@@ -9,6 +9,8 @@ import { usePortalContainer } from '../../hooks/usePortalContainer';
 import { Toggle } from '../ui/Toggle';
 import { isElectron } from '../../platform/platform';
 import { RESOLUTION_LABELS } from '@backspace/shared/src/constants';
+import { Trans } from 'react-i18next';
+import { translate } from '../../i18n';
 
 interface ScreenShareSettingsPopoverProps {
   open: boolean;
@@ -17,13 +19,13 @@ interface ScreenShareSettingsPopoverProps {
 }
 
 const MODES: { value: ScreenShareConfig['mode']; label: string }[] = [
-  { value: 'gaming', label: 'Gaming' },
-  { value: 'text', label: 'Text' },
+  { value: 'gaming', get label() { return translate('runtime.static.ScreenShareSettingsPopover.gaming'); } },
+  { value: 'text', get label() { return translate('runtime.static.ScreenShareSettingsPopover.text'); } },
 ];
 
 const CODEC_OPTIONS = [
-  { value: 'vp9' as const, label: 'Standard', sub: 'VP9' },
-  { value: 'hw' as const, label: 'NVIDIA / Apple', sub: 'H.264' },
+  { value: 'vp9' as const, get label() { return translate('runtime.static.ScreenShareSettingsPopover.standard'); }, sub: 'VP9' },
+  { value: 'hw' as const, get label() { return translate('runtime.static.ScreenShareSettingsPopover.nvidiaApple'); }, sub: 'H.264' },
 ];
 
 function formatBitrate(bps: number): string {
@@ -129,14 +131,14 @@ export function ScreenShareSettingsPopover({ open, onClose, anchorRef }: ScreenS
       className="w-[260px] glass rounded-lg overflow-hidden"
     >
       <div className="px-3 py-2 border-b border-border-hard">
-        <span className="text-[14px] font-bold text-txt-primary">Stream Settings</span>
+        <span className="text-[14px] font-bold text-txt-primary"><Trans i18nKey="ui.ScreenShareSettingsPopover.streamSettings">Stream Settings</Trans></span>
       </div>
 
       <div className="px-3 py-3 flex flex-col gap-3">
         {/* Resolution */}
         <div>
           <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-1.5">
-            Resolution
+            <Trans i18nKey="ui.ScreenShareSettingsPopover.resolution">Resolution</Trans>
           </div>
           <div className="grid grid-cols-3 gap-1.5">
             {RESOLUTIONS.map((r) => (
@@ -154,7 +156,7 @@ export function ScreenShareSettingsPopover({ open, onClose, anchorRef }: ScreenS
         {/* Frame Rate */}
         <div>
           <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-1.5">
-            Frame Rate
+            <Trans i18nKey="ui.ScreenShareSettingsPopover.frameRate">Frame Rate</Trans>
           </div>
           <div className="grid grid-cols-3 gap-1.5">
             {FRAME_RATES.map((f) => (
@@ -172,7 +174,7 @@ export function ScreenShareSettingsPopover({ open, onClose, anchorRef }: ScreenS
         {/* Content Mode */}
         <div>
           <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-1.5">
-            Content Mode
+            <Trans i18nKey="ui.ScreenShareSettingsPopover.contentMode">Content Mode</Trans>
           </div>
           <div className="flex gap-1.5">
             {MODES.map((m) => (
@@ -190,11 +192,11 @@ export function ScreenShareSettingsPopover({ open, onClose, anchorRef }: ScreenS
         {/* Codec */}
         <div>
           <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-1.5">
-            Codec
+            <Trans i18nKey="ui.ScreenShareSettingsPopover.codec">Codec</Trans>
           </div>
           <div className="flex gap-1.5">
             {CODEC_OPTIONS.map((c) => {
-              const isHw = c.value === 'hw';
+              const isHw = c.value === "hw";
               const isSelected = isHw ? hwOverdrive : !hwOverdrive;
               return (
                 <button
@@ -214,7 +216,7 @@ export function ScreenShareSettingsPopover({ open, onClose, anchorRef }: ScreenS
           </div>
           {hwOverdrive && (
             <div className="text-[10px] text-accent-amber/80 mt-1">
-              GPU hardware encoder · resets when stream ends
+              <Trans i18nKey="ui.ScreenShareSettingsPopover.gpuHardwareEncoderResetsWhenStreamEnds">GPU hardware encoder · resets when stream ends</Trans>
             </div>
           )}
         </div>
@@ -223,14 +225,14 @@ export function ScreenShareSettingsPopover({ open, onClose, anchorRef }: ScreenS
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider">
-              Bitrate
+              <Trans i18nKey="ui.ScreenShareSettingsPopover.bitrate">Bitrate</Trans>
             </div>
             {limits?.allowCustomBitrate !== false && config.customBitrateKbps != null && (
               <button
                 onClick={() => setConfig({ customBitrateKbps: null })}
                 className="text-[11px] text-accent-primary hover:text-accent-lavender font-medium transition-colors"
               >
-                Reset to Auto
+                <Trans i18nKey="ui.ScreenShareSettingsPopover.resetToAuto">Reset to Auto</Trans>
               </button>
             )}
           </div>
@@ -264,7 +266,7 @@ export function ScreenShareSettingsPopover({ open, onClose, anchorRef }: ScreenS
                 {formatKbps(Math.round(result.publish.videoEncoding.maxBitrate / 1000))}
               </div>
               <div className="text-[10px] text-txt-tertiary mt-0.5">
-                Custom bitrate disabled by administrator
+                <Trans i18nKey="ui.ScreenShareSettingsPopover.customBitrateDisabledByAdministrator">Custom bitrate disabled by administrator</Trans>
               </div>
             </div>
           )}
@@ -275,11 +277,11 @@ export function ScreenShareSettingsPopover({ open, onClose, anchorRef }: ScreenS
           <div className="flex items-center justify-between">
             <div>
               <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider">
-                System Audio
+                <Trans i18nKey="ui.ScreenShareSettingsPopover.systemAudio">System Audio</Trans>
               </div>
               {isElectron() && config.shareAudio && (
                 <div className="text-[10px] text-accent-amber/80 mt-0.5">
-                  Use Chrome for echo-free audio
+                  <Trans i18nKey="ui.ScreenShareSettingsPopover.useChromeForEchoFreeAudio">Use Chrome for echo-free audio</Trans>
                 </div>
               )}
             </div>

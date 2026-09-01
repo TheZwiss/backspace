@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Modal } from '../ui/Modal';
 import { useUIStore } from '../../stores/uiStore';
 import { useSpaceStore } from '../../stores/spaceStore';
+import { Trans } from 'react-i18next';
+import { translate } from '../../i18n';
 
 export function CreateCategoryModal() {
   const [name, setName] = useState('');
@@ -19,12 +21,12 @@ export function CreateCategoryModal() {
     setError('');
 
     if (!name.trim()) {
-      setError('Category name is required');
+      setError(translate('runtime.messages.CreateCategory.categoryNameIsRequired'));
       return;
     }
 
     if (!currentSpaceId) {
-      setError('No space selected');
+      setError(translate('runtime.messages.CreateCategory.noSpaceSelected'));
       return;
     }
 
@@ -34,14 +36,14 @@ export function CreateCategoryModal() {
       closeModal();
       setName('');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create category');
+      setError(err instanceof Error ? err.message : translate('runtime.messages.CreateCategory.failedToCreateCategory'));
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={closeModal} title="Create Category" mobileStyle="sheet">
+    <Modal isOpen={isOpen} onClose={closeModal} title={translate("runtime.attributes.CreateCategory.createCategory")} mobileStyle="sheet">
       <form onSubmit={handleSubmit}>
         {error && (
           <div className="mb-3 p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">
@@ -51,14 +53,14 @@ export function CreateCategoryModal() {
 
         <div className="mb-4">
           <label className="block text-xs font-bold text-txt-secondary uppercase mb-2">
-            Category Name
+            <Trans i18nKey="ui.CreateCategory.categoryName">Category Name</Trans>
           </label>
           <input
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
             className="input-standard w-full"
-            placeholder="new-category"
+            placeholder={translate("runtime.attributes.CreateCategory.newCategory")}
             autoFocus
           />
         </div>
@@ -71,14 +73,14 @@ export function CreateCategoryModal() {
                 onClick={closeModal}
                 className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
               >
-                Cancel
+                <Trans i18nKey="ui.CreateCategory.cancel">Cancel</Trans>
               </button>
               <button
                 type="submit"
                 disabled={isLoading}
                 className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
               >
-                {isLoading ? 'Creating...' : 'Create Category'}
+                {isLoading ? translate('runtime.expressions.CreateCategory.creating') : translate('runtime.expressions.CreateCategory.createCategory')}
               </button>
             </div>
           </div>

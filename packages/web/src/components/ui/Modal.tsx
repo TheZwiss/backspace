@@ -1,6 +1,7 @@
 import React, { useEffect, useCallback } from 'react';
 import { useUIStore } from '../../stores/uiStore';
 import { useTranslation } from 'react-i18next';
+import { translate } from '../../i18n';
 
 interface ModalProps {
   isOpen: boolean;
@@ -36,13 +37,13 @@ export function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-md',
   if (isMobile && mobileStyle === 'fullscreen') {
     return (
       <div className="fixed inset-0 z-[200] flex flex-col bg-surface-base animate-fade-in">
-        {(title || size === 'settings') && (
-          <div className="flex items-center justify-between px-4 pt-4 flex-shrink-0" style={{ paddingTop: 'calc(16px + env(safe-area-inset-top))' }}>
+        {(title || size === "settings") && (
+          <div className="flex items-center justify-between px-4 pt-4 flex-shrink-0" style={{ paddingTop: "calc(16px + env(safe-area-inset-top))" }}>
             {title ? <h2 className="text-xl font-bold text-txt-primary">{title}</h2> : <div />}
             <button
               onClick={onClose}
               className="text-txt-tertiary hover:text-txt-primary transition-colors p-1"
-              aria-label={size === 'settings' ? t('common.closeSettings') : t('common.close')}
+              aria-label={size === "settings" ? t("common.closeSettings") : t("common.close")}
             >
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M18.4 4L12 10.4L5.6 4L4 5.6L10.4 12L4 18.4L5.6 20L12 13.6L18.4 20L20 18.4L13.6 12L20 5.6L18.4 4Z" />
@@ -72,7 +73,7 @@ export function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-md',
               <button
                 onClick={onClose}
                 className="text-txt-tertiary hover:text-txt-primary transition-colors p-1"
-                aria-label={t('common.close')}
+                aria-label={t("common.close")}
               >
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M18.4 4L12 10.4L5.6 4L4 5.6L10.4 12L4 18.4L5.6 20L12 13.6L18.4 20L20 18.4L13.6 12L20 5.6L18.4 4Z" />
@@ -101,7 +102,7 @@ export function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-md',
           <button
             onClick={onClose}
             className="absolute top-4 right-4 z-10 p-1.5 rounded-full bg-surface-elevated/50 backdrop-blur-sm text-txt-tertiary hover:text-txt-primary transition-colors"
-            aria-label={t('common.closeSettings')}
+            aria-label={t("common.closeSettings")}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
               <path d="M18.4 4L12 10.4L5.6 4L4 5.6L10.4 12L4 18.4L5.6 20L12 13.6L18.4 20L20 18.4L13.6 12L20 5.6L18.4 4Z" />
@@ -127,7 +128,7 @@ export function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-md',
             <button
               onClick={onClose}
               className="text-txt-tertiary hover:text-txt-primary transition-colors p-1"
-              aria-label={t('common.close')}
+              aria-label={t("common.close")}
             >
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M18.4 4L12 10.4L5.6 4L4 5.6L10.4 12L4 18.4L5.6 20L12 13.6L18.4 20L20 18.4L13.6 12L20 5.6L18.4 4Z" />

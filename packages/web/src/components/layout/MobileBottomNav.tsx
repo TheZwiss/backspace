@@ -6,6 +6,7 @@ import { useSocialStore } from '../../stores/socialStore';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { translate } from '../../i18n';
 
 export function MobileBottomNav() {
   const { t } = useTranslation();
@@ -108,10 +109,10 @@ export function MobileBottomNav() {
         >
           <div className="relative">
             {tab.icon}
-            {tab.badge === 'dot' && (
+            {tab.badge === "dot" && (
               <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-notification rounded-full" />
             )}
-            {typeof tab.badge === 'number' && (
+            {typeof tab.badge === "number" && (
               <span className="absolute -top-1 -right-2 min-w-[16px] h-4 px-1 bg-notification text-white text-[10px] font-bold rounded-full flex items-center justify-center">
                 {tab.badge > 99 ? '99+' : tab.badge}
               </span>

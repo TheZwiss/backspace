@@ -7,6 +7,8 @@ import { useSpaceStore } from '../../stores/spaceStore';
 import { Avatar } from '../ui/Avatar';
 import type { ParticipantInfo } from '../../hooks/useLiveKit';
 import { useVoiceParticipantMeta } from '../../hooks/useVoiceParticipantMeta';
+import { Trans } from 'react-i18next';
+import { translate } from '../../i18n';
 
 /** Stable fallback for useVoiceParticipantMeta when no participant exists */
 const EMPTY_PARTICIPANT: ParticipantInfo = {
@@ -413,7 +415,7 @@ export function PictureInPicture() {
           playsInline
           muted
           className="w-full h-full object-cover"
-          style={{ imageRendering: 'auto' }}
+          style={{ imageRendering: "auto" }}
         />
       ) : (
         <div className="w-full h-full flex items-center justify-center bg-surface-channel">
@@ -444,7 +446,7 @@ export function PictureInPicture() {
       {/* LIVE badge */}
       {isScreen && (
         <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-accent-rose rounded text-[11px] font-bold text-white uppercase tracking-wide">
-          LIVE
+          <Trans i18nKey="ui.PictureInPicture.live">LIVE</Trans>
         </div>
       )}
 

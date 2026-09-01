@@ -4,6 +4,7 @@ import { EmojiPicker } from './EmojiPicker';
 import { GifPicker } from './GifPicker';
 import { useUIStore } from '../../stores/uiStore';
 import { useDragToClose } from '../../hooks/useDragToClose';
+import { translate } from '../../i18n';
 
 export type InputPopoverTab = 'emoji' | 'gif';
 
@@ -137,8 +138,8 @@ function DesktopPopover({
         <TabBar activeTab={activeTab} availableTabs={availableTabs} onTabChange={onTabChange} />
         {/* Content */}
         <div className="flex-1 min-h-0 overflow-hidden">
-          {activeTab === 'emoji' && <EmojiPicker onEmojiSelect={onEmojiSelect} />}
-          {activeTab === 'gif' && gifEnabled && <GifPicker onGifSelect={onGifSelect} />}
+          {activeTab === "emoji" && <EmojiPicker onEmojiSelect={onEmojiSelect} />}
+          {activeTab === "gif" && gifEnabled && <GifPicker onGifSelect={onGifSelect} />}
         </div>
       </div>
     </div>,
@@ -219,8 +220,8 @@ function MobileSheet({
 
         {/* Content */}
         <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-          {activeTab === 'emoji' && <EmojiPicker onEmojiSelect={onEmojiSelect} mobile />}
-          {activeTab === 'gif' && gifEnabled && <GifPicker onGifSelect={onGifSelect} mobile />}
+          {activeTab === "emoji" && <EmojiPicker onEmojiSelect={onEmojiSelect} mobile />}
+          {activeTab === "gif" && gifEnabled && <GifPicker onGifSelect={onGifSelect} mobile />}
         </div>
       </div>
     </>,
@@ -232,10 +233,10 @@ export function InputPopover(props: InputPopoverProps) {
   const isMobile = useUIStore((s) => s.isMobile);
 
   const availableTabs: { key: InputPopoverTab; label: string }[] = [
-    { key: 'emoji', label: 'Emoji' },
+    { key: 'emoji', label: translate('runtime.properties.InputPopover.emoji') },
   ];
   if (props.gifEnabled) {
-    availableTabs.splice(0, 0, { key: 'gif', label: 'GIF' });
+    availableTabs.splice(0, 0, { key: 'gif', label: translate('runtime.properties.InputPopover.gif') });
   }
 
   if (isMobile) {

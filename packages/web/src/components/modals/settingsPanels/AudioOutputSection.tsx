@@ -3,6 +3,8 @@ import { useVoiceStore } from '../../../stores/voiceStore';
 import { AudioManager } from '../../../audio/AudioManager';
 import { useAudioDevices } from '../../../hooks/useAudioDevices';
 import { SectionShell, DropdownItem } from './_shared/SettingsPickerPrimitives';
+import { Trans } from 'react-i18next';
+import { translate } from '../../../i18n';
 
 /**
  * Feature-detect per-element output routing support. iOS Safari has zero
@@ -98,8 +100,8 @@ function AudioOutputSectionInner() {
 
   if (permState === 'unknown') {
     return (
-      <SectionShell title="Output Device">
-        <div className="text-sm text-txt-tertiary">Checking audio access…</div>
+      <SectionShell title={translate("runtime.attributes.AudioOutputSection.outputDevice")}>
+        <div className="text-sm text-txt-tertiary"><Trans i18nKey="ui.AudioOutputSection.checkingAudioAccess">Checking audio access…</Trans></div>
       </SectionShell>
     );
   }
@@ -109,8 +111,8 @@ function AudioOutputSectionInner() {
   // current default, but the picker is hidden.
   const showPicker = permState === 'granted' && supportsSinkId;
   const selectedLabel = outputDeviceId === 'default'
-    ? 'System Default'
-    : outputLabels.get(outputDeviceId) ?? 'System Default';
+    ? translate('runtime.selected.AudioOutputSection.systemDefault')
+    : outputLabels.get(outputDeviceId) ?? translate('runtime.selected.AudioOutputSection.systemDefault2');
 
   const handleSelect = (id: string) => {
     setOutputDevice(id);
@@ -123,7 +125,7 @@ function AudioOutputSectionInner() {
   };
 
   return (
-    <SectionShell title="Output Device">
+    <SectionShell title={translate("runtime.attributes.AudioOutputSection.outputDevice2")}>
       <div className="space-y-3">
         {showPicker ? (
           <div ref={dropdownRef}>
@@ -134,14 +136,14 @@ function AudioOutputSectionInner() {
             >
               <span className="text-[13px] text-txt-primary truncate text-left">{selectedLabel}</span>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"
-                className={`text-txt-tertiary flex-shrink-0 ml-2 transition-transform ${listOpen ? 'rotate-90' : ''}`}>
+                className={`text-txt-tertiary flex-shrink-0 ml-2 transition-transform ${listOpen ? "rotate-90" : ''}`}>
                 <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
               </svg>
             </button>
             {listOpen && (
               <div className="mt-1 rounded-md bg-surface-base border border-border-hard py-1 max-h-64 overflow-y-auto">
-                <DropdownItem label="System Default" active={outputDeviceId === 'default'} onClick={() => handleSelect('default')} />
-                {outputs.filter(d => d.deviceId !== 'default').map((d) => (
+                <DropdownItem label={translate("runtime.attributes.AudioOutputSection.systemDefault")} active={outputDeviceId === "default"} onClick={() => handleSelect("default")} />
+                {outputs.filter(d => d.deviceId !== "default").map((d) => (
                   <DropdownItem
                     key={d.deviceId}
                     label={outputLabels.get(d.deviceId) ?? d.deviceId}
@@ -152,27 +154,27 @@ function AudioOutputSectionInner() {
               </div>
             )}
           </div>
-        ) : permState === 'granted' && !supportsSinkId ? (
+        ) : permState === "granted" && !supportsSinkId ? (
           <div className="text-xs text-txt-tertiary">
-            This browser doesn't support choosing an output device. Audio plays to the system default.
+            <Trans i18nKey="ui.AudioOutputSection.thisBrowserDoesnTSupportChoosingAnOutput">This browser doesn't support choosing an output device. Audio plays to the system default.</Trans>
           </div>
         ) : (
           <div className="space-y-2">
             <div className="text-xs text-txt-tertiary">
-              Grant microphone permission to list output devices (browsers gate output names behind microphone access).
+              <Trans i18nKey="ui.AudioOutputSection.grantMicrophonePermissionToListOutputDevicesBrowsers">Grant microphone permission to list output devices (browsers gate output names behind microphone access).</Trans>
             </div>
             <button
               onClick={() => { requestPermission().catch(() => {}); }}
               className="text-[13px] px-3 py-2 rounded-md bg-accent-primary hover:bg-accent-primary-hover text-white font-medium transition-colors"
             >
-              Enable audio access
+              <Trans i18nKey="ui.AudioOutputSection.enableAudioAccess">Enable audio access</Trans>
             </button>
           </div>
         )}
 
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <div className="text-[13px] font-medium text-txt-primary">Output Volume</div>
+            <div className="text-[13px] font-medium text-txt-primary"><Trans i18nKey="ui.AudioOutputSection.outputVolume">Output Volume</Trans></div>
             <div className="text-xs text-txt-tertiary tabular-nums">{outputVolume}%</div>
           </div>
           <input
@@ -195,7 +197,7 @@ function AudioOutputSectionInner() {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
             <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z" />
           </svg>
-          Play test sound
+          <Trans i18nKey="ui.AudioOutputSection.playTestSound">Play test sound</Trans>
         </button>
       </div>
     </SectionShell>

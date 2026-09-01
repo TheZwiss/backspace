@@ -13,7 +13,7 @@ export function LanguageSwitcher({ compact = false }: LanguageSwitcherProps) {
     <label className={compact ? 'inline-flex items-center' : 'block'}>
       {!compact && (
         <span className="block text-xs font-semibold text-txt-secondary mb-2">
-          {t('language.current')}
+          {t("language.current")}
         </span>
       )}
       <select
@@ -22,7 +22,7 @@ export function LanguageSwitcher({ compact = false }: LanguageSwitcherProps) {
           : 'input-standard w-full py-2.5'}
         value={value}
         onChange={(event) => void i18n.changeLanguage(event.target.value)}
-        aria-label={t('language.current')}
+        aria-label={t("language.current")}
       >
         {supportedLanguages.map((language) => (
           <option key={language.code} value={language.code}>

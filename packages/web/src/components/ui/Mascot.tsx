@@ -1,5 +1,6 @@
 import { useId, useRef } from 'react';
 import { useMascotAnimation } from '../../hooks/useMascotAnimation';
+import { translate } from '../../i18n';
 
 export const MASCOT_PALETTES = {
   idle:     { from: '#c8f0de', to: '#6dbf96', shadow: 'rgba(168,216,192,0.13)', blush: '#f5a8a8' },
@@ -242,20 +243,20 @@ export function Mascot({ state, className }: MascotProps) {
 
   return (
     <div ref={containerRef} role="presentation" className={`relative ${className ?? 'w-32 h-32'}`}>
-      {state === 'idle' && <IdleSvg palette={palette} gradientId={gradientId} svgRef={svgRef} />}
-      {state === 'sleeping' && <SleepingSvg palette={palette} gradientId={gradientId} svgRef={svgRef} />}
-      {state === 'excited' && <ExcitedSvg palette={palette} gradientId={gradientId} svgRef={svgRef} />}
-      {state === 'lonely' && <LonelySvg palette={palette} gradientId={gradientId} svgRef={svgRef} />}
-      {state === 'sleeping' && (
+      {state === "idle" && <IdleSvg palette={palette} gradientId={gradientId} svgRef={svgRef} />}
+      {state === "sleeping" && <SleepingSvg palette={palette} gradientId={gradientId} svgRef={svgRef} />}
+      {state === "excited" && <ExcitedSvg palette={palette} gradientId={gradientId} svgRef={svgRef} />}
+      {state === "lonely" && <LonelySvg palette={palette} gradientId={gradientId} svgRef={svgRef} />}
+      {state === "sleeping" && (
         <div
           data-mascot="z-container"
           style={{
-            position: 'absolute',
-            top: '-15px',
-            right: '8px',
-            width: '50px',
-            height: '90px',
-            pointerEvents: 'none',
+            position: "absolute",
+            top: "-15px",
+            right: "8px",
+            width: "50px",
+            height: "90px",
+            pointerEvents: "none",
           }}
         />
       )}

@@ -11,6 +11,8 @@ import { parseFederatedUsername, isFederationGlobeApplicable } from '../../utils
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { MobileScreenHeader } from './MobileScreenHeader';
 import { useDelayedLoading } from '../../hooks/useDelayedLoading';
+import { Trans } from 'react-i18next';
+import { translate } from '../../i18n';
 
 /**
  * Derives the display group for a member based on their highest-positioned role
@@ -21,7 +23,7 @@ function getMemberGroup(member: MemberWithUser, ownerId: string | undefined) {
     const ownerRole = member.roles?.find(r => r.position > 0);
     return {
       key: '__owner__',
-      label: 'OWNER',
+      label: translate('runtime.properties.MobileMembersScreen.owner'),
       color: ownerRole?.color ?? 'rgb(var(--accent-rose))',
       position: Infinity,
     };
@@ -38,7 +40,7 @@ function getMemberGroup(member: MemberWithUser, ownerId: string | undefined) {
   }
   return {
     key: '__online__',
-    label: 'ONLINE',
+    label: translate('runtime.properties.MobileMembersScreen.online'),
     color: undefined,
     position: -1,
   };
@@ -184,15 +186,15 @@ export function MobileMembersScreen({ params }: MobileMembersScreenProps) {
 
   return (
     <div className="flex flex-col h-full bg-surface-base">
-      <MobileScreenHeader title={totalCount > 0 ? `Members — ${totalCount}` : 'Members'} />
+      <MobileScreenHeader title={totalCount > 0 ? `Members — ${totalCount}` : translate('runtime.expressions.MobileMembersScreen.members')} />
       <div className="flex-1 overflow-y-auto p-3">
         {showMemberSkeleton ? (
-          <div className="px-2 pt-2" role="status" aria-label="Loading members">
+          <div className="px-2 pt-2" role="status" aria-label={translate("runtime.attributes.MobileMembersScreen.loadingMembers")}>
             {/* Role group 1 — match real row geometry: w-9 h-9 avatar +
                 gap-2.5 + py-2.5 → ~52px row height. */}
             <div
               className="skeleton skeleton-bar h-2 w-[35%] mb-2"
-              style={{ animationDelay: '0s' }}
+              style={{ animationDelay: "0s" }}
             />
             {Array.from({ length: 2 }, (_, i) => (
               <div
@@ -215,7 +217,7 @@ export function MobileMembersScreen({ params }: MobileMembersScreenProps) {
             {/* Role group 2 */}
             <div
               className="skeleton skeleton-bar h-2 w-[45%] mb-2 mt-4"
-              style={{ animationDelay: '0.25s' }}
+              style={{ animationDelay: "0.25s" }}
             />
             {Array.from({ length: 5 }, (_, i) => (
               <div
@@ -238,7 +240,7 @@ export function MobileMembersScreen({ params }: MobileMembersScreenProps) {
           </div>
         ) : onlineCount === 0 && offlineMembers.length === 0 ? (
           <div className="flex items-center justify-center h-40 text-txt-tertiary text-sm">
-            No members found
+            <Trans i18nKey="ui.MobileMembersScreen.noMembersFound">No members found</Trans>
           </div>
         ) : (
           <>
@@ -254,7 +256,7 @@ export function MobileMembersScreen({ params }: MobileMembersScreenProps) {
             {offlineMembers.length > 0 && (
               <div>
                 <h3 className="text-[10.5px] font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
-                  OFFLINE — {offlineMembers.length}
+                  <Trans i18nKey="ui.MobileMembersScreen.offline">OFFLINE —</Trans> {offlineMembers.length}
                 </h3>
                 {offlineMembers.map((m) => renderMember(m, true))}
               </div>

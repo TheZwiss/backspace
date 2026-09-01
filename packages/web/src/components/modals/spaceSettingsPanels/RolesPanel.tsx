@@ -4,6 +4,8 @@ import { useUIStore } from '../../../stores/uiStore';
 import { api } from '../../../api/client';
 import { PermissionBits, stringToPermissions, permissionsToString } from '../../../utils/permissions';
 import type { Role } from '@backspace/shared';
+import { Trans } from 'react-i18next';
+import { translate } from '../../../i18n';
 
 // ─── Permission display groups ─────────────────────────────────────────────
 
@@ -16,36 +18,36 @@ const PERMISSION_GROUPS: { name: string; perms: PermDef[] }[] = [
   {
     name: 'General',
     perms: [
-      { bit: PermissionBits.ADMINISTRATOR, label: 'Administrator' },
-      { bit: PermissionBits.VIEW_CHANNEL, label: 'View Channels' },
-      { bit: PermissionBits.MANAGE_CHANNELS, label: 'Manage Channels' },
-      { bit: PermissionBits.MANAGE_ROLES, label: 'Manage Roles' },
-      { bit: PermissionBits.MANAGE_SPACE, label: 'Manage Space' },
-      { bit: PermissionBits.CREATE_INVITE, label: 'Create Invite' },
-      { bit: PermissionBits.KICK_MEMBERS, label: 'Kick Members' },
-      { bit: PermissionBits.BAN_MEMBERS, label: 'Ban Members' },
+      { bit: PermissionBits.ADMINISTRATOR, get label() { return translate('runtime.static.RolesPanel.administrator'); } },
+      { bit: PermissionBits.VIEW_CHANNEL, get label() { return translate('runtime.static.RolesPanel.viewChannels'); } },
+      { bit: PermissionBits.MANAGE_CHANNELS, get label() { return translate('runtime.static.RolesPanel.manageChannels'); } },
+      { bit: PermissionBits.MANAGE_ROLES, get label() { return translate('runtime.static.RolesPanel.manageRoles'); } },
+      { bit: PermissionBits.MANAGE_SPACE, get label() { return translate('runtime.static.RolesPanel.manageSpace'); } },
+      { bit: PermissionBits.CREATE_INVITE, get label() { return translate('runtime.static.RolesPanel.createInvite'); } },
+      { bit: PermissionBits.KICK_MEMBERS, get label() { return translate('runtime.static.RolesPanel.kickMembers'); } },
+      { bit: PermissionBits.BAN_MEMBERS, get label() { return translate('runtime.static.RolesPanel.banMembers'); } },
     ],
   },
   {
     name: 'Text',
     perms: [
-      { bit: PermissionBits.SEND_MESSAGES, label: 'Send Messages' },
-      { bit: PermissionBits.MANAGE_MESSAGES, label: 'Manage Messages' },
-      { bit: PermissionBits.ATTACH_FILES, label: 'Attach Files' },
-      { bit: PermissionBits.READ_MESSAGE_HISTORY, label: 'Read Message History' },
-      { bit: PermissionBits.ADD_REACTIONS, label: 'Add Reactions' },
+      { bit: PermissionBits.SEND_MESSAGES, get label() { return translate('runtime.static.RolesPanel.sendMessages'); } },
+      { bit: PermissionBits.MANAGE_MESSAGES, get label() { return translate('runtime.static.RolesPanel.manageMessages'); } },
+      { bit: PermissionBits.ATTACH_FILES, get label() { return translate('runtime.static.RolesPanel.attachFiles'); } },
+      { bit: PermissionBits.READ_MESSAGE_HISTORY, get label() { return translate('runtime.static.RolesPanel.readMessageHistory'); } },
+      { bit: PermissionBits.ADD_REACTIONS, get label() { return translate('runtime.static.RolesPanel.addReactions'); } },
     ],
   },
   {
     name: 'Voice',
     perms: [
-      { bit: PermissionBits.CONNECT, label: 'Connect' },
-      { bit: PermissionBits.SPEAK, label: 'Speak' },
-      { bit: PermissionBits.MUTE_MEMBERS, label: 'Mute Members' },
-      { bit: PermissionBits.DEAFEN_MEMBERS, label: 'Deafen Members' },
-      { bit: PermissionBits.MOVE_MEMBERS, label: 'Move Members' },
-      { bit: PermissionBits.DISCONNECT_MEMBERS, label: 'Disconnect Members' },
-      { bit: PermissionBits.STREAM, label: 'Stream' },
+      { bit: PermissionBits.CONNECT, get label() { return translate('runtime.static.RolesPanel.connect'); } },
+      { bit: PermissionBits.SPEAK, get label() { return translate('runtime.static.RolesPanel.speak'); } },
+      { bit: PermissionBits.MUTE_MEMBERS, get label() { return translate('runtime.static.RolesPanel.muteMembers'); } },
+      { bit: PermissionBits.DEAFEN_MEMBERS, get label() { return translate('runtime.static.RolesPanel.deafenMembers'); } },
+      { bit: PermissionBits.MOVE_MEMBERS, get label() { return translate('runtime.static.RolesPanel.moveMembers'); } },
+      { bit: PermissionBits.DISCONNECT_MEMBERS, get label() { return translate('runtime.static.RolesPanel.disconnectMembers'); } },
+      { bit: PermissionBits.STREAM, get label() { return translate('runtime.static.RolesPanel.stream'); } },
     ],
   },
 ];
@@ -101,7 +103,7 @@ export function RolesPanel({ spaceId }: RolesPanelProps) {
       setIsNewRole(true);
       setEditingRoleId(newRole.id);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create role');
+      setError(err instanceof Error ? err.message : translate('runtime.messages.RolesPanel.failedToCreateRole'));
     } finally {
       setCreating(false);
     }
@@ -128,7 +130,7 @@ export function RolesPanel({ spaceId }: RolesPanelProps) {
 
   return (
     <div className="space-y-5">
-      <h2 className="text-lg font-semibold text-txt-primary mb-6">Roles</h2>
+      <h2 className="text-lg font-semibold text-txt-primary mb-6"><Trans i18nKey="ui.RolesPanel.roles">Roles</Trans></h2>
       {error && (
         <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">{error}</div>
       )}
@@ -143,13 +145,13 @@ export function RolesPanel({ spaceId }: RolesPanelProps) {
             <line x1="12" y1="5" x2="12" y2="19" />
             <line x1="5" y1="12" x2="19" y2="12" />
           </svg>
-          {creating ? 'Creating...' : 'Create Role'}
+          {creating ? translate('runtime.expressions.RolesPanel.creating') : translate('runtime.expressions.RolesPanel.createRole')}
         </button>
       </div>
 
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">Roles</div>
-        <p className="text-xs text-txt-tertiary mb-2">Roles define what permissions members have. Higher roles take priority.</p>
+        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5"><Trans i18nKey="ui.RolesPanel.roles2">Roles</Trans></div>
+        <p className="text-xs text-txt-tertiary mb-2"><Trans i18nKey="ui.RolesPanel.rolesDefineWhatPermissionsMembersHaveHigherRoles">Roles define what permissions members have. Higher roles take priority.</Trans></p>
         <div className="rounded-lg bg-white/[0.02] p-2">
           <div className="space-y-0.5">
             {sortedRoles.map((role) => {
@@ -217,7 +219,7 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
 
   const validateName = (name: string): string => {
     const trimmed = name.trim();
-    if (!trimmed) return 'Role name cannot be empty';
+    if (!trimmed) return translate('runtime.selected.RolesPanel.roleNameCannotBeEmpty');
     const isDuplicate = roles.some(
       (r) => r.id !== role.id && r.name.toLowerCase() === trimmed.toLowerCase()
     );
@@ -254,9 +256,9 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
       if (hasPermChange) data.permissions = permissionsToString(draftPermissions);
       await api.roles.update(spaceId, role.id, data);
       await loadSpaceDetail(spaceId);
-      addToast('Role saved', 'success', 2000);
+      addToast(translate('runtime.messages.RolesPanel.roleSaved'), 'success', 2000);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to save role';
+      const msg = err instanceof Error ? err.message : translate('runtime.selected.RolesPanel.failedToSaveRole');
       if (msg.includes('already exists')) {
         setNameError(msg);
       } else {
@@ -288,7 +290,7 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
       await loadSpaceDetail(spaceId);
       onDeleted();
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : 'Failed to delete role');
+      setSaveError(err instanceof Error ? err.message : translate('runtime.messages.RolesPanel.failedToDeleteRole'));
       setConfirmDelete(false);
     } finally {
       setDeleting(false);
@@ -310,7 +312,7 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
       await loadSpaceDetail(spaceId);
       onCopied(newRole.id);
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : 'Failed to copy role');
+      setSaveError(err instanceof Error ? err.message : translate('runtime.messages.RolesPanel.failedToCopyRole'));
     } finally {
       setCopying(false);
     }
@@ -327,24 +329,24 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
           </svg>
-          Back to roles
+          <Trans i18nKey="ui.RolesPanel.backToRoles">Back to roles</Trans>
         </button>
       </div>
 
       {isNew && !hasChanges && (
         <div className="p-2 bg-status-online/10 border border-status-online/30 rounded text-status-online text-sm">
-          Role created — customize it below
+          <Trans i18nKey="ui.RolesPanel.roleCreatedCustomizeItBelow">Role created — customize it below</Trans>
         </div>
       )}
 
       {/* Identity card (Name + Color — not shown for @everyone) */}
       {!isEveryone && (
         <div>
-          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">Identity</div>
+          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5"><Trans i18nKey="ui.RolesPanel.identity">Identity</Trans></div>
           <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-4">
             <div>
               <label className="block text-xs text-txt-secondary mb-1.5">
-                Role Name
+                <Trans i18nKey="ui.RolesPanel.roleName">Role Name</Trans>
               </label>
               <input
                 ref={nameInputRef}
@@ -355,7 +357,7 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
                   setNameError(validateName(e.target.value));
                 }}
                 onBlur={() => setNameError(validateName(draftName))}
-                className={`input-standard w-full${nameError ? ' ring-2 ring-accent-rose' : ''}`}
+                className={`input-standard w-full${nameError ? " ring-2 ring-accent-rose" : ''}`}
               />
               {nameError && (
                 <p className="text-xs text-txt-danger mt-1">{nameError}</p>
@@ -363,7 +365,7 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
             </div>
             <div>
               <label className="block text-xs text-txt-secondary mb-1.5">
-                Role Color
+                <Trans i18nKey="ui.RolesPanel.roleColor">Role Color</Trans>
               </label>
               <div className="flex items-center gap-2 flex-wrap">
                 {PRESET_COLORS.map((c) => (
@@ -461,14 +463,14 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
                     onClick={handleDiscard}
                     className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
                   >
-                    Discard
+                    <Trans i18nKey="ui.RolesPanel.discard">Discard</Trans>
                   </button>
                   <button
                     onClick={handleSave}
                     disabled={saving || (!isEveryone && !draftName.trim()) || !!nameError}
                     className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
                   >
-                    {saving ? 'Saving...' : 'Save'}
+                    {saving ? translate('runtime.expressions.RolesPanel.saving') : translate('runtime.expressions.RolesPanel.save')}
                   </button>
                 </>
               )}
@@ -480,7 +482,7 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
                 disabled={copying}
                 className="px-3 py-1.5 text-sm font-medium rounded-full text-txt-secondary hover:bg-interactive-hover transition-colors disabled:opacity-50"
               >
-                {copying ? 'Copying...' : 'Copy Role'}
+                {copying ? translate('runtime.expressions.RolesPanel.copying') : translate('runtime.expressions.RolesPanel.copyRole')}
               </button>
               {!isEveryone && (
                 <>
@@ -494,7 +496,7 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
                         : 'text-accent-rose hover:bg-accent-rose/10'
                     }`}
                   >
-                    {deleting ? 'Deleting...' : confirmDelete ? 'Confirm?' : 'Delete Role'}
+                    {deleting ? translate('runtime.expressions.RolesPanel.deleting') : confirmDelete ? translate('runtime.expressions.RolesPanel.confirm') : translate('runtime.expressions.RolesPanel.deleteRole')}
                   </button>
                 </>
               )}

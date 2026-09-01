@@ -3,6 +3,7 @@ import { getChannelOrigin, getMyUserIdForOrigin, useSpaceStore } from '../stores
 import { wsSend } from '../hooks/useWebSocket';
 import { AudioManager } from '../audio/AudioManager';
 import { useUIStore } from '../stores/uiStore';
+import { translate } from '../i18n';
 
 // ---------------------------------------------------------------------------
 // Effective-state helpers — single source of truth for broadcasts
@@ -185,14 +186,14 @@ export function joinVoiceChannel(
     if (name === 'NotAllowedError') {
       useVoiceStore.getState().setMicPermissionDenied(true);
       useUIStore.getState().addToast(
-        'Microphone access denied. You joined as a listener — tap "Allow microphone" to grant access.',
+        translate('runtime.selected.voice.microphoneAccessDeniedYouJoinedAsAListener'),
         'warning',
       );
     } else if (name === 'NotFoundError') {
       // No mic hardware available. Proceed as listener.
       useVoiceStore.getState().setMicPermissionDenied(true);
       useUIStore.getState().addToast(
-        'No microphone detected. You joined as a listener.',
+        translate('runtime.selected.voice.noMicrophoneDetectedYouJoinedAsAListener'),
         'info',
       );
     } else {
@@ -238,17 +239,17 @@ export async function requestMicPermission(): Promise<boolean> {
     const name = err instanceof Error ? err.name : '';
     if (name === 'NotAllowedError') {
       useUIStore.getState().addToast(
-        'Microphone permission still denied. Open Settings → Safari to grant access.',
+        translate('runtime.selected.voice.microphonePermissionStillDeniedOpenSettingsSafariTo'),
         'warning',
       );
     } else if (name === 'NotFoundError') {
       useUIStore.getState().addToast(
-        'No microphone detected.',
+        translate('runtime.selected.voice.noMicrophoneDetected'),
         'warning',
       );
     } else {
       useUIStore.getState().addToast(
-        'Could not access the microphone.',
+        translate('runtime.selected.voice.couldNotAccessTheMicrophone'),
         'warning',
       );
     }

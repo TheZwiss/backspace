@@ -12,6 +12,10 @@ export const supportedLanguages = [
 
 export type SupportedLanguage = (typeof supportedLanguages)[number]['code'];
 
+export function translate(key: string, options?: Record<string, unknown>): string {
+  return i18n.t(key, options);
+}
+
 export function isSupportedLanguage(value: string | null): value is SupportedLanguage {
   return supportedLanguages.some(({ code }) => code === value);
 }

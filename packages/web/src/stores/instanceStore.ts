@@ -19,6 +19,7 @@ import { clearPasswordSyncTimers } from '../utils/federationOps';
 import { failoverDmOriginsFromDisconnected } from '../utils/dmOriginFailover';
 import { useUIStore } from './uiStore';
 import { parseFederatedUsername } from '../utils/identity';
+import { translate } from '../i18n';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -103,7 +104,7 @@ function isNetworkError(err: unknown): boolean {
 /** Thrown when the remote instance already has an account for this user with a different password. */
 export class DifferentPasswordError extends Error {
   constructor(public remoteUsername: string) {
-    super('Account exists with a different password on this instance');
+    super(translate('runtime.selected.instanceStore.accountExistsWithADifferentPasswordOnThis'));
     this.name = 'DifferentPasswordError';
   }
 }
@@ -122,7 +123,7 @@ function normalizeOrigin(url: string): string {
     const parsed = new URL(normalized);
     return parsed.origin; // "https://domain.com" — no path, no trailing slash
   } catch {
-    throw new Error('Invalid URL');
+    throw new Error(translate('runtime.selected.instanceStore.invalidURL'));
   }
 }
 
@@ -291,7 +292,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     // Allow re-adding instances that are in error/disconnected state.
     const existing = get().instances.find(i => i.origin === origin);
     if (existing && (existing.status === 'connected' || existing.status === 'connecting')) {
-      throw new Error('This instance is already connected');
+      throw new Error(translate('runtime.selected.instanceStore.thisInstanceIsAlreadyConnected'));
     }
 
     // Probe with unauthenticated client
@@ -303,7 +304,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
 
   connectToRemote: async (origin: string, password: string, displayName?: string) => {
     const currentUser = useAuthStore.getState().user;
-    if (!currentUser) throw new Error('Not logged in');
+    if (!currentUser) throw new Error(translate('runtime.selected.instanceStore.notLoggedIn'));
 
     set({ isLoading: true, error: null });
 
@@ -311,7 +312,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       // Step 1: Verify password against the instance we're currently browsing
       const { valid } = await api.users.verifyPassword(password);
       if (!valid) {
-        throw new Error('Incorrect password');
+        throw new Error(translate('runtime.selected.instanceStore.incorrectPassword'));
       }
 
       // Step 2: Compute the user's true home identity
@@ -387,7 +388,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       }
 
       if (!response) {
-        throw new Error('Failed to authenticate with remote instance');
+        throw new Error(translate('runtime.selected.instanceStore.failedToAuthenticateWithRemoteInstance'));
       }
 
       // Step 3: Complete connection
@@ -437,14 +438,14 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
         if (peerResult.peeringStatus === 'rejected') {
           const { addToast } = useUIStore.getState();
           addToast(
-            `Cross-instance messaging unavailable — ${instance.label} requires manual peering approval`,
+            translate('runtime.templates.instanceStore.crossInstanceMessagingUnavailableRequiresManualPeeringApproval', { p0: instance.label }),
             'warning',
             10000,
           );
         } else if (peerResult.peeringStatus === 'pending') {
           const { addToast } = useUIStore.getState();
           addToast(
-            `Peering with ${instance.label} in progress — cross-instance messaging will be available shortly`,
+            translate('runtime.templates.instanceStore.peeringWithInProgressCrossInstanceMessagingWill', { p0: instance.label }),
             'info',
           );
         }
@@ -660,7 +661,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
         set((state) => ({
           instances: state.instances.map(i =>
             i.origin === origin
-              ? { ...i, status: 'disconnected' as const, error: 'Instance unreachable — retrying in background' }
+              ? { ...i, status: 'disconnected' as const, error: translate('runtime.selected.instanceStore.instanceUnreachableRetryingInBackground') }
               : i
           ),
         }));
@@ -669,7 +670,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
         const errRegistry = upsertRegistryEntry(get().registry, origin, {
           origin,
           status: 'unreachable',
-          errorMessage: 'Instance unreachable',
+          errorMessage: translate('runtime.selected.instanceStore.instanceUnreachable'),
         });
         set({ registry: errRegistry, registryUpdatedAt: Date.now() });
 
@@ -678,7 +679,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
         set((state) => ({
           instances: state.instances.map(i =>
             i.origin === origin
-              ? { ...i, status: 'error' as const, error: 'Token expired — re-authenticate to reconnect' }
+              ? { ...i, status: 'error' as const, error: translate('runtime.selected.instanceStore.tokenExpiredReAuthenticateToReconnect') }
               : i
           ),
         }));
@@ -687,7 +688,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
         const errRegistry = upsertRegistryEntry(get().registry, origin, {
           origin,
           status: 'auth_expired',
-          errorMessage: 'Token expired',
+          errorMessage: translate('runtime.selected.instanceStore.tokenExpired'),
         });
         set({ registry: errRegistry, registryUpdatedAt: Date.now() });
       }
@@ -853,7 +854,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
 
       return results;
     } catch (err) {
-      const error = err instanceof Error ? err.message : 'Unknown error';
+      const error = err instanceof Error ? err.message : translate('runtime.selected.instanceStore.unknownError');
       return Object.fromEntries(origins.map(o => [o, { success: false as const, error }]));
     }
   },
@@ -988,7 +989,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
             addedAt: Date.now(),
             lastConnectedAt: null,
             disconnectedAt: null,
-            errorMessage: 'Authenticate to connect to your home instance',
+            errorMessage: translate('runtime.selected.instanceStore.authenticateToConnectToYourHomeInstance'),
           });
         }
       }
@@ -1055,7 +1056,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
           user: currentUser, // placeholder
           username: ri.username,
           status: 'error' as const,
-          error: 'Session expired — re-authenticate to reconnect',
+          error: translate('runtime.selected.instanceStore.sessionExpiredReAuthenticateToReconnect'),
           api: createApiClient(origin, () => null),
         }));
         return { instances: [...state.instances, ...placeholders] };
@@ -1066,7 +1067,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     for (const { origin } of withoutToken) {
       const entry = registry.get(origin);
       if (entry) {
-        registry.set(origin, { ...entry, status: 'auth_expired', errorMessage: 'Session expired — re-authenticate to reconnect' });
+        registry.set(origin, { ...entry, status: 'auth_expired', errorMessage: translate('runtime.selected.instanceStore.sessionExpiredReAuthenticateToReconnect2') });
       }
     }
 
@@ -1151,7 +1152,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
               set((state) => ({
                 instances: state.instances.map(i =>
                   i.origin === origin
-                    ? { ...i, status: 'disconnected' as const, error: 'Instance unreachable — retrying in background' }
+                    ? { ...i, status: 'disconnected' as const, error: translate('runtime.selected.instanceStore.instanceUnreachableRetryingInBackground2') }
                     : i
                 ),
               }));
@@ -1159,7 +1160,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
               // Update registry entry on network error
               const entry = registry.get(origin);
               if (entry) {
-                registry.set(origin, { ...entry, status: 'unreachable', errorMessage: 'Instance unreachable' });
+                registry.set(origin, { ...entry, status: 'unreachable', errorMessage: translate('runtime.selected.instanceStore.instanceUnreachable2') });
               }
 
               // Start WebSocket — its built-in exponential backoff retry will auto-recover
@@ -1170,7 +1171,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
               set((state) => ({
                 instances: state.instances.map(i =>
                   i.origin === origin
-                    ? { ...i, status: 'error' as const, error: 'Token expired — re-authenticate to reconnect' }
+                    ? { ...i, status: 'error' as const, error: translate('runtime.selected.instanceStore.tokenExpiredReAuthenticateToReconnect2') }
                     : i
                 ),
               }));
@@ -1178,7 +1179,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
               // Update registry entry on auth error
               const entry = registry.get(origin);
               if (entry) {
-                registry.set(origin, { ...entry, status: 'auth_expired', errorMessage: 'Token expired' });
+                registry.set(origin, { ...entry, status: 'auth_expired', errorMessage: translate('runtime.selected.instanceStore.tokenExpired2') });
               }
             }
           }

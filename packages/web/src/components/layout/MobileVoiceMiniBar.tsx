@@ -3,6 +3,8 @@ import { useUIStore } from '../../stores/uiStore';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useSpaceStore, getChannelOrigin } from '../../stores/spaceStore';
 import { wsSend } from '../../hooks/useWebSocket';
+import { Trans } from 'react-i18next';
+import { translate } from '../../i18n';
 
 export function MobileVoiceMiniBar() {
   const pushMobileScreen = useUIStore((s) => s.pushMobileScreen);
@@ -28,11 +30,11 @@ export function MobileVoiceMiniBar() {
 
   // Resolve channel name
   const isDmCall = currentVoiceChannelId.startsWith('dm-');
-  let channelName = 'Voice Call';
+  let channelName = translate('runtime.selected.MobileVoiceMiniBar.voiceCall');
   if (isDmCall) {
     const dmId = currentVoiceChannelId.replace('dm-', '');
     const dm = dmChannels.find(d => d.id === dmId);
-    if (dm) channelName = 'DM Call';
+    if (dm) channelName = translate('runtime.selected.MobileVoiceMiniBar.dmCall');
   } else {
     const ch = channels.find(c => c.id === currentVoiceChannelId);
     if (ch) channelName = ch.name;
@@ -55,7 +57,7 @@ export function MobileVoiceMiniBar() {
         <div className="min-w-0">
           <p className="text-xs font-medium text-accent-mint truncate">{channelName}</p>
           {participantCount > 0 && (
-            <p className="text-[10px] text-txt-tertiary">{participantCount} connected</p>
+            <p className="text-[10px] text-txt-tertiary">{participantCount} <Trans i18nKey="ui.MobileVoiceMiniBar.connected">connected</Trans></p>
           )}
         </div>
       </button>

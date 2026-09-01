@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useInstanceStore, DifferentPasswordError } from '../stores/instanceStore';
+import { translate } from '../i18n';
 
 /**
  * Reusable hook for connecting to a federated instance.
@@ -39,11 +40,11 @@ export function useInstanceConnect() {
     } catch (err) {
       let message: string;
       if (err instanceof DifferentPasswordError) {
-        message = 'An account already exists on this instance with a different password. Enter the password for that account.';
+        message = translate('runtime.selected.useInstanceConnect.anAccountAlreadyExistsOnThisInstanceWith');
       } else if (err instanceof Error) {
         message = err.message;
       } else {
-        message = 'Connection failed';
+        message = translate('runtime.selected.useInstanceConnect.connectionFailed');
       }
       setError(message);
       throw err;

@@ -3,6 +3,7 @@ import type { DiscoverUser, User } from '@backspace/shared';
 import { api } from '../api/client';
 import { useInstanceStore } from './instanceStore';
 import { normalizeUserAssets } from '../utils/assetUrls';
+import { translate } from '../i18n';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -70,7 +71,7 @@ export const useDiscoverStore = create<DiscoverState>((set) => ({
       const fulfilled = results.filter(r => r.status === 'fulfilled') as PromiseFulfilledResult<{ users: DiscoverUser[]; total: number; origin: string }>[];
 
       if (fulfilled.length === 0) {
-        set({ isLoading: false, error: 'Failed to reach any instance for discovery' });
+        set({ isLoading: false, error: translate('runtime.selected.discoverStore.failedToReachAnyInstanceForDiscovery') });
         return;
       }
 
@@ -101,7 +102,7 @@ export const useDiscoverStore = create<DiscoverState>((set) => ({
     } catch (err) {
       set({
         isLoading: false,
-        error: err instanceof Error ? err.message : 'Failed to discover users',
+        error: err instanceof Error ? err.message : translate('runtime.selected.discoverStore.failedToDiscoverUsers'),
       });
     }
   },

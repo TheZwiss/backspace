@@ -9,6 +9,8 @@ import { api } from '../../api/client';
 import { isSelf, parseFederatedUsername } from '../../utils/identity';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import type { Friend, MemberWithUser, SpaceInviteRequest, User } from '@backspace/shared';
+import { Trans } from 'react-i18next';
+import { translate } from '../../i18n';
 
 type SendStatus =
   | { kind: 'pending' }
@@ -16,14 +18,14 @@ type SendStatus =
   | { kind: 'failure'; reason: string };
 
 const FAILURE_COPY: Record<string, string> = {
-  invite_invalid: 'Invite link no longer valid',
-  not_a_friend: 'Not a friend',
-  user_not_found: 'User not found',
-  already_member: 'Already a member',
-  upstream: "Couldn't verify invite — try again",
-  cannot_invite_self: 'Cannot invite yourself',
-  invalid_body: 'Invalid request',
-  invalid_target: 'Invalid target',
+  invite_invalid: 'runtime.manual.inviteNoLongerValid',
+  not_a_friend: 'runtime.manual.notAFriend',
+  user_not_found: 'runtime.manual.userNotFound',
+  already_member: 'runtime.manual.alreadyAMember',
+  upstream: 'runtime.manual.couldNotVerifyInvite',
+  cannot_invite_self: 'runtime.manual.cannotInviteYourself',
+  invalid_body: 'runtime.manual.invalidRequest',
+  invalid_target: 'runtime.manual.invalidTarget',
 };
 
 function reasonForError(error: unknown): string {
@@ -33,12 +35,12 @@ function reasonForError(error: unknown): string {
     // network detection for transport failures.
     const msg = error.message;
     const mapped = FAILURE_COPY[msg];
-    if (mapped) return mapped;
+    if (mapped) return translate(mapped);
     if (/network|fetch|failed to fetch/i.test(msg)) {
-      return "Couldn't reach your instance";
+      return translate('runtime.manual.couldNotReachYourInstance');
     }
   }
-  return "Couldn't send (server error)";
+  return translate('runtime.manual.couldNotSendServerError');
 }
 
 function InviteResultFriendRow({
@@ -64,13 +66,13 @@ function InviteResultFriendRow({
         <div className="text-[13px] font-medium text-txt-primary truncate">{dn}</div>
         <div className="text-[11px] text-txt-tertiary truncate">@{canonical.username}</div>
       </div>
-      {status?.kind === 'success' && (
-        <span className="text-[12px] text-accent-mint flex-shrink-0">✓ Sent</span>
+      {status?.kind === "success" && (
+        <span className="text-[12px] text-accent-mint flex-shrink-0"><Trans i18nKey="ui.InviteModal.sent">✓ Sent</Trans></span>
       )}
-      {status?.kind === 'failure' && (
+      {status?.kind === "failure" && (
         <span className="text-[12px] text-txt-danger flex-shrink-0">✗ {status.reason}</span>
       )}
-      {status?.kind === 'pending' && (
+      {status?.kind === "pending" && (
         <span className="text-[12px] text-txt-tertiary flex-shrink-0">...</span>
       )}
     </div>
@@ -116,7 +118,7 @@ function InviteSelectFriendRow({
       <div className="flex-1 min-w-0">
         <div className="text-[13px] font-medium text-txt-primary truncate">{dn}</div>
         <div className="text-[11px] text-txt-tertiary truncate">
-          {alreadyMember ? 'Already in space' : `@${canonical.username}`}
+          {alreadyMember ? translate('runtime.expressions.InviteModal.alreadyInSpace') : `@${canonical.username}`}
         </div>
       </div>
       {!alreadyMember && (
@@ -180,7 +182,7 @@ export function InviteModal() {
         setCodeLoading(false);
       },
       (err) => {
-        setCodeError((err as Error)?.message ?? 'Failed to generate invite link');
+        setCodeError((err as Error)?.message ?? translate('runtime.messages.InviteModal.failedToGenerateInviteLink'));
         setCodeLoading(false);
       },
     );
@@ -324,7 +326,7 @@ export function InviteModal() {
   const inResultsView = results.size > 0 && !sending;
   const submitLabel =
     selectedFriends.length === 0
-      ? 'Select Friends'
+      ? translate('runtime.selected.InviteModal.selectFriends')
       : `Send ${selectedFriends.length} Invite${selectedFriends.length > 1 ? 's' : ''}`;
   const hasFailures =
     inResultsView &&
@@ -334,26 +336,26 @@ export function InviteModal() {
     <Modal
       isOpen={isOpen}
       onClose={closeModal}
-      title="Invite Friends"
+      title={translate("runtime.attributes.InviteModal.inviteFriends")}
       mobileStyle="sheet"
     >
       {isRequestOnly ? (
         <div className="space-y-3">
           <p className="text-[13px] text-txt-tertiary">
-            This space uses join requests — people join by requesting approval
-            from a manager, so it has no invite link to share.
+            <Trans i18nKey="ui.InviteModal.thisSpaceUsesJoinRequestsPeopleJoinBy">This space uses join requests — people join by requesting approval
+            from a manager, so it has no invite link to share.</Trans>
           </p>
           <button
             onClick={closeModal}
             className="w-full py-2 rounded-md text-[13px] font-semibold glass-pill text-txt-primary"
           >
-            Got it
+            <Trans i18nKey="ui.InviteModal.gotIt">Got it</Trans>
           </button>
         </div>
       ) : (
       <div className="space-y-3">
         <p className="text-[13px] text-txt-tertiary">
-          Send to friends, or share a link.
+          <Trans i18nKey="ui.InviteModal.sendToFriendsOrShareALink">Send to friends, or share a link.</Trans>
         </p>
 
         {/* Selected chips — hidden in results view */}
@@ -368,7 +370,7 @@ export function InviteModal() {
                 <button
                   onClick={() => removeFriend(f.id)}
                   className="opacity-60 hover:opacity-100 transition-opacity text-[14px] leading-none"
-                  aria-label={`Remove ${f.displayName ?? f.username}`}
+                  aria-label={translate('runtime.templates.InviteModal.remove', { p0: f.displayName ?? f.username })}
                 >
                   &times;
                 </button>
@@ -384,7 +386,7 @@ export function InviteModal() {
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search friends..."
+            placeholder={translate("runtime.attributes.InviteModal.searchFriends")}
             className="input-search w-full py-2 text-[14px]"
           />
         )}
@@ -404,8 +406,8 @@ export function InviteModal() {
               {filteredFriends.length === 0 && (
                 <div className="py-4 text-center text-txt-tertiary text-[14px]">
                   {query.trim()
-                    ? 'No friends match your search'
-                    : 'No friends yet'}
+                    ? translate('runtime.expressions.InviteModal.noFriendsMatchYourSearch')
+                    : translate('runtime.expressions.InviteModal.noFriendsYet')}
                 </div>
               )}
               {filteredFriends.map((friend) => (
@@ -431,14 +433,14 @@ export function InviteModal() {
                 disabled={sending}
                 className="flex-1 py-2 rounded-md text-[13px] font-semibold transition-colors bg-accent-mint text-surface-base hover:bg-accent-mint/90 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Retry failed
+                <Trans i18nKey="ui.InviteModal.retryFailed">Retry failed</Trans>
               </button>
             )}
             <button
               onClick={closeModal}
               className="flex-1 py-2 rounded-md text-[13px] font-semibold glass-pill text-txt-primary"
             >
-              Done
+              <Trans i18nKey="ui.InviteModal.done">Done</Trans>
             </button>
           </div>
         ) : (
@@ -447,14 +449,14 @@ export function InviteModal() {
             disabled={selectedFriends.length === 0 || sending || codeLoading}
             className="w-full py-2 rounded-md text-[13px] font-semibold transition-colors bg-accent-mint text-surface-base hover:bg-accent-mint/90 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {sending ? 'Sending...' : submitLabel}
+            {sending ? translate('runtime.expressions.InviteModal.sending') : submitLabel}
           </button>
         )}
 
         {/* Share-link footer */}
         <div className="pt-3 border-t border-white/[0.06]">
           <p className="text-[12px] text-txt-tertiary mb-2">
-            Or share a link
+            <Trans i18nKey="ui.InviteModal.orShareALink">Or share a link</Trans>
           </p>
           {codeError && (
             <div className="mb-2 text-[12px] text-txt-danger">{codeError}</div>
@@ -462,7 +464,7 @@ export function InviteModal() {
           <div className="flex items-center gap-2">
             <input
               type="text"
-              value={codeLoading ? 'Generating...' : inviteUrl}
+              value={codeLoading ? "Generating..." : inviteUrl}
               readOnly
               className="input-embedded flex-1 font-mono text-xs px-2 py-1.5"
             />
@@ -473,7 +475,7 @@ export function InviteModal() {
                 linkCopied ? 'text-accent-mint' : 'text-txt-primary'
               }`}
             >
-              {linkCopied ? 'Copied!' : 'Copy'}
+              {linkCopied ? translate('runtime.expressions.InviteModal.copied') : translate('runtime.expressions.InviteModal.copy')}
             </button>
           </div>
         </div>

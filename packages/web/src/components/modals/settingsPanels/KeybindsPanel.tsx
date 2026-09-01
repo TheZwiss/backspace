@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useKeybindStore, BINDABLE_ACTIONS, Keybind } from '../../../stores/keybindStore';
 import { isElectron, isElectronMac } from '../../../platform/platform';
+import { Trans } from 'react-i18next';
+import { translate } from '../../../i18n';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -12,7 +14,11 @@ const MODIFIER_CODES = new Set([
 ]);
 
 const MOUSE_BUTTON_MAP: Record<number, number> = { 1: 3, 3: 4, 4: 5 };
-const MOUSE_BUTTON_NAMES: Record<number, string> = { 3: 'Middle Click', 4: 'Mouse 4', 5: 'Mouse 5' };
+const mouseButtonName = (button: number): string | undefined => ({
+  3: translate('runtime.manual.middleClick'),
+  4: translate('runtime.manual.mouse4'),
+  5: translate('runtime.manual.mouse5'),
+})[button];
 
 function keyDisplayName(code: string, key: string): string {
   if (code.startsWith('Shift')) return 'Shift';
@@ -64,12 +70,12 @@ function KeybindRow({ actionId, label, keybind, isRecording, recordingDisplay, o
         <div className="text-xs text-txt-tertiary mt-0.5">
           {isRecording ? (
             <span className="text-accent-mint animate-pulse">
-              {recordingDisplay || 'Press a key combo...'}
+              {recordingDisplay || translate('runtime.expressions.KeybindsPanel.pressAKeyCombo')}
             </span>
           ) : keybind ? (
             keybind.displayLabel
           ) : (
-            'Not bound'
+            translate('runtime.expressions.KeybindsPanel.notBound')
           )}
         </div>
       </div>
@@ -80,20 +86,20 @@ function KeybindRow({ actionId, label, keybind, isRecording, recordingDisplay, o
               onClick={onStartRecording}
               className="text-xs px-2.5 py-1 rounded text-txt-tertiary hover:text-txt-primary hover:bg-white/[0.06] transition-colors"
             >
-              {keybind ? 'Edit' : 'Record'}
+              {keybind ? translate('runtime.expressions.KeybindsPanel.edit') : translate('runtime.expressions.KeybindsPanel.record')}
             </button>
             {keybind && (
               <button
                 onClick={onDelete}
                 className="text-xs px-2.5 py-1 rounded text-txt-tertiary hover:text-rose-400 hover:bg-rose-400/10 transition-colors"
               >
-                Delete
+                <Trans i18nKey="ui.KeybindsPanel.delete">Delete</Trans>
               </button>
             )}
           </>
         )}
         {isRecording && (
-          <span className="text-[10px] text-txt-tertiary">ESC to cancel</span>
+          <span className="text-[10px] text-txt-tertiary"><Trans i18nKey="ui.KeybindsPanel.escToCancel">ESC to cancel</Trans></span>
         )}
       </div>
     </div>
@@ -177,8 +183,8 @@ export function KeybindsPanel() {
 
     const keys = Array.from(codes.values()).map((c) => c.numeric).sort((a, b) => a - b);
     const displayParts = Array.from(codes.values()).map((c) => c.display);
-    if (mouseBtn && MOUSE_BUTTON_NAMES[mouseBtn]) {
-      displayParts.push(MOUSE_BUTTON_NAMES[mouseBtn]);
+    if (mouseBtn && mouseButtonName(mouseBtn)) {
+      displayParts.push(mouseButtonName(mouseBtn)!);
     }
     const displayLabel = displayParts.join(' + ');
 
@@ -251,7 +257,7 @@ export function KeybindsPanel() {
       e.stopPropagation();
 
       mouseButtonRef.current = uiButton;
-      mouseDisplayRef.current = MOUSE_BUTTON_NAMES[uiButton] ?? `Mouse ${uiButton}`;
+      mouseDisplayRef.current = mouseButtonName(uiButton) ?? translate('runtime.manual.mouseNumber', { number: uiButton });
 
       const parts = Array.from(pressedCodesRef.current.values()).map((c) => c.display);
       parts.push(mouseDisplayRef.current);
@@ -286,13 +292,13 @@ export function KeybindsPanel() {
 
   return (
     <div className="space-y-5">
-      <h2 className="text-lg font-semibold text-txt-primary mb-6">Keybinds</h2>
+      <h2 className="text-lg font-semibold text-txt-primary mb-6"><Trans i18nKey="ui.KeybindsPanel.keybinds">Keybinds</Trans></h2>
       {/* macOS Accessibility Warning */}
       {isElectronMac() && accessibilityTrusted === false && (
         <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3.5">
-          <div className="text-sm text-amber-200 font-medium">Accessibility Permission Required</div>
+          <div className="text-sm text-amber-200 font-medium"><Trans i18nKey="ui.KeybindsPanel.accessibilityPermissionRequired">Accessibility Permission Required</Trans></div>
           <div className="text-xs text-amber-200/70 mt-1">
-            Backspace needs Accessibility permission for global shortcuts to work outside the app.
+            <Trans i18nKey="ui.KeybindsPanel.backspaceNeedsAccessibilityPermissionForGlobalShortcutsTo">Backspace needs Accessibility permission for global shortcuts to work outside the app.</Trans>
           </div>
           <button
             onClick={() => {
@@ -300,7 +306,7 @@ export function KeybindsPanel() {
             }}
             className="mt-2 text-xs px-3 py-1.5 rounded bg-amber-500/20 text-amber-200 hover:bg-amber-500/30 transition-colors"
           >
-            Grant Permission
+            <Trans i18nKey="ui.KeybindsPanel.grantPermission">Grant Permission</Trans>
           </button>
         </div>
       )}
@@ -308,9 +314,9 @@ export function KeybindsPanel() {
       {/* Linux hook error warning */}
       {isElectron() && hookError && (
         <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3.5">
-          <div className="text-sm text-amber-200 font-medium">Global Shortcuts Unavailable</div>
+          <div className="text-sm text-amber-200 font-medium"><Trans i18nKey="ui.KeybindsPanel.globalShortcutsUnavailable">Global Shortcuts Unavailable</Trans></div>
           <div className="text-xs text-amber-200/70 mt-1">
-            Failed to start input listener. On Linux, your user may need to be in the <code className="bg-black/20 px-1 rounded">input</code> group.
+            <Trans i18nKey="ui.KeybindsPanel.failedToStartInputListenerOnLinuxYour">Failed to start input listener. On Linux, your user may need to be in the</Trans> <code className="bg-black/20 px-1 rounded"><Trans i18nKey="ui.KeybindsPanel.input">input</Trans></code> <Trans i18nKey="ui.KeybindsPanel.group">group.</Trans>
           </div>
         </div>
       )}
@@ -318,21 +324,21 @@ export function KeybindsPanel() {
       {/* Web limitation note */}
       {!isElectron() && (
         <div className="text-xs text-txt-tertiary px-1">
-          Shortcuts work while this tab is focused. For global shortcuts that work in other apps, use the desktop app.
+          <Trans i18nKey="ui.KeybindsPanel.shortcutsWorkWhileThisTabIsFocusedFor">Shortcuts work while this tab is focused. For global shortcuts that work in other apps, use the desktop app.</Trans>
         </div>
       )}
 
       {/* Keybind rows */}
       <div>
         <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
-          Voice Shortcuts
+          <Trans i18nKey="ui.KeybindsPanel.voiceShortcuts">Voice Shortcuts</Trans>
         </div>
         <div className="space-y-1.5">
           {BINDABLE_ACTIONS.map((action) => (
             <KeybindRow
               key={action.id}
               actionId={action.id}
-              label={action.label}
+              label={translate(action.labelKey)}
               keybind={getKeybind(action.id)}
               isRecording={recordingActionId === action.id}
               recordingDisplay={recordingDisplay}
@@ -351,24 +357,24 @@ export function KeybindsPanel() {
       {conflict && (
         <div className="rounded-lg bg-surface-elevated border border-white/[0.06] p-3.5">
           <div className="text-sm text-txt-primary">
-            <span className="font-medium">{conflict.pendingKeybind.displayLabel}</span> is already bound to{' '}
+            <span className="font-medium">{conflict.pendingKeybind.displayLabel}</span> <Trans i18nKey="ui.KeybindsPanel.isAlreadyBoundTo">is already bound to</Trans>{' '}
             <span className="font-medium">
-              {BINDABLE_ACTIONS.find((a) => a.id === conflict.existingKeybind.actionId)?.label}
+              {translate(BINDABLE_ACTIONS.find((a) => a.id === conflict.existingKeybind.actionId)?.labelKey ?? '')}
             </span>
-            . Overwrite?
+            <Trans i18nKey="ui.KeybindsPanel.overwrite">. Overwrite?</Trans>
           </div>
           <div className="flex gap-2 mt-2.5">
             <button
               onClick={confirmConflict}
               className="text-xs px-3 py-1.5 rounded bg-accent-mint/20 text-accent-mint hover:bg-accent-mint/30 transition-colors"
             >
-              Overwrite
+              <Trans i18nKey="ui.KeybindsPanel.overwrite2">Overwrite</Trans>
             </button>
             <button
               onClick={cancelConflict}
               className="text-xs px-3 py-1.5 rounded bg-white/[0.06] text-txt-secondary hover:bg-white/[0.1] transition-colors"
             >
-              Cancel
+              <Trans i18nKey="ui.KeybindsPanel.cancel">Cancel</Trans>
             </button>
           </div>
         </div>

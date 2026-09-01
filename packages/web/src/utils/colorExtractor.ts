@@ -1,4 +1,5 @@
-/**
+
+import { translate } from '../i18n';/**
  * Canvas-based dominant color extraction using median-cut quantization.
  * Zero-dependency, client-side only. Used to derive icon-matched gradients
  * for space cards on the Explore page.
@@ -30,7 +31,7 @@ export async function extractDominantColors(imageUrl: string): Promise<string[]>
 
     await new Promise<void>((resolve, reject) => {
       img.onload = () => resolve();
-      img.onerror = () => reject(new Error('Failed to load image'));
+      img.onerror = () => reject(new Error(translate('runtime.selected.colorExtractor.failedToLoadImage')));
       img.src = imageUrl;
     });
 

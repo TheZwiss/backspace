@@ -41,6 +41,7 @@ import { useChatStore } from '../../stores/chatStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { AudioManager } from '../../audio/AudioManager';
+import { translate } from '../../i18n';
 
 export function AppLayout() {
   const { spaceId, channelId } = useParams<{ spaceId?: string; channelId?: string }>();
@@ -155,7 +156,7 @@ export function AppLayout() {
           const newest = devices.find(d =>
             d.kind === 'audioinput' && d.groupId && newGroups.includes(d.groupId) && d.label,
           );
-          const label = newest?.label || 'New audio device';
+          const label = newest?.label || translate('runtime.selected.AppLayout.newAudioDevice');
           useUIStore.getState().addToast(
             `${label} detected — choose it in Voice settings to switch`,
             'info',
@@ -339,7 +340,7 @@ export function AppLayout() {
 
   if (!user || showBootSkeleton) {
     return (
-      <div className="h-full flex bg-surface-base" role="status" aria-label="Loading Backspace">
+      <div className="h-full flex bg-surface-base" role="status" aria-label={translate("runtime.attributes.AppLayout.loadingBackspace")}>
         {/* Space strip */}
         <div className="w-[72px] hidden md:flex flex-col items-center gap-3 pt-4 bg-surface-base flex-shrink-0">
           {Array.from({ length: 5 }, (_, i) => (

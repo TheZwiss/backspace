@@ -12,6 +12,8 @@ import { useTransferStore } from '../../../stores/transferStore';
 import { waitForTransferAttachment } from '../../../utils/waitForTransfer';
 import { getMyUserIdForOrigin } from '../../../stores/spaceStore';
 import { hasPermissionBit, PermissionBits } from '../../../utils/permissions';
+import { Trans } from 'react-i18next';
+import { translate } from '../../../i18n';
 
 interface OverviewPanelProps {
   spaceId: string;
@@ -121,7 +123,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
       const { filename } = await waitForTransferAttachment(tid);
       setIconFilename(filename);
     } catch {
-      setSaveError('Failed to upload icon');
+      setSaveError(translate('runtime.messages.OverviewPanel.failedToUploadIcon'));
       setIconPreview(null);
       URL.revokeObjectURL(previewUrl);
     } finally {
@@ -162,7 +164,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
       const { filename } = await waitForTransferAttachment(tid);
       setBannerFilename(filename);
     } catch {
-      setSaveError('Failed to upload banner');
+      setSaveError(translate('runtime.messages.OverviewPanel.failedToUploadBanner'));
       setBannerPreview(null);
       URL.revokeObjectURL(previewUrl);
     } finally {
@@ -204,9 +206,9 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
         URL.revokeObjectURL(bannerPreview);
         setBannerPreview(null);
       }
-      addToast('Settings saved', 'success', 2000);
+      addToast(translate('runtime.messages.OverviewPanel.settingsSaved'), 'success', 2000);
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : 'Failed to save');
+      setSaveError(err instanceof Error ? err.message : translate('runtime.messages.OverviewPanel.failedToSave'));
     } finally {
       setSaving(false);
     }
@@ -238,7 +240,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
       closeModal();
       navigate('/channels/@me');
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : 'Failed to delete space');
+      setSaveError(err instanceof Error ? err.message : translate('runtime.messages.OverviewPanel.failedToDeleteSpace'));
     }
   };
 
@@ -260,12 +262,12 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
     setTransferring(true);
     try {
       await transferOwnership(spaceId, transferTargetId);
-      addToast(`Ownership transferred to ${transferTarget?.user.displayName || transferTarget?.user.username}`, 'success', 3000);
+      addToast(translate('runtime.templates.OverviewPanel.ownershipTransferredTo', { p0: transferTarget?.user.displayName || transferTarget?.user.username }), 'success', 3000);
       setShowTransfer(false);
       setTransferTargetId(null);
       setTransferSearch('');
     } catch (err) {
-      addToast(err instanceof Error ? err.message : 'Failed to transfer ownership', 'warning', 3000);
+      addToast(err instanceof Error ? err.message : translate('runtime.messages.OverviewPanel.failedToTransferOwnership'), 'warning', 3000);
     } finally {
       setTransferring(false);
     }
@@ -278,15 +280,15 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
   return (
     <>
       <div className="space-y-5">
-        <h2 className="text-lg font-semibold text-txt-primary mb-6">Overview</h2>
+        <h2 className="text-lg font-semibold text-txt-primary mb-6"><Trans i18nKey="ui.OverviewPanel.overview">Overview</Trans></h2>
         {/* Space Identity */}
         <div>
-          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">Space Identity</div>
+          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5"><Trans i18nKey="ui.OverviewPanel.spaceIdentity">Space Identity</Trans></div>
           <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-4">
         {/* Space Icon */}
         <div>
           <label className="block text-xs text-txt-secondary mb-1.5">
-            Space Icon
+            <Trans i18nKey="ui.OverviewPanel.spaceIcon">Space Icon</Trans>
           </label>
           <div className="flex items-center gap-3">
             <button
@@ -299,7 +301,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
             >
               {displayIconSrc ? (
                 <>
-                  <img src={displayIconSrc} alt="Space icon" className="w-full h-full object-cover" />
+                  <img src={displayIconSrc} alt={translate("runtime.attributes.OverviewPanel.spaceIcon")} className="w-full h-full object-cover" />
                   {canManageSpace && (
                     <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                       <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -339,7 +341,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
                 onClick={handleRemoveIcon}
                 className="text-xs text-txt-tertiary hover:text-txt-danger transition-colors"
               >
-                Remove
+                <Trans i18nKey="ui.OverviewPanel.remove">Remove</Trans>
               </button>
             )}
           </div>
@@ -348,7 +350,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
         {/* Space Avatar Color */}
         <div>
           <label className="block text-xs text-txt-secondary mb-1.5">
-            Icon Color
+            <Trans i18nKey="ui.OverviewPanel.iconColor">Icon Color</Trans>
           </label>
           <div className="flex gap-2">
             {AVATAR_COLORS.map((key) => {
@@ -362,8 +364,8 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
                   className="w-7 h-7 rounded-full border-2 transition-all hover:scale-110 disabled:cursor-default disabled:hover:scale-100"
                   style={{
                     background: entry.gradient,
-                    borderColor: avatarColorState === key ? 'white' : 'transparent',
-                    boxShadow: avatarColorState === key ? `0 0 0 2px ${entry.glow}40` : 'none',
+                    borderColor: avatarColorState === key ? "white" : "transparent",
+                    boxShadow: avatarColorState === key ? `0 0 0 2px ${entry.glow}40` : "none",
                   }}
                   title={key.charAt(0).toUpperCase() + key.slice(1)}
                 />
@@ -375,7 +377,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
         {/* Space Banner */}
         <div>
           <label className="block text-xs text-txt-secondary mb-1.5">
-            Space Banner
+            <Trans i18nKey="ui.OverviewPanel.spaceBanner">Space Banner</Trans>
           </label>
           <div className="flex flex-col gap-2">
             <button
@@ -388,7 +390,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
             >
               {displayBannerSrc ? (
                 <>
-                  <img src={displayBannerSrc} alt="Space banner" className="w-full h-full object-cover" />
+                  <img src={displayBannerSrc} alt={translate("runtime.attributes.OverviewPanel.spaceBanner")} className="w-full h-full object-cover" />
                   {canManageSpace && (
                     <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                       <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -403,7 +405,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
                   <svg className="w-6 h-6 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" />
                   </svg>
-                  <span className="text-[11px]">Upload banner (16:9)</span>
+                  <span className="text-[11px]"><Trans i18nKey="ui.OverviewPanel.uploadBanner169">Upload banner (16:9)</Trans></span>
                 </div>
               )}
               {uploadingBanner && (
@@ -428,7 +430,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
                 onClick={handleRemoveBanner}
                 className="text-xs text-txt-tertiary hover:text-txt-danger transition-colors self-start"
               >
-                Remove banner
+                <Trans i18nKey="ui.OverviewPanel.removeBanner">Remove banner</Trans>
               </button>
             )}
           </div>
@@ -437,7 +439,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
         {/* Space Name */}
         <div>
           <label className="block text-xs text-txt-secondary mb-1.5">
-            Space Name
+            <Trans i18nKey="ui.OverviewPanel.spaceName">Space Name</Trans>
           </label>
           <input
             type="text"
@@ -457,18 +459,18 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
         {/* Danger Zone */}
         {isOwner && (
           <div>
-            <div className="text-[11px] font-semibold text-txt-danger uppercase tracking-wider mb-1.5">Danger Zone</div>
+            <div className="text-[11px] font-semibold text-txt-danger uppercase tracking-wider mb-1.5"><Trans i18nKey="ui.OverviewPanel.dangerZone">Danger Zone</Trans></div>
             <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-4">
               {/* Transfer Ownership */}
               <div>
-                <p className="text-xs text-txt-tertiary mb-3">Transfer ownership to another member. You will become a regular member.</p>
+                <p className="text-xs text-txt-tertiary mb-3"><Trans i18nKey="ui.OverviewPanel.transferOwnershipToAnotherMemberYouWillBecome">Transfer ownership to another member. You will become a regular member.</Trans></p>
                 {showTransfer ? (
                   transferTargetId && transferTarget ? (
                     /* Confirm step */
                     <div className="space-y-3">
                       <div className="p-2.5 rounded-lg bg-accent-amber/10 border border-accent-amber/20">
                         <p className="text-sm text-txt-secondary">
-                          Transfer ownership to{' '}
+                          <Trans i18nKey="ui.OverviewPanel.transferOwnershipTo">Transfer ownership to</Trans>{' '}
                           <span className="font-semibold text-txt-primary">{transferTarget.user.displayName || transferTarget.user.username}</span>?
                         </p>
                       </div>
@@ -478,14 +480,14 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
                           className="px-3 py-1.5 text-sm text-txt-secondary hover:text-txt-primary transition-colors"
                           disabled={transferring}
                         >
-                          Back
+                          <Trans i18nKey="ui.OverviewPanel.back">Back</Trans>
                         </button>
                         <button
                           onClick={handleTransfer}
                           disabled={transferring}
                           className="px-3 py-1.5 bg-accent-amber hover:bg-accent-amber/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
                         >
-                          {transferring ? 'Transferring...' : 'Transfer'}
+                          {transferring ? translate('runtime.expressions.OverviewPanel.transferring') : translate('runtime.expressions.OverviewPanel.transfer')}
                         </button>
                       </div>
                     </div>
@@ -496,17 +498,17 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
                         type="text"
                         value={transferSearch}
                         onChange={(e) => setTransferSearch(e.target.value)}
-                        placeholder="Search members..."
+                        placeholder={translate("runtime.attributes.OverviewPanel.searchMembers")}
                         className="input-search w-full"
                         autoFocus
                       />
                       <div className="max-h-[160px] overflow-y-auto space-y-0.5">
                         {transferCandidates.length === 0 ? (
-                          <p className="text-xs text-txt-tertiary text-center py-3">No members found</p>
+                          <p className="text-xs text-txt-tertiary text-center py-3"><Trans i18nKey="ui.OverviewPanel.noMembersFound">No members found</Trans></p>
                         ) : (
                           transferCandidates.map((member) => {
                             const avatarUrl = member.user.avatar
-                              ? (member.user.avatar.startsWith('http') || member.user.avatar.startsWith('/') ? member.user.avatar : `/api/uploads/${member.user.avatar}`)
+                              ? (member.user.avatar.startsWith("http") || member.user.avatar.startsWith('/') ? member.user.avatar : `/api/uploads/${member.user.avatar}`)
                               : null;
                             return (
                               <button
@@ -542,7 +544,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
                         onClick={() => { setShowTransfer(false); setTransferSearch(''); }}
                         className="text-xs text-txt-tertiary hover:text-txt-secondary transition-colors"
                       >
-                        Cancel
+                        <Trans i18nKey="ui.OverviewPanel.cancel">Cancel</Trans>
                       </button>
                     </div>
                   )
@@ -551,7 +553,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
                     onClick={() => setShowTransfer(true)}
                     className="px-4 py-2 bg-accent-amber hover:bg-accent-amber/80 text-white text-sm font-medium rounded transition-colors"
                   >
-                    Transfer Ownership
+                    <Trans i18nKey="ui.OverviewPanel.transferOwnership">Transfer Ownership</Trans>
                   </button>
                 )}
               </div>
@@ -561,12 +563,12 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
 
               {/* Delete Space */}
               <div>
-                <p className="text-xs text-txt-tertiary mb-3">Permanently delete this space and all its data. This cannot be undone.</p>
+                <p className="text-xs text-txt-tertiary mb-3"><Trans i18nKey="ui.OverviewPanel.permanentlyDeleteThisSpaceAndAllItsData">Permanently delete this space and all its data. This cannot be undone.</Trans></p>
                 <button
                   onClick={handleDelete}
                   className="px-4 py-2 bg-accent-rose hover:bg-accent-rose/80 text-white text-sm font-medium rounded transition-colors"
                 >
-                  {confirmDelete ? 'Click again to confirm deletion' : 'Delete Space'}
+                  {confirmDelete ? translate('runtime.expressions.OverviewPanel.clickAgainToConfirmDeletion') : translate('runtime.expressions.OverviewPanel.deleteSpace')}
                 </button>
               </div>
             </div>
@@ -581,14 +583,14 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
                   onClick={handleDiscard}
                   className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
                 >
-                  Discard
+                  <Trans i18nKey="ui.OverviewPanel.discard">Discard</Trans>
                 </button>
                 <button
                   onClick={handleSave}
                   disabled={saving || uploadingIcon || uploadingBanner || !spaceName.trim()}
                   className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
                 >
-                  {saving ? 'Saving...' : 'Save'}
+                  {saving ? translate('runtime.expressions.OverviewPanel.saving') : translate('runtime.expressions.OverviewPanel.save')}
                 </button>
               </div>
             </div>
@@ -601,7 +603,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
         onClose={() => setCropSrc(null)}
         imageSrc={cropSrc ?? ''}
         onCropComplete={handleCropComplete}
-        title="Crop Space Icon"
+        title={translate("runtime.attributes.OverviewPanel.cropSpaceIcon")}
         cropShape="round"
         aspectRatio={1}
         maxOutputDimension={256}
@@ -612,7 +614,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
         onClose={() => setBannerCropSrc(null)}
         imageSrc={bannerCropSrc ?? ''}
         onCropComplete={handleBannerCropComplete}
-        title="Crop Space Banner"
+        title={translate("runtime.attributes.OverviewPanel.cropSpaceBanner")}
         cropShape="rect"
         aspectRatio={16 / 9}
         maxOutputDimension={1280}

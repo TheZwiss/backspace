@@ -9,12 +9,12 @@ export interface Keybind {
 }
 
 export const BINDABLE_ACTIONS = [
-  { id: 'toggleMute', label: 'Toggle Mute', type: 'toggle' as const },
-  { id: 'toggleDeafen', label: 'Toggle Deafen', type: 'toggle' as const },
-  { id: 'pushToTalk', label: 'Push to Talk', type: 'hold' as const },
-  { id: 'toggleCamera', label: 'Toggle Camera', type: 'toggle' as const },
-  { id: 'toggleScreenShare', label: 'Toggle Screen Share', type: 'toggle' as const },
-  { id: 'disconnect', label: 'Disconnect', type: 'toggle' as const },
+  { id: 'toggleMute', labelKey: 'runtime.manual.toggleMute', type: 'toggle' as const },
+  { id: 'toggleDeafen', labelKey: 'runtime.manual.toggleDeafen', type: 'toggle' as const },
+  { id: 'pushToTalk', labelKey: 'runtime.manual.pushToTalk', type: 'hold' as const },
+  { id: 'toggleCamera', labelKey: 'runtime.manual.toggleCamera', type: 'toggle' as const },
+  { id: 'toggleScreenShare', labelKey: 'runtime.manual.toggleScreenShare', type: 'toggle' as const },
+  { id: 'disconnect', labelKey: 'runtime.manual.disconnect', type: 'toggle' as const },
 ] as const;
 
 /** Mouse buttons that must not be bound (would break OS interaction) */

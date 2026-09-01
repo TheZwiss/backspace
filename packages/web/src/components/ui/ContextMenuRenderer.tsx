@@ -10,6 +10,8 @@ import {
 } from '../../stores/contextMenuStore';
 import { useUIStore } from '../../stores/uiStore';
 import { usePortalContainer } from '../../hooks/usePortalContainer';
+import { Trans } from 'react-i18next';
+import { translate } from '../../i18n';
 
 // ── Desktop item button ──────────────────────────────────────────────────────
 
@@ -503,12 +505,12 @@ function MobileMenu({ items, close }: MobileMenuProps) {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0">
               <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" />
             </svg>
-            <span>Back</span>
+            <span><Trans i18nKey="ui.ContextMenuRenderer.back">Back</Trans></span>
           </button>
         )}
         <div className="py-1">
           {currentItems.map((item) => {
-            if (item.type === 'submenu') {
+            if (item.type === "submenu") {
               // Render submenu trigger as a button that switches sheet content
               const colorClass = 'text-txt-primary';
               return (

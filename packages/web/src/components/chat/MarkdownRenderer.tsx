@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm';
 import { Highlight, themes } from 'prism-react-renderer';
 import type { Components } from 'react-markdown';
 import { MentionBadge } from './MentionBadge';
+import { translate } from '../../i18n';
 
 // ─── Remark Plugin: Tag Bare Fenced Blocks ─────────────────────────────────
 // react-markdown v9 removed the `inline` prop from <code>. Fenced blocks
@@ -91,12 +92,12 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
       {({ style, tokens, getLineProps, getTokenProps }) => (
         <pre
           className="mt-1 rounded border border-white/[0.06] text-[0.875rem] leading-[1.125rem] font-mono overflow-x-auto"
-          style={{ ...style, padding: '0.625rem 0.75rem', margin: 0 }}
+          style={{ ...style, padding: "0.625rem 0.75rem", margin: 0 }}
         >
           {tokens.map((line, i) => {
             const lineProps = getLineProps({ line });
             return (
-              <div key={i} {...lineProps} style={{ ...lineProps.style, minHeight: '1.125rem' }}>
+              <div key={i} {...lineProps} style={{ ...lineProps.style, minHeight: "1.125rem" }}>
                 {line.map((token, key) => (
                   <span key={key} {...getTokenProps({ token })} />
                 ))}

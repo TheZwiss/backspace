@@ -10,6 +10,8 @@ import { api } from '../../api/client';
 import { isSelf, parseFederatedUsername } from '../../utils/identity';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import type { User } from '@backspace/shared';
+import { Trans } from 'react-i18next';
+import { translate } from '../../i18n';
 
 function AddDmFriendRow({
   friend,
@@ -54,7 +56,7 @@ function AddDmFriendRow({
           {friendDisplayName}
         </div>
         <div className="text-[11px] text-txt-tertiary truncate">
-          {isInDm ? 'Already in this DM' : `@${canonical.username}`}
+          {isInDm ? translate('runtime.expressions.AddDmMemberModal.alreadyInThisDM') : `@${canonical.username}`}
         </div>
       </div>
       {!isInDm && (
@@ -162,7 +164,7 @@ export function AddDmMemberModal() {
         // 1-on-1 DM → create a new group DM with all selected + existing other member
         const otherMember = dmChannel.members.find(m => !isSelf(m, myUser));
         if (!otherMember) {
-          setError('Could not determine the other member of this conversation.');
+          setError(translate('runtime.messages.AddDmMemberModal.couldNotDetermineTheOtherMemberOfThis'));
           setIsAdding(false);
           return;
         }
@@ -190,23 +192,23 @@ export function AddDmMemberModal() {
         closeModal();
       }
     } catch (err) {
-      setError((err as Error).message || 'Failed to add members');
+      setError((err as Error).message || translate('runtime.messages.AddDmMemberModal.failedToAddMembers'));
     } finally {
       setIsAdding(false);
     }
   };
 
   const buttonText = selectedFriends.length === 0
-    ? 'Select Friends'
+    ? translate('runtime.selected.AddDmMemberModal.selectFriends')
     : `Add ${selectedFriends.length} Friend${selectedFriends.length > 1 ? 's' : ''}`;
 
   return (
-    <Modal isOpen={isOpen} onClose={closeModal} title="Add Friends to DM" mobileStyle="sheet">
+    <Modal isOpen={isOpen} onClose={closeModal} title={translate("runtime.attributes.AddDmMemberModal.addFriendsToDM")} mobileStyle="sheet">
       <div className="space-y-3">
         {/* Header with member count */}
         <div className="flex items-center justify-between">
           <p className="text-[13px] text-txt-tertiary">
-            Select friends to add to this conversation.
+            <Trans i18nKey="ui.AddDmMemberModal.selectFriendsToAddToThisConversation">Select friends to add to this conversation.</Trans>
           </p>
           <span className="text-[12px] text-txt-tertiary flex-shrink-0 ml-2">
             {memberCount}/{maxMembers}
@@ -239,13 +241,13 @@ export function AddDmMemberModal() {
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search friends..."
+          placeholder={translate("runtime.attributes.AddDmMemberModal.searchFriends")}
           className="input-search w-full py-2 text-[14px]"
           disabled={remainingSlots <= 0}
         />
 
         {remainingSlots <= 0 && (
-          <p className="text-txt-danger text-[13px]">This group DM has reached the 10-member limit.</p>
+          <p className="text-txt-danger text-[13px]"><Trans i18nKey="ui.AddDmMemberModal.thisGroupDMHasReachedThe10Member">This group DM has reached the 10-member limit.</Trans></p>
         )}
 
         {error && (
@@ -256,7 +258,7 @@ export function AddDmMemberModal() {
         <div className="max-h-[300px] overflow-y-auto space-y-[2px]">
           {filteredFriends.length === 0 && (
             <div className="py-4 text-center text-txt-tertiary text-[14px]">
-              {query.trim() ? 'No friends match your search' : 'No friends yet'}
+              {query.trim() ? translate('runtime.expressions.AddDmMemberModal.noFriendsMatchYourSearch') : translate('runtime.expressions.AddDmMemberModal.noFriendsYet')}
             </div>
           )}
 
@@ -284,7 +286,7 @@ export function AddDmMemberModal() {
           disabled={selectedFriends.length === 0 || isAdding}
           className="w-full py-2 rounded-md text-[13px] font-semibold transition-colors bg-accent-mint text-surface-base hover:bg-accent-mint/90 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {isAdding ? 'Adding...' : buttonText}
+          {isAdding ? translate('runtime.expressions.AddDmMemberModal.adding') : buttonText}
         </button>
       </div>
     </Modal>

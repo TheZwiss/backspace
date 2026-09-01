@@ -6,6 +6,7 @@ import { getPublisherPC, getMediaStreamTrack } from './livekitInternals';
 import { broadcastVoiceStatus } from './voice';
 import { activate as activateHwOverdrive, deactivate as deactivateHwOverdrive } from './hwOverdrive';
 import { useUIStore } from '../stores/uiStore';
+import { translate } from '../i18n';
 import {
   STANDARD_RESOLUTIONS, STANDARD_FRAMERATES, WIDTH_MAP,
   BITRATE_MATRIX_KBPS,
@@ -311,7 +312,7 @@ export async function startScreenShare(room: Room): Promise<boolean> {
     // selection was consumed, retrying would re-prompt it.
     if (config.shareAudio && err instanceof Error && err.name !== 'NotAllowedError') {
       useUIStore.getState().addToast(
-        'Could not start stream with system audio. Disable "Share system audio" in the picker if your system does not support it.',
+        translate('runtime.selected.screenShare.couldNotStartStreamWithSystemAudioDisable'),
         'warning',
         8000,
       );
@@ -400,7 +401,7 @@ function scheduleEncoderDetection(room: Room): void {
 
       if (encoderImpl && /openh264/i.test(encoderImpl)) {
         useUIStore.getState().addToast(
-          'Hardware encoder not available — using software fallback. Switch to VP9 for better performance.',
+          translate('runtime.selected.screenShare.hardwareEncoderNotAvailableUsingSoftwareFallbackSwitch'),
           'warning',
           8000,
         );

@@ -12,6 +12,7 @@ import { MobileScreenHeader } from './MobileScreenHeader';
 import { TransferIndicator } from './TransferIndicator';
 import { isElectron } from '../../platform/platform';
 import { useTranslation } from 'react-i18next';
+import { translate } from '../../i18n';
 
 interface MobileSettingsScreenProps {
   initialPanel?: string;
@@ -109,7 +110,7 @@ export function MobileSettingsScreen({ initialPanel }: MobileSettingsScreenProps
 
   return (
     <div className="flex flex-col h-full bg-surface-base">
-      <MobileScreenHeader title={t('common.settings')} rightActions={<TransferIndicator />} />
+      <MobileScreenHeader title={t("common.settings")} rightActions={<TransferIndicator />} />
       <div className="flex-1 overflow-y-auto">
         {sections.map((section) => (
           <button

@@ -4,6 +4,8 @@ import { useVoiceStore } from '../../stores/voiceStore';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useDragToClose } from '../../hooks/useDragToClose';
 import { VoiceUserRow } from './VoiceUserRow';
+import { Trans } from 'react-i18next';
+import { translate } from '../../i18n';
 
 /**
  * Permission state for the in-sheet camera preview. Mirrors the smaller
@@ -284,13 +286,13 @@ export function MobileVoiceJoinSheet({
           setPermState('denied');
           setPreviewActive(false);
         } else if (name === 'NotReadableError') {
-          setPreviewError('Camera is in use by another application.');
+          setPreviewError(translate('runtime.messages.MobileVoiceJoinSheet.cameraIsInUseByAnotherApplication'));
         } else if (name === 'OverconstrainedError') {
-          setPreviewError('Selected camera is unavailable.');
+          setPreviewError(translate('runtime.messages.MobileVoiceJoinSheet.selectedCameraIsUnavailable'));
         } else if (name === 'NotFoundError') {
-          setPreviewError('No camera detected.');
+          setPreviewError(translate('runtime.messages.MobileVoiceJoinSheet.noCameraDetected'));
         } else {
-          setPreviewError('Could not start camera preview.');
+          setPreviewError(translate('runtime.messages.MobileVoiceJoinSheet.couldNotStartCameraPreview'));
         }
       }
     };
@@ -364,13 +366,13 @@ export function MobileVoiceJoinSheet({
         setPermState('denied');
         setPreviewActive(false);
       } else if (name === 'NotReadableError') {
-        setPreviewError('Camera is in use by another application.');
+        setPreviewError(translate('runtime.messages.MobileVoiceJoinSheet.cameraIsInUseByAnotherApplication2'));
       } else if (name === 'OverconstrainedError') {
-        setPreviewError('Selected camera is unavailable.');
+        setPreviewError(translate('runtime.messages.MobileVoiceJoinSheet.selectedCameraIsUnavailable2'));
       } else if (name === 'NotFoundError') {
-        setPreviewError('No camera detected.');
+        setPreviewError(translate('runtime.messages.MobileVoiceJoinSheet.noCameraDetected2'));
       } else {
-        setPreviewError('Could not start camera preview.');
+        setPreviewError(translate('runtime.messages.MobileVoiceJoinSheet.couldNotStartCameraPreview2'));
       }
     }
   }, [cameraDeviceId, stopPreview]);
@@ -387,7 +389,7 @@ export function MobileVoiceJoinSheet({
   const selectedCameraLabel = useMemo(() => {
     if (cameraDeviceId === null) return 'Auto';
     const d = cameraDevices.find((c) => c.deviceId === cameraDeviceId);
-    return d?.label || 'Selected camera';
+    return d?.label || translate('runtime.selected.MobileVoiceJoinSheet.selectedCamera');
   }, [cameraDeviceId, cameraDevices]);
 
   return createPortal(
@@ -434,7 +436,7 @@ export function MobileVoiceJoinSheet({
         {/* Channel switch warning */}
         {isSwitching && (
           <div className="mx-5 mb-3 px-3 py-2 rounded-lg bg-accent-amber/10 text-accent-amber text-xs">
-            You'll leave <span className="font-semibold">{currentChannelName}</span> and join{' '}
+            <Trans i18nKey="ui.MobileVoiceJoinSheet.youLlLeave">You'll leave</Trans> <span className="font-semibold">{currentChannelName}</span> <Trans i18nKey="ui.MobileVoiceJoinSheet.andJoin">and join</Trans>{' '}
             <span className="font-semibold">{channelName}</span>
           </div>
         )}
@@ -452,32 +454,32 @@ export function MobileVoiceJoinSheet({
             />
 
             {/* Dormant / prompt state — tap to enable */}
-            {!previewActive && !previewError && permState !== 'denied' && (
+            {!previewActive && !previewError && permState !== "denied" && (
               <button
                 type="button"
                 onClick={startPreviewFromUser}
                 className="absolute inset-0 flex flex-col items-center justify-center text-txt-tertiary active:bg-white/[0.03] transition-colors"
-                aria-label="Enable camera preview"
+                aria-label={translate("runtime.attributes.MobileVoiceJoinSheet.enableCameraPreview")}
               >
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" className="mb-1.5">
                   <path d="M17 10.5V7a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h12a1 1 0 001-1v-3.5l4 4v-11l-4 4z" />
                 </svg>
                 <span className="text-xs">
-                  {permState === 'unknown' ? 'Checking camera…' : 'Tap to preview camera'}
+                  {permState === "unknown" ? translate('runtime.expressions.MobileVoiceJoinSheet.checkingCamera') : translate('runtime.expressions.MobileVoiceJoinSheet.tapToPreviewCamera')}
                 </span>
               </button>
             )}
 
             {/* Denied state */}
-            {!previewActive && !previewError && permState === 'denied' && (
+            {!previewActive && !previewError && permState === "denied" && (
               <div className="absolute inset-0 flex flex-col items-center justify-center text-txt-tertiary px-6 text-center gap-2">
-                <span className="text-xs">Camera permission denied.</span>
+                <span className="text-xs"><Trans i18nKey="ui.MobileVoiceJoinSheet.cameraPermissionDenied">Camera permission denied.</Trans></span>
                 <button
                   type="button"
                   onClick={startPreviewFromUser}
                   className="text-[11px] px-3 py-1.5 rounded-md bg-surface-elevated text-txt-secondary"
                 >
-                  Try again
+                  <Trans i18nKey="ui.MobileVoiceJoinSheet.tryAgain">Try again</Trans>
                 </button>
               </div>
             )}
@@ -491,7 +493,7 @@ export function MobileVoiceJoinSheet({
                   onClick={startPreviewFromUser}
                   className="text-[11px] px-3 py-1.5 rounded-md bg-surface-elevated text-txt-secondary"
                 >
-                  Try again
+                  <Trans i18nKey="ui.MobileVoiceJoinSheet.tryAgain2">Try again</Trans>
                 </button>
               </div>
             )}
@@ -503,7 +505,7 @@ export function MobileVoiceJoinSheet({
                 onClick={stopPreviewFromUser}
                 className="absolute top-2 right-2 rounded-md bg-black/60 text-white/90 text-[11px] px-2.5 py-1.5"
               >
-                Stop preview
+                <Trans i18nKey="ui.MobileVoiceJoinSheet.stopPreview">Stop preview</Trans>
               </button>
             )}
 
@@ -519,7 +521,7 @@ export function MobileVoiceJoinSheet({
                   className="rounded-md bg-black/60 text-white/90 text-[11px] px-2.5 py-1.5 flex items-center gap-1 max-w-[160px]"
                 >
                   <span className="truncate">{selectedCameraLabel}</span>
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" className={`flex-shrink-0 transition-transform ${pickerOpen ? 'rotate-180' : ''}`}>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" className={`flex-shrink-0 transition-transform ${pickerOpen ? "rotate-180" : ''}`}>
                     <path d="M7 10l5 5 5-5z" />
                   </svg>
                 </button>
@@ -573,8 +575,8 @@ export function MobileVoiceJoinSheet({
         {/* Empty state */}
         {userCount === 0 && (
           <div className="px-5 mb-4 py-3 text-center">
-            <p className="text-sm text-txt-tertiary">No one is in this channel yet.</p>
-            <p className="text-xs text-txt-tertiary/60 mt-1">Be the first to join!</p>
+            <p className="text-sm text-txt-tertiary"><Trans i18nKey="ui.MobileVoiceJoinSheet.noOneIsInThisChannelYet">No one is in this channel yet.</Trans></p>
+            <p className="text-xs text-txt-tertiary/60 mt-1"><Trans i18nKey="ui.MobileVoiceJoinSheet.beTheFirstToJoin">Be the first to join!</Trans></p>
           </div>
         )}
 
@@ -584,7 +586,7 @@ export function MobileVoiceJoinSheet({
           <button
             onClick={() => setPreMuted(!preMuted)}
             className="w-12 h-12 bg-surface-elevated rounded-full flex items-center justify-center text-txt-secondary active:scale-95 transition-transform"
-            aria-label={preMuted ? 'Unmute microphone' : 'Mute microphone'}
+            aria-label={preMuted ? translate('runtime.expressions.MobileVoiceJoinSheet.unmuteMicrophone') : translate('runtime.expressions.MobileVoiceJoinSheet.muteMicrophone')}
           >
             {preMuted ? (
               /* Mic off icon */
@@ -607,14 +609,14 @@ export function MobileVoiceJoinSheet({
             onClick={handleJoin}
             className="bg-accent-mint text-black font-semibold rounded-full px-8 py-3 active:scale-95 transition-transform"
           >
-            {isSwitching ? 'Switch Channel' : 'Join Voice'}
+            {isSwitching ? translate('runtime.expressions.MobileVoiceJoinSheet.switchChannel') : translate('runtime.expressions.MobileVoiceJoinSheet.joinVoice')}
           </button>
 
           {/* Close button */}
           <button
             onClick={onClose}
             className="w-12 h-12 bg-surface-elevated rounded-full flex items-center justify-center text-txt-secondary active:scale-95 transition-transform"
-            aria-label="Close"
+            aria-label={translate("runtime.attributes.MobileVoiceJoinSheet.close")}
           >
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
               <path d="M6 18L18 6M6 6l12 12" />
@@ -641,9 +643,9 @@ export function MobileVoiceJoinSheet({
             // Cap to leave room above the safe area / sheet header. Combined with
             // overflow-y-auto this guarantees every entry stays reachable
             // regardless of device count.
-            maxHeight: 'min(50vh, 320px)',
+            maxHeight: "min(50vh, 320px)",
             // iOS Safari scroll momentum
-            WebkitOverflowScrolling: 'touch',
+            WebkitOverflowScrolling: "touch",
           }}
         >
           <button
@@ -656,7 +658,7 @@ export function MobileVoiceJoinSheet({
               cameraDeviceId === null ? 'text-txt-primary' : 'text-txt-secondary'
             } active:bg-interactive-hover`}
           >
-            Auto (system default)
+            <Trans i18nKey="ui.MobileVoiceJoinSheet.autoSystemDefault">Auto (system default)</Trans>
           </button>
           {cameraDevices.map((d, i) => (
             <button
@@ -670,7 +672,7 @@ export function MobileVoiceJoinSheet({
                 cameraDeviceId === d.deviceId ? 'text-txt-primary' : 'text-txt-secondary'
               } active:bg-interactive-hover`}
             >
-              {d.label || `Camera ${i + 1}`}
+              {d.label || translate('runtime.templates.MobileVoiceJoinSheet.camera', { p0: i + 1 })}
             </button>
           ))}
         </div>

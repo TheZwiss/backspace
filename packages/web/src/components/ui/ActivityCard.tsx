@@ -1,5 +1,7 @@
 import type { Activity } from '@backspace/shared';
 import { getPrimaryActivity } from '@backspace/shared/src/activities.js';
+import { Trans } from 'react-i18next';
+import { translate } from '../../i18n';
 
 interface ActivityCardProps {
   activities: Activity[];
@@ -58,7 +60,7 @@ export function ActivityCard({ activities, fallbackCustomStatus }: ActivityCardP
       </div>
       {primary.timestamps?.start && (
         <div className="text-[10px] leading-[1.3] text-txt-tertiary">
-          {formatElapsed(primary.timestamps.start)} elapsed
+          {formatElapsed(primary.timestamps.start)} <Trans i18nKey="ui.ActivityCard.elapsed">elapsed</Trans>
         </div>
       )}
     </>

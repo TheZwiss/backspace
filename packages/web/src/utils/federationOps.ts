@@ -1,4 +1,5 @@
 import { useInstanceStore } from '../stores/instanceStore';
+import { translate } from '../i18n';
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -146,13 +147,13 @@ export async function changePasswordOnRemotes(newPassword: string): Promise<Fede
         return {
           origin: inst.origin,
           success: false,
-          error: err instanceof Error ? err.message : 'Unknown error',
+          error: err instanceof Error ? err.message : translate('runtime.selected.federationOps.unknownError'),
         };
       }
     })
   );
 
-  return results.map(r => r.status === 'fulfilled' ? r.value : { origin: '', success: false, error: 'Unexpected error' });
+  return results.map(r => r.status === 'fulfilled' ? r.value : { origin: '', success: false, error: translate('runtime.selected.federationOps.unexpectedError') });
 }
 
 // ─── Account deletion propagation ───────────────────────────────────────
@@ -179,11 +180,11 @@ export async function deleteAccountOnRemotes(): Promise<FederationOpResult[]> {
         return {
           origin: inst.origin,
           success: false,
-          error: err instanceof Error ? err.message : 'Unknown error',
+          error: err instanceof Error ? err.message : translate('runtime.selected.federationOps.unknownError2'),
         };
       }
     })
   );
 
-  return results.map(r => r.status === 'fulfilled' ? r.value : { origin: '', success: false, error: 'Unexpected error' });
+  return results.map(r => r.status === 'fulfilled' ? r.value : { origin: '', success: false, error: translate('runtime.selected.federationOps.unexpectedError2') });
 }

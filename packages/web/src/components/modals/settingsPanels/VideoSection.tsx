@@ -3,6 +3,8 @@ import { Track } from 'livekit-client';
 import { useVoiceStore } from '../../../stores/voiceStore';
 import { getActiveRoom } from '../../../hooks/useLiveKit';
 import { isElectron, getElectronAPI } from '../../../platform/platform';
+import { Trans } from 'react-i18next';
+import { translate } from '../../../i18n';
 
 /**
  * Permission state machine for the Video section.
@@ -28,17 +30,17 @@ function errorName(err: unknown): string {
 
 function getHardBlockedCopy(): string {
   if (!isElectron()) {
-    return "Camera blocked at browser level. Click the camera icon in your browser's address bar, reset the permission, then click Try again.";
+    return translate('runtime.selected.VideoSection.cameraBlockedAtBrowserLevelClickTheCamera');
   }
   const platform = getElectronAPI()?.platform;
   if (platform === 'darwin') {
-    return 'Grant camera access in System Settings → Privacy & Security → Camera, then restart the app.';
+    return translate('runtime.selected.VideoSection.grantCameraAccessInSystemSettingsPrivacySecurity');
   }
   if (platform === 'win32') {
-    return 'Grant camera access in Settings → Privacy & Security → Camera, then restart the app.';
+    return translate('runtime.selected.VideoSection.grantCameraAccessInSettingsPrivacySecurityCamera');
   }
   // linux or unknown
-  return 'Camera permission was denied. Reset it in your browser/Chromium prompt and try again.';
+  return translate('runtime.selected.VideoSection.cameraPermissionWasDeniedResetItInYour');
 }
 
 /**
@@ -56,7 +58,7 @@ function buildDisplayLabels(devices: MediaDeviceInfo[]): Map<string, string> {
   const labels = new Map<string, string>();
   devices.forEach((d, i) => {
     if (!d.label) {
-      labels.set(d.deviceId, `Camera ${i + 1}`);
+      labels.set(d.deviceId, translate('runtime.templates.VideoSection.camera', { p0: i + 1 }));
       return;
     }
     const total = counts.get(d.label) ?? 1;
@@ -337,12 +339,12 @@ export function VideoSection() {
       } catch (err) {
         if (gen !== startGenRef.current || !mountedRef.current) return;
         const name = errorName(err);
-        if (name === 'NotReadableError') setPreviewError('Camera is in use by another application.');
-        else if (name === 'OverconstrainedError') setPreviewError('Selected camera is unavailable.');
+        if (name === 'NotReadableError') setPreviewError(translate('runtime.messages.VideoSection.cameraIsInUseByAnotherApplication'));
+        else if (name === 'OverconstrainedError') setPreviewError(translate('runtime.messages.VideoSection.selectedCameraIsUnavailable'));
         else if (name === 'NotAllowedError') {
           setPermState('denied');
           setPreviewActive(false);
-        } else setPreviewError('Could not start camera preview.');
+        } else setPreviewError(translate('runtime.messages.VideoSection.couldNotStartCameraPreview'));
       }
     };
 
@@ -403,13 +405,13 @@ export function VideoSection() {
         setPermState((prev) => (prev === 'denied' ? 'hard-blocked' : 'denied'));
         setPreviewActive(false);
       } else if (name === 'NotReadableError') {
-        setPreviewError('Camera is in use by another application.');
+        setPreviewError(translate('runtime.messages.VideoSection.cameraIsInUseByAnotherApplication2'));
       } else if (name === 'OverconstrainedError') {
-        setPreviewError('Selected camera is unavailable.');
+        setPreviewError(translate('runtime.messages.VideoSection.selectedCameraIsUnavailable2'));
       } else if (name === 'NotFoundError') {
-        setPreviewError('No camera detected.');
+        setPreviewError(translate('runtime.messages.VideoSection.noCameraDetected'));
       } else {
-        setPreviewError('Could not start camera preview.');
+        setPreviewError(translate('runtime.messages.VideoSection.couldNotStartCameraPreview2'));
       }
     }
   };
@@ -428,10 +430,10 @@ export function VideoSection() {
     return (
       <div>
         <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
-          Video
+          <Trans i18nKey="ui.VideoSection.video">Video</Trans>
         </div>
         <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5 text-sm text-txt-tertiary">
-          Checking camera access…
+          <Trans i18nKey="ui.VideoSection.checkingCameraAccess">Checking camera access…</Trans>
         </div>
       </div>
     );
@@ -441,20 +443,20 @@ export function VideoSection() {
     return (
       <div>
         <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
-          Video
+          <Trans i18nKey="ui.VideoSection.video2">Video</Trans>
         </div>
         <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5 space-y-2">
-          <div className="text-sm text-txt-primary">⚠ Camera access denied</div>
+          <div className="text-sm text-txt-primary"><Trans i18nKey="ui.VideoSection.cameraAccessDenied">⚠ Camera access denied</Trans></div>
           <div className="text-xs text-txt-tertiary">
-            {permState === 'hard-blocked'
+            {permState === "hard-blocked"
               ? getHardBlockedCopy()
-              : 'Grant camera permission to choose a camera.'}
+              : translate('runtime.expressions.VideoSection.grantCameraPermissionToChooseACamera')}
           </div>
           <button
             onClick={startPreviewFromUser}
             className="text-xs px-3 py-1.5 rounded-md bg-surface-base hover:bg-interactive-hover text-txt-secondary transition-colors"
           >
-            Try again
+            <Trans i18nKey="ui.VideoSection.tryAgain">Try again</Trans>
           </button>
         </div>
       </div>
@@ -465,7 +467,7 @@ export function VideoSection() {
     return (
       <div>
         <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
-          Video
+          <Trans i18nKey="ui.VideoSection.video3">Video</Trans>
         </div>
         <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5 space-y-3">
           <div className="aspect-video w-full rounded-lg bg-surface-base overflow-hidden relative flex flex-col items-center justify-center text-center px-6">
@@ -473,14 +475,14 @@ export function VideoSection() {
               <path d="M17 10.5V7a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h12a1 1 0 001-1v-3.5l4 4v-11l-4 4z" />
             </svg>
             <div className="text-sm text-txt-secondary mb-1">
-              Camera permission needed to choose a camera and preview.
+              <Trans i18nKey="ui.VideoSection.cameraPermissionNeededToChooseACameraAnd">Camera permission needed to choose a camera and preview.</Trans>
             </div>
           </div>
           <button
             onClick={startPreviewFromUser}
             className="w-full text-[13px] px-3 py-2 rounded-md bg-accent-primary hover:bg-accent-primary-hover active:bg-accent-primary-active text-white font-medium transition-colors"
           >
-            Enable camera preview
+            <Trans i18nKey="ui.VideoSection.enableCameraPreview">Enable camera preview</Trans>
           </button>
         </div>
       </div>
@@ -507,7 +509,7 @@ export function VideoSection() {
   return (
     <div>
       <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
-        Video
+        <Trans i18nKey="ui.VideoSection.video4">Video</Trans>
       </div>
       <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5">
         <div className="aspect-video w-full rounded-lg bg-surface-base overflow-hidden relative mb-3 group">
@@ -523,13 +525,13 @@ export function VideoSection() {
             <button
               type="button"
               onClick={startPreviewFromUser}
-              aria-label="Test camera"
+              aria-label={translate("runtime.attributes.VideoSection.testCamera")}
               className="absolute inset-0 flex flex-col items-center justify-center text-txt-tertiary hover:text-txt-secondary hover:bg-white/[0.02] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary"
             >
               <svg width="40" height="40" viewBox="0 0 24 24" fill="currentColor" className="mb-2">
                 <path d="M8 5v14l11-7z" />
               </svg>
-              <span className="text-xs">Click to test camera</span>
+              <span className="text-xs"><Trans i18nKey="ui.VideoSection.clickToTestCamera">Click to test camera</Trans></span>
             </button>
           )}
           {previewActive && !previewError && (
@@ -542,7 +544,7 @@ export function VideoSection() {
                          min-h-[44px] min-w-[44px] px-3 py-2 text-xs flex items-center justify-center
                          md:min-h-0 md:min-w-0 md:text-[11px] md:px-2 md:py-1 md:opacity-0 md:group-hover:opacity-100"
             >
-              Stop preview
+              <Trans i18nKey="ui.VideoSection.stopPreview">Stop preview</Trans>
             </button>
           )}
           {previewError && (
@@ -553,12 +555,12 @@ export function VideoSection() {
                 onClick={startPreviewFromUser}
                 className="text-[11px] px-2 py-1 rounded-md bg-surface-base hover:bg-interactive-hover text-txt-secondary transition-colors"
               >
-                Try again
+                <Trans i18nKey="ui.VideoSection.tryAgain2">Try again</Trans>
               </button>
             </div>
           )}
         </div>
-        <div className="text-[13px] font-medium text-txt-primary mb-1.5">Camera</div>
+        <div className="text-[13px] font-medium text-txt-primary mb-1.5"><Trans i18nKey="ui.VideoSection.camera">Camera</Trans></div>
         <div ref={dropdownRef}>
           <button
             type="button"
@@ -579,7 +581,7 @@ export function VideoSection() {
           {listOpen && (
             <div className="mt-1 rounded-md bg-surface-base border border-border-hard py-1">
               <DropdownItem
-                label="Auto (system default)"
+                label={translate("runtime.attributes.VideoSection.autoSystemDefault")}
                 active={cameraDeviceId === null}
                 onClick={() => handleSelect(null)}
               />
@@ -600,12 +602,12 @@ export function VideoSection() {
           (() => {
             const m = devices.find((d) => d.deviceId === activeDeviceId);
             const label = m
-              ? displayLabels.get(activeDeviceId) ?? (m.label || 'detected camera')
-              : 'detected camera';
-            return <div className="text-xs text-txt-tertiary mt-1">Currently using: {label}</div>;
+              ? displayLabels.get(activeDeviceId) ?? (m.label || "detected camera")
+              : "detected camera";
+            return <div className="text-xs text-txt-tertiary mt-1"><Trans i18nKey="ui.VideoSection.currentlyUsing">Currently using:</Trans> {label}</div>;
           })()}
         {devices.length === 0 && (
-          <div className="text-xs text-txt-tertiary mt-1">No cameras detected.</div>
+          <div className="text-xs text-txt-tertiary mt-1"><Trans i18nKey="ui.VideoSection.noCamerasDetected">No cameras detected.</Trans></div>
         )}
       </div>
     </div>

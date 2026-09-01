@@ -12,6 +12,8 @@ import { parseFederatedUsername } from '../../utils/identity';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { loadFederatedMutuals } from '../../utils/mutuals';
 import { computeFloatingPosition, type AnchorRect, type Placement } from '../../hooks/useFloatingPosition';
+import { Trans } from 'react-i18next';
+import { translate } from '../../i18n';
 
 /** Gap between the card and the element it was opened from. */
 const ANCHOR_OFFSET = 8;
@@ -187,11 +189,11 @@ export function UserProfilePopout({ user: propUser, onClose, anchor, placement =
             <div className="border-t border-white/[0.06] my-3" />
             <div>
               <span className="text-[11px] uppercase tracking-wide font-semibold text-txt-tertiary">
-                About Me
+                <Trans i18nKey="ui.UserProfilePopout.aboutMe">About Me</Trans>
               </span>
               <div className="text-[13px] text-txt-secondary mt-1 whitespace-pre-wrap break-words leading-relaxed [&_strong]:font-semibold [&_strong]:text-txt-primary [&_em]:italic [&_a]:text-accent-primary [&_a]:underline">
                 <ReactMarkdown
-                  allowedElements={['p', 'strong', 'em', 'a', 'br']}
+                  allowedElements={['p', "strong", "em", 'a', "br"]}
                   unwrapDisallowed
                   components={{
                     a: ({ href, children }) => (
@@ -212,22 +214,22 @@ export function UserProfilePopout({ user: propUser, onClose, anchor, placement =
         <div className="space-y-1.5">
           <div>
             <span className="text-[11px] uppercase tracking-wide font-semibold text-txt-tertiary">
-              Member Since
+              <Trans i18nKey="ui.UserProfilePopout.memberSince">Member Since</Trans>
             </span>
             <span className="text-[12px] text-txt-secondary ml-2">
-              {new Date(user.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+              {new Date(user.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
             </span>
           </div>
           {mutualCounts && (mutualCounts.friends > 0 || mutualCounts.spaces > 0) && (
             <div className="text-[12px] text-txt-tertiary">
               {mutualCounts.friends > 0 && (
-                <span>{mutualCounts.friends} mutual friend{mutualCounts.friends !== 1 ? 's' : ''}</span>
+                <span>{mutualCounts.friends} <Trans i18nKey="ui.UserProfilePopout.mutualFriend">mutual friend</Trans>{mutualCounts.friends !== 1 ? 's' : ''}</span>
               )}
               {mutualCounts.friends > 0 && mutualCounts.spaces > 0 && (
                 <span className="mx-1">&middot;</span>
               )}
               {mutualCounts.spaces > 0 && (
-                <span>{mutualCounts.spaces} mutual space{mutualCounts.spaces !== 1 ? 's' : ''}</span>
+                <span>{mutualCounts.spaces} <Trans i18nKey="ui.UserProfilePopout.mutualSpace">mutual space</Trans>{mutualCounts.spaces !== 1 ? 's' : ''}</span>
               )}
             </div>
           )}
@@ -238,13 +240,13 @@ export function UserProfilePopout({ user: propUser, onClose, anchor, placement =
           onClick={handleSendMessage}
           className="w-full mt-3 py-2 rounded-lg text-[13px] font-medium text-txt-primary bg-white/[0.06] hover:bg-white/[0.10] border border-white/[0.08] transition-colors"
         >
-          Send Message
+          <Trans i18nKey="ui.UserProfilePopout.sendMessage">Send Message</Trans>
         </button>
         <button
           onClick={handleViewFullProfile}
           className="w-full mt-1.5 py-2 rounded-lg text-[13px] font-medium text-txt-tertiary hover:text-txt-secondary bg-transparent hover:bg-white/[0.04] transition-colors"
         >
-          View Full Profile
+          <Trans i18nKey="ui.UserProfilePopout.viewFullProfile">View Full Profile</Trans>
         </button>
       </div>
     </div>

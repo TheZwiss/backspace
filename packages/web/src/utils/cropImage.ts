@@ -1,4 +1,5 @@
-export interface PixelCrop {
+
+import { translate } from '../i18n';export interface PixelCrop {
   x: number;
   y: number;
   width: number;
@@ -30,7 +31,7 @@ export function cropImage(
       cropCanvas.height = pixelCrop.height;
       const cropCtx = cropCanvas.getContext('2d');
       if (!cropCtx) {
-        reject(new Error('Failed to get canvas context'));
+        reject(new Error(translate('runtime.selected.cropImage.failedToGetCanvasContext')));
         return;
       }
       cropCtx.drawImage(
@@ -56,7 +57,7 @@ export function cropImage(
         scaledCanvas.height = scaledH;
         const scaledCtx = scaledCanvas.getContext('2d');
         if (!scaledCtx) {
-          reject(new Error('Failed to get scaled canvas context'));
+          reject(new Error(translate('runtime.selected.cropImage.failedToGetScaledCanvasContext')));
           return;
         }
         scaledCtx.drawImage(cropCanvas, 0, 0, scaledW, scaledH);
@@ -73,19 +74,19 @@ export function cropImage(
             outputCanvas.toBlob(
               (pngBlob) => {
                 if (pngBlob) resolve(pngBlob);
-                else reject(new Error('Canvas toBlob returned null'));
+                else reject(new Error(translate('runtime.selected.cropImage.canvasToBlobReturnedNull')));
               },
               'image/png',
             );
           } else {
-            reject(new Error('Canvas toBlob returned null'));
+            reject(new Error(translate('runtime.selected.cropImage.canvasToBlobReturnedNull2')));
           }
         },
         finalType,
         quality,
       );
     };
-    img.onerror = () => reject(new Error('Failed to load image'));
+    img.onerror = () => reject(new Error(translate('runtime.selected.cropImage.failedToLoadImage')));
     img.src = imageSrc;
   });
 }

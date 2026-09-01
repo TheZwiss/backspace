@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { translate } from '../../../../i18n';
 
 /**
  * Section wrapper used by audio/video picker subsections (AudioInputSection,

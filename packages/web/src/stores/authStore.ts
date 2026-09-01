@@ -9,6 +9,7 @@ import { useInstanceStore } from './instanceStore';
 import { useActivityStore } from './activityStore';
 import { changePasswordOnRemotes, deleteAccountOnRemotes, type FederationOpResult } from '../utils/federationOps';
 import { clearSelfIds } from '../utils/identity';
+import { translate } from '../i18n';
 
 interface AuthState {
   token: string | null;
@@ -57,7 +58,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const response = await api.auth.login({ username, password });
       get().initSession(response.token, response.user);
     } catch (err) {
-      set({ isLoading: false, error: err instanceof Error ? err.message : 'Login failed' });
+      set({ isLoading: false, error: err instanceof Error ? err.message : translate('runtime.selected.authStore.loginFailed') });
       throw err;
     }
   },
@@ -68,7 +69,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const response = await api.auth.register({ username, password, displayName, avatarColor });
       get().initSession(response.token, response.user);
     } catch (err) {
-      set({ isLoading: false, error: err instanceof Error ? err.message : 'Registration failed' });
+      set({ isLoading: false, error: err instanceof Error ? err.message : translate('runtime.selected.authStore.registrationFailed') });
       throw err;
     }
   },
@@ -100,7 +101,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const user = await api.users.update(data);
       set({ user });
     } catch (err) {
-      set({ error: err instanceof Error ? err.message : 'Update failed' });
+      set({ error: err instanceof Error ? err.message : translate('runtime.selected.authStore.updateFailed') });
       throw err;
     }
   },

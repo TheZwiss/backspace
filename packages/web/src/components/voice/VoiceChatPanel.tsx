@@ -2,6 +2,8 @@ import React from 'react';
 import { MessageList } from '../chat/MessageList';
 import { MessageInput } from '../chat/MessageInput';
 import { useUIStore } from '../../stores/uiStore';
+import { Trans } from 'react-i18next';
+import { translate } from '../../i18n';
 
 interface VoiceChatPanelProps {
   channelId: string;
@@ -15,11 +17,11 @@ export function VoiceChatPanel({ channelId, channelName }: VoiceChatPanelProps) 
     <div className="w-[340px] flex-shrink-0 bg-surface-chat flex flex-col border-l border-border-soft">
       {/* Chat header */}
       <div className="h-12 px-4 flex items-center justify-between shadow-header flex-shrink-0">
-        <span className="font-bold text-txt-primary text-[16px]">Chat</span>
+        <span className="font-bold text-txt-primary text-[16px]"><Trans i18nKey="ui.VoiceChatPanel.chat">Chat</Trans></span>
         <button
           onClick={toggleVoiceChat}
           className="w-7 h-7 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded"
-          title="Close Chat"
+          title={translate("runtime.attributes.VoiceChatPanel.closeChat")}
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
             <path d="M18.4 4L12 10.4L5.6 4L4 5.6L10.4 12L4 18.4L5.6 20L12 13.6L18.4 20L20 18.4L13.6 12L20 5.6L18.4 4Z" />

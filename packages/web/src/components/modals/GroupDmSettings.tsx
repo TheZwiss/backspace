@@ -14,6 +14,8 @@ import { isSelf, parseFederatedUsername } from '../../utils/identity';
 import { AvatarStack } from '../ui/AvatarStack';
 import { DmMemberRow, type DmMemberRowAction } from '../layout/DmMemberRow';
 import { pointAnchor } from '../../hooks/useFloatingPosition';
+import { Trans } from 'react-i18next';
+import { translate } from '../../i18n';
 
 const MAX_NAME_LENGTH = 50;
 const MAX_GROUP_MEMBERS = 10;
@@ -221,7 +223,7 @@ export function GroupDmSettings() {
       // (`dm_channel_updated`) updates the open channel in-place.
       closeModal();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to save settings';
+      const msg = err instanceof Error ? err.message : translate('runtime.selected.GroupDmSettings.failedToSaveSettings');
       setSaveError(msg);
       addToast(msg, 'warning', 4000);
     } finally {
@@ -240,7 +242,7 @@ export function GroupDmSettings() {
       await api.dm.leave(dmChannelId);
       closeModal();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to leave group';
+      const msg = err instanceof Error ? err.message : translate('runtime.selected.GroupDmSettings.failedToLeaveGroup');
       addToast(msg, 'warning', 4000);
     } finally {
       setLeaving(false);
@@ -280,7 +282,7 @@ export function GroupDmSettings() {
         await useSocialStore.getState().removeFriend(member.id);
       } catch (err) {
         addToast(
-          err instanceof Error ? err.message : 'Failed to remove friend',
+          err instanceof Error ? err.message : translate('runtime.messages.GroupDmSettings.failedToRemoveFriend'),
           'warning',
           3000,
         );
@@ -294,14 +296,14 @@ export function GroupDmSettings() {
     try {
       await api.dm.kickMember(dmChannelId, pendingKick.id);
       addToast(
-        `Removed ${pendingKick.displayName ?? parseFederatedUsername(pendingKick.username).baseName} from the group`,
+        translate('runtime.templates.GroupDmSettings.removedFromTheGroup', { p0: pendingKick.displayName ?? parseFederatedUsername(pendingKick.username).baseName }),
         'success',
         3000,
       );
       setPendingKick(null);
     } catch (err) {
       addToast(
-        err instanceof Error ? err.message : 'Failed to remove member',
+        err instanceof Error ? err.message : translate('runtime.messages.GroupDmSettings.failedToRemoveMember'),
         'warning',
         3000,
       );
@@ -316,14 +318,14 @@ export function GroupDmSettings() {
     try {
       await api.dm.transferOwnership(dmChannelId, pendingTransfer.id);
       addToast(
-        `Ownership transferred to ${pendingTransfer.displayName ?? parseFederatedUsername(pendingTransfer.username).baseName}`,
+        translate('runtime.templates.GroupDmSettings.ownershipTransferredTo', { p0: pendingTransfer.displayName ?? parseFederatedUsername(pendingTransfer.username).baseName }),
         'success',
         3000,
       );
       setPendingTransfer(null);
     } catch (err) {
       addToast(
-        err instanceof Error ? err.message : 'Failed to transfer ownership',
+        err instanceof Error ? err.message : translate('runtime.messages.GroupDmSettings.failedToTransferOwnership'),
         'warning',
         3000,
       );
@@ -345,12 +347,12 @@ export function GroupDmSettings() {
     if (isMobile) setMobileView('content');
   };
 
-  const headerName = dmChannel.name && dmChannel.name.length > 0 ? dmChannel.name : (fallbackName || 'Group DM');
+  const headerName = dmChannel.name && dmChannel.name.length > 0 ? dmChannel.name : (fallbackName || translate('runtime.selected.GroupDmSettings.groupDM'));
 
   // ── Overview panel ─────────────────────────────────────────────────────
   const overviewPanel = (
     <div className="space-y-5">
-      <h2 className="text-lg font-semibold text-txt-primary mb-6">Overview</h2>
+      <h2 className="text-lg font-semibold text-txt-primary mb-6"><Trans i18nKey="ui.GroupDmSettings.overview">Overview</Trans></h2>
 
       {/* Hero icon */}
       <div className="flex flex-col items-center gap-3">
@@ -360,7 +362,7 @@ export function GroupDmSettings() {
             onClick={handleHeroClick}
             disabled={!isOwner}
             data-group-dm-icon-hero
-            aria-label={isOwner ? 'Change group icon' : 'Group icon'}
+            aria-label={isOwner ? translate('runtime.expressions.GroupDmSettings.changeGroupIcon') : translate('runtime.expressions.GroupDmSettings.groupIcon')}
             className={`relative block rounded-full overflow-hidden group ${
               isOwner ? 'cursor-pointer' : 'cursor-default'
             }`}
@@ -381,7 +383,7 @@ export function GroupDmSettings() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
-                <span className="mt-1">Click to upload</span>
+                <span className="mt-1"><Trans i18nKey="ui.GroupDmSettings.clickToUpload">Click to upload</Trans></span>
               </div>
             )}
           </button>
@@ -392,7 +394,7 @@ export function GroupDmSettings() {
               type="button"
               onClick={handleClearIcon}
               data-group-dm-icon-clear
-              aria-label="Remove group icon"
+              aria-label={translate("runtime.attributes.GroupDmSettings.removeGroupIcon")}
               className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-surface-elevated border border-border-hard flex items-center justify-center text-txt-tertiary hover:text-txt-danger hover:bg-accent-rose/10 transition-colors"
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
@@ -416,18 +418,18 @@ export function GroupDmSettings() {
       {/* Group name */}
       <div>
         <label className="block text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
-          Group Name
+          <Trans i18nKey="ui.GroupDmSettings.groupName">Group Name</Trans>
         </label>
         <input
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value.slice(0, MAX_NAME_LENGTH))}
-          placeholder={fallbackName || 'Group DM'}
+          placeholder={fallbackName || translate('runtime.expressions.GroupDmSettings.groupDM')}
           disabled={!isOwner}
           maxLength={MAX_NAME_LENGTH}
           className="input-standard w-full"
           data-group-dm-name-input
-          aria-label="Group name"
+          aria-label={translate("runtime.attributes.GroupDmSettings.groupName")}
         />
         {isOwner && (
           <div className="text-[11px] text-txt-tertiary text-right mt-1">
@@ -451,7 +453,7 @@ export function GroupDmSettings() {
             className="px-3 py-1.5 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
             data-group-dm-cancel
           >
-            Cancel
+            <Trans i18nKey="ui.GroupDmSettings.cancel">Cancel</Trans>
           </button>
           <button
             type="button"
@@ -460,7 +462,7 @@ export function GroupDmSettings() {
             className="px-4 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             data-group-dm-save
           >
-            {saving ? 'Saving...' : 'Save'}
+            {saving ? translate('runtime.expressions.GroupDmSettings.saving') : translate('runtime.expressions.GroupDmSettings.save')}
           </button>
         </div>
       )}
@@ -474,7 +476,7 @@ export function GroupDmSettings() {
             className="px-4 py-1.5 bg-surface-elevated hover:bg-interactive-hover text-txt-primary text-sm font-medium rounded-full transition-colors"
             data-group-dm-close
           >
-            Close
+            <Trans i18nKey="ui.GroupDmSettings.close">Close</Trans>
           </button>
         </div>
       )}
@@ -482,10 +484,10 @@ export function GroupDmSettings() {
       {/* Leave Group — destructive footer button, everyone */}
       <div className="pt-4 border-t border-border-soft">
         <div className="text-[11px] font-semibold text-txt-danger uppercase tracking-wider mb-1.5">
-          Leave Group
+          <Trans i18nKey="ui.GroupDmSettings.leaveGroup">Leave Group</Trans>
         </div>
         <p className="text-xs text-txt-tertiary mb-3">
-          You will stop receiving messages from this conversation. Other members will see a system message.
+          <Trans i18nKey="ui.GroupDmSettings.youWillStopReceivingMessagesFromThisConversation">You will stop receiving messages from this conversation. Other members will see a system message.</Trans>
         </p>
         <button
           type="button"
@@ -494,7 +496,7 @@ export function GroupDmSettings() {
           className="px-4 py-2 bg-accent-rose hover:bg-accent-rose/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
           data-group-dm-leave
         >
-          {leaving ? 'Leaving...' : 'Leave Group'}
+          {leaving ? translate('runtime.expressions.GroupDmSettings.leaving') : translate('runtime.expressions.GroupDmSettings.leaveGroup')}
         </button>
       </div>
     </div>
@@ -514,7 +516,7 @@ export function GroupDmSettings() {
   const membersPanel = (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-txt-primary">Members</h2>
+        <h2 className="text-lg font-semibold text-txt-primary"><Trans i18nKey="ui.GroupDmSettings.members">Members</Trans></h2>
         <span className="text-[12px] text-txt-tertiary">
           {memberCount}/{MAX_GROUP_MEMBERS}
         </span>
@@ -530,9 +532,9 @@ export function GroupDmSettings() {
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
           <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
         </svg>
-        Add Member
+        <Trans i18nKey="ui.GroupDmSettings.addMember">Add Member</Trans>
         {!canAddMembers && (
-          <span className="ml-auto text-[11px] text-txt-tertiary">Group is full</span>
+          <span className="ml-auto text-[11px] text-txt-tertiary"><Trans i18nKey="ui.GroupDmSettings.groupIsFull">Group is full</Trans></span>
         )}
       </button>
 
@@ -585,19 +587,19 @@ export function GroupDmSettings() {
           {/* Nav list */}
           <div className="glass-bubble rounded-lg p-2 flex-1 flex flex-col">
             <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">
-              General
+              <Trans i18nKey="ui.GroupDmSettings.general">General</Trans>
             </div>
             <button type="button" onClick={() => handleTabClick('overview')} className={tabBtnClass('overview')}>
-              Overview
+              <Trans i18nKey="ui.GroupDmSettings.overview2">Overview</Trans>
             </button>
             <button type="button" onClick={() => handleTabClick('members')} className={tabBtnClass('members')}>
-              Members
+              <Trans i18nKey="ui.GroupDmSettings.members2">Members</Trans>
             </button>
           </div>
         </div>
 
         {/* Mobile: tab list */}
-        {isMobile && mobileView === 'tabs' && (
+        {isMobile && mobileView === "tabs" && (
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
             <div className="glass-bubble rounded-lg p-3 flex items-center gap-3">
               <AvatarStack
@@ -613,37 +615,37 @@ export function GroupDmSettings() {
 
             <div className="glass-bubble rounded-lg p-2 space-y-0.5">
               <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">
-                General
+                <Trans i18nKey="ui.GroupDmSettings.general2">General</Trans>
               </div>
-              <button type="button" onClick={() => handleTabClick('overview')} className={tabBtnClass('overview')}>
-                Overview
+              <button type="button" onClick={() => handleTabClick("overview")} className={tabBtnClass("overview")}>
+                <Trans i18nKey="ui.GroupDmSettings.overview3">Overview</Trans>
               </button>
-              <button type="button" onClick={() => handleTabClick('members')} className={tabBtnClass('members')}>
-                Members
+              <button type="button" onClick={() => handleTabClick("members")} className={tabBtnClass("members")}>
+                <Trans i18nKey="ui.GroupDmSettings.members3">Members</Trans>
               </button>
             </div>
           </div>
         )}
 
         {/* Content area */}
-        {(!isMobile || mobileView === 'content') && (
+        {(!isMobile || mobileView === "content") && (
           <div className="flex-1 min-w-0 overflow-y-auto scrollbar-thin py-6">
             <div className="px-6 max-w-[640px] mx-auto">
               {isMobile && (
                 <button
                   type="button"
-                  onClick={() => setMobileView('tabs')}
+                  onClick={() => setMobileView("tabs")}
                   className="flex items-center gap-1.5 text-txt-tertiary hover:text-txt-secondary mb-4 text-sm"
-                  aria-label="Back to group DM settings menu"
+                  aria-label={translate("runtime.attributes.GroupDmSettings.backToGroupDMSettingsMenu")}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" />
                   </svg>
-                  Group Settings
+                  <Trans i18nKey="ui.GroupDmSettings.groupSettings">Group Settings</Trans>
                 </button>
               )}
-              {tab === 'overview' && overviewPanel}
-              {tab === 'members' && membersPanel}
+              {tab === "overview" && overviewPanel}
+              {tab === "members" && membersPanel}
             </div>
           </div>
         )}
@@ -655,7 +657,7 @@ export function GroupDmSettings() {
         onClose={() => setCropSrc(null)}
         imageSrc={cropSrc ?? ''}
         onCropComplete={handleCropComplete}
-        title="Crop Group Icon"
+        title={translate("runtime.attributes.GroupDmSettings.cropGroupIcon")}
         cropShape="round"
         aspectRatio={1}
         maxOutputDimension={256}
@@ -666,9 +668,9 @@ export function GroupDmSettings() {
         isOpen={confirmLeave}
         onClose={() => { if (!leaving) setConfirmLeave(false); }}
         onConfirm={handleConfirmLeave}
-        title="Leave Group"
-        description={`Leave "${headerName}"? You will stop receiving messages from this conversation.`}
-        confirmLabel="Leave"
+        title={translate("runtime.attributes.GroupDmSettings.leaveGroup")}
+        description={translate('runtime.templates.GroupDmSettings.leaveYouWillStopReceivingMessagesFromThis', { p0: headerName })}
+        confirmLabel={translate("runtime.attributes.GroupDmSettings.leave")}
         variant="danger"
         loading={leaving}
       />
@@ -677,13 +679,13 @@ export function GroupDmSettings() {
         isOpen={!!pendingKick}
         onClose={() => { if (!memberActionSubmitting) setPendingKick(null); }}
         onConfirm={confirmKick}
-        title="Remove from Group"
+        title={translate("runtime.attributes.GroupDmSettings.removeFromGroup")}
         description={
           pendingKick
-            ? `Remove ${pendingKick.displayName ?? parseFederatedUsername(pendingKick.username).baseName} from this group? They won't be able to see new messages.`
+            ? translate('runtime.templates.GroupDmSettings.removeFromThisGroupTheyWonTBe', { p0: pendingKick.displayName ?? parseFederatedUsername(pendingKick.username).baseName })
             : ''
         }
-        confirmLabel="Remove"
+        confirmLabel={translate("runtime.attributes.GroupDmSettings.remove")}
         variant="danger"
         loading={memberActionSubmitting}
       />
@@ -692,13 +694,13 @@ export function GroupDmSettings() {
         isOpen={!!pendingTransfer}
         onClose={() => { if (!memberActionSubmitting) setPendingTransfer(null); }}
         onConfirm={confirmTransfer}
-        title="Transfer Ownership"
+        title={translate("runtime.attributes.GroupDmSettings.transferOwnership")}
         description={
           pendingTransfer
-            ? `Transfer ownership to ${pendingTransfer.displayName ?? parseFederatedUsername(pendingTransfer.username).baseName}? You'll lose owner privileges.`
+            ? translate('runtime.templates.GroupDmSettings.transferOwnershipToYouLlLoseOwnerPrivileges', { p0: pendingTransfer.displayName ?? parseFederatedUsername(pendingTransfer.username).baseName })
             : ''
         }
-        confirmLabel="Transfer"
+        confirmLabel={translate("runtime.attributes.GroupDmSettings.transfer")}
         variant="warning"
         loading={memberActionSubmitting}
       />

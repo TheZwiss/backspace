@@ -1,6 +1,7 @@
 import React from 'react';
 import type { User } from '@backspace/shared';
 import { getAvatarGradient } from '../../utils/gradients';
+import { translate } from '../../i18n';
 
 interface AvatarProps {
   src?: string | null;
@@ -88,16 +89,16 @@ export function Avatar({ src, name, size = 40, status, className = '', onClick, 
       >
         {src ? (
           <img
-            src={(src.startsWith('http') || src.startsWith('blob:') || src.startsWith('data:') || src.startsWith('/'))
+            src={(src.startsWith("http") || src.startsWith("blob:") || src.startsWith("data:") || src.startsWith('/'))
               ? src : `/api/uploads/${src}`}
             alt={name}
             loading="lazy"
             className="w-full h-full rounded-full object-cover"
             onError={(e) => {
-              (e.target as HTMLImageElement).style.display = 'none';
+              (e.target as HTMLImageElement).style.display = "none";
               const parent = (e.target as HTMLImageElement).parentElement;
               if (parent) {
-                const fallback = parent.querySelector('.avatar-fallback') as HTMLElement;
+                const fallback = parent.querySelector(".avatar-fallback") as HTMLElement;
                 if (fallback) fallback.style.display = 'flex';
               }
             }}

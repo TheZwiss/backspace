@@ -6,6 +6,7 @@ import { useSpaceStore } from '../../stores/spaceStore';
 import { useFloatingPosition } from '../../hooks/useFloatingPosition';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { useUIStore } from '../../stores/uiStore';
+import { Trans } from 'react-i18next';
 
 const MAX_RESULTS = 8;
 
@@ -88,7 +89,7 @@ function MemberList({
   return (
     <>
       <div className="px-2 py-1.5 text-[11px] font-bold text-txt-tertiary uppercase tracking-wider">
-        Members
+        <Trans i18nKey="ui.MentionPopover.members">Members</Trans>
       </div>
       {filtered.map((member, i) => (
         <MentionMemberRow

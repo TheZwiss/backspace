@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '../../api/client';
 import type { GifResult } from '@backspace/shared';
+import { Trans } from 'react-i18next';
+import { translate } from '../../i18n';
 
 interface GifPickerProps {
   onGifSelect: (url: string) => void;
@@ -97,7 +99,7 @@ export function GifPicker({ onGifSelect, mobile = false }: GifPickerProps) {
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search GIFs"
+          placeholder={translate("runtime.attributes.GifPicker.searchGIFs")}
           className="input-search w-full"
           // Auto-focus only on desktop. On mobile this would force the OS
           // keyboard up the moment the sheet opens, hiding most of the grid.
@@ -123,7 +125,7 @@ export function GifPicker({ onGifSelect, mobile = false }: GifPickerProps) {
           </div>
         ) : results.length === 0 ? (
           <div className="flex items-center justify-center h-full text-txt-tertiary text-sm">
-            {debouncedQuery.trim() ? 'No GIFs found' : 'No trending GIFs'}
+            {debouncedQuery.trim() ? translate('runtime.expressions.GifPicker.noGIFsFound') : translate('runtime.expressions.GifPicker.noTrendingGIFs')}
           </div>
         ) : (
           <div className="columns-2 gap-1.5 p-1">
@@ -155,7 +157,7 @@ export function GifPicker({ onGifSelect, mobile = false }: GifPickerProps) {
 
       {/* Attribution */}
       <div className="px-3 py-1 text-[10px] text-txt-tertiary text-right shrink-0">
-        Powered by Klipy
+        <Trans i18nKey="ui.GifPicker.poweredByKlipy">Powered by Klipy</Trans>
       </div>
     </div>
   );

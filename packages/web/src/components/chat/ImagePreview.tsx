@@ -1,6 +1,7 @@
 import React from 'react';
 import { useUIStore } from '../../stores/uiStore';
 import { saveImage, copyImageToClipboard } from '../../utils/imageActions';
+import { translate } from '../../i18n';
 
 export function ImagePreview() {
   const imageUrl = useUIStore((s) => s.imagePreviewUrl);
@@ -22,7 +23,7 @@ export function ImagePreview() {
             e.stopPropagation();
             saveImage(imageUrl);
           }}
-          title="Save image"
+          title={translate("runtime.attributes.ImagePreview.saveImage")}
         >
           <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
             <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
@@ -34,7 +35,7 @@ export function ImagePreview() {
             e.stopPropagation();
             copyImageToClipboard(imageUrl);
           }}
-          title="Copy image"
+          title={translate("runtime.attributes.ImagePreview.copyImage")}
         >
           <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
             <path d="M21 9v10c0 1.1-.9 2-2 2H8c-1.1 0-2-.9-2-2V5c0-1.1.9-2 2-2h7l6 6zm-2 1h-5V4H8v15h11V10zM3 15V3c0-1.1.9-2 2-2h9v2H5v12H3z" />
@@ -43,7 +44,7 @@ export function ImagePreview() {
         <button
           className="text-white/70 hover:text-white transition-colors"
           onClick={closeImagePreview}
-          title="Close"
+          title={translate("runtime.attributes.ImagePreview.close")}
         >
           <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
             <path d="M18.4 4L12 10.4L5.6 4L4 5.6L10.4 12L4 18.4L5.6 20L12 13.6L18.4 20L20 18.4L13.6 12L20 5.6L18.4 4Z" />
@@ -52,7 +53,7 @@ export function ImagePreview() {
       </div>
       <img
         src={imageUrl}
-        alt="Preview"
+        alt={translate("runtime.attributes.ImagePreview.preview")}
         className="max-w-[90vw] max-h-[90vh] object-contain rounded shadow-elevation-high"
         onClick={(e) => e.stopPropagation()}
       />

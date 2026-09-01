@@ -73,13 +73,14 @@ import type {
   ReattachResponse,
 } from '@backspace/shared';
 import { getApiForOrigin, getOwnerInstanceForDm } from '../utils/crossStoreResolvers';
+import { translate } from '../i18n';
 
 export type { FederationPeer, FederationOrphanedAccount, FederationResetEvent, FederationResetEventsResponse, ApprovalRequest, PeeringSubscription, PeeringNotification };
 
 export class RateLimitError extends Error {
   readonly retryAfter: number;
   constructor(retryAfter: number) {
-    super('Rate limit exceeded');
+    super(translate('runtime.selected.client.rateLimitExceeded'));
     this.name = 'RateLimitError';
     this.retryAfter = retryAfter;
   }
@@ -360,7 +361,7 @@ export class BackspaceApiClient {
       } catch (err) {
         clearTimeout(timeoutId);
         if (err instanceof DOMException && err.name === 'AbortError') {
-          throw new Error('Request timed out');
+          throw new Error(translate('runtime.selected.client.requestTimedOut'));
         }
         throw err;
       }
@@ -376,7 +377,7 @@ export class BackspaceApiClient {
             ?? (parseInt(response.headers.get('retry-after') || '', 10) || 60);
           throw new RateLimitError(retryAfter);
         }
-        const error = await response.json().catch(() => ({ error: 'Request failed' }));
+        const error = await response.json().catch(() => ({ error: translate('runtime.selected.client.requestFailed') }));
         throw new HttpError(response.status, (error as { error?: string }).error || `HTTP ${response.status}`, error);
       }
 

@@ -12,6 +12,7 @@ import { waitForTransferAttachment } from '../../utils/waitForTransfer';
 import { SourceCodeLink } from '../ui/SourceCodeLink';
 import { LanguageSwitcher } from '../ui/LanguageSwitcher';
 import { useTranslation } from 'react-i18next';
+import { translate } from '../../i18n';
 
 // Single-source regex for extracting a bare invite token from a pasted full URL.
 // Token format: 22 chars base64url ([A-Za-z0-9_-]).
@@ -382,7 +383,7 @@ export function RegisterPage() {
         setRetryAfter(err.retryAfter);
         setError('');
       } else {
-        setError(err instanceof Error ? err.message : 'Registration failed');
+        setError(err instanceof Error ? err.message : translate('runtime.messages.RegisterPage.registrationFailed'));
       }
       setIsRegistering(false);
     }
@@ -422,9 +423,9 @@ export function RegisterPage() {
         </div>
 
         {step === 1 ? (
-          <div key="step1" className={`w-full${direction === 'back' ? ' animate-step-back' : ''}`}>
+          <div key="step1" className={`w-full${direction === "back" ? " animate-step-back" : ''}`}>
             <div className="text-center mb-6">
-              <h1 className="text-2xl font-bold text-txt-primary">{t('auth.createAccount')}</h1>
+              <h1 className="text-2xl font-bold text-txt-primary">{t("auth.createAccount")}</h1>
             </div>
 
             <form onSubmit={handleContinue}>
@@ -439,35 +440,35 @@ export function RegisterPage() {
               {showManualEntry && (
                 <div className="mb-4 p-3 rounded-lg bg-surface-elevated border border-surface-border space-y-2">
                   <div className="text-sm text-txt-secondary">
-                    {t('auth.inviteOnly')}
+                    {t("auth.inviteOnly")}
                   </div>
                   <input
                     type="text"
                     value={manualInviteToken}
                     onChange={(e) => setManualInviteToken(e.target.value)}
-                    placeholder={t('auth.invitePlaceholder')}
+                    placeholder={t("auth.invitePlaceholder")}
                     // text-base on mobile prevents iOS Safari from auto-zooming
                     // when the field is focused (any <input> with font-size <16px triggers zoom).
                     className="input-standard w-full px-3 py-2 text-base md:text-sm"
-                    aria-label={t('auth.invitePlaceholder')}
+                    aria-label={t("auth.invitePlaceholder")}
                     autoComplete="off"
                   />
                   {inviteChecking && (
-                    <div className="text-xs text-txt-tertiary">{t('auth.checking')}</div>
+                    <div className="text-xs text-txt-tertiary">{t("auth.checking")}</div>
                   )}
                   {!inviteChecking && inviteCheck?.valid === true && (
                     <div className="text-xs text-status-online flex items-center gap-1">
                       <svg className="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
                         <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                       </svg>
-                      {t('auth.validInvite', { name: inviteCheck.name })}
+                      {t("auth.validInvite", { name: inviteCheck.name })}
                     </div>
                   )}
                   {!inviteChecking && inviteCheck?.valid === false && (
                     <div className="text-xs text-txt-danger">
-                      {inviteCheck.reason === 'expired' && t('auth.inviteExpired')}
-                      {inviteCheck.reason === 'exhausted' && t('auth.inviteExhausted')}
-                      {inviteCheck.reason === 'invalid' && t('auth.inviteInvalid')}
+                      {inviteCheck.reason === "expired" && t("auth.inviteExpired")}
+                      {inviteCheck.reason === "exhausted" && t("auth.inviteExhausted")}
+                      {inviteCheck.reason === "invalid" && t("auth.inviteInvalid")}
                     </div>
                   )}
                 </div>
@@ -486,31 +487,31 @@ export function RegisterPage() {
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                       </svg>
-                      <span>{t('auth.validatingInvite')}</span>
+                      <span>{t("auth.validatingInvite")}</span>
                     </>
                   ) : inviteCheck?.valid === true ? (
                     <>
                       <svg className="w-3 h-3 flex-shrink-0 mt-0.5 md:mt-0" viewBox="0 0 20 20" fill="currentColor">
                         <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                       </svg>
-                      <span className="break-all">{t('auth.usingInvite', { name: inviteCheck.name })}</span>
+                      <span className="break-all">{t("auth.usingInvite", { name: inviteCheck.name })}</span>
                     </>
                   ) : inviteCheck?.valid === false ? (
                     <>
                       <svg className="w-3 h-3 flex-shrink-0 mt-0.5 md:mt-0" viewBox="0 0 20 20" fill="currentColor">
                         <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                       </svg>
-                      <span>{t('auth.invalidInviteLink')}</span>
+                      <span>{t("auth.invalidInviteLink")}</span>
                     </>
                   ) : (
-                    <>{t('auth.validatingInvite')}</>
+                    <>{t("auth.validatingInvite")}</>
                   )}
                 </div>
               )}
 
               <div className="mb-5">
                 <label className="block text-xs font-bold text-txt-secondary uppercase mb-2">
-                  {t('auth.username')} <span className="text-txt-danger">*</span>
+                  {t("auth.username")} <span className="text-txt-danger">*</span>
                 </label>
                 <input
                   type="text"
@@ -521,24 +522,24 @@ export function RegisterPage() {
                   autoFocus
                   autoComplete="username"
                 />
-                {usernameStatus !== 'idle' && (
+                {usernameStatus !== "idle" && (
                   <div className={`mt-1.5 flex items-center gap-1.5 text-xs ${
-                    usernameStatus === 'available' ? 'text-status-online' :
-                    usernameStatus === 'checking' ? 'text-txt-tertiary' :
+                    usernameStatus === "available" ? 'text-status-online' :
+                    usernameStatus === "checking" ? 'text-txt-tertiary' :
                     'text-txt-danger'
                   }`}>
-                    {usernameStatus === 'checking' && (
+                    {usernameStatus === "checking" && (
                       <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                       </svg>
                     )}
-                    {usernameStatus === 'available' && (
+                    {usernameStatus === "available" && (
                       <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
                         <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                       </svg>
                     )}
-                    {(usernameStatus === 'taken' || usernameStatus === 'invalid') && (
+                    {(usernameStatus === "taken" || usernameStatus === "invalid") && (
                       <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
                         <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                       </svg>
@@ -550,7 +551,7 @@ export function RegisterPage() {
 
               <div className="mb-5">
                 <label className="block text-xs font-bold text-txt-secondary uppercase mb-2">
-                  {t('auth.password')} <span className="text-txt-danger">*</span>
+                  {t("auth.password")} <span className="text-txt-danger">*</span>
                 </label>
                 <input
                   type="password"
@@ -563,7 +564,7 @@ export function RegisterPage() {
 
               <div className="mb-5">
                 <label className="block text-xs font-bold text-txt-secondary uppercase mb-2">
-                  {t('auth.confirmPassword')} <span className="text-txt-danger">*</span>
+                  {t("auth.confirmPassword")} <span className="text-txt-danger">*</span>
                 </label>
                 <input
                   type="password"
@@ -581,35 +582,35 @@ export function RegisterPage() {
                 // tighter desktop look from before.
                 className="w-full py-3 md:py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {t('auth.continue')}
+                {t("auth.continue")}
               </button>
 
               {/* Helper text when invite is required but not yet entered */}
               {inviteRequired && !manualInviteToken.trim() && !urlInviteToken && (
                 <div className="text-xs text-txt-tertiary mt-2">
-                  {t('auth.inviteRequired')}
+                  {t("auth.inviteRequired")}
                 </div>
               )}
 
               <p className="mt-3 text-sm text-txt-tertiary">
-                {t('auth.alreadyHaveAccount')}{' '}
+                {t("auth.alreadyHaveAccount")}{' '}
                 <Link to={`/login${redirect ? `?redirect=${encodeURIComponent(redirect)}` : ''}`} className="text-accent-primary hover:underline">
-                  {t('auth.logIn')}
+                  {t("auth.logIn")}
                 </Link>
               </p>
             </form>
           </div>
         ) : (
-          <div key="step2" className={`w-full${direction === 'forward' ? ' animate-step-forward' : ''}`}>
+          <div key="step2" className={`w-full${direction === "forward" ? " animate-step-forward" : ''}`}>
             <div className="text-center mb-6">
-              <h1 className="text-2xl font-bold text-txt-primary">{t('auth.makeItYours')}</h1>
-              <p className="text-txt-tertiary text-sm mt-1">{t('auth.personalize')}</p>
+              <h1 className="text-2xl font-bold text-txt-primary">{t("auth.makeItYours")}</h1>
+              <p className="text-txt-tertiary text-sm mt-1">{t("auth.personalize")}</p>
             </div>
 
             {retryAfter > 0 && (
               <div className="mb-4 p-3 bg-accent-amber/10 border border-accent-amber/30 rounded text-sm">
-                <p className="font-medium text-accent-amber">{t('auth.tooManyAttemptsShort')}</p>
-                <p className="text-txt-secondary mt-0.5">{t('auth.tryAgainIn', { seconds: retryAfter })}</p>
+                <p className="font-medium text-accent-amber">{t("auth.tooManyAttemptsShort")}</p>
+                <p className="text-txt-secondary mt-0.5">{t("auth.tryAgainIn", { seconds: retryAfter })}</p>
               </div>
             )}
 
@@ -644,7 +645,7 @@ export function RegisterPage() {
                 onClick={() => avatarInputRef.current?.click()}
                 className="text-xs text-accent-primary hover:underline mt-2"
               >
-                {t('auth.uploadPhoto')}
+                {t("auth.uploadPhoto")}
               </button>
               <input
                 ref={avatarInputRef}
@@ -658,13 +659,13 @@ export function RegisterPage() {
             {/* Display Name */}
             <div className="mb-5">
               <label className="block text-xs font-bold text-txt-secondary uppercase mb-2">
-                {t('auth.displayName')}
+                {t("auth.displayName")}
               </label>
               <input
                 type="text"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
-                placeholder={username.trim() || t('auth.displayNamePlaceholder')}
+                placeholder={username.trim() || t("auth.displayNamePlaceholder")}
                 className="input-standard w-full py-2.5 text-base md:text-sm"
                 autoComplete="name"
               />
@@ -673,7 +674,7 @@ export function RegisterPage() {
             {/* Avatar Color Picker */}
             <div className="mb-6">
               <label className="block text-xs font-bold text-txt-secondary uppercase mb-2">
-                {t('auth.avatarColor')}
+                {t("auth.avatarColor")}
               </label>
               {/* Color swatch row: gap tightens on narrow viewports so the 7 swatches
                   fit inside a 360 px viewport (p-6 inner content area is ~280 px;
@@ -689,8 +690,8 @@ export function RegisterPage() {
                       className="w-8 h-8 rounded-full border-2 transition-all hover:scale-110"
                       style={{
                         background: entry.gradient,
-                        borderColor: avatarColor === key ? 'white' : 'transparent',
-                        boxShadow: avatarColor === key ? `0 0 0 2px ${entry.glow}40` : 'none',
+                        borderColor: avatarColor === key ? "white" : "transparent",
+                        boxShadow: avatarColor === key ? `0 0 0 2px ${entry.glow}40` : "none",
                       }}
                       title={key.charAt(0).toUpperCase() + key.slice(1)}
                     />
@@ -707,21 +708,21 @@ export function RegisterPage() {
               className="w-full py-3 md:py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {retryAfter > 0
-                ? t('auth.tryAgainIn', { seconds: retryAfter })
+                ? t("auth.tryAgainIn", { seconds: retryAfter })
                 : isRegistering
-                  ? t('auth.creatingAccount')
-                  : t('auth.getStarted')}
+                  ? t("auth.creatingAccount")
+                  : t("auth.getStarted")}
             </button>
 
             <div className="flex items-center justify-between mt-3">
               <button
                 type="button"
-                onClick={() => { setError(''); setRetryAfter(0); setDirection('back'); setStep(1); }}
+                onClick={() => { setError(''); setRetryAfter(0); setDirection("back"); setStep(1); }}
                 disabled={isRegistering}
                 // py-2 px-1 widens the tap area on mobile while keeping the visual link style.
                 className="text-sm text-txt-tertiary hover:text-txt-secondary transition-colors disabled:opacity-50 py-2 px-1 -mx-1"
               >
-                {t('common.back')}
+                {t("common.back")}
               </button>
               <button
                 type="button"
@@ -729,7 +730,7 @@ export function RegisterPage() {
                 disabled={isDisabled}
                 className="text-sm text-txt-tertiary hover:text-txt-secondary transition-colors disabled:opacity-50 py-2 px-1 -mx-1"
               >
-                {t('auth.skipForNow')}
+                {t("auth.skipForNow")}
               </button>
             </div>
           </div>
@@ -751,7 +752,7 @@ export function RegisterPage() {
           onClose={() => setAvatarCropSrc(null)}
           imageSrc={avatarCropSrc}
           onCropComplete={handleAvatarCropComplete}
-          title={t('auth.cropAvatar')}
+          title={t("auth.cropAvatar")}
           aspectRatio={1}
           cropShape="round"
           maxOutputDimension={256}

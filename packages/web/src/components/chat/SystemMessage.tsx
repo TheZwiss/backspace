@@ -1,5 +1,6 @@
 import type { DmChannel, MessageWithUser, SpaceInviteSystemPayload, User } from '@backspace/shared';
 import { SpaceInviteCard } from './SpaceInviteCard';
+import { translate } from '../../i18n';
 
 interface SystemMessageProps {
   message: MessageWithUser;
@@ -17,9 +18,9 @@ function resolveActorName(message: MessageWithUser, dm?: Pick<DmChannel, 'member
   if (dm) {
     const fromRoster = dm.members.find(m => m.id === message.userId) as User | undefined;
     if (fromRoster) {
-      return fromRoster.displayName ?? fromRoster.username ?? 'Unknown';
+      return fromRoster.displayName ?? fromRoster.username ?? translate('runtime.selected.SystemMessage.unknown');
     }
-    return 'Unknown';
+    return translate('runtime.selected.SystemMessage.unknown2');
   }
   return message.user?.displayName ?? message.user?.username ?? 'Someone';
 }
@@ -51,32 +52,32 @@ export function SystemMessage({ message, dm }: SystemMessageProps) {
   switch (data.event) {
     case 'member_added':
       icon = '→'; // →
-      text = `${actorName} added ${data.targetDisplayName} to the group`;
+      text = translate('runtime.templates.SystemMessage.addedToTheGroup', { p0: actorName, p1: data.targetDisplayName });
       break;
     case 'member_removed':
       if (data.reason === 'leave') {
         icon = '←'; // ←
-        text = `${data.targetDisplayName} left the group`;
+        text = translate('runtime.templates.SystemMessage.leftTheGroup', { p0: data.targetDisplayName });
       } else {
         icon = '←';
-        text = `${actorName} removed ${data.targetDisplayName} from the group`;
+        text = translate('runtime.templates.SystemMessage.removedFromTheGroup', { p0: actorName, p1: data.targetDisplayName });
       }
       break;
     case 'owner_changed':
       icon = '♛'; // ♛
-      text = `${data.newOwnerDisplayName} is now the group owner`;
+      text = translate('runtime.templates.SystemMessage.isNowTheGroupOwner', { p0: data.newOwnerDisplayName });
       break;
     case 'name_changed':
       icon = '✎'; // ✎
       // newName === null is a meaningful "cleared" state — distinct from a
       // missing field — so we test for a non-empty string explicitly.
       text = typeof data.newName === 'string' && data.newName.length > 0
-        ? `${actorName} renamed the group to "${data.newName}"`
+        ? translate('runtime.templates.SystemMessage.renamedTheGroupTo', { p0: actorName, p1: data.newName })
         : `${actorName} cleared the group name`;
       break;
     case 'icon_changed':
       icon = '\u{1F5BC}'; // 🖼
-      text = `${actorName} updated the group icon`;
+      text = translate('runtime.templates.SystemMessage.updatedTheGroupIcon', { p0: actorName });
       break;
     default:
       text = message.content ?? '';

@@ -1,5 +1,6 @@
 import React from 'react';
 import { useUIStore } from '../../stores/uiStore';
+import { translate } from '../../i18n';
 
 export function MobileNav() {
   const isMobile = useUIStore((s) => s.isMobile);

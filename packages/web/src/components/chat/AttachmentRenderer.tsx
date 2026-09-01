@@ -3,6 +3,8 @@ import type { Attachment } from '@backspace/shared';
 import { useUIStore } from '../../stores/uiStore';
 import { useTransferStore } from '../../stores/transferStore';
 import { Tooltip } from '../ui/Tooltip';
+import { Trans } from 'react-i18next';
+import { translate } from '../../i18n';
 
 interface AttachmentRendererProps {
   attachment: Attachment;
@@ -118,7 +120,7 @@ function VideoAttachment({ attachment, attUrl, thumbUrl, federationInlineBadge }
                 <svg className="w-9 h-9" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
                 </svg>
-                <span className="text-[12px] font-medium">Can't play here — download</span>
+                <span className="text-[12px] font-medium"><Trans i18nKey="ui.AttachmentRenderer.canTPlayHereDownload">Can't play here — download</Trans></span>
               </div>
             </div>
           )}
@@ -133,7 +135,7 @@ function VideoAttachment({ attachment, attUrl, thumbUrl, federationInlineBadge }
             <div className="min-w-0 flex-1">
               <p className="text-txt-link text-[14px] font-medium truncate group-hover/vid:underline">{originalName}</p>
               <p className="text-[12px] text-txt-tertiary">
-                {meta ? `${meta} · ` : ''}Unsupported video format
+                {meta ? `${meta} · ` : ''}<Trans i18nKey="ui.AttachmentRenderer.unsupportedVideoFormat">Unsupported video format</Trans>
               </p>
             </div>
           </div>
@@ -157,7 +159,7 @@ function VideoAttachment({ attachment, attUrl, thumbUrl, federationInlineBadge }
           onError={() => setFailed(true)}
           className="w-full h-full rounded-lg"
         >
-          Your browser does not support video playback.
+          <Trans i18nKey="ui.AttachmentRenderer.yourBrowserDoesNotSupportVideoPlayback">Your browser does not support video playback.</Trans>
         </video>
       </div>
       {federationInlineBadge && <div className="mt-1">{federationInlineBadge}</div>}
@@ -184,27 +186,27 @@ export function AttachmentRenderer({ attachment }: AttachmentRendererProps) {
     if (!attachment.federationStatus) return null;
 
     if (attachment.federationStatus === 'remote') {
-      let senderName = 'the sender';
+      let senderName = translate('runtime.manual.theSender');
       if (attachment.federationMeta) {
         try {
           const meta = JSON.parse(attachment.federationMeta);
           if (meta.sourceUsername) senderName = meta.sourceUsername;
         } catch { /* ignore */ }
       }
-      return { text: `Hosted on ${senderName}'s instance. Download to keep a local copy.`, type: 'remote' as const };
+      return { text: translate('runtime.manual.hostedOnSenderInstance', { senderName }), type: 'remote' as const };
     }
 
     if (attachment.federationStatus === 'remote_partial') {
-      let text = 'Some recipients cannot cache this file locally.';
+      let text = translate('runtime.selected.AttachmentRenderer.someRecipientsCannotCacheThisFileLocally');
       if (attachment.federationMeta) {
         try {
           const meta: Array<{ username: string; limit: number }> = JSON.parse(attachment.federationMeta);
           if (meta.length > 0) {
             const parts = meta.map(u => {
               const limitMb = Math.round(u.limit / (1024 * 1024));
-              return `${u.username}'s instance (limit: ${limitMb} MB)`;
+              return translate('runtime.manual.userInstanceLimit', { username: u.username, limitMb });
             });
-            text = `File couldn't be cached on ${parts.join(' and ')}. They can still view it from yours.`;
+            text = translate('runtime.manual.fileCouldNotBeCached', { instances: parts.join(translate('runtime.manual.listAnd')) });
           }
         } catch { /* ignore */ }
       }
@@ -219,7 +221,7 @@ export function AttachmentRenderer({ attachment }: AttachmentRendererProps) {
     <Tooltip content={federationTooltip.text} position="top">
       <div className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded glass-pill text-xs cursor-default ${federationTooltip.type === 'remote' ? 'text-txt-muted' : 'text-accent-amber'}`}>
         <svg className="w-3 h-3 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          {federationTooltip.type === 'remote'
+          {federationTooltip.type === "remote"
             ? <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />
             : <><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></>
           }
@@ -284,7 +286,7 @@ export function AttachmentRenderer({ attachment }: AttachmentRendererProps) {
         </div>
         <audio controls preload="metadata" className="w-full mt-2 h-8">
           <source src={attUrl} type={mimetype} />
-          Your browser does not support audio playback.
+          <Trans i18nKey="ui.AttachmentRenderer.yourBrowserDoesNotSupportAudioPlayback">Your browser does not support audio playback.</Trans>
         </audio>
       </div>
     );

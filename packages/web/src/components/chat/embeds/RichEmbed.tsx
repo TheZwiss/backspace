@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import type { Embed } from '@backspace/shared';
+import { Trans } from 'react-i18next';
+import { translate } from '../../../i18n';
 
 interface RichEmbedProps {
   embed: Embed;
@@ -33,7 +35,7 @@ export function RichEmbed({ embed }: RichEmbedProps) {
       {isLoaded ? (
         <iframe
           src={embed.embedUrl}
-          title={embed.title ?? providerLabel ?? 'Embed'}
+          title={embed.title ?? providerLabel ?? translate('runtime.expressions.RichEmbed.embed')}
           height={iframeHeight}
           className="w-full block"
           allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
@@ -46,7 +48,7 @@ export function RichEmbed({ embed }: RichEmbedProps) {
           type="button"
           onClick={() => setIsLoaded(true)}
           className="w-full text-left focus:outline-none group"
-          aria-label={`Load ${providerLabel ?? 'embed'}`}
+          aria-label={`Load ${providerLabel ?? translate('runtime.expressions.RichEmbed.embed2')}`}
         >
           <div className="flex items-start gap-3 p-3">
             {embed.image && (
@@ -79,7 +81,7 @@ export function RichEmbed({ embed }: RichEmbedProps) {
                 <svg viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5">
                   <path d="M8 5v14l11-7z" />
                 </svg>
-                Click to load
+                <Trans i18nKey="ui.RichEmbed.clickToLoad">Click to load</Trans>
               </div>
             </div>
           </div>

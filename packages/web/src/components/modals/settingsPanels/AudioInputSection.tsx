@@ -3,6 +3,8 @@ import { useVoiceStore } from '../../../stores/voiceStore';
 import { AudioManager } from '../../../audio/AudioManager';
 import { useAudioDevices } from '../../../hooks/useAudioDevices';
 import { SectionShell, DropdownItem } from './_shared/SettingsPickerPrimitives';
+import { Trans } from 'react-i18next';
+import { translate } from '../../../i18n';
 
 export function AudioInputSection() {
   const inputDeviceId = useVoiceStore((s) => s.inputDeviceId);
@@ -91,25 +93,25 @@ export function AudioInputSection() {
 
   if (permState === 'unknown') {
     return (
-      <SectionShell title="Input Device">
-        <div className="text-sm text-txt-tertiary">Checking microphone access…</div>
+      <SectionShell title={translate("runtime.attributes.AudioInputSection.inputDevice")}>
+        <div className="text-sm text-txt-tertiary"><Trans i18nKey="ui.AudioInputSection.checkingMicrophoneAccess">Checking microphone access…</Trans></div>
       </SectionShell>
     );
   }
 
   if (permState === 'denied') {
     return (
-      <SectionShell title="Input Device">
+      <SectionShell title={translate("runtime.attributes.AudioInputSection.inputDevice2")}>
         <div className="space-y-2">
-          <div className="text-sm text-txt-primary">⚠ Microphone access denied</div>
+          <div className="text-sm text-txt-primary"><Trans i18nKey="ui.AudioInputSection.microphoneAccessDenied">⚠ Microphone access denied</Trans></div>
           <div className="text-xs text-txt-tertiary">
-            Grant microphone permission to choose an input device.
+            <Trans i18nKey="ui.AudioInputSection.grantMicrophonePermissionToChooseAnInputDevice">Grant microphone permission to choose an input device.</Trans>
           </div>
           <button
             onClick={() => { requestPermission().catch(() => {}); }}
             className="text-xs px-3 py-1.5 rounded-md bg-surface-base hover:bg-interactive-hover text-txt-secondary transition-colors"
           >
-            Try again
+            <Trans i18nKey="ui.AudioInputSection.tryAgain">Try again</Trans>
           </button>
         </div>
       </SectionShell>
@@ -118,16 +120,16 @@ export function AudioInputSection() {
 
   if (permState === 'prompt') {
     return (
-      <SectionShell title="Input Device">
+      <SectionShell title={translate("runtime.attributes.AudioInputSection.inputDevice3")}>
         <div className="space-y-3">
           <div className="text-xs text-txt-tertiary">
-            Microphone permission needed to list and choose an input device.
+            <Trans i18nKey="ui.AudioInputSection.microphonePermissionNeededToListAndChooseAn">Microphone permission needed to list and choose an input device.</Trans>
           </div>
           <button
             onClick={() => { requestPermission().catch(() => {}); }}
             className="text-[13px] px-3 py-2 rounded-md bg-accent-primary hover:bg-accent-primary-hover text-white font-medium transition-colors"
           >
-            Enable microphone access
+            <Trans i18nKey="ui.AudioInputSection.enableMicrophoneAccess">Enable microphone access</Trans>
           </button>
         </div>
       </SectionShell>
@@ -136,8 +138,8 @@ export function AudioInputSection() {
 
   // permState === 'granted'
   const selectedLabel = inputDeviceId === 'default'
-    ? 'System Default'
-    : inputLabels.get(inputDeviceId) ?? 'System Default';
+    ? translate('runtime.selected.AudioInputSection.systemDefault')
+    : inputLabels.get(inputDeviceId) ?? translate('runtime.selected.AudioInputSection.systemDefault2');
   const resolvedHint = inputDeviceId === 'default' && activeUpstreamId
     ? inputLabels.get(activeUpstreamId)
     : null;
@@ -152,7 +154,7 @@ export function AudioInputSection() {
   const activeBars = Math.round(micLevel * micBars * (inputVolume / 100));
 
   return (
-    <SectionShell title="Input Device">
+    <SectionShell title={translate("runtime.attributes.AudioInputSection.inputDevice4")}>
       <div className="space-y-3">
         <div ref={dropdownRef}>
           <button
@@ -168,8 +170,8 @@ export function AudioInputSection() {
           </button>
           {listOpen && (
             <div className="mt-1 rounded-md bg-surface-base border border-border-hard py-1 max-h-64 overflow-y-auto">
-              <DropdownItem label="System Default" active={inputDeviceId === 'default'} onClick={() => handleSelect('default')} />
-              {inputs.filter(d => d.deviceId !== 'default').map((d) => (
+              <DropdownItem label={translate("runtime.attributes.AudioInputSection.systemDefault")} active={inputDeviceId === "default"} onClick={() => handleSelect("default")} />
+              {inputs.filter(d => d.deviceId !== "default").map((d) => (
                 <DropdownItem
                   key={d.deviceId}
                   label={inputLabels.get(d.deviceId) ?? d.deviceId}
@@ -181,15 +183,15 @@ export function AudioInputSection() {
           )}
         </div>
         {resolvedHint && (
-          <div className="text-xs text-txt-tertiary -mt-1">Currently using: {resolvedHint}</div>
+          <div className="text-xs text-txt-tertiary -mt-1"><Trans i18nKey="ui.AudioInputSection.currentlyUsing">Currently using:</Trans> {resolvedHint}</div>
         )}
         {inputs.length === 0 && (
-          <div className="text-xs text-txt-tertiary">No microphones detected.</div>
+          <div className="text-xs text-txt-tertiary"><Trans i18nKey="ui.AudioInputSection.noMicrophonesDetected">No microphones detected.</Trans></div>
         )}
 
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <div className="text-[13px] font-medium text-txt-primary">Input Volume</div>
+            <div className="text-[13px] font-medium text-txt-primary"><Trans i18nKey="ui.AudioInputSection.inputVolume">Input Volume</Trans></div>
             <div className="text-xs text-txt-tertiary tabular-nums">{inputVolume}%</div>
           </div>
           <input
@@ -214,7 +216,7 @@ export function AudioInputSection() {
             ))}
           </div>
           <div className="text-xs text-txt-tertiary mt-1.5">
-            The level meter activates once you join a voice channel.
+            <Trans i18nKey="ui.AudioInputSection.theLevelMeterActivatesOnceYouJoinA">The level meter activates once you join a voice channel.</Trans>
           </div>
         </div>
       </div>

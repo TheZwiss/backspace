@@ -5,6 +5,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { useContextMenuStore, type ContextMenuItem } from '../../stores/contextMenuStore';
 import { buildVoiceModMenuItems, VolumeSliderItem } from './voiceMenuItems';
 import { VoiceUserRow } from './VoiceUserRow';
+import { translate } from '../../i18n';
 
 const EMPTY_VOICE_USERS: string[] = [];
 
@@ -86,7 +87,7 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, canManag
       items.push({
         key: 'mute-user',
         type: 'checkbox',
-        label: 'Mute User',
+        label: translate('runtime.properties.VoiceChannel.muteUser'),
         subscribe: useVoiceStore.subscribe,
         getChecked: () => useVoiceStore.getState().participantMutes.get(userId) ?? false,
         onChange: (checked) => useVoiceStore.getState().setParticipantMute(userId, checked),
@@ -123,7 +124,7 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, canManag
               ? 'bg-surface-elevated text-txt-primary'
               : 'text-txt-tertiary hover:text-txt-secondary hover:bg-interactive-hover'
         }`}
-        title={locked ? "You don't have permission to connect to this channel" : undefined}
+        title={locked ? translate('runtime.expressions.VoiceChannel.youDonTHavePermissionToConnectTo') : undefined}
       >
         {isActive && !locked && (
           <div

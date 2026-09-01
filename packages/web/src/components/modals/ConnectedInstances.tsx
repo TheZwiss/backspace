@@ -14,6 +14,8 @@ import { useUIStore } from '../../stores/uiStore';
 import { useFederationStore } from '../../stores/federationStore';
 import { isElectron } from '../../platform/platform';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { Trans } from 'react-i18next';
+import { translate } from '../../i18n';
 
 // ─── URL helpers ─────────────────────────────────────────────────────────────
 
@@ -58,7 +60,7 @@ function registryStatusLabel(status: string): string {
     case 'connected': return 'Connected';
     case 'disconnected': return 'Disconnected';
     case 'unreachable': return 'Unreachable';
-    case 'auth_expired': return 'Auth Expired';
+    case 'auth_expired': return translate('runtime.selected.ConnectedInstances.authExpired');
     default: return status;
   }
 }
@@ -66,7 +68,7 @@ function registryStatusLabel(status: string): string {
 function formatRelativeTime(timestamp: number | null): string {
   if (!timestamp) return 'Never';
   const seconds = Math.floor((Date.now() - timestamp) / 1000);
-  if (seconds < 60) return 'Just now';
+  if (seconds < 60) return translate('runtime.selected.ConnectedInstances.justNow');
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) return `${minutes}m ago`;
   const hours = Math.floor(minutes / 60);
@@ -161,16 +163,16 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
   return (
     <div className="mt-3 p-3 bg-surface-channel rounded-lg space-y-3">
       {/* Step 1: Enter URL */}
-      {step === 'url' && (
+      {step === "url" && (
         <>
-          <div className="text-sm text-txt-primary font-medium">Add Remote Instance</div>
+          <div className="text-sm text-txt-primary font-medium"><Trans i18nKey="ui.ConnectedInstances.addRemoteInstance">Add Remote Instance</Trans></div>
           <div className="flex gap-2">
             <input
               type="text"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && !isLoading && url.trim() && handleProbe()}
-              placeholder="https://instance.example.com"
+              onKeyDown={(e) => e.key === "Enter" && !isLoading && url.trim() && handleProbe()}
+              placeholder={translate("runtime.attributes.ConnectedInstances.httpsInstanceExampleCom")}
               className="input-standard flex-1"
               disabled={isLoading}
             />
@@ -179,20 +181,20 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
               disabled={isLoading || !url.trim()}
               className="px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
             >
-              {isLoading ? 'Probing...' : 'Connect'}
+              {isLoading ? translate('runtime.expressions.ConnectedInstances.probing') : translate('runtime.expressions.ConnectedInstances.connect')}
             </button>
           </div>
           <button
             onClick={onDone}
             className="text-xs text-txt-tertiary hover:text-txt-secondary transition-colors"
           >
-            Cancel
+            <Trans i18nKey="ui.ConnectedInstances.cancel">Cancel</Trans>
           </button>
         </>
       )}
 
       {/* Step 2: Auth — single password */}
-      {step === 'auth' && probeResult && authPhase === 'password' && (
+      {step === "auth" && probeResult && authPhase === "password" && (
         <>
           {/* Instance info card */}
           <div className="flex items-center gap-2">
@@ -205,7 +207,7 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
 
           {!probeResult.federatedRegistrationOpen && (
             <div className="mb-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-sm text-amber-300">
-              This instance has disabled new federated registrations. Existing accounts can still sign in.
+              <Trans i18nKey="ui.ConnectedInstances.thisInstanceHasDisabledNewFederatedRegistrationsExisting">This instance has disabled new federated registrations. Existing accounts can still sign in.</Trans>
             </div>
           )}
 
@@ -213,20 +215,20 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
             <input type="text" autoComplete="username" value={user?.username || ''} readOnly tabIndex={-1} className="sr-only" />
             <div>
               <label className="block text-xs text-txt-tertiary mb-1">
-                Enter your password to connect to {new URL(probeResult.origin).host}
+                <Trans i18nKey="ui.ConnectedInstances.enterYourPasswordToConnectTo">Enter your password to connect to</Trans> {new URL(probeResult.origin).host}
               </label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Your account password"
+                placeholder={translate("runtime.attributes.ConnectedInstances.yourAccountPassword")}
                 className="input-standard w-full"
                 disabled={isLoading}
                 autoFocus
                 autoComplete="current-password"
               />
               <div className="text-xs text-txt-tertiary mt-1">
-                Your password is verified locally, then used to create or access your account on the remote instance.
+                <Trans i18nKey="ui.ConnectedInstances.yourPasswordIsVerifiedLocallyThenUsedTo">Your password is verified locally, then used to create or access your account on the remote instance.</Trans>
               </div>
             </div>
             <button
@@ -234,29 +236,29 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
               disabled={isLoading || !password}
               className="w-full px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
             >
-              {isLoading ? 'Connecting...' : 'Connect'}
+              {isLoading ? translate('runtime.expressions.ConnectedInstances.connecting') : translate('runtime.expressions.ConnectedInstances.connect2')}
             </button>
           </form>
 
           <div className="flex gap-2">
             <button
-              onClick={() => { setStep('url'); setProbeResult(null); setError(''); }}
+              onClick={() => { setStep("url"); setProbeResult(null); setError(''); }}
               className="text-xs text-txt-tertiary hover:text-txt-secondary transition-colors"
             >
-              Back
+              <Trans i18nKey="ui.ConnectedInstances.back">Back</Trans>
             </button>
             <button
               onClick={onDone}
               className="text-xs text-txt-tertiary hover:text-txt-secondary transition-colors"
             >
-              Cancel
+              <Trans i18nKey="ui.ConnectedInstances.cancel2">Cancel</Trans>
             </button>
           </div>
         </>
       )}
 
       {/* Step 2b: Fallback login — different password on remote */}
-      {step === 'auth' && probeResult && authPhase === 'fallback-login' && (
+      {step === "auth" && probeResult && authPhase === "fallback-login" && (
         <>
           {/* Instance info card */}
           <div className="flex items-center gap-2">
@@ -268,29 +270,29 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
           </div>
 
           <div className="p-2 bg-accent-amber/10 border border-accent-amber/30 rounded text-xs text-accent-amber">
-            An account already exists on this instance with a different password. Enter the credentials you used on that instance.
+            <Trans i18nKey="ui.ConnectedInstances.anAccountAlreadyExistsOnThisInstanceWith">An account already exists on this instance with a different password. Enter the credentials you used on that instance.</Trans>
           </div>
 
           <form onSubmit={(e) => { e.preventDefault(); handleFallbackLogin(); }} className="space-y-2">
             <div>
-              <label className="block text-xs text-txt-tertiary mb-1">Username</label>
+              <label className="block text-xs text-txt-tertiary mb-1"><Trans i18nKey="ui.ConnectedInstances.username">Username</Trans></label>
               <input
                 type="text"
                 value={fallbackUsername}
                 onChange={(e) => setFallbackUsername(e.target.value)}
-                placeholder="Your username on this instance"
+                placeholder={translate("runtime.attributes.ConnectedInstances.yourUsernameOnThisInstance")}
                 className="input-standard w-full"
                 disabled={isLoading}
                 autoComplete="username"
               />
             </div>
             <div>
-              <label className="block text-xs text-txt-tertiary mb-1">Password for this instance</label>
+              <label className="block text-xs text-txt-tertiary mb-1"><Trans i18nKey="ui.ConnectedInstances.passwordForThisInstance">Password for this instance</Trans></label>
               <input
                 type="password"
                 value={fallbackPassword}
                 onChange={(e) => setFallbackPassword(e.target.value)}
-                placeholder="Password on the remote instance"
+                placeholder={translate("runtime.attributes.ConnectedInstances.passwordOnTheRemoteInstance")}
                 className="input-standard w-full"
                 disabled={isLoading}
                 autoFocus
@@ -302,22 +304,22 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
               disabled={isLoading || !fallbackUsername || !fallbackPassword}
               className="w-full px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
             >
-              {isLoading ? 'Logging in...' : 'Login & Connect'}
+              {isLoading ? translate('runtime.expressions.ConnectedInstances.loggingIn') : translate('runtime.expressions.ConnectedInstances.loginConnect')}
             </button>
           </form>
 
           <div className="flex gap-2">
             <button
-              onClick={() => { setAuthPhase('password'); setPassword(''); setError(''); }}
+              onClick={() => { setAuthPhase("password"); setPassword(''); setError(''); }}
               className="text-xs text-txt-tertiary hover:text-txt-secondary transition-colors"
             >
-              Back
+              <Trans i18nKey="ui.ConnectedInstances.back2">Back</Trans>
             </button>
             <button
               onClick={onDone}
               className="text-xs text-txt-tertiary hover:text-txt-secondary transition-colors"
             >
-              Cancel
+              <Trans i18nKey="ui.ConnectedInstances.cancel3">Cancel</Trans>
             </button>
           </div>
         </>
@@ -356,16 +358,16 @@ function RegistryFilterBar({
   const [sortOpen, setSortOpen] = useState(false);
 
   const tabs: Array<{ key: StatusFilter; label: string; count: number }> = [
-    { key: 'all', label: 'All', count: counts.all },
-    { key: 'connected', label: 'Connected', count: counts.connected },
-    { key: 'disconnected', label: 'Disconnected', count: counts.disconnected },
-    { key: 'issues', label: 'Issues', count: counts.issues },
+    { key: 'all', label: translate('runtime.properties.ConnectedInstances.all'), count: counts.all },
+    { key: 'connected', label: translate('runtime.properties.ConnectedInstances.connected'), count: counts.connected },
+    { key: 'disconnected', label: translate('runtime.properties.ConnectedInstances.disconnected'), count: counts.disconnected },
+    { key: 'issues', label: translate('runtime.properties.ConnectedInstances.issues'), count: counts.issues },
   ];
 
   const sortOptions: Array<{ key: SortBy; label: string }> = [
-    { key: 'name', label: 'Name (A-Z)' },
-    { key: 'dateAdded', label: 'Date Added' },
-    { key: 'lastConnected', label: 'Last Connected' },
+    { key: 'name', label: translate('runtime.properties.ConnectedInstances.nameAZ') },
+    { key: 'dateAdded', label: translate('runtime.properties.ConnectedInstances.dateAdded') },
+    { key: 'lastConnected', label: translate('runtime.properties.ConnectedInstances.lastConnected') },
   ];
 
   return (
@@ -394,7 +396,7 @@ function RegistryFilterBar({
           <svg width="12" height="12" viewBox="0 0 16 16" fill="none" className="opacity-60">
             <path d="M2 4h12M4 8h8M6 12h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
           </svg>
-          Sort
+          <Trans i18nKey="ui.ConnectedInstances.sort">Sort</Trans>
           <span className="text-[10px]">&#9662;</span>
         </button>
 
@@ -402,7 +404,7 @@ function RegistryFilterBar({
           <>
             <div className="fixed inset-0 z-40" onClick={() => setSortOpen(false)} />
             <div className="absolute right-0 top-full mt-1 z-50 glass rounded-lg p-1.5 w-44">
-              <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-2 py-1">Sort by</div>
+              <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-2 py-1"><Trans i18nKey="ui.ConnectedInstances.sortBy">Sort by</Trans></div>
               {sortOptions.map((opt) => (
                 <button
                   key={opt.key}
@@ -470,11 +472,11 @@ function DeleteIdentityDialog({
     const failed = Object.entries(results).filter(([, r]) => !r.success);
     if (failed.length === 0) {
       useUIStore.getState().addToast(
-        mode === 'leave'
-          ? 'Disconnected successfully'
+        mode === translate('runtime.messages.ConnectedInstances.leave')
+          ? translate('runtime.messages.ConnectedInstances.disconnectedSuccessfully')
           : targetOrigins.length === 1
-            ? 'Identity deleted successfully'
-            : `Identity deleted on ${targetOrigins.length} instances`,
+            ? translate('runtime.messages.ConnectedInstances.identityDeletedSuccessfully')
+            : translate('runtime.templates.ConnectedInstances.identityDeletedOnInstances', { p0: targetOrigins.length }),
         'success',
         3000,
       );
@@ -491,7 +493,7 @@ function DeleteIdentityDialog({
           );
         } else {
           useUIStore.getState().addToast(
-            `${host}: ${result.error || 'Failed'}`,
+            `${host}: ${result.error || translate('runtime.messages.ConnectedInstances.failed')}`,
             'warning',
             5000,
           );
@@ -514,9 +516,9 @@ function DeleteIdentityDialog({
         onClick={loading ? undefined : onClose}
       />
       <div className="relative max-w-md w-full mx-4 glass-modal rounded-xl p-6 animate-slide-up">
-        <h3 className="text-base font-semibold text-txt-primary mb-1">Delete Identity</h3>
+        <h3 className="text-base font-semibold text-txt-primary mb-1"><Trans i18nKey="ui.ConnectedInstances.deleteIdentity">Delete Identity</Trans></h3>
         <p className="text-xs text-txt-tertiary mb-4">
-          Remove your federated identity on <span className="text-txt-secondary font-medium">{label}</span>. Choose how your data should be handled.
+          <Trans i18nKey="ui.ConnectedInstances.removeYourFederatedIdentityOn">Remove your federated identity on</Trans> <span className="text-txt-secondary font-medium">{label}</span><Trans i18nKey="ui.ConnectedInstances.chooseHowYourDataShouldBeHandled">. Choose how your data should be handled.</Trans>
         </p>
 
         {/* Deletion mode selection */}
@@ -532,9 +534,9 @@ function DeleteIdentityDialog({
                 : 'bg-transparent border-white/[0.04] hover:border-white/[0.06]'
             } disabled:opacity-50`}
           >
-            <div className="text-sm font-medium text-txt-primary">Leave quietly</div>
+            <div className="text-sm font-medium text-txt-primary"><Trans i18nKey="ui.ConnectedInstances.leaveQuietly">Leave quietly</Trans></div>
             <div className="text-[11px] text-txt-tertiary mt-0.5">
-              Disconnect from this instance. Your account and all data remain.
+              <Trans i18nKey="ui.ConnectedInstances.disconnectFromThisInstanceYourAccountAndAll">Disconnect from this instance. Your account and all data remain.</Trans>
             </div>
           </button>
 
@@ -549,9 +551,9 @@ function DeleteIdentityDialog({
                 : 'bg-transparent border-white/[0.04] hover:border-white/[0.06]'
             } disabled:opacity-50`}
           >
-            <div className="text-sm font-medium text-txt-primary">Delete User</div>
+            <div className="text-sm font-medium text-txt-primary"><Trans i18nKey="ui.ConnectedInstances.deleteUser">Delete User</Trans></div>
             <div className="text-[11px] text-txt-tertiary mt-0.5">
-              Delete your account but keep your messages. You appear as &lsquo;Deleted User&rsquo;.
+              <Trans i18nKey="ui.ConnectedInstances.deleteYourAccountButKeepYourMessagesYou">Delete your account but keep your messages. You appear as &lsquo;Deleted User&rsquo;.</Trans>
             </div>
           </button>
 
@@ -567,29 +569,29 @@ function DeleteIdentityDialog({
             } disabled:opacity-50`}
           >
             <div className={`text-sm font-medium ${mode === 'full' ? 'text-txt-danger' : 'text-txt-primary'}`}>
-              Nuke everything
+              <Trans i18nKey="ui.ConnectedInstances.nukeEverything">Nuke everything</Trans>
             </div>
             <div className="text-[11px] text-txt-tertiary mt-0.5">
-              Delete your account and all your messages, DMs, reactions, and files. Nothing remains.
+              <Trans i18nKey="ui.ConnectedInstances.deleteYourAccountAndAllYourMessagesDMs">Delete your account and all your messages, DMs, reactions, and files. Nothing remains.</Trans>
             </div>
           </button>
         </div>
 
         {/* Scope selector */}
         <div className="mb-4">
-          <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">Scope</div>
+          <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2"><Trans i18nKey="ui.ConnectedInstances.scope">Scope</Trans></div>
           <div className="flex gap-1.5">
             {([
-              { key: 'this' as DeletionScope, label: 'This instance only', disabled: false },
-              { key: 'select' as DeletionScope, label: 'Select instances...', disabled: false },
-              { key: 'all' as DeletionScope, label: 'All remote instances', disabled: false },
+              { key: "this" as DeletionScope, label: translate('runtime.selected.ConnectedInstances.thisInstanceOnly'), disabled: false },
+              { key: "select" as DeletionScope, label: translate('runtime.selected.ConnectedInstances.selectInstances'), disabled: false },
+              { key: "all" as DeletionScope, label: translate('runtime.selected.ConnectedInstances.allRemoteInstances'), disabled: false },
             ]).map((opt) => (
               <button
                 key={opt.key}
                 type="button"
                 onClick={() => !opt.disabled && setScope(opt.key)}
                 disabled={opt.disabled || loading}
-                title={opt.disabled ? 'Coming soon' : undefined}
+                title={opt.disabled ? translate('runtime.expressions.ConnectedInstances.comingSoon') : undefined}
                 className={`flex-1 px-2 py-1.5 text-[11px] font-medium rounded transition-colors ${
                   opt.disabled
                     ? 'bg-white/[0.02] text-txt-tertiary/40 cursor-not-allowed'
@@ -605,7 +607,7 @@ function DeleteIdentityDialog({
         </div>
 
         {/* Instance picker for 'select' scope */}
-        {scope === 'select' && (
+        {scope === "select" && (
           <div className="mb-4 p-2 bg-surface-input rounded-lg max-h-40 overflow-y-auto scrollbar-thin space-y-0.5">
             {Array.from(registry.values()).map((entry) => {
               const checked = selectedOrigins.has(entry.origin);
@@ -642,14 +644,14 @@ function DeleteIdentityDialog({
             disabled={loading}
             className="flex-1 py-2.5 text-sm font-medium text-txt-secondary bg-interactive-hover hover:bg-interactive-selected rounded-lg transition-colors disabled:opacity-50"
           >
-            Cancel
+            <Trans i18nKey="ui.ConnectedInstances.cancel4">Cancel</Trans>
           </button>
           <button
             onClick={handleConfirm}
             disabled={loading || (scope === 'select' && selectedOrigins.size === 0)}
             className="flex-1 py-2.5 bg-accent-rose hover:bg-accent-rose/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? 'Deleting...' : mode === 'leave' ? 'Disconnect' : 'Delete Identity'}
+            {loading ? translate('runtime.expressions.ConnectedInstances.deleting') : mode === "leave" ? translate('runtime.expressions.ConnectedInstances.disconnect') : translate('runtime.expressions.ConnectedInstances.deleteIdentity')}
           </button>
         </div>
       </div>
@@ -693,17 +695,17 @@ function RegistryRow({
   // Build context-dependent metadata line
   let metadataText = '';
   if (isConnected) {
-    metadataText = `Added ${formatAbsoluteDate(entry.addedAt)}`;
+    metadataText = translate('runtime.templates.ConnectedInstances.added', { p0: formatAbsoluteDate(entry.addedAt) });
     if (entry.lastConnectedAt) {
       metadataText += ` · Connected ${formatRelativeTime(entry.lastConnectedAt)}`;
     }
   } else if (isDisconnected) {
-    metadataText = `Added ${formatAbsoluteDate(entry.addedAt)}`;
+    metadataText = translate('runtime.templates.ConnectedInstances.added2', { p0: formatAbsoluteDate(entry.addedAt) });
     if (entry.disconnectedAt) {
       metadataText += ` · Disconnected ${formatRelativeTime(entry.disconnectedAt)}`;
     }
   } else {
-    metadataText = `Added ${formatAbsoluteDate(entry.addedAt)}`;
+    metadataText = translate('runtime.templates.ConnectedInstances.added3', { p0: formatAbsoluteDate(entry.addedAt) });
     if (entry.lastConnectedAt) {
       metadataText += ` · Last connected ${formatRelativeTime(entry.lastConnectedAt)}`;
     }
@@ -759,7 +761,7 @@ function RegistryRow({
               <div className="text-[11px] text-txt-tertiary truncate">
                 {safeHost(entry.origin)}
                 {entry.username && (
-                  <span className="ml-1">as {entry.username}</span>
+                  <span className="ml-1"><Trans i18nKey="ui.ConnectedInstances.as">as</Trans> {entry.username}</span>
                 )}
               </div>
               <div className="text-[10px] text-txt-tertiary">{metadataText}</div>
@@ -775,26 +777,26 @@ function RegistryRow({
               {/* Stats grid */}
               <div className="grid grid-cols-3 gap-3 mb-3">
                 <div>
-                  <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider mb-0.5">Remote User ID</div>
-                  <div className="text-xs text-txt-secondary truncate" title={entry.remoteUserId || 'Unknown'}>
-                    {entry.remoteUserId ? entry.remoteUserId.slice(0, 12) + '...' : 'Unknown'}
+                  <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider mb-0.5"><Trans i18nKey="ui.ConnectedInstances.remoteUserID">Remote User ID</Trans></div>
+                  <div className="text-xs text-txt-secondary truncate" title={entry.remoteUserId || translate('runtime.expressions.ConnectedInstances.unknown')}>
+                    {entry.remoteUserId ? entry.remoteUserId.slice(0, 12) + '...' : translate('runtime.expressions.ConnectedInstances.unknown')}
                   </div>
                 </div>
                 <div>
-                  <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider mb-0.5">Added</div>
+                  <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider mb-0.5"><Trans i18nKey="ui.ConnectedInstances.added">Added</Trans></div>
                   <div className="text-xs text-txt-secondary">{formatAbsoluteDate(entry.addedAt)}</div>
                 </div>
                 <div>
                   {isDisconnected && entry.disconnectedAt ? (
                     <>
-                      <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider mb-0.5">Disconnected</div>
+                      <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider mb-0.5"><Trans i18nKey="ui.ConnectedInstances.disconnected">Disconnected</Trans></div>
                       <div className="text-xs text-txt-secondary">{formatAbsoluteDate(entry.disconnectedAt)}</div>
                     </>
                   ) : (
                     <>
-                      <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider mb-0.5">Last Connected</div>
+                      <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider mb-0.5"><Trans i18nKey="ui.ConnectedInstances.lastConnected">Last Connected</Trans></div>
                       <div className="text-xs text-txt-secondary">
-                        {entry.lastConnectedAt ? formatAbsoluteDate(entry.lastConnectedAt) : 'Never'}
+                        {entry.lastConnectedAt ? formatAbsoluteDate(entry.lastConnectedAt) : translate('runtime.expressions.ConnectedInstances.never')}
                       </div>
                     </>
                   )}
@@ -817,7 +819,7 @@ function RegistryRow({
                       type="password"
                       value={reauthPassword}
                       onChange={(e) => setReauthPassword(e.target.value)}
-                      placeholder="Your account password"
+                      placeholder={translate("runtime.attributes.ConnectedInstances.yourAccountPassword2")}
                       className="input-standard flex-1 py-1.5"
                       disabled={reauthLoading}
                       autoFocus
@@ -828,14 +830,14 @@ function RegistryRow({
                       disabled={reauthLoading || !reauthPassword}
                       className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-xs font-medium rounded transition-colors disabled:opacity-50"
                     >
-                      {reauthLoading ? 'Connecting...' : 'Connect'}
+                      {reauthLoading ? translate('runtime.expressions.ConnectedInstances.connecting2') : translate('runtime.expressions.ConnectedInstances.connect3')}
                     </button>
                     <button
                       type="button"
                       onClick={() => { setShowReauth(false); setReauthPassword(''); setReauthError(''); }}
                       className="px-2 py-1.5 text-xs text-txt-tertiary hover:text-txt-secondary transition-colors"
                     >
-                      Cancel
+                      <Trans i18nKey="ui.ConnectedInstances.cancel5">Cancel</Trans>
                     </button>
                   </div>
                   {reauthError && (
@@ -855,15 +857,15 @@ function RegistryRow({
                       onClick={(e) => { e.stopPropagation(); handleDisconnect(); }}
                       className="px-3 py-1.5 text-xs font-medium bg-white/[0.06] hover:bg-white/[0.1] text-txt-secondary rounded transition-colors"
                     >
-                      Disconnect
+                      <Trans i18nKey="ui.ConnectedInstances.disconnect">Disconnect</Trans>
                     </button>
                     <button
                       type="button"
                       disabled
                       className="px-3 py-1.5 text-xs font-medium bg-accent-rose/10 text-txt-danger rounded opacity-50 cursor-not-allowed"
-                      title="Disconnect first to delete identity"
+                      title={translate("runtime.attributes.ConnectedInstances.disconnectFirstToDeleteIdentity")}
                     >
-                      Delete Identity
+                      <Trans i18nKey="ui.ConnectedInstances.deleteIdentity2">Delete Identity</Trans>
                     </button>
                   </>
                 )}
@@ -876,7 +878,7 @@ function RegistryRow({
                         onClick={(e) => { e.stopPropagation(); handleReconnect(); }}
                         className="px-3 py-1.5 text-xs font-medium bg-accent-lavender/15 text-accent-lavender hover:bg-accent-lavender/25 rounded transition-colors"
                       >
-                        Reconnect
+                        <Trans i18nKey="ui.ConnectedInstances.reconnect">Reconnect</Trans>
                       </button>
                     )}
                     <button
@@ -884,27 +886,27 @@ function RegistryRow({
                       onClick={(e) => { e.stopPropagation(); setShowReauth((v) => !v); }}
                       className="px-3 py-1.5 text-xs font-medium bg-accent-amber/15 text-accent-amber hover:bg-accent-amber/25 rounded transition-colors"
                     >
-                      Re-authenticate
+                      <Trans i18nKey="ui.ConnectedInstances.reAuthenticate">Re-authenticate</Trans>
                     </button>
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); setShowDeleteIdentity(true); }}
                       className="px-3 py-1.5 text-xs font-medium bg-accent-rose/10 text-txt-danger hover:bg-accent-rose/20 rounded transition-colors"
                     >
-                      Delete Identity
+                      <Trans i18nKey="ui.ConnectedInstances.deleteIdentity3">Delete Identity</Trans>
                     </button>
                   </>
                 )}
 
                 {hasIssue && (
                   <>
-                    {entry.status === 'unreachable' && liveInstance && (
+                    {entry.status === "unreachable" && liveInstance && (
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); handleReconnect(); }}
                         className="px-3 py-1.5 text-xs font-medium bg-accent-lavender/15 text-accent-lavender hover:bg-accent-lavender/25 rounded transition-colors"
                       >
-                        Reconnect
+                        <Trans i18nKey="ui.ConnectedInstances.reconnect2">Reconnect</Trans>
                       </button>
                     )}
                     {entry.status === 'auth_expired' && (
@@ -913,7 +915,7 @@ function RegistryRow({
                         onClick={(e) => { e.stopPropagation(); setShowReauth((v) => !v); }}
                         className="px-3 py-1.5 text-xs font-medium bg-accent-amber/15 text-accent-amber hover:bg-accent-amber/25 rounded transition-colors"
                       >
-                        Re-authenticate
+                        <Trans i18nKey="ui.ConnectedInstances.reAuthenticate2">Re-authenticate</Trans>
                       </button>
                     )}
                     <button
@@ -921,14 +923,14 @@ function RegistryRow({
                       onClick={(e) => { e.stopPropagation(); setShowForceRemoveConfirm(true); }}
                       className="px-3 py-1.5 text-xs font-medium bg-white/[0.06] hover:bg-white/[0.1] text-txt-secondary rounded transition-colors"
                     >
-                      Force Remove
+                      <Trans i18nKey="ui.ConnectedInstances.forceRemove">Force Remove</Trans>
                     </button>
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); setShowDeleteIdentity(true); }}
                       className="px-3 py-1.5 text-xs font-medium bg-accent-rose/10 text-txt-danger hover:bg-accent-rose/20 rounded transition-colors"
                     >
-                      Delete Identity
+                      <Trans i18nKey="ui.ConnectedInstances.deleteIdentity4">Delete Identity</Trans>
                     </button>
                   </>
                 )}
@@ -943,9 +945,9 @@ function RegistryRow({
         isOpen={showForceRemoveConfirm}
         onClose={() => setShowForceRemoveConfirm(false)}
         onConfirm={handleForceRemove}
-        title="Force Remove Entry"
-        description={`This will remove the registry entry for ${name}. The remote instance will not be notified. Use this only if the instance is permanently unreachable.`}
-        confirmLabel="Force Remove"
+        title={translate("runtime.attributes.ConnectedInstances.forceRemoveEntry")}
+        description={translate('runtime.templates.ConnectedInstances.thisWillRemoveTheRegistryEntryForThe', { p0: name })}
+        confirmLabel={translate("runtime.attributes.ConnectedInstances.forceRemove")}
         variant="warning"
       />
 
@@ -993,7 +995,7 @@ function actionLabel(reason: PeeringTriggerReason): string {
 
 function actionVerbPhrase(reason: PeeringTriggerReason, target: string): string {
   switch (reason) {
-    case 'friend_add': return `Friend request to ${target}`;
+    case 'friend_add': return translate('runtime.templates.ConnectedInstances.friendRequestTo', { p0: target });
     case 'space_join': return `Join ${target}`;
     case 'direct_message': return `Direct message to ${target}`;
   }
@@ -1013,10 +1015,10 @@ function PendingSubscriptionRow({ subscription }: { subscription: PeeringSubscri
     setBusy(true);
     try {
       await cancelPeeringSubscription(subscription.id);
-      addToast('Peering request cancelled', 'success', 3000);
+      addToast(translate('runtime.messages.ConnectedInstances.peeringRequestCancelled'), 'success', 3000);
     } catch (err) {
       addToast(
-        `Failed to cancel: ${err instanceof Error ? err.message : 'Unknown error'}`,
+        `Failed to cancel: ${err instanceof Error ? err.message : translate('runtime.messages.ConnectedInstances.unknownError')}`,
         'warning',
         5000,
       );
@@ -1031,7 +1033,7 @@ function PendingSubscriptionRow({ subscription }: { subscription: PeeringSubscri
           {actionVerbPhrase(subscription.triggerReason, subscription.triggerTarget)}
         </div>
         <div className="text-[11px] text-txt-tertiary truncate">
-          on <span className="text-txt-secondary">{peerLabel}</span>
+          <Trans i18nKey="ui.ConnectedInstances.on">on</Trans> <span className="text-txt-secondary">{peerLabel}</span>
           {subscription.peerInstanceName && (
             <span className="ml-1 text-txt-tertiary/70">({host})</span>
           )}
@@ -1043,7 +1045,7 @@ function PendingSubscriptionRow({ subscription }: { subscription: PeeringSubscri
         disabled={busy}
         className="px-3 py-1.5 text-xs font-medium bg-white/[0.06] hover:bg-white/[0.1] text-txt-secondary rounded transition-colors shrink-0 disabled:opacity-50"
       >
-        {busy ? 'Cancelling...' : 'Cancel'}
+        {busy ? translate('runtime.expressions.ConnectedInstances.cancelling') : translate('runtime.expressions.ConnectedInstances.cancel')}
       </button>
     </div>
   );
@@ -1057,10 +1059,10 @@ function PendingPeeringSubscriptionsSection() {
   return (
     <div>
       <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
-        Pending Peering Approvals
+        <Trans i18nKey="ui.ConnectedInstances.pendingPeeringApprovals">Pending Peering Approvals</Trans>
       </div>
       <p className="text-xs text-txt-tertiary mb-2">
-        Your admin must approve before these requests can proceed.
+        <Trans i18nKey="ui.ConnectedInstances.yourAdminMustApproveBeforeTheseRequestsCan">Your admin must approve before these requests can proceed.</Trans>
       </p>
       <div className="rounded-lg bg-white/[0.02] p-3 space-y-2">
         {subscriptions.map((s) => (
@@ -1143,7 +1145,7 @@ function PeeringNotificationCard({
       await markPeeringNotificationRead(notification.id);
     } catch (err) {
       addToast(
-        `Failed to dismiss: ${err instanceof Error ? err.message : 'Unknown error'}`,
+        `Failed to dismiss: ${err instanceof Error ? err.message : translate('runtime.messages.ConnectedInstances.unknownError2')}`,
         'warning',
         5000,
       );
@@ -1188,7 +1190,7 @@ function PeeringNotificationCard({
                 onClick={() => onRetry(notification)}
                 className="px-3 py-1.5 text-xs font-medium bg-status-online/15 text-status-online hover:bg-status-online/25 rounded transition-colors"
               >
-                Retry your {actionLabel(notification.triggerReason)}
+                <Trans i18nKey="ui.ConnectedInstances.retryYour">Retry your</Trans> {actionLabel(notification.triggerReason)}
               </button>
             )}
             <button
@@ -1197,7 +1199,7 @@ function PeeringNotificationCard({
               disabled={busy}
               className="px-3 py-1.5 text-xs font-medium bg-white/[0.06] hover:bg-white/[0.1] text-txt-secondary rounded transition-colors disabled:opacity-50"
             >
-              {busy ? 'Dismissing...' : 'Dismiss'}
+              {busy ? translate('runtime.expressions.ConnectedInstances.dismissing') : translate('runtime.expressions.ConnectedInstances.dismiss')}
             </button>
           </div>
         </div>
@@ -1252,7 +1254,7 @@ function RecentPeeringOutcomesSection() {
       await markAllPeeringNotificationsRead();
     } catch (err) {
       addToast(
-        `Failed to dismiss all: ${err instanceof Error ? err.message : 'Unknown error'}`,
+        `Failed to dismiss all: ${err instanceof Error ? err.message : translate('runtime.messages.ConnectedInstances.unknownError3')}`,
         'warning',
         5000,
       );
@@ -1264,7 +1266,7 @@ function RecentPeeringOutcomesSection() {
     <div>
       <div className="flex items-center justify-between mb-1.5">
         <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider">
-          Recent Peering Outcomes
+          <Trans i18nKey="ui.ConnectedInstances.recentPeeringOutcomes">Recent Peering Outcomes</Trans>
         </div>
         {notifications.length > 1 && (
           <button
@@ -1273,7 +1275,7 @@ function RecentPeeringOutcomesSection() {
             disabled={bulkBusy}
             className="text-[11px] text-txt-tertiary hover:text-txt-secondary transition-colors disabled:opacity-50"
           >
-            {bulkBusy ? 'Dismissing...' : 'Dismiss all'}
+            {bulkBusy ? translate('runtime.expressions.ConnectedInstances.dismissing2') : translate('runtime.expressions.ConnectedInstances.dismissAll')}
           </button>
         )}
       </div>
@@ -1351,7 +1353,7 @@ export function ConnectedInstances() {
   const emptyMessage = registryEntries.length === 0
     ? null
     : filteredEntries.length === 0
-      ? 'No instances match the current filter.'
+      ? translate('runtime.selected.ConnectedInstances.noInstancesMatchTheCurrentFilter')
       : null;
 
   return (
@@ -1365,9 +1367,9 @@ export function ConnectedInstances() {
 
       <div>
       <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
-        Connected Instances
+        <Trans i18nKey="ui.ConnectedInstances.connectedInstances">Connected Instances</Trans>
       </div>
-      <p className="text-xs text-txt-tertiary mb-2">Link accounts across federated Backspace instances.</p>
+      <p className="text-xs text-txt-tertiary mb-2"><Trans i18nKey="ui.ConnectedInstances.linkAccountsAcrossFederatedBackspaceInstances">Link accounts across federated Backspace instances.</Trans></p>
 
       <div className="rounded-lg bg-white/[0.02] p-3 space-y-2">
         {/* Home instance (always pinned, non-filterable) */}
@@ -1376,24 +1378,24 @@ export function ConnectedInstances() {
             <StatusDot status="connected" />
             <div className="min-w-0">
               <div className="text-sm text-txt-primary font-medium truncate">
-                Home Instance
+                <Trans i18nKey="ui.ConnectedInstances.homeInstance">Home Instance</Trans>
               </div>
               <div className="text-xs text-txt-tertiary truncate">
                 {window.location.host}
                 {user?.username && (
-                  <span className="ml-1">as {user.username}</span>
+                  <span className="ml-1"><Trans i18nKey="ui.ConnectedInstances.as2">as</Trans> {user.username}</span>
                 )}
               </div>
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0 ml-2">
-            <span className="text-xs text-txt-tertiary">Local</span>
+            <span className="text-xs text-txt-tertiary"><Trans i18nKey="ui.ConnectedInstances.local">Local</Trans></span>
             {isElectron() && (
               <button
                 onClick={() => window.backspace?.clearInstanceUrl()}
                 className="px-2 py-1 text-xs text-txt-secondary hover:text-txt-primary hover:bg-white/[0.04] rounded transition-colors"
               >
-                Change
+                <Trans i18nKey="ui.ConnectedInstances.change">Change</Trans>
               </button>
             )}
           </div>
@@ -1431,7 +1433,7 @@ export function ConnectedInstances() {
 
         {registryEntries.length === 0 && !showAddForm && (
           <div className="text-xs text-txt-tertiary py-2">
-            No remote instances connected. Add one to start federating.
+            <Trans i18nKey="ui.ConnectedInstances.noRemoteInstancesConnectedAddOneToStart">No remote instances connected. Add one to start federating.</Trans>
           </div>
         )}
 
@@ -1443,7 +1445,7 @@ export function ConnectedInstances() {
             onClick={() => setShowAddForm(true)}
             className="w-full p-2 text-sm text-txt-secondary hover:text-txt-primary hover:bg-surface-channel/50 rounded-lg border border-dashed border-white/[0.06] hover:border-white/[0.12] transition-colors"
           >
-            + Add Instance
+            <Trans i18nKey="ui.ConnectedInstances.addInstance">+ Add Instance</Trans>
           </button>
         )}
       </div>

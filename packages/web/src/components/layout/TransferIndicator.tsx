@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useTransferStore, type Transfer } from '../../stores/transferStore';
+import { Trans } from 'react-i18next';
+import { translate } from '../../i18n';
 
 function fmt(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -64,8 +66,8 @@ export function TransferIndicator() {
             ? 'text-txt-tertiary/60 hover:text-txt-tertiary hover:bg-interactive-hover'
             : 'text-txt-tertiary hover:text-txt-primary hover:bg-interactive-hover'
         }`}
-        title="Transfers"
-        aria-label="Transfers"
+        title={translate("runtime.attributes.TransferIndicator.transfers")}
+        aria-label={translate("runtime.attributes.TransferIndicator.transfers2")}
       >
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M12 4v12m0 0l-4-4m4 4l4-4M4 20h16" />
@@ -88,22 +90,22 @@ export function TransferIndicator() {
         <div className="fixed right-2 top-14 md:absolute md:right-0 md:top-full md:mt-2 w-[min(300px,calc(100vw-16px))] glass z-50 rounded-lg overflow-hidden">
           <div className="px-3 py-2 border-b border-border-soft text-xs flex justify-between items-center">
             <span className="text-txt-secondary">
-              {visible.length} transfer{visible.length === 1 ? '' : 's'}
+              {visible.length} <Trans i18nKey="ui.TransferIndicator.transfer">transfer</Trans>{visible.length === 1 ? '' : 's'}
             </span>
             <button
               onClick={() =>
                 visible
-                  .filter((t) => t.state === 'completed' || t.state === 'aborted')
+                  .filter((t) => t.state === "completed" || t.state === "aborted")
                   .forEach((t) => remove(t.id))
               }
               className="text-txt-tertiary hover:text-txt-primary transition-colors"
             >
-              Clear completed
+              <Trans i18nKey="ui.TransferIndicator.clearCompleted">Clear completed</Trans>
             </button>
           </div>
           {visible.length === 0 && (
             <div className="px-3 py-6 text-center text-txt-tertiary text-xs">
-              No active transfers.
+              <Trans i18nKey="ui.TransferIndicator.noActiveTransfers">No active transfers.</Trans>
             </div>
           )}
           <div className="max-h-[400px] overflow-y-auto">
@@ -111,12 +113,12 @@ export function TransferIndicator() {
               <TransferRow
                 key={t.id}
                 transfer={t}
-                onPause={() => (t.type === 'upload' ? pause(t.id) : pauseDl(t.id))}
+                onPause={() => (t.type === "upload" ? pause(t.id) : pauseDl(t.id))}
                 onResume={() => {
-                  if (t.type === 'upload') void resume(t.id);
+                  if (t.type === "upload") void resume(t.id);
                   else void resumeDl(t.id);
                 }}
-                onAbort={() => (t.type === 'upload' ? abort(t.id) : abortDl(t.id))}
+                onAbort={() => (t.type === "upload" ? abort(t.id) : abortDl(t.id))}
                 onDismiss={() => remove(t.id)}
               />
             ))}
@@ -150,7 +152,7 @@ function TransferRow({ transfer, onPause, onResume, onAbort, onDismiss }: Transf
     <div className="px-3 py-2 border-b border-border-soft last:border-none">
       <div className="flex items-center gap-2 text-[11px]">
         <span className="text-txt-tertiary text-[10px]">
-          {transfer.type === 'upload' ? '↑' : '↓'}
+          {transfer.type === "upload" ? '↑' : '↓'}
         </span>
         <span className="text-txt-primary truncate flex-1">{transfer.file.name}</span>
       </div>
@@ -159,37 +161,37 @@ function TransferRow({ transfer, onPause, onResume, onAbort, onDismiss }: Transf
       </div>
       <div className="mt-1 flex justify-between items-center text-[10px] text-txt-tertiary gap-2">
         <span className="truncate">
-          {transfer.state === 'completed'
-            ? 'Done'
-            : transfer.state === 'failed'
-            ? `Failed: ${transfer.error?.message ?? 'unknown'}`
-            : transfer.state === 'aborted'
-            ? 'Aborted'
+          {transfer.state === "completed"
+            ? translate('runtime.expressions.TransferIndicator.done')
+            : transfer.state === "failed"
+            ? `Failed: ${transfer.error?.message ?? translate('runtime.expressions.TransferIndicator.unknown')}`
+            : transfer.state === "aborted"
+            ? translate('runtime.expressions.TransferIndicator.aborted')
             : `${fmt(transfer.progress.loaded)} / ${fmt(transfer.progress.total)}`}
         </span>
         <span className="flex gap-2 flex-shrink-0">
-          {transfer.state === 'active' && (
+          {transfer.state === "active" && (
             <button onClick={onPause} className="hover:text-txt-primary transition-colors">
-              Pause
+              <Trans i18nKey="ui.TransferIndicator.pause">Pause</Trans>
             </button>
           )}
-          {transfer.state === 'paused' && (
+          {transfer.state === "paused" && (
             <button onClick={onResume} className="hover:text-txt-primary transition-colors">
-              Resume
+              <Trans i18nKey="ui.TransferIndicator.resume">Resume</Trans>
             </button>
           )}
-          {(transfer.state === 'active' ||
-            transfer.state === 'paused' ||
-            transfer.state === 'queued') && (
+          {(transfer.state === "active" ||
+            transfer.state === "paused" ||
+            transfer.state === "queued") && (
             <button onClick={onAbort} className="hover:text-accent-rose transition-colors">
-              Abort
+              <Trans i18nKey="ui.TransferIndicator.abort">Abort</Trans>
             </button>
           )}
-          {(transfer.state === 'completed' ||
-            transfer.state === 'failed' ||
-            transfer.state === 'aborted') && (
+          {(transfer.state === "completed" ||
+            transfer.state === "failed" ||
+            transfer.state === "aborted") && (
             <button onClick={onDismiss} className="hover:text-txt-primary transition-colors">
-              Dismiss
+              <Trans i18nKey="ui.TransferIndicator.dismiss">Dismiss</Trans>
             </button>
           )}
         </span>

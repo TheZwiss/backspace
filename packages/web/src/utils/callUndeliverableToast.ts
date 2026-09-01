@@ -1,4 +1,5 @@
-/**
+
+import { translate } from '../i18n';/**
  * Builds a user-facing toast message from a `dm_call_undeliverable` event.
  *
  * Copy is phase-aware:
@@ -27,17 +28,17 @@ export function buildCallUndeliverableToast(
 
   if (phase === 'accept' && terminal) {
     const label = primary ? labelFor(primary) : 'the host instance';
-    return `Couldn't confirm your accept with ${label} — the call was dropped.`;
+    return translate('runtime.manual.couldNotConfirmAccept', { label });
   }
 
   if (phase === 'reject') {
     const labels = failures.map(labelFor).join(', ') || 'the host instance';
-    return `Couldn't notify ${labels} that you declined. Caller may still see you as ringing briefly.`;
+    return translate('runtime.manual.couldNotNotifyDecline', { labels });
   }
 
   if (phase === 'end') {
     const labels = failures.map(labelFor).join(', ') || 'the host instance';
-    return `Couldn't notify ${labels} that you hung up. Remote participants may see the call for up to 60 seconds.`;
+    return translate('runtime.manual.couldNotNotifyHangup', { labels });
   }
 
   // host_unreachable: call terminated because the host peer became unreachable.
@@ -46,39 +47,39 @@ export function buildCallUndeliverableToast(
   if (phase === 'host_unreachable') {
     const [f] = failures;
     if (!f || failures.length !== 1) {
-      return 'Call ended — host instance became unreachable.';
+      return translate('runtime.selected.callUndeliverableToast.callEndedHostInstanceBecameUnreachable');
     }
     const label = f.peerLabel || f.peerOrigin?.replace(/^https?:\/\//, '') || 'the host instance';
     if (f.reason === 'peer_rejected') {
-      return `Call ended — this instance is no longer peered with ${label}.`;
+      return translate('runtime.manual.callEndedNoLongerPeered', { label });
     }
-    return `Call ended — ${label} became unreachable.`;
+    return translate('runtime.manual.callEndedUnreachable', { label });
   }
 
   // phase === 'start' (default + legacy)
   if (!terminal) {
     const labels = failures.map(labelFor).join(', ');
-    return `Some participants could not be reached: ${labels}.`;
+    return translate('runtime.manual.someParticipantsUnreachable', { labels });
   }
   if (failures.length > 1) {
     const labels = failures.map(labelFor).join(', ');
-    return `Could not reach ${failures.length} instances: ${labels}.`;
+    return translate('runtime.manual.couldNotReachInstances', { count: failures.length, labels });
   }
-  if (!primary) return 'Call could not be placed.';
+  if (!primary) return translate('runtime.selected.callUndeliverableToast.callCouldNotBePlaced');
 
   const label = labelFor(primary);
   switch (primary.reason) {
     case 'peer_rejected':
-      return `Cannot reach ${label} — this instance requires manual peering approval.`;
+      return translate('runtime.manual.manualPeeringApprovalRequired', { label });
     case 'peer_awaiting_approval':
-      return `Waiting for ${label} admin to approve your instance. Calls will work once approved.`;
+      return translate('runtime.manual.waitingForAdminApproval', { label });
     case 'peer_transient_failure':
-      return `Could not reach ${label}. Try again in a moment.`;
+      return translate('runtime.manual.couldNotReachLabel', { label });
     case 'livekit_unavailable':
-      return 'Voice is not configured on this instance.';
+      return translate('runtime.selected.callUndeliverableToast.voiceIsNotConfiguredOnThisInstance');
     case 'no_recipient':
-      return `${label} couldn't ring anyone.`;
+      return translate('runtime.manual.couldNotRingAnyone', { label });
     default:
-      return `Call to ${label} could not be placed.`;
+      return translate('runtime.manual.callCouldNotBePlacedTo', { label });
   }
 }

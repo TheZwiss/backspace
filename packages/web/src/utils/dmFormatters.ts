@@ -1,5 +1,6 @@
 import type { DmChannel, DmMessageWithUser, DmLastMessagePreview, User, SpaceInviteSystemPayload } from '@backspace/shared';
 import { parseFederatedUsername, isSelf } from './identity';
+import { translate } from '../i18n';
 
 // ─── DM Preview Formatting ────────────────────────────────────────────────────
 
@@ -36,9 +37,9 @@ function getAttachmentIcon(mimeType: string): string {
 }
 
 function getAttachmentLabel(mimeType: string, name: string): string {
-  if (mimeType.startsWith('image/')) return '📷 Image';
-  if (mimeType.startsWith('video/')) return '🎬 Video';
-  if (mimeType.startsWith('audio/')) return '🎵 Audio';
+  if (mimeType.startsWith('image/')) return translate('runtime.manual.attachmentImage');
+  if (mimeType.startsWith('video/')) return translate('runtime.manual.attachmentVideo');
+  if (mimeType.startsWith('audio/')) return translate('runtime.manual.attachmentAudio');
   return `📎 ${name}`;
 }
 
@@ -84,7 +85,7 @@ export function formatDmPreview(lastMessage: PreviewMessage | null | undefined):
       const a = attachments![0]!;
       return getAttachmentLabel(resolveAttachmentType(a), resolveAttachmentName(a));
     }
-    return `📎 ${attachments!.length} files`;
+    return translate('runtime.manual.attachmentFileCount', { count: attachments!.length });
   }
 
   // Both text and attachments present
@@ -113,9 +114,9 @@ function asString(v: unknown): string | null {
 }
 
 function resolveDisplayName(user: User | null | undefined): string {
-  if (!user) return 'Unknown';
+  if (!user) return translate('runtime.selected.dmFormatters.unknown');
   if (user.displayName) return user.displayName;
-  return parseFederatedUsername(user.username ?? '').baseName || 'Unknown';
+  return parseFederatedUsername(user.username ?? '').baseName || translate('runtime.selected.dmFormatters.unknown2');
 }
 
 /**
@@ -135,35 +136,35 @@ function formatSystemPreview(content: string | null, actor: User | null | undefi
     case 'space_invite': {
       const spaceName = asString((data as Partial<SpaceInviteSystemPayload>).snapshot?.spaceName);
       return spaceName
-        ? `📨 Sent invite to ${spaceName}`
-        : '📨 Sent a space invite';
+        ? translate('runtime.manual.sentInviteToSpace', { spaceName })
+        : translate('runtime.manual.sentSpaceInvite');
     }
     case 'member_added': {
-      const target = asString(data.targetDisplayName) ?? 'someone';
-      return `${actorName} added ${target}`;
+      const target = asString(data.targetDisplayName) ?? translate('runtime.manual.someone');
+      return translate('runtime.manual.actorAddedTarget', { actorName, target });
     }
     case 'member_removed': {
-      const target = asString(data.targetDisplayName) ?? 'someone';
+      const target = asString(data.targetDisplayName) ?? translate('runtime.manual.someone');
       const reason = asString(data.reason);
-      if (reason === 'leave') return `${target} left the group`;
-      return `${actorName} removed ${target}`;
+      if (reason === 'leave') return translate('runtime.manual.targetLeftGroup', { target });
+      return translate('runtime.manual.actorRemovedTarget', { actorName, target });
     }
     case 'owner_changed': {
-      const newOwner = asString(data.newOwnerDisplayName) ?? 'A member';
-      return `${newOwner} is now the group owner`;
+      const newOwner = asString(data.newOwnerDisplayName) ?? translate('runtime.manual.aMember');
+      return translate('runtime.manual.newGroupOwner', { newOwner });
     }
     case 'name_changed': {
       // newName === null is a meaningful "cleared" state — distinct from a
       // missing field — so we check for a non-empty string explicitly.
       return asString(data.newName)
-        ? `${actorName} renamed the group`
-        : `${actorName} cleared the group name`;
+        ? translate('runtime.manual.actorRenamedGroup', { actorName })
+        : translate('runtime.manual.actorClearedGroupName', { actorName });
     }
     case 'icon_changed': {
-      return `${actorName} updated the group icon`;
+      return translate('runtime.manual.actorUpdatedGroupIcon', { actorName });
     }
     default:
-      return 'System message';
+      return translate('runtime.selected.dmFormatters.systemMessage');
   }
 }
 
@@ -285,13 +286,13 @@ export function formatDmHeaderName(dm: DmChannel, currentUser: AuthLike): string
 
   if (isGroup) {
     if (dm.name && dm.name.trim().length > 0) return dm.name;
-    if (others.length === 0) return 'Group';
+    if (others.length === 0) return translate('runtime.manual.group');
     return others.map(memberDisplayName).join(', ');
   }
 
   const partner = others[0];
-  if (!partner) return 'Direct Message';
-  return memberDisplayName(partner) || 'Direct Message';
+  if (!partner) return translate('runtime.selected.dmFormatters.directMessage');
+  return memberDisplayName(partner) || translate('runtime.selected.dmFormatters.directMessage2');
 }
 
 /**
@@ -311,12 +312,12 @@ export function formatDmInputLabel(dm: DmChannel, currentUser: AuthLike): string
 
   if (isGroup) {
     if (dm.name && dm.name.trim().length > 0) return `#${dm.name}`;
-    return 'the group';
+    return translate('runtime.manual.theGroup');
   }
 
   const partner = otherMembersOf(dm, currentUser)[0];
-  if (!partner) return '@unknown';
-  return `@${memberDisplayName(partner) || 'unknown'}`;
+  if (!partner) return `@${translate('runtime.manual.unknownLowercase')}`;
+  return `@${memberDisplayName(partner) || translate('runtime.manual.unknownLowercase')}`;
 }
 
 /**

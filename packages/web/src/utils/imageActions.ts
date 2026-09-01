@@ -1,5 +1,6 @@
 import { useUIStore } from '../stores/uiStore';
 import { useTransferStore } from '../stores/transferStore';
+import { translate } from '../i18n';
 
 function deriveFilename(url: string): string {
   try {
@@ -28,11 +29,11 @@ export async function saveImage(url: string, filename?: string): Promise<void> {
     // and resolves with the id. Detect that and stay silent.
     const t = useTransferStore.getState().get(transferId);
     if (t?.state === 'failed') {
-      throw new Error(t.error?.message ?? 'Download failed');
+      throw new Error(t.error?.message ?? translate('runtime.selected.imageActions.downloadFailed'));
     }
   } catch {
     window.open(url, '_blank', 'noopener');
-    useUIStore.getState().addToast('Opened in new tab', 'info', 3000);
+    useUIStore.getState().addToast(translate('runtime.selected.imageActions.openedInNewTab'), 'info', 3000);
   }
 }
 
@@ -45,7 +46,7 @@ export async function copyImageToClipboard(url: string): Promise<void> {
   // GIFs lose animation when converted to PNG — copy the URL instead
   if (isGifUrl(url)) {
     await navigator.clipboard.writeText(url);
-    useUIStore.getState().addToast('Copied GIF link', 'success', 3000);
+    useUIStore.getState().addToast(translate('runtime.selected.imageActions.copiedGIFLink'), 'success', 3000);
     return;
   }
 
@@ -57,7 +58,7 @@ export async function copyImageToClipboard(url: string): Promise<void> {
     // If the server returned a GIF despite the URL not ending in .gif
     if (blob.type === 'image/gif') {
       await navigator.clipboard.writeText(url);
-      useUIStore.getState().addToast('Copied GIF link', 'success', 3000);
+      useUIStore.getState().addToast(translate('runtime.selected.imageActions.copiedGIFLink2'), 'success', 3000);
       return;
     }
 
@@ -68,7 +69,7 @@ export async function copyImageToClipboard(url: string): Promise<void> {
     ]);
   } catch {
     await navigator.clipboard.writeText(url);
-    useUIStore.getState().addToast('Copied image link', 'info', 3000);
+    useUIStore.getState().addToast(translate('runtime.selected.imageActions.copiedImageLink'), 'info', 3000);
   }
 }
 
@@ -100,12 +101,12 @@ function convertToPng(blob: Blob): Promise<Blob> {
       URL.revokeObjectURL(blobUrl);
       canvas.toBlob((pngBlob) => {
         if (pngBlob) resolve(pngBlob);
-        else reject(new Error('Canvas toBlob returned null'));
+        else reject(new Error(translate('runtime.selected.imageActions.canvasToBlobReturnedNull')));
       }, 'image/png');
     };
     img.onerror = () => {
       URL.revokeObjectURL(blobUrl);
-      reject(new Error('Failed to load image for conversion'));
+      reject(new Error(translate('runtime.selected.imageActions.failedToLoadImageForConversion')));
     };
     img.src = blobUrl;
   });

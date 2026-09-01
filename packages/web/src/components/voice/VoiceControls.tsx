@@ -9,6 +9,7 @@ import { startScreenShare, stopScreenShare } from '../../utils/screenShare';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import { broadcastVoiceStatus } from '../../utils/voice';
 import { handleCameraAction } from '../../utils/voiceActions';
+import { translate } from '../../i18n';
 
 /**
  * VoiceControls renders the voice status + button rows.
@@ -42,7 +43,7 @@ export function VoiceControls() {
   if (!currentVoiceChannelId && !activeDmCall) return null;
 
   const channel = channels.find(c => c.id === currentVoiceChannelId);
-  const channelName = channel?.name ?? (activeDmCall ? 'DM Call' : 'Voice Channel');
+  const channelName = channel?.name ?? (activeDmCall ? translate('runtime.selected.VoiceControls.dmCall') : translate('runtime.selected.VoiceControls.voiceChannel'));
 
   const handleScreenShare = async () => {
     const room = getActiveRoom();
@@ -109,7 +110,7 @@ export function VoiceControls() {
             if (!showConnectionInfo) setShowScreenShareSettings(false);
           }}
           className={`w-8 h-8 rounded-lg ${statusBgColor} flex items-center justify-center flex-shrink-0 hover:brightness-125 transition-all`}
-          title="Connection Info"
+          title={translate("runtime.attributes.VoiceControls.connectionInfo")}
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className={qualityColor}>
             <path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z" />
@@ -118,7 +119,7 @@ export function VoiceControls() {
 
         <div className="min-w-0 flex-1">
           <div className={`text-[13px] font-semibold leading-[18px] ${statusColor}`}>
-            {connectionError ? 'Connection Failed' : isLiveKitConnected ? 'Voice Connected' : 'Connecting...'}
+            {connectionError ? translate('runtime.expressions.VoiceControls.connectionFailed') : isLiveKitConnected ? translate('runtime.expressions.VoiceControls.voiceConnected') : translate('runtime.expressions.VoiceControls.connecting')}
           </div>
           <div className="text-[12px] text-txt-tertiary truncate leading-[16px]">
             {connectionError ? connectionError : channelName}
@@ -129,7 +130,7 @@ export function VoiceControls() {
           <button
             onClick={handleDisconnect}
             className="w-7 h-7 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded"
-            title="Disconnect"
+            title={translate("runtime.attributes.VoiceControls.disconnect")}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 9C10.4 9 8.85 9.25 7.4 9.72V12.82C7.4 13.22 7.17 13.56 6.84 13.72C5.86 14.21 4.97 14.84 4.18 15.57C4 15.75 3.75 15.85 3.48 15.85C3.2 15.85 2.95 15.74 2.77 15.56L0.29 13.08C0.11 12.9 0 12.65 0 12.38C0 12.1 0.11 11.85 0.29 11.67C3.34 8.78 7.46 7 12 7S20.66 8.78 23.71 11.67C23.89 11.85 24 12.1 24 12.38C24 12.65 23.89 12.9 23.71 13.08L21.23 15.56C21.05 15.74 20.8 15.85 20.52 15.85C20.25 15.85 20 15.75 19.82 15.57C19.03 14.84 18.14 14.21 17.16 13.72C16.83 13.56 16.6 13.22 16.6 12.82V9.72C15.15 9.25 13.6 9 12 9Z" />
@@ -155,7 +156,7 @@ export function VoiceControls() {
                 ? 'bg-surface-base text-status-online hover:bg-surface-channel'
                 : btnDefaultStyle
             }`}
-            title={isCameraOn ? 'Turn Off Camera' : 'Turn On Camera'}
+            title={isCameraOn ? translate('runtime.expressions.VoiceControls.turnOffCamera') : translate('runtime.expressions.VoiceControls.turnOnCamera')}
           >
             {isCameraOn ? (
               <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
@@ -178,7 +179,7 @@ export function VoiceControls() {
                 ? 'bg-surface-base text-status-online hover:bg-surface-channel'
                 : btnDefaultStyle
             }`}
-            title={isScreenSharing ? 'Stop Sharing' : 'Share Screen'}
+            title={isScreenSharing ? translate('runtime.expressions.VoiceControls.stopSharing') : translate('runtime.expressions.VoiceControls.shareScreen')}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
               <path d="M20 18C21.1 18 22 17.1 22 16V6C22 4.9 21.1 4 20 4H4C2.9 4 2 4.9 2 6V16C2 17.1 2.9 18 4 18H0V20H24V18H20ZM4 6H20V16H4V6Z" />
@@ -199,7 +200,7 @@ export function VoiceControls() {
               ? 'bg-surface-base text-accent-primary hover:bg-surface-channel'
               : btnDefaultStyle
           }`}
-          title="Video Quality"
+          title={translate("runtime.attributes.VoiceControls.videoQuality")}
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
             <path d="M3 5v14h18V5H3zm16 12H5V7h14v10z" />
@@ -215,7 +216,7 @@ export function VoiceControls() {
               ? 'bg-surface-base text-status-online hover:bg-surface-channel'
               : btnDefaultStyle
           }`}
-          title={rnnoiseEnabled ? 'Disable AI Noise Suppression' : 'Enable AI Noise Suppression'}
+          title={rnnoiseEnabled ? translate('runtime.expressions.VoiceControls.disableAINoiseSuppression') : translate('runtime.expressions.VoiceControls.enableAINoiseSuppression')}
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" opacity={rnnoiseEnabled ? 0.15 : 0.08} />

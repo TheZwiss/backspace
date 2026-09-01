@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { isElectron } from '../../platform/platform';
+import { Trans } from 'react-i18next';
+import { translate } from '../../i18n';
 
 interface UpdateError {
   message: string;
@@ -38,21 +40,21 @@ export function UpdateToast() {
       <div className="fixed bottom-6 left-6 z-[300] animate-slide-up">
         <div className="glass-pill rounded-xl px-4 py-3 flex items-center gap-3 max-w-[340px]">
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-txt-primary">Update ready</p>
+            <p className="text-sm font-medium text-txt-primary"><Trans i18nKey="ui.UpdateToast.updateReady">Update ready</Trans></p>
             <p className="text-xs text-txt-secondary truncate">
-              Version {downloadedVersion} has been downloaded
+              <Trans i18nKey="ui.UpdateToast.version">Version</Trans> {downloadedVersion} <Trans i18nKey="ui.UpdateToast.hasBeenDownloaded">has been downloaded</Trans>
             </p>
           </div>
           <button
             onClick={() => window.backspace?.installUpdate()}
             className="shrink-0 px-3 py-1.5 text-xs font-medium rounded-lg bg-accent-primary hover:bg-accent-primary/80 text-white transition-colors"
           >
-            Restart
+            <Trans i18nKey="ui.UpdateToast.restart">Restart</Trans>
           </button>
           <button
             onClick={() => setDownloadedVersion(null)}
             className="shrink-0 p-1 text-txt-tertiary hover:text-txt-secondary transition-colors"
-            aria-label="Dismiss"
+            aria-label={translate("runtime.attributes.UpdateToast.dismiss")}
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -68,9 +70,9 @@ export function UpdateToast() {
     <div className="fixed bottom-6 left-6 z-[300] animate-slide-up">
       <div className="glass-pill rounded-xl px-4 py-3 flex items-center gap-3 max-w-[380px]">
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-txt-primary">Update failed</p>
+          <p className="text-sm font-medium text-txt-primary"><Trans i18nKey="ui.UpdateToast.updateFailed">Update failed</Trans></p>
           <p className="text-xs text-txt-secondary truncate">
-            Auto-update failed — download manually
+            <Trans i18nKey="ui.UpdateToast.autoUpdateFailedDownloadManually">Auto-update failed — download manually</Trans>
           </p>
         </div>
         <a
@@ -79,12 +81,12 @@ export function UpdateToast() {
           rel="noopener noreferrer"
           className="shrink-0 px-3 py-1.5 text-xs font-medium rounded-lg bg-accent-primary hover:bg-accent-primary/80 text-white transition-colors"
         >
-          Download
+          <Trans i18nKey="ui.UpdateToast.download">Download</Trans>
         </a>
         <button
           onClick={() => setFailedUpdate(null)}
           className="shrink-0 p-1 text-txt-tertiary hover:text-txt-secondary transition-colors"
-          aria-label="Dismiss"
+          aria-label={translate("runtime.attributes.UpdateToast.dismiss2")}
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />

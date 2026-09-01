@@ -1,4 +1,5 @@
-/**
+
+import { translate } from '../i18n';/**
  * Parse invite input into a code and optional remote origin.
  *
  * Supported formats:
@@ -8,7 +9,7 @@
  */
 export function parseInviteInput(input: string): { code: string; origin?: string } {
   const trimmed = input.trim();
-  if (!trimmed) throw new Error('Invite code is required');
+  if (!trimmed) throw new Error(translate('runtime.selected.inviteParser.inviteCodeIsRequired'));
 
   // Full URL: starts with http:// or https://
   if (/^https?:\/\//i.test(trimmed)) {
@@ -16,13 +17,13 @@ export function parseInviteInput(input: string): { code: string; origin?: string
     try {
       parsed = new URL(trimmed);
     } catch {
-      throw new Error('Invalid invite link');
+      throw new Error(translate('runtime.selected.inviteParser.invalidInviteLink'));
     }
 
     // Extract code from /join/{code} path
     const match = parsed.pathname.match(/^\/join\/([^/]+)$/);
     if (!match) {
-      throw new Error('Invalid invite link — expected format: https://instance/join/CODE');
+      throw new Error(translate('runtime.selected.inviteParser.invalidInviteLinkExpectedFormatHttpsInstanceJoin'));
     }
 
     const code = match[1]!;
@@ -42,7 +43,7 @@ export function parseInviteInput(input: string): { code: string; origin?: string
     const domain = trimmed.slice(atIndex + 1);
 
     if (!code || !domain) {
-      throw new Error('Invalid invite format — expected: CODE@domain');
+      throw new Error(translate('runtime.selected.inviteParser.invalidInviteFormatExpectedCODEDomain'));
     }
 
     const origin = `https://${domain}`;
@@ -53,7 +54,7 @@ export function parseInviteInput(input: string): { code: string; origin?: string
         return { code };
       }
     } catch {
-      throw new Error('Invalid domain in invite');
+      throw new Error(translate('runtime.selected.inviteParser.invalidDomainInInvite'));
     }
 
     return { code, origin };

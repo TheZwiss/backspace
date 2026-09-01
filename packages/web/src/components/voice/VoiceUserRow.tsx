@@ -1,4 +1,6 @@
 import { Avatar } from '../ui/Avatar';
+import { Trans } from 'react-i18next';
+import { translate } from '../../i18n';
 
 export interface VoiceUserRowProps {
   userId: string;
@@ -67,10 +69,10 @@ export function VoiceUserRow({
           <span
             title={
               isPermissionMuted
-                ? 'Muted (No Speak Permission)'
+                ? translate('runtime.expressions.VoiceUserRow.mutedNoSpeakPermission')
                 : isServerMuted
-                  ? 'Space Muted'
-                  : 'Muted (Space Deafened)'
+                  ? translate('runtime.expressions.VoiceUserRow.spaceMuted')
+                  : translate('runtime.expressions.VoiceUserRow.mutedSpaceDeafened')
             }
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-accent-amber">
@@ -82,7 +84,7 @@ export function VoiceUserRow({
         )}
         {/* Server deafened — amber headphone with slash */}
         {showServerDeafIcon && (
-          <span title="Space Deafened">
+          <span title={translate("runtime.attributes.VoiceUserRow.spaceDeafened")}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-accent-amber">
               <path d="M12 3c-4.97 0-9 4.03-9 9v7c0 1.1.9 2 2 2h2v-7H5v-2c0-3.87 3.13-7 7-7s7 3.13 7 7v2h-2v7h2c1.1 0 2-.9 2-2v-7c0-4.97-4.03-9-9-9z" />
               <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
@@ -115,11 +117,11 @@ export function VoiceUserRow({
         )}
         {/* Screen sharing LIVE badge */}
         {isScreenSharing && (
-          <span className="bg-accent-rose text-white text-[9px] font-bold px-1 rounded leading-[14px]">LIVE</span>
+          <span className="bg-accent-rose text-white text-[9px] font-bold px-1 rounded leading-[14px]"><Trans i18nKey="ui.VoiceUserRow.live">LIVE</Trans></span>
         )}
         {/* Locally muted — volume X icon */}
         {isLocallyMuted && (
-          <span title="Locally Muted">
+          <span title={translate("runtime.attributes.VoiceUserRow.locallyMuted")}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary">
               <path d="M3 9v6h4l5 5V4L7 9H3z" />
               <line x1="17" y1="7" x2="23" y2="13" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />

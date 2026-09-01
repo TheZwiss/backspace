@@ -10,6 +10,8 @@ import { getPrimaryActivity } from '@backspace/shared/src/activities.js';
 import { parseFederatedUsername, isFederationGlobeApplicable } from '../../utils/identity';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { useDelayedLoading } from '../../hooks/useDelayedLoading';
+import { Trans } from 'react-i18next';
+import { translate } from '../../i18n';
 
 /**
  * Derives the display group for a member based on their highest-positioned role
@@ -21,7 +23,7 @@ function getMemberGroup(member: MemberWithUser, ownerId: string | undefined) {
     const ownerRole = member.roles?.find(r => r.position > 0);
     return {
       key: '__owner__',
-      label: 'OWNER',
+      label: translate('runtime.properties.MemberSidebar.owner'),
       color: ownerRole?.color ?? 'rgb(var(--accent-rose))',
       position: Infinity,
     };
@@ -40,7 +42,7 @@ function getMemberGroup(member: MemberWithUser, ownerId: string | undefined) {
   // No explicit roles — just @everyone
   return {
     key: '__online__',
-    label: 'ONLINE',
+    label: translate('runtime.properties.MemberSidebar.online'),
     color: undefined,
     position: -1,
   };
@@ -183,9 +185,9 @@ export function MemberSidebar() {
   return (
     <div className="w-60 bg-surface-members flex-shrink-0 overflow-y-auto select-none no-scrollbar hidden md:block border-l border-border-hard">
       {showMemberSkeleton ? (
-        <div className="px-3 pt-4" role="status" aria-label="Loading members">
+        <div className="px-3 pt-4" role="status" aria-label={translate("runtime.attributes.MemberSidebar.loadingMembers")}>
           {/* Role group 1 */}
-          <div className="skeleton skeleton-bar h-2 w-[40%] mb-3" style={{ animationDelay: '0s' }} />
+          <div className="skeleton skeleton-bar h-2 w-[40%] mb-3" style={{ animationDelay: "0s" }} />
           {Array.from({ length: 2 }, (_, i) => (
             <div key={i} className="flex items-center gap-3 py-1.5 mb-1" style={{ animationDelay: `${i * 0.12}s` }}>
               <div className="skeleton skeleton-circle w-8 h-8 flex-shrink-0" style={{ animationDelay: `${i * 0.12}s` }} />
@@ -193,7 +195,7 @@ export function MemberSidebar() {
             </div>
           ))}
           {/* Role group 2 */}
-          <div className="skeleton skeleton-bar h-2 w-[50%] mb-3 mt-5" style={{ animationDelay: '0.25s' }} />
+          <div className="skeleton skeleton-bar h-2 w-[50%] mb-3 mt-5" style={{ animationDelay: "0.25s" }} />
           {Array.from({ length: 5 }, (_, i) => (
             <div key={i} className="flex items-center gap-3 py-1.5 mb-1" style={{ animationDelay: `${(i + 2) * 0.12}s` }}>
               <div className="skeleton skeleton-circle w-8 h-8 flex-shrink-0" style={{ animationDelay: `${(i + 2) * 0.12}s` }} />
@@ -217,7 +219,7 @@ export function MemberSidebar() {
         {offlineMembers.length > 0 && (
           <div>
             <h3 className="text-[10.5px] font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
-              OFFLINE — {offlineMembers.length}
+              <Trans i18nKey="ui.MemberSidebar.offline">OFFLINE —</Trans> {offlineMembers.length}
             </h3>
             {offlineMembers.map((m) => renderMember(m, true))}
           </div>

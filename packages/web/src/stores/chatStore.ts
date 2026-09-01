@@ -6,6 +6,7 @@ import { useAuthStore } from './authStore';
 import { normalizeMessageAssets } from '../utils/assetUrls';
 import { sortDmChannels } from '../utils/dmSorting';
 import { usePendingMessageStore } from './pendingMessageStore';
+import { translate } from '../i18n';
 
 const MAX_MESSAGES_PER_CHANNEL = 200;
 const MAX_CACHED_CHANNELS = 20;
@@ -217,7 +218,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           return { messages: newMessages, hasMore: newHasMore, channelAccessTimes: newAccessTimes, isLoading: false, loadError: null };
         });
       } catch (err) {
-        set({ isLoading: false, loadError: (err as Error).message || 'Failed to load messages' });
+        set({ isLoading: false, loadError: (err as Error).message || translate('runtime.selected.chatStore.failedToLoadMessages') });
       }
     })();
 

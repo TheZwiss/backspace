@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { useChatStore } from '../../stores/chatStore';
 import { useAuthStore } from '../../stores/authStore';
+import { translate } from '../../i18n';
 
 interface TypingIndicatorProps {
   channelId: string;
@@ -22,11 +23,11 @@ export function TypingIndicator({ channelId }: TypingIndicatorProps) {
 
   let text = '';
   if (others.length === 1) {
-    text = `${others[0]!.username} is typing`;
+    text = translate('runtime.manual.userIsTyping', { username: others[0]!.username });
   } else if (others.length === 2) {
-    text = `${others[0]!.username} and ${others[1]!.username} are typing`;
+    text = translate('runtime.manual.twoUsersAreTyping', { first: others[0]!.username, second: others[1]!.username });
   } else {
-    text = 'Several people are typing';
+    text = translate('runtime.selected.TypingIndicator.severalPeopleAreTyping');
   }
 
   return (

@@ -4,6 +4,8 @@ import { Avatar } from '../../ui/Avatar';
 import { ConfirmDialog } from '../../ui/ConfirmDialog';
 import { useAuthStore } from '../../../stores/authStore';
 import type { AdminUser, AdminUserListResponse } from '@backspace/shared';
+import { Trans } from 'react-i18next';
+import { translate } from '../../../i18n';
 
 export function UsersPanel() {
   const currentUser = useAuthStore((s) => s.user);
@@ -56,7 +58,7 @@ export function UsersPanel() {
       });
       setData(result);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load users');
+      setError(err instanceof Error ? err.message : translate('runtime.messages.UsersPanel.failedToLoadUsers'));
     } finally {
       setLoading(false);
     }
@@ -87,7 +89,7 @@ export function UsersPanel() {
       await api.admin.setUserRole(user.id, true);
       fetchUsers(query, page, showDeleted, filtersRef.current);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update role');
+      setError(err instanceof Error ? err.message : translate('runtime.messages.UsersPanel.failedToUpdateRole'));
     }
   };
 
@@ -108,7 +110,7 @@ export function UsersPanel() {
       setTempPassword({ userId: resetConfirmUser.id, password: result.temporaryPassword });
       setResetConfirmUser(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to reset password');
+      setError(err instanceof Error ? err.message : translate('runtime.messages.UsersPanel.failedToResetPassword'));
       setResetConfirmUser(null);
     } finally {
       setResetLoading(false);
@@ -132,7 +134,7 @@ export function UsersPanel() {
       setConfirmAction(null);
       fetchUsers(query, page, showDeleted, filtersRef.current);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Action failed');
+      setError(err instanceof Error ? err.message : translate('runtime.messages.UsersPanel.actionFailed'));
       setConfirmAction(null);
     } finally {
       setActionLoading(false);
@@ -148,9 +150,9 @@ export function UsersPanel() {
 
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-semibold text-txt-primary">Users</h2>
+      <h2 className="text-lg font-semibold text-txt-primary"><Trans i18nKey="ui.UsersPanel.users">Users</Trans></h2>
       <div className="text-xs text-txt-tertiary">
-        View and manage user accounts on this instance.
+        <Trans i18nKey="ui.UsersPanel.viewAndManageUserAccountsOnThisInstance">View and manage user accounts on this instance.</Trans>
       </div>
 
       {/* Search */}
@@ -159,7 +161,7 @@ export function UsersPanel() {
           type="text"
           value={query}
           onChange={(e) => handleSearchChange(e.target.value)}
-          placeholder="Search users..."
+          placeholder={translate("runtime.attributes.UsersPanel.searchUsers")}
           className="input-search flex-1"
         />
       </div>
@@ -171,8 +173,8 @@ export function UsersPanel() {
           onChange={(e) => { setInstanceFilter(e.target.value); setPage(1); }}
           className="input-search text-xs py-1"
         >
-          <option value="">All instances</option>
-          <option value="local">Local only</option>
+          <option value=""><Trans i18nKey="ui.UsersPanel.allInstances">All instances</Trans></option>
+          <option value="local"><Trans i18nKey="ui.UsersPanel.localOnly">Local only</Trans></option>
           {instances.map((inst) => (
             <option key={inst} value={inst}>{inst}</option>
           ))}
@@ -183,9 +185,9 @@ export function UsersPanel() {
           onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }}
           className="input-search text-xs py-1"
         >
-          <option value="">All roles</option>
-          <option value="admin">Admin</option>
-          <option value="non-admin">Non-admin</option>
+          <option value=""><Trans i18nKey="ui.UsersPanel.allRoles">All roles</Trans></option>
+          <option value="admin"><Trans i18nKey="ui.UsersPanel.admin">Admin</Trans></option>
+          <option value="non-admin"><Trans i18nKey="ui.UsersPanel.nonAdmin">Non-admin</Trans></option>
         </select>
 
         <input
@@ -193,14 +195,14 @@ export function UsersPanel() {
           value={joinedAfter}
           onChange={(e) => { setJoinedAfter(e.target.value); setPage(1); }}
           className="input-search text-xs py-1"
-          title="Joined after"
+          title={translate("runtime.attributes.UsersPanel.joinedAfter")}
         />
         <input
           type="date"
           value={joinedBefore}
           onChange={(e) => { setJoinedBefore(e.target.value); setPage(1); }}
           className="input-search text-xs py-1"
-          title="Joined before"
+          title={translate("runtime.attributes.UsersPanel.joinedBefore")}
         />
 
         <select
@@ -208,10 +210,10 @@ export function UsersPanel() {
           onChange={(e) => { setSortBy(e.target.value); setPage(1); }}
           className="input-search text-xs py-1"
         >
-          <option value="newest">Newest first</option>
-          <option value="oldest">Oldest first</option>
-          <option value="az">Name A-Z</option>
-          <option value="za">Name Z-A</option>
+          <option value="newest"><Trans i18nKey="ui.UsersPanel.newestFirst">Newest first</Trans></option>
+          <option value="oldest"><Trans i18nKey="ui.UsersPanel.oldestFirst">Oldest first</Trans></option>
+          <option value="az"><Trans i18nKey="ui.UsersPanel.nameAZ">Name A-Z</Trans></option>
+          <option value="za"><Trans i18nKey="ui.UsersPanel.nameZA">Name Z-A</Trans></option>
         </select>
 
         <label className="flex items-center gap-1.5 text-xs text-txt-secondary cursor-pointer whitespace-nowrap">
@@ -221,20 +223,20 @@ export function UsersPanel() {
             onChange={(e) => { setShowDeleted(e.target.checked); setPage(1); }}
             className="w-3 h-3 rounded border-border-soft accent-accent-primary"
           />
-          Deleted
+          <Trans i18nKey="ui.UsersPanel.deleted">Deleted</Trans>
         </label>
 
-        {(instanceFilter || roleFilter || joinedAfter || joinedBefore || sortBy !== 'newest' || showDeleted || query) && (
+        {(instanceFilter || roleFilter || joinedAfter || joinedBefore || sortBy !== "newest" || showDeleted || query) && (
           <button
             onClick={() => {
               setQuery(''); setInstanceFilter(''); setRoleFilter('');
               setJoinedAfter(''); setJoinedBefore('');
-              setSortBy('newest'); setShowDeleted(false); setPage(1);
-              fetchUsers('', 1, false, { sort: 'newest' });
+              setSortBy("newest"); setShowDeleted(false); setPage(1);
+              fetchUsers('', 1, false, { sort: "newest" });
             }}
             className="text-xs text-accent-primary hover:text-accent-primary/80 whitespace-nowrap"
           >
-            Clear filters
+            <Trans i18nKey="ui.UsersPanel.clearFilters">Clear filters</Trans>
           </button>
         )}
       </div>
@@ -246,14 +248,14 @@ export function UsersPanel() {
 
       {/* Loading */}
       {loading && !data && (
-        <div className="text-sm text-txt-tertiary py-4">Loading users...</div>
+        <div className="text-sm text-txt-tertiary py-4"><Trans i18nKey="ui.UsersPanel.loadingUsers">Loading users...</Trans></div>
       )}
 
       {/* User list */}
       {data && (
         <div className="space-y-1.5">
           {data.users.length === 0 && (
-            <div className="text-sm text-txt-tertiary py-4 text-center">No users found</div>
+            <div className="text-sm text-txt-tertiary py-4 text-center"><Trans i18nKey="ui.UsersPanel.noUsersFound">No users found</Trans></div>
           )}
           {data.users.map((user) => {
             const isSelf = user.id === currentUser?.id;
@@ -278,7 +280,7 @@ export function UsersPanel() {
                   {/* Info */}
                   <div className={`flex-1 min-w-0 ${isDeleted ? 'opacity-50' : ''}`}>
                     <div className="flex items-center gap-2">
-                      <span className={`text-sm font-medium text-txt-primary truncate ${isDeleted ? 'line-through' : ''}`}>
+                      <span className={`text-sm font-medium text-txt-primary truncate ${isDeleted ? "line-through" : ''}`}>
                         {user.username}
                       </span>
                       {user.displayName && !isDeleted && (
@@ -288,7 +290,7 @@ export function UsersPanel() {
                     <div className="flex items-center gap-1.5 mt-0.5">
                       {user.isAdmin && (
                         <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-accent-amber/20 text-accent-amber">
-                          Admin
+                          <Trans i18nKey="ui.UsersPanel.admin2">Admin</Trans>
                         </span>
                       )}
                       {isFederated && (
@@ -298,7 +300,7 @@ export function UsersPanel() {
                       )}
                       {isDeleted && (
                         <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-accent-rose/20 text-accent-rose">
-                          Deleted
+                          <Trans i18nKey="ui.UsersPanel.deleted2">Deleted</Trans>
                         </span>
                       )}
                       <span className="text-[10px] text-txt-tertiary">
@@ -314,7 +316,7 @@ export function UsersPanel() {
                       <button
                         onClick={() => handleToggleAdmin(user)}
                         disabled={isFederated && !user.isAdmin}
-                        title={user.isAdmin ? 'Demote from admin' : isFederated ? 'Federated users cannot be admin' : 'Promote to admin'}
+                        title={user.isAdmin ? translate('runtime.expressions.UsersPanel.demoteFromAdmin') : isFederated ? translate('runtime.expressions.UsersPanel.federatedUsersCannotBeAdmin') : translate('runtime.expressions.UsersPanel.promoteToAdmin')}
                         className={`p-1.5 rounded transition-colors ${
                           user.isAdmin
                             ? 'text-accent-amber hover:bg-accent-amber/10'
@@ -332,7 +334,7 @@ export function UsersPanel() {
                       <button
                         onClick={() => handleResetPassword(user)}
                         disabled={isFederated}
-                        title={isFederated ? 'Federated users authenticate via home instance' : 'Reset password'}
+                        title={isFederated ? translate('runtime.expressions.UsersPanel.federatedUsersAuthenticateViaHomeInstance') : translate('runtime.expressions.UsersPanel.resetPassword')}
                         className={`p-1.5 rounded transition-colors ${
                           isFederated
                             ? 'text-txt-tertiary/30 cursor-not-allowed'
@@ -348,7 +350,7 @@ export function UsersPanel() {
                       <button
                         onClick={() => handleDeleteUser(user)}
                         disabled={isSelf}
-                        title={isSelf ? 'Use account settings to delete your own account' : 'Delete user'}
+                        title={isSelf ? translate('runtime.expressions.UsersPanel.useAccountSettingsToDeleteYourOwnAccount') : translate('runtime.expressions.UsersPanel.deleteUser')}
                         className={`p-1.5 rounded transition-colors ${
                           isSelf
                             ? 'text-txt-tertiary/30 cursor-not-allowed'
@@ -367,12 +369,12 @@ export function UsersPanel() {
                 {hasTempPassword && (
                   <div className="p-3 bg-status-online/10 border border-status-online/30 border-t-0 rounded-b-lg">
                     <div className="flex items-center justify-between gap-2">
-                      <div className="text-xs text-txt-secondary">Temporary password:</div>
+                      <div className="text-xs text-txt-secondary"><Trans i18nKey="ui.UsersPanel.temporaryPassword">Temporary password:</Trans></div>
                       <button
                         onClick={() => setTempPassword(null)}
                         className="text-txt-tertiary hover:text-txt-secondary text-xs"
                       >
-                        Dismiss
+                        <Trans i18nKey="ui.UsersPanel.dismiss">Dismiss</Trans>
                       </button>
                     </div>
                     <div className="mt-1.5 flex items-center gap-2">
@@ -383,11 +385,11 @@ export function UsersPanel() {
                         onClick={() => navigator.clipboard.writeText(tempPassword.password)}
                         className="px-2 py-1 bg-white/[0.06] hover:bg-white/[0.1] text-txt-secondary text-xs rounded transition-colors"
                       >
-                        Copy
+                        <Trans i18nKey="ui.UsersPanel.copy">Copy</Trans>
                       </button>
                     </div>
                     <div className="text-[10px] text-txt-tertiary mt-1">
-                      Shown once. User has been disconnected and must log in again.
+                      <Trans i18nKey="ui.UsersPanel.shownOnceUserHasBeenDisconnectedAndMust">Shown once. User has been disconnected and must log in again.</Trans>
                     </div>
                   </div>
                 )}
@@ -405,17 +407,17 @@ export function UsersPanel() {
             disabled={page <= 1}
             className="px-3 py-1 text-sm text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           >
-            Previous
+            <Trans i18nKey="ui.UsersPanel.previous">Previous</Trans>
           </button>
           <span className="text-xs text-txt-tertiary">
-            Page {page} of {totalPages} ({data.total} user{data.total !== 1 ? 's' : ''})
+            <Trans i18nKey="ui.UsersPanel.page">Page</Trans> {page} <Trans i18nKey="ui.UsersPanel.of">of</Trans> {totalPages} ({data.total} <Trans i18nKey="ui.UsersPanel.user">user</Trans>{data.total !== 1 ? 's' : ''})
           </span>
           <button
             onClick={() => setPage(p => Math.min(totalPages, p + 1))}
             disabled={page >= totalPages}
             className="px-3 py-1 text-sm text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           >
-            Next
+            <Trans i18nKey="ui.UsersPanel.next">Next</Trans>
           </button>
         </div>
       )}
@@ -425,9 +427,9 @@ export function UsersPanel() {
         isOpen={!!resetConfirmUser}
         onClose={() => setResetConfirmUser(null)}
         onConfirm={handleResetConfirm}
-        title="Reset Password"
-        description={<>Reset the password for <strong>{resetConfirmUser?.username}</strong>? They will be disconnected immediately and must log in with the new temporary password.</>}
-        confirmLabel="Reset Password"
+        title={translate("runtime.attributes.UsersPanel.resetPassword")}
+        description={<><Trans i18nKey="ui.UsersPanel.resetThePasswordFor">Reset the password for</Trans> <strong>{resetConfirmUser?.username}</strong><Trans i18nKey="ui.UsersPanel.theyWillBeDisconnectedImmediatelyAndMustLog">? They will be disconnected immediately and must log in with the new temporary password.</Trans></>}
+        confirmLabel={translate("runtime.attributes.UsersPanel.resetPassword2")}
         variant="warning"
         loading={resetLoading}
       />
@@ -435,9 +437,9 @@ export function UsersPanel() {
         isOpen={confirmAction?.type === 'demote'}
         onClose={() => setConfirmAction(null)}
         onConfirm={handleConfirm}
-        title="Demote Admin"
-        description={<>Remove admin privileges from <strong>{confirmAction?.user.username}</strong>? They will lose access to instance settings.</>}
-        confirmLabel="Demote"
+        title={translate("runtime.attributes.UsersPanel.demoteAdmin")}
+        description={<><Trans i18nKey="ui.UsersPanel.removeAdminPrivilegesFrom">Remove admin privileges from</Trans> <strong>{confirmAction?.user.username}</strong><Trans i18nKey="ui.UsersPanel.theyWillLoseAccessToInstanceSettings">? They will lose access to instance settings.</Trans></>}
+        confirmLabel={translate("runtime.attributes.UsersPanel.demote")}
         variant="warning"
         loading={actionLoading}
       />
@@ -445,9 +447,9 @@ export function UsersPanel() {
         isOpen={confirmAction?.type === 'delete'}
         onClose={() => setConfirmAction(null)}
         onConfirm={handleConfirm}
-        title="Delete User"
-        description={<>Permanently delete <strong>{confirmAction?.user.username}</strong>? This will remove them from all spaces, DMs, and friends lists. This cannot be undone.</>}
-        confirmLabel="Delete User"
+        title={translate("runtime.attributes.UsersPanel.deleteUser")}
+        description={<><Trans i18nKey="ui.UsersPanel.permanentlyDelete">Permanently delete</Trans> <strong>{confirmAction?.user.username}</strong><Trans i18nKey="ui.UsersPanel.thisWillRemoveThemFromAllSpacesDMs">? This will remove them from all spaces, DMs, and friends lists. This cannot be undone.</Trans></>}
+        confirmLabel={translate("runtime.attributes.UsersPanel.deleteUser2")}
         variant="danger"
         loading={actionLoading}
       />

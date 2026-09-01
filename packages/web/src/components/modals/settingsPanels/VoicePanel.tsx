@@ -3,6 +3,7 @@ import { Toggle } from '../../ui/Toggle';
 import { VideoSection } from './VideoSection';
 import { AudioInputSection } from './AudioInputSection';
 import { AudioOutputSection } from './AudioOutputSection';
+import { Trans } from 'react-i18next';
 
 export function VoicePanel() {
   const echoCancellation = useVoiceStore((s) => s.echoCancellation);
@@ -18,19 +19,19 @@ export function VoicePanel() {
 
   return (
     <div className="space-y-5">
-      <h2 className="text-lg font-semibold text-txt-primary mb-6">Voice &amp; Video</h2>
+      <h2 className="text-lg font-semibold text-txt-primary mb-6"><Trans i18nKey="ui.VoicePanel.voiceVideo">Voice &amp; Video</Trans></h2>
 
       <AudioInputSection />
       <AudioOutputSection />
 
       <div>
         <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
-          Volume
+          <Trans i18nKey="ui.VoicePanel.volume">Volume</Trans>
         </div>
         <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5">
           <div className="py-1">
             <div className="flex items-center justify-between mb-2">
-              <div className="text-sm text-txt-primary">Sound Effects Volume</div>
+              <div className="text-sm text-txt-primary"><Trans i18nKey="ui.VoicePanel.soundEffectsVolume">Sound Effects Volume</Trans></div>
               <div className="text-xs text-txt-tertiary tabular-nums">{soundEffectVolume}%</div>
             </div>
             <input
@@ -47,9 +48,9 @@ export function VoicePanel() {
           </div>
           <div className="flex items-center justify-between py-2">
             <div>
-              <div className="text-sm text-txt-primary">Play sound for every message</div>
+              <div className="text-sm text-txt-primary"><Trans i18nKey="ui.VoicePanel.playSoundForEveryMessage">Play sound for every message</Trans></div>
               <div className="text-xs text-txt-tertiary">
-                Off (default): only DMs and messages that mention you. On: every channel.
+                <Trans i18nKey="ui.VoicePanel.offDefaultOnlyDMsAndMessagesThatMention">Off (default): only DMs and messages that mention you. On: every channel.</Trans>
               </div>
             </div>
             <Toggle enabled={messageSoundAllChannels} onChange={setMessageSoundAllChannels} />
@@ -61,29 +62,29 @@ export function VoicePanel() {
 
       <div>
         <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
-          Voice Processing
+          <Trans i18nKey="ui.VoicePanel.voiceProcessing">Voice Processing</Trans>
         </div>
         <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5">
           <div className="flex items-center justify-between py-2">
             <div>
-              <div className="text-sm text-txt-primary">AI Noise Suppression</div>
-              <div className="text-xs text-txt-tertiary">ML-based noise removal (RNNoise) — filters keyboard, fans, and background noise</div>
+              <div className="text-sm text-txt-primary"><Trans i18nKey="ui.VoicePanel.aiNoiseSuppression">AI Noise Suppression</Trans></div>
+              <div className="text-xs text-txt-tertiary"><Trans i18nKey="ui.VoicePanel.mlBasedNoiseRemovalRNNoiseFiltersKeyboardFans">ML-based noise removal (RNNoise) — filters keyboard, fans, and background noise</Trans></div>
             </div>
             <Toggle enabled={rnnoiseEnabled} onChange={setRnnoiseEnabled} />
           </div>
 
           <div className="flex items-center justify-between py-2">
             <div>
-              <div className="text-sm text-txt-primary">Echo Cancellation</div>
-              <div className="text-xs text-txt-tertiary">Cancels echo from your speakers feeding back into the mic. Always on for voice channels and calls.</div>
+              <div className="text-sm text-txt-primary"><Trans i18nKey="ui.VoicePanel.echoCancellation">Echo Cancellation</Trans></div>
+              <div className="text-xs text-txt-tertiary"><Trans i18nKey="ui.VoicePanel.cancelsEchoFromYourSpeakersFeedingBackInto">Cancels echo from your speakers feeding back into the mic. Always on for voice channels and calls.</Trans></div>
             </div>
             <Toggle enabled={echoCancellation} onChange={setEchoCancellation} />
           </div>
 
           <div className="flex items-center justify-between py-2">
             <div>
-              <div className="text-sm text-txt-primary">Auto Gain Control</div>
-              <div className="text-xs text-txt-tertiary">Auto-adjusts mic volume — can cause voice ducking during streams</div>
+              <div className="text-sm text-txt-primary"><Trans i18nKey="ui.VoicePanel.autoGainControl">Auto Gain Control</Trans></div>
+              <div className="text-xs text-txt-tertiary"><Trans i18nKey="ui.VoicePanel.autoAdjustsMicVolumeCanCauseVoiceDucking">Auto-adjusts mic volume — can cause voice ducking during streams</Trans></div>
             </div>
             <Toggle enabled={autoGainControl} onChange={setAutoGainControl} />
           </div>

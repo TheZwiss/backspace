@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useInstanceStore, type ConnectedInstance } from '../stores/instanceStore';
 import { useUIStore } from '../stores/uiStore';
+import { translate } from '../i18n';
 
 /**
  * Watches instanceStore for status changes on remote instances and fires
@@ -28,12 +29,12 @@ export function useFederationToasts() {
         prevStatus === 'connected' &&
         (inst.status === 'disconnected' || inst.status === 'error')
       ) {
-        addToast(`Lost connection to ${label} — reconnecting...`, 'warning');
+        addToast(translate('runtime.manual.lostConnectionReconnecting', { label }), 'warning');
       } else if (
         (prevStatus === 'disconnected' || prevStatus === 'error' || prevStatus === 'connecting') &&
         inst.status === 'connected'
       ) {
-        addToast(`Reconnected to ${label}`, 'success');
+        addToast(translate('runtime.manual.reconnectedTo', { label }), 'success');
       }
     }
 

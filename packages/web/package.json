@@ -7,8 +7,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
-    "typecheck": "tsc --noEmit",
+    "build": "node ../../scripts/check-i18n.mjs && tsc && vite build",
+    "typecheck": "node ../../scripts/check-i18n.mjs && tsc --noEmit",
+    "check:i18n": "node ../../scripts/check-i18n.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "preview": "vite preview",

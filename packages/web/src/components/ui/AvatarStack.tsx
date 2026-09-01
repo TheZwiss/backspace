@@ -3,6 +3,7 @@ import type { User } from '@backspace/shared';
 import { Avatar } from './Avatar';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { parseFederatedUsername } from '../../utils/identity';
+import { translate } from '../../i18n';
 
 /**
  * Reusable avatar-stack widget for group-DM identity slots.

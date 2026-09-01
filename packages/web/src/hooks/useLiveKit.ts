@@ -35,6 +35,7 @@ import {
 import { parseStreamWatch } from '../utils/streamWatchProtocol';
 import { getMediaStreamTrack } from '../utils/livekitInternals';
 import { deactivate as deactivateHwOverdrive } from '../utils/hwOverdrive';
+import { translate } from '../i18n';
 
 let _activeRoom: Room | null = null;
 let _publishedScreenShareCodec: 'vp9' | 'h264' | null = null;
@@ -424,7 +425,7 @@ export function useLiveKit() {
           if (err?.name === 'NotAllowedError') {
             useVoiceStore.getState().setMicPermissionDenied(true);
             useUIStore.getState().addToast(
-              'Microphone access denied. You joined as a listener — tap "Allow microphone" to grant access.',
+              translate('runtime.selected.useLiveKit.microphoneAccessDeniedYouJoinedAsAListener'),
               'warning',
             );
             return;
@@ -464,7 +465,7 @@ export function useLiveKit() {
       if (roomRef.current !== subscriberRoom || !subscriberRoom) return;
 
       const deviceId = useVoiceStore.getState().inputDeviceId;
-      let copy = 'Microphone could not be restored';
+      let copy = translate('runtime.selected.useLiveKit.microphoneCouldNotBeRestored');
 
       try {
         // Probe is intentionally constraint-free — we want to know whether the
@@ -488,19 +489,19 @@ export function useLiveKit() {
         }
       } catch (err: any) {
         if (err?.name === 'NotAllowedError') {
-          copy = 'Microphone permission was revoked';
+          copy = translate('runtime.selected.useLiveKit.microphonePermissionWasRevoked');
         } else if (err?.name === 'NotFoundError') {
           if (deviceId !== 'default') {
             // The configured device disappeared. Fall back to default — the
             // store update triggers syncMic via its dep array, which calls
             // republishMicrophone with the freshly acquired default stream.
             useVoiceStore.getState().setInputDevice('default');
-            copy = 'Microphone disconnected — switched to system default';
+            copy = translate('runtime.selected.useLiveKit.microphoneDisconnectedSwitchedToSystemDefault');
           } else {
-            copy = 'Microphone disconnected';
+            copy = translate('runtime.selected.useLiveKit.microphoneDisconnected');
           }
         } else {
-          copy = 'Microphone could not be restored';
+          copy = translate('runtime.selected.useLiveKit.microphoneCouldNotBeRestored2');
         }
       }
 
@@ -544,7 +545,7 @@ export function useLiveKit() {
         // A newer device-switch attempt has superseded ours. Don't write stale
         // rollback state; let the newer attempt's outcome stand.
         if (myGen !== switchCameraGenRef.current) {
-          useUIStore.getState().addToast('Could not switch camera', 'warning');
+          useUIStore.getState().addToast(translate('runtime.selected.useLiveKit.couldNotSwitchCamera'), 'warning');
           return;
         }
         const stillLive = camPub.track?.mediaStreamTrack?.readyState === 'live';
@@ -564,7 +565,7 @@ export function useLiveKit() {
           useVoiceStore.setState({ isCameraOn: false });
           broadcastVoiceStatus();
         }
-        useUIStore.getState().addToast('Could not switch camera', 'warning');
+        useUIStore.getState().addToast(translate('runtime.selected.useLiveKit.couldNotSwitchCamera2'), 'warning');
       }
     })();
   }, [cameraDeviceId, isCameraOn, isConnected]);
@@ -701,7 +702,7 @@ export function useLiveKit() {
               // Re-probe getUserMedia to distinguish hardware unplug from
               // OS-level permission revoke. Keep the probe short and tolerant.
               const deviceId = useVoiceStore.getState().cameraDeviceId;
-              let copy = 'Camera unavailable';
+              let copy = translate('runtime.selected.useLiveKit.cameraUnavailable');
               try {
                 const probe = await navigator.mediaDevices.getUserMedia({
                   video: deviceId ? { deviceId: { exact: deviceId } } : true,
@@ -709,8 +710,8 @@ export function useLiveKit() {
                 probe.getTracks().forEach(t => t.stop());
                 // Probe succeeded — reason is unknown; keep generic copy.
               } catch (err: any) {
-                if (err?.name === 'NotAllowedError') copy = 'Camera permission was revoked';
-                else if (err?.name === 'NotFoundError') copy = 'Camera disconnected';
+                if (err?.name === 'NotAllowedError') copy = translate('runtime.selected.useLiveKit.cameraPermissionWasRevoked');
+                else if (err?.name === 'NotFoundError') copy = translate('runtime.selected.useLiveKit.cameraDisconnected');
                 // Any other error → keep generic copy.
               }
 
@@ -850,7 +851,7 @@ export function useLiveKit() {
       }
       
       updateParticipants();
-    } catch (err) { if (gen === _connectGeneration) { setConnectionError('Failed to connect'); useVoiceStore.getState().setConnectionError('Failed to connect'); useVoiceStore.getState().leaveVoice(); } }
+    } catch (err) { if (gen === _connectGeneration) { setConnectionError(translate('runtime.selected.useLiveKit.failedToConnect')); useVoiceStore.getState().setConnectionError(translate('runtime.selected.useLiveKit.failedToConnect2')); useVoiceStore.getState().leaveVoice(); } }
     finally { if (gen === _connectGeneration) setIsConnecting(false); }
   }, [updateParticipants, handleDataReceived]);
 

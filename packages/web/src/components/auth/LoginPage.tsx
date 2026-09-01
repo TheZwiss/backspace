@@ -6,6 +6,7 @@ import type { InstanceInfoResponse } from '@backspace/shared';
 import { SourceCodeLink } from '../ui/SourceCodeLink';
 import { LanguageSwitcher } from '../ui/LanguageSwitcher';
 import { useTranslation } from 'react-i18next';
+import { translate } from '../../i18n';
 
 export function LoginPage() {
   const { t } = useTranslation();
@@ -84,15 +85,15 @@ export function LoginPage() {
       </div>
       <div className="w-full max-w-[480px] bg-surface-elevated rounded-md p-8 shadow-elevation-high relative z-10">
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-txt-primary">{t('auth.welcomeBack')}</h1>
-          <p className="text-txt-tertiary mt-1">{t('auth.welcomeSubtitle')}</p>
+          <h1 className="text-2xl font-bold text-txt-primary">{t("auth.welcomeBack")}</h1>
+          <p className="text-txt-tertiary mt-1">{t("auth.welcomeSubtitle")}</p>
         </div>
 
         <form onSubmit={handleSubmit}>
           {retryAfter > 0 && (
             <div className="mb-4 p-3 bg-accent-amber/10 border border-accent-amber/30 rounded text-sm">
-              <p className="font-medium text-accent-amber">{t('auth.tooManyAttempts')}</p>
-              <p className="text-txt-secondary mt-0.5">{t('auth.tryAgainIn', { seconds: retryAfter })}</p>
+              <p className="font-medium text-accent-amber">{t("auth.tooManyAttempts")}</p>
+              <p className="text-txt-secondary mt-0.5">{t("auth.tryAgainIn", { seconds: retryAfter })}</p>
             </div>
           )}
 
@@ -104,7 +105,7 @@ export function LoginPage() {
 
           <div className="mb-5">
             <label className="block text-xs font-bold text-txt-secondary uppercase mb-2">
-              {t('auth.username')} <span className="text-txt-danger">*</span>
+              {t("auth.username")} <span className="text-txt-danger">*</span>
             </label>
             <input
               type="text"
@@ -118,7 +119,7 @@ export function LoginPage() {
 
           <div className="mb-5">
             <label className="block text-xs font-bold text-txt-secondary uppercase mb-2">
-              {t('auth.password')} <span className="text-txt-danger">*</span>
+              {t("auth.password")} <span className="text-txt-danger">*</span>
             </label>
             <input
               type="password"
@@ -135,16 +136,16 @@ export function LoginPage() {
             className="w-full py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {retryAfter > 0
-              ? t('auth.tryAgainIn', { seconds: retryAfter })
+              ? t("auth.tryAgainIn", { seconds: retryAfter })
               : isLoading
-                ? t('auth.loggingIn')
-                : t('auth.logIn')}
+                ? t("auth.loggingIn")
+                : t("auth.logIn")}
           </button>
 
           <p className="mt-3 text-sm text-txt-tertiary">
-            {t('auth.needAccount')}{' '}
+            {t("auth.needAccount")}{' '}
             <Link to={`/register${redirect ? `?redirect=${encodeURIComponent(redirect)}` : ''}`} className="text-accent-primary hover:underline">
-              {t('auth.register')}
+              {t("auth.register")}
             </Link>
           </p>
         </form>

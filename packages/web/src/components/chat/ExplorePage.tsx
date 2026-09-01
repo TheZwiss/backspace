@@ -8,6 +8,8 @@ import { getSpaceGradient } from '../../utils/gradients';
 import { extractDominantColors, colorsToGradient } from '../../utils/colorExtractor';
 import { MemberListToggleButton } from '../layout/MemberListToggleButton';
 import { useSpaceJoin } from '../../hooks/useSpaceJoin';
+import { Trans } from 'react-i18next';
+import { translate } from '../../i18n';
 
 export function ExplorePage() {
   const navigate = useNavigate();
@@ -73,7 +75,7 @@ export function ExplorePage() {
           <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary">
             <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-5.5-2.5l7.51-3.49L17.5 6.5 9.99 9.99 6.5 17.5zm5.5-6.6c.61 0 1.1.49 1.1 1.1s-.49 1.1-1.1 1.1-1.1-.49-1.1-1.1.49-1.1 1.1-1.1z" />
           </svg>
-          <span className="font-bold text-txt-primary">Explore</span>
+          <span className="font-bold text-txt-primary"><Trans i18nKey="ui.ExplorePage.explore">Explore</Trans></span>
         </div>
 
         <div className="w-[1px] h-6 bg-surface-elevated mx-2" />
@@ -81,7 +83,7 @@ export function ExplorePage() {
         <div className="relative flex-1 max-w-xs ml-2">
           <input
             type="text"
-            placeholder="Search spaces..."
+            placeholder={translate("runtime.attributes.ExplorePage.searchSpaces")}
             value={searchQuery}
             onChange={(e) => handleSearchChange(e.target.value)}
             className="input-search w-full"
@@ -107,7 +109,7 @@ export function ExplorePage() {
       <div className="flex-1 overflow-y-auto">
         {!discoveryEnabled && (
           <div className="mx-6 mt-4 p-2.5 bg-accent-amber/10 border border-accent-amber/30 rounded text-[13px] text-accent-amber">
-            Space discovery is disabled by the instance administrator.
+            <Trans i18nKey="ui.ExplorePage.spaceDiscoveryIsDisabledByTheInstanceAdministrator">Space discovery is disabled by the instance administrator.</Trans>
           </div>
         )}
 
@@ -125,8 +127,8 @@ export function ExplorePage() {
             <Mascot state="lonely" className="w-32 h-32 mb-3" />
             <p className="text-txt-tertiary text-sm">
               {searchQuery
-                ? 'No spaces match your search.'
-                : 'No discoverable spaces yet.'}
+                ? translate('runtime.expressions.ExplorePage.noSpacesMatchYourSearch')
+                : translate('runtime.expressions.ExplorePage.noDiscoverableSpacesYet')}
             </p>
           </div>
         ) : (
@@ -138,7 +140,7 @@ export function ExplorePage() {
                   <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
                 </svg>
                 <span className="text-[13px] text-accent-mint">
-                  You're in all discoverable spaces
+                  <Trans i18nKey="ui.ExplorePage.youReInAllDiscoverableSpaces">You're in all discoverable spaces</Trans>
                 </span>
               </div>
             )}
@@ -168,12 +170,12 @@ export function ExplorePage() {
                     height="12"
                     viewBox="0 0 24 24"
                     fill="currentColor"
-                    className={`text-txt-tertiary transition-transform ${joinedCollapsed ? '-rotate-90' : ''}`}
+                    className={`text-txt-tertiary transition-transform ${joinedCollapsed ? "-rotate-90" : ''}`}
                   >
                     <path d="M7 10l5 5 5-5z" />
                   </svg>
                   <span className="text-xs font-semibold uppercase tracking-wider text-txt-tertiary group-hover:text-txt-secondary transition-colors">
-                    Joined
+                    <Trans i18nKey="ui.ExplorePage.joined">Joined</Trans>
                   </span>
                   <span className="text-xs text-txt-tertiary/60">
                     {joinedSpaces.length}
@@ -285,7 +287,7 @@ function SpaceCard({
               <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
               </svg>
-              Joined
+              <Trans i18nKey="ui.ExplorePage.joined2">Joined</Trans>
             </span>
           </div>
         )}
@@ -297,7 +299,7 @@ function SpaceCard({
               ? 'bg-accent-mint/20 text-accent-mint'
               : 'bg-accent-amber/20 text-accent-amber'
           }`}>
-            {isPublic ? 'Public' : 'Request'}
+            {isPublic ? translate('runtime.expressions.ExplorePage.public') : translate('runtime.expressions.ExplorePage.request')}
           </span>
         </div>
 
@@ -330,7 +332,7 @@ function SpaceCard({
             {space.description}
           </p>
         ) : (
-          <p className="text-[13px] text-txt-tertiary italic mb-3 flex-1">No description</p>
+          <p className="text-[13px] text-txt-tertiary italic mb-3 flex-1"><Trans i18nKey="ui.ExplorePage.noDescription">No description</Trans></p>
         )}
 
         <div className="flex items-center gap-3 text-[12px] text-txt-tertiary mb-3">
@@ -338,7 +340,7 @@ function SpaceCard({
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="opacity-60">
               <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" />
             </svg>
-            {space.memberCount} {space.memberCount === 1 ? 'member' : 'members'}
+            {space.memberCount} {space.memberCount === 1 ? translate('runtime.expressions.ExplorePage.member') : translate('runtime.expressions.ExplorePage.members')}
           </span>
           {originLabel && (
             <span className="flex items-center gap-1 text-txt-tertiary/70">
@@ -360,7 +362,7 @@ function SpaceCard({
             onClick={handleViewSpace}
             className="w-full py-2 bg-accent-mint/15 hover:bg-accent-mint/25 text-accent-mint text-sm font-medium rounded transition-colors"
           >
-            View Space
+            <Trans i18nKey="ui.ExplorePage.viewSpace">View Space</Trans>
           </button>
         ) : isPublic ? (
           <button
@@ -371,10 +373,10 @@ function SpaceCard({
             {joining ? (
               <span className="flex items-center justify-center gap-2">
                 <LoadingSpinner />
-                Joining...
+                <Trans i18nKey="ui.ExplorePage.joining">Joining...</Trans>
               </span>
             ) : (
-              'Join Space'
+              translate('runtime.expressions.ExplorePage.joinSpace')
             )}
           </button>
         ) : isPending ? (
@@ -382,14 +384,14 @@ function SpaceCard({
             disabled
             className="w-full py-2 bg-interactive-muted text-txt-tertiary text-sm font-medium rounded cursor-default"
           >
-            Request Pending
+            <Trans i18nKey="ui.ExplorePage.requestPending">Request Pending</Trans>
           </button>
         ) : showRequestForm ? (
           <div className="space-y-2">
             <textarea
               value={requestMessage}
               onChange={(e) => setRequestMessage(e.target.value.slice(0, 200))}
-              placeholder="Why do you want to join? (optional)"
+              placeholder={translate("runtime.attributes.ExplorePage.whyDoYouWantToJoinOptional")}
               rows={2}
               className="input-standard w-full resize-none"
             />
@@ -399,13 +401,13 @@ function SpaceCard({
                 disabled={joining}
                 className="flex-1 py-1.5 bg-accent-amber hover:bg-accent-amber/80 text-[#13131a] text-sm font-medium rounded transition-colors disabled:opacity-50"
               >
-                {joining ? 'Sending...' : 'Send Request'}
+                {joining ? translate('runtime.expressions.ExplorePage.sending') : translate('runtime.expressions.ExplorePage.sendRequest')}
               </button>
               <button
                 onClick={cancelRequestForm}
                 className="px-3 py-1.5 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
               >
-                Cancel
+                <Trans i18nKey="ui.ExplorePage.cancel">Cancel</Trans>
               </button>
             </div>
           </div>
@@ -414,7 +416,7 @@ function SpaceCard({
             onClick={openRequestForm}
             className="w-full py-2 bg-accent-amber/20 hover:bg-accent-amber/30 text-accent-amber text-sm font-medium rounded transition-colors"
           >
-            Request to Join
+            <Trans i18nKey="ui.ExplorePage.requestToJoin">Request to Join</Trans>
           </button>
         )}
       </div>

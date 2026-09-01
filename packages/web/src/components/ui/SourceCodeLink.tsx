@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { translate } from '../../i18n';
 
 interface SourceCodeLinkProps {
   /** URL to the Corresponding Source of the running version (AGPL § 13). */
@@ -35,7 +36,7 @@ export function SourceCodeLink({ sourceCodeUrl, version, commit, className }: So
       className={`inline-flex items-center gap-1.5 text-xs text-txt-tertiary hover:text-txt-secondary transition-colors${
         className ? ` ${className}` : ''
       }`}
-      title={t('common.sourceCodeTitle')}
+      title={t("common.sourceCodeTitle")}
     >
       <svg
         width="12"

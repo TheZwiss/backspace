@@ -7,6 +7,8 @@ import { parseFederatedUsername, isFederationGlobeApplicable } from '../../../ut
 import { useCanonicalUserView } from '../../../utils/userViewLookup';
 import { hasPermissionBit, PermissionBits } from '../../../utils/permissions';
 import type { MemberWithUser, Role } from '@backspace/shared';
+import { Trans } from 'react-i18next';
+import { translate } from '../../../i18n';
 
 function MembersPanelRow({
   member,
@@ -75,7 +77,7 @@ function MembersPanelRow({
             <div className="flex items-center gap-1 flex-wrap">
               {isOwner && (
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent-rose/20 text-txt-danger font-medium">
-                  Owner
+                  <Trans i18nKey="ui.MembersPanel.owner">Owner</Trans>
                 </span>
               )}
               {member.roles?.filter((r) => r.id !== spaceId).map((r) => (
@@ -88,7 +90,7 @@ function MembersPanelRow({
                 </span>
               ))}
               {!isOwner && (!member.roles || member.roles.filter((r) => r.id !== spaceId).length === 0) && (
-                <span className="text-[10px] text-txt-tertiary">No roles</span>
+                <span className="text-[10px] text-txt-tertiary"><Trans i18nKey="ui.MembersPanel.noRoles">No roles</Trans></span>
               )}
             </div>
           </div>
@@ -97,23 +99,23 @@ function MembersPanelRow({
         <div className="flex items-center gap-1 flex-shrink-0">
           {canBan && member.userId !== currentUserId && !isOwner && (
             <button
-              onClick={(e) => { e.stopPropagation(); onPendingAction({ type: 'ban', userId: member.userId, displayName }); }}
+              onClick={(e) => { e.stopPropagation(); onPendingAction({ type: "ban", userId: member.userId, displayName }); }}
               className="px-2 py-1 text-xs text-txt-danger hover:bg-accent-rose/10 rounded transition-colors"
             >
-              Ban
+              <Trans i18nKey="ui.MembersPanel.ban">Ban</Trans>
             </button>
           )}
           {canKick && member.userId !== currentUserId && !isOwner && (
             <button
-              onClick={(e) => { e.stopPropagation(); onPendingAction({ type: 'kick', userId: member.userId, displayName }); }}
+              onClick={(e) => { e.stopPropagation(); onPendingAction({ type: "kick", userId: member.userId, displayName }); }}
               className="px-2 py-1 text-xs text-txt-danger hover:bg-accent-rose/10 rounded transition-colors"
             >
-              Kick
+              <Trans i18nKey="ui.MembersPanel.kick">Kick</Trans>
             </button>
           )}
           {expandable && (
             <svg
-              className={`w-4 h-4 text-txt-tertiary transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+              className={`w-4 h-4 text-txt-tertiary transition-transform ${isExpanded ? "rotate-90" : ''}`}
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -150,13 +152,13 @@ function MembersPanelRow({
                 onClick={() => onSaveRoles(member.userId)}
                 className="px-2 py-0.5 text-xs bg-accent-primary hover:bg-accent-primary/80 text-white rounded transition-colors"
               >
-                Save
+                <Trans i18nKey="ui.MembersPanel.save">Save</Trans>
               </button>
               <button
                 onClick={() => onCancelRoleChange(member.userId)}
                 className="px-2 py-0.5 text-xs text-txt-tertiary hover:text-txt-secondary transition-colors"
               >
-                Cancel
+                <Trans i18nKey="ui.MembersPanel.cancel">Cancel</Trans>
               </button>
             </div>
           )}
@@ -224,7 +226,7 @@ export function MembersPanel({ spaceId }: MembersPanelProps) {
       setExpandedMemberId(null);
       await loadSpaceDetail(spaceId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update roles');
+      setError(err instanceof Error ? err.message : translate('runtime.messages.MembersPanel.failedToUpdateRoles'));
     }
   };
 
@@ -241,7 +243,7 @@ export function MembersPanel({ spaceId }: MembersPanelProps) {
       await spaceApi.spaces.removeMember(spaceId, userId);
       await loadSpaceDetail(spaceId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to kick member');
+      setError(err instanceof Error ? err.message : translate('runtime.messages.MembersPanel.failedToKickMember'));
     }
   };
 
@@ -250,7 +252,7 @@ export function MembersPanel({ spaceId }: MembersPanelProps) {
       await spaceApi.spaces.ban(spaceId, userId);
       await loadSpaceDetail(spaceId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to ban member');
+      setError(err instanceof Error ? err.message : translate('runtime.messages.MembersPanel.failedToBanMember'));
     }
   };
 
@@ -259,15 +261,15 @@ export function MembersPanel({ spaceId }: MembersPanelProps) {
 
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-semibold text-txt-primary mb-6">Members</h2>
+      <h2 className="text-lg font-semibold text-txt-primary mb-6"><Trans i18nKey="ui.MembersPanel.members">Members</Trans></h2>
       {error && (
         <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">{error}</div>
       )}
-      <p className="text-xs text-txt-tertiary">Manage members of this space. Click a member to edit their roles.</p>
+      <p className="text-xs text-txt-tertiary"><Trans i18nKey="ui.MembersPanel.manageMembersOfThisSpaceClickAMember">Manage members of this space. Click a member to edit their roles.</Trans></p>
 
       <div>
         <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
-          Members ({members.length})
+          <Trans i18nKey="ui.MembersPanel.members2">Members (</Trans>{members.length})
         </div>
         <div className="rounded-lg bg-white/[0.02] p-2">
           <div className="space-y-0.5">
@@ -308,14 +310,14 @@ export function MembersPanel({ spaceId }: MembersPanelProps) {
           }
           setPendingAction(null);
         }}
-        title={pendingAction?.type === 'ban' ? `Ban ${pendingAction.displayName}` : `Kick ${pendingAction?.displayName ?? ''}`}
+        title={pendingAction?.type === "ban" ? `Ban ${pendingAction.displayName}` : `Kick ${pendingAction?.displayName ?? ''}`}
         description={
-          pendingAction?.type === 'ban'
-            ? 'They will be permanently banned from this space until unbanned.'
-            : 'They can rejoin with an invite link.'
+          pendingAction?.type === "ban"
+            ? translate('runtime.expressions.MembersPanel.theyWillBePermanentlyBannedFromThisSpace')
+            : translate('runtime.expressions.MembersPanel.theyCanRejoinWithAnInviteLink')
         }
         variant={pendingAction?.type === 'ban' ? 'danger' : 'warning'}
-        confirmLabel={pendingAction?.type === 'ban' ? 'Ban' : 'Kick'}
+        confirmLabel={pendingAction?.type === "ban" ? translate('runtime.expressions.MembersPanel.ban') : translate('runtime.expressions.MembersPanel.kick')}
       />
     </div>
   );

@@ -126,6 +126,7 @@ function buildWsUrl(origin: string): string {
 // ─── Call relay helpers ───────────────────────────────────────────────────────
 
 import { buildCallUndeliverableToast } from '../utils/callUndeliverableToast';
+import { translate } from '../i18n';
 
 export { buildCallUndeliverableToast };
 
@@ -474,7 +475,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
           const { addToast } = useUIStore.getState();
           const count = event.pendingApprovalCount;
           addToast(
-            `You have ${count} pending peering request${count === 1 ? '' : 's'}`,
+            translate('runtime.templates.useWebSocket.youHavePendingPeeringRequest', { p0: count, p1: translate('runtime.manual.englishPluralSuffix', { count }) }),
             'info',
             5000,
           );
@@ -650,7 +651,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
           useVoiceStore.getState().handleForceDisconnect();
           getActiveRoom()?.disconnect();
           if (event.reason === 'displaced') {
-            useUIStore.getState().addToast('Voice disconnected — joined from another session', 'info');
+            useUIStore.getState().addToast(translate('runtime.selected.useWebSocket.voiceDisconnectedJoinedFromAnotherSession'), 'info');
           }
         }
       }
@@ -799,7 +800,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
           const limitMb = Math.round(u.limit / (1024 * 1024));
           return `${u.username}'s instance (limit: ${limitMb} MB)`;
         });
-        const msg = `File couldn't be cached on ${parts.join(' and ')}. They can still view it from yours.`;
+        const msg = translate('runtime.templates.useWebSocket.fileCouldnTBeCachedOnTheyCan', { p0: parts.join(' and ') });
         addToast(msg, 'warning', 7000);
       }
       break;
@@ -859,10 +860,10 @@ function handleEvent(origin: string, event: ServerEvent): void {
       void useFederationStore.getState().refetchPeeringNotifications();
       const message =
         event.kind === 'approved'
-          ? 'Your peering request was approved'
+          ? translate('runtime.selected.useWebSocket.yourPeeringRequestWasApproved')
           : event.kind === 'denied'
-            ? 'Your peering request was denied'
-            : 'Your peering request expired';
+            ? translate('runtime.selected.useWebSocket.yourPeeringRequestWasDenied')
+            : translate('runtime.selected.useWebSocket.yourPeeringRequestExpired');
       // uiStore exposes 'info' | 'warning' | 'success' — use 'success' for
       // approved, 'warning' for denied/expired (no error severity exists).
       const severity: 'success' | 'warning' = event.kind === 'approved' ? 'success' : 'warning';
@@ -968,7 +969,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
       removeRequestById(event.requestId, origin);
       const { addToast } = useUIStore.getState();
       addToast(
-        `Friend request to ${event.targetHandle} could not be delivered: ${event.message}`,
+        translate('runtime.templates.useWebSocket.friendRequestToCouldNotBeDelivered', { p0: event.targetHandle, p1: event.message }),
         'warning',
       );
       break;
@@ -1402,7 +1403,7 @@ function connectToOrigin(origin: string, token: string): void {
     // Mark remote instance as disconnected in instanceStore
     if (origin !== HOME_ORIGIN) {
       import('../stores/instanceStore').then(({ useInstanceStore }) => {
-        useInstanceStore.getState().setInstanceStatus(origin, 'disconnected', 'Connection lost — reconnecting');
+        useInstanceStore.getState().setInstanceStatus(origin, 'disconnected', translate('runtime.selected.useWebSocket.connectionLostReconnecting'));
       });
     }
     // Only reconnect if the connection is still registered (not explicitly disconnected)

@@ -1,5 +1,6 @@
 import React from 'react';
 import type { Embed } from '@backspace/shared';
+import { translate } from '../../../i18n';
 
 interface GenericEmbedProps {
   embed: Embed;

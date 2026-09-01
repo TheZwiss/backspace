@@ -4,6 +4,7 @@ import { useVoiceStore } from '../stores/voiceStore';
 import { useAuthStore } from '../stores/authStore';
 import { isElectron } from '../platform/platform';
 import { sendNotification, updateBadgeCount } from '../platform/notifications';
+import { translate } from '../i18n';
 
 /**
  * Headless component that bridges store events to native OS notifications and badge counts.
@@ -57,10 +58,10 @@ export function NotificationController() {
         const newEvents = state.realtimeMessageEvents.slice(prevState.realtimeMessageEvents.length);
         for (const { message } of newEvents) {
           if (message.userId !== currentUser?.id) {
-            const displayName = message.user?.displayName || message.user?.username || 'Someone';
+            const displayName = message.user?.displayName || message.user?.username || translate('runtime.manual.someoneCapitalized');
             const body = message.content
               ? message.content.replace(/[*_~`>#\-\[\]]/g, '').slice(0, 100)
-              : 'Sent an attachment';
+              : translate('runtime.selected.NotificationController.sentAnAttachment');
             sendNotification(displayName, body, {
               channelId: message.channelId,
             });
@@ -90,7 +91,7 @@ export function NotificationController() {
 
     const unsubscribe = useVoiceStore.subscribe((state) => {
       if (state.incomingCall && !prevIncoming && !windowFocused.current) {
-        sendNotification('Incoming Call', `${state.incomingCall.callerName} is calling you`);
+        sendNotification(translate('runtime.messages.NotificationController.incomingCall'), translate('runtime.manual.callerIsCallingYou', { callerName: state.incomingCall.callerName }));
       }
       prevIncoming = state.incomingCall;
     });

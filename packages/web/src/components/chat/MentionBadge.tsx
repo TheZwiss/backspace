@@ -3,6 +3,7 @@ import type { User } from '@backspace/shared';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
+import { translate } from '../../i18n';
 
 interface MentionBadgeProps {
   userId: string;
@@ -36,7 +37,7 @@ export const MentionBadge = React.memo(function MentionBadge({ userId }: Mention
       color = '#7c6cf6'; // accent-primary default
     }
   } else {
-    displayName = 'Unknown User';
+    displayName = translate('runtime.selected.MentionBadge.unknownUser');
     color = '#a0a0aa'; // text-secondary fallback
   }
 

@@ -8,6 +8,7 @@ import { SwAutoUpdate } from './components/ui/SwUpdatePrompt';
 import { ScreenSharePicker } from './components/voice/ScreenSharePicker';
 import { useAuthStore } from './stores/authStore';
 import { isElectron } from './platform/platform';
+import { useTranslation } from 'react-i18next';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const token = useAuthStore((s) => s.token);
@@ -29,6 +30,9 @@ function AuthRedirect({ children }: { children: React.ReactNode }) {
 }
 
 export function App() {
+  // Subscribe the application root so translated attributes refresh immediately
+  // alongside <Trans> content when the user switches languages.
+  useTranslation();
   // Boot-completion ping — disarms the main-process boot timer.
   // MUST be first hook on the unconditional render path. Single fire on
   // first commit; main owns "armed once" gating so duplicate calls (e.g.

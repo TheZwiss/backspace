@@ -10,6 +10,7 @@ import {
   type ContextMenuItem,
 } from '../../stores/contextMenuStore';
 import { useUIStore } from '../../stores/uiStore';
+import { translate } from '../../i18n';
 
 export type DmMemberRowAction = 'profile' | 'transfer' | 'kick' | 'remove-friend';
 
@@ -101,7 +102,7 @@ export function DmMemberRow({
     items.push({
       key: 'profile',
       type: 'action',
-      label: 'View Profile',
+      label: translate('runtime.properties.DmMemberRow.viewProfile'),
       onClick: () => {
         // Anchor the popout to this row's bounding rect — matches the
         // MemberSidebar pattern (see MemberSidebar.tsx). On mobile the anchor
@@ -125,7 +126,7 @@ export function DmMemberRow({
       items.push({
         key: 'transfer',
         type: 'action',
-        label: 'Transfer Ownership',
+        label: translate('runtime.properties.DmMemberRow.transferOwnership'),
         onClick: () => onMenuAction('transfer', canonical),
       });
     }
@@ -134,7 +135,7 @@ export function DmMemberRow({
       items.push({
         key: 'kick',
         type: 'action',
-        label: 'Remove from Group',
+        label: translate('runtime.properties.DmMemberRow.removeFromGroup'),
         danger: true,
         onClick: () => onMenuAction('kick', canonical),
       });
@@ -148,7 +149,7 @@ export function DmMemberRow({
       items.push({
         key: 'remove-friend',
         type: 'action',
-        label: 'Remove Friend',
+        label: translate('runtime.properties.DmMemberRow.removeFriend'),
         danger: true,
         onClick: () => onMenuAction('remove-friend', canonical),
       });
@@ -206,7 +207,7 @@ export function DmMemberRow({
             </Tooltip>
           )}
           {isOwner && (
-            <Tooltip content="Group Owner" position="top">
+            <Tooltip content={translate('runtime.attributes.DmMemberRow.groupOwner')} position="top">
               <span data-owner-crown className="inline-flex">
                 <CrownIcon />
               </span>
@@ -230,7 +231,7 @@ export function DmMemberRow({
       {showKebab && (
         <button
           type="button"
-          aria-label="Member actions"
+          aria-label={translate("runtime.attributes.DmMemberRow.memberActions")}
           data-dm-member-kebab
           onClick={handleKebabClick}
           onContextMenu={(e) => {

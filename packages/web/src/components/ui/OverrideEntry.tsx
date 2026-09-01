@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { TriStateToggle, type TriState } from './TriStateToggle';
 import { PermissionBits } from '../../utils/permissions';
+import { Trans } from 'react-i18next';
+import { translate } from '../../i18n';
 
 export interface PermissionDef {
   key: keyof typeof PermissionBits;
@@ -59,14 +61,14 @@ export function OverrideEntry({
         <span className="text-sm font-medium text-txt-primary flex-1 text-left truncate">{label}</span>
         {!expanded && summary.length > 0 && (
           <span className="text-[11px] text-txt-tertiary flex-shrink-0">
-            {summary.length} override{summary.length !== 1 ? 's' : ''}
+            {summary.length} <Trans i18nKey="ui.OverrideEntry.override">override</Trans>{summary.length !== 1 ? 's' : ''}
           </span>
         )}
         {onRemove && !isEveryone && (
           <button
             onClick={(e) => { e.stopPropagation(); onRemove(); }}
             className="p-0.5 text-txt-muted hover:text-accent-rose transition-colors"
-            title="Remove override"
+            title={translate("runtime.attributes.OverrideEntry.removeOverride")}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
               <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />

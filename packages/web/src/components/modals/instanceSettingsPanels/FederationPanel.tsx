@@ -7,6 +7,8 @@ import { api, HttpError } from '../../../api/client';
 import { onFederationPeersChanged, onFederationPeerResetDetected } from '../../../hooks/useWebSocket';
 import type { InstanceAdminSettings } from '@backspace/shared';
 import type { FederationPeer, ApprovalRequest, FederationResetEvent, FederationOrphanedAccount } from '../../../api/client';
+import { Trans } from 'react-i18next';
+import { translate } from '../../../i18n';
 
 // ─── Global Settings ─────────────────────────────────────────────────────────
 
@@ -44,9 +46,9 @@ function FederationGlobalSettings() {
     setSaveError('');
     try {
       await updateInstanceSettings(draft);
-      addToast('Settings saved', 'success', 2000);
+      addToast(translate('runtime.messages.FederationPanel.settingsSaved'), 'success', 2000);
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : 'Failed to save');
+      setSaveError(err instanceof Error ? err.message : translate('runtime.messages.FederationPanel.failedToSave'));
     } finally {
       setSaving(false);
     }
@@ -66,30 +68,30 @@ function FederationGlobalSettings() {
 
   return (
     <div>
-      <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">Relay Settings</div>
+      <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5"><Trans i18nKey="ui.FederationPanel.relaySettings">Relay Settings</Trans></div>
       <p className="text-xs text-txt-tertiary mb-2">
-        Control DM relay between federated instances. When enabled, DMs with users on peer instances are relayed server-to-server.
+        <Trans i18nKey="ui.FederationPanel.controlDMRelayBetweenFederatedInstancesWhenEnabled">Control DM relay between federated instances. When enabled, DMs with users on peer instances are relayed server-to-server.</Trans>
       </p>
       <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-4">
         <label className="flex items-center justify-between cursor-pointer">
           <div>
-            <div className="text-sm font-medium text-txt-primary">Enable DM Relay</div>
-            <div className="text-xs text-txt-tertiary mt-0.5">Relay direct messages to and from peer instances</div>
+            <div className="text-sm font-medium text-txt-primary"><Trans i18nKey="ui.FederationPanel.enableDMRelay">Enable DM Relay</Trans></div>
+            <div className="text-xs text-txt-tertiary mt-0.5"><Trans i18nKey="ui.FederationPanel.relayDirectMessagesToAndFromPeerInstances">Relay direct messages to and from peer instances</Trans></div>
           </div>
           <Toggle enabled={draft.federationRelayEnabled} onChange={(v) => setDraft({ ...draft, federationRelayEnabled: v })} />
         </label>
 
         <label className="flex items-center justify-between cursor-pointer">
           <div>
-            <div className="text-sm font-medium text-txt-primary">Auto-accept peering</div>
-            <div className="text-xs text-txt-tertiary mt-0.5">Automatically accept peering requests from other instances. When disabled, only manually initiated peering is allowed.</div>
+            <div className="text-sm font-medium text-txt-primary"><Trans i18nKey="ui.FederationPanel.autoAcceptPeering">Auto-accept peering</Trans></div>
+            <div className="text-xs text-txt-tertiary mt-0.5"><Trans i18nKey="ui.FederationPanel.automaticallyAcceptPeeringRequestsFromOtherInstancesWhen">Automatically accept peering requests from other instances. When disabled, only manually initiated peering is allowed.</Trans></div>
           </div>
           <Toggle enabled={draft.autoAcceptPeering} onChange={(v) => setDraft({ ...draft, autoAcceptPeering: v })} />
         </label>
 
         <div>
-          <div className="text-sm font-medium text-txt-primary mb-1">Relay TTL (days)</div>
-          <div className="text-xs text-txt-tertiary mb-2">How long relayed messages are retained in the outbox before cleanup</div>
+          <div className="text-sm font-medium text-txt-primary mb-1"><Trans i18nKey="ui.FederationPanel.relayTTLDays">Relay TTL (days)</Trans></div>
+          <div className="text-xs text-txt-tertiary mb-2"><Trans i18nKey="ui.FederationPanel.howLongRelayedMessagesAreRetainedInThe">How long relayed messages are retained in the outbox before cleanup</Trans></div>
           <input
             type="number"
             min={1}
@@ -106,8 +108,8 @@ function FederationGlobalSettings() {
         </div>
 
         <div>
-          <div className="text-sm font-medium text-txt-primary mb-1">Default Secret Rotation (days)</div>
-          <div className="text-xs text-txt-tertiary mb-2">Auto-rotation interval for new peers. Existing peers keep their current setting.</div>
+          <div className="text-sm font-medium text-txt-primary mb-1"><Trans i18nKey="ui.FederationPanel.defaultSecretRotationDays">Default Secret Rotation (days)</Trans></div>
+          <div className="text-xs text-txt-tertiary mb-2"><Trans i18nKey="ui.FederationPanel.autoRotationIntervalForNewPeersExistingPeers">Auto-rotation interval for new peers. Existing peers keep their current setting.</Trans></div>
           <input
             type="number"
             min={1}
@@ -133,14 +135,14 @@ function FederationGlobalSettings() {
           <div className="flex justify-center pt-3 pb-1">
             <div className="glass-bubble rounded-full px-4 py-2 flex items-center gap-2 animate-slide-up pointer-events-auto">
               <button onClick={handleReset} className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors">
-                Reset
+                <Trans i18nKey="ui.FederationPanel.reset">Reset</Trans>
               </button>
               <button
                 onClick={handleSave}
                 disabled={saving}
                 className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
               >
-                {saving ? 'Saving...' : 'Save'}
+                {saving ? translate('runtime.expressions.FederationPanel.saving') : translate('runtime.expressions.FederationPanel.save')}
               </button>
             </div>
           </div>
@@ -155,7 +157,7 @@ function FederationGlobalSettings() {
 function formatRelativeTime(timestamp: number | null): string {
   if (!timestamp) return 'Never';
   const seconds = Math.floor((Date.now() - timestamp) / 1000);
-  if (seconds < 60) return 'Just now';
+  if (seconds < 60) return translate('runtime.selected.FederationPanel.justNow');
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) return `${minutes}m ago`;
   const hours = Math.floor(minutes / 60);
@@ -200,8 +202,8 @@ function peerStatusLabel(status: string): string {
     case 'unreachable': return 'Unreachable';
     case 'rejected': return 'Rejected (auto-peering denied)';
     case 'revoked': return 'Revoked';
-    case 'awaiting_approval': return 'Awaiting Approval';
-    case 'needs_attention': return 'Needs Attention';
+    case 'awaiting_approval': return translate('runtime.selected.FederationPanel.awaitingApproval');
+    case 'needs_attention': return translate('runtime.selected.FederationPanel.needsAttention');
     default: return status;
   }
 }
@@ -239,14 +241,14 @@ function FilterDropdown({
 
   const sortOptions: Array<{ key: SortBy; label: string }> = view === 'active'
     ? [
-        { key: 'name', label: 'Name (A-Z)' },
-        { key: 'lastSeen', label: 'Last seen' },
-        { key: 'dateAdded', label: 'Date added' },
-        { key: 'failures', label: 'Failures' },
+        { key: 'name', label: translate('runtime.properties.FederationPanel.nameAZ') },
+        { key: 'lastSeen', label: translate('runtime.properties.FederationPanel.lastSeen') },
+        { key: 'dateAdded', label: translate('runtime.properties.FederationPanel.dateAdded') },
+        { key: 'failures', label: translate('runtime.properties.FederationPanel.failures') },
       ]
     : [
-        { key: 'name', label: 'Name (A-Z)' },
-        { key: 'dateAdded', label: 'Revoked date' },
+        { key: 'name', label: translate('runtime.properties.FederationPanel.nameAZ2') },
+        { key: 'dateAdded', label: translate('runtime.properties.FederationPanel.revokedDate') },
       ];
 
   return (
@@ -259,7 +261,7 @@ function FilterDropdown({
         <svg width="12" height="12" viewBox="0 0 16 16" fill="none" className="opacity-60">
           <path d="M2 4h12M4 8h8M6 12h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
         </svg>
-        Filter
+        <Trans i18nKey="ui.FederationPanel.filter">Filter</Trans>
         <span className="text-[10px]">▾</span>
       </button>
 
@@ -267,10 +269,10 @@ function FilterDropdown({
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
           <div className="absolute right-0 top-full mt-1 z-50 glass rounded-lg p-1.5 w-48">
-            {view === 'active' && (
+            {view === "active" && (
               <>
-                <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-2 py-1">Status</div>
-                {(['active', 'unreachable', 'pending', 'rejected', 'awaiting_approval', 'needs_attention'] as StatusFilter[]).map((s) => (
+                <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-2 py-1"><Trans i18nKey="ui.FederationPanel.status">Status</Trans></div>
+                {(["active", "unreachable", "pending", "rejected", 'awaiting_approval', 'needs_attention'] as StatusFilter[]).map((s) => (
                   <button
                     key={s}
                     type="button"
@@ -281,8 +283,8 @@ function FilterDropdown({
                   >
                     <div className={`w-2 h-2 rounded-full ${peerStatusDotColor(s)}`} />
                     <span className="capitalize">
-                      {s === 'awaiting_approval' ? 'Awaiting Approval'
-                        : s === 'needs_attention' ? 'Needs Attention'
+                      {s === 'awaiting_approval' ? translate('runtime.expressions.FederationPanel.awaitingApproval')
+                        : s === 'needs_attention' ? translate('runtime.expressions.FederationPanel.needsAttention')
                         : s}
                     </span>
                   </button>
@@ -290,7 +292,7 @@ function FilterDropdown({
                 <div className="h-px bg-white/[0.06] my-1" />
               </>
             )}
-            <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-2 py-1">Sort by</div>
+            <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-2 py-1"><Trans i18nKey="ui.FederationPanel.sortBy">Sort by</Trans></div>
             {sortOptions.map((opt) => (
               <button
                 key={opt.key}
@@ -341,7 +343,7 @@ function PeerListControls({
             view === 'active' ? 'bg-white/[0.08] text-txt-primary' : 'text-txt-tertiary hover:text-txt-secondary'
           }`}
         >
-          Active <span className="text-[10px] text-txt-tertiary ml-0.5">{activeCount}</span>
+          <Trans i18nKey="ui.FederationPanel.active">Active</Trans> <span className="text-[10px] text-txt-tertiary ml-0.5">{activeCount}</span>
         </button>
         <button
           type="button"
@@ -350,7 +352,7 @@ function PeerListControls({
             view === 'revoked' ? 'bg-white/[0.08] text-txt-primary' : 'text-txt-tertiary hover:text-txt-secondary'
           }`}
         >
-          Revoked <span className="text-[10px] text-txt-tertiary ml-0.5">{revokedCount}</span>
+          <Trans i18nKey="ui.FederationPanel.revoked">Revoked</Trans> <span className="text-[10px] text-txt-tertiary ml-0.5">{revokedCount}</span>
         </button>
       </div>
       <FilterDropdown
@@ -410,7 +412,7 @@ function PeerRow({ peer, view, expanded, onToggleExpand, onAction, onRecheck, re
 
   const handleSaveInterval = async () => {
     if (intervalDraft < 1 || intervalDraft > 365) {
-      setIntervalError('Must be 1-365');
+      setIntervalError(translate('runtime.messages.FederationPanel.mustBe1365'));
       return;
     }
     setIntervalSaving(true);
@@ -422,9 +424,9 @@ function PeerRow({ peer, view, expanded, onToggleExpand, onAction, onRecheck, re
       // This works because React re-renders from the parent's setPeers.
       peer.autoRotateIntervalDays = result.peer.autoRotateIntervalDays;
       setEditingInterval(false);
-      addToast('Rotation interval updated', 'success', 2000);
+      addToast(translate('runtime.messages.FederationPanel.rotationIntervalUpdated'), 'success', 2000);
     } catch (err) {
-      setIntervalError(err instanceof Error ? err.message : 'Failed to update');
+      setIntervalError(err instanceof Error ? err.message : translate('runtime.messages.FederationPanel.failedToUpdate'));
     } finally {
       setIntervalSaving(false);
     }
@@ -446,7 +448,7 @@ function PeerRow({ peer, view, expanded, onToggleExpand, onAction, onRecheck, re
             <div className="text-[11px] text-txt-tertiary truncate">
               {isRevoked
                 ? `Revoked: ${formatAbsoluteDate(peer.lastSeenAt ?? peer.createdAt)} · Peered: ${formatAbsoluteDate(peer.createdAt)}`
-                : peer.status === 'unreachable'
+                : peer.status === "unreachable"
                   ? `Last seen: ${formatRelativeTime(peer.lastSeenAt)} · ${peer.consecutiveFailures ?? 0} failures`
                   : `Last seen: ${formatRelativeTime(peer.lastSeenAt)} · Synced: ${formatRelativeTime(peer.lastSyncedAt)}`
               }
@@ -470,17 +472,17 @@ function PeerRow({ peer, view, expanded, onToggleExpand, onAction, onRecheck, re
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={(e) => { e.stopPropagation(); onAction('reinitiate'); }}
+                  onClick={(e) => { e.stopPropagation(); onAction("reinitiate"); }}
                   className="px-3 py-1.5 text-xs font-medium bg-status-online/10 text-status-online hover:bg-status-online/20 rounded transition-colors"
                 >
-                  Re-initiate Peering
+                  <Trans i18nKey="ui.FederationPanel.reInitiatePeering">Re-initiate Peering</Trans>
                 </button>
                 <button
                   type="button"
-                  onClick={(e) => { e.stopPropagation(); onAction('delete'); }}
+                  onClick={(e) => { e.stopPropagation(); onAction("delete"); }}
                   className="px-3 py-1.5 text-xs font-medium bg-accent-rose/10 text-txt-danger hover:bg-accent-rose/20 rounded transition-colors"
                 >
-                  Delete Permanently
+                  <Trans i18nKey="ui.FederationPanel.deletePermanently">Delete Permanently</Trans>
                 </button>
               </div>
             ) : (
@@ -488,36 +490,36 @@ function PeerRow({ peer, view, expanded, onToggleExpand, onAction, onRecheck, re
                 {/* Stats grid */}
                 <div className="grid grid-cols-3 gap-3 mb-3">
                   <div>
-                    <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">Consecutive Failures</div>
+                    <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5"><Trans i18nKey="ui.FederationPanel.consecutiveFailures">Consecutive Failures</Trans></div>
                     <div className={`text-xs ${(peer.consecutiveFailures ?? 0) > 0 ? 'text-accent-amber font-medium' : 'text-txt-secondary'}`}>
                       {peer.consecutiveFailures ?? 0}
                     </div>
                   </div>
                   {peer.status === 'needs_attention' && (
                     <div>
-                      <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">Auth Failures</div>
+                      <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5"><Trans i18nKey="ui.FederationPanel.authFailures">Auth Failures</Trans></div>
                       <div className="text-xs text-accent-rose font-medium">
                         {peer.consecutiveAuthFailures}
                       </div>
                     </div>
                   )}
                   <div>
-                    <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">Last Failure</div>
+                    <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5"><Trans i18nKey="ui.FederationPanel.lastFailure">Last Failure</Trans></div>
                     <div className="text-xs text-txt-secondary">{formatRelativeTime(peer.lastFailureAt)}</div>
                   </div>
                   <div>
-                    <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">Peered Since</div>
+                    <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5"><Trans i18nKey="ui.FederationPanel.peeredSince">Peered Since</Trans></div>
                     <div className="text-xs text-txt-secondary">{formatAbsoluteDate(peer.createdAt)}</div>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-3 gap-3 mb-3">
                   <div>
-                    <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">Secret Rotated</div>
+                    <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5"><Trans i18nKey="ui.FederationPanel.secretRotated">Secret Rotated</Trans></div>
                     <div className="text-xs text-txt-secondary">{formatRelativeTime(peer.secretRotatedAt)}</div>
                   </div>
                   <div>
-                    <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">Auto-Rotate</div>
+                    <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5"><Trans i18nKey="ui.FederationPanel.autoRotate">Auto-Rotate</Trans></div>
                     {editingInterval ? (
                       <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                         <input
@@ -536,69 +538,69 @@ function PeerRow({ peer, view, expanded, onToggleExpand, onAction, onRecheck, re
                           disabled={intervalSaving}
                           className="text-[10px] text-accent-primary hover:text-accent-primary/80 disabled:opacity-50"
                         >
-                          {intervalSaving ? '...' : 'Save'}
+                          {intervalSaving ? '...' : translate('runtime.expressions.FederationPanel.save2')}
                         </button>
                         <button
                           type="button"
                           onClick={() => { setEditingInterval(false); setIntervalDraft(peer.autoRotateIntervalDays); setIntervalError(''); }}
                           className="text-[10px] text-txt-tertiary hover:text-txt-secondary"
                         >
-                          Cancel
+                          <Trans i18nKey="ui.FederationPanel.cancel">Cancel</Trans>
                         </button>
                       </div>
                     ) : (
                       <div className="text-xs text-txt-secondary">
-                        Every {peer.autoRotateIntervalDays}d
-                        {isDefault && <span className="text-[10px] text-txt-tertiary ml-1">(default)</span>}
+                        <Trans i18nKey="ui.FederationPanel.every">Every</Trans> {peer.autoRotateIntervalDays}d
+                        {isDefault && <span className="text-[10px] text-txt-tertiary ml-1"><Trans i18nKey="ui.FederationPanel.default">(default)</Trans></span>}
                       </div>
                     )}
                     {intervalError && <div className="text-[10px] text-txt-danger mt-0.5">{intervalError}</div>}
                   </div>
                   <div>
-                    <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">Rotation Status</div>
+                    <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5"><Trans i18nKey="ui.FederationPanel.rotationStatus">Rotation Status</Trans></div>
                     <div className="text-xs text-txt-secondary">
-                      {peer.rotationInProgress ? 'In progress' : 'Idle'}
+                      {peer.rotationInProgress ? translate('runtime.expressions.FederationPanel.inProgress') : translate('runtime.expressions.FederationPanel.idle')}
                     </div>
                   </div>
                 </div>
 
                 {/* Actions */}
                 <div className="flex items-center gap-2">
-                  {peer.status === 'unreachable' && (
+                  {peer.status === "unreachable" && (
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); onRecheck(); }}
                       disabled={recheckLoading}
                       className="px-3 py-1.5 text-xs font-medium bg-accent-mint/10 text-accent-mint hover:bg-accent-mint/20 rounded transition-colors disabled:opacity-50"
                     >
-                      {recheckLoading ? 'Checking…' : 'Check now'}
+                      {recheckLoading ? translate('runtime.expressions.FederationPanel.checking') : translate('runtime.expressions.FederationPanel.checkNow')}
                     </button>
                   )}
                   {peer.status === 'needs_attention' ? (
                     <button
                       type="button"
-                      onClick={(e) => { e.stopPropagation(); onAction('reset'); }}
+                      onClick={(e) => { e.stopPropagation(); onAction("reset"); }}
                       className="px-3 py-1.5 text-xs font-medium bg-accent-rose/10 text-txt-danger hover:bg-accent-rose/20 rounded transition-colors"
                     >
-                      Reset Peering
+                      <Trans i18nKey="ui.FederationPanel.resetPeering">Reset Peering</Trans>
                     </button>
                   ) : (
                     <>
                       <button
                         type="button"
-                        onClick={(e) => { e.stopPropagation(); onAction('rotate'); }}
+                        onClick={(e) => { e.stopPropagation(); onAction("rotate"); }}
                         disabled={peer.rotationInProgress}
                         className="px-3 py-1.5 text-xs font-medium bg-accent-lavender/10 text-accent-lavender hover:bg-accent-lavender/20 rounded transition-colors disabled:opacity-50"
-                        title={peer.rotationInProgress ? 'Rotation already in progress' : undefined}
+                        title={peer.rotationInProgress ? translate('runtime.expressions.FederationPanel.rotationAlreadyInProgress') : undefined}
                       >
-                        Rotate Secret
+                        <Trans i18nKey="ui.FederationPanel.rotateSecret">Rotate Secret</Trans>
                       </button>
                       <button
                         type="button"
-                        onClick={(e) => { e.stopPropagation(); onAction('revoke'); }}
+                        onClick={(e) => { e.stopPropagation(); onAction("revoke"); }}
                         className="px-3 py-1.5 text-xs font-medium bg-accent-rose/10 text-txt-danger hover:bg-accent-rose/20 rounded transition-colors"
                       >
-                        Revoke
+                        <Trans i18nKey="ui.FederationPanel.revoke">Revoke</Trans>
                       </button>
                       {!editingInterval && (
                         <button
@@ -606,7 +608,7 @@ function PeerRow({ peer, view, expanded, onToggleExpand, onAction, onRecheck, re
                           onClick={(e) => { e.stopPropagation(); setEditingInterval(true); setIntervalDraft(peer.autoRotateIntervalDays); }}
                           className="text-[11px] text-txt-tertiary hover:text-txt-secondary underline decoration-dotted transition-colors ml-1"
                         >
-                          Edit rotation interval
+                          <Trans i18nKey="ui.FederationPanel.editRotationInterval">Edit rotation interval</Trans>
                         </button>
                       )}
                     </>
@@ -674,15 +676,15 @@ function PendingApprovals({ onCountChange }: { onCountChange?: (count: number) =
         await api.federation.approveRequest(req.id);
         setRequests((prev) => prev.filter((r) => r.id !== req.id));
         onCountChange?.(requests.length - 1);
-        addToast(`Peering established with ${req.instanceName || req.origin}`, 'success', 3000);
+        addToast(translate('runtime.templates.FederationPanel.peeringEstablishedWith', { p0: req.instanceName || req.origin }), 'success', 3000);
       } else {
         await api.federation.denyRequest(req.id);
         setRequests((prev) => prev.filter((r) => r.id !== req.id));
         onCountChange?.(requests.length - 1);
-        addToast(`Denied peering request from ${req.instanceName || req.origin}`, 'success', 3000);
+        addToast(translate('runtime.templates.FederationPanel.deniedPeeringRequestFrom', { p0: req.instanceName || req.origin }), 'success', 3000);
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Action failed';
+      const msg = err instanceof Error ? err.message : translate('runtime.selected.FederationPanel.actionFailed');
       setErrors((prev) => ({ ...prev, [req.id]: msg }));
     } finally {
       setActionLoading(null);
@@ -695,17 +697,17 @@ function PendingApprovals({ onCountChange }: { onCountChange?: (count: number) =
   return (
     <div>
       <div className="flex items-center gap-2 mb-1.5">
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider">Pending Approval Requests</div>
+        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider"><Trans i18nKey="ui.FederationPanel.pendingApprovalRequests">Pending Approval Requests</Trans></div>
         <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-accent-amber/15 text-accent-amber">
           {requests.length}
         </span>
       </div>
       <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-2 mb-5">
         {loading && requests.length === 0 && (
-          <div className="text-xs text-txt-tertiary py-2">Loading...</div>
+          <div className="text-xs text-txt-tertiary py-2"><Trans i18nKey="ui.FederationPanel.loading">Loading...</Trans></div>
         )}
         {requests.map((req) => {
-          const isOutbound = req.direction === 'outbound';
+          const isOutbound = req.direction === "outbound";
           let name = req.instanceName || '';
           if (!name) {
             try {
@@ -716,7 +718,7 @@ function PendingApprovals({ onCountChange }: { onCountChange?: (count: number) =
           }
           const subCount = req.subscribers?.length ?? 0;
           const titleText = isOutbound
-            ? `${name} — ${subCount} ${subCount === 1 ? 'user wants' : 'users want'} us to peer`
+            ? `${name} — ${subCount} ${subCount === 1 ? "user wants" : "users want"} us to peer`
             : name;
           return (
             <div key={req.id} className="bg-white/[0.02] rounded-md px-3 py-2.5">
@@ -725,7 +727,7 @@ function PendingApprovals({ onCountChange }: { onCountChange?: (count: number) =
                   <div className="text-sm font-medium text-txt-primary truncate">{titleText}</div>
                   <div className="text-[11px] text-txt-tertiary truncate">{req.origin}</div>
                   <div className="text-[11px] text-txt-tertiary mt-0.5">
-                    Requested {formatRelativeTime(req.requestedAt)}
+                    <Trans i18nKey="ui.FederationPanel.requested">Requested</Trans> {formatRelativeTime(req.requestedAt)}
                   </div>
                   {isOutbound && req.subscribers && req.subscribers.length > 0 && (
                     <div className="mt-1.5 space-y-0.5">
@@ -747,19 +749,19 @@ function PendingApprovals({ onCountChange }: { onCountChange?: (count: number) =
                 <div className="flex items-center gap-2 shrink-0 ml-3">
                   <button
                     type="button"
-                    onClick={() => setConfirmAction({ type: 'approve', request: req })}
+                    onClick={() => setConfirmAction({ type: "approve", request: req })}
                     disabled={actionLoading === req.id}
                     className="px-3 py-1.5 text-xs font-medium bg-status-online/10 text-status-online hover:bg-status-online/20 rounded transition-colors disabled:opacity-50"
                   >
-                    Approve
+                    <Trans i18nKey="ui.FederationPanel.approve">Approve</Trans>
                   </button>
                   <button
                     type="button"
-                    onClick={() => setConfirmAction({ type: 'deny', request: req })}
+                    onClick={() => setConfirmAction({ type: "deny", request: req })}
                     disabled={actionLoading === req.id}
                     className="px-3 py-1.5 text-xs font-medium bg-accent-rose/10 text-txt-danger hover:bg-accent-rose/20 rounded transition-colors disabled:opacity-50"
                   >
-                    Deny
+                    <Trans i18nKey="ui.FederationPanel.deny">Deny</Trans>
                   </button>
                 </div>
               </div>
@@ -771,7 +773,7 @@ function PendingApprovals({ onCountChange }: { onCountChange?: (count: number) =
                     onClick={() => setErrors((prev) => { const next = { ...prev }; delete next[req.id]; return next; })}
                     className="ml-2 underline"
                   >
-                    Dismiss
+                    <Trans i18nKey="ui.FederationPanel.dismiss">Dismiss</Trans>
                   </button>
                 </div>
               )}
@@ -781,30 +783,30 @@ function PendingApprovals({ onCountChange }: { onCountChange?: (count: number) =
       </div>
 
       {confirmAction && (() => {
-        const isOutbound = confirmAction.request.direction === 'outbound';
+        const isOutbound = confirmAction.request.direction === "outbound";
         const targetName = confirmAction.request.instanceName || confirmAction.request.origin;
         const subCount = confirmAction.request.subscribers?.length ?? 0;
         const description =
-          confirmAction.type === 'approve'
+          confirmAction.type === "approve"
             ? isOutbound
-              ? `This will initiate a peering handshake with ${targetName} on behalf of the ${subCount} requesting ${subCount === 1 ? 'user' : 'users'}. The remote instance must be reachable.`
-              : `This will initiate a peering handshake with ${targetName}. The remote instance must be reachable.`
+              ? translate('runtime.templates.FederationPanel.thisWillInitiateAPeeringHandshakeWithOn', { p0: targetName, p1: subCount, p2: translate('runtime.manual.requestingUser', { count: subCount }) })
+              : translate('runtime.templates.FederationPanel.thisWillInitiateAPeeringHandshakeWithThe', { p0: targetName })
             : isOutbound
-              ? `This will deny the outbound peering request and notify the requesting ${subCount === 1 ? 'user' : 'users'}. They can re-trigger the request from their friend list.`
-              : `This will deny the request and block future auto-peering requests from ${targetName}. You can unblock them later from the rejected peers list.`;
+              ? translate('runtime.templates.FederationPanel.thisWillDenyTheOutboundPeeringRequestAnd', { p0: subCount === 1 ? "user" : "users" })
+              : translate('runtime.templates.FederationPanel.thisWillDenyTheRequestAndBlockFuture', { p0: targetName });
         const confirmLabel =
-          confirmAction.type === 'approve'
-            ? isOutbound ? 'Approve & Peer' : 'Approve'
-            : isOutbound ? 'Deny & Notify' : 'Deny';
+          confirmAction.type === "approve"
+            ? isOutbound ? "Approve & Peer" : "Approve"
+            : isOutbound ? "Deny & Notify" : "Deny";
         return (
           <ConfirmDialog
             isOpen={true}
             onClose={() => { if (!actionLoading) setConfirmAction(null); }}
             onConfirm={handleConfirm}
-            title={confirmAction.type === 'approve' ? 'Approve Peering Request' : 'Deny Peering Request'}
+            title={confirmAction.type === "approve" ? translate('runtime.expressions.FederationPanel.approvePeeringRequest') : translate('runtime.expressions.FederationPanel.denyPeeringRequest')}
             description={description}
             confirmLabel={confirmLabel}
-            variant={confirmAction.type === 'approve' ? 'warning' : 'danger'}
+            variant={confirmAction.type === "approve" ? "warning" : "danger"}
             loading={!!actionLoading}
           />
         );
@@ -928,7 +930,7 @@ function ResetCleanup() {
       } else {
         const { account } = confirmAction;
         await api.admin.deleteUser(account.id);
-        addToast(`Removed ${account.username} and all their content`, 'success', 3000);
+        addToast(translate('runtime.templates.FederationPanel.removedAndAllTheirContent', { p0: account.username }), 'success', 3000);
         await fetchAll();
       }
     } catch (err) {
@@ -943,18 +945,18 @@ function ResetCleanup() {
             'warning',
           );
         } else {
-          addToast(err instanceof Error ? err.message : 'Failed to remove account', 'warning');
+          addToast(err instanceof Error ? err.message : translate('runtime.messages.FederationPanel.failedToRemoveAccount'), 'warning');
         }
       } else if (
         err instanceof HttpError && err.status === 409 &&
         (err.body as { code?: string } | undefined)?.code === 'PEER_EXISTS_RESET_REQUIRED'
       ) {
         addToast(
-          `The remote instance still holds stale peering for you. Ask its admin to reset their side, then Re-peer again.`,
+          translate('runtime.manual.remoteStillHoldsStalePeering'),
           'warning',
         );
       } else {
-        addToast(err instanceof Error ? err.message : 'Re-peering failed', 'warning');
+        addToast(err instanceof Error ? err.message : translate('runtime.messages.FederationPanel.rePeeringFailed'), 'warning');
       }
     } finally {
       setActionLoading(false);
@@ -970,7 +972,7 @@ function ResetCleanup() {
       await api.federation.acknowledgeResetEvent(origin);
       await fetchAll();
     } catch (err) {
-      addToast(err instanceof Error ? err.message : 'Failed to dismiss', 'warning');
+      addToast(err instanceof Error ? err.message : translate('runtime.messages.FederationPanel.failedToDismiss'), 'warning');
     } finally {
       setActionLoading(false);
     }
@@ -989,7 +991,7 @@ function ResetCleanup() {
   return (
     <div>
       <div className="flex items-center gap-2 mb-1.5">
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider">Reset Cleanup</div>
+        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider"><Trans i18nKey="ui.FederationPanel.resetCleanup">Reset Cleanup</Trans></div>
         <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-accent-rose/15 text-accent-rose">
           {resetPeers.length + eventsWithOrphans.length}
         </span>
@@ -1006,20 +1008,20 @@ function ResetCleanup() {
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="text-sm font-semibold text-txt-primary">
-                    {peerName(peer)} was reset
+                    {peerName(peer)} <Trans i18nKey="ui.FederationPanel.wasReset">was reset</Trans>
                   </div>
                   <div className="text-[11px] text-txt-tertiary truncate">{peer.origin}</div>
                   <p className="text-xs text-txt-secondary mt-1.5 leading-relaxed">
-                    A new instance is running on this domain. Re-establish federation to heal stale friendships and DMs.
+                    <Trans i18nKey="ui.FederationPanel.aNewInstanceIsRunningOnThisDomain">A new instance is running on this domain. Re-establish federation to heal stale friendships and DMs.</Trans>
                   </p>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setConfirmAction({ kind: 'repeer', peer })}
+                  onClick={() => setConfirmAction({ kind: "repeer", peer })}
                   disabled={actionLoading}
                   className="shrink-0 px-3 py-1.5 text-xs font-medium bg-accent-mint/10 text-accent-mint hover:bg-accent-mint/20 rounded transition-colors disabled:opacity-50"
                 >
-                  Re-peer
+                  <Trans i18nKey="ui.FederationPanel.rePeer">Re-peer</Trans>
                 </button>
               </div>
             </div>
@@ -1034,13 +1036,13 @@ function ResetCleanup() {
             <div key={`${event.origin}:${event.deadEpoch}`}>
               <div className="text-xs text-txt-tertiary mb-2 leading-relaxed">
                 <span className="font-medium text-txt-secondary">{originHost(event.origin)}</span>{' '}
-                was reset — {event.stubCount} replicated{' '}
-                {event.stubCount === 1 ? 'identity' : 'identities'} auto-cleaned,{' '}
+                <Trans i18nKey="ui.FederationPanel.wasReset2">was reset —</Trans> {event.stubCount} <Trans i18nKey="ui.FederationPanel.replicated">replicated</Trans>{' '}
+                {event.stubCount === 1 ? translate('runtime.expressions.FederationPanel.identity') : translate('runtime.expressions.FederationPanel.identities')} <Trans i18nKey="ui.FederationPanel.autoCleaned">auto-cleaned,</Trans>{' '}
                 {event.orphanedAccounts.length}{' '}
-                {event.orphanedAccounts.length === 1 ? 'account' : 'accounts'} with local content detached.
+                {event.orphanedAccounts.length === 1 ? translate('runtime.expressions.FederationPanel.account') : translate('runtime.expressions.FederationPanel.accounts')} <Trans i18nKey="ui.FederationPanel.withLocalContentDetachedDetachedAccountsKeepWorking">with local content detached.
                 Detached accounts keep working locally — owners keep access with their existing password.
                 The owner can re-attach a detached account to their new home identity from that account's
-                settings (Account → detached notice) when logged into both.
+                settings (Account → detached notice) when logged into both.</Trans>
               </div>
               <div className="space-y-2">
                 {event.orphanedAccounts.map((account) => (
@@ -1053,13 +1055,13 @@ function ResetCleanup() {
                         <div className="text-[11px] text-txt-tertiary truncate">{account.username}</div>
                         <div className="text-[11px] text-txt-tertiary mt-0.5">
                           {account.spaceMemberCount}{' '}
-                          {account.spaceMemberCount === 1 ? 'membership' : 'memberships'} ·{' '}
+                          {account.spaceMemberCount === 1 ? translate('runtime.expressions.FederationPanel.membership') : translate('runtime.expressions.FederationPanel.memberships')} ·{' '}
                           {account.messageCount}{' '}
-                          {account.messageCount === 1 ? 'message' : 'messages'}
+                          {account.messageCount === 1 ? translate('runtime.expressions.FederationPanel.message') : translate('runtime.expressions.FederationPanel.messages')}
                         </div>
                         {account.ownedSpaces.length > 0 && (
                           <div className="text-[11px] text-accent-amber mt-0.5 truncate">
-                            Owns: {account.ownedSpaces.map((s) => s.name).join(', ')}
+                            <Trans i18nKey="ui.FederationPanel.owns">Owns:</Trans> {account.ownedSpaces.map((s) => s.name).join(', ')}
                           </div>
                         )}
                       </div>
@@ -1067,12 +1069,12 @@ function ResetCleanup() {
                         <button
                           type="button"
                           onClick={() =>
-                            setConfirmAction({ kind: 'remove', account, origin: event.origin })
+                            setConfirmAction({ kind: "remove", account, origin: event.origin })
                           }
                           disabled={actionLoading}
                           className="px-3 py-1.5 text-xs font-medium bg-accent-rose/10 text-txt-danger hover:bg-accent-rose/20 rounded transition-colors disabled:opacity-50"
                         >
-                          Remove
+                          <Trans i18nKey="ui.FederationPanel.remove">Remove</Trans>
                         </button>
                       </div>
                     </div>
@@ -1085,7 +1087,7 @@ function ResetCleanup() {
                 disabled={actionLoading}
                 className="mt-2 px-3 py-1.5 text-xs font-medium text-txt-tertiary hover:text-txt-secondary bg-white/[0.04] hover:bg-white/[0.06] rounded transition-colors disabled:opacity-50"
               >
-                Dismiss — keep all detached accounts
+                <Trans i18nKey="ui.FederationPanel.dismissKeepAllDetachedAccounts">Dismiss — keep all detached accounts</Trans>
               </button>
             </div>
           ))}
@@ -1097,14 +1099,14 @@ function ResetCleanup() {
           isOpen={true}
           onClose={() => { if (!actionLoading) setConfirmAction(null); }}
           onConfirm={handleConfirm}
-          title={confirmAction.kind === 'repeer' ? 'Re-establish Federation' : 'Remove detached account'}
+          title={confirmAction.kind === "repeer" ? translate('runtime.expressions.FederationPanel.reEstablishFederation') : translate('runtime.expressions.FederationPanel.removeDetachedAccount')}
           description={
-            confirmAction.kind === 'repeer'
-              ? `This deletes the local peer record and starts a fresh authenticated handshake with ${confirmAction.peer.origin}. The remote must be reachable and (if it does not auto-accept) approve the request.`
-              : `Permanently delete ${confirmAction.account.username} and all their content on this instance? This cannot be undone.`
+            confirmAction.kind === "repeer"
+              ? translate('runtime.templates.FederationPanel.thisDeletesTheLocalPeerRecordAndStarts', { p0: confirmAction.peer.origin })
+              : translate('runtime.templates.FederationPanel.permanentlyDeleteAndAllTheirContentOnThis', { p0: confirmAction.account.username })
           }
-          confirmLabel={confirmAction.kind === 'repeer' ? 'Re-peer & heal' : 'Delete permanently'}
-          variant={confirmAction.kind === 'repeer' ? 'warning' : 'danger'}
+          confirmLabel={confirmAction.kind === "repeer" ? translate('runtime.expressions.FederationPanel.rePeerHeal') : translate('runtime.expressions.FederationPanel.deletePermanently')}
+          variant={confirmAction.kind === "repeer" ? "warning" : "danger"}
           loading={actionLoading}
         />
       )}
@@ -1150,7 +1152,7 @@ export function FederationPanel({ onApprovalCountChange }: { onApprovalCountChan
       const result = await api.federation.peers();
       setPeers(result.peers);
     } catch (err) {
-      setPeersError(err instanceof Error ? err.message : 'Failed to load peers');
+      setPeersError(err instanceof Error ? err.message : translate('runtime.messages.FederationPanel.failedToLoadPeers'));
     } finally {
       setPeersLoading(false);
     }
@@ -1184,11 +1186,11 @@ export function FederationPanel({ onApprovalCountChange }: { onApprovalCountChan
 
   // Empty state message
   const emptyMessage = peers.length === 0
-    ? 'No federation peers configured. Peers are created automatically when users connect to remote instances.'
+    ? translate('runtime.selected.FederationPanel.noFederationPeersConfiguredPeersAreCreatedAutomatically')
     : view === 'active' && filteredPeers.length === 0
-      ? 'No peers match the current filter.'
+      ? translate('runtime.selected.FederationPanel.noPeersMatchTheCurrentFilter')
       : view === 'revoked' && revokedPeers.length === 0
-        ? 'No revoked peers.'
+        ? translate('runtime.selected.FederationPanel.noRevokedPeers')
         : null;
 
   const handleRecheck = async (peer: FederationPeer) => {
@@ -1200,12 +1202,12 @@ export function FederationPanel({ onApprovalCountChange }: { onApprovalCountChan
         setPeers((prev) => prev.map((p) =>
           p.id === peer.id ? { ...p, status: 'active' } : p
         ));
-        addToast(`${name} is back online`, 'success', 3000);
+        addToast(translate('runtime.templates.FederationPanel.isBackOnline', { p0: name }), 'success', 3000);
       } else {
-        addToast(`${name} is still unreachable`, 'warning', 3000);
+        addToast(translate('runtime.templates.FederationPanel.isStillUnreachable', { p0: name }), 'warning', 3000);
       }
     } catch (err) {
-      addToast(err instanceof Error ? err.message : 'Recheck failed', 'warning', 3000);
+      addToast(err instanceof Error ? err.message : translate('runtime.messages.FederationPanel.recheckFailed'), 'warning', 3000);
     } finally {
       setRecheckingId(null);
     }
@@ -1223,7 +1225,7 @@ export function FederationPanel({ onApprovalCountChange }: { onApprovalCountChan
           setPeers((prev) => prev.map((p) =>
             p.id === peer.id ? { ...p, rotationInProgress: true } : p
           ));
-          addToast('Secret rotation initiated — 15 minute grace period', 'success', 3000);
+          addToast(translate('runtime.messages.FederationPanel.secretRotationInitiated15MinuteGracePeriod'), 'success', 3000);
           break;
         }
         case 'revoke': {
@@ -1231,7 +1233,7 @@ export function FederationPanel({ onApprovalCountChange }: { onApprovalCountChan
           setPeers((prev) => prev.map((p) =>
             p.id === peer.id ? { ...p, status: 'revoked' } : p
           ));
-          addToast('Peer revoked', 'success', 2000);
+          addToast(translate('runtime.messages.FederationPanel.peerRevoked'), 'success', 2000);
           break;
         }
         case 'reinitiate': {
@@ -1241,10 +1243,10 @@ export function FederationPanel({ onApprovalCountChange }: { onApprovalCountChan
           try {
             const result = await api.federation.initiatePeering({ remoteOrigin: origin });
             setPeers((prev) => [...prev, result.peer]);
-            addToast('Peering re-initiated', 'success', 2000);
+            addToast(translate('runtime.messages.FederationPanel.peeringReInitiated'), 'success', 2000);
           } catch (err) {
             addToast(
-              `Peer record deleted but handshake failed: ${(err as Error).message}. Re-peer manually with ${origin}`,
+              translate('runtime.templates.FederationPanel.peerRecordDeletedButHandshakeFailedRePeer', { p0: (err as Error).message, p1: origin }),
               'warning',
               5000,
             );
@@ -1254,18 +1256,18 @@ export function FederationPanel({ onApprovalCountChange }: { onApprovalCountChan
         case 'delete': {
           await api.federation.deletePeerPermanently(peer.id);
           setPeers((prev) => prev.filter((p) => p.id !== peer.id));
-          addToast('Peer permanently deleted', 'success', 2000);
+          addToast(translate('runtime.messages.FederationPanel.peerPermanentlyDeleted'), 'success', 2000);
           break;
         }
         case 'reset': {
           await api.federation.resetPeer(peer.id);
           setPeers((prev) => prev.filter((p) => p.id !== peer.id));
-          addToast(`Peering reset for ${peer.instanceName || peer.origin}`, 'success', 3000);
+          addToast(translate('runtime.templates.FederationPanel.peeringResetFor', { p0: peer.instanceName || peer.origin }), 'success', 3000);
           break;
         }
       }
     } catch (err) {
-      addToast(err instanceof Error ? err.message : 'Action failed', 'warning', 3000);
+      addToast(err instanceof Error ? err.message : translate('runtime.messages.FederationPanel.actionFailed'), 'warning', 3000);
     } finally {
       setActionLoading(false);
       setConfirmAction(null);
@@ -1276,32 +1278,32 @@ export function FederationPanel({ onApprovalCountChange }: { onApprovalCountChan
     const name = confirmAction.peer.instanceName || new URL(confirmAction.peer.origin).host;
     switch (confirmAction.type) {
       case 'rotate': return {
-        title: 'Rotate HMAC Secret',
-        description: `This will generate a new HMAC secret for ${name}. Both instances will accept old and new secrets during a 15-minute grace period.`,
+        title: translate('runtime.properties.FederationPanel.rotateHMACSecret'),
+        description: translate('runtime.templates.FederationPanel.thisWillGenerateANewHMACSecretFor', { p0: name }),
         confirmLabel: 'Rotate',
         variant: 'warning' as const,
       };
       case 'revoke': return {
-        title: 'Revoke Peer',
-        description: `This will stop all federation relay traffic with ${name}. Pending outbox entries will be purged. You can re-initiate peering later.`,
+        title: translate('runtime.properties.FederationPanel.revokePeer'),
+        description: translate('runtime.templates.FederationPanel.thisWillStopAllFederationRelayTrafficWith', { p0: name }),
         confirmLabel: 'Revoke',
         variant: 'danger' as const,
       };
       case 'reinitiate': return {
-        title: 'Re-initiate Peering',
-        description: `This will delete the revoked record and start a fresh handshake with ${confirmAction.peer.origin}. The remote instance must be reachable.`,
+        title: translate('runtime.properties.FederationPanel.reInitiatePeering'),
+        description: translate('runtime.templates.FederationPanel.thisWillDeleteTheRevokedRecordAndStart', { p0: confirmAction.peer.origin }),
         confirmLabel: 'Re-initiate',
         variant: 'warning' as const,
       };
       case 'delete': return {
-        title: 'Delete Peer Record',
-        description: `This will permanently delete the peer record for ${name}. This cannot be undone.`,
+        title: translate('runtime.properties.FederationPanel.deletePeerRecord'),
+        description: translate('runtime.templates.FederationPanel.thisWillPermanentlyDeleteThePeerRecordFor', { p0: name }),
         confirmLabel: 'Delete',
         variant: 'danger' as const,
       };
       case 'reset': return {
-        title: 'Reset Peering',
-        description: `Reset peering with ${name}? This deletes the local peer record and all pending outbox entries. You must re-initiate peering with the remote admin out of band after reset. This cannot be undone.`,
+        title: translate('runtime.properties.FederationPanel.resetPeering'),
+        description: translate('runtime.templates.FederationPanel.resetPeeringWithThisDeletesTheLocalPeer', { p0: name }),
         confirmLabel: 'Reset',
         variant: 'danger' as const,
       };
@@ -1310,9 +1312,9 @@ export function FederationPanel({ onApprovalCountChange }: { onApprovalCountChan
 
   return (
     <form className="space-y-5" onSubmit={(e) => e.preventDefault()}>
-      <h2 className="text-lg font-semibold text-txt-primary">Federation</h2>
+      <h2 className="text-lg font-semibold text-txt-primary"><Trans i18nKey="ui.FederationPanel.federation">Federation</Trans></h2>
       <div className="text-xs text-txt-tertiary">
-        Configure federation relay, secret rotation, and manage peered instances.
+        <Trans i18nKey="ui.FederationPanel.configureFederationRelaySecretRotationAndManagePeered">Configure federation relay, secret rotation, and manage peered instances.</Trans>
       </div>
 
       <FederationGlobalSettings />
@@ -1324,14 +1326,14 @@ export function FederationPanel({ onApprovalCountChange }: { onApprovalCountChan
       {/* Peered Instances */}
       <div>
         <div className="flex items-center justify-between mb-1.5">
-          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider">Peered Instances</div>
+          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider"><Trans i18nKey="ui.FederationPanel.peeredInstances">Peered Instances</Trans></div>
           <button
             type="button"
             onClick={fetchPeers}
             disabled={peersLoading}
             className="text-[11px] text-txt-tertiary hover:text-txt-secondary transition-colors disabled:opacity-50"
           >
-            {peersLoading ? 'Loading...' : 'Refresh'}
+            {peersLoading ? translate('runtime.expressions.FederationPanel.loading') : translate('runtime.expressions.FederationPanel.refresh')}
           </button>
         </div>
 
@@ -1352,7 +1354,7 @@ export function FederationPanel({ onApprovalCountChange }: { onApprovalCountChan
           {peersError && (
             <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-xs mb-2">
               {peersError}
-              <button type="button" onClick={fetchPeers} className="ml-2 underline">Retry</button>
+              <button type="button" onClick={fetchPeers} className="ml-2 underline"><Trans i18nKey="ui.FederationPanel.retry">Retry</Trans></button>
             </div>
           )}
 

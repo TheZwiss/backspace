@@ -1,6 +1,8 @@
 import { useSpaceJoin } from '../../hooks/useSpaceJoin';
 import { getSpaceGradient } from '../../utils/gradients';
 import type { TaggedExploreSpace } from '../../stores/exploreStore';
+import { Trans } from 'react-i18next';
+import { translate } from '../../i18n';
 
 export function ExploreSpacePreviewCard({
   space,
@@ -55,7 +57,7 @@ export function ExploreSpacePreviewCard({
         <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold text-txt-primary truncate">{space.name}</div>
           <div className="flex items-center gap-2 text-[12px] text-txt-tertiary">
-            <span>{space.memberCount} {space.memberCount === 1 ? 'member' : 'members'}</span>
+            <span>{space.memberCount} {space.memberCount === 1 ? translate('runtime.expressions.ExploreSpacePreviewCard.member') : translate('runtime.expressions.ExploreSpacePreviewCard.members')}</span>
             {originLabel && <span className="truncate text-txt-tertiary/70">· {originLabel}</span>}
           </div>
         </div>
@@ -69,17 +71,17 @@ export function ExploreSpacePreviewCard({
               disabled={joining}
               className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary-hover text-white text-xs font-medium rounded-full transition-colors disabled:opacity-50"
             >
-              {joining ? 'Joining…' : 'Join'}
+              {joining ? translate('runtime.expressions.ExploreSpacePreviewCard.joining') : translate('runtime.expressions.ExploreSpacePreviewCard.join')}
             </button>
           ) : isPending ? (
-            <span className="px-3 py-1.5 text-xs font-medium text-txt-tertiary">Pending</span>
+            <span className="px-3 py-1.5 text-xs font-medium text-txt-tertiary"><Trans i18nKey="ui.ExploreSpacePreviewCard.pending">Pending</Trans></span>
           ) : (
             <button
               type="button"
               onClick={openRequestForm}
               className="px-3 py-1.5 bg-accent-amber/20 hover:bg-accent-amber/30 text-accent-amber text-xs font-medium rounded-full transition-colors"
             >
-              Request
+              <Trans i18nKey="ui.ExploreSpacePreviewCard.request">Request</Trans>
             </button>
           )}
         </div>
@@ -91,7 +93,7 @@ export function ExploreSpacePreviewCard({
           <textarea
             value={requestMessage}
             onChange={(e) => setRequestMessage(e.target.value.slice(0, 200))}
-            placeholder="Why do you want to join? (optional)"
+            placeholder={translate("runtime.attributes.ExploreSpacePreviewCard.whyDoYouWantToJoinOptional")}
             rows={2}
             className="input-standard w-full resize-none text-sm"
           />
@@ -102,14 +104,14 @@ export function ExploreSpacePreviewCard({
               disabled={joining}
               className="flex-1 py-1.5 bg-accent-amber hover:bg-accent-amber/80 text-[#13131a] text-xs font-medium rounded transition-colors disabled:opacity-50"
             >
-              {joining ? 'Sending…' : 'Send Request'}
+              {joining ? translate('runtime.expressions.ExploreSpacePreviewCard.sending') : translate('runtime.expressions.ExploreSpacePreviewCard.sendRequest')}
             </button>
             <button
               type="button"
               onClick={cancelRequestForm}
               className="px-3 py-1.5 text-xs text-txt-tertiary hover:text-txt-secondary transition-colors"
             >
-              Cancel
+              <Trans i18nKey="ui.ExploreSpacePreviewCard.cancel">Cancel</Trans>
             </button>
           </div>
         </div>

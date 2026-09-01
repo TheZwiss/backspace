@@ -4,6 +4,8 @@ import { useTrackStats, AudioTrackStat, VideoTrackStat } from '../../hooks/useTr
 import { getActiveRoom } from '../../hooks/useLiveKit';
 import { useFloatingPosition } from '../../hooks/useFloatingPosition';
 import { usePortalContainer } from '../../hooks/usePortalContainer';
+import { Trans } from 'react-i18next';
+import { translate } from '../../i18n';
 
 interface ConnectionInfoPopoverProps {
   open: boolean;
@@ -39,8 +41,8 @@ function sourceLabel(source: string): string {
     case 'microphone': return 'Microphone';
     case 'camera': return 'Camera';
     case 'screen_share': return 'Screen';
-    case 'screen_share_audio': return 'Screen Audio';
-    default: return 'Unknown';
+    case 'screen_share_audio': return translate('runtime.selected.ConnectionInfoPopover.screenAudio');
+    default: return translate('runtime.selected.ConnectionInfoPopover.unknown');
   }
 }
 
@@ -101,13 +103,13 @@ function VideoTrackRow({ track }: { track: VideoTrackStat }) {
             {track.fps !== null && ` @${track.fps}`}
           </span>
           <span className="text-[11px] text-txt-tertiary">
-            {track.direction === 'send' && (() => {
+            {track.direction === "send" && (() => {
               const parts: string[] = [];
               if (track.encoderImpl) parts.push(track.encoderImpl);
-              if (track.qualityLimitation && track.qualityLimitation !== 'none') parts.push(track.qualityLimitation);
+              if (track.qualityLimitation && track.qualityLimitation !== "none") parts.push(track.qualityLimitation);
               return parts.join(' · ') || null;
             })()}
-            {track.direction === 'recv' && track.simulcastLayer
+            {track.direction === "recv" && track.simulcastLayer
               ? track.simulcastLayer
               : ''}
           </span>
@@ -151,36 +153,36 @@ export function ConnectionInfoPopover({ open, onClose, anchorRef }: ConnectionIn
       className="w-[300px] glass rounded-lg overflow-hidden"
     >
       <div className="px-3 py-2 border-b border-border-hard">
-        <span className="text-[14px] font-bold text-txt-primary">Connection Info</span>
+        <span className="text-[14px] font-bold text-txt-primary"><Trans i18nKey="ui.ConnectionInfoPopover.connectionInfo">Connection Info</Trans></span>
       </div>
 
       <div className="px-3 py-2 max-h-[calc(100vh-32px)] overflow-y-auto scrollbar-thin">
         {!room ? (
-          <div className="text-[12px] text-txt-tertiary py-2 text-center">Not connected</div>
+          <div className="text-[12px] text-txt-tertiary py-2 text-center"><Trans i18nKey="ui.ConnectionInfoPopover.notConnected">Not connected</Trans></div>
         ) : !stats ? (
-          <div className="text-[12px] text-txt-tertiary py-2 text-center">Gathering stats...</div>
+          <div className="text-[12px] text-txt-tertiary py-2 text-center"><Trans i18nKey="ui.ConnectionInfoPopover.gatheringStats">Gathering stats...</Trans></div>
         ) : (
           <>
             {/* Network */}
-            <SectionHeader title="Network" />
+            <SectionHeader title={translate("runtime.attributes.ConnectionInfoPopover.network")} />
             <Row
-              label="Ping"
+              label={translate("runtime.attributes.ConnectionInfoPopover.ping")}
               value={stats.network.ping !== null ? `${stats.network.ping} ms` : '\u2014'}
               colorClass={stats.network.ping !== null ? pingColor(stats.network.ping) : undefined}
             />
             <Row
-              label="Packet Loss"
+              label={translate("runtime.attributes.ConnectionInfoPopover.packetLoss")}
               value={stats.network.packetLoss !== null ? `${stats.network.packetLoss.toFixed(1)}%` : '\u2014'}
               colorClass={stats.network.packetLoss !== null ? lossColor(stats.network.packetLoss) : undefined}
             />
             <Row
-              label="Jitter"
+              label={translate("runtime.attributes.ConnectionInfoPopover.jitter")}
               value={stats.network.jitter !== null ? `${stats.network.jitter} ms` : '\u2014'}
               colorClass={stats.network.jitter !== null ? jitterColor(stats.network.jitter) : undefined}
             />
-            <Row label="Server" value={stats.network.serverAddress ?? '\u2014'} />
+            <Row label={translate("runtime.attributes.ConnectionInfoPopover.server")} value={stats.network.serverAddress ?? '\u2014'} />
             <Row
-              label="Protocol"
+              label={translate("runtime.attributes.ConnectionInfoPopover.protocol")}
               value={
                 stats.network.protocol
                   ? `${stats.network.protocol}${stats.network.candidateType ? ` (${stats.network.candidateType})` : ''}`
@@ -192,7 +194,7 @@ export function ConnectionInfoPopover({ open, onClose, anchorRef }: ConnectionIn
             {stats.audioTracks.length > 0 && (
               <>
                 <Divider />
-                <SectionHeader title="Audio" />
+                <SectionHeader title={translate("runtime.attributes.ConnectionInfoPopover.audio")} />
                 {stats.audioTracks.map((t) => (
                   <AudioTrackRow key={t.key} track={t} />
                 ))}
@@ -203,7 +205,7 @@ export function ConnectionInfoPopover({ open, onClose, anchorRef }: ConnectionIn
             {stats.videoTracks.length > 0 && (
               <>
                 <Divider />
-                <SectionHeader title="Video" />
+                <SectionHeader title={translate("runtime.attributes.ConnectionInfoPopover.video")} />
                 {stats.videoTracks.map((t) => (
                   <VideoTrackRow key={t.key} track={t} />
                 ))}

@@ -4,6 +4,7 @@ import { GenericEmbed } from './embeds/GenericEmbed';
 import { VideoEmbed } from './embeds/VideoEmbed';
 import { ImageEmbed } from './embeds/ImageEmbed';
 import { RichEmbed } from './embeds/RichEmbed';
+import { translate } from '../../i18n';
 
 interface EmbedRendererProps {
   embed: Embed;

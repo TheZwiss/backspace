@@ -5,6 +5,7 @@ import type { Attachment } from '@backspace/shared';
 import { useAuthStore } from './authStore';
 import { getTokenForOrigin } from '../utils/crossStoreResolvers';
 import { getHandle, putHandle, ensurePermission, queryHandlePermission } from '../utils/idbHandles';
+import { translate } from '../i18n';
 
 export type TransferType = 'upload' | 'download';
 export type TransferState =
@@ -233,7 +234,7 @@ export const useTransferStore = create<TransferStore>()(
       startUpload: async (file, opts) => {
         const token = getTokenForOrigin(opts.origin ?? '');
         const user = useAuthStore.getState().user;
-        if (!token) throw new Error('Cannot start upload — not authenticated');
+        if (!token) throw new Error(translate('runtime.selected.transferStore.cannotStartUploadNotAuthenticated'));
 
         const baseOrigin = opts.origin ?? '';
         const endpoint = `${baseOrigin}/api/files/`;
@@ -283,7 +284,7 @@ export const useTransferStore = create<TransferStore>()(
               get().setState_(id, 'completed');
               get().updateProgress(id, fileLike.size);
             } catch (e) {
-              const msg = e instanceof Error ? e.message : 'Could not parse upload response';
+              const msg = e instanceof Error ? e.message : translate('runtime.selected.transferStore.couldNotParseUploadResponse');
               get().setError(id, { message: msg, permanent: true });
             } finally {
               liveUploads.delete(id);
@@ -292,7 +293,7 @@ export const useTransferStore = create<TransferStore>()(
             }
           },
           onError: (err: Error) => {
-            const msg = err.message ?? 'Upload error';
+            const msg = err.message ?? translate('runtime.selected.transferStore.uploadError');
             // Treat 4xx as permanent (no retry past tus's own retry chain).
             const permanent = /\b4\d\d\b/.test(msg);
             get().setError(id, { message: msg, permanent });
@@ -353,7 +354,7 @@ export const useTransferStore = create<TransferStore>()(
 
         const token = getTokenForOrigin(t.origin ?? '');
         if (!token) {
-          get().setError(id, { message: 'Not authenticated for this instance', permanent: true });
+          get().setError(id, { message: translate('runtime.selected.transferStore.notAuthenticatedForThisInstance'), permanent: true });
           return;
         }
 
@@ -381,7 +382,7 @@ export const useTransferStore = create<TransferStore>()(
           // mark-failed sweep keep the bubble in failed state and Message.tsx surfaces
           // the discard control. The Retry button is hidden in this case (canRetry gate).
           get().setError(id, {
-            message: 'File no longer available — discard and re-upload',
+            message: translate('runtime.selected.transferStore.fileNoLongerAvailableDiscardAndReUpload'),
             permanent: true,
           });
           return;
@@ -451,7 +452,7 @@ export const useTransferStore = create<TransferStore>()(
               get().setState_(id, 'completed');
               get().updateProgress(id, blob!.size);
             } catch (e) {
-              const msg = e instanceof Error ? e.message : 'Upload completed but parse failed';
+              const msg = e instanceof Error ? e.message : translate('runtime.selected.transferStore.uploadCompletedButParseFailed');
               get().setError(id, { message: msg, permanent: true });
             } finally {
               liveUploads.delete(id);
@@ -460,7 +461,7 @@ export const useTransferStore = create<TransferStore>()(
             }
           },
           onError: (err: Error) => {
-            const msg = err.message ?? 'Upload error';
+            const msg = err.message ?? translate('runtime.selected.transferStore.uploadError2');
             const permanent = /\b4\d\d\b/.test(msg);
             get().setError(id, { message: msg, permanent });
             liveUploads.delete(id);
@@ -585,7 +586,7 @@ export const useTransferStore = create<TransferStore>()(
           if (err instanceof Error && err.name === 'AbortError') {
             // Aborted via abortDownload/pauseDownload — state already set there.
           } else {
-            const msg = err instanceof Error ? err.message : 'Download failed';
+            const msg = err instanceof Error ? err.message : translate('runtime.selected.transferStore.downloadFailed');
             const permanent = /\b4\d\d\b/.test(msg);
             get().setError(id, { message: msg, permanent });
           }
@@ -614,17 +615,17 @@ export const useTransferStore = create<TransferStore>()(
         const t = get().get(id);
         if (!t || t.type !== 'download' || !t.sourceUrl) return;
         if (!t.destFileHandleId) {
-          get().setError(id, { message: 'No destination handle — cannot resume', permanent: true });
+          get().setError(id, { message: translate('runtime.selected.transferStore.noDestinationHandleCannotResume'), permanent: true });
           return;
         }
         const handle = await getHandle(t.destFileHandleId);
         if (!handle) {
-          get().setError(id, { message: 'Destination handle missing', permanent: true });
+          get().setError(id, { message: translate('runtime.selected.transferStore.destinationHandleMissing'), permanent: true });
           return;
         }
         const perm = await ensurePermission(handle, 'readwrite');
         if (perm !== 'granted') {
-          get().setError(id, { message: 'Permission denied', permanent: false });
+          get().setError(id, { message: translate('runtime.selected.transferStore.permissionDenied'), permanent: false });
           return;
         }
         const handleAny = handle as unknown as {
@@ -670,7 +671,7 @@ export const useTransferStore = create<TransferStore>()(
           if (err instanceof Error && err.name === 'AbortError') {
             get().setState_(id, 'paused');
           } else {
-            const msg = err instanceof Error ? err.message : 'Resume failed';
+            const msg = err instanceof Error ? err.message : translate('runtime.selected.transferStore.resumeFailed');
             const permanent = /\b4\d\d\b/.test(msg);
             get().setError(id, { message: msg, permanent });
           }
@@ -753,8 +754,8 @@ async function normalizeRehydratedTransfers(): Promise<void> {
       if (!handleId) {
         store.setError(current.id, {
           message: isUpload
-            ? 'File no longer available — discard and re-upload'
-            : 'Download cannot resume — bytes lost. Restart the download.',
+            ? translate('runtime.selected.transferStore.fileNoLongerAvailableDiscardAndReUpload2')
+            : translate('runtime.selected.transferStore.downloadCannotResumeBytesLostRestartTheDownload'),
           permanent: true,
         });
         continue;
@@ -766,8 +767,8 @@ async function normalizeRehydratedTransfers(): Promise<void> {
         if (!handle) {
           store.setError(current.id, {
             message: isUpload
-              ? 'File handle missing — discard and re-upload'
-              : 'Destination handle missing — restart the download',
+              ? translate('runtime.selected.transferStore.fileHandleMissingDiscardAndReUpload')
+              : translate('runtime.selected.transferStore.destinationHandleMissingRestartTheDownload'),
             permanent: true,
           });
           continue;

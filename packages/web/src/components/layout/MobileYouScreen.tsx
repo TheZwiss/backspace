@@ -5,6 +5,7 @@ import { Avatar } from '../ui/Avatar';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { parseFederatedUsername } from '../../utils/identity';
 import { useTranslation } from 'react-i18next';
+import { translate } from '../../i18n';
 
 export function MobileYouScreen() {
   const { t } = useTranslation();
@@ -105,7 +106,7 @@ export function MobileYouScreen() {
           {(() => {
             const { domain } = parseFederatedUsername(user.username);
             if (!domain) return null;
-            return <div className="text-[10px] leading-[1.3] text-txt-tertiary opacity-60">{t('mobile.homeInstance', { domain })}</div>;
+            return <div className="text-[10px] leading-[1.3] text-txt-tertiary opacity-60">{t("mobile.homeInstance", { domain })}</div>;
           })()}
           {user.customStatus && (
             <p className="text-sm text-txt-secondary mt-1">{user.customStatus}</p>
@@ -144,16 +145,16 @@ export function MobileYouScreen() {
           <svg className="w-5 h-5 text-accent-rose" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
           </svg>
-          <span className="text-sm text-accent-rose flex-1">{t('common.logOut')}</span>
+          <span className="text-sm text-accent-rose flex-1">{t("common.logOut")}</span>
         </button>
       </div>
 
       {showLogoutConfirm && (
         <ConfirmDialog
           isOpen={true}
-          title={t('common.logOut')}
-          description={t('mobile.logOutConfirm')}
-          confirmLabel={t('common.logOut')}
+          title={t("common.logOut")}
+          description={t("mobile.logOutConfirm")}
+          confirmLabel={t("common.logOut")}
           onConfirm={() => { setShowLogoutConfirm(false); logout(); }}
           onClose={() => setShowLogoutConfirm(false)}
           variant="danger"

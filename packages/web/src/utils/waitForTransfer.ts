@@ -1,4 +1,5 @@
 import { useTransferStore } from '../stores/transferStore';
+import { translate } from '../i18n';
 
 export interface TransferAttachmentRef {
   attachmentId: string;
@@ -23,7 +24,7 @@ export function waitForTransferAttachment(transferId: string): Promise<TransferA
         return true;
       }
       if (t.state === 'failed' || t.state === 'aborted') {
-        reject(new Error(t.error?.message ?? 'Upload failed'));
+        reject(new Error(t.error?.message ?? translate('runtime.selected.waitForTransfer.uploadFailed')));
         return true;
       }
       return false;

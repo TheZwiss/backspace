@@ -1,4 +1,5 @@
-/**
+
+import { translate } from '../i18n';/**
  * Map a server error code (from POST /api/social/requests) to a human-readable
  * toast message. The server emits these codes; the client renders them.
  *
@@ -11,27 +12,27 @@ export function mapServerErrorToMessage(
   handle: string,
 ): string {
   switch (code) {
-    case 'username_required': return 'Enter a username.';
-    case 'cannot_friend_self': return "You can't friend yourself.";
+    case 'username_required': return translate('runtime.selected.friendErrors.enterAUsername');
+    case 'cannot_friend_self': return translate('runtime.selected.friendErrors.youCanTFriendYourself');
     case 'peer_rejected':
       return `Instance has rejected federation. Contact your admin.`;
     case 'user_not_found':
-      return `No user "${handle}" on the remote instance.`;
+      return translate('runtime.templates.friendErrors.noUserOnTheRemoteInstance', { p0: handle });
     case 'already_friends': return "You're already friends with this user.";
     case 'peer_pending_approval':
-      return "The remote instance's admin needs to approve federation. Try again later.";
+      return translate('runtime.selected.friendErrors.theRemoteInstanceSAdminNeedsToApprove');
     case 'peer_pending_local_admin':
-      return "Your admin needs to approve federation with this instance. You'll see your request in Connections settings.";
+      return translate('runtime.selected.friendErrors.yourAdminNeedsToApproveFederationWithThis');
     case 'peer_pending':
-      return 'Connecting to the remote instance — try again in a moment.';
+      return translate('runtime.selected.friendErrors.connectingToTheRemoteInstanceTryAgainIn');
     case 'incoming_request_exists':
-      return `${handle} has already sent you a request — open the Pending tab.`;
-    case 'lookup_rate_limited': return 'Too many lookups; try again in a minute.';
-    case 'peer_unreachable': return 'The remote instance is currently unreachable.';
-    case 'invalid_target_domain': return 'Invalid target domain.';
+      return translate('runtime.templates.friendErrors.hasAlreadySentYouARequestOpenThe', { p0: handle });
+    case 'lookup_rate_limited': return translate('runtime.selected.friendErrors.tooManyLookupsTryAgainInAMinute');
+    case 'peer_unreachable': return translate('runtime.selected.friendErrors.theRemoteInstanceIsCurrentlyUnreachable');
+    case 'invalid_target_domain': return translate('runtime.selected.friendErrors.invalidTargetDomain');
     case 'not_authoritative_for_sender':
       // Should not happen in normal client usage — internal protocol violation.
-      return 'Could not send friend request (authority error).';
-    default: return fallback ?? 'Could not send friend request.';
+      return translate('runtime.selected.friendErrors.couldNotSendFriendRequestAuthorityError');
+    default: return fallback ?? translate('runtime.selected.friendErrors.couldNotSendFriendRequest');
   }
 }

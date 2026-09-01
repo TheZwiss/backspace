@@ -13,6 +13,8 @@ import { useAuthStore } from '../../stores/authStore';
 import { getAvatarGradient, getSpaceGradient, adjustColor, mutedGradient } from '../../utils/gradients';
 import { parseFederatedUsername, isSelf, canonicalUserMatch } from '../../utils/identity';
 import { loadFederatedMutuals, type TaggedMutualFriend, type MutualSpace } from '../../utils/mutuals';
+import { Trans } from 'react-i18next';
+import { translate } from '../../i18n';
 
 type Tab = 'about' | 'friends' | 'spaces';
 
@@ -245,9 +247,9 @@ export function UserProfileModal() {
   };
 
   const tabs: { key: Tab; label: string; count?: number }[] = [
-    { key: 'about', label: 'About' },
-    { key: 'friends', label: 'Mutual Friends', count: mutualFriends.length },
-    { key: 'spaces', label: 'Mutual Spaces', count: mutualSpaces.length },
+    { key: 'about', label: translate('runtime.properties.UserProfileModal.about') },
+    { key: 'friends', label: translate('runtime.properties.UserProfileModal.mutualFriends'), count: mutualFriends.length },
+    { key: 'spaces', label: translate('runtime.properties.UserProfileModal.mutualSpaces'), count: mutualSpaces.length },
   ];
 
   return (
@@ -329,17 +331,17 @@ export function UserProfileModal() {
 
         {/* Tab content */}
         <div className="flex-1 overflow-y-auto scrollbar-thin p-5 min-h-[200px]">
-          {activeTab === 'about' && (
+          {activeTab === "about" && (
             <div className="space-y-4">
               {/* Bio */}
               {user.bio && (
                 <div>
                   <span className="text-[11px] uppercase tracking-wide font-semibold text-txt-tertiary">
-                    About Me
+                    <Trans i18nKey="ui.UserProfileModal.aboutMe">About Me</Trans>
                   </span>
                   <div className="text-[13px] text-txt-secondary mt-1 whitespace-pre-wrap break-words leading-relaxed [&_strong]:font-semibold [&_strong]:text-txt-primary [&_em]:italic [&_a]:text-accent-primary [&_a]:underline">
                     <ReactMarkdown
-                      allowedElements={['p', 'strong', 'em', 'a', 'br']}
+                      allowedElements={['p', "strong", "em", 'a', "br"]}
                       unwrapDisallowed
                       components={{
                         a: ({ href, children }) => (
@@ -356,13 +358,13 @@ export function UserProfileModal() {
               {/* Member Since */}
               <div>
                 <span className="text-[11px] uppercase tracking-wide font-semibold text-txt-tertiary">
-                  Member Since
+                  <Trans i18nKey="ui.UserProfileModal.memberSince">Member Since</Trans>
                 </span>
                 <div className="text-[13px] text-txt-secondary mt-1">
                   {new Date(user.createdAt).toLocaleDateString(undefined, {
-                    month: 'long',
-                    day: 'numeric',
-                    year: 'numeric',
+                    month: "long",
+                    day: "numeric",
+                    year: "numeric",
                   })}
                 </div>
               </div>
@@ -370,7 +372,7 @@ export function UserProfileModal() {
             </div>
           )}
 
-          {activeTab === 'friends' && (
+          {activeTab === "friends" && (
             <div>
               {loadingMutuals ? (
                 <div className="flex items-center justify-center py-8">
@@ -381,7 +383,7 @@ export function UserProfileModal() {
                 </div>
               ) : mutualFriends.length === 0 ? (
                 <div className="text-center py-8 text-txt-tertiary text-[13px]">
-                  No mutual friends
+                  <Trans i18nKey="ui.UserProfileModal.noMutualFriends">No mutual friends</Trans>
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-2">
@@ -397,7 +399,7 @@ export function UserProfileModal() {
                           src={friend.avatar}
                           name={fname}
                           size={40}
-                          status={friend.status as 'online' | 'idle' | 'dnd' | 'offline' | null}
+                          status={friend.status as "online" | "idle" | "dnd" | "offline" | null}
                           userId={friend.homeUserId ?? friend.id}
                           avatarColor={friend.avatarColor}
                         />
@@ -425,7 +427,7 @@ export function UserProfileModal() {
             </div>
           )}
 
-          {activeTab === 'spaces' && (
+          {activeTab === "spaces" && (
             <div>
               {loadingMutuals ? (
                 <div className="flex items-center justify-center py-8">
@@ -436,7 +438,7 @@ export function UserProfileModal() {
                 </div>
               ) : mutualSpaces.length === 0 ? (
                 <div className="text-center py-8 text-txt-tertiary text-[13px]">
-                  No mutual spaces
+                  <Trans i18nKey="ui.UserProfileModal.noMutualSpaces">No mutual spaces</Trans>
                 </div>
               ) : (
                 <div className="space-y-1">
@@ -451,7 +453,7 @@ export function UserProfileModal() {
                       <div className="relative shrink-0">
                         {space.icon ? (
                           <img
-                            src={space.icon.startsWith('http') ? space.icon : spaceApi.uploads.url(space.icon)}
+                            src={space.icon.startsWith("http") ? space.icon : spaceApi.uploads.url(space.icon)}
                             alt={space.name}
                             className="w-8 h-8 rounded-lg object-cover"
                           />
@@ -499,20 +501,20 @@ export function UserProfileModal() {
             onClick={handleSendMessage}
             className="flex-1 py-2 rounded-lg text-[13px] font-medium text-white bg-accent-primary hover:bg-accent-primary/80 transition-colors"
           >
-            Send Message
+            <Trans i18nKey="ui.UserProfileModal.sendMessage">Send Message</Trans>
           </button>
 
-          {friendship.state === 'none' && (
+          {friendship.state === "none" && (
             <button onClick={handleAddFriend} disabled={friendActionLoading}
               className="flex-1 py-2 rounded-lg text-[13px] font-medium text-txt-primary border border-white/[0.08] bg-white/[0.06] hover:bg-white/[0.10] transition-colors disabled:opacity-50">
-              {friendActionLoading ? '...' : 'Add Friend'}
+              {friendActionLoading ? '...' : translate('runtime.expressions.UserProfileModal.addFriend')}
             </button>
           )}
 
           {friendship.state === 'outbound_pending' && (
             <button onClick={handleCancelRequest} disabled={friendActionLoading}
               className="flex-1 py-2 rounded-lg text-[13px] font-medium text-amber-400 border border-amber-400/30 hover:bg-amber-400/10 transition-colors disabled:opacity-50">
-              {friendActionLoading ? '...' : 'Cancel Request'}
+              {friendActionLoading ? '...' : translate('runtime.expressions.UserProfileModal.cancelRequest')}
             </button>
           )}
 
@@ -520,19 +522,19 @@ export function UserProfileModal() {
             <>
               <button onClick={handleAcceptRequest} disabled={friendActionLoading}
                 className="flex-1 py-2 rounded-lg text-[13px] font-medium text-white bg-accent-primary hover:bg-accent-primary/80 transition-colors disabled:opacity-50">
-                {friendActionLoading ? '...' : 'Accept'}
+                {friendActionLoading ? '...' : translate('runtime.expressions.UserProfileModal.accept')}
               </button>
               <button onClick={handleDeclineRequest} disabled={friendActionLoading}
                 className="py-2 px-3 rounded-lg text-[13px] font-medium text-txt-tertiary border border-white/[0.06] hover:bg-white/[0.06] transition-colors disabled:opacity-50">
-                {friendActionLoading ? '...' : 'Ignore'}
+                {friendActionLoading ? '...' : translate('runtime.expressions.UserProfileModal.ignore')}
               </button>
             </>
           )}
 
-          {friendship.state === 'friends' && (
+          {friendship.state === "friends" && (
             <button onClick={handleRemoveFriend} disabled={friendActionLoading}
               className="flex-1 py-2 rounded-lg text-[13px] font-medium text-txt-danger border border-txt-danger/30 hover:bg-txt-danger/10 transition-colors disabled:opacity-50">
-              {friendActionLoading ? '...' : 'Remove Friend'}
+              {friendActionLoading ? '...' : translate('runtime.expressions.UserProfileModal.removeFriend')}
             </button>
           )}
         </div>

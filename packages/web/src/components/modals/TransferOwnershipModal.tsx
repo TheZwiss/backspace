@@ -7,6 +7,8 @@ import { useUIStore } from '../../stores/uiStore';
 import { normalizeUserAssets } from '../../utils/assetUrls';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { Avatar } from '../ui/Avatar';
+import { Trans } from 'react-i18next';
+import { translate } from '../../i18n';
 
 function TransferMemberRow({
   member,
@@ -124,10 +126,10 @@ export function TransferOwnershipModal({ spaceId, onClose }: { spaceId: string; 
     setTransferring(true);
     try {
       await transferOwnership(spaceId, selectedUserId);
-      addToast(`Ownership transferred to ${selectedMember?.user.displayName || selectedMember?.user.username}`, 'success', 3000);
+      addToast(translate('runtime.templates.TransferOwnershipModal.ownershipTransferredTo', { p0: selectedMember?.user.displayName || selectedMember?.user.username }), 'success', 3000);
       onClose();
     } catch (err) {
-      addToast(err instanceof Error ? err.message : 'Failed to transfer ownership', 'warning', 3000);
+      addToast(err instanceof Error ? err.message : translate('runtime.messages.TransferOwnershipModal.failedToTransferOwnership'), 'warning', 3000);
     } finally {
       setTransferring(false);
     }
@@ -141,9 +143,9 @@ export function TransferOwnershipModal({ spaceId, onClose }: { spaceId: string; 
       >
         {/* Header */}
         <div className="px-4 pt-4 pb-3 border-b border-white/[0.06]">
-          <h3 className="text-base font-semibold text-txt-primary">Transfer Ownership</h3>
+          <h3 className="text-base font-semibold text-txt-primary"><Trans i18nKey="ui.TransferOwnershipModal.transferOwnership">Transfer Ownership</Trans></h3>
           <p className="text-xs text-txt-tertiary mt-0.5">
-            Choose a member to become the new owner of <span className="font-medium text-txt-secondary">{space.name}</span>
+            <Trans i18nKey="ui.TransferOwnershipModal.chooseAMemberToBecomeTheNewOwner">Choose a member to become the new owner of</Trans> <span className="font-medium text-txt-secondary">{space.name}</span>
           </p>
         </div>
 
@@ -152,10 +154,10 @@ export function TransferOwnershipModal({ spaceId, onClose }: { spaceId: string; 
           <div className="p-4 flex flex-col gap-4">
             <div className="p-3 rounded-lg bg-accent-amber/10 border border-accent-amber/20">
               <p className="text-sm text-txt-secondary">
-                Transfer ownership of <span className="font-semibold text-txt-primary">{space.name}</span> to{' '}
+                <Trans i18nKey="ui.TransferOwnershipModal.transferOwnershipOf">Transfer ownership of</Trans> <span className="font-semibold text-txt-primary">{space.name}</span> <Trans i18nKey="ui.TransferOwnershipModal.to">to</Trans>{' '}
                 <span className="font-semibold text-txt-primary">{selectedMember.user.displayName || selectedMember.user.username}</span>?
               </p>
-              <p className="text-xs text-txt-tertiary mt-1.5">You will become a regular member.</p>
+              <p className="text-xs text-txt-tertiary mt-1.5"><Trans i18nKey="ui.TransferOwnershipModal.youWillBecomeARegularMember">You will become a regular member.</Trans></p>
             </div>
             <div className="flex gap-3">
               <button
@@ -163,14 +165,14 @@ export function TransferOwnershipModal({ spaceId, onClose }: { spaceId: string; 
                 className="flex-1 py-2.5 text-sm font-medium text-txt-secondary bg-interactive-hover hover:bg-interactive-selected rounded-lg transition-colors disabled:opacity-50"
                 disabled={transferring}
               >
-                Cancel
+                <Trans i18nKey="ui.TransferOwnershipModal.cancel">Cancel</Trans>
               </button>
               <button
                 onClick={handleTransfer}
                 disabled={transferring}
                 className="flex-1 py-2.5 bg-accent-amber hover:bg-accent-amber/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
               >
-                {transferring ? 'Transferring...' : 'Transfer'}
+                {transferring ? translate('runtime.expressions.TransferOwnershipModal.transferring') : translate('runtime.expressions.TransferOwnershipModal.transfer')}
               </button>
             </div>
           </div>
@@ -182,16 +184,16 @@ export function TransferOwnershipModal({ spaceId, onClose }: { spaceId: string; 
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search members..."
+                placeholder={translate("runtime.attributes.TransferOwnershipModal.searchMembers")}
                 className="input-search w-full"
                 autoFocus
               />
             </div>
             <div className="flex-1 overflow-y-auto p-2 min-h-0">
               {loading ? (
-                <p className="text-xs text-txt-tertiary text-center py-4">Loading members...</p>
+                <p className="text-xs text-txt-tertiary text-center py-4"><Trans i18nKey="ui.TransferOwnershipModal.loadingMembers">Loading members...</Trans></p>
               ) : filteredMembers.length === 0 ? (
-                <p className="text-xs text-txt-tertiary text-center py-4">No members found</p>
+                <p className="text-xs text-txt-tertiary text-center py-4"><Trans i18nKey="ui.TransferOwnershipModal.noMembersFound">No members found</Trans></p>
               ) : (
                 filteredMembers.map((member) => (
                   <TransferMemberRow

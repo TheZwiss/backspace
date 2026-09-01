@@ -1,4 +1,5 @@
-/**
+
+import { Trans } from 'react-i18next';/**
  * Read-only composer replacement shown in a 1-on-1 DM whose partner's account
  * was deleted. Occupies the same bottom slot as the MessageInput glass bubble.
  */
@@ -9,7 +10,7 @@ export function DmDeletedNotice() {
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="opacity-70 flex-shrink-0">
           <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
         </svg>
-        <span>This user&rsquo;s account was deleted</span>
+        <span><Trans i18nKey="ui.DmDeletedNotice.thisUserSAccountWasDeleted">This user&rsquo;s account was deleted</Trans></span>
       </div>
     </div>
   );

@@ -1,4 +1,5 @@
 import React from 'react';
+import { translate } from '../../i18n';
 
 export type TriState = 'allow' | 'neutral' | 'deny';
 
@@ -27,21 +28,21 @@ export function TriStateToggle({
       <button
         className={btnClass('deny', value === 'deny')}
         onClick={() => !disabled && onChange(value === 'deny' ? 'neutral' : 'deny')}
-        title="Deny"
+        title={translate("runtime.attributes.TriStateToggle.deny")}
       >
         ✕
       </button>
       <button
         className={btnClass('neutral', value === 'neutral')}
         onClick={() => !disabled && onChange('neutral')}
-        title="Neutral (inherit)"
+        title={translate("runtime.attributes.TriStateToggle.neutralInherit")}
       >
         /
       </button>
       <button
         className={btnClass('allow', value === 'allow')}
         onClick={() => !disabled && onChange(value === 'allow' ? 'neutral' : 'allow')}
-        title="Allow"
+        title={translate("runtime.attributes.TriStateToggle.allow")}
       >
         ✓
       </button>

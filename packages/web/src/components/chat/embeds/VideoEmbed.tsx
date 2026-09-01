@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import type { Embed } from '@backspace/shared';
+import { translate } from '../../../i18n';
 
 interface VideoEmbedProps {
   embed: Embed;
@@ -38,7 +39,7 @@ export function VideoEmbed({ embed }: VideoEmbedProps) {
           <iframe
             className="absolute inset-0 w-full h-full"
             src={`${embed.embedUrl}?autoplay=1&origin=${encodeURIComponent(window.location.origin)}`}
-            title={embed.title ?? 'Video'}
+            title={embed.title ?? translate('runtime.expressions.VideoEmbed.video')}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
             allowFullScreen
           />
@@ -48,7 +49,7 @@ export function VideoEmbed({ embed }: VideoEmbedProps) {
             data-embed-thumbnail
             onClick={() => setIsPlaying(true)}
             className="absolute inset-0 w-full h-full flex items-center justify-center group focus:outline-none"
-            aria-label={`Play ${embed.title ?? 'video'}`}
+            aria-label={`Play ${embed.title ?? translate('runtime.expressions.VideoEmbed.video2')}`}
           >
             {embed.image ? (
               <img

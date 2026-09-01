@@ -6,6 +6,7 @@ import { useSpaceStore, getChannelOrigin, getMyUserIdForOrigin } from '../../sto
 import { ScreenShareSettingsPopover } from './ScreenShareSettingsPopover';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import { handleMuteAction, handleDeafenAction, handleCameraAction, handleScreenShareAction, handleDisconnectAction } from '../../utils/voiceActions';
+import { translate } from '../../i18n';
 
 const btnBase = 'w-10 h-10 flex items-center justify-center rounded-full transition-colors';
 const btnDefault = `${btnBase} bg-surface-channel text-txt-secondary hover:bg-surface-elevated hover:text-txt-primary`;
@@ -77,7 +78,7 @@ export function VoiceControlBar() {
               ? `${btnBase} bg-accent-rose/20 text-txt-danger hover:bg-accent-rose/30`
               : btnDefault
           }
-          title={(isSpaceMuted || isSpaceDeafened) ? (isMuted ? 'Space Muted (self-muted)' : 'Space Muted') : isMuted ? 'Unmute (M)' : 'Mute (M)'}
+          title={(isSpaceMuted || isSpaceDeafened) ? (isMuted ? translate('runtime.expressions.VoiceControlBar.spaceMutedSelfMuted') : translate('runtime.expressions.VoiceControlBar.spaceMuted')) : isMuted ? translate('runtime.expressions.VoiceControlBar.unmuteM') : translate('runtime.expressions.VoiceControlBar.muteM')}
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
@@ -95,7 +96,7 @@ export function VoiceControlBar() {
               ? `${btnBase} bg-accent-rose/20 text-txt-danger hover:bg-accent-rose/30`
               : btnDefault
           }
-          title={isSpaceDeafened ? 'Space Deafened' : isDeafened ? 'Undeafen (D)' : 'Deafen (D)'}
+          title={isSpaceDeafened ? translate('runtime.expressions.VoiceControlBar.spaceDeafened') : isDeafened ? translate('runtime.expressions.VoiceControlBar.undeafenD') : translate('runtime.expressions.VoiceControlBar.deafenD')}
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 3c-4.97 0-9 4.03-9 9v7c0 1.1.9 2 2 2h2v-7H5v-2c0-3.87 3.13-7 7-7s7 3.13 7 7v2h-2v7h2c1.1 0 2-.9 2-2v-7c0-4.97-4.03-9-9-9z" />
@@ -108,7 +109,7 @@ export function VoiceControlBar() {
           <button
             onClick={handleCamera}
             className={isCameraOn ? btnGreen : btnDefault}
-            title={isCameraOn ? 'Turn Off Camera' : 'Turn On Camera'}
+            title={isCameraOn ? translate('runtime.expressions.VoiceControlBar.turnOffCamera') : translate('runtime.expressions.VoiceControlBar.turnOnCamera')}
           >
             {isCameraOn ? (
               <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
@@ -128,7 +129,7 @@ export function VoiceControlBar() {
           <button
             onClick={handleScreenShare}
             className={isScreenSharing ? btnGreen : btnDefault}
-            title={isScreenSharing ? 'Stop Sharing' : 'Share Screen'}
+            title={isScreenSharing ? translate('runtime.expressions.VoiceControlBar.stopSharing') : translate('runtime.expressions.VoiceControlBar.shareScreen')}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
               <path d="M20 18C21.1 18 22 17.1 22 16V6C22 4.9 21.1 4 20 4H4C2.9 4 2 4.9 2 6V16C2 17.1 2.9 18 4 18H0V20H24V18H20ZM4 6H20V16H4V6Z" />
@@ -145,7 +146,7 @@ export function VoiceControlBar() {
             ? `${btnBase} bg-surface-channel text-txt-primary`
             : btnDefault
           }
-          title="Video Quality"
+          title={translate("runtime.attributes.VoiceControlBar.videoQuality")}
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
             <path d="M3 5v14h18V5H3zm16 12H5V7h14v10z" />
@@ -164,7 +165,7 @@ export function VoiceControlBar() {
             ? `${btnBase} bg-surface-channel text-txt-primary`
             : btnDefault
           }
-          title="Toggle Chat"
+          title={translate("runtime.attributes.VoiceControlBar.toggleChat")}
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
             <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z" />
@@ -178,7 +179,7 @@ export function VoiceControlBar() {
             ? `${btnBase} bg-surface-channel text-txt-primary`
             : btnDefault
           }
-          title={voiceFullscreen ? 'Exit Fullscreen (Esc)' : 'Fullscreen'}
+          title={voiceFullscreen ? translate('runtime.expressions.VoiceControlBar.exitFullscreenEsc') : translate('runtime.expressions.VoiceControlBar.fullscreen')}
         >
           {voiceFullscreen ? (
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
@@ -198,7 +199,7 @@ export function VoiceControlBar() {
         <button
           onClick={handleDisconnect}
           className={`${btnBase} bg-accent-rose hover:bg-accent-rose/80 text-white`}
-          title="Disconnect"
+          title={translate("runtime.attributes.VoiceControlBar.disconnect")}
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 9C10.4 9 8.85 9.25 7.4 9.72V12.82C7.4 13.22 7.17 13.56 6.84 13.72C5.86 14.21 4.97 14.84 4.18 15.57C4 15.75 3.75 15.85 3.48 15.85C3.2 15.85 2.95 15.74 2.77 15.56L0.29 13.08C0.11 12.9 0 12.65 0 12.38C0 12.1 0.11 11.85 0.29 11.67C3.34 8.78 7.46 7 12 7S20.66 8.78 23.71 11.67C23.89 11.85 24 12.1 24 12.38C24 12.65 23.89 12.9 23.71 13.08L21.23 15.56C21.05 15.74 20.8 15.85 20.52 15.85C20.25 15.85 20 15.75 19.82 15.57C19.03 14.84 18.14 14.21 17.16 13.72C16.83 13.56 16.6 13.22 16.6 12.82V9.72C15.15 9.25 13.6 9 12 9Z" />

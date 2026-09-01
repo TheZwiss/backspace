@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { useUIStore } from '../../stores/uiStore';
+import { translate } from '../../i18n';
 
 interface MobileScreenStackProps {
   rootScreen: React.ReactNode;
@@ -65,13 +66,13 @@ export function MobileScreenStack({ rootScreen, screenMap }: MobileScreenStackPr
         let style: React.CSSProperties = {};
         let className = 'absolute inset-0 bg-surface-base z-10 flex flex-col overflow-hidden';
 
-        if (isTop && transitioning === 'push') {
+        if (isTop && transitioning === "push") {
           // Initial position: off-screen right
-          style.transform = 'translateX(100%)';
-        } else if (isTop && transitioning === 'pop') {
+          style.transform = "translateX(100%)";
+        } else if (isTop && transitioning === "pop") {
           // Animate out to the right
           className += ' transition-transform duration-200 ease-out';
-          style.transform = 'translateX(100%)';
+          style.transform = "translateX(100%)";
         } else if (isTop && !transitioning && !animatingRef.current) {
           // Settled position
           className += ' transition-transform duration-200 ease-out';

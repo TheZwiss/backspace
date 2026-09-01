@@ -7,6 +7,8 @@ import { useUIStore } from '../../../stores/uiStore';
 import { Toggle } from '../../ui/Toggle';
 import { ConfirmDialog } from '../../ui/ConfirmDialog';
 import { Modal } from '../../ui/Modal';
+import { Trans } from 'react-i18next';
+import { translate } from '../../../i18n';
 
 interface RegistrationDraft {
   registrationOpen: boolean;
@@ -34,7 +36,7 @@ function formatExpiry(invite: InviteLinkSummary): string {
   if (invite.status === 'exhausted') {
     return 'Exhausted';
   }
-  if (invite.expiresAt === null) return 'No expiration';
+  if (invite.expiresAt === null) return translate('runtime.selected.RegistrationPanel.noExpiration');
   const remaining = invite.expiresAt - Date.now();
   if (remaining <= 0) return `Expired ${new Date(invite.expiresAt).toLocaleDateString()}`;
   const days = Math.floor(remaining / 86_400_000);
@@ -145,17 +147,17 @@ function FilterDropdown({
   const [open, setOpen] = useState(false);
 
   const activeSortOptions: Array<{ key: ActiveSort; label: string }> = [
-    { key: 'recent', label: 'Most recent' },
-    { key: 'oldest', label: 'Oldest' },
-    { key: 'name', label: 'Name (A–Z)' },
-    { key: 'mostUsed', label: 'Most used' },
-    { key: 'expiringSoonest', label: 'Expiring soonest' },
+    { key: 'recent', label: translate('runtime.properties.RegistrationPanel.mostRecent') },
+    { key: 'oldest', label: translate('runtime.properties.RegistrationPanel.oldest') },
+    { key: 'name', label: translate('runtime.properties.RegistrationPanel.nameAZ') },
+    { key: 'mostUsed', label: translate('runtime.properties.RegistrationPanel.mostUsed') },
+    { key: 'expiringSoonest', label: translate('runtime.properties.RegistrationPanel.expiringSoonest') },
   ];
 
   const archivedSortOptions: Array<{ key: ArchivedSort; label: string }> = [
-    { key: 'recent', label: 'Most recent' },
-    { key: 'oldest', label: 'Oldest' },
-    { key: 'name', label: 'Name (A–Z)' },
+    { key: 'recent', label: translate('runtime.properties.RegistrationPanel.mostRecent2') },
+    { key: 'oldest', label: translate('runtime.properties.RegistrationPanel.oldest2') },
+    { key: 'name', label: translate('runtime.properties.RegistrationPanel.nameAZ2') },
   ];
 
   const archivedStatusOptions: ArchivedStatus[] = ['expired', 'exhausted', 'revoked'];
@@ -176,7 +178,7 @@ function FilterDropdown({
         <svg width="12" height="12" viewBox="0 0 16 16" fill="none" className="opacity-60">
           <path d="M2 4h12M4 8h8M6 12h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
         </svg>
-        Filter
+        <Trans i18nKey="ui.RegistrationPanel.filter">Filter</Trans>
         <span className="text-[10px]">▾</span>
       </button>
 
@@ -184,10 +186,10 @@ function FilterDropdown({
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
           <div className="absolute right-0 top-full mt-1 z-50 glass rounded-lg p-1.5 w-48">
-            {view === 'archived' && (
+            {view === "archived" && (
               <>
                 <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-2 py-1">
-                  Status
+                  <Trans i18nKey="ui.RegistrationPanel.status">Status</Trans>
                 </div>
                 {archivedStatusOptions.map((s) => (
                   <button
@@ -208,9 +210,9 @@ function FilterDropdown({
               </>
             )}
             <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-2 py-1">
-              Sort by
+              <Trans i18nKey="ui.RegistrationPanel.sortBy">Sort by</Trans>
             </div>
-            {view === 'active'
+            {view === "active"
               ? activeSortOptions.map((opt) => (
                   <button
                     key={opt.key}
@@ -252,14 +254,14 @@ type ExpiryPresetId = '1h' | '24h' | '7d' | '30d' | 'never' | 'custom';
 type EditExpiryId = 'keep' | ExpiryPresetId;
 
 const EXPIRY_PRESETS: ReadonlyArray<{ id: ExpiryPresetId; label: string; ms: number | null }> = [
-  { id: '1h', label: '1 hour', ms: 3_600_000 },
-  { id: '24h', label: '24 hours', ms: 86_400_000 },
-  { id: '7d', label: '7 days', ms: 7 * 86_400_000 },
-  { id: '30d', label: '30 days', ms: 30 * 86_400_000 },
-  { id: 'never', label: 'Never', ms: null },
+  { id: '1h', get label() { return translate('runtime.static.RegistrationPanel.1Hour'); }, ms: 3_600_000 },
+  { id: '24h', get label() { return translate('runtime.static.RegistrationPanel.24Hours'); }, ms: 86_400_000 },
+  { id: '7d', get label() { return translate('runtime.static.RegistrationPanel.7Days'); }, ms: 7 * 86_400_000 },
+  { id: '30d', get label() { return translate('runtime.static.RegistrationPanel.30Days'); }, ms: 30 * 86_400_000 },
+  { id: 'never', get label() { return translate('runtime.static.RegistrationPanel.never'); }, ms: null },
   // Custom uses a free-form datetime input rendered below the preset row;
   // ms is intentionally null and ignored for this id.
-  { id: 'custom', label: 'Custom…', ms: null },
+  { id: 'custom', get label() { return translate('runtime.static.RegistrationPanel.custom'); }, ms: null },
 ];
 
 /**
@@ -299,15 +301,15 @@ function ExpirySelector({ value, customDateTime, onChange, showKeep, disabled }:
         {showKeep && (
           <button
             type="button"
-            onClick={() => onChange('keep', customDateTime)}
+            onClick={() => onChange("keep", customDateTime)}
             disabled={disabled}
             className={`px-2.5 py-1 text-xs rounded transition-colors disabled:opacity-50 ${
-              value === 'keep'
+              value === "keep"
                 ? 'bg-accent-primary text-white'
                 : 'bg-surface-input text-txt-tertiary hover:text-txt-secondary'
             }`}
           >
-            Keep current
+            <Trans i18nKey="ui.RegistrationPanel.keepCurrent">Keep current</Trans>
           </button>
         )}
         {EXPIRY_PRESETS.map((p) => (
@@ -326,11 +328,11 @@ function ExpirySelector({ value, customDateTime, onChange, showKeep, disabled }:
           </button>
         ))}
       </div>
-      {value === 'custom' && (
+      {value === "custom" && (
         <input
           type="datetime-local"
           value={customDateTime}
-          onChange={(e) => onChange('custom', e.target.value)}
+          onChange={(e) => onChange("custom", e.target.value)}
           min={toDatetimeLocalValue(Date.now() + 60_000)}
           disabled={disabled}
           className="input-standard w-full px-3 py-2 text-sm mt-2"
@@ -359,18 +361,18 @@ function resolveExpiryFromSelector(
   if (value === 'never') return { kind: 'value', expiresAt: null };
   if (value === 'custom') {
     if (customDateTime === '') {
-      return { kind: 'invalid', message: 'Pick a future date & time' };
+      return { kind: 'invalid', message: translate('runtime.properties.RegistrationPanel.pickAFutureDateTime') };
     }
     const ts = new Date(customDateTime).getTime();
     if (!Number.isFinite(ts) || ts <= Date.now()) {
-      return { kind: 'invalid', message: 'Pick a future date & time' };
+      return { kind: 'invalid', message: translate('runtime.properties.RegistrationPanel.pickAFutureDateTime2') };
     }
     return { kind: 'value', expiresAt: ts };
   }
   const preset = EXPIRY_PRESETS.find((p) => p.id === value);
   if (!preset || preset.ms === null) {
     // Unreachable: 'never' and 'custom' are handled above; remaining ids all carry an ms.
-    return { kind: 'invalid', message: 'Invalid expiry selection' };
+    return { kind: 'invalid', message: translate('runtime.properties.RegistrationPanel.invalidExpirySelection') };
   }
   return { kind: 'value', expiresAt: Date.now() + preset.ms };
 }
@@ -405,14 +407,14 @@ function CreateInviteModal({ onClose, onCreated }: CreateInviteModalProps) {
   const handleCreate = async () => {
     const trimmed = name.trim();
     if (trimmed.length === 0 || trimmed.length > 64) {
-      addToast('Name must be 1–64 characters', 'warning');
+      addToast(translate('runtime.messages.RegistrationPanel.nameMustBe164Characters'), 'warning');
       return;
     }
     let maxUsesNum: number | null = null;
     if (!unlimited) {
       const parsed = Number(maxUses);
       if (!Number.isInteger(parsed) || parsed < 1) {
-        addToast('Max uses must be a positive integer', 'warning');
+        addToast(translate('runtime.messages.RegistrationPanel.maxUsesMustBeAPositiveInteger'), 'warning');
         return;
       }
       maxUsesNum = parsed;
@@ -427,7 +429,7 @@ function CreateInviteModal({ onClose, onCreated }: CreateInviteModalProps) {
     if (resolved.kind === 'omit') {
       // Unreachable: ExpirySelector for Create is rendered with showKeep={false}, so
       // 'keep' cannot be selected. Defensive guard so future refactors fail loudly.
-      addToast('Invalid expiry selection', 'warning');
+      addToast(translate('runtime.messages.RegistrationPanel.invalidExpirySelection'), 'warning');
       return;
     }
     const expiresAt = resolved.expiresAt;
@@ -437,14 +439,14 @@ function CreateInviteModal({ onClose, onCreated }: CreateInviteModalProps) {
       const created = await api.invites.create({ name: trimmed, maxUses: maxUsesNum, expiresAt });
       try {
         await navigator.clipboard.writeText(created.url);
-        addToast('Link created. Copied to clipboard.', 'success', 2000);
+        addToast(translate('runtime.messages.RegistrationPanel.linkCreatedCopiedToClipboard'), 'success', 2000);
       } catch {
-        addToast('Link created. Copy manually from the row.', 'success', 2000);
+        addToast(translate('runtime.messages.RegistrationPanel.linkCreatedCopyManuallyFromTheRow'), 'success', 2000);
       }
       onCreated(created);
       onClose();
     } catch (err) {
-      addToast(`Failed to create invite: ${(err as Error).message}`, 'warning');
+      addToast(translate('runtime.templates.RegistrationPanel.failedToCreateInvite', { p0: (err as Error).message }), 'warning');
     } finally {
       setSubmitting(false);
     }
@@ -454,7 +456,7 @@ function CreateInviteModal({ onClose, onCreated }: CreateInviteModalProps) {
     <Modal
       isOpen
       onClose={handleClose}
-      title="Create invite link"
+      title={translate("runtime.attributes.RegistrationPanel.createInviteLink")}
       mobileStyle="fullscreen"
       maxWidth="max-w-md"
     >
@@ -469,7 +471,7 @@ function CreateInviteModal({ onClose, onCreated }: CreateInviteModalProps) {
           </svg>
         </div>
         <p className="text-[13px] text-txt-secondary leading-snug min-w-0">
-          Generate a shareable link that lets people register on this instance. You'll set how many times it can be used and when it expires.
+          <Trans i18nKey="ui.RegistrationPanel.generateAShareableLinkThatLetsPeopleRegister">Generate a shareable link that lets people register on this instance. You'll set how many times it can be used and when it expires.</Trans>
         </p>
       </div>
 
@@ -482,14 +484,14 @@ function CreateInviteModal({ onClose, onCreated }: CreateInviteModalProps) {
       >
         {/* Name */}
         <div>
-          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">Name</div>
+          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2"><Trans i18nKey="ui.RegistrationPanel.name">Name</Trans></div>
           <input
             ref={nameInputRef}
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
             maxLength={64}
-            placeholder="e.g. Friends batch 1"
+            placeholder={translate("runtime.attributes.RegistrationPanel.eGFriendsBatch1")}
             className="input-standard w-full"
             disabled={submitting}
           />
@@ -497,7 +499,7 @@ function CreateInviteModal({ onClose, onCreated }: CreateInviteModalProps) {
 
         {/* Max uses */}
         <div>
-          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">Max uses</div>
+          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2"><Trans i18nKey="ui.RegistrationPanel.maxUses">Max uses</Trans></div>
           <div className="flex items-center gap-4 flex-wrap">
             <label className="flex items-center gap-2 text-sm cursor-pointer">
               <input
@@ -508,7 +510,7 @@ function CreateInviteModal({ onClose, onCreated }: CreateInviteModalProps) {
                 disabled={submitting}
                 className="accent-accent-primary"
               />
-              <span className="text-txt-primary">Unlimited</span>
+              <span className="text-txt-primary"><Trans i18nKey="ui.RegistrationPanel.unlimited">Unlimited</Trans></span>
             </label>
             <label className="flex items-center gap-2 text-sm cursor-pointer">
               <input
@@ -531,14 +533,14 @@ function CreateInviteModal({ onClose, onCreated }: CreateInviteModalProps) {
                 disabled={submitting}
                 className="input-standard w-16 text-center disabled:opacity-50"
               />
-              <span className="text-txt-secondary">uses</span>
+              <span className="text-txt-secondary"><Trans i18nKey="ui.RegistrationPanel.uses">uses</Trans></span>
             </label>
           </div>
         </div>
 
         {/* Expiry */}
         <div>
-          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">Expires</div>
+          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2"><Trans i18nKey="ui.RegistrationPanel.expires">Expires</Trans></div>
           <ExpirySelector
             value={expiryId}
             customDateTime={customDateTime}
@@ -563,14 +565,14 @@ function CreateInviteModal({ onClose, onCreated }: CreateInviteModalProps) {
               disabled={submitting}
               className="px-3 py-1 text-sm text-txt-secondary hover:text-txt-primary transition-colors disabled:opacity-50"
             >
-              Cancel
+              <Trans i18nKey="ui.RegistrationPanel.cancel">Cancel</Trans>
             </button>
             <button
               type="submit"
               disabled={submitting}
               className="px-4 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
             >
-              {submitting ? 'Creating…' : 'Create link'}
+              {submitting ? translate('runtime.expressions.RegistrationPanel.creating') : translate('runtime.expressions.RegistrationPanel.createLink')}
             </button>
           </div>
         </div>
@@ -615,7 +617,7 @@ function EditInviteModal({ invite, onClose, onUpdated }: EditInviteModalProps) {
   const handleSave = async () => {
     const trimmed = name.trim();
     if (trimmed.length === 0 || trimmed.length > 64) {
-      addToast('Name must be 1–64 characters', 'warning');
+      addToast(translate('runtime.messages.RegistrationPanel.nameMustBe164Characters2'), 'warning');
       return;
     }
 
@@ -625,12 +627,12 @@ function EditInviteModal({ invite, onClose, onUpdated }: EditInviteModalProps) {
     if (!unlimited) {
       const parsed = Number(maxUses);
       if (!Number.isInteger(parsed) || parsed < 1) {
-        addToast('Max uses must be a positive integer', 'warning');
+        addToast(translate('runtime.messages.RegistrationPanel.maxUsesMustBeAPositiveInteger2'), 'warning');
         return;
       }
       if (parsed < invite.usedCount) {
         addToast(
-          `Max uses cannot be less than current uses (${invite.usedCount})`,
+          translate('runtime.templates.RegistrationPanel.maxUsesCannotBeLessThanCurrentUses', { p0: invite.usedCount }),
           'warning',
         );
         return;
@@ -654,18 +656,18 @@ function EditInviteModal({ invite, onClose, onUpdated }: EditInviteModalProps) {
     // 'omit' (Keep current) → leave expiresAt off the body entirely.
 
     if (Object.keys(body).length === 0) {
-      addToast('No changes to save', 'warning');
+      addToast(translate('runtime.messages.RegistrationPanel.noChangesToSave'), 'warning');
       return;
     }
 
     setSubmitting(true);
     try {
       await api.invites.update(invite.id, body);
-      addToast('Invite updated', 'success', 2000);
+      addToast(translate('runtime.messages.RegistrationPanel.inviteUpdated'), 'success', 2000);
       onUpdated();
       onClose();
     } catch (err) {
-      addToast(`Failed to update invite: ${(err as Error).message}`, 'warning');
+      addToast(translate('runtime.templates.RegistrationPanel.failedToUpdateInvite', { p0: (err as Error).message }), 'warning');
     } finally {
       setSubmitting(false);
     }
@@ -691,7 +693,7 @@ function EditInviteModal({ invite, onClose, onUpdated }: EditInviteModalProps) {
           </svg>
         </div>
         <p className="text-[13px] text-txt-secondary leading-snug min-w-0">
-          Adjust the limits on this invite link. The URL stays the same — anyone who already has it can still redeem under the new constraints.
+          <Trans i18nKey="ui.RegistrationPanel.adjustTheLimitsOnThisInviteLinkThe">Adjust the limits on this invite link. The URL stays the same — anyone who already has it can still redeem under the new constraints.</Trans>
         </p>
       </div>
 
@@ -704,7 +706,7 @@ function EditInviteModal({ invite, onClose, onUpdated }: EditInviteModalProps) {
       >
         {/* Name */}
         <div>
-          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">Name</div>
+          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2"><Trans i18nKey="ui.RegistrationPanel.name2">Name</Trans></div>
           <input
             ref={nameInputRef}
             type="text"
@@ -719,7 +721,7 @@ function EditInviteModal({ invite, onClose, onUpdated }: EditInviteModalProps) {
         {/* Max uses */}
         <div>
           <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">
-            Max uses <span className="normal-case font-normal text-txt-tertiary">({invite.usedCount} used)</span>
+            <Trans i18nKey="ui.RegistrationPanel.maxUses2">Max uses</Trans> <span className="normal-case font-normal text-txt-tertiary">({invite.usedCount} <Trans i18nKey="ui.RegistrationPanel.used">used)</Trans></span>
           </div>
           <div className="flex items-center gap-4 flex-wrap">
             <label className="flex items-center gap-2 text-sm cursor-pointer">
@@ -731,7 +733,7 @@ function EditInviteModal({ invite, onClose, onUpdated }: EditInviteModalProps) {
                 disabled={submitting}
                 className="accent-accent-primary"
               />
-              <span className="text-txt-primary">Unlimited</span>
+              <span className="text-txt-primary"><Trans i18nKey="ui.RegistrationPanel.unlimited2">Unlimited</Trans></span>
             </label>
             <label className="flex items-center gap-2 text-sm cursor-pointer">
               <input
@@ -754,14 +756,14 @@ function EditInviteModal({ invite, onClose, onUpdated }: EditInviteModalProps) {
                 disabled={submitting}
                 className="input-standard w-16 text-center disabled:opacity-50"
               />
-              <span className="text-txt-secondary">uses</span>
+              <span className="text-txt-secondary"><Trans i18nKey="ui.RegistrationPanel.uses2">uses</Trans></span>
             </label>
           </div>
         </div>
 
         {/* Expiry */}
         <div>
-          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">Expires</div>
+          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2"><Trans i18nKey="ui.RegistrationPanel.expires2">Expires</Trans></div>
           <ExpirySelector
             value={expiryId}
             customDateTime={customDateTime}
@@ -783,14 +785,14 @@ function EditInviteModal({ invite, onClose, onUpdated }: EditInviteModalProps) {
               disabled={submitting}
               className="px-3 py-1 text-sm text-txt-secondary hover:text-txt-primary transition-colors disabled:opacity-50"
             >
-              Cancel
+              <Trans i18nKey="ui.RegistrationPanel.cancel2">Cancel</Trans>
             </button>
             <button
               type="submit"
               disabled={submitting}
               className="px-4 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
             >
-              {submitting ? 'Saving…' : 'Save changes'}
+              {submitting ? translate('runtime.expressions.RegistrationPanel.saving') : translate('runtime.expressions.RegistrationPanel.saveChanges')}
             </button>
           </div>
         </div>
@@ -864,7 +866,7 @@ function ReinstateInviteModal({ invite, onClose, onReinstated }: ReinstateInvite
     }
     if (resolved.kind === 'omit') {
       // Unreachable: ExpirySelector for Reinstate is rendered with showKeep={false}.
-      addToast('Invalid expiry selection', 'warning');
+      addToast(translate('runtime.messages.RegistrationPanel.invalidExpirySelection2'), 'warning');
       return;
     }
 
@@ -879,25 +881,25 @@ function ReinstateInviteModal({ invite, onClose, onReinstated }: ReinstateInvite
       if (result.tokenRotated) {
         try {
           await navigator.clipboard.writeText(result.invite.url);
-          addToast('Reinstated with new link. Copied to clipboard.', 'success', 2500);
+          addToast(translate('runtime.messages.RegistrationPanel.reinstatedWithNewLinkCopiedToClipboard'), 'success', 2500);
         } catch {
-          addToast('Reinstated with new link. Copy manually from the row.', 'success', 2500);
+          addToast(translate('runtime.messages.RegistrationPanel.reinstatedWithNewLinkCopyManuallyFromThe'), 'success', 2500);
         }
       } else {
-        addToast('Reinstated. The same link is active again.', 'success', 2500);
+        addToast(translate('runtime.messages.RegistrationPanel.reinstatedTheSameLinkIsActiveAgain'), 'success', 2500);
       }
       onReinstated();
       onClose();
     } catch (err) {
-      addToast(`Failed to reinstate: ${(err as Error).message}`, 'warning');
+      addToast(translate('runtime.templates.RegistrationPanel.failedToReinstate', { p0: (err as Error).message }), 'warning');
     } finally {
       setSubmitting(false);
     }
   };
 
   const subtitle = isRevoked
-    ? 'This invite was revoked. Reinstating generates a new link with a different URL — the old URL stays inactive.'
-    : 'This invite has lapsed. Reinstating reactivates the same URL — anyone who saved it will be able to use it again.';
+    ? translate('runtime.selected.RegistrationPanel.thisInviteWasRevokedReinstatingGeneratesANew')
+    : translate('runtime.selected.RegistrationPanel.thisInviteHasLapsedReinstatingReactivatesTheSame');
 
   return createPortal(
     <Modal
@@ -927,14 +929,14 @@ function ReinstateInviteModal({ invite, onClose, onReinstated }: ReinstateInvite
         {/* Amber callout — only for revoked variant to reinforce the "new URL" consequence */}
         {isRevoked && (
           <div className="p-3 rounded-lg bg-accent-amber/10 border border-accent-amber/20 text-[13px] text-accent-amber">
-            A new link will be generated. Anyone who had the old URL will not be able to use it.
+            <Trans i18nKey="ui.RegistrationPanel.aNewLinkWillBeGeneratedAnyoneWho">A new link will be generated. Anyone who had the old URL will not be able to use it.</Trans>
           </div>
         )}
 
         {/* Max uses */}
         <div>
           <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">
-            Max uses <span className="normal-case font-normal text-txt-tertiary">(current: {invite.maxUses ?? '∞'}, used: {invite.usedCount})</span>
+            <Trans i18nKey="ui.RegistrationPanel.maxUses3">Max uses</Trans> <span className="normal-case font-normal text-txt-tertiary"><Trans i18nKey="ui.RegistrationPanel.current">(current:</Trans> {invite.maxUses ?? '∞'}<Trans i18nKey="ui.RegistrationPanel.used2">, used:</Trans> {invite.usedCount})</span>
           </div>
           <div className="flex items-center gap-4 flex-wrap">
             <label className="flex items-center gap-2 text-sm cursor-pointer">
@@ -946,7 +948,7 @@ function ReinstateInviteModal({ invite, onClose, onReinstated }: ReinstateInvite
                 disabled={submitting}
                 className="accent-accent-primary"
               />
-              <span className="text-txt-primary">Unlimited</span>
+              <span className="text-txt-primary"><Trans i18nKey="ui.RegistrationPanel.unlimited3">Unlimited</Trans></span>
             </label>
             <label className="flex items-center gap-2 text-sm cursor-pointer">
               <input
@@ -969,14 +971,14 @@ function ReinstateInviteModal({ invite, onClose, onReinstated }: ReinstateInvite
                 disabled={submitting}
                 className="input-standard w-16 text-center disabled:opacity-50"
               />
-              <span className="text-txt-secondary">uses</span>
+              <span className="text-txt-secondary"><Trans i18nKey="ui.RegistrationPanel.uses3">uses</Trans></span>
             </label>
           </div>
         </div>
 
         {/* Expiry */}
         <div>
-          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">Expires</div>
+          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2"><Trans i18nKey="ui.RegistrationPanel.expires3">Expires</Trans></div>
           <ExpirySelector
             value={expiryId}
             customDateTime={customDateTime}
@@ -999,7 +1001,7 @@ function ReinstateInviteModal({ invite, onClose, onReinstated }: ReinstateInvite
               disabled={submitting}
               className="px-3 py-1 text-sm text-txt-secondary hover:text-txt-primary transition-colors disabled:opacity-50"
             >
-              Cancel
+              <Trans i18nKey="ui.RegistrationPanel.cancel3">Cancel</Trans>
             </button>
             <button
               type="submit"
@@ -1007,10 +1009,10 @@ function ReinstateInviteModal({ invite, onClose, onReinstated }: ReinstateInvite
               className="px-4 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
             >
               {submitting
-                ? 'Reinstating…'
+                ? translate('runtime.expressions.RegistrationPanel.reinstating')
                 : isRevoked
-                  ? 'Reinstate with new link'
-                  : 'Reinstate'}
+                  ? translate('runtime.expressions.RegistrationPanel.reinstateWithNewLink')
+                  : translate('runtime.expressions.RegistrationPanel.reinstate')}
             </button>
           </div>
         </div>
@@ -1052,7 +1054,7 @@ function RedemptionsModal({ invite, onClose }: RedemptionsModalProps) {
         if (cancelled) return;
         setError(true);
         setRedemptions([]);
-        addToast('Failed to load redemptions', 'warning');
+        addToast(translate('runtime.messages.RegistrationPanel.failedToLoadRedemptions'), 'warning');
       });
     return () => {
       cancelled = true;
@@ -1074,7 +1076,7 @@ function RedemptionsModal({ invite, onClose }: RedemptionsModalProps) {
           </svg>
         </div>
         <p className="text-[13px] text-txt-secondary leading-snug min-w-0">
-          Users who registered using this invite link, in the order they signed up.
+          <Trans i18nKey="ui.RegistrationPanel.usersWhoRegisteredUsingThisInviteLinkIn">Users who registered using this invite link, in the order they signed up.</Trans>
         </p>
       </div>
 
@@ -1085,29 +1087,29 @@ function RedemptionsModal({ invite, onClose }: RedemptionsModalProps) {
       <div
         className="sticky top-0 z-10 -mx-4 px-4 pb-3 space-y-3 bg-[var(--glass-modal-bg)] backdrop-blur-md"
       >
-        {invite.status === 'revoked' && (
+        {invite.status === "revoked" && (
           <div className="bg-accent-rose/10 border border-accent-rose/30 rounded p-2.5 text-xs text-accent-rose leading-relaxed">
-            This invite was revoked
+            <Trans i18nKey="ui.RegistrationPanel.thisInviteWasRevoked">This invite was revoked</Trans>
             {invite.revokedAt
               ? ` ${new Date(invite.revokedAt).toLocaleDateString()}`
               : ''}
-            . The redemptions below represent users who registered before revocation.
+            <Trans i18nKey="ui.RegistrationPanel.theRedemptionsBelowRepresentUsersWhoRegisteredBefore">. The redemptions below represent users who registered before revocation.</Trans>
           </div>
         )}
 
         <div className="text-sm text-txt-tertiary">
           {invite.usedCount}
-          {invite.maxUses !== null ? ` of ${invite.maxUses}` : ''} use
+          {invite.maxUses !== null ? ` of ${invite.maxUses}` : ''} <Trans i18nKey="ui.RegistrationPanel.use">use</Trans>
           {invite.usedCount === 1 ? '' : 's'}
         </div>
       </div>
 
       <div className="-mx-1">
         {redemptions === null ? (
-          <div className="text-sm text-txt-tertiary px-3 py-2">Loading…</div>
+          <div className="text-sm text-txt-tertiary px-3 py-2"><Trans i18nKey="ui.RegistrationPanel.loading">Loading…</Trans></div>
         ) : redemptions.length === 0 ? (
           <div className="text-sm text-txt-tertiary px-3 py-2">
-            {error ? 'Could not load redemptions.' : 'No redemptions yet.'}
+            {error ? translate('runtime.expressions.RegistrationPanel.couldNotLoadRedemptions') : translate('runtime.expressions.RegistrationPanel.noRedemptionsYet')}
           </div>
         ) : (
           <div className="space-y-0.5">
@@ -1126,7 +1128,7 @@ function RedemptionsModal({ invite, onClose }: RedemptionsModalProps) {
                     {(r.isDeleted || showCurrent) && (
                       <span className="text-txt-tertiary">
                         {' '}
-                        (now {r.isDeleted ? 'Deleted User' : r.currentUsername})
+                        <Trans i18nKey="ui.RegistrationPanel.now">(now</Trans> {r.isDeleted ? translate('runtime.expressions.RegistrationPanel.deletedUser') : r.currentUsername})
                       </span>
                     )}
                   </span>
@@ -1181,9 +1183,9 @@ function InviteRow({ invite, expanded, onToggleExpand, onMutate }: InviteRowProp
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(invite.url);
-      addToast('Invite link copied', 'success', 2000);
+      addToast(translate('runtime.messages.RegistrationPanel.inviteLinkCopied'), 'success', 2000);
     } catch {
-      addToast('Failed to copy link', 'warning');
+      addToast(translate('runtime.messages.RegistrationPanel.failedToCopyLink'), 'warning');
     }
   };
 
@@ -1191,11 +1193,11 @@ function InviteRow({ invite, expanded, onToggleExpand, onMutate }: InviteRowProp
     setActionLoading(true);
     try {
       await api.invites.revoke(invite.id);
-      addToast('Invite revoked', 'success', 2000);
+      addToast(translate('runtime.messages.RegistrationPanel.inviteRevoked'), 'success', 2000);
       setConfirmRevoke(false);
       onMutate();
     } catch (err) {
-      addToast(`Failed to revoke: ${(err as Error).message}`, 'warning');
+      addToast(translate('runtime.templates.RegistrationPanel.failedToRevoke', { p0: (err as Error).message }), 'warning');
     } finally {
       setActionLoading(false);
     }
@@ -1205,18 +1207,18 @@ function InviteRow({ invite, expanded, onToggleExpand, onMutate }: InviteRowProp
     setActionLoading(true);
     try {
       await api.invites.delete(invite.id);
-      addToast('Invite deleted', 'success', 2000);
+      addToast(translate('runtime.messages.RegistrationPanel.inviteDeleted'), 'success', 2000);
       setConfirmDelete(false);
       onMutate();
     } catch (err) {
-      addToast(`Failed to delete: ${(err as Error).message}`, 'warning');
+      addToast(translate('runtime.templates.RegistrationPanel.failedToDelete', { p0: (err as Error).message }), 'warning');
     } finally {
       setActionLoading(false);
     }
   };
 
   const isActive = invite.status === 'active';
-  const createdByLabel = invite.createdByUsername ?? 'Unknown';
+  const createdByLabel = invite.createdByUsername ?? translate('runtime.selected.RegistrationPanel.unknown');
 
   // Subtitle (collapsed view)
   //   active   → "X / Y uses · Expires in 3 days · Created by alice"
@@ -1231,10 +1233,10 @@ function InviteRow({ invite, expanded, onToggleExpand, onMutate }: InviteRowProp
   let archivedTerminalLabel: string;
   let archivedTerminalValue: string;
   if (invite.status === 'expired') {
-    archivedTerminalLabel = 'EXPIRED AT';
+    archivedTerminalLabel = translate('runtime.selected.RegistrationPanel.expiredAT');
     archivedTerminalValue = invite.expiresAt !== null ? formatRelative(invite.expiresAt) : '—';
   } else if (invite.status === 'revoked') {
-    archivedTerminalLabel = 'REVOKED AT';
+    archivedTerminalLabel = translate('runtime.selected.RegistrationPanel.revokedAT');
     archivedTerminalValue = invite.revokedAt !== null ? formatRelative(invite.revokedAt) : '—';
   } else {
     // exhausted
@@ -1290,7 +1292,7 @@ function InviteRow({ invite, expanded, onToggleExpand, onMutate }: InviteRowProp
               {/* Row 1: USED · (EXPIRES | terminal-status AT) · CREATED */}
               <div className="grid grid-cols-3 gap-3 mb-3">
                 <div>
-                  <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">Used</div>
+                  <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5"><Trans i18nKey="ui.RegistrationPanel.used3">Used</Trans></div>
                   <div
                     className={`text-xs ${
                       usageNearLimit ? 'text-accent-amber font-medium' : 'text-txt-secondary'
@@ -1301,7 +1303,7 @@ function InviteRow({ invite, expanded, onToggleExpand, onMutate }: InviteRowProp
                 </div>
                 {isActive ? (
                   <div>
-                    <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">Expires</div>
+                    <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5"><Trans i18nKey="ui.RegistrationPanel.expires4">Expires</Trans></div>
                     <div className="text-xs text-txt-secondary">{formatExpiry(invite)}</div>
                   </div>
                 ) : (
@@ -1313,7 +1315,7 @@ function InviteRow({ invite, expanded, onToggleExpand, onMutate }: InviteRowProp
                   </div>
                 )}
                 <div>
-                  <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">Created</div>
+                  <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5"><Trans i18nKey="ui.RegistrationPanel.created">Created</Trans></div>
                   <div className="text-xs text-txt-secondary">{formatRelative(invite.createdAt)}</div>
                 </div>
               </div>
@@ -1321,19 +1323,19 @@ function InviteRow({ invite, expanded, onToggleExpand, onMutate }: InviteRowProp
               {/* Row 2: CREATED BY · TOKEN · LAST REDEEMED */}
               <div className="grid grid-cols-3 gap-3 mb-3">
                 <div>
-                  <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">Created by</div>
+                  <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5"><Trans i18nKey="ui.RegistrationPanel.createdBy">Created by</Trans></div>
                   <div className="text-xs text-txt-secondary truncate" title={createdByLabel}>
                     {createdByLabel}
                   </div>
                 </div>
                 <div>
-                  <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">Token</div>
+                  <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5"><Trans i18nKey="ui.RegistrationPanel.token">Token</Trans></div>
                   <div className="text-xs font-mono text-txt-secondary" title={invite.token}>
                     {tokenDisplay}
                   </div>
                 </div>
                 <div>
-                  <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">Last redeemed</div>
+                  <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5"><Trans i18nKey="ui.RegistrationPanel.lastRedeemed">Last redeemed</Trans></div>
                   <div className="text-xs text-txt-secondary">{lastRedeemedDisplay}</div>
                 </div>
               </div>
@@ -1347,28 +1349,28 @@ function InviteRow({ invite, expanded, onToggleExpand, onMutate }: InviteRowProp
                       onClick={(e) => { e.stopPropagation(); handleCopy(); }}
                       className="px-3 py-1.5 text-xs font-medium bg-accent-lavender/10 text-accent-lavender hover:bg-accent-lavender/20 rounded transition-colors"
                     >
-                      Copy link
+                      <Trans i18nKey="ui.RegistrationPanel.copyLink">Copy link</Trans>
                     </button>
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); setShowEdit(true); }}
                       className="px-3 py-1.5 text-xs font-medium bg-accent-lavender/10 text-accent-lavender hover:bg-accent-lavender/20 rounded transition-colors"
                     >
-                      Edit
+                      <Trans i18nKey="ui.RegistrationPanel.edit">Edit</Trans>
                     </button>
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); setConfirmRevoke(true); }}
                       className="px-3 py-1.5 text-xs font-medium bg-accent-rose/10 text-txt-danger hover:bg-accent-rose/20 rounded transition-colors"
                     >
-                      Revoke
+                      <Trans i18nKey="ui.RegistrationPanel.revoke">Revoke</Trans>
                     </button>
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); setShowRedemptions(true); }}
                       className="text-[11px] text-txt-tertiary hover:text-txt-secondary underline decoration-dotted transition-colors ml-1"
                     >
-                      View redemptions
+                      <Trans i18nKey="ui.RegistrationPanel.viewRedemptions">View redemptions</Trans>
                     </button>
                   </>
                 ) : (
@@ -1378,21 +1380,21 @@ function InviteRow({ invite, expanded, onToggleExpand, onMutate }: InviteRowProp
                       onClick={(e) => { e.stopPropagation(); setShowReinstate(true); }}
                       className="px-3 py-1.5 text-xs font-medium bg-status-online/10 text-status-online hover:bg-status-online/20 rounded transition-colors"
                     >
-                      Reinstate
+                      <Trans i18nKey="ui.RegistrationPanel.reinstate">Reinstate</Trans>
                     </button>
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); setConfirmDelete(true); }}
                       className="px-3 py-1.5 text-xs font-medium bg-accent-rose/10 text-txt-danger hover:bg-accent-rose/20 rounded transition-colors"
                     >
-                      Delete permanently
+                      <Trans i18nKey="ui.RegistrationPanel.deletePermanently">Delete permanently</Trans>
                     </button>
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); setShowRedemptions(true); }}
                       className="text-[11px] text-txt-tertiary hover:text-txt-secondary underline decoration-dotted transition-colors ml-1"
                     >
-                      View redemptions
+                      <Trans i18nKey="ui.RegistrationPanel.viewRedemptions2">View redemptions</Trans>
                     </button>
                   </>
                 )}
@@ -1427,13 +1429,13 @@ function InviteRow({ invite, expanded, onToggleExpand, onMutate }: InviteRowProp
         title={`Revoke "${invite.name}"?`}
         description={
           <>
-            The link stops working immediately. Anyone who has the URL can no longer use it.
+            <Trans i18nKey="ui.RegistrationPanel.theLinkStopsWorkingImmediatelyAnyoneWhoHas">The link stops working immediately. Anyone who has the URL can no longer use it.</Trans>
             <br />
             <br />
-            If you change your mind later, <strong>Reinstate</strong> issues a fresh link under this entry — the original URL stays inactive.
+            <Trans i18nKey="ui.RegistrationPanel.ifYouChangeYourMindLater">If you change your mind later,</Trans> <strong><Trans i18nKey="ui.RegistrationPanel.reinstate2">Reinstate</Trans></strong> <Trans i18nKey="ui.RegistrationPanel.issuesAFreshLinkUnderThisEntryThe">issues a fresh link under this entry — the original URL stays inactive.</Trans>
           </>
         }
-        confirmLabel="Revoke link"
+        confirmLabel={translate("runtime.attributes.RegistrationPanel.revokeLink")}
         variant="danger"
         loading={actionLoading}
       />
@@ -1445,12 +1447,12 @@ function InviteRow({ invite, expanded, onToggleExpand, onMutate }: InviteRowProp
         title={`Delete "${invite.name}" permanently?`}
         description={
           <>
-            This cannot be undone. Redemption history for this link will also be removed.
-            If you only want to stop the link from working, use <strong>Revoke</strong>{' '}
-            instead — that preserves the redemption record.
+            <Trans i18nKey="ui.RegistrationPanel.thisCannotBeUndoneRedemptionHistoryForThis">This cannot be undone. Redemption history for this link will also be removed.
+            If you only want to stop the link from working, use</Trans> <strong><Trans i18nKey="ui.RegistrationPanel.revoke2">Revoke</Trans></strong>{' '}
+            <Trans i18nKey="ui.RegistrationPanel.insteadThatPreservesTheRedemptionRecord">instead — that preserves the redemption record.</Trans>
           </>
         }
-        confirmLabel="Delete permanently"
+        confirmLabel={translate("runtime.attributes.RegistrationPanel.deletePermanently")}
         variant="danger"
         loading={actionLoading}
       />
@@ -1518,7 +1520,7 @@ export function RegistrationPanel() {
         if (tabRef.current !== which) return;
         setInvites(res.invites);
       } catch {
-        if (tabRef.current === which) addToast('Failed to load invites', 'warning');
+        if (tabRef.current === which) addToast(translate('runtime.messages.RegistrationPanel.failedToLoadInvites'), 'warning');
       } finally {
         if (tabRef.current === which) setInvitesLoading(false);
       }
@@ -1569,7 +1571,7 @@ export function RegistrationPanel() {
     return list;
   }, [invites, tab, activeSort, archivedSort, archivedStatusFilter]);
 
-  if (!draft) return <div className="text-sm text-txt-tertiary">Loading settings...</div>;
+  if (!draft) return <div className="text-sm text-txt-tertiary"><Trans i18nKey="ui.RegistrationPanel.loadingSettings">Loading settings...</Trans></div>;
 
   const hasChanges = !!instanceSettings && (
     draft.registrationOpen !== instanceSettings.registrationOpen ||
@@ -1584,11 +1586,11 @@ export function RegistrationPanel() {
         registrationOpen: draft.registrationOpen,
         federatedRegistrationOpen: draft.federatedRegistrationOpen,
       });
-      addToast('Registration settings saved', 'success', 2000);
+      addToast(translate('runtime.messages.RegistrationPanel.registrationSettingsSaved'), 'success', 2000);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to save';
+      const message = err instanceof Error ? err.message : translate('runtime.selected.RegistrationPanel.failedToSave');
       setSaveError(message);
-      addToast('Failed to update registration settings', 'warning');
+      addToast(translate('runtime.messages.RegistrationPanel.failedToUpdateRegistrationSettings'), 'warning');
     } finally {
       setSaving(false);
     }
@@ -1607,22 +1609,22 @@ export function RegistrationPanel() {
   return (
     <>
     <form className="space-y-5" onSubmit={(e) => e.preventDefault()}>
-      <h2 className="text-lg font-semibold text-txt-primary">Registration</h2>
+      <h2 className="text-lg font-semibold text-txt-primary"><Trans i18nKey="ui.RegistrationPanel.registration">Registration</Trans></h2>
       <div className="text-xs text-txt-tertiary">
-        Control who can create accounts on this instance. Public registration covers local
-        sign-ups; federated registration covers users from peered instances creating an account here.
+        <Trans i18nKey="ui.RegistrationPanel.controlWhoCanCreateAccountsOnThisInstance">Control who can create accounts on this instance. Public registration covers local
+        sign-ups; federated registration covers users from peered instances creating an account here.</Trans>
       </div>
 
       {/* Public registration */}
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">Public Registration</div>
+        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5"><Trans i18nKey="ui.RegistrationPanel.publicRegistration">Public Registration</Trans></div>
         <div className="rounded-lg bg-white/[0.02] p-3.5">
           <label className="flex items-center justify-between cursor-pointer gap-4">
             <div className="flex-1">
-              <div className="text-sm font-medium text-txt-primary">Allow new local accounts</div>
+              <div className="text-sm font-medium text-txt-primary"><Trans i18nKey="ui.RegistrationPanel.allowNewLocalAccounts">Allow new local accounts</Trans></div>
               <div className="text-xs text-txt-tertiary mt-0.5">
-                Anyone can create a local account from the registration page. When off, only invite
-                links can create new local accounts.
+                <Trans i18nKey="ui.RegistrationPanel.anyoneCanCreateALocalAccountFromThe">Anyone can create a local account from the registration page. When off, only invite
+                links can create new local accounts.</Trans>
               </div>
             </div>
             <Toggle
@@ -1635,14 +1637,14 @@ export function RegistrationPanel() {
 
       {/* Federated registration */}
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">Federated Registration</div>
+        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5"><Trans i18nKey="ui.RegistrationPanel.federatedRegistration">Federated Registration</Trans></div>
         <div className="rounded-lg bg-white/[0.02] p-3.5">
           <label className="flex items-center justify-between cursor-pointer gap-4">
             <div className="flex-1">
-              <div className="text-sm font-medium text-txt-primary">Allow new federated accounts</div>
+              <div className="text-sm font-medium text-txt-primary"><Trans i18nKey="ui.RegistrationPanel.allowNewFederatedAccounts">Allow new federated accounts</Trans></div>
               <div className="text-xs text-txt-tertiary mt-0.5">
-                Users from other instances can create a federated account here via their Connections
-                settings. Existing federated accounts can always log in regardless of this setting.
+                <Trans i18nKey="ui.RegistrationPanel.usersFromOtherInstancesCanCreateAFederated">Users from other instances can create a federated account here via their Connections
+                settings. Existing federated accounts can always log in regardless of this setting.</Trans>
               </div>
             </div>
             <Toggle
@@ -1657,13 +1659,13 @@ export function RegistrationPanel() {
       <div className="border-t border-white/[0.06] pt-5">
         {/* Row 1: heading + create button */}
         <div className="flex items-center justify-between mb-3">
-          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider">Invite Links</div>
+          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider"><Trans i18nKey="ui.RegistrationPanel.inviteLinks">Invite Links</Trans></div>
           <button
             type="button"
             onClick={() => setShowCreate(true)}
             className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-lg transition-colors"
           >
-            + Create link
+            <Trans i18nKey="ui.RegistrationPanel.createLink">+ Create link</Trans>
           </button>
         </div>
 
@@ -1677,7 +1679,7 @@ export function RegistrationPanel() {
                 tab === 'active' ? 'bg-white/[0.08] text-txt-primary' : 'text-txt-tertiary hover:text-txt-secondary'
               }`}
             >
-              Active <span className="text-[10px] text-txt-tertiary ml-0.5">{activeCount}</span>
+              <Trans i18nKey="ui.RegistrationPanel.active">Active</Trans> <span className="text-[10px] text-txt-tertiary ml-0.5">{activeCount}</span>
             </button>
             <button
               type="button"
@@ -1686,7 +1688,7 @@ export function RegistrationPanel() {
                 tab === 'archived' ? 'bg-white/[0.08] text-txt-primary' : 'text-txt-tertiary hover:text-txt-secondary'
               }`}
             >
-              Archived <span className="text-[10px] text-txt-tertiary ml-0.5">{archivedCount}</span>
+              <Trans i18nKey="ui.RegistrationPanel.archived">Archived</Trans> <span className="text-[10px] text-txt-tertiary ml-0.5">{archivedCount}</span>
             </button>
           </div>
           <FilterDropdown
@@ -1701,14 +1703,14 @@ export function RegistrationPanel() {
         </div>
 
         {invitesLoading ? (
-          <div className="text-sm text-txt-tertiary">Loading...</div>
+          <div className="text-sm text-txt-tertiary"><Trans i18nKey="ui.RegistrationPanel.loading2">Loading...</Trans></div>
         ) : invites.length === 0 ? (
           <div className="text-sm text-txt-tertiary">
-            {tab === 'active' ? 'No active invite links.' : 'No archived invite links.'}
+            {tab === "active" ? translate('runtime.expressions.RegistrationPanel.noActiveInviteLinks') : translate('runtime.expressions.RegistrationPanel.noArchivedInviteLinks')}
           </div>
         ) : displayInvites.length === 0 ? (
           <div className="text-[11px] text-txt-tertiary py-3 text-center">
-            No invites match the current filter.
+            <Trans i18nKey="ui.RegistrationPanel.noInvitesMatchTheCurrentFilter">No invites match the current filter.</Trans>
           </div>
         ) : (
           <div className="space-y-2">
@@ -1740,14 +1742,14 @@ export function RegistrationPanel() {
                 onClick={handleReset}
                 className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
               >
-                Reset
+                <Trans i18nKey="ui.RegistrationPanel.reset">Reset</Trans>
               </button>
               <button
                 onClick={handleSave}
                 disabled={saving}
                 className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
               >
-                {saving ? 'Saving...' : 'Save'}
+                {saving ? translate('runtime.expressions.RegistrationPanel.saving2') : translate('runtime.expressions.RegistrationPanel.save')}
               </button>
             </div>
           </div>
@@ -1758,7 +1760,7 @@ export function RegistrationPanel() {
     {showCreate && (
       <CreateInviteModal
         onClose={() => setShowCreate(false)}
-        onCreated={() => { fetchInvites('active'); refreshCounts(); }}
+        onCreated={() => { fetchInvites("active"); refreshCounts(); }}
       />
     )}
     </>

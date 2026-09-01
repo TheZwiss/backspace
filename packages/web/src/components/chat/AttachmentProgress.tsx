@@ -1,5 +1,6 @@
 import React from 'react';
 import type { TransferState } from '../../stores/transferStore';
+import { translate } from '../../i18n';
 
 interface Props {
   loaded: number;
@@ -42,19 +43,19 @@ export function AttachmentProgress({ loaded, total, state, filename, error, onPa
         title={ringTitle}
       >
         <div className="w-7 h-7 rounded-full bg-surface-overlay text-[10px] text-txt-primary flex items-center justify-center font-medium">
-          {state === 'paused' ? (
+          {state === "paused" ? (
             <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true">
               <rect x="2" y="1.5" width="2" height="7" rx="0.5" />
               <rect x="6" y="1.5" width="2" height="7" rx="0.5" />
             </svg>
-          ) : state === 'failed' ? (
+          ) : state === "failed" ? (
             '!'
           ) : (
             `${pct}%`
           )}
         </div>
       </div>
-      {size === 'tile' && (
+      {size === "tile" && (
         <div className="text-[10px] text-txt-primary text-center leading-tight px-1">
           <div className="truncate max-w-[120px]">{filename}</div>
           <div className="opacity-60">{fmt(loaded)} / {fmt(total)}</div>
@@ -62,14 +63,14 @@ export function AttachmentProgress({ loaded, total, state, filename, error, onPa
       )}
       {!isFinal && (
         <div className="absolute top-1 right-1 flex gap-1">
-          {state === 'paused' && onResume && (
-            <button onClick={onResume} className="bg-black/60 hover:bg-black/80 text-white w-5 h-5 rounded text-[9px]" aria-label="Resume">▶</button>
+          {state === "paused" && onResume && (
+            <button onClick={onResume} className="bg-black/60 hover:bg-black/80 text-white w-5 h-5 rounded text-[9px]" aria-label={translate("runtime.attributes.AttachmentProgress.resume")}>▶</button>
           )}
-          {state === 'active' && onPause && (
-            <button onClick={onPause} className="bg-black/60 hover:bg-black/80 text-white w-5 h-5 rounded text-[9px]" aria-label="Pause">⏸</button>
+          {state === "active" && onPause && (
+            <button onClick={onPause} className="bg-black/60 hover:bg-black/80 text-white w-5 h-5 rounded text-[9px]" aria-label={translate("runtime.attributes.AttachmentProgress.pause")}>⏸</button>
           )}
           {onAbort && (
-            <button onClick={onAbort} className="bg-black/60 hover:bg-black/80 text-white w-5 h-5 rounded text-[9px]" aria-label="Abort">✕</button>
+            <button onClick={onAbort} className="bg-black/60 hover:bg-black/80 text-white w-5 h-5 rounded text-[9px]" aria-label={translate("runtime.attributes.AttachmentProgress.abort")}>✕</button>
           )}
         </div>
       )}

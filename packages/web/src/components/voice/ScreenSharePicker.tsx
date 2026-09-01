@@ -4,6 +4,8 @@ import { create } from 'zustand';
 import { getElectronAPI } from '../../platform/platform';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { usePortalContainer } from '../../hooks/usePortalContainer';
+import { Trans } from 'react-i18next';
+import { translate } from '../../i18n';
 
 // ---------------------------------------------------------------------------
 // Zustand micro-store — bridges the event-driven API to React state
@@ -115,7 +117,7 @@ export function ScreenSharePicker() {
       <div className="relative w-full max-w-3xl mx-4 glass-modal rounded-lg animate-slide-up flex flex-col max-h-[calc(100vh-4rem)]">
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0">
-          <h2 className="text-lg font-bold text-txt-primary">Share Your Screen</h2>
+          <h2 className="text-lg font-bold text-txt-primary"><Trans i18nKey="ui.ScreenSharePicker.shareYourScreen">Share Your Screen</Trans></h2>
           <button
             onClick={() => closePicker(null)}
             className="text-txt-tertiary hover:text-txt-primary transition-colors p-1"
@@ -131,25 +133,25 @@ export function ScreenSharePicker() {
           <TabButton
             active={activeTab === 'screens'}
             onClick={() => { setActiveTab('screens'); setSelectedId(null); }}
-            label="Screens"
+            label={translate("runtime.attributes.ScreenSharePicker.screens")}
             count={screens.length}
           />
           <TabButton
             active={activeTab === 'windows'}
             onClick={() => { setActiveTab('windows'); setSelectedId(null); }}
-            label="Windows"
+            label={translate("runtime.attributes.ScreenSharePicker.windows")}
             count={windows.length}
           />
         </div>
 
         {/* Search (windows tab only) */}
-        {activeTab === 'windows' && (
+        {activeTab === "windows" && (
           <div className="px-5 pb-3 flex-shrink-0">
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search windows..."
+              placeholder={translate("runtime.attributes.ScreenSharePicker.searchWindows")}
               className="input-search w-full"
               autoFocus
             />
@@ -160,12 +162,12 @@ export function ScreenSharePicker() {
         <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin px-5 py-2">
           {activeSources.length === 0 ? (
             <div className="text-center py-12 text-txt-tertiary text-sm">
-              {activeTab === 'windows' && search.trim()
-                ? 'No windows match your search'
-                : `No ${activeTab} available`}
+              {activeTab === "windows" && search.trim()
+                ? translate('runtime.expressions.ScreenSharePicker.noWindowsMatchYourSearch')
+                : translate('runtime.templates.ScreenSharePicker.noAvailable', { p0: activeTab })}
             </div>
           ) : (
-            <div className={`grid gap-3 ${activeTab === 'screens' ? 'grid-cols-2' : 'grid-cols-3'}`}>
+            <div className={`grid gap-3 ${activeTab === "screens" ? 'grid-cols-2' : 'grid-cols-3'}`}>
               {activeSources.map((source) => (
                 <SourceCard
                   key={source.id}
@@ -189,11 +191,11 @@ export function ScreenSharePicker() {
                 onChange={(e) => setScreenShareConfig({ shareAudio: e.target.checked })}
                 className="w-3.5 h-3.5 rounded accent-accent-primary cursor-pointer"
               />
-              <span className="text-[12px] text-txt-secondary">Share system audio</span>
+              <span className="text-[12px] text-txt-secondary"><Trans i18nKey="ui.ScreenSharePicker.shareSystemAudio">Share system audio</Trans></span>
             </label>
             {shareAudio && (
               <div className="text-[11px] text-accent-amber/80">
-                May echo voices back to viewers — use Chrome browser for echo-free audio
+                <Trans i18nKey="ui.ScreenSharePicker.mayEchoVoicesBackToViewersUseChrome">May echo voices back to viewers — use Chrome browser for echo-free audio</Trans>
               </div>
             )}
           </div>
@@ -202,14 +204,14 @@ export function ScreenSharePicker() {
               onClick={() => closePicker(null)}
               className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
             >
-              Cancel
+              <Trans i18nKey="ui.ScreenSharePicker.cancel">Cancel</Trans>
             </button>
             <button
               onClick={() => closePicker(selectedId, shareAudio)}
               disabled={!selectedId}
               className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary-hover text-white text-sm font-medium rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              Share
+              <Trans i18nKey="ui.ScreenSharePicker.share">Share</Trans>
             </button>
           </div>
         </div>

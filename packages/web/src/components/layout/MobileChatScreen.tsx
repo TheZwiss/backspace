@@ -11,6 +11,7 @@ import { formatDmHeaderName, formatDmInputLabel, isDeletedPartnerDm } from '../.
 import { DmDeletedNotice } from '../chat/DmDeletedNotice';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import type { User } from '@backspace/shared';
+import { translate } from '../../i18n';
 
 const FALLBACK_USER = { id: '', username: '', createdAt: 0, isAdmin: false, replicatedInstances: [] } as unknown as User;
 
@@ -60,17 +61,17 @@ export function MobileChatScreen({ params }: MobileChatScreenProps) {
   if (isDm && dm) {
     if (isGroup) {
       channelName = formatDmHeaderName(dm, authUser);
-      inputPlaceholder = `Message ${formatDmInputLabel(dm, authUser)}`;
+      inputPlaceholder = translate('runtime.templates.MobileChatScreen.message', { p0: formatDmInputLabel(dm, authUser) });
     } else if (rawMainOther) {
       channelName =
         canonicalMainOther.displayName ??
         parseFederatedUsername(canonicalMainOther.username).baseName ??
-        'Direct Message';
+        translate('runtime.selected.MobileChatScreen.directMessage');
       // Use the canonical `channelName` directly so header + placeholder stay
       // aligned even when the raw partner and canonical view disagree.
-      inputPlaceholder = `Message @${channelName}`;
+      inputPlaceholder = translate('runtime.templates.MobileChatScreen.message2', { p0: channelName });
     } else {
-      channelName = 'Direct Message';
+      channelName = translate('runtime.selected.MobileChatScreen.directMessage2');
     }
   } else if (!isDm && channelId) {
     const ch = channels.find(c => c.id === channelId);
@@ -101,13 +102,13 @@ export function MobileChatScreen({ params }: MobileChatScreenProps) {
           <button
             onClick={() => {
               if (isDm && isGroup && channelId) {
-                pushMobileScreen('group-dm-info', { channelId });
+                pushMobileScreen("group-dm-info", { channelId });
               } else {
-                pushMobileScreen('members');
+                pushMobileScreen("members");
               }
             }}
             className="w-8 h-8 flex items-center justify-center text-txt-secondary hover:text-txt-primary"
-            aria-label={isDm && isGroup ? 'Group info' : 'Members'}
+            aria-label={isDm && isGroup ? translate('runtime.expressions.MobileChatScreen.groupInfo') : translate('runtime.expressions.MobileChatScreen.members')}
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />

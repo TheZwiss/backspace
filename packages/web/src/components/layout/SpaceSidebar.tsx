@@ -15,6 +15,8 @@ import type { SpaceLayoutItem, SpaceFolder } from '@backspace/shared';
 import { getSpaceGradient } from '../../utils/gradients';
 import { isElectron } from '../../platform/platform';
 import { useFloatingPosition } from '../../hooks/useFloatingPosition';
+import { Trans } from 'react-i18next';
+import { translate } from '../../i18n';
 
 // ─── Resolved layout types ─────────────────────────────────────────────────
 
@@ -110,14 +112,14 @@ function SidebarItem({ id, name, icon, avatarColor, active, onClick, onContextMe
 
   const buttonContent = (
     <button onClick={onClick} className={`${getButtonClasses()} ${dimmed ? 'opacity-40 saturate-50' : ''}`} style={backgroundStyle} title={tooltipText ? undefined : name}>
-      {type === 'dm' ? (
-        <img src="/icons/logo-mark.svg" alt="Backspace" className="w-[25px] h-auto" />
-      ) : type === 'action' ? (
-        actionType === 'add' ? (
+      {type === "dm" ? (
+        <img src="/icons/logo-mark.svg" alt={translate("runtime.attributes.SpaceSidebar.backspace")} className="w-[25px] h-auto" />
+      ) : type === "action" ? (
+        actionType === "add" ? (
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z" />
           </svg>
-        ) : actionType === 'explore' ? (
+        ) : actionType === "explore" ? (
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-5.5-2.5l7.51-3.49L17.5 6.5 9.99 9.99 6.5 17.5zm5.5-6.6c.61 0 1.1.49 1.1 1.1s-.49 1.1-1.1 1.1-1.1-.49-1.1-1.1.49-1.1 1.1-1.1z" />
           </svg>
@@ -128,7 +130,7 @@ function SidebarItem({ id, name, icon, avatarColor, active, onClick, onContextMe
         )
       ) : icon ? (
         <img
-          src={icon.startsWith('http') || icon.startsWith('/') ? icon : `/api/uploads/${icon}`}
+          src={icon.startsWith("http") || icon.startsWith('/') ? icon : `/api/uploads/${icon}`}
           alt={name}
           className="w-full h-full object-cover"
         />
@@ -168,15 +170,15 @@ function SidebarItem({ id, name, icon, avatarColor, active, onClick, onContextMe
       onDrop={onDrop}
     >
       {/* Drop indicator lines — offset into the mb-1.5 gap so adjacent items share one line */}
-      {dropIndicator === 'before' && (
+      {dropIndicator === "before" && (
         <div className="absolute -top-[3px] left-3 right-3 h-[2px] bg-accent-mint rounded-full z-10" />
       )}
-      {dropIndicator === 'after' && (
+      {dropIndicator === "after" && (
         <div className="absolute -bottom-[3px] left-3 right-3 h-[2px] bg-accent-mint rounded-full z-10" />
       )}
 
       {/* Pill Indicator */}
-      {(type === 'space' || type === 'dm') && (
+      {(type === "space" || type === "dm") && (
         <div className="absolute -left-0 w-2 h-10 flex items-center">
           <div
             className={`bg-white rounded-r-full transition-all duration-200 origin-left ${getPillHeight()} w-1`}
@@ -406,8 +408,8 @@ function FolderFlyout({
               defaultValue={folder.name || ''}
               onBlur={(e) => onRename(e.currentTarget.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') onRename(e.currentTarget.value);
-                if (e.key === 'Escape') onClose();
+                if (e.key === "Enter") onRename(e.currentTarget.value);
+                if (e.key === "Escape") onClose();
               }}
             />
           ) : (
@@ -431,7 +433,7 @@ function FolderFlyout({
         return (
           <React.Fragment key={space.id}>
             {/* Drop indicator: before first item */}
-            {idx === 0 && flyoutDrop?.targetSpaceId === space.id && flyoutDrop.position === 'before' && (
+            {idx === 0 && flyoutDrop?.targetSpaceId === space.id && flyoutDrop.position === "before" && (
               <div className="h-0.5 bg-accent-mint rounded-full mx-2.5 my-0.5" />
             )}
 
@@ -439,7 +441,7 @@ function FolderFlyout({
               className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 mx-1 rounded-md transition-colors ${
                 isDimmed ? 'opacity-40 saturate-50' : ''
               } ${isActive ? 'bg-white/[0.10]' : 'hover:bg-white/[0.06]'}`}
-              style={{ width: 'calc(100% - 8px)' }}
+              style={{ width: "calc(100% - 8px)" }}
               draggable
               onDragStart={(e) => onDragStart(e, space.id)}
               onDragOver={(e) => handleFlyoutDragOver(e, space.id)}
@@ -457,7 +459,7 @@ function FolderFlyout({
               <div className="w-8 h-8 rounded-[10px] flex-shrink-0 overflow-hidden flex items-center justify-center" style={grad ? { background: grad.gradient } : undefined}>
                 {icon ? (
                   <img
-                    src={icon.startsWith('http') || icon.startsWith('/') ? icon : `/api/uploads/${icon}`}
+                    src={icon.startsWith("http") || icon.startsWith('/') ? icon : `/api/uploads/${icon}`}
                     alt=""
                     className="w-full h-full object-cover"
                   />
@@ -483,7 +485,7 @@ function FolderFlyout({
             </button>
 
             {/* Drop indicator: after item */}
-            {flyoutDrop?.targetSpaceId === space.id && flyoutDrop.position === 'after' && (
+            {flyoutDrop?.targetSpaceId === space.id && flyoutDrop.position === "after" && (
               <div className="h-0.5 bg-accent-mint rounded-full mx-2.5 my-0.5" />
             )}
           </React.Fragment>
@@ -556,13 +558,13 @@ function FolderSlot({
       onDrop={onDrop}
     >
       {/* Drop indicators — offset into the mb-1.5 gap so adjacent items share one line */}
-      {dropIndicator === 'before' && (
+      {dropIndicator === "before" && (
         <div className="absolute -top-[3px] left-3 right-3 h-[2px] bg-accent-mint rounded-full z-10" />
       )}
-      {dropIndicator === 'after' && (
+      {dropIndicator === "after" && (
         <div className="absolute -bottom-[3px] left-3 right-3 h-[2px] bg-accent-mint rounded-full z-10" />
       )}
-      {dropIndicator === 'merge' && (
+      {dropIndicator === "merge" && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
           <div className="w-12 h-12 rounded-[16px] ring-2 ring-accent-mint/60" />
         </div>
@@ -634,7 +636,7 @@ export function SpaceSidebar() {
       {
         key: 'invite',
         type: 'action',
-        label: 'Invite People',
+        label: translate('runtime.properties.SpaceSidebar.invitePeople'),
         icon: (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
             <path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
@@ -646,16 +648,16 @@ export function SpaceSidebar() {
             const origin = (space as TaggedSpace)._instanceOrigin || window.location.origin;
             const url = `${origin}/invite/${code}`;
             await navigator.clipboard.writeText(url);
-            useUIStore.getState().addToast('Invite link copied to clipboard', 'success', 3000);
+            useUIStore.getState().addToast(translate('runtime.messages.SpaceSidebar.inviteLinkCopiedToClipboard'), 'success', 3000);
           } catch {
-            useUIStore.getState().addToast('Failed to generate invite', 'warning', 3000);
+            useUIStore.getState().addToast(translate('runtime.messages.SpaceSidebar.failedToGenerateInvite'), 'warning', 3000);
           }
         },
       },
       {
         key: 'transfer',
         type: 'action',
-        label: 'Transfer Ownership',
+        label: translate('runtime.properties.SpaceSidebar.transferOwnership'),
         hidden: !isOwner,
         icon: (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -667,7 +669,7 @@ export function SpaceSidebar() {
       {
         key: 'leave',
         type: 'action',
-        label: 'Leave Space',
+        label: translate('runtime.properties.SpaceSidebar.leaveSpace'),
         hidden: isOwner,
         danger: true,
         icon: (
@@ -774,7 +776,7 @@ export function SpaceSidebar() {
     const origin = space?._instanceOrigin;
     if (origin && disconnectedOrigins.has(origin)) {
       const inst = instances.find(i => i.origin === origin);
-      addToast(`Reconnecting to ${inst?.label || 'remote instance'}...`, 'warning', 4000);
+      addToast(`Reconnecting to ${inst?.label || translate('runtime.messages.SpaceSidebar.remoteInstance')}...`, 'warning', 4000);
       return;
     }
     setCurrentSpace(spaceId);
@@ -1095,7 +1097,7 @@ export function SpaceSidebar() {
     <nav data-pip-obstacle="left" className="w-[72px] bg-surface-base flex flex-col items-center py-3 overflow-y-auto flex-shrink-0 no-scrollbar select-none md:fixed md:inset-y-0 md:left-0 md:z-[100] md:glass-strip" style={{ paddingBottom: floatingPanelHeight + 24, ...(isElectron() ? { top: '33px' } : {}) }} onDragOver={(e) => { if (dragState) e.preventDefault(); }} onDrop={handleDrop}>
       <SidebarItem
         id="@me"
-        name="Direct Messages"
+        name={translate('runtime.attributes.SpaceSidebar.directMessages')}
         active={showDms}
         onClick={handleDmClick}
         type="dm"
@@ -1106,7 +1108,7 @@ export function SpaceSidebar() {
 
       {/* Unified space list (ordered by user layout) */}
       {resolvedLayout.map((item) => {
-        if (item.type === 'space') {
+        if (item.type === "space") {
           const { isFederated, isDimmed, tooltipText } = getFederationInfo(item.space);
           return (
             <SidebarItem
@@ -1124,11 +1126,11 @@ export function SpaceSidebar() {
               federationDisconnected={isDimmed}
               tooltipText={tooltipText}
               draggable
-              onDragStart={(e) => handleDragStart(e, item.space.id, 'space')}
-              onDragOver={(e) => handleDragOver(e, item.space.id, 'space')}
+              onDragStart={(e) => handleDragStart(e, item.space.id, "space")}
+              onDragOver={(e) => handleDragOver(e, item.space.id, "space")}
               onDragEnd={handleDragEnd}
               onDrop={handleDrop}
-              isDragging={dragState?.dragType === 'space' && dragState.dragId === item.space.id}
+              isDragging={dragState?.dragType === "space" && dragState.dragId === item.space.id}
               dropIndicator={dropIndicator?.targetId === item.space.id ? dropIndicator.position : null}
             />
           );
@@ -1148,7 +1150,7 @@ export function SpaceSidebar() {
             isActive={isActive}
             hasUnread={hasUnread}
             isFlyoutOpen={isFlyoutOpen}
-            isDragging={dragState?.dragType === 'folder' && dragState.dragId === folder.id}
+            isDragging={dragState?.dragType === "folder" && dragState.dragId === folder.id}
             dropIndicator={dropIndicator?.targetId === folder.id ? dropIndicator.position : null}
             onToggleFlyout={() => setOpenFolderId(isFlyoutOpen ? null : folder.id)}
             onContextMenu={(e) => {
@@ -1156,9 +1158,9 @@ export function SpaceSidebar() {
               const folderRef = folder;
               const items: ContextMenuItem[] = [
                 {
-                  key: 'rename',
-                  type: 'action',
-                  label: 'Rename Folder',
+                  key: "rename",
+                  type: "action",
+                  label: translate('runtime.properties.SpaceSidebar.renameFolder'),
                   icon: (
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
@@ -1170,16 +1172,16 @@ export function SpaceSidebar() {
                   },
                 },
                 {
-                  key: 'color',
-                  type: 'custom',
+                  key: "color",
+                  type: "custom",
                   render: () => (
                     <div className="px-3 py-1.5">
-                      <p className="text-[11px] text-txt-tertiary mb-1.5">Folder Color</p>
+                      <p className="text-[11px] text-txt-tertiary mb-1.5"><Trans i18nKey="ui.SpaceSidebar.folderColor">Folder Color</Trans></p>
                       <div className="flex gap-1.5">
                         <button
                           className={`w-5 h-5 rounded-full border-2 ${!folderRef.color ? 'border-white/40' : 'border-transparent'} bg-white/10`}
                           onClick={() => { handleFolderColorChange(folderRef.id, null); useContextMenuStore.getState().close(); }}
-                          title="Default"
+                          title={translate("runtime.attributes.SpaceSidebar.default")}
                         />
                         {FOLDER_COLORS.map((c) => (
                           <button
@@ -1195,13 +1197,13 @@ export function SpaceSidebar() {
                   ),
                 },
                 {
-                  key: 'sep',
-                  type: 'separator',
+                  key: "sep",
+                  type: "separator",
                 },
                 {
-                  key: 'ungroup',
-                  type: 'action',
-                  label: 'Ungroup',
+                  key: "ungroup",
+                  type: "action",
+                  label: translate('runtime.properties.SpaceSidebar.ungroup'),
                   danger: true,
                   icon: (
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -1213,8 +1215,8 @@ export function SpaceSidebar() {
               ];
               openContextMenu({ x: e.clientX, y: e.clientY }, items);
             }}
-            onDragStart={(e) => handleDragStart(e, folder.id, 'folder')}
-            onDragOver={(e) => handleDragOver(e, folder.id, 'folder')}
+            onDragStart={(e) => handleDragStart(e, folder.id, "folder")}
+            onDragOver={(e) => handleDragOver(e, folder.id, "folder")}
             onDragEnd={handleDragEnd}
             onDrop={handleDrop}
             anchorRef={(el) => {
@@ -1229,7 +1231,7 @@ export function SpaceSidebar() {
 
       <SidebarItem
         id="add-space"
-        name="Add a Space"
+        name={translate('runtime.attributes.SpaceSidebar.addASpace')}
         active={false}
         onClick={() => openModal('createSpace')}
         type="action"
@@ -1238,7 +1240,7 @@ export function SpaceSidebar() {
 
       <SidebarItem
         id="join-space"
-        name="Join a Space"
+        name={translate('runtime.attributes.SpaceSidebar.joinASpace')}
         active={false}
         onClick={() => openModal('joinSpace')}
         type="action"
@@ -1247,7 +1249,7 @@ export function SpaceSidebar() {
 
       <SidebarItem
         id="explore"
-        name="Explore Spaces"
+        name={translate('runtime.attributes.SpaceSidebar.exploreSpaces')}
         active={location.pathname === '/explore'}
         onClick={handleExploreClick}
         type="action"
@@ -1275,18 +1277,18 @@ export function SpaceSidebar() {
               leaveSpace(leaveConfirmSpaceId);
               setLeaveConfirmSpaceId(null);
             }}
-            title={`Leave ${space?.name ?? 'Space'}`}
-            description="Are you sure you want to leave this space? You'll need a new invite to rejoin."
+            title={`Leave ${space?.name ?? translate('runtime.expressions.SpaceSidebar.space')}`}
+            description={translate("runtime.attributes.SpaceSidebar.areYouSureYouWantToLeaveThis")}
             variant="danger"
-            confirmLabel="Leave"
+            confirmLabel={translate("runtime.attributes.SpaceSidebar.leave")}
           />
         );
       })()}
 
       {openFolderId && (() => {
         const folderItem = resolvedLayout.find(
-          (i): i is ResolvedItem & { type: 'folder' } =>
-            i.type === 'folder' && i.folder.id === openFolderId
+          (i): i is ResolvedItem & { type: "folder" } =>
+            i.type === "folder" && i.folder.id === openFolderId
         );
         const anchor = folderAnchorRefs.current.get(openFolderId);
         if (!folderItem || !anchor) return null;
@@ -1303,7 +1305,7 @@ export function SpaceSidebar() {
             onSpaceClick={handleSpaceClick}
             onSpaceContextMenu={handleSpaceContextMenu}
             onRename={(name) => handleFolderRename(openFolderId, name)}
-            onDragStart={(e, spaceId) => handleDragStart(e, spaceId, 'space', openFolderId)}
+            onDragStart={(e, spaceId) => handleDragStart(e, spaceId, "space", openFolderId)}
             onReorder={(ids) => handleReorderInFolder(openFolderId!, ids)}
             onParentDragEnd={handleDragEnd}
           />

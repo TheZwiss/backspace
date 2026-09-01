@@ -8,6 +8,8 @@ import { api } from '../../api/client';
 import type { User } from '@backspace/shared';
 import { parseFederatedUsername } from '../../utils/identity';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
+import { Trans } from 'react-i18next';
+import { translate } from '../../i18n';
 
 function NewDmUserRow({
   user,
@@ -104,19 +106,19 @@ export function NewDmModal() {
       useUIStore.getState().setShowDms(true);
       navigate(`/channels/@me/${channel.id}`);
     } catch (err) {
-      setError((err as Error).message || 'Failed to create DM');
+      setError((err as Error).message || translate('runtime.messages.NewDmModal.failedToCreateDM'));
     }
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={closeModal} title="New Direct Message" mobileStyle="sheet">
+    <Modal isOpen={isOpen} onClose={closeModal} title={translate("runtime.attributes.NewDmModal.newDirectMessage")} mobileStyle="sheet">
       <div className="space-y-3">
         <input
           ref={inputRef}
           type="text"
           value={query}
           onChange={(e) => handleSearch(e.target.value)}
-          placeholder="Search for a user..."
+          placeholder={translate("runtime.attributes.NewDmModal.searchForAUser")}
           className="input-search w-full py-2 text-[14px]"
         />
 
@@ -126,11 +128,11 @@ export function NewDmModal() {
 
         <div className="max-h-[300px] overflow-y-auto space-y-[2px]">
           {isSearching && (
-            <div className="py-4 text-center text-txt-tertiary text-[14px]">Searching...</div>
+            <div className="py-4 text-center text-txt-tertiary text-[14px]"><Trans i18nKey="ui.NewDmModal.searching">Searching...</Trans></div>
           )}
 
           {!isSearching && query.trim().length >= 2 && results.length === 0 && (
-            <div className="py-4 text-center text-txt-tertiary text-[14px]">No users found</div>
+            <div className="py-4 text-center text-txt-tertiary text-[14px]"><Trans i18nKey="ui.NewDmModal.noUsersFound">No users found</Trans></div>
           )}
 
           {results.map((user) => (

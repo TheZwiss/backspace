@@ -4,6 +4,7 @@ import { api } from '../api/client';
 import { resolveAssetUrl } from '../utils/assetUrls';
 import { useInstanceStore } from './instanceStore';
 import { useSpaceStore } from './spaceStore';
+import { translate } from '../i18n';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -85,7 +86,7 @@ export const useExploreStore = create<ExploreState>((set, get) => ({
 
       // If ALL instances failed, surface an error
       if (fulfilled.length === 0 && rejected.length > 0) {
-        set({ isLoading: false, error: 'Failed to reach any instance for discovery' });
+        set({ isLoading: false, error: translate('runtime.selected.exploreStore.failedToReachAnyInstanceForDiscovery') });
         return;
       }
 
@@ -127,7 +128,7 @@ export const useExploreStore = create<ExploreState>((set, get) => ({
     } catch (err) {
       set({
         isLoading: false,
-        error: err instanceof Error ? err.message : 'Failed to fetch spaces',
+        error: err instanceof Error ? err.message : translate('runtime.selected.exploreStore.failedToFetchSpaces'),
       });
     }
   },

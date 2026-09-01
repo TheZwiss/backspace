@@ -15,6 +15,8 @@ import { useTransferStore, type Transfer } from '../../stores/transferStore';
 import { usePendingMessageStore } from '../../stores/pendingMessageStore';
 import { putHandle, supportsFsHandles, supportsDnDHandles } from '../../utils/idbHandles';
 import { useVisualViewportInset } from '../../hooks/useVisualViewportInset';
+import { Trans } from 'react-i18next';
+import { translate } from '../../i18n';
 
 interface MessageInputProps {
   channelId: string;
@@ -176,8 +178,8 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
     for (const t of stagedTransfers) {
       if (t.state === 'failed' && !toastedFailuresRef.current.has(t.id)) {
         toastedFailuresRef.current.add(t.id);
-        const msg = t.error?.message ?? 'Upload failed';
-        addToast(`Failed to upload ${t.file.name}: ${msg}`, 'warning');
+        const msg = t.error?.message ?? translate('runtime.selected.MessageInput.uploadFailed');
+        addToast(translate('runtime.templates.MessageInput.failedToUpload', { p0: t.file.name, p1: msg }), 'warning');
       }
     }
   }, [stagedTransfers, addToast]);
@@ -251,8 +253,8 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
           }
         }
       } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Upload failed';
-        addToast(`Failed to upload ${file.name}: ${msg}`, 'warning');
+        const msg = err instanceof Error ? err.message : translate('runtime.selected.MessageInput.uploadFailed2');
+        addToast(translate('runtime.templates.MessageInput.failedToUpload2', { p0: file.name, p1: msg }), 'warning');
       }
     },
     [channelId, startUpload, attachToComposer, addToast],
@@ -330,7 +332,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
           textareaRef.current.focus();
         }
       } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Failed to send message';
+        const msg = err instanceof Error ? err.message : translate('runtime.selected.MessageInput.failedToSendMessage');
         addToast(msg, 'warning');
       }
       return;
@@ -743,7 +745,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
       <div ref={setComposerRef} data-pip-obstacle="bottom" className={composerClass} style={composerStyle}>
         <div className="flex items-center justify-center py-[14px] px-4">
           <span className="text-txt-tertiary text-[14px]">
-            You do not have permission to send messages in this channel
+            <Trans i18nKey="ui.MessageInput.youDoNotHavePermissionToSendMessages">You do not have permission to send messages in this channel</Trans>
           </span>
         </div>
       </div>
@@ -775,7 +777,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
       {chatReplyTo && (
         <div className="bg-interactive-hover rounded-t-lg px-4 py-2 flex items-center justify-between border-b border-white/[0.06]">
           <div className="flex items-center gap-1 text-[14px] text-txt-message truncate">
-            <span className="opacity-60">Replying to</span>
+            <span className="opacity-60"><Trans i18nKey="ui.MessageInput.replyingTo">Replying to</Trans></span>
             <span className="font-bold">
               {chatReplyTo.user.displayName ?? chatReplyTo.user.username}
             </span>
@@ -783,7 +785,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
           <button
             onClick={() => chatSetReplyTo(null)}
             className="text-txt-tertiary hover:text-txt-primary transition-colors"
-            aria-label="Cancel reply"
+            aria-label={translate("runtime.attributes.MessageInput.cancelReply")}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
               <path d="M18.4 4L12 10.4L5.6 4L4 5.6L10.4 12L4 18.4L5.6 20L12 13.6L18.4 20L20 18.4L13.6 12L20 5.6L18.4 4Z" />
@@ -811,9 +813,9 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
         {stagedTransfers.length > 0 && (
           <div className="p-4 flex flex-wrap gap-4 bg-surface-channel/30">
             {stagedTransfers.map((t) => {
-              const isImage = t.file.mimetype.startsWith('image/');
-              const isFinal = t.state === 'completed';
-              const showOverlay = t.state !== 'completed';
+              const isImage = t.file.mimetype.startsWith("image/");
+              const isFinal = t.state === "completed";
+              const showOverlay = t.state !== "completed";
               const previewUrl = previewUrlsRef.current.get(t.id);
               return (
                 <div
@@ -856,8 +858,8 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
                       state={t.state}
                       filename={t.file.name}
                       size="tile"
-                      onPause={t.state === 'active' ? () => pauseUpload(t.id) : undefined}
-                      onResume={t.state === 'paused' ? () => void resumeUpload(t.id) : undefined}
+                      onPause={t.state === "active" ? () => pauseUpload(t.id) : undefined}
+                      onResume={t.state === "paused" ? () => void resumeUpload(t.id) : undefined}
                       onAbort={() => removeStagedTransfer(t.id)}
                     />
                   )}
@@ -867,7 +869,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
                     <button
                       onClick={() => removeStagedTransfer(t.id)}
                       className="absolute -top-2 -right-2 w-7 h-7 bg-accent-rose hover:bg-accent-rose/80 shadow-elevation-high rounded-lg flex items-center justify-center text-white transition-colors z-10"
-                      aria-label="Remove attachment"
+                      aria-label={translate("runtime.attributes.MessageInput.removeAttachment")}
                     >
                       <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
                         <path d="M5 2a1 1 0 011-1h4a1 1 0 011 1v1h3a1 1 0 110 2h-.08L13 14a2 2 0 01-2 2H5a2 2 0 01-2-2L2.08 5H2a1 1 0 110-2h3V2zm2 0v1h2V2H7z" />
@@ -886,8 +888,8 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
             <button
               onClick={() => fileInputRef.current?.click()}
               className="w-10 h-10 md:w-[34px] md:h-[34px] flex items-center justify-center rounded-[6px] text-txt-tertiary hover:text-txt-secondary transition-colors flex-shrink-0"
-              title="Attach file"
-              aria-label="Attach file"
+              title={translate("runtime.attributes.MessageInput.attachFile")}
+              aria-label={translate("runtime.attributes.MessageInput.attachFile2")}
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z" />
@@ -915,14 +917,14 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
             onChange={handleChange}
             onKeyDown={handleKeyDown}
             onPaste={canAttachFiles ? handlePaste : undefined}
-            placeholder={placeholder ?? `Message ${channelName.startsWith('@') ? channelName : `#${channelName}`}`}
+            placeholder={placeholder ?? translate('runtime.templates.MessageInput.message', { p0: channelName.startsWith('@') ? channelName : `#${channelName}` })}
             className="input-embedded flex-1 py-[10px] px-1 resize-none text-[15px] leading-[1.375rem] max-h-[50vh] scrollbar-thin"
             rows={1}
           />
 
           {/* Active-upload indicator */}
           {anyActiveOrQueued && (
-            <div className="p-3 text-txt-tertiary" title="Uploading…" aria-label="Uploading">
+            <div className="p-3 text-txt-tertiary" title={translate("runtime.attributes.MessageInput.uploading")} aria-label={translate("runtime.attributes.MessageInput.uploading2")}>
               <svg className="w-5 h-5 animate-spin" viewBox="0 0 24 24" fill="none">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
@@ -934,9 +936,9 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
           {failedCount > 0 && (
             <span
               className="text-[12px] font-medium text-accent-rose px-1 flex-shrink-0"
-              title="Remove or retry the failed attachment to send"
+              title={translate("runtime.attributes.MessageInput.removeOrRetryTheFailedAttachmentToSend")}
             >
-              {failedCount} failed
+              {failedCount} <Trans i18nKey="ui.MessageInput.failed">failed</Trans>
             </span>
           )}
 
@@ -952,12 +954,12 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
           {/* GIF button */}
           {gifEnabled && (
             <button
-              onClick={() => togglePopover('gif')}
+              onClick={() => togglePopover("gif")}
               className={`w-10 h-10 md:w-[34px] md:h-[34px] flex items-center justify-center rounded-[6px] transition-colors flex-shrink-0 ${
-                activePopover === 'gif' ? 'text-accent-primary' : 'text-txt-tertiary hover:text-txt-secondary'
+                activePopover === "gif" ? 'text-accent-primary' : 'text-txt-tertiary hover:text-txt-secondary'
               }`}
-              title="GIF"
-              aria-label="GIF picker"
+              title={translate("runtime.attributes.MessageInput.gif")}
+              aria-label={translate("runtime.attributes.MessageInput.gifPicker")}
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M2 5.5A2.5 2.5 0 0 1 4.5 3h15A2.5 2.5 0 0 1 22 5.5v13a2.5 2.5 0 0 1-2.5 2.5h-15A2.5 2.5 0 0 1 2 18.5v-13ZM5.1 14V10h3.2v1.2H6.5v.6h1.6v1.1H6.5V14H5.1Zm4.5 0V10h1.4v4H9.6Zm2.5 0V10h3.2v1.2h-1.8v.5h1.6v1h-1.6V14h-1.4Z" />
@@ -971,8 +973,8 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
             className={`w-10 h-10 md:w-[34px] md:h-[34px] flex items-center justify-center rounded-[6px] transition-colors flex-shrink-0 ${
               activePopover === 'emoji' ? 'text-accent-primary' : 'text-txt-tertiary hover:text-txt-secondary'
             }`}
-            title="Emoji"
-            aria-label="Emoji picker"
+            title={translate("runtime.attributes.MessageInput.emoji")}
+            aria-label={translate("runtime.attributes.MessageInput.emojiPicker")}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5s.67 1.5 1.5 1.5zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z" />
@@ -985,8 +987,8 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
               onClick={() => void handleSubmit()}
               disabled={anyUnshippable}
               className="w-10 h-10 md:w-[34px] md:h-[34px] flex items-center justify-center rounded-[6px] bg-accent-primary hover:bg-accent-primary-hover text-white transition-all duration-150 flex-shrink-0 disabled:opacity-50"
-              aria-label="Send message"
-              title="Send"
+              aria-label={translate("runtime.attributes.MessageInput.sendMessage")}
+              title={translate("runtime.attributes.MessageInput.send")}
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M3.4 20.4l17.45-7.48a1 1 0 000-1.84L3.4 3.6a.993.993 0 00-1.39.91L2 9.12c0 .5.37.93.87.99L17 12 2.87 13.88c-.5.07-.87.5-.87 1l.01 4.61c0 .71.73 1.2 1.39.91z" />
