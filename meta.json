@@ -1,6 +1,6 @@
 {
-  "last_run": "2026-09-01T21:42:49.737Z",
+  "last_run": "2026-09-01T21:54:47.628Z",
   "last_success": null,
-  "error": "failure",
+  "error": "run failure — https://github.com/TheZwiss/backspace/actions/runs/33563551661",
   "series_last_date": {}
 }
