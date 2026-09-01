@@ -44,7 +44,7 @@ Issues/PRs and commit/code-frequency history are not collected at all — no cha
 scripts/metrics/                     @backspace/metrics (pnpm workspace package)
   package.json      zero runtime dependencies; scripts: typecheck, test
   tsconfig.json      extends the repo's strict base config, plus erasableSyntaxOnly,
-                      verbatimModuleSyntax, rewriteRelativeImportExtensions
+                      verbatimModuleSyntax, allowImportingTsExtensions
   src/
     types.ts          shared row shapes (import type only)
     github.ts         API client
@@ -283,10 +283,10 @@ That said, adding a second repo is not a matter of pointing a second workflow at
 
 The collector has **zero runtime dependencies** — only `fetch` and `node:` builtins — and is executed directly by Node via native TypeScript type stripping, with no `tsc` build step in the run path (`tsc --noEmit` runs only for typechecking, in `test`/`typecheck`). `scripts/metrics/package.json` declares `"engines": { "node": ">=22.18" }`; the workflow's `setup-node` step pins `node-version: 24`.
 
-Two constraints this creates are compiler-enforced (`tsconfig.json`'s `erasableSyntaxOnly` + `verbatimModuleSyntax` + `rewriteRelativeImportExtensions`) and test-enforced (`no-runtime-deps.test.ts`, §10) rather than left to discipline:
+Two constraints this creates are enforced rather than left to discipline, but by different mechanisms — worth knowing, because only one of them fails at typecheck time:
 
-- **`import type` is mandatory** for any type-only import. Omitting it makes Node treat the import as a value import, which throws `SyntaxError` at runtime — the single most likely way this system could break, since a missing `import type` still passes a typecheck that isn't checking for it.
-- **Relative import specifiers must carry the `.ts` extension** (`import './series.ts'`, never `'./series'`).
+- **`import type` is mandatory** for any type-only import. Omitting it makes Node treat the import as a value import, which throws `SyntaxError` at runtime. `verbatimModuleSyntax` in `scripts/metrics/tsconfig.json` catches this at typecheck time, and `no-runtime-deps.test.ts` catches it again.
+- **Relative import specifiers must carry the `.ts` extension** (`import './series.ts'`, never `'./series'`). This one has **no compiler enforcement**: `allowImportingTsExtensions` permits the extension but does not require it, so a missing `.ts` typechecks cleanly and only fails when Node runs the file. The regex scan in `no-runtime-deps.test.ts` (§10) is the only thing that catches it before then.
 
 Unsupported by type stripping and therefore avoided throughout the package: enums, namespaces with runtime code, parameter properties, import aliases, decorators.
 

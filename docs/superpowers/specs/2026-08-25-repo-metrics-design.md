@@ -213,9 +213,17 @@ The constraints that actually shape the code, all omitted from v1:
   import aliases, decorators.
 
 Mitigation is compiler-enforced, not discipline-enforced: the package tsconfig
-sets `erasableSyntaxOnly`, `verbatimModuleSyntax`, and
-`rewriteRelativeImportExtensions`, so `tsc --noEmit` — which now runs in CI via
-§3.6 — rejects every one of these at review time rather than at 03:00.
+sets `erasableSyntaxOnly` and `verbatimModuleSyntax`, so `tsc --noEmit` — which
+now runs in CI via §3.6 — rejects these at review time rather than at 03:00.
+
+> **Correction (2026-09-01, during implementation).** This paragraph originally
+> also named `rewriteRelativeImportExtensions`, and claimed the mandatory `.ts`
+> extension on relative imports was compiler-enforced. It is not. That flag was
+> never set, and no compiler option requires the extension —
+> `allowImportingTsExtensions` permits it without demanding it, so a missing
+> `.ts` typechecks cleanly and fails only when Node runs the file. The regex
+> scan in `scripts/metrics/src/no-runtime-deps.test.ts` is the only thing that
+> catches it. See `docs/systems/metrics.md`.
 
 ---
 
