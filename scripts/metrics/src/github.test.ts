@@ -181,7 +181,17 @@ describe('createClient.paginate', () => {
         // Points back at the very first URL this call fetched, forming a cycle.
         headers: { link: '<https://api.github.com/x?per_page=100>; rel="next"' },
       });
-    const fetchImpl = vi.fn(async (url: string) => (url.includes('page=2') ? page2() : page1()));
+    // Hard ceiling inside the mock itself. Without the cycle guard this loop
+    // is a tight microtask cycle that never yields to a macrotask, so it
+    // exhausts memory and crashes the worker BEFORE vitest's timeout can fire
+    // — an opaque CI crash instead of a red test. Throwing here makes a future
+    // regression fail fast and legibly.
+    let calls = 0;
+    const fetchImpl = vi.fn(async (url: string) => {
+      calls += 1;
+      if (calls > 4) throw new Error('cycle guard regressed: paginate kept fetching');
+      return url.includes('page=2') ? page2() : page1();
+    });
     const client = createClient('t', {
       fetchImpl: fetchImpl as unknown as typeof fetch,
       sleep: noSleep,
