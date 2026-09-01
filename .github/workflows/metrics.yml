@@ -105,6 +105,11 @@ jobs:
           # Pinned to 24: the collector is TypeScript executed directly by Node's
           # native type stripping, with no build step and no dependencies.
           node-version: 24
+          # This job never installs anything, so there is no dependency cache to
+          # prime. Left at its default, setup-node detects the repo's pnpm from
+          # the root package.json and fails the step trying to invoke it, because
+          # nothing here installs pnpm the way ci.yml does.
+          package-manager-cache: false
 
       - name: Collect
         env:
