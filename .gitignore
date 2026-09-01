@@ -103,3 +103,7 @@ tests/reports/*
 # Scratch orphan-branch bootstrap worktree created (and normally removed) by the
 # same workflow's "Bootstrap the data branch if absent" step.
 .metrics-init/
+# Dashboard bundle generated at deploy time by scripts/metrics/src/cli-bundle.ts.
+# A build artifact, never committed: the metrics-data branch is the single source
+# of truth, and a committed derived copy invites the two to disagree.
+site/insights/data.json

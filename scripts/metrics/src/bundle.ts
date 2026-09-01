@@ -1,3 +1,4 @@
+import { Buffer } from 'node:buffer';
 import { compareStrings, compareReleaseRows } from './series.ts';
 import type { Store } from './store.ts';
 
@@ -122,8 +123,11 @@ export interface DashboardData {
   empty: boolean;
   /**
    * Set when the `all` range was downsampled to weekly buckets to fit the
-   * budget. Always false here — `buildDashboardData` never downsamples; the
-   * budget pass owns that flag and flips it when it acts.
+   * budget, which the page must label. Always false as `buildDashboardData`
+   * returns it — reading the archive never downsamples. `downsampleWeekly`
+   * owns this flag and `serialiseWithinBudget` is the only thing that
+   * decides to call it, so it can never claim weekly buckets over data that
+   * is still daily.
    */
   downsampled: boolean;
   series: {
@@ -480,4 +484,325 @@ export function buildDashboardData(store: Store, generatedAt: string): Dashboard
     releases,
     dimensions: { referrers, paths },
   };
+}
+
+/**
+ * The published bundle's uncompressed size budget: 2 MB, measured as the
+ * UTF-8 byte length of the serialised JSON (spec §7.1).
+ *
+ * Uncompressed and not gzipped on purpose. Pages serves the file gzipped, so
+ * the number a visitor downloads is smaller — but the number that decides
+ * whether the page is usable is the one the browser must parse and hold in
+ * memory, and that is this one. Measuring the compressed size would also
+ * make the budget depend on how well one particular archive happens to
+ * compress, which is not a property of the dashboard.
+ */
+export const BUNDLE_BUDGET_BYTES = 2 * 1024 * 1024;
+
+const MS_PER_DAY = 86_400_000;
+
+/** The exact shape every date in the archive has, and the only one weekly bucketing can place. */
+const ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/**
+ * The UTC Monday that opens `date`'s ISO week, as `YYYY-MM-DD`.
+ *
+ * Computed entirely in UTC. The archive treats every date as a UTC calendar
+ * day (see `deriveRunTimestamps` in `cli-support.ts`), so using
+ * `getDay`/`getDate` — which read the host's LOCAL calendar — would move a
+ * day into the neighbouring week for any machine west of Greenwich and
+ * produce a different bundle on a developer's laptop than in CI.
+ *
+ * `(getUTCDay() + 6) % 7` is the days-since-Monday offset, and the `+ 6`
+ * is the whole reason this is not a one-liner: `getUTCDay()` returns 0 for
+ * SUNDAY, not for Monday, so subtracting it directly would leave Sunday
+ * alone as a bucket of one and push every other day back to the preceding
+ * Sunday. The offset here maps Monday to 0 and Sunday to 6, which is the ISO
+ * week — Monday through Sunday inclusive.
+ *
+ * This is the one place in the package that validates a date's SHAPE, and
+ * the asymmetry with `readDatedRows` (which deliberately does not) is
+ * justified by what each does with the value. Sorting only compares bytes,
+ * so a malformed date is merely misplaced; week arithmetic must actually
+ * parse it, and the two failure modes available without this check are both
+ * silent — `new Date('2026-9-1')` is host-dependent, and `2026-02-30` rolls
+ * over to 2 March in every JS date constructor, relocating a measurement by
+ * two days under a bucket key that looks perfectly ordinary. The round-trip
+ * comparison catches both, and also catches the legacy two-digit-year
+ * mapping in `Date.UTC` (year 50 means 1950, year 1 means 1901).
+ */
+function utcMonday(date: string): string {
+  const match = ISO_DATE_RE.exec(date);
+  if (match === null) {
+    throw new Error(`bundle: cannot bucket "${date}" into a week — expected a YYYY-MM-DD date`);
+  }
+  const time = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  if (!Number.isFinite(time)) {
+    throw new Error(`bundle: cannot bucket "${date}" into a week — it is not a real date`);
+  }
+  const parsed = new Date(time);
+  if (parsed.toISOString().slice(0, 10) !== date) {
+    throw new Error(
+      `bundle: cannot bucket "${date}" into a week — it is not a real calendar date`,
+    );
+  }
+  const daysSinceMonday = (parsed.getUTCDay() + 6) % 7;
+  return new Date(time - daysSinceMonday * MS_PER_DAY).toISOString().slice(0, 10);
+}
+
+/** One ISO week's worth of a series, as the indices of the rows that fall in it. */
+interface WeekBucket {
+  /** The UTC Monday that opens the week, and the date the bucket is published under. */
+  monday: string;
+  /** Indices into the source `dates`/value arrays, in the order they appeared. */
+  indices: number[];
+}
+
+/**
+ * Groups a series' dates into ISO weeks, ascending by Monday.
+ *
+ * Returns indices rather than values so one grouping pass serves every
+ * parallel array of a series at once — `RepoSeries` has three, and
+ * re-deriving the buckets per field would let the three drift out of index
+ * alignment if any of them ever grouped differently.
+ *
+ * A week with no rows produces no bucket. That is the same rule the daily
+ * series follow (`buildDashboardData` does not gap-fill a missing day), and
+ * the reason is the same: an invented point is a claim that something was
+ * measured.
+ */
+function weekBuckets(dates: readonly string[]): WeekBucket[] {
+  const byMonday = new Map<string, number[]>();
+  for (const [index, date] of dates.entries()) {
+    const monday = utcMonday(date);
+    const existing = byMonday.get(monday);
+    if (existing === undefined) {
+      byMonday.set(monday, [index]);
+    } else {
+      existing.push(index);
+    }
+  }
+  return [...byMonday.entries()]
+    .map(([monday, indices]): WeekBucket => ({ monday, indices }))
+    .sort((a, b) => compareStrings(a.monday, b.monday));
+}
+
+/**
+ * A bucket's total for a PER-DAY EVENT COUNT (`views.count`, `clones.uniques`).
+ *
+ * Nulls are skipped rather than counted as 0, and the accumulator starts at
+ * `null` rather than at 0 so a bucket in which nothing was measured stays
+ * null. Starting at 0 is the single easiest way to fabricate a measurement
+ * here: it turns "the collector did not run that week" into "that week had
+ * no traffic", two statements the page renders very differently and the
+ * archive can never tell apart again once the distinction is gone.
+ *
+ * A partly-measured week sums the days it has, which understates the week.
+ * That is deliberate and is the least-bad option: the alternative — nulling
+ * any week with a gap — would blank the first and last buckets of every
+ * bundle, since both are partial weeks by construction, and would discard
+ * measurements that really were taken. The page labels a downsampled range
+ * as weekly, which is what makes a short week readable as a short week.
+ *
+ * `undefined` is treated as absent for the same reason as null. Under
+ * `noUncheckedIndexedAccess` it is reachable only from a value array shorter
+ * than its `dates` array — a malformed `DashboardData` no producer in this
+ * package emits — and treating it as absent rather than crashing keeps the
+ * budget pass from being the thing that fails on it.
+ */
+function sumBucket(values: ReadonlyArray<number | null>, indices: readonly number[]): number | null {
+  let total: number | null = null;
+  for (const index of indices) {
+    const value = values[index];
+    if (value === undefined || value === null) continue;
+    total = total === null ? value : total + value;
+  }
+  return total;
+}
+
+/**
+ * A bucket's value for a CUMULATIVE COUNTER (`stars.total`, every field of
+ * `repo`): the last measured value in the week.
+ *
+ * Summing these would be meaningless — seven daily readings of a star count
+ * that sat at 66 all week would publish 462 stars — and it is meaningless in
+ * a way that looks entirely plausible on a chart, which is why the two
+ * aggregators are separate named functions rather than a boolean flag on
+ * one.
+ *
+ * "Last MEASURED", not "last element": a week whose final days are null was
+ * still measured earlier in the week, and reading the literal last value
+ * would publish an absence invented out of a real measurement. Picking the
+ * highest date rather than the highest index also means an unsorted input
+ * cannot silently yield the wrong reading — the values in a bucket are
+ * ordered by what their dates say, not by where they happened to sit in the
+ * array.
+ *
+ * `>=` rather than `>` on the date comparison so that two rows sharing a
+ * date resolve to the later one in file order, matching what "last" means
+ * everywhere else in this package.
+ */
+function lastBucket(
+  dates: readonly string[],
+  values: ReadonlyArray<number | null>,
+  indices: readonly number[],
+): number | null {
+  let latestDate: string | null = null;
+  let latest: number | null = null;
+  for (const index of indices) {
+    const value = values[index];
+    if (value === undefined || value === null) continue;
+    const date = dates[index];
+    if (date === undefined) continue;
+    if (latestDate === null || compareStrings(date, latestDate) >= 0) {
+      latestDate = date;
+      latest = value;
+    }
+  }
+  return latest;
+}
+
+function downsampleTraffic(series: TrafficSeries): TrafficSeries {
+  const buckets = weekBuckets(series.dates);
+  return {
+    dates: buckets.map((bucket) => bucket.monday),
+    count: buckets.map((bucket) => sumBucket(series.count, bucket.indices)),
+    // `uniques` sums too. A week's unique visitors are not the sum of its
+    // daily uniques — someone who visited on Monday and Thursday is counted
+    // twice — but the archive holds only daily figures, so a true weekly
+    // unique count is not recoverable from it at any resolution. The sum is
+    // an upper bound and moves with the quantity it describes; taking the
+    // last day's uniques instead would report one day as if it were seven,
+    // which is wrong by a much larger factor and in the opposite direction.
+    uniques: buckets.map((bucket) => sumBucket(series.uniques, bucket.indices)),
+  };
+}
+
+function downsampleCount(series: CountSeries): CountSeries {
+  const buckets = weekBuckets(series.dates);
+  return {
+    dates: buckets.map((bucket) => bucket.monday),
+    total: buckets.map((bucket) => lastBucket(series.dates, series.total, bucket.indices)),
+  };
+}
+
+function downsampleRepo(series: RepoSeries): RepoSeries {
+  const buckets = weekBuckets(series.dates);
+  return {
+    dates: buckets.map((bucket) => bucket.monday),
+    subscribers: buckets.map((bucket) =>
+      lastBucket(series.dates, series.subscribers, bucket.indices),
+    ),
+    open_issues: buckets.map((bucket) =>
+      lastBucket(series.dates, series.open_issues, bucket.indices),
+    ),
+    downloads_total: buckets.map((bucket) =>
+      lastBucket(series.dates, series.downloads_total, bucket.indices),
+    ),
+  };
+}
+
+/**
+ * Reduces the six dated series to weekly buckets, keyed on the UTC Monday.
+ *
+ * Pure, exactly as `buildDashboardData` is: no clock, no environment, no
+ * writes, and no mutation of the argument — the caller keeps a usable daily
+ * bundle after the call, which is what lets the budget pass measure both and
+ * publish the smaller one.
+ *
+ * Three groups of fields, three different treatments, and the difference
+ * between the first two is the one thing in this function that cannot be got
+ * wrong safely:
+ *
+ * - `views` and `clones` are per-day event counts and SUM within a week.
+ * - `stars`, `forks`, `contributors` and every field of `repo` are
+ *   point-in-time totals and take the week's LAST measured value.
+ * - `releases` and `dimensions` are not bucketed at all. Releases are sparse
+ *   — there is no space to save, and merging two tags published in one week
+ *   into one marker would destroy the annotation the Growth chart exists
+ *   for. Dimension series are already bounded by top-10-per-snapshot, and
+ *   their trajectories are differences between CONSECUTIVE snapshots, a
+ *   quantity weekly bucketing would silently redefine into something else
+ *   with the same name.
+ *
+ * `collection_started` and `empty` are carried through untouched rather than
+ * recomputed. `empty` cannot change — bucketing an empty series yields an
+ * empty series — but `collection_started` would: a first measurement on a
+ * Wednesday buckets under the preceding Monday, and recomputing the field
+ * from the bucket keys would move the page's honest "since <date>" label
+ * onto a day on which nothing was measured and no chart has a point. The
+ * bucket key is a label for a week; `collection_started` is a claim about a
+ * measurement, and only one of the two may be back-dated.
+ */
+export function downsampleWeekly(data: DashboardData): DashboardData {
+  return {
+    ...data,
+    downsampled: true,
+    series: {
+      views: downsampleTraffic(data.series.views),
+      clones: downsampleTraffic(data.series.clones),
+      stars: downsampleCount(data.series.stars),
+      forks: downsampleCount(data.series.forks),
+      contributors: downsampleCount(data.series.contributors),
+      repo: downsampleRepo(data.series.repo),
+    },
+  };
+}
+
+/** The bytes to publish as `data.json`, with the measurements a run log should report. */
+export interface BundleResult {
+  /** The exact text to write. */
+  json: string;
+  /** UTF-8 byte length of `json`, the quantity the budget is measured in. */
+  bytes: number;
+  /** Whether the series were reduced to weekly buckets to fit the budget. */
+  downsampled: boolean;
+}
+
+/**
+ * Serialises `data`, downsampling to weekly buckets if — and only if — the
+ * daily bundle exceeds the budget.
+ *
+ * Build, serialise, measure; if over, downsample, re-serialise, re-measure;
+ * if still over, throw. The order matters: downsampling unconditionally
+ * would publish weekly buckets for the many years this archive will spend
+ * comfortably under 2 MB, throwing away resolution nobody needed to save,
+ * and would light up the page's "weekly" label over data that is daily.
+ *
+ * Failing is the correct end state rather than a fallback, per spec §7.1.
+ * The alternatives are truncating a series — silently dropping the oldest
+ * history from the only surviving copy of data GitHub deletes after 14 days,
+ * which is exactly the loss this archive exists to prevent — or publishing
+ * an oversized bundle, which moves the regression from a red CI run to a
+ * visitor's first paint. A build that fails is a build a maintainer fixes.
+ *
+ * Bytes are measured with `Buffer.byteLength`, not `String#length`. The
+ * latter counts UTF-16 code units, so a single emoji or accented character
+ * in a referrer title — upstream text this package does not control —
+ * under-counts against a budget expressed in bytes.
+ *
+ * The under-budget path reports `data.downsampled` rather than a hardcoded
+ * `false`: this function's answer is "did the published bundle end up
+ * weekly", and a caller that already downsampled for its own reasons must
+ * not have that fact erased on the way out.
+ */
+export function serialiseWithinBudget(data: DashboardData): BundleResult {
+  const daily = JSON.stringify(data);
+  const dailyBytes = Buffer.byteLength(daily, 'utf8');
+  if (dailyBytes <= BUNDLE_BUDGET_BYTES) {
+    return { json: daily, bytes: dailyBytes, downsampled: data.downsampled };
+  }
+
+  const weekly = downsampleWeekly(data);
+  const json = JSON.stringify(weekly);
+  const bytes = Buffer.byteLength(json, 'utf8');
+  if (bytes > BUNDLE_BUDGET_BYTES) {
+    throw new Error(
+      `bundle: ${bytes} bytes after weekly downsampling (from ${dailyBytes} daily) still exceeds ` +
+        `the ${BUNDLE_BUDGET_BYTES}-byte budget. Nothing was dropped to fit: a series is never ` +
+        `truncated. Reduce what the bundle carries (e.g. cap the release list or the dimension ` +
+        `history) or raise the budget deliberately.`,
+    );
+  }
+  return { json, bytes, downsampled: true };
 }

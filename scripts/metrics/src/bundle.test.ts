@@ -3,7 +3,13 @@ import { mkdtempSync, rmSync, writeFileSync, mkdirSync, readdirSync, readFileSyn
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createStore } from './store.ts';
-import { buildDashboardData } from './bundle.ts';
+import {
+  buildDashboardData,
+  downsampleWeekly,
+  serialiseWithinBudget,
+  BUNDLE_BUDGET_BYTES,
+} from './bundle.ts';
+import type { DashboardData } from './bundle.ts';
 import type { DimensionRow } from './types.ts';
 
 let dir = '';
@@ -621,10 +627,18 @@ describe('buildDashboardData — purity and envelope', () => {
     expect({ ...other, generated_at: marker }).toEqual(marked);
   });
 
-  it('reports downsampled false — it never downsamples', () => {
+  it('reports downsampled false, and a bundle under budget keeps it false', () => {
     writeRaw('stars.csv', 'date,total\n2026-09-01,56\n');
 
-    expect(build().downsampled).toBe(false);
+    // `buildDashboardData` itself never downsamples: the budget pass owns
+    // that flag entirely.
+    const data = build();
+    expect(data.downsampled).toBe(false);
+
+    // And a bundle that fits the budget is published exactly as built — the
+    // flag only turns true when weekly bucketing actually happened, so the
+    // page's "weekly buckets" label can never appear over daily data.
+    expect(serialiseWithinBudget(data).downsampled).toBe(false);
   });
 
   it('returns byte-identical output for the same archive on repeated calls', () => {
@@ -694,5 +708,543 @@ describe('buildDashboardData — purity and envelope', () => {
     // not a field that quietly disappears in transit.
     expect(undefinedPaths(data)).toEqual([]);
     expect(JSON.stringify(data)).toContain('"downloads_total":[null]');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Weekly downsampling and the 2 MB budget
+// ---------------------------------------------------------------------------
+
+/**
+ * A complete, valid `DashboardData` with every series empty, plus overrides.
+ *
+ * The budget cases need bundles far larger than any archive a test should
+ * write to disk (over 2 MB of CSV), and the envelope cases are about fields
+ * no archive controls, so both are better built as objects than read back
+ * out of a store. Every field of the contract is spelled out here on
+ * purpose: if `DashboardData` grows one, this helper fails to compile rather
+ * than quietly omitting it from every budget test.
+ */
+function makeData(overrides: Partial<DashboardData> = {}): DashboardData {
+  return {
+    generated_at: GENERATED_AT,
+    collection_started: null,
+    meta: null,
+    empty: false,
+    downsampled: false,
+    series: {
+      views: { dates: [], count: [], uniques: [] },
+      clones: { dates: [], count: [], uniques: [] },
+      stars: { dates: [], total: [] },
+      forks: { dates: [], total: [] },
+      contributors: { dates: [], total: [] },
+      repo: { dates: [], subscribers: [], open_issues: [], downloads_total: [] },
+    },
+    releases: [],
+    dimensions: {
+      referrers: { snapshots: [], latest: [], trajectories: [] },
+      paths: { snapshots: [], latest: [], trajectories: [] },
+    },
+    ...overrides,
+  };
+}
+
+/** `count` consecutive UTC calendar days starting at `start`, as `YYYY-MM-DD`. */
+function dailyDates(start: string, count: number): string[] {
+  const base = Date.parse(`${start}T00:00:00.000Z`);
+  return Array.from({ length: count }, (_unused, index) =>
+    new Date(base + index * 86_400_000).toISOString().slice(0, 10),
+  );
+}
+
+describe('downsampleWeekly — sum vs. last', () => {
+  it('sums traffic but takes the last value of a cumulative counter when bucketing', () => {
+    // One whole ISO week: Monday 2026-08-31 through Sunday 2026-09-06.
+    writeRaw(
+      'traffic/views.csv',
+      [
+        'date,count,uniques',
+        '2026-08-31,1,1',
+        '2026-09-01,2,1',
+        '2026-09-02,3,1',
+        '2026-09-03,4,1',
+        '2026-09-04,5,1',
+        '2026-09-05,6,1',
+        '2026-09-06,7,1',
+        '',
+      ].join('\n'),
+    );
+    writeRaw(
+      'stars.csv',
+      [
+        'date,total',
+        '2026-08-31,60',
+        '2026-09-01,61',
+        '2026-09-02,62',
+        '2026-09-03,63',
+        '2026-09-04,64',
+        '2026-09-05,65',
+        '2026-09-06,66',
+        '',
+      ].join('\n'),
+    );
+
+    const weekly = downsampleWeekly(build());
+
+    // Views are per-day event counts: a week is their sum.
+    expect(weekly.series.views).toEqual({
+      dates: ['2026-08-31'],
+      count: [28],
+      uniques: [7],
+    });
+    // Stars are a point-in-time total: a week is its last value. Summing
+    // them would report 441 stars for a repo that has 66, and the chart
+    // would look entirely plausible.
+    expect(weekly.series.stars).toEqual({ dates: ['2026-08-31'], total: [66] });
+    expect(weekly.series.stars.total[0]).not.toBe(441);
+  });
+
+  it('takes the last value of every repo counter rather than summing any of them', () => {
+    writeRaw(
+      'repo.csv',
+      [
+        'date,subscribers,open_issues,downloads_total',
+        '2026-08-31,10,20,300',
+        '2026-09-01,11,21,310',
+        '2026-09-02,12,22,320',
+        '',
+      ].join('\n'),
+    );
+
+    expect(downsampleWeekly(build()).series.repo).toEqual({
+      dates: ['2026-08-31'],
+      subscribers: [12],
+      open_issues: [22],
+      downloads_total: [320],
+    });
+  });
+
+  it('sums clones and takes the last value of forks and contributors', () => {
+    // Each of the six series is bucketed by its own rule; this pins the
+    // three not covered above so a mis-wired call site cannot hide behind a
+    // series that happens to be tested elsewhere.
+    writeRaw(
+      'traffic/clones.csv',
+      ['date,count,uniques', '2026-08-31,4,2', '2026-09-01,5,3', ''].join('\n'),
+    );
+    writeRaw('forks.csv', ['date,total', '2026-08-31,7', '2026-09-01,8', ''].join('\n'));
+    writeRaw('contributors.csv', ['date,total', '2026-08-31,2', '2026-09-01,3', ''].join('\n'));
+
+    const weekly = downsampleWeekly(build());
+
+    expect(weekly.series.clones).toEqual({ dates: ['2026-08-31'], count: [9], uniques: [5] });
+    expect(weekly.series.forks).toEqual({ dates: ['2026-08-31'], total: [8] });
+    expect(weekly.series.contributors).toEqual({ dates: ['2026-08-31'], total: [3] });
+  });
+
+  it('preserves the total of a traffic series across downsampling', () => {
+    // The property that makes weekly views comparable with daily views at
+    // all: bucketing changes the resolution, never the quantity.
+    const dates = dailyDates('2026-01-01', 90);
+    const counts = dates.map((_unused, index) => index + 1);
+    const data = makeData({
+      series: {
+        ...makeData().series,
+        views: { dates, count: counts, uniques: counts.map(() => 1) },
+      },
+    });
+
+    const weekly = downsampleWeekly(data);
+    const sum = (values: Array<number | null>): number =>
+      values.reduce<number>((total, value) => total + (value ?? 0), 0);
+
+    expect(sum(weekly.series.views.count)).toBe(sum(counts));
+    expect(sum(weekly.series.views.uniques)).toBe(90);
+  });
+});
+
+describe('downsampleWeekly — absent vs. zero', () => {
+  it('keeps a null bucket null rather than treating it as zero', () => {
+    // A whole week with the column blank: not measured, and a weekly bucket
+    // must not manufacture a measured 0 out of it.
+    writeRaw(
+      'repo.csv',
+      [
+        'date,subscribers,open_issues,downloads_total',
+        '2026-08-31,10,20,',
+        '2026-09-01,11,21,',
+        '',
+      ].join('\n'),
+    );
+    writeRaw('stars.csv', ['date,total', '2026-08-31,', '2026-09-01,', ''].join('\n'));
+    writeRaw(
+      'traffic/views.csv',
+      ['date,count,uniques', '2026-08-31,,', '2026-09-01,,', ''].join('\n'),
+    );
+
+    const weekly = downsampleWeekly(build());
+
+    expect(weekly.series.repo.downloads_total).toEqual([null]);
+    expect(weekly.series.repo.downloads_total[0]).not.toBe(0);
+    expect(weekly.series.stars.total).toEqual([null]);
+    expect(weekly.series.stars.total[0]).not.toBe(0);
+    // A summed series is the easier place to get this wrong: an accumulator
+    // that starts at 0 reports a week nobody measured as a week of no
+    // traffic.
+    expect(weekly.series.views.count).toEqual([null]);
+    expect(weekly.series.views.count[0]).not.toBe(0);
+    // The measured column on the same rows still comes through.
+    expect(weekly.series.repo.subscribers).toEqual([11]);
+  });
+
+  it('keeps a measured zero as zero rather than collapsing it to null', () => {
+    // The mirror of the rule above, and the reason the bucket aggregators
+    // test `=== null` rather than falsiness.
+    writeRaw(
+      'traffic/views.csv',
+      ['date,count,uniques', '2026-08-31,0,0', '2026-09-01,0,0', ''].join('\n'),
+    );
+    writeRaw('stars.csv', ['date,total', '2026-08-31,5', '2026-09-01,0', ''].join('\n'));
+
+    const weekly = downsampleWeekly(build());
+
+    expect(weekly.series.views.count).toEqual([0]);
+    expect(weekly.series.views.count[0]).not.toBeNull();
+    expect(weekly.series.stars.total).toEqual([0]);
+    expect(weekly.series.stars.total[0]).not.toBeNull();
+  });
+
+  it('sums the measured days of a partly-measured week rather than nulling the week', () => {
+    writeRaw(
+      'traffic/views.csv',
+      ['date,count,uniques', '2026-08-31,10,3', '2026-09-01,,', '2026-09-02,5,2', ''].join('\n'),
+    );
+
+    expect(downsampleWeekly(build()).series.views).toEqual({
+      dates: ['2026-08-31'],
+      count: [15],
+      uniques: [5],
+    });
+  });
+
+  it('takes the last MEASURED value when a cumulative week ends in a gap', () => {
+    // Reading the literal last element would publish null for a week whose
+    // counter was measured at 61 three days earlier — an absence invented
+    // out of a real measurement.
+    writeRaw(
+      'stars.csv',
+      ['date,total', '2026-08-31,60', '2026-09-01,61', '2026-09-02,', ''].join('\n'),
+    );
+
+    expect(downsampleWeekly(build()).series.stars).toEqual({
+      dates: ['2026-08-31'],
+      total: [61],
+    });
+  });
+});
+
+describe('downsampleWeekly — UTC ISO-week boundaries', () => {
+  it('buckets on the UTC Monday', () => {
+    // Sunday 2026-09-06 closes the week that opened on Monday 2026-08-31;
+    // Monday 2026-09-07 opens the next one. `getDay()` returns 0 for Sunday,
+    // so an implementation that subtracts it outright leaves Sunday in a
+    // bucket of its own — or, with the wrong sign, pushes it a week forward.
+    writeRaw(
+      'traffic/views.csv',
+      ['date,count,uniques', '2026-09-06,7,1', '2026-09-07,8,1', ''].join('\n'),
+    );
+
+    expect(downsampleWeekly(build()).series.views).toEqual({
+      dates: ['2026-08-31', '2026-09-07'],
+      count: [7, 8],
+      uniques: [1, 1],
+    });
+  });
+
+  it('places every day of one ISO week in the same Monday bucket', () => {
+    const dates = dailyDates('2026-08-31', 7);
+    const data = makeData({
+      series: {
+        ...makeData().series,
+        views: { dates, count: dates.map(() => 1), uniques: dates.map(() => 1) },
+      },
+    });
+
+    // Monday through Sunday inclusive: one bucket, seven days in it.
+    expect(downsampleWeekly(data).series.views).toEqual({
+      dates: ['2026-08-31'],
+      count: [7],
+      uniques: [7],
+    });
+  });
+
+  it('buckets across a month and year boundary in UTC', () => {
+    // Thursday 2026-01-01 belongs to the week that opened on Monday
+    // 2025-12-29 — the case that fails for any implementation doing day
+    // arithmetic on the day-of-month rather than on the timestamp.
+    writeRaw(
+      'traffic/views.csv',
+      ['date,count,uniques', '2025-12-31,4,1', '2026-01-01,5,1', ''].join('\n'),
+    );
+
+    expect(downsampleWeekly(build()).series.views).toEqual({
+      dates: ['2025-12-29'],
+      count: [9],
+      uniques: [2],
+    });
+  });
+
+  it('emits buckets in ascending date order', () => {
+    const dates = dailyDates('2026-08-31', 21);
+    const data = makeData({
+      series: {
+        ...makeData().series,
+        views: { dates, count: dates.map(() => 1), uniques: dates.map(() => 1) },
+      },
+    });
+
+    expect(downsampleWeekly(data).series.views.dates).toEqual([
+      '2026-08-31',
+      '2026-09-07',
+      '2026-09-14',
+    ]);
+  });
+
+  it('does not gap-fill a week with no measurements at all', () => {
+    // The same rule the daily series follows: a missing week is absent from
+    // the axis, not a null point on it. Inventing one would draw a gap the
+    // archive never recorded.
+    writeRaw(
+      'traffic/views.csv',
+      ['date,count,uniques', '2026-08-31,4,1', '2026-09-14,5,1', ''].join('\n'),
+    );
+
+    expect(downsampleWeekly(build()).series.views.dates).toEqual(['2026-08-31', '2026-09-14']);
+  });
+
+  it('throws rather than bucketing a date it cannot place in a week', () => {
+    // `2026-9-1` is not a date this collector ever writes, but nothing in
+    // the read path validates the shape, and week arithmetic — unlike the
+    // byte sort the daily path uses — cannot proceed on a value it cannot
+    // parse. Failing loudly beats bucketing it under `Invalid Date`.
+    writeRaw('stars.csv', 'date,total\n2026-9-1,5\n');
+
+    expect(() => downsampleWeekly(build())).toThrow(/cannot bucket "2026-9-1"/);
+  });
+
+  it('throws on a date that parses but is not a real calendar day', () => {
+    // `2026-02-30` rolls over to 2 March in every JS date constructor, so
+    // accepting it would silently relocate a measurement by two days.
+    writeRaw('stars.csv', 'date,total\n2026-02-30,5\n');
+
+    expect(() => downsampleWeekly(build())).toThrow(/cannot bucket "2026-02-30"/);
+  });
+});
+
+describe('downsampleWeekly — what it must not touch', () => {
+  it('leaves releases and dimensions untouched when downsampling', () => {
+    writeRaw(
+      'releases.csv',
+      'date,tag,name\n2026-08-31,v1.0.0,First\n2026-09-01,v1.0.1,Patch\n',
+    );
+    createStore(dir).writeNdjson('traffic/referrers.ndjson', [
+      dimensionRow('2026-08-31', 'a.example', 100),
+      dimensionRow('2026-09-01', 'a.example', 130),
+    ]);
+    createStore(dir).writeNdjson('traffic/paths.ndjson', [
+      dimensionRow('2026-08-31', '/a', 9),
+      dimensionRow('2026-09-01', '/a', 11),
+    ]);
+    writeRaw('traffic/views.csv', 'date,count,uniques\n2026-08-31,4,1\n2026-09-01,5,1\n');
+
+    const data = build();
+    const weekly = downsampleWeekly(data);
+
+    // Releases are sparse: bucketing them would merge two tags published in
+    // one week into a single marker, and there is no space to save.
+    expect(weekly.releases).toEqual(data.releases);
+    expect(weekly.releases).toHaveLength(2);
+    // Dimension snapshots stay per-snapshot: they are already bounded by
+    // top-10-per-snapshot, and their trajectories are differences between
+    // consecutive snapshots that weekly bucketing would silently redefine.
+    expect(weekly.dimensions).toEqual(data.dimensions);
+    expect(weekly.dimensions.referrers.snapshots).toEqual(['2026-08-31', '2026-09-01']);
+    expect(weekly.dimensions.paths.snapshots).toEqual(['2026-08-31', '2026-09-01']);
+    // And the series it DOES own really was bucketed, so this test cannot
+    // pass by downsampling nothing at all.
+    expect(weekly.series.views.dates).toEqual(['2026-08-31']);
+  });
+
+  it('carries the envelope through unchanged', () => {
+    writeRaw('traffic/views.csv', 'date,count,uniques\n2026-09-02,4,1\n2026-09-03,5,1\n');
+    writeMeta();
+
+    const data = build();
+    const weekly = downsampleWeekly(data);
+
+    expect(weekly.generated_at).toBe(data.generated_at);
+    expect(weekly.meta).toEqual(data.meta);
+    expect(weekly.empty).toBe(data.empty);
+    // `collection_started` is a claim about when measurement began, and the
+    // Monday of the first bucket (2026-08-31) predates the first measured
+    // day (2026-09-02). Recomputing it from the bucket keys would move the
+    // page's "since" label onto a day nothing was measured.
+    expect(weekly.collection_started).toBe('2026-09-02');
+    expect(weekly.series.views.dates).toEqual(['2026-08-31']);
+  });
+
+  it('sets downsampled true', () => {
+    writeRaw('stars.csv', 'date,total\n2026-09-01,56\n');
+
+    expect(downsampleWeekly(build()).downsampled).toBe(true);
+  });
+
+  it('does not mutate its input', () => {
+    writeRaw('traffic/views.csv', 'date,count,uniques\n2026-08-31,4,1\n2026-09-01,5,1\n');
+    writeRaw('stars.csv', 'date,total\n2026-08-31,60\n2026-09-01,61\n');
+
+    const data = build();
+    const before = JSON.stringify(data);
+
+    downsampleWeekly(data);
+
+    expect(JSON.stringify(data)).toBe(before);
+  });
+
+  it('handles an empty bundle without inventing a bucket', () => {
+    const weekly = downsampleWeekly(makeData({ empty: true }));
+
+    expect(weekly.series.views).toEqual({ dates: [], count: [], uniques: [] });
+    expect(weekly.series.stars).toEqual({ dates: [], total: [] });
+    expect(weekly.series.repo).toEqual({
+      dates: [],
+      subscribers: [],
+      open_issues: [],
+      downloads_total: [],
+    });
+    expect(weekly.empty).toBe(true);
+  });
+
+  it('round-trips through JSON with no undefined anywhere', () => {
+    writeRaw('repo.csv', 'date,subscribers,open_issues,downloads_total\n2026-08-31,1,18,\n');
+    writeRaw('releases.csv', 'date,tag,name\n2026-08-01,v1.0.0,First\n');
+    writeMeta();
+
+    const weekly = downsampleWeekly(build());
+
+    expect(JSON.parse(JSON.stringify(weekly))).toStrictEqual(weekly);
+    expect(undefinedPaths(weekly)).toEqual([]);
+  });
+});
+
+describe('serialiseWithinBudget', () => {
+  it('uses a 2 MB budget', () => {
+    expect(BUNDLE_BUDGET_BYTES).toBe(2 * 1024 * 1024);
+    expect(BUNDLE_BUDGET_BYTES).toBe(2_097_152);
+  });
+
+  it('publishes a bundle under budget exactly as built', () => {
+    writeRaw('stars.csv', 'date,total\n2026-09-01,56\n');
+
+    const data = build();
+    const result = serialiseWithinBudget(data);
+
+    expect(result.json).toBe(JSON.stringify(data));
+    expect(result.downsampled).toBe(false);
+    expect(result.bytes).toBeLessThan(BUNDLE_BUDGET_BYTES);
+    expect(JSON.parse(result.json)).toStrictEqual(data);
+  });
+
+  it('serialises a wholly missing archive as a valid empty bundle', () => {
+    // The production path this whole entrypoint exists to survive: the
+    // Pages deploy runs on every landing-page push, whether or not the
+    // metrics-data branch has ever been created.
+    const data = buildDashboardData(createStore(path.join(dir, 'no-such-branch')), GENERATED_AT);
+    const result = serialiseWithinBudget(data);
+
+    expect(result.downsampled).toBe(false);
+    expect(result.bytes).toBeGreaterThan(0);
+    expect(result.bytes).toBeLessThan(BUNDLE_BUDGET_BYTES);
+    const parsed: unknown = JSON.parse(result.json);
+    expect(parsed).toStrictEqual(data);
+    expect(data.empty).toBe(true);
+    expect(data.meta).toBeNull();
+  });
+
+  it('measures UTF-8 bytes, not UTF-16 code units', () => {
+    // A referrer title is upstream text and can hold anything. `.length`
+    // would under-count a multi-byte character and let a bundle over the
+    // real budget through — the exact regression the budget exists to catch.
+    const data = makeData({
+      dimensions: {
+        referrers: {
+          snapshots: ['2026-09-01'],
+          latest: [{ dimension: 'a.example', title: '😀', count: 1, uniques: 1 }],
+          trajectories: [],
+        },
+        paths: { snapshots: [], latest: [], trajectories: [] },
+      },
+    });
+
+    const result = serialiseWithinBudget(data);
+
+    expect(result.bytes).toBeGreaterThan(result.json.length);
+  });
+
+  it('sets downsampled true only when it actually downsampled', () => {
+    const small = serialiseWithinBudget(makeData({ empty: true }));
+    expect(small.downsampled).toBe(false);
+
+    // Roughly 330 years of daily views: over 2 MB as dailies, comfortably
+    // under it once bucketed by week.
+    const dates = dailyDates('1700-01-01', 120_000);
+    const large = makeData({
+      series: {
+        ...makeData().series,
+        views: {
+          dates,
+          count: dates.map((_unused, index) => index % 97),
+          uniques: dates.map((_unused, index) => index % 13),
+        },
+      },
+    });
+    expect(Buffer.byteLength(JSON.stringify(large), 'utf8')).toBeGreaterThan(BUNDLE_BUDGET_BYTES);
+
+    const result = serialiseWithinBudget(large);
+
+    expect(result.downsampled).toBe(true);
+    expect(result.bytes).toBeLessThanOrEqual(BUNDLE_BUDGET_BYTES);
+    const parsed = JSON.parse(result.json) as DashboardData;
+    expect(parsed.downsampled).toBe(true);
+    // Nothing was dropped to fit: the weekly counts still add up to the
+    // daily ones.
+    const total = (values: Array<number | null>): number =>
+      values.reduce<number>((sum, value) => sum + (value ?? 0), 0);
+    expect(total(parsed.series.views.count)).toBe(total(large.series.views.count));
+  });
+
+  it('throws rather than truncating when still over budget after downsampling', () => {
+    // Releases are never downsampled, so a bundle whose bulk is releases
+    // cannot be shrunk by bucketing. The only honest answers are "publish it
+    // oversized" and "fail the build"; §7.1 chooses the second, so the
+    // regression surfaces in CI rather than in first paint.
+    const releases = Array.from({ length: 40_000 }, (_unused, index) => ({
+      date: '2026-09-01',
+      tag: `v0.0.${index}`,
+      name: `Release number ${index}`,
+    }));
+    const data = makeData({ releases });
+    expect(Buffer.byteLength(JSON.stringify(data), 'utf8')).toBeGreaterThan(BUNDLE_BUDGET_BYTES);
+
+    expect(() => serialiseWithinBudget(data)).toThrow(/budget/);
+    // And it says both sizes, so a maintainer reading a red CI log knows
+    // whether downsampling helped at all.
+    expect(() => serialiseWithinBudget(data)).toThrow(/after weekly downsampling/);
+  });
+
+  it('keeps an already-downsampled bundle flagged as downsampled', () => {
+    const data = makeData({ downsampled: true });
+
+    expect(serialiseWithinBudget(data).downsampled).toBe(true);
   });
 });
