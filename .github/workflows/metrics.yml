@@ -1,0 +1,181 @@
+name: Metrics
+
+# Snapshots this repo's traffic metrics daily into the orphan `metrics-data`
+# branch. Purpose: GitHub's Insights -> Traffic panel discards views, clones,
+# referrers, and popular paths after 14 days, and no API can reconstruct them.
+# Every day this does not run is a day of history destroyed permanently.
+#
+# Why two tokens: the traffic endpoints require the "Administration: read"
+# permission, and there is no `administration` key in the Actions `permissions:`
+# vocabulary at all — so GITHUB_TOKEN cannot reach them under any configuration.
+# METRICS_TOKEN (a fine-grained, repo-scoped, read-only PAT) reads; GITHUB_TOKEN
+# writes. Neither alone can both read traffic and modify the archive.
+#
+# Never runs on a fork: METRICS_TOKEN does not propagate to forks, so a fork's
+# scheduled run would fail every single day with nothing anyone could do about
+# it short of disabling the workflow. `github.event.repository.fork` gates the
+# job instead of a hardcoded repo slug, which stays correct if the project is
+# ever renamed or transferred.
+#
+# Why `gh workflow enable`: GitHub disables scheduled workflows after 60 days
+# with no repository activity. This workflow's own commits go to a non-default
+# branch and are made with GITHUB_TOKEN, so they cannot be relied on to reset
+# that timer. Re-enabling on every run is idempotent and costs one API call.
+# It needs `actions: write` — without that scope the call fails silently
+# (masked by `|| true` so a stalled collector doesn't also fail the run over
+# a self-heal step), which would defeat the entire point of running it.
+#
+# See docs/systems/metrics.md.
+
+on:
+  schedule:
+    # 03:00 UTC daily. The exact hour does not matter: the traffic API returns a
+    # 14-day window, so any gap of 13 days or less is repaired by the next run.
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Never cancel in progress: metrics.yml and backfill.yml write the same files,
+# and cancelling a collection run loses that day irrecoverably. Sharing the
+# `metrics-data` group also means the two workflows queue instead of racing
+# each other's pushes.
+concurrency:
+  group: metrics-data
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    name: Collect metrics
+    # Skip entirely on forks. A fork's Actions run still resolves
+    # `github.repository` to its own slug, but it never has METRICS_TOKEN
+    # (secrets do not propagate to forks), so the job would otherwise fail
+    # loudly on a schedule the fork owner never opted into.
+    if: ${{ !github.event.repository.fork }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      # The data branch must be created BEFORE actions/checkout is asked for it:
+      # checkout with a nonexistent ref hard-fails the job, so a bootstrap step
+      # placed after it could never run.
+      #
+      # Built as a `git worktree add --orphan` into a scratch directory rather
+      # than `git switch --orphan` in place: switching the primary checkout to
+      # an orphan branch leaves the previous HEAD's tree staged (an orphan
+      # branch has no parent to diff against, so the working tree and index
+      # are carried over unchanged), so `commit --allow-empty` would commit
+      # the *entire main branch source tree* as the archive's first commit,
+      # not an empty one — and it would require rm -rf'ing the primary
+      # checkout to fix, which the later "Collect" step still needs intact.
+      # A worktree keeps the primary checkout completely untouched and starts
+      # genuinely empty, so the init commit is empty as intended.
+      - name: Bootstrap the data branch if absent
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --heads origin metrics-data >/dev/null 2>&1; then
+            echo "metrics-data exists"
+          else
+            echo "Creating orphan branch metrics-data"
+            git config user.name  "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git worktree add --orphan -b metrics-data .metrics-init
+            git -C .metrics-init commit --allow-empty -m "chore(metrics): initialise data branch"
+            git -C .metrics-init push origin metrics-data
+            git worktree remove .metrics-init --force
+          fi
+
+      - name: Checkout the data branch
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          ref: metrics-data
+          path: .metrics-data
+
+      - name: Setup Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          # Pinned to 24: the collector is TypeScript executed directly by Node's
+          # native type stripping, with no build step and no dependencies.
+          node-version: 24
+
+      - name: Collect
+        env:
+          METRICS_TOKEN: ${{ secrets.METRICS_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          METRICS_DATA_DIR: ${{ github.workspace }}/.metrics-data
+        run: node scripts/metrics/src/cli-collect.ts
+
+      - name: Commit and push
+        working-directory: .metrics-data
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No change to commit"
+            exit 0
+          fi
+          git commit -m "chore(metrics): snapshot $(date -u +%Y-%m-%d)"
+          # backfill.yml can be dispatched while this runs. Rebase and retry
+          # rather than clobbering, then fail loudly if it still will not land.
+          for attempt in 1 2 3; do
+            if git push origin metrics-data; then
+              exit 0
+            fi
+            echo "Push rejected (attempt $attempt), rebasing"
+            git pull --rebase origin metrics-data
+          done
+          echo "Could not push after 3 attempts"
+          exit 1
+
+      # Runs even when collection failed, so a stalled collector is visible on
+      # the data branch and in the dashboard header rather than only in this tab.
+      - name: Record run outcome
+        if: always()
+        working-directory: .metrics-data
+        env:
+          OUTCOME: ${{ job.status }}
+        run: |
+          set -euo pipefail
+          # Single-quoted on purpose: the ${...} below are JS template-literal
+          # interpolations for `node -e`, not shell expansions, and must reach
+          # node unexpanded.
+          # shellcheck disable=SC2016
+          node -e '
+            const fs = require("node:fs");
+            const now = new Date().toISOString();
+            let meta = { last_run: now, last_success: null, error: null, series_last_date: {} };
+            if (fs.existsSync("meta.json")) {
+              meta = JSON.parse(fs.readFileSync("meta.json", "utf8"));
+            }
+            meta.last_run = now;
+            if (process.env.OUTCOME === "success") {
+              meta.last_success = now;
+              meta.error = null;
+            } else {
+              meta.error = `run failed: ${process.env.OUTCOME}`;
+            }
+            fs.writeFileSync("meta.json", JSON.stringify(meta, null, 2) + "\n");
+          '
+          git add meta.json
+          git diff --cached --quiet || {
+            git commit -m "chore(metrics): record run outcome"
+            git push origin metrics-data || true
+          }
+
+      - name: Keep the schedule alive
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow enable metrics.yml --repo "${{ github.repository }}" || true
