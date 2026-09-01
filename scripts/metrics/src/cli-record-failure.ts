@@ -22,13 +22,13 @@ import {
  * exactly why the workflow step invoking this file is `if: failure()` and
  * not `if: always()`. See docs/systems/metrics.md §3.3.
  *
- * This file, `cli-collect.ts`, and `cli-backfill.ts` are deliberately the
- * only three files in this package that read `process.env` or the system
- * clock — every other module takes those as injected values, which is what
- * makes the rest of the package testable without touching the network, the
- * filesystem, or real time. Unlike the other two, this entrypoint makes no
- * GitHub API call at all, so it needs no `METRICS_TOKEN` and never touches
- * `assertHeaderSafeToken` — there is no token here to be unsafe.
+ * Reading `process.env` and the system clock is confined to this package's
+ * `cli-*.ts` entrypoints — every other module takes both as injected
+ * values, which is what makes the rest of the package testable without
+ * touching the network, the filesystem, or real time. Unlike the
+ * entrypoints that fetch, this one makes no GitHub API call at all, so it
+ * needs no `METRICS_TOKEN` and never touches `assertHeaderSafeToken` —
+ * there is no token here to be unsafe.
  */
 async function main(): Promise<void> {
   const dataDir = requiredEnv(process.env, 'METRICS_DATA_DIR');

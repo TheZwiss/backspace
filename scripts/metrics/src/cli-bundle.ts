@@ -1,7 +1,12 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { createStore } from './store.ts';
-import { buildDashboardData, serialiseWithinBudget, BUNDLE_BUDGET_BYTES } from './bundle.ts';
+import {
+  buildDashboardData,
+  serialiseWithinBudget,
+  budgetWarning,
+  BUNDLE_BUDGET_BYTES,
+} from './bundle.ts';
 import { requiredEnv, deriveRunTimestamps, describeFailure } from './cli-support.ts';
 
 /**
@@ -78,6 +83,17 @@ async function main(): Promise<void> {
     `wrote ${full}: ${result.bytes} bytes of the ${BUNDLE_BUDGET_BYTES}-byte budget ` +
       `(downsampled: ${result.downsampled ? 'yes, weekly buckets' : 'no, daily'})`,
   );
+
+  // Last line of the run, on stderr, so it is the thing a maintainer sees at
+  // the bottom of a green deploy log rather than something buried above the
+  // summary. stderr rather than stdout because this is diagnostic output
+  // about a build that still succeeded: it must not be mistaken for, or
+  // parsed alongside, the two result lines above. The build deliberately
+  // still passes — the point of warning early is to leave years of room to
+  // decide, and failing here would turn a heads-up into the very cliff it
+  // exists to prevent.
+  const warning = budgetWarning(result);
+  if (warning !== null) console.error(warning);
 }
 
 // `main().catch(...)` with `process.exitCode = 1` rather than a bare

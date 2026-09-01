@@ -7,7 +7,10 @@ import {
   buildDashboardData,
   downsampleWeekly,
   serialiseWithinBudget,
+  budgetWarning,
   BUNDLE_BUDGET_BYTES,
+  BUNDLE_WARN_BYTES,
+  BUNDLE_WARN_FRACTION,
 } from './bundle.ts';
 import type { DashboardData } from './bundle.ts';
 import type { DimensionRow } from './types.ts';
@@ -1246,5 +1249,159 @@ describe('serialiseWithinBudget', () => {
     const data = makeData({ downsampled: true });
 
     expect(serialiseWithinBudget(data).downsampled).toBe(true);
+  });
+});
+
+describe('downsampleWeekly — structural sharing', () => {
+  it('shares no mutable object with its input', () => {
+    writeRaw('traffic/views.csv', 'date,count,uniques\n2026-08-31,4,1\n2026-09-01,5,1\n');
+    writeRaw('releases.csv', 'date,tag,name\n2026-08-31,v1.0.0,First\n');
+    createStore(dir).writeNdjson('traffic/referrers.ndjson', [
+      dimensionRow('2026-08-31', 'a.example', 100),
+      dimensionRow('2026-09-01', 'a.example', 130),
+    ]);
+    writeMeta();
+
+    const data = build();
+    const weekly = downsampleWeekly(data);
+
+    // Purity as a property of the function, not as a promise about every
+    // future caller. The pass-through parts are the ones a maintainer will
+    // be editing when the budget finally binds — the over-budget error
+    // names capping the dimension history as the lever — and an alias here
+    // would make that an action-at-a-distance change to the daily bundle
+    // the weekly one was derived from.
+    expect(weekly.releases).not.toBe(data.releases);
+    expect(weekly.releases[0]).not.toBe(data.releases[0]);
+    expect(weekly.dimensions).not.toBe(data.dimensions);
+    expect(weekly.dimensions.referrers).not.toBe(data.dimensions.referrers);
+    expect(weekly.dimensions.referrers.snapshots).not.toBe(data.dimensions.referrers.snapshots);
+    expect(weekly.dimensions.referrers.latest[0]).not.toBe(data.dimensions.referrers.latest[0]);
+    expect(weekly.dimensions.referrers.trajectories[0]).not.toBe(
+      data.dimensions.referrers.trajectories[0],
+    );
+    expect(weekly.dimensions.referrers.trajectories[0]?.delta).not.toBe(
+      data.dimensions.referrers.trajectories[0]?.delta,
+    );
+    expect(weekly.dimensions.paths).not.toBe(data.dimensions.paths);
+    expect(weekly.meta).not.toBe(data.meta);
+    expect(weekly.series).not.toBe(data.series);
+    expect(weekly.series.views).not.toBe(data.series.views);
+    // Copied, not altered.
+    expect(weekly.releases).toEqual(data.releases);
+    expect(weekly.dimensions).toEqual(data.dimensions);
+    expect(weekly.meta).toEqual(data.meta);
+  });
+
+  it('is unaffected by a later edit to the bundle it was derived from', () => {
+    writeRaw('traffic/views.csv', 'date,count,uniques\n2026-08-31,4,1\n');
+    writeRaw('releases.csv', 'date,tag,name\n2026-08-31,v1.0.0,First\n');
+    createStore(dir).writeNdjson('traffic/referrers.ndjson', [
+      dimensionRow('2026-08-31', 'a.example', 100),
+    ]);
+    writeMeta();
+
+    const data = build();
+    const weekly = downsampleWeekly(data);
+
+    // The maintainer's most likely edit: trimming what the bundle carries
+    // to get back under budget.
+    data.releases.length = 0;
+    data.dimensions.referrers.latest.length = 0;
+    const firstRelease = weekly.releases[0];
+    expect(firstRelease).toBeDefined();
+    expect(firstRelease?.tag).toBe('v1.0.0');
+    expect(weekly.dimensions.referrers.latest).toHaveLength(1);
+  });
+});
+
+describe('budgetWarning', () => {
+  it('warns at 80% of the budget, six years of headroom before the flip', () => {
+    expect(BUNDLE_WARN_FRACTION).toBe(0.8);
+    expect(BUNDLE_WARN_BYTES).toBe(Math.floor(BUNDLE_BUDGET_BYTES * 0.8));
+    expect(BUNDLE_WARN_BYTES).toBe(1_677_721);
+    // The archive grows by roughly 68 KB a year, so the headroom between the
+    // warning and the cliff must be worth years, not weeks.
+    const headroomYears = (BUNDLE_BUDGET_BYTES - BUNDLE_WARN_BYTES) / (68 * 1024);
+    expect(headroomYears).toBeGreaterThan(5);
+  });
+
+  it('stays silent for a bundle nowhere near the budget', () => {
+    writeRaw('stars.csv', 'date,total\n2026-09-01,56\n');
+
+    const result = serialiseWithinBudget(build());
+
+    expect(result.bytes).toBeLessThan(BUNDLE_WARN_BYTES);
+    expect(budgetWarning(result)).toBeNull();
+  });
+
+  it('stays silent one byte below the mark and warns exactly at it', () => {
+    // The boundary is the whole point of a high-water mark: off by one here
+    // is the difference between warning on the last build before the flip
+    // and warning on the first build after it.
+    expect(budgetWarning({ json: '', bytes: BUNDLE_WARN_BYTES - 1, downsampled: false })).toBeNull();
+    expect(budgetWarning({ json: '', bytes: BUNDLE_WARN_BYTES, downsampled: false })).not.toBeNull();
+  });
+
+  it('names the size, the budget, the headroom, and what happens next', () => {
+    const bytes = BUNDLE_WARN_BYTES + 1000;
+    const warning = budgetWarning({ json: '', bytes, downsampled: false });
+
+    expect(warning).toContain('WARNING');
+    expect(warning).toContain(String(bytes));
+    expect(warning).toContain(String(BUNDLE_BUDGET_BYTES));
+    expect(warning).toContain(String(BUNDLE_BUDGET_BYTES - bytes));
+    // The percentage, so the number means something without arithmetic.
+    expect(warning).toMatch(/80\.\d%/);
+    // And what the next build past the budget actually does.
+    expect(warning).toContain('weekly buckets');
+  });
+
+  it('says the next step is a failed build once the bundle is already weekly', () => {
+    // Weekly buckets are the last reduction available, so a bundle that is
+    // already downsampled and still approaching the budget is approaching a
+    // hard failure, not another quiet resolution change. The two messages
+    // must not be interchangeable.
+    const daily = budgetWarning({ json: '', bytes: BUNDLE_WARN_BYTES, downsampled: false });
+    const weekly = budgetWarning({ json: '', bytes: BUNDLE_WARN_BYTES, downsampled: true });
+
+    expect(weekly).toContain('FAIL the build');
+    expect(daily).not.toContain('FAIL the build');
+    expect(weekly).not.toBe(daily);
+  });
+
+  it('still warns for a bundle sitting exactly on the budget', () => {
+    // Under budget by the `<=` rule, so it publishes — and is as close to
+    // the cliff as a passing build can be.
+    const warning = budgetWarning({ json: '', bytes: BUNDLE_BUDGET_BYTES, downsampled: false });
+
+    expect(warning).toContain('100.0%');
+    expect(warning).toContain('0 bytes of headroom');
+  });
+
+  it('warns on a bundle that was downsampled to fit', () => {
+    // End to end: build something over budget, let the budget pass reduce
+    // it, and confirm the warning reflects the PUBLISHED bundle rather than
+    // the one that was measured first.
+    const dates = dailyDates('1700-01-01', 120_000);
+    const large = makeData({
+      series: {
+        ...makeData().series,
+        views: {
+          dates,
+          count: dates.map((_unused, index) => index % 97),
+          uniques: dates.map((_unused, index) => index % 13),
+        },
+      },
+    });
+
+    const result = serialiseWithinBudget(large);
+
+    expect(result.downsampled).toBe(true);
+    // This particular reduction lands far under the mark, so no warning —
+    // which is the correct answer, and pins that the warning reads the
+    // published size and not the pre-downsampling one.
+    expect(result.bytes).toBeLessThan(BUNDLE_WARN_BYTES);
+    expect(budgetWarning(result)).toBeNull();
   });
 });

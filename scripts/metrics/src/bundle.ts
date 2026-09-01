@@ -703,12 +703,46 @@ function downsampleRepo(series: RepoSeries): RepoSeries {
 }
 
 /**
+ * A structural copy of a dimension series, down to the individual entries.
+ *
+ * The bucketed series are rebuilt from scratch, so they are new arrays
+ * whatever this function does; `releases`, `dimensions` and `meta` are the
+ * parts `downsampleWeekly` passes straight through, and copying them is what
+ * makes its purity a property of the function rather than a promise about
+ * everyone downstream. It is genuinely non-mutating today — but the
+ * over-budget error message points a future maintainer at capping the
+ * dimension history as the lever to pull, so the next person to edit this
+ * package will be editing exactly these structures, holding what looks like
+ * a private copy. Sharing the references would make that a silent
+ * action-at-a-distance bug in the daily bundle the weekly one was derived
+ * from.
+ *
+ * Deliberately explicit rather than `structuredClone`: the shape is fixed by
+ * the published contract, so an explicit copy fails to compile if the
+ * contract grows a field, where a generic clone would carry it silently and
+ * hide the fact that nobody decided how the new field should be bucketed.
+ */
+function copyDimensionSeries(series: DimensionSeries): DimensionSeries {
+  return {
+    snapshots: [...series.snapshots],
+    latest: series.latest.map((entry) => ({ ...entry })),
+    trajectories: series.trajectories.map((trajectory) => ({
+      dimension: trajectory.dimension,
+      delta: [...trajectory.delta],
+    })),
+  };
+}
+
+/**
  * Reduces the six dated series to weekly buckets, keyed on the UTC Monday.
  *
  * Pure, exactly as `buildDashboardData` is: no clock, no environment, no
  * writes, and no mutation of the argument — the caller keeps a usable daily
  * bundle after the call, which is what lets the budget pass measure both and
- * publish the smaller one.
+ * publish the smaller one. The result shares no mutable object with the
+ * argument either: the bucketed series are rebuilt, and the pass-through
+ * parts (`releases`, `dimensions`, `meta`) are copied rather than aliased,
+ * so neither bundle can be changed through the other.
  *
  * Three groups of fields, three different treatments, and the difference
  * between the first two is the one thing in this function that cannot be got
@@ -737,6 +771,7 @@ function downsampleRepo(series: RepoSeries): RepoSeries {
 export function downsampleWeekly(data: DashboardData): DashboardData {
   return {
     ...data,
+    meta: data.meta === null ? null : { ...data.meta },
     downsampled: true,
     series: {
       views: downsampleTraffic(data.series.views),
@@ -745,6 +780,11 @@ export function downsampleWeekly(data: DashboardData): DashboardData {
       forks: downsampleCount(data.series.forks),
       contributors: downsampleCount(data.series.contributors),
       repo: downsampleRepo(data.series.repo),
+    },
+    releases: data.releases.map((release) => ({ ...release })),
+    dimensions: {
+      referrers: copyDimensionSeries(data.dimensions.referrers),
+      paths: copyDimensionSeries(data.dimensions.paths),
     },
   };
 }
@@ -805,4 +845,63 @@ export function serialiseWithinBudget(data: DashboardData): BundleResult {
     );
   }
   return { json, bytes, downsampled: true };
+}
+
+/**
+ * The fraction of the budget at which the bundler starts warning.
+ *
+ * 80 %, i.e. 1 677 721 of the 2 097 152 bytes. Chosen from what the archive
+ * actually does rather than from habit: it grows by roughly 68 KB a year, so
+ * the 419 431 bytes between this mark and the budget are about **six years**
+ * of lead time — long enough that a maintainer who sees the warning can
+ * schedule the decision (raise the budget, cap the dimension history, accept
+ * weekly buckets) instead of discovering it as a fait accompli in a deploy
+ * log.
+ *
+ * Higher would be worse in the obvious way. Lower would be worse in a less
+ * obvious one: a warning that fires for a decade before it means anything is
+ * a warning nobody reads by the time it matters. At the live bundle's
+ * current 3.5 KB this mark is over two decades away, so the threshold costs
+ * nothing until it is genuinely close.
+ */
+export const BUNDLE_WARN_FRACTION = 0.8;
+
+/** The absolute size at which `budgetWarning` starts returning a message. */
+export const BUNDLE_WARN_BYTES = Math.floor(BUNDLE_BUDGET_BYTES * BUNDLE_WARN_FRACTION);
+
+/**
+ * A warning for a bundle approaching the budget, or `null` when it is not.
+ *
+ * Without this, the daily-to-weekly flip arrives with no notice whatsoever:
+ * one build is fine, the next silently halves the resolution of every chart
+ * on the page, and the only signal is a line in a deploy log nobody reads
+ * when the deploy succeeded. A size budget with a hard cliff and no approach
+ * warning converts a slow, predictable growth curve into a surprise.
+ *
+ * The message says which side of the cliff the bundle is on, because the
+ * next event differs and so does the remedy. A daily bundle nearing the
+ * budget will be downsampled — recoverable, but it changes what every chart
+ * means. A bundle that is ALREADY weekly and still nearing the budget has no
+ * reduction left: weekly buckets are the last one, nothing is ever
+ * truncated to fit, and the next step is a failed build.
+ *
+ * Returns the text rather than printing it, so this stays pure and testable
+ * and the entrypoint keeps sole ownership of the process's output streams.
+ */
+export function budgetWarning(result: BundleResult): string | null {
+  if (result.bytes < BUNDLE_WARN_BYTES) return null;
+  const percent = ((result.bytes / BUNDLE_BUDGET_BYTES) * 100).toFixed(1);
+  const remaining = BUNDLE_BUDGET_BYTES - result.bytes;
+  const next = result.downsampled
+    ? 'It is already downsampled to weekly buckets, which is the last reduction available: ' +
+      'nothing is ever truncated to fit, so exceeding the budget will FAIL the build. Cap what ' +
+      'the bundle carries (the release list or the dimension history) or raise the budget ' +
+      'deliberately.'
+    : 'Exceeding the budget will downsample every series to weekly buckets, changing the ' +
+      'resolution of every chart on the page at once. Decide now whether to accept that, cap ' +
+      'what the bundle carries, or raise the budget.';
+  return (
+    `bundle: WARNING — data.json is ${result.bytes} bytes, ${percent}% of the ` +
+    `${BUNDLE_BUDGET_BYTES}-byte budget (${remaining} bytes of headroom left). ${next}`
+  );
 }
