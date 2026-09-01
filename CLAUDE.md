@@ -105,7 +105,11 @@ packages/
   server/   — Fastify server, DB schema, routes, WS handler, federation, utils
   web/      — React SPA, stores, hooks, components (layout/chat/voice/modals/ui), platform layer
   desktop/  — Electron wrapper (main, preload, activity detector, keybind manager)
+scripts/
+  metrics/  — @backspace/metrics: repo traffic collector (workspace package)
 ```
+
+The metrics subsystem currently spans only `scripts/metrics` (a workspace package). A `site/insights` dashboard that reads the collected archive is planned as a separate workstream and does not exist yet.
 
 Data: `packages/server/data/` (backspace.db + uploads/)
 
@@ -161,6 +165,7 @@ Before modifying any subsystem, read its spec from `docs/systems/`. After making
 | [deployment.md](docs/systems/deployment.md) | Hosting pipeline: Docker/Caddy build, admin bootstrap, DB backup/restore, image pinning, env vars | Any deploy, backup/restore, or hosting change |
 | [activity-presence.md](docs/systems/activity-presence.md) | Presence states, rich activities, activity types/priorities, broadcast pipeline, visibility control, ActivityCard/Panel | Presence, rich activities, activity display, status management |
 | [security-scanning.md](docs/systems/security-scanning.md) | CI security pipeline: Dependabot, CodeQL SAST, gitleaks, OSV-Scanner, Trivy (config/license; image scan in a later plan), OpenSSF Scorecard, SHA-pinning, harden-runner, tiered enforcement policy, maintainer settings checklist | Any CI security work, adding/changing scanners, enabling enforcement, supply-chain hardening |
+| [metrics.md](docs/systems/metrics.md) | Traffic archive: daily collection into the `metrics-data` branch, CSV/NDJSON schemas, upsert and write-if-absent semantics, backfill, the 202 stats problem, PAT scopes, the 60-day schedule hazard | Any repo-analytics work, changing collected series, debugging a stalled collector |
 
 ---
 

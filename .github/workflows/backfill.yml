@@ -1,0 +1,134 @@
+name: Metrics backfill
+
+# Reconstructs history that permanent per-item timestamps make recoverable:
+# stars from `starred_at`, forks from `created_at`, releases from
+# `published_at`. See docs/systems/metrics.md.
+#
+# Dispatch only, never scheduled — this is a one-shot reconstruction, not a
+# recurring job. It is safe to run at any time, including more than once,
+# because every write is if-absent: it fills dates that have no row and
+# never replaces one the daily collector (metrics.yml) measured. That rule
+# matters because /stargazers lists only CURRENT stargazers, so a
+# reconstruction cannot see anyone who starred and later unstarred —
+# overwriting a measured value with a reconstructed one would silently
+# replace a correct number with a systematically wrong one. A rerun over
+# dates it already filled writes nothing new; it is not destructive.
+#
+# Traffic (views/clones/referrers/paths) is not backfillable by any means —
+# GitHub only ever exposes a trailing 14-day window for it — and this
+# workflow never touches it.
+#
+# Never runs on a fork: METRICS_TOKEN does not propagate to forks, so a
+# fork owner dispatching this would otherwise get a loud failure on every
+# attempt with nothing they could do about it, and there is no scenario
+# where a fork should be writing to this repo's archive anyway.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Shares metrics.yml's exact group so a dispatched backfill cannot race the
+# daily cron's write to the same branch. Never cancel in progress: the two
+# workflows write the same files, and cancelling mid-write is worse than
+# queueing — the write is the entire point of running this.
+concurrency:
+  group: metrics-data
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    name: Backfill history
+    # Skip entirely on forks. A fork's dispatch still resolves
+    # `github.repository` to its own slug, but it never has METRICS_TOKEN
+    # (secrets do not propagate to forks) — see header.
+    if: ${{ !github.event.repository.fork }}
+    runs-on: ubuntu-latest
+    # The stargazer list is the one genuinely long paginated call this
+    # package makes (100/page, no fixed cap) and this job has no other slow
+    # step, so a generous bound here is purely a backstop against a stuck
+    # run tying up the shared `metrics-data` concurrency group and delaying
+    # the next scheduled collection, not a limit expected to be hit.
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      # The data branch must be created BEFORE actions/checkout is asked for
+      # it: checkout with a nonexistent ref hard-fails the job, so a
+      # bootstrap step placed after it could never run. Backfill does not
+      # require metrics.yml to have run first — it can be dispatched right
+      # after this package is adopted, before any daily collection has
+      # happened — so this workflow cannot assume `metrics-data` exists.
+      #
+      # Built as a `git worktree add --orphan` into a scratch directory
+      # rather than `git switch --orphan` in place. Both start genuinely
+      # empty — `git switch --orphan` removes all tracked files, and only
+      # the legacy `git checkout --orphan` carries the previous tree over
+      # into the index. The worktree is preferred because it never touches
+      # the primary checkout at all: the later "Backfill" step runs the CLI
+      # from the repository root and needs that tree intact, and a scratch
+      # worktree removes any way for this step to leave it modified on an
+      # early exit.
+      - name: Bootstrap the data branch if absent
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --heads origin metrics-data >/dev/null 2>&1; then
+            echo "metrics-data exists"
+          else
+            echo "Creating orphan branch metrics-data"
+            git config user.name  "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git worktree add --orphan -b metrics-data .metrics-init
+            git -C .metrics-init commit --allow-empty -m "chore(metrics): initialise data branch"
+            git -C .metrics-init push origin metrics-data
+            git worktree remove .metrics-init --force
+          fi
+
+      - name: Checkout the data branch
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          ref: metrics-data
+          path: .metrics-data
+
+      - name: Setup Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          # Pinned to 24: the CLI is TypeScript executed directly by Node's
+          # native type stripping, with no build step and no dependencies.
+          node-version: 24
+
+      - name: Backfill
+        env:
+          # Must be the PAT, not GITHUB_TOKEN: the latter carries a 1,000
+          # requests/hour per-repository limit rather than 5,000, and in any
+          # case cannot reach the traffic-scoped "Administration: read"
+          # permission the collector needs — see metrics.yml's header. This
+          # job does not read traffic, but it uses the same token as the
+          # daily collector for one PAT rather than provisioning a second.
+          METRICS_TOKEN: ${{ secrets.METRICS_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          METRICS_DATA_DIR: ${{ github.workspace }}/.metrics-data
+        run: node scripts/metrics/src/cli-backfill.ts
+
+      - name: Commit and push
+        working-directory: .metrics-data
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No change to commit"
+            exit 0
+          fi
+          git commit -m "chore(metrics): backfill reconstructable history"
+          git push origin metrics-data

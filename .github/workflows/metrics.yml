@@ -1,0 +1,194 @@
+name: Metrics
+
+# Snapshots this repo's traffic metrics daily into the orphan `metrics-data`
+# branch. Purpose: GitHub's Insights -> Traffic panel discards views, clones,
+# referrers, and popular paths after 14 days, and no API can reconstruct them.
+# Every day this does not run is a day of history destroyed permanently.
+#
+# Why two tokens: the traffic endpoints require the "Administration: read"
+# permission, and there is no `administration` key in the Actions `permissions:`
+# vocabulary at all — so GITHUB_TOKEN cannot reach them under any configuration.
+# METRICS_TOKEN (a fine-grained, repo-scoped, read-only PAT) reads; GITHUB_TOKEN
+# writes. Neither alone can both read traffic and modify the archive.
+#
+# Never runs on a fork: METRICS_TOKEN does not propagate to forks, so a fork's
+# scheduled run would fail every single day with nothing anyone could do about
+# it short of disabling the workflow. `github.event.repository.fork` gates the
+# job instead of a hardcoded repo slug, which stays correct if the project is
+# ever renamed or transferred.
+#
+# Why `gh workflow enable`: GitHub disables scheduled workflows after 60 days
+# with no repository activity. This workflow's own commits go to a non-default
+# branch and are made with GITHUB_TOKEN, so they cannot be relied on to reset
+# that timer. Re-enabling on every run is idempotent and costs one API call.
+# It needs `actions: write` — without that scope the call fails silently
+# (masked by `|| true` so a stalled collector doesn't also fail the run over
+# a self-heal step), which would defeat the entire point of running it.
+#
+# See docs/systems/metrics.md.
+
+on:
+  schedule:
+    # 03:00 UTC daily. The exact hour does not matter: the traffic API returns a
+    # 14-day window, so any gap of 13 days or less is repaired by the next run.
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Never cancel in progress: metrics.yml and backfill.yml write the same files,
+# and cancelling a collection run loses that day irrecoverably. Sharing the
+# `metrics-data` group also means the two workflows queue instead of racing
+# each other's pushes.
+concurrency:
+  group: metrics-data
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    name: Collect metrics
+    # Skip entirely on forks. A fork's Actions run still resolves
+    # `github.repository` to its own slug, but it never has METRICS_TOKEN
+    # (secrets do not propagate to forks), so the job would otherwise fail
+    # loudly on a schedule the fork owner never opted into.
+    if: ${{ !github.event.repository.fork }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      # The data branch must be created BEFORE actions/checkout is asked for it:
+      # checkout with a nonexistent ref hard-fails the job, so a bootstrap step
+      # placed after it could never run.
+      #
+      # Built as a `git worktree add --orphan` into a scratch directory rather
+      # than `git switch --orphan` in place. Both start genuinely empty —
+      # `git switch --orphan` removes all tracked files, and only the legacy
+      # `git checkout --orphan` carries the previous tree over into the index.
+      # The worktree is preferred because it never touches the primary
+      # checkout at all: the later "Collect" step runs the collector from the
+      # repository root and needs that tree intact, and a scratch worktree
+      # removes any way for this step to leave it modified on an early exit.
+      - name: Bootstrap the data branch if absent
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --heads origin metrics-data >/dev/null 2>&1; then
+            echo "metrics-data exists"
+          else
+            echo "Creating orphan branch metrics-data"
+            git config user.name  "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git worktree add --orphan -b metrics-data .metrics-init
+            git -C .metrics-init commit --allow-empty -m "chore(metrics): initialise data branch"
+            git -C .metrics-init push origin metrics-data
+            git worktree remove .metrics-init --force
+          fi
+
+      - name: Checkout the data branch
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          ref: metrics-data
+          path: .metrics-data
+
+      - name: Setup Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          # Pinned to 24: the collector is TypeScript executed directly by Node's
+          # native type stripping, with no build step and no dependencies.
+          node-version: 24
+
+      - name: Collect
+        env:
+          METRICS_TOKEN: ${{ secrets.METRICS_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          METRICS_DATA_DIR: ${{ github.workspace }}/.metrics-data
+        run: node scripts/metrics/src/cli-collect.ts
+
+      - name: Commit and push
+        working-directory: .metrics-data
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No change to commit"
+            exit 0
+          fi
+          git commit -m "chore(metrics): snapshot $(date -u +%Y-%m-%d)"
+          # backfill.yml can be dispatched while this runs. Rebase and retry
+          # rather than clobbering, then fail loudly if it still will not land.
+          for attempt in 1 2 3; do
+            if git push origin metrics-data; then
+              exit 0
+            fi
+            echo "Push rejected (attempt $attempt), rebasing"
+            git pull --rebase origin metrics-data
+          done
+          echo "Could not push after 3 attempts"
+          exit 1
+
+      # Runs only when something upstream in this job failed (a required
+      # fetch in "Collect", or the "Commit and push" step itself) — never on
+      # success. On success there is nothing left to record: `collect()`
+      # already wrote a complete, correct meta.json as the last step of its
+      # own atomic write phase (see collect.ts), and the "Commit and push"
+      # step above already commits it alongside the data files via
+      # `git add -A`. A second write here on the success path would just be
+      # a redundant, confusing second daily commit — which is exactly what
+      # this replaces. See docs/systems/metrics.md §3.3.
+      - name: Record failure
+        if: failure()
+        env:
+          METRICS_DATA_DIR: ${{ github.workspace }}/.metrics-data
+          METRICS_RUN_OUTCOME: ${{ job.status }}
+        run: node scripts/metrics/src/cli-record-failure.ts
+
+      # Split from "Record failure" above rather than folded into one step:
+      # the CLI only ever touches the working tree (via `store.ts`), and
+      # every other step in this job that runs `git` does so as its own
+      # step with its own identity/add/commit/push, for the same reason
+      # "Commit and push" above is separate from "Collect" — a step that
+      # fails partway through this shell script (e.g. the push) should not
+      # be indistinguishable in the logs from the write itself failing.
+      - name: Commit and push failure record
+        if: failure()
+        working-directory: .metrics-data
+        run: |
+          set -euo pipefail
+          # Own identity for the same reason "Commit and push" above needs
+          # one: this step can run on a path where no prior step in this job
+          # configured git, and a `git commit` under an auto-detected
+          # `runner@<vm>` identity would be inconsistent with every other
+          # commit on this branch — on exactly the runs this step exists to
+          # make visible.
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add meta.json
+          git diff --cached --quiet || {
+            git commit -m "chore(metrics): record run failure"
+            # This commit carries only run metadata; the data commit (when
+            # it happens) has its own retry loop and hard-fails on its own.
+            # Swallow a push failure here so a metadata push cannot mask or
+            # compound an already-failed run, but surface it — an
+            # unannotated `|| true` is how a real problem stays invisible
+            # for months.
+            git push origin metrics-data \
+              || echo "::warning::failed to push failure record to metrics-data"
+          }
+
+      - name: Keep the schedule alive
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: gh workflow enable metrics.yml --repo "$REPO" || true
