@@ -1,4 +1,4 @@
-import { upsertByDate } from './series.ts';
+import { upsertByDate, upsertByKey, compareReleaseRows } from './series.ts';
 import type { GitHubClient } from './github.ts';
 import type { Store } from './store.ts';
 import type { CountPoint, IsoDate, ReleaseRow } from './types.ts';
@@ -187,7 +187,27 @@ export async function backfill(options: BackfillOptions): Promise<{ written: str
       tag: release.tag_name,
       name: release.name ?? release.tag_name,
     }));
-  mergeIfAbsent('releases.csv', ['date', 'tag', 'name'], releaseRows);
+
+  // Not `mergeIfAbsent`: `releases.csv` is keyed on `tag`, not `date` — see
+  // `upsertByKey` in series.ts for why a date-keyed merge silently collapses
+  // two releases published on the same UTC day into one row. Still
+  // if-absent, matching every other write in this function: a tag the
+  // collector already recorded (with `collect.ts`'s own `upsertByKey`
+  // 'overwrite' merge, which is authoritative because it comes from the
+  // day's live fetch) must never be replaced by this reconstruction.
+  const existingReleases = store.readCsv('releases.csv') as unknown as ReleaseRow[];
+  const mergedReleases = upsertByKey(
+    existingReleases,
+    releaseRows,
+    (row) => row.tag,
+    'if-absent',
+    compareReleaseRows,
+  );
+  store.writeCsv(
+    'releases.csv',
+    ['date', 'tag', 'name'],
+    mergedReleases as unknown as Array<Record<string, string | number>>,
+  );
 
   return { written: [...WRITABLE] };
 }

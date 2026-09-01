@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createStore } from './store.ts';
 import { backfill } from './backfill.ts';
+import { collect } from './collect.ts';
 import type { GitHubClient } from './github.ts';
 
 let dir = '';
@@ -71,6 +72,98 @@ describe('backfill', () => {
     await backfill({ client: fakeClient(), store, ...base });
     expect(store.readCsv('releases.csv')).toEqual([
       { date: '2026-08-01', tag: 'v1.0.0', name: 'Backspace 1.0.0' },
+    ]);
+  });
+
+  it('keeps both releases when two are published on the same UTC day', async () => {
+    const store = createStore(dir);
+    const client = fakeClient({
+      '/repos/o/r/releases': [
+        { tag_name: 'v1.0.1', name: 'v1.0.1', published_at: '2026-08-01T18:00:00Z' },
+        { tag_name: 'v1.0.0', name: 'v1.0.0', published_at: '2026-08-01T09:00:00Z' },
+      ],
+    });
+    await backfill({ client, store, ...base });
+    expect(store.readCsv('releases.csv')).toEqual([
+      { date: '2026-08-01', tag: 'v1.0.0', name: 'v1.0.0' },
+      { date: '2026-08-01', tag: 'v1.0.1', name: 'v1.0.1' },
+    ]);
+  });
+
+  it('is idempotent for same-day releases across repeated runs', async () => {
+    const store = createStore(dir);
+    const client = fakeClient({
+      '/repos/o/r/releases': [
+        { tag_name: 'v1.0.1', name: 'v1.0.1', published_at: '2026-08-01T18:00:00Z' },
+        { tag_name: 'v1.0.0', name: 'v1.0.0', published_at: '2026-08-01T09:00:00Z' },
+      ],
+    });
+    await backfill({ client, store, ...base });
+    const first = store.readCsv('releases.csv');
+    await backfill({ client, store, ...base });
+    expect(store.readCsv('releases.csv')).toEqual(first);
+  });
+
+  it('never alters a release the collector already wrote, even under a different name', async () => {
+    // collect() and backfill() both write releases.csv, keyed on tag. If
+    // collect() ran first and recorded a release, a later backfill() dispatch
+    // reconstructing the same tag from /releases (a raw list, not filtered to
+    // "new since last run") must not clobber it — matching the if-absent
+    // guarantee stars.csv/forks.csv already have, now extended to the
+    // tag-keyed merge.
+    const store = createStore(dir);
+    const collectClient: GitHubClient = {
+      async get<T>(p: string): Promise<T> {
+        const routes: Record<string, unknown> = {
+          '/repos/o/r/traffic/views': { views: [] },
+          '/repos/o/r/traffic/clones': { clones: [] },
+          '/repos/o/r/traffic/popular/referrers': [],
+          '/repos/o/r/traffic/popular/paths': [],
+          '/repos/o/r': {
+            stargazers_count: 1,
+            forks_count: 1,
+            subscribers_count: 1,
+            open_issues_count: 1,
+          },
+        };
+        const value = routes[p];
+        if (value === undefined) throw new Error(`unexpected GET ${p}`);
+        return value as T;
+      },
+      async getStats<T>(): Promise<T | null> {
+        return null;
+      },
+      async paginate<T>(p: string): Promise<T[]> {
+        if (p !== '/repos/o/r/releases') throw new Error(`unexpected paginate ${p}`);
+        return [
+          {
+            tag_name: 'v1.0.0',
+            name: 'Collector name',
+            published_at: '2026-08-01T10:00:00Z',
+            assets: [],
+          },
+        ] as T[];
+      },
+    };
+    await collect({
+      client: collectClient,
+      store,
+      slug: 'o/r',
+      today: '2026-08-25',
+      now: '2026-08-25T03:00:00Z',
+    });
+    expect(store.readCsv('releases.csv')).toEqual([
+      { date: '2026-08-01', tag: 'v1.0.0', name: 'Collector name' },
+    ]);
+
+    const backfillClient = fakeClient({
+      '/repos/o/r/releases': [
+        { tag_name: 'v1.0.0', name: 'Reconstructed name', published_at: '2026-08-01T10:00:00Z' },
+      ],
+    });
+    await backfill({ client: backfillClient, store, ...base });
+    expect(store.readCsv('releases.csv')).toEqual([
+      { date: '2026-08-01', tag: 'v1.0.0', name: 'Collector name' },
     ]);
   });
 
