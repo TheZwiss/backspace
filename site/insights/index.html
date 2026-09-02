@@ -357,6 +357,56 @@ h2 {
    width, so it could never overflow and the container would never scroll. */
 .chart-scroll .uplot { width: min-content; }
 
+/* ================= Ranked dimensions ================= */
+/*
+ * The ranked list is the section's primary reading AND the movement chart's
+ * legend: a row drawn in a palette colour is one of the handful that carries
+ * a line below, in that same colour. The join between the two structures is
+ * therefore visible on the page rather than merely asserted in code.
+ *
+ * Every text cell truncates with an ellipsis rather than wrapping or pushing
+ * the page sideways — paths run to eighty characters — and every one of them
+ * carries the full value in a `title` attribute, so truncation costs a glance
+ * and never the value itself.
+ */
+.ranked { display: grid; gap: 13px; }
+.rank-row {
+  display: grid; grid-template-columns: 22px minmax(0, 1fr);
+  gap: 12px; align-items: start;
+}
+.rank-n {
+  font-family: var(--mono); font-size: 12.5px; color: var(--txt4);
+  text-align: right; line-height: 1.55;
+}
+.rank-body { min-width: 0; }
+.rank-head { display: flex; align-items: baseline; gap: 12px; }
+.rank-name {
+  font-size: 14.8px; font-weight: 560; color: var(--txt);
+  flex: 1 1 auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.rank-num {
+  font-family: var(--mono); font-size: 12.5px; color: var(--txt2);
+  flex: 0 0 auto; white-space: nowrap;
+}
+.rank-sub {
+  font-family: var(--mono); font-size: 12px; color: var(--txt4);
+  margin-top: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.rank-track {
+  height: 6px; margin-top: 8px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05); overflow: hidden;
+}
+.rank-fill { height: 100%; border-radius: 999px; }
+/* Below this the count would crowd the name into a few characters. Given its
+   own line it keeps the name readable at 360px without the row wrapping into
+   something a reader has to reassemble. */
+@media (max-width: 460px) {
+  .rank-head { flex-wrap: wrap; gap: 2px 12px; }
+  .rank-name { flex-basis: 100%; }
+}
+
 /* ================= Footer ================= */
 footer { border-top: 1px solid var(--line); padding: 34px 0 44px; }
 .foot-in { display: flex; flex-wrap: wrap; gap: 18px 28px; align-items: center; justify-content: space-between; color: var(--txt3); font-size: 13.5px; }
@@ -3985,6 +4035,938 @@ footer a:hover { color: var(--txt); }
   }
 
   I.registerSection("chart-growth", render, teardown);
+})();
+</script>
+<script>
+/*
+ * Sections "ranked-referrers" and "ranked-paths" — spec §7's dimensional view,
+ * and the weakest data this archive holds.
+ *
+ * ─────────────────────────────────────────────────────────────────────────
+ * WHY THIS FILE IS MOSTLY CAVEATS
+ *
+ * Everything else on this page is a daily measurement. These two are not.
+ * GitHub reports referrers and paths ONLY as a trailing fourteen-day
+ * aggregate of at most ten rows, taken as a whole at the moment it is asked.
+ * There is no daily resolution to be had — not from a different endpoint, not
+ * by asking more often, not anywhere. Three consequences run through every
+ * line below, and each of them is a way to present this data as something
+ * stronger than it is:
+ *
+ * 1. A FIGURE HERE IS A FORTNIGHT, NOT A DAY. The ranked bars are one
+ *    snapshot's fourteen-day totals. They are labelled as such in the card,
+ *    in the meta line and in the section copy above, and they do NOT move
+ *    with the range control — there is no finer history for a range to
+ *    select from, and a control that appeared to window them would be
+ *    promising a resolution that does not exist.
+ *
+ * 2. THE TRAJECTORIES ARE ALREADY DIFFERENCED, AND MUST NOT BE DIFFERENCED
+ *    AGAIN. Consecutive snapshots share thirteen of their fourteen days, so
+ *    the raw sequence is a rolling sum whose shape is dominated by what is
+ *    ageing out of the window rather than by what arrived — it reads as
+ *    smooth growth when nothing changed. `bundle.ts` already differences
+ *    consecutive snapshots, and `delta` is that difference. This file plots
+ *    it as it stands.
+ *
+ * 3. A NULL IS "OUTSIDE THE TOP TEN", WHICH IS AN UPPER BOUND — NEVER A ZERO.
+ *    A dimension GitHub did not list that day still received traffic; all
+ *    that is known is that it received no more than the tenth-ranked row did.
+ *    Plotting that as zero would draw a cliff that never happened. It is
+ *    drawn as a break, through the same `spanGaps: false` machinery the rest
+ *    of the page uses, and the captions say what a break means here — which
+ *    is a different sentence from the one the reach and growth sections use,
+ *    because the reason is different.
+ * ─────────────────────────────────────────────────────────────────────────
+ *
+ * TWO STRUCTURES, JOINED ON A STRING.
+ *
+ * `latest` holds up to ten rows; `trajectories` holds at most five. They are
+ * different lengths, so `trajectories[3]` is emphatically not `latest[3]`.
+ * Everything below joins them on the `dimension` string and never on
+ * position. An index join would pair a bar with another dimension's line and
+ * label a chart with the wrong referrer, throwing nothing and showing nothing
+ * — the same silent defect `INSIGHTS_CHARTS.bind` exists to prevent for the
+ * time-series sections, in the one place on this page `bind` cannot reach.
+ *
+ * WHAT THE SHARED TOOLKIT COULD AND COULD NOT DO HERE.
+ *
+ * `bind` resolves a card's declared columns against `data.series.*`. These
+ * columns are not there — they are `data.dimensions.*.trajectories[].delta`,
+ * indexed by `snapshots` rather than by `dates` — so `bind` cannot bind them.
+ * `buildLines` below does the same job for this shape and keeps the property
+ * that matters: a line's `offset` into `axis.values` is recorded at the
+ * moment its column is pushed, and is read back BY NAME, so no chart here is
+ * ever drawn from a column it did not declare.
+ *
+ * `expand` fits exactly, and is used rather than reimplemented. Its contract
+ * is a list of `{ series, field }` where the series carries a `dates` array
+ * and a parallel value array — and a trajectory IS that shape once
+ * `snapshots` is named as its dates. The gap machinery, the complete axis and
+ * the null-never-zero rule therefore stay in one place for the whole page
+ * instead of being copied into a fourth section that could drift from it.
+ */
+(function () {
+  "use strict";
+
+  var I = window.INSIGHTS;
+  var C = window.INSIGHTS_CHARTS;
+
+  /* GitHub's traffic API answers with at most ten rows per dimension, over a
+   * trailing fortnight. Both numbers are named here so the copy below states
+   * them from one place rather than spelling them out inline six times. */
+  var GITHUB_TOP_N = 10;
+  var AGGREGATE_DAYS = 14;
+
+  /*
+   * The axis step for a trajectory is ONE DAY, always — including in a
+   * downsampled bundle, where every other chart on this page steps by a week.
+   *
+   * That is not an oversight and it is not a resolution claim of this file's
+   * own: `downsampleWeekly` copies `dimensions` through untouched
+   * (`bundle.ts`: "releases and dimensions are not bucketed at all"), because
+   * a trajectory is a difference between CONSECUTIVE SNAPSHOTS and weekly
+   * bucketing would silently redefine that into a different quantity with the
+   * same name. So snapshot dates stay daily whatever the bundle's headline
+   * resolution is, and stepping this axis by `INSIGHTS.resolutionStepDays()`
+   * would put a seven-day grid under daily rows — most of them landing
+   * off-step and the chart claiming a granularity the snapshots do not have.
+   */
+  var SNAPSHOT_STEP_DAYS = 1;
+
+  /*
+   * Line colours, in rank order, and the same swatch fills the ranked row's
+   * bar — which is what makes the ranked list readable as the chart's legend.
+   * Every entry is an Aether Drift token declared on :root and read at draw
+   * time, so the canvas stroke and the DOM bar are one resolved value rather
+   * than two copies that can drift.
+   *
+   * Five colours for `bundle.ts`'s five trajectories. A bundle carrying more
+   * wraps the ramp, and `wrapped` below says so rather than leaving two lines
+   * the same colour with nothing to explain it.
+   */
+  var RAMP = [
+    { token: "--sky", fallback: "#7dd3fc" },
+    { token: "--lavender", fallback: "#c4b5fd" },
+    { token: "--mint", fallback: "#86efac" },
+    { token: "--amber", fallback: "#fcd34d" },
+    { token: "--peach", fallback: "#fca5a5" }
+  ];
+  /* A ranked row with no line of its own — rank six and below. Muted, so the
+   * five that are drawn read as the ones the chart is about. */
+  var NEUTRAL = { token: "--txt4", fallback: "#5c5c68" };
+
+  /* Long enough for a referrer host and a short path title; past this the
+   * uPlot legend starts to set the width of the card it sits in. The full
+   * value is never lost: it is in the ranked list directly above, in full,
+   * under the matching colour and in a `title` attribute. */
+  var LEGEND_MAX = 34;
+
+  var SECTIONS = [
+    {
+      slotId: "ranked-referrers",
+      key: "referrers",
+      one: "referring site",
+      many: "referring sites",
+      rankedTitle: "Referring sites, ranked"
+    },
+    {
+      slotId: "ranked-paths",
+      key: "paths",
+      one: "path",
+      many: "paths",
+      rankedTitle: "Paths, ranked"
+    }
+  ];
+
+  /* ------------------------------------------------------------- helpers */
+
+  function el(tag, className, text) {
+    var node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+
+  function pair(key, value) {
+    var span = el("span");
+    span.appendChild(el("span", "k", key));
+    span.appendChild(document.createTextNode(" "));
+    span.appendChild(el("span", "v", value));
+    return span;
+  }
+
+  function plural(count, singular, pluralWord) {
+    return count === 1 ? singular : pluralWord;
+  }
+
+  function days(count) {
+    return count + " " + plural(count, "day", "days");
+  }
+
+  function trimmed(value) {
+    return typeof value === "string" ? value.replace(/^\s+|\s+$/g, "") : "";
+  }
+
+  /* A snapshot date as the page prints every other date, or a stated refusal.
+   * The bundle contract promises only a non-empty string here, and a date
+   * this page cannot place on a UTC calendar day is said out loud rather than
+   * printed raw or quietly dropped. */
+  function dayText(value) {
+    var ms = I.parseDay(value);
+    return isNaN(ms) ? "a date this page cannot place on a calendar day" : I.formatDay(ms);
+  }
+
+  /*
+   * What to call a row. Path rows carry a `title` — "Overview",
+   * "/releases/tag/v1.0.0" — and referrer rows carry an empty one, so the
+   * title is used where it exists and the dimension is the fallback. Both are
+   * third-party strings from an external API and reach the document only ever
+   * through `textContent` and `.title`, never as markup.
+   */
+  function displayLabel(row, dimension) {
+    var title = row === null ? "" : trimmed(row.title);
+    return title !== "" ? title : dimension;
+  }
+
+  function shortLabel(text) {
+    return text.length > LEGEND_MAX ? text.slice(0, LEGEND_MAX - 1) + "…" : text;
+  }
+
+  /*
+   * The device-pixel ratio uPlot is drawing at, for the zero rule below.
+   * `u.bbox` and `valToPos(…, true)` are in canvas pixels, so a line width
+   * written in CSS pixels comes out a third of its intended size on a retina
+   * display — thin enough to pass a glance and still be wrong.
+   */
+  function pixelRatio() {
+    var uplot = window.uPlot;
+    if (uplot && typeof uplot.pxRatio === "number" && isFinite(uplot.pxRatio) &&
+      uplot.pxRatio > 0) {
+      return uplot.pxRatio;
+    }
+    var ratio = window.devicePixelRatio;
+    return (typeof ratio === "number" && isFinite(ratio) && ratio > 0) ? ratio : 1;
+  }
+
+  /* ---------------------------------------------------------- the join */
+
+  /*
+   * `latest`'s row for a dimension, with the rank it holds there, or null.
+   *
+   * A linear scan rather than a lookup object, and deliberately so: the two
+   * arrays are at most ten and five long, and the keys here are third-party
+   * strings. A plain object keyed on them would have to defend against
+   * `__proto__` and `constructor` arriving as a path; a scan compares strings
+   * and cannot be confused by any of them.
+   */
+  function latestRowFor(series, dimension) {
+    for (var i = 0; i < series.latest.length; i++) {
+      if (series.latest[i].dimension === dimension) {
+        return { row: series.latest[i], rank: i + 1 };
+      }
+    }
+    return null;
+  }
+
+  /* The drawn line for a dimension, or null when it has none — which is the
+   * ordinary state of ranks six to ten. Joined on the same string. */
+  function lineFor(lines, dimension) {
+    for (var i = 0; i < lines.length; i++) {
+      if (lines[i].dimension === dimension) return lines[i];
+    }
+    return null;
+  }
+
+  /*
+   * Turn `trajectories` into `expand` columns plus the lines that read them.
+   *
+   * This is `bind`'s job, done for the one shape `bind` cannot address, and
+   * with `bind`'s one load-bearing property preserved: `offset` is recorded
+   * as the column is pushed and read back by name, so a line cannot end up
+   * drawn from a column belonging to another dimension however this array is
+   * later reordered.
+   *
+   * It also enforces, per trajectory, the one contract invariant the bundle
+   * validator deliberately does not check.
+   *
+   * `delta[0]` is null by construction — there is no snapshot before the
+   * first to difference against — but `validateBundle` does not reject a
+   * bundle that breaks that, on the grounds that blanking the whole page over
+   * a cosmetic violation trades it for a total outage. That leaves the
+   * invariant to whoever depends on it, and this file does: the captions
+   * below state that the first snapshot carries no point. A number there
+   * would be a difference taken against nothing — a figure the archive cannot
+   * hold — so it is dropped to null rather than plotted, and `zeroFaults`
+   * carries the dimension's name up to a caution line that says so. Silently
+   * plotting it would publish a fabricated figure; silently dropping it would
+   * hide a fault in the bundler.
+   */
+  function buildLines(series) {
+    var columns = [];
+    var lines = [];
+    var zeroFaults = [];
+    var orphans = 0;
+
+    for (var i = 0; i < series.trajectories.length; i++) {
+      var trajectory = series.trajectories[i];
+      var joined = latestRowFor(series, trajectory.dimension);
+      if (joined === null) orphans++;
+
+      var delta = trajectory.delta;
+      if (delta.length > 0 && delta[0] !== null) {
+        zeroFaults.push(trajectory.dimension);
+        delta = delta.slice();
+        delta[0] = null;
+      }
+
+      var swatch = RAMP[i % RAMP.length];
+      lines.push({
+        dimension: trajectory.dimension,
+        label: displayLabel(joined === null ? null : joined.row, trajectory.dimension),
+        swatch: swatch,
+        stroke: C.colour(swatch.token, swatch.fallback),
+        /* Recorded before the push, so it is the index of THIS line's column
+         * and of no other. */
+        offset: columns.length
+      });
+      /* The shim `expand` reads: a trajectory's `snapshots` are its dates and
+       * its `delta` is the parallel value column. The validator has already
+       * checked that the two are the same length. */
+      columns.push({ series: { dates: series.snapshots, delta: delta }, field: "delta" });
+    }
+
+    return {
+      columns: columns,
+      lines: lines,
+      zeroFaults: zeroFaults,
+      orphans: orphans,
+      wrapped: series.trajectories.length > RAMP.length
+    };
+  }
+
+  /* -------------------------------------------------------- ranked bars */
+
+  /*
+   * One ranked row: rank, name, the fortnight's figures, and a bar.
+   *
+   * The bar is proportional to the top row, which is the only comparison it
+   * can honestly offer — these are ten rows of one snapshot, with no baseline
+   * and no history behind them. It is decoration for a figure that is printed
+   * in full beside it, so nothing is lost if a reader ignores it entirely.
+   */
+  function rankedRow(row, rank, max, line) {
+    var box = el("div", "rank-row");
+    box.appendChild(el("p", "rank-n", String(rank)));
+
+    var body = el("div", "rank-body");
+    var head = el("div", "rank-head");
+
+    var label = displayLabel(row, row.dimension);
+    var name = el("p", "rank-name", label);
+    /* Set whether or not the CSS ellipsis actually bites: a path can be
+     * eighty characters and the full value must stay reachable at every
+     * width, not only the narrow ones. */
+    name.title = label;
+    head.appendChild(name);
+
+    head.appendChild(el("p", "rank-num",
+      I.formatCount(row.count) + " " + plural(row.count, "view", "views") + " · " +
+      I.formatCount(row.uniques) + " unique"));
+    body.appendChild(head);
+
+    /* The dimension itself, when the title is standing in front of it — a
+     * path's "Overview" says nothing about which path it is. */
+    if (label !== row.dimension) {
+      var sub = el("p", "rank-sub", row.dimension);
+      sub.title = row.dimension;
+      body.appendChild(sub);
+    }
+
+    var track = el("div", "rank-track");
+    var fill = el("div", "rank-fill");
+    /* A negative or absent top figure leaves every bar at zero width rather
+     * than producing a negative one; the printed counts still stand. */
+    var share = max > 0 ? (row.count / max) * 100 : 0;
+    if (!isFinite(share) || share < 0) share = 0;
+    if (share > 100) share = 100;
+    fill.style.width = share + "%";
+    fill.style.background = line === null
+      ? C.colour(NEUTRAL.token, NEUTRAL.fallback)
+      : line.stroke;
+    track.appendChild(fill);
+    body.appendChild(track);
+
+    box.appendChild(body);
+    return box;
+  }
+
+  /*
+   * `lines` is the set the movement chart will actually draw, and is empty
+   * when it draws nothing. That is what decides which bars are coloured,
+   * because on this page the colour MEANS "this row has a line below in this
+   * colour" — it is the join between the two structures, made visible. With
+   * no chart on the page the colour would mean nothing, and a page that
+   * distinguishes five rows from five others for no stated reason is
+   * signalling something it declines to explain. So they all take the neutral
+   * and the list reads as one ranking, which is what it is.
+   */
+  function rankedList(series, lines) {
+    var max = 0;
+    var i;
+    for (i = 0; i < series.latest.length; i++) {
+      if (series.latest[i].count > max) max = series.latest[i].count;
+    }
+    var list = el("div", "ranked");
+    for (i = 0; i < series.latest.length; i++) {
+      var row = series.latest[i];
+      /* Joined on the dimension string. `latest` is longer than `lines`, so
+       * `lines[i]` would be a different site entirely for most of these
+       * rows. */
+      list.appendChild(rankedRow(row, i + 1, max, lineFor(lines, row.dimension)));
+    }
+    return list;
+  }
+
+  /* What the ranked figures are, in the terms that make them readable: one
+   * snapshot, a fortnight wide, capped at ten rows. */
+  function rankedMeta(series) {
+    var note = el("p", "chart-meta");
+    var last = series.snapshots.length > 0
+      ? series.snapshots[series.snapshots.length - 1]
+      : null;
+    note.appendChild(pair("basis", "trailing " + AGGREGATE_DAYS + "-day aggregate"));
+    note.appendChild(pair("snapshot", last === null
+      ? "none recorded"
+      : "taken " + dayText(last) + ", covering the " + AGGREGATE_DAYS +
+        " days ending that day"));
+    note.appendChild(pair("rows", series.latest.length + " listed — GitHub reports at most " +
+      GITHUB_TOP_N));
+    return note;
+  }
+
+  /* The statement the whole section turns on, next to the figures it governs
+   * rather than only in the prose above them. */
+  /* `lines` is the set of lines the movement chart is ACTUALLY going to
+   * draw, which is empty whenever the section declines to draw one. Passing
+   * the trajectories regardless would print "a row drawn in colour is one of
+   * the five with a line below" directly above a paragraph explaining that
+   * there is no chart below — a caption for something that is not there,
+   * which is the failure this page's whole discipline exists to avoid. */
+  function rankedHint(spec, lines) {
+    var text = "These are not daily figures. GitHub reports a " + spec.one + "'s traffic " +
+      "only as one trailing " + AGGREGATE_DAYS + "-day total per snapshot and lists at most " +
+      GITHUB_TOP_N + " rows, so every count above covers a fortnight and there is no finer " +
+      "resolution to be had — from this archive or from anywhere else. They do not move with " +
+      "the range control: there is no daily history for a range to select from.";
+    /* Both remaining sentences describe the chart. Neither is printed when
+     * there is no chart to describe. */
+    if (lines.length > 0) {
+      text += " The range does move the movement chart below, which is drawn across snapshot " +
+        "dates. A row drawn in colour is one of the " + lines.length + " with a line in that " +
+        "same colour there; the rest are ranked here only.";
+    }
+    return el("p", "chart-hint", text);
+  }
+
+  /* ------------------------------------------------------ movement chart */
+
+  /*
+   * The y-scale policy for a signed difference, and the reason `mount` takes
+   * one as an option.
+   *
+   * `zeroBasedCounts` — right for the reach section's per-day event counts —
+   * clamps its floor to zero, and a fall in a referrer's fortnight count is a
+   * real, negative, measured quantity. Clipping it would drop the half of
+   * this chart that says traffic went down.
+   *
+   * Zero is always inside the range, whatever the values do, because zero is
+   * what every point on this chart is read against: above the line the
+   * dimension gained, below it the dimension lost, and an axis that excluded
+   * the line would leave a reader guessing which side of it a point sits on.
+   */
+  function signedRange(u, min, max) {
+    if (typeof min !== "number" || !isFinite(min) ||
+      typeof max !== "number" || !isFinite(max)) {
+      return [-1, 1];
+    }
+    var low = min < 0 ? min : 0;
+    var high = max > 0 ? max : 0;
+    if (low === high) return [-1, 1];
+    var padding = (high - low) * 0.12;
+    return [low - padding, high + padding];
+  }
+
+  /*
+   * The zero rule, drawn through `mount`'s `hooks` option as a `drawAxes`
+   * hook — after the grid, before the series, so it reads as part of the
+   * frame rather than as a sixth line across the data.
+   *
+   * It is stronger than a gridline on purpose: on a chart of signed
+   * differences the sign is the reading, and "did this go up or down" must
+   * not depend on counting gridlines up from the bottom of the frame.
+   */
+  function zeroPainter(stroke) {
+    return function (u) {
+      var scale = u.scales.y;
+      /* `signedRange` above guarantees zero is inside the range. Checked all
+       * the same, because the y policy is an option a future caller could
+       * pass differently, and a rule painted outside the plot area would
+       * strike through the axis labels. */
+      if (!scale || typeof scale.min !== "number" || typeof scale.max !== "number") return;
+      if (scale.min > 0 || scale.max < 0) return;
+      var y = u.valToPos(0, "y", true);
+      if (typeof y !== "number" || !isFinite(y)) return;
+      var ctx = u.ctx;
+      ctx.save();
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = Math.max(1, Math.round(pixelRatio()));
+      ctx.beginPath();
+      ctx.moveTo(u.bbox.left, y);
+      ctx.lineTo(u.bbox.left + u.bbox.width, y);
+      ctx.stroke();
+      ctx.restore();
+    };
+  }
+
+  /* The snapshot days that fall inside the selected window, and how many
+   * snapshot dates the bundle carries that this page cannot read. */
+  function snapshotsInWindow(series, win) {
+    var inside = 0;
+    var unreadable = 0;
+    for (var i = 0; i < series.snapshots.length; i++) {
+      var ms = I.parseDay(series.snapshots[i]);
+      if (isNaN(ms)) {
+        unreadable++;
+        continue;
+      }
+      if (ms >= win.startMs && ms <= win.endMs) inside++;
+    }
+    return { inside: inside, unreadable: unreadable };
+  }
+
+  /* How many points across every line the axis carries, and how many of the
+   * places one could sit are breaks. Stated because a chart of five mostly
+   * broken lines should say how much of it is break before a reader counts. */
+  function pointTally(axis, lines) {
+    var drawn = 0;
+    var blank = 0;
+    for (var i = 0; i < lines.length; i++) {
+      drawn += axis.measured[lines[i].offset];
+      if (axis.measured[lines[i].offset] === 0) blank++;
+    }
+    return { drawn: drawn, possible: axis.xs.length * lines.length, blankLines: blank };
+  }
+
+  function movementMeta(axis, lines, counted, total) {
+    var note = el("p", "chart-meta");
+    note.appendChild(pair("span", I.formatDay(axis.startMs) + " → " + I.formatDay(axis.endMs)));
+    note.appendChild(pair("snapshots", counted + " of the " + total +
+      " the archive holds"));
+    note.appendChild(pair("lines", lines.length + " " +
+      plural(lines.length, "dimension", "dimensions") + ", joined to the ranking above by name"));
+    if (axis.xs.length > counted) {
+      note.appendChild(pair("no snapshot", days(axis.xs.length - counted) + " on this axis " +
+        plural(axis.xs.length - counted, "carries", "carry") + " none — drawn as breaks"));
+    }
+    var tally = pointTally(axis, lines);
+    note.appendChild(pair("points", tally.drawn + " drawn of " + tally.possible +
+      " possible; the rest are breaks"));
+    return note;
+  }
+
+  /* What a point is, and what a break is — a different sentence from the one
+   * the reach and growth sections use, because the reason is different. */
+  function movementHint(spec) {
+    return el("p", "chart-hint",
+      "Each point is the CHANGE in a " + spec.one + "'s " + AGGREGATE_DAYS + "-day count " +
+      "since the previous snapshot, not the count itself. Consecutive snapshots share " +
+      (AGGREGATE_DAYS - 1) + " of their " + AGGREGATE_DAYS + " days, so the raw totals overlap " +
+      "and a chart of them would climb steadily while nothing changed; the difference is the " +
+      "closest honest answer to what moved. A break is not a zero: it means the " + spec.one +
+      " was outside the " + GITHUB_TOP_N + " GitHub listed on one of the two snapshots being " +
+      "compared, so all that is known is that it drew no more than the " + GITHUB_TOP_N +
+      "th-ranked row did. The first snapshot carries no point at all — there is nothing before " +
+      "it to difference against — and a snapshot missing from the middle of the run breaks " +
+      "both its own point and the one after it, because a difference taken across the gap " +
+      "would report a two-snapshot move as a one-snapshot one.");
+  }
+
+  /*
+   * A day on the axis with NO snapshot at all — the collector did not run —
+   * is a different fact from a dimension missing from a snapshot, and it has
+   * a consequence the reader would otherwise have to infer.
+   *
+   * `bundle.ts` differences CONSECUTIVE SNAPSHOTS, not consecutive days. When
+   * a day carries no snapshot the next point covers the whole gap, so a point
+   * one day to the right of a break is a two-day change drawn at one day's
+   * tick. The break says a day is missing; this says what the point beside it
+   * therefore means.
+   */
+  function gapHint(gapDays) {
+    return el("p", "chart-hint", days(gapDays) + " on this axis " +
+      plural(gapDays, "carries", "carry") + " no snapshot at all: the collector did not run, " +
+      "so nothing was recorded to difference. A point is the change since the PREVIOUS " +
+      "SNAPSHOT rather than since the previous day, so the point immediately after a break " +
+      "covers the whole of it — read it against the last day before the break, not against " +
+      "the day beside it.");
+  }
+
+  function axisHint() {
+    return el("p", "chart-hint",
+      "The vertical axis is signed and always includes zero: a point above the rule is a rise " +
+      "in that fortnight count and a point below it a fall. Line names in the legend are " +
+      "shortened to fit; the ranked list above carries every one of them in full, under the " +
+      "matching colour.");
+  }
+
+  /* A fault in the bundle rather than in the archive or in this page, so it
+   * is named as one. */
+  function zeroFaultHint(faults) {
+    return el("p", "chart-hint chart-caution",
+      faults.length + " " + plural(faults.length, "line", "lines") + " here (" +
+      faults.join(", ") + ") " + plural(faults.length, "carries", "carry") +
+      " a number at the first snapshot. There is no snapshot before the first to difference " +
+      "against, so no such figure can exist. " + plural(faults.length, "It is", "They are") +
+      " not plotted, and this is a fault in the bundle that produced this page's data.");
+  }
+
+  function orphanHint(count, spec) {
+    return el("p", "chart-hint chart-caution", count + " " +
+      plural(count, "line", "lines") + " " + plural(count, "names a", "name a") + " " +
+      spec.one + " that is not among the ranked rows above, so " +
+      plural(count, "it is", "they are") + " labelled by the raw value and " +
+      plural(count, "has", "have") + " no bar to match. Every trajectory is supposed to be " +
+      "drawn from the ranking it sits beside; " + plural(count, "this one is", "these are") +
+      " not, which is a fault in the bundle that produced this page's data.");
+  }
+
+  function wrappedHint() {
+    return el("p", "chart-hint chart-caution",
+      "This bundle carries more trajectories than this page has colours for, so some lines " +
+      "share one. Read a line by the name in its legend rather than by matching its colour to " +
+      "a bar in the ranking above.");
+  }
+
+  function blankLinesHint(count, total, spec) {
+    return el("p", "chart-hint", count + " of the " + total + " " +
+      plural(total, "line", "lines") + " " + plural(count, "carries", "carry") +
+      " no point inside this span: " +
+      plural(count, "that " + spec.one + " appears", "those " + spec.many + " appear") +
+      " in at most one of the snapshots here, and a change needs two of them.");
+  }
+
+  /*
+   * A span so long it cannot be real is a fault in the ARCHIVE, and this page
+   * must not report it as one of its own. Letting `expand` throw would reach
+   * the shell's generic section-failure note — "the fault is in this page's
+   * code" — and send whoever reads it to the wrong repository entirely.
+   */
+  function overrunNote(axis) {
+    var detail = "The snapshot dates would run from " + I.formatDay(axis.startMs) + " to " +
+      I.formatDay(axis.endMs) + ", which needs " + I.formatCount(axis.overrunSteps) +
+      " points on the time axis — far longer than this archive can really cover. A snapshot " +
+      "date in the archive itself is wrong. No chart is drawn, rather than one built around a " +
+      "date that cannot be true.";
+    if (typeof console !== "undefined" && typeof console.error === "function") {
+      console.error("insights: a ranked section declined to plot. " + detail);
+    }
+    var note = el("p", "slot-note slot-note-error");
+    note.appendChild(el("strong", null, "This chart cannot be drawn from this archive."));
+    note.appendChild(document.createTextNode(" " + detail));
+    return note;
+  }
+
+  /* Whether any line carries a real figure at the axis' single step. */
+  function hasReading(axis, lines) {
+    for (var i = 0; i < lines.length; i++) {
+      var value = axis.values[lines[i].offset][0];
+      if (value !== null && value !== undefined) return true;
+    }
+    return false;
+  }
+
+  /* Every line's reading at the one step the axis holds, for the case below. */
+  function readings(axis, lines) {
+    var parts = [];
+    for (var i = 0; i < lines.length; i++) {
+      var value = axis.values[lines[i].offset][0];
+      parts.push(lines[i].label + ": " + (value === null || value === undefined
+        ? "no figure"
+        : (value > 0 ? "+" : "") + I.formatCount(value)));
+    }
+    return parts.join("  ·  ");
+  }
+
+  /*
+   * NOT ENOUGH HISTORY, AND WHY THAT IS NOT A BROKEN CHART.
+   *
+   * This is the live archive's state today: exactly one snapshot, so every
+   * trajectory is `[null]` and there is nothing whatever to plot. It is also
+   * reachable with a longer archive when the selected range holds fewer than
+   * two snapshots, or when the five lines happen to carry no movement figure
+   * inside it.
+   *
+   * A chart drawn anyway would be an empty frame, and an empty frame is
+   * indistinguishable from a section that failed to render. So the section
+   * says what the archive holds, what a trajectory needs, and when the next
+   * one arrives — and states any reading it does have rather than withholding
+   * it. The ranked figures above are unaffected and are said to be, because
+   * the reader is looking at ten filled bars and one absent chart and is owed
+   * an account of why only one of them is missing.
+   */
+  function historyNote(spec, series, axis, win, lines, counted) {
+    var box = el("div", "slot-note slot-note-detail");
+    var total = series.snapshots.length;
+
+    var first = el("p");
+    first.appendChild(el("strong", null, "Not enough history for a movement chart yet."));
+    first.appendChild(document.createTextNode(
+      " A trajectory is the change in a " + spec.one + "'s " + AGGREGATE_DAYS +
+      "-day count from one snapshot to the next, so it takes two snapshots to have any value " +
+      "at all, and the first snapshot carries none by construction: there is nothing before " +
+      "it to difference against."));
+    box.appendChild(first);
+
+    var held = total === 0
+      ? "The archive holds no snapshot of " + spec.many + " at all."
+      : "The archive holds " + total + " " + plural(total, "snapshot", "snapshots") +
+        " of " + spec.many + ", the newest taken " +
+        dayText(series.snapshots[series.snapshots.length - 1]) + ".";
+    if (win !== null && total > 0 && counted !== total) {
+      held += " " + counted + " of " + plural(total, "it", "them") + " " +
+        plural(counted, "falls", "fall") + " inside " + win.title.toLowerCase() + " (" +
+        I.formatDay(win.startMs) + " to " + I.formatDay(win.endMs) +
+        "); a wider range takes in more.";
+    }
+    box.appendChild(el("p", null, held));
+
+    /* A single step CAN carry a real figure — a range that clips the run to
+     * its last snapshot leaves one difference standing. Stating it is the
+     * difference between "there is nothing" and "there is one reading, and
+     * one reading is not a trajectory".
+     *
+     * Guarded on a reading actually existing, not merely on there being one
+     * step. With the archive's first and only snapshot the step is there and
+     * every value on it is null, and printing "carries these changes against
+     * the snapshot before it — Google: no figure · …" would assert a
+     * comparison against a snapshot that does not exist, five times over. */
+    if (axis !== null && !axis.empty && axis.xs.length === 1 && lines.length > 0 &&
+      hasReading(axis, lines)) {
+      box.appendChild(el("p", null, "The one snapshot inside this range, " +
+        I.formatDay(axis.startMs) + ", carries these changes against the snapshot before it — " +
+        readings(axis, lines) + ". A single difference is a reading, not a trajectory: it has " +
+        "no direction and no rate, and a line needs two points to have either."));
+    }
+
+    /* Enough snapshots to difference, and still nothing drawn: every ranked
+     * dimension is new to the run. Said explicitly, because the paragraph
+     * above blames the length of the archive and here the archive is long
+     * enough. */
+    if (axis !== null && axis.xs.length > 1 && lines.length > 0) {
+      box.appendChild(el("p", null, "This range spans " + counted + " " +
+        plural(counted, "snapshot", "snapshots") + ", but none of the " + lines.length + " " +
+        plural(lines.length, "ranked " + spec.one, "ranked " + spec.many) +
+        " drawn here appears in two of them, so not one of them has a change to plot. A " +
+        spec.one + " GitHub did not list on a given day is outside its top " + GITHUB_TOP_N +
+        " for that day — which bounds its traffic from above, and is not a zero."));
+    }
+
+    box.appendChild(el("p", null,
+      "The ranked figures above are unaffected: they are one snapshot's totals and need no " +
+      "history. The collector runs once a day, so the first movement figure appears here after " +
+      "the next successful run."));
+
+    if (lines.length === 0 && series.latest.length > 0) {
+      box.appendChild(el("p", null,
+        "This bundle carries no trajectory for any of the ranked " + spec.many + ", so there " +
+        "would be nothing to draw even with a longer history."));
+    }
+
+    return box;
+  }
+
+  /* ------------------------------------------------------------- render */
+
+  function noRowsNote(spec, series) {
+    var box = el("div", "slot-note slot-note-detail");
+    var first = el("p");
+    first.appendChild(el("strong", null, "No " + spec.many + " recorded yet."));
+    first.appendChild(document.createTextNode(
+      series.snapshots.length === 0
+        ? " The archive holds no snapshot of " + spec.many + ". GitHub reports them as a " +
+          "trailing " + AGGREGATE_DAYS + "-day aggregate, so the first one appears here after " +
+          "the collector's next successful run, and no earlier history is recoverable."
+        : " The newest snapshot, taken " +
+          dayText(series.snapshots[series.snapshots.length - 1]) +
+          ", lists none. GitHub returns an empty set when a repository drew no traffic it " +
+          "could attribute over the trailing " + AGGREGATE_DAYS + " days — which is a real " +
+          "reading, not a failed one."));
+    box.appendChild(first);
+    return box;
+  }
+
+  function makeRenderer(spec) {
+    /* Every live uPlot instance this section owns — at most one. Assigned
+     * only once a render has completed. */
+    var live = [];
+
+    function render(slot, data, rangeKey) {
+      var series = data.dimensions[spec.key];
+
+      /* The ranked bars first, and unconditionally: they come from one
+       * snapshot and need neither a window nor a time axis, so they still
+       * stand on a bundle that has no dated series row to anchor one to. */
+      slot.appendChild(rankedMeta(series));
+      if (series.latest.length === 0) {
+        slot.appendChild(noRowsNote(spec, series));
+        return;
+      }
+
+      var bound = buildLines(series);
+      var win = I.rangeWindow(data, rangeKey);
+      /* `win` is null on a non-empty bundle holding only dimension snapshots:
+       * there is no dated series row for the range control to anchor to. The
+       * bars need no window; only the chart does. */
+      var counts = win === null ? null : snapshotsInWindow(series, win);
+      /* One expansion for every line, so all of them share an axis and the
+       * cursor lands on the same day in each — and on the same day as the
+       * reach and growth charts, which sit in the same sync group. */
+      var axis = win === null ? null : C.expand(bound.columns, win, SNAPSHOT_STEP_DAYS);
+      var tally = (axis !== null && !axis.empty) ? pointTally(axis, bound.lines) : null;
+      /*
+       * Settled BEFORE the ranked card is built, because the ranked card's own
+       * caption describes the chart: it tells the reader that a coloured row
+       * is one with a line below it. Deciding afterwards would print that
+       * sentence above the paragraph explaining that there is no chart, which
+       * is a caption for something that is not on the page.
+       */
+      var drawing = axis !== null && !axis.overrun && !axis.empty &&
+        axis.xs.length >= 2 && tally.drawn > 0;
+
+      var stack = el("div", "chart-stack");
+      slot.appendChild(stack);
+
+      var rankCard = el("div", "chart-card");
+      rankCard.appendChild(el("p", "chart-title", spec.rankedTitle));
+      rankCard.appendChild(rankedList(series, drawing ? bound.lines : []));
+      rankCard.appendChild(rankedHint(spec, drawing ? bound.lines : []));
+      stack.appendChild(rankCard);
+
+      if (win === null) {
+        slot.appendChild(el("p", "slot-note",
+          "The archive holds no dated series measurement for the range control to anchor a " +
+          "window to, so there is no time axis to draw the movement chart on. The ranked " +
+          "figures above do not need one."));
+        return;
+      }
+
+      /* Before the `empty` branch: an overrun sets `empty` too, as a fail-safe
+       * for a caller that forgets this check, and the specific reason is the
+       * more useful of the two. */
+      if (axis.overrun) {
+        slot.appendChild(overrunNote(axis));
+        return;
+      }
+
+      if (!drawing) {
+        slot.appendChild(historyNote(spec, series, axis.empty ? null : axis, win,
+          bound.lines, counts.inside));
+        if (counts.unreadable > 0) {
+          slot.appendChild(el("p", "chart-hint chart-caution", counts.unreadable + " " +
+            plural(counts.unreadable, "snapshot carries", "snapshots carry") +
+            " a date this page cannot place on a calendar day, so " +
+            plural(counts.unreadable, "it is", "they are") + " not counted above."));
+        }
+        return;
+      }
+
+      var card = el("div", "chart-card");
+      card.appendChild(el("p", "chart-title", "Movement between snapshots"));
+      card.appendChild(movementMeta(axis, bound.lines, counts.inside, series.snapshots.length));
+      var host = el("div", "chart-scroll");
+      card.appendChild(host);
+      card.appendChild(movementHint(spec));
+      if (axis.xs.length > counts.inside) {
+        card.appendChild(gapHint(axis.xs.length - counts.inside));
+      }
+      card.appendChild(axisHint());
+      if (tally.blankLines > 0) {
+        card.appendChild(blankLinesHint(tally.blankLines, bound.lines.length, spec));
+      }
+      if (bound.zeroFaults.length > 0) card.appendChild(zeroFaultHint(bound.zeroFaults));
+      if (bound.orphans > 0) card.appendChild(orphanHint(bound.orphans, spec));
+      if (bound.wrapped) card.appendChild(wrappedHint());
+      if (counts.unreadable > 0) {
+        card.appendChild(el("p", "chart-hint chart-caution", counts.unreadable + " " +
+          plural(counts.unreadable, "snapshot carries", "snapshots carry") +
+          " a date this page cannot place on a calendar day, so " +
+          plural(counts.unreadable, "it is", "they are") + " not drawn."));
+      }
+      /* In the document before uPlot is constructed: the plot is given an
+       * explicit pixel size and that size is measured from this container. */
+      stack.appendChild(card);
+
+      var defs = [];
+      for (var i = 0; i < bound.lines.length; i++) {
+        var line = bound.lines[i];
+        defs.push({
+          label: shortLabel(line.label),
+          stroke: line.stroke,
+          width: 2,
+          /* Read by the offset this line recorded for itself, never by the
+           * loop counter. */
+          values: axis.values[line.offset]
+        });
+      }
+
+      /*
+       * Mounted last, and deliberately so. Teardown is skipped after a failed
+       * render, so anything created before a throw would leak; with the one
+       * instance this section owns created by the final statement, there is
+       * no window in which a throw can leave a live plot behind, and a catch
+       * here would be unreachable code pretending to be a safeguard.
+       */
+      live.push(C.mount(host, axis.xs, defs, {
+        /* Not `zeroBasedCounts`: these are signed differences and its floor
+         * of zero would clip every fall. See `signedRange`. */
+        yRange: signedRange,
+        /* `drawAxes` rather than `draw`: uPlot fires it after the axes and
+         * grid and BEFORE the series, so the rule sits behind the lines
+         * instead of striking through them. */
+        hooks: { drawAxes: [zeroPainter(C.colour(NEUTRAL.token, NEUTRAL.fallback))] }
+      }));
+    }
+
+    /*
+     * Runs before the slot is emptied. Removing the nodes alone would leave
+     * the instance's window listeners, its resize observer and its membership
+     * of the page's cursor-sync group alive.
+     *
+     * `live` is emptied first so a destroy that throws cannot leave a
+     * half-destroyed instance behind to be destroyed twice; the first failure
+     * is re-thrown once the rest have been released, and the shell reports it.
+     */
+    function teardown() {
+      var pending = live;
+      live = [];
+      var failure = null;
+      for (var i = 0; i < pending.length; i++) {
+        try {
+          pending[i].destroy();
+        } catch (error) {
+          if (failure === null) failure = error;
+        }
+      }
+      if (failure !== null) throw failure;
+    }
+
+    return { render: render, teardown: teardown };
+  }
+
+  for (var s = 0; s < SECTIONS.length; s++) {
+    var renderer = makeRenderer(SECTIONS[s]);
+    I.registerSection(SECTIONS[s].slotId, renderer.render, renderer.teardown);
+  }
 })();
 </script>
 </body>
