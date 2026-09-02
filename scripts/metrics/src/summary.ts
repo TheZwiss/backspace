@@ -292,7 +292,10 @@ export function renderSummaryHtml(facts: SummaryFacts): string {
  * variable with no measurement behind it keeps its name and drops the value,
  * for the same reason the prose omits it.
  */
-export function renderDatasetJsonLd(facts: SummaryFacts, siteUrl: string): string {
+export function buildDatasetJsonLd(
+  facts: SummaryFacts,
+  siteUrl: string,
+): Record<string, unknown> {
   const base = siteUrl.replace(/\/+$/, '');
   const variables: Array<Record<string, unknown>> = [];
   const add = (name: string, unit: string, dated: DatedValue | null): void => {
@@ -355,7 +358,20 @@ export function renderDatasetJsonLd(facts: SummaryFacts, siteUrl: string): strin
     dataset['temporalCoverage'] = `${facts.from}/${facts.to}`;
   }
 
-  return `<script type="application/ld+json">\n${jsonLd(dataset)}\n</script>`;
+  return dataset;
+}
+
+/**
+ * The same object, wrapped in its `<script>` tag.
+ *
+ * Split from `buildDatasetJsonLd` so callers that want to inspect the
+ * structured data — the tests, above all — read the object instead of
+ * pulling it back out of a string. A test that regex-strips a `<script>`
+ * wrapper to reach its payload is parsing HTML with a regex, which is both
+ * fragile and, correctly, something the security scanner objects to.
+ */
+export function renderDatasetJsonLd(facts: SummaryFacts, siteUrl: string): string {
+  return `<script type="application/ld+json">\n${jsonLd(buildDatasetJsonLd(facts, siteUrl))}\n</script>`;
 }
 
 /**

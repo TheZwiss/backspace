@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   buildSummary,
   renderSummaryHtml,
+  buildDatasetJsonLd,
   renderDatasetJsonLd,
   replaceRegion,
 } from './summary.ts';
@@ -212,8 +213,10 @@ describe('renderSummaryHtml', () => {
 
 describe('renderDatasetJsonLd', () => {
   it('carries measured values and the archive coverage', () => {
-    const json = renderDatasetJsonLd(buildSummary(data()), 'https://example.com/backspace/');
-    const parsed = JSON.parse(json.replace(/^<script[^>]*>|<\/script>$/g, '').trim()) as {
+    const parsed = buildDatasetJsonLd(
+      buildSummary(data()),
+      'https://example.com/backspace/',
+    ) as unknown as {
       temporalCoverage: string;
       url: string;
       variableMeasured: Array<{ name: string; value?: number }>;
@@ -231,22 +234,16 @@ describe('renderDatasetJsonLd', () => {
   it('names an unmeasured variable but attaches no value to it', () => {
     const d = data();
     d.series.forks = { dates: [], total: [] };
-    const parsed = JSON.parse(
-      renderDatasetJsonLd(buildSummary(d), 'https://example.com')
-        .replace(/^<script[^>]*>|<\/script>$/g, '')
-        .trim(),
-    ) as { variableMeasured: Array<{ name: string; value?: number }> };
+    const parsed = buildDatasetJsonLd(buildSummary(d), 'https://example.com') as unknown as {
+      variableMeasured: Array<{ name: string; value?: number }>;
+    };
     const forks = parsed.variableMeasured.find((v) => v.name === 'forks');
     expect(forks).toBeDefined();
     expect(forks?.value).toBeUndefined();
   });
 
   it('omits temporalCoverage entirely for an empty archive', () => {
-    const parsed = JSON.parse(
-      renderDatasetJsonLd(buildSummary(empty()), 'https://example.com')
-        .replace(/^<script[^>]*>|<\/script>$/g, '')
-        .trim(),
-    ) as Record<string, unknown>;
+    const parsed = buildDatasetJsonLd(buildSummary(empty()), 'https://example.com');
     expect(parsed['temporalCoverage']).toBeUndefined();
   });
 
