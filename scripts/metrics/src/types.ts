@@ -19,9 +19,13 @@ export interface CountPoint {
  * it started on that UTC date.
  *
  * It exists to sit beside `traffic/clones.csv`, which GitHub inflates with
- * every `actions/checkout` this repository runs. The two are plotted on a
- * shared axis so a clone spike that is really a build spike is visible as
- * such, rather than described in prose the reader has to take on trust.
+ * every `actions/checkout` this repository runs. The two are plotted as
+ * stacked charts under one synced cursor so a clone spike that is really a
+ * build spike is visible as such, rather than described in prose the reader
+ * has to take on trust. They do NOT share an x axis: this series is
+ * reconstructed back to whatever the Actions API still retains, where traffic
+ * begins on the day the collector first ran, so each chart is drawn across
+ * its own measured days and the cursor carries the comparison.
  *
  * Unlike traffic, a day with no runs is a MEASURED ZERO, not an absence: the
  * Actions API is asked for a whole window and answers completely, where the
