@@ -492,3 +492,10 @@ type PeeringNotificationSummary = {
 GET /utils/metadata  ?url= → { title?, description?, image?, siteName? }
 GET /health          (public) → { status: 'ok', timestamp }
 ```
+
+## Security reporting (`routes/cspReport.ts`), public
+```
+POST /csp-report     (no auth) -> 204
+```
+
+**`POST /api/csp-report`** is the Content Security Policy violation sink named by the policy's `report-uri` and `report-to`. Unauthenticated on purpose: a violation can happen on the login screen before any token exists. It registers content-type parsers for `application/csp-report` and `application/reports+json` in addition to the built-in `application/json`. Fastify ships parsers for neither of the first two and would otherwise answer 415, leaving an empty report log that looks exactly like a clean policy. It answers `204` to everything, including a malformed body, because a browser cannot act on an error and would only retry. It reads at most 16 KB off the wire and logs at most 4096 characters per report at `warn` level with the message `CSP violation reported`. Registered after `@fastify/rate-limit` so the shared 200/minute limit applies; that ordering is load-bearing. See `docs/systems/web-security.md`.

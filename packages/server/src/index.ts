@@ -1,5 +1,6 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import websocket from '@fastify/websocket';
 import fastifyStatic from '@fastify/static';
@@ -25,6 +26,8 @@ import { searchRoutes } from './routes/search.js';
 import { adminRoutes } from './routes/admin.js';
 import { gifRoutes } from './routes/gif.js';
 import { federationRoutes } from './routes/federation.js';
+import { cspReportRoutes } from './routes/cspReport.js';
+import { buildCspHeaderValue, CSP_REPORT_GROUP, CSP_REPORT_PATH } from './utils/csp.js';
 import { startFederationWorkers, stopFederationWorkers } from './utils/federationWorker.js';
 import { startBackupWorker, stopBackupWorker } from './utils/backupWorker.js';
 import './utils/federationRollback.js'; // Side-effect: registers rollback callbacks for outbox terminal failures.
@@ -43,9 +46,24 @@ async function main(): Promise<void> {
     },
   });
 
+  // The origin is deliberately reflected rather than restricted to a peer
+  // allowlist. Client federation has a browser on one instance call
+  // /api/instance/info, /api/auth/register and /api/auth/login directly against
+  // another instance BEFORE any server-to-server peering exists, and peering can
+  // legitimately be declined by an admin while that browser connection keeps
+  // working (see instanceStore.connectToRemote and docs/systems/client-federation.md).
+  // An allowlist would reject the whole onboarding flow.
+  //
+  // Reflecting is safe here only because there is no ambient credential to ride
+  // on: this API has no cookies and no HTTP auth, and the bearer token is read
+  // from localStorage and attached explicitly by our own client. A cross-origin
+  // page cannot obtain it and the browser will not attach it. That premise is
+  // enforced by test/cors-posture.test.ts. Access-Control-Allow-Credentials is
+  // therefore NOT set: it grants nothing today and would make this reflection
+  // genuinely unsafe the moment a cookie appeared.
+  // See docs/systems/web-security.md.
   await app.register(cors, {
     origin: true,
-    credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'],
     // Tus-* and Upload-* headers are required for federated tus uploads
     // (cross-origin POST/HEAD/PATCH/DELETE on /api/files/*). Without them the
@@ -77,6 +95,48 @@ async function main(): Promise<void> {
       'Upload-Metadata',
       'Upload-Expires',
     ],
+  });
+
+  // helmet supplies the static security headers. It is explicitly NOT allowed to
+  // manage the CSP: the policy depends on runtime config and has to defer to
+  // routes that set their own, so it is applied by the onSend hook below and
+  // lives in exactly one place.
+  await app.register(helmet, {
+    contentSecurityPolicy: false,
+    // Only the TLS terminator knows whether HTTPS is actually in play. Caddy
+    // owns HSTS; see Caddyfile and docs/systems/web-security.md.
+    strictTransportSecurity: false,
+    // Federation loads avatars and attachments across origins with plain <img>
+    // and <video>. helmet's default of same-origin would block all of it.
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    crossOriginOpenerPolicy: { policy: 'same-origin' },
+    // Not enabled: it would require CORP headers on every third-party image an
+    // embed pulls in, which is not something this app controls.
+    crossOriginEmbedderPolicy: false,
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+    xFrameOptions: { action: 'deny' },
+  });
+
+  // The policy is built once at boot because its only input is config, which
+  // does not change while the process runs.
+  const cspHeaderValue = buildCspHeaderValue({ livekitUrl: config.livekit.url });
+  // Report-only for now. Flipping this to `Content-Security-Policy` is a
+  // separate, deliberate change gated on a clean report log from real
+  // deployments. See docs/systems/web-security.md, "Rollout".
+  const cspHeaderName = 'Content-Security-Policy-Report-Only';
+  const reportingEndpoints = `${CSP_REPORT_GROUP}="${CSP_REPORT_PATH}"`;
+
+  app.addHook('onSend', async (_request, reply, payload) => {
+    // A route that has already set an enforcing policy is asserting something
+    // stricter about its own response than the app policy can. routes/uploads.ts
+    // sandboxes served user files under `default-src 'none'`, and attaching a
+    // permissive report-only policy next to it would only produce noise in the
+    // sink from responses that are already locked down.
+    if (!reply.getHeader('Content-Security-Policy')) {
+      reply.header(cspHeaderName, cspHeaderValue);
+      reply.header('Reporting-Endpoints', reportingEndpoints);
+    }
+    return payload;
   });
 
   await app.register(rateLimit, {
@@ -136,6 +196,10 @@ async function main(): Promise<void> {
   await app.register(adminRoutes);
   await app.register(gifRoutes);
   await app.register(federationRoutes);
+  // Registered here rather than beside the hook above so it sits behind the
+  // rate limiter. The sink is unauthenticated by design and writes a log line
+  // per report, and @fastify/rate-limit only covers routes registered after it.
+  await app.register(cspReportRoutes);
   await app.register(registerWebSocket);
 
   app.get('/api/health', async () => {

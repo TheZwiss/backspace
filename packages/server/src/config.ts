@@ -1,4 +1,5 @@
 import { config as dotenvConfig } from 'dotenv';
+import { readFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -66,6 +67,43 @@ if (!/^https?:\/\//i.test(sourceCodeUrl)) {
 // (no build step) — the § 13 offer still works via version + sourceCodeUrl.
 const commit = envOptional('BACKSPACE_COMMIT') ?? null;
 
+// The running version, read from this package's own manifest rather than kept
+// as a second copy in the source. A hand-maintained constant is what let the
+// reported version sit at 1.0.0 through two releases: it duplicated
+// package.json and nothing made the two agree. Reading it means they cannot
+// disagree. scripts/bump-version.mjs writes every manifest at once and
+// test/version-consistency.test.ts fails if they drift apart.
+//
+// packages/server/package.json is present in the runtime image (Dockerfile
+// copies it at the `runtime` stage), so this resolves in production as well as
+// in development. Failing loudly is deliberate: the version is half of the
+// AGPL-3.0 section 13 source offer, and an instance that cannot say which
+// version it is running cannot make that offer accurately.
+function readPackageVersion(): string {
+  const manifestPath = resolve(__dirname, '../package.json');
+  let raw: string;
+  try {
+    raw = readFileSync(manifestPath, 'utf8');
+  } catch (err) {
+    throw new Error(
+      `Could not read ${manifestPath} to determine the running version: ${(err as Error).message}`
+    );
+  }
+
+  const parsed: unknown = JSON.parse(raw);
+  if (
+    typeof parsed !== 'object' || parsed === null ||
+    typeof (parsed as { version?: unknown }).version !== 'string' ||
+    (parsed as { version: string }).version === ''
+  ) {
+    throw new Error(`${manifestPath} has no usable "version" field.`);
+  }
+
+  return (parsed as { version: string }).version;
+}
+
+const version = readPackageVersion();
+
 export const config = {
   port: envInt('PORT', 3000),
   host: env('HOST', '0.0.0.0'),
@@ -73,6 +111,7 @@ export const config = {
   jwtExpiresIn: env('JWT_EXPIRES_IN', '30d'),
   domain: envOptional('DOMAIN'),
   publicOrigin,
+  version,
   sourceCodeUrl,
   commit,
 
