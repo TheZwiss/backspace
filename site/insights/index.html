@@ -1283,18 +1283,37 @@ footer a:hover { color: var(--txt); }
     reportFailure("Section “" + slot.id + "”", error);
   }
 
-  /* Give a section back its slot: tear down whatever it built (a uPlot instance
+  /*
+   * Give a section back its slot: tear down whatever it built (a uPlot instance
    * holds listeners and a canvas, and dropping the DOM node alone leaks both),
-   * then empty the node. Called before every render, not only the first. */
+   * then empty the node. Called before every render, not only the first.
+   *
+   * The gate is `entered` -- "the renderer has been called since this slot was
+   * last reset" -- and deliberately NOT "the renderer returned without
+   * throwing". A renderer that throws after building something has still built
+   * it, and gating teardown on success would strand it permanently rather than
+   * for one render: the flag would never be set, so teardown would be skipped
+   * on every later render too, and the section could never release what it
+   * leaked. One instance per failed render, forever, in the page's shared
+   * cursor group -- the DOM node gone, the listeners and the group membership
+   * alive.
+   *
+   * The cost is that teardown must be safe on a partial build, which is a
+   * property a teardown can actually hold: `mount`'s `destroy` is idempotent,
+   * and a section that has built nothing yet has nothing to iterate. That is a
+   * far smaller thing to ask of a section author than "never throw after
+   * constructing anything", which is unenforceable and silently droppable --
+   * the same argument `mount`'s own rollback makes for its half of this leak.
+   */
   function resetSection(section, slot) {
-    if (section.rendered && typeof section.teardown === "function") {
+    if (section.entered && typeof section.teardown === "function") {
       try {
         section.teardown(slot);
       } catch (error) {
         reportFailure("Teardown for section “" + slot.id + "”", error);
       }
     }
-    section.rendered = false;
+    section.entered = false;
     clear(slot);
   }
 
@@ -1302,11 +1321,13 @@ footer a:hover { color: var(--txt); }
     var slot = slotElement(section.slotId);
     if (slot === null) return;
     resetSection(section, slot);
+    /* Set BEFORE the call, and that ordering is the whole of the guarantee
+     * above: from this point the renderer may have built something whether or
+     * not it returns, so from this point the section owes a teardown. */
+    section.entered = true;
     try {
       section.render(slot, state.data, state.range);
-      section.rendered = true;
     } catch (error) {
-      section.rendered = false;
       renderSectionFailure(slot, error);
     }
   }
@@ -1467,6 +1488,10 @@ footer a:hover { color: var(--txt); }
      *     Called before a re-render and before the slot is emptied. Destroy
      *     anything holding resources here -- a uPlot instance, a listener, an
      *     observer -- because removing the DOM node does not release them.
+     *     It runs before EVERY re-render, including one that follows a render
+     *     that threw, so it must be safe on a PARTIAL build: a renderer that
+     *     threw part-way may have built some of what it set out to build, and
+     *     this is the only thing that will ever release it.
      *
      * Returns true when the section was registered.
      */
@@ -1488,7 +1513,7 @@ footer a:hover { color: var(--txt); }
           return false;
         }
       }
-      var section = { slotId: slotId, render: render, teardown: teardown, rendered: false };
+      var section = { slotId: slotId, render: render, teardown: teardown, entered: false };
       sections.push(section);
       if (state.status === "ok") renderSection(section);
       return true;
@@ -2889,8 +2914,8 @@ footer a:hover { color: var(--txt); }
      * listeners, a canvas and a slot in the page's cursor-sync group, and only
      * `destroy()` releases them. A throw between here and the return would
      * leave all of that alive with no reference for anyone to destroy — the
-     * caller never received one, and the shell skips a section's teardown
-     * after a failed render precisely because it cannot know what was built.
+     * caller never received one, so it is beyond the reach of the section's
+     * own teardown however carefully that teardown is written.
      *
      * A caller CAN avoid the window by constructing last, and this page's
      * sections do. But that is a discipline every future caller would have to
@@ -3247,9 +3272,11 @@ footer a:hover { color: var(--txt); }
        * this section declined to draw, however many other charts were on the
        * page. */
     } catch (error) {
-      /* Teardown is skipped after a failed render, so nothing else will
-       * release these. Destroy what was built, then let the shell render its
-       * honest failure note for this slot. */
+      /* `live` is assigned only once every chart is built, so a throw part-way
+       * leaves `created` referenced by nothing but this frame: the shell's
+       * teardown would find the previous render's (already empty) `live` and
+       * release nothing. Destroy what was built here, then let the shell
+       * render its honest failure note for this slot. */
       for (var j = 0; j < created.length; j++) {
         try {
           created[j].destroy();
@@ -4105,9 +4132,11 @@ footer a:hover { color: var(--txt); }
         if (chart !== null) created.push(chart);
       }
     } catch (error) {
-      /* Teardown is skipped after a failed render, so nothing else will
-       * release these. Destroy what was built, then let the shell render its
-       * honest failure note for this slot. */
+      /* `live` is assigned only once every chart is built, so a throw part-way
+       * leaves `created` referenced by nothing but this frame: the shell's
+       * teardown would find the previous render's (already empty) `live` and
+       * release nothing. Destroy what was built here, then let the shell
+       * render its honest failure note for this slot. */
       for (var j = 0; j < created.length; j++) {
         try {
           created[j].destroy();
@@ -5208,11 +5237,11 @@ footer a:hover { color: var(--txt); }
       }
 
       /*
-       * Mounted last, and deliberately so. Teardown is skipped after a failed
-       * render, so anything created before a throw would leak; with the one
-       * instance this section owns created by the final statement, there is
-       * no window in which a throw can leave a live plot behind, and a catch
-       * here would be unreachable code pretending to be a safeguard.
+       * Mounted last, and deliberately so. The one instance this section owns
+       * is created by the final statement and pushed straight into `live`, so
+       * there is no window in which a throw can leave a plot this section's
+       * teardown cannot reach, and a catch here would be unreachable code
+       * pretending to be a safeguard.
        */
       live.push(C.mount(host, axis.xs, defs, {
         /* Not `zeroBasedCounts`: these are signed differences and its floor
