@@ -623,7 +623,7 @@ packages/
 | Server       | Node.js 20+, Fastify 4, TypeScript (strict) |
 | Database     | SQLite (better-sqlite3) + Drizzle ORM |
 | Auth         | JWT + bcrypt |
-| Frontend     | React 18, Vite 6, Tailwind CSS 3, Zustand 5 |
+| Frontend     | React 18, Vite 8, Tailwind CSS 3, Zustand 5 |
 | Voice/Video  | LiveKit |
 | Media        | sharp (thumbnails), Cheerio (embeds) |
 | Desktop      | Electron 40 |
