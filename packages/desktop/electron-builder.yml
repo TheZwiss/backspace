@@ -18,8 +18,11 @@ asarUnpack:
   - "**/*.node"
 npmRebuild: false
 # afterPack also flips Electron security fuses (RunAsNode, EnableNodeCliInspectArguments,
-# OnlyLoadAppFromAsar) via @electron/fuses — NOT via a top-level `electronFuses:` key here,
-# because the installed electron-builder (25.1.8) does not support that config key.
+# OnlyLoadAppFromAsar) via @electron/fuses, not via a top-level `electronFuses:` key here.
+# electron-builder 26 does support that key. It is not used because electron-builder runs
+# its own flip after the afterPack hook returns, and afterPack is where macSign.js seals
+# the macOS bundle, so the flip would land on an already-signed app. Switching to the key
+# is a release-pipeline change that has to be checked on all six shipped artifacts.
 # See scripts/afterPack.js and docs/systems/desktop-security.md.
 afterPack: ./scripts/afterPack.js
 publish:
