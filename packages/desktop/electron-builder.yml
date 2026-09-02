@@ -17,6 +17,10 @@ files:
 asarUnpack:
   - "**/*.node"
 npmRebuild: false
+# afterPack also flips Electron security fuses (RunAsNode, EnableNodeCliInspectArguments,
+# OnlyLoadAppFromAsar) via @electron/fuses — NOT via a top-level `electronFuses:` key here,
+# because the installed electron-builder (25.1.8) does not support that config key.
+# See scripts/afterPack.js and docs/systems/desktop-security.md.
 afterPack: ./scripts/afterPack.js
 publish:
   - provider: github
