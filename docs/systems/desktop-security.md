@@ -3,9 +3,10 @@
 Source files:
 - `packages/desktop/src/main.ts` — `BrowserWindow` webPreferences, `will-navigate` deny handler, `setWindowOpenHandler`
 - `packages/desktop/src/navigationPolicy.ts` — pure `will-navigate` allow/deny decision logic (unit-tested)
-- `packages/desktop/scripts/afterPack.js` — native-module cleanup + Electron fuse-flipping (electron-builder's single `afterPack` hook)
+- `packages/desktop/scripts/afterPack.js` — native-module cleanup, then Electron fuse-flipping, then (on macOS) ad-hoc signing, in that order (electron-builder's single `afterPack` hook)
+- `packages/desktop/scripts/macSign.js` — macOS ad-hoc `codesign` fallback, called last from `afterPack.js`; stands aside when a real signing identity is configured
 - `packages/desktop/electron-builder.yml` — build config; `asarUnpack`, `afterPack` wiring
-- `.github/workflows/release.yml` — release build matrix; currently unsigned (`CSC_IDENTITY_AUTO_DISCOVERY: "false"`)
+- `.github/workflows/release.yml` — release build matrix; sets `CSC_IDENTITY_AUTO_DISCOVERY: "false"` for every platform, which stops electron-builder from searching the runner's keychain for a signing identity. That disables identity *discovery*, which is not the same as not signing at all: macOS bundles are still ad-hoc signed by `macSign.js`, while Windows and Linux artifacts ship unsigned. The workflow also re-checks the final macOS `.app` with `codesign --verify --deep --strict` after the build.
 
 ---
 
@@ -44,10 +45,10 @@ pnpm --filter @backspace/desktop exec electron-fuses read --app /path/to/Backspa
 
 Why:
 - Flipping it is not sufficient on its own — electron-builder (or a custom afterPack step) must also *compute and inject* the correct hash into `Info.plist`. The installed electron-builder (25.1.8) does not automate this (same version gap as the `electronFuses:` config key above). Building this injection step correctly and testing it was out of scope for this plan.
-- If the fuse is enabled without the matching hash being present/correct, Electron **fails closed**: the app refuses to launch entirely. Given this codebase's release pipeline is unsigned (see below), shipping a broken launch path was judged a worse outcome than the marginal protection this fuse adds today.
-- **Even if wired up correctly, its protection is limited without real code signing.** The hash lives in `Info.plist`, which is itself just a file inside the (unsigned) `.app` bundle — an attacker capable of modifying `app.asar` on disk is equally capable of recomputing the hash and rewriting `Info.plist` to match, unless the outer bundle is code-signed (so the OS's own signature verification detects *any* modification, including to `Info.plist`). Asar integrity validation is meant to complement code signing, not substitute for it.
+- If the fuse is enabled without the matching hash being present/correct, Electron **fails closed**: the app refuses to launch entirely. Given this codebase's release pipeline has no Developer ID signing (see below), shipping a broken launch path was judged a worse outcome than the marginal protection this fuse adds today.
+- **Even if wired up correctly, its protection is limited without Developer ID signing.** The hash lives in `Info.plist`, which is itself just a file inside the `.app` bundle — an attacker capable of modifying `app.asar` on disk is equally capable of recomputing the hash and rewriting `Info.plist` to match. macOS bundles *are* code-signed today, but only ad-hoc (`codesign --sign -`, see `scripts/macSign.js`), and an ad-hoc signature requires no identity to produce: after tampering, an attacker simply re-runs `codesign --force --sign - --deep` over the bundle and the result verifies exactly as well as the original did. That is why an ad-hoc signature buys no tamper-evidence. Only a signature an attacker cannot forge — one made with a Developer ID certificate they do not hold — makes the OS's own verification detect *any* modification, including to `Info.plist`. Asar integrity validation is meant to complement code signing, not substitute for it.
 
-**Follow-up (gated on real code signing, see below):** once macOS code signing is in place, revisit adding `EnableEmbeddedAsarIntegrityValidation` with correct `Info.plist` hash injection in `afterPack.js`, and re-verify the packaged app still launches (per Task 3's boot-test pattern) before shipping it.
+**Follow-up (gated on Developer ID signing, see below):** once macOS Developer ID signing is in place, revisit adding `EnableEmbeddedAsarIntegrityValidation` with correct `Info.plist` hash injection in `afterPack.js`, and re-verify the packaged app still launches (per Task 3's boot-test pattern) before shipping it.
 
 ## `will-navigate` deny handler
 
@@ -67,9 +68,17 @@ Anything else is denied (`event.preventDefault()`) and logged as a warning in th
 
 `setWindowOpenHandler` (`main.ts:454-470`) is unrelated and unchanged by this — it governs `window.open()`/new-window requests (used for `/join/*` deep-link interception and external-link handling), not same-window top-level navigation.
 
-## Code signing & notarization — NOT done, exact steps to procure
+## Developer ID signing & notarization — NOT done, exact steps to procure
 
-Desktop release builds are currently **unsigned**: `.github/workflows/release.yml` sets `CSC_IDENTITY_AUTO_DISCOVERY: "false"` for every platform in the release matrix, and there is no notarization step. This is a deliberate, previously-accepted gap this plan does not close (procuring certificates is a real-money, real-identity action outside what can be done in code) — it is documented here so a maintainer can execute it later without re-deriving the steps.
+No desktop release build carries a Developer ID or CA-issued signature, and there is no notarization step. Beyond that the posture differs per platform:
+
+- **macOS — ad-hoc signed, not unsigned.** `scripts/macSign.js` runs last in the `afterPack` hook and re-seals the packaged bundle with `codesign --force --sign - --timestamp=none`: first every `.node`/`.dylib` under `Contents/Resources` (which `--deep` does not reach), then `--deep` over the whole `.app`, then a `codesign --verify --deep --strict` so a bad seal fails the build. This exists because packaging *invalidates* the ad-hoc signatures the prebuilt Electron binaries ship with — it renames the executable, rewrites `Info.plist`, injects `app.asar`, and (in the same hook) deletes files under `Contents/Resources`. macOS reports an invalid signature as "Backspace.app is damaged and can't be opened", with no "Open Anyway" affordance anywhere in the UI, so re-sealing is what makes the app openable at all. What the ad-hoc signature gives is a valid bundle seal and nothing more. It does **not** give notarization (first launch still shows the Gatekeeper prompt, cleared via System Settings → Privacy & Security → Open Anyway), it does **not** give a team identifier (so macOS auto-update stays unavailable — see below), and it does **not** give a stable cdhash across releases (so macOS drops Input Monitoring and Screen Recording grants on every update, meaning global keybinds and screen sharing must be re-authorised each time).
+- **Windows — unsigned.** No certificate is configured, so installers carry no Authenticode signature and users meet the SmartScreen "Windows protected your PC" prompt.
+- **Linux — unsigned.** AppImage and `.deb` artifacts carry no signature, and releases are not served from a GPG-signed apt repository.
+
+`CSC_IDENTITY_AUTO_DISCOVERY: "false"` is set for every platform in the matrix and only stops electron-builder from hunting for an identity in the runner's keychain; it is not what makes the macOS bundle ad-hoc signed. `macSign.js` decides that for itself, from `CSC_LINK`/`CSC_NAME` (see step 5 below).
+
+Procuring real certificates is a real-money, real-identity action outside what can be done in code, so it remains a deliberate, previously-accepted gap — documented here so a maintainer can execute it later without re-deriving the steps.
 
 ### macOS: Apple Developer ID + notarization
 
@@ -77,7 +86,7 @@ Desktop release builds are currently **unsigned**: `.github/workflows/release.ym
 2. **Generate a "Developer ID Application" certificate** via Xcode (Settings → Accounts → Manage Certificates → +) or the Apple Developer portal (Certificates → + → Developer ID Application). Export it as a `.p12` file with a password.
 3. **Base64-encode the `.p12`** and store it as a GitHub Actions secret (e.g. `MACOS_CERTIFICATE`), plus the export password as `MACOS_CERTIFICATE_PWD`.
 4. **Create an App Store Connect API key** (or use an app-specific password) for notarization: App Store Connect → Users and Access → Integrations → App Store Connect API → generate a key with the "Developer" role. Store the key ID, issuer ID, and the `.p8` key content as secrets (e.g. `APPLE_API_KEY`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER`).
-5. **In `release.yml`'s macOS job**, replace `CSC_IDENTITY_AUTO_DISCOVERY: "false"` with the real signing identity env vars electron-builder expects (`CSC_LINK` pointing at the decoded `.p12`, `CSC_KEY_PASSWORD`), and add electron-builder's notarization config (`mac.notarize` in `electron-builder.yml`, or the `afterSign` hook pattern electron-builder documents) referencing the App Store Connect API key secrets from step 4.
+5. **In `release.yml`'s macOS job**, replace `CSC_IDENTITY_AUTO_DISCOVERY: "false"` with the real signing identity env vars electron-builder expects (`CSC_LINK` pointing at the decoded `.p12`, `CSC_KEY_PASSWORD`), and add electron-builder's notarization config (`mac.notarize` in `electron-builder.yml`, or the `afterSign` hook pattern electron-builder documents) referencing the App Store Connect API key secrets from step 4. Setting `CSC_LINK` also switches the ad-hoc fallback off: `macSign.js`'s `hasRealSigningIdentity()` returns true as soon as either `CSC_LINK` or `CSC_NAME` is present and returns without touching the bundle, leaving the signing to electron-builder. Note the exact variables — the check is `CSC_LINK || CSC_NAME`; `CSC_KEY_PASSWORD` is not part of it, so a build that exported only the password would still get ad-hoc signed over the top.
 6. **Verify** with `codesign --verify --deep --strict` and `spctl -a -vv` against a built `.app`, and `xcrun notarytool history` to confirm the notarization ticket was issued, before shipping to users.
 
 ### Windows: code-signing certificate
@@ -91,6 +100,19 @@ Desktop release builds are currently **unsigned**: `.github/workflows/release.ym
 
 AppImage/`.deb` distribution does not require a paid certificate; Linux package managers rely on repository-level trust (e.g. a GPG-signed apt repo) rather than binary code signing. If Backspace ever ships via a `.deb` apt repository, GPG-sign the repository metadata — this is a separate, lower-priority item from macOS/Windows signing and is not detailed further here.
 
-### Known gap: unsigned auto-update
+### Known gap: auto-update without a verifiable signature
 
-`electron-updater`'s GitHub provider (configured in `electron-builder.yml`'s `publish:` block) downloads and installs updates without a code-signature check on macOS/Windows today, because there is no signature to check — the app is unsigned. Once code signing (above) is wired up, `electron-updater` will additionally verify the new update package's signature before install, closing a real risk: today, a compromised GitHub release (or a MITM on an unpatched update channel — though GitHub Releases are served over HTTPS) could ship a malicious update that installs without any signature mismatch to alert the user. This is flagged as a known gap, not fixed by this plan.
+`main.ts`'s `initAutoUpdater()` runs unconditionally on every platform (`electron-updater`'s GitHub provider, configured in `electron-builder.yml`'s `publish:` block; first check 10s after launch, then every 4 hours). What that buys differs per platform:
+
+- **Windows — updates install without a code-signature check**, because there is no signature to check: the app is unsigned, so `electron-updater`'s NSIS path has no publisher name to validate the downloaded installer against. A compromised GitHub release or publishing token could therefore ship a malicious update that installs with nothing to alert the user. (Releases are served over HTTPS, so a plain network MITM is not the concern here.)
+- **macOS — auto-update is unavailable, not merely unverified.** There *is* a signature, but it is ad-hoc. `electron-updater` checks and downloads, then hands the update to Electron's native `autoUpdater` (Squirrel.Mac), which will only swap in a bundle whose code signature matches the running app's. An ad-hoc signature carries no team identifier and its cdhash changes with every build, so no new release can ever match — the install step fails and the app stays on the old version. Until Developer ID signing lands, macOS users have to download new releases by hand.
+- **Linux — no signature check either.** `electron-updater` selects its AppImage or `.deb` updater from how the app was installed; neither verifies a signature, and the artifacts are unsigned.
+
+Once Developer ID / Authenticode signing (above) is wired up, `electron-updater` will verify the update package's signature before install on Windows, and Squirrel.Mac will be able to validate macOS updates at all. This is flagged as a known gap, not fixed by this plan.
+
+## Not verified
+
+What follows is what has and has not actually been checked, so the sections above are not read as broader assurance than they are.
+
+- **Fuse flipping is verified on macOS arm64 only.** The states were read back out of a packaged macOS arm64 `.app` with the `electron-fuses read` command above. Windows, Linux, and macOS x64 packaged builds have not been checked. This is not a symmetry argument that can be waved through: `flipElectronFuses()` resolves the binary path differently per platform (`.app` / `.exe` / no extension, and `packager.executableName` on Linux versus `appInfo.productFilename` elsewhere), so a wrong path on an unverified platform would surface as a build error or a silently unflipped binary, and nobody has looked.
+- **The `will-navigate` deny handler has not been exercised in a packaged build.** Its decision logic is unit-tested directly, at the `isNavigationAllowed()` level, in `packages/desktop/src/navigationPolicy.test.ts`. Nobody has driven a real packaged app into a foreign top-level navigation and watched the handler deny it, so the wiring around that logic — the event registration in `createWindow()`, the `event.preventDefault()`, and `knownInstanceOrigins` actually being populated by the `set-connected-origins` IPC at the moment a navigation is judged — is untested end to end.
