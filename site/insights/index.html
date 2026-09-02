@@ -300,6 +300,45 @@ h2 {
 .u-select { background: rgba(124, 108, 246, 0.18); }
 .u-hz .u-cursor-x, .u-vt .u-cursor-y { border-right: 1px dashed var(--txt4); }
 .u-hz .u-cursor-y, .u-vt .u-cursor-x { border-bottom: 1px dashed var(--txt4); }
+.u-legend { margin: 10px 0 0; }
+.u-legend .u-value { font-family: var(--mono); color: var(--txt); }
+.u-legend .u-series { padding-right: 18px; }
+
+/* ================= Charts ================= */
+.chart-stack { display: grid; gap: 22px; }
+.chart-card {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--chat);
+  padding: 18px 18px 16px;
+}
+.chart-title { font-size: 1.05rem; font-weight: 600; letter-spacing: -0.018em; margin-bottom: 6px; }
+.chart-window, .chart-meta {
+  font-family: var(--mono); font-size: 12.5px; color: var(--txt4);
+  line-height: 1.8;
+  display: flex; flex-wrap: wrap; gap: 4px 20px;
+}
+.chart-window { margin-bottom: 22px; }
+.chart-meta { margin-bottom: 14px; }
+.chart-window .k, .chart-meta .k { color: var(--txt3); }
+.chart-window .v, .chart-meta .v { color: var(--txt2); overflow-wrap: anywhere; }
+.chart-hint { font-size: 13.5px; color: var(--txt4); line-height: 1.6; margin-top: 12px; }
+.chart-caution { color: var(--amber); }
+/*
+ * The plot is drawn at a fixed minimum width and scrolls inside this box when
+ * the viewport is narrower, rather than being squashed until the day axis is
+ * unreadable. The body never scrolls sideways; this container does.
+ */
+.chart-scroll {
+  overflow-x: auto; overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+}
+/* Restore uPlot's own shrink-wrapping inside the scroller. The page-wide
+   `.uplot { width: 100% }` above would otherwise clamp the plot to the visible
+   width, so it could never overflow and the container would never scroll. */
+.chart-scroll .uplot { width: min-content; }
 
 /* ================= Footer ================= */
 footer { border-top: 1px solid var(--line); padding: 34px 0 44px; }
@@ -1919,5 +1958,844 @@ footer a:hover { color: var(--txt); }
 })();
 </script>
 
+<script>
+/*
+ * Shared chart toolkit.
+ *
+ * Everything that more than one chart section needs sits here: the page's one
+ * cursor-sync key, the gap expansion that keeps a line honest across missing
+ * measurements, and the uPlot lifecycle (create, resize, destroy). Sections
+ * build their own DOM and their own captions; this file owns nothing visible.
+ *
+ * It exists rather than being inlined into the reach section because the
+ * expansion below is the one piece of this page that is wrong by omission —
+ * leave it out and the chart looks perfectly healthy while drawing a line
+ * through days nobody measured. Duplicating it into the growth section would
+ * be duplicating the thing most worth getting right once.
+ *
+ * ─────────────────────────────────────────────────────────────────────────
+ * THE DEFECT THIS FILE EXISTS TO PREVENT
+ *
+ * The bundle writes `null` for a field that exists but was left blank. It does
+ * NOT write anything at all for a day the collector never ran: that day is
+ * simply absent from `dates`, because `bundle.ts` deliberately does not
+ * gap-fill and inventing a row would be inventing a measurement.
+ *
+ * uPlot draws the points it is handed, in order. Hand it 2026-08-30 followed
+ * by 2026-09-01 and it draws one straight segment between them — a line
+ * asserting continuity across a day of collector downtime. That is the same
+ * fabrication as filling the gap with a zero, moved into the render layer,
+ * and it is invisible: nothing about the resulting chart looks wrong.
+ *
+ * So `expand` below rebuilds the series onto a COMPLETE axis of evenly spaced
+ * steps and writes `null` at every step no row covers. uPlot renders `null` as
+ * a break, which is exactly why the data contract specifies `null` rather than
+ * omission. An absent row and a null field are the same fact — "not measured"
+ * — and the line must break across both, and plot a zero for neither. A
+ * genuinely measured `0` is a different fact and plots as `0`.
+ * ─────────────────────────────────────────────────────────────────────────
+ */
+(function () {
+  "use strict";
+
+  var I = window.INSIGHTS;
+
+  /*
+   * ONE cursor-sync key for the whole page.
+   *
+   * uPlot joins every plot registered under the same key into a single cursor
+   * group, which is what makes hovering any chart move the cursor on all of
+   * them (spec §7). Later chart sections must import this constant rather than
+   * declare a second key of their own: two keys are two independent groups,
+   * and "one shared hover cursor" would quietly become "shared within a
+   * section" with nothing on screen to reveal it.
+   */
+  var SYNC_KEY = "insights-time";
+
+  /*
+   * The narrowest a plot may be drawn. Below roughly this width the day axis
+   * collapses into overlapping ticks and the series become unreadable, so a
+   * narrow viewport gets a full-width plot that scrolls inside its own
+   * container instead of a squashed one that fits.
+   */
+  var MIN_PLOT_WIDTH = 520;
+  var WIDE_AT = 700;
+  /* An upper bound on how many steps an axis may be built out of; see `expand`. */
+  var MAX_AXIS_STEPS = 20000;
+  var HEIGHT_NARROW = 220;
+  var HEIGHT_WIDE = 280;
+
+  /* The page's own type stack, so canvas text matches the DOM around it. Every
+   * family here is either self-hosted or a system font; nothing is fetched. */
+  var FONT_STACK = '"DM Sans", -apple-system, BlinkMacSystemFont, system-ui, sans-serif';
+  var AXIS_FONT = "12px " + FONT_STACK;
+
+  /* Grid and tick lines. Deliberately dimmer than --line so the series read as
+   * the foreground; both are the same white-on-dark idiom the page uses. */
+  var GRID_STROKE = "rgba(255, 255, 255, 0.055)";
+  var TICK_STROKE = "rgba(255, 255, 255, 0.11)";
+
+  /*
+   * Integer-only tick increments for a count axis. uPlot's numeric defaults
+   * include fractional steps, and half a view is not a quantity this archive
+   * can measure — a "2.5" gridline would be inviting a reading the data cannot
+   * support.
+   */
+  var COUNT_INCRS = [
+    1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500,
+    1000, 2000, 2500, 5000, 10000, 20000, 25000, 50000,
+    100000, 200000, 250000, 500000, 1000000, 2000000, 5000000, 10000000
+  ];
+
+  /*
+   * A palette token, read from the page's own custom properties.
+   *
+   * A canvas stroke has to be a literal colour string, so it cannot reference
+   * `var(--sky)` directly. Reading the computed property means the chart uses
+   * the same value :root declares rather than a copy that can drift from it.
+   * The fallback is that same literal, for a browser that hands back an empty
+   * string for an unresolved custom property.
+   */
+  function colour(name, fallback) {
+    var raw = "";
+    try {
+      raw = window.getComputedStyle(document.documentElement).getPropertyValue(name);
+    } catch (error) {
+      raw = "";
+    }
+    if (typeof raw !== "string") return fallback;
+    raw = raw.replace(/^\s+|\s+$/g, "");
+    return raw === "" ? fallback : raw;
+  }
+
+  function pad2(n) {
+    return n < 10 ? "0" + n : String(n);
+  }
+
+  /*
+   * uPlot snaps and formats its time ticks through a Date, and by default it
+   * reads that Date in the visitor's local zone. Every date in this archive is
+   * a UTC calendar day, so west of UTC a tick sitting exactly on the point
+   * dated 2026-08-18 would be labelled 2026-08-17 — the same day-boundary
+   * shift the shell's `parseDay` exists to avoid, reintroduced at the axis.
+   *
+   * This hands uPlot a Date whose LOCAL fields are the UTC fields of the
+   * instant, which puts uPlot's day boundaries back on UTC midnight. The tick
+   * TEXT is not left to depend on it: `dayTicks` below builds its strings from
+   * the raw timestamp with `INSIGHTS.formatDay`, which is pure UTC arithmetic
+   * and involves no locale at all.
+   */
+  function utcDate(ts) {
+    var d = new Date(ts * 1000);
+    return new Date(
+      d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(),
+      d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds(), d.getUTCMilliseconds()
+    );
+  }
+
+  /*
+   * Rows of `series` inside `win`, keyed by their UTC day instant.
+   *
+   * The window bounds are re-checked rather than trusted from the slice: dates
+   * ascend by contract, and `rangeSlice` returns the first and last row that
+   * fall inside the window, so a row between them that does not is impossible
+   * on conforming data — but a map is the wrong place to find out otherwise.
+   */
+  function indexByDay(series, win) {
+    var slice = I.rangeSlice(series, win);
+    var byDay = {};
+    for (var i = slice.start; i < slice.end; i++) {
+      var ms = I.parseDay(series.dates[i]);
+      if (isNaN(ms) || ms < win.startMs || ms > win.endMs) continue;
+      byDay[ms] = i;
+    }
+    return byDay;
+  }
+
+  /*
+   * Re-lay a set of columns onto a complete, evenly stepped time axis.
+   *
+   * `columns` is `[{ series, field }, ...]`; every column is placed on ONE
+   * shared axis, so charts built from the same call line up exactly and the
+   * synced cursor points at the same day on all of them.
+   *
+   * Three decisions worth stating, because each of them is a way to get this
+   * wrong that produces a plausible-looking chart:
+   *
+   * 1. THE STEP COMES FROM THE DATA, NOT THE RANGE. `stepDays` is
+   *    `INSIGHTS.resolutionStepDays()` — 1 for a daily bundle, 7 when the
+   *    bundle was downsampled to weekly buckets. Deriving it from the selected
+   *    range instead (30d ⇒ daily) would step a weekly bundle one day at a
+   *    time and render a chart that is six-sevenths gap: every real bucket
+   *    isolated, no line drawn at all.
+   *
+   * 2. THE AXIS SPANS THE MEASURED ROWS, NOT THE WINDOW. A window opens where
+   *    the range control says, which for `all` is the archive's first dated
+   *    row across every series — 2026-02-15 in the live archive, from a
+   *    contributors series derived from commit history. Anchoring a traffic
+   *    axis there would draw six months of emptiness in front of two weeks of
+   *    data and imply the collector was failing for all of it. Days before a
+   *    series began were not "measured as nothing"; they are outside its
+   *    history, and the caption says where that history starts.
+   *
+   * 3. A ROW THAT DOES NOT LAND ON A STEP IS STILL PLOTTED. The grid is walked
+   *    from the first measured day, so on conforming data every row lands on
+   *    it. Should one not — a stray date in a weekly bundle — it is merged
+   *    into the axis rather than dropped: an axis that silently discards a
+   *    measurement is worse than one with an uneven step, and `offGrid`
+   *    reports it so a caller can say so.
+   */
+  function expand(columns, win, stepDays) {
+    /* A step of zero or less would make the axis loop below never terminate,
+     * and a hung tab is a worse failure than any mis-drawn chart. The archive
+     * has no resolution finer than a day, so a day is the floor. */
+    var stepMs = stepDays > 0 ? stepDays * I.DAY_MS : I.DAY_MS;
+    var maps = [];
+    var startMs = NaN;
+    var endMs = NaN;
+    var c;
+    var key;
+    var ms;
+
+    for (c = 0; c < columns.length; c++) {
+      var byDay = indexByDay(columns[c].series, win);
+      maps.push(byDay);
+      for (key in byDay) {
+        if (!Object.prototype.hasOwnProperty.call(byDay, key)) continue;
+        ms = Number(key);
+        if (isNaN(startMs) || ms < startMs) startMs = ms;
+        if (isNaN(endMs) || ms > endMs) endMs = ms;
+      }
+    }
+
+    if (isNaN(startMs)) {
+      return {
+        empty: true, xs: [], values: [], measured: [],
+        startMs: NaN, endMs: NaN, stepDays: stepDays, offGrid: 0
+      };
+    }
+
+    /*
+     * `parseDay` accepts any well-formed four-digit year, so one corrupt row
+     * dated 9999-01-01 would ask for millions of axis steps and freeze the
+     * tab while it built them. The cap is far above any span this archive can
+     * really hold — 20,000 daily steps is roughly 55 years — and refusing
+     * loudly hands the shell a named failure for this one slot, which is a
+     * great deal better than a browser that stops responding.
+     */
+    var stepCount = Math.floor((endMs - startMs) / stepMs) + 1;
+    if (stepCount > MAX_AXIS_STEPS) {
+      throw new Error("insights: the series span " + I.formatDay(startMs) + " to " +
+        I.formatDay(endMs) + " needs " + stepCount + " axis steps, past the " +
+        MAX_AXIS_STEPS + " this page will build. A date in the archive is almost " +
+        "certainly wrong.");
+    }
+
+    var seen = {};
+    var days = [];
+    for (ms = startMs; ms <= endMs; ms += stepMs) {
+      seen[ms] = true;
+      days.push(ms);
+    }
+
+    var offGrid = 0;
+    for (c = 0; c < maps.length; c++) {
+      for (key in maps[c]) {
+        if (!Object.prototype.hasOwnProperty.call(maps[c], key)) continue;
+        ms = Number(key);
+        if (seen[ms] === true) continue;
+        seen[ms] = true;
+        days.push(ms);
+        offGrid++;
+      }
+    }
+    days.sort(function (a, b) { return a - b; });
+
+    /* uPlot's time scale reads x as seconds since the epoch. */
+    var xs = [];
+    var d;
+    for (d = 0; d < days.length; d++) xs.push(days[d] / 1000);
+
+    var values = [];
+    var measured = [];
+    for (c = 0; c < columns.length; c++) {
+      var column = [];
+      var found = 0;
+      for (d = 0; d < days.length; d++) {
+        var index = maps[c][days[d]];
+        /* Absent row and null field collapse to the same null on purpose:
+         * both mean "not measured", and uPlot breaks the line at either. A
+         * measured 0 survives this untouched and plots as 0. */
+        var value = index === undefined ? null : columns[c].series[columns[c].field][index];
+        if (value === null || value === undefined) {
+          column.push(null);
+        } else {
+          column.push(value);
+          found++;
+        }
+      }
+      values.push(column);
+      measured.push(found);
+    }
+
+    return {
+      empty: false,
+      xs: xs,
+      values: values,
+      measured: measured,
+      startMs: startMs,
+      endMs: endMs,
+      stepDays: stepDays,
+      offGrid: offGrid
+    };
+  }
+
+  function plotSize(host) {
+    var available = host.clientWidth;
+    if (typeof available !== "number" || !isFinite(available) || available < 1) {
+      available = MIN_PLOT_WIDTH;
+    }
+    var width = Math.max(MIN_PLOT_WIDTH, Math.round(available));
+    return { width: width, height: width < WIDE_AT ? HEIGHT_NARROW : HEIGHT_WIDE };
+  }
+
+  /*
+   * uPlot hides per-point markers once the points are closer together than
+   * `points.space`, which is right for a dense line and wrong for an isolated
+   * one: a single measured day between two unmeasured ones draws a segment of
+   * zero length and, with markers hidden, nothing at all. A measurement that
+   * renders as blank is indistinguishable from one that was never taken.
+   *
+   * uPlot draws whatever indices `points.filter` returns even when `show` is
+   * false, so this returns exactly the isolated values — no others, so a dense
+   * line is not peppered with dots it does not need.
+   */
+  function isolatedPoints(u, seriesIdx, show) {
+    if (show) return null;
+    var values = u.data[seriesIdx];
+    var bounds = u.series[0].idxs;
+    var from = bounds ? bounds[0] : 0;
+    var to = bounds ? bounds[1] : values.length - 1;
+    var out = [];
+    for (var i = from; i <= to; i++) {
+      if (values[i] === null || values[i] === undefined) continue;
+      var before = i > 0 ? values[i - 1] : null;
+      var after = i < values.length - 1 ? values[i + 1] : null;
+      if ((before === null || before === undefined) && (after === null || after === undefined)) {
+        out.push(i);
+      }
+    }
+    return out.length === 0 ? null : out;
+  }
+
+  /*
+   * Day labels for the x axis, built from the raw timestamp so no locale can
+   * shift them. `MM-DD` while the visible span sits inside one calendar year,
+   * the full `YYYY-MM-DD` once it does not, so a January tick is never
+   * ambiguous about which January.
+   *
+   * Zooming below one day is possible — the drag is free-form — and produces
+   * ticks that repeat the same day. That is honest: the archive has one point
+   * per day and no finer reading exists to show.
+   */
+  function dayTicks(u, splits) {
+    var spansYears = false;
+    var year = null;
+    var i;
+    for (i = 0; i < splits.length; i++) {
+      var y = new Date(splits[i] * 1000).getUTCFullYear();
+      if (year === null) year = y;
+      else if (y !== year) spansYears = true;
+    }
+    var labels = [];
+    for (i = 0; i < splits.length; i++) {
+      var d = new Date(splits[i] * 1000);
+      labels.push(spansYears
+        ? I.formatDay(splits[i] * 1000)
+        : pad2(d.getUTCMonth() + 1) + "-" + pad2(d.getUTCDate()));
+    }
+    return labels;
+  }
+
+  /*
+   * How much room to leave between day ticks. `dayTicks` widens its labels
+   * from `MM-DD` to `YYYY-MM-DD` once the visible span crosses a calendar
+   * year, and a fixed spacing sized for the short form leaves the long one
+   * overlapping its neighbour.
+   *
+   * The two decisions are deliberately keyed on the same thing so they cannot
+   * disagree in the direction that matters: the splits always lie inside the
+   * scale range, so a split set spanning two years implies a scale range
+   * spanning two years, and the wide labels always get the wide spacing. The
+   * reverse — wide spacing under short labels, for a range that crosses New
+   * Year within a few days — only costs a tick.
+   */
+  function daySpace(u, axisIdx, scaleMin, scaleMax) {
+    var first = new Date(scaleMin * 1000).getUTCFullYear();
+    var last = new Date(scaleMax * 1000).getUTCFullYear();
+    return first === last ? 58 : 96;
+  }
+
+  /* Counts are whole. A split that is not an integer gets no label rather than
+   * a rounded one, which would print two gridlines with the same number. */
+  function countTicks(u, splits) {
+    var labels = [];
+    for (var i = 0; i < splits.length; i++) {
+      labels.push(splits[i] === Math.round(splits[i]) ? I.formatCount(splits[i]) : "");
+    }
+    return labels;
+  }
+
+  /*
+   * Counts start at zero. A per-day event count has a true floor at 0, and an
+   * auto-fitted baseline part-way up the axis turns an ordinary week into a
+   * dramatic one — the visual equivalent of a truncated bar chart. The 8%
+   * headroom keeps the highest point off the frame.
+   */
+  function countRange(u, min, max) {
+    var top = max;
+    if (typeof top !== "number" || !isFinite(top) || top <= 0) return [0, 1];
+    return [0, top * 1.08];
+  }
+
+  /*
+   * The live legend readout.
+   *
+   * uPlot calls this with `idx === null` when the cursor is off the plot, and
+   * with a real index when it is on it. The two cases must not print the same
+   * words: "not measured" with no cursor anywhere would announce that the
+   * whole series is unmeasured, which is a claim about the archive rather than
+   * about the pointer. So no cursor is a dash — the page's own "nothing to
+   * show here" — and only a selected day with a null value says it was not
+   * measured. A measured 0 prints "0".
+   */
+  function seriesValue(u, value, seriesIdx, idx) {
+    if (idx === null || idx === undefined) return I.DASH;
+    if (value === null || value === undefined) return "not measured";
+    return I.formatCount(value);
+  }
+
+  function xValue(u, value, seriesIdx, idx) {
+    if (idx === null || idx === undefined || value === null || value === undefined) return I.DASH;
+    return I.formatDay(value * 1000);
+  }
+
+  /*
+   * Keep the plot's pixel size in step with its container.
+   *
+   * The observer watches the scroll container, whose width is set by the page
+   * layout rather than by the plot inside it, so resizing the plot cannot feed
+   * back into a resize of the thing being observed. The applied size is
+   * remembered and an identical one is skipped, which also settles the height
+   * change a scrollbar appearing or disappearing can cause.
+   *
+   * Returns the detach function; a caller that drops it leaks a live observer.
+   */
+  function trackSize(u, host) {
+    var applied = plotSize(host);
+    function sync() {
+      var next = plotSize(host);
+      if (next.width === applied.width && next.height === applied.height) return;
+      applied = next;
+      u.setSize(next);
+    }
+    if (typeof ResizeObserver === "function") {
+      var observer = new ResizeObserver(sync);
+      observer.observe(host);
+      return function () { observer.disconnect(); };
+    }
+    window.addEventListener("resize", sync);
+    return function () { window.removeEventListener("resize", sync); };
+  }
+
+  /*
+   * Build one plot inside `host`, which must already be in the document —
+   * uPlot is given an explicit pixel size, and that size is measured from the
+   * container.
+   *
+   * `defs` is `[{ label, stroke, fill?, width?, dash?, values }, ...]`, all on
+   * a single shared y scale. Two y scales on one plot invite a reader to
+   * compare two lines that are not comparable, so this deliberately does not
+   * offer one.
+   *
+   * Returns `{ plot, destroy }`. `destroy` is not optional: removing the DOM
+   * node leaves uPlot's window listeners, its entry in the cursor-sync group
+   * and its resize observer alive.
+   */
+  function mount(host, xs, defs) {
+    var size = plotSize(host);
+    var axisStroke = colour("--txt4", "#5c5c68");
+
+    /* A fresh object per axis, nested `grid`/`ticks` included. uPlot keeps
+     * per-axis state on these, so two axes sharing one literal would share it
+     * too. */
+    function axis(extra) {
+      var spec = {
+        stroke: axisStroke,
+        font: AXIS_FONT,
+        grid: { stroke: GRID_STROKE, width: 1 },
+        ticks: { stroke: TICK_STROKE, width: 1 }
+      };
+      for (var key in extra) {
+        if (Object.prototype.hasOwnProperty.call(extra, key)) spec[key] = extra[key];
+      }
+      return spec;
+    }
+
+    var series = [{ label: "Date", value: xValue }];
+    var data = [xs];
+    for (var i = 0; i < defs.length; i++) {
+      var def = defs[i];
+      var entry = {
+        label: def.label,
+        scale: "y",
+        stroke: def.stroke,
+        width: typeof def.width === "number" ? def.width : 2,
+        /* The single most load-bearing option on this page. `true` would join
+         * the line across every null, which is precisely the fabricated
+         * continuity `expand` exists to make visible. Stated explicitly rather
+         * than left to the default so it cannot be changed by accident. */
+        spanGaps: false,
+        points: { size: 6, space: 14, filter: isolatedPoints },
+        value: seriesValue
+      };
+      if (def.fill !== undefined) entry.fill = def.fill;
+      if (def.dash !== undefined) entry.dash = def.dash;
+      series.push(entry);
+      data.push(def.values);
+    }
+
+    var options = {
+      width: size.width,
+      height: size.height,
+      tzDate: utcDate,
+      legend: { live: true },
+      cursor: {
+        /* One key for the whole page. `scales: ["x", null]` joins the plots on
+         * the time scale only, so two charts with unrelated y magnitudes do
+         * not push each other's vertical cursor about. uPlot propagates the
+         * drag selection through this same group, so a zoom on one chart zooms
+         * every chart onto the same span — which is the behaviour worth having
+         * when the whole point is reading them against each other. */
+        sync: { key: SYNC_KEY, setSeries: false, scales: ["x", null] },
+        /* Drag-to-zoom on the time axis (spec §7). `dist` is a few pixels so a
+         * click that slips does not zoom into an empty sliver. */
+        drag: { x: true, y: false, setScale: true, dist: 6 },
+        points: { size: 7 }
+      },
+      /* A little room above the plot so the highest point's marker is not
+       * clipped by the top of the canvas. Every other side is left to uPlot,
+       * which already reserves what the axis labels need — pinning the right
+       * side by hand sliced the final day label in half. */
+      padding: [8, null, null, null],
+      scales: { x: { time: true }, y: { range: countRange } },
+      axes: [
+        axis({ space: daySpace, values: dayTicks }),
+        axis({ size: 56, incrs: COUNT_INCRS, values: countTicks })
+      ],
+      series: series
+    };
+
+    var plot = new window.uPlot(options, data, host);
+    var detach = trackSize(plot, host);
+    return {
+      plot: plot,
+      destroy: function () {
+        detach();
+        plot.destroy();
+      }
+    };
+  }
+
+  window.INSIGHTS_CHARTS = {
+    /* Exported so a later chart section joins THIS cursor group rather than
+     * declaring a key of its own. */
+    SYNC_KEY: SYNC_KEY,
+    colour: colour,
+    expand: expand,
+    mount: mount
+  };
+})();
+</script>
+
+<script>
+/*
+ * Section "chart-reach" — spec §7's core archive view.
+ *
+ * Views and clones, each with its unique-visitor count, on one shared time
+ * axis so the two charts can be read against each other and the synced cursor
+ * points at the same day on both.
+ *
+ * The section holds uPlot instances, so unlike header-stats it registers a
+ * teardown. Three consequences of the Task 5 contract shape the code below:
+ * the slot is emptied before every render, so nothing is cached across calls
+ * and everything is rebuilt from scratch; teardown runs before that clearing,
+ * so it still has the instances it needs to destroy; and teardown is SKIPPED
+ * after a failed render, so this file destroys its own instances in a catch
+ * before re-throwing rather than assuming anything will do it later.
+ */
+(function () {
+  "use strict";
+
+  var I = window.INSIGHTS;
+  var C = window.INSIGHTS_CHARTS;
+
+  /*
+   * The two charts, in the order the section copy names them.
+   *
+   * Colours are Aether Drift tokens, read from :root at draw time. The count
+   * series carries the fill and the solid stroke; the uniques series is dashed
+   * and thinner, because it is the subordinate reading of the same traffic and
+   * should not compete with it.
+   */
+  var CHARTS = [
+    {
+      series: "views",
+      title: "Page views",
+      count: {
+        label: "Views",
+        token: "--sky", fallback: "#7dd3fc",
+        fill: "rgba(125, 211, 252, 0.10)"
+      },
+      uniques: { label: "Unique visitors", token: "--lavender", fallback: "#c4b5fd" }
+    },
+    {
+      series: "clones",
+      title: "Repository clones",
+      count: {
+        label: "Clones",
+        token: "--mint", fallback: "#86efac",
+        fill: "rgba(134, 239, 172, 0.10)"
+      },
+      uniques: { label: "Unique cloners", token: "--amber", fallback: "#fcd34d" }
+    }
+  ];
+
+  /* Every live uPlot instance this section owns. Assigned only once a render
+   * has completed; a render that throws destroys what it built itself. */
+  var live = [];
+
+  function el(tag, className, text) {
+    var node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+
+  function pair(key, value) {
+    var span = el("span");
+    span.appendChild(el("span", "k", key));
+    span.appendChild(document.createTextNode(" "));
+    span.appendChild(el("span", "v", value));
+    return span;
+  }
+
+  function plural(count, singular, pluralWord) {
+    return count === 1 ? singular : pluralWord;
+  }
+
+  /* One step of the axis is a day in a daily bundle and a week in a
+   * downsampled one, and both spellings appear in these captions. */
+  function steps(count, stepDays) {
+    return count + " " + (stepDays === 1
+      ? plural(count, "day", "days")
+      : plural(count, "weekly bucket", "weekly buckets"));
+  }
+
+  /*
+   * `downsampled` is wholesale: when it is true EVERY range is weekly, 30d
+   * included. A weekly bucket's `uniques` is the sum of its days' uniques, and
+   * a visitor who came back on three days is three daily uniques and one
+   * person — so the weekly figure over-counts and is an upper bound, never an
+   * exact count of people. It is not recoverable from daily data, so the only
+   * honest move is to label it. The label travels on the series itself, where
+   * a reader hovering the line will see it, rather than only in a caption.
+   */
+  function uniquesLabel(spec, downsampled) {
+    return downsampled
+      ? spec.uniques.label + " (weekly sum — upper bound)"
+      : spec.uniques.label;
+  }
+
+  /*
+   * What this chart actually drew: the span of the axis, and how much of it
+   * carries a measurement. The unmeasured count is stated in the same breath
+   * as what the page does with it, because a break in a line is the one thing
+   * on this page a reader is most likely to read as a fall to zero.
+   */
+  function metaLine(axis, offset) {
+    var stepDays = axis.stepDays;
+    var total = axis.xs.length;
+    var counted = axis.measured[offset];
+    var uniqueCounted = axis.measured[offset + 1];
+    var missing = total - counted;
+
+    var note = el("p", "chart-meta");
+    note.appendChild(pair("span", I.formatDay(axis.startMs) + " → " + I.formatDay(axis.endMs)));
+    note.appendChild(pair("measured", counted + " of " + steps(total, stepDays)));
+    if (missing > 0) {
+      note.appendChild(pair("unmeasured",
+        steps(missing, stepDays) + " — drawn as breaks, not zeros"));
+    }
+    /* Only when the two columns disagree, which is the case worth naming: the
+     * count was recorded and the unique figure was not, or the reverse. */
+    if (uniqueCounted !== counted) {
+      note.appendChild(pair("uniques measured", uniqueCounted + " of " + steps(total, stepDays)));
+    }
+    if (axis.offGrid > 0) {
+      note.appendChild(pair("off-step",
+        axis.offGrid + " " + plural(axis.offGrid, "row does", "rows do") +
+        " not fall on the bundle's own resolution; " +
+        plural(axis.offGrid, "it is", "they are") + " plotted where " +
+        plural(axis.offGrid, "it is", "they are") + " dated"));
+    }
+    return note;
+  }
+
+  function buildChart(stack, spec, axis, offset, downsampled) {
+    var card = el("div", "chart-card");
+    card.appendChild(el("p", "chart-title", spec.title));
+    card.appendChild(metaLine(axis, offset));
+
+    var host = el("div", "chart-scroll");
+    card.appendChild(host);
+    /* In the document before uPlot is constructed: the plot is given an
+     * explicit pixel size and that size is measured from this container. */
+    stack.appendChild(card);
+
+    if (downsampled) {
+      card.appendChild(el("p", "chart-hint chart-caution",
+        "This bundle is bucketed by week. A bucket's unique figure is the sum of its " +
+        "days' unique counts, so someone who came back on several days is counted more " +
+        "than once: read the " + spec.uniques.label.toLowerCase() +
+        " line as an upper bound rather than a count of people."));
+    }
+
+    return C.mount(host, axis.xs, [
+      {
+        label: spec.count.label,
+        stroke: C.colour(spec.count.token, spec.count.fallback),
+        fill: spec.count.fill,
+        width: 2,
+        values: axis.values[offset]
+      },
+      {
+        label: uniquesLabel(spec, downsampled),
+        stroke: C.colour(spec.uniques.token, spec.uniques.fallback),
+        width: 1.5,
+        dash: [5, 4],
+        values: axis.values[offset + 1]
+      }
+    ]);
+  }
+
+  /*
+   * The selected window, stated in the dates it resolves to. This is the range
+   * that was ASKED for; each chart's own caption states the span it actually
+   * drew, and the two differ whenever a series is younger than the window —
+   * which is the live archive's current state, not a hypothetical.
+   */
+  function windowLine(win) {
+    var note = el("p", "chart-window");
+    note.appendChild(pair("showing", win.title.toLowerCase()));
+    note.appendChild(pair("window",
+      I.formatDay(win.startMs) + " → " + I.formatDay(win.endMs) + I.resolutionSuffix()));
+    return note;
+  }
+
+  function render(slot, data, rangeKey) {
+    var win = I.rangeWindow(data, rangeKey);
+    /* Reachable on a non-empty bundle: one holding only releases or only
+     * dimension snapshots has no dated series row to anchor a window to. */
+    if (win === null) {
+      slot.appendChild(el("p", "slot-note",
+        "The archive holds no dated measurement, so there is no time axis to draw these charts on."));
+      return;
+    }
+
+    slot.appendChild(windowLine(win));
+
+    var stepDays = I.resolutionStepDays();
+    /* One expansion for both charts, so both get the identical x axis and the
+     * synced cursor lands on the same day in each. */
+    var axis = C.expand([
+      { series: data.series.views, field: "count" },
+      { series: data.series.views, field: "uniques" },
+      { series: data.series.clones, field: "count" },
+      { series: data.series.clones, field: "uniques" }
+    ], win, stepDays);
+
+    if (axis.empty) {
+      slot.appendChild(el("p", "slot-note",
+        "Neither views nor clones carry a row inside " + win.title.toLowerCase() + " (" +
+        I.formatDay(win.startMs) + " to " + I.formatDay(win.endMs) +
+        "), so there is nothing to plot for this range."));
+      return;
+    }
+
+    var stack = el("div", "chart-stack");
+    slot.appendChild(stack);
+
+    var created = [];
+    try {
+      for (var i = 0; i < CHARTS.length; i++) {
+        created.push(buildChart(stack, CHARTS[i], axis, i * 2, data.downsampled));
+      }
+      /* Both charts sit in one cursor-sync group, and uPlot propagates the
+       * drag selection through it, so a zoom on either moves both. Verified in
+       * a browser rather than assumed — the wording has to match what the page
+       * actually does. */
+      slot.appendChild(el("p", "chart-hint",
+        "Hovering either chart moves the cursor on both. Drag sideways across either one to " +
+        "zoom the shared time axis; double-click to return to the full span."));
+    } catch (error) {
+      /* Teardown is skipped after a failed render, so nothing else will
+       * release these. Destroy what was built, then let the shell render its
+       * honest failure note for this slot. */
+      for (var j = 0; j < created.length; j++) {
+        try {
+          created[j].destroy();
+        } catch (cleanupError) {
+          /* The render failure is the one worth reporting, so a destroy that
+           * also fails is logged rather than allowed to replace it — and the
+           * remaining instances still get released. */
+          if (typeof console !== "undefined" && typeof console.error === "function") {
+            console.error("insights: releasing a reach chart after a failed render also failed.",
+              cleanupError);
+          }
+        }
+      }
+      throw error;
+    }
+    live = created;
+  }
+
+  /*
+   * Runs before the slot is emptied. Removing the nodes alone would leave
+   * every instance's window listeners, its resize observer and its membership
+   * of the page's cursor-sync group alive, and a few range switches would have
+   * the page syncing a cursor across charts nobody can see.
+   *
+   * `live` is cleared first so a destroy that throws cannot leave a
+   * half-destroyed instance behind to be destroyed twice; the first failure is
+   * re-thrown once the rest have been released, and the shell reports it.
+   */
+  function teardown() {
+    var pending = live;
+    live = [];
+    var failure = null;
+    for (var i = 0; i < pending.length; i++) {
+      try {
+        pending[i].destroy();
+      } catch (error) {
+        if (failure === null) failure = error;
+      }
+    }
+    if (failure !== null) throw failure;
+  }
+
+  I.registerSection("chart-reach", render, teardown);
+})();
+</script>
 </body>
 </html>
