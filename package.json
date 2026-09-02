@@ -26,7 +26,7 @@
     "bump": "node scripts/bump-version.mjs"
   },
   "devDependencies": {
-    "sharp": "^0.33.5",
+    "sharp": "^0.35.4",
     "png-to-ico": "^2.1.8",
     "png2icons": "^2.0.1"
   },
