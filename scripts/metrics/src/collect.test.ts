@@ -189,6 +189,42 @@ describe('collect', () => {
     expect(result.skipped).toContain('workflows.csv');
   });
 
+  // The runs fetch must use the separate Actions credential when one is given,
+  // and nothing else may: the traffic endpoints need a PAT the built-in token
+  // structurally cannot replace.
+  it('fetches workflow runs through the actions client, leaving the rest on the primary', async () => {
+    const store = createStore(dir);
+    const seen: string[] = [];
+    const primary = fakeClient();
+    const actions: GitHubClient = {
+      get: primary.get.bind(primary),
+      getStats: primary.getStats.bind(primary),
+      paginate: async () => {
+        throw new Error('the actions client must only be used for /actions/runs');
+      },
+      paginateEnvelope: async <T,>(p: string): Promise<T[]> => {
+        seen.push(p);
+        return [{ created_at: '2026-08-24T10:00:00Z' }] as T[];
+      },
+    };
+    const spied: GitHubClient = {
+      ...primary,
+      paginateEnvelope: async () => {
+        throw new Error('the primary client must not fetch /actions/runs');
+      },
+    };
+    await collect({ client: spied, actionsClient: actions, store, ...base });
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toContain('/actions/runs');
+    expect(store.readCsv('workflows.csv').find((r) => r.date === '2026-08-24')?.runs).toBe('1');
+  });
+
+  it('falls back to the primary client when no actions client is supplied', async () => {
+    const store = createStore(dir);
+    await collect({ client: fakeClient(), store, ...base });
+    expect(store.readCsv('workflows.csv').length).toBeGreaterThan(0);
+  });
+
   it('does not invent a row for today when the window ends yesterday', async () => {
     const store = createStore(dir);
     await collect({ client: fakeClient(), store, ...base });
