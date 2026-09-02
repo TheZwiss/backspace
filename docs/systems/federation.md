@@ -14,6 +14,7 @@ Source files:
   - `routes/federation/handlers/*.ts` -- Fastify route registrars, grouped by endpoint concern: `peerHandshake` (initiate/accept/ensure/rotate/denied), `peerAdmin` (peer list/CRUD/reset/recheck/rotate), `approvals` (approval queue + peering subscriptions/notifications + approve/deny helpers), `relay` (identity delete, relay, epoch, sync), `lookup` (user lookups), `attach` (verify-attach-proof, `/api/users/@me/reattach`)
     - `routes/federation/handlers/s2sAuth.ts` -- `authenticateS2SPeer(request, reply, opts?)`: the shared inbound S2S-HMAC auth preamble (parse headers → resolve active peer → optional per-peer rate limit **before** signature → verify HMAC signature → nonce replay). Adopted by the six endpoints whose preamble is byte-identical: `DELETE /identity`, `POST /relay`, `POST /sync` (`relay.ts`), `POST /users/lookup`, `POST /users/by-home-id` (`lookup.ts`), and `POST /verify-attach-proof` (`attach.ts`). Returns `{ ok: true, peer, nonce }` or, having already sent the rejection reply, `{ ok: false }` (caller must `return`). **Intentional non-adopters** (each keeps a load-bearing gate the helper would flatten, documented in its own docstring/comment): `POST /epoch` (revoked-only gate for peer recovery, 400 on missing headers, no nonce check), `POST /peer/rotate` (active-only, no nonce check), `POST /peer/denied` (`awaiting_approval` gate, synthetic no-grace secret verify).
 - `packages/server/src/utils/federationAuth.ts` -- HMAC signing, verification, header parsing, `getOurOrigin()`
+- `packages/server/src/utils/federationFetch.ts` -- The outbound path for peer-addressed requests: origin trust levels (`approved` / `asserted`), origin format checks, no redirect following. See §1b.
 - `packages/server/src/utils/federationOutbox.ts` -- Event queuing, coalescing, relay payload construction, mutation log, participant/target resolution
 - `packages/server/src/utils/federationLookup.ts` -- HMAC-signed remote-user lookups: `lookupRemoteUser` (by username) and `lookupRemoteUserByHomeId` (reverse lookup, used by stub backfill)
 - `packages/server/src/utils/federationPresence.ts` -- S2S presence relay: `queuePresenceRelay`, `snapshotPresenceForPeer` (relationship-scoped), `markPeerStubsOffline`
@@ -514,6 +515,120 @@ These S→C events are pushed to the acting user's connected clients by the fede
 | `federation_peer_rejected` | Outbox worker receives `403 PEERING_REQUIRES_APPROVAL` from a remote instance during auto-peering | `{ peerId: string, origin: string }` |
 | `federation_peer_active` | A previously `rejected` peer transitions to `active` (e.g., via manual `peer/initiate` or incoming `peer/accept`) | `{ peerId: string, origin: string }` |
 | `federation_peer_reset_detected` | A peer's advertised instance epoch differs from the trusted baseline (wipe-and-reinstall on the same domain) — emitted by `markPeerReset` after routing the peer to `needs_attention` | `{ origin: string }` (admin-only, via `sendToAdmins`) |
+
+---
+
+## 1b. Outbound Requests
+
+Requests this instance addresses to a peer's federation endpoints go through
+`federationFetch` (`utils/federationFetch.ts`). It takes the peer origin, the
+federation path, the fetch init, and one more argument: how this instance came
+to know the origin.
+
+```ts
+export type OriginTrust = 'approved' | 'asserted';
+export async function assertPeerOriginAllowed(origin: string, trust: OriginTrust): Promise<void>;
+export async function federationFetch(origin: string, path: string, init: RequestInit, trust: OriginTrust): Promise<Response>;
+```
+
+### Origin trust
+
+| Trust | Where the origin came from | Address rule |
+|-------|---------------------------|--------------|
+| `approved` | a `federation_peers` row, or the body of an admin-authenticated request | any address |
+| `asserted` | a party with no settled peering relationship: a peering-request row a remote wrote, a handle a local user typed, a callback to a request that was never accepted | must resolve to a publicly routable address |
+
+Both levels run the same format checks first. The origin must parse, must be
+`http:` or `https:`, and must carry no path, query or fragment, because an
+origin is scheme plus host plus port and nothing else. A value that fails those
+checks is a bug in whatever wrote it, wherever it came from, so it is refused at
+both levels rather than joined to a federation path.
+
+`approved` allows a private address deliberately. Peering across a LAN is a
+supported deployment shape, and the two-instance test harness peers on
+loopback. A rule of the form "peer origins must be public" would break both.
+What makes this level safe is not the address, it is that an admin named the
+origin or that the origin is already a row in the peer table.
+
+`asserted` is the level for an origin nobody on this instance has ruled on. It
+must resolve to a public address, so the party that supplied it does not get to
+choose which hosts this instance opens a connection to. The gate resolves the
+hostname once and classifies the result with `classifyAddress`
+(`utils/ipClass.ts`); anything the classifier does not read as `public` is
+refused, and an origin that does not resolve at all is refused too.
+
+The two levels do not circle back on each other. A `federation_peers` row only
+exists because the outbound path that created it was itself gated: either an
+admin typed the origin into `/peer/initiate`, or the handshake that created the
+row ran as `asserted`.
+
+### Call sites
+
+18 outbound sites carry a peer origin: 13 `approved`, 5 `asserted`.
+
+| Trust | Sites |
+|-------|-------|
+| `approved` | `federationEpoch` (`/epoch`), `federationLookup` (`/users/lookup`, `/users/by-home-id`), `federationAttach` (`/verify-attach-proof`, `/users/by-home-id`), `federationOutbox` (`/relay`), `federationWorker` (`/relay`, `/peer/rotate`), `federationPeerActivation` (`/sync`), `federationRecovery` (`/api/instance/info` reachability probe), `routes/users.ts` (`/identity`), `handlers/peerAdmin.ts` (`/peer/rotate`), `handlers/peerHandshake.ts` (`/peer/accept`) |
+| `asserted` | `handlers/approvals.ts` (`/peer/accept` from the inbound and outbound approve branches, `/peer/denied` from the deny branch), `federationPeering.ts:performHandshake` (`/peer/accept`), `storageJanitor.ts` (`/peer/denied` on request expiry) |
+
+**Trust is a property of the caller, not of the function.** `performHandshake`
+is the clearest case: it runs only when no settled peer row exists, and its
+origin reaches it from a handle a user typed (friend-add) or from
+`POST /api/federation/peer/ensure`, which carries `authenticate` and nothing
+more, so any logged-in user can call it. It is `asserted` wherever it runs.
+
+Two sites read as asserted from the outside and are not:
+
+- `handlers/peerHandshake.ts` issues `/peer/accept` from `/peer/initiate`,
+  which carries `preHandler: [authenticate, requireAdmin]`. The origin is the
+  admin's own request body, already through `validateOrigin`. Classifying it
+  `asserted` would break admin-initiated LAN peering, which `validateOrigin`
+  deliberately supports.
+- `federationRecovery.ts:probePeerReachable` has two callers and both iterate
+  `federation_peers` rows with `status='unreachable'`: the recovery tick in
+  `federationWorker.ts` and the admin-only recheck route in `peerAdmin.ts`. No
+  unapproved origin reaches it, and a private peer stays probeable.
+
+### `FEDERATION_ALLOW_PRIVATE_PEERS`
+
+Default `false`, read as `config.federation.allowPrivatePeers`. While it is off,
+the `asserted` address rule above applies. Turning it on skips that rule, so an
+asserted origin may resolve to a private address. `approved` is unaffected
+either way, which is why admin-driven peering with a peer on a private address
+works the same in both settings.
+
+Two situations call for it:
+
+1. **A LAN-only deployment**, where every instance sits on a private address and
+   users add each other by handle. The asserted path has to be allowed to reach
+   a private address there, or handle-driven peering cannot work at all.
+2. **The two-instance test harness** (`test/helpers/twoInstanceHarness.ts`),
+   which spawns every instance on `127.0.0.1` and sets the flag for exactly the
+   same reason. It is set there and only there.
+
+Off is the shipped default so that an instance reachable from the public
+internet gets the narrower behaviour without configuring anything, and the
+operator opts in knowingly. Documented in `.env.example`.
+
+### Redirects
+
+`federationFetch` sends with `redirect: 'manual'` and does not follow. Every
+federation endpoint answers directly, so a 3xx from a peer means the peer is
+misconfigured or the response is pointing the request somewhere else. Callers
+see the 3xx and handle it through the non-2xx branch they already have.
+
+### Other outbound paths
+
+Not every outbound request is addressed to a federation endpoint. The rest of
+the map, so the inventory stays complete:
+
+| Path | Helper | Notes |
+|------|--------|-------|
+| Replicated profile assets (`routes/federation/profile.ts`) | `safeFetch` (`utils/ssrf.ts`) | Fetches a file URL rather than a federation endpoint. Redirects are followed, with every hop's destination re-validated first, and the body is capped at `MAX_PROFILE_ASSET_BYTES` (8 MiB). See [Profile Image File Replication](#profile-image-file-replication). |
+| Federated file replication (`federationWorker.ts`) | `safeFetch` | Same helper, same per-hop re-validation. See [File Download Worker](#file-download-worker-federationworkertsprocessfilequeueentry). |
+| Link embeds, metadata scraping, invite snapshots | `safeFetch` | Not federation traffic at all. See `docs/systems/embeds.md` §3. |
+| Federated login self-heal (`routes/auth.ts`) | its own request | Posts to `https://${user.homeInstance}`, a value stored on the user row, over a fixed path. Scheme is forced to `https`. See `docs/systems/auth.md` §4. |
+| GIF search proxy (`routes/gif.ts`) | its own request | A fixed provider host, no caller-supplied origin. |
 
 ---
 

@@ -532,6 +532,7 @@ The most important:
 | `BACKSPACE_IMAGE` / `BACKSPACE_IMAGE_TAG` | no | `ghcr.io/thezwiss/backspace` / `latest` | Prebuilt image to pull; pin a tag or point at your fork's registry |
 | `LIVEKIT_URL` / `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` | no | none | Enable voice/video |
 | `COMPOSE_PROFILES`   | no       | none        | Set to `voice` to start the bundled LiveKit service |
+| `FEDERATION_ALLOW_PRIVATE_PEERS` | no | `false` | Set `true` only on a LAN-only deployment, so instances on private addresses can still peer when a user adds a handle. Admin-driven peering with a private peer works either way. |
 
 ## Voice & Video
 
