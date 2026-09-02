@@ -111,6 +111,20 @@ export interface CollectResult {
 
 export interface CollectOptions {
   client: GitHubClient;
+  /**
+   * Client for `/actions/runs` only, when that endpoint needs a different
+   * credential from the traffic endpoints. Defaults to `client`.
+   *
+   * The split exists because the two need opposite instruments. The traffic
+   * endpoints require **Administration: read**, which has no key in the
+   * Actions `permissions:` vocabulary at all, so no configuration of
+   * `GITHUB_TOKEN` can reach them and a PAT is forced. `/actions/runs` needs
+   * **`actions: read`**, which IS in that vocabulary — so the workflow's own
+   * built-in token can do it, and asking the PAT to carry the scope instead
+   * would widen a long-lived credential to buy nothing. Least privilege that
+   * still does the job, per endpoint rather than per run.
+   */
+  actionsClient?: GitHubClient;
   store: Store;
   /** `owner/repo`, from `github.repository`. */
   slug: string;
@@ -194,6 +208,7 @@ function toTraffic(buckets: TrafficBucket[]): TrafficPoint[] {
  */
 export async function collect(options: CollectOptions): Promise<CollectResult> {
   const { client, store, slug, today, now } = options;
+  const actionsClient = options.actionsClient ?? client;
   const repoPath = `/repos/${slug}`;
   const skipped: string[] = [];
 
@@ -239,7 +254,7 @@ export async function collect(options: CollectOptions): Promise<CollectResult> {
   const workflowFrom = daysBefore(today, WORKFLOW_WINDOW_DAYS - 1);
   let workflowRuns: WorkflowRunResponse[] | null = null;
   try {
-    workflowRuns = await client.paginateEnvelope<WorkflowRunResponse>(
+    workflowRuns = await actionsClient.paginateEnvelope<WorkflowRunResponse>(
       `${repoPath}/actions/runs?created=%3E%3D${workflowFrom}`,
       'workflow_runs',
     );

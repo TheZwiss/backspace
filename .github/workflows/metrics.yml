@@ -119,6 +119,14 @@ jobs:
       - name: Collect
         env:
           METRICS_TOKEN: ${{ secrets.METRICS_TOKEN }}
+          # `/actions/runs` (workflows.csv) only. It needs `actions: read`,
+          # which this job already holds via the `actions: write` it uses to
+          # call the deploy workflow — and unlike the traffic endpoints'
+          # `administration` requirement, `actions` exists in the Actions
+          # permissions vocabulary, so the built-in token reaches it. Keeping
+          # the scope here rather than on METRICS_TOKEN leaves the long-lived
+          # PAT no wider than the endpoints that genuinely force one.
+          METRICS_ACTIONS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           METRICS_DATA_DIR: ${{ github.workspace }}/.metrics-data
         run: node scripts/metrics/src/cli-collect.ts

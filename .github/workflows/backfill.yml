@@ -63,6 +63,12 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: write
+      # `/actions/runs`, which backs workflows.csv. This job already runs on
+      # GITHUB_TOKEN (see the Backfill step below), and naming any
+      # `permissions:` block sets every unlisted scope to `none` — so without
+      # this line the runs fetch 403s and the CI series silently reconstructs
+      # nothing, while every other series backfills normally.
+      actions: read
     steps:
       - name: Harden the runner
         uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0

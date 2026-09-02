@@ -27,10 +27,21 @@ async function main(): Promise<void> {
   const slug = requiredEnv(process.env, 'GITHUB_REPOSITORY');
   const dataDir = requiredEnv(process.env, 'METRICS_DATA_DIR');
 
+  // Optional, and read with `??` rather than `requiredEnv`, because it is the
+  // one credential this entrypoint can do without: unset, the runs fetch falls
+  // back to METRICS_TOKEN and either works (if that PAT happens to carry
+  // Actions: read) or skips the series, which is already a handled outcome.
+  // `metrics.yml` sets it to the workflow's own GITHUB_TOKEN — see
+  // CollectOptions.actionsClient for why that is the right instrument for this
+  // one endpoint and the wrong one for the traffic endpoints.
+  const actionsToken = process.env['METRICS_ACTIONS_TOKEN'] ?? '';
+  if (actionsToken !== '') assertHeaderSafeToken(actionsToken);
+
   const { now, today } = deriveRunTimestamps(new Date());
 
   const result = await collect({
     client: createClient(token),
+    actionsClient: actionsToken === '' ? undefined : createClient(actionsToken),
     store: createStore(dataDir),
     slug,
     today,
