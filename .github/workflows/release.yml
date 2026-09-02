@@ -101,3 +101,24 @@ jobs:
           # bundled x86_64 fpm (which can't run on the arm64 runner). No-op on
           # macOS/Windows, which don't build .deb.
           USE_SYSTEM_FPM: "true"
+
+      - name: Verify macOS code signature
+        if: runner.os == 'macOS'
+        working-directory: packages/desktop
+        # Backstop for the ad-hoc signing done in scripts/macSign.js. A bundle
+        # whose signature does not validate is reported by macOS as "Backspace
+        # is damaged and can't be opened", which no user can work around from
+        # the UI — so a broken seal must fail the release loudly rather than
+        # ship. macSign.js already verifies before packaging; this re-checks the
+        # final bundle, and also covers the case where that hook no-ops.
+        run: |
+          shopt -s nullglob
+          apps=(dist-electron/mac*/*.app)
+          if [ ${#apps[@]} -eq 0 ]; then
+            echo "::error::No packaged .app found under dist-electron/"
+            exit 1
+          fi
+          for app in "${apps[@]}"; do
+            echo "==> $app"
+            codesign --verify --deep --strict --verbose=2 "$app"
+          done

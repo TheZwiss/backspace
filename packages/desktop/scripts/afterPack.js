@@ -1,35 +1,40 @@
 // afterPack hook for electron-builder
-// Removes host-compiled native module artifacts so cross-platform builds
-// use the correct prebuilt binaries from the `prebuilds/` directory.
 //
-// Why this is needed:
+// Two jobs, in order:
+//   1. Remove host-compiled native module artifacts so cross-platform builds
+//      use the correct prebuilt binaries from the `prebuilds/` directory.
+//   2. On macOS, ad-hoc sign the bundle (see macSign.js).
+//
+// Order matters: signing seals the bundle's contents, so it must run after
+// every file mutation. afterPack is also the only hook available for this —
+// electron-builder skips the `afterSign` hook entirely when no signing
+// occurred, which is exactly the case this build is in.
+//
+// Why the native module cleanup is needed:
 //   `electron-rebuild` (postinstall) compiles uiohook-napi for the BUILD
 //   machine (e.g. macOS arm64), placing the binary in `build/Release/`.
 //   `node-gyp-build` checks `build/Release/` BEFORE `prebuilds/{platform}/`,
 //   so Windows/Linux packages would load the macOS binary and crash.
-//
-// What this does:
-//   1. Removes `build/`, `build.bak/`, `bin/` dirs (host-compiled artifacts)
-//   2. Strips prebuilts for platforms other than the target
 
 const fs = require('fs');
 const path = require('path');
 
-exports.default = async function afterPack(context) {
-  const platform = context.electronPlatformName; // 'darwin', 'linux', 'win32'
-  const appDir = path.join(
-    context.appOutDir,
-    // macOS bundles resources inside the .app
-    platform === 'darwin'
-      ? `${context.packager.appInfo.productFilename}.app/Contents/Resources`
-      : 'resources'
-  );
+const { signMacAppIfUnsigned } = require('./macSign');
 
+/**
+ * Strips host-compiled artifacts and foreign-platform prebuilts from the
+ * packaged copy of uiohook-napi.
+ *
+ * @param {string} appDir Resources directory of the packaged app.
+ * @param {string} platform electron-builder platform name.
+ * @returns {void}
+ */
+function cleanNativeModules(appDir, platform) {
   const asarUnpacked = path.join(appDir, 'app.asar.unpacked');
   const uiohookDir = path.join(asarUnpacked, 'node_modules', 'uiohook-napi');
 
   if (!fs.existsSync(uiohookDir)) {
-    console.log(`[afterPack] uiohook-napi not found in ${platform} build — skipping`);
+    console.log(`[afterPack] uiohook-napi not found in ${platform} build — skipping cleanup`);
     return;
   }
 
@@ -55,4 +60,21 @@ exports.default = async function afterPack(context) {
   }
 
   console.log(`[afterPack] Native module cleanup done for ${platform}`);
+}
+
+exports.default = async function afterPack(context) {
+  const platform = context.electronPlatformName; // 'darwin', 'linux', 'win32'
+  const isMac = platform === 'darwin';
+  const appName = `${context.packager.appInfo.productFilename}.app`;
+  const appDir = path.join(
+    context.appOutDir,
+    // macOS bundles resources inside the .app
+    isMac ? `${appName}/Contents/Resources` : 'resources'
+  );
+
+  cleanNativeModules(appDir, platform);
+
+  if (isMac) {
+    signMacAppIfUnsigned(path.join(context.appOutDir, appName));
+  }
 };
