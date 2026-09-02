@@ -359,3 +359,22 @@ server renders different HTML.
 Fastify 5. This repo is on Fastify 4 and every other plugin is pinned to its
 Fastify 4 major (`@fastify/cors@^9`, `rate-limit@^9`, `static@^7`,
 `websocket@^10`). A helmet bump is a Fastify 5 migration, not a version bump.
+
+`livekit-client` is the dependency the meta policy's two script directives are
+measured against, because it is the only one in the voice path that could start
+a worker or compile WebAssembly. Re-derive that on every bump rather than
+assuming it: grep the installed bundle, not the source repo or the docs.
+
+```bash
+cd packages/web/node_modules/livekit-client
+grep -n "WebAssembly\|new Worker\|importScripts\|wasm" dist/livekit-client.esm.mjs
+```
+
+As of 2.22.2 the only hit is a commented-out `// this.worker = new Worker('')`
+inside the E2EE manager. The library never constructs a worker itself: both the
+E2EE worker and the frame-metadata worker added in the 2.2x line are read from
+`RoomOptions.e2ee.worker` / `RoomOptions.frameMetadata.worker`, which the app
+never passes, and it compiles no WebAssembly. The single `new Worker` and the
+single `WebAssembly.validate` in the built bundle come from
+`useWebSocket.ts` and from RNNoise's SIMD probe, which are the two directives
+already documented above.

@@ -2,7 +2,7 @@
   "name": "backspace",
   "version": "1.0.2",
   "private": true,
-  "description": "Open, self-hosted communication platform — text, voice, video, and federation",
+  "description": "Open, self-hosted communication platform \u2014 text, voice, video, and federation",
   "license": "AGPL-3.0-only",
   "author": "Jannis Braun",
   "homepage": "https://github.com/TheZwiss/backspace",
@@ -26,7 +26,7 @@
     "bump": "node scripts/bump-version.mjs"
   },
   "devDependencies": {
-    "sharp": "^0.33.5",
+    "sharp": "^0.35.4",
     "png-to-ico": "^2.1.8",
     "png2icons": "^2.0.1"
   },
