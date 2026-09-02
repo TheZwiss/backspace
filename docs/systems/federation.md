@@ -1614,7 +1614,7 @@ Four relay event types are processed in `processRelayEvents()`:
 
 | Event Type | Direction | Key Payload Fields |
 |---|---|---|
-| `dm_call_start` | Host → Peers | `federatedId`, `livekitUrl`, `tokens: Record<string, string>` (keyed by `homeUserId`), `caller: { homeUserId, homeInstance, displayName }`, `participants` |
+| `dm_call_start` | Host → each participant-homing peer | `federatedId`, `livekitUrl`, `tokens: Record<string, string>` (keyed by `homeUserId`, **scoped to the recipient's own members**), `caller: { homeUserId, homeInstance, displayName }`, `participants` (full roster) |
 | `dm_call_accept` | Participant → Host, then Host → All Peers | `federatedId`, `acceptor: { homeUserId, homeInstance }` |
 | `dm_call_reject` | Participant → Host, then Host → All Peers | `federatedId`, `rejector: { homeUserId, homeInstance }` |
 | `dm_call_end` | Any → Host (if not host), then Host → All Peers | `federatedId`, `endedBy: { homeUserId, homeInstance }` |
@@ -1644,7 +1644,7 @@ All events carry standard relay fields: `eventType`, `messageId`, `encryptionVer
 
 ### Call Flows
 
-**Start:** Host validates membership, generates LiveKit tokens for all DM members (local + remote), broadcasts `dm_call_incoming` to local WS clients, then sends `dm_call_start` S2S to each remote instance with per-user tokens.
+**Start:** Host validates membership, broadcasts `dm_call_incoming` to local WS clients, then sends `dm_call_start` S2S to each instance that homes a remote DM member. The relay is built per recipient: the host mints tokens only for the members that recipient homes. A DM with no remote member is not relayed at all, and peers that home no DM member are not contacted. See "Token Scoping" below.
 
 **Accept:** Remote instance sends `dm_call_accept` S2S to host. Host transitions `ringing → active`, broadcasts `dm_call_accepted` locally, fans out `dm_call_accept` to all other remote instances.
 
@@ -1669,6 +1669,20 @@ Room name = `federatedId` (the cross-instance stable UUID), never the local `dmC
 - **Identity:** `${homeUserId}:${displayName}`
 - **Permissions:** full DM grants (mic, camera, screen share, subscribe, data channel)
 
+### Token Scoping
+
+A federated call token is a bearer credential: whoever holds it can join the room and publish under the identity it was minted for. Peers are admin-approved but not trusted, so `sendFederatedCallStart` (`ws/events.ts`) treats the token map as a per-recipient secret:
+
+- Remote members are bucketed by their home instance (`canonicalizeHomeInstance`; comparisons use `normalizeOriginForCompare`, since `homeInstance` is stored both bare and scheme-prefixed). Each bucket is exactly the set of identities that peer is entitled to act for.
+- `buildRelayEvent(recipients)` mints tokens for that bucket only. No peer receives the caller's token, a local member's token, or a token for a member homed on another peer.
+- With no remote members the function returns before minting anything — a purely local call produces zero relays, so no peer learns it happened.
+- Only bucketed origins are contacted; there is no all-peers broadcast. `affectedUserIds` on a `dm_call_undeliverable` failure is derived from the failing peer's bucket.
+- Per-recipient keying also removes the ambiguity of one global `homeUserId → token` map, where the same `homeUserId` on two instances would collide.
+
+`participants` is the non-secret roster and is still sent in full, because Path B recipients need it to match a participant to a local identity.
+
+Recipient side (`routes/federation/events/calls.ts`): both Path A and Path B skip a local member with no token in the payload rather than dispatching a `dm_call_incoming` the client cannot use. This is reachable for a member homed on a third instance who holds a client-federation connection here; their own home instance receives their token and rings them.
+
 ### Public LiveKit URL
 
 The URL sent in S2S payloads is always `https://${DOMAIN}/livekit` (the Caddy-proxied public address). The internal `LIVEKIT_URL` env var (`http://livekit:7880`) is never sent to peers.
@@ -1687,7 +1701,7 @@ interface FederatedCallEntry {
   callerHomeUserId: string;
   federatedCallHost: string;    // peer origin of the host instance
   livekitUrl: string;
-  tokens: Map<string, string>;  // homeUserId → LiveKit token
+  tokens: Map<string, string>;  // homeUserId → LiveKit token (only members this instance homes)
   state: 'ringing' | 'active';
   startedAt: number;
 }

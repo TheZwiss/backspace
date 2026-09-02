@@ -29,16 +29,25 @@ vi.mock('../utils/federationAuth.js', async () => {
   };
 });
 
-// `generateFederatedCallToken` lives in `routes/livekit.js`, not in
-// `federationAuth.js` — mocking it on the latter is a no-op.
+// Mock the REAL token factory (`routes/livekit.js`) so each minted token is
+// traceable back to the identity it was minted for. A LiveKit token is a bearer
+// credential; these tests assert exactly which identities' credentials leave
+// this instance and to whom.
 vi.mock('../routes/livekit.js', () => ({
-  generateFederatedCallToken: () => Promise.resolve('fake-token'),
+  generateFederatedCallToken: (roomName: string, homeUserId: string) =>
+    Promise.resolve(`token:${roomName}:${homeUserId}`),
 }));
 
-// Mock sendCallRelay so the test controls relay results per peer. The
-// implementation captures the messageId each call was made with so tests
-// can return { undeliverable: [messageId] } dynamically.
-type RelayArgs = [string, Array<{ messageId: string }>];
+type CallRelayEvent = {
+  messageId: string;
+  federatedId?: string;
+  call?: {
+    tokens?: Record<string, string>;
+    participants?: Array<{ homeUserId: string; homeInstance: string }>;
+    caller?: { homeUserId: string; homeInstance: string };
+  };
+};
+type RelayArgs = [string, CallRelayEvent[]];
 const sendCallRelayMock = vi.fn();
 vi.mock('../utils/federationOutbox.js', async () => {
   const actual = await vi.importActual<typeof import('../utils/federationOutbox.js')>(
@@ -50,7 +59,6 @@ vi.mock('../utils/federationOutbox.js', async () => {
   };
 });
 
-// Mock config to claim LiveKit is configured.
 vi.mock('../config.js', async () => {
   const actual = await vi.importActual<typeof import('../config.js')>('../config.js');
   return {
@@ -124,18 +132,29 @@ async function importManager() {
   return (await import('./handler.js')).connectionManager;
 }
 
+/** All origins `sendCallRelay` was invoked with, in call order. */
+function relayedOrigins(): string[] {
+  return sendCallRelayMock.mock.calls.map(([origin]) => origin as string);
+}
+
+/** The single relay event sent to `origin`, or undefined if none was sent. */
+function relayTo(origin: string): CallRelayEvent | undefined {
+  const call = sendCallRelayMock.mock.calls.find(([o]) => o === origin);
+  return call ? (call[1] as CallRelayEvent[])[0] : undefined;
+}
+
 let sqlite: Database.Database;
 
-describe('sendFederatedCallStart — undeliverable reclassification (#18)', () => {
+describe('sendFederatedCallStart — LiveKit token scoping', () => {
   beforeEach(async () => {
     sqlite = new Database(':memory:');
     testDb = drizzle(sqlite, { schema });
     applyMigrations(sqlite);
 
     const cm = await importManager();
-    // Reset federatedCalls + rooms between tests.
     for (const [fedId] of cm.getAllFederatedCalls()) cm.clearFederatedCall(fedId);
     sendCallRelayMock.mockReset();
+    sendCallRelayMock.mockResolvedValue({ ok: true, undeliverable: [] });
   });
 
   afterEach(() => {
@@ -143,122 +162,103 @@ describe('sendFederatedCallStart — undeliverable reclassification (#18)', () =
     sqlite.close();
   });
 
-  it('single targeted peer returns undeliverable → terminal dm_call_undeliverable, room destroyed', async () => {
-    // 1-on-1 DM: Alice local, Bob remote on orbit.
-    const federatedId = 'fed-1on1';
+  it('local-only DM call sends no relay at all, even with active peers present', async () => {
+    // Both members are homed here. No peer hosts a participant, so no peer has
+    // any business learning the call exists — let alone holding a room token.
     seedLocalUser('alice', { homeUserId: null, homeInstance: null });
-    seedLocalUser('bob-stub', { homeUserId: 'bob-home', homeInstance: 'https://orbit.example' });
-    seedDmChannel('dm-1', federatedId, null);
-    seedDmMember('dm-1', 'alice');
-    seedDmMember('dm-1', 'bob-stub');
-    seedActivePeer('https://orbit.example', 'Orbit');
-
-    const cm = await importManager();
-    cm.createDmRoom('dm-1', 'alice');  // caller's local ring room (mirrors real flow)
-
-    // Capture the messageId sendFederatedCallStart generates, return it as undeliverable.
-    sendCallRelayMock.mockImplementation(async (_origin: string, events: Array<{ messageId: string }>) => {
-      return { ok: true, undeliverable: [events[0]!.messageId] };
-    });
-
-    const sendToUserSpy = vi.spyOn(cm, 'sendToUser');
-    const destroyRoomSpy = vi.spyOn(cm, 'destroyRoom');
-
-    const { sendFederatedCallStartForTest } = await importSUT();
-    await sendFederatedCallStartForTest('dm-1', 'alice', 'Alice');
-
-    // The caller (Alice) got a terminal dm_call_undeliverable with reason='no_recipient'.
-    const undelivCalls = sendToUserSpy.mock.calls.filter(([, ev]) =>
-      (ev as { type: string }).type === 'dm_call_undeliverable',
-    );
-    expect(undelivCalls).toHaveLength(1);
-    expect(undelivCalls[0]![0]).toBe('alice');
-
-    const ev = undelivCalls[0]![1] as {
-      terminal: boolean;
-      phase: string;
-      failures: Array<{ reason: string; peerLabel?: string; peerOrigin?: string }>;
-    };
-    expect(ev.terminal).toBe(true);
-    expect(ev.phase).toBe('start');
-    expect(ev.failures).toHaveLength(1);
-    expect(ev.failures[0]!.reason).toBe('no_recipient');
-    expect(ev.failures[0]!.peerOrigin).toBe('https://orbit.example');
-    expect(ev.failures[0]!.peerLabel).toBe('Orbit');
-
-    // Room was destroyed.
-    expect(destroyRoomSpy).toHaveBeenCalledWith('dm-1');
-  });
-
-  it('group DM mixed delivered + undeliverable → non-terminal, failures lists only the undeliverable peer', async () => {
-    // Group DM: caller + one member on orbit (delivers) + one member on nova (undeliverable).
-    const federatedId = 'fed-group';
-    seedLocalUser('alice', { homeUserId: null, homeInstance: null });
-    seedLocalUser('bob-stub', { homeUserId: 'bob-home', homeInstance: 'https://orbit.example' });
-    seedLocalUser('carol-stub', { homeUserId: 'carol-home', homeInstance: 'https://nova.example' });
-    seedDmChannel('dm-group', federatedId, 'alice');  // group DM: ownerId non-null
-    seedDmMember('dm-group', 'alice');
-    seedDmMember('dm-group', 'bob-stub');
-    seedDmMember('dm-group', 'carol-stub');
+    seedLocalUser('dave', { homeUserId: null, homeInstance: null });
+    seedDmChannel('dm-local', 'fed-local-only', null);
+    seedDmMember('dm-local', 'alice');
+    seedDmMember('dm-local', 'dave');
     seedActivePeer('https://orbit.example', 'Orbit');
     seedActivePeer('https://nova.example', 'Nova');
 
     const cm = await importManager();
+    cm.createDmRoom('dm-local', 'alice');
+
+    const { sendFederatedCallStartForTest } = await importSUT();
+    await sendFederatedCallStartForTest('dm-local', 'alice', 'Alice');
+
+    expect(relayedOrigins()).toEqual([]);
+  });
+
+  it('gives each peer tokens only for the members it hosts, and nothing to uninvolved peers', async () => {
+    // Group DM: caller alice (local), dave (local), bob (orbit), carol (nova).
+    // ghost.example is an active peer hosting nobody in this DM.
+    seedLocalUser('alice', { homeUserId: null, homeInstance: null });
+    seedLocalUser('dave', { homeUserId: null, homeInstance: null });
+    seedLocalUser('bob-stub', { homeUserId: 'bob-home', homeInstance: 'https://orbit.example' });
+    seedLocalUser('carol-stub', { homeUserId: 'carol-home', homeInstance: 'https://nova.example' });
+    seedDmChannel('dm-group', 'fed-group', 'alice');
+    seedDmMember('dm-group', 'alice');
+    seedDmMember('dm-group', 'dave');
+    seedDmMember('dm-group', 'bob-stub');
+    seedDmMember('dm-group', 'carol-stub');
+    seedActivePeer('https://orbit.example', 'Orbit');
+    seedActivePeer('https://nova.example', 'Nova');
+    seedActivePeer('https://ghost.example', 'Ghost');
+
+    const cm = await importManager();
     cm.createDmRoom('dm-group', 'alice');
-
-    // Orbit delivers (empty undeliverable), Nova returns messageId in undeliverable.
-    sendCallRelayMock.mockImplementation(async (origin: string, events: Array<{ messageId: string }>) => {
-      if (origin === 'https://nova.example') {
-        return { ok: true, undeliverable: [events[0]!.messageId] };
-      }
-      return { ok: true, undeliverable: [] };
-    });
-
-    const sendToUserSpy = vi.spyOn(cm, 'sendToUser');
-    const destroyRoomSpy = vi.spyOn(cm, 'destroyRoom');
 
     const { sendFederatedCallStartForTest } = await importSUT();
     await sendFederatedCallStartForTest('dm-group', 'alice', 'Alice');
 
-    // Room NOT destroyed (orbit delivered).
-    expect(destroyRoomSpy).not.toHaveBeenCalledWith('dm-group');
+    // Only the two participant-hosting peers were contacted.
+    expect(relayedOrigins().sort()).toEqual([
+      'https://nova.example',
+      'https://orbit.example',
+    ]);
+    expect(relayTo('https://ghost.example')).toBeUndefined();
 
-    const undelivCalls = sendToUserSpy.mock.calls.filter(([uid, ev]) =>
-      uid === 'alice' && (ev as { type: string }).type === 'dm_call_undeliverable',
-    );
-    expect(undelivCalls).toHaveLength(1);
+    const orbit = relayTo('https://orbit.example');
+    const nova = relayTo('https://nova.example');
+    expect(orbit).toBeDefined();
+    expect(nova).toBeDefined();
 
-    const ev = undelivCalls[0]![1] as {
-      terminal: boolean;
-      failures: Array<{ reason: string; peerOrigin?: string }>;
-    };
-    expect(ev.terminal).toBe(false);
-    expect(ev.failures).toHaveLength(1);
-    expect(ev.failures[0]!.reason).toBe('no_recipient');
-    expect(ev.failures[0]!.peerOrigin).toBe('https://nova.example');
+    // Each peer receives exactly one token: the one for the member it hosts.
+    expect(orbit!.call?.tokens).toEqual({
+      'bob-home': 'token:fed-group:bob-home',
+    });
+    expect(nova!.call?.tokens).toEqual({
+      'carol-home': 'token:fed-group:carol-home',
+    });
+
+    // Neither peer receives a credential for a local member or the caller.
+    for (const relay of [orbit!, nova!]) {
+      const keys = Object.keys(relay.call?.tokens ?? {});
+      expect(keys).not.toContain('alice');
+      expect(keys).not.toContain('dave');
+    }
+
+    // The non-secret roster still names every participant, so Path B identity
+    // matching on the recipient keeps working.
+    expect(
+      (nova!.call?.participants ?? []).map(p => p.homeUserId).sort(),
+    ).toEqual(['alice', 'bob-home', 'carol-home', 'dave']);
   });
 
-  it('single targeted peer delivers (empty undeliverable) → no undeliverable event', async () => {
-    const federatedId = 'fed-happy';
-    seedLocalUser('alice', {});
+  it('mints a token for every remote member of a single peer', async () => {
+    // Two members homed on the same peer: that peer legitimately needs both.
+    seedLocalUser('alice', { homeUserId: null, homeInstance: null });
     seedLocalUser('bob-stub', { homeUserId: 'bob-home', homeInstance: 'https://orbit.example' });
-    seedDmChannel('dm-happy', federatedId, null);
-    seedDmMember('dm-happy', 'alice');
-    seedDmMember('dm-happy', 'bob-stub');
+    seedLocalUser('erin-stub', { homeUserId: 'erin-home', homeInstance: 'https://orbit.example' });
+    seedDmChannel('dm-same-peer', 'fed-same-peer', 'alice');
+    seedDmMember('dm-same-peer', 'alice');
+    seedDmMember('dm-same-peer', 'bob-stub');
+    seedDmMember('dm-same-peer', 'erin-stub');
     seedActivePeer('https://orbit.example', 'Orbit');
 
     const cm = await importManager();
-    cm.createDmRoom('dm-happy', 'alice');
+    cm.createDmRoom('dm-same-peer', 'alice');
 
-    sendCallRelayMock.mockResolvedValue({ ok: true, undeliverable: [] });
-
-    const sendToUserSpy = vi.spyOn(cm, 'sendToUser');
     const { sendFederatedCallStartForTest } = await importSUT();
-    await sendFederatedCallStartForTest('dm-happy', 'alice', 'Alice');
+    await sendFederatedCallStartForTest('dm-same-peer', 'alice', 'Alice');
 
-    const undelivCalls = sendToUserSpy.mock.calls.filter(([, ev]) =>
-      (ev as { type: string }).type === 'dm_call_undeliverable',
-    );
-    expect(undelivCalls).toHaveLength(0);
+    expect(relayedOrigins()).toEqual(['https://orbit.example']);
+    expect(relayTo('https://orbit.example')!.call?.tokens).toEqual({
+      'bob-home': 'token:fed-same-peer:bob-home',
+      'erin-home': 'token:fed-same-peer:erin-home',
+    });
   });
 });

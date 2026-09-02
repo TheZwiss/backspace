@@ -74,7 +74,14 @@ export function processDmCallStartEvent(
       // symmetric in what counts as "ringed."
       if (connectionManager.getUserConnections(member.userId).size === 0) continue;
 
+      // The host mints a token only for the members IT considers ours. A local
+      // member homed on a third instance (client-federation) is rung by their
+      // own home instance, not by us — without a token there is nothing to ring
+      // them with, so skip rather than dispatch an unusable `dm_call_incoming`.
+      // Mirrors the same guard on Path B below.
       const token = event.call!.tokens![homeUserId];
+      if (!token) continue;
+
       connectionManager.sendToUser(member.userId, {
         type: 'dm_call_incoming',
         dmChannelId: localDmChannelId,
