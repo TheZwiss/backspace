@@ -285,14 +285,19 @@ Two environment variables, both required, both checked by the same `requiredEnv`
 - `METRICS_DATA_DIR` is the archive root — the same variable `cli-collect.ts` and `cli-backfill.ts` read.
 - `METRICS_OUTPUT_PATH` is a **file** path, not a directory. It is resolved against the process working directory, and its parent is created recursively. Point it somewhere outside the repo unless you actually want to preview the page, since `site/insights/data.json` is gitignored precisely so the artefact never lands in a commit.
 
-Two lines on stdout, and a third on stderr only if the bundle is at or above the 80 % warning mark (§10.3):
+Two lines on stdout, and a third on stderr only if the bundle is at or above the 80 % warning mark (§10.3). Real output, run against a fresh clone of `metrics-data` on 2026-09-02 — the two counts and the byte total grow with the archive, so treat them as the shape rather than as values to match:
 
 ```
-archive /path/to/metrics-data: since 2026-02-15 — 2 days of views, 1 releases
-wrote /tmp/data.json: 3087 bytes of the 2097152-byte budget (downsampled: no, daily)
+archive /path/to/metrics-data: since 2026-02-15 — 14 days of views, 1 releases
+wrote /tmp/data.json: 3550 bytes of the 2097152-byte budget (downsampled: no, daily)
 ```
 
-**A missing `METRICS_DATA_DIR` is the empty case, not an error.** The bundler exits 0 and writes a valid `empty: true` bundle, because `store.read` collapses `ENOENT` — and only `ENOENT` — to "absent". Every other failure (an unreadable directory, a data dir that is really a file, a corrupt CSV, a bundle still over budget after downsampling) exits non-zero, which fails the deploy. See §10.5.
+**"Missing" means two different things here, with opposite outcomes. Do not conflate them.**
+
+- **A missing archive *directory* is the empty case, not an error.** `METRICS_DATA_DIR` is set, but nothing exists at that path: the bundler exits **0** and writes a valid `empty: true` bundle, because `store.read` collapses `ENOENT` — and only `ENOENT` — to "absent". This is the behaviour `deploy-pages.yml` depends on when the `metrics-data` branch does not exist (§10.5).
+- **A missing *environment variable* is an error.** Either variable unset, empty, or whitespace-only fails `requiredEnv` before anything is read, and the bundler exits **1** with `Missing required environment variable <NAME>` — the empty and whitespace-only cases adding `(present but empty or whitespace-only)`.
+
+Every other failure also exits non-zero and fails the deploy: an unreadable directory (`EACCES`), a data dir that is really a file (`ENOTDIR`), a corrupt CSV, or a bundle still over budget after downsampling.
 
 To preview the page itself, write the bundle to `site/insights/data.json` and serve `site/` over HTTP — the page fetches `data.json` relative and same-origin, so a browser will block the request from a `file://` page.
 
@@ -463,7 +468,7 @@ Downsampling only on failure is the point of the order. Doing it unconditionally
 
 **The 80 % warning.** `BUNDLE_WARN_BYTES` is `Math.floor(BUNDLE_BUDGET_BYTES * 0.8)` = **1 677 721 bytes**. At or above it, `cli-bundle.ts` prints `budgetWarning`'s message to **stderr** as the last line of an otherwise-green run, and the build still passes. The threshold is picked from what the archive actually does rather than from habit: it grows by roughly 68 KB a year, so the 419 431 bytes between the mark and the budget are about **six years** of lead time — enough to schedule the decision instead of meeting it as a fait accompli in a deploy log. A lower mark would fire for a decade before it meant anything, and a warning nobody reads by the time it matters is not a warning. The message says which side of the cliff the bundle is on, because the next event differs: a daily bundle nearing the budget gets downsampled, while a bundle that is *already* weekly has no reduction left and the next step is a failed build.
 
-**The throw is the designed terminal state, not a gap in the design.** Nothing is ever truncated to fit: dropping the oldest history would silently destroy the only surviving copy of data GitHub deletes after 14 days, which is what this archive exists to prevent, and publishing an oversized bundle moves the regression from a red CI run to a visitor's first paint. **`dimensions` is the unbounded component.** Every other part of the payload is either bounded or downsamplable. `latest` is capped at ten entries per file and `trajectories` at five, but `snapshots` gains one element per day forever and every trajectory's `delta` gains one alongside it — and weekly bucketing cannot touch any of them without redefining what a trajectory means. So the error message names the right lever — cap the release list or the dimension history, or raise the budget deliberately — rather than suggesting a reduction that does not exist. At the live bundle's current size the mark is over two decades away.
+**The throw is the designed terminal state, not a gap in the design.** Nothing is ever truncated to fit: dropping the oldest history would silently destroy the only surviving copy of data GitHub deletes after 14 days, which is what this archive exists to prevent, and publishing an oversized bundle moves the regression from a red CI run to a visitor's first paint. **`dimensions` is the unbounded component.** Every other part of the payload is either bounded or downsamplable. Within `dimensions`, two of the three parts are bounded: `trajectories` at five per file by `TRAJECTORY_LIMIT`, and `latest` by GitHub's own top-10-per-snapshot response shape (§3.2) rather than by any cap in this package. The third is not. `snapshots` gains one element per day forever, every trajectory's `delta` gains one alongside it, and weekly bucketing cannot touch either without redefining what a trajectory means. So the error message names the right lever — cap the release list or the dimension history, or raise the budget deliberately — rather than suggesting a reduction that does not exist. At the live bundle's current size the mark is over two decades away.
 
 ### 10.4 Vendoring
 
