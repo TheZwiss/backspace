@@ -1,4 +1,5 @@
 import { getDb } from '../../../db/index.js';
+import { normalizeOriginForCompare } from '../../../utils/federationAuth.js';
 import { and } from 'drizzle-orm';
 import type { FederationRelayEvent } from '@backspace/shared';
 import { processDmCallAcceptEvent, processDmCallEndEvent, processDmCallRejectEvent, processDmCallStartEvent, processDmTypingStartEvent, processDmTypingStopEvent } from './calls.js';
@@ -25,6 +26,19 @@ export async function processRelayEvents(
   const accepted: string[] = [];
   const rejected: Array<{ messageId: string; reason: string }> = [];
   const undeliverable: Array<{ messageId: string; reason: string }> = [];
+
+  // Structural invariant. Every per-event attribution check downstream reads
+  // `sourceInstance` as if it were the signing peer, so the two MUST already be
+  // the same instance. The HTTP boundary rejects a mismatched batch with 403
+  // before it gets here; this re-assertion means no caller — present or future,
+  // HTTP or in-process — can feed the pipeline a source the peer did not prove.
+  if (normalizeOriginForCompare(sourceInstance) !== normalizeOriginForCompare(peerOrigin)) {
+    console.error(`[federation-relay] Refusing batch: sourceInstance=${sourceInstance} is not the authenticated peer ${peerOrigin}`);
+    for (const event of events) {
+      rejected.push({ messageId: event.messageId, reason: 'source_peer_mismatch' });
+    }
+    return { accepted, rejected, undeliverable };
+  }
 
   for (const event of events) {
     try {

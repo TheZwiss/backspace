@@ -436,6 +436,16 @@ Client-driven LWW whole-registry push (same pattern as `profileSync.ts`):
 
 `replicatedInstances` continues to serve S2S topology relay — it tells the federation layer which peers to relay events to. The registry is a superset that also includes disconnected, unreachable, and auth-expired entries. The two are maintained independently.
 
+### Load-bearing for inbound attribution
+
+Both records are now read by the **home** instance's S2S attribution check (`localUserActsOnPeer`, see [federation.md §3](federation.md#3-identity-resolution)). A homeward relay — a peer asserting an event authored by one of *our* users — is only accepted when that user has a registry row or a `replicatedInstances` entry for the signing peer. Either record satisfies the check, so a failed `PUT` on one path does not lock the user out.
+
+Consequences to keep in mind when touching this code:
+
+- **Never widen the write path.** Both endpoints are authenticated and scoped to `request.userId`. A route that let anyone else write these rows would hand a peer the ability to grant itself attribution authority over a user.
+- **Do not prune on disconnect.** `disconnectInstance` keeps the registry row (status `disconnected`) rather than deleting it. Deleting it would break attribution for events still in flight from that remote, and for retried outbox deliveries. `forceRemoveEntry` *does* drop the row — that is the intended way to revoke a remote's standing to act as you, and it takes effect on the next `syncRegistry()` push.
+- **The sync-ready gate matters.** The degraded-mode behaviour described above (local Map populated, `PUT` suppressed) is safe *because* it never wipes server rows — the server keeps the authoritative record the check reads.
+
 ---
 
 ## 8. Outbound Peering Gate (client surfaces)

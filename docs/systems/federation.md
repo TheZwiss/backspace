@@ -526,6 +526,9 @@ Two layers of replay protection:
 3. Re-serialize request body to JSON: `JSON.stringify(request.body)`
 4. `verifySignature(bodyString, signature, peer.hmacSecret, timestamp, nonce)` -- reject if false
 5. Nonce enforcement: duplicate nonce → 409, missing nonce from ratcheted peer → 401, legacy peer → warn
+6. **Source-to-peer binding:** `normalizeOriginForCompare(body.sourceInstance)` must equal `normalizeOriginForCompare(peer.origin)` -- otherwise `403`
+
+**Source-to-peer binding.** The HMAC proves *who sent* the request; `body.sourceInstance` is only what the body *claims*, and every per-event attribution check downstream reads it. Step 6 collapses the two: a batch is only processed when its claimed origin is the peer that actually signed it. An honest sender always stamps its own `getOurOrigin()` there (`federationWorker.ts`), so a mismatch is never a legitimate configuration -- it is one peer speaking as another. `processRelayEvents` re-asserts the same equality as a structural invariant and rejects every event in the batch with `source_peer_mismatch` if it does not hold, so no caller -- HTTP or in-process (`federationPeerActivation.ts` initial sync) -- can feed the pipeline a source the peer did not prove.
 
 **Important:** The body is re-serialized server-side. This means Fastify's JSON parsing and re-stringification must produce identical output to the sender's `JSON.stringify`. In practice this works because both sides use standard `JSON.stringify` with no custom replacers.
 
@@ -603,12 +606,49 @@ Locations where normalization is applied:
 - `dm.ts:743` -- normalizes target homeInstance before peer origin comparison
 
 **Attribution verification (`verifyAttribution`):**
-- `verifyAttribution(actingUserHomeInstance, sourceInstance)` normalizes both via `extractDomain` and compares
-- Two valid cases:
-  1. **Direct**: `authorDomain === sourceDomain` — standard S2S, peer sends events for its own users
-  2. **Homeward relay**: `authorDomain === extractDomain(getOurOrigin())` — a client-federation user sent a message on a remote server, and the S2S relay forwards it back to the author's home instance
-- Applied as the FIRST check in every relay event processor (13+ handlers) — before user resolution or DB writes
-- Prevents malicious peers from forging events attributed to users on *unrelated* instances (neither source nor receiver)
+
+```typescript
+verifyAttribution(actor: RelayActor | null | undefined, sourceInstance: string, db): boolean
+// RelayActor = { homeUserId: string; homeInstance: string }
+```
+
+The actor is passed as a **pair**. A `homeUserId` on its own is not an identity — the column is only unique within one instance — so the signature makes it impossible to attribute an event from an id alone. `sourceInstance` is the HMAC-authenticated peer (bound at the relay boundary, §2), so this is a check against *who actually signed the batch*, never against a self-declared origin.
+
+Two valid cases:
+
+1. **Direct**: `authorDomain === sourceDomain`. A peer is the identity authority for its own users.
+2. **Homeward relay**: `authorDomain === extractDomain(getOurOrigin())` — a client-federation user (e.g. `erin@nova` logged into `orbit`) acted on the remote and the relay carries the event back to their home instance. Accepted **only** when `localUserActsOnPeer(homeUserId, sourceInstance, db)` holds.
+
+An actor homed on a third instance is always rejected: the signing peer is neither that instance's identity authority nor delegated by it.
+
+**`localUserActsOnPeer(homeUserId, peerOrigin, db)`** — does the natively-homed local user hold a federated account on the signing peer? This is the whole content of a legitimate homeward relay: such an event can only genuinely exist if the user connected to that peer and acted there. Two records are consulted, both written *exclusively by the user themselves* over an authenticated session on this instance:
+
+| Record | Written by | Notes |
+|---|---|---|
+| `user_federation_registry` row `(user_id, origin)` | `PUT /api/users/@me/federation-registry`, scoped to `request.userId` | Any lifecycle status counts — a connection that is `disconnected` / `auth_expired` today was still real |
+| `users.replicated_instances` JSON entry | `PATCH /api/users/@me`, same scoping | Client-federation topology list |
+
+The actor must resolve to a **native** row (`home_instance IS NULL`, `is_deleted = 0`). A replicated stub that merely carries the same `home_user_id` never satisfies a homeward claim. Origins are compared with `normalizeOriginForCompare` (port-preserving), and malformed `replicated_instances` JSON fails closed.
+
+A peer cannot forge either record, so it cannot manufacture standing to speak for a user who never connected to it. Without this binding, any admin-approved peer could relay events attributed to any local user — including auto-creating a 1-on-1 DM channel between two local users from a forged author pair.
+
+**Residual, in-model exposure:** an instance the user *has* connected to can act as them there — that is what holding an account on it means. Connecting to a remote is therefore a trust decision about that operator, and disconnecting does not revoke it (registry rows persist by design, so history keeps resolving). This is a property of the federation model, not a gap in the check.
+
+**Coverage.** Applied as the FIRST check in every relay event processor, before user resolution or any DB write:
+
+| Handler file | Events guarded | Actor field |
+|---|---|---|
+| `events/dmMessages.ts` | `create`, `update`, `reaction_add`, `reaction_remove` | `message`, `reaction` |
+| `events/membership.ts` | `member_add` (bootstrap + add), `member_remove` (self-leave), `ownership_transfer` | `group.owner`, `membership.addedBy`, `membership.user`, `ownership.previousOwner` |
+| `events/friends.ts` | `friend_request_create/update/cancel`, `friend_add`, `friend_remove` | `friendship.from` / `.to` (`friend_remove` accepts either side) |
+| `events/calls.ts` | `dm_call_start/accept/reject/end`, `dm_typing_start/stop` | `call.caller` / `.acceptor` / `.rejector` / `.endedBy`, `typing` |
+| `events/dmState.ts` | `read_state_update`, `dm_close`, `dm_reopen` | `readState.user`, `dmCloseReopen` |
+
+`read_state_update`, `dm_close`, `dm_reopen` and the two typing events were previously unguarded — they resolved an actor from a bare `home_user_id` with no verification at all, which let any peer ack, close or reopen a DM as any user. They now run the same check as the rest.
+
+**Transitive relays are not accepted.** An event whose actor is homed on neither the signing peer nor this instance is rejected, even when all three are peered. In a 3-instance group DM where a client-federation user acts on a remote, the remote's relay reaches the user's home instance (homeward) but not the *third* instance. This limitation is not new — it has always applied to `create`, `member_add`, reactions and the friend events — and the newly-guarded events now share it rather than diverging from it. Making that case work needs a signed origin-attestation the relaying peer can forward, which is a protocol change, not an attribution relaxation.
+
+`profile_update` and `presence_update` (`profile.ts`, `events/dmState.ts`) use a **stricter** rule that predates this and is deliberately kept: the payload's `homeInstance` must equal the source domain outright, with no homeward branch — only a user's own home instance may mutate their profile or presence here. `group_metadata_update` gates on `dm_channels.owner_home_instance` instead. `file_rejected` carries no user attribution (it is a system event from the rejecting peer).
 
 All origin comparisons use `extractDomain()` or `getOurOrigin()` with normalization, handling both bare domains and full URLs consistently.
 - `federation.ts:2447` -- same pattern in `processFriendRemoveEvent`

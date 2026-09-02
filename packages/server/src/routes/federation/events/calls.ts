@@ -24,7 +24,7 @@ export function processDmCallStartEvent(
   }
 
   // Attribution: caller must belong to source instance
-  if (!verifyAttribution(event.call.caller.homeInstance, sourceInstance)) {
+  if (!verifyAttribution(event.call.caller, sourceInstance, db)) {
     console.warn(`[federation] Attribution mismatch in dm_call_start: caller=${extractDomain(event.call.caller.homeInstance)} source=${extractDomain(sourceInstance)}`);
     rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
     return;
@@ -218,7 +218,7 @@ export function processDmCallAcceptEvent(
     return;
   }
 
-  if (!verifyAttribution(event.call.acceptor.homeInstance, sourceInstance)) {
+  if (!verifyAttribution(event.call.acceptor, sourceInstance, db)) {
     rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
     return;
   }
@@ -302,7 +302,7 @@ export function processDmCallRejectEvent(
     return;
   }
 
-  if (!verifyAttribution(event.call.rejector.homeInstance, sourceInstance)) {
+  if (!verifyAttribution(event.call.rejector, sourceInstance, db)) {
     rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
     return;
   }
@@ -362,7 +362,7 @@ export function processDmCallEndEvent(
     return;
   }
 
-  if (!verifyAttribution(event.call.endedBy.homeInstance, sourceInstance)) {
+  if (!verifyAttribution(event.call.endedBy, sourceInstance, db)) {
     rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
     return;
   }
@@ -426,6 +426,12 @@ export function processDmTypingStartEvent(
     return;
   }
 
+  // Attribution: the peer must be entitled to speak for the typing identity.
+  if (!verifyAttribution(event.typing, sourceInstance, db)) {
+    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+    return;
+  }
+
   // Look up local channel by federatedId
   const channel = db.select()
     .from(schema.dmChannels)
@@ -479,6 +485,12 @@ export function processDmTypingStopEvent(
 ): void {
   if (!event.typing || !event.federatedId) {
     rejected.push({ messageId: event.messageId, reason: 'missing_typing_payload' });
+    return;
+  }
+
+  // Attribution: the peer must be entitled to speak for the typing identity.
+  if (!verifyAttribution(event.typing, sourceInstance, db)) {
+    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
     return;
   }
 
