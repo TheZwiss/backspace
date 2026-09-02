@@ -242,7 +242,7 @@ unconditionally (`if: always()`), on every run, using `GITHUB_TOKEN` with `actio
 
 The dashboard carries a staleness banner as a partial second backstop (§10.6): it compares `meta.last_run` against the bundle's own `generated_at` and warns above 48 hours, and it warns unconditionally whenever `meta.error` is non-null. **Partial, and the limit is exactly the failure mode this section is about.** The banner's reference clock is `generated_at`, not the visitor's clock, so it only fires once something rebuilds the bundle after the collector stalled. If the schedule is disabled, `metrics.yml` never runs, `deploy-dashboard` never runs, and the published bundle freezes with both timestamps close together — a page that looks healthy because nothing is measuring the gap. A push under `site/**` or a `workflow_dispatch` of `deploy-pages.yml` rebuilds the bundle and makes the banner fire.
 
-So the reliable check for this specific hazard is still `meta.json`'s `last_run`/`last_success` on the tip of `metrics-data`, read by hand or by a script. The banner catches a collector that is failing while the rest of the pipeline still runs; it does not catch a collector that stopped being scheduled at all.
+So the reliable check for this specific hazard is still `meta.json`'s `last_run`/`last_success` on the tip of `metrics-data`, read by hand or by a script. The banner is not a nightly backstop for either case: `deploy-dashboard` carries `needs: collect` (§10.5), so a collector that is merely failing stops the republish just as surely as one that stopped being scheduled, and in both cases the banner stays silent until something else rebuilds the bundle.
 
 ---
 
