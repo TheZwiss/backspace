@@ -562,3 +562,22 @@ Persistent registry of all instances a user has federated with. Tracks full life
 | error_message | TEXT | | Last error message |
 
 **PK:** `(user_id, origin)`
+
+### user_federation_credentials
+Per-remote credential this user's client presents when registering or logging in as itself on **another** instance. Added 2026-09-02 (migration `0011_loose_boomer`) to replace the previous scheme, where the client reused the account's home password verbatim on every remote it connected to.
+
+**Home-instance-only state.** The row is written and read exclusively by the account's own home instance, is never federated, and never leaves the home server except to that account's authenticated client (`POST /api/users/@me/federation-credential`). The endpoint 409s for a replicated federated account precisely so that exactly one secret exists per (user, remote) no matter which instance the user browses from — a second issuer would hand the same remote account a divergent secret and lock the user out of it from every other device. Detached accounts (`federation_home_orphaned = 1`) are sovereign and DO issue their own.
+
+| Column | Type | Constraints | Purpose |
+|--------|------|-------------|---------|
+| user_id | TEXT | NOT NULL, FK→users(id) CASCADE | Owner |
+| origin | TEXT | NOT NULL | Remote origin, canonical `https://host[:port]` lowercased |
+| secret | TEXT | NOT NULL | 32-byte CSPRNG, base64url. No relation to the account password or to any other remote's secret |
+| created_at | INTEGER | NOT NULL | Epoch ms |
+| provisioned_at | INTEGER | | Epoch ms, set-once. NULL = the remote account may still carry a credential this instance did not issue (a connection predating this table), so the client rotates it the next time it holds a live session there |
+
+**PK:** `(user_id, origin)`
+
+**Lifecycle:** created get-or-create with `onConflictDoNothing` + re-read (first-writer-wins — a racing write never replaces a stored secret). Deleted by `tombstoneUser` (explicitly: a tombstone keeps the `users` row, so the CASCADE never fires and live credentials would otherwise outlive the account) and by `POST /api/users/@me/federation-identity/delete` in `soft`/`full` mode. **Not** deleted in `leave` mode — the remote account survives and keeps authenticating with the secret.
+
+**Migration note:** `0011` is a bare `CREATE TABLE`. It reads and rewrites nothing, so it is forward-safe on a populated database and idempotent on re-run. Restoring a **pre-**`0011` backup into a **post-**`0011` deployment works — `migrate()` re-applies `0011` on boot — but any credential rows written after the snapshot are lost, and the client will mint fresh secrets for those origins. Recovery is automatic while a remote token is still valid (`provisioned_at` comes back NULL, so `ensureRemoteCredential` rotates the remote onto the new secret); otherwise the user re-authenticates through the per-instance login form once. See `deployment.md`.

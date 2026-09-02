@@ -39,7 +39,7 @@ export function useInstanceConnect() {
     } catch (err) {
       let message: string;
       if (err instanceof DifferentPasswordError) {
-        message = 'An account already exists on this instance with a different password. Enter the password for that account.';
+        message = 'An account already exists on this instance and it does not accept the credential your home instance issued. Sign in with the password you set on that instance.';
       } else if (err instanceof Error) {
         message = err.message;
       } else {

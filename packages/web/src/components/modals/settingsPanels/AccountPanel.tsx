@@ -12,7 +12,6 @@ import { waitForTransferAttachment } from '../../../utils/waitForTransfer';
 import { getAvatarGradient, adjustColor, mutedGradient, AVATAR_GRADIENT_MAP, BANNER_COLOR_PRESETS } from '../../../utils/gradients';
 import { AVATAR_COLORS } from '@backspace/shared';
 import type { User, UserStatus, AvatarColor } from '@backspace/shared';
-import type { FederationOpResult } from '../../../utils/federationOps';
 export function AccountPanel() {
   const user = useAuthStore((s) => s.user);
   const updateProfile = useAuthStore((s) => s.updateProfile);
@@ -68,7 +67,6 @@ export function AccountPanel() {
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [passwordLoading, setPasswordLoading] = useState(false);
-  const [passwordResults, setPasswordResults] = useState<FederationOpResult[] | null>(null);
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
 
@@ -258,7 +256,6 @@ export function AccountPanel() {
 
   const handleChangePassword = async () => {
     setPasswordError('');
-    setPasswordResults(null);
 
     if (newPassword.length < 8) {
       setPasswordError('New password must be at least 8 characters');
@@ -271,19 +268,11 @@ export function AccountPanel() {
 
     setPasswordLoading(true);
     try {
-      const results = await changePassword(currentPassword, newPassword);
+      await changePassword(currentPassword, newPassword);
       addToast('Password changed', 'success', 2000);
       setCurrentPassword('');
       setNewPassword('');
       setConfirmNewPassword('');
-
-      if (results.length > 0) {
-        setPasswordResults(results);
-      }
-
-      setTimeout(() => {
-        setPasswordResults(null);
-      }, 5000);
     } catch (err) {
       setPasswordError(err instanceof Error ? err.message : 'Failed to change password');
     } finally {
@@ -731,21 +720,6 @@ export function AccountPanel() {
           {passwordError && (
             <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-xs">{passwordError}</div>
           )}
-          {passwordResults && passwordResults.length > 0 && (
-            <div className="space-y-1">
-              {passwordResults.map(r => (
-                <div key={r.origin} className="flex items-center justify-between text-xs px-2 py-1 rounded bg-white/[0.02]">
-                  <span className="text-txt-secondary">{r.origin}</span>
-                  {r.success ? (
-                    <span className="text-status-online">Synced</span>
-                  ) : (
-                    <span className="text-txt-danger" title={r.error}>Failed — will sync on reconnect</span>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-
           <button
             type="submit"
             disabled={passwordLoading || !currentPassword || !newPassword || !confirmNewPassword}

@@ -525,6 +525,30 @@ export const userFederationRegistry = sqliteTable('user_federation_registry', {
   pk: primaryKey({ columns: [table.userId, table.origin] }),
 }));
 
+// Per-remote credential this user's client presents when registering or logging
+// in as itself on ANOTHER instance. Home-instance-only state: the row is written
+// and read exclusively by the account's own home instance, is never federated,
+// and never leaves the home server except to the account's authenticated client.
+//
+// Why it exists: the client used to reuse the account's home password verbatim
+// for every remote it connected to, handing a reusable home credential to every
+// remote operator. Each remote now gets its own high-entropy secret with no
+// relationship to the home password or to any other remote's secret.
+//
+// `provisionedAt` is the migration marker: NULL means the remote account may
+// still be carrying a credential this instance did not issue (a pre-existing
+// connection), so the client rotates it the next time it holds a live session
+// there. Set once the remote account is known to use `secret`.
+export const userFederationCredentials = sqliteTable('user_federation_credentials', {
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  origin: text('origin').notNull(),
+  secret: text('secret').notNull(),
+  createdAt: integer('created_at').notNull(),
+  provisionedAt: integer('provisioned_at'),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.userId, table.origin] }),
+}));
+
 export const inviteLinks = sqliteTable('invite_links', {
   id: text('id').primaryKey(),
   token: text('token').notNull().unique(),

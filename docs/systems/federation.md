@@ -581,6 +581,12 @@ Two layers of replay protection:
 
 Any code path that sets `ownerId`, creates a `dm_members` row, or inserts a message MUST use `resolveOrCreateReplicatedUser`. Using `resolveLocalUser` with a `?? null` fallback can cause data corruption (e.g., `ownerId` set to null for group DMs).
 
+### Credentials are per-instance, not per-identity
+
+A federated identity spans instances; its **credentials do not**. Since 2026-09-02 a client-created federated account authenticates with a per-remote secret issued by the identity's home instance (`user_federation_credentials`, `POST /api/users/@me/federation-credential`), not with the account's home password — so `password_hash` on a peer is a credential for that peer alone and carries no authority anywhere else. Nothing in the S2S protocol transports it: peering is HMAC-secret based, relay attribution is `(homeUserId, homeInstance)` bound to the authenticated peer, and re-attach proves identity with a one-time home-minted token (§"S2S Detached-Account Re-Attach Proof"). Full contract in `auth.md` §5b and `client-federation.md` §1.
+
+One coupling remains, and it predates this: the login self-heal in `auth.ts` §4 forwards a password submitted to a peer to the identity's home instance, so a password typed directly into a peer's login form is still meaningful on the home. That is the human login path, not an S2S one — see the residual-exposure note in `auth.md` §5b.
+
 ### Origin Normalization
 
 **Two formats exist in the database:**

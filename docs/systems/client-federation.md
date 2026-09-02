@@ -54,7 +54,7 @@ Backspace supports **client-side federation**: a single app session (web or desk
 
 ## 1. Federated Account Creation
 
-When a user adds a remote instance via the Connections settings to **join a space there**, the client creates (or logs into) an account on that instance. As of 2026-04-25, this is no longer required for friending or messaging users on a remote instance — those flows are fully S2S (see `social.md` §6 and `federation.md` §4 respectively). Federated accounts remain real loginable accounts and retain all capabilities (login, space membership, password sync, deletion).
+When a user adds a remote instance via the Connections settings to **join a space there**, the client creates (or logs into) an account on that instance. As of 2026-04-25, this is no longer required for friending or messaging users on a remote instance — those flows are fully S2S (see `social.md` §6 and `federation.md` §4 respectively). Federated accounts remain real loginable accounts and retain all capabilities (login, space membership, deletion). Since 2026-09-02 they no longer share the home password: each one authenticates with a per-remote secret the home instance issues (see "Per-Remote Credentials" below and `auth.md` §5b).
 
 This is a **real account with a real bcrypt password** — not a replicated stub.
 
@@ -70,21 +70,33 @@ Key distinction: **Federated accounts** and **replicated stubs** can have the sa
 
 The merge migration in `migrate.ts` detects when both exist for the same remote user and merges them (real account always wins).
 
+### Per-Remote Credentials
+
+The password the user types is a credential for **one** instance — their home. It is never forwarded to any other instance. Instead the home instance issues a distinct high-entropy secret per remote origin (`POST /api/users/@me/federation-credential`, backed by `user_federation_credentials`), and that secret is what the remote account is registered and logged in with. Full contract in `auth.md` §5b; table in `database.md`.
+
+Two consequences shape the client:
+
+- **Credentials are minted by the account's TRUE home, not by the instance being browsed.** `resolveCredentialHomeApi()` returns the home connection's API client (the primary connection when browsing home natively, else a connected secondary instance for the home domain). If two instances each issued their own secret for the same remote, the remote account would end up with one of them and the user would be locked out of it everywhere else. When no home session is available, `connectToRemote` fails with a message naming the home rather than minting a divergent secret. A detached account (`federationHomeOrphaned`) is sovereign and issues its own.
+- **`ensureRemoteCredential(instance, { force? })` is the single reconciliation point.** Every path that establishes a remote session calls it — `connectToRemote`, `loginToRemote` (with `force`), and the token reconnect in `autoConnectAll`. It rotates the remote account onto the issued secret when the home's `provisioned` flag says the account may still carry something else, and refuses unless the remote account is this user's own federated identity (`homeInstance` **and** `homeUserId` both match).
+
 ### Connection Flow (`connectToRemote`)
 
 When a user adds a remote instance via the Connections settings:
 
-1. **Verify home password** — client confirms the user's password against the home instance
-2. **Compute federated username** — `{bareUsername}@{homeHost}` (e.g., `erin@nova.ddns.net`)
-3. **Try registration** on remote instance with:
+1. **Target is the account's own home** — log in with the entered password under the bare username. Nothing below applies.
+2. **Resolve the home API client** — `resolveCredentialHomeApi()`; if there is no home session, throw naming the home instance.
+3. **Verify the entered password against the home instance** — `homeApi.users.verifyPassword`. The target never sees it.
+4. **Fetch the per-remote secret** — `homeApi.users.federationCredential({ origin })`.
+5. **Compute federated username** — `{bareUsername}@{homeHost}` (e.g., `erin@nova.ddns.net`)
+6. **Try registration** on the remote instance with:
    - Username: `erin@nova.ddns.net`
-   - Password: same as home instance password
+   - Password: **the issued secret**
    - `homeInstance`: `nova.ddns.net` (bare domain)
    - `homeUserId`: user's Snowflake ID on home instance
-4. **If registration fails** (account already exists) — fall back to login
-5. **On success** — store JWT token, create API client, open WebSocket, sync profile
+7. **If registration fails** (account already exists) — log in with the issued secret. There is deliberately **no** retry with the entered password; an account that rejects the issued secret surfaces `DifferentPasswordError` and the explicit per-instance login form, where the user chooses what to send.
+8. **On success** — mark the credential provisioned, store JWT token, create API client, open WebSocket, sync profile
 
-The same password is used across all instances. Password changes on the home instance are synced to remote instances automatically.
+Password changes on the home instance are **not** propagated to remote instances — there is nothing to propagate, since no remote holds the home password.
 
 ### Automatic Re-Attach on Connect (`maybeAutoReattach`, re-attach spec §3.4)
 
@@ -127,7 +139,6 @@ interface ConnectedInstance {
 interface InstanceState {
   instances: ConnectedInstance[];
   _autoConnectDone: boolean;    // Has startup reconnection finished?
-  pendingSyncOrigins: string[]; // Instances needing password sync
 }
 ```
 

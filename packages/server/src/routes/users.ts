@@ -1,9 +1,10 @@
 import type { FastifyInstance } from 'fastify';
-import { eq, or, and, inArray } from 'drizzle-orm';
+import { eq, or, and, inArray, isNull } from 'drizzle-orm';
+import { randomBytes } from 'node:crypto';
 import { getDb, schema } from '../db/index.js';
 import { authenticate, verifyPassword, hashPassword, signJwt } from '../utils/auth.js';
 import { connectionManager } from '../ws/handler.js';
-import type { UpdateUserRequest, VerifyPasswordRequest, VerifyPasswordResponse, ChangePasswordRequest, ChangePasswordResponse, DeleteAccountRequest, ReplicatedInstance, SpaceLayoutItem, SpaceFolder, Activity, FederationIdentityDeleteRequest, FederationIdentityDeleteResponse, FederationIdentityDeleteResult, FederationProfileUpdatePayload } from '@backspace/shared';
+import type { UpdateUserRequest, VerifyPasswordRequest, VerifyPasswordResponse, ChangePasswordRequest, ChangePasswordResponse, DeleteAccountRequest, FederationCredentialRequest, FederationCredentialResponse, ReplicatedInstance, SpaceLayoutItem, SpaceFolder, Activity, FederationIdentityDeleteRequest, FederationIdentityDeleteResponse, FederationIdentityDeleteResult, FederationProfileUpdatePayload } from '@backspace/shared';
 import { AVATAR_COLORS } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteUploadFile, deleteAttachmentByFilename } from '../utils/fileCleanup.js';
@@ -12,9 +13,32 @@ import { queueOutboxEvent, isFederationRelayEnabled, appendMutationLog } from '.
 import { generateSnowflake } from '../utils/snowflake.js';
 import { resizeProfileImage } from '../utils/thumbnail.js';
 import { config } from '../config.js';
-import { buildFederationHeaders, getOurOrigin } from '../utils/federationAuth.js';
+import { buildFederationHeaders, getOurOrigin, normalizeOriginForCompare, canonicalizeHomeInstance } from '../utils/federationAuth.js';
 import { extractDomain } from './federation.js';
 import path from 'path';
+
+/**
+ * Canonicalize a caller-supplied remote instance origin to the single storage
+ * form `https://host[:port]` (lowercased, no path, no trailing slash) so that
+ * `orbit.test`, `orbit.test/`, and `https://Orbit.test` all resolve to the same
+ * credential row instead of minting three unrelated secrets for one instance.
+ * Returns null when the value is not a usable http(s) origin.
+ */
+export function canonicalRemoteOrigin(value: string): string | null {
+  const canonical = canonicalizeHomeInstance(value);
+  if (!canonical) return null;
+  if (canonical.length > 512) return null;
+  let url: URL;
+  try {
+    url = new URL(canonical);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
+  // Same host charset the registration route enforces on `homeInstance`.
+  if (!/^[a-z0-9.-]+$/.test(url.hostname) || url.hostname.length > 253) return null;
+  return url.origin.toLowerCase();
+}
 
 /** Validates that a URL is a safe asset URL (relative upload path, bare filename, or http/https) */
 export function isValidAssetUrl(url: string | null | undefined): boolean {
@@ -683,6 +707,92 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(200).send({ ok: true, updatedAt });
   });
 
+  // POST /api/users/@me/federation-credential — issue (or re-read) the per-remote
+  // credential this account's client uses to register/log in on ANOTHER instance.
+  //
+  // Get-or-create with first-writer-wins semantics: the row is inserted with
+  // `onConflictDoNothing` and then re-read, so two clients racing for the same
+  // (user, origin) converge on one secret instead of overwriting each other and
+  // locking the loser out of the remote account.
+  //
+  // Only an account that is sovereign HERE may hold credentials here: a
+  // replicated federated account's credentials are issued by its own home
+  // instance, so that one secret exists per (user, remote) no matter which
+  // instance the user happens to be browsing. Detached accounts
+  // (`federationHomeOrphaned = 1`) have no home left to ask and follow the LOCAL
+  // rule, mirroring change-password and account deletion (detach spec §4.4).
+  app.post<{ Body: FederationCredentialRequest }>('/api/users/@me/federation-credential', {
+    preHandler: authenticate,
+  }, async (request, reply) => {
+    const { origin, markProvisioned } = request.body ?? {};
+
+    if (!origin || typeof origin !== 'string') {
+      return reply.code(400).send({ error: 'Origin is required', statusCode: 400 });
+    }
+    const target = canonicalRemoteOrigin(origin);
+    if (!target) {
+      return reply.code(400).send({ error: 'Invalid origin', statusCode: 400 });
+    }
+    if (normalizeOriginForCompare(target) === normalizeOriginForCompare(getOurOrigin())) {
+      return reply.code(400).send({
+        error: 'Federation credentials are only issued for remote instances',
+        statusCode: 400,
+      });
+    }
+
+    const db = getDb();
+    const user = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
+    if (!user || user.isDeleted) {
+      return reply.code(401).send({ error: 'This account has been deleted', statusCode: 401 });
+    }
+    if (user.homeInstance && user.federationHomeOrphaned !== 1) {
+      return reply.code(409).send({
+        error: 'Federation credentials are issued by your home instance',
+        statusCode: 409,
+      });
+    }
+
+    const now = Date.now();
+    db.insert(schema.userFederationCredentials)
+      .values({
+        userId: request.userId,
+        origin: target,
+        secret: randomBytes(32).toString('base64url'),
+        createdAt: now,
+        provisionedAt: markProvisioned === true ? now : null,
+      })
+      .onConflictDoNothing()
+      .run();
+
+    if (markProvisioned === true) {
+      db.update(schema.userFederationCredentials)
+        .set({ provisionedAt: now })
+        .where(and(
+          eq(schema.userFederationCredentials.userId, request.userId),
+          eq(schema.userFederationCredentials.origin, target),
+          isNull(schema.userFederationCredentials.provisionedAt),
+        ))
+        .run();
+    }
+
+    const row = db.select().from(schema.userFederationCredentials)
+      .where(and(
+        eq(schema.userFederationCredentials.userId, request.userId),
+        eq(schema.userFederationCredentials.origin, target),
+      ))
+      .get();
+    if (!row) {
+      return reply.code(500).send({ error: 'Failed to issue federation credential', statusCode: 500 });
+    }
+
+    const response: FederationCredentialResponse = {
+      origin: row.origin,
+      secret: row.secret,
+      provisioned: row.provisionedAt !== null,
+    };
+    return reply.code(200).send(response);
+  });
+
   // POST /api/users/@me/federation-identity/delete — request identity deletion on remote instances via S2S
   app.post<{ Body: FederationIdentityDeleteRequest }>('/api/users/@me/federation-identity/delete', {
     preHandler: authenticate,
@@ -776,6 +886,25 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
               eq(schema.userFederationRegistry.origin, origin),
             ))
             .run();
+
+          // The remote account itself is gone in soft/full mode, so its credential
+          // is dead — drop it. In `leave` mode the remote account survives and
+          // keeps using this secret, so the row must stay or a later re-connect
+          // would mint a second secret and lock the user out of their own account.
+          if (mode !== 'leave') {
+            const canonical = canonicalRemoteOrigin(origin);
+            db.delete(schema.userFederationCredentials)
+              .where(and(
+                eq(schema.userFederationCredentials.userId, request.userId),
+                canonical && canonical !== origin
+                  ? or(
+                      eq(schema.userFederationCredentials.origin, origin),
+                      eq(schema.userFederationCredentials.origin, canonical),
+                    )
+                  : eq(schema.userFederationCredentials.origin, origin),
+              ))
+              .run();
+          }
 
           db.update(schema.users)
             .set({ federationRegistryUpdatedAt: Date.now() })

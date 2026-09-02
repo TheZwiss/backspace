@@ -35,6 +35,8 @@ import type {
   VerifyPasswordResponse,
   ChangePasswordRequest,
   ChangePasswordResponse,
+  FederationCredentialRequest,
+  FederationCredentialResponse,
   DeleteAccountRequest,
   StorageStats,
   OrphanedFile,
@@ -111,6 +113,7 @@ export class BackspaceApiClient {
     get: (id: string) => Promise<User>;
     verifyPassword: (password: string) => Promise<VerifyPasswordResponse>;
     changePassword: (data: ChangePasswordRequest) => Promise<ChangePasswordResponse>;
+    federationCredential: (data: FederationCredentialRequest) => Promise<FederationCredentialResponse>;
     deleteAccount: (data: DeleteAccountRequest) => Promise<{ success: boolean }>;
     getMutuals: (id: string, homeUserId?: string) => Promise<{ mutualFriends: User[]; mutualSpaces: { id: string; name: string; icon: string | null; avatarColor: string | null }[] }>;
     getFederationRegistry: () => Promise<{ registry: FederationRegistryEntry[]; updatedAt: number }>;
@@ -404,6 +407,8 @@ export class BackspaceApiClient {
         request<VerifyPasswordResponse>('POST', '/users/@me/verify-password', { password }),
       changePassword: (data: ChangePasswordRequest) =>
         request<ChangePasswordResponse>('POST', '/users/@me/change-password', data),
+      federationCredential: (data: FederationCredentialRequest) =>
+        request<FederationCredentialResponse>('POST', '/users/@me/federation-credential', data),
       deleteAccount: (data: DeleteAccountRequest) =>
         request<{ success: boolean }>('DELETE', '/users/@me', data),
       getMutuals: (id: string, homeUserId?: string) => {
