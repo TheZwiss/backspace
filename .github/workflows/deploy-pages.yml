@@ -53,6 +53,16 @@ jobs:
     # day, and since only one run per group stays pending, delay and then drop a
     # scheduled collection. Traffic data GitHub has already discarded cannot be
     # collected later.
+    #
+    # Two limits of this ceiling, stated so they are not rediscovered as
+    # surprises. It bounds job EXECUTION, so it does not bound a wait at the
+    # `github-pages` environment gate — an approval rule or wait timer there can
+    # hold the run, and the `metrics-data` group with it, for far longer. And a
+    # timeout cancels the job, which is the same stranding the `cancel-in-progress:
+    # false` note above exists to avoid; if a deploy ever hits this ceiling, check
+    # the environment for a stuck in-progress deployment before re-running. Both
+    # are accepted: a bounded chance of a stranded deploy beats an unbounded
+    # chance of a dropped collection.
     timeout-minutes: 15
     environment:
       name: github-pages
