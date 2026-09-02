@@ -4,8 +4,7 @@ import { getDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
 import { hasPermission, getChannelSpaceId, PermissionBits, isDmMember } from '../utils/permissions.js';
 import { fetchReactionsForMessages, fetchReplyToMessages, buildMessageWithUser } from './messages.js';
-import { fetchDmReactionsForMessages, buildDmMessageWithUser } from './dm.js';
-import { sanitizeUser } from '../utils/sanitize.js';
+import { fetchDmReactionsForMessages, fetchDmReplyToMessages, buildDmMessageWithUser } from './dm.js';
 import type { MessageWithUser, DmMessageWithUser } from '@backspace/shared';
 import { fetchEmbedsForMessages, fetchDmEmbedsForMessages } from '../utils/embedResolver.js';
 
@@ -273,40 +272,8 @@ export async function searchRoutes(app: FastifyInstance): Promise<void> {
     const reactionsMap = fetchDmReactionsForMessages(messageIds);
     const embedMap = fetchDmEmbedsForMessages(messageIds);
 
-    // Fetch reply-to messages for DMs
-    const replyToIds = messageRows
-      .map(m => m.replyToId)
-      .filter((rid): rid is string => rid !== null && rid !== undefined);
-    const uniqueReplyIds = [...new Set(replyToIds)];
-    const replyToMap = new Map<string, DmMessageWithUser>();
-    if (uniqueReplyIds.length > 0) {
-      const replyMessages = db.select()
-        .from(schema.dmMessages)
-        .where(inArray(schema.dmMessages.id, uniqueReplyIds))
-        .all();
-      const replyUserIds = [...new Set(replyMessages.map(m => m.userId))];
-      const replyUsers = replyUserIds.length > 0
-        ? db.select().from(schema.users).where(inArray(schema.users.id, replyUserIds)).all()
-        : [];
-      const replyUserMap = new Map(replyUsers.map(u => [u.id, u]));
-      for (const rm of replyMessages) {
-        const rUser = replyUserMap.get(rm.userId);
-        if (!rUser) continue;
-        replyToMap.set(rm.id, {
-          id: rm.id,
-          dmChannelId: rm.dmChannelId,
-          userId: rm.userId,
-          replyToId: rm.replyToId,
-          content: rm.content,
-          editedAt: rm.editedAt,
-          createdAt: rm.createdAt,
-          user: sanitizeUser(rUser),
-          attachments: [],
-          embeds: [],
-          reactions: [],
-        });
-      }
-    }
+    // Fetch reply-to messages for DMs, confined to this DM channel
+    const replyToMap = fetchDmReplyToMessages(id, messageRows);
 
     const results: DmMessageWithUser[] = messageRows
       .map(m => {
@@ -505,39 +472,8 @@ export async function searchRoutes(app: FastifyInstance): Promise<void> {
     const reactionsMap = fetchDmReactionsForMessages(msgIds);
     const embedMap = fetchDmEmbedsForMessages(msgIds);
 
-    const replyToIds = uniqueRows
-      .map(m => m.replyToId)
-      .filter((rid): rid is string => rid !== null && rid !== undefined);
-    const uniqueReplyIds = [...new Set(replyToIds)];
-    const replyToMap = new Map<string, DmMessageWithUser>();
-    if (uniqueReplyIds.length > 0) {
-      const replyMessages = db.select()
-        .from(schema.dmMessages)
-        .where(inArray(schema.dmMessages.id, uniqueReplyIds))
-        .all();
-      const replyUserIds = [...new Set(replyMessages.map(m => m.userId))];
-      const replyUsers = replyUserIds.length > 0
-        ? db.select().from(schema.users).where(inArray(schema.users.id, replyUserIds)).all()
-        : [];
-      const replyUserMap = new Map(replyUsers.map(u => [u.id, u]));
-      for (const rm of replyMessages) {
-        const rUser = replyUserMap.get(rm.userId);
-        if (!rUser) continue;
-        replyToMap.set(rm.id, {
-          id: rm.id,
-          dmChannelId: rm.dmChannelId,
-          userId: rm.userId,
-          replyToId: rm.replyToId,
-          content: rm.content,
-          editedAt: rm.editedAt,
-          createdAt: rm.createdAt,
-          user: sanitizeUser(rUser),
-          attachments: [],
-          embeds: [],
-          reactions: [],
-        });
-      }
-    }
+    // Reply targets are confined to this DM channel
+    const replyToMap = fetchDmReplyToMessages(id, uniqueRows);
 
     const messages: DmMessageWithUser[] = uniqueRows
       .map(m => {

@@ -5,7 +5,7 @@ import { generateSnowflake } from '../utils/snowflake.js';
 import { connectionManager } from './handler.js';
 import type { VoiceRoom, DmRoomMeta, SpaceRoomMeta } from './handler.js';
 import { isMember, getChannelSpaceId, isDmMember, isDeadOneOnOne, hasPermission, computePermissions, PermissionBits } from '../utils/permissions.js';
-import { broadcastDmMessage, getDmMessageWithUser } from '../routes/dm.js';
+import { broadcastDmMessage, getDmMessageWithUser, isDmReplyTargetInChannel } from '../routes/dm.js';
 import { MAX_MESSAGE_LENGTH, type MessageWithUser, type Attachment, type DmMessageWithUser, type Embed, type Activity, type ActivityType, type ActivityTimestamps, type ActivityAssets, type ServerEvent, type DmCallUndeliverableFailure, type DmCallUndeliverableReason } from '@backspace/shared';
 import type { CallRelayResult, CallFanoutFailure } from '../utils/federationOutbox.js';
 import { mapCallReasonToEventReason } from '../utils/federationOutbox.js';
@@ -859,6 +859,12 @@ function handleDmMessageCreate(event: Record<string, unknown>, userId: string): 
 
   if (!isDmMember(dmChannelId, userId)) {
     connectionManager.sendToUser(userId, { type: 'error', message: 'Not a member of this DM channel' });
+    return;
+  }
+
+  // A reply may only target a message in the channel it is posted into.
+  if (replyToId && !isDmReplyTargetInChannel(dmChannelId, replyToId)) {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'Invalid reply target' });
     return;
   }
 

@@ -90,6 +90,82 @@ export function fetchDmReactionsForMessages(dmMessageIds: string[]): Map<string,
 }
 
 /**
+ * Batch-fetch the reply targets for a set of DM messages, confined to one channel.
+ *
+ * A reply target only ever names a message in the same DM channel, so the lookup
+ * is scoped to `dmChannelId`. That scoping is what keeps hydration from surfacing
+ * a message belonging to a different conversation — including for rows written
+ * before the create-time guard existed.
+ *
+ * Returns a map from reply-target id to its shallow hydration (no attachments,
+ * embeds or reactions — reply previews do not render them).
+ */
+export function fetchDmReplyToMessages(
+  dmChannelId: string,
+  messages: (typeof schema.dmMessages.$inferSelect)[],
+): Map<string, DmMessageWithUser> {
+  const replyToIds = messages
+    .map(m => m.replyToId)
+    .filter((id): id is string => id !== null && id !== undefined);
+  if (replyToIds.length === 0) return new Map();
+
+  const db = getDb();
+  const uniqueReplyIds = [...new Set(replyToIds)];
+  const replyMessages = db.select()
+    .from(schema.dmMessages)
+    .where(and(
+      inArray(schema.dmMessages.id, uniqueReplyIds),
+      eq(schema.dmMessages.dmChannelId, dmChannelId),
+    ))
+    .all();
+
+  const replyUserIds = [...new Set(replyMessages.map(m => m.userId))];
+  const replyUsers = replyUserIds.length > 0
+    ? db.select().from(schema.users).where(inArray(schema.users.id, replyUserIds)).all()
+    : [];
+  const replyUserMap = new Map(replyUsers.map(u => [u.id, u]));
+
+  const map = new Map<string, DmMessageWithUser>();
+  for (const rm of replyMessages) {
+    const rUser = replyUserMap.get(rm.userId);
+    if (!rUser) continue;
+    map.set(rm.id, {
+      id: rm.id,
+      dmChannelId: rm.dmChannelId,
+      userId: rm.userId,
+      replyToId: rm.replyToId,
+      content: rm.content,
+      type: (rm.type ?? 'user') as 'user' | 'system',
+      editedAt: rm.editedAt,
+      createdAt: rm.createdAt,
+      user: sanitizeUser(rUser),
+      attachments: [],
+      embeds: [],
+      reactions: [],
+    });
+  }
+  return map;
+}
+
+/**
+ * True when `replyToId` names an existing message inside `dmChannelId`.
+ *
+ * Used by both DM message-create paths (REST and WebSocket) so a reply can only
+ * ever point at the conversation it is posted into.
+ */
+export function isDmReplyTargetInChannel(dmChannelId: string, replyToId: string): boolean {
+  const db = getDb();
+  const target = db.select({ id: schema.dmMessages.id })
+    .from(schema.dmMessages)
+    .where(and(
+      eq(schema.dmMessages.id, replyToId),
+      eq(schema.dmMessages.dmChannelId, dmChannelId),
+    ))
+    .get();
+  return target !== undefined;
+}
+
+/**
  * Pure transformer: builds a DmMessageWithUser from pre-fetched data.
  */
 export function buildDmMessageWithUser(
@@ -158,27 +234,11 @@ export function getDmMessageWithUser(dmMessageId: string): DmMessageWithUser | n
   const reactionsMap = fetchDmReactionsForMessages([dmMessageId]);
   const reactions = reactionsMap.get(dmMessageId) ?? [];
 
+  // Reply targets are confined to the message's own DM channel.
   let replyTo: DmMessageWithUser | null = null;
   if (message.replyToId) {
-    const replyMsg = db.select().from(schema.dmMessages).where(eq(schema.dmMessages.id, message.replyToId)).get();
-    if (replyMsg) {
-      const replyUser = db.select().from(schema.users).where(eq(schema.users.id, replyMsg.userId)).get();
-      if (replyUser) {
-        replyTo = {
-          id: replyMsg.id,
-          dmChannelId: replyMsg.dmChannelId,
-          userId: replyMsg.userId,
-          replyToId: replyMsg.replyToId,
-          content: replyMsg.content,
-          editedAt: replyMsg.editedAt,
-          createdAt: replyMsg.createdAt,
-          user: sanitizeUser(replyUser),
-          attachments: [],
-          embeds: [],
-          reactions: [],
-        };
-      }
-    }
+    const replyToMap = fetchDmReplyToMessages(message.dmChannelId, [message]);
+    replyTo = replyToMap.get(message.replyToId) ?? null;
   }
 
   return buildDmMessageWithUser(message, user, attachmentRows, reactions, replyTo, embedRows);
@@ -2273,42 +2333,8 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     // Batch fetch embeds
     const embedMap = fetchDmEmbedsForMessages(messageIds);
 
-    // Batch fetch reply-to messages
-    const replyToIds = messageRows
-      .map(m => m.replyToId)
-      .filter((id): id is string => id !== null && id !== undefined);
-    const uniqueReplyIds = [...new Set(replyToIds)];
-    const replyToMap = new Map<string, DmMessageWithUser>();
-    if (uniqueReplyIds.length > 0) {
-      const replyMessages = db.select()
-        .from(schema.dmMessages)
-        .where(inArray(schema.dmMessages.id, uniqueReplyIds))
-        .all();
-      const replyUserIds = [...new Set(replyMessages.map(m => m.userId))];
-      const replyUsers = replyUserIds.length > 0
-        ? db.select().from(schema.users).where(inArray(schema.users.id, replyUserIds)).all()
-        : [];
-      const replyUserMap = new Map(replyUsers.map(u => [u.id, u]));
-
-      for (const rm of replyMessages) {
-        const rUser = replyUserMap.get(rm.userId);
-        if (!rUser) continue;
-        replyToMap.set(rm.id, {
-          id: rm.id,
-          dmChannelId: rm.dmChannelId,
-          userId: rm.userId,
-          replyToId: rm.replyToId,
-          content: rm.content,
-          type: (rm.type ?? 'user') as 'user' | 'system',
-          editedAt: rm.editedAt,
-          createdAt: rm.createdAt,
-          user: sanitizeUser(rUser),
-          attachments: [],
-          embeds: [],
-          reactions: [],
-        });
-      }
-    }
+    // Batch fetch reply-to messages, confined to this DM channel
+    const replyToMap = fetchDmReplyToMessages(id, messageRows);
 
     const messages: DmMessageWithUser[] = messageRows
       .map(m => {
@@ -2482,6 +2508,11 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
 
     if (content && content.length > MAX_MESSAGE_LENGTH) {
       return reply.code(400).send({ error: `Message content must be ${MAX_MESSAGE_LENGTH} characters or less`, statusCode: 400 });
+    }
+
+    // A reply may only target a message in the channel it is posted into.
+    if (replyToId && !isDmReplyTargetInChannel(id, replyToId)) {
+      return reply.code(400).send({ error: 'Invalid reply target', statusCode: 400 });
     }
 
     const db = getDb();

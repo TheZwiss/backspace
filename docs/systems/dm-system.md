@@ -461,6 +461,9 @@ Users tombstoned **before** this fix already had their 1-on-1 `dm_members` row d
 - Must have content or attachments (not both empty)
 - Content max length: 4000 chars (`MAX_MESSAGE_LENGTH`)
 - Attachment ownership verified (must be unlinked and owned by caller)
+- `replyToId`, when present, must name a message in this same DM channel (`isDmReplyTargetInChannel`) -- otherwise `400 Invalid reply target` and nothing is inserted. The WebSocket `dm_message_create` path applies the same rule and answers with an `error` event instead.
+
+**Reply hydration:** every DM read path resolves `replyTo` through `fetchDmReplyToMessages(dmChannelId, rows)` (`dm.ts`), which scopes the reply lookup to the channel being read -- `getDmMessageWithUser`, `GET /api/dm/:id/messages`, `GET /api/dm/:id/search` and `GET /api/dm/:id/messages/around`. A `replyToId` pointing outside the channel hydrates as `replyTo: null` rather than surfacing the other conversation's message, so rows predating the create-time check stay contained. Inbound federated DM messages are stored with `replyToId: null` (`federation/events/dmMessages.ts`), so relay never introduces a cross-channel target.
 
 **Flow:**
 1. Insert message + link attachments in a single transaction

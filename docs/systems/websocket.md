@@ -30,7 +30,7 @@ Source: `packages/server/src/ws/handler.ts`, `packages/server/src/ws/events.ts`
 ### DM Messages
 | type | fields | notes |
 |------|--------|-------|
-| `dm_message_create` | dmChannelId, content?, attachments?, replyToId? | member |
+| `dm_message_create` | dmChannelId, content?, attachments?, replyToId? | member; `replyToId` must name a message in the same DM channel |
 | `dm_message_edit` | messageId, content | author only |
 | `dm_message_delete` | messageId | author only |
 | `dm_typing_start` | dmChannelId | 5s auto-expire |
