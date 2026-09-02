@@ -150,6 +150,19 @@ export function queueOutboxEvent(
       return;
     }
 
+    // DM traffic is participant-scoped: it may only ever reach instances that
+    // host a participant. An omitted target list means "broadcast to every
+    // peer", which is correct for profile/presence but never for a
+    // conversation, so refuse it rather than fan the event out. Callers derive
+    // their targets from getGroupDmTargetOrigins(), which returns [] when the
+    // conversation is entirely local.
+    if (contextType === 'dm' && !targetPeerOrigins) {
+      console.error(
+        `[federation] queueOutboxEvent: refusing to broadcast dm event ${eventType} (${entityId}) with no target origins`,
+      );
+      return;
+    }
+
     const db = getDb();
 
     const peers = db
@@ -400,21 +413,19 @@ export function getDmParticipants(dmChannelId: string): FederationRelayParticipa
 }
 
 /**
- * Compute which peer origins need to receive events for a group DM.
- * Returns undefined for 1-on-1 DMs (broadcast to all).
- * Returns a list of origins for group DMs (participant-aware routing).
+ * Compute which peer origins need to receive events for a DM.
+ *
+ * Always participant-derived — both 1-on-1 and group DMs. The result is the set
+ * of instances that host a participant, minus our own origin.
+ *
+ * Returns an empty array when every participant is local. `[]` is a *target
+ * list*, not an absence of one: `queueOutboxEvent` takes the targeted branch
+ * and matches zero peers, so a conversation that never left this instance is
+ * never relayed anywhere. Never return `undefined` here — `queueOutboxEvent`
+ * reads `undefined` as "broadcast to every peer", which for DM content would
+ * hand a local-only conversation to unrelated instances.
  */
-export function getGroupDmTargetOrigins(dmChannelId: string): string[] | undefined {
-  const db = getDb();
-  const channel = db
-    .select({ ownerId: schema.dmChannels.ownerId })
-    .from(schema.dmChannels)
-    .where(eq(schema.dmChannels.id, dmChannelId))
-    .get();
-
-  // Always compute target origins from participants — both 1-on-1 and group DMs.
-  // Returning undefined (broadcast to all) would skip the pending-placeholder creation
-  // in queueOutboxEvent(), preventing relay when no peer exists yet.
+export function getGroupDmTargetOrigins(dmChannelId: string): string[] {
   const participants = getDmParticipants(dmChannelId);
   const ourOrigin = getOurOrigin();
 
@@ -425,9 +436,6 @@ export function getGroupDmTargetOrigins(dmChannelId: string): string[] | undefin
       origins.add(normalized);
     }
   }
-
-  // No remote participants — no relay needed
-  if (origins.size === 0) return undefined;
 
   return Array.from(origins);
 }
@@ -484,6 +492,25 @@ export function queueDmRelay(
     },
     participants,
   }), targetOrigins);
+}
+
+/**
+ * Queue a DM message deletion for federation relay.
+ *
+ * Single source of truth for the delete relay — the REST and WebSocket delete
+ * paths both call this so neither can drift from the participant-scoped
+ * targeting (a delete carries the channel and message coordinates, which are
+ * only ever another participant instance's business).
+ */
+export function queueDmMessageDeleteRelay(messageId: string, dmChannelId: string): void {
+  appendMutationLog(messageId, dmChannelId, 'delete');
+  queueOutboxEvent(
+    messageId,
+    dmChannelId,
+    'delete',
+    JSON.stringify({ deleted: true }),
+    getGroupDmTargetOrigins(dmChannelId),
+  );
 }
 
 /**

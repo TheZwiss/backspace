@@ -598,7 +598,7 @@ const normalized = homeInstance.startsWith('http') ? homeInstance : `https://${h
 ```
 
 Locations where normalization is applied:
-- `getGroupDmTargetOrigins()` (`federationOutbox.ts:294`) -- normalizes before comparing to `ourOrigin`
+- `getGroupDmTargetOrigins()` (`federationOutbox.ts`) -- normalizes before comparing to `ourOrigin`
 - `dm.ts:655` -- `isLocalMember` broadcast filter checks both formats
 - `dm.ts:743` -- normalizes target homeInstance before peer origin comparison
 
@@ -624,8 +624,8 @@ All origin comparisons use `extractDomain()` or `getOurOrigin()` with normalizat
 2. `queueDmRelay(message, channelId, 'create')` called from `dm.ts` / `events.ts`
 3. `buildRelayPayload()` constructs the message portion with `homeUserId`, `homeInstance`, `content`, `replyToId`, `editedAt`, `createdAt`
 4. `getDmParticipants(channelId)` resolves all members to `(homeUserId, homeInstance)` pairs with profile snapshots
-5. `getGroupDmTargetOrigins(channelId)` returns `undefined` (no owner -> broadcast to all)
-6. `queueOutboxEvent(messageId, channelId, 'create', payload, undefined)` -> queued to ALL active peers
+5. `getGroupDmTargetOrigins(channelId)` returns the participants' instances minus our own -- `[]` when both participants are local
+6. `queueOutboxEvent(messageId, channelId, 'create', payload, targetOrigins)` -> queued only to those peers; a `[]` target list matches no peer, so a conversation between two local users is never relayed
 
 **Channel creation (1-on-1 with federated user):**
 - When `POST /api/dm` creates a channel where either participant has `homeInstance` set, the deterministic `federatedId = SHA256(sorted([homeUserIdA, homeUserIdB])).slice(0, 32)` is computed and stored immediately
@@ -649,7 +649,6 @@ All origin comparisons use `extractDomain()` or `getOurOrigin()` with normalizat
 
 **Outbound (origin instance):**
 Same as 1-on-1 except:
-- `getGroupDmTargetOrigins(channelId)` returns a list of peer origins that have at least one participant
 - Normalizes `homeInstance` to full URL before comparison
 - `queueOutboxEvent` receives `targetPeerOrigins` and only queues to those peers
 - Payload includes `federatedId` (random UUID assigned at channel creation)
@@ -720,8 +719,13 @@ This permissiveness is **intentional** — the relay envelope is designed for ad
 ```
 Trigger (API/WS handler)
   -> isFederationRelayEnabled()? No -> return silently
+  -> contextType 'dm' with no targetPeerOrigins? -> refuse, log, return
+       (DM traffic is participant-scoped and must never fan out to every peer;
+        an omitted list means broadcast, which only profile/presence may use)
   -> Fetch active peers from federation_peers
   -> Filter to targetPeerOrigins (if specified) -- EXACT string match against peer.origin
+       (an empty array is a target list, not an absence of one: it matches
+        nothing, which is how a local-only DM is suppressed)
   -> If zero peers match -> logs warning and returns
   -> For each peer, in a transaction:
       -> Check for existing outbox entry by (peerId, entityId)
@@ -1225,9 +1229,8 @@ Called from `dm.ts` after the local close or reopen is committed.
 1. Fetch the channel's `federatedId` — if null (local-only DM), return silently
 2. Fetch the acting user's `(homeUserId, homeInstance)` federation identity
 3. Build `FederationRelayEvent` with `eventType` and `dmCloseReopen` payload
-4. `getGroupDmTargetOrigins(dmChannelId)` resolves the delivery targets:
-   - 1-on-1 DMs (`ownerId = NULL`): returns `undefined` → broadcast to ALL active peers
-   - Group DMs: returns the set of peer origins that have at least one participant
+4. `getGroupDmTargetOrigins(dmChannelId)` resolves the delivery targets — the set of
+   peer origins that host at least one participant, for both 1-on-1 and group DMs
 5. Enqueue via `appendMutationLog` + `queueOutboxEvent`
 
 ### Inbound
@@ -1534,7 +1537,7 @@ Event types covered by `appendMutationLog` (replayed on sync-pull):
 
 | Event type | `contextType` | Source |
 |---|---|---|
-| DM `create` / `update` / `delete` | `dm` | `federationOutbox.queueDmRelay`, `dm.ts` delete handler |
+| DM `create` / `update` / `delete` | `dm` | `federationOutbox.queueDmRelay`, `federationOutbox.queueDmMessageDeleteRelay` |
 | `reaction_add` / `reaction_remove` | `dm` | `ws/events.ts` |
 | `member_add` / `member_remove` / `ownership_transfer` | `dm` | `dm.ts` |
 | `dm_close` / `dm_reopen` | `dm` | `federationOutbox.queueDmCloseRelay` |

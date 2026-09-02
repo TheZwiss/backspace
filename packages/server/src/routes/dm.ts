@@ -37,6 +37,7 @@ import {
   appendMutationLog,
   queueOutboxEvent,
   queueDmRelay,
+  queueDmMessageDeleteRelay,
   queueDmCloseRelay,
   queueGroupMetadataRelay,
   getDmParticipants,
@@ -2695,8 +2696,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     }
 
     // Federation: log mutation and queue for relay
-    appendMutationLog(id, msg.dmChannelId, 'delete');
-    queueOutboxEvent(id, msg.dmChannelId, 'delete', JSON.stringify({ deleted: true }));
+    queueDmMessageDeleteRelay(id, msg.dmChannelId);
 
     return reply.code(200).send({ success: true });
   });

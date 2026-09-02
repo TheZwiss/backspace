@@ -14,7 +14,7 @@ import { sanitizeUser } from '../utils/sanitize.js';
 import { collectProfileBroadcastTargetIds } from '../utils/userDeletion.js';
 import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
 import { resolveEmbeds, reResolveEmbeds, embedRowToEmbed } from '../utils/embedResolver.js';
-import { appendMutationLog, queueOutboxEvent, queueDmRelay, getGroupDmTargetOrigins, sendCallRelay, computeFederatedId, sendTypingRelay, queueReadStateRelay } from '../utils/federationOutbox.js';
+import { appendMutationLog, queueOutboxEvent, queueDmRelay, queueDmMessageDeleteRelay, getGroupDmTargetOrigins, sendCallRelay, computeFederatedId, sendTypingRelay, queueReadStateRelay } from '../utils/federationOutbox.js';
 import { getOurOrigin } from '../utils/federationAuth.js';
 import { generateFederatedCallToken } from '../routes/livekit.js';
 import { config } from '../config.js';
@@ -1088,9 +1088,7 @@ function handleDmMessageDelete(event: Record<string, unknown>, userId: string): 
   }
 
   // Federation: log mutation and queue for relay
-  appendMutationLog(messageId, msg.dmChannelId, 'delete');
-  const targetOrigins = getGroupDmTargetOrigins(msg.dmChannelId);
-  queueOutboxEvent(messageId, msg.dmChannelId, 'delete', JSON.stringify({ deleted: true }), targetOrigins);
+  queueDmMessageDeleteRelay(messageId, msg.dmChannelId);
 }
 
 // ─── Reaction Handlers ─────────────────────────────────────────────────────
