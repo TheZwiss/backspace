@@ -107,6 +107,36 @@ if channelOverride:  base = (base & ~deny) | allow
 
 ---
 
+## Broadcast audience
+
+Space membership and channel access are not the same thing, so the two
+`ConnectionManager` fan-out helpers are not interchangeable:
+
+| Helper | Recipients | Carries |
+|--------|-----------|---------|
+| `sendToSpace(spaceId, event)` | every member of the space | space-level facts: `space_updated`, `member_joined`, `member_left`, `category_created` / `category_updated` / `category_deleted`, voice presence |
+| `sendToChannel(spaceId, channelId, event)` | members whose `computePermissions` grants `VIEW_CHANNEL` on that channel | anything scoped to one channel: `message_created`, `message_updated`, `message_deleted`, `typing`, `reaction_added`, `reaction_removed`, `embeds_resolved` |
+
+Anything naming a channel or carrying its content goes through `sendToChannel`.
+A message edit ships the full `MessageWithUser` (content, author, attachments), a
+delete names the channel it happened in, and both must land only where the
+original `message_created` did. REST and WebSocket are two entry points to the
+same event, so they use the same helper: `PATCH /api/messages/:id` and
+`DELETE /api/messages/:id` mirror the `message_edit` and `message_delete`
+WebSocket handlers.
+
+The choice does not go the other way. A space-level event pushed through
+`sendToChannel` would be withheld from members who lack `VIEW_CHANNEL` on
+whichever channel was named, so member lists and the category tree would drift
+out of sync for exactly those members. Space furniture stays on `sendToSpace`.
+
+Covered by `packages/server/src/routes/messages.broadcastAudience.test.ts`,
+which drives the real `ConnectionManager` and asserts both directions: a member
+denied `VIEW_CHANNEL` receives neither event, while readers of the channel and
+the space-wide `category_created` are unaffected.
+
+---
+
 ## Reply-target confinement
 
 A message's `replyToId` must name a message in the **same channel**. Both create

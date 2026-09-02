@@ -97,12 +97,18 @@ Source: `packages/server/src/ws/handler.ts`, `packages/server/src/ws/events.ts`
 | type | fields | scope |
 |------|--------|-------|
 | `message_created` | message: MessageWithUser | channel (VIEW_CHANNEL) |
-| `message_updated` | message: MessageWithUser | channel |
-| `message_deleted` | messageId, channelId | channel |
-| `typing` | channelId, userId, username | channel (excludes sender) |
-| `reaction_added` | messageId, reaction (includes user) | channel |
-| `reaction_removed` | messageId, userId, emoji | channel |
-| `embeds_resolved` | messageId, channelId, embeds[] | channel |
+| `message_updated` | message: MessageWithUser | channel (VIEW_CHANNEL) |
+| `message_deleted` | messageId, channelId | channel (VIEW_CHANNEL) |
+| `typing` | channelId, userId, username | channel (VIEW_CHANNEL, excludes sender) |
+| `reaction_added` | messageId, reaction (includes user) | channel (VIEW_CHANNEL) |
+| `reaction_removed` | messageId, userId, emoji | channel (VIEW_CHANNEL) |
+| `embeds_resolved` | messageId, channelId, embeds[] | channel (VIEW_CHANNEL) |
+
+In a space channel every event above is emitted with
+`connectionManager.sendToChannel`, from the REST route and from the WebSocket
+handler alike, so both paths reach the same audience. (`reaction_added` and
+`reaction_removed` are reused on the DM path, where they go out with
+`sendToDmMembers`.) See permissions.md, "Broadcast audience".
 
 ### DM Messages
 | type | fields | scope |

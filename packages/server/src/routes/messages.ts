@@ -481,10 +481,13 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
 
     const messageWithUser = buildMessageWithUser(updatedMessage, user, attachmentRows, reactions, replyTo, []);
 
-    // Broadcast edit (with empty embeds — new ones arrive via embeds_resolved)
+    // Broadcast edit (with empty embeds — new ones arrive via embeds_resolved).
+    // The audience is the channel, not the space: the payload carries the full
+    // message, so it goes to the same VIEW_CHANNEL holders that received the
+    // original message_created. Matches the WebSocket message_edit handler.
     const spaceId = getChannelSpaceId(message.channelId);
     if (spaceId) {
-      connectionManager.sendToSpace(spaceId, {
+      connectionManager.sendToChannel(spaceId, message.channelId, {
         type: 'message_updated',
         message: messageWithUser,
       });
@@ -537,8 +540,10 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
     // Clean up files from disk after transaction commits
     deleteAttachmentFiles(attachmentRows);
 
-    // Broadcast deletion
-    connectionManager.sendToSpace(spaceId, {
+    // Broadcast deletion to the channel's audience. A member without
+    // VIEW_CHANNEL never saw the message and must not learn that it existed.
+    // Matches the WebSocket message_delete handler.
+    connectionManager.sendToChannel(spaceId, message.channelId, {
       type: 'message_deleted',
       messageId: id,
       channelId: message.channelId,
