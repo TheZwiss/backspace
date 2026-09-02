@@ -438,7 +438,7 @@ export function JoinPage() {
                 autoComplete="current-password"
               />
               <p className="text-xs text-txt-tertiary mt-1">
-                Your password is verified locally, then used to create or access your account on the remote instance.
+                Your password is checked by your home instance and is never sent to {hostDisplay} — that instance gets a unique credential generated for it alone.
               </p>
             </div>
             <div className="flex gap-2">
@@ -469,7 +469,7 @@ export function JoinPage() {
         {phase === 'fallback' && (
           <form onSubmit={handleFallbackLogin}>
             <div className="mb-3 p-2 bg-accent-amber/10 border border-accent-amber/30 rounded text-xs text-accent-amber">
-              An account already exists on {hostDisplay} with a different password. Enter the credentials you used on that instance.
+              An account already exists on {hostDisplay} and it does not accept the credential your home instance issued. Sign in with the password you set on that instance — it will be switched to the issued credential afterwards.
             </div>
             <div className="mb-4 space-y-3">
               <div>

@@ -149,6 +149,14 @@ export function tombstoneUser(uid: string, options?: TombstoneOptions): string[]
     }
     tx.delete(schema.spaceFolders).where(eq(schema.spaceFolders.userId, uid)).run();
 
+    // The per-remote federation credentials are live secrets for accounts on
+    // OTHER instances. A tombstone keeps the users row, so the ON DELETE CASCADE
+    // never fires — scrub them explicitly rather than leaving usable credentials
+    // behind for a deleted account.
+    tx.delete(schema.userFederationCredentials)
+      .where(eq(schema.userFederationCredentials.userId, uid))
+      .run();
+
     // Conditional deletes for tables that may reference userId
     try { tx.delete(schema.bans).where(eq(schema.bans.userId, uid)).run(); } catch { /* table may not exist */ }
     try { tx.delete(schema.joinRequests).where(eq(schema.joinRequests.userId, uid)).run(); } catch { /* table may not exist */ }

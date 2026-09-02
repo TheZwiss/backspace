@@ -226,7 +226,7 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
                 autoComplete="current-password"
               />
               <div className="text-xs text-txt-tertiary mt-1">
-                Your password is verified locally, then used to create or access your account on the remote instance.
+                Your password is checked by your home instance and is never sent to {new URL(probeResult.origin).host} — that instance gets a unique credential generated for it alone.
               </div>
             </div>
             <button
@@ -268,7 +268,7 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
           </div>
 
           <div className="p-2 bg-accent-amber/10 border border-accent-amber/30 rounded text-xs text-accent-amber">
-            An account already exists on this instance with a different password. Enter the credentials you used on that instance.
+            An account already exists on this instance and it does not accept the credential your home instance issued. Sign in with the password you set on that instance — it will be switched to the issued credential afterwards.
           </div>
 
           <form onSubmit={(e) => { e.preventDefault(); handleFallbackLogin(); }} className="space-y-2">
@@ -817,7 +817,7 @@ function RegistryRow({
                       type="password"
                       value={reauthPassword}
                       onChange={(e) => setReauthPassword(e.target.value)}
-                      placeholder="Your account password"
+                      placeholder="Your home account password"
                       className="input-standard flex-1 py-1.5"
                       disabled={reauthLoading}
                       autoFocus

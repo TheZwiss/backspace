@@ -53,7 +53,7 @@ export async function processMemberAddEvent(
   // Bootstrap: channel doesn't exist yet — create from group metadata
   if (!channel && event.group) {
     // Attribution: only the owner's instance can bootstrap a group (FED-010)
-    if (event.group.owner && !verifyAttribution(event.group.owner.homeInstance, sourceInstance)) {
+    if (event.group.owner && !verifyAttribution(event.group.owner, sourceInstance, db)) {
       console.warn(`[federation] Attribution mismatch in member_add bootstrap: owner homeInstance=${extractDomain(event.group.owner.homeInstance)} source=${extractDomain(sourceInstance)}`);
       rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
       return;
@@ -137,7 +137,7 @@ export async function processMemberAddEvent(
   // The attribution check below still validates that addedBy belongs to the source instance.
 
   // Attribution: adder must belong to source instance (FED-010)
-  if (event.membership.addedBy && !verifyAttribution(event.membership.addedBy.homeInstance, sourceInstance)) {
+  if (event.membership.addedBy && !verifyAttribution(event.membership.addedBy, sourceInstance, db)) {
     console.warn(`[federation] Attribution mismatch in member_add: addedBy homeInstance=${extractDomain(event.membership.addedBy.homeInstance)} source=${extractDomain(sourceInstance)}`);
     rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
     return;
@@ -300,7 +300,7 @@ export function processMemberRemoveEvent(
   }
 
   // Attribution: for self-leave, user must belong to source instance (FED-010)
-  if (event.membership.reason === 'leave' && !verifyAttribution(event.membership.user.homeInstance, sourceInstance)) {
+  if (event.membership.reason === 'leave' && !verifyAttribution(event.membership.user, sourceInstance, db)) {
     console.warn(`[federation] Attribution mismatch in member_remove: user homeInstance=${extractDomain(event.membership.user.homeInstance)} source=${extractDomain(sourceInstance)}`);
     rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
     return;
@@ -454,7 +454,7 @@ export function processOwnershipTransferEvent(
   }
 
   // Attribution: previous owner must belong to source instance (FED-010)
-  if (event.ownership.previousOwner && !verifyAttribution(event.ownership.previousOwner.homeInstance, sourceInstance)) {
+  if (event.ownership.previousOwner && !verifyAttribution(event.ownership.previousOwner, sourceInstance, db)) {
     console.warn(`[federation] Attribution mismatch in ownership_transfer: previousOwner homeInstance=${extractDomain(event.ownership.previousOwner.homeInstance)} source=${extractDomain(sourceInstance)}`);
     rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
     return;

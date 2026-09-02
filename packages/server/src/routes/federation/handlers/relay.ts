@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { config } from '../../../config.js';
 import { getDb, getRawDb, schema } from '../../../db/index.js';
-import { getOurOrigin, parseFederationHeaders, verifyPeerSignature } from '../../../utils/federationAuth.js';
+import { getOurOrigin, normalizeOriginForCompare, parseFederationHeaders, verifyPeerSignature } from '../../../utils/federationAuth.js';
 import { sendSignedJson } from './signedResponse.js';
 import { getInstanceId } from '../../../utils/federationEpoch.js';
 import { getDmParticipants } from '../../../utils/federationOutbox.js';
@@ -163,6 +163,16 @@ export function registerRelayRoutes(app: FastifyInstance): void {
       const sourceInstance = body.sourceInstance;
       if (!sourceInstance || typeof sourceInstance !== 'string') {
         return reply.code(400).send({ error: 'sourceInstance is required', statusCode: 400 });
+      }
+
+      // 2b. Bind the batch's claimed origin to the peer that actually signed it.
+      // The HMAC proves WHO sent this request; `sourceInstance` is only what the
+      // body CLAIMS, and every downstream attribution check reads it. An honest
+      // peer always sends its own `getOurOrigin()` here, so a mismatch is never
+      // a legitimate configuration — it is one peer speaking as another.
+      if (normalizeOriginForCompare(sourceInstance) !== normalizeOriginForCompare(peer.origin)) {
+        console.warn(`[federation] Relay source rejected: peer ${peer.origin} claimed sourceInstance=${sourceInstance}`);
+        return reply.code(403).send({ error: 'sourceInstance does not match the authenticated peer', statusCode: 403 });
       }
 
       // 3. Process each event

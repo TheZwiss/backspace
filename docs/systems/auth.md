@@ -14,10 +14,11 @@ Source files:
 - `packages/web/src/hooks/useAuth.ts` -- Route guard hook (redirect to `/login` when no token)
 - `packages/web/src/App.tsx` -- `ProtectedRoute` and `AuthRedirect` route wrappers
 - `packages/web/src/utils/identity.ts` -- Federation-aware identity helpers (`parseFederatedUsername`, `isSelf`, `canonicalUserMatch`)
-- `packages/web/src/utils/federationOps.ts` -- Cross-instance password sync and account deletion propagation
+- `packages/web/src/utils/federationOps.ts` -- Account deletion propagation to connected remote instances
+- `packages/web/src/stores/instanceStore.ts` -- `resolveCredentialHomeApi()` / `ensureRemoteCredential()`: per-remote federation credentials (§5b)
 - `packages/server/src/config.ts` -- `jwtSecret`, `jwtExpiresIn`, `registrationOpen` config
 
-DB tables: `users`, `instanceSettings`. See `database.md` for full schemas.
+DB tables: `users`, `instanceSettings`, `userFederationCredentials`. See `database.md` for full schemas.
 
 ---
 
@@ -138,7 +139,8 @@ DB value overrides env when explicitly set by admin. When closed, a valid `invit
 **Invariants** (spec §1.3):
 
 - **Login-unaffected invariant.** Neither toggle gates `POST /api/auth/login` for any user. Existing federated accounts always log in regardless of `federatedRegistrationOpen`; existing local accounts always log in regardless of `registrationOpen`. Both gates affect **creation only**. This is why the Connections add-instance form keeps its submit button enabled even when the target instance has `federatedRegistrationOpen = false` (see `client-federation.md`): the request runs through `instanceStore`'s register-then-login fall-through, and the login leg succeeds for users who already have a federated account on that instance.
-- The federated stub upgrade flow (below) is gated by `federatedRegistrationOpen`, never by an invite token. Tokens only unlock the local anonymous-signup path.
+- The federated registration path is gated by `federatedRegistrationOpen`, never by an invite token. Tokens only unlock the local anonymous-signup path.
+- **Creation-only invariant.** `/register` only ever INSERTs. It never binds the submitted credentials to a row that already exists — see "Federated Registration Never Claims an Existing Row" below.
 
 **Toggle matrix** (spec §5.6):
 
@@ -193,7 +195,7 @@ db.transaction(() => {
 
 If any step throws (concurrent revoke, last-slot race, username collision against the unique index), the entire transaction rolls back -- `usedCount` is never incremented on a failed registration. The route catches `InviteUnavailableError` from `redeemInvite()` and surfaces it as 403 `"Invalid or expired invite"`.
 
-- **Federated stub upgrade and federated new-account paths do NOT enter `redeemInvite`.** They are gated only by `federatedRegistrationOpen` and never consume tokens, even if a token is provided in the request body. This is the structural enforcement of the spec §1.3 invariant "tokens never unlock federated creation".
+- **The federated registration path does NOT enter `redeemInvite`.** It is gated only by `federatedRegistrationOpen` and never consumes tokens, even if a token is provided in the request body. This is the structural enforcement of the spec §1.3 invariant "tokens never unlock federated creation".
 
 The `/api/auth/check-invite` debounced UX endpoint pre-validates a token from the register page; the in-txn re-derive inside `redeemInvite()` is the authoritative enforcement point.
 
@@ -221,26 +223,22 @@ If `requestedAvatarColor` is provided and is in `AVATAR_COLORS`, use it. Otherwi
 3. **Branch by request shape** (spec §1.2):
    - If `homeInstance` set → reject with 403 unless `federatedRegistrationOpen === true`. `inviteToken` ignored on this path.
    - Else (local) → if `registrationOpen` is false, require a valid `inviteToken`; otherwise reject with 403. Pre-flight token check rejects obvious-invalid tokens before bcrypt.
-4. **Federated stub upgrade check** (if `homeInstance` is set): call `findFederatedUser` to look for an existing relay-created stub. If found and upgradeable, upgrade it instead of creating a new record (see below).
+4. Hash password (bcrypt, 12 rounds)
 5. Check username uniqueness (exact match on lowercased username)
-6. Hash password (bcrypt, 12 rounds)
-7. Generate Snowflake ID
-8. Insert user row (status defaults to `'offline'` at the schema level; it is set to `'online'` only when the client establishes a WebSocket via the WS auth path in `ws/handler.ts`). Admin flag set if first user. **When the local-closed-with-token path is in play**, the insert runs inside `redeemInvite()`'s transaction so the user row, the `usedCount` bump, and the `invite_redemptions` row commit atomically (or all roll back).
-9. Sign JWT with `{ userId, username }`
-10. Return `{ token, user }` (user sanitized via `sanitizeUser(user, true)`)
+6. Generate Snowflake ID
+7. Insert user row (status defaults to `'offline'` at the schema level; it is set to `'online'` only when the client establishes a WebSocket via the WS auth path in `ws/handler.ts`). Admin flag set if first user. **When the local-closed-with-token path is in play**, the insert runs inside `redeemInvite()`'s transaction so the user row, the `usedCount` bump, and the `invite_redemptions` row commit atomically (or all roll back).
+8. Sign JWT with `{ userId, username }`
+9. Return `201 { token, user }` (user sanitized via `sanitizeUser(user, true)`)
 
-### Federated Stub Upgrade
+### Federated Registration Never Claims an Existing Row
 
-When a user registers with `homeInstance` set (federated registration via friend-connect), the registration path checks for an existing relay-created stub using `findFederatedUser`. The stub-upgrade flow is **always gated by `federatedRegistrationOpen`**, never by an invite token (spec §1.3). If found and the stub has `passwordHash = '!federation-replicated'` (not a real account), the stub is upgraded:
+`/api/auth/register` is public and unauthenticated. `homeInstance` and `homeUserId` are caller-supplied strings carrying **no proof** that the caller controls the identity they name, and `homeUserId` is only unique *within* an instance — two different instances may legitimately hand out the same id. The route therefore performs no identity lookup at all: a federated registration is a plain INSERT, exactly like a local one, and always returns `201` with a freshly generated Snowflake.
 
-- `passwordHash` is set to the new bcrypt hash (enables login)
-- `username` is updated to the registration's chosen username (replaces placeholder like `291255103060533248@nova.ddns.net` with `nova@nova.ddns.net`)
-- `homeUserId` is backfilled if null
-- Missing profile fields (`displayName`, `avatarColor`) are filled
+In particular, a registration is **never** merged into a relay-created stub (`passwordHash = '!federation-replicated'`), regardless of matching `homeUserId`, matching `homeInstance`, or a matching username base. The only gate on the path is `federatedRegistrationOpen`, and the only rejection is the ordinary `409 Username already taken` from the uniqueness check.
 
-The user's ID remains the same, preserving all existing FK references (DM memberships, messages, reactions, friendships). The user logs in and sees their full history. Returns HTTP 200 (not 201).
+**Merging a stub into a real account is exclusively the job of `POST /api/users/@me/reattach`** (`routes/federation/handlers/attach.ts`; see `federation.md` "Peer-Side Re-Attach"). That flow requires two independent proofs — a JWT session that already *is* the account, plus a one-time attach-proof token minted by the home instance via `POST /api/auth/attach-proof` and verified with the home peer over signed S2S — and it is the only place `'!federation-replicated'` rows are ever absorbed.
 
-If the found user has a real password hash (already registered), the registration returns 409 and the client falls back to login.
+**Consequence:** a person who already has a relay-created stub here and then registers federated ends up with a second row sharing that `homeUserId` until they re-attach. The stub keeps the DM history; the new row is a fresh account. Wiring fresh federated registration to the proof-gated reattach primitive for history continuity is a separate, unimplemented enhancement.
 
 ### Username Availability Check
 
@@ -346,31 +344,39 @@ Detach is sovereign but not permanent: the legitimate owner who re-created their
 3. `connectionManager.forceDisconnectUser(targetId)` -- closes all WS connections, forcing re-auth
 4. Return `{ temporaryPassword }` -- admin must relay this to the user out-of-band
 
-### Cross-Instance Password Propagation (Client-Side)
+---
 
-When a user changes their password on their home instance, `authStore.changePassword()`:
+## 5b. Per-Remote Federation Credentials
 
-1. Changes password on home instance via API
-2. Updates local token in localStorage and Zustand state
-3. Calls `changePasswordOnRemotes(newPassword)` from `federationOps.ts`
+**The home password is never sent to another instance.** Before 2026-09-02 the client verified the entered password locally and then reused that same plaintext password for the remote's `/auth/register` and `/auth/login`, and kept it in sync on every remote via `changePasswordOnRemotes()`. That handed a reusable, pre-hash home credential to every remote operator the user had ever connected to. Both the reuse and the propagation are gone.
 
-`changePasswordOnRemotes()` flow:
+**Model.** Each (account, remote instance) pair gets its own high-entropy secret with no relationship to the account password or to any other remote's secret. The secret is issued and stored by the account's **home** instance in `user_federation_credentials` (see `database.md`) and handed only to that account's own authenticated client.
 
-1. Gets all connected remote instances from `instanceStore`
-2. Cancels any existing retry timers for those origins
-3. For each connected instance, calls `inst.api.users.changePassword({ newPassword })` with retry:
-   - **Initial retry:** `retryWithBackoff()` -- 3 attempts, exponential backoff starting at 2000ms (2s, 4s, 8s)
-   - On success: updates cached token for that instance, clears pending sync flag
-4. If initial retries fail, starts `scheduleBackgroundRetry()`:
-   - Schedule: 10 attempts at 30s intervals (5 min), then 12 attempts at 5min intervals (60 min)
-   - Each attempt looks up current instance from store (avoids stale references)
-   - Stops if instance disconnected or removed
-   - On exhaustion: sets `pendingPasswordSync` flag on the instance (UI indicator)
+**Endpoint — `POST /api/users/@me/federation-credential`** (`routes/users.ts`), JWT-authenticated, scoped to `request.userId`:
 
-**Timer management:**
-- `activeRetryTimers` map tracks per-origin retry timers
-- `clearPasswordSyncTimers()` cancels all active retries (called on logout)
-- New password change cancels existing retry loops for affected origins
+- Body `{ origin, markProvisioned? }` → `{ origin, secret, provisioned }`.
+- `origin` is canonicalized to `https://host[:port]`; unparseable/non-http(s) → 400; our own origin → 400.
+- Get-or-create with `onConflictDoNothing` + re-read = **first-writer-wins**. A racing second call gets the stored secret; it never replaces one, which would lock the loser out of the remote account.
+- **409 for a replicated federated account** (`homeInstance` set and `federationHomeOrphaned !== 1`): credentials must be issued in exactly one place or the same remote account is handed two different secrets. Detached accounts (`federationHomeOrphaned === 1`) have no home left to ask and follow the LOCAL rule, matching §5 change-password and §6 deletion.
+- `markProvisioned: true` latches `provisioned_at` (set-once; the secret is never rotated by this call).
+
+**Client side** (`instanceStore.ts`). `resolveCredentialHomeApi()` returns the API client of the account's **true home** — the primary connection when browsing home natively, else a connected secondary instance for that domain, else `null`. `connectToRemote()`:
+
+1. If the target IS the account's own home, log in with the entered password as before. Nothing else applies — that password is that account's password.
+2. Otherwise the entered password is verified by `homeApi.users.verifyPassword` (the home instance, never the target), a secret is fetched from the home, and the remote `register` / `login` is performed with **that secret**. There is deliberately no retry with the entered password.
+3. On success the credential is marked provisioned.
+4. If the home instance is not reachable in this session, the connect **fails with a message naming the home** rather than minting a divergent secret on the instance being browsed.
+
+`ensureRemoteCredential(instance, { force? })` is the single reconciliation point, called after every path that establishes a remote session — fresh connect, explicit `loginToRemote`, and token reconnect in `autoConnectAll`. It rotates the remote account onto the home-issued secret via that instance's `change-password` (which needs no `currentPassword` for a federated account — §5), then marks it provisioned. It refuses unless the remote account is this user's own federated identity (`homeInstance` **and** `homeUserId` both match), so a native account someone logged into on the remote is never touched.
+
+**Migrating connections made before this existed.** Those remote accounts carry `bcrypt(home password)`. `provisioned_at = NULL` marks them; `ensureRemoteCredential` rotates each one exactly once, using the still-valid cached token, so no password is needed. Two consequences worth knowing:
+
+- The rotation sets `passwordChangedAt` on the remote, which revokes that account's other sessions there. Those devices re-authenticate through the normal prompt — and their entered password only ever reaches the home instance.
+- If the token has already expired, the connect surfaces `DifferentPasswordError` and the per-instance login form. What the user types there goes to that instance by their explicit choice; `ensureRemoteCredential(..., { force: true })` then switches the account onto the issued secret.
+
+**Residual exposure this does not undo.** Every instance a user federated with before this change still holds `bcrypt(home password)` for their account, and `/api/auth/login`'s federated self-heal path (§4) still forwards a submitted password to the home instance, so a remote operator who captured the old hash — or who is typed into directly — retains a credential that is meaningful on the home. Migrating the schema does not scrub other operators' databases. **A user who connected to an instance they do not trust should change their home password**; after the change no remote is given the new one.
+
+**Changing the home password no longer touches remotes.** `authStore.changePassword()` calls the home endpoint and updates the local token, and stops there. The remote-propagation machinery (`changePasswordOnRemotes`, `scheduleBackgroundRetry`, `clearPasswordSyncTimers`, the `pendingPasswordSync` / `pendingSyncOrigins` flags and their AccountPanel indicator) is removed: with per-remote secrets there is nothing to propagate.
 
 ---
 

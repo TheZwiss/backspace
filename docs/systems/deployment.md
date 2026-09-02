@@ -320,6 +320,17 @@ The pre-restore copy means a mistaken restore is itself undoable: the previous D
 
 > The `pre-restore` reason tag is **not** in the auto-pruned reason set (`pre-migration` / `scheduled` / `manual`), so pre-restore copies are retained until manually cleaned up. Periodically prune old `*-pre-restore.db` files by hand if disk is tight.
 
+### Restoring an older snapshot into a newer build
+
+A snapshot only carries the schema of the build that wrote it. On boot `initDatabase()` re-runs `migrate()`, so a snapshot taken before a migration is brought forward automatically and the restore itself works. What a restore always costs is the **data** written between the snapshot and now.
+
+One case is worth calling out because the loss is silent rather than visible. `user_federation_credentials` (migration `0011`) holds the per-remote secret each user's client presents on other instances (`auth.md` §5b). Restoring a snapshot from before those rows were written leaves the remote accounts holding secrets this instance no longer knows:
+
+- The client self-heals **while a remote token is still valid** — the credential comes back with `provisioned_at` NULL, so `ensureRemoteCredential` rotates that remote account onto a freshly issued secret with no user interaction.
+- Where the token has already expired, the user re-authenticates once through the per-instance login form on that connection. Nothing is permanently lost; nobody is locked out.
+
+No action is required after a restore. Watch `docker compose logs -f backspace` for `[federation] Credential migration deferred` lines, which name any connection that could not be reconciled yet.
+
 ---
 
 ## 5. Image Pinning & Upgrades

@@ -545,3 +545,108 @@ describe('POST /api/auth/register — first-user-admin promotion', () => {
     expect(user?.isAdmin).toBe(0);
   });
 });
+
+describe('POST /api/auth/register — federation-replicated stubs are never claimed', () => {
+  // A relay-created stub is a placeholder row for a person who has never
+  // authenticated here. Public registration is unauthenticated and carries no
+  // proof of control over the claimed home identity, so it must never bind
+  // credentials to an existing stub — it may only ever create a fresh row.
+  // Merging a stub into a real account is exclusively the job of the
+  // authenticated, S2S-proof-gated reattach flow (POST /api/users/@me/reattach).
+  const STUB_ID = 'stub-user-1';
+  const STUB_HASH = '!federation-replicated';
+
+  beforeEach(() => {
+    testDb.delete(schema.instanceSettings).run();
+    testDb.insert(schema.instanceSettings).values({
+      id: 1,
+      registrationOpen: 1,
+      federatedRegistrationOpen: 1,
+      updatedAt: Date.now(),
+    }).run();
+  });
+
+  function seedStub(homeInstance: string, homeUserId: string, username: string): void {
+    testDb.insert(schema.users).values({
+      id: STUB_ID,
+      username,
+      passwordHash: STUB_HASH,
+      homeInstance,
+      homeUserId,
+      createdAt: Date.now(),
+    }).run();
+  }
+
+  it('a registration from a DIFFERENT home instance cannot claim a stub sharing its homeUserId', async () => {
+    // homeUserId values are only unique within an instance. A hostile instance
+    // can hand out any id it likes, so a registration must never be matched to
+    // a stub on the id alone.
+    seedStub('victim.example', 'shared-home-id', 'victim@victim.example');
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: {
+        username: 'mallory@attacker.example',
+        password: 'password123',
+        homeInstance: 'attacker.example',
+        homeUserId: 'shared-home-id',
+      },
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(res.json().user.id).not.toBe(STUB_ID);
+    expect(res.json().user.username).toBe('mallory@attacker.example');
+
+    const stub = testDb.select().from(schema.users).where(eq(schema.users.id, STUB_ID)).get();
+    expect(stub?.passwordHash).toBe(STUB_HASH);
+    expect(stub?.username).toBe('victim@victim.example');
+    expect(stub?.homeInstance).toBe('victim.example');
+  });
+
+  it('a registration from the SAME home instance cannot claim a stub sharing its homeUserId', async () => {
+    seedStub('otherhost', 'victim-home-id', 'victim@otherhost');
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: {
+        username: 'mallory@otherhost',
+        password: 'password123',
+        homeInstance: 'otherhost',
+        homeUserId: 'victim-home-id',
+      },
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(res.json().user.id).not.toBe(STUB_ID);
+
+    const stub = testDb.select().from(schema.users).where(eq(schema.users.id, STUB_ID)).get();
+    expect(stub?.passwordHash).toBe(STUB_HASH);
+    expect(stub?.username).toBe('victim@otherhost');
+  });
+
+  it('a registration matching a stub by username hint cannot claim it either', async () => {
+    // The username-hint lookup tier is just as unproven as the id tier: the
+    // username is caller-supplied and the caller is unauthenticated.
+    seedStub('otherhost', 'victim-home-id', 'victim@otherhost');
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: {
+        username: 'victim@otherhost.example',
+        password: 'password123',
+        homeInstance: 'otherhost',
+        homeUserId: 'some-other-home-id',
+      },
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(res.json().user.id).not.toBe(STUB_ID);
+
+    const stub = testDb.select().from(schema.users).where(eq(schema.users.id, STUB_ID)).get();
+    expect(stub?.passwordHash).toBe(STUB_HASH);
+    expect(stub?.username).toBe('victim@otherhost');
+  });
+});
