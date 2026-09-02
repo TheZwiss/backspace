@@ -107,3 +107,7 @@ tests/reports/*
 # A build artifact, never committed: the metrics-data branch is the single source
 # of truth, and a committed derived copy invites the two to disagree.
 site/insights/data.json
+# Generated beside it at deploy time by cli-bundle.ts: the same archive as
+# static, no-JavaScript tables. Listed explicitly rather than left to the
+# generic `data/` rule above, which exists for packages/server/data/.
+site/insights/data/

@@ -121,6 +121,20 @@ All files live at the root of the `metrics-data` branch. CSVs are sorted ascendi
 | `contributors.csv` | `date,total` | Cumulative distinct-contributor count, where a contributor counts from the UTC date of the start of their first commit week onward. Capped: see the note below the table |
 | `repo.csv` | `date,subscribers,open_issues,downloads_total,downloads_app,downloads_updates` | The repo object's counters as read on that date, plus release asset `download_count` sums: every asset, then that total split into app installs and update-check traffic |
 
+### The static data page
+
+`cli-bundle.ts` writes a second artifact beside `data.json`: `<bundle dir>/data/index.html`, served at `…/insights/data/`. It is rendered by `renderDataPage` in `datapage.ts`, a pure function over the same `DashboardData` the charts are built from, so the two encodings cannot disagree about a figure.
+
+It exists because the dashboard draws every value client-side. A text-only crawler, an LLM fetching the URL, or a reader with JavaScript disabled otherwise sees the headings and the methodology and not one measured number. The static page carries the values as real `<table>` rows, plus a schema.org `Dataset` block naming `data.json` as a machine-readable `distribution` — without which nothing on the site tells a crawler that `data.json` exists at all.
+
+Three properties worth keeping:
+
+- **Escaping is load-bearing, not cosmetic.** Referrer hostnames and popular paths are strings GitHub reports from real traffic, so they originate outside this repo and reach the page verbatim. `escapeHtml` covers `& < > " '`, ampersand first so replacements are not re-escaped, and `jsonLd` additionally escapes `<` so a `</script>` sequence in the data cannot terminate the structured-data block early. Both are pinned by tests in `datapage.test.ts`.
+- **The page inherits the absent-versus-zero rule.** A `null` renders as the words `not measured`, never as `0`; a measured zero renders as `0`. It also reports the resolution it was handed, so a downsampled bundle is labelled as weekly buckets rather than silently presented as daily.
+- **The output path is derived, not configured.** It is `data/index.html` inside `METRICS_OUTPUT_PATH`'s directory. A second path variable would be a second thing that can point elsewhere, at which point the page and the JSON it mirrors can disagree about where each lives. `METRICS_SITE_URL` is separate and genuinely optional: set, the page emits absolute links and `Dataset` URLs; unset, it links relatively, so a fork gets a correct page rather than one advertising this deployment's domain as the home of its data.
+
+Both `site/insights/data.json` and `site/insights/data/` are gitignored: they exist only inside a deploy run.
+
 **The download split.** `downloads_total` sums every release asset. That number is dominated by update machinery rather than by installs: electron-updater fetches `latest.yml` / `latest-mac.yml` / `latest-linux.yml` on every update check from every installed client, and `.blockmap` files during a differential update, and GitHub counts all of them in `download_count` exactly like an installer. When the split was added on 2026-09-02 the feed files had 1,519 downloads against 323 for every real installer and archive combined, so the single figure overstated installs by roughly 5.7x.
 
 `downloads_app` counts installers and archives; `downloads_updates` counts anything matching `*.yml`, `*.yaml` or `*.blockmap` (`isUpdateArtifact` in `collect.ts`). For any row carrying all three, `downloads_app + downloads_updates === downloads_total`.

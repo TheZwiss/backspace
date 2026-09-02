@@ -8,6 +8,7 @@ import {
   BUNDLE_BUDGET_BYTES,
 } from './bundle.ts';
 import { requiredEnv, deriveRunTimestamps, describeFailure } from './cli-support.ts';
+import { renderDataPage } from './datapage.ts';
 
 /**
  * Entrypoint invoked by `.github/workflows/deploy-pages.yml` as
@@ -20,6 +21,10 @@ import { requiredEnv, deriveRunTimestamps, describeFailure } from './cli-support
  *   and `cli-backfill.ts` read, so all three entrypoints name the checkout
  *   once and identically.
  * - `METRICS_OUTPUT_PATH` — where to write the bundle, `site/insights/data.json`
+ * - `METRICS_SITE_URL` — optional. The deployed site's base URL, used to emit
+ *   absolute links and `Dataset` metadata on the static data page. Omitted, the
+ *   page still renders and links relatively; a fork that has not set it gets a
+ *   correct page rather than one pointing at somebody else's domain.
  *   in the deploy workflow. Parameterised rather than hardcoded so a
  *   maintainer can generate a bundle anywhere for inspection without
  *   dirtying the site tree, and so this file has no opinion about the site's
@@ -83,6 +88,30 @@ async function main(): Promise<void> {
     `wrote ${full}: ${result.bytes} bytes of the ${BUNDLE_BUDGET_BYTES}-byte budget ` +
       `(downsampled: ${result.downsampled ? 'yes, weekly buckets' : 'no, daily'})`,
   );
+
+  // The static, no-JavaScript rendering of the same bundle, written beside it
+  // as `<bundle dir>/data/index.html` so it serves at `…/insights/data/`.
+  //
+  // Derived from the bundle's own path rather than configured separately, on
+  // purpose: the two files are one artifact in two encodings, and a second
+  // path variable is a second thing that can be pointed somewhere else, at
+  // which point the page and the JSON it claims to mirror can disagree about
+  // where each of them lives.
+  //
+  // It exists because the dashboard draws every value client-side: a text-only
+  // crawler, or a reader with JavaScript off, otherwise sees the methodology
+  // and not one measured number. `serialiseWithinBudget` may have downsampled
+  // `data` to weekly buckets, and this renders whatever it was handed, so the
+  // page always states the resolution it is actually showing.
+  const pagePath = path.join(path.dirname(full), 'data', 'index.html');
+  const html = renderDataPage(data, { siteUrl: process.env['METRICS_SITE_URL'] });
+  try {
+    mkdirSync(path.dirname(pagePath), { recursive: true });
+    writeFileSync(pagePath, html, 'utf8');
+  } catch (cause) {
+    throw new Error(`cli-bundle: failed to write "${pagePath}"`, { cause });
+  }
+  console.log(`wrote ${pagePath}: ${Buffer.byteLength(html, 'utf8')} bytes of static tables`);
 
   // Last line of the run, on stderr, so it is the thing a maintainer sees at
   // the bottom of a green deploy log rather than something buried above the

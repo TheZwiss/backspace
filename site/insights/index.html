@@ -6,6 +6,43 @@
 <title>Backspace insights: repository traffic and growth</title>
 <meta name="description" content="Traffic, growth and referral figures for the Backspace repository, collected daily into a public archive and rendered from a single static bundle." />
 <link rel="canonical" href="https://thezwiss.github.io/backspace/insights/" />
+<!-- Declares the archive as a dataset rather than as prose, and names its
+     machine-readable distribution explicitly. Without this a crawler reads the
+     methodology on this page but has no way to discover that data.json exists,
+     because every value here is fetched and drawn client-side. Kept in sync by
+     hand with the copy datapage.ts emits; both point at the same two URLs. -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Dataset",
+  "name": "Backspace repository traffic and growth archive",
+  "description": "Daily archive of the Backspace repository's GitHub traffic, stars, forks, contributors and releases. GitHub discards repository traffic data after 14 days; this archive records it once per day and retains it indefinitely. Every figure is measured, never estimated; a value that was not measured is recorded as absent rather than as zero.",
+  "url": "https://thezwiss.github.io/backspace/insights/",
+  "license": "https://www.gnu.org/licenses/agpl-3.0.html",
+  "isAccessibleForFree": true,
+  "creator": { "@type": "Organization", "name": "Backspace" },
+  "measurementTechnique": "GitHub REST API, collected once daily by a scheduled job and committed to a public git branch",
+  "variableMeasured": [
+    "page views", "unique visitors", "repository clones", "unique cloners",
+    "stars", "forks", "contributors", "watchers", "open issues",
+    "release asset downloads", "referring sites", "popular paths"
+  ],
+  "distribution": [
+    {
+      "@type": "DataDownload",
+      "encodingFormat": "application/json",
+      "contentUrl": "https://thezwiss.github.io/backspace/insights/data.json",
+      "name": "Complete archive bundle (JSON)"
+    },
+    {
+      "@type": "DataDownload",
+      "encodingFormat": "text/html",
+      "contentUrl": "https://thezwiss.github.io/backspace/insights/data/",
+      "name": "The same archive as static HTML tables"
+    }
+  ]
+}
+</script>
 <link rel="icon" type="image/png" href="../assets/logo.png" />
 <link rel="apple-touch-icon" href="../assets/logo.png" />
 <meta name="robots" content="index, follow" />
@@ -115,6 +152,9 @@ h1 {
   color: var(--txt2); font-size: clamp(1rem, 1.7vw, 1.1rem);
   max-width: 66ch; line-height: 1.65;
 }
+.raw-data { margin-top: 14px; }
+.raw-data code { font-size: 0.92em; }
+
 .provenance {
   font-family: var(--mono); font-size: 12.5px; color: var(--txt4);
   margin-top: 18px; line-height: 1.8;
@@ -442,6 +482,18 @@ footer a:hover { color: var(--txt); }
       data branch. The page reads a single bundle built from that archive at deploy time. Nothing
       is estimated, and nothing is fetched from anywhere but this site.
     </p>
+    <p class="sec-copy raw-data">
+      Prefer the numbers to the charts? The same archive is published as
+      <a href="data/">plain tables</a> and as one machine-readable file,
+      <a href="data.json"><code>data.json</code></a>. Both are built from this page's own bundle, so
+      they cannot disagree with what is drawn here.
+    </p>
+    <noscript>
+      <p class="sec-copy raw-data">
+        Every figure here is drawn in the browser from <code>data.json</code>, so without JavaScript
+        the charts cannot render. <a href="data/">The same archive as plain tables</a> needs none.
+      </p>
+    </noscript>
     <p class="provenance">
       <span><span class="k">archive history</span> <span class="v" id="pv-since">checking</span></span>
       <span><span class="k">bundle built</span> <span class="v" id="pv-generated">checking</span></span>
@@ -470,7 +522,7 @@ footer a:hover { color: var(--txt); }
         covers the window it describes; otherwise it reads as a dash, and a figure that could
         only be assembled from a different span is labelled with the span it actually covers.
       </p>
-      <div class="slot" id="header-stats"></div>
+  <div class="slot" id="header-stats"></div>
     </div>
   </section>
 

@@ -152,6 +152,11 @@ jobs:
         env:
           METRICS_DATA_DIR: ${{ github.workspace }}/.metrics-data
           METRICS_OUTPUT_PATH: ${{ github.workspace }}/site/insights/data.json
+          # Lets the static data page emit absolute links and schema.org
+          # Dataset metadata. Optional by design: a fork that has not set it
+          # still gets a correct page with relative links, rather than one
+          # advertising this deployment's domain as the home of its data.
+          METRICS_SITE_URL: https://thezwiss.github.io/backspace
         run: node scripts/metrics/src/cli-bundle.ts
 
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
