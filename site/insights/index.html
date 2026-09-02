@@ -240,6 +240,58 @@ h2 {
 /* Wide content (charts, tables) scrolls inside its own container, never the body. */
 .scroll-x { overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; max-width: 100%; }
 
+/* ================= Header stats ================= */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(184px, 1fr));
+  gap: 14px;
+}
+.stat {
+  display: flex; flex-direction: column; gap: 5px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--chat);
+  padding: 16px 18px 15px;
+}
+.stat-label {
+  font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.07em;
+  text-transform: uppercase; font-weight: 500; color: var(--txt3);
+  line-height: 1.5;
+}
+.stat-value {
+  font-size: clamp(1.6rem, 4.4vw, 2rem); font-weight: 630;
+  letter-spacing: -0.03em; line-height: 1.12; overflow-wrap: anywhere;
+}
+.stat-value.is-unmeasured { font-size: 1.6rem; font-weight: 500; color: var(--txt4); }
+.stat-sub { color: var(--txt3); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.stat-delta {
+  align-self: flex-start; margin-top: 5px;
+  font-family: var(--mono); font-size: 12px; font-weight: 500;
+  padding: 3px 10px; border-radius: 999px;
+  border: 1px solid transparent; white-space: nowrap;
+}
+.delta-up { color: var(--mint); background: rgba(134, 239, 172, 0.1); }
+.delta-down { color: var(--rose); background: rgba(253, 164, 175, 0.1); }
+.delta-flat { color: var(--txt2); background: rgba(255, 255, 255, 0.05); }
+.delta-none { color: var(--txt4); border-color: var(--line); border-style: dashed; }
+
+.window-note {
+  font-family: var(--mono); font-size: 12.5px; color: var(--txt4);
+  margin-top: 18px; line-height: 1.8;
+  display: flex; flex-wrap: wrap; gap: 6px 20px;
+}
+.window-note .k { color: var(--txt3); }
+.window-note .v { color: var(--txt2); overflow-wrap: anywhere; }
+
+/* Text carried for assistive technology only: the reason a figure is a dash
+   is a sentence, and a dash on its own announces nothing. */
+.vh {
+  position: absolute; width: 1px; height: 1px;
+  margin: -1px; padding: 0; border: 0;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+
 /* ================= uPlot theme (tokens, so later charts inherit) ================= */
 .uplot { font-family: var(--sans); color: var(--txt2); width: 100%; }
 .u-title { color: var(--txt); font-size: 15px; font-weight: 600; }
@@ -285,7 +337,7 @@ footer a:hover { color: var(--txt); }
       is estimated, and nothing is fetched from anywhere but this site.
     </p>
     <p class="provenance">
-      <span><span class="k">traffic history</span> <span class="v" id="pv-since">checking</span></span>
+      <span><span class="k">archive history</span> <span class="v" id="pv-since">checking</span></span>
       <span><span class="k">bundle built</span> <span class="v" id="pv-generated">checking</span></span>
       <span><span class="k">collector last ran</span> <span class="v" id="pv-lastrun">checking</span></span>
       <span><span class="k">last successful run</span> <span class="v" id="pv-lastsuccess">checking</span></span>
@@ -403,6 +455,11 @@ footer a:hover { color: var(--txt); }
    * the "loading" state is guaranteed to resolve rather than hang forever. */
   var FETCH_TIMEOUT_MS = 15000;
   var DASH = "—";
+  var DAY_MS = 24 * 60 * 60 * 1000;
+  /* Spec 7: every header figure carries a 30-day delta, whatever range is
+   * selected. The range control governs the window the charts draw, not the
+   * width of the delta, which is fixed so the seven figures stay comparable. */
+  var DELTA_DAYS = 30;
 
   var RANGES = [
     { key: "30d", label: "30d", days: 30, title: "Last 30 days" },
@@ -467,6 +524,65 @@ footer a:hover { color: var(--txt); }
 
   function hoursBetween(aMs, bMs) {
     return Math.round(Math.abs(aMs - bMs) / 3600000);
+  }
+
+  /*
+   * Every date inside a series is a calendar day in the archive's own UTC
+   * frame, and the page compares days to days -- never days to a wall clock.
+   * Date.parse would accept far more than the archive writes, and would hand
+   * back a local-midnight instant for some of it, which shifts a day boundary
+   * for anyone west of UTC. So the shape is required explicitly and the day is
+   * built with Date.UTC. Anything else is NaN, which every caller below treats
+   * as "this row has no usable date" rather than as a date near 1970.
+   */
+  var DAY_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+  function parseDay(value) {
+    if (typeof value !== "string") return NaN;
+    var parts = DAY_PATTERN.exec(value);
+    if (parts === null) return NaN;
+    var year = Number(parts[1]);
+    var month = Number(parts[2]);
+    var day = Number(parts[3]);
+    var ms = Date.UTC(year, month - 1, day);
+    var back = new Date(ms);
+    /* Rejects 2026-02-30 and friends, which Date.UTC would roll forward into
+     * a real but wrong day. */
+    if (back.getUTCFullYear() !== year || back.getUTCMonth() !== month - 1 ||
+      back.getUTCDate() !== day) {
+      return NaN;
+    }
+    return ms;
+  }
+
+  function formatDay(ms) {
+    if (typeof ms !== "number" || !isFinite(ms)) return DASH;
+    var d = new Date(ms);
+    if (isNaN(d.getTime())) return DASH;
+    return d.getUTCFullYear() + "-" + pad(d.getUTCMonth() + 1) + "-" + pad(d.getUTCDate());
+  }
+
+  /* Whole days between two day instants. Both come from parseDay, so both sit
+   * on a UTC midnight and the division is exact. */
+  function dayGap(aMs, bMs) {
+    return Math.round(Math.abs(aMs - bMs) / DAY_MS);
+  }
+
+  /* Thousands separators without toLocaleString: the grouping character it
+   * picks depends on the visitor's locale, and two figures on the same page
+   * formatted by different code paths would not match. Anything that is not a
+   * finite number is a dash, never "NaN". */
+  function formatCount(value) {
+    if (typeof value !== "number" || !isFinite(value)) return DASH;
+    var rounded = Math.round(Math.abs(value));
+    var digits = String(rounded);
+    var out = "";
+    for (var i = 0; i < digits.length; i++) {
+      if (i > 0 && (digits.length - i) % 3 === 0) out += ",";
+      out += digits.charAt(i);
+    }
+    /* A value that rounds to zero is "0", never "−0". */
+    return (value < 0 && rounded !== 0 ? "−" : "") + out;
   }
 
   function element(tag, className, text) {
@@ -825,6 +941,19 @@ footer a:hover { color: var(--txt); }
     return "";
   }
 
+  /*
+   * How many days one row of a series stands for, given the bundle's single
+   * wholesale resolution flag. It is the tolerance every coverage test below
+   * uses: the finest granularity the bundle claims is also the closest a
+   * measurement can be expected to sit to a window edge. Asking for a
+   * measurement exactly on the edge of a weekly bundle would dash every delta
+   * on the page; accepting one from an arbitrary distance away would let a
+   * change that happened months ago be reported as this month's.
+   */
+  function resolutionStepDays() {
+    return (state.status === "ok" && state.data.downsampled) ? 7 : 1;
+  }
+
   function renderControlNote() {
     dom.resolution.textContent = controlNote();
     if (state.status === "ok" && state.data.downsampled) {
@@ -836,11 +965,102 @@ footer a:hover { color: var(--txt); }
 
   /* ---------------------------------------------------------- range control */
 
-  function knownRange(key) {
+  var SERIES_NAMES = ["views", "clones", "stars", "forks", "contributors", "repo"];
+
+  function rangeDefinition(key) {
     for (var i = 0; i < RANGES.length; i++) {
-      if (RANGES[i].key === key) return true;
+      if (RANGES[i].key === key) return RANGES[i];
     }
-    return false;
+    return null;
+  }
+
+  function knownRange(key) {
+    return rangeDefinition(key) !== null;
+  }
+
+  /*
+   * The archive's own newest and oldest measured day, across every series.
+   *
+   * Windows are anchored on the archive rather than on the visitor's clock on
+   * purpose. A collector that stopped a week ago would otherwise make "the
+   * last 30 days" mean 30 days of which seven were never measured, and the
+   * page would quietly report a shortfall as a decline. Anchored here, the
+   * window is 30 days of archive, the staleness banner is what says the
+   * archive stopped moving, and the two claims cannot contradict each other.
+   *
+   * Dimension snapshots are deliberately excluded: they are trailing 14-day
+   * aggregates on a snapshot date, not a measurement of that day, so letting
+   * one set the anchor would stretch a window past the last real measurement.
+   *
+   * Returns NaN when no series carries a parseable date -- possible on a
+   * non-empty bundle that holds only releases or only dimension snapshots.
+   */
+  function seriesDayExtent(data, wantNewest) {
+    var found = NaN;
+    for (var s = 0; s < SERIES_NAMES.length; s++) {
+      var dates = data.series[SERIES_NAMES[s]].dates;
+      for (var i = 0; i < dates.length; i++) {
+        var ms = parseDay(dates[i]);
+        if (isNaN(ms)) continue;
+        if (isNaN(found) || (wantNewest ? ms > found : ms < found)) found = ms;
+      }
+    }
+    return found;
+  }
+
+  function archiveEndDay(data) {
+    return seriesDayExtent(data, true);
+  }
+
+  function archiveStartDay(data) {
+    return seriesDayExtent(data, false);
+  }
+
+  /*
+   * The inclusive day window a range key selects, or null when the archive has
+   * no dated row to anchor it to.
+   *
+   * `all` is bounded by the archive's own first measured day rather than by
+   * negative infinity, so callers have a real date to print instead of having
+   * to invent the words "all time" for a window whose start they never
+   * established. `bounded` distinguishes the two for anyone who needs it.
+   */
+  function rangeWindow(data, rangeKey) {
+    var definition = rangeDefinition(rangeKey);
+    if (definition === null) return null;
+    var endMs = archiveEndDay(data);
+    if (isNaN(endMs)) return null;
+    var startMs = definition.days === null
+      ? archiveStartDay(data)
+      : endMs - (definition.days - 1) * DAY_MS;
+    if (isNaN(startMs) || startMs > endMs) startMs = endMs;
+    return {
+      key: definition.key,
+      title: definition.title,
+      days: definition.days,
+      bounded: definition.days !== null,
+      startMs: startMs,
+      endMs: endMs
+    };
+  }
+
+  /*
+   * Half-open index bounds [start, end) of the rows of `series` whose date
+   * falls inside `window`, so a caller can slice its parallel arrays without
+   * re-parsing dates. Dates ascend by contract; a row whose date does not
+   * parse is treated as outside the window.
+   */
+  function rangeSlice(series, window) {
+    var first = -1;
+    var last = -1;
+    for (var i = 0; i < series.dates.length; i++) {
+      var ms = parseDay(series.dates[i]);
+      if (isNaN(ms) || ms < window.startMs || ms > window.endMs) continue;
+      if (first < 0) first = i;
+      last = i;
+    }
+    if (first < 0) return { start: 0, end: 0, count: 0 };
+    return { start: first, end: last + 1, count: last + 1 - first };
   }
 
   /*
@@ -1154,12 +1374,419 @@ footer a:hover { color: var(--txt); }
     setRange: setRange,
     resolutionSuffix: resolutionSuffix,
     formatInstant: formatInstant,
-    parseInstant: parseInstant
+    parseInstant: parseInstant,
+    /*
+     * Shared range machinery. Every section reads the window from here rather
+     * than deriving one of its own, so a range change moves the whole page to
+     * the same window and two sections can never disagree about which 30 days
+     * they are drawing.
+     *
+     *   rangeWindow(data, rangeKey) -> { key, title, days, bounded, startMs, endMs } | null
+     *   rangeSlice(series, window)  -> { start, end, count }   half-open bounds
+     *   resolutionStepDays()        -> 1 daily, 7 when the bundle is downsampled
+     *
+     * DELTA_DAYS is the fixed 30-day header window and is independent of the
+     * range control; the range control governs what the charts draw.
+     */
+    DAY_MS: DAY_MS,
+    DELTA_DAYS: DELTA_DAYS,
+    parseDay: parseDay,
+    formatDay: formatDay,
+    dayGap: dayGap,
+    formatCount: formatCount,
+    resolutionStepDays: resolutionStepDays,
+    archiveStartDay: archiveStartDay,
+    archiveEndDay: archiveEndDay,
+    rangeWindow: rangeWindow,
+    rangeSlice: rangeSlice
   };
 
   buildRangeControl();
   applyState();
   load();
+})();
+</script>
+
+<script>
+/*
+ * Section "header-stats" — spec §7's at-a-glance figures.
+ *
+ * Registered through INSIGHTS.registerSection like every later section, so it
+ * inherits the same guarantees: it is only ever called with a validated,
+ * non-empty bundle, its slot is emptied before every call, and a throw would
+ * be contained to this slot. It builds from scratch each call and holds no
+ * listeners, timers or instances, so it registers no teardown.
+ *
+ * One rule shapes the whole file: a figure is printed only when the archive
+ * can support it, and a 30-day delta is printed only when THIS metric's own
+ * history covers the 30 days the delta claims to describe.
+ *
+ * That last clause is the trap in this data, and it is live rather than
+ * hypothetical. `collection_started` is the earliest date in ANY series — in
+ * the current archive 2026-02-15, from a contributors series derived from
+ * commit history — while `series.views.dates[0]` is 2026-08-18, the day the
+ * collector first wrote a traffic row. Checking coverage against
+ * `collection_started` would pass every metric permissively and print a
+ * confident 30-day views delta computed from a fortnight of data. So every
+ * coverage test below reads the metric's own dates, and every "since" label
+ * names the metric's own first measured day rather than the archive's.
+ */
+(function () {
+  "use strict";
+
+  var I = window.INSIGHTS;
+  var DASH = I.DASH;
+
+  /*
+   * Spec §7's seven figures, in the order the section copy names them.
+   *
+   * `kind` decides what a 30-day delta can honestly mean for the metric:
+   *
+   *   point — a point-in-time total (stars, forks, watchers, contributors,
+   *           release downloads). Its delta is the difference between the
+   *           measurements at the two ends of the window, so a measurement
+   *           must exist at BOTH ends.
+   *   flow  — a per-day count (views, clones). Its delta is what accrued
+   *           inside the window, so every day of the window has to be
+   *           measured or the total is short by an unknown amount.
+   */
+  var CARDS = [
+    { label: "Stars", kind: "point", series: "stars", field: "total" },
+    { label: "Forks", kind: "point", series: "forks", field: "total" },
+    { label: "Watchers", kind: "point", series: "repo", field: "subscribers" },
+    { label: "Views", kind: "flow", series: "views", field: "count" },
+    { label: "Clones", kind: "flow", series: "clones", field: "count" },
+    { label: "Contributors", kind: "point", series: "contributors", field: "total" },
+    { label: "Release downloads", kind: "point", series: "repo", field: "downloads_total" }
+  ];
+
+  /* The series whose coverage inside the selected range is worth stating, and
+   * the column that decides whether one of their rows counts as measured. */
+  var COVERAGE = [
+    { label: "views", series: "views", field: "count" },
+    { label: "clones", series: "clones", field: "count" },
+    { label: "stars", series: "stars", field: "total" },
+    { label: "forks", series: "forks", field: "total" },
+    { label: "contributors", series: "contributors", field: "total" },
+    { label: "repo snapshots", series: "repo", field: "subscribers" }
+  ];
+
+  function el(tag, className, text) {
+    var node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+
+  /* A row counts as measured only when its value is not null AND its date
+   * parses: the contract makes null mean "not measured", and a row whose date
+   * cannot be read cannot be placed in a window at all. */
+  function newestMeasured(series, field, notAfterMs) {
+    for (var i = series.dates.length - 1; i >= 0; i--) {
+      if (series[field][i] === null) continue;
+      var ms = I.parseDay(series.dates[i]);
+      if (isNaN(ms)) continue;
+      if (notAfterMs !== null && ms > notAfterMs) continue;
+      return { value: series[field][i], dayMs: ms };
+    }
+    return null;
+  }
+
+  function oldestMeasured(series, field) {
+    for (var i = 0; i < series.dates.length; i++) {
+      if (series[field][i] === null) continue;
+      var ms = I.parseDay(series.dates[i]);
+      if (isNaN(ms)) continue;
+      return { value: series[field][i], dayMs: ms };
+    }
+    return null;
+  }
+
+  function countMeasured(series, field, from, to) {
+    var measured = 0;
+    for (var i = from; i < to; i++) {
+      if (series[field][i] !== null) measured++;
+    }
+    return measured;
+  }
+
+  function unavailable(reason) {
+    return { available: false, reason: reason };
+  }
+
+  function plural(count, singular, pluralWord) {
+    return count === 1 ? singular : pluralWord;
+  }
+
+  /* One row of a daily bundle stands for a day; one row of a downsampled
+   * bundle stands for a week. Both spellings appear in captions, so the label
+   * is derived from the bundle's own resolution rather than assumed daily. */
+  function rowsLabel(count, step) {
+    return count + " measured " +
+      (step === 1 ? plural(count, "day", "days") : plural(count, "weekly bucket", "weekly buckets"));
+  }
+
+  /*
+   * A point-in-time delta over `win`, whose startMs is the day the window
+   * opens against — one full DELTA_DAYS before its close, because the change
+   * being described is the change SINCE that measurement.
+   *
+   * Three ways this refuses, each naming what is missing rather than falling
+   * back on a number computed from something else.
+   */
+  function pointDelta(series, field, win, step) {
+    var current = newestMeasured(series, field, null);
+    if (current === null) {
+      return unavailable("this metric has never been measured, so there is no value to compare.");
+    }
+    var trailing = I.dayGap(win.endMs, current.dayMs);
+    if (trailing > step) {
+      return unavailable("its most recent measurement is from " + I.formatDay(current.dayMs) +
+        ", " + trailing + " " + plural(trailing, "day", "days") + " before the archive's newest day (" +
+        I.formatDay(win.endMs) + "), so the window has no value at its close.");
+    }
+    var baseline = newestMeasured(series, field, win.startMs);
+    if (baseline === null) {
+      var first = oldestMeasured(series, field);
+      return unavailable("this metric's own history starts on " + I.formatDay(first.dayMs) +
+        ", after the window opens on " + I.formatDay(win.startMs) +
+        ", so the last " + I.DELTA_DAYS + " days are not covered by it.");
+    }
+    var lag = I.dayGap(win.startMs, baseline.dayMs);
+    if (lag > step) {
+      return unavailable("the nearest measurement at or before " + I.formatDay(win.startMs) +
+        " is from " + I.formatDay(baseline.dayMs) + ", " + lag + " days earlier. A change between " +
+        "those two dates cannot be told apart from a change inside the window, so no figure is claimed.");
+    }
+    return {
+      available: true,
+      signed: true,
+      value: current.value - baseline.value,
+      detail: "Measured " + I.formatCount(baseline.value) + " on " + I.formatDay(baseline.dayMs) +
+        " and " + I.formatCount(current.value) + " on " + I.formatDay(current.dayMs) + "."
+    };
+  }
+
+  /*
+   * Every day of the window has to be accounted for by a measurement, or the
+   * total is short by an unknown amount and cannot be published as a 30-day
+   * figure. `step` is how many days one row stands for, so a daily bundle
+   * needs a row on the window's first and last day with no gap wider than a
+   * day between them.
+   */
+  function coverageGap(days, win, step) {
+    var edge = (step - 1) * I.DAY_MS;
+    var broken = days[0] - win.startMs > edge || win.endMs - days[days.length - 1] > edge;
+    for (var i = 1; !broken && i < days.length; i++) {
+      if (days[i] - days[i - 1] > step * I.DAY_MS) broken = true;
+    }
+    if (!broken) return null;
+    if (step === 1) {
+      var total = I.dayGap(win.endMs, win.startMs) + 1;
+      var missing = total - days.length;
+      if (missing > 0) {
+        return missing + " of the " + total + " days in the window " +
+          plural(missing, "carries", "carry") + " no measurement, so the total would be short " +
+          "by an unknown amount.";
+      }
+    }
+    return "the window is not covered end to end by measurements, so the total would be short " +
+      "by an unknown amount.";
+  }
+
+  /*
+   * A flow total over `win`, whose startMs is the FIRST day of the window
+   * rather than the day before it: a sum counts the days it covers, where a
+   * point-in-time difference compares against the state before them. The two
+   * kinds genuinely need windows offset by one day from each other, and
+   * collapsing them into one would either drop a day from the sum or claim a
+   * comparison the archive cannot make.
+   */
+  function flowDelta(series, field, win, step) {
+    var first = oldestMeasured(series, field);
+    if (first === null) {
+      return unavailable("this metric has never been measured, so there is nothing to total.");
+    }
+    var days = [];
+    var sum = 0;
+    for (var i = 0; i < series.dates.length; i++) {
+      var ms = I.parseDay(series.dates[i]);
+      if (isNaN(ms) || ms < win.startMs || ms > win.endMs) continue;
+      if (series[field][i] === null) continue;
+      days.push(ms);
+      sum += series[field][i];
+    }
+    if (days.length === 0) {
+      return unavailable("no day inside the window carries a measurement.");
+    }
+    days.sort(function (a, b) { return a - b; });
+    /* Stated as what actually fell inside the window rather than as the span
+     * between the first measurement and the window's close: the two differ
+     * whenever the series also stops short of the close, and the smaller of
+     * them is the one that is true. */
+    if (first.dayMs > win.startMs) {
+      return unavailable("this metric's own history starts on " + I.formatDay(first.dayMs) +
+        ", after the window opens on " + I.formatDay(win.startMs) + " — only " +
+        rowsLabel(days.length, step) + " of the " + I.DELTA_DAYS +
+        " fall inside it, so a " + I.DELTA_DAYS + "-day total would be a total of something else.");
+    }
+    var gap = coverageGap(days, win, step);
+    if (gap !== null) return unavailable(gap);
+    return {
+      available: true,
+      signed: false,
+      value: sum,
+      detail: "Totalled from " + rowsLabel(days.length, step) + " covering " +
+        I.formatDay(win.startMs) + " to " + I.formatDay(win.endMs) + "."
+    };
+  }
+
+  function deltaChip(delta, endMs) {
+    var tone;
+    var text;
+    if (!delta.available) {
+      tone = "delta-none";
+      text = DASH;
+    } else if (delta.signed) {
+      tone = delta.value > 0 ? "delta-up" : (delta.value < 0 ? "delta-down" : "delta-flat");
+      text = (delta.value > 0 ? "+" : "") + I.formatCount(delta.value);
+    } else {
+      tone = delta.value > 0 ? "delta-up" : "delta-flat";
+      text = I.formatCount(delta.value);
+    }
+
+    var explanation;
+    if (!delta.available) {
+      explanation = "No " + I.DELTA_DAYS + "-day figure: " + delta.reason;
+    } else {
+      explanation = (delta.signed ? "Change over the " : "Total over the ") + I.DELTA_DAYS +
+        " days to " + I.formatDay(endMs) + I.resolutionSuffix() + ". " + delta.detail;
+    }
+
+    var chip = el("span", "stat-delta " + tone, text + " · " + I.DELTA_DAYS + "d");
+    chip.title = explanation;
+    /* The dash is the whole point of this chip and announces nothing on its
+     * own, so the reason travels with it for anyone not reading a tooltip. */
+    chip.appendChild(el("span", "vh", " — " + explanation));
+    return chip;
+  }
+
+  /*
+   * Views and clones: a running total since THIS series began, per spec §7,
+   * labelled with its own first measured day. Daily unique-visitor counts are
+   * deliberately not summed anywhere on this card — a visitor who returns on
+   * three days is three daily uniques and one person, so a sum of them is not
+   * a count of anything.
+   */
+  function flowCard(card, data, win, step) {
+    var series = data.series[card.series];
+    var first = oldestMeasured(series, card.field);
+    var body = { valueText: DASH, unmeasured: true, sub: "No measurement recorded." };
+    if (first !== null) {
+      var total = 0;
+      var measured = 0;
+      for (var i = 0; i < series.dates.length; i++) {
+        if (series[card.field][i] === null) continue;
+        total += series[card.field][i];
+        measured++;
+      }
+      var missing = series.dates.length - measured;
+      body.valueText = I.formatCount(total);
+      body.unmeasured = false;
+      body.sub = "since " + I.formatDay(first.dayMs) + " · " + rowsLabel(measured, step) +
+        (missing > 0 ? " · " + missing + " unmeasured" : "");
+    }
+    body.delta = win === null
+      ? unavailable("the archive holds no dated measurement to anchor a window to.")
+      : flowDelta(series, card.field, win, step);
+    return body;
+  }
+
+  function pointCard(card, data, win, step) {
+    var series = data.series[card.series];
+    var current = newestMeasured(series, card.field, null);
+    var body = { valueText: DASH, unmeasured: true, sub: "No measurement recorded." };
+    if (current !== null) {
+      body.valueText = I.formatCount(current.value);
+      body.unmeasured = false;
+      body.sub = "as of " + I.formatDay(current.dayMs);
+    }
+    body.delta = win === null
+      ? unavailable("the archive holds no dated measurement to anchor a window to.")
+      : pointDelta(series, card.field, win, step);
+    return body;
+  }
+
+  function buildCard(card, body, endMs) {
+    var box = el("div", "stat");
+    box.appendChild(el("p", "stat-label", card.label));
+    box.appendChild(el("p", "stat-value" + (body.unmeasured ? " is-unmeasured" : ""), body.valueText));
+    box.appendChild(el("p", "stat-sub", body.sub));
+    box.appendChild(deltaChip(body.delta, endMs));
+    return box;
+  }
+
+  function pair(key, value) {
+    var span = el("span");
+    span.appendChild(el("span", "k", key));
+    span.appendChild(document.createTextNode(" "));
+    span.appendChild(el("span", "v", value));
+    return span;
+  }
+
+  /*
+   * The selected range, stated in the dates it actually resolves to and in how
+   * much of it each series measured. This is what consumes the shared range
+   * state: the figures above are the fixed set spec §7 names, so the range
+   * cannot honestly move them, but what the archive holds inside the selected
+   * window is a real answer that changes with the control — and it is the same
+   * window, from the same INSIGHTS.rangeWindow, that the later charts draw.
+   */
+  function windowNote(data, rangeKey, step) {
+    var note = el("p", "window-note");
+    var win = I.rangeWindow(data, rangeKey);
+    if (win === null) {
+      note.appendChild(pair("selected range", "no dated measurement to window"));
+      return note;
+    }
+    var spanDays = I.dayGap(win.endMs, win.startMs) + 1;
+    note.appendChild(pair(win.title.toLowerCase(),
+      I.formatDay(win.startMs) + " → " + I.formatDay(win.endMs) + " · " + spanDays + " " +
+      plural(spanDays, "day", "days") + I.resolutionSuffix()));
+    for (var i = 0; i < COVERAGE.length; i++) {
+      var entry = COVERAGE[i];
+      var series = data.series[entry.series];
+      var slice = I.rangeSlice(series, win);
+      note.appendChild(pair(entry.label,
+        rowsLabel(countMeasured(series, entry.field, slice.start, slice.end), step)));
+    }
+    return note;
+  }
+
+  function render(slot, data, rangeKey) {
+    var step = I.resolutionStepDays();
+    var endMs = I.archiveEndDay(data);
+    var hasAnchor = !isNaN(endMs);
+    /* The delta window is fixed at 30 days and is NOT the selected range: the
+     * seven figures stay comparable to each other whatever the control shows.
+     * `point` windows open a full 30 days before the close, `flow` windows on
+     * the first of the 30 days — see flowDelta for why they differ by one. */
+    var pointWin = hasAnchor ? { startMs: endMs - I.DELTA_DAYS * I.DAY_MS, endMs: endMs } : null;
+    var flowWin = hasAnchor ? { startMs: endMs - (I.DELTA_DAYS - 1) * I.DAY_MS, endMs: endMs } : null;
+
+    var grid = el("div", "stat-grid");
+    for (var i = 0; i < CARDS.length; i++) {
+      var card = CARDS[i];
+      var body = card.kind === "flow"
+        ? flowCard(card, data, flowWin, step)
+        : pointCard(card, data, pointWin, step);
+      grid.appendChild(buildCard(card, body, endMs));
+    }
+    slot.appendChild(grid);
+    slot.appendChild(windowNote(data, rangeKey, step));
+  }
+
+  I.registerSection("header-stats", render);
 })();
 </script>
 
