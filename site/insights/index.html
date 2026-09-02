@@ -2255,6 +2255,71 @@ footer a:hover { color: var(--txt); }
   }
 
   /*
+   * Bind a section's card declarations to the archive columns they name.
+   *
+   * `specs` is the section's own array of card objects. Each carries a
+   * `columns` map — `{ <name>: { series, field }, ... }` — naming a series of
+   * the bundle and one of that series' value columns, and a `title` used to
+   * name the card if the binding fails. This returns
+   *
+   *   { columns: [ { series, field }, ... ],
+   *     cards:   [ { spec, offsets: { <name>: index } }, ... ] }
+   *
+   * where `columns` is exactly the argument `expand` takes, and a card's
+   * `offsets[name]` is the index in `axis.values` of the column that card
+   * declared under `name`. A chart therefore draws
+   * `axis.values[card.offsets.count]` — named at the point of use with the
+   * name it was declared under, never `values[i]` and never
+   * `values[offset + 1]`.
+   *
+   * This exists because the alternative had already gone wrong twice in this
+   * file. A section that writes its `expand` columns as one literal and its
+   * card list as another binds a card to its data BY ARRAY POSITION: the
+   * declared series name decorates the card without driving it, and
+   * reordering the card list moves every title, label and colour while the
+   * data stays where it was — a card headed "Forks" drawn from the star
+   * column, or one headed "Repository clones" drawn from the views columns,
+   * with nothing thrown and nothing on the page to show it. On a page whose
+   * whole discipline is that a caption describes what is beneath it, that is
+   * the worst failure available, and it is invisible in review because both
+   * literals read correctly on their own.
+   *
+   * One binding path for every section rather than one per section, for the
+   * same reason `mount` is the only `new uPlot(...)`: two copies of this
+   * arithmetic are two chances for one of them to drift, and the drift would
+   * be silent in exactly the same way.
+   */
+  function bind(sectionId, data, specs) {
+    var columns = [];
+    var cards = [];
+    for (var i = 0; i < specs.length; i++) {
+      var spec = specs[i];
+      var offsets = {};
+      for (var name in spec.columns) {
+        if (!Object.prototype.hasOwnProperty.call(spec.columns, name)) continue;
+        var declared = spec.columns[name];
+        var series = data.series[declared.series];
+        /* The bundle validator guarantees every series the contract names and
+         * checks that each of its value columns is an array, so this can only
+         * fire on a card declaring something the contract does not carry —
+         * the one input the validator structurally cannot check, because it
+         * validates the bundle and not the page. Thrown rather than skipped:
+         * the shell turns a throw into that section's honest failure note,
+         * where skipping the card would publish a section quietly missing a
+         * chart it says it draws. */
+        if (series === undefined || series === null || !Array.isArray(series[declared.field])) {
+          throw new Error(sectionId + ": the " + spec.title + " card declares series." +
+            declared.series + "." + declared.field + ", which this bundle does not carry.");
+        }
+        offsets[name] = columns.length;
+        columns.push({ series: series, field: declared.field });
+      }
+      cards.push({ spec: spec, offsets: offsets });
+    }
+    return { columns: columns, cards: cards };
+  }
+
+  /*
    * Re-lay a set of columns onto a complete, evenly stepped time axis.
    *
    * `columns` is `[{ series, field }, ...]`; every column is placed on ONE
@@ -2727,6 +2792,7 @@ footer a:hover { color: var(--txt); }
     /* Exported so a later chart section joins THIS cursor group rather than
      * declaring a key of its own. */
     SYNC_KEY: SYNC_KEY,
+    bind: bind,
     colour: colour,
     expand: expand,
     mount: mount,
@@ -2760,6 +2826,16 @@ footer a:hover { color: var(--txt); }
   /*
    * The two charts, in the order the section copy names them.
    *
+   * `columns` is what the card DRAWS and `count`/`uniques` are how it draws
+   * it, under matching keys: `columns.count` names the archive column, `count`
+   * names its label and colour. The two are bound together by
+   * `INSIGHTS_CHARTS.bind`, so this array is the single declaration of both —
+   * reorder it, or point a `columns` entry somewhere else, and the heading,
+   * the colour and the data all move together. Written as a card list beside
+   * a separate `expand` literal, they would have been bound by array position
+   * and a reorder would have left this section drawing views under the clones
+   * heading with nothing to show for it.
+   *
    * Colours are Aether Drift tokens, read from :root at draw time. The count
    * series carries the fill and the solid stroke; the uniques series is dashed
    * and thinner, because it is the subordinate reading of the same traffic and
@@ -2767,7 +2843,10 @@ footer a:hover { color: var(--txt); }
    */
   var CHARTS = [
     {
-      series: "views",
+      columns: {
+        count: { series: "views", field: "count" },
+        uniques: { series: "views", field: "uniques" }
+      },
       title: "Page views",
       count: {
         label: "Views",
@@ -2777,7 +2856,10 @@ footer a:hover { color: var(--txt); }
       uniques: { label: "Unique visitors", token: "--lavender", fallback: "#c4b5fd" }
     },
     {
-      series: "clones",
+      columns: {
+        count: { series: "clones", field: "count" },
+        uniques: { series: "clones", field: "uniques" }
+      },
       title: "Repository clones",
       count: {
         label: "Clones",
@@ -2840,11 +2922,11 @@ footer a:hover { color: var(--txt); }
    * as what the page does with it, because a break in a line is the one thing
    * on this page a reader is most likely to read as a fall to zero.
    */
-  function metaLine(axis, offset) {
+  function metaLine(axis, offsets) {
     var stepDays = axis.stepDays;
     var total = axis.xs.length;
-    var counted = axis.measured[offset];
-    var uniqueCounted = axis.measured[offset + 1];
+    var counted = axis.measured[offsets.count];
+    var uniqueCounted = axis.measured[offsets.uniques];
     var missing = total - counted;
 
     var note = el("p", "chart-meta");
@@ -2869,10 +2951,10 @@ footer a:hover { color: var(--txt); }
     return note;
   }
 
-  function buildChart(stack, spec, axis, offset, downsampled) {
+  function buildChart(stack, spec, axis, offsets, downsampled) {
     var card = el("div", "chart-card");
     card.appendChild(el("p", "chart-title", spec.title));
-    card.appendChild(metaLine(axis, offset));
+    card.appendChild(metaLine(axis, offsets));
 
     var host = el("div", "chart-scroll");
     card.appendChild(host);
@@ -2894,14 +2976,14 @@ footer a:hover { color: var(--txt); }
         stroke: C.colour(spec.count.token, spec.count.fallback),
         fill: spec.count.fill,
         width: 2,
-        values: axis.values[offset]
+        values: axis.values[offsets.count]
       },
       {
         label: uniquesLabel(spec, downsampled),
         stroke: C.colour(spec.uniques.token, spec.uniques.fallback),
         width: 1.5,
         dash: [5, 4],
-        values: axis.values[offset + 1]
+        values: axis.values[offsets.uniques]
       }
     ], {
       /* Stated rather than left to the default. Both series here are per-day
@@ -2962,13 +3044,11 @@ footer a:hover { color: var(--txt); }
 
     var stepDays = I.resolutionStepDays();
     /* One expansion for both charts, so both get the identical x axis and the
-     * synced cursor lands on the same day in each. */
-    var axis = C.expand([
-      { series: data.series.views, field: "count" },
-      { series: data.series.views, field: "uniques" },
-      { series: data.series.clones, field: "count" },
-      { series: data.series.clones, field: "uniques" }
-    ], win, stepDays);
+     * synced cursor lands on the same day in each. The columns come from the
+     * cards that read them rather than from a literal of their own, so a card
+     * cannot be drawn from a column it does not name; see `bind`. */
+    var bound = C.bind("chart-reach", data, CHARTS);
+    var axis = C.expand(bound.columns, win, stepDays);
 
     /* Before the `empty` branch: an overrun sets `empty` too, as a fail-safe
      * for a caller that forgets this check, and the specific reason is the
@@ -2991,8 +3071,9 @@ footer a:hover { color: var(--txt); }
 
     var created = [];
     try {
-      for (var i = 0; i < CHARTS.length; i++) {
-        created.push(buildChart(stack, CHARTS[i], axis, i * 2, data.downsampled));
+      for (var i = 0; i < bound.cards.length; i++) {
+        created.push(buildChart(stack, bound.cards[i].spec, axis,
+          bound.cards[i].offsets, data.downsampled));
       }
       /* Both charts sit in one cursor-sync group, and uPlot propagates the drag
        * selection through it, so a zoom on either moves both — and moves the
@@ -3110,60 +3191,25 @@ footer a:hover { color: var(--txt); }
    *
    * No area fill, unlike the reach charts. A fill reads as area-under-the-curve
    * measured from zero, and this axis does not start at zero.
+   *
+   * `columns` is what each card DRAWS, and it is the only declaration of it:
+   * `INSIGHTS_CHARTS.bind` builds the `expand` columns out of these and hands
+   * each card back the offset of the column it named, so the heading, the
+   * colour and the data move together. See `bind` for what a second literal
+   * here would have cost.
    */
   var CHARTS = [
     {
-      series: "stars", field: "total", title: "Stars", label: "Stars",
+      columns: { total: { series: "stars", field: "total" } },
+      title: "Stars", label: "Stars",
       token: "--amber", fallback: "#fcd34d"
     },
     {
-      series: "forks", field: "total", title: "Forks", label: "Forks",
+      columns: { total: { series: "forks", field: "total" } },
+      title: "Forks", label: "Forks",
       token: "--mint", fallback: "#86efac"
     }
   ];
-
-  /*
-   * Turn the declarations above into the columns `expand` is handed, so a
-   * card's heading and the archive column it draws cannot come apart.
-   *
-   * This is the ONLY place `series` and `field` are read, and the only place
-   * the expand columns are built. Card `i` draws `axis.values[offset]` where
-   * `offset` is the position this same iteration pushed its column into, so
-   * reordering `CHARTS` — or editing a `series` — moves the title, the label,
-   * the colour and the data together. Written as two independent literals,
-   * the cards would have been bound to their data by array position alone,
-   * and a reorder would have produced a card headed "Forks" drawn from the
-   * star column with nothing failing and nothing on the page to show it. On a
-   * page whose entire discipline is that a caption describes what is beneath
-   * it, that is the worst failure available, so the binding is derived rather
-   * than declared twice.
-   *
-   * The offset is carried per card rather than assumed equal to the card's
-   * index. It is equal today, because each card declares one column; a card
-   * that one day needs two would otherwise silently shift every later card
-   * onto the wrong data.
-   */
-  function bindColumns(data) {
-    var cards = [];
-    var columns = [];
-    for (var i = 0; i < CHARTS.length; i++) {
-      var spec = CHARTS[i];
-      var series = data.series[spec.series];
-      /* The bundle validator guarantees every series the contract names and
-       * checks that each declared field is an array, so this can only fire on
-       * a spec naming something the contract does not carry. Thrown rather
-       * than skipped: the shell turns a throw into this section's honest
-       * failure note, where skipping the card would publish a section quietly
-       * missing a chart it claims to draw. */
-      if (series === undefined || series === null || !Array.isArray(series[spec.field])) {
-        throw new Error("chart-growth: the " + spec.title + " card declares series." +
-          spec.series + "." + spec.field + ", which this bundle does not carry.");
-      }
-      cards.push({ spec: spec, offset: columns.length });
-      columns.push({ series: series, field: spec.field });
-    }
-    return { cards: cards, columns: columns };
-  }
 
   /* The release markers take the growth section's own channel colour, so the
    * lane, the labels and the section's "#growth" heading are one thing. */
@@ -3688,7 +3734,7 @@ footer a:hover { color: var(--txt); }
   function readings(cards, axis) {
     var parts = [];
     for (var i = 0; i < cards.length; i++) {
-      var value = axis.values[cards[i].offset][0];
+      var value = axis.values[cards[i].offsets.total][0];
       parts.push(cards[i].spec.label + ": " +
         (value === null || value === undefined ? "not measured" : I.formatCount(value)));
     }
@@ -3841,9 +3887,10 @@ footer a:hover { color: var(--txt); }
     var stepDays = I.resolutionStepDays();
     /* One expansion for both charts, so both get the identical x axis, the
      * synced cursor lands on the same day in each, and one set of release
-     * markers is correct for both. The columns and the cards that read them
-     * come out of one declaration; see `bindColumns`. */
-    var bound = bindColumns(data);
+     * markers is correct for both. The columns come from the cards that read
+     * them rather than from a literal of their own, so a card cannot be drawn
+     * from a column it does not name; see `bind`. */
+    var bound = C.bind("chart-growth", data, CHARTS);
     var axis = C.expand(bound.columns, win, stepDays);
 
     /* Before the `empty` branch: an overrun sets `empty` too, as a fail-safe
@@ -3889,7 +3936,7 @@ footer a:hover { color: var(--txt); }
     try {
       for (var i = 0; i < bound.cards.length; i++) {
         var chart = buildChart(stack, bound.cards[i].spec, axis,
-          bound.cards[i].offset, painter);
+          bound.cards[i].offsets.total, painter);
         if (chart !== null) created.push(chart);
       }
     } catch (error) {
