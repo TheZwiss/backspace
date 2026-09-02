@@ -20,6 +20,19 @@ export interface BackfillOptions {
   store: Store;
   /** `owner/repo`, from `github.repository`. */
   slug: string;
+  /**
+   * The UTC date the reconstruction is being taken on, injected the same way
+   * `collect.ts` takes it rather than read from the clock here, so the output
+   * stays a pure function of the inputs and the tests can pin it.
+   *
+   * It bounds the cumulative fill forward: a star counter is known on every
+   * day between its first event and the moment it is read, so a quiet stretch
+   * running from the last star up to the present is knowledge, not a gap. It
+   * is a bound and never a truncation — an event dated after it (clock skew,
+   * or a star that lands while the job pages through the list) still gets its
+   * row.
+   */
+  today: IsoDate;
 }
 
 /**
@@ -35,6 +48,45 @@ export interface BackfillOptions {
  * one-shot backfill to fill, and no cheaper reconstruction exists.
  */
 const WRITABLE = ['stars.csv', 'forks.csv', 'releases.csv'] as const;
+
+const MS_PER_DAY = 86_400_000;
+
+/**
+ * Upper bound on the number of days one reconstruction may write. GitHub
+ * launched in 2008, so a repository history longer than this is not a long
+ * history, it is a bad input — and because backfill writes straight into the
+ * archive branch, an unbounded day loop turns one malformed timestamp into a
+ * multi-million-row commit. Generous on purpose: it exists to catch nonsense,
+ * not to express a policy about how much history is worth keeping.
+ */
+const MAX_RECONSTRUCTED_DAYS = 20_000;
+
+const ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/**
+ * Converts a `YYYY-MM-DD` date to the epoch milliseconds of its UTC midnight,
+ * so the fill in `cumulativeByDay` can step a day at a time.
+ *
+ * Built from the matched components through `Date.UTC` rather than
+ * `new Date(string)`, and then round-tripped back to a string, for the same
+ * reasons `bundle.ts`'s `utcMonday` does it this way: a non-ISO spelling like
+ * `2026-9-1` parses host-dependently, and an impossible date like `2026-02-30`
+ * rolls silently over to 2 March, which would shift every row after it by two
+ * days under a date that still looks perfectly ordinary. The round trip
+ * catches both, along with the legacy two-digit-year mapping in `Date.UTC`
+ * where year 50 means 1950.
+ */
+function utcDayStart(date: IsoDate): number {
+  const match = ISO_DATE_RE.exec(date);
+  if (match === null) {
+    throw new Error(`backfill: expected a YYYY-MM-DD date, got ${JSON.stringify(date)}`);
+  }
+  const time = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  if (!Number.isFinite(time) || new Date(time).toISOString().slice(0, 10) !== date) {
+    throw new Error(`backfill: ${JSON.stringify(date)} is not a real calendar date`);
+  }
+  return time;
+}
 
 /**
  * Converts an ISO timestamp to its UTC calendar date. Mirrors `collect.ts`'s
@@ -71,8 +123,30 @@ function toDate(timestamp: string): IsoDate {
  * a date with no events keeps the running total from the day before it
  * rather than resetting — matching what the live counter would have read
  * had it been sampled that day.
+ *
+ * That last clause is why this emits a row for EVERY calendar day in the
+ * range rather than only for the days an event landed on. The dashboard draws
+ * an absent date as a break in the line, and that convention is load-bearing
+ * for traffic, where GitHub omits a day on which it measured nothing and a
+ * break is the only honest rendering. A cumulative counter is the opposite
+ * case: on a day nobody starred, the total is not unmeasured, it is known
+ * exactly, and it equals the running total carried forward. Writing only the
+ * days that moved publishes a hole in the record where there is no hole in
+ * the knowledge, which understates the archive as badly as a fabricated zero
+ * would overstate it.
+ *
+ * Every row is a reconstruction carrying one uniform caveat: `/stargazers`
+ * lists only *current* stargazers, so a star since withdrawn is invisible and
+ * these totals are a lower bound on what the live counter read. That caveat
+ * is identical on an event day and on a quiet day — both are computed from
+ * the same permanent timestamps — so there is no honesty distinction between
+ * the two kinds of day for the fill to preserve. The merge stays if-absent,
+ * so a real collector measurement always wins over any of them.
+ *
+ * The range runs from the first event to `through`, or to the last event when
+ * that falls later.
  */
-function cumulativeByDay(dates: readonly IsoDate[]): CountPoint[] {
+function cumulativeByDay(dates: readonly IsoDate[], through: IsoDate): CountPoint[] {
   const perDay = new Map<IsoDate, number>();
   for (const date of dates) {
     perDay.set(date, (perDay.get(date) ?? 0) + 1);
@@ -81,11 +155,43 @@ function cumulativeByDay(dates: readonly IsoDate[]): CountPoint[] {
   // entire point of byte ordering here is that everything in the archive sorts
   // the same way, which two independent implementations cannot promise.
   const days = [...perDay.keys()].sort(compareStrings);
+  const first = days[0];
+  const last = days[days.length - 1];
+  // No events means nothing to reconstruct — not an empty range to fill with
+  // zeroes. A repository nobody has starred and a repository whose stargazer
+  // list could not be read are different states, and the archive holding no
+  // rows is the only thing that distinguishes them.
+  if (first === undefined || last === undefined) return [];
+
+  const startTime = utcDayStart(first);
+  // `through` bounds the fill but never truncates evidence, so an event dated
+  // after it still ends the range. Skew of that kind is ordinary: the job
+  // reads its own date once at start-up and then pages a list that keeps
+  // growing underneath it.
+  const endTime = Math.max(utcDayStart(last), utcDayStart(through));
+
+  // A span no real repository can have means an input is wrong — a corrupted
+  // clock, or a garbage timestamp that still parsed as a date — and the cost
+  // of proceeding is a multi-million-row CSV committed to the archive branch.
+  // GitHub itself dates from 2008, so nothing longer than this describes a
+  // real history.
+  const spanDays = (endTime - startTime) / MS_PER_DAY + 1;
+  if (spanDays > MAX_RECONSTRUCTED_DAYS) {
+    const end = new Date(endTime).toISOString().slice(0, 10);
+    throw new Error(
+      `backfill: refusing to reconstruct ${spanDays} days (${first} to ${end}); ` +
+        'an input date is implausible',
+    );
+  }
+
+  const rows: CountPoint[] = [];
   let running = 0;
-  return days.map((date) => {
+  for (let time = startTime; time <= endTime; time += MS_PER_DAY) {
+    const date = new Date(time).toISOString().slice(0, 10);
     running += perDay.get(date) ?? 0;
-    return { date, total: running };
-  });
+    rows.push({ date, total: running });
+  }
+  return rows;
 }
 
 /**
@@ -124,7 +230,7 @@ function cumulativeByDay(dates: readonly IsoDate[]): CountPoint[] {
  * meant the same thing.
  */
 export async function backfill(options: BackfillOptions): Promise<{ written: string[] }> {
-  const { client, store, slug } = options;
+  const { client, store, slug, today } = options;
   const repoPath = `/repos/${slug}`;
 
   // The stargazers list is the one genuinely long paginated call this
@@ -166,12 +272,12 @@ export async function backfill(options: BackfillOptions): Promise<{ written: str
   mergeIfAbsent(
     'stars.csv',
     ['date', 'total'],
-    cumulativeByDay(stargazers.map((item) => toDate(item.starred_at))),
+    cumulativeByDay(stargazers.map((item) => toDate(item.starred_at)), today),
   );
   mergeIfAbsent(
     'forks.csv',
     ['date', 'total'],
-    cumulativeByDay(forks.map((item) => toDate(item.created_at))),
+    cumulativeByDay(forks.map((item) => toDate(item.created_at)), today),
   );
 
   // A draft release carries `published_at: null` and is excluded: it has no

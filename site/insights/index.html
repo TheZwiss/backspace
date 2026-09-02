@@ -593,8 +593,13 @@ footer a:hover { color: var(--txt); }
         the archive did not measure &mdash; a day, or a whole week once the bundle is bucketed
         by week &mdash; is a hole in the record and never a fall back to a lower count, and
         wherever a line is drawn that hole is a break in it rather than a dip. A star count does
-        not return to zero, so it is the easiest gap on the page to misread as a collapse. What
-        follows is built from the rows the archive holds and nothing else: when the history is
+        not return to zero, so it is the easiest gap on the page to misread as a collapse. A day on
+        which nobody starred is not such a gap and carries a row of its own: the total that day is
+        known, and it is the previous day's. History from before daily collection began is
+        <strong>reconstructed</strong> from GitHub's permanent per-star and per-fork timestamps,
+        which list only stars and forks that still exist, so a star since withdrawn is invisible
+        there and those earlier totals are a lower bound rather than what the counter read at the
+        time. What follows is built from the rows the archive holds and nothing else: when the history is
         too short to make a line, this section states the readings and its reasons instead of
         drawing one, and how a chart's axes are scaled is stated beside the chart itself.
       </p>

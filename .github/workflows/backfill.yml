@@ -12,7 +12,17 @@ name: Metrics backfill
 # reconstruction cannot see anyone who starred and later unstarred —
 # overwriting a measured value with a reconstructed one would silently
 # replace a correct number with a systematically wrong one. A rerun over
-# dates it already filled writes nothing new; it is not destructive.
+# dates it already holds a row for writes nothing new; it is not
+# destructive.
+#
+# One caveat, because "safe to run at any time" is not quite the whole
+# story. The reconstruction is dense: it writes a row for EVERY day from
+# the first event through the run date, quiet days included, since a
+# cumulative total is known on a day nothing happened. So a dispatch fills
+# any date with no row -- including a gap left by a FAILED COLLECTION,
+# where the reconstruction can undercount and make a cumulative line dip.
+# Read "Recovering from a gap" in docs/systems/metrics.md before
+# dispatching against an archive that already has collector history in it.
 #
 # Traffic (views/clones/referrers/paths) is not backfillable by any means —
 # GitHub only ever exposes a trailing 14-day window for it — and this

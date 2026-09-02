@@ -260,11 +260,11 @@ ${seriesTable(s.clones.dates, [
 ])}
 
 <h2>Stars</h2>
-<p>Cumulative star count. Dates with no change carry no row.</p>
+<p>Cumulative star count, one row per day. A day on which nobody starred carries the previous day's total, because that total is known rather than missing. History before daily collection began is reconstructed from each star's permanent timestamp, which counts only stars that still exist, so those early totals are a lower bound on what the counter read at the time.</p>
 ${seriesTable(s.stars.dates, [{ label: 'stars', values: s.stars.total }])}
 
 <h2>Forks</h2>
-<p>Cumulative fork count. Dates with no change carry no row.</p>
+<p>Cumulative fork count, one row per day, on the same basis as stars above: quiet days carry the previous total, and pre-collection history is reconstructed from forks that still exist.</p>
 ${seriesTable(s.forks.dates, [{ label: 'forks', values: s.forks.total }])}
 
 <h2>Contributors</h2>
