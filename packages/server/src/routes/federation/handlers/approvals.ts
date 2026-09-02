@@ -11,6 +11,7 @@ import { randomBytes } from 'node:crypto';
 import type { ApprovalRequestSubscriberSummary, PeeringTriggerReason } from '@backspace/shared';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { resolveLocalOrigin, sanitizePeer } from '../origin.js';
+import { federationFetch } from '../../../utils/federationFetch.js';
 
 /**
  * Queue an inbound peer/accept request for local-admin approval.
@@ -138,7 +139,10 @@ export async function handleInboundApprove(
       .where(eq(schema.instanceSettings.id, 1))
       .get()?.name ?? undefined;
 
-    const response = await fetch(`${approvalReq.origin}/api/federation/peer/accept`, {
+    // 'asserted': this origin was written into the approval-request row by the
+    // remote's own /peer/accept body. The admin is approving the request, but
+    // no outbound request to that origin has been vetted before now.
+    const response = await federationFetch(approvalReq.origin, '/api/federation/peer/accept', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -152,7 +156,7 @@ export async function handleInboundApprove(
         ...(approvalReq.approvalToken ? { approvalToken: approvalReq.approvalToken } : {}),
       }),
       signal: AbortSignal.timeout(10_000),
-    });
+    }, 'asserted');
 
     if (response.status === 202) {
       // Remote instance also has autoAcceptPeering off — they queued our request.
@@ -299,7 +303,10 @@ export async function handleOutboundApprove(
 
   let response: Response;
   try {
-    response = await fetch(`${approvalReq.origin}/api/federation/peer/accept`, {
+    // 'asserted': an outbound queue row's origin came from a handle a local
+    // user typed, and with autoAcceptPeering off no handshake has run against
+    // it yet, so this is the first outbound request to that origin.
+    response = await federationFetch(approvalReq.origin, '/api/federation/peer/accept', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -312,7 +319,7 @@ export async function handleOutboundApprove(
         // autoAcceptPeering setting to decide 200 vs 202.
       }),
       signal: AbortSignal.timeout(10_000),
-    });
+    }, 'asserted');
   } catch (err: unknown) {
     db.delete(schema.federationPeers)
       .where(eq(schema.federationPeers.id, peerId))
@@ -473,12 +480,13 @@ export async function handleInboundDeny(
 
   let notificationSent = false;
   try {
-    const response = await fetch(`${approvalReq.origin}/api/federation/peer/denied`, {
+    // 'asserted': same row, same provenance as the approve path above.
+    const response = await federationFetch(approvalReq.origin, '/api/federation/peer/denied', {
       method: 'POST',
       headers,
       body: denialBody,
       signal: AbortSignal.timeout(10_000),
-    });
+    }, 'asserted');
     notificationSent = response.ok;
   } catch {
     // Network error

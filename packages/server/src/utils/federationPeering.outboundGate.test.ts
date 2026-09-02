@@ -15,6 +15,22 @@ type TestDb = ReturnType<typeof drizzle<typeof schema>>;
 let sqlite: Database.Database;
 let testDb: TestDb;
 
+// The peer-origin gate resolves an asserted origin before this instance will
+// send anything to it. These cases use non-resolving .example hosts and are
+// about peering state, not address policy (see federationFetch.test.ts for
+// that), so the resolver answers with a public address — except for the one
+// host the last case uses to drive the gate itself.
+const LOOPBACK_HOST = 'lan-only.example';
+vi.mock('dns', () => ({
+  default: {
+    promises: {
+      lookup: async (host: string) => (host === LOOPBACK_HOST
+        ? { address: '127.0.0.1', family: 4 }
+        : { address: '93.184.216.34', family: 4 }),
+    },
+  },
+}));
+
 vi.mock('../db/index.js', () => ({
   getDb: () => testDb,
   schema,
@@ -524,5 +540,35 @@ describe('ensurePeered — outbound gate behavior across (autoAccept × peer-row
     expect(parents).toHaveLength(1);
     expect(parents[0]!.direction).toBe('outbound');
     expect(parents[0]!.origin).toBe('https://orbit.example');
+  });
+
+  // ─── Gate placement ─────────────────────────────────────────────────────
+  // Not a restatement of federationFetch.test.ts. That suite proves the gate
+  // decides correctly; this one proves performHandshake actually goes through
+  // it, which no assertion about the gate module can show. Against the code
+  // before the gate existed, fetch is called and the status is 'failed' for a
+  // transport reason, so both assertions below flip.
+  it('refuses to send the handshake to an origin that resolves onto the local network', async () => {
+    seedInstanceSettings(1);
+    seedUser('user1', 'alice');
+
+    const fetchSpy = vi.fn(async () => new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const { ensurePeered } = await import('./federationPeering.js');
+    const result = await ensurePeered(`https://${LOOPBACK_HOST}`, {
+      kind: 'user_action',
+      userId: 'user1',
+      reason: 'friend_add',
+      target: `bob@${LOOPBACK_HOST}`,
+    });
+
+    expect(result.status).toBe('failed');
+    expect(result.status === 'failed' && result.error).toMatch(/not reachable on the public internet/);
+    expect(fetchSpy).not.toHaveBeenCalled();
+
+    // The placeholder row performHandshake creates is rolled back the same way
+    // a transport failure rolls it back, so a refused origin leaves no trace.
+    expect(testDb.select().from(schema.federationPeers).all()).toHaveLength(0);
   });
 });

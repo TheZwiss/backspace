@@ -3,6 +3,7 @@ import * as schema from '../db/schema.js';
 import { and, eq, isNotNull, isNull, ne, or } from 'drizzle-orm';
 import { onPeerActivated } from './federationPeerActivation.js';
 import { markPeerReset } from './federationReset.js';
+import { federationFetch } from './federationFetch.js';
 
 /** Reachability-probe timeout (ms). */
 export const RECOVERY_PROBE_TIMEOUT_MS = 10_000;
@@ -32,9 +33,12 @@ export interface ProbeResult {
 export async function probePeerReachable(origin: string, signal?: AbortSignal): Promise<ProbeResult> {
   try {
     const timeout = AbortSignal.timeout(RECOVERY_PROBE_TIMEOUT_MS);
-    const response = await fetch(`${origin}/api/instance/info`, {
+    // 'approved': both callers pass a federation_peers row's origin (the
+    // recovery tick iterates 'unreachable' rows; the manual recheck route is
+    // admin-only), so a private peer address stays probeable.
+    const response = await federationFetch(origin, '/api/instance/info', {
       signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
-    });
+    }, 'approved');
     if (!response.ok) {
       return { reachable: false, instanceId: null };
     }

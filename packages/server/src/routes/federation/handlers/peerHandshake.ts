@@ -12,6 +12,7 @@ import type { FastifyInstance } from 'fastify';
 import { queueApprovalRequest } from './approvals.js';
 import { resolveLocalOrigin, sanitizePeer, validateOrigin } from '../origin.js';
 import { isAcceptRateLimited, isEnsureRateLimited } from '../rateLimits.js';
+import { federationFetch } from '../../../utils/federationFetch.js';
 
 export function registerPeerHandshakeRoutes(app: FastifyInstance): void {
   // ─── POST /api/federation/peer/initiate ────────────────────────────────────
@@ -110,7 +111,9 @@ export function registerPeerHandshakeRoutes(app: FastifyInstance): void {
 
       // Initiate the server-to-server handshake
       try {
-        const response = await fetch(`${remoteOrigin}/api/federation/peer/accept`, {
+        // 'approved': remoteOrigin is the body of an admin-authenticated
+        // request on this route, so a private peer address is allowed.
+        const response = await federationFetch(remoteOrigin, '/api/federation/peer/accept', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -124,7 +127,7 @@ export function registerPeerHandshakeRoutes(app: FastifyInstance): void {
             instanceId: getInstanceId(),
           }),
           signal: AbortSignal.timeout(10_000),
-        });
+        }, 'approved');
 
         if (response.status === 202) {
           // Remote instance queued our request for admin approval

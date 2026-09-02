@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
 import * as schema from '../db/schema.js';
 import { buildFederationHeaders, getOurOrigin } from './federationAuth.js';
+import { federationFetch } from './federationFetch.js';
 import type { FederationUserLookupProfile, FederationUserLookupResponse } from '@backspace/shared';
 
 const LOOKUP_TIMEOUT_MS = 10_000;
@@ -38,12 +39,12 @@ export async function lookupRemoteUser(peerOrigin: string, username: string): Pr
 
   let response: Response;
   try {
-    response = await fetch(`${peerOrigin}/api/federation/users/lookup`, {
+    response = await federationFetch(peerOrigin, '/api/federation/users/lookup', {
       method: 'POST',
       headers,
       body,
       signal: AbortSignal.timeout(LOOKUP_TIMEOUT_MS),
-    });
+    }, 'approved');
   } catch {
     // Network error, timeout, AbortError — all unreachable.
     return { ok: false, reason: 'unreachable' };
@@ -112,12 +113,12 @@ export async function lookupRemoteUserByHomeId(peerOrigin: string, homeUserId: s
 
   let response: Response;
   try {
-    response = await fetch(`${peerOrigin}/api/federation/users/by-home-id`, {
+    response = await federationFetch(peerOrigin, '/api/federation/users/by-home-id', {
       method: 'POST',
       headers,
       body,
       signal: AbortSignal.timeout(LOOKUP_TIMEOUT_MS),
-    });
+    }, 'approved');
   } catch {
     return { ok: false, reason: 'unreachable' };
   }
