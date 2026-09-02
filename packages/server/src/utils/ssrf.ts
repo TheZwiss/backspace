@@ -1,18 +1,15 @@
 import dns from 'dns';
+import { classifyAddress } from './ipClass.js';
 
+/**
+ * True for any address that is not safely routable on the public internet.
+ *
+ * Kept as a named export with its original signature: four modules import it
+ * and `spaceInviteSnapshot.test.ts` mocks it by name. The classification moved
+ * to ipClass.ts; this is the adapter.
+ */
 export function isPrivateIp(ip: string): boolean {
-  // IPv4
-  if (ip.startsWith('127.') || ip.startsWith('0.') || ip === '0.0.0.0') return true;
-  if (ip.startsWith('10.')) return true;
-  if (ip.startsWith('192.168.')) return true;
-  if (ip.startsWith('169.254.')) return true;
-  if (ip.startsWith('172.')) {
-    const second = parseInt(ip.split('.')[1] ?? '', 10);
-    if (second >= 16 && second <= 31) return true;
-  }
-  // IPv6
-  if (ip === '::1' || ip.startsWith('fc') || ip.startsWith('fd') || ip.startsWith('fe80')) return true;
-  return false;
+  return classifyAddress(ip) !== 'public';
 }
 
 /**
@@ -31,9 +28,15 @@ export async function validateExternalUrl(url: string): Promise<void> {
     throw new Error('Invalid URL scheme');
   }
 
+  // URL.hostname keeps the square brackets around an IPv6 literal, and
+  // dns.lookup('[::1]') fails ENOTFOUND. That produced the right refusal for
+  // the wrong reason and made every legitimate IPv6 literal unreachable.
+  // Strip them and let the classifier decide.
+  const hostname = parsed.hostname.replace(/^\[|\]$/g, '');
+
   let address: string;
   try {
-    const result = await dns.promises.lookup(parsed.hostname);
+    const result = await dns.promises.lookup(hostname);
     address = result.address;
   } catch {
     throw new Error('DNS lookup failed');
