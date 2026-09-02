@@ -5,6 +5,11 @@ name: Metrics
 # referrers, and popular paths after 14 days, and no API can reconstruct them.
 # Every day this does not run is a day of history destroyed permanently.
 #
+# It then calls deploy-pages.yml to republish the dashboard from what it just
+# wrote, so the published data.json tracks the archive daily instead of only
+# when someone pushes a site change. See the `deploy-dashboard` job at the
+# bottom for why that is a separate job rather than more steps in `collect`.
+#
 # Why two tokens: the traffic endpoints require the "Administration: read"
 # permission, and there is no `administration` key in the Actions `permissions:`
 # vocabulary at all — so GITHUB_TOKEN cannot reach them under any configuration.
@@ -203,3 +208,67 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
         run: gh workflow enable metrics.yml --repo "$REPO" || true
+
+  # Republishes the dashboard from the archive this run just wrote. Without
+  # this job the collector would update `metrics-data` every night while the
+  # published `site/insights/data.json` was rebuilt only when someone happened
+  # to push a change under `site/**` or `scripts/metrics/**` — a daily archive
+  # sitting behind a dashboard that goes stale indefinitely.
+  #
+  # A separate job rather than more steps in `collect`, for two reasons that
+  # both fall out of how `workflow_call` works:
+  #   - Permissions in a called workflow are the INTERSECTION of the calling
+  #     job's grant and the called workflow's declaration: they can be reduced,
+  #     never elevated. `collect` holds `contents: write` and `actions: write`
+  #     and no Pages scopes, so calling from there would hand deploy-pages
+  #     `pages: none` and `id-token: none` and fail on the missing OIDC token.
+  #     Widening `collect` instead would give the job that writes the archive a
+  #     Pages write scope and an OIDC identity it has no use for.
+  #   - A job holds exactly one concurrency group, and this workflow already
+  #     spends its workflow-level group on `metrics-data`.
+  #
+  # Deliberately carries no `if:`. `needs: collect` alone is both gates this
+  # job wants: a FAILED collection skips it via the implicit `success()`, and a
+  # SKIPPED collection skips it too, because GitHub skips the dependents of a
+  # skipped job by default — which is exactly right for the fork case, where
+  # `collect`'s own `if:` already declined to run. Restating that fork
+  # condition here would duplicate a gate that is already inherited, and any
+  # job-level `if:` is a place to later introduce a status-check-function
+  # mistake that silently deploys off a failed run.
+  #
+  # A workflow_dispatch of this workflow from a branch other than `main` will
+  # collect normally and then stop here: the github-pages environment's branch
+  # policy allows only `main` and `gh-pages`, so this job is refused at the
+  # gate and the run goes red. That is accurate rather than broken — the
+  # archive was written and pushed before this job started, so nothing is lost
+  # and the deploy genuinely did not happen. Deliberately not guarded with an
+  # `if:` on the ref: that would duplicate a policy stored in repo settings
+  # this file cannot see, and would silently skip the deploy if the policy ever
+  # changed — worse than a loud, self-explaining failure. Scheduled runs always
+  # execute on the default branch, so the nightly path never hits this.
+  deploy-dashboard:
+    name: Deploy the dashboard
+    needs: collect
+    # Reduced from `collect`'s grant, never widened — this job never touches
+    # the archive. `contents: read` is what deploy-pages.yml's two checkouts
+    # need; `pages: write` and `id-token: write` are what actions/deploy-pages
+    # needs to mint its OIDC token.
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    # The group belongs on this job, not on deploy-pages.yml: a workflow-level
+    # `concurrency` is not reliably applied to a `workflow_call` invocation.
+    # `pages` is the same repository-wide group the push-triggered deploy
+    # declares, so the nightly deploy and a landing-page deploy queue behind
+    # one another instead of racing into the github-pages environment.
+    # `cancel-in-progress: false` for the reason deploy-pages.yml gives:
+    # cancelling actions/deploy-pages mid-flight strands a deployment in that
+    # environment and blocks the next one from proceeding.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    # A local reusable workflow is referenced by path with no ref, and cannot
+    # carry a SHA: GitHub always resolves it from this run's own commit, which
+    # pins it more tightly than a SHA pin would.
+    uses: ./.github/workflows/deploy-pages.yml
