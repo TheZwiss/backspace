@@ -133,6 +133,7 @@ POST   /channels/:id/messages  { content, attachments?, replyToId? } → { messa
 PATCH  /messages/:id           { content }                → { message }  [author]
 DELETE /messages/:id                                      → { success }  [author|MANAGE_MESSAGES]
 ```
+`replyToId` on POST must name a message in the same channel, otherwise `400 Invalid reply target` and nothing is inserted. See permissions.md, "Reply-target confinement".
 
 ## DMs (`routes/dm.ts`) — auth required
 ```

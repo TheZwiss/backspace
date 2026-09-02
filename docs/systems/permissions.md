@@ -102,3 +102,40 @@ if channelOverride:  base = (base & ~deny) | allow
 | `getMember/isMember/isSpaceOwner` | Membership checks |
 | `isDmMember/isBanned` | DM/ban checks |
 | `getChannelSpaceId(channelId)` | Resolve channel's space |
+| `isReplyTargetInChannel(channelId, replyToId)` | Create-time reply-target check (`routes/messages.ts`) |
+| `fetchReplyToMessages(channelId, rows)` | Channel-scoped reply hydration (`routes/messages.ts`) |
+
+---
+
+## Reply-target confinement
+
+A message's `replyToId` must name a message in the **same channel**. Both create
+paths enforce it (`POST /api/channels/:id/messages` and the WebSocket
+`message_create` handler) via `isReplyTargetInChannel`, answering
+`400 Invalid reply target` / a WS `error` event without inserting anything. Every
+channel read path hydrates `replyTo` through `fetchReplyToMessages(channelId, rows)`,
+which scopes the lookup to the channel being read, so a `replyToId` pointing
+elsewhere hydrates as `replyTo: null` even for rows written before the
+create-time check existed.
+
+Same-channel is the rule rather than "the requester may read the target's
+channel", and the permission model above is the reason:
+
+- A hydrated message is fanned out by `connectionManager.sendToChannel` to an
+  audience whose members hold different permissions, so at hydration time there
+  is no single reader to resolve against.
+- Checking the **author's** permissions at create time would not bound who reads
+  the result. An author who may read a restricted channel could otherwise embed
+  one of its messages as a reply preview inside a channel with a wider audience,
+  and later override changes would not retract it.
+
+Confining the target to the message's own channel needs no second permission
+computation: the reply preview inherits exactly the `VIEW_CHANNEL` +
+`READ_MESSAGE_HISTORY` gate that already guards the message carrying it.
+
+The DM side has the same rule with its own pair of helpers
+(`isDmReplyTargetInChannel` / `fetchDmReplyToMessages` in `routes/dm.ts`), where
+membership is binary so the two candidate predicates coincide.
+
+Covered by `packages/server/src/routes/messages.replyAuthorization.test.ts` and
+`packages/server/src/routes/dm.replyAuthorization.test.ts`.

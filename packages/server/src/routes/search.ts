@@ -144,7 +144,8 @@ export async function searchRoutes(app: FastifyInstance): Promise<void> {
 
     const reactionsMap = fetchReactionsForMessages(messageIds);
     const embedMap = fetchEmbedsForMessages(messageIds);
-    const replyToMap = fetchReplyToMessages(messageRows);
+    // Reply targets are confined to this channel
+    const replyToMap = fetchReplyToMessages(id, messageRows);
 
     const results: MessageWithUser[] = messageRows
       .map(m => {
@@ -377,7 +378,8 @@ export async function searchRoutes(app: FastifyInstance): Promise<void> {
 
     const reactionsMap = fetchReactionsForMessages(msgIds);
     const embedMap = fetchEmbedsForMessages(msgIds);
-    const replyToMap = fetchReplyToMessages(uniqueRows);
+    // Reply targets are confined to this channel
+    const replyToMap = fetchReplyToMessages(id, uniqueRows);
 
     const messages: MessageWithUser[] = uniqueRows
       .map(m => {

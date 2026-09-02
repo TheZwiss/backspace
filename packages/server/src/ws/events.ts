@@ -6,6 +6,7 @@ import { connectionManager } from './handler.js';
 import type { VoiceRoom, DmRoomMeta, SpaceRoomMeta } from './handler.js';
 import { isMember, getChannelSpaceId, isDmMember, isDeadOneOnOne, hasPermission, computePermissions, PermissionBits } from '../utils/permissions.js';
 import { broadcastDmMessage, getDmMessageWithUser, isDmReplyTargetInChannel } from '../routes/dm.js';
+import { fetchReplyToMessages, isReplyTargetInChannel } from '../routes/messages.js';
 import { MAX_MESSAGE_LENGTH, type MessageWithUser, type Attachment, type DmMessageWithUser, type Embed, type Activity, type ActivityType, type ActivityTimestamps, type ActivityAssets, type ServerEvent, type DmCallUndeliverableFailure, type DmCallUndeliverableReason } from '@backspace/shared';
 import type { CallRelayResult, CallFanoutFailure } from '../utils/federationOutbox.js';
 import { mapCallReasonToEventReason } from '../utils/federationOutbox.js';
@@ -96,28 +97,12 @@ function getMessageWithUser(messageId: string): MessageWithUser | null {
     .where(eq(schema.embeds.messageId, messageId))
     .all();
 
+  // Reply targets are confined to the message's own channel. This is the same
+  // helper the REST read paths use, so both stay on one rule.
   let replyTo: MessageWithUser | null = null;
   if (message.replyToId) {
-    // Simple fetch for replyTo (one level deep to avoid recursion loops)
-    const replyMsg = db.select().from(schema.messages).where(eq(schema.messages.id, message.replyToId)).get();
-    if (replyMsg) {
-      const replyUser = db.select().from(schema.users).where(eq(schema.users.id, replyMsg.userId)).get();
-      if (replyUser) {
-        replyTo = {
-          id: replyMsg.id,
-          channelId: replyMsg.channelId,
-          userId: replyMsg.userId,
-          replyToId: replyMsg.replyToId,
-          content: replyMsg.content,
-          editedAt: replyMsg.editedAt,
-          createdAt: replyMsg.createdAt,
-          user: sanitizeUser(replyUser),
-          attachments: [], // Don't fetch attachments for replies to save bandwidth
-          embeds: [],
-          reactions: [], // Don't fetch reactions for replies
-        };
-      }
-    }
+    const replyToMap = fetchReplyToMessages(message.channelId, [message]);
+    replyTo = replyToMap.get(message.replyToId) ?? null;
   }
 
   return {
@@ -267,6 +252,12 @@ function handleMessageCreate(event: Record<string, unknown>, userId: string): vo
 
   if (!hasPermission(userId, spaceId, PermissionBits.SEND_MESSAGES, channelId)) {
     connectionManager.sendToUser(userId, { type: 'error', message: 'Missing SEND_MESSAGES permission' });
+    return;
+  }
+
+  // A reply may only target a message in the channel it is posted into.
+  if (replyToId && !isReplyTargetInChannel(channelId, replyToId)) {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'Invalid reply target' });
     return;
   }
 

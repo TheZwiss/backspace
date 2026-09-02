@@ -22,7 +22,7 @@ Source: `packages/server/src/ws/handler.ts`, `packages/server/src/ws/events.ts`
 ### Messages
 | type | fields | notes |
 |------|--------|-------|
-| `message_create` | channelId, content, replyToId? | SEND_MESSAGES perm |
+| `message_create` | channelId, content, replyToId? | SEND_MESSAGES perm; `replyToId` must name a message in the same channel |
 | `message_edit` | messageId, content | author only |
 | `message_delete` | messageId | author or MANAGE_MESSAGES |
 | `typing_start` | channelId | 5s auto-expire |

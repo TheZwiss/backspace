@@ -76,7 +76,7 @@ Both search endpoints follow the same hydration pipeline after fetching raw mess
 3. Batch-fetch attachments   → attachmentMap (messageId → attachments[])
 4. Batch-fetch reactions     → fetchReactionsForMessages() / fetchDmReactionsForMessages()
 5. Batch-fetch embeds        → fetchEmbedsForMessages() / fetchDmEmbedsForMessages()
-6. Batch-fetch reply parents → fetchReplyToMessages() / inline DM reply fetch
+6. Batch-fetch reply parents → fetchReplyToMessages(channelId, rows) / fetchDmReplyToMessages(dmChannelId, rows)
 7. Assemble via buildMessageWithUser() / buildDmMessageWithUser()
 8. Filter out messages with missing users (null check)
 ```
@@ -87,7 +87,7 @@ Both search endpoints follow the same hydration pipeline after fetching raw mess
 - **Attachments:** Batch `SELECT` from `attachments` with `inArray(attachments.messageId, messageIds)`
 - **Reactions:** `fetchReactionsForMessages(messageIds)` — from `routes/messages.ts`
 - **Embeds:** `fetchEmbedsForMessages(messageIds)` — from `utils/embedResolver.ts`
-- **Replies:** `fetchReplyToMessages(messageRows)` — from `routes/messages.ts`
+- **Replies:** `fetchReplyToMessages(id, messageRows)` from `routes/messages.ts`. Scoped to the channel being searched, so a `replyToId` pointing at another channel hydrates as `replyTo: null`. See permissions.md, "Reply-target confinement". The same applies to `GET /api/channels/:id/messages/around`.
 - **Assembly:** `buildMessageWithUser()` — from `routes/messages.ts`
 
 ### DM Search Hydration
@@ -96,7 +96,7 @@ Both search endpoints follow the same hydration pipeline after fetching raw mess
 - **Attachments:** Batch `SELECT` from `attachments` with `inArray(attachments.dmMessageId, messageIds)`
 - **Reactions:** `fetchDmReactionsForMessages(messageIds)` — from `routes/dm.ts`
 - **Embeds:** `fetchDmEmbedsForMessages(messageIds)` — from `utils/embedResolver.ts`
-- **Replies:** Inline implementation — fetches `dmMessages` by `replyToId`, builds minimal `DmMessageWithUser` (with empty `attachments`, `embeds`, `reactions` arrays)
+- **Replies:** `fetchDmReplyToMessages(id, messageRows)` from `routes/dm.ts`. Scoped to the DM channel being searched; builds a minimal `DmMessageWithUser` (empty `attachments`, `embeds`, `reactions`)
 - **Assembly:** `buildDmMessageWithUser()` — from `routes/dm.ts`
 
 ### Response Types
