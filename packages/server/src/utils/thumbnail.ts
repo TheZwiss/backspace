@@ -33,7 +33,7 @@ export async function resizeProfileImage(
     fs.renameSync(tmpPath, filepath);
   } catch (err) {
     // Non-fatal — the original file is still intact
-    console.error(`Profile image resize failed (non-fatal) for ${path.basename(filepath)}:`, err);
+    console.error('Profile image resize failed (non-fatal) for %s:', path.basename(filepath), err);
     // Clean up temp file if it was partially written
     try { fs.unlinkSync(filepath + '.tmp'); } catch { /* ignore */ }
   }

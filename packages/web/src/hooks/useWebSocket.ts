@@ -1392,7 +1392,7 @@ function connectToOrigin(origin: string, token: string): void {
     try {
       handleEvent(origin, event);
     } catch (err) {
-      console.error(`Error handling WS event "${event.type}" (${origin || 'home'}):`, err);
+      console.error('Error handling WS event "%s" (%s):', event.type, origin || 'home', err);
     }
   };
 
