@@ -215,17 +215,32 @@ jobs:
   # to push a change under `site/**` or `scripts/metrics/**` — a daily archive
   # sitting behind a dashboard that goes stale indefinitely.
   #
-  # A separate job rather than more steps in `collect`, for two reasons that
-  # both fall out of how `workflow_call` works:
-  #   - Permissions in a called workflow are the INTERSECTION of the calling
-  #     job's grant and the called workflow's declaration: they can be reduced,
-  #     never elevated. `collect` holds `contents: write` and `actions: write`
-  #     and no Pages scopes, so calling from there would hand deploy-pages
-  #     `pages: none` and `id-token: none` and fail on the missing OIDC token.
-  #     Widening `collect` instead would give the job that writes the archive a
-  #     Pages write scope and an OIDC identity it has no use for.
-  #   - A job holds exactly one concurrency group, and this workflow already
-  #     spends its workflow-level group on `metrics-data`.
+  # A separate job, necessarily: `uses:` is a job-level key, so a reusable
+  # workflow cannot be invoked as a step inside `collect` even if that were
+  # wanted. It must also not be `collect` itself with the grant widened.
+  # Permissions in a called workflow are the INTERSECTION of the calling job's
+  # grant and the called workflow's declaration: they can be reduced, never
+  # elevated. `collect` holds `contents: write` and `actions: write` and no
+  # Pages scopes, so calling from there would hand deploy-pages `pages: none`
+  # and `id-token: none` and fail on the missing OIDC token — and widening
+  # `collect` to fix that would give the job that writes the archive a Pages
+  # write scope and an OIDC identity it has no use for.
+  #
+  # No `concurrency:` here, deliberately. The `pages` group lives on
+  # deploy-pages.yml's own `deploy` job, where it applies identically whether
+  # that workflow is reached by a push or by this call, and where the key is
+  # documented for an ordinary job. `jobs.<job_id>.concurrency` on a job that
+  # calls a reusable workflow does not appear in GitHub's documented key list
+  # for `jobs.<job_id>.uses`; actionlint accepts it, but if GitHub's own parser
+  # were to reject it this entire FILE would be invalid and the nightly
+  # collector would stop — and traffic data GitHub has already discarded cannot
+  # be collected later. Not a risk worth taking to save a line.
+  #
+  # This job also holds this workflow's `metrics-data` group for as long as the
+  # called deploy runs, and that group is shared with backfill.yml and with this
+  # workflow's own next scheduled run. deploy-pages.yml's `deploy` job therefore
+  # carries `timeout-minutes`, bounding that hold far below the 24 hours to the
+  # next 03:00 collection; GitHub's 6-hour default job timeout would not.
   #
   # Deliberately carries no `if:`. `needs: collect` alone is both gates this
   # job wants: a FAILED collection skips it via the implicit `success()`, and a
@@ -257,17 +272,6 @@ jobs:
       contents: read
       pages: write
       id-token: write
-    # The group belongs on this job, not on deploy-pages.yml: a workflow-level
-    # `concurrency` is not reliably applied to a `workflow_call` invocation.
-    # `pages` is the same repository-wide group the push-triggered deploy
-    # declares, so the nightly deploy and a landing-page deploy queue behind
-    # one another instead of racing into the github-pages environment.
-    # `cancel-in-progress: false` for the reason deploy-pages.yml gives:
-    # cancelling actions/deploy-pages mid-flight strands a deployment in that
-    # environment and blocks the next one from proceeding.
-    concurrency:
-      group: pages
-      cancel-in-progress: false
     # A local reusable workflow is referenced by path with no ref, and cannot
     # carry a SHA: GitHub always resolves it from this run's own commit, which
     # pins it more tightly than a SHA pin would.
