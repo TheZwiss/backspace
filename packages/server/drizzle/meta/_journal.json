@@ -85,6 +85,13 @@
       "when": 1788370324540,
       "tag": "0011_loose_boomer",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1788371689229,
+      "tag": "0012_absurd_shiver_man",
+      "breakpoints": true
     }
   ]
 }

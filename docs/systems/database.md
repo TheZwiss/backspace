@@ -400,6 +400,7 @@ The user INSERT, `usedCount` increment, and redemption row INSERT all run in a s
 | instanceName | text | | |
 | hmacSecret | text NOT NULL | | 256-bit hex |
 | status | text NOT NULL | `'active'` | active/pending/awaiting_approval/unreachable/revoked/rejected/needs_attention |
+| initiatedBy | text NOT NULL | `'auto'` | Provenance — who caused this row to exist. `'admin'` = `POST /peer/initiate` or an approve/deny decision in `routes/federation/handlers/approvals.ts`; `'auto'` = local traffic with no admin decision (the outbox placeholder, `ensurePeered` auto-peering); `'remote'` = created by an inbound `/peer/accept`. Only `'admin'` counts as admin authorization at the two peering gates. Rows predating migration `0012_absurd_shiver_man` read as `'auto'` (fail closed). See [federation.md → Peer-row provenance](federation.md#peer-row-provenance). |
 | lastSeenAt | integer | | |
 | lastFailureAt | integer | | |
 | consecutiveFailures | integer NOT NULL | 0 | >=10 → unreachable (network/5xx failures). Counter — never null. |

@@ -152,16 +152,16 @@ When due, it calls `probePeerReachable(origin)` (`utils/federationRecovery.ts`) 
 When the server needs to relay events to an instance it has not yet peered with, `ensurePeered()` in `federationPeering.ts` automatically initiates the handshake. This removes the requirement for an admin to manually initiate every peering relationship.
 
 **Integration points:**
-- **Outbox worker** (`federationWorker.ts`) — after delivering active peers, calls `ensurePeered()` for any pending-placeholder entries whose peer has not yet been activated.
+- **Outbox worker** (`federationWorker.ts`) — after delivering active peers, calls `ensurePeered()` for any pending-placeholder entries whose peer has not yet been activated. The placeholders themselves are created by `createAutoPlaceholderPeer`, subject to the outbound gate — see [Peer-row provenance](#peer-row-provenance).
 - **Connection flow** (`POST /api/federation/peer/ensure`) — called by the client when establishing a cross-instance connection, ensuring the two instances are peered before any relay traffic is sent.
 
 **`rejected` status** — Added to the peer lifecycle. Set when a remote instance explicitly rejects auto-peering with `403 PEERING_REQUIRES_APPROVAL`. This status is sticky: no automatic retry occurs. An admin can clear it by deleting the peer record (then re-initiating), or by manually initiating via `peer/initiate`. An incoming `peer/accept` from a remote admin can also override `rejected` → `active` (treated the same as a `pending` record).
 
-**`autoAcceptPeering` instance setting** — Controls whether `POST /api/federation/peer/accept` accepts unsolicited peering requests. Default: `true`. When `false`, the endpoint returns `403 PEERING_REQUIRES_APPROVAL` for requests where no local `pending` record exists (i.e., a request the local admin did not initiate). The determination is made by checking the local peer table — not a client-provided flag.
+**`autoAcceptPeering` instance setting** — Controls whether `POST /api/federation/peer/accept` accepts unsolicited peering requests. Default: `true`. When `false`, a request with no matching **admin-initiated** local `pending`/`awaiting_approval` record is queued for review and answered `202` (see [Peer Approval Queue](#peer-approval-queue)); `403 PEERING_REQUIRES_APPROVAL` is reserved for an origin the admin previously denied (a `rejected` row). The determination is made from the local peer table — the row's status *and* its `initiated_by` provenance — never from a client-provided flag.
 
 ### Peer Approval Queue
 
-When `autoAcceptPeering` is `false` and an instance calls `POST /api/federation/peer/accept` without a matching local `pending` record, the endpoint returns `202 Accepted` and creates a row in `peer_approval_requests` instead of immediately peering. The requesting instance receives `202` (not an error), so it enters `awaiting_approval` status rather than `rejected`.
+When `autoAcceptPeering` is `false` and an instance calls `POST /api/federation/peer/accept` without a matching admin-initiated local `pending` record, the endpoint returns `202 Accepted` and creates a row in `peer_approval_requests` instead of immediately peering. The requesting instance receives `202` (not an error), so it enters `awaiting_approval` status rather than `rejected`.
 
 **`peer_approval_requests` table** — Holds incoming peering requests pending admin review:
 - `id` — Snowflake PK
@@ -230,7 +230,7 @@ The receiver-side trust class is closed by the approval-token mechanism above. T
 
 Spec: `docs/superpowers/specs/2026-04-26-outbound-peering-gate-design.md`.
 
-**Gate location.** `ensurePeered` (`utils/federationPeering.ts`) is the single chokepoint every outbound new-peer attempt funnels through (friend-add, `/peer/ensure`, `sendCallRelay`'s no-active-peer branch, future callers). The gate runs ONLY when **no `federation_peers` row exists for the origin**. If any peer row exists in any status (`active`, `pending`, `awaiting_approval`, `rejected`, `revoked`, `unreachable`, `needs_attention`), the gate is a no-op — the existing branches in `ensurePeered` handle the row as today. This matches the threat model: the worry is automated paths creating *new* peerings without admin consent.
+**Gate location.** `ensurePeered` (`utils/federationPeering.ts`) is the single chokepoint every outbound new-peer attempt funnels through (friend-add, `/peer/ensure`, `sendCallRelay`'s no-active-peer branch, future callers). The gate runs when **no `federation_peers` row exists for the origin**, and also for a `pending` row that carries no admin provenance (`initiated_by != 'admin'` — see [Peer-row provenance](#peer-row-provenance)). Every settled status (`active`, `awaiting_approval`, `rejected`, `revoked`, `unreachable`, `needs_attention`) returns from the branch switch above the gate and never reaches it, so the gate can never retroactively break an established peering. `pending` is the one status meaning "no handshake has ever completed": there is nothing yet to preserve, and the gate's question is still unanswered. When the gate fires on such a row it **deletes it first** — the row can no longer become a peering (both peering gates refuse it) and leaving it would collide with the fresh row `handleOutboundApprove` inserts on approval. Its `federation_outbox` entries cascade away; the conversation itself survives in `federation_mutation_log` and replays on activation, exactly as for a rejected peer.
 
 **Required caller intent.** Every call site MUST pass an explicit `EnsurePeeredCallerIntent` (declared in `packages/shared/src/types.ts`). The argument is required at the type level so a future caller cannot silently fall through to system behavior:
 
@@ -286,9 +286,30 @@ The other lifecycle exits write notifications and cascade-delete the parent at t
 | `routes/social.ts` (friend-add) | `user_action` reason `friend_add` target `name@domain` | 409 `peer_pending_local_admin` |
 | `routes/federation.ts` (`/peer/ensure`) | `user_action` reason `friend_add` (default; client-supplied reason is ignored today) | response `peeringStatus: 'admin_required'` |
 | `utils/federationOutbox.ts` (`sendCallRelay` no-active-peer) | `system` | `CallRelayFailureReason.peer_admin_required` |
-| `utils/federationWorker.ts` (`resolvePendingPeers`) | n/a | operates only on already-existing pending rows; gate is unreachable from this path |
+| `utils/federationWorker.ts` (`resolvePendingPeers`) | `system` | operates on already-existing pending rows; reaches the gate only for a row with non-admin provenance, which it refuses |
 
 Admin-initiated paths (`/peer/initiate`, `/approve`) do NOT call `ensurePeered`. They issue their own `fetch` and run their own activation logic. The gate does not affect admin power; admins retain full ability to pre-peer or approve outbound regardless of the setting.
+
+### Peer-row provenance
+
+`federation_peers.initiated_by` records **who caused a peer row to exist**. It is the fact both peering gates consult when `autoAcceptPeering=0`, because a bare `pending` row is not evidence of anything on its own — several paths create one.
+
+| Value | Written by | Meaning |
+|-------|-----------|---------|
+| `'admin'` | `POST /peer/initiate`; the inbound, outbound, and deny handlers in `routes/federation/handlers/approvals.ts` | A local admin explicitly authorized (or refused) peering with this origin. |
+| `'auto'` | `createAutoPlaceholderPeer` (the outbox placeholder), `performHandshake` inside `ensurePeered` | Local traffic brought the origin up. No admin ruled on it. |
+| `'remote'` | the new-peer branch of `POST /peer/accept` | The remote instance introduced itself and we accepted (only reachable with `autoAcceptPeering=1`). |
+
+**Why it exists.** Relaying a DM to an unpeered origin used to insert a `pending` row directly from `queueOutboxEvent`. That row was indistinguishable from one `/peer/initiate` had created, so two separate gates read it as admin approval: the outbound worker resolved it into a real handshake (`ensurePeered` skips its gate once a row exists), and the remote's inbound `/peer/accept` matched it against the local-pending check below. Either way an origin a local user merely addressed could obtain the peering that `autoAcceptPeering=0` exists to withhold. Provenance separates "an admin decided" from "traffic happened".
+
+**Where it is enforced.** Both checks are positive tests for `'admin'`, never denylists of the other values, so adding a provenance value cannot silently reopen either gate:
+
+1. **Inbound** — the `autoAcceptPeering=0` branch of `POST /api/federation/peer/accept` matches a local `pending`/`awaiting_approval` row only when `initiated_by = 'admin'`. Anything else falls through to `queueApprovalRequest` (202) as if no row existed.
+2. **Outbound** — the [Outbound Peering Gate](#outbound-peering-gate) fires for a `pending` row with non-admin provenance and discards it.
+
+**Placeholder creation.** `queueOutboxEvent` no longer inserts peer rows itself; it calls `createAutoPlaceholderPeer` (`utils/federationPeering.ts`), which applies the same two guards `ensurePeered` applies — refuse while an inbound `peer_approval_requests` row for the origin is unresolved, and refuse when `autoAcceptPeering=0` — before inserting a `pending` row tagged `'auto'`. On refusal the origin is skipped and nothing is queued. That is not a lost message: `federation_mutation_log` is written independently of the outbox and replays through `onPeerActivated` if peering is approved later, the same mechanism that covers `awaiting_approval`, `needs_attention`, and `rejected` peers.
+
+**Upgrade behavior.** Migration `0012_absurd_shiver_man` adds the column with `DEFAULT 'auto'`, so every pre-existing row reads as non-admin — the gates fail closed. This is only observable on an `autoAcceptPeering=0` instance that had a handshake in flight at the moment of upgrade: the remote's callback re-queues as an approval request and the admin approves it once. `active` peers are untouched (they never reach either gate), and default-configuration instances (`autoAcceptPeering=1`) see no behavior change at all.
 
 ### Admin Endpoints
 

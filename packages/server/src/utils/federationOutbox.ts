@@ -4,9 +4,9 @@ import { eq, and, inArray } from 'drizzle-orm';
 import { generateSnowflake } from './snowflake.js';
 import crypto from 'node:crypto';
 import type { FederationRelayEvent, FederationRelayParticipant, FederationRelayAttachment, DmMessageWithUser, FederationRelayRequest, DmCallUndeliverableReason } from '@backspace/shared';
-import { getOurOrigin, buildFederationHeaders, generateHmacSecret } from './federationAuth.js';
+import { getOurOrigin, buildFederationHeaders } from './federationAuth.js';
 import { extractDomain } from '../routes/federation.js';
-import { racePeering, ensurePeered } from './federationPeering.js';
+import { racePeering, ensurePeered, createAutoPlaceholderPeer } from './federationPeering.js';
 
 // ─── Settings Cache ──────────────────────────────────────────────────────────
 
@@ -182,11 +182,13 @@ export function queueOutboxEvent(
       ? peers.filter(p => targetPeerOrigins.includes(p.origin))
       : peers;
 
-    // For targeted origins with no existing peer record, create pending placeholders.
-    // autoAcceptPeering controls INCOMING acceptance, not outgoing initiation —
-    // when a local user sends a DM requiring relay, the server creates the placeholder
-    // regardless of the setting. The peer/accept gate on the REMOTE side decides
-    // whether to accept or queue our request.
+    // For targeted origins with no existing peer record, create pending
+    // placeholders — but only through createAutoPlaceholderPeer(), which applies
+    // the same outbound-peering gate ensurePeered() applies. A placeholder is
+    // not a neutral bookkeeping row: the outbound worker resolves it into a real
+    // handshake, and the remote's /peer/accept reads it as evidence our admin
+    // asked to peer. When the gate refuses, the origin is skipped and the DM
+    // replays from the mutation log if peering is approved later.
     if (targetPeerOrigins) {
       const matchedOrigins = new Set(matchedPeers.map(p => p.origin));
 
@@ -200,18 +202,10 @@ export function queueOutboxEvent(
           .get();
 
         if (!existingPeer) {
-          // No peer row — create pending placeholder, handshake fires on next tick
-          const peerId = generateSnowflake();
-          const now = Date.now();
-          db.insert(schema.federationPeers).values({
-            id: peerId,
-            origin,
-            hmacSecret: generateHmacSecret(),
-            status: 'pending',
-            createdAt: now,
-          }).run();
-          const newPeer = db.select().from(schema.federationPeers)
-            .where(eq(schema.federationPeers.id, peerId)).get();
+          // No peer row — create pending placeholder, handshake fires on next
+          // tick. Returns null when the outbound-peering gate refuses, in which
+          // case nothing is queued for this origin.
+          const newPeer = createAutoPlaceholderPeer(origin);
           if (newPeer) {
             matchedPeers = [...matchedPeers, newPeer];
             console.log(`[federation] queueOutboxEvent: created pending placeholder for ${origin}`);

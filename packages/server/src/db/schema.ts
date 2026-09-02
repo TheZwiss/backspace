@@ -373,6 +373,17 @@ export const federationPeers = sqliteTable('federation_peers', {
   instanceName: text('instance_name'),
   hmacSecret: text('hmac_secret').notNull(),
   status: text('status').notNull().default('active'),
+  // Who caused this row to exist. Only 'admin' is proof that a local admin
+  // deliberately authorized peering with this origin, which is what the
+  // inbound /peer/accept gate consults when autoAcceptPeering = 0:
+  //   'admin'  — POST /peer/initiate, or an approval/denial decision in
+  //              routes/federation/handlers/approvals.ts.
+  //   'auto'   — created by local traffic without an admin decision: the
+  //              outbox placeholder, or ensurePeered() auto-peering.
+  //   'remote' — created by an inbound /peer/accept from the remote itself.
+  // Rows that predate this column read as 'auto' (fail closed): a stale
+  // pending row cannot stand in for an admin decision.
+  initiatedBy: text('initiated_by', { enum: ['admin', 'auto', 'remote'] }).notNull().default('auto'),
   lastSeenAt: integer('last_seen_at'),
   lastFailureAt: integer('last_failure_at'),
   consecutiveFailures: integer('consecutive_failures').notNull().default(0),

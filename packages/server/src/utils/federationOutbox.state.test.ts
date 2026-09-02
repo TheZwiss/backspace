@@ -40,11 +40,12 @@ function applyMigrations(db: Database.Database): void {
   }
 }
 
-function seedSettings(): void {
+function seedSettings(autoAcceptPeering: 0 | 1 = 1): void {
   testDb.insert(schema.instanceSettings).values({
     id: 1,
     federationRelayEnabled: 1,
     federationRelayTtlDays: 30,
+    autoAcceptPeering,
     updatedAt: Date.now(),
   }).run();
 }
@@ -119,6 +120,33 @@ function countOutbox(peerId: string): number {
   return testDb.select().from(schema.federationOutbox)
     .where(eq(schema.federationOutbox.peerId, peerId))
     .all().length;
+}
+
+function peerByOrigin(origin: string) {
+  return testDb.select().from(schema.federationPeers)
+    .where(eq(schema.federationPeers.origin, origin))
+    .get();
+}
+
+function countAllOutbox(): number {
+  return testDb.select().from(schema.federationOutbox).all().length;
+}
+
+function countMutationLog(): number {
+  return testDb.select().from(schema.federationMutationLog).all().length;
+}
+
+function seedInboundApprovalRequest(origin: string): void {
+  testDb.insert(schema.peerApprovalRequests).values({
+    id: 'req-1',
+    origin,
+    direction: 'inbound',
+    instanceName: null,
+    hmacSecret: 'inbound-secret',
+    requestedAt: Date.now(),
+    expiresAt: Date.now() + 86_400_000,
+    approvalToken: 'token',
+  }).run();
 }
 
 // Import once at module level — vi.mock is hoisted and the factory returns the
@@ -236,5 +264,84 @@ describe('DM relay targeting — local-only conversations', () => {
 
     expect(countOutbox('peer-bystander')).toBe(0);
     expect(errorSpy).toHaveBeenCalled();
+  });
+});
+
+describe('queueOutboxEvent — placeholder peers and the outbound peering gate', () => {
+  function freshDb(autoAccept: 0 | 1): void {
+    const sqlite = new Database(':memory:');
+    testDb = drizzle(sqlite, { schema });
+    applyMigrations(sqlite);
+    seedSettings(autoAccept);
+    setWorkerId(1);
+    vi.restoreAllMocks();
+  }
+
+  it('creates a pending placeholder for an unknown target origin when auto-accept peering is on', () => {
+    // POSITIVE CONTROL for the two suppression cases below: proves this harness
+    // observes placeholder creation and outbox writes when they are supposed to
+    // happen. Without it, "no row was created" could be vacuously true.
+    freshDb(1);
+
+    queueOutboxEvent('entity-a', 'ctx-a', 'create', '{}', ['https://newpeer.example'], 'dm');
+
+    const peer = peerByOrigin('https://newpeer.example');
+    expect(peer).toBeTruthy();
+    expect(peer?.status).toBe('pending');
+    expect(countOutbox(peer!.id)).toBe(1);
+  });
+
+  it('tags an outbox-created placeholder with non-admin provenance', () => {
+    freshDb(1);
+
+    queueOutboxEvent('entity-a', 'ctx-a', 'create', '{}', ['https://newpeer.example'], 'dm');
+
+    expect(peerByOrigin('https://newpeer.example')?.initiatedBy).toBe('auto');
+  });
+
+  it('creates no peer row and no outbox row for an unknown origin when auto-accept peering is off', () => {
+    freshDb(0);
+
+    queueOutboxEvent('entity-b', 'ctx-b', 'create', '{}', ['https://attacker.example'], 'dm');
+
+    expect(peerByOrigin('https://attacker.example')).toBeUndefined();
+    expect(countAllOutbox()).toBe(0);
+  });
+
+  it('creates no peer row while an inbound peering approval request for that origin is unresolved', () => {
+    freshDb(1);
+    seedInboundApprovalRequest('https://undecided.example');
+
+    queueOutboxEvent('entity-c', 'ctx-c', 'create', '{}', ['https://undecided.example'], 'dm');
+
+    expect(peerByOrigin('https://undecided.example')).toBeUndefined();
+    expect(countAllOutbox()).toBe(0);
+  });
+
+  it('still delivers to an already-known peer when auto-accept peering is off', () => {
+    // POSITIVE CONTROL: the gate must only suppress *creation* of unknown-origin
+    // rows, never delivery to peers the admin already approved.
+    freshDb(0);
+    seedPeer('peer-known', 'https://known.example', 'active');
+
+    queueOutboxEvent('entity-d', 'ctx-d', 'create', '{}', ['https://known.example'], 'dm');
+
+    expect(countOutbox('peer-known')).toBe(1);
+  });
+
+  it('records the DM mutation log even when the gate suppresses the placeholder', () => {
+    // The mutation log is what replays the conversation once peering is
+    // approved later, so suppressing the placeholder must not lose history.
+    freshDb(0);
+    seedUser('local-a', null);
+    seedUser('remote-b', 'https://attacker.example');
+    seedDmChannel('dm-mixed', ['local-a', 'remote-b']);
+
+    const author = buildAuthor('local-a', null);
+    queueDmRelay(buildMessage('msg-gate', 'dm-mixed', author, 'text'), 'dm-mixed', 'create');
+
+    expect(peerByOrigin('https://attacker.example')).toBeUndefined();
+    expect(countAllOutbox()).toBe(0);
+    expect(countMutationLog()).toBe(1);
   });
 });
