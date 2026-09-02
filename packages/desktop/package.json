@@ -1,6 +1,6 @@
 {
   "name": "@backspace/desktop",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "license": "AGPL-3.0-only",
   "description": "Backspace",
@@ -25,6 +25,7 @@
     "uiohook-napi": "^1.5.5"
   },
   "devDependencies": {
+    "@electron/fuses": "^1.8.0",
     "@electron/rebuild": "^3.7.1",
     "electron": "^40.0.0",
     "electron-builder": "^25.1.8",

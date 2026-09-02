@@ -116,3 +116,8 @@ site/insights/data/
 # every `lastmod` in it would be wrong the moment the collector next runs, and
 # a lastmod that lies tells a crawler not to come back.
 site/sitemap.xml
+
+# Security-pass working plans — contain vulnerability detail, must never be
+# committed to a public repo. See PR #51 / #52 for why this guard exists.
+docs/superpowers/plans/2026-07-12-federation-security-remediation.md
+docs/superpowers/plans/2026-09-02-security-pass-master.md

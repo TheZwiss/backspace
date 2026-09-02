@@ -1,6 +1,6 @@
 {
   "name": "backspace",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Open, self-hosted communication platform — text, voice, video, and federation",
   "license": "AGPL-3.0-only",

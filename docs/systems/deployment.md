@@ -59,10 +59,13 @@ One installer, three modes, recorded as `DEPLOY_MODE` in `.env`. `install.sh` au
 
 ### Build: multi-stage Dockerfile
 
-`Dockerfile` has two stages:
+`Dockerfile` has three stages:
 
-1. **`builder`** (`node:20-slim`) — enables pnpm via corepack, installs the full workspace with `pnpm install --frozen-lockfile`, copies `shared`/`server`/`web` source, and runs `pnpm --filter @backspace/web build` to produce the static frontend (`packages/web/dist`).
-2. **`runtime`** (`node:20-slim`) — installs `ffmpeg` (media) + `gosu` (privilege drop) only — **no C toolchain**, since `better-sqlite3`/`sharp` load prebuilt binaries — installs production-only deps with `pnpm install --prod --frozen-lockfile` (`tsx` is a server runtime dependency), copies `shared` + `server` source and the prebuilt `web/dist`, creates `/app/data/uploads`, and runs the server **as the non-root `node` user** via `docker-entrypoint.sh` (which chowns `/app/data` as root, then `exec gosu node`) with `node --import tsx/esm src/index.ts` from `/app/packages/server`.
+1. **`deps`** (`node:20-slim`): enables pnpm via corepack, installs `python3`/`make`/`g++`, and produces the production dependency tree with `pnpm install --prod --frozen-lockfile` (`tsx` is a server runtime dependency). This is the only stage that carries a C toolchain, and the only one that compiles native modules.
+2. **`builder`** (`node:20-slim`): installs just the frontend's dependency subset with `pnpm install --frozen-lockfile --filter @backspace/web...`, copies `shared`/`web` source, and runs `pnpm --filter @backspace/web build` to produce the static frontend (`packages/web/dist`). The filter keeps the server's dependencies out of this stage, so no toolchain is needed here either.
+3. **`runtime`** (`node:20-slim`): installs `ffmpeg` (media) + `gosu` (privilege drop) only, with **no C toolchain**. Copies the production `node_modules` from `deps`, `shared` + `server` source, and the prebuilt `web/dist` from `builder`, creates `/app/data/uploads`, and runs the server **as the non-root `node` user** via `docker-entrypoint.sh` (which chowns `/app/data` as root, then `exec gosu node`) with `node --import tsx/esm src/index.ts` from `/app/packages/server`. It runs no `pnpm install` of its own.
+
+**Why the `deps` stage exists.** `better-sqlite3` 12.x publishes prebuilt binaries for Node ABI v127, v137, v141 and v147, which cover Node 22 and newer. It publishes none for v115, the ABI of Node 20, on any platform. This repo pins Node 20, so `prebuild-install` gets a 404 and falls back to `node-gyp rebuild`, which needs Python and a C++ compiler that `node:20-slim` does not have. Compiling it in a dedicated stage and copying only the resulting `node_modules` keeps the toolchain out of the published image. Verify this before assuming a future `better-sqlite3` bump restores the prebuild: check for a `-node-v115-` asset on the release, e.g. `better-sqlite3-v<version>-node-v115-linux-x64.tar.gz`.
 
 The server is run through `tsx` (no separate transpile step); TypeScript is executed directly at runtime.
 
@@ -80,8 +83,10 @@ container start, `docker-entrypoint.sh` runs as root only long enough to `chown`
 the `./data` bind mount to `node` (only entries not already node-owned, so it is
 near-instant after the first boot), then drops privileges via `gosu` and execs the
 server. The build toolchain (`python3`/`make`/`g++`) is not installed in the
-runtime stage — `better-sqlite3` and `sharp` load from prebuilt binaries — which
-shrinks the runtime attack surface. `ffmpeg` remains (a real runtime dependency).
+runtime stage. `sharp` loads a prebuilt binary; `better-sqlite3` is compiled in
+the separate `deps` stage and copied in, so neither needs a compiler at runtime.
+That keeps the runtime attack surface small. `ffmpeg` remains (a real runtime
+dependency).
 
 The published image carries an SBOM and SLSA provenance attestation, and the
 amd64 image is scanned by Trivy before publish (report-only). Note: only the
