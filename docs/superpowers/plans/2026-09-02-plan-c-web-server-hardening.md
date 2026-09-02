@@ -147,7 +147,7 @@ credentials without revisiting the whole posture.
 - Consumes: `bootTwoInstances` from `test/helpers/twoInstanceHarness.js`.
 - Produces: nothing consumed by later tasks.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `packages/server/test/cors-posture.test.ts`:
 
@@ -247,7 +247,7 @@ describe('CORS posture', () => {
 });
 ```
 
-- [ ] **Step 2: Run it and watch the credential assertions fail**
+- [x] **Step 2: Run it and watch the credential assertions fail**
 
 Run: `cd packages/server && npx vitest run test/cors-posture.test.ts`
 Expected: the two `access-control-allow-credentials` tests FAIL (the header is
@@ -256,7 +256,7 @@ being in the source. The reflection and tus tests PASS already. If the
 credential tests pass before the change, stop: the test is not exercising what
 it claims.
 
-- [ ] **Step 3: Make the change**
+- [x] **Step 3: Make the change**
 
 In `packages/server/src/index.ts`, replace the `await app.register(cors, {`
 opening and its `origin`/`credentials` lines with:
@@ -285,19 +285,19 @@ opening and its `origin`/`credentials` lines with:
 
 Leave `allowedHeaders` and `exposedHeaders` exactly as they are.
 
-- [ ] **Step 4: Run the test again**
+- [x] **Step 4: Run the test again**
 
 Run: `cd packages/server && npx vitest run test/cors-posture.test.ts`
 Expected: all 7 PASS.
 
-- [ ] **Step 5: Run the full server suite**
+- [x] **Step 5: Run the full server suite**
 
 Run: `cd packages/server && npx vitest run && npx tsc --noEmit`
 Expected: no regressions, `tsc` exit 0. Some suite may assert on the credentials
 header; if one does, it encoded the old posture and should be updated, not
 worked around.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add packages/server/src/index.ts packages/server/test/cors-posture.test.ts
@@ -335,7 +335,7 @@ there is exactly one definition of the policy in the codebase.
   ```
   Task 4 consumes `buildCspHeaderValue`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `packages/server/src/utils/csp.test.ts`:
 
@@ -451,12 +451,12 @@ describe('buildCspHeaderValue', () => {
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `cd packages/server && npx vitest run src/utils/csp.test.ts`
 Expected: FAIL, `Cannot find module './csp.js'`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `packages/server/src/utils/csp.ts`:
 
@@ -578,19 +578,19 @@ export function buildCspHeaderValue(input: CspInput): string {
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd packages/server && npx vitest run src/utils/csp.test.ts`
 Expected: 14 passed.
 
-- [ ] **Step 5: Prove the two non-obvious assertions can fail**
+- [x] **Step 5: Prove the two non-obvious assertions can fail**
 
 Temporarily delete `'wasm-unsafe-eval'` from `script-src` and `'blob:'` from
 `worker-src`, re-run, and confirm those two tests go red. Restore. Record the
 observed failure messages in the task report. If either still passes, the test
 is not asserting what it claims.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add packages/server/src/utils/csp.ts packages/server/src/utils/csp.test.ts
@@ -623,7 +623,7 @@ produce an empty report log that reads exactly like a clean policy.
 - Produces: `export async function cspReportRoutes(app: FastifyInstance): Promise<void>`,
   registered by Task 4.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `packages/server/src/routes/cspReport.test.ts`:
 
@@ -732,12 +732,12 @@ describe('POST /api/csp-report', () => {
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `cd packages/server && npx vitest run src/routes/cspReport.test.ts`
 Expected: FAIL, `Cannot find module './cspReport.js'`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `packages/server/src/routes/cspReport.ts`:
 
@@ -815,7 +815,7 @@ export async function cspReportRoutes(app: FastifyInstance): Promise<void> {
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd packages/server && npx vitest run src/routes/cspReport.test.ts`
 Expected: 6 passed.
@@ -825,14 +825,14 @@ documented Fastify 4 form and adjust the code, not the test:
 `app.addContentTypeParser(contentType, { parseAs: 'string' }, (req, body, done) => done(null, body))`.
 Confirm whichever form you use against a real inject, not against types alone.
 
-- [ ] **Step 5: Prove the content-type test can fail**
+- [x] **Step 5: Prove the content-type test can fail**
 
 Temporarily remove the `application/csp-report` parser registration and confirm
 that test goes red with a 415. This is the assertion the whole rollout depends
 on: a silently-415ing sink would make an unvalidated policy look validated.
 Restore and record the observed status code in the task report.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add packages/server/src/routes/cspReport.ts packages/server/src/routes/cspReport.test.ts
@@ -859,7 +859,7 @@ Not yet wired into the server."
   `./utils/csp.js`; `cspReportRoutes` from `./routes/cspReport.js`.
 - Produces: nothing consumed by later tasks.
 
-- [ ] **Step 1: Add the dependency**
+- [x] **Step 1: Add the dependency**
 
 ```bash
 cd /Users/jbraun/backspace-public
@@ -872,7 +872,7 @@ Run: `cd packages/server && node -e "console.log(require('./node_modules/@fastif
 Expected: a `11.x` version and `^4.x`. If it prints `^5` or `^6`, the wrong
 major was installed. Stop and correct it.
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 Create `packages/server/test/http-security-headers.test.ts`:
 
@@ -992,12 +992,12 @@ describe('HTTP security headers, LiveKit configured', () => {
 });
 ```
 
-- [ ] **Step 3: Run it to verify it fails**
+- [x] **Step 3: Run it to verify it fails**
 
 Run: `cd packages/server && npx vitest run test/http-security-headers.test.ts`
 Expected: FAIL on every header assertion, since no header is set yet.
 
-- [ ] **Step 4: Wire it up**
+- [x] **Step 4: Wire it up**
 
 In `packages/server/src/index.ts`, add to the imports:
 
@@ -1057,12 +1057,12 @@ Immediately after the `await app.register(cors, {...});` block, insert:
 
 `config` is already imported at the top of the file.
 
-- [ ] **Step 5: Run the test to verify it passes**
+- [x] **Step 5: Run the test to verify it passes**
 
 Run: `cd packages/server && npx vitest run test/http-security-headers.test.ts`
 Expected: 10 passed.
 
-- [ ] **Step 6: Prove the LiveKit assertion is not vacuous**
+- [x] **Step 6: Prove the LiveKit assertion is not vacuous**
 
 Temporarily change `buildCspHeaderValue({ livekitUrl: config.livekit.url })` to
 `buildCspHeaderValue({})` and confirm the "names the configured LiveKit origin"
@@ -1070,7 +1070,7 @@ test goes red. Restore. This is the one assertion that proves the policy is
 actually built from config rather than from a constant, so it must be shown to
 fail. Record the failure output in the task report.
 
-- [ ] **Step 7: Run everything**
+- [x] **Step 7: Run everything**
 
 ```bash
 cd packages/server && npx vitest run && npx tsc --noEmit && pnpm typecheck:e2e
@@ -1082,7 +1082,7 @@ responses between instances, so a header change that broke S2S would surface
 there. S2S requests carry no browser `Origin` and authenticate by HMAC, so they
 should be unaffected; confirm that rather than assume it.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add packages/server/package.json packages/server/src/index.ts \
@@ -1114,7 +1114,7 @@ than the Fastify static handler.
 - Consumes: nothing.
 - Produces: nothing.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `packages/web/src/index-html.test.ts`:
 
@@ -1165,12 +1165,12 @@ describe('index.html meta policy', () => {
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `cd packages/web && npx vitest run src/index-html.test.ts`
 Expected: FAIL on "declares a meta policy". There is no meta tag yet.
 
-- [ ] **Step 3: Add the tag**
+- [x] **Step 3: Add the tag**
 
 In `packages/web/index.html`, immediately after the `<meta name="viewport" ...>`
 line, add:
@@ -1185,12 +1185,12 @@ line, add:
     <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'wasm-unsafe-eval'; object-src 'none'; base-uri 'self'" />
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd packages/web && npx vitest run src/index-html.test.ts`
 Expected: 4 passed.
 
-- [ ] **Step 5: Confirm the built app actually runs under it**
+- [x] **Step 5: Confirm the built app actually runs under it**
 
 ```bash
 cd packages/web && npx vite build && npx vite preview --port 4173
@@ -1202,14 +1202,14 @@ message. Vite emits the bundle as a module script with a `src`, so `'self'`
 covers it. If a CSP error appears, the meta policy is wrong and must be fixed
 here rather than loosened in the server policy. Record what the console showed.
 
-- [ ] **Step 6: Run the web suite and build**
+- [x] **Step 6: Run the web suite and build**
 
 ```bash
 cd packages/web && npx vitest run && npx tsc --noEmit && npx vite build
 ```
 Expected: 492 passed, both exit 0.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add packages/web/index.html packages/web/src/index-html.test.ts
@@ -1232,7 +1232,7 @@ stays out of here."
 - Consumes: nothing.
 - Produces: nothing.
 
-- [ ] **Step 1: Add the header block**
+- [x] **Step 1: Add the header block**
 
 Replace the contents of `Caddyfile` with:
 
@@ -1267,7 +1267,7 @@ Replace the contents of `Caddyfile` with:
 }
 ```
 
-- [ ] **Step 2: Validate the syntax**
+- [x] **Step 2: Validate the syntax**
 
 Run: `docker run --rm -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" -e DOMAIN=example.test caddy:2 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile`
 Expected: `Valid configuration`.
@@ -1276,13 +1276,13 @@ If Docker is unavailable, run `caddy validate` against a local Caddy binary. Do
 not skip this step: a malformed Caddyfile takes the whole deployment down on the
 next restart, and nothing else in CI parses this file.
 
-- [ ] **Step 3: Note the deliberate omission**
+- [x] **Step 3: Note the deliberate omission**
 
 `preload` is **not** included in the HSTS value. Submitting a domain to the
 preload list is effectively irreversible and is the operator's decision, not a
 default this project gets to make on their behalf. Do not add it.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add Caddyfile
@@ -1308,7 +1308,7 @@ Sequenced after the implementation so the prose describes what exists.
 - Consumes: everything from Tasks 1-6.
 - Produces: nothing.
 
-- [ ] **Step 1: Write the subsystem doc**
+- [x] **Step 1: Write the subsystem doc**
 
 Create `docs/systems/web-security.md` covering, in this order:
 
@@ -1346,14 +1346,14 @@ Create `docs/systems/web-security.md` covering, in this order:
 8. **The meta policy** in `packages/web/index.html`: what it carries, and why it
    must not carry connect/img/frame or frame-ancestors/report-uri.
 
-- [ ] **Step 2: Add the API row**
+- [x] **Step 2: Add the API row**
 
 In `docs/systems/api.md`, add `POST /api/csp-report` to the appropriate section:
 unauthenticated, accepts `application/csp-report`, `application/reports+json` and
 `application/json`, answers 204 to everything including malformed bodies, logs at
 warn level.
 
-- [ ] **Step 3: Add the CLAUDE.md row**
+- [x] **Step 3: Add the CLAUDE.md row**
 
 In the subsystem documentation table in `CLAUDE.md`, add, keeping the existing
 column format:
@@ -1362,13 +1362,13 @@ column format:
 | [web-security.md](docs/systems/web-security.md) | Content Security Policy construction and rollout state, the CORS posture and why the origin is reflected, security-header ownership between Caddy and the app, the route-level policy override for served files | Any CSP, CORS or security-header work; before "tightening" CORS |
 ```
 
-- [ ] **Step 4: Check the doc against the code**
+- [x] **Step 4: Check the doc against the code**
 
 Open each file the doc names and confirm the line references still resolve.
 Every one of them was accurate on 2026-09-02; if the implementation moved during
 this plan, fix the doc, not the reference.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add docs/systems/web-security.md docs/systems/api.md CLAUDE.md
