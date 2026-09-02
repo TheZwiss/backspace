@@ -27,7 +27,7 @@
   "devDependencies": {
     "@electron/fuses": "^1.8.0",
     "@electron/rebuild": "^4.2.0",
-    "electron": "^40.0.0",
+    "electron": "^40.10.6",
     "electron-builder": "^26.15.3",
     "typescript": "^5.7.2",
     "vitest": "^4.1.11"
