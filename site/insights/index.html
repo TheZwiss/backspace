@@ -4322,13 +4322,20 @@ footer a:hover { color: var(--txt); }
     return typeof value === "string" ? value.replace(/^\s+|\s+$/g, "") : "";
   }
 
-  /* A snapshot date as the page prints every other date, or a stated refusal.
-   * The bundle contract promises only a non-empty string here, and a date
-   * this page cannot place on a UTC calendar day is said out loud rather than
-   * printed raw or quietly dropped. */
-  function dayText(value) {
+  /*
+   * A snapshot date as the page prints every other date, or `null`.
+   *
+   * The bundle contract promises only a non-empty string here, and a date this
+   * page cannot place on a UTC calendar day must be said out loud rather than
+   * printed raw or quietly dropped. Returning `null` rather than a stock
+   * phrase is the point: every caller has to phrase its own refusal, because
+   * a phrase substituted into a slot built for a date reads as
+   * "snapshot taken a date this page cannot place on a calendar day". The
+   * refusal was right and the sentence was broken.
+   */
+  function dayOrNull(value) {
     var ms = I.parseDay(value);
-    return isNaN(ms) ? "a date this page cannot place on a calendar day" : I.formatDay(ms);
+    return isNaN(ms) ? null : I.formatDay(ms);
   }
 
   /*
@@ -4549,11 +4556,13 @@ footer a:hover { color: var(--txt); }
     var last = series.snapshots.length > 0
       ? series.snapshots[series.snapshots.length - 1]
       : null;
+    var lastDay = last === null ? null : dayOrNull(last);
     note.appendChild(pair("basis", "trailing " + AGGREGATE_DAYS + "-day aggregate"));
     note.appendChild(pair("snapshot", last === null
       ? "none recorded"
-      : "taken " + dayText(last) + ", covering the " + AGGREGATE_DAYS +
-        " days ending that day"));
+      : (lastDay === null
+        ? "recorded, but its date cannot be placed on a calendar day"
+        : "taken " + lastDay + ", covering the " + AGGREGATE_DAYS + " days ending that day")));
     note.appendChild(pair("rows", series.latest.length + " listed — GitHub reports at most " +
       GITHUB_TOP_N));
     return note;
@@ -4567,18 +4576,29 @@ footer a:hover { color: var(--txt); }
    * the five with a line below" directly above a paragraph explaining that
    * there is no chart below — a caption for something that is not there,
    * which is the failure this page's whole discipline exists to avoid. */
-  function rankedHint(spec, lines) {
+  function rankedHint(spec, lines, rankedCount) {
     var text = "These are not daily figures. GitHub reports a " + spec.one + "'s traffic " +
       "only as one trailing " + AGGREGATE_DAYS + "-day total per snapshot and lists at most " +
       GITHUB_TOP_N + " rows, so every count above covers a fortnight and there is no finer " +
       "resolution to be had — from this archive or from anywhere else. They do not move with " +
       "the range control: there is no daily history for a range to select from.";
-    /* Both remaining sentences describe the chart. Neither is printed when
-     * there is no chart to describe. */
+    /*
+     * Both remaining sentences describe the chart, so neither is printed when
+     * there is no chart to describe. Two further things they must not claim:
+     *
+     * - "one of the 1", when a single line is drawn.
+     * - "the rest are ranked here only", when there IS no rest. GitHub returns
+     *   at most ten rows and the bundler draws the top five, so a repository
+     *   with five or fewer referrers has every ranked row on the chart — and
+     *   the sentence would be pointing at rows that are not on the page.
+     */
     if (lines.length > 0) {
       text += " The range does move the movement chart below, which is drawn across snapshot " +
-        "dates. A row drawn in colour is one of the " + lines.length + " with a line in that " +
-        "same colour there; the rest are ranked here only.";
+        "dates. " + (lines.length === 1
+          ? "The one row drawn in colour is the one with a line in that same colour there"
+          : "A row drawn in colour is one of the " + lines.length +
+            " with a line in that same colour there");
+      text += rankedCount > lines.length ? "; the rest are ranked here only." : ".";
     }
     return el("p", "chart-hint", text);
   }
@@ -4643,10 +4663,73 @@ footer a:hover { color: var(--txt); }
     };
   }
 
-  /* The snapshot days that fall inside the selected window, and how many
-   * snapshot dates the bundle carries that this page cannot read. */
+  /*
+   * The window this section draws: the shared one, with its END extended to
+   * reach a snapshot that sits past it.
+   *
+   * `INSIGHTS.rangeWindow` anchors every window on the newest DATED SERIES
+   * row and deliberately excludes dimension snapshots from that anchor, so
+   * that a trailing 14-day aggregate cannot stretch a window past the last
+   * real daily measurement. On a daily bundle the two coincide — the
+   * collector writes a star row and a snapshot in the same run — and this
+   * function returns the window untouched.
+   *
+   * On a DOWNSAMPLED bundle they do not. Series dates become Monday bucket
+   * keys while `downsampleWeekly` leaves the snapshots on their own daily
+   * dates, so the newest series day can sit up to six days BEFORE the newest
+   * snapshot. In the fixture that found this, the newest bucket key is
+   * 2026-08-31 and the newest snapshot 2026-09-06: every snapshot in that
+   * trailing partial week fell outside every window, "all" included. The
+   * section drew nothing, said "N of the M the archive holds" and offered
+   * "a wider range takes in more" — which no range does. Dropping a reading
+   * the archive holds because a DIFFERENT series was bucketed is the page
+   * hiding data with no reason a reader could see.
+   *
+   * Only the end moves, and only as far as a snapshot that exists. The start
+   * is left exactly as the range control set it: that is what the control
+   * means, and widening it would let this section show a span the reader did
+   * not ask for. `extendedFrom` is set when the end moved, so the section can
+   * say so rather than quietly drawing a wider axis than the control implies.
+   */
+  function snapshotWindow(series, win) {
+    var endMs = win.endMs;
+    for (var i = 0; i < series.snapshots.length; i++) {
+      var ms = I.parseDay(series.snapshots[i]);
+      if (isNaN(ms)) continue;
+      if (ms > endMs) endMs = ms;
+    }
+    if (endMs === win.endMs) return win;
+    return {
+      key: win.key, title: win.title, days: win.days, bounded: win.bounded,
+      startMs: win.startMs, endMs: endMs, extendedFrom: win.endMs
+    };
+  }
+
+  /* Why the axis runs past the day the range control anchors on. */
+  function extendedHint(win) {
+    return el("p", "chart-hint", "The newest snapshot here is dated " +
+      I.formatDay(win.endMs) + ", after the archive's newest dated series row (" +
+      I.formatDay(win.extendedFrom) + ") — which is the day the range control anchors every " +
+      "window on. That happens when the bundle is bucketed by week: the series dates become " +
+      "the Monday that opens each bucket while these snapshots keep their own daily dates. " +
+      "The axis is extended to the snapshot rather than stopping short of it, because a " +
+      "reading this archive holds should not disappear because a different series was " +
+      "bucketed. The range's start is unchanged.");
+  }
+
+  /*
+   * The snapshots inside the selected window, split three ways.
+   *
+   * `differenceable` is the count that can carry a point at all: a snapshot
+   * inside the window that is not the archive's FIRST one, since element 0 of
+   * every trajectory is null by construction. It is index 0 of `snapshots`
+   * that is excluded and not the first snapshot inside the window — a window
+   * that opens mid-run leaves its earliest snapshot with a real predecessor
+   * outside the window, and that difference exists and is drawn.
+   */
   function snapshotsInWindow(series, win) {
     var inside = 0;
+    var differenceable = 0;
     var unreadable = 0;
     for (var i = 0; i < series.snapshots.length; i++) {
       var ms = I.parseDay(series.snapshots[i]);
@@ -4654,38 +4737,82 @@ footer a:hover { color: var(--txt); }
         unreadable++;
         continue;
       }
-      if (ms >= win.startMs && ms <= win.endMs) inside++;
+      if (ms < win.startMs || ms > win.endMs) continue;
+      inside++;
+      if (i > 0) differenceable++;
     }
-    return { inside: inside, unreadable: unreadable };
+    return { inside: inside, differenceable: differenceable, unreadable: unreadable };
   }
 
-  /* How many points across every line the axis carries, and how many of the
-   * places one could sit are breaks. Stated because a chart of five mostly
-   * broken lines should say how much of it is break before a reader counts. */
-  function pointTally(axis, lines) {
-    var drawn = 0;
-    var blank = 0;
+  /*
+   * The lines that carry at least one point inside this span.
+   *
+   * A trajectory with nothing to draw is left OFF the chart rather than added
+   * as an empty series, and its ranked row keeps the neutral fill rather than
+   * a palette colour. Both follow from what the colour means here: "this row
+   * has a line below in this colour". A coloured bar whose line is an empty
+   * legend entry makes that sentence false for it, and the caption saying so
+   * would be describing four of five rows. What is on the chart and what is
+   * coloured in the list are therefore exactly the same set, and
+   * `blankLinesHint` names the ones left out and why.
+   */
+  function linesWithPoints(axis, lines) {
+    var out = [];
     for (var i = 0; i < lines.length; i++) {
-      drawn += axis.measured[lines[i].offset];
-      if (axis.measured[lines[i].offset] === 0) blank++;
+      if (axis.measured[lines[i].offset] > 0) out.push(lines[i]);
     }
-    return { drawn: drawn, possible: axis.xs.length * lines.length, blankLines: blank };
+    return out;
   }
 
-  function movementMeta(axis, lines, counted, total) {
+  /*
+   * How many points the drawn lines carry, and how many they COULD carry.
+   *
+   * `possible` counts snapshots, never axis days, and that distinction is the
+   * whole value of the figure. The axis is a complete daily grid so that a
+   * stretch with no snapshot renders as a break — but a day with no snapshot
+   * is not a place a point could have sat and failed to. Multiplying axis days
+   * by lines reported the sparse archive as "10 drawn of 490 possible" when
+   * all ten points a difference can exist for were in fact drawn: a chart
+   * described as 98% missing while it was complete.
+   *
+   * A point can exist only where a snapshot sits AND a snapshot precedes it,
+   * so the archive's very first snapshot is excluded — the same fact the
+   * captions state as "the first snapshot carries no point at all". The two
+   * now agree because they are computed from the same rule.
+   */
+  function pointTally(axis, lines, differenceable) {
+    var drawn = 0;
+    for (var i = 0; i < lines.length; i++) drawn += axis.measured[lines[i].offset];
+    return { drawn: drawn, possible: differenceable * lines.length };
+  }
+
+  function movementMeta(axis, lines, counts, total, tally, downsampled) {
     var note = el("p", "chart-meta");
     note.appendChild(pair("span", I.formatDay(axis.startMs) + " → " + I.formatDay(axis.endMs)));
-    note.appendChild(pair("snapshots", counted + " of the " + total +
+    note.appendChild(pair("snapshots", counts.inside + " of the " + total +
       " the archive holds"));
+    /*
+     * Stated here because the page-wide note above the charts governs the
+     * DATED SERIES, and `downsampleWeekly` leaves these snapshots alone. Said
+     * on a daily bundle too: a resolution claim that only appears when it
+     * differs from the page's is a claim a reader has to notice the absence of.
+     */
+    note.appendChild(pair("resolution", downsampled
+      ? "one point per snapshot date — these snapshots are never bucketed by week, unlike the series above"
+      : "one point per snapshot date"));
     note.appendChild(pair("lines", lines.length + " " +
       plural(lines.length, "dimension", "dimensions") + ", joined to the ranking above by name"));
-    if (axis.xs.length > counted) {
-      note.appendChild(pair("no snapshot", days(axis.xs.length - counted) + " on this axis " +
-        plural(axis.xs.length - counted, "carries", "carry") + " none — drawn as breaks"));
+    if (axis.xs.length > counts.inside) {
+      note.appendChild(pair("no snapshot", days(axis.xs.length - counts.inside) +
+        " on this axis " + plural(axis.xs.length - counts.inside, "carries", "carry") +
+        " none — drawn as breaks"));
     }
-    var tally = pointTally(axis, lines);
-    note.appendChild(pair("points", tally.drawn + " drawn of " + tally.possible +
-      " possible; the rest are breaks"));
+    /* Counted against what the snapshots can carry, not against the axis: see
+     * pointTally. When the two are equal the chart is complete and says so
+     * rather than trailing a clause about breaks it does not have. */
+    note.appendChild(pair("points", tally.drawn + " of the " + tally.possible +
+      " the snapshots can carry" +
+      (tally.drawn < tally.possible ? " — the rest are breaks" : "")));
     return note;
   }
 
@@ -4762,12 +4889,17 @@ footer a:hover { color: var(--txt); }
       "a bar in the ranking above.");
   }
 
+  /* Named rather than silently dropped: a top-five dimension that is not on
+   * the chart is a fact about the archive, and a chart quietly showing four
+   * lines where the bundler produced five would hide it. */
   function blankLinesHint(count, total, spec) {
-    return el("p", "chart-hint", count + " of the " + total + " " +
-      plural(total, "line", "lines") + " " + plural(count, "carries", "carry") +
-      " no point inside this span: " +
-      plural(count, "that " + spec.one + " appears", "those " + spec.many + " appear") +
-      " in at most one of the snapshots here, and a change needs two of them.");
+    return el("p", "chart-hint", count + " of the " + total + " ranked " +
+      plural(total, spec.one, spec.many) + " the bundle carries a trajectory for " +
+      plural(count, "is", "are") + " not drawn here: " +
+      plural(count, "it appears", "they appear") +
+      " in at most one of the snapshots inside this span, and a change needs two of them. " +
+      plural(count, "Its row above keeps", "Their rows above keep") +
+      " the neutral bar, because " + plural(count, "it has", "they have") + " no line to match.");
   }
 
   /*
@@ -4829,9 +4961,15 @@ footer a:hover { color: var(--txt); }
    * the reader is looking at ten filled bars and one absent chart and is owed
    * an account of why only one of them is missing.
    */
-  function historyNote(spec, series, axis, win, lines, counted) {
+  function historyNote(spec, series, axis, win, lines, counts) {
     var box = el("div", "slot-note slot-note-detail");
     var total = series.snapshots.length;
+    var counted = counts === null ? 0 : counts.inside;
+    /* Snapshots whose date this page can place at all. A snapshot it cannot
+     * read is not "outside the window" — it has no position to be outside of,
+     * and counting it against the window would report an unreadable date as a
+     * range problem. It is disclosed on its own line instead. */
+    var placeable = total - (counts === null ? 0 : counts.unreadable);
 
     var first = el("p");
     first.appendChild(el("strong", null, "Not enough history for a movement chart yet."));
@@ -4842,16 +4980,35 @@ footer a:hover { color: var(--txt); }
       "it to difference against."));
     box.appendChild(first);
 
-    var held = total === 0
-      ? "The archive holds no snapshot of " + spec.many + " at all."
-      : "The archive holds " + total + " " + plural(total, "snapshot", "snapshots") +
-        " of " + spec.many + ", the newest taken " +
-        dayText(series.snapshots[series.snapshots.length - 1]) + ".";
-    if (win !== null && total > 0 && counted !== total) {
-      held += " " + counted + " of " + plural(total, "it", "them") + " " +
-        plural(counted, "falls", "fall") + " inside " + win.title.toLowerCase() + " (" +
-        I.formatDay(win.startMs) + " to " + I.formatDay(win.endMs) +
-        "); a wider range takes in more.";
+    var newestDay = total === 0 ? null : dayOrNull(series.snapshots[total - 1]);
+    var held;
+    if (total === 0) {
+      held = "The archive holds no snapshot of " + spec.many + " at all.";
+    } else {
+      held = "The archive holds " + total + " " + plural(total, "snapshot", "snapshots") +
+        " of " + spec.many + (newestDay === null
+          ? ", and the newest carries a date this page cannot place on a calendar day."
+          : ", the newest taken " + newestDay + ".");
+    }
+    /*
+     * Only when some of them fall outside, and phrased so it survives
+     * `total === 1`. Two independently pluralised fragments produced "0 of it
+     * fall inside last 30 days" there — the count agreeing with the subject
+     * and the verb agreeing with the count, each correct on its own.
+     *
+     * The offer of a wider range is made only when a wider range EXISTS. On
+     * `all` there is none, and "a wider range takes in more" would be sending
+     * a reader to look for a control that cannot help them.
+     */
+    if (win !== null && placeable > 0 && counted !== placeable) {
+      var range = win.title.toLowerCase() + " (" + I.formatDay(win.startMs) + " to " +
+        I.formatDay(win.endMs) + ")";
+      held += " " + (counted === 0
+        ? (placeable === 1 ? "It does not fall inside " : "None of them falls inside ") + range
+        : counted + " of them " + plural(counted, "falls", "fall") + " inside " + range) +
+        (win.bounded
+          ? "; a wider range takes in more."
+          : ", which is every day the archive covers.");
     }
     box.appendChild(el("p", null, held));
 
@@ -4879,11 +5036,14 @@ footer a:hover { color: var(--txt); }
      * enough. */
     if (axis !== null && axis.xs.length > 1 && lines.length > 0) {
       box.appendChild(el("p", null, "This range spans " + counted + " " +
-        plural(counted, "snapshot", "snapshots") + ", but none of the " + lines.length + " " +
-        plural(lines.length, "ranked " + spec.one, "ranked " + spec.many) +
-        " drawn here appears in two of them, so not one of them has a change to plot. A " +
-        spec.one + " GitHub did not list on a given day is outside its top " + GITHUB_TOP_N +
-        " for that day — which bounds its traffic from above, and is not a zero."));
+        plural(counted, "snapshot", "snapshots") + ", but " +
+        (lines.length === 1
+          ? "the one ranked " + spec.one + " the bundle carries a trajectory for does not appear"
+          : "none of the " + lines.length + " ranked " + spec.many +
+            " the bundle carries trajectories for appears") +
+        " in two of them, so there is no change to plot. A " + spec.one + " GitHub did not " +
+        "list on a given day is outside its top " + GITHUB_TOP_N + " for that day — which " +
+        "bounds its traffic from above, and is not a zero."));
     }
 
     box.appendChild(el("p", null,
@@ -4911,11 +5071,13 @@ footer a:hover { color: var(--txt); }
         ? " The archive holds no snapshot of " + spec.many + ". GitHub reports them as a " +
           "trailing " + AGGREGATE_DAYS + "-day aggregate, so the first one appears here after " +
           "the collector's next successful run, and no earlier history is recoverable."
-        : " The newest snapshot, taken " +
-          dayText(series.snapshots[series.snapshots.length - 1]) +
-          ", lists none. GitHub returns an empty set when a repository drew no traffic it " +
-          "could attribute over the trailing " + AGGREGATE_DAYS + " days — which is a real " +
-          "reading, not a failed one."));
+        : " The newest snapshot " + (dayOrNull(series.snapshots[series.snapshots.length - 1]) === null
+          ? "carries a date this page cannot place on a calendar day, and lists none."
+          : "was taken " + dayOrNull(series.snapshots[series.snapshots.length - 1]) +
+            " and lists none.") +
+          " GitHub returns an empty set when a repository drew no traffic it could attribute " +
+          "over the trailing " + AGGREGATE_DAYS + " days — which is a real reading, not a " +
+          "failed one."));
     box.appendChild(first);
     return box;
   }
@@ -4942,29 +5104,37 @@ footer a:hover { color: var(--txt); }
       /* `win` is null on a non-empty bundle holding only dimension snapshots:
        * there is no dated series row for the range control to anchor to. The
        * bars need no window; only the chart does. */
-      var counts = win === null ? null : snapshotsInWindow(series, win);
+      /* The section's own window: the control's, with its end extended to a
+       * snapshot that sits past it. See snapshotWindow. */
+      var swin = win === null ? null : snapshotWindow(series, win);
+      var counts = swin === null ? null : snapshotsInWindow(series, swin);
       /* One expansion for every line, so all of them share an axis and the
        * cursor lands on the same day in each — and on the same day as the
        * reach and growth charts, which sit in the same sync group. */
-      var axis = win === null ? null : C.expand(bound.columns, win, SNAPSHOT_STEP_DAYS);
-      var tally = (axis !== null && !axis.empty) ? pointTally(axis, bound.lines) : null;
+      var axis = swin === null ? null : C.expand(bound.columns, swin, SNAPSHOT_STEP_DAYS);
       /*
-       * Settled BEFORE the ranked card is built, because the ranked card's own
-       * caption describes the chart: it tells the reader that a coloured row
-       * is one with a line below it. Deciding afterwards would print that
-       * sentence above the paragraph explaining that there is no chart, which
-       * is a caption for something that is not on the page.
+       * The lines that will actually be drawn, and whether a chart is drawn at
+       * all — both settled BEFORE the ranked card is built, because the ranked
+       * card's own caption describes the chart: it tells the reader that a
+       * coloured row is one with a line below it. Deciding afterwards would
+       * print that sentence above the paragraph explaining that there is no
+       * chart, and would colour bars whose lines carry nothing.
        */
+      var drawnLines = (axis === null || axis.overrun || axis.empty)
+        ? []
+        : linesWithPoints(axis, bound.lines);
       var drawing = axis !== null && !axis.overrun && !axis.empty &&
-        axis.xs.length >= 2 && tally.drawn > 0;
+        axis.xs.length >= 2 && drawnLines.length > 0;
+      if (!drawing) drawnLines = [];
+      var tally = drawing ? pointTally(axis, drawnLines, counts.differenceable) : null;
 
       var stack = el("div", "chart-stack");
       slot.appendChild(stack);
 
       var rankCard = el("div", "chart-card");
       rankCard.appendChild(el("p", "chart-title", spec.rankedTitle));
-      rankCard.appendChild(rankedList(series, drawing ? bound.lines : []));
-      rankCard.appendChild(rankedHint(spec, drawing ? bound.lines : []));
+      rankCard.appendChild(rankedList(series, drawnLines));
+      rankCard.appendChild(rankedHint(spec, drawnLines, series.latest.length));
       stack.appendChild(rankCard);
 
       if (win === null) {
@@ -4984,8 +5154,8 @@ footer a:hover { color: var(--txt); }
       }
 
       if (!drawing) {
-        slot.appendChild(historyNote(spec, series, axis.empty ? null : axis, win,
-          bound.lines, counts.inside));
+        slot.appendChild(historyNote(spec, series, axis.empty ? null : axis, swin,
+          bound.lines, counts));
         if (counts.unreadable > 0) {
           slot.appendChild(el("p", "chart-hint chart-caution", counts.unreadable + " " +
             plural(counts.unreadable, "snapshot carries", "snapshots carry") +
@@ -4997,16 +5167,19 @@ footer a:hover { color: var(--txt); }
 
       var card = el("div", "chart-card");
       card.appendChild(el("p", "chart-title", "Movement between snapshots"));
-      card.appendChild(movementMeta(axis, bound.lines, counts.inside, series.snapshots.length));
+      card.appendChild(movementMeta(axis, drawnLines, counts, series.snapshots.length, tally,
+        data.downsampled));
       var host = el("div", "chart-scroll");
       card.appendChild(host);
       card.appendChild(movementHint(spec));
+      if (swin.extendedFrom !== undefined) card.appendChild(extendedHint(swin));
       if (axis.xs.length > counts.inside) {
         card.appendChild(gapHint(axis.xs.length - counts.inside));
       }
       card.appendChild(axisHint());
-      if (tally.blankLines > 0) {
-        card.appendChild(blankLinesHint(tally.blankLines, bound.lines.length, spec));
+      if (bound.lines.length > drawnLines.length) {
+        card.appendChild(blankLinesHint(bound.lines.length - drawnLines.length,
+          bound.lines.length, spec));
       }
       if (bound.zeroFaults.length > 0) card.appendChild(zeroFaultHint(bound.zeroFaults));
       if (bound.orphans > 0) card.appendChild(orphanHint(bound.orphans, spec));
@@ -5022,8 +5195,8 @@ footer a:hover { color: var(--txt); }
       stack.appendChild(card);
 
       var defs = [];
-      for (var i = 0; i < bound.lines.length; i++) {
-        var line = bound.lines[i];
+      for (var i = 0; i < drawnLines.length; i++) {
+        var line = drawnLines[i];
         defs.push({
           label: shortLabel(line.label),
           stroke: line.stroke,
