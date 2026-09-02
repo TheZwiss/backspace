@@ -447,13 +447,14 @@ footer a:hover { color: var(--txt); }
       <h2>Growth</h2>
       <p class="sec-copy">
         Star and fork history with release tags marked on the time axis, so a jump can be read
-        against what shipped. Both are <strong>cumulative point-in-time totals</strong>: a break
-        in a line means nothing was measured at that point on the axis &mdash; a day, or a whole
-        week once the bundle is bucketed by week &mdash; and never that the count fell back. A
-        star count does not return to zero, so a gap here is the easiest break on the page to
-        misread as a collapse. The vertical axis is fitted to the values drawn rather than
-        pinned to zero, because a total that has sat near sixty for months would otherwise be a
-        flat line with every real movement squashed out of it.
+        against what shipped. Both are <strong>cumulative point-in-time totals</strong>: a step
+        the archive did not measure &mdash; a day, or a whole week once the bundle is bucketed
+        by week &mdash; is a hole in the record and never a fall back to a lower count, and
+        wherever a line is drawn that hole is a break in it rather than a dip. A star count does
+        not return to zero, so it is the easiest gap on the page to misread as a collapse. What
+        follows is built from the rows the archive holds and nothing else: when the history is
+        too short to make a line, this section states the readings and its reasons instead of
+        drawing one, and how a chart's axes are scaled is stated beside the chart itself.
       </p>
       <div class="slot" id="chart-growth"></div>
     </div>
@@ -2060,17 +2061,92 @@ footer a:hover { color: var(--txt); }
    * exactly one plot on the page there is no "every chart" to speak of, and a
    * sentence about charts moving together would be describing something the
    * reader cannot see happening.
+   *
+   * `mount` also keeps the containers it drew into, because the count alone
+   * cannot say WHERE the charts are. A page-level element has one fixed place
+   * in the document, and a section that declines to draw still occupies its
+   * own place in that order — so the sentence could sit directly beneath a
+   * section holding no chart, reading as a caption for something that is not
+   * there. `placeHint` moves it under whichever section drew last instead.
    */
   var HINT_ID = "chart-hint";
   var livePlots = 0;
+  /* The container of every live plot, in mount order. */
+  var liveHosts = [];
+
+  function forgetHost(host) {
+    for (var i = 0; i < liveHosts.length; i++) {
+      if (liveHosts[i] === host) {
+        liveHosts.splice(i, 1);
+        return;
+      }
+    }
+  }
+
+  /*
+   * The live host that sits last in the document.
+   *
+   * Mount order is document order while the sections render top to bottom,
+   * but nothing enforces that, and a hint placed after a chart that is not the
+   * last one on the page would be the same misplacement in a subtler form. So
+   * the order is read from the document rather than assumed from the array.
+   */
+  function lastHost() {
+    var last = null;
+    for (var i = 0; i < liveHosts.length; i++) {
+      if (last === null) {
+        last = liveHosts[i];
+      } else if ((last.compareDocumentPosition(liveHosts[i]) &
+        Node.DOCUMENT_POSITION_FOLLOWING) !== 0) {
+        last = liveHosts[i];
+      }
+    }
+    return last;
+  }
+
+  /* The ancestor of `node` that is a direct child of `container`, or null when
+   * `node` is not inside `container` at all — which is what a host detached
+   * from the document returns, and the reason `placeHint` can leave the hint
+   * where it is rather than throwing on one. */
+  function childOf(container, node) {
+    var current = node;
+    while (current !== null && current.parentNode !== container) current = current.parentNode;
+    return current;
+  }
+
+  /*
+   * Put the hint directly after the section that drew the last chart.
+   *
+   * The whole element moves — the `.wrap` the hint sits in, not the paragraph
+   * — so the page's own centred column is preserved wherever it lands. It is
+   * moved rather than duplicated: there is one hint, and it says one thing
+   * about one cursor-sync group.
+   */
+  function placeHint(node) {
+    var wrapper = node.parentNode;
+    if (wrapper === null) return;
+    var container = wrapper.parentNode;
+    if (container === null) return;
+    var host = lastHost();
+    if (host === null) return;
+    var anchor = childOf(container, host);
+    /* Nothing to do when the last chart is not a sibling of the hint, and
+     * nothing to do when it already sits where it belongs. */
+    if (anchor === null || anchor === wrapper) return;
+    if (anchor.nextSibling === wrapper) return;
+    container.insertBefore(wrapper, anchor.nextSibling);
+  }
 
   function syncHint() {
     var node = document.getElementById(HINT_ID);
     if (node === null) return;
     if (livePlots === 0) {
+      /* Left where it stands: `.chart-hint:empty` gives it no height, so there
+       * is nothing on the page to be misplaced. */
       node.textContent = "";
       return;
     }
+    placeHint(node);
     node.textContent = livePlots > 1
       ? "Hovering any chart moves the cursor on every chart on this page. Drag sideways across " +
         "any of them to zoom the shared time axis; double-click to return to the full span."
@@ -2626,6 +2702,7 @@ footer a:hover { color: var(--txt); }
     var plot = new window.uPlot(config, data, host);
     var detach = trackSize(plot, host);
     livePlots += 1;
+    liveHosts.push(host);
     syncHint();
     /* `released` guards the count against a double destroy. A section that
      * tears down and then has its slot emptied would otherwise be able to
@@ -2638,6 +2715,7 @@ footer a:hover { color: var(--txt); }
         if (released) return;
         released = true;
         livePlots -= 1;
+        forgetHost(host);
         syncHint();
         detach();
         plot.destroy();
@@ -3044,6 +3122,49 @@ footer a:hover { color: var(--txt); }
     }
   ];
 
+  /*
+   * Turn the declarations above into the columns `expand` is handed, so a
+   * card's heading and the archive column it draws cannot come apart.
+   *
+   * This is the ONLY place `series` and `field` are read, and the only place
+   * the expand columns are built. Card `i` draws `axis.values[offset]` where
+   * `offset` is the position this same iteration pushed its column into, so
+   * reordering `CHARTS` — or editing a `series` — moves the title, the label,
+   * the colour and the data together. Written as two independent literals,
+   * the cards would have been bound to their data by array position alone,
+   * and a reorder would have produced a card headed "Forks" drawn from the
+   * star column with nothing failing and nothing on the page to show it. On a
+   * page whose entire discipline is that a caption describes what is beneath
+   * it, that is the worst failure available, so the binding is derived rather
+   * than declared twice.
+   *
+   * The offset is carried per card rather than assumed equal to the card's
+   * index. It is equal today, because each card declares one column; a card
+   * that one day needs two would otherwise silently shift every later card
+   * onto the wrong data.
+   */
+  function bindColumns(data) {
+    var cards = [];
+    var columns = [];
+    for (var i = 0; i < CHARTS.length; i++) {
+      var spec = CHARTS[i];
+      var series = data.series[spec.series];
+      /* The bundle validator guarantees every series the contract names and
+       * checks that each declared field is an array, so this can only fire on
+       * a spec naming something the contract does not carry. Thrown rather
+       * than skipped: the shell turns a throw into this section's honest
+       * failure note, where skipping the card would publish a section quietly
+       * missing a chart it claims to draw. */
+      if (series === undefined || series === null || !Array.isArray(series[spec.field])) {
+        throw new Error("chart-growth: the " + spec.title + " card declares series." +
+          spec.series + "." + spec.field + ", which this bundle does not carry.");
+      }
+      cards.push({ spec: spec, offset: columns.length });
+      columns.push({ series: series, field: spec.field });
+    }
+    return { cards: cards, columns: columns };
+  }
+
   /* The release markers take the growth section's own channel colour, so the
    * lane, the labels and the section's "#growth" heading are one thing. */
   var RELEASE_TOKEN = "--lavender";
@@ -3172,10 +3293,18 @@ footer a:hover { color: var(--txt); }
    *
    * The span tested against is the span the SERIES cover, not the range the
    * control asked for and not the scale uPlot ends up drawing. A release
-   * outside it is reported as unmarked in the caption, and the painter below
-   * additionally declines anything outside the live scale, so a zoom hides
-   * markers without ever making the caption claim something is drawn that is
-   * not.
+   * outside it is reported as unmarked in the caption.
+   *
+   * The painter below additionally declines anything outside the LIVE scale,
+   * so a drag zoom can leave the canvas with no marker on it while the
+   * caption still names every release it listed. That is deliberate, and it is
+   * not the caption going stale: the caption is a statement about the span
+   * this section drew out of the archive — the span each card's `span` line
+   * names — and not a claim about what is on the canvas at the reader's
+   * current zoom. Double-clicking restores the full span and every listed
+   * marker with it. A caption recomputed from a `setScale` hook would be
+   * making the narrower claim, and would then have to say which of the two
+   * spans it meant; this one says the wider thing and says it once.
    */
   function collectReleases(releases, startMs, endMs) {
     var groups = [];
@@ -3371,7 +3500,7 @@ footer a:hover { color: var(--txt); }
    * stated together with what the page does about it, because on a cumulative
    * total a break is the single most misreadable mark on this page.
    */
-  function metaLine(axis, offset, series) {
+  function metaLine(axis, offset) {
     var stepDays = axis.stepDays;
     var total = axis.xs.length;
     var counted = axis.measured[offset];
@@ -3525,12 +3654,42 @@ footer a:hover { color: var(--txt); }
     return note;
   }
 
-  /* Every series' reading at a single step, for the one-point case below. */
-  function readings(axis) {
+  /*
+   * When the readings below were taken, said in terms the bundle can support.
+   *
+   * A daily bundle dates a row on the day it was read, so the date IS the
+   * measurement date. A weekly bundle keys each bucket on the Monday that
+   * opens the week while a cumulative field carries the LAST value measured
+   * inside it (`bundle.ts`: point-in-time totals take the week's last measured
+   * value), so the key can sit up to six days before the reading it carries.
+   * Printing "measured <Monday>" there would state a date on which nothing was
+   * read — a measurement this page did not make — which is the one thing this
+   * section exists to refuse. So the weekly spelling names the week, and the
+   * paragraph below it says why the day cannot be named.
+   */
+  function measuredPhrase(axis, downsampled) {
+    return downsampled
+      ? "measured in the week beginning " + I.formatDay(axis.startMs)
+      : "measured " + I.formatDay(axis.startMs);
+  }
+
+  /* The same distinction as a subject rather than a predicate: a bucket key is
+   * a week, and naming it as though it were the day itself would be the same
+   * misstatement in a different place in the sentence. */
+  function stepPhrase(axis, downsampled) {
+    return downsampled
+      ? "the week beginning " + I.formatDay(axis.startMs)
+      : I.formatDay(axis.startMs);
+  }
+
+  /* Every card's reading at a single step, for the one-point case below. Read
+   * through the same binding the charts use, so the labels here name the
+   * columns these figures came out of. */
+  function readings(cards, axis) {
     var parts = [];
-    for (var i = 0; i < CHARTS.length; i++) {
-      var value = axis.values[i][0];
-      parts.push(CHARTS[i].label + ": " +
+    for (var i = 0; i < cards.length; i++) {
+      var value = axis.values[cards[i].offset][0];
+      parts.push(cards[i].spec.label + ": " +
         (value === null || value === undefined ? "not measured" : I.formatCount(value)));
     }
     return parts.join("  ·  ");
@@ -3560,14 +3719,14 @@ footer a:hover { color: var(--txt); }
    * a history" is a true sentence; a chart of it would not be a true picture.
    * This resolves itself with the second day of collection.
    */
-  function singlePointNote(axis, win, collected, total) {
+  function singlePointNote(cards, axis, win, collected, total, downsampled) {
     var box = el("div", "slot-note slot-note-detail");
 
     var first = el("p");
     first.appendChild(el("strong", null, "One measurement is not a history."));
     first.appendChild(document.createTextNode(
       " The axis these two series share is a single step wide: " +
-      I.formatDay(axis.startMs) + " is the only " + stepWord(axis.stepDays) + " inside " +
+      stepPhrase(axis, downsampled) + " is the only " + stepWord(axis.stepDays) + " inside " +
       win.title.toLowerCase() + " that either of them carries a row for. A cumulative total " +
       "read once has no direction and no rate, and a line needs two points to have either. " +
       "Drawn anyway it would be a single dot on an axis the plotting library stretches years " +
@@ -3575,7 +3734,7 @@ footer a:hover { color: var(--txt); }
       "readings are stated instead."));
     box.appendChild(first);
 
-    box.appendChild(el("p", null, readings(axis) + "  ·  measured " + I.formatDay(axis.startMs)));
+    box.appendChild(el("p", null, readings(cards, axis) + "  ·  " + measuredPhrase(axis, downsampled)));
 
     if (total === 0) {
       box.appendChild(el("p", null,
@@ -3598,6 +3757,18 @@ footer a:hover { color: var(--txt); }
         "covers the day a release shipped."));
     }
 
+    if (downsampled) {
+      /* The weekly caution below the charts never reaches this path — it is
+       * appended after the early return that renders this box — and the
+       * hazard it discloses is sharper here, because this box states a single
+       * date and nothing else on the page qualifies it. */
+      box.appendChild(el("p", null,
+        "This bundle is bucketed by week rather than by day. The figures above are the last " +
+        "values measured in the week beginning " + I.formatDay(axis.startMs) + "; the day they " +
+        "were actually read on is up to six days later and is not preserved in a bucketed " +
+        "bundle, so it cannot be stated here."));
+    }
+
     if (collected.unreadable > 0) {
       box.appendChild(el("p", null,
         collected.unreadable + " further " + plural(collected.unreadable, "release", "releases") +
@@ -3615,7 +3786,7 @@ footer a:hover { color: var(--txt); }
   function buildChart(stack, spec, axis, offset, painter) {
     var card = el("div", "chart-card");
     card.appendChild(el("p", "chart-title", spec.title));
-    card.appendChild(metaLine(axis, offset, spec.series));
+    card.appendChild(metaLine(axis, offset));
     stack.appendChild(card);
 
     if (axis.measured[offset] === 0) {
@@ -3670,11 +3841,10 @@ footer a:hover { color: var(--txt); }
     var stepDays = I.resolutionStepDays();
     /* One expansion for both charts, so both get the identical x axis, the
      * synced cursor lands on the same day in each, and one set of release
-     * markers is correct for both. */
-    var axis = C.expand([
-      { series: data.series.stars, field: "total" },
-      { series: data.series.forks, field: "total" }
-    ], win, stepDays);
+     * markers is correct for both. The columns and the cards that read them
+     * come out of one declaration; see `bindColumns`. */
+    var bound = bindColumns(data);
+    var axis = C.expand(bound.columns, win, stepDays);
 
     /* Before the `empty` branch: an overrun sets `empty` too, as a fail-safe
      * for a caller that forgets this check, and the specific reason is the
@@ -3696,7 +3866,8 @@ footer a:hover { color: var(--txt); }
     var collected = collectReleases(data.releases, axis.startMs, axis.endMs);
 
     if (axis.xs.length < 2) {
-      slot.appendChild(singlePointNote(axis, win, collected, total));
+      slot.appendChild(singlePointNote(bound.cards, axis, win, collected, total,
+        data.downsampled));
       return;
     }
 
@@ -3716,8 +3887,9 @@ footer a:hover { color: var(--txt); }
     var painter = releasePainter(collected.groups, C.colour(RELEASE_TOKEN, RELEASE_FALLBACK));
     var created = [];
     try {
-      for (var i = 0; i < CHARTS.length; i++) {
-        var chart = buildChart(stack, CHARTS[i], axis, i, painter);
+      for (var i = 0; i < bound.cards.length; i++) {
+        var chart = buildChart(stack, bound.cards[i].spec, axis,
+          bound.cards[i].offset, painter);
         if (chart !== null) created.push(chart);
       }
     } catch (error) {
