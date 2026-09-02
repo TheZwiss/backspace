@@ -195,6 +195,23 @@ export function getOurOrigin(): string {
   return `http://localhost:${config.port}`;
 }
 
+const SLASH_CHAR_CODE = 47; // '/'
+
+/**
+ * Remove every trailing '/' from a string.
+ *
+ * Equivalent to `s.replace(/\/+$/, '')`, but scans backwards from the end so
+ * the cost is linear in the length of the input. The regex form re-tries the
+ * match from each successive start position inside a long run of slashes,
+ * which is quadratic, and these helpers run on origin strings supplied by
+ * clients and by federation peers.
+ */
+export function stripTrailingSlashes(s: string): string {
+  let end = s.length;
+  while (end > 0 && s.charCodeAt(end - 1) === SLASH_CHAR_CODE) end--;
+  return end === s.length ? s : s.slice(0, end);
+}
+
 /**
  * Canonicalize a homeInstance / origin value for comparison.
  *
@@ -218,7 +235,7 @@ export function normalizeOriginForCompare(value: string | null | undefined): str
   // Strip scheme if present
   s = s.replace(/^https?:\/\//i, '');
   // Strip trailing slashes
-  s = s.replace(/\/+$/, '');
+  s = stripTrailingSlashes(s);
   if (!s) return null;
   return s.toLowerCase();
 }
@@ -243,7 +260,7 @@ export function canonicalizeHomeInstance(value: string | null | undefined): stri
   if (!s) return null;
   if (/^https?:\/\//i.test(s)) {
     // Strip trailing slashes only — preserve the explicit scheme.
-    return s.replace(/\/+$/, '');
+    return stripTrailingSlashes(s);
   }
-  return `https://${s.replace(/\/+$/, '')}`;
+  return `https://${stripTrailingSlashes(s)}`;
 }

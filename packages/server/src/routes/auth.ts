@@ -10,6 +10,7 @@ import { AVATAR_COLORS } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { extractDomain } from './federation.js';
 import { fetchPeerEpoch } from '../utils/federationEpoch.js';
+import { stripTrailingSlashes } from '../utils/federationAuth.js';
 import { getInviteByToken, inviteStatus, redeemInvite, InviteUnavailableError } from '../utils/inviteService.js';
 
 export async function authRoutes(app: FastifyInstance): Promise<void> {
@@ -453,7 +454,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     if (typeof rawTarget !== 'string' || rawTarget.trim().length === 0 || rawTarget.length > 255) {
       return reply.code(400).send({ error: 'targetDomain is required (string)', statusCode: 400 });
     }
-    const targetDomain = rawTarget.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/+$/, '');
+    const targetDomain = stripTrailingSlashes(rawTarget.trim().toLowerCase().replace(/^https?:\/\//, ''));
     // Re-check emptiness AFTER normalization: inputs like "https://" or "/"
     // pass the pre-normalization guard but collapse to "" — never persist an
     // inert target_domain='' proof row.
