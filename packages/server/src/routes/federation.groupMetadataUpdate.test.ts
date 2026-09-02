@@ -20,6 +20,14 @@ let sqlite: Database.Database;
 let testDb: TestDb;
 let tmpUploadDir: string;
 
+// downloadProfileAsset now goes through safeFetch, which resolves the target
+// host before requesting it. These cases use a real domain in their fixtures,
+// so without this stub the outcome would depend on the machine having working
+// DNS. Resolve to a fixed public address and keep the redirect handling real.
+vi.mock('dns', () => ({
+  default: { promises: { lookup: async () => ({ address: '93.184.216.34', family: 4 }) } },
+}));
+
 vi.mock('../db/index.js', () => ({
   getDb: () => testDb,
   getRawDb: () => sqlite,

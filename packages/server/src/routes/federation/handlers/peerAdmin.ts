@@ -4,6 +4,7 @@ import { authenticate, requireAdmin } from '../../../utils/auth.js';
 import { buildFederationHeaders, generateHmacSecret } from '../../../utils/federationAuth.js';
 import { onPeerDeactivated } from '../../../utils/federationPeerActivation.js';
 import { probePeerReachable, recoverOrDetectReset } from '../../../utils/federationRecovery.js';
+import { federationFetch } from '../../../utils/federationFetch.js';
 import { homeInstanceMatch } from '../../../utils/federationReset.js';
 import { connectionManager } from '../../../ws/handler.js';
 import { and, eq, sql } from 'drizzle-orm';
@@ -378,12 +379,12 @@ export function registerPeerAdminRoutes(app: FastifyInstance): void {
         const rotateBody = JSON.stringify({ newSecret });
         const headers = buildFederationHeaders(rotateBody, peer.hmacSecret, localOrigin);
 
-        const response = await fetch(`${peer.origin}/api/federation/peer/rotate`, {
+        const response = await federationFetch(peer.origin, '/api/federation/peer/rotate', {
           method: 'POST',
           headers,
           body: rotateBody,
           signal: AbortSignal.timeout(10_000),
-        });
+        }, 'approved');
 
         if (!response.ok) {
           let errorMessage = `Remote instance rejected rotation (HTTP ${response.status})`;

@@ -11,6 +11,7 @@ import { deleteUploadFile, deleteAttachmentByFilename } from '../utils/fileClean
 import { tombstoneUser, collectDeletionBroadcastTargets, collectProfileBroadcastTargetIds } from '../utils/userDeletion.js';
 import { queueOutboxEvent, isFederationRelayEnabled, appendMutationLog } from '../utils/federationOutbox.js';
 import { generateSnowflake } from '../utils/snowflake.js';
+import { federationFetch } from '../utils/federationFetch.js';
 import { resizeProfileImage } from '../utils/thumbnail.js';
 import { config } from '../config.js';
 import { buildFederationHeaders, getOurOrigin, normalizeOriginForCompare, canonicalizeHomeInstance } from '../utils/federationAuth.js';
@@ -843,12 +844,14 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
           const timeout = setTimeout(() => controller.abort(), 15_000);
 
           try {
-            const response = await fetch(`${origin}/api/federation/identity`, {
+            // 'approved': the block above refused anything without a
+            // matching federation_peers row in 'active'.
+            const response = await federationFetch(origin, '/api/federation/identity', {
               method: 'DELETE',
               headers,
               body,
               signal: controller.signal,
-            });
+            }, 'approved');
 
             clearTimeout(timeout);
 

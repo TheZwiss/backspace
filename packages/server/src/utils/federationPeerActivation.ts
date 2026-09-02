@@ -3,6 +3,7 @@ import * as schema from '../db/schema.js';
 import { and, eq } from 'drizzle-orm';
 import { isFederationRelayEnabled } from './federationOutbox.js';
 import { buildFederationHeaders, getOurOrigin } from './federationAuth.js';
+import { federationFetch } from './federationFetch.js';
 import { generateSnowflake } from './snowflake.js';
 import { healResetIncarnation } from './federationReset.js';
 import type { FederationRelayEvent } from '@backspace/shared';
@@ -169,10 +170,10 @@ export async function syncPeerMutationLog(
       if (contextType) bodyObj.contextType = contextType;
       const body = JSON.stringify(bodyObj);
       const headers = buildFederationHeaders(body, signingSecret, ourOrigin);
-      const resp = await fetch(`${activePeer.origin}/api/federation/sync`, {
+      const resp = await federationFetch(activePeer.origin, '/api/federation/sync', {
         method: 'POST', headers, body,
         signal: AbortSignal.timeout(30_000),
-      });
+      }, 'approved');
       if (!resp.ok) {
         console.warn(`[federation] Sync-pull ${contextType ?? 'dm'} pass HTTP ${resp.status} for ${activePeer.origin}`);
         return false;

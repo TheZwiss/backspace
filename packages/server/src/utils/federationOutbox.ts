@@ -7,6 +7,7 @@ import type { FederationRelayEvent, FederationRelayParticipant, FederationRelayA
 import { getOurOrigin, buildFederationHeaders } from './federationAuth.js';
 import { extractDomain } from '../routes/federation.js';
 import { racePeering, ensurePeered, createAutoPlaceholderPeer } from './federationPeering.js';
+import { federationFetch } from './federationFetch.js';
 
 // ─── Settings Cache ──────────────────────────────────────────────────────────
 
@@ -693,12 +694,12 @@ export async function sendCallRelay(
   const headers = buildFederationHeaders(bodyStr, signingSecret, ourOrigin);
 
   try {
-    const res = await fetch(`${targetPeerOrigin}/api/federation/relay`, {
+    const res = await federationFetch(targetPeerOrigin, '/api/federation/relay', {
       method: 'POST',
       headers,
       body: bodyStr,
       signal: AbortSignal.timeout(10_000),
-    });
+    }, 'approved');
 
     if (res.ok) {
       // Parse response body to surface the undeliverable bucket. Old peers

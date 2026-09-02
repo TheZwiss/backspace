@@ -1,4 +1,5 @@
 import { buildFederationHeaders, verifySignature, getOurOrigin } from './federationAuth.js';
+import { federationFetch } from './federationFetch.js';
 
 export interface PeerForAttach {
   origin: string;
@@ -21,12 +22,12 @@ export async function verifyAttachProofWithPeer(
 
   let res: Response;
   try {
-    res = await fetch(`${peer.origin}/api/federation/verify-attach-proof`, {
+    res = await federationFetch(peer.origin, '/api/federation/verify-attach-proof', {
       method: 'POST',
       headers,
       body,
       signal: AbortSignal.timeout(10_000),
-    });
+    }, 'approved');
   } catch {
     return { valid: false };
   }
@@ -75,12 +76,12 @@ export async function fetchHomeProfileByHomeId(
 
   let res: Response;
   try {
-    res = await fetch(`${peer.origin}/api/federation/users/by-home-id`, {
+    res = await federationFetch(peer.origin, '/api/federation/users/by-home-id', {
       method: 'POST',
       headers,
       body,
       signal: AbortSignal.timeout(10_000),
-    });
+    }, 'approved');
   } catch {
     return null;
   }

@@ -1,6 +1,7 @@
 import { and, eq, isNull } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { buildFederationHeaders, verifySignature, getOurOrigin } from './federationAuth.js';
+import { federationFetch } from './federationFetch.js';
 
 let cached: string | null = null;
 
@@ -50,12 +51,12 @@ export async function fetchPeerEpoch(peer: PeerForEpoch): Promise<string | null>
 
   let res: Response;
   try {
-    res = await fetch(`${peer.origin}/api/federation/epoch`, {
+    res = await federationFetch(peer.origin, '/api/federation/epoch', {
       method: 'POST',
       headers,
       body,
       signal: AbortSignal.timeout(10000),
-    });
+    }, 'approved');
   } catch {
     // Network error / timeout — benign no-op, retry later.
     return null;

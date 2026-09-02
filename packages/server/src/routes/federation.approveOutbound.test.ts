@@ -17,6 +17,14 @@ type TestDb = ReturnType<typeof drizzle<typeof schema>>;
 let sqlite: Database.Database;
 let testDb: TestDb;
 
+// The peer-origin gate resolves an asserted origin before this instance will
+// send anything to it. These suites use non-resolving .example hosts and are
+// about peering state, not address policy (see federationFetch.test.ts for
+// that), so the resolver answers with a public address.
+vi.mock('dns', () => ({
+  default: { promises: { lookup: async () => ({ address: '93.184.216.34', family: 4 }) } },
+}));
+
 vi.mock('../db/index.js', () => ({
   getDb: () => testDb,
   getRawDb: () => sqlite,
@@ -31,6 +39,7 @@ vi.mock('../config.js', () => ({
     jwtSecret: 'test-secret-12345678901234567890123456789012',
     maxUploadSize: 100 * 1024 * 1024,
     registrationOpen: true,
+    federation: { allowPrivatePeers: false },
   },
 }));
 

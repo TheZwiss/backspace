@@ -145,6 +145,12 @@ export async function spawnInstance(opts: {
     LIVEKIT_URL: opts.livekit?.url ?? '',
     LIVEKIT_API_KEY: opts.livekit?.apiKey ?? '',
     LIVEKIT_API_SECRET: opts.livekit?.apiSecret ?? '',
+    // Every instance in this harness binds 127.0.0.1, which is exactly the
+    // LAN-only shape the flag exists for: an origin a caller asserted (a friend
+    // handle, a peering callback) is otherwise required to resolve to a public
+    // address before this instance will send anything to it. Set here and only
+    // here — the shipped default is off, and .env.example documents it that way.
+    FEDERATION_ALLOW_PRIVATE_PEERS: 'true',
   };
   // Explicit in BOTH branches: `env` starts as a copy of `process.env`, so an
   // inherited DISABLE_FEDERATION_WORKERS would otherwise silently re-disable the
