@@ -232,11 +232,20 @@ h2 {
   border: 1px dashed var(--line); border-radius: 12px;
   padding: 18px 20px; background: rgba(255, 255, 255, 0.012);
 }
+.slot-note p + p { margin-top: 10px; }
 .slot-note-error {
   color: var(--txt2); border-style: solid; border-color: rgba(253, 164, 175, 0.28);
   background: rgba(253, 164, 175, 0.05);
 }
 .slot-note-error strong { color: var(--rose); font-weight: 560; }
+/* Not a failure — a stated reason the page is showing figures instead of a
+   chart. Solid rather than dashed, and readable rather than dimmed, because
+   the words are the content here and not a placeholder for it. */
+.slot-note-detail {
+  color: var(--txt2); border-style: solid;
+  background: rgba(255, 255, 255, 0.02);
+}
+.slot-note-detail strong { color: var(--txt); font-weight: 560; }
 /* Wide content (charts, tables) scrolls inside its own container, never the body. */
 .scroll-x { overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; max-width: 100%; }
 
@@ -324,7 +333,15 @@ h2 {
 .chart-window .k, .chart-meta .k { color: var(--txt3); }
 .chart-window .v, .chart-meta .v { color: var(--txt2); overflow-wrap: anywhere; }
 .chart-hint { font-size: 13.5px; color: var(--txt4); line-height: 1.6; margin-top: 12px; }
+.chart-hint:empty { display: none; }
 .chart-caution { color: var(--amber); }
+/* The page-level interaction hint. It describes the shared cursor group, which
+   the chart toolkit owns, so the toolkit is what fills it — from zero, one or
+   both chart sections. Empty until at least one plot exists. */
+#chart-hint { margin-top: 30px; }
+/* The release markers' own colour, so the caption naming a release and the
+   marker drawn for it are visibly the same thing. */
+.chart-meta .v.rel { color: var(--lavender); }
 /*
  * The plot is drawn at a fixed minimum width and scrolls inside this box when
  * the viewport is narrower, rather than being squashed until the day axis is
@@ -430,12 +447,21 @@ footer a:hover { color: var(--txt); }
       <h2>Growth</h2>
       <p class="sec-copy">
         Star and fork history with release tags marked on the time axis, so a jump can be read
-        against what shipped. Both are point-in-time totals, so an unmeasured day is a break in
-        the line rather than a drop.
+        against what shipped. Both are <strong>cumulative point-in-time totals</strong>: a break
+        in a line means nothing was measured at that point on the axis &mdash; a day, or a whole
+        week once the bundle is bucketed by week &mdash; and never that the count fell back. A
+        star count does not return to zero, so a gap here is the easiest break on the page to
+        misread as a collapse. The vertical axis is fitted to the values drawn rather than
+        pinned to zero, because a total that has sat near sixty for months would otherwise be a
+        flat line with every real movement squashed out of it.
       </p>
       <div class="slot" id="chart-growth"></div>
     </div>
   </section>
+
+  <div class="wrap">
+    <p class="chart-hint" id="chart-hint"></p>
+  </div>
 
   <section class="panel" id="referrers">
     <div class="wrap">
@@ -2018,6 +2044,41 @@ footer a:hover { color: var(--txt); }
   var SYNC_KEY = "insights-time";
 
   /*
+   * The page's one interaction hint, and why it lives here rather than in a
+   * chart section.
+   *
+   * The sentence describes the cursor-sync group above: hovering any chart
+   * moves the cursor on every chart, and a drag zooms all of them. That group
+   * is this file's property, not any one section's, and the hint was
+   * previously appended by the reach section — which made it vanish whenever
+   * reach declined to draw, even with the growth charts rendering perfectly
+   * beside it, and would have printed it twice once a second section started
+   * appending one of its own.
+   *
+   * So `mount` counts the live plots and this fills a single page-level
+   * element from that count. The wording is chosen from the count too: with
+   * exactly one plot on the page there is no "every chart" to speak of, and a
+   * sentence about charts moving together would be describing something the
+   * reader cannot see happening.
+   */
+  var HINT_ID = "chart-hint";
+  var livePlots = 0;
+
+  function syncHint() {
+    var node = document.getElementById(HINT_ID);
+    if (node === null) return;
+    if (livePlots === 0) {
+      node.textContent = "";
+      return;
+    }
+    node.textContent = livePlots > 1
+      ? "Hovering any chart moves the cursor on every chart on this page. Drag sideways across " +
+        "any of them to zoom the shared time axis; double-click to return to the full span."
+      : "Drag sideways across the chart to zoom its time axis; double-click to return to the " +
+        "full span.";
+  }
+
+  /*
    * The narrowest a plot may be drawn. Below roughly this width the day axis
    * collapses into overlapping ticks and the series become unreadable, so a
    * narrow viewport gets a full-width plot that scrolls inside its own
@@ -2564,9 +2625,20 @@ footer a:hover { color: var(--txt); }
 
     var plot = new window.uPlot(config, data, host);
     var detach = trackSize(plot, host);
+    livePlots += 1;
+    syncHint();
+    /* `released` guards the count against a double destroy. A section that
+     * tears down and then has its slot emptied would otherwise be able to
+     * decrement twice and drive the hint off the page while charts are still
+     * on it. */
+    var released = false;
     return {
       plot: plot,
       destroy: function () {
+        if (released) return;
+        released = true;
+        livePlots -= 1;
+        syncHint();
         detach();
         plot.destroy();
       }
@@ -2844,13 +2916,12 @@ footer a:hover { color: var(--txt); }
       for (var i = 0; i < CHARTS.length; i++) {
         created.push(buildChart(stack, CHARTS[i], axis, i * 2, data.downsampled));
       }
-      /* Both charts sit in one cursor-sync group, and uPlot propagates the
-       * drag selection through it, so a zoom on either moves both. Verified in
-       * a browser rather than assumed — the wording has to match what the page
-       * actually does. */
-      slot.appendChild(el("p", "chart-hint",
-        "Hovering any chart moves the cursor on every chart on this page. Drag sideways across " +
-        "any of them to zoom the shared time axis; double-click to return to the full span."));
+      /* Both charts sit in one cursor-sync group, and uPlot propagates the drag
+       * selection through it, so a zoom on either moves both — and moves the
+       * growth charts too, which join the same group. The sentence saying so is
+       * the toolkit's, not this section's: written here it disappeared whenever
+       * this section declined to draw, however many other charts were on the
+       * page. */
     } catch (error) {
       /* Teardown is skipped after a failed render, so nothing else will
        * release these. Destroy what was built, then let the shell render its
@@ -2898,6 +2969,803 @@ footer a:hover { color: var(--txt); }
   }
 
   I.registerSection("chart-reach", render, teardown);
+})();
+</script>
+<script>
+/*
+ * Section "chart-growth" — spec §7's growth view, and the only place on this
+ * page where two different kinds of record are drawn together: a MEASURED
+ * SERIES (stars, forks, sampled once a day) and a DATED EVENT (a release).
+ *
+ * The release markers are the point of the section. A star count that climbs
+ * through July is a fact about the archive; the same climb with `v1.0.0`
+ * marked on the day it shipped is a reading of it, and it is only available
+ * because the collector writes release dates and star history into one
+ * archive.
+ *
+ * Being the point, they are also the thing most able to lie. Three rules keep
+ * them honest, and each is enforced below rather than left to the eye:
+ *
+ * 1. THE AXIS IS DRAWN FROM THE MEASURED ROWS, NEVER FROM THE RELEASES. A
+ *    release outside the span the series cover is not marked, and the axis is
+ *    NOT stretched back to reach it. Stretching it would draw weeks or months
+ *    of empty axis in front of the data and imply the archive covered a period
+ *    it never measured — which is exactly the live archive's state today: the
+ *    only release, v1.0.0, shipped on 2026-07-03 and the star series begins on
+ *    2026-09-01. So nothing is marked, and the caption says which release was
+ *    left off and why. A centrepiece that silently draws nothing looks broken;
+ *    one that says what it left out and on what grounds does not.
+ *
+ * 2. A CUMULATIVE BREAK IS NOT A COLLAPSE. Stars and forks are point-in-time
+ *    totals, so an unmeasured step is drawn as a break by the shared `expand`
+ *    — never as a zero. A cumulative counter falling to zero would be a
+ *    catastrophe rather than a quiet day, so this is the break on the page a
+ *    reader is most likely to misread, and the captions name it in those words.
+ *
+ * 3. THE Y AXIS IS FITTED, AND SAYS SO. `zeroBasedCounts` is right for the
+ *    per-day event counts in the reach section and wrong here: a count that
+ *    moved 60 → 64 over a month would be a flat line at the top of an axis
+ *    that is 94% empty. This section passes its own policy, and states in copy
+ *    that the axis does not start at zero, because a fitted baseline is the
+ *    other half of the truncated-axis trade and must not be silent.
+ *
+ * The section holds uPlot instances, so it registers a teardown. The Task 5
+ * contract shapes the rest: the slot is emptied before every render so nothing
+ * is cached across calls; teardown runs before that clearing, so it still has
+ * its instances; and teardown is SKIPPED after a failed render, so a render
+ * that throws destroys what it built in its own catch.
+ */
+(function () {
+  "use strict";
+
+  var I = window.INSIGHTS;
+  var C = window.INSIGHTS_CHARTS;
+
+  /*
+   * One chart per series rather than two lines on one plot. Stars and forks
+   * differ by an order of magnitude in the live archive (64 against 5), so a
+   * shared axis would flatten the fork line onto the floor — and `mount`
+   * deliberately offers no second y scale, because two scales invite a reader
+   * to compare two lines that are not comparable. Two plots on ONE shared time
+   * axis is the honest version of the same comparison: the synced cursor lands
+   * on the same day in both, and neither series distorts the other's shape.
+   *
+   * No area fill, unlike the reach charts. A fill reads as area-under-the-curve
+   * measured from zero, and this axis does not start at zero.
+   */
+  var CHARTS = [
+    {
+      series: "stars", field: "total", title: "Stars", label: "Stars",
+      token: "--amber", fallback: "#fcd34d"
+    },
+    {
+      series: "forks", field: "total", title: "Forks", label: "Forks",
+      token: "--mint", fallback: "#86efac"
+    }
+  ];
+
+  /* The release markers take the growth section's own channel colour, so the
+   * lane, the labels and the section's "#growth" heading are one thing. */
+  var RELEASE_TOKEN = "--lavender";
+  var RELEASE_FALLBACK = "#c4b5fd";
+
+  /* Verbatim from the page's own `--mono` declaration. A canvas font must be a
+   * literal stack, and every family in it is a system font — nothing here is
+   * fetched from anywhere. */
+  var MONO_STACK = 'ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, ' +
+    '"Liberation Mono", monospace';
+
+  /*
+   * The release lane sits ABOVE the plot, reserved through `mount`'s `padding`
+   * option, and the marker line runs from the lane straight down through the
+   * plot area.
+   *
+   * Above rather than below because the space below the plot already holds the
+   * day-axis tick labels: a lane there would either overprint them or need the
+   * marker line to stop at the axis and resume underneath it, drawn as two
+   * pieces of what a reader has to read as one. Above, the line is continuous
+   * and the labels have the gutter to themselves.
+   *
+   * Two label rows, because two releases days apart would otherwise print on
+   * top of each other. A third row would eat the plot; a marker that fits in
+   * neither row keeps its line and its dot and loses only its text, and the
+   * caption above the charts names what shipped in the span regardless.
+   */
+  var LANE_CSS = 34;
+  var LANE_ROWS = 2;
+  var ROW_CSS = 13;
+  var LABEL_PX = 11;
+  var LABEL_GAP_CSS = 7;
+
+  /*
+   * How many release dates a caption spells out before it starts counting the
+   * rest. A repository with two hundred tags would otherwise turn this line
+   * into a wall nobody reads; past the cap the caption still states the exact
+   * number it did not name, so the count is never approximate even when the
+   * list is.
+   */
+  var MAX_LISTED = 8;
+
+  /* Every live uPlot instance this section owns. Assigned only once a render
+   * has completed; a render that throws destroys what it built itself. */
+  var live = [];
+
+  function el(tag, className, text) {
+    var node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+
+  function pair(key, value, accent) {
+    var span = el("span");
+    span.appendChild(el("span", "k", key));
+    span.appendChild(document.createTextNode(" "));
+    span.appendChild(el("span", accent ? "v rel" : "v", value));
+    return span;
+  }
+
+  function plural(count, singular, pluralWord) {
+    return count === 1 ? singular : pluralWord;
+  }
+
+  /* One step of the axis is a day in a daily bundle and a week in a
+   * downsampled one, and both spellings appear in these captions. */
+  function steps(count, stepDays) {
+    return count + " " + (stepDays === 1
+      ? plural(count, "day", "days")
+      : plural(count, "weekly bucket", "weekly buckets"));
+  }
+
+  function stepWord(stepDays) {
+    return stepDays === 1 ? "day" : "week";
+  }
+
+  /*
+   * The y-scale policy for a cumulative counter, and the reason `mount` takes
+   * one as an option at all.
+   *
+   * `zeroBasedCounts` — right for the reach section's per-day event counts —
+   * would render a star count that moved 60 → 64 as a flat line pinned to the
+   * top of an empty axis, hiding the only thing the chart is for. So this fits
+   * the axis to the values and pads by an eighth of their span.
+   *
+   * The floor is clamped at zero rather than allowed below it: a count of
+   * stars cannot be negative, and an axis offering the reading is offering a
+   * quantity the archive cannot hold. A flat or single-valued series gets one
+   * whole unit of air either side — one is the smallest step this data can
+   * actually move by, so it is the honest amount of room to leave for a
+   * movement that has not happened.
+   */
+  function fittedCounts(u, min, max) {
+    if (typeof min !== "number" || !isFinite(min) ||
+      typeof max !== "number" || !isFinite(max)) {
+      return [0, 1];
+    }
+    var span = max - min;
+    if (span <= 0) {
+      return [min - 1 < 0 ? 0 : min - 1, max + 1];
+    }
+    var padding = span * 0.12;
+    var low = min - padding;
+    return [low < 0 ? 0 : low, max + padding];
+  }
+
+  /* A release's own name for itself, preferring the tag. The bundle validator
+   * accepts an empty string for both fields, so an unnamed release still gets
+   * a marker and a caption entry rather than a blank one. */
+  function releaseLabel(release) {
+    if (release.tag !== "") return release.tag;
+    if (release.name !== "") return release.name;
+    return "untagged release";
+  }
+
+  /*
+   * Sort the archive's releases into the ones this chart can mark and the ones
+   * it cannot, and group the markable ones by day.
+   *
+   * The grouping is what keeps several releases on one date legible: they
+   * share one line, one dot and one label, and the caption spells out which
+   * tags are behind it. Two releases on the same day are one event on a time
+   * axis, and drawing two coincident lines with two labels fighting for the
+   * same pixel column would be drawing the same x twice.
+   *
+   * The span tested against is the span the SERIES cover, not the range the
+   * control asked for and not the scale uPlot ends up drawing. A release
+   * outside it is reported as unmarked in the caption, and the painter below
+   * additionally declines anything outside the live scale, so a zoom hides
+   * markers without ever making the caption claim something is drawn that is
+   * not.
+   */
+  function collectReleases(releases, startMs, endMs) {
+    var groups = [];
+    var index = {};
+    var outside = [];
+    var unreadable = 0;
+    var i;
+
+    for (i = 0; i < releases.length; i++) {
+      var release = releases[i];
+      var ms = I.parseDay(release.date);
+      /* The bundle contract only promises a non-empty string here. A date this
+       * page cannot place on a UTC day is not silently dropped: it is counted,
+       * and the caption says so. */
+      if (isNaN(ms)) {
+        unreadable++;
+        continue;
+      }
+      if (ms < startMs || ms > endMs) {
+        outside.push({ dayMs: ms, release: release });
+        continue;
+      }
+      var group = index[ms];
+      if (group === undefined) {
+        group = { dayMs: ms, entries: [], label: "" };
+        index[ms] = group;
+        groups.push(group);
+      }
+      group.entries.push(release);
+    }
+
+    function byDay(a, b) { return a.dayMs - b.dayMs; }
+    groups.sort(byDay);
+    outside.sort(byDay);
+
+    for (i = 0; i < groups.length; i++) {
+      var entries = groups[i].entries;
+      groups[i].label = entries.length === 1
+        ? releaseLabel(entries[0])
+        : releaseLabel(entries[0]) + " +" + (entries.length - 1);
+    }
+
+    return { groups: groups, outside: outside, unreadable: unreadable };
+  }
+
+  /* "v1.0.0 (2026-07-03)", several of them, truncated once a caption would
+   * turn into a list nobody reads. The count is always exact even when the
+   * names are not all printed. */
+  function listGroups(groups) {
+    var parts = [];
+    for (var i = 0; i < groups.length && i < MAX_LISTED; i++) {
+      var entries = groups[i].entries;
+      var names = [];
+      for (var j = 0; j < entries.length; j++) names.push(releaseLabel(entries[j]));
+      parts.push(names.join(", ") + " (" + I.formatDay(groups[i].dayMs) + ")");
+    }
+    if (groups.length > MAX_LISTED) {
+      parts.push("and " + (groups.length - MAX_LISTED) + " more");
+    }
+    return parts.join(" · ");
+  }
+
+  function listOutside(outside) {
+    var parts = [];
+    for (var i = 0; i < outside.length && i < MAX_LISTED; i++) {
+      parts.push(releaseLabel(outside[i].release) + " (" + I.formatDay(outside[i].dayMs) + ")");
+    }
+    if (outside.length > MAX_LISTED) {
+      parts.push("and " + (outside.length - MAX_LISTED) + " more");
+    }
+    return parts.join(" · ");
+  }
+
+  /*
+   * The device-pixel ratio uPlot is drawing at.
+   *
+   * `u.bbox` and `valToPos(…, true)` are both in canvas pixels, so a line
+   * width or a font size written in CSS pixels would come out a half or a
+   * third of its intended size on a retina display — legible enough in a
+   * screenshot to pass a glance, and wrong. uPlot keeps the ratio it is using
+   * on its constructor; the fallbacks cover a build that does not.
+   */
+  function pixelRatio() {
+    var uplot = window.uPlot;
+    if (uplot && typeof uplot.pxRatio === "number" && isFinite(uplot.pxRatio) &&
+      uplot.pxRatio > 0) {
+      return uplot.pxRatio;
+    }
+    var ratio = window.devicePixelRatio;
+    return (typeof ratio === "number" && isFinite(ratio) && ratio > 0) ? ratio : 1;
+  }
+
+  /*
+   * Paint the release lane. Installed through `mount`'s `hooks` option as a
+   * `draw` hook, which uPlot fires after the axes and the series, with no clip
+   * region in force — so it can reach the padding reserved above the plot.
+   *
+   * It runs on every redraw, which is what makes the markers follow a zoom and
+   * a resize instead of drifting away from the axis they annotate.
+   */
+  function releasePainter(groups, stroke) {
+    return function (u) {
+      if (groups.length === 0) return;
+      var scale = u.scales.x;
+      if (!scale || typeof scale.min !== "number" || typeof scale.max !== "number") return;
+
+      var ctx = u.ctx;
+      var ratio = pixelRatio();
+      var canvasWidth = ctx.canvas.width;
+      var plotBottom = u.bbox.top + u.bbox.height;
+      var laneBottom = u.bbox.top - 5 * ratio;
+
+      var rows = [];
+      var baselines = [];
+      var row;
+      for (row = 0; row < LANE_ROWS; row++) {
+        rows.push([]);
+        baselines.push(laneBottom - (4 + row * ROW_CSS) * ratio);
+      }
+
+      ctx.save();
+      ctx.font = Math.round(LABEL_PX * ratio) + "px " + MONO_STACK;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "alphabetic";
+
+      for (var i = 0; i < groups.length; i++) {
+        var group = groups[i];
+        var ts = group.dayMs / 1000;
+        /* The live scale, not the data span: a drag zoom narrows it, and a
+         * marker outside what is drawn must not be painted onto the edge of
+         * the plot as though it were inside. */
+        if (ts < scale.min || ts > scale.max) continue;
+        var x = u.valToPos(ts, "x", true);
+        if (typeof x !== "number" || !isFinite(x)) continue;
+
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = Math.max(1, Math.round(ratio));
+        /* Dashed, and thinner than either series, so the annotation reads as
+         * chrome over the measurement rather than as a third reading of it. */
+        ctx.setLineDash([4 * ratio, 4 * ratio]);
+        ctx.beginPath();
+        ctx.moveTo(x, laneBottom);
+        ctx.lineTo(x, plotBottom);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.fillStyle = stroke;
+        ctx.beginPath();
+        ctx.arc(x, laneBottom, 2.5 * ratio, 0, Math.PI * 2);
+        ctx.fill();
+
+        var text = group.label;
+        var half = ctx.measureText(text).width / 2;
+        var margin = 2 * ratio;
+        var centre = x;
+        /* A label centred on a marker at the very edge of the plot would hang
+         * half off the canvas. Nudged inwards it no longer sits exactly over
+         * its line, which is why the line and dot are drawn at the true
+         * position first. */
+        if (centre - half < margin) centre = half + margin;
+        if (centre + half > canvasWidth - margin) centre = canvasWidth - margin - half;
+
+        var from = centre - half - LABEL_GAP_CSS * ratio;
+        var to = centre + half + LABEL_GAP_CSS * ratio;
+        var placed = -1;
+        for (row = 0; row < rows.length && placed < 0; row++) {
+          var free = true;
+          for (var s = 0; s < rows[row].length; s++) {
+            if (from < rows[row][s][1] && to > rows[row][s][0]) {
+              free = false;
+              break;
+            }
+          }
+          if (free) placed = row;
+        }
+        /* Out of rows at this width. The line and the dot stay, so the reader
+         * can still see that something shipped there, and the caption above
+         * names the releases in this span — up to its own cap, past which it
+         * states exactly how many it did not name. A label dropped here is a
+         * lost convenience, not a lost fact. */
+        if (placed < 0) continue;
+        rows[placed].push([from, to]);
+        ctx.fillText(text, centre, baselines[placed]);
+      }
+
+      ctx.restore();
+    };
+  }
+
+  /*
+   * What one chart actually drew: the span of its axis, how much of it carries
+   * a measurement, and where the series stands now. The unmeasured count is
+   * stated together with what the page does about it, because on a cumulative
+   * total a break is the single most misreadable mark on this page.
+   */
+  function metaLine(axis, offset, series) {
+    var stepDays = axis.stepDays;
+    var total = axis.xs.length;
+    var counted = axis.measured[offset];
+    var missing = total - counted;
+
+    var note = el("p", "chart-meta");
+    note.appendChild(pair("span", I.formatDay(axis.startMs) + " → " + I.formatDay(axis.endMs)));
+    note.appendChild(pair("measured", counted + " of " + steps(total, stepDays)));
+    if (missing > 0) {
+      note.appendChild(pair("unmeasured", steps(missing, stepDays) +
+        " — drawn as breaks, not as a fall to zero"));
+    }
+    var latest = latestReading(axis, offset);
+    if (latest !== null) {
+      note.appendChild(pair("latest", I.formatCount(latest.value) + " on " +
+        I.formatDay(latest.dayMs)));
+    }
+    if (axis.offGrid > 0) {
+      note.appendChild(pair("off-step",
+        axis.offGrid + " " + plural(axis.offGrid, "row does", "rows do") +
+        " not fall on the bundle's own resolution; " +
+        plural(axis.offGrid, "it is", "they are") + " plotted where " +
+        plural(axis.offGrid, "it is", "they are") + " dated"));
+    }
+    return note;
+  }
+
+  /* The newest step on the drawn axis that carries a value, or null when the
+   * whole column is unmeasured inside this span. */
+  function latestReading(axis, offset) {
+    var column = axis.values[offset];
+    for (var i = column.length - 1; i >= 0; i--) {
+      if (column[i] === null || column[i] === undefined) continue;
+      return { value: column[i], dayMs: axis.xs[i] * 1000 };
+    }
+    return null;
+  }
+
+  /*
+   * The release caption, stated once for the section because both charts share
+   * one axis and therefore one set of markers.
+   *
+   * It names what is marked and what is not, so the reader never has to work
+   * out from an empty lane whether the archive has no releases, or has some
+   * that fall elsewhere, or carries one this page could not read.
+   */
+  function releaseLine(collected, total) {
+    var note = el("p", "chart-meta");
+    if (total === 0) {
+      note.appendChild(pair("releases", "none recorded in the archive"));
+      return note;
+    }
+    note.appendChild(pair("releases marked",
+      collected.groups.length === 0
+        ? "none — no release falls inside the span drawn here"
+        : listGroups(collected.groups),
+      collected.groups.length > 0));
+    if (collected.outside.length > 0) {
+      note.appendChild(pair("outside this span", listOutside(collected.outside)));
+    }
+    if (collected.unreadable > 0) {
+      note.appendChild(pair("unreadable date",
+        collected.unreadable + " " + plural(collected.unreadable, "release", "releases") +
+        " " + plural(collected.unreadable, "carries", "carry") +
+        " a date this page cannot place on a calendar day"));
+    }
+    return note;
+  }
+
+  /*
+   * Why a release the archive holds is not on the chart. This is the sentence
+   * that stops the centrepiece looking broken: the live archive's only release
+   * shipped two months before the star series begins, so the lane is empty,
+   * and an empty lane with no explanation is indistinguishable from a feature
+   * that failed to render.
+   */
+  function releaseNarrative(collected, total, stepDays) {
+    if (total === 0) {
+      return "No release is recorded in the archive, so there is nothing to mark on the time " +
+        "axis. Markers appear here as soon as the collector records one.";
+    }
+    if (collected.outside.length === 0) {
+      return null;
+    }
+    var count = collected.outside.length;
+    return count + " " + plural(count, "release", "releases") + " recorded in the archive " +
+      plural(count, "falls", "fall") + " outside the span drawn here (" +
+      listOutside(collected.outside) + ") and " + plural(count, "is", "are") + " not marked. " +
+      "The axis is built from the " + stepWord(stepDays) + "s the archive actually measured; " +
+      "stretching it back to reach a release would add axis where nothing was recorded, and " +
+      "imply a history the collector never took.";
+  }
+
+  /* The vertical axis is fitted rather than pinned to zero, which is the right
+   * choice for a cumulative counter and a claim a reader is owed. */
+  function axisNote() {
+    return "The vertical axis on both charts is fitted to the values drawn rather than pinned " +
+      "to a zero baseline, so a move of a few stars is visible rather than flattened. Read the " +
+      "height of a line against its own axis labels, not against the bottom of the frame.";
+  }
+
+  /*
+   * A weekly bundle dates each bucket on the Monday that opens its week, but a
+   * cumulative field carries the LAST value measured in that week
+   * (`bundle.ts`: `lastBucket`). So every point on a weekly stars chart sits up
+   * to six days earlier on the axis than the reading it shows — and a release
+   * marker, which is dated exactly, can appear to fall after a rise that in
+   * fact preceded it. That is precisely the misreading this section exists to
+   * enable in the other direction, so it is stated wherever it applies.
+   */
+  function weeklyNote() {
+    return "This bundle is bucketed by week. A point is dated on the Monday that opens its " +
+      "week but carries the last value measured in that week, so it sits up to six days " +
+      "earlier on the axis than the reading it shows. Release markers are dated exactly, so " +
+      "a marker can appear a few days to the right of the rise it caused. Read a marker " +
+      "against the week it lands in, not against the point beside it.";
+  }
+
+  /*
+   * The selected window, stated in the dates it resolves to. This is the range
+   * that was ASKED for; each chart's own caption states the span it actually
+   * drew, and the two differ whenever a series is younger than the window —
+   * which is the live archive's current state, not a hypothetical.
+   */
+  function windowLine(win) {
+    var note = el("p", "chart-window");
+    note.appendChild(pair("showing", win.title.toLowerCase()));
+    note.appendChild(pair("window",
+      I.formatDay(win.startMs) + " → " + I.formatDay(win.endMs) + I.resolutionSuffix()));
+    return note;
+  }
+
+  /*
+   * A span so long it cannot be real is a fault in the ARCHIVE, and this page
+   * must not report it as one of its own. Letting `expand` throw would reach
+   * the shell's generic section-failure note — "the fault is in this page's
+   * code" — and send whoever reads it to the wrong repository entirely.
+   */
+  function overrunNote(axis) {
+    var detail = "The star and fork series would run from " + I.formatDay(axis.startMs) +
+      " to " + I.formatDay(axis.endMs) + ", which needs " + I.formatCount(axis.overrunSteps) +
+      " points on the time axis — far longer than this archive can really cover. A date in " +
+      "the archive itself is wrong. No chart is drawn, rather than one built around a date " +
+      "that cannot be true.";
+    if (typeof console !== "undefined" && typeof console.error === "function") {
+      console.error("insights: chart-growth declined to plot. " + detail);
+    }
+    var note = el("p", "slot-note slot-note-error");
+    note.appendChild(el("strong", null, "These charts cannot be drawn from this archive."));
+    note.appendChild(document.createTextNode(" " + detail));
+    return note;
+  }
+
+  /* Every series' reading at a single step, for the one-point case below. */
+  function readings(axis) {
+    var parts = [];
+    for (var i = 0; i < CHARTS.length; i++) {
+      var value = axis.values[i][0];
+      parts.push(CHARTS[i].label + ": " +
+        (value === null || value === undefined ? "not measured" : I.formatCount(value)));
+    }
+    return parts.join("  ·  ");
+  }
+
+  /*
+   * THE ONE-POINT CASE, AND THIS SECTION'S X-RANGE POLICY.
+   *
+   * The live archive holds exactly one star row and one fork row, both dated
+   * 2026-09-01, so the shared axis is a single step wide. Handed a single
+   * point, uPlot picks an x range of its own: measured in a browser against
+   * this archive, the single point on 2026-09-01 produces an axis running to
+   * 2029-05-28 — one dot adrift on two and a half years of time nothing was
+   * ever recorded across. (Two or more points need no such policy: uPlot's
+   * time scale then resolves to exactly the data's own extent, which is why
+   * the caption below can name a release as "outside the span drawn here" and
+   * be describing the same span the painter tests against.)
+   *
+   * There is no honest x range to pick instead. Any span invented around the
+   * point is a span the archive did not measure, and pinning the scale to
+   * [point, point] leaves a chart of zero width. A cumulative counter read
+   * once is a reading, not a history: it has no direction, no rate, and
+   * nothing for a release marker to be read against.
+   *
+   * So the section declines to draw and states the readings, the reason, and
+   * what the archive holds by way of releases. Saying "one measurement is not
+   * a history" is a true sentence; a chart of it would not be a true picture.
+   * This resolves itself with the second day of collection.
+   */
+  function singlePointNote(axis, win, collected, total) {
+    var box = el("div", "slot-note slot-note-detail");
+
+    var first = el("p");
+    first.appendChild(el("strong", null, "One measurement is not a history."));
+    first.appendChild(document.createTextNode(
+      " The axis these two series share is a single step wide: " +
+      I.formatDay(axis.startMs) + " is the only " + stepWord(axis.stepDays) + " inside " +
+      win.title.toLowerCase() + " that either of them carries a row for. A cumulative total " +
+      "read once has no direction and no rate, and a line needs two points to have either. " +
+      "Drawn anyway it would be a single dot on an axis the plotting library stretches years " +
+      "past the last day anything was recorded — a span this archive never measured. The " +
+      "readings are stated instead."));
+    box.appendChild(first);
+
+    box.appendChild(el("p", null, readings(axis) + "  ·  measured " + I.formatDay(axis.startMs)));
+
+    if (total === 0) {
+      box.appendChild(el("p", null,
+        "No release is recorded in the archive either, so there is nothing yet to mark against " +
+        "this reading."));
+    } else if (collected.groups.length > 0) {
+      box.appendChild(el("p", null,
+        listGroups(collected.groups) + " — recorded on the one " + stepWord(axis.stepDays) +
+        " measured here. Release markers are drawn on the time axis once the star and fork " +
+        "history spans more than a single point."));
+    } else {
+      var count = collected.outside.length;
+      box.appendChild(el("p", null,
+        "The archive records " + count + " " + plural(count, "release", "releases") + " — " +
+        listOutside(collected.outside) + " — " + plural(count, "which falls", "all of which fall") +
+        " outside the one " + stepWord(axis.stepDays) + " measured here. " +
+        plural(count, "It is", "They are") + " not marked, and the axis is not stretched back " +
+        "to reach " + plural(count, "it", "them") + ": that would draw months of time nothing " +
+        "was recorded across. Release markers appear here once the star and fork history " +
+        "covers the day a release shipped."));
+    }
+
+    if (collected.unreadable > 0) {
+      box.appendChild(el("p", null,
+        collected.unreadable + " further " + plural(collected.unreadable, "release", "releases") +
+        " " + plural(collected.unreadable, "carries", "carry") + " a date this page cannot " +
+        "place on a calendar day, so " + plural(collected.unreadable, "it is", "they are") +
+        " not counted above."));
+    }
+
+    return box;
+  }
+
+  /* One card. Returns the mounted chart, or null when this series has no
+   * measurement anywhere on the shared axis — a plot whose every point is a
+   * break is an empty frame, and the words are more use than the frame. */
+  function buildChart(stack, spec, axis, offset, painter) {
+    var card = el("div", "chart-card");
+    card.appendChild(el("p", "chart-title", spec.title));
+    card.appendChild(metaLine(axis, offset, spec.series));
+    stack.appendChild(card);
+
+    if (axis.measured[offset] === 0) {
+      card.appendChild(el("p", "chart-hint",
+        "No " + spec.label.toLowerCase() + " measurement falls inside this span, so every step " +
+        "of the axis would be a break. Nothing is drawn rather than an empty frame."));
+      return null;
+    }
+
+    var host = el("div", "chart-scroll");
+    /* In the document before uPlot is constructed: the plot is given an
+     * explicit pixel size and that size is measured from this container. */
+    card.appendChild(host);
+
+    return C.mount(host, axis.xs, [{
+      label: spec.label,
+      stroke: C.colour(spec.token, spec.fallback),
+      width: 2,
+      values: axis.values[offset]
+    }], {
+      /* Not `zeroBasedCounts`: see fittedCounts. */
+      yRange: fittedCounts,
+      /* Room above the plot for the release lane. */
+      padding: [LANE_CSS, null, null, null],
+      /* The release annotations. `draw` fires after the axes and series, with
+       * no clip in force, so the painter can reach the reserved lane. */
+      hooks: { draw: [painter] }
+      /*
+       * No `syncFilters`. These charts join the page's cursor-sync group in
+       * full — shared cursor AND shared zoom — because reading a star curve
+       * against the traffic that produced it is the entire point of putting
+       * them on one page, and a zoom that moved one section's axis while
+       * leaving the other's alone would silently break the comparison the
+       * markers exist to support.
+       */
+    });
+  }
+
+  function render(slot, data, rangeKey) {
+    var win = I.rangeWindow(data, rangeKey);
+    /* Reachable on a non-empty bundle: one holding only releases or only
+     * dimension snapshots has no dated series row to anchor a window to. */
+    if (win === null) {
+      slot.appendChild(el("p", "slot-note",
+        "The archive holds no dated measurement, so there is no time axis to draw these " +
+        "charts on, and no axis for a release to be marked against."));
+      return;
+    }
+
+    slot.appendChild(windowLine(win));
+
+    var stepDays = I.resolutionStepDays();
+    /* One expansion for both charts, so both get the identical x axis, the
+     * synced cursor lands on the same day in each, and one set of release
+     * markers is correct for both. */
+    var axis = C.expand([
+      { series: data.series.stars, field: "total" },
+      { series: data.series.forks, field: "total" }
+    ], win, stepDays);
+
+    /* Before the `empty` branch: an overrun sets `empty` too, as a fail-safe
+     * for a caller that forgets this check, and the specific reason is the
+     * more useful of the two. */
+    if (axis.overrun) {
+      slot.appendChild(overrunNote(axis));
+      return;
+    }
+
+    if (axis.empty) {
+      slot.appendChild(el("p", "slot-note",
+        "Neither stars nor forks carry a row inside " + win.title.toLowerCase() + " (" +
+        I.formatDay(win.startMs) + " to " + I.formatDay(win.endMs) +
+        "), so there is nothing to plot for this range."));
+      return;
+    }
+
+    var total = data.releases.length;
+    var collected = collectReleases(data.releases, axis.startMs, axis.endMs);
+
+    if (axis.xs.length < 2) {
+      slot.appendChild(singlePointNote(axis, win, collected, total));
+      return;
+    }
+
+    slot.appendChild(releaseLine(collected, total));
+    slot.appendChild(el("p", "chart-hint", axisNote()));
+    if (data.downsampled) {
+      slot.appendChild(el("p", "chart-hint chart-caution", weeklyNote()));
+    }
+    var narrative = releaseNarrative(collected, total, stepDays);
+    if (narrative !== null) {
+      slot.appendChild(el("p", "chart-hint", narrative));
+    }
+
+    var stack = el("div", "chart-stack");
+    slot.appendChild(stack);
+
+    var painter = releasePainter(collected.groups, C.colour(RELEASE_TOKEN, RELEASE_FALLBACK));
+    var created = [];
+    try {
+      for (var i = 0; i < CHARTS.length; i++) {
+        var chart = buildChart(stack, CHARTS[i], axis, i, painter);
+        if (chart !== null) created.push(chart);
+      }
+    } catch (error) {
+      /* Teardown is skipped after a failed render, so nothing else will
+       * release these. Destroy what was built, then let the shell render its
+       * honest failure note for this slot. */
+      for (var j = 0; j < created.length; j++) {
+        try {
+          created[j].destroy();
+        } catch (cleanupError) {
+          /* The render failure is the one worth reporting, so a destroy that
+           * also fails is logged rather than allowed to replace it — and the
+           * remaining instances still get released. */
+          if (typeof console !== "undefined" && typeof console.error === "function") {
+            console.error("insights: releasing a growth chart after a failed render also failed.",
+              cleanupError);
+          }
+        }
+      }
+      throw error;
+    }
+    live = created;
+  }
+
+  /*
+   * Runs before the slot is emptied. Removing the nodes alone would leave
+   * every instance's window listeners, its resize observer and its membership
+   * of the page's cursor-sync group alive.
+   *
+   * `live` is cleared first so a destroy that throws cannot leave a
+   * half-destroyed instance behind to be destroyed twice; the first failure is
+   * re-thrown once the rest have been released, and the shell reports it.
+   */
+  function teardown() {
+    var pending = live;
+    live = [];
+    var failure = null;
+    for (var i = 0; i < pending.length; i++) {
+      try {
+        pending[i].destroy();
+      } catch (error) {
+        if (failure === null) failure = error;
+      }
+    }
+    if (failure !== null) throw failure;
+  }
+
+  I.registerSection("chart-growth", render, teardown);
 })();
 </script>
 </body>
