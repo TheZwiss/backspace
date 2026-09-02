@@ -43,9 +43,24 @@ async function main(): Promise<void> {
     },
   });
 
+  // The origin is deliberately reflected rather than restricted to a peer
+  // allowlist. Client federation has a browser on one instance call
+  // /api/instance/info, /api/auth/register and /api/auth/login directly against
+  // another instance BEFORE any server-to-server peering exists, and peering can
+  // legitimately be declined by an admin while that browser connection keeps
+  // working (see instanceStore.connectToRemote and docs/systems/client-federation.md).
+  // An allowlist would reject the whole onboarding flow.
+  //
+  // Reflecting is safe here only because there is no ambient credential to ride
+  // on: this API has no cookies and no HTTP auth, and the bearer token is read
+  // from localStorage and attached explicitly by our own client. A cross-origin
+  // page cannot obtain it and the browser will not attach it. That premise is
+  // enforced by test/cors-posture.test.ts. Access-Control-Allow-Credentials is
+  // therefore NOT set: it grants nothing today and would make this reflection
+  // genuinely unsafe the moment a cookie appeared.
+  // See docs/systems/web-security.md.
   await app.register(cors, {
     origin: true,
-    credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'],
     // Tus-* and Upload-* headers are required for federated tus uploads
     // (cross-origin POST/HEAD/PATCH/DELETE on /api/files/*). Without them the
