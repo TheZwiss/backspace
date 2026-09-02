@@ -135,6 +135,26 @@ Three properties worth keeping:
 
 Both `site/insights/data.json` and `site/insights/data/` are gitignored: they exist only inside a deploy run.
 
+### Static content baked into the charted page
+
+The static data page solves the crawler problem for a reader that follows the link to it. `/insights/` is the URL that actually gets shared, and a fetcher that reads that URL and stops never does follow it — which is the common case for a search crawler or an assistant asked to look at the page. So `cli-bundle.ts` also writes two regions into `site/insights/index.html` itself, from the same `DashboardData`:
+
+- **`<!-- BUILD:SUMMARY -->`** — a paragraph of headline measurements: the latest measured value of each counter with the date it was measured, the peak day of views and clones, the leading referrer and path, and the archive's coverage and resolution. Rendered by `renderSummaryHtml` in `summary.ts`.
+- **`<!-- BUILD:JSONLD -->`** — the schema.org `Dataset` block, regenerated so `variableMeasured` carries `PropertyValue` entries with real values and `temporalCoverage` states the archive's actual span. Rendered by `renderDatasetJsonLd`. Skipped when `METRICS_SITE_URL` is unset, since every URL in it is absolute; the committed block stands in that case.
+
+Four properties this depends on:
+
+- **It is not a second implementation of the at-a-glance cards.** Those are range-dependent and carry 30-day deltas with their own reasons for declining to state one. Duplicating that logic in TypeScript would create two sets of rules that drift apart, and the drift would be invisible until they disagreed in public. `summary.ts` derives only figures whose rules are simple enough to be obviously correct.
+- **The absent-versus-zero rule applies to prose.** A figure with no measurement behind it loses its whole clause rather than printing `0` or a dash. This text is read by machines that will quote whatever number sits next to a label, so a dash next to "watchers" is a worse outcome here than on a chart.
+- **A missing marker throws.** `replaceRegion` refuses to return the page unchanged, because the committed fallback says "not built by the pipeline" and publishing it silently would look exactly like a successful deploy.
+- **`labelled()` mirrors the dashboard's `displayLabel` exactly** — trimmed `title` when non-empty, `dimension` otherwise. GitHub fills `title` for paths and leaves it **empty for every referrer**, where the host lives in `dimension`. Reading `title` alone renders "Leading referrer: , 193 views", which is how this was caught.
+
+### The sitemap
+
+`cli-bundle.ts` writes `site/sitemap.xml` (gitignored, `sitemap.ts`) listing the three published pages, with `lastmod` on the two generated ones taken from the archive's newest date rather than from the clock: they are rebuilt every deploy, but their *content* only changes when a collection adds a row, and `lastmod` describes content. The landing page carries no `lastmod` — nothing in this pipeline knows when it last changed.
+
+**`robots.txt` cannot be published from this repository.** It is only honoured at a domain root, and this site is a project page at `thezwiss.github.io/backspace/`; the root belongs to a separate `thezwiss.github.io` user-pages repository. A 404 there is permissive, so nothing is blocked, but the sitemap cannot be declared from it either — it has to be submitted to a search console directly, or referenced from a `robots.txt` in that other repository.
+
 **The download split.** `downloads_total` sums every release asset. That number is dominated by update machinery rather than by installs: electron-updater fetches `latest.yml` / `latest-mac.yml` / `latest-linux.yml` on every update check from every installed client, and `.blockmap` files during a differential update, and GitHub counts all of them in `download_count` exactly like an installer. When the split was added on 2026-09-02 the feed files had 1,519 downloads against 323 for every real installer and archive combined, so the single figure overstated installs by roughly 5.7x.
 
 `downloads_app` counts installers and archives; `downloads_updates` counts anything matching `*.yml`, `*.yaml` or `*.blockmap` (`isUpdateArtifact` in `collect.ts`). For any row carrying all three, `downloads_app + downloads_updates === downloads_total`.

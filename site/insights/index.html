@@ -11,6 +11,7 @@
      methodology on this page but has no way to discover that data.json exists,
      because every value here is fetched and drawn client-side. Kept in sync by
      hand with the copy datapage.ts emits; both point at the same two URLs. -->
+<!-- BUILD:JSONLD -->
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -43,6 +44,7 @@
   ]
 }
 </script>
+<!-- /BUILD:JSONLD -->
 <link rel="icon" type="image/png" href="../assets/logo.png" />
 <link rel="apple-touch-icon" href="../assets/logo.png" />
 <meta name="robots" content="index, follow" />
@@ -86,6 +88,9 @@
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html { scroll-behavior: smooth; }
+.static-figures { margin-top: 18px; }
+.static-figures strong { color: var(--txt); font-weight: 600; }
+
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 body {
   background: var(--base);
@@ -534,6 +539,20 @@ footer a:hover { color: var(--txt); }
         the charts cannot render. <a href="data/">The same archive as plain tables</a> needs none.
       </p>
     </noscript>
+
+    <!-- The figures below are written into this file at deploy time by
+         cli-bundle.ts, from the same bundle the charts are drawn from, so the
+         served page states its headline measurements without running any
+         JavaScript. What is committed here is the pre-build fallback: it names
+         where the numbers live rather than guessing at them, because a stale
+         figure baked into source would outlive whatever made it true. -->
+    <!-- BUILD:SUMMARY -->
+    <p class="sec-copy static-figures">
+      The headline measurements are written into this page at deploy time. If you are reading this
+      sentence instead of them, this copy was not built by the deploy pipeline: the figures are in
+      the <a href="data/">plain tables</a> and in <a href="data.json"><code>data.json</code></a>.
+    </p>
+    <!-- /BUILD:SUMMARY -->
     <p class="provenance">
       <span><span class="k">archive history</span> <span class="v" id="pv-since">checking</span></span>
       <span><span class="k">bundle built</span> <span class="v" id="pv-generated">checking</span></span>

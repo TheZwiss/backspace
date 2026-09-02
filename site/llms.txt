@@ -30,6 +30,7 @@
 - Repository insights, charted (traffic, growth, and referral figures, collected daily): https://thezwiss.github.io/backspace/insights/
 - The same archive as plain HTML tables, no JavaScript required: https://thezwiss.github.io/backspace/insights/data/
 - The same archive as one machine-readable JSON file: https://thezwiss.github.io/backspace/insights/data.json
+- Sitemap: https://thezwiss.github.io/backspace/sitemap.xml
 
 ## Repository metrics archive
 

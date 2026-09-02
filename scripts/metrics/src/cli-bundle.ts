@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { createStore } from './store.ts';
 import {
@@ -9,6 +9,8 @@ import {
 } from './bundle.ts';
 import { requiredEnv, deriveRunTimestamps, describeFailure } from './cli-support.ts';
 import { renderDataPage } from './datapage.ts';
+import { buildSummary, renderSummaryHtml, renderDatasetJsonLd, replaceRegion } from './summary.ts';
+import { renderSitemap, siteEntries } from './sitemap.ts';
 
 /**
  * Entrypoint invoked by `.github/workflows/deploy-pages.yml` as
@@ -112,6 +114,61 @@ async function main(): Promise<void> {
     throw new Error(`cli-bundle: failed to write "${pagePath}"`, { cause });
   }
   console.log(`wrote ${pagePath}: ${Buffer.byteLength(html, 'utf8')} bytes of static tables`);
+
+  // The charted page's own static content: the headline measurements, and a
+  // `Dataset` block carrying real values and the archive's coverage.
+  //
+  // This exists because `/insights/` is the URL that gets shared, and every
+  // figure on it is drawn client-side — so its served HTML states the method
+  // and not one number. The static data page beside it solves that for a
+  // reader who follows the link; a fetcher that reads the shared URL and
+  // stops never does. Both regions are written from `data`, the same bundle
+  // the charts read, so the static text cannot disagree with the charts.
+  //
+  // `replaceRegion` throws when a marker is missing rather than leaving the
+  // page untouched: the committed fallback says "not built by the pipeline",
+  // and publishing that silently would look exactly like a successful deploy.
+  const indexPath = path.join(path.dirname(full), 'index.html');
+  const siteUrl = process.env['METRICS_SITE_URL'];
+  let page: string;
+  try {
+    page = readFileSync(indexPath, 'utf8');
+  } catch (cause) {
+    throw new Error(`cli-bundle: failed to read "${indexPath}"`, { cause });
+  }
+  const facts = buildSummary(data);
+  page = replaceRegion(page, 'SUMMARY', renderSummaryHtml(facts));
+  // The JSON-LD names absolute URLs, so it is regenerated only when this
+  // deployment knows its own address. Left alone, the committed block stands:
+  // correct for this site, and not something a fork republishes under its own
+  // domain while pointing at ours.
+  if (siteUrl !== undefined && siteUrl !== '') {
+    page = replaceRegion(page, 'JSONLD', renderDatasetJsonLd(facts, siteUrl));
+  }
+  try {
+    writeFileSync(indexPath, page, 'utf8');
+  } catch (cause) {
+    throw new Error(`cli-bundle: failed to write "${indexPath}"`, { cause });
+  }
+  console.log(
+    `wrote ${indexPath}: static figures` +
+      (siteUrl === undefined || siteUrl === '' ? ' (JSON-LD left as committed: no METRICS_SITE_URL)' : ' and Dataset metadata'),
+  );
+
+  // The sitemap, at the site root two levels up from the bundle. Skipped
+  // without a site URL for the same reason the JSON-LD is: every entry in it
+  // is an absolute URL, and a sitemap is a claim about which domain owns
+  // these pages.
+  if (siteUrl !== undefined && siteUrl !== '') {
+    const sitemapPath = path.join(path.dirname(path.dirname(full)), 'sitemap.xml');
+    const xml = renderSitemap(siteUrl, siteEntries(facts.to));
+    try {
+      writeFileSync(sitemapPath, xml, 'utf8');
+    } catch (cause) {
+      throw new Error(`cli-bundle: failed to write "${sitemapPath}"`, { cause });
+    }
+    console.log(`wrote ${sitemapPath}: ${siteEntries(facts.to).length} urls`);
+  }
 
   // Last line of the run, on stderr, so it is the thing a maintainer sees at
   // the bottom of a green deploy log rather than something buried above the
