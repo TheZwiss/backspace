@@ -8,6 +8,16 @@ on:
       - 'scripts/metrics/**' # a bundler change must redeploy, or the site silently serves stale data
       - '.github/workflows/deploy-pages.yml'
   workflow_dispatch:
+  # Called by metrics.yml after a successful collection, so the dashboard
+  # publishes the day it is collected instead of waiting for the next push to
+  # `site/**`. Two constraints the caller owns, not this file:
+  #   - Permissions in a called workflow are the intersection of what the
+  #     caller grants and what is declared below — they can be reduced, never
+  #     elevated. The calling job must therefore grant `pages: write` and
+  #     `id-token: write` itself, or the deploy fails on a missing scope.
+  #   - The workflow-level `concurrency` below is not reliably honoured for a
+  #     `workflow_call` invocation, so the calling job carries its own group.
+  workflow_call:
 
 permissions:
   contents: read
@@ -32,7 +42,69 @@ jobs:
         with:
           egress-policy: audit
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      # This runs on every `site/**` push, whether or not the archive branch
+      # exists — so its existence is probed here, in a step that cannot fail
+      # the job, and the checkout below is gated on the answer. `actions/checkout`
+      # asked for a ref that does not exist hard-fails, and no `if:` inside that
+      # step can rescue it, so the test has to happen before it: an
+      # unconditional checkout would break every landing-page deploy until the
+      # branch is created, and permanently again if it is ever deleted.
+      #
+      # `git ls-remote origin` rather than a `gh api` call against a repo slug:
+      # `origin` is whatever the checkout above cloned, so this stays correct if
+      # the project is renamed or transferred, and it needs no token handling.
+      - name: Check for the metrics archive branch
+        id: archive
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --heads origin metrics-data >/dev/null 2>&1; then
+            echo 'present=true' >> "$GITHUB_OUTPUT"
+            echo 'metrics-data found — bundling the dashboard from the archive'
+          else
+            echo 'present=false' >> "$GITHUB_OUTPUT"
+            echo '::notice::metrics-data does not exist — publishing the dashboard empty state'
+          fi
+
+      - name: Checkout the metrics archive
+        if: steps.archive.outputs.present == 'true'
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          ref: metrics-data
+          path: .metrics-data
+
+      - name: Setup Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          # Pinned to 24 to match metrics.yml: the bundler is TypeScript executed
+          # directly by Node's native type stripping, with no build step and no
+          # dependencies.
+          node-version: 24
+          # This job never installs anything, so there is no dependency cache to
+          # prime. Left at its default, setup-node detects the repo's pnpm from
+          # the root package.json and fails the step trying to invoke it, because
+          # nothing here installs pnpm the way ci.yml does.
+          package-manager-cache: false
+
+      # Unconditional, unlike the checkout above. A missing archive directory is
+      # the empty case, not a failure: cli-bundle.ts writes a valid, complete
+      # data.json and exits 0, and the page renders its empty state from it. An
+      # archive that exists but is corrupt or unreadable still exits non-zero and
+      # fails the deploy, which is correct — a blank dashboard published over
+      # data that exists is indistinguishable, on the page, from no traffic.
+      #
+      # Both paths are absolute, matching metrics.yml: METRICS_OUTPUT_PATH is a
+      # file path resolved against the process CWD, and the CLI creates its
+      # parent directory recursively.
+      - name: Bundle the metrics archive
+        env:
+          METRICS_DATA_DIR: ${{ github.workspace }}/.metrics-data
+          METRICS_OUTPUT_PATH: ${{ github.workspace }}/site/insights/data.json
+        run: node scripts/metrics/src/cli-bundle.ts
+
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      # ./site now carries insights/data.json, written by the step above into the
+      # workspace (it is gitignored, so it exists only for the length of a run).
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: ./site
