@@ -8,6 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as schema from '../db/schema.js';
 import { setWorkerId } from '../utils/snowflake.js';
+import { config } from '../config.js';
 
 setWorkerId(3);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -89,7 +90,12 @@ describe('GET /api/instance/info', () => {
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(typeof body.name).toBe('string');
-    expect(typeof body.version).toBe('string');
+    // Asserted by value, not by type. `typeof === 'string'` passed happily
+    // while this endpoint reported a hardcoded 1.0.0 through two releases, so a
+    // type check here is not coverage. config.version is read from
+    // packages/server/package.json; see test/version-consistency.test.ts.
+    expect(body.version).toBe(config.version);
+    expect(body.version).toMatch(/^\d+\.\d+\.\d+$/);
     expect(typeof body.registrationOpen).toBe('boolean');
     expect(typeof body.federatedRegistrationOpen).toBe('boolean');
     // AGPL § 13 source offer — always a URL; commit is a string or null.

@@ -22,7 +22,8 @@
     "test": "pnpm -r test",
     "dev:desktop": "pnpm --filter @backspace/desktop dev",
     "build:desktop": "pnpm --filter @backspace/desktop build",
-    "gen-icons": "node scripts/gen-icons.mjs"
+    "gen-icons": "node scripts/gen-icons.mjs",
+    "bump": "node scripts/bump-version.mjs"
   },
   "devDependencies": {
     "sharp": "^0.33.5",
