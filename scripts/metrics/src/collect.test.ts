@@ -39,7 +39,10 @@ const RELEASES = [
     tag_name: 'v1.0.0',
     name: 'Backspace 1.0.0',
     published_at: '2026-08-01T10:00:00Z',
-    assets: [{ download_count: 20 }, { download_count: 17 }],
+    assets: [
+      { name: 'App-1.0.0-x64.exe', download_count: 20 },
+      { name: 'App-1.0.0.dmg', download_count: 17 },
+    ],
   },
 ];
 const CONTRIBUTORS = [{ weeks: [{ w: 1771200000, c: 3 }] }, { weeks: [{ w: 1771804800, c: 1 }] }];
@@ -136,8 +139,66 @@ describe('collect', () => {
         subscribers: '1',
         open_issues: '13',
         downloads_total: '37',
+        downloads_app: '37',
+        downloads_updates: '0',
       },
     ]);
+  });
+
+  it('splits release downloads into app installs and update-check traffic', async () => {
+    const store = createStore(dir);
+    const client = fakeClient({
+      '/repos/o/r/releases': [
+        {
+          tag_name: 'v1.0.0',
+          name: 'v1.0.0',
+          published_at: '2026-08-01T00:00:00Z',
+          assets: [
+            { name: 'Backspace-1.0.0-x64.exe', download_count: 139 },
+            { name: 'Backspace-1.0.0-arm64.dmg', download_count: 17 },
+            { name: 'latest.yml', download_count: 1203 },
+            { name: 'latest-mac.yml', download_count: 62 },
+            { name: 'Backspace-1.0.0-x64.exe.blockmap', download_count: 4 },
+          ],
+        },
+      ],
+    });
+    await collect({ client, store, ...base });
+    const row = store.readCsv('repo.csv')[0];
+    // The whole point: the headline figure is the 156 real installs, not the
+    // 1,425 that a plain sum over every asset would have reported.
+    expect(row?.downloads_app).toBe('156');
+    expect(row?.downloads_updates).toBe('1269');
+    expect(row?.downloads_total).toBe('1425');
+  });
+
+  it('keeps the split a decomposition of the total, never an overlap or a gap', async () => {
+    const store = createStore(dir);
+    await collect({ client: fakeClient(), store, ...base });
+    const row = store.readCsv('repo.csv')[0];
+    expect(Number(row?.downloads_app) + Number(row?.downloads_updates)).toBe(
+      Number(row?.downloads_total),
+    );
+  });
+
+  it('leaves the split blank on rows written before it existed, never zero', async () => {
+    const store = createStore(dir);
+    // A row as the collector wrote it before the split columns were added.
+    store.writeCsv(
+      'repo.csv',
+      ['date', 'subscribers', 'open_issues', 'downloads_total'],
+      [{ date: '2026-08-24', subscribers: 1, open_issues: 10, downloads_total: 1802 }],
+    );
+    await collect({ client: fakeClient(), store, ...base });
+    const rows = store.readCsv('repo.csv');
+    const old = rows.find((r) => r['date'] === '2026-08-24');
+    // A zero here would claim nobody had ever downloaded the app up to that
+    // day, which the archive never measured. Blank reads as "not measured".
+    expect(old?.downloads_app).toBe('');
+    expect(old?.downloads_updates).toBe('');
+    expect(old?.downloads_app).not.toBe('0');
+    // The pre-existing total is untouched: its definition did not change.
+    expect(old?.downloads_total).toBe('1802');
   });
 
   it('records release publish dates for the growth-chart annotations', async () => {
@@ -163,10 +224,10 @@ describe('collect', () => {
       'https://api.github.com/repos/o/r': REPO,
     };
     const page1 = [
-      { tag_name: 'v2.0.0', name: 'v2.0.0', published_at: '2026-08-10T00:00:00Z', assets: [{ download_count: 5 }] },
+      { tag_name: 'v2.0.0', name: 'v2.0.0', published_at: '2026-08-10T00:00:00Z', assets: [{ name: 'App-2.0.0.dmg', download_count: 5 }] },
     ];
     const page2 = [
-      { tag_name: 'v1.0.0', name: 'v1.0.0', published_at: '2026-08-01T00:00:00Z', assets: [{ download_count: 7 }] },
+      { tag_name: 'v1.0.0', name: 'v1.0.0', published_at: '2026-08-01T00:00:00Z', assets: [{ name: 'App-1.0.0.dmg', download_count: 7 }] },
     ];
     const fetchImpl = (async (url: string) => {
       if (url === 'https://api.github.com/repos/o/r/releases?per_page=100') {
@@ -334,8 +395,22 @@ describe('collect', () => {
     const result = await collect({ client, store, ...base });
     const rows = store.readCsv('repo.csv');
     expect(rows).toEqual([
-      { date: '2026-08-24', subscribers: '1', open_issues: '10', downloads_total: '25' },
-      { date: '2026-08-25', subscribers: '1', open_issues: '13', downloads_total: '' },
+      {
+        date: '2026-08-24',
+        subscribers: '1',
+        open_issues: '10',
+        downloads_total: '25',
+        downloads_app: '',
+        downloads_updates: '',
+      },
+      {
+        date: '2026-08-25',
+        subscribers: '1',
+        open_issues: '13',
+        downloads_total: '',
+        downloads_app: '',
+        downloads_updates: '',
+      },
     ]);
     expect(rows[1]?.downloads_total).toBe('');
     expect(rows[1]?.subscribers).toBe('1');
@@ -349,7 +424,14 @@ describe('collect', () => {
     const client = fakeClient({ '/repos/o/r/releases': new Error('502') });
     const result = await collect({ client, store, ...base });
     expect(store.readCsv('repo.csv')).toEqual([
-      { date: '2026-08-25', subscribers: '1', open_issues: '13', downloads_total: '' },
+      {
+        date: '2026-08-25',
+        subscribers: '1',
+        open_issues: '13',
+        downloads_total: '',
+        downloads_app: '',
+        downloads_updates: '',
+      },
     ]);
     expect(result.skipped).toContain('repo.csv:downloads_total');
     expect(result.skipped).not.toContain('repo.csv');
@@ -366,8 +448,22 @@ describe('collect', () => {
     );
     const result = await collect({ client: fakeClient(), store, ...base });
     expect(store.readCsv('repo.csv')).toEqual([
-      { date: '2026-08-24', subscribers: '1', open_issues: '10', downloads_total: '' },
-      { date: '2026-08-25', subscribers: '1', open_issues: '13', downloads_total: '37' },
+      {
+        date: '2026-08-24',
+        subscribers: '1',
+        open_issues: '10',
+        downloads_total: '',
+        downloads_app: '',
+        downloads_updates: '',
+      },
+      {
+        date: '2026-08-25',
+        subscribers: '1',
+        open_issues: '13',
+        downloads_total: '37',
+        downloads_app: '37',
+        downloads_updates: '0',
+      },
     ]);
     expect(result.skipped).not.toContain('repo.csv:downloads_total');
   });
