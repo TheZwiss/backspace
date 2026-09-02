@@ -92,6 +92,77 @@ function splitRows(text: string): string[][] {
   return rows;
 }
 
+/** Milliseconds in a UTC day. Every dated series steps by this. */
+export const MS_PER_DAY = 86_400_000;
+
+const ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/**
+ * Converts a `YYYY-MM-DD` date to the epoch milliseconds of its UTC midnight,
+ * so a dense day-by-day fill can step a day at a time.
+ *
+ * Built from the matched components through `Date.UTC` rather than
+ * `new Date(string)`, and then round-tripped back to a string, for the same
+ * reasons `bundle.ts`'s `utcMonday` does it this way: a non-ISO spelling like
+ * `2026-9-1` parses host-dependently, and an impossible date like `2026-02-30`
+ * rolls silently over to 2 March, which would shift every row after it by two
+ * days under a date that still looks perfectly ordinary. The round trip
+ * catches both, along with the legacy two-digit-year mapping in `Date.UTC`
+ * where year 50 means 1950.
+ *
+ * Lives here rather than in `backfill.ts` because both the reconstruction and
+ * the daily collector now fill dense day ranges, and two copies of this
+ * validation would be two places for the round-trip check to be dropped.
+ */
+export function utcDayStart(date: IsoDate): number {
+  const match = ISO_DATE_RE.exec(date);
+  if (match === null) {
+    throw new Error(`expected a YYYY-MM-DD date, got ${JSON.stringify(date)}`);
+  }
+  const time = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  if (!Number.isFinite(time) || new Date(time).toISOString().slice(0, 10) !== date) {
+    throw new Error(`${JSON.stringify(date)} is not a real calendar date`);
+  }
+  return time;
+}
+
+/**
+ * Counts dated events per UTC day across the whole range `[from, through]`,
+ * emitting a row for every day in it — including days with no events.
+ *
+ * The dense fill is the point. This backs `workflows.csv`, where a day with no
+ * workflow runs is a MEASURED ZERO rather than an absence: the Actions API is
+ * asked for a date range and answers it completely, unlike the traffic
+ * endpoints, which omit a day they recorded nothing for. §4.3 forbids
+ * inventing a zero for an unmeasured day; it equally forbids hiding a measured
+ * one behind a gap, which would read on the chart as collector downtime.
+ *
+ * Callers own the range, and with it the claim that the range was fully
+ * observed. An event outside `[from, through]` is dropped rather than
+ * recorded, so a page that straddles the boundary cannot contribute a partial
+ * count for a day this call did not cover completely.
+ */
+export function countByDay(dates: readonly IsoDate[], from: IsoDate, through: IsoDate): CountedDay[] {
+  const perDay = new Map<IsoDate, number>();
+  for (const date of dates) {
+    if (compareStrings(date, from) < 0 || compareStrings(date, through) > 0) continue;
+    perDay.set(date, (perDay.get(date) ?? 0) + 1);
+  }
+  const rows: CountedDay[] = [];
+  const end = utcDayStart(through);
+  for (let time = utcDayStart(from); time <= end; time += MS_PER_DAY) {
+    const date = new Date(time).toISOString().slice(0, 10);
+    rows.push({ date, count: perDay.get(date) ?? 0 });
+  }
+  return rows;
+}
+
+/** One day and how many events landed on it. */
+export interface CountedDay {
+  date: IsoDate;
+  count: number;
+}
+
 export function parseCsv(text: string): Record<string, string>[] {
   const rows = splitRows(text);
   const header = rows.shift();

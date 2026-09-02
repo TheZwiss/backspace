@@ -777,6 +777,7 @@ function makeData(overrides: Partial<DashboardData> = {}): DashboardData {
         downloads_app: [],
         downloads_updates: [],
       },
+      workflows: { dates: [], runs: [] },
     },
     releases: [],
     dimensions: {
@@ -794,6 +795,49 @@ function dailyDates(start: string, count: number): string[] {
     new Date(base + index * 86_400_000).toISOString().slice(0, 10),
   );
 }
+
+describe('workflows series', () => {
+  it('reads runs, keeping a measured zero distinct from an unmeasured day', () => {
+    writeRaw(
+      'workflows.csv',
+      ['date,runs', '2026-08-31,17', '2026-09-01,0', '2026-09-02,', ''].join('\n'),
+    );
+    expect(build().series.workflows).toEqual({
+      dates: ['2026-08-31', '2026-09-01', '2026-09-02'],
+      runs: [17, 0, null],
+    });
+  });
+
+  it('is an empty series, not a missing one, when the archive has no workflows.csv', () => {
+    expect(build().series.workflows).toEqual({ dates: [], runs: [] });
+  });
+
+  // Runs are events on their day, like the traffic counts and unlike the
+  // cumulative counters: taking the last day would flatten exactly the CI
+  // spikes this series exists to put beside the clone line.
+  it('sums runs within a weekly bucket rather than taking the last day', () => {
+    writeRaw(
+      'workflows.csv',
+      [
+        'date,runs',
+        '2026-08-31,10',
+        '2026-09-01,20',
+        '2026-09-02,0',
+        '2026-09-03,5',
+        '',
+      ].join('\n'),
+    );
+    expect(downsampleWeekly(build()).series.workflows).toEqual({
+      dates: ['2026-08-31'],
+      runs: [35],
+    });
+  });
+
+  it('leaves a week the collector never covered as null rather than summing it to zero', () => {
+    writeRaw('workflows.csv', ['date,runs', '2026-08-31,', '', ''].join('\n'));
+    expect(downsampleWeekly(build()).series.workflows.runs).toEqual([null]);
+  });
+});
 
 describe('downsampleWeekly — sum vs. last', () => {
   it('sums traffic but takes the last value of a cumulative counter when bucketing', () => {

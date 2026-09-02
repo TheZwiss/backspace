@@ -6,7 +6,7 @@ function data(overrides: Partial<DashboardData> = {}): DashboardData {
   return {
     generated_at: '2026-09-02T10:00:00.000Z',
     collection_started: '2026-08-18',
-    meta: { last_run: null, last_success: null, error: null },
+    meta: { last_run: '2026-09-02T10:00:00.000Z', last_success: null, error: null },
     empty: false,
     downsampled: false,
     series: {
@@ -23,6 +23,9 @@ function data(overrides: Partial<DashboardData> = {}): DashboardData {
         downloads_app: [null],
         downloads_updates: [0],
       },
+      // A measured zero and a real count, so the table can be checked for the
+      // one thing this series must never do: render its zero as a gap.
+      workflows: { dates: ['2026-08-18', '2026-08-19'], runs: [0, 12] },
     },
     releases: [],
     dimensions: {
@@ -30,7 +33,7 @@ function data(overrides: Partial<DashboardData> = {}): DashboardData {
       paths: { snapshots: [], latest: [], trajectories: [] },
     },
     ...overrides,
-  } as DashboardData;
+  };
 }
 
 describe('escapeHtml', () => {
@@ -57,6 +60,26 @@ describe('jsonLd', () => {
 });
 
 describe('renderDataPage', () => {
+  // The tables are the encoding a crawler reads. A clone column presented as
+  // plain reach, with no note that this repository's own CI is counted in it,
+  // is the one number here that reliably reads as more adoption than it is.
+  // The distinction this whole series turns on: on the traffic tables a zero
+  // day is absent (GitHub omits it), here it is a value that must be printed.
+  it('prints a workflow zero as a zero, never as not measured', () => {
+    const html = renderDataPage(data());
+    expect(html).toContain('CI activity');
+    expect(html).toContain('workflow runs');
+    const row = html.slice(html.indexOf('<h2>CI activity</h2>'));
+    expect(row).toContain('2026-08-18');
+    expect(row.slice(0, row.indexOf('</table>'))).not.toContain('not measured');
+  });
+
+  it('qualifies the clone table with the CI checkouts counted in it', () => {
+    const html = renderDataPage(data());
+    expect(html).toContain('actions/checkout');
+    expect(html).toContain('per unique cloner');
+  });
+
   it('puts the measured values in the HTML itself, not behind a fetch', () => {
     const html = renderDataPage(data());
     expect(html).toContain('75');

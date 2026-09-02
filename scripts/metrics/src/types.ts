@@ -14,6 +14,26 @@ export interface CountPoint {
   total: number;
 }
 
+/**
+ * One day of this repository's own CI activity: the number of workflow runs
+ * it started on that UTC date.
+ *
+ * It exists to sit beside `traffic/clones.csv`, which GitHub inflates with
+ * every `actions/checkout` this repository runs. The two are plotted on a
+ * shared axis so a clone spike that is really a build spike is visible as
+ * such, rather than described in prose the reader has to take on trust.
+ *
+ * Unlike traffic, a day with no runs is a MEASURED ZERO, not an absence: the
+ * Actions API is asked for a whole window and answers completely, where the
+ * traffic endpoints omit a zero-traffic day entirely. So this series writes
+ * an explicit `0` for a quiet day and plots it at zero, and a genuine gap
+ * here means the collector did not run. See §4.3.
+ */
+export interface WorkflowPoint {
+  date: IsoDate;
+  runs: number;
+}
+
 /** A published release. `date` is the UTC day of `published_at`. */
 export interface ReleaseRow {
   date: IsoDate;

@@ -29,6 +29,7 @@ function data(overrides: Partial<DashboardData> = {}): DashboardData {
         downloads_app: [null],
         downloads_updates: [0],
       },
+      workflows: { dates: ['2026-08-18', '2026-08-19'], runs: [0, 17] },
     },
     releases: [{ date: '2026-07-03', tag: 'v1.0.0', name: 'Backspace 1.0.0' }],
     dimensions: {
@@ -65,6 +66,7 @@ const empty = (): DashboardData =>
         downloads_app: [],
         downloads_updates: [],
       },
+      workflows: { dates: [], runs: [] },
     },
     releases: [],
     dimensions: {
@@ -145,6 +147,36 @@ describe('renderSummaryHtml', () => {
     expect(html).not.toContain('watchers');
     expect(html).not.toContain('0 watchers');
     expect(html).toContain('64 stars');
+  });
+
+  // The busiest clone day is, on this repository, a day its own CI ran hardest —
+  // GitHub counts every `actions/checkout` as a clone. This sentence is baked into
+  // the shared `/insights/` HTML, so it is the figure a fetcher quotes; the caveat
+  // has to travel in the same sentence or the number arrives stripped of it.
+  it('never states the clone peak without saying CI checkouts are counted in it', () => {
+    const html = renderSummaryHtml(buildSummary(data()));
+    expect(html).toContain('Busiest day for clones: 10 clones on 2026-08-18');
+    expect(html).toContain('own CI checkouts');
+  });
+
+  it('states the CI peak so the clone caveat has its number in the same text', () => {
+    const html = renderSummaryHtml(buildSummary(data()));
+    expect(html).toContain('17 workflow runs on 2026-08-19');
+  });
+
+  it('omits the CI sentence when the archive carries no workflow rows', () => {
+    const d = data();
+    d.series.workflows = { dates: [], runs: [] };
+    const html = renderSummaryHtml(buildSummary(d));
+    expect(html).not.toContain('workflow run');
+  });
+
+  it('omits the CI caveat entirely when there is no clone figure to qualify', () => {
+    const d = data();
+    d.series.clones = { dates: [], count: [], uniques: [] };
+    const html = renderSummaryHtml(buildSummary(d));
+    expect(html).not.toContain('Busiest day for clones');
+    expect(html).not.toContain('own CI checkouts');
   });
 
   it('says plainly that nothing is recorded rather than rendering a figure-less sentence', () => {

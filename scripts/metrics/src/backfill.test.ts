@@ -23,6 +23,16 @@ const STARGAZERS = [
   { starred_at: '2026-03-01T09:00:00Z' },
 ];
 const FORKS = [{ created_at: '2026-03-05T09:00:00Z' }];
+// Two runs on 02-21 and one on 02-23. 02-22 falls between them and must
+// reconstruct as a measured 0, while everything before 02-21 — the oldest
+// surviving run — must not be reconstructed at all, because GitHub deletes
+// runs by age and an older day's silence is destroyed evidence, not a zero.
+const WORKFLOW_RUNS = [
+  { created_at: '2026-02-21T08:00:00Z' },
+  { created_at: '2026-02-21T20:00:00Z' },
+  { created_at: '2026-02-23T09:00:00Z' },
+];
+
 const RELEASES = [
   { tag_name: 'v1.0.0', name: 'Backspace 1.0.0', published_at: '2026-08-01T10:00:00Z' },
 ];
@@ -32,6 +42,7 @@ function fakeClient(pages: Record<string, unknown[]> = {}): GitHubClient {
     '/repos/o/r/stargazers': STARGAZERS,
     '/repos/o/r/forks?sort=oldest': FORKS,
     '/repos/o/r/releases': RELEASES,
+    '/repos/o/r/actions/runs': WORKFLOW_RUNS,
     ...pages,
   };
   return {
@@ -44,6 +55,12 @@ function fakeClient(pages: Record<string, unknown[]> = {}): GitHubClient {
     async paginate<T>(p: string): Promise<T[]> {
       const value = routes[p];
       if (value === undefined) throw new Error(`unexpected paginate ${p}`);
+      return value as T[];
+    },
+    async paginateEnvelope<T>(p: string, key: string): Promise<T[]> {
+      if (key !== 'workflow_runs') throw new Error(`unexpected envelope key ${key}`);
+      const value = routes[p];
+      if (value === undefined) throw new Error(`unexpected paginateEnvelope ${p}`);
       return value as T[];
     },
   };
@@ -117,6 +134,42 @@ describe('backfill', () => {
     expect(rows[rows.length - 1]).toEqual({ date: '2026-03-01', total: '3' });
   });
 
+  it('reconstructs workflow runs per day, with a measured zero between them', async () => {
+    const store = createStore(dir);
+    await backfill({ client: fakeClient(), store, ...base });
+    const rows = store.readCsv('workflows.csv');
+    expect(rows.find((r) => r.date === '2026-02-21')).toEqual({ date: '2026-02-21', runs: '2' });
+    expect(rows.find((r) => r.date === '2026-02-22')).toEqual({ date: '2026-02-22', runs: '0' });
+    expect(rows.find((r) => r.date === '2026-02-23')).toEqual({ date: '2026-02-23', runs: '1' });
+  });
+
+  // The bound that keeps this honest. GitHub deletes workflow runs by age, so
+  // a day older than the oldest surviving run has had its evidence destroyed —
+  // reconstructing a confident `0` there would be a fabricated measurement,
+  // and it would look exactly like a genuinely quiet day forever after.
+  it('reconstructs nothing before the oldest surviving run', async () => {
+    const store = createStore(dir);
+    await backfill({ client: fakeClient(), store, ...base });
+    const dates = store.readCsv('workflows.csv').map((r) => r.date);
+    expect(dates[0]).toBe('2026-02-21');
+    expect(dates).not.toContain('2026-02-20');
+  });
+
+  // Inside the surviving span the fill runs all the way to the run date: those
+  // zeros ARE measurements, because retention deletes uniformly by age.
+  it('fills quiet days from the last run up to the run date', async () => {
+    const store = createStore(dir);
+    await backfill({ client: fakeClient(), store, ...base });
+    const rows = store.readCsv('workflows.csv');
+    expect(rows[rows.length - 1]).toEqual({ date: '2026-03-05', runs: '0' });
+  });
+
+  it('writes no workflow rows at all when no run survives', async () => {
+    const store = createStore(dir);
+    await backfill({ client: fakeClient({ '/repos/o/r/actions/runs': [] }), store, ...base });
+    expect(store.readCsv('workflows.csv')).toEqual([]);
+  });
+
   it('accumulates forks cumulatively by created_at', async () => {
     const store = createStore(dir);
     await backfill({ client: fakeClient(), store, ...base });
@@ -188,6 +241,9 @@ describe('backfill', () => {
       },
       async getStats<T>(): Promise<T | null> {
         return null;
+      },
+      async paginateEnvelope<T>(): Promise<T[]> {
+        return [] as T[];
       },
       async paginate<T>(p: string): Promise<T[]> {
         if (p !== '/repos/o/r/releases') throw new Error(`unexpected paginate ${p}`);

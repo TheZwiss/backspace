@@ -1,4 +1,12 @@
-import { upsertByDate, upsertByKey, upsertDimensional, compareReleaseRows } from './series.ts';
+import {
+  upsertByDate,
+  upsertByKey,
+  upsertDimensional,
+  compareReleaseRows,
+  countByDay,
+  utcDayStart,
+  MS_PER_DAY,
+} from './series.ts';
 import type { GitHubClient } from './github.ts';
 import type { Meta, Store } from './store.ts';
 import type {
@@ -8,6 +16,7 @@ import type {
   ReleaseRow,
   RepoPoint,
   TrafficPoint,
+  WorkflowPoint,
 } from './types.ts';
 
 interface TrafficBucket {
@@ -66,6 +75,33 @@ export function isUpdateArtifact(assetName: string): boolean {
 
 interface ContributorResponse {
   weeks: Array<{ w: number; c: number }>;
+}
+
+interface WorkflowRunResponse {
+  created_at: string;
+}
+
+/**
+ * How many days of workflow-run history each collection re-counts.
+ *
+ * Fourteen, to match the traffic window this series exists to be compared
+ * against, and for one structural reason beyond symmetry: **the run count for
+ * the current day is always partial.** The collector runs mid-morning UTC, so
+ * counting only `today` and never revisiting it would freeze every day of this
+ * series at whatever fraction of it had happened by ~10:00 — a permanent,
+ * uniformly-wrong understatement that nothing downstream could detect. Fetching
+ * a trailing window and merging it with `'overwrite'` means yesterday's partial
+ * count is replaced by its complete one on the very next run, which is exactly
+ * how the traffic series already stays correct.
+ *
+ * A window this size costs one extra paginated fetch per run and is bounded by
+ * a server-side `created=>=` filter, so it does not grow with the archive.
+ */
+const WORKFLOW_WINDOW_DAYS = 14;
+
+/** The UTC date `days` days before `date`, as `YYYY-MM-DD`. */
+function daysBefore(date: IsoDate, days: number): IsoDate {
+  return new Date(utcDayStart(date) - days * MS_PER_DAY).toISOString().slice(0, 10);
 }
 
 export interface CollectResult {
@@ -192,6 +228,24 @@ export async function collect(options: CollectOptions): Promise<CollectResult> {
     contributors = null;
   }
   if (contributors === null) skipped.push('contributors.csv');
+
+  // Optional, and paginated with a server-side date filter so the cost is
+  // bounded by the window rather than by how long this repo has existed.
+  // Optional rather than required for the usual reason: a failed fetch must
+  // skip the series, never write a zero. A zero here is a load-bearing value
+  // — it is what a quiet day legitimately looks like — so a fabricated one
+  // would be indistinguishable from a real measurement, which is precisely
+  // the failure this package's `skipped` path exists to avoid.
+  const workflowFrom = daysBefore(today, WORKFLOW_WINDOW_DAYS - 1);
+  let workflowRuns: WorkflowRunResponse[] | null = null;
+  try {
+    workflowRuns = await client.paginateEnvelope<WorkflowRunResponse>(
+      `${repoPath}/actions/runs?created=%3E%3D${workflowFrom}`,
+      'workflow_runs',
+    );
+  } catch {
+    skipped.push('workflows.csv');
+  }
 
   // `downloads_total` is folded into `repo.csv` alongside the required
   // `subscribers`/`open_issues` counters, but it is itself sourced from the
@@ -355,6 +409,23 @@ export async function collect(options: CollectOptions): Promise<CollectResult> {
   const forks: CountPoint = { date: today, total: repo.forks_count };
   writeCsvSeries('stars.csv', ['date', 'total'], [stars]);
   writeCsvSeries('forks.csv', ['date', 'total'], [forks]);
+
+  // Written only when the fetch succeeded, and then for the whole window at
+  // once rather than for `today` alone. `writeCsvSeries` merges with
+  // `'overwrite'`, which is what upgrades each earlier day's partial count to
+  // its final one: today's row is always short (the day is still running) and
+  // is corrected by tomorrow's run, and the day before that has already been
+  // corrected. Re-counting a settled day is free in diff terms — the value it
+  // writes is identical to the one already there — so this costs one line of
+  // archive churn on the days that actually changed and none anywhere else.
+  if (workflowRuns !== null) {
+    const runDates = workflowRuns.map((run) => run.created_at.slice(0, 10));
+    writeCsvSeries(
+      'workflows.csv',
+      ['date', 'runs'],
+      countByDay(runDates, workflowFrom, today).map((day) => ({ date: day.date, runs: day.count })),
+    );
+  }
 
   // Always written: `subscribers`/`open_issues` are required-fetch fields
   // that have already resolved successfully by this point, so they are

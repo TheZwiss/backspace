@@ -272,6 +272,9 @@ h2 {
 }
 .sec-copy { color: var(--txt2); max-width: 62ch; font-size: 15.5px; }
 .sec-copy strong { color: var(--txt); font-weight: 560; }
+/* Two section paragraphs in a row: the reset zeroes p margins, so without
+   this they butt together and read as one run-on block. */
+.sec-copy + .sec-copy { margin-top: 14px; }
 
 /* The slot each later section renders into. Empty by design until filled. */
 .slot { margin-top: 26px; min-width: 0; }
@@ -323,6 +326,10 @@ h2 {
 }
 .stat-value.is-unmeasured { font-size: 1.6rem; font-weight: 500; color: var(--txt4); }
 .stat-sub { color: var(--txt3); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+/* A standing qualifier on the figure above it, for a card whose number means
+   something other than what its label suggests. Dimmer and smaller than
+   .stat-sub: it is a caveat, not a second measurement. */
+.stat-note { color: var(--txt4); font-size: 12px; line-height: 1.45; margin-top: 4px; }
 .stat-delta {
   align-self: flex-start; margin-top: 5px;
   font-family: var(--mono); font-size: 12px; font-weight: 500;
@@ -597,6 +604,19 @@ footer a:hover { color: var(--txt); }
         recorded no traffic</strong>, so a quiet day arrives here as a break rather than as a
         zero, and the two charts can honestly disagree about which days exist. A break is not,
         on its own, evidence that the collector failed.
+      </p>
+      <p class="sec-copy">
+        One caveat belongs to the clone line alone: GitHub counts this repository's own
+        automation in it. Every <code>actions/checkout</code>, in every job of every workflow
+        run, registers as a clone, so on a day of heavy continuous integration the line
+        measures this project's build pipeline rather than its audience and can sit an order
+        of magnitude above the days on either side. Clones running well above one per unique
+        cloner is the signature. Page views are unaffected, because a checkout loads no page.
+        The CI chart below the clone chart is this repository's own workflow-run count on the
+        same axis, so the overlap can be read directly rather than taken on trust. The two are
+        plotted separately and never combined: no fixed number of clones follows from a run,
+        and subtracting an estimate would put a model on a page whose whole claim is that
+        every figure on it was measured.
       </p>
       <div class="slot" id="chart-reach"></div>
     </div>
@@ -1738,7 +1758,13 @@ footer a:hover { color: var(--txt); }
     { label: "Forks", kind: "point", series: "forks", field: "total" },
     { label: "Watchers", kind: "point", series: "repo", field: "subscribers" },
     { label: "Views", kind: "flow", series: "views", field: "count" },
-    { label: "Clones", kind: "flow", series: "clones", field: "count" },
+    /* GitHub counts every `actions/checkout` this repository runs as a clone,
+       so on a heavy CI day the figure measures the build pipeline rather than
+       anyone's interest. It cannot be split the way the download cards below
+       are — nothing in the API attributes a clone to Actions — so the card
+       states the confound instead of pretending the number is clean. */
+    { label: "Clones", kind: "flow", series: "clones", field: "count",
+      note: "includes this repo's own CI checkouts" },
     { label: "Contributors", kind: "step", series: "contributors", field: "total" },
     /* Deliberately NOT one "Release downloads" figure. GitHub counts an
        electron-updater feed file (`latest.yml`) and a `.blockmap` in
@@ -2135,6 +2161,7 @@ footer a:hover { color: var(--txt); }
     box.appendChild(el("p", "stat-label", card.label));
     box.appendChild(el("p", "stat-value" + (body.unmeasured ? " is-unmeasured" : ""), body.valueText));
     box.appendChild(el("p", "stat-sub", body.sub));
+    if (card.note) box.appendChild(el("p", "stat-note", card.note));
     box.appendChild(deltaChip(body.delta));
     return box;
   }
@@ -3184,6 +3211,36 @@ footer a:hover { color: var(--txt); }
         fill: "rgba(134, 239, 172, 0.10)"
       },
       uniques: { label: "Unique cloners", token: "--amber", fallback: "#fcd34d" }
+    },
+    /*
+     * Directly below the clone chart, sharing its x axis and its cursor,
+     * because it is the explanation for most of that chart's shape: GitHub
+     * counts every `actions/checkout` this repository runs as a clone.
+     *
+     * Deliberately a SEPARATE chart rather than a second line on the clone
+     * chart. An overlay invites reading a ratio off the two lines, and no
+     * stable ratio exists — measured here, 218 checkout steps produced 155
+     * clones on one day and 180 produced 189 on another. Stacked charts on a
+     * shared axis show the co-occurrence, which is what the archive can
+     * actually support, and claim nothing about the coefficient.
+     *
+     * One series, no `uniques`: a workflow run has no unique-visitor reading.
+     */
+    {
+      columns: {
+        count: { series: "workflows", field: "runs" }
+      },
+      title: "CI activity",
+      note: "A zero here sits on the axis rather than breaking the line, unlike the two " +
+        "charts above. The Actions API is asked for a date range and answers it completely, " +
+        "so a day with no runs is a measurement; the traffic endpoints omit a day they " +
+        "recorded nothing for, so an absent day there is genuinely unmeasured. A break in " +
+        "this line means the collector did not run, or ran before this series existed.",
+      count: {
+        label: "Workflow runs",
+        token: "--rose", fallback: "#fda4af",
+        fill: "rgba(253, 164, 175, 0.10)"
+      }
     }
   ];
 
@@ -3233,17 +3290,23 @@ footer a:hover { color: var(--txt); }
       : spec.uniques.label;
   }
 
+  /* Whether a card carries a second, subordinate series. The CI card does not
+   * — a workflow run has no unique-visitor reading — so every place that
+   * describes or draws `uniques` has to ask first. */
+  function hasUniques(spec) {
+    return spec.uniques !== undefined && spec.uniques !== null;
+  }
+
   /*
    * What this chart actually drew: the span of the axis, and how much of it
    * carries a measurement. The unmeasured count is stated in the same breath
    * as what the page does with it, because a break in a line is the one thing
    * on this page a reader is most likely to read as a fall to zero.
    */
-  function metaLine(axis, offsets) {
+  function metaLine(axis, offsets, spec) {
     var stepDays = axis.stepDays;
     var total = axis.xs.length;
     var counted = axis.measured[offsets.count];
-    var uniqueCounted = axis.measured[offsets.uniques];
     var missing = total - counted;
 
     var note = el("p", "chart-meta");
@@ -3255,8 +3318,11 @@ footer a:hover { color: var(--txt); }
     }
     /* Only when the two columns disagree, which is the case worth naming: the
      * count was recorded and the unique figure was not, or the reverse. */
-    if (uniqueCounted !== counted) {
-      note.appendChild(pair("uniques measured", uniqueCounted + " of " + steps(total, stepDays)));
+    if (hasUniques(spec)) {
+      var uniqueCounted = axis.measured[offsets.uniques];
+      if (uniqueCounted !== counted) {
+        note.appendChild(pair("uniques measured", uniqueCounted + " of " + steps(total, stepDays)));
+      }
     }
     if (axis.offGrid > 0) {
       note.appendChild(pair("off-step",
@@ -3268,10 +3334,33 @@ footer a:hover { color: var(--txt); }
     return note;
   }
 
+  /*
+   * A card whose primary series has NO measured step in this window gets a
+   * sentence instead of a plot.
+   *
+   * uPlot draws such a series as an empty frame on an invented 0..1 axis — a
+   * chart that looks broken while the caption beside it is telling the exact
+   * truth. This is a real state, not a hypothetical: a series added to the
+   * collector appears in the bundle contract immediately and in the archive
+   * only after the next collection run, so every new series is empty on the
+   * deploy that introduces it.
+   */
+  function buildEmptyCard(stack, spec, axis, offsets) {
+    var card = el("div", "chart-card");
+    card.appendChild(el("p", "chart-title", spec.title));
+    card.appendChild(metaLine(axis, offsets, spec));
+    card.appendChild(el("p", "slot-note",
+      "No measurement of " + spec.count.label.toLowerCase() + " falls inside this window, so " +
+      "there is no line to draw. An empty frame would look like a failure rather than an " +
+      "absence."));
+    if (spec.note) card.appendChild(el("p", "chart-hint", spec.note));
+    stack.appendChild(card);
+  }
+
   function buildChart(stack, spec, axis, offsets, downsampled) {
     var card = el("div", "chart-card");
     card.appendChild(el("p", "chart-title", spec.title));
-    card.appendChild(metaLine(axis, offsets));
+    card.appendChild(metaLine(axis, offsets, spec));
 
     var host = el("div", "chart-scroll");
     card.appendChild(host);
@@ -3279,30 +3368,35 @@ footer a:hover { color: var(--txt); }
      * explicit pixel size and that size is measured from this container. */
     stack.appendChild(card);
 
-    if (downsampled) {
+    if (downsampled && hasUniques(spec)) {
       card.appendChild(el("p", "chart-hint chart-caution",
         "This bundle is bucketed by week. A bucket's unique figure is the sum of its " +
         "days' unique counts, so someone who came back on several days is counted more " +
         "than once: read the " + spec.uniques.label.toLowerCase() +
         " line as an upper bound rather than a count of people."));
     }
+    if (spec.note) card.appendChild(el("p", "chart-hint", spec.note));
 
-    return C.mount(host, axis.xs, [
+    var lines = [
       {
         label: spec.count.label,
         stroke: C.colour(spec.count.token, spec.count.fallback),
         fill: spec.count.fill,
         width: 2,
         values: axis.values[offsets.count]
-      },
-      {
+      }
+    ];
+    if (hasUniques(spec)) {
+      lines.push({
         label: uniquesLabel(spec, downsampled),
         stroke: C.colour(spec.uniques.token, spec.uniques.fallback),
         width: 1.5,
         dash: [5, 4],
         values: axis.values[offsets.uniques]
-      }
-    ], {
+      });
+    }
+
+    return C.mount(host, axis.xs, lines, {
       /* Stated rather than left to the default. Both series here are per-day
        * event counts with a true floor at zero, so this is the right policy —
        * and a shipped caller exercising the extension point is what keeps it
@@ -3377,7 +3471,7 @@ footer a:hover { color: var(--txt); }
 
     if (axis.empty) {
       slot.appendChild(el("p", "slot-note",
-        "Neither views nor clones carry a row inside " + win.title.toLowerCase() + " (" +
+        "No traffic or CI series carries a row inside " + win.title.toLowerCase() + " (" +
         I.formatDay(win.startMs) + " to " + I.formatDay(win.endMs) +
         "), so there is nothing to plot for this range."));
       return;
@@ -3389,8 +3483,12 @@ footer a:hover { color: var(--txt); }
     var created = [];
     try {
       for (var i = 0; i < bound.cards.length; i++) {
-        created.push(buildChart(stack, bound.cards[i].spec, axis,
-          bound.cards[i].offsets, data.downsampled));
+        var card = bound.cards[i];
+        if (axis.measured[card.offsets.count] === 0) {
+          buildEmptyCard(stack, card.spec, axis, card.offsets);
+          continue;
+        }
+        created.push(buildChart(stack, card.spec, axis, card.offsets, data.downsampled));
       }
       /* Both charts sit in one cursor-sync group, and uPlot propagates the drag
        * selection through it, so a zoom on either moves both — and moves the
