@@ -552,6 +552,25 @@ h2 {
 .honest-list li:first-child { border-top: 1px solid var(--line); }
 .honest-list b { color: var(--txt); font-weight: 560; display: block; margin-bottom: 3px; }
 
+.numbers { background: var(--chat); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.numbers .sec-copy { max-width: 66ch; }
+.nums { display: flex; flex-wrap: wrap; gap: 14px; margin: 32px 0 20px; }
+.num {
+  flex: 1 1 190px; min-width: 190px; padding: 22px 24px;
+  border: 1px solid var(--line); border-radius: 14px; background: var(--base);
+}
+.num b {
+  display: block; font-size: 34px; font-weight: 600; line-height: 1.1;
+  letter-spacing: -0.02em; color: var(--txt); font-variant-numeric: tabular-nums;
+}
+.num span { display: block; margin-top: 6px; font-size: 14.5px; color: var(--txt2); }
+.num i {
+  display: block; margin-top: 12px; font-style: normal;
+  font-family: var(--mono); font-size: 12px; color: var(--txt4);
+}
+.nums-note { color: var(--txt3); font-size: 13.5px; max-width: 62ch; margin-bottom: 24px; }
+@media (max-width: 640px) { .num { flex: 1 1 100%; } .num b { font-size: 30px; } }
+
 /* compare */
 .table-wrap {
   overflow-x: auto; border: 1px solid var(--line); border-radius: 14px;
@@ -606,6 +625,7 @@ footer a:hover { color: var(--txt); }
     <a class="nav-link" href="#install">Install</a>
     <a class="nav-link" href="#compare">Compare</a>
     <a class="nav-link" href="#faq">FAQ</a>
+    <a class="nav-link" href="insights/">Insights</a>
     <a class="btn btn-primary btn-sm" href="https://github.com/TheZwiss/backspace">GitHub</a>
   </div>
 </header>
@@ -885,6 +905,21 @@ footer a:hover { color: var(--txt); }
   </div>
 </section>
 
+<section id="numbers" class="numbers">
+  <div class="wrap reveal">
+    <div class="ch-label ch-sky">by-the-numbers</div>
+    <h2>And here is what that looks like.</h2>
+    <p class="sec-copy">
+      GitHub deletes repository traffic data after fourteen days. A scheduled job records it once a
+      day into a public data branch instead, so the history is kept rather than lost. Every figure
+      below is read straight from that archive. Nothing is estimated.
+    </p>
+    <div class="nums" id="nums" hidden></div>
+    <p class="nums-note" id="nums-note" hidden></p>
+    <a class="btn btn-glass" href="insights/">See the full archive</a>
+  </div>
+</section>
+
 <!-- ============ Compare ============ -->
 <section id="compare">
   <div class="wrap reveal">
@@ -985,6 +1020,95 @@ footer a:hover { color: var(--txt); }
   } else {
     revealEls.forEach(function (el) { el.classList.add("in"); });
   }
+
+  /* ---- live project figures, read from the insights bundle ----
+     Deliberately placed above the reduced-motion return: these are content,
+     not animation, and must load for every visitor.
+
+     The governing rule matches the dashboard's: a figure that was never
+     measured is left out entirely, never rendered as a zero. The archive
+     writes null for a value it did not record, and a 0 printed here would be
+     indistinguishable from a real measurement of nothing. Coverage is stated
+     per figure, because the series do not all start on the same day. */
+  (function () {
+    var host = document.getElementById("nums");
+    var note = document.getElementById("nums-note");
+    if (!host || !note) return;
+
+    function lastValue(series, field) {
+      if (!series || !Array.isArray(series[field])) return null;
+      var v = series[field];
+      for (var i = v.length - 1; i >= 0; i--) {
+        if (v[i] !== null && v[i] !== undefined) return v[i];
+      }
+      return null;
+    }
+    function sum(series, field) {
+      if (!series || !Array.isArray(series[field])) return null;
+      var v = series[field], acc = null;
+      for (var i = 0; i < v.length; i++) {
+        if (v[i] === null || v[i] === undefined) continue;
+        acc = (acc === null ? 0 : acc) + v[i];
+      }
+      return acc;
+    }
+    function edgeDate(series, first) {
+      if (!series || !Array.isArray(series.dates) || !series.dates.length) return null;
+      return first ? series.dates[0] : series.dates[series.dates.length - 1];
+    }
+    function card(value, label, coverage) {
+      var el = document.createElement("div");
+      el.className = "num";
+      var b = document.createElement("b");
+      b.textContent = value.toLocaleString("en-US");
+      var s = document.createElement("span");
+      s.textContent = label;
+      el.appendChild(b);
+      el.appendChild(s);
+      if (coverage) {
+        var i = document.createElement("i");
+        i.textContent = coverage;
+        el.appendChild(i);
+      }
+      return el;
+    }
+
+    fetch("insights/data.json", { cache: "no-cache" })
+      .then(function (r) {
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.json();
+      })
+      .then(function (d) {
+        if (!d || d.empty || !d.series) throw new Error("archive holds no rows");
+        var cards = [];
+        var stars = lastValue(d.series.stars, "total");
+        var views = sum(d.series.views, "count");
+        var clones = sum(d.series.clones, "count");
+        var starsOn = edgeDate(d.series.stars, false);
+        var viewsFrom = edgeDate(d.series.views, true);
+        var clonesFrom = edgeDate(d.series.clones, true);
+        if (stars !== null) {
+          cards.push(card(stars, "stars", starsOn ? "as of " + starsOn : null));
+        }
+        if (views !== null) {
+          cards.push(card(views, "page views", viewsFrom ? "since " + viewsFrom : null));
+        }
+        if (clones !== null) {
+          cards.push(card(clones, "clones", clonesFrom ? "since " + clonesFrom : null));
+        }
+        if (!cards.length) throw new Error("nothing measured yet");
+        for (var i = 0; i < cards.length; i++) host.appendChild(cards[i]);
+        host.hidden = false;
+        note.textContent = "Recorded once a day and kept after GitHub discards it.";
+        note.hidden = false;
+      })
+      .catch(function () {
+        /* No figures rather than invented ones. The link below still reaches
+           the archive, which states its own condition when it cannot load. */
+        note.textContent = "The live figures could not be read here. The archive itself is still available.";
+        note.hidden = false;
+      });
+  })();
 
   if (reduced) {
     var j = document.getElementById("vu-jonas");
