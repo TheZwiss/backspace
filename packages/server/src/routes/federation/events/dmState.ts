@@ -6,7 +6,7 @@ import { getDmMessageWithUser } from '../../dm.js';
 import { and, eq, isNull } from 'drizzle-orm';
 import type { FederationRelayEvent } from '@backspace/shared';
 import { buildDmChannelPayload } from '../dmChannels.js';
-import { extractDomain, resolveLocalUser } from '../identity.js';
+import { extractDomain, resolveLocalUser, verifyAttribution } from '../identity.js';
 
 export function processFileRejectedEvent(
   event: FederationRelayEvent,
@@ -237,6 +237,13 @@ export function processReadStateUpdateEvent(
     return;
   }
 
+  // Attribution: the peer must be entitled to speak for the acking identity.
+  if (!verifyAttribution(event.readState.user, sourceInstance, db)) {
+    console.warn(`[federation] Attribution mismatch in read_state_update: user homeInstance=${extractDomain(event.readState.user.homeInstance)} source=${extractDomain(sourceInstance)}`);
+    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+    return;
+  }
+
   // Find the local DM channel by federatedId
   const channel = db.select({ id: schema.dmChannels.id })
     .from(schema.dmChannels)
@@ -335,6 +342,13 @@ export function processDmCloseEvent(
     return;
   }
 
+  // Attribution: the peer must be entitled to speak for the closing identity.
+  if (!verifyAttribution(event.dmCloseReopen, sourceInstance, db)) {
+    console.warn(`[federation] Attribution mismatch in dm_close: user homeInstance=${extractDomain(event.dmCloseReopen.homeInstance)} source=${extractDomain(sourceInstance)}`);
+    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+    return;
+  }
+
   // Find the local DM channel by federatedId
   const channel = db.select({ id: schema.dmChannels.id })
     .from(schema.dmChannels)
@@ -401,6 +415,13 @@ export function processDmReopenEvent(
 ): void {
   if (!event.federatedId || !event.dmCloseReopen) {
     rejected.push({ messageId: event.messageId, reason: 'missing_dm_reopen_payload' });
+    return;
+  }
+
+  // Attribution: the peer must be entitled to speak for the reopening identity.
+  if (!verifyAttribution(event.dmCloseReopen, sourceInstance, db)) {
+    console.warn(`[federation] Attribution mismatch in dm_reopen: user homeInstance=${extractDomain(event.dmCloseReopen.homeInstance)} source=${extractDomain(sourceInstance)}`);
+    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
     return;
   }
 

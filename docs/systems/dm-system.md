@@ -424,11 +424,11 @@ The scan is **scoped** to `userDmChannelIds` (not a global `dm_channels` sweep) 
 
 ### Read-only enforcement (`isDeadOneOnOne`)
 
-A Deleted-User 1-on-1 is a **read-only archive** — you can never message a tombstoned (and possibly dead-incarnation) partner, and for a 1-on-1 an edit/delete relay would broadcast to all active peers (`getGroupDmTargetOrigins` returns `undefined`), risking mis-direction to a new incarnation. The server is the enforcement boundary:
+A Deleted-User 1-on-1 is a **read-only archive** — you can never message a tombstoned (and possibly dead-incarnation) partner, and an edit/delete relay would still be addressed to the tombstoned partner's home instance, risking mis-direction to a new incarnation. The server is the enforcement boundary:
 
 - **Helper:** `permissions.ts:isDeadOneOnOne(dmChannelId, requesterId)` → `true` when the channel is 1-on-1 (`ownerId IS NULL`) **and** every member other than the requester has `isDeleted = 1` (returns `false` for groups and when there are no other members).
 - **Applied to all three message-mutation endpoints** in `dm.ts`: `POST /api/dm/:id/messages` (after the `isDmMember` gate), `PATCH /api/dm/messages/:id`, and `DELETE /api/dm/messages/:id`. Each rejects with **`403 { error: "This user's account was deleted", code: 'recipient_deleted', statusCode: 403 }`**.
-- **Applied to DM reactions on the WebSocket path** in `ws/events.ts`: `handleReactionAdd` and `handleReactionRemove` call `isDeadOneOnOne(dmMsg.dmChannelId, userId)` after the `isDmMember` gate and **silently drop** the frame (WS has no response channel). Without this, a survivor could add/remove reactions on historical messages and the reaction would relay to **all** active peers (a 1-on-1 has no group target-origins, so `queueOutboxEvent(..., undefined)` fans out) — the exact mis-directed relay the read-only invariant exists to prevent.
+- **Applied to DM reactions on the WebSocket path** in `ws/events.ts`: `handleReactionAdd` and `handleReactionRemove` call `isDeadOneOnOne(dmMsg.dmChannelId, userId)` after the `isDmMember` gate and **silently drop** the frame (WS has no response channel). Without this, a survivor could add/remove reactions on historical messages and the reaction would relay to the tombstoned partner's home instance — the exact mis-directed relay the read-only invariant exists to prevent.
 - **Client mirror (consistency, not the boundary):** `components/chat/Message.tsx` withdraws the add-reaction affordances (hover button, emoji picker, context-menu "Add Reaction") and no-ops existing-pill toggles when the message's DM is a dead 1-on-1 (`isDeletedPartnerDm(dm, currentUser)`). Existing reactions still **display** read-only; only add/remove is disabled.
 
 ### Live update on the heal path
@@ -461,6 +461,9 @@ Users tombstoned **before** this fix already had their 1-on-1 `dm_members` row d
 - Must have content or attachments (not both empty)
 - Content max length: 4000 chars (`MAX_MESSAGE_LENGTH`)
 - Attachment ownership verified (must be unlinked and owned by caller)
+- `replyToId`, when present, must name a message in this same DM channel (`isDmReplyTargetInChannel`) -- otherwise `400 Invalid reply target` and nothing is inserted. The WebSocket `dm_message_create` path applies the same rule and answers with an `error` event instead.
+
+**Reply hydration:** every DM read path resolves `replyTo` through `fetchDmReplyToMessages(dmChannelId, rows)` (`dm.ts`), which scopes the reply lookup to the channel being read -- `getDmMessageWithUser`, `GET /api/dm/:id/messages`, `GET /api/dm/:id/search` and `GET /api/dm/:id/messages/around`. A `replyToId` pointing outside the channel hydrates as `replyTo: null` rather than surfacing the other conversation's message, so rows predating the create-time check stay contained. Inbound federated DM messages are stored with `replyToId: null` (`federation/events/dmMessages.ts`), so relay never introduces a cross-channel target.
 
 **Flow:**
 1. Insert message + link attachments in a single transaction
@@ -490,9 +493,9 @@ Users tombstoned **before** this fix already had their 1-on-1 `dm_members` row d
 3. Delete attachments, reactions, and message atomically in a transaction
 4. Clean up files from disk
 5. Broadcast `dm_message_deleted` to all members
-6. Federation: `appendMutationLog()` + `queueOutboxEvent()` with `eventType='delete'`
+6. Federation: `queueDmMessageDeleteRelay(id, dmChannelId)`
 
-**Note:** Delete federation events are queued without `targetOrigins` -- they broadcast to ALL active peers regardless of group membership. This differs from create/update which use `getGroupDmTargetOrigins()` for group DMs.
+**Note:** `queueDmMessageDeleteRelay()` (`federationOutbox.ts`) is the single source of truth for the delete relay and is shared with the WebSocket delete path (`ws/events.ts`). It appends the mutation log entry and enqueues the outbox event with `getGroupDmTargetOrigins(dmChannelId)`, so a delete reaches exactly the peers that host a participant -- the same targeting create/update use.
 
 ---
 
@@ -504,14 +507,21 @@ This section covers the DM-specific application-level relay logic. For the wire 
 
 **Function:** `federationOutbox.ts:getGroupDmTargetOrigins()`
 
+Participant-derived for every DM, 1-on-1 and group alike:
+
 ```
-Channel has ownerId?
-├── No (1-on-1)  → return undefined → broadcasts to ALL active peers
-└── Yes (group)  → query all members' homeInstances
-                  → normalize bare domains to full URLs
-                  → filter out our own origin
-                  → return unique peer origins
+query all members' homeInstances
+  → normalize bare domains to full URLs
+  → filter out our own origin
+  → return unique peer origins   (empty array when every member is local)
 ```
+
+The return type is `string[]`, never `undefined`. The distinction matters at the
+call site: `queueOutboxEvent` reads an **omitted** `targetPeerOrigins` as
+"broadcast to every peer", while `[]` is a target list that matches no peer. A
+DM whose participants are all local therefore relays nowhere. `queueOutboxEvent`
+enforces this structurally — it refuses to enqueue a `contextType: 'dm'` event
+that arrives with no target list at all, and logs the caller instead.
 
 **Function:** `federationOutbox.ts:queueDmRelay()`
 

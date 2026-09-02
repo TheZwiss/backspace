@@ -159,6 +159,10 @@ describe('POST /api/federation/peer/accept — approval token verification', () 
       origin: 'https://remote.example',
       hmacSecret: 'old-secret',
       status: 'awaiting_approval',
+      // Every row here models the admin-initiated handshake ('/peer/initiate'
+      // → 202 → awaiting_approval). Without the admin provenance the accept
+      // gate short-circuits before the token check these cases exercise.
+      initiatedBy: 'admin',
       approvalToken: token,
       createdAt: Date.now(),
     }).run();
@@ -191,6 +195,10 @@ describe('POST /api/federation/peer/accept — approval token verification', () 
       origin: 'https://remote.example',
       hmacSecret: 'old-secret',
       status: 'awaiting_approval',
+      // Every row here models the admin-initiated handshake ('/peer/initiate'
+      // → 202 → awaiting_approval). Without the admin provenance the accept
+      // gate short-circuits before the token check these cases exercise.
+      initiatedBy: 'admin',
       approvalToken: token,
       createdAt: now,
     }).run();
@@ -229,6 +237,10 @@ describe('POST /api/federation/peer/accept — approval token verification', () 
       origin: 'https://remote.example',
       hmacSecret: 'old-secret',
       status: 'awaiting_approval',
+      // Every row here models the admin-initiated handshake ('/peer/initiate'
+      // → 202 → awaiting_approval). Without the admin provenance the accept
+      // gate short-circuits before the token check these cases exercise.
+      initiatedBy: 'admin',
       approvalToken: token,
       createdAt: Date.now(),
     }).run();
@@ -269,6 +281,10 @@ describe('POST /api/federation/peer/accept — approval token verification', () 
       origin: 'https://remote.example',
       hmacSecret: 'old-secret',
       status: 'awaiting_approval',
+      // Every row here models the admin-initiated handshake ('/peer/initiate'
+      // → 202 → awaiting_approval). Without the admin provenance the accept
+      // gate short-circuits before the token check these cases exercise.
+      initiatedBy: 'admin',
       approvalToken: 'd'.repeat(64),
       createdAt: Date.now(),
     }).run();
@@ -296,6 +312,10 @@ describe('POST /api/federation/peer/accept — approval token verification', () 
       origin: 'https://remote.example',
       hmacSecret: 'old-secret',
       status: 'awaiting_approval',
+      // Every row here models the admin-initiated handshake ('/peer/initiate'
+      // → 202 → awaiting_approval). Without the admin provenance the accept
+      // gate short-circuits before the token check these cases exercise.
+      initiatedBy: 'admin',
       approvalToken: null,
       createdAt: Date.now(),
     }).run();
@@ -322,6 +342,10 @@ describe('POST /api/federation/peer/accept — approval token verification', () 
       origin: 'https://remote.example',
       hmacSecret: 'old-secret',
       status: 'awaiting_approval',
+      // Every row here models the admin-initiated handshake ('/peer/initiate'
+      // → 202 → awaiting_approval). Without the admin provenance the accept
+      // gate short-circuits before the token check these cases exercise.
+      initiatedBy: 'admin',
       approvalToken: 'f'.repeat(64),
       createdAt: Date.now(),
     }).run();

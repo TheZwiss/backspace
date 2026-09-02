@@ -105,7 +105,14 @@ packages/
   server/   — Fastify server, DB schema, routes, WS handler, federation, utils
   web/      — React SPA, stores, hooks, components (layout/chat/voice/modals/ui), platform layer
   desktop/  — Electron wrapper (main, preload, activity detector, keybind manager)
+scripts/
+  metrics/  — @backspace/metrics: repo traffic collector + dashboard bundler (workspace package)
+site/
+  index.html    — landing page (GitHub Pages)
+  insights/     — the metrics dashboard: one static page + vendored uPlot
 ```
+
+The metrics subsystem spans `scripts/metrics` (collector, bundler) and `site/insights` (the static dashboard the bundler feeds). See docs/systems/metrics.md.
 
 Data: `packages/server/data/` (backspace.db + uploads/)
 
@@ -156,11 +163,14 @@ Before modifying any subsystem, read its spec from `docs/systems/`. After making
 | [embeds.md](docs/systems/embeds.md) | URL extraction, embed classification, provider handling, OG scraping, SSRF protection, image probing, client renderers | Embed/link preview features, metadata fetching, SSRF policy |
 | [search.md](docs/systems/search.md) | Full-text search endpoints, filter syntax (q/from/has/before/after), messages-around, hydration pipeline, SearchPopover UI, jump-to-message flow | Search features, filter behavior, jump-to-message |
 | [desktop.md](docs/systems/desktop.md) | Electron main process, preload bridge, activity detection, global keybind manager, auto-update, build system (afterPack hook) | Desktop app, Electron, activity detection, keybinds, builds |
+| [desktop-security.md](docs/systems/desktop-security.md) | Electron webPreferences posture, security fuses (RunAsNode/EnableNodeCliInspectArguments/OnlyLoadAppFromAsar), asar-integrity posture and its ad-hoc-signing limits, `will-navigate` top-level navigation policy, code-signing/notarization procurement steps | Electron hardening work, fuses, navigation security, desktop code-signing |
 | [mobile-ui.md](docs/systems/mobile-ui.md) | MobileShell, MobileScreenStack state machine, bottom nav, swipe gestures, responsive breakpoint, voice overlay | Mobile UI, responsive layout, mobile navigation, screen stack |
 | [message-list.md](docs/systems/message-list.md) | Auto-scroll model, position memory (session-only), embed renderer dimension contract, known limitations | Touching MessageList.tsx, scroll behavior, embed renderers, position restore |
 | [deployment.md](docs/systems/deployment.md) | Hosting pipeline: Docker/Caddy build, admin bootstrap, DB backup/restore, image pinning, env vars | Any deploy, backup/restore, or hosting change |
 | [activity-presence.md](docs/systems/activity-presence.md) | Presence states, rich activities, activity types/priorities, broadcast pipeline, visibility control, ActivityCard/Panel | Presence, rich activities, activity display, status management |
 | [security-scanning.md](docs/systems/security-scanning.md) | CI security pipeline: Dependabot, CodeQL SAST, gitleaks, OSV-Scanner, Trivy (config/license; image scan in a later plan), OpenSSF Scorecard, SHA-pinning, harden-runner, tiered enforcement policy, maintainer settings checklist | Any CI security work, adding/changing scanners, enabling enforcement, supply-chain hardening |
+| [web-security.md](docs/systems/web-security.md) | Content Security Policy construction and rollout state, the CORS posture and why the origin is reflected, security-header ownership between Caddy and the app, the route-level policy override for served files | Any CSP, CORS or security-header work; before "tightening" CORS |
+| [metrics.md](docs/systems/metrics.md) | Traffic archive: daily collection into the `metrics-data` branch, CSV/NDJSON schemas, upsert and write-if-absent semantics, backfill, the 202 stats problem, PAT scopes, the 60-day schedule hazard; the `site/insights` dashboard: `data.json` contract, 2 MB bundle budget and weekly downsampling, uPlot vendoring, Pages deploy wiring, empty-state behaviour | Any repo-analytics or dashboard work, changing collected series, changing the bundle contract, debugging a stalled collector or a red deploy |
 
 ---
 

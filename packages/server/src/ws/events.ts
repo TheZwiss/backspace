@@ -5,7 +5,8 @@ import { generateSnowflake } from '../utils/snowflake.js';
 import { connectionManager } from './handler.js';
 import type { VoiceRoom, DmRoomMeta, SpaceRoomMeta } from './handler.js';
 import { isMember, getChannelSpaceId, isDmMember, isDeadOneOnOne, hasPermission, computePermissions, PermissionBits } from '../utils/permissions.js';
-import { broadcastDmMessage, getDmMessageWithUser } from '../routes/dm.js';
+import { broadcastDmMessage, getDmMessageWithUser, isDmReplyTargetInChannel } from '../routes/dm.js';
+import { fetchReplyToMessages, isReplyTargetInChannel } from '../routes/messages.js';
 import { MAX_MESSAGE_LENGTH, type MessageWithUser, type Attachment, type DmMessageWithUser, type Embed, type Activity, type ActivityType, type ActivityTimestamps, type ActivityAssets, type ServerEvent, type DmCallUndeliverableFailure, type DmCallUndeliverableReason } from '@backspace/shared';
 import type { CallRelayResult, CallFanoutFailure } from '../utils/federationOutbox.js';
 import { mapCallReasonToEventReason } from '../utils/federationOutbox.js';
@@ -14,8 +15,8 @@ import { sanitizeUser } from '../utils/sanitize.js';
 import { collectProfileBroadcastTargetIds } from '../utils/userDeletion.js';
 import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
 import { resolveEmbeds, reResolveEmbeds, embedRowToEmbed } from '../utils/embedResolver.js';
-import { appendMutationLog, queueOutboxEvent, queueDmRelay, getGroupDmTargetOrigins, sendCallRelay, computeFederatedId, sendTypingRelay, queueReadStateRelay } from '../utils/federationOutbox.js';
-import { getOurOrigin } from '../utils/federationAuth.js';
+import { appendMutationLog, queueOutboxEvent, queueDmRelay, queueDmMessageDeleteRelay, getGroupDmTargetOrigins, sendCallRelay, computeFederatedId, sendTypingRelay, queueReadStateRelay } from '../utils/federationOutbox.js';
+import { canonicalizeHomeInstance, getOurOrigin, normalizeOriginForCompare } from '../utils/federationAuth.js';
 import { generateFederatedCallToken } from '../routes/livekit.js';
 import { config } from '../config.js';
 import crypto from 'node:crypto';
@@ -96,28 +97,12 @@ function getMessageWithUser(messageId: string): MessageWithUser | null {
     .where(eq(schema.embeds.messageId, messageId))
     .all();
 
+  // Reply targets are confined to the message's own channel. This is the same
+  // helper the REST read paths use, so both stay on one rule.
   let replyTo: MessageWithUser | null = null;
   if (message.replyToId) {
-    // Simple fetch for replyTo (one level deep to avoid recursion loops)
-    const replyMsg = db.select().from(schema.messages).where(eq(schema.messages.id, message.replyToId)).get();
-    if (replyMsg) {
-      const replyUser = db.select().from(schema.users).where(eq(schema.users.id, replyMsg.userId)).get();
-      if (replyUser) {
-        replyTo = {
-          id: replyMsg.id,
-          channelId: replyMsg.channelId,
-          userId: replyMsg.userId,
-          replyToId: replyMsg.replyToId,
-          content: replyMsg.content,
-          editedAt: replyMsg.editedAt,
-          createdAt: replyMsg.createdAt,
-          user: sanitizeUser(replyUser),
-          attachments: [], // Don't fetch attachments for replies to save bandwidth
-          embeds: [],
-          reactions: [], // Don't fetch reactions for replies
-        };
-      }
-    }
+    const replyToMap = fetchReplyToMessages(message.channelId, [message]);
+    replyTo = replyToMap.get(message.replyToId) ?? null;
   }
 
   return {
@@ -267,6 +252,12 @@ function handleMessageCreate(event: Record<string, unknown>, userId: string): vo
 
   if (!hasPermission(userId, spaceId, PermissionBits.SEND_MESSAGES, channelId)) {
     connectionManager.sendToUser(userId, { type: 'error', message: 'Missing SEND_MESSAGES permission' });
+    return;
+  }
+
+  // A reply may only target a message in the channel it is posted into.
+  if (replyToId && !isReplyTargetInChannel(channelId, replyToId)) {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'Invalid reply target' });
     return;
   }
 
@@ -862,6 +853,12 @@ function handleDmMessageCreate(event: Record<string, unknown>, userId: string): 
     return;
   }
 
+  // A reply may only target a message in the channel it is posted into.
+  if (replyToId && !isDmReplyTargetInChannel(dmChannelId, replyToId)) {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'Invalid reply target' });
+    return;
+  }
+
   const db = getDb();
 
   // Verify attachment ownership before linking
@@ -1082,9 +1079,7 @@ function handleDmMessageDelete(event: Record<string, unknown>, userId: string): 
   }
 
   // Federation: log mutation and queue for relay
-  appendMutationLog(messageId, msg.dmChannelId, 'delete');
-  const targetOrigins = getGroupDmTargetOrigins(msg.dmChannelId);
-  queueOutboxEvent(messageId, msg.dmChannelId, 'delete', JSON.stringify({ deleted: true }), targetOrigins);
+  queueDmMessageDeleteRelay(messageId, msg.dmChannelId);
 }
 
 // ─── Reaction Handlers ─────────────────────────────────────────────────────
@@ -1842,25 +1837,31 @@ async function sendFederatedCallStart(
       .run();
   }
 
-  // Classify members relative to this instance.
+  // Classify members relative to this instance. `homeInstance` is stored in two
+  // shapes (bare host and full URL), so every comparison goes through
+  // normalizeOriginForCompare; the peer-facing origin is canonicalized.
+  const ourOriginKey = normalizeOriginForCompare(ourOrigin);
   const remoteMembers = members.filter(m => {
-    if (!m.homeInstance) return false;
-    const normalized = m.homeInstance.startsWith('http') ? m.homeInstance : `https://${m.homeInstance}`;
-    return normalized !== ourOrigin;
+    const key = normalizeOriginForCompare(m.homeInstance);
+    return key !== null && key !== ourOriginKey;
   });
+
+  // A purely local call has no federated recipient. Relaying it anyway would
+  // hand every peered instance the call's existence, its participant roster and
+  // room credentials for a conversation none of them hosts a party to.
+  if (remoteMembers.length === 0) return;
+
   const localNonCallerMembers = members.filter(m => {
     if (m.userId === callerId) return false;
-    const home = m.homeInstance
-      ? (m.homeInstance.startsWith('http') ? m.homeInstance : `https://${m.homeInstance}`)
-      : ourOrigin;
-    return home === ourOrigin;
+    return (normalizeOriginForCompare(m.homeInstance) ?? ourOriginKey) === ourOriginKey;
   });
   const hasConnectedLocalRingee = localNonCallerMembers.some(m =>
     connectionManager.isUserOnline(m.userId),
   );
 
   // ─── LiveKit pre-flight ────────────────────────────────────────────────────
-  if ((!config.livekit.apiKey || !config.livekit.apiSecret) && remoteMembers.length > 0) {
+  // Reached only with at least one remote member, so a missing key is fatal here.
+  if (!config.livekit.apiKey || !config.livekit.apiSecret) {
     console.warn('[federation] Cannot start federated call: LiveKit not configured');
     emitUndeliverableAndMaybeDestroy({
       callerId,
@@ -1884,54 +1885,65 @@ async function sendFederatedCallStart(
     displayName: m.displayName || m.username,
   }));
 
-  // Generate tokens for ALL members upfront
-  const allTokens: Record<string, string> = {};
-  for (const m of members) {
-    const homeUserId = m.homeUserId || m.userId;
-    const name = m.displayName || m.username;
-    allTokens[homeUserId] = await generateFederatedCallToken(federatedId, homeUserId, name);
-  }
-
   const callerHomeUserId = members.find(m => m.userId === callerId)?.homeUserId || callerId;
 
-  // Build the relay event template (reused for all peers)
-  const buildRelayEvent = () => ({
-    eventType: 'dm_call_start' as const,
-    messageId: generateSnowflake(),
-    encryptionVersion: 0 as const,
-    timestamp: Date.now(),
-    federatedId,
-    call: {
-      livekitUrl,
-      tokens: allTokens,
-      caller: {
-        homeUserId: callerHomeUserId,
-        homeInstance: ourOrigin,
-        displayName: callerName,
-      },
-      participants,
-    },
-  });
-
-  // Group remote members by home instance (targeted peers)
-  const targetedPeers = new Map<string, string[]>();
+  // Group remote members by the instance that homes them. Each bucket is the
+  // exact set of identities its peer is entitled to act for.
+  const targetedPeers = new Map<string, typeof members>();
   for (const m of remoteMembers) {
-    const origin = m.homeInstance!.startsWith('http') ? m.homeInstance! : `https://${m.homeInstance!}`;
+    const origin = canonicalizeHomeInstance(m.homeInstance);
+    if (!origin) continue;
     const bucket = targetedPeers.get(origin) ?? [];
-    bucket.push(m.userId);
+    bucket.push(m);
     targetedPeers.set(origin, bucket);
   }
 
-  // Single query for all peers — derives both active-peer list and label map
+  /**
+   * Build the `dm_call_start` payload for one recipient peer.
+   *
+   * A LiveKit token is a bearer credential: it grants `roomJoin` + `canPublish`
+   * on the call room to whoever holds it, under the identity it was minted for.
+   * So a peer is only ever handed tokens for the members it actually homes —
+   * never the caller's (both inbound paths skip the caller), never a local
+   * member's, never another peer's. Keying the map per recipient also removes
+   * the cross-instance `homeUserId` ambiguity of a single shared map.
+   *
+   * `participants` is the non-secret roster and stays complete: the recipient
+   * needs it for Path B identity matching when the DM has no local row yet.
+   */
+  const buildRelayEvent = async (recipients: typeof members) => {
+    const tokens: Record<string, string> = {};
+    for (const m of recipients) {
+      const homeUserId = m.homeUserId || m.userId;
+      const name = m.displayName || m.username;
+      tokens[homeUserId] = await generateFederatedCallToken(federatedId, homeUserId, name);
+    }
+    return {
+      eventType: 'dm_call_start' as const,
+      messageId: generateSnowflake(),
+      encryptionVersion: 0 as const,
+      timestamp: Date.now(),
+      federatedId,
+      call: {
+        livekitUrl,
+        tokens,
+        caller: {
+          homeUserId: callerHomeUserId,
+          homeInstance: ourOrigin,
+          displayName: callerName,
+        },
+        participants,
+      },
+    };
+  };
+
+  // Peer labels for the undeliverable surface.
   const peerRows = db.select({
     origin: schema.federationPeers.origin,
     instanceName: schema.federationPeers.instanceName,
-    status: schema.federationPeers.status,
   })
     .from(schema.federationPeers)
     .all();
-
-  const allPeers = peerRows.filter(r => r.status === 'active');
 
   const peerLabelByOrigin = new Map<string, string>();
   for (const row of peerRows) {
@@ -1944,8 +1956,8 @@ async function sendFederatedCallStart(
   //   ok=true, messageId IN undeliverable     → new: no_recipient failure (#18)
   //   ok=false                                → existing failure reasons
   const targetedResults = await Promise.all(
-    Array.from(targetedPeers.keys()).map(async peerOrigin => {
-      const relayEvent = buildRelayEvent();
+    Array.from(targetedPeers.entries()).map(async ([peerOrigin, recipients]) => {
+      const relayEvent = await buildRelayEvent(recipients);
       const result = await sendCallRelay(peerOrigin, [relayEvent]);
       if (result.ok) {
         if (result.undeliverable.includes(relayEvent.messageId)) {
@@ -1965,17 +1977,6 @@ async function sendFederatedCallStart(
     }),
   );
 
-  // ─── All-peers broadcast: fire-and-forget; failures NOT surfaced ───────────
-  for (const peer of allPeers) {
-    if (targetedPeers.has(peer.origin)) continue;
-    if (peer.origin === ourOrigin) continue;
-    sendCallRelay(peer.origin, [buildRelayEvent()]).then(result => {
-      if (!result.ok) {
-        console.debug(`[federation] All-peers dm_call_start to ${peer.origin}: ${result.reason} ${result.error}`);
-      }
-    }).catch(err => console.warn('[federation] all-peers broadcast threw:', err));
-  }
-
   // ─── Aggregate failures → dm_call_undeliverable ───────────────────────────
   const failedTargeted = targetedResults.filter(
     (r): r is Extract<typeof r, { ok: false }> => !r.ok,
@@ -1986,7 +1987,7 @@ async function sendFederatedCallStart(
   const plausibleRecipientRemains = anyTargetedSuccess || hasConnectedLocalRingee;
 
   const failures: DmCallUndeliverableFailure[] = failedTargeted.map(r => {
-    const affectedUserIds = targetedPeers.get(r.origin) ?? [];
+    const affectedUserIds = (targetedPeers.get(r.origin) ?? []).map(m => m.userId);
     return {
       reason: r.reason,
       peerOrigin: r.origin,

@@ -27,3 +27,17 @@
 - Source code and documentation: https://github.com/TheZwiss/backspace
 - Comparison with Discord, Revolt, Spacebar, Matrix, and Mumble: https://github.com/TheZwiss/backspace/blob/main/docs/comparison.md
 - License: https://github.com/TheZwiss/backspace/blob/main/LICENSE
+- Repository insights, charted (traffic, growth, and referral figures, collected daily): https://thezwiss.github.io/backspace/insights/
+- The same archive as plain HTML tables, no JavaScript required: https://thezwiss.github.io/backspace/insights/data/
+- The same archive as one machine-readable JSON file: https://thezwiss.github.io/backspace/insights/data.json
+- Sitemap: https://thezwiss.github.io/backspace/sitemap.xml
+
+## Repository metrics archive
+
+- What it is: a public, daily archive of this repository's GitHub traffic and growth. GitHub discards repository traffic data after 14 days; a scheduled job records it once a day into a public git branch, so the history is retained indefinitely.
+- Series recorded: daily page views and unique visitors, daily clones and unique cloners, cumulative stars, forks and contributors, watchers, open issues, release asset downloads, this repository's own daily workflow-run count, and trailing-14-day referring sites and popular paths.
+- Clone counts include this repository's own CI: GitHub counts every `actions/checkout` in the clone statistics, so on a heavy build day the clone figure measures the build pipeline more than it measures people. The workflow-run series is published alongside it for exactly that reason. The two are never combined into a corrected figure.
+- Provenance: every figure is measured through the GitHub REST API. Nothing is estimated, modelled, or interpolated.
+- Absent versus zero: a value that was never measured is recorded as absent and rendered as a gap, never as a zero. A measured zero is recorded and rendered as zero. The two are never conflated, so a gap in a chart means "not measured" and not "fell to nothing".
+- Release downloads are reported split: installers and archives separately from update-check traffic, because GitHub counts an electron-updater feed file the same as an installer and every installed client fetches that feed on every update check.
+- Licence: the data is published under AGPL-3.0 along with the project, and is free to read, cite, and reuse with attribution.

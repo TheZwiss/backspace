@@ -1,0 +1,30 @@
+{
+  // Type-checks the federation e2e suites and the shared test helpers, which the
+  // main tsconfig does not cover (it includes only `src/**/*`, because that is
+  // what `pnpm build` emits). Run via `pnpm --filter @backspace/server typecheck:e2e`.
+  //
+  // The two live-server security suites (cors-posture, http-security-headers)
+  // are listed explicitly rather than by a `test/*.test.ts` glob, because a
+  // glob would also pull in the two excluded files described below.
+  //
+  // Scope note: the pre-existing `test/federation-identity-deletion.test.ts` and
+  // `test/federation-by-home-id.test.ts` are deliberately NOT included. They were
+  // written before anything type-checked `test/` and carry a backlog of strict
+  // errors (mostly un-narrowed `await res.json()` results). Fixing them is a
+  // worthwhile cleanup but an unrelated change; widening this include is the
+  // single edit that pulls them in once they are green.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "."
+  },
+  "include": [
+    "src/**/*",
+    "test/helpers/**/*",
+    "test/setup-env.ts",
+    "test/federation-e2e-*.test.ts",
+    "test/federation-handshake-desync.test.ts",
+    "test/cors-posture.test.ts",
+    "test/http-security-headers.test.ts"
+  ]
+}

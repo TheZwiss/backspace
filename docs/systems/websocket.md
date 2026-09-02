@@ -22,7 +22,7 @@ Source: `packages/server/src/ws/handler.ts`, `packages/server/src/ws/events.ts`
 ### Messages
 | type | fields | notes |
 |------|--------|-------|
-| `message_create` | channelId, content, replyToId? | SEND_MESSAGES perm |
+| `message_create` | channelId, content, replyToId? | SEND_MESSAGES perm; `replyToId` must name a message in the same channel |
 | `message_edit` | messageId, content | author only |
 | `message_delete` | messageId | author or MANAGE_MESSAGES |
 | `typing_start` | channelId | 5s auto-expire |
@@ -30,7 +30,7 @@ Source: `packages/server/src/ws/handler.ts`, `packages/server/src/ws/events.ts`
 ### DM Messages
 | type | fields | notes |
 |------|--------|-------|
-| `dm_message_create` | dmChannelId, content?, attachments?, replyToId? | member |
+| `dm_message_create` | dmChannelId, content?, attachments?, replyToId? | member; `replyToId` must name a message in the same DM channel |
 | `dm_message_edit` | messageId, content | author only |
 | `dm_message_delete` | messageId | author only |
 | `dm_typing_start` | dmChannelId | 5s auto-expire |
@@ -97,12 +97,18 @@ Source: `packages/server/src/ws/handler.ts`, `packages/server/src/ws/events.ts`
 | type | fields | scope |
 |------|--------|-------|
 | `message_created` | message: MessageWithUser | channel (VIEW_CHANNEL) |
-| `message_updated` | message: MessageWithUser | channel |
-| `message_deleted` | messageId, channelId | channel |
-| `typing` | channelId, userId, username | channel (excludes sender) |
-| `reaction_added` | messageId, reaction (includes user) | channel |
-| `reaction_removed` | messageId, userId, emoji | channel |
-| `embeds_resolved` | messageId, channelId, embeds[] | channel |
+| `message_updated` | message: MessageWithUser | channel (VIEW_CHANNEL) |
+| `message_deleted` | messageId, channelId | channel (VIEW_CHANNEL) |
+| `typing` | channelId, userId, username | channel (VIEW_CHANNEL, excludes sender) |
+| `reaction_added` | messageId, reaction (includes user) | channel (VIEW_CHANNEL) |
+| `reaction_removed` | messageId, userId, emoji | channel (VIEW_CHANNEL) |
+| `embeds_resolved` | messageId, channelId, embeds[] | channel (VIEW_CHANNEL) |
+
+In a space channel every event above is emitted with
+`connectionManager.sendToChannel`, from the REST route and from the WebSocket
+handler alike, so both paths reach the same audience. (`reaction_added` and
+`reaction_removed` are reused on the DM path, where they go out with
+`sendToDmMembers`.) See permissions.md, "Broadcast audience".
 
 ### DM Messages
 | type | fields | scope |

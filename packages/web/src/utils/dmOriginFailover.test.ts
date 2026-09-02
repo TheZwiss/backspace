@@ -8,9 +8,6 @@ vi.mock('../hooks/useWebSocket', () => ({
   disconnectInstance: vi.fn(),
   disconnectAllRemote: vi.fn(),
 }));
-vi.mock('../utils/federationOps', () => ({
-  clearPasswordSyncTimers: vi.fn(),
-}));
 
 // Stub AudioManager to avoid AudioWorkletNode reference error in jsdom.
 vi.mock('../audio/AudioManager', () => ({

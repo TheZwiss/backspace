@@ -1,0 +1,1 @@
+ALTER TABLE `federation_peers` ADD `initiated_by` text DEFAULT 'auto' NOT NULL;

@@ -2,6 +2,22 @@
 # DOMAIN is read from the container environment (set via docker-compose.yml)
 
 {$DOMAIN} {
+    # Security header ownership, so the two layers never fight:
+    #
+    #   Caddy owns Strict-Transport-Security. Only the TLS terminator knows
+    #   HTTPS is genuinely in play, and an app that emitted HSTS would be wrong
+    #   on a plain-HTTP LAN deployment.
+    #
+    #   The app owns everything else, including the Content Security Policy,
+    #   which it builds from instance config at boot. Do not set a CSP here:
+    #   two policies on one response intersect, and a static copy in this file
+    #   would go stale against the dynamic one and block voice or embeds.
+    #
+    # See docs/systems/web-security.md.
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    }
+
     # LiveKit signaling — strip /livekit prefix, forward to host-mode LiveKit
     handle_path /livekit/* {
         reverse_proxy host.docker.internal:7880

@@ -1,2 +1,6 @@
 packages:
   - "packages/*"
+  # Repo tooling that needs typecheck + tests, listed explicitly rather than as
+  # `scripts/*` so unrelated one-off scripts (gen-icons.mjs) stay out of the
+  # workspace. See docs/systems/metrics.md.
+  - "scripts/metrics"

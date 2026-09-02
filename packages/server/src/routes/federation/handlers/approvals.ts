@@ -127,6 +127,7 @@ export async function handleInboundApprove(
     instanceName: approvalReq.instanceName,
     hmacSecret,
     status: 'pending',
+    initiatedBy: 'admin',
     createdAt: now,
   }).run();
 
@@ -286,6 +287,7 @@ export async function handleOutboundApprove(
     instanceName: approvalReq.instanceName,
     hmacSecret,
     status: 'pending',
+    initiatedBy: 'admin',
     createdAt: now,
   }).run();
 
@@ -502,6 +504,7 @@ export async function handleInboundDeny(
       instanceName: approvalReq.instanceName,
       hmacSecret: approvalReq.hmacSecret,
       status: 'rejected',
+      initiatedBy: 'admin',
       createdAt: Date.now(),
     }).run();
   } else if (existingPeer.status !== 'active') {

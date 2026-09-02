@@ -67,7 +67,25 @@ jobs:
       - name: Typecheck desktop
         run: pnpm --filter @backspace/desktop build:ts
 
+      # `pnpm build` runs the server's `tsc`, whose tsconfig includes only
+      # `src/**/*` — so nothing in packages/server/test is ever type-checked by
+      # the steps above. This covers the federation e2e suites and the shared
+      # test helpers they boot instances with. See packages/server/tsconfig.e2e.json
+      # for why the older test/ files are not in its include yet.
+      - name: Typecheck server e2e suites
+        run: pnpm --filter @backspace/server typecheck:e2e
+
       # Runs every package's `test` script (server, web, desktop) via vitest.
+      #
+      # This includes the two-instance federation e2e suites
+      # (packages/server/test/federation-e2e-*.test.ts), which spawn real server
+      # processes on ephemeral ports, peer them over the real HMAC handshake and
+      # relay real events between them. They are deliberately part of THIS job
+      # rather than a job of their own: branch protection requires the
+      # "Build & test" context (produced by the aggregate gate below), so a
+      # separate job would run on PRs without being able to block a merge — no
+      # use for a suite whose whole purpose is gating security fixes. They need
+      # no Docker, Caddy or LiveKit, and add roughly a minute of wall clock.
       - name: Test
         run: pnpm -r test
 

@@ -291,7 +291,7 @@ export function JoinSpaceModal() {
                 autoComplete="current-password"
               />
               <div className="text-xs text-txt-tertiary mt-1">
-                <Trans i18nKey="ui.JoinSpace.yourPasswordIsVerifiedLocallyThenUsedTo">Your password is verified locally, then used to create or access your account on the remote instance.</Trans>
+                {translate('ui.JoinSpace.yourPasswordIsVerifiedLocallyThenUsedTo', { host: hostDisplay })}
               </div>
             </div>
           </div>
@@ -333,7 +333,7 @@ export function JoinSpaceModal() {
       {phase === "fallback" && (
         <form onSubmit={handleFallbackLogin}>
           <div className="mb-3 p-2 bg-accent-amber/10 border border-accent-amber/30 rounded text-xs text-accent-amber">
-            <Trans i18nKey="ui.JoinSpace.anAccountAlreadyExistsOn">An account already exists on</Trans> {hostDisplay} <Trans i18nKey="ui.JoinSpace.withADifferentPasswordEnterTheCredentialsYou">with a different password. Enter the credentials you used on that instance.</Trans>
+            {translate('ui.JoinSpace.anAccountAlreadyExistsOn', { host: hostDisplay })}
           </div>
           <div className="mb-4 space-y-3">
             <div>

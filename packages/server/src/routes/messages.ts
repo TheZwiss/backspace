@@ -57,10 +57,26 @@ export function fetchReactionsForMessages(messageIds: string[]): Map<string, Rea
 }
 
 /**
- * Fetch reply-to messages for a set of message IDs.
- * Returns a map from messageId to its reply parent MessageWithUser.
+ * Batch-fetch the reply targets for a set of channel messages, confined to one channel.
+ *
+ * A reply target only ever names a message in the same channel, so the lookup is
+ * scoped to `channelId`. That scoping is what keeps hydration from surfacing a
+ * message from a channel the reader may not have access to, including for rows
+ * written before the create-time check existed.
+ *
+ * The scope has to be the channel rather than the reader's permissions: one
+ * hydrated message is fanned out by `sendToChannel` to an audience whose members
+ * hold different permissions, so there is no single reader to resolve against.
+ * Confining the target to the message's own channel puts the reply preview under
+ * exactly the VIEW_CHANNEL gate that already guards the message carrying it.
+ *
+ * Returns a map from reply-target id to its hydration. Embeds and reactions are
+ * left empty because reply previews do not render them.
  */
-export function fetchReplyToMessages(messages: (typeof schema.messages.$inferSelect)[]): Map<string, MessageWithUser> {
+export function fetchReplyToMessages(
+  channelId: string,
+  messages: (typeof schema.messages.$inferSelect)[],
+): Map<string, MessageWithUser> {
   const replyToIds = messages
     .map(m => m.replyToId)
     .filter((id): id is string => id !== null && id !== undefined);
@@ -71,7 +87,10 @@ export function fetchReplyToMessages(messages: (typeof schema.messages.$inferSel
   const uniqueReplyIds = [...new Set(replyToIds)];
   const replyMessages = db.select()
     .from(schema.messages)
-    .where(inArray(schema.messages.id, uniqueReplyIds))
+    .where(and(
+      inArray(schema.messages.id, uniqueReplyIds),
+      eq(schema.messages.channelId, channelId),
+    ))
     .all();
 
   // Fetch users for reply messages
@@ -127,6 +146,27 @@ export function fetchReplyToMessages(messages: (typeof schema.messages.$inferSel
     });
   }
   return map;
+}
+
+/**
+ * True when `replyToId` names an existing message inside `channelId`.
+ *
+ * Used by both channel message-create paths (REST and WebSocket) so a reply can
+ * only ever point at the channel it is posted into. Author permissions are not
+ * enough on their own: an author who may read a restricted channel would
+ * otherwise be able to pull one of its messages into a channel with a wider
+ * audience.
+ */
+export function isReplyTargetInChannel(channelId: string, replyToId: string): boolean {
+  const db = getDb();
+  const target = db.select({ id: schema.messages.id })
+    .from(schema.messages)
+    .where(and(
+      eq(schema.messages.id, replyToId),
+      eq(schema.messages.channelId, channelId),
+    ))
+    .get();
+  return target !== undefined;
 }
 
 export function buildMessageWithUser(
@@ -243,8 +283,8 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
     // Batch fetch embeds for all messages
     const embedMap = fetchEmbedsForMessages(messageIds);
 
-    // Batch fetch reply-to messages
-    const replyToMap = fetchReplyToMessages(messageRows);
+    // Batch fetch reply-to messages, confined to this channel
+    const replyToMap = fetchReplyToMessages(id, messageRows);
 
     const messages: MessageWithUser[] = messageRows
       .map(m => {
@@ -296,6 +336,11 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
 
     if (content && content.length > MAX_MESSAGE_LENGTH) {
       return reply.code(400).send({ error: `Message content must be ${MAX_MESSAGE_LENGTH} characters or less`, statusCode: 400 });
+    }
+
+    // A reply may only target a message in the channel it is posted into.
+    if (replyToId && !isReplyTargetInChannel(id, replyToId)) {
+      return reply.code(400).send({ error: 'Invalid reply target', statusCode: 400 });
     }
 
     const db = getDb();
@@ -352,10 +397,11 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(500).send({ error: 'Failed to create message', statusCode: 500 });
     }
 
-    // Hydrate the reply-to message if present
+    // Hydrate the reply-to message if present. Reply targets are confined to
+    // the message's own channel.
     let replyTo: MessageWithUser | null = null;
     if (message.replyToId) {
-      const replyToMap = fetchReplyToMessages([message]);
+      const replyToMap = fetchReplyToMessages(message.channelId, [message]);
       replyTo = replyToMap.get(message.replyToId) ?? null;
     }
 
@@ -429,16 +475,19 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
     const reactions = reactionsMap.get(id) ?? [];
     let replyTo: MessageWithUser | null = null;
     if (updatedMessage.replyToId) {
-      const replyToMap = fetchReplyToMessages([updatedMessage]);
+      const replyToMap = fetchReplyToMessages(updatedMessage.channelId, [updatedMessage]);
       replyTo = replyToMap.get(updatedMessage.replyToId) ?? null;
     }
 
     const messageWithUser = buildMessageWithUser(updatedMessage, user, attachmentRows, reactions, replyTo, []);
 
-    // Broadcast edit (with empty embeds — new ones arrive via embeds_resolved)
+    // Broadcast edit (with empty embeds — new ones arrive via embeds_resolved).
+    // The audience is the channel, not the space: the payload carries the full
+    // message, so it goes to the same VIEW_CHANNEL holders that received the
+    // original message_created. Matches the WebSocket message_edit handler.
     const spaceId = getChannelSpaceId(message.channelId);
     if (spaceId) {
-      connectionManager.sendToSpace(spaceId, {
+      connectionManager.sendToChannel(spaceId, message.channelId, {
         type: 'message_updated',
         message: messageWithUser,
       });
@@ -491,8 +540,10 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
     // Clean up files from disk after transaction commits
     deleteAttachmentFiles(attachmentRows);
 
-    // Broadcast deletion
-    connectionManager.sendToSpace(spaceId, {
+    // Broadcast deletion to the channel's audience. A member without
+    // VIEW_CHANNEL never saw the message and must not learn that it existed.
+    // Matches the WebSocket message_delete handler.
+    connectionManager.sendToChannel(spaceId, message.channelId, {
       type: 'message_deleted',
       messageId: id,
       channelId: message.channelId,

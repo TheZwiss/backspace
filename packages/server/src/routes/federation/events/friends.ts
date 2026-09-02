@@ -23,7 +23,7 @@ export async function processFriendRequestCreateEvent(
   const { from, to } = event.friendship;
 
   // Attribution: sender must belong to source instance (FED-010)
-  if (!verifyAttribution(from.homeInstance, sourceInstance)) {
+  if (!verifyAttribution(from, sourceInstance, db)) {
     console.warn(`[federation] Attribution mismatch in friend_request_create: from homeInstance=${extractDomain(from.homeInstance)} source=${extractDomain(sourceInstance)}`);
     rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
     return;
@@ -146,7 +146,7 @@ export function processFriendRequestUpdateEvent(
   const { from, to, status } = event.friendship;
 
   // Attribution: recipient (acceptor/decliner) must belong to source instance (FED-010)
-  if (!verifyAttribution(to.homeInstance, sourceInstance)) {
+  if (!verifyAttribution(to, sourceInstance, db)) {
     console.warn(`[federation] Attribution mismatch in friend_request_update: to homeInstance=${extractDomain(to.homeInstance)} source=${extractDomain(sourceInstance)}`);
     rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
     return;
@@ -229,7 +229,7 @@ export function processFriendRequestCancelEvent(
   const { from, to } = event.friendship;
 
   // Attribution: sender must belong to source instance (FED-010)
-  if (!verifyAttribution(from.homeInstance, sourceInstance)) {
+  if (!verifyAttribution(from, sourceInstance, db)) {
     console.warn(`[federation] Attribution mismatch in friend_request_cancel: from homeInstance=${extractDomain(from.homeInstance)} source=${extractDomain(sourceInstance)}`);
     rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
     return;
@@ -295,7 +295,7 @@ export async function processFriendAddEvent(
   const { from, to } = event.friendship;
 
   // Attribution: acceptor must belong to source instance (FED-010)
-  if (!verifyAttribution(to.homeInstance, sourceInstance)) {
+  if (!verifyAttribution(to, sourceInstance, db)) {
     console.warn(`[federation] Attribution mismatch in friend_add: to homeInstance=${extractDomain(to.homeInstance)} source=${extractDomain(sourceInstance)}`);
     rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
     return;
@@ -392,7 +392,7 @@ export function processFriendRemoveEvent(
   const { from, to } = event.friendship;
 
   // Attribution: at least one side must belong to source instance (FED-010)
-  if (!verifyAttribution(from.homeInstance, sourceInstance) && !verifyAttribution(to.homeInstance, sourceInstance)) {
+  if (!verifyAttribution(from, sourceInstance, db) && !verifyAttribution(to, sourceInstance, db)) {
     console.warn(`[federation] Attribution mismatch in friend_remove: from homeInstance=${extractDomain(from.homeInstance)} to homeInstance=${extractDomain(to.homeInstance)} source=${extractDomain(sourceInstance)}`);
     rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
     return;

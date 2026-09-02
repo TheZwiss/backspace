@@ -96,12 +96,15 @@ export function registerPeerHandshakeRoutes(app: FastifyInstance): void {
       const peerId = generateSnowflake();
       const now = Date.now();
 
-      // Store peer as pending
+      // Store peer as pending. `initiatedBy: 'admin'` is what later lets the
+      // inbound /peer/accept gate tell this row apart from one that local
+      // traffic created; this route is admin-only, so it is the real thing.
       db.insert(schema.federationPeers).values({
         id: peerId,
         origin: remoteOrigin,
         hmacSecret,
         status: 'pending',
+        initiatedBy: 'admin',
         createdAt: now,
       }).run();
 
@@ -318,6 +321,15 @@ export function registerPeerHandshakeRoutes(app: FastifyInstance): void {
         // 'awaiting_approval' = admin approved an earlier request, handshake was sent,
         //   remote queued it (202). Now the remote admin approved too and is handshaking
         //   back to us. We should accept — both admins have approved.
+        //
+        // The `initiated_by = 'admin'` term is load-bearing: `pending` rows are
+        // also created by local traffic (the outbox placeholder, ensurePeered
+        // auto-peering), and those record no admin decision. Without the term,
+        // any origin a local user happened to address could hand itself the
+        // approval this gate exists to withhold. Positive test, not a denylist,
+        // so a future provenance value cannot silently reopen it — and rows
+        // predating the column read as 'auto', so the gate fails closed on
+        // upgrade (a handshake in flight at that moment re-queues for approval).
         const localPending = db
           .select({ id: schema.federationPeers.id })
           .from(schema.federationPeers)
@@ -325,6 +337,7 @@ export function registerPeerHandshakeRoutes(app: FastifyInstance): void {
             and(
               eq(schema.federationPeers.origin, sourceOrigin),
               inArray(schema.federationPeers.status, ['pending', 'awaiting_approval']),
+              eq(schema.federationPeers.initiatedBy, 'admin'),
             ),
           )
           .get();
@@ -541,6 +554,7 @@ export function registerPeerHandshakeRoutes(app: FastifyInstance): void {
         instanceName: reqInstanceName ?? null,
         peerInstanceId: reqInstanceId ?? null,
         status: 'active',
+        initiatedBy: 'remote',
         lastSeenAt: Date.now(),
         createdAt: Date.now(),
       }).run();

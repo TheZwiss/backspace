@@ -101,3 +101,132 @@ jobs:
           # bundled x86_64 fpm (which can't run on the arm64 runner). No-op on
           # macOS/Windows, which don't build .deb.
           USE_SYSTEM_FPM: "true"
+
+      - name: Verify Electron security fuses
+        working-directory: packages/desktop
+        shell: bash
+        # Backstop for the fuse flip done in scripts/afterPack.js. That hook
+        # resolves the Electron binary path *per platform* (Linux reads
+        # `packager.executableName`, mac/win read `appInfo.productFilename`),
+        # so "it worked on macOS arm64" proves nothing about the other five
+        # artifacts this matrix ships — a wrong path there means either a build
+        # error or, worse, a binary that quietly ships with the fuses still off.
+        # Read the wire back out of every packaged binary and fail the release
+        # if any of the three is not in the state afterPack claims to have set.
+        # Runs before the signature check below, mirroring afterPack's own
+        # order (fuses are flipped, then the bundle is sealed).
+        #
+        # `npx --no` is deliberate: it runs the @electron/fuses already pinned
+        # in this package's devDependencies (1.8.0) and hard-fails instead of
+        # reaching the registry. A bare `npx` would silently fetch 2.x, which
+        # is ESM-only and requires Node >= 22.12 — this job is on Node 20.
+        run: |
+          set -euo pipefail
+
+          # Expected artifacts per runner, matching the build matrix above.
+          # Listed explicitly rather than globbed: a glob that matches nothing
+          # would skip silently, and a check that verifies nothing is worse
+          # than no check at all because it still reads as coverage.
+          case "$RUNNER_OS" in
+            macOS)
+              artifacts=(
+                "dist-electron/mac/Backspace.app"
+                "dist-electron/mac-arm64/Backspace.app"
+              )
+              ;;
+            Windows)
+              artifacts=(
+                "dist-electron/win-unpacked/Backspace.exe"
+                "dist-electron/win-arm64-unpacked/Backspace.exe"
+              )
+              ;;
+            Linux)
+              # Not "backspace": electron-builder names the Linux executable
+              # from package.json `name` ("@backspace/desktop") via
+              # sanitizeFileName().toLowerCase(), which drops the slash but
+              # keeps the leading "@" — the "@" is only special-cased for the
+              # .deb package name, not for the binary.
+              if [ "$RUNNER_ARCH" = "ARM64" ]; then
+                artifacts=("dist-electron/linux-arm64-unpacked/@backspacedesktop")
+              else
+                artifacts=("dist-electron/linux-unpacked/@backspacedesktop")
+              fi
+              ;;
+            *)
+              echo "::error::Unknown runner OS '$RUNNER_OS' — no expected artifact list, refusing to pass by default"
+              exit 1
+              ;;
+          esac
+
+          # Fuse name -> required state, exactly as scripts/afterPack.js sets them.
+          expected=(
+            "RunAsNode=Disabled"
+            "EnableNodeCliInspectArguments=Disabled"
+            "OnlyLoadAppFromAsar=Enabled"
+          )
+
+          esc="$(printf '\033')"
+          failed=0
+
+          for artifact in "${artifacts[@]}"; do
+            if [ ! -e "$artifact" ]; then
+              echo "::error::Expected packaged artifact not found: packages/desktop/$artifact — the fuses for this target were never checked"
+              failed=1
+              continue
+            fi
+
+            echo "==> $artifact"
+            # chalk colourises its output on GitHub Actions (it treats
+            # GITHUB_ACTIONS as a colour-capable terminal), and the escape
+            # codes wrap the very words matched below. FORCE_COLOR=0 turns
+            # that off; the sed strips any that survive anyway.
+            if ! fuses="$(FORCE_COLOR=0 npx --no @electron/fuses read --app "$artifact" 2>&1 \
+                | sed -e "s/${esc}\[[0-9;]*m//g")"; then
+              echo "$fuses"
+              echo "::error::${artifact}: could not read the Electron fuse wire (output above)"
+              failed=1
+              continue
+            fi
+            echo "$fuses"
+
+            for pair in "${expected[@]}"; do
+              name="${pair%%=*}"
+              want="${pair#*=}"
+              got="$(printf '%s\n' "$fuses" \
+                | sed -n -E "s/^[[:space:]]*${name} is ([A-Za-z]+)[[:space:]]*\$/\\1/p")"
+              if [ -z "$got" ]; then
+                echo "::error::${artifact}: fuse ${name} was not reported by @electron/fuses at all (expected ${want})"
+                failed=1
+              elif [ "$got" != "$want" ]; then
+                echo "::error::${artifact}: fuse ${name} is ${got}, expected ${want} — scripts/afterPack.js did not flip this binary"
+                failed=1
+              fi
+            done
+          done
+
+          if [ "$failed" -ne 0 ]; then
+            echo "::error::Electron security fuse verification failed on $RUNNER_OS/$RUNNER_ARCH — do not ship this release."
+            exit 1
+          fi
+          echo "All three Electron security fuses verified on $RUNNER_OS/$RUNNER_ARCH."
+
+      - name: Verify macOS code signature
+        if: runner.os == 'macOS'
+        working-directory: packages/desktop
+        # Backstop for the ad-hoc signing done in scripts/macSign.js. A bundle
+        # whose signature does not validate is reported by macOS as "Backspace
+        # is damaged and can't be opened", which no user can work around from
+        # the UI — so a broken seal must fail the release loudly rather than
+        # ship. macSign.js already verifies before packaging; this re-checks the
+        # final bundle, and also covers the case where that hook no-ops.
+        run: |
+          shopt -s nullglob
+          apps=(dist-electron/mac*/*.app)
+          if [ ${#apps[@]} -eq 0 ]; then
+            echo "::error::No packaged .app found under dist-electron/"
+            exit 1
+          fi
+          for app in "${apps[@]}"; do
+            echo "==> $app"
+            codesign --verify --deep --strict --verbose=2 "$app"
+          done

@@ -151,6 +151,14 @@ When `findOrCreateDmChannel` creates a local DM channel during an active federat
 
 **Token generation:** `generateFederatedCallToken(federatedId, homeUserId, displayName)` in `routes/livekit.ts` issues 5-minute tokens scoped to the `federatedId` room (not the local `dmChannelId`). Grants full DM permissions (mic, camera, screen share, subscribe, data channel).
 
+**Token audience (`sendFederatedCallStart`, `ws/events.ts`).** These tokens are bearer credentials for the call room, so each `dm_call_start` relay is built per recipient and carries tokens **only for the DM members that recipient homes**. Consequences:
+
+- A DM whose members are all local produces **no relay at all** — the function returns before any token is minted. Peers never learn that a purely local call happened.
+- Only instances that home a DM member are contacted. An active peer with no party to the DM receives nothing.
+- The caller's own token is never relayed (the caller joins via `POST /api/livekit/token`; both inbound paths in `routes/federation/events/calls.ts` skip the caller anyway), and no peer receives a token minted for a member homed on a different instance.
+- On the receiving side, both Path A and Path B skip a local member for whom the host sent no token instead of dispatching a `dm_call_incoming` with an unusable token. A local member homed on a third instance — a client-federation connection — is rung by their own home instance, which is the one the host minted their token for.
+- `participants` stays the complete roster: it is non-secret and Path B needs it for identity matching.
+
 **LiveKit URL:** The relay sends `config.livekit.url` (e.g., `wss://nova.ddns.net/livekit`). Must be `wss://`, not `https://` — the LiveKit SDK requires a WebSocket URL.
 
 **Token endpoint:** `POST /api/livekit/token` uses `federatedId` as the room name when the DM channel has a `federatedId` set, ensuring both instances join the same LiveKit room.

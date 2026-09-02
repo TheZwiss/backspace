@@ -31,10 +31,19 @@ vi.mock('../utils/federationAuth.js', async (importActual) => {
   const actual = await importActual<typeof import('../utils/federationAuth.js')>();
   return { ...actual, getOurOrigin: () => 'https://home.test' };
 });
-vi.mock('../utils/federationPeering.js', () => ({
-  ensurePeered: (...args: unknown[]) => ensurePeeredMock(...args),
-  racePeering: vi.fn(),
-}));
+// Spread the real module rather than listing exports: this suite asserts that a
+// placeholder peer row IS created, which runs through createAutoPlaceholderPeer.
+// A hand-written export list silently drops anything added later, and
+// queueOutboxEvent swallows the resulting throw — the assertion would fail with
+// no hint of why.
+vi.mock('../utils/federationPeering.js', async (importActual) => {
+  const actual = await importActual<typeof import('../utils/federationPeering.js')>();
+  return {
+    ...actual,
+    ensurePeered: (...args: unknown[]) => ensurePeeredMock(...args),
+    racePeering: vi.fn(),
+  };
+});
 vi.mock('../utils/federationLookup.js', () => ({
   lookupRemoteUser: (...args: unknown[]) => lookupRemoteUserMock(...args),
 }));

@@ -835,6 +835,22 @@ export interface DeleteAccountRequest {
   username: string;  // Must match — confirmation safeguard
 }
 
+// ─── Per-Remote Federation Credentials ───────────────────────────────────
+// The credential the client uses to register/log in as this user on ANOTHER
+// instance. Issued and stored by the user's HOME instance only, so it stays
+// identical across devices and browsing sessions. Never the home password.
+
+export interface FederationCredentialRequest {
+  origin: string;            // Remote instance origin, e.g. 'https://orbit.example'
+  markProvisioned?: boolean; // Record that the remote account now uses this secret
+}
+
+export interface FederationCredentialResponse {
+  origin: string;
+  secret: string;
+  provisioned: boolean;      // True once the remote account is known to use `secret`
+}
+
 // ─── Federation Identity Delete Types ────────────────────────────────────
 
 export interface FederationIdentityDeleteRequest {

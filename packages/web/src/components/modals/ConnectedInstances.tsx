@@ -228,7 +228,9 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
                 autoComplete="current-password"
               />
               <div className="text-xs text-txt-tertiary mt-1">
-                <Trans i18nKey="ui.ConnectedInstances.yourPasswordIsVerifiedLocallyThenUsedTo">Your password is verified locally, then used to create or access your account on the remote instance.</Trans>
+                {translate('ui.ConnectedInstances.yourPasswordIsVerifiedLocallyThenUsedTo', {
+                  host: new URL(probeResult.origin).host,
+                })}
               </div>
             </div>
             <button
@@ -270,7 +272,7 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
           </div>
 
           <div className="p-2 bg-accent-amber/10 border border-accent-amber/30 rounded text-xs text-accent-amber">
-            <Trans i18nKey="ui.ConnectedInstances.anAccountAlreadyExistsOnThisInstanceWith">An account already exists on this instance with a different password. Enter the credentials you used on that instance.</Trans>
+            {translate('ui.ConnectedInstances.anAccountAlreadyExistsOnThisInstanceWith')}
           </div>
 
           <form onSubmit={(e) => { e.preventDefault(); handleFallbackLogin(); }} className="space-y-2">

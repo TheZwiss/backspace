@@ -12,7 +12,6 @@ import { waitForTransferAttachment } from '../../../utils/waitForTransfer';
 import { getAvatarGradient, adjustColor, mutedGradient, AVATAR_GRADIENT_MAP, BANNER_COLOR_PRESETS } from '../../../utils/gradients';
 import { AVATAR_COLORS } from '@backspace/shared';
 import type { User, UserStatus, AvatarColor } from '@backspace/shared';
-import type { FederationOpResult } from '../../../utils/federationOps';
 import { Trans } from 'react-i18next';
 import { translate } from '../../../i18n';
 export function AccountPanel() {
@@ -70,7 +69,6 @@ export function AccountPanel() {
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [passwordLoading, setPasswordLoading] = useState(false);
-  const [passwordResults, setPasswordResults] = useState<FederationOpResult[] | null>(null);
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
 
@@ -260,7 +258,6 @@ export function AccountPanel() {
 
   const handleChangePassword = async () => {
     setPasswordError('');
-    setPasswordResults(null);
 
     if (newPassword.length < 8) {
       setPasswordError(translate('runtime.messages.AccountPanel.newPasswordMustBeAtLeast8Characters'));
@@ -273,19 +270,11 @@ export function AccountPanel() {
 
     setPasswordLoading(true);
     try {
-      const results = await changePassword(currentPassword, newPassword);
+      await changePassword(currentPassword, newPassword);
       addToast(translate('runtime.messages.AccountPanel.passwordChanged'), 'success', 2000);
       setCurrentPassword('');
       setNewPassword('');
       setConfirmNewPassword('');
-
-      if (results.length > 0) {
-        setPasswordResults(results);
-      }
-
-      setTimeout(() => {
-        setPasswordResults(null);
-      }, 5000);
     } catch (err) {
       setPasswordError(err instanceof Error ? err.message : translate('runtime.messages.AccountPanel.failedToChangePassword'));
     } finally {
@@ -733,21 +722,6 @@ export function AccountPanel() {
           {passwordError && (
             <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-xs">{passwordError}</div>
           )}
-          {passwordResults && passwordResults.length > 0 && (
-            <div className="space-y-1">
-              {passwordResults.map(r => (
-                <div key={r.origin} className="flex items-center justify-between text-xs px-2 py-1 rounded bg-white/[0.02]">
-                  <span className="text-txt-secondary">{r.origin}</span>
-                  {r.success ? (
-                    <span className="text-status-online"><Trans i18nKey="ui.AccountPanel.synced">Synced</Trans></span>
-                  ) : (
-                    <span className="text-txt-danger" title={r.error}><Trans i18nKey="ui.AccountPanel.failedWillSyncOnReconnect">Failed — will sync on reconnect</Trans></span>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-
           <button
             type="submit"
             disabled={passwordLoading || !currentPassword || !newPassword || !confirmNewPassword}
