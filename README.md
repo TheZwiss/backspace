@@ -465,10 +465,11 @@ briefly restarts the `backspace` container (clients reconnect automatically).
 
 ## Development
 
-Requirements: **Node.js 20 or newer** and **pnpm 10**. The `.nvmrc` file keeps
-Node 20 as the default development and production baseline; CI additionally
-exercises Node 24, and newer majors generally work but are not part of the test
-matrix. The Docker image continues to build on Node 20 regardless of your host.
+Requirements: **Node.js 20 or newer** and **pnpm 10**. The `.nvmrc` file selects
+Node 24, which is the active LTS and the version the Docker image runs. CI runs
+the suite on both Node 20 and Node 24, so a Node 20 host still works, but Node 20
+reached end of life in April 2026 and is not what a fresh checkout picks up.
+Newer majors generally work but are not part of the test matrix.
 
 ```bash
 pnpm install
