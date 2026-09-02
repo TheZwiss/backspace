@@ -4,6 +4,20 @@
     <meta charset="UTF-8" />
     <meta name="color-scheme" content="dark" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
+    <!-- Defence in depth only. The server sends the full policy as a header,
+         built from instance config (see docs/systems/web-security.md). A meta
+         policy INTERSECTS with the header rather than replacing it, so this
+         carries only the directives that never depend on runtime config.
+         Adding connect-src, img-src or frame-src here would silently block
+         whatever the server policy allows and this copy has gone stale on.
+
+         worker-src is listed even though the header also carries it, because
+         worker-src falls back to script-src when it is absent. Without it this
+         tag blocks the blob-URL Worker that runs the WebSocket keepalive in
+         src/hooks/useWebSocket.ts, and the block is silent apart from a console
+         entry. child-src is deliberately not listed: frame-src falls back to it,
+         and the embed origins are server-owned config that must not appear here. -->
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'" />
     <meta name="description" content="The self-hosted Discord and TeamSpeak alternative. HD voice, video, and screen share — open source and free (AGPL-3.0)." />
     <meta name="theme-color" content="#0b0b10" />
     <meta name="mobile-web-app-capable" content="yes" />
