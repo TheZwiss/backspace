@@ -113,13 +113,22 @@ jobs:
 
       - name: Backfill
         env:
-          # Must be the PAT, not GITHUB_TOKEN: the latter carries a 1,000
-          # requests/hour per-repository limit rather than 5,000, and in any
-          # case cannot reach the traffic-scoped "Administration: read"
-          # permission the collector needs — see metrics.yml's header. This
-          # job does not read traffic, but it uses the same token as the
-          # daily collector for one PAT rather than provisioning a second.
-          METRICS_TOKEN: ${{ secrets.METRICS_TOKEN }}
+          # GITHUB_TOKEN, deliberately, NOT the collector's PAT. This job
+          # reads no traffic, so it never needs the "Administration: read"
+          # permission that forces metrics.yml onto a PAT; it reads only
+          # stargazers, forks and releases. Sharing the collector's
+          # fine-grained PAT here was the original choice and it does not
+          # work: that token is refused by the stargazers endpoint with
+          # "Resource not accessible by personal access token" (HTTP 403),
+          # which failed the job before it wrote anything.
+          #
+          # GITHUB_TOKEN's 1,000 requests/hour per-repository limit is not a
+          # constraint at this size: the three paginated calls cost a handful
+          # of requests, and this workflow is dispatched by hand, not on a
+          # schedule. The stargazers endpoint does require authentication --
+          # it answers 401 unauthenticated -- so this cannot simply drop the
+          # token instead.
+          METRICS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           METRICS_DATA_DIR: ${{ github.workspace }}/.metrics-data
         run: node scripts/metrics/src/cli-backfill.ts
