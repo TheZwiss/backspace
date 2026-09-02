@@ -13,7 +13,6 @@ vi.mock('../hooks/useWebSocket', () => ({
   disconnectInstance: vi.fn(),
   disconnectAllRemote: vi.fn(),
 }));
-vi.mock('../utils/federationOps', () => ({ clearPasswordSyncTimers: vi.fn() }));
 vi.mock('../audio/AudioManager', () => ({
   AudioManager: { getInstance: vi.fn().mockReturnValue({ setOutputDevice: vi.fn(), setVolume: vi.fn() }) },
 }));

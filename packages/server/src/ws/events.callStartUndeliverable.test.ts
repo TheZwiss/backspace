@@ -26,9 +26,14 @@ vi.mock('../utils/federationAuth.js', async () => {
     ...actual,
     getOurOrigin: () => 'https://local.example',
     buildFederationHeaders: () => ({}),
-    generateFederatedCallToken: () => Promise.resolve('fake-token'),
   };
 });
+
+// `generateFederatedCallToken` lives in `routes/livekit.js`, not in
+// `federationAuth.js` — mocking it on the latter is a no-op.
+vi.mock('../routes/livekit.js', () => ({
+  generateFederatedCallToken: () => Promise.resolve('fake-token'),
+}));
 
 // Mock sendCallRelay so the test controls relay results per peer. The
 // implementation captures the messageId each call was made with so tests

@@ -17,6 +17,25 @@ describe('parseUploadMetadata', () => {
   it('returns empty object on null input', () => {
     expect(parseUploadMetadata(null)).toEqual({});
   });
+
+  it('accepts a value whose padding differs from the canonical encoding', () => {
+    // 'ab' encodes to 'YWI='. The unpadded form must round-trip the same way.
+    const meta = parseUploadMetadata('filename YWI');
+    expect(meta.filename).toBe('ab');
+  });
+
+  it('rejects a value that is not the canonical encoding of its own bytes', () => {
+    const meta = parseUploadMetadata('filename ####');
+    expect(meta.filename).toBeUndefined();
+  });
+
+  it('handles a long run of padding characters without stalling', () => {
+    const start = process.hrtime.bigint();
+    const meta = parseUploadMetadata(`filename ${'='.repeat(40_000)}a`);
+    const elapsed = Number(process.hrtime.bigint() - start) / 1e6;
+    expect(meta.filename).toBeUndefined();
+    expect(elapsed).toBeLessThan(100);
+  });
 });
 
 describe('extractExtension', () => {

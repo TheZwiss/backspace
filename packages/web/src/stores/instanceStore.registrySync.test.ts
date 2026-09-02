@@ -26,7 +26,6 @@ vi.mock('../hooks/useWebSocket', () => ({
 vi.mock('../utils/dmOriginFailover', () => ({
   failoverDmOriginsFromDisconnected: vi.fn(),
 }));
-vi.mock('../utils/federationOps', () => ({ clearPasswordSyncTimers: vi.fn() }));
 vi.mock('../audio/AudioManager', () => ({
   AudioManager: { getInstance: vi.fn().mockReturnValue({ setOutputDevice: vi.fn(), setVolume: vi.fn() }) },
 }));

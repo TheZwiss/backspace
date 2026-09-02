@@ -31,7 +31,7 @@ export async function processCreateEvent(
   }
 
   // Attribution: message author must belong to source instance (FED-010)
-  if (!verifyAttribution(event.message.homeInstance, sourceInstance)) {
+  if (!verifyAttribution(event.message, sourceInstance, db)) {
     console.warn(`[federation] Attribution mismatch in create: message homeInstance=${extractDomain(event.message.homeInstance)} source=${extractDomain(sourceInstance)}`);
     rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
     return;
@@ -264,7 +264,7 @@ export function processUpdateEvent(
   rejected: Array<{ messageId: string; reason: string }>,
 ): void {
   // Attribution: if homeInstance present, verify it matches source (FED-010)
-  if (event.message?.homeInstance && !verifyAttribution(event.message.homeInstance, sourceInstance)) {
+  if (event.message?.homeInstance && !verifyAttribution(event.message, sourceInstance, db)) {
     console.warn(`[federation] Attribution mismatch in update: message homeInstance=${extractDomain(event.message.homeInstance)} source=${extractDomain(sourceInstance)}`);
     rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
     return;
@@ -432,7 +432,7 @@ export function processReactionAddEvent(
   }
 
   // Attribution: reacting user must belong to source instance (FED-010)
-  if (!event.reaction.homeInstance || !verifyAttribution(event.reaction.homeInstance, sourceInstance)) {
+  if (!event.reaction.homeInstance || !verifyAttribution(event.reaction, sourceInstance, db)) {
     console.warn(`[federation] Attribution mismatch in reaction_add: reaction homeInstance=${event.reaction.homeInstance ? extractDomain(event.reaction.homeInstance) : 'missing'} source=${extractDomain(sourceInstance)}`);
     rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
     return;
@@ -521,7 +521,7 @@ export function processReactionRemoveEvent(
   }
 
   // Attribution: reacting user must belong to source instance (FED-010)
-  if (!event.reaction.homeInstance || !verifyAttribution(event.reaction.homeInstance, sourceInstance)) {
+  if (!event.reaction.homeInstance || !verifyAttribution(event.reaction, sourceInstance, db)) {
     console.warn(`[federation] Attribution mismatch in reaction_remove: reaction homeInstance=${event.reaction.homeInstance ? extractDomain(event.reaction.homeInstance) : 'missing'} source=${extractDomain(sourceInstance)}`);
     rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
     return;

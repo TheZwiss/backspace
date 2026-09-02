@@ -5,8 +5,6 @@ import { config } from '../config.js';
 import { getInstanceId } from '../utils/federationEpoch.js';
 import type { InstanceInfoResponse } from '@backspace/shared';
 
-const BACKSPACE_VERSION = '1.0.0';
-
 export async function instanceRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/instance/info', async (_request, reply) => {
     const db = getDb();
@@ -21,7 +19,7 @@ export async function instanceRoutes(app: FastifyInstance): Promise<void> {
 
     const response: InstanceInfoResponse = {
       name: instanceName,
-      version: BACKSPACE_VERSION,
+      version: config.version,
       registrationOpen,
       federatedRegistrationOpen: settings?.federatedRegistrationOpen === 1,
       instanceId: getInstanceId(),

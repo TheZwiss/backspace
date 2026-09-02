@@ -574,7 +574,7 @@ Grab the installer for your platform from the
 | Platform | File | Notes |
 |----------|------|-------|
 | Windows | `Backspace-<version>.exe` | Universal installer (x64 + arm64). SmartScreen may warn on first run; choose "More info" → "Run anyway". Auto-updates. |
-| macOS | `Backspace-<version>-arm64.dmg` (Apple Silicon) / `Backspace-<version>-x64.dmg` (Intel) | Builds are currently **unsigned**: on first launch, right-click the app → **Open** → **Open**. Auto-update is not available on macOS yet, so check the releases page for new versions. |
+| macOS | `Backspace-<version>-arm64.dmg` (Apple Silicon) / `Backspace-<version>-x64.dmg` (Intel) | Builds are ad-hoc signed but **not notarized**, so Gatekeeper blocks the first launch. Open it once, dismiss the warning, then go to **System Settings → Privacy & Security** and click **Open Anyway** next to the Backspace message. On macOS 14 and earlier, right-click the app → **Open** → **Open** works instead. Auto-update is not available on macOS yet, so check the releases page for new versions. |
 | Linux | `Backspace-<version>-x86_64.AppImage` / `-arm64.AppImage`, or `.deb` (`amd64` / `arm64`) | AppImage auto-updates; `.deb` installs update via new releases. |
 
 On first launch the app asks for your instance URL. Enter the address of the

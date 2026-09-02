@@ -10,7 +10,8 @@ Source files:
 - `packages/web/src/platform/electron.d.ts` — TypeScript declarations for `window.backspace`
 - `packages/web/src/platform/platform.ts` — `isElectron()` / `isElectronMac()` / `getElectronAPI()` helpers
 - `packages/desktop/electron-builder.yml` — Build config, protocol registration, afterPack hook
-- `packages/desktop/scripts/afterPack.js` — Cross-platform native module cleanup (critical for builds)
+- `packages/desktop/scripts/afterPack.js` — Cross-platform native module cleanup (critical for builds), then macOS signing
+- `packages/desktop/scripts/macSign.js` — Ad-hoc macOS code signing fallback (critical: without it the app will not launch)
 - `io.github.TheZwiss.backspace.yml` — Flatpak manifest (offline x86_64/aarch64 source build)
 - `flatpak/` — Flatpak launcher, desktop entry, AppStream metadata, and build instructions
 - `packages/desktop/resources/games.json` — Bundled game dictionary seed (versioned)
@@ -245,11 +246,17 @@ autoInstallOnAppQuit: true
 Publish: GitHub (TheZwiss/backspace)
 ```
 
-**Signing status (as of v1.0.0):** all builds are unsigned. Consequences:
-- **macOS:** Squirrel.Mac refuses to apply unsigned updates — auto-update is
-  effectively disabled on macOS until a Developer ID certificate + notarization
-  are added to the CI build. Users update manually from the releases page.
-  First launch requires right-click → Open (Gatekeeper).
+**Signing status:** no Apple Developer ID or Windows certificate. macOS builds
+are ad-hoc signed by `scripts/macSign.js` (see below); Windows and Linux builds
+are unsigned. Consequences:
+- **macOS:** Squirrel.Mac refuses to apply updates without a real signing
+  identity — auto-update is effectively disabled on macOS until a Developer ID
+  certificate + notarization are added to the CI build. Users update manually
+  from the releases page. The app is not notarized, so first launch is blocked
+  by Gatekeeper and must be approved once via System Settings → Privacy &
+  Security → Open Anyway. Ad-hoc signatures also have no stable identity, so
+  the cdhash changes every release and macOS drops the Input Monitoring and
+  Screen Recording grants (global keybinds, screen share) on each update.
 - **Windows:** NSIS auto-update works unsigned; SmartScreen warns on first
   install only.
 - **Linux:** AppImage auto-update works unsigned.
@@ -933,6 +940,28 @@ output: dist-electron
 **Path resolution:** On macOS, resources live inside `{productName}.app/Contents/Resources/`; on Windows/Linux, under `resources/`. The hook resolves the correct path via `context.electronPlatformName`.
 
 **WARNING:** Removing or disabling this hook will cause Windows and Linux builds to crash on launch. This is documented in project memory as a critical constraint.
+
+3. **Ad-hoc sign (macOS only):** Delegates to `scripts/macSign.js`. Must run last — signing seals the bundle, so it has to follow every file mutation, including the deletions above.
+
+### macOS Ad-hoc Signing (CRITICAL)
+
+**File:** `scripts/macSign.js`
+
+**Problem:** electron-builder only signs when it can resolve a signing identity. With no Developer ID available, `MacPackager.sign()` bails out before signing at all (`findIdentity()` → `null` → `reportError()` → `return false`), leaving the bundle with only the linker-generated ad-hoc signatures baked into the prebuilt Electron binaries. Packaging then invalidates those: it renames the executable, rewrites `Info.plist`, injects `app.asar`, and deletes files from `Contents/Resources`.
+
+The result is not merely unsigned, it is **invalid** — `codesign --verify` reports `code has no resources but signature indicates they must be present`, and there is no `Contents/_CodeSignature` at all. macOS reports an invalid signature as *"Backspace.app is damaged and can't be opened. You should move it to the Trash."* That is a dead end: unlike the unnotarized-app warning, it offers no "Open Anyway" path. Every macOS user of v1.0.0 hit this (issue #38).
+
+**Solution:** Re-seal the bundle with an ad-hoc signature in `afterPack`:
+
+1. Sign every Mach-O under `Contents/Resources` (`.node`, `.dylib`). `codesign --deep` only reaches the standard nested-code locations, so native modules unpacked to `app.asar.unpacked` are otherwise sealed as plain resources and never signed.
+2. `codesign --force --deep --sign -` the bundle. `--deep` is discouraged for distribution signing because it applies one entitlement set to every nested binary; ad-hoc signatures carry no entitlements, so that does not apply here.
+3. `codesign --verify --deep --strict` immediately, so a bad bundle fails the build **before** electron-builder packages and publishes it. `.github/workflows/release.yml` re-checks the final bundle as a backstop.
+
+**Why `afterPack` and not `afterSign`:** electron-builder skips the `afterSign` hook entirely when no signing occurred (`didSign === false`), which is precisely this build's situation.
+
+**No-op conditions:** skips when `CSC_LINK` or `CSC_NAME` is set, so a real Developer ID identity takes over cleanly, and warns (rather than failing) on non-macOS hosts, which cannot run `codesign`.
+
+**WARNING:** Removing this hook makes macOS builds refuse to launch entirely.
 
 ### Icon Generation
 

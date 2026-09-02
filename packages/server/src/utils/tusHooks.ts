@@ -7,6 +7,22 @@ export interface UploadMetadata {
   [k: string]: string | undefined;
 }
 
+const EQUALS_CHAR_CODE = 61; // '='
+
+/**
+ * Remove every trailing '=' from a string.
+ *
+ * Equivalent to `s.replace(/=+$/, '')`, but scans backwards from the end so the
+ * cost is linear in the length of the input. The regex form re-tries the match
+ * from each successive start position inside a long run of '=', which is
+ * quadratic, and this runs on a client-supplied header value.
+ */
+function stripBase64Padding(s: string): string {
+  let end = s.length;
+  while (end > 0 && s.charCodeAt(end - 1) === EQUALS_CHAR_CODE) end--;
+  return end === s.length ? s : s.slice(0, end);
+}
+
 /** Parse the comma-separated `Upload-Metadata` header into a flat object. */
 export function parseUploadMetadata(raw: string | null | undefined): UploadMetadata {
   if (!raw) return {};
@@ -23,8 +39,8 @@ export function parseUploadMetadata(raw: string | null | undefined): UploadMetad
     try {
       const decoded = Buffer.from(b64, 'base64').toString('utf8');
       // Reject if base64 round-trip mismatches — protects against odd encodings
-      if (Buffer.from(decoded, 'utf8').toString('base64').replace(/=+$/, '') !==
-          b64.replace(/=+$/, '')) continue;
+      if (stripBase64Padding(Buffer.from(decoded, 'utf8').toString('base64')) !==
+          stripBase64Padding(b64)) continue;
       out[key] = decoded;
     } catch { /* ignore */ }
   }

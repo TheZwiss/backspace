@@ -102,3 +102,70 @@ if channelOverride:  base = (base & ~deny) | allow
 | `getMember/isMember/isSpaceOwner` | Membership checks |
 | `isDmMember/isBanned` | DM/ban checks |
 | `getChannelSpaceId(channelId)` | Resolve channel's space |
+| `isReplyTargetInChannel(channelId, replyToId)` | Create-time reply-target check (`routes/messages.ts`) |
+| `fetchReplyToMessages(channelId, rows)` | Channel-scoped reply hydration (`routes/messages.ts`) |
+
+---
+
+## Broadcast audience
+
+Space membership and channel access are not the same thing, so the two
+`ConnectionManager` fan-out helpers are not interchangeable:
+
+| Helper | Recipients | Carries |
+|--------|-----------|---------|
+| `sendToSpace(spaceId, event)` | every member of the space | space-level facts: `space_updated`, `member_joined`, `member_left`, `category_created` / `category_updated` / `category_deleted`, voice presence |
+| `sendToChannel(spaceId, channelId, event)` | members whose `computePermissions` grants `VIEW_CHANNEL` on that channel | anything scoped to one channel: `message_created`, `message_updated`, `message_deleted`, `typing`, `reaction_added`, `reaction_removed`, `embeds_resolved` |
+
+Anything naming a channel or carrying its content goes through `sendToChannel`.
+A message edit ships the full `MessageWithUser` (content, author, attachments), a
+delete names the channel it happened in, and both must land only where the
+original `message_created` did. REST and WebSocket are two entry points to the
+same event, so they use the same helper: `PATCH /api/messages/:id` and
+`DELETE /api/messages/:id` mirror the `message_edit` and `message_delete`
+WebSocket handlers.
+
+The choice does not go the other way. A space-level event pushed through
+`sendToChannel` would be withheld from members who lack `VIEW_CHANNEL` on
+whichever channel was named, so member lists and the category tree would drift
+out of sync for exactly those members. Space furniture stays on `sendToSpace`.
+
+Covered by `packages/server/src/routes/messages.broadcastAudience.test.ts`,
+which drives the real `ConnectionManager` and asserts both directions: a member
+denied `VIEW_CHANNEL` receives neither event, while readers of the channel and
+the space-wide `category_created` are unaffected.
+
+---
+
+## Reply-target confinement
+
+A message's `replyToId` must name a message in the **same channel**. Both create
+paths enforce it (`POST /api/channels/:id/messages` and the WebSocket
+`message_create` handler) via `isReplyTargetInChannel`, answering
+`400 Invalid reply target` / a WS `error` event without inserting anything. Every
+channel read path hydrates `replyTo` through `fetchReplyToMessages(channelId, rows)`,
+which scopes the lookup to the channel being read, so a `replyToId` pointing
+elsewhere hydrates as `replyTo: null` even for rows written before the
+create-time check existed.
+
+Same-channel is the rule rather than "the requester may read the target's
+channel", and the permission model above is the reason:
+
+- A hydrated message is fanned out by `connectionManager.sendToChannel` to an
+  audience whose members hold different permissions, so at hydration time there
+  is no single reader to resolve against.
+- Checking the **author's** permissions at create time would not bound who reads
+  the result. An author who may read a restricted channel could otherwise embed
+  one of its messages as a reply preview inside a channel with a wider audience,
+  and later override changes would not retract it.
+
+Confining the target to the message's own channel needs no second permission
+computation: the reply preview inherits exactly the `VIEW_CHANNEL` +
+`READ_MESSAGE_HISTORY` gate that already guards the message carrying it.
+
+The DM side has the same rule with its own pair of helpers
+(`isDmReplyTargetInChannel` / `fetchDmReplyToMessages` in `routes/dm.ts`), where
+membership is binary so the two candidate predicates coincide.
+
+Covered by `packages/server/src/routes/messages.replyAuthorization.test.ts` and
+`packages/server/src/routes/dm.replyAuthorization.test.ts`.

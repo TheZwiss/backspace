@@ -35,6 +35,10 @@ merge-blocking, Dependabot alerts, and native secret-scanning are GitHub *settin
 
 - Every action is pinned to a full commit SHA (`# vX.Y.Z` comment) — resists
   tag-move attacks and satisfies Scorecard's Pinned-Dependencies check.
+  **One `uses:` is deliberately unpinned and cannot be pinned:**
+  `metrics.yml`'s `uses: ./.github/workflows/deploy-pages.yml`. GitHub rejects
+  `@ref` on a `./` path and resolves a local reusable workflow from the calling
+  run's own commit, which is tighter than a SHA pin. Not a gap — do not "fix" it.
 - `step-security/harden-runner` (egress-policy `audit`) on Linux jobs.
 - Least-privilege `permissions:` per workflow/job.
 - SBOM + SLSA provenance are attached to the published container image at push
@@ -44,15 +48,45 @@ merge-blocking, Dependabot alerts, and native secret-scanning are GitHub *settin
 
 ## Maintainer checklist (one-time GitHub settings — NOT code)
 
-- [ ] Repository must be **public** (required for the Scorecard badge/publish and
-      the CodeQL free tier).
+Status verified against the live repository on 2026-09-02 (`gh api`). These are
+settings, not code, so nothing in this repository keeps the boxes honest — re-check
+them when something in the Security tab looks wrong, and after any transfer or
+rename.
+
+### Done
+
+- [x] Repository is **public** (required for the Scorecard badge/publish and the
+      CodeQL free tier).
+- [x] Fine-grained PAT scoped to this repository only, with **Administration:
+      read** and **Contents: read**, stored as the `METRICS_TOKEN` repository
+      secret. Traffic endpoints are unreachable without it — there is no
+      `administration` key in the Actions `permissions:` vocabulary, so
+      `GITHUB_TOKEN` cannot substitute. See `docs/systems/metrics.md` §7.
+- [x] Ruleset on the `metrics-data` branch blocking **deletion** and
+      **force-push**, with no bypass actors (`Protect metrics data store`,
+      alongside the `Protect CLA signature store` precedent it copies). It
+      deliberately does **not** require pull requests or status checks: the
+      collector commits directly, and requiring a PR would break every run. This
+      branch holds the only irreplaceable data in the repository.
+
+### Outstanding
+
 - [ ] Settings → Code security: enable **Dependabot alerts** and **Dependabot
-      security updates**.
+      security updates**. Both currently disabled.
 - [ ] Settings → Code security: enable **Secret scanning** + **Push protection**.
+      Both currently disabled — note that `security.yml`'s gitleaks job scans full
+      history on PR and push, but it is not push protection and cannot stop a
+      secret from landing.
 - [ ] Settings → Code security: enable **CodeQL / code-scanning merge protection**
-      so high-severity alerts block PRs (the code-level gates do the rest).
-- [ ] Branch protection on `main`: require the CI + security status checks to pass.
+      so high-severity alerts block PRs (the code-level gates do the rest). No
+      code-scanning rule is present on any ruleset today.
+- [ ] Branch protection on `main`: **partly done.** The `Require CI on main`
+      ruleset is active and blocks deletion and force-push, requires a pull
+      request, and requires the `Build & test` check. It does **not** require any
+      check from `security.yml`, `codeql.yml`, or `scorecard.yml` — add those
+      contexts when enforcement is turned on, or the tiered policy above has no
+      gate on `main`.
 - [ ] **Manual image bumps:** Dependabot does not track `docker-compose.yml`
       `image:` pins — update `caddy` and `livekit/livekit-server` by hand when new
       releases ship. (Renovate, which parses compose, is an optional future
-      alternative.)
+      alternative.) Standing task, never "done".

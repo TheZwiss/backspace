@@ -1,5 +1,5 @@
 diff --git a/packages/desktop/package.json b/packages/desktop/package.json
-index 70c152fa..ee22ba5f 100644
+index c2917fcb..ebea80ed 100644
 --- a/packages/desktop/package.json
 +++ b/packages/desktop/package.json
 @@ -12,0 +13 @@
@@ -20,34 +20,34 @@ index 9697241a..e188e0f8 100644
 -      $('btn-restart').style.display = state.updateState === 'downloaded' ? '' : 'none';
 +      $('btn-restart').style.display = !managedByFlatpak && state.updateState === 'downloaded' ? '' : 'none';
 diff --git a/packages/desktop/src/main.ts b/packages/desktop/src/main.ts
-index 9029069d..9d8a1ad9 100644
+index 84ff0506..e83fff97 100644
 --- a/packages/desktop/src/main.ts
 +++ b/packages/desktop/src/main.ts
-@@ -71,0 +72,4 @@ const knownInstanceOrigins = new Set<string>();
+@@ -73,0 +74,4 @@ const knownInstanceOrigins = new Set<string>();
 +// Flatpak deployments are immutable and are upgraded by Flatpak itself. Keep
 +// electron-updater from downloading an AppImage/DEB that it cannot install.
 +const IS_FLATPAK = Boolean(process.env.FLATPAK_ID);
 +
-@@ -576,0 +581 @@ function registerIpcHandlers(): void {
+@@ -596,0 +601 @@ function registerIpcHandlers(): void {
 +    if (IS_FLATPAK) return;
-@@ -585,0 +591 @@ function registerIpcHandlers(): void {
+@@ -605,0 +611 @@ function registerIpcHandlers(): void {
 +    if (IS_FLATPAK) return;
-@@ -603,0 +610,2 @@ function registerIpcHandlers(): void {
+@@ -623,0 +630,2 @@ function registerIpcHandlers(): void {
 +    if (IS_FLATPAK) return { openAtLogin: false, startMinimized: false };
 +
-@@ -637,0 +646,2 @@ function registerIpcHandlers(): void {
+@@ -657,0 +666,2 @@ function registerIpcHandlers(): void {
 +    if (IS_FLATPAK) return { openAtLogin: false, startMinimized: false };
 +
-@@ -705,0 +716,2 @@ function initAutoUpdater(): void {
+@@ -725,0 +736,2 @@ function initAutoUpdater(): void {
 +  if (IS_FLATPAK) return;
 +
-@@ -997 +1009 @@ if (!gotTheLock) {
+@@ -1017 +1029 @@ if (!gotTheLock) {
 -        tray.setContextMenu(Menu.buildFromTemplate(buildTrayMenuTemplate(state, trayActions)));
 +        tray.setContextMenu(Menu.buildFromTemplate(buildTrayMenuTemplate(state, trayActions, IS_FLATPAK)));
-@@ -1000 +1012 @@ if (!gotTheLock) {
+@@ -1020 +1032 @@ if (!gotTheLock) {
 -        Menu.setApplicationMenu(Menu.buildFromTemplate(buildAppMenuTemplate(app.name, state, trayActions)));
 +        Menu.setApplicationMenu(Menu.buildFromTemplate(buildAppMenuTemplate(app.name, state, trayActions, IS_FLATPAK)));
-@@ -1014,3 +1026,5 @@ if (!gotTheLock) {
+@@ -1034,3 +1046,5 @@ if (!gotTheLock) {
 -    startActivityDetection((activity) => {
 -      mainWindow?.webContents.send('activity-detected', activity);
 -    });

@@ -54,9 +54,12 @@ export async function connectWs(origin: string, token: string): Promise<WsCaptur
     if (!msg || typeof msg.type !== 'string') return;
     events.push(msg);
     for (let i = waiters.length - 1; i >= 0; i--) {
-      if (waiters[i].type === msg.type) {
-        clearTimeout(waiters[i].timer);
-        waiters[i].resolve(msg);
+      // Bound by the loop condition, but `noUncheckedIndexedAccess` still types
+      // the element as possibly-undefined; bind it once instead of indexing thrice.
+      const waiter = waiters[i];
+      if (waiter && waiter.type === msg.type) {
+        clearTimeout(waiter.timer);
+        waiter.resolve(msg);
         waiters.splice(i, 1);
       }
     }

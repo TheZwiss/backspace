@@ -19,7 +19,7 @@ POST /auth/attach-proof      (JWT, rate-limited 5/15min)  { targetDomain } → {
 **`POST /auth/login`** — request/response shape unchanged, but two internal controls from instance-epoch self-healing gate the flow: (1) an account with `federationHomeOrphaned = 1` (home instance factory-reset) is **detached** — a sovereign local account whose local password hash is the sole authority; it logs in normally with that local password (the detach pivot removed the old pre-verification freeze), and the flag's only login effect is to permanently disable self-heal (step 7); (2) for non-detached federated accounts, the password self-heal runs an **epoch guard** — it re-hashes the stale local password only if the home instance's authenticated epoch (`fetchPeerEpoch`) matches the trusted baseline, failing closed when the epoch differs or can't be determined. A detached account can be re-bound to the owner's new home identity via `POST /users/@me/reattach` (re-attach spec §3.2), which clears the flag and re-enables normal federated semantics. No wire-shape change. See `auth.md` §4.
 
 **`POST /auth/register` gating** — branches on whether `homeInstance` is set:
-- **Federated path** (`homeInstance` set): gated solely by `instance_settings.federatedRegistrationOpen`. `inviteToken` is ignored entirely (not validated, not consumed). 403 `Federated registration is closed on this instance` when closed. Existing federated stubs (relay-created, `passwordHash = '!federation-replicated'`) upgrade in place — login is never blocked by this gate.
+- **Federated path** (`homeInstance` set): gated solely by `instance_settings.federatedRegistrationOpen`. `inviteToken` is ignored entirely (not validated, not consumed). 403 `Federated registration is closed on this instance` when closed. The endpoint is **create-only**: it always INSERTs a new row and returns `201`, and never binds the submitted credentials to an existing row — a relay-created stub (`passwordHash = '!federation-replicated'`) is never claimed here, whatever `homeUserId`/`homeInstance` the caller supplies. Stub merges happen only via the proof-gated `POST /users/@me/reattach`. Login is never blocked by this gate.
 - **Local path** (no `homeInstance`):
   - When `registrationOpen` is true: `inviteToken` is silently ignored (no row touched, no `usedCount` increment).
   - When `registrationOpen` is false: `inviteToken` is required. The token is pre-validated, then the user INSERT + `usedCount` increment + `invite_redemptions` row INSERT all run in a single transaction (`inviteService.redeemInvite`). 403 `Registration is closed. An invite is required.` (no token) or `Invalid or expired invite` (token rejected at any stage, including a concurrent-redemption race re-check inside the transaction).
@@ -46,6 +46,7 @@ DELETE /users/@me             { password, username }      → { success }
 PUT    /users/@me/space-layout { items, folders, updatedAt? } → { items, folders, updatedAt }
 GET    /users/@me/federation-registry                    → { registry: FederationRegistryEntry[], updatedAt: number }
 PUT    /users/@me/federation-registry { registry, updatedAt } → { ok: true, updatedAt } (409 if not newer)
+POST   /users/@me/federation-credential { origin, markProvisioned? } → { origin, secret, provisioned }
 GET    /users/:id                                        → { user }
 GET    /users/:id/mutuals     ?homeUserId=               → { mutualFriends[], mutualSpaces[] }
 ```
@@ -53,6 +54,14 @@ GET    /users/:id/mutuals     ?homeUserId=               → { mutualFriends[], 
 **Write protection:** If the authenticated user is a replicated user (`homeInstance` is set **and** `federationHomeOrphaned !== 1`), the following fields are rejected with 403: `displayName`, `avatar`, `banner`, `accentColor`, `avatarColor`, `bio`. These fields are managed by the home instance via S2S relay. **Exception — detached accounts** (`federationHomeOrphaned === 1`): a federated account whose home instance was reset/lost is a sovereign local account with no home managing its profile, so it edits these durable fields locally like a native user (detach design §4.4). Detached edits are NOT relayed (the S2S profile-relay path stays gated on `!homeInstance`).
 
 **Self-view flag:** `GET /users/@me`, the login response, and the WS `ready` payload all sanitize the row with `isSelf=true` and include `federationHomeOrphaned: boolean` (detach design §4.7) — self-view only; it is never exposed to other users and never on the deleted/tombstone branch.
+
+**`POST /users/@me/federation-credential`:** get-or-create the per-remote credential this account's client presents when registering or logging in as itself on another instance. Scoped to `request.userId`; the secret is never derived from and never equal to the account password. See `auth.md` §5b and `client-federation.md` §1.
+
+- `origin` is canonicalized to `https://host[:port]` (lowercased, no path), so `orbit.example`, `orbit.example/`, and `https://Orbit.example` all address one row. Unparseable or non-http(s) values → **400**; our own origin → **400** (a credential is only ever for a remote).
+- **409** when the caller is a replicated federated account (`homeInstance` set and `federationHomeOrphaned !== 1`) — credentials are issued by the account's own home instance so exactly one secret exists per (user, remote). Detached accounts follow the LOCAL rule and DO get credentials.
+- Creation is `onConflictDoNothing` + re-read, i.e. **first-writer-wins**: a racing second call returns the stored secret rather than replacing it and locking the loser out of the remote account.
+- `markProvisioned: true` latches `provisionedAt` (set-once, never rotates the secret). `provisioned: false` means the remote account may still carry a credential this instance did not issue, and the client will rotate it the next time it holds a live session there.
+- Rows are deleted by `tombstoneUser` and by `POST /users/@me/federation-identity/delete` in `soft`/`full` mode (not `leave` — the remote account survives and keeps using the secret).
 
 ## Spaces (`routes/spaces.ts`) — auth required
 ```
@@ -124,6 +133,7 @@ POST   /channels/:id/messages  { content, attachments?, replyToId? } → { messa
 PATCH  /messages/:id           { content }                → { message }  [author]
 DELETE /messages/:id                                      → { success }  [author|MANAGE_MESSAGES]
 ```
+`replyToId` on POST must name a message in the same channel, otherwise `400 Invalid reply target` and nothing is inserted. See permissions.md, "Reply-target confinement".
 
 ## DMs (`routes/dm.ts`) — auth required
 ```
@@ -482,3 +492,10 @@ type PeeringNotificationSummary = {
 GET /utils/metadata  ?url= → { title?, description?, image?, siteName? }
 GET /health          (public) → { status: 'ok', timestamp }
 ```
+
+## Security reporting (`routes/cspReport.ts`), public
+```
+POST /csp-report     (no auth) -> 204
+```
+
+**`POST /api/csp-report`** is the Content Security Policy violation sink named by the policy's `report-uri` and `report-to`. Unauthenticated on purpose: a violation can happen on the login screen before any token exists. It registers content-type parsers for `application/csp-report` and `application/reports+json` in addition to the built-in `application/json`. Fastify ships parsers for neither of the first two and would otherwise answer 415, leaving an empty report log that looks exactly like a clean policy. It answers `204` to everything, including a malformed body, because a browser cannot act on an error and would only retry. It reads at most 16 KB off the wire and logs at most 4096 characters per report at `warn` level with the message `CSP violation reported`. Registered after `@fastify/rate-limit` so the shared 200/minute limit applies; that ordering is load-bearing. See `docs/systems/web-security.md`.

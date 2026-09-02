@@ -62,6 +62,16 @@
   </screenshots>
 
   <releases>
+    <release version="1.0.2" date="2026-09-02">
+      <description>
+        <p>Security hardening and desktop packaging improvements.</p>
+      </description>
+    </release>
+    <release version="1.0.1" date="2026-09-02">
+      <description>
+        <p>Maintenance and reliability improvements.</p>
+      </description>
+    </release>
     <release version="1.0.0" date="2026-07-03">
       <description>
         <p>First public release of Backspace.</p>

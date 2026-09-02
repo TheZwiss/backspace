@@ -129,6 +129,88 @@ async function queueOutboundApproval(
   });
 }
 
+/**
+ * The outbound-peering gate, expressed for callers that cannot `await`
+ * `ensurePeered()`.
+ *
+ * `ensurePeered()` refuses to bring a brand-new origin into `federation_peers`
+ * when the local admin has not authorized outbound peering (see the two guards
+ * inside it). Any other code path that inserts a `pending` row for an unknown
+ * origin silently defeats that: `resolvePendingPeers()` finds the row, calls
+ * `ensurePeered()`, which now sees `existing` and skips the gate entirely — and
+ * the remote's inbound `/peer/accept` reads the same row as proof that our
+ * admin initiated peering. So placeholder creation lives here, next to the gate
+ * it has to obey, rather than being re-derived at each call site.
+ *
+ * Returns the created row, or `null` when the gate refuses. A refusal is not a
+ * lost message: DM mutations are journalled in `federation_mutation_log`
+ * independently of the outbox and replay when the peer is activated later.
+ *
+ * The row is tagged `initiatedBy: 'auto'` — it records local traffic, never an
+ * admin decision.
+ */
+export function createAutoPlaceholderPeer(
+  origin: string,
+): typeof schema.federationPeers.$inferSelect | null {
+  const db = getDb();
+
+  // Guard 1 (mirrors the `pendingInbound` check in ensurePeered): the remote
+  // already asked to peer and our admin has not ruled on it. Creating a row
+  // now would answer that question on the admin's behalf.
+  const pendingInbound = db
+    .select({ id: schema.peerApprovalRequests.id })
+    .from(schema.peerApprovalRequests)
+    .where(
+      and(
+        eq(schema.peerApprovalRequests.origin, origin),
+        eq(schema.peerApprovalRequests.direction, 'inbound'),
+      ),
+    )
+    .get();
+
+  if (pendingInbound) {
+    console.warn(
+      `[federation] placeholder peer for ${origin} suppressed: inbound peering approval still pending`,
+    );
+    return null;
+  }
+
+  // Guard 2 (mirrors the outbound gate in ensurePeered for `system` intent):
+  // with auto-accept off, outbound peering needs an admin decision. The outbox
+  // has no acting user to attribute an approval request to, so it refuses
+  // outright, exactly as ensurePeered does for a `system` intent.
+  const settings = db
+    .select({ autoAcceptPeering: schema.instanceSettings.autoAcceptPeering })
+    .from(schema.instanceSettings)
+    .where(eq(schema.instanceSettings.id, 1))
+    .get();
+
+  if ((settings?.autoAcceptPeering ?? 1) === 0) {
+    console.warn(
+      `[federation] placeholder peer for ${origin} suppressed: outbound peering requires admin approval on this instance`,
+    );
+    return null;
+  }
+
+  const peerId = generateSnowflake();
+  db.insert(schema.federationPeers)
+    .values({
+      id: peerId,
+      origin,
+      hmacSecret: generateHmacSecret(),
+      status: 'pending',
+      initiatedBy: 'auto',
+      createdAt: Date.now(),
+    })
+    .run();
+
+  return db
+    .select()
+    .from(schema.federationPeers)
+    .where(eq(schema.federationPeers.id, peerId))
+    .get() ?? null;
+}
+
 // ─── In-flight deduplication ─────────────────────────────────────────────────
 
 const inFlightPeering = new Map<string, Promise<EnsurePeeredResult>>();
@@ -224,9 +306,23 @@ export async function ensurePeered(
 
   // Outbound gate: when autoAcceptPeering=0, regular-user-initiated outbound
   // becomes admin-approvable; system-initiated outbound is refused outright.
-  // Runs only when no peer row exists (existing rows already passed the gate
-  // when first created — toggling autoAccept later doesn't retroactively gate).
-  if (!existing) {
+  //
+  // It runs when no peer row exists, and also for a `pending` row that carries
+  // no admin provenance. A settled row (active/unreachable/rejected/revoked/
+  // needs_attention/awaiting_approval) returns from the switch above and never
+  // reaches here, so this cannot retroactively gate an established peering —
+  // `pending` is the one status that means "no handshake has ever completed",
+  // where there is nothing yet to preserve and the gate's question is still
+  // unanswered. Without this, a placeholder row left behind by local traffic
+  // (created while auto-accept was on, or before placeholder creation was
+  // gated) would still let `resolvePendingPeers` handshake our secret out to
+  // that origin, which is the escalation the gate exists to prevent.
+  const ungatedPlaceholder =
+    existing !== undefined &&
+    existing.status === 'pending' &&
+    existing.initiatedBy !== 'admin';
+
+  if (!existing || ungatedPlaceholder) {
     const settings = db
       .select({ autoAcceptPeering: schema.instanceSettings.autoAcceptPeering })
       .from(schema.instanceSettings)
@@ -235,6 +331,21 @@ export async function ensurePeered(
     const autoAccept = settings?.autoAcceptPeering ?? 1;
 
     if (autoAccept === 0) {
+      // Drop the ungated placeholder before queueing. It can no longer become a
+      // peering (both this gate and the inbound /peer/accept gate refuse it), so
+      // leaving it would only collide with the fresh row `handleOutboundApprove`
+      // inserts when the admin says yes. Its outbox entries cascade away; the
+      // conversation itself lives in `federation_mutation_log` and replays on
+      // activation, the same way a rejected peer's queue is handled.
+      if (ungatedPlaceholder && existing) {
+        db.delete(schema.federationPeers)
+          .where(eq(schema.federationPeers.id, existing.id))
+          .run();
+        console.warn(
+          `[federation] discarded ungated placeholder peer for ${normalized}: outbound peering requires admin approval`,
+        );
+      }
+
       if (intent.kind === 'user_action') {
         await queueOutboundApproval(normalized, intent);
         return {
@@ -284,7 +395,10 @@ async function performHandshake(
   let peerId = existingPeerId;
 
   if (!peerId) {
-    // Create pending peer placeholder
+    // Create pending peer placeholder. Reaching here means the outbound gate in
+    // ensurePeered() let this through, which for a brand-new origin only
+    // happens with auto-accept on — so it records local traffic, not an admin
+    // decision, and is tagged 'auto' accordingly.
     peerId = generateSnowflake();
     db.insert(schema.federationPeers)
       .values({
@@ -292,6 +406,7 @@ async function performHandshake(
         origin,
         hmacSecret,
         status: 'pending',
+        initiatedBy: 'auto',
         createdAt: Date.now(),
       })
       .run();

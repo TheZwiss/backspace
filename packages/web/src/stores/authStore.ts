@@ -7,7 +7,7 @@ import { useSocialStore } from './socialStore';
 import { useVoiceStore } from './voiceStore';
 import { useInstanceStore } from './instanceStore';
 import { useActivityStore } from './activityStore';
-import { changePasswordOnRemotes, deleteAccountOnRemotes, type FederationOpResult } from '../utils/federationOps';
+import { deleteAccountOnRemotes } from '../utils/federationOps';
 import { clearSelfIds } from '../utils/identity';
 
 interface AuthState {
@@ -21,7 +21,7 @@ interface AuthState {
   logout: () => void;
   loadUser: () => Promise<void>;
   updateProfile: (data: { displayName?: string; avatar?: string; banner?: string; accentColor?: string; avatarColor?: string; bio?: string; customStatus?: string; status?: UserStatus }) => Promise<void>;
-  changePassword: (currentPassword: string, newPassword: string) => Promise<FederationOpResult[]>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   deleteAccount: (password: string, username: string) => Promise<void>;
   setUser: (user: User) => void;
   clearError: () => void;
@@ -106,16 +106,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   changePassword: async (currentPassword: string, newPassword: string) => {
-    // Change on home instance
+    // Change on this instance only. Remote instances are NOT touched: each
+    // federated account authenticates with its own home-issued per-remote
+    // secret, so the home password is not a credential anywhere else and there
+    // is nothing to propagate (client-federation.md §1).
     const response = await api.users.changePassword({ currentPassword, newPassword });
 
     // Update token in state and localStorage
     localStorage.setItem('backspace_token', response.token);
     set({ token: response.token });
-
-    // Propagate to remote instances (best-effort)
-    const remoteResults = await changePasswordOnRemotes(newPassword);
-    return remoteResults;
   },
 
   deleteAccount: async (password: string, username: string) => {

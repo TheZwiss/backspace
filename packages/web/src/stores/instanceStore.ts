@@ -10,10 +10,6 @@ import {
 } from '../utils/crossStoreResolvers';
 import { useSpaceStore } from './spaceStore';
 import { connectInstance, disconnectInstance as disconnectWs, disconnectAllRemote } from '../hooks/useWebSocket';
-// Circular dependency: federationOps imports useInstanceStore, instanceStore imports this.
-// Safe because both modules access each other lazily (at call time, not import time).
-// clearPasswordSyncTimers itself does not reference useInstanceStore.
-import { clearPasswordSyncTimers } from '../utils/federationOps';
 // dmOriginFailover lazily reads useInstanceStore/useSpaceStore/useChatStore at call time,
 // so a static import here does not create an import-time cycle.
 import { failoverDmOriginsFromDisconnected } from '../utils/dmOriginFailover';
@@ -37,7 +33,6 @@ interface CachedInstanceToken {
   token: string;
   label: string;
   username: string;
-  pendingPasswordSync?: boolean;
 }
 
 const STORAGE_KEY_PREFIX = 'backspace_instances';
@@ -72,10 +67,8 @@ function loadCachedTokens(userId: string): Record<string, CachedInstanceToken> {
   }
 }
 
-function saveCachedTokens(instances: ConnectedInstance[], userId: string, pendingSyncFlags?: Record<string, boolean>): void {
+function saveCachedTokens(instances: ConnectedInstance[], userId: string): void {
   const cache: Record<string, CachedInstanceToken> = {};
-  // Load existing cache to preserve pendingPasswordSync flags
-  const existing = loadCachedTokens(userId);
   for (const inst of instances) {
     // Skip tokenless placeholders — writing an empty token would cause
     // autoConnectAll to find a truthy cached entry with an empty bearer token
@@ -84,7 +77,6 @@ function saveCachedTokens(instances: ConnectedInstance[], userId: string, pendin
       token: inst.token,
       label: inst.label,
       username: inst.username,
-      pendingPasswordSync: pendingSyncFlags?.[inst.origin] ?? existing[inst.origin]?.pendingPasswordSync,
     };
   }
   localStorage.setItem(storageKey(userId), JSON.stringify(cache));
@@ -135,6 +127,97 @@ export function isSelfOrigin(origin: string): boolean {
   }
 }
 
+// ─── Home-session resolution ─────────────────────────────────────────────────
+
+/** Bare, lowercased hostname of an origin / homeInstance value (no scheme, no port). */
+function homeHostOf(value: string): string {
+  const stripped = value.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+  return (stripped.split('/')[0] ?? '').split(':')[0]!.toLowerCase();
+}
+
+/**
+ * The authenticated API client for a given home domain, or null when this
+ * client holds no session there: the primary connection when we are browsing
+ * that domain natively, else a connected secondary instance.
+ *
+ * Shared by `maybeAutoReattach` (proof minting) and `resolveCredentialHomeApi`
+ * (per-remote credential issuance) so both agree on what "a session on the home
+ * instance" means.
+ */
+function resolveSessionApiForHome(homeDomain: string): { api: BackspaceApiClient; username: string } | null {
+  const primaryUser = useAuthStore.getState().user;
+  if (primaryUser && !primaryUser.homeInstance && window.location.hostname.toLowerCase() === homeDomain) {
+    return { api, username: primaryUser.username };
+  }
+  const conn = useInstanceStore.getState().instances.find(
+    (i) => i.status === 'connected' && new URL(i.origin).hostname.toLowerCase() === homeDomain,
+  );
+  return conn ? { api: conn.api, username: conn.username } : null;
+}
+
+/**
+ * The API client of the instance that ISSUES this account's per-remote
+ * federation credentials — always the account's true home.
+ *
+ * Credentials must be minted in exactly one place. If each browsing instance
+ * issued its own, the same remote account would be handed two different secrets
+ * and the user would be locked out of it from every device but one. A detached
+ * account (`federationHomeOrphaned`) has no home left to ask, so it is sovereign
+ * here and issues its own — the same rule the server applies (users.ts).
+ */
+function resolveCredentialHomeApi(): BackspaceApiClient | null {
+  const currentUser = useAuthStore.getState().user;
+  if (!currentUser) return null;
+  if (!currentUser.homeInstance || currentUser.federationHomeOrphaned) return api;
+  return resolveSessionApiForHome(homeHostOf(currentUser.homeInstance))?.api ?? null;
+}
+
+/**
+ * Make the remote account for THIS user on `instance` authenticate with the
+ * home-issued per-remote secret rather than whatever it was provisioned with.
+ *
+ * This is the single place that reconciles a remote account's credential, so
+ * every path that establishes a remote session routes through it: fresh
+ * connect, explicit login, and token reconnect. Connections made before
+ * per-remote secrets existed still carry `bcrypt(home password)`; the home
+ * instance's `provisioned` flag marks which ones have been migrated, so the
+ * rotation happens exactly once per account instead of on every launch (each
+ * rotation bumps the remote's `passwordChangedAt` and revokes this user's other
+ * sessions there).
+ *
+ * `force` skips the flag — used after an explicit login, which is the one
+ * signal that the remote hash is something other than the issued secret.
+ *
+ * Never touches an account that is not this user's federated identity on that
+ * instance: `homeInstance` and `homeUserId` must both match, so a native
+ * account someone logged into on the remote is left alone.
+ */
+export async function ensureRemoteCredential(
+  instance: ConnectedInstance,
+  opts: { force?: boolean } = {},
+): Promise<void> {
+  const currentUser = useAuthStore.getState().user;
+  if (!currentUser) return;
+
+  const trueHomeHost = homeHostOf(currentUser.homeInstance ?? window.location.host);
+  if (homeHostOf(instance.origin) === trueHomeHost) return; // home keeps the real password
+
+  const remote = instance.user;
+  if (!remote.homeInstance || !remote.homeUserId) return;
+  if (homeHostOf(remote.homeInstance) !== trueHomeHost) return;
+  if (remote.homeUserId !== (currentUser.homeUserId ?? currentUser.id)) return;
+
+  const homeApi = resolveCredentialHomeApi();
+  if (!homeApi) return;
+
+  const credential = await homeApi.users.federationCredential({ origin: instance.origin });
+  if (credential.provisioned && !opts.force) return;
+
+  const rotated = await instance.api.users.changePassword({ newPassword: credential.secret });
+  useInstanceStore.getState().updateInstanceToken(instance.origin, rotated.token);
+  await homeApi.users.federationCredential({ origin: instance.origin, markProvisioned: true });
+}
+
 // ─── Automatic re-attach (re-attach spec §3.4) ────────────────────────────────
 
 /**
@@ -152,22 +235,9 @@ export async function maybeAutoReattach(instance: ConnectedInstance): Promise<vo
 
   // An authenticated session on the account's home domain: the primary
   // connection when we're browsing it, else a connected secondary instance.
-  const primaryUser = useAuthStore.getState().user;
-  let homeApi: BackspaceApiClient | null = null;
-  let homeUsername: string | null = null;
-  if (primaryUser && !primaryUser.homeInstance && window.location.hostname.toLowerCase() === homeDomain) {
-    homeApi = api;
-    homeUsername = primaryUser.username;
-  } else {
-    const conn = useInstanceStore.getState().instances.find(
-      (i) => i.status === 'connected' && new URL(i.origin).hostname.toLowerCase() === homeDomain,
-    );
-    if (conn) {
-      homeApi = conn.api;
-      homeUsername = conn.username;
-    }
-  }
-  if (!homeApi || !homeUsername) return;
+  const homeSession = resolveSessionApiForHome(homeDomain);
+  if (!homeSession) return;
+  const { api: homeApi, username: homeUsername } = homeSession;
 
   // Unambiguous case only: same username base on both sides (spec §2/§3.4).
   const detachedBase = parseFederatedUsername(remoteUser.username).baseName.toLowerCase();
@@ -243,7 +313,6 @@ interface InstanceState {
   isLoading: boolean;
   error: string | null;
   _autoConnectDone: boolean;
-  pendingSyncOrigins: string[];
   registry: Map<string, FederationRegistryEntry>;
   registryUpdatedAt: number;
   // True once we've successfully fetched the authoritative registry from the
@@ -262,8 +331,6 @@ interface InstanceState {
   reconnectInstance: (origin: string) => Promise<void>;
   reauthenticateInstance: (origin: string, password: string) => Promise<void>;
   updateInstanceToken: (origin: string, newToken: string) => void;
-  setPendingPasswordSync: (origin: string, pending: boolean) => void;
-  hasPendingPasswordSync: (origin: string) => boolean;
   syncInstanceList: () => Promise<void>;
   autoConnectAll: () => Promise<void>;
   reset: () => void;
@@ -274,7 +341,6 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
   isLoading: false,
   error: null,
   _autoConnectDone: false,
-  pendingSyncOrigins: [],
   registry: new Map(),
   registryUpdatedAt: 0,
   _registrySyncReady: false,
@@ -308,15 +374,9 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
-      // Step 1: Verify password against the instance we're currently browsing
-      const { valid } = await api.users.verifyPassword(password);
-      if (!valid) {
-        throw new Error('Incorrect password');
-      }
-
-      // Step 2: Compute the user's true home identity
-      // If we're a federated user (e.g. erin@nova browsing orbit),
-      // homeInstance points to the real home, not window.location.host.
+      // Compute the user's true home identity. If we're a federated user
+      // (e.g. erin@nova browsing orbit), homeInstance points at the real home,
+      // not window.location.host.
       const trueHomeHost = currentUser.homeInstance ?? window.location.host;
       const bareUsername = currentUser.username.includes('@')
         ? currentUser.username.split('@')[0]!
@@ -329,10 +389,13 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
 
       let response: AuthResponse | null = null;
       let finalUsername: string;
+      let credentialOrigin: string | null = null;
+      let homeApi: BackspaceApiClient | null = null;
 
       if (targetIsHome) {
-        // Target IS the user's home instance — they already have a native account.
-        // Just login with bare username, no registration or homeInstance params.
+        // Target IS the user's home instance — they already have a native
+        // account there, and the entered password is that account's password.
+        // The login itself is the verification, so there is nothing to pre-check.
         finalUsername = bareUsername;
         try {
           response = await tempClient.auth.login({
@@ -343,14 +406,30 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
           throw new DifferentPasswordError(bareUsername);
         }
       } else {
-        // Target is a remote/third-party instance — register as user@homeHost
+        // Target is a remote/third-party instance. The entered password is
+        // checked by the account's OWN home instance and never travels to the
+        // target; the target is given a per-remote secret the home issues.
+        homeApi = resolveCredentialHomeApi();
+        if (!homeApi) {
+          throw new Error(
+            `Connect to your home instance (${trueHomeHost}) first — it issues the credential for ${targetHost}`,
+          );
+        }
+
+        const { valid } = await homeApi.users.verifyPassword(password);
+        if (!valid) {
+          throw new Error('Incorrect password');
+        }
+
+        const credential = await homeApi.users.federationCredential({ origin });
+        credentialOrigin = credential.origin;
         finalUsername = `${bareUsername}@${trueHomeHost}`;
 
         // 2a: Attempt registration with namespaced username
         try {
           response = await tempClient.auth.register({
             username: finalUsername,
-            password,
+            password: credential.secret,
             displayName: displayName || currentUser.displayName || undefined,
             homeInstance: trueHomeHost,
             homeUserId: trueHomeUserId,
@@ -365,29 +444,32 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
           }
         }
 
-        // 2b: If registration didn't work, try login
+        // 2b: If registration didn't work, try login with the issued secret.
+        // There is deliberately no retry with the entered password: an account
+        // that does not accept the issued secret is reached through the explicit
+        // per-instance login form, where the user chooses what to send.
         if (!response) {
           try {
             response = await tempClient.auth.login({
               username: finalUsername,
-              password,
+              password: credential.secret,
             });
           } catch {
-            // Namespaced login failed — try legacy plain username as fallback
-            try {
-              response = await tempClient.auth.login({
-                username: bareUsername,
-                password,
-              });
-            } catch {
-              throw new DifferentPasswordError(bareUsername);
-            }
+            throw new DifferentPasswordError(finalUsername);
           }
         }
       }
 
       if (!response) {
         throw new Error('Failed to authenticate with remote instance');
+      }
+
+      // The remote account now authenticates with the issued secret — record it
+      // so no later launch tries to migrate an already-migrated account.
+      if (homeApi && credentialOrigin) {
+        await homeApi.users
+          .federationCredential({ origin: credentialOrigin, markProvisioned: true })
+          .catch((err) => console.warn('[federation] Could not record credential state:', err));
       }
 
       // Step 3: Complete connection
@@ -510,6 +592,13 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
 
       // Automatic re-attach for detached accounts (re-attach spec §3.4).
       maybeAutoReattach(instance).catch(() => {});
+
+      // The user just authenticated with a password of their own choosing, so
+      // the remote hash is whatever they typed. Force it back onto the
+      // home-issued secret (no-op unless this is our own federated identity).
+      ensureRemoteCredential(instance, { force: true }).catch((err) =>
+        console.warn('[federation] Could not reconcile remote credential:', err),
+      );
 
       // Sync instance list to all instances (fire-and-forget)
       get().syncInstanceList().catch(() => {});
@@ -655,6 +744,16 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       get().syncRegistry().catch(() => {});
 
       connectInstance(origin, inst.token);
+
+      // Same reconciliation as autoConnectAll: a still-valid token is the one
+      // chance to migrate a connection made before per-remote secrets existed
+      // without asking for a password. No-op once marked provisioned.
+      const reconnected = get().instances.find(i => i.origin === origin);
+      if (reconnected) {
+        ensureRemoteCredential(reconnected).catch((err2) =>
+          console.warn(`[federation] Credential migration deferred for ${origin}:`, err2),
+        );
+      }
     } catch (err) {
       if (isNetworkError(err)) {
         set((state) => ({
@@ -717,10 +816,6 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       password,
       currentUser.displayName || undefined,
     );
-
-    // Clear pending password sync — connectToRemote uses the current password
-    // which updates the remote's stored hash through register/login
-    get().setPendingPasswordSync(origin, false);
   },
 
   updateInstanceToken: (origin: string, newToken: string) => {
@@ -739,28 +834,6 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     // Reconnect WebSocket with new token
     disconnectWs(origin);
     connectInstance(origin, newToken);
-  },
-
-  setPendingPasswordSync: (origin: string, pending: boolean) => {
-    const userId = useAuthStore.getState().user?.id;
-    if (!userId) return;
-
-    // Update Zustand state (triggers React re-renders)
-    set((state) => ({
-      pendingSyncOrigins: pending
-        ? state.pendingSyncOrigins.includes(origin)
-          ? state.pendingSyncOrigins
-          : [...state.pendingSyncOrigins, origin]
-        : state.pendingSyncOrigins.filter(o => o !== origin),
-    }));
-
-    // Also persist to localStorage
-    const flags: Record<string, boolean> = { [origin]: pending };
-    saveCachedTokens(get().instances, userId, flags);
-  },
-
-  hasPendingPasswordSync: (origin: string) => {
-    return get().pendingSyncOrigins.includes(origin);
   },
 
   syncInstanceList: async () => {
@@ -1143,6 +1216,13 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
             // Open WebSocket connection now that we've verified the token
             connectInstance(origin, cachedEntry.token);
 
+            // Migrate connections provisioned before per-remote secrets existed,
+            // while this still-valid token makes it possible without a password.
+            // No-op once the home instance has the account marked provisioned.
+            ensureRemoteCredential(connectedInstance).catch((err) =>
+              console.warn(`[federation] Credential migration deferred for ${origin}:`, err),
+            );
+
             // Initiate server-to-server peering for DM relay (non-fatal, idempotent)
             api.federation.ensurePeered({ remoteOrigin: origin }).catch(() => {});
           } catch (err) {
@@ -1196,18 +1276,11 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     // so tokens are preserved for instant reconnect (registry controls auto-connect behavior)
     saveCachedTokens(get().instances, currentUser.id);
 
-    // Hydrate pendingSyncOrigins from localStorage cache and mark auto-connect done
-    const freshCached = loadCachedTokens(currentUser.id);
-    const pendingOrigins = Object.entries(freshCached)
-      .filter(([, v]) => v.pendingPasswordSync)
-      .map(([origin]) => origin);
-
     // Persist reconciled registry. _registrySyncReady gates outbound PUTs:
     // only flip true when we've authoritatively read from the home server.
     const registryUpdatedAt = serverRegistryUpdatedAt > 0 ? Math.max(serverRegistryUpdatedAt, Date.now()) : Date.now();
     set({
       _autoConnectDone: true,
-      pendingSyncOrigins: pendingOrigins,
       registry,
       registryUpdatedAt,
       _registrySyncReady: serverRegistryFetched,
@@ -1229,9 +1302,8 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     // Tear down all remote WebSocket connections
     disconnectAllRemote();
 
-    clearPasswordSyncTimers();
 
-    set({ instances: [], isLoading: false, error: null, _autoConnectDone: false, pendingSyncOrigins: [], registry: new Map(), registryUpdatedAt: 0, _registrySyncReady: false });
+    set({ instances: [], isLoading: false, error: null, _autoConnectDone: false, registry: new Map(), registryUpdatedAt: 0, _registrySyncReady: false });
     // Token cache preserved — scoped per user, survives logout for seamless reconnect
   },
 }));

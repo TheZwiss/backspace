@@ -1,0 +1,21 @@
+{
+  "name": "@backspace/metrics",
+  "version": "1.0.2",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "author": "Jannis Braun",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "tsc --noEmit && vitest run",
+    "vendor:check": "vitest run src/vendor-check.test.ts"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0",
+    "vitest": "^4.0.18",
+    "@types/node": "^24.0.0"
+  }
+}

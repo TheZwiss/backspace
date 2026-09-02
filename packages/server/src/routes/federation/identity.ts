@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { config } from '../../config.js';
 import { getDb, schema } from '../../db/index.js';
-import { getOurOrigin } from '../../utils/federationAuth.js';
+import { getOurOrigin, normalizeOriginForCompare } from '../../utils/federationAuth.js';
 import { generateSnowflake } from '../../utils/snowflake.js';
 import { and, eq, isNull, or, sql } from 'drizzle-orm';
 import { randomBytes } from 'node:crypto';
@@ -37,22 +37,129 @@ export function getOurIdentityDomain(): string | null {
 
 
 /**
- * Verify that an acting user's homeInstance is legitimate for this relay.
+ * The acting identity an inbound relay event asserts. A `homeUserId` on its own
+ * is NOT an identity — the column is only unique within one instance, so it is
+ * meaningless without the `homeInstance` that scopes it. Every attribution site
+ * therefore passes the pair.
+ */
+export interface RelayActor {
+  homeUserId: string;
+  homeInstance: string;
+}
+
+
+/**
+ * Does the natively-homed local user `homeUserId` have an established federated
+ * presence on `peerOrigin`?
+ *
+ * This is the ONLY thing that makes a homeward relay (a peer asserting an event
+ * authored by one of OUR users) legitimate: such an event can only genuinely
+ * exist if the user holds an account on that peer and acted there. Both records
+ * consulted here are written exclusively by the user themselves, over an
+ * authenticated session on this instance:
+ *
+ *   - `user_federation_registry` — `PUT /api/users/@me/federation-registry`,
+ *     scoped to `request.userId`. Every lifecycle state counts (a connection
+ *     that is `disconnected` / `auth_expired` today was still real).
+ *   - `users.replicated_instances` — `PATCH /api/users/@me`, same scoping.
+ *
+ * A peer cannot forge either one, so it cannot manufacture standing to speak
+ * for a user who never connected to it.
+ */
+export function localUserActsOnPeer(
+  homeUserId: string,
+  peerOrigin: string,
+  db: ReturnType<typeof getDb>,
+): boolean {
+  const peerHost = normalizeOriginForCompare(peerOrigin);
+  if (!peerHost) return false;
+
+  // Homeward means "homed HERE", so the actor must resolve to a NATIVE row
+  // (home_instance IS NULL). Matching a replicated stub that merely carries the
+  // same home_user_id would reintroduce the cross-instance id collision the
+  // homeInstance pairing exists to prevent.
+  const nativeUser = db
+    .select({ id: schema.users.id, replicatedInstances: schema.users.replicatedInstances })
+    .from(schema.users)
+    .where(and(
+      eq(schema.users.id, homeUserId),
+      isNull(schema.users.homeInstance),
+      eq(schema.users.isDeleted, 0),
+    ))
+    .get();
+  if (!nativeUser) return false;
+
+  const registryRows = db
+    .select({ origin: schema.userFederationRegistry.origin })
+    .from(schema.userFederationRegistry)
+    .where(eq(schema.userFederationRegistry.userId, nativeUser.id))
+    .all();
+  if (registryRows.some(r => normalizeOriginForCompare(r.origin) === peerHost)) return true;
+
+  if (nativeUser.replicatedInstances) {
+    try {
+      const parsed: unknown = JSON.parse(nativeUser.replicatedInstances);
+      if (Array.isArray(parsed)) {
+        for (const entry of parsed) {
+          if (typeof entry !== 'object' || entry === null) continue;
+          const origin = (entry as { origin?: unknown }).origin;
+          if (typeof origin === 'string' && normalizeOriginForCompare(origin) === peerHost) return true;
+        }
+      }
+    } catch {
+      // Malformed JSON is treated as "no recorded presence" — fail closed.
+    }
+  }
+
+  return false;
+}
+
+
+/**
+ * Verify that an inbound relay event's acting identity is one the signing peer
+ * is entitled to speak for.
+ *
+ * The only trustworthy fact about an inbound relay is the HMAC-authenticated
+ * peer. `sourceInstance` is bound to that peer at the relay boundary (see
+ * `handlers/relay.ts` and `events/dispatch.ts`), so it is safe to treat it as
+ * the signing peer here.
  *
  * Two valid cases:
- * 1. **Direct**: author is from the source instance (standard S2S — peer sends events for its own users).
- * 2. **Homeward relay**: author is from the *receiving* instance. This happens when a client-federation
- *    user (e.g., erin@nova logged into orbit) sends a message on a remote server, and the
- *    S2S relay forwards it back to the author's home instance. The trusted peer is just the messenger.
+ * 1. **Direct**: the actor is homed on the signing peer. A peer is the identity
+ *    authority for its own users.
+ * 2. **Homeward relay**: the actor is homed on THIS instance — a client-
+ *    federation user (e.g. erin@nova logged into orbit) acted on the remote and
+ *    the relay carries it back home. This is only accepted when the local user
+ *    actually holds a federated account on the signing peer
+ *    (`localUserActsOnPeer`). Without that binding, any approved peer could
+ *    forge events attributed to any of our users.
  *
- * Both sides are normalized to bare domain before comparison.
+ * An actor homed on a third instance is never accepted: the signing peer is not
+ * that instance's identity authority and has no delegation from it.
  */
-export function verifyAttribution(actingUserHomeInstance: string, sourceInstance: string): boolean {
-  const authorDomain = extractDomain(actingUserHomeInstance);
-  // Case 1: author belongs to the source peer
-  if (authorDomain === extractDomain(sourceInstance)) return true;
-  // Case 2: homeward relay — author belongs to THIS (receiving) instance
-  if (authorDomain === extractDomain(getOurOrigin())) return true;
+export function verifyAttribution(
+  actor: RelayActor | null | undefined,
+  sourceInstance: string,
+  db: ReturnType<typeof getDb>,
+): boolean {
+  if (!actor) return false;
+  const { homeUserId, homeInstance } = actor;
+  if (typeof homeUserId !== 'string' || homeUserId.length === 0) return false;
+  if (typeof homeInstance !== 'string' || homeInstance.length === 0) return false;
+
+  const authorDomain = extractDomain(homeInstance).toLowerCase();
+  const sourceDomain = extractDomain(sourceInstance).toLowerCase();
+  if (!authorDomain || !sourceDomain) return false;
+
+  // Case 1: the actor belongs to the signing peer.
+  if (authorDomain === sourceDomain) return true;
+
+  // Case 2: homeward relay — the actor belongs to THIS instance.
+  const ourDomain = extractDomain(getOurOrigin()).toLowerCase();
+  if (ourDomain && authorDomain === ourDomain) {
+    return localUserActsOnPeer(homeUserId, sourceInstance, db);
+  }
+
   return false;
 }
 
