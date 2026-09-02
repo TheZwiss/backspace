@@ -27,3 +27,4 @@
 - Source code and documentation: https://github.com/TheZwiss/backspace
 - Comparison with Discord, Revolt, Spacebar, Matrix, and Mumble: https://github.com/TheZwiss/backspace/blob/main/docs/comparison.md
 - License: https://github.com/TheZwiss/backspace/blob/main/LICENSE
+- Repository insights (traffic, growth, and referral figures, collected daily): https://thezwiss.github.io/backspace/insights/
