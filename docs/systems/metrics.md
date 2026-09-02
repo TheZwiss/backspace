@@ -124,7 +124,7 @@ All files live at the root of the `metrics-data` branch. CSVs are sorted ascendi
 
 #### Caveats on the table above
 
-**Clones count this repository's own CI.** GitHub counts every `actions/checkout` in the clone statistics, so `traffic/clones.csv` measures the build pipeline and the audience together, with no field distinguishing them. Measured on this repo: days with no workflow runs sit at 2-30 clones, while 2026-08-25 and 2026-09-01 recorded 155 and 189 clones against 218 and 180 successful checkout steps. Clones far above one per unique cloner is the signature. The ratio is not a constant and this archive does not model it: neither the run count nor the checkout-step count predicts the clone figure closely (218 checkout steps produced 155 clones, 180 produced 189), so only the co-occurrence is established, not a coefficient. That is exactly why nothing here publishes a "clones minus CI" figure: that would be a model, and the premise of this archive is that every number on it is a measurement. Page views are unaffected, because a checkout loads no page. The confound is disclosed on the clones card, in the Reach section copy, in the static data page's clones blurb, and in the `BUILD:SUMMARY` sentence that states the peak clone day. It is also *shown*: `workflows.csv` records this repository's own daily workflow-run count, and the dashboard plots it as a third chart on the Reach section's shared axis, directly under clones. The two series are never combined into one corrected figure — see §4.5.
+**Clones count this repository's own CI.** GitHub counts every `actions/checkout` in the clone statistics, so `traffic/clones.csv` measures the build pipeline and the audience together, with no field distinguishing them. Measured on this repo: days with no workflow runs sit at 2-30 clones, while 2026-08-25 and 2026-09-01 recorded 155 and 189 clones against 218 and 180 successful checkout steps. Clones far above one per unique cloner is the signature. The ratio is not a constant and this archive does not model it: neither the run count nor the checkout-step count predicts the clone figure closely (218 checkout steps produced 155 clones, 180 produced 189), so only the co-occurrence is established, not a coefficient. That is exactly why nothing here publishes a "clones minus CI" figure: that would be a model, and the premise of this archive is that every number on it is a measurement. Page views are unaffected, because a checkout loads no page. The confound is disclosed on the clones card, in the Reach section copy, in the static data page's clones blurb, and in the `BUILD:SUMMARY` sentence that states the peak clone day. It is also *shown*: `workflows.csv` records this repository's own daily workflow-run count, and the dashboard plots it as a third chart in the Reach section, directly under clones and joined to it by the shared cursor rather than by a shared x axis — see §10.7. The two series are never combined into one corrected figure — see §4.5.
 
 **`stars.csv` and `forks.csv` are point-in-time snapshots, not deltas.** Each row is the live counter as read that day, so it correctly reflects someone who starred and later unstarred. A row written by `backfill()` instead reconstructs the value from `/stargazers`' `starred_at`, which lists only *current* stargazers, making a reconstructed row a **lower bound**. Nothing on disk distinguishes the two writers. See §4.2.
 
@@ -251,7 +251,7 @@ The traffic window is 14 buckets wide, so any gap of **≤13 full days** without
 
 **Backfill stops at the oldest surviving run.** GitHub deletes workflow runs once they pass the repository's retention period (90 days by default). Reconstructing a day older than the oldest run still returned would write a confident `0` for a day whose evidence has been destroyed — a fabricated measurement, indistinguishable ever after from a genuinely quiet day. Inside the surviving span the zeros are sound, because retention deletes uniformly by age: if the oldest surviving run is still present, no later day has lost runs. Below that date the reconstruction writes nothing, leaving a gap, which is the truthful encoding.
 
-**The two series are never combined.** No "clones minus estimated CI" figure is published anywhere. The relationship is not a stable coefficient — measured on this repository, 218 successful checkout steps accompanied 155 clones on one day and 180 accompanied 189 on another — so a corrected number would be a model, on a page whose entire claim is that every figure was measured. Both series are plotted on a shared axis, as separate stacked charts rather than one dual-axis chart, precisely so the co-occurrence is visible without inviting a ratio to be read off them.
+**The two series are never combined.** No "clones minus estimated CI" figure is published anywhere. The relationship is not a stable coefficient — measured on this repository, 218 successful checkout steps accompanied 155 clones on one day and 180 accompanied 189 on another — so a corrected number would be a model, on a page whose entire claim is that every figure was measured. Both series are plotted as separate stacked charts rather than one dual-axis chart, precisely so the co-occurrence is visible without inviting a ratio to be read off them. They are joined by the page's shared cursor, not by a shared x axis; §10.7 says why.
 ---
 
 ## 5. The 202 problem
@@ -441,7 +441,7 @@ The bundler reads the nine archive files described in §3 and emits one JSON obj
 
 - **`meta.json`'s `series_last_date` is not published.** It is a per-file resume cursor — collector internals. Shipping it would hand a static page a map of the collector's file layout and invite the page to start depending on it. `DashboardMeta` carries `last_run`, `last_success` and `error`, and nothing else.
 - **Most of the dimensional history is discarded.** The archive holds every row of every snapshot; the bundle keeps only the *latest* snapshot's ranking plus a differenced trajectory for its top five dimensions, per file. Everything else in `referrers.ndjson`/`paths.ndjson` exists only on the `metrics-data` branch.
-- **Daily resolution of the six dated series, but only under pressure.** They are published day-by-day until the bundle would exceed its size budget, at which point every one of them is reduced to weekly buckets (§10.3). `releases` and `dimensions` are never bucketed.
+- **Daily resolution of the seven dated series, but only under pressure.** They are published day-by-day until the bundle would exceed its size budget, at which point every one of them is reduced to weekly buckets (§10.3). `releases` and `dimensions` are never bucketed.
 
 `bundle.ts` also declares its own types rather than reusing `types.ts`. `types.ts` describes what the collector writes; `bundle.ts` describes what the page reads. They coincide today — a `ReleaseEntry` and a `ReleaseRow` are the same three fields — but they are two contracts with two consumers, and the page must not silently acquire a field because a collector type grew one.
 
@@ -453,7 +453,7 @@ The bundler reads the nine archive files described in §3 and emits one JSON obj
 interface DashboardData {
   /** ISO timestamp (with milliseconds) the bundle was generated. */
   generated_at: string;
-  /** Earliest date present in ANY of the six dated series, or null. */
+  /** Earliest date present in ANY of the seven dated series, or null. */
   collection_started: string | null;
   /** From meta.json, or null when the archive has none. */
   meta: { last_run: string; last_success: string | null; error: string | null } | null;
@@ -512,7 +512,7 @@ Neither is checked, and that is a decision rather than an oversight: rejecting a
 
 **`downsampleWeekly`, `rangeWindow` and `snapshotWindow` are one mechanism in three parts. Do not "fix" any of them in isolation.**
 
-- `downsampleWeekly` buckets the six dated series onto their UTC Monday and leaves `dimensions` **unbucketed**, on their own daily snapshot dates. Bucketing them would silently redefine "the difference between consecutive snapshots" into something else with the same name.
+- `downsampleWeekly` buckets the seven dated series onto their UTC Monday and leaves `dimensions` **unbucketed**, on their own daily snapshot dates. Bucketing them would silently redefine "the difference between consecutive snapshots" into something else with the same name.
 - `rangeWindow` anchors every window on the newest **dated series** row, deliberately excluding dimension snapshots, so a trailing 14-day aggregate cannot stretch a window past the last real daily measurement.
 - Those two are compatible on a daily bundle, where the two dates coincide. On a **downsampled** bundle they are not: series dates become Monday bucket keys while snapshots keep their daily dates, so the newest series day can sit up to six days *before* the newest snapshot. In the fixture that found this, every snapshot in the trailing partial week fell outside every window, `all` included — both dimension sections drew nothing, reported "N of the M the archive holds", and offered "a wider range takes in more", which no range did.
 - `snapshotWindow` exists to close exactly that gap. It extends only the **end** of the shared window, and only as far as a snapshot that actually exists; the start is left where the range control put it, and `extendedFrom` is set so the section states that the axis runs past the range's anchor rather than quietly drawing a wider span than the control implies.
@@ -604,7 +604,7 @@ There is a third, per-chart case worth stating because it is the normal state of
 | `empty` | the bundle loaded and validated, and `empty` is `true` | "Collection has not produced any rows yet" — the archive holds no traffic, no growth snapshots, no releases; figures appear after the collector's first successful run |
 | `ok` | loaded, validated, non-empty | the five sections render |
 
-`empty` is true when all six dated series, `releases`, and both dimension snapshot lists are empty — the state an archive is in immediately after the branch is bootstrapped, when it holds only `meta.json`. Note that `empty` and `collection_started` answer different questions: an archive holding only releases or only dimension snapshots is **not** empty yet has no dated series, so `collection_started` is `null` and the range control has nothing to anchor on.
+`empty` is true when all seven dated series, `releases`, and both dimension snapshot lists are empty — the state an archive is in immediately after the branch is bootstrapped, when it holds only `meta.json`. Note that `empty` and `collection_started` answer different questions: an archive holding only releases or only dimension snapshots is **not** empty yet has no dated series, so `collection_started` is `null` and the range control has nothing to anchor on.
 
 The **staleness banner** is separate from all three and is evaluated on any bundle that loaded, empty or not. It fails closed — anything it cannot confirm counts as stale, and the reason says which:
 
@@ -617,11 +617,32 @@ Whenever the banner fires it also reports `last_success`, because when the colle
 
 **One thing the bundle carries no evidence of.** A persistent `202` from `/stats/contributors` (§5) makes the collector skip `contributors.csv` for that run without recording an error anywhere. The contributors card and its coverage line therefore **understate** — never overstate — and nothing in `data.json` distinguishes "the count did not move" from "the count was not measured that day". The card's `step` kind exists partly for this: a contributors row is written when the total *changes*, so the age of its newest row says nothing about freshness and the daily-sample staleness test is deliberately not applied to it.
 
+### 10.7 Each chart is drawn on its own span, not on the section's
+
+**The rule: a chart's x axis spans the days *that chart* was measured on. Two charts share an axis only when they share a history.**
+
+`expand` in the chart toolkit lays a set of columns onto one evenly stepped axis running from the earliest to the latest day any of those columns holds. Handing it every card in a section gives them one axis, which is right for cards that started collecting together — Growth's stars and forks do, and they additionally *need* one axis, because one set of release markers is painted across both.
+
+Reach is the case where it is wrong. Its traffic series begin on the day the collector first ran; `workflows` is reconstructed from the Actions API and reaches back as far as that API still retains — 47 days further, when the CI chart shipped. Expanded together, all three cards got the CI series' span, and both traffic charts were drawn with their entire history crushed into the right-hand quarter of an otherwise blank frame. Every caption was accurate ("measured 15 of 62 days · unmeasured 47 days") and both charts still read as broken. So Reach calls `isolate(bound, card)` per card and expands each on its own columns.
+
+**What that gives up, and what it does not.** Peaks can no longer be compared across cards by their horizontal position — two charts on different spans put the same day at different pixels. Everything else survives, because the comparison never depended on the axis:
+
+- The cursor group syncs on scale **values**, not pixels, so hovering 08-25 anywhere lands on 08-25 in every chart whose span covers it. A chart that does not cover that day shows a dash rather than a value, which is the honest answer.
+- Drag-zoom propagates as a value range too, so dragging across any chart puts them all on that span.
+- Double-click returns **each** chart to its own span, not to a shared one.
+
+Each card's caption states the span it drew, and the CI card's note says outright that its span reaches further back than the two above it and why.
+
+**Two traps this creates for a later series.**
+
+1. `SERIES_NAMES` in the page's range control is the list of dated series allowed to move the window. A series left out of it can hold a row outside every other series' history, and that row is measured, bundled, and then silently clipped out of every range including `all`. `workflows` was added to that list for exactly this reason; add any new dated series to it in the same commit.
+2. `validateBundle` must gain a `checkSeries` line for any new series. Without one the bundle validates, and the failure surfaces later and further away — as a section-wide error note, or a throw inside the range control that is outside any section's error boundary. `series.workflows` was missing from it until this rule was written down.
+
 ---
 
 ## 11. Testing
 
-`scripts/metrics`'s `test` script is `tsc --noEmit && vitest run` — it runs through the existing root `pnpm -r test` step with no `ci.yml` change required, and covers both types and behavior in one script. All tests are fixture-driven and touch no network; filesystem tests use a per-test `mkdtempSync` directory, cleaned up in `afterEach`. As of this writing there are **338 tests across 12 files**, all passing:
+`scripts/metrics`'s `test` script is `tsc --noEmit && vitest run` — it runs through the existing root `pnpm -r test` step with no `ci.yml` change required, and covers both types and behavior in one script. All tests are fixture-driven and touch no network; filesystem tests use a per-test `mkdtempSync` directory, cleaned up in `afterEach`. As of this writing there are **340 tests across 12 files**, all passing:
 
 ```
 src/no-runtime-deps.test.ts   9
@@ -632,7 +653,7 @@ src/github.test.ts           21
 src/backfill.test.ts         22
 src/store.test.ts            23
 src/summary.test.ts          26
-src/collect.test.ts          33
+src/collect.test.ts          35
 src/cli-support.test.ts      35
 src/series.test.ts           55
 src/bundle.test.ts           89

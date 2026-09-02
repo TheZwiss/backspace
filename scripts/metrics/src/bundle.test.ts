@@ -911,7 +911,7 @@ describe('downsampleWeekly — sum vs. last', () => {
   });
 
   it('sums clones and takes the last value of forks and contributors', () => {
-    // Each of the six series is bucketed by its own rule; this pins the
+    // Each of the seven series is bucketed by its own rule; this pins the
     // three not covered above so a mis-wired call site cannot hide behind a
     // series that happens to be tested elsewhere.
     writeRaw(

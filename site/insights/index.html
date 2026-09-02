@@ -612,11 +612,15 @@ footer a:hover { color: var(--txt); }
         measures this project's build pipeline rather than its audience and can sit an order
         of magnitude above the days on either side. Clones running well above one per unique
         cloner is the signature. Page views are unaffected, because a checkout loads no page.
-        The CI chart below the clone chart is this repository's own workflow-run count on the
-        same axis, so the overlap can be read directly rather than taken on trust. The two are
-        plotted separately and never combined: no fixed number of clones follows from a run,
-        and subtracting an estimate would put a model on a page whose whole claim is that
-        every figure on it was measured.
+        The CI chart below the clone chart is this repository's own workflow-run count, so the
+        overlap can be read directly rather than taken on trust. Its history reaches further
+        back than traffic collection does, because the Actions API can be asked about the past
+        and the traffic endpoints cannot, so each chart is drawn across its own measured days
+        rather than stretched over its neighbour's; hovering lands on the same day in every
+        chart whose span covers it, and dragging sideways across one puts them all on the same
+        span. The two are plotted separately and never combined: no fixed number of clones
+        follows from a run, and subtracting an estimate would put a model on a page whose
+        whole claim is that every figure on it was measured.
       </p>
       <div class="slot" id="chart-reach"></div>
     </div>
@@ -996,6 +1000,7 @@ footer a:hover { color: var(--txt); }
       checkSeries(d.series.contributors, "series.contributors", ["total"]) ||
       checkSeries(d.series.repo, "series.repo",
         ["subscribers", "open_issues", "downloads_total", "downloads_app", "downloads_updates"]) ||
+      checkSeries(d.series.workflows, "series.workflows", ["runs"]) ||
       checkReleases(d.releases);
     if (problem !== null) return problem;
 
@@ -1238,7 +1243,13 @@ footer a:hover { color: var(--txt); }
 
   /* ---------------------------------------------------------- range control */
 
-  var SERIES_NAMES = ["views", "clones", "stars", "forks", "contributors", "repo"];
+  /* Every dated series in the bundle contract. A series left out of this list
+   * cannot move the window, so a row it holds outside every other series'
+   * history would be measured, bundled, and then silently clipped out of the
+   * chart. `workflows` is the live case: it is reconstructed from the Actions
+   * API and reaches back to whatever the API still retains, which is under no
+   * obligation to start on the same day the star history does. */
+  var SERIES_NAMES = ["views", "clones", "workflows", "stars", "forks", "contributors", "repo"];
 
   function rangeDefinition(key) {
     for (var i = 0; i < RANGES.length; i++) {
@@ -2401,8 +2412,9 @@ footer a:hover { color: var(--txt); }
     }
     placeHint(node);
     node.textContent = livePlots > 1
-      ? "Hovering any chart moves the cursor on every chart on this page. Drag sideways across " +
-        "any of them to zoom the shared time axis; double-click to return to the full span."
+      ? "Hovering any chart moves the cursor to that day on every chart on this page whose " +
+        "span covers it. Drag sideways across any of them to put them all on that span; " +
+        "double-click to return every chart to its own."
       : "Drag sideways across the chart to zoom its time axis; double-click to return to the " +
         "full span.";
   }
@@ -2612,11 +2624,55 @@ footer a:hover { color: var(--txt); }
   }
 
   /*
+   * The columns ONE card reads, rebased onto an array of their own, so a
+   * section can give that card an axis fitted to its own history instead of
+   * to its neighbours'.
+   *
+   * `expand` spans the UNION of the columns it is handed, which is right when
+   * the cards cover the same days and wrong the moment one of them reaches
+   * further back. The CI series is exactly that case: it is reconstructed
+   * from the Actions API back to the first release, where traffic exists only
+   * from the day the collector first ran. Expanded together, the two traffic
+   * charts were drawn across 47 days they were never measured on and their
+   * whole history was squeezed into the right quarter of the frame — an
+   * accurate chart that reads as a broken one.
+   *
+   * What the shared axis existed for survives without it. The cursor group
+   * syncs on scale VALUES rather than pixels, so hovering 08-25 on the clone
+   * chart still lands on 08-25 in the CI chart however differently the two
+   * are scaled, and a drag-zoom still puts every chart on one span. What is
+   * given up is only the eyeball comparison of two peaks by their horizontal
+   * position, and each card's caption states the span it drew.
+   *
+   * Offsets are rebased in ascending order of their ORIGINAL offset rather
+   * than in enumeration order, so the rebased array holds the card's columns
+   * in the order `bind` pushed them however a host enumerates keys.
+   */
+  function isolate(bound, card) {
+    var names = [];
+    var name;
+    for (name in card.offsets) {
+      if (!Object.prototype.hasOwnProperty.call(card.offsets, name)) continue;
+      names.push(name);
+    }
+    names.sort(function (a, b) { return card.offsets[a] - card.offsets[b]; });
+
+    var columns = [];
+    var offsets = {};
+    for (var i = 0; i < names.length; i++) {
+      offsets[names[i]] = columns.length;
+      columns.push(bound.columns[card.offsets[names[i]]]);
+    }
+    return { columns: columns, offsets: offsets };
+  }
+
+  /*
    * Re-lay a set of columns onto a complete, evenly stepped time axis.
    *
    * `columns` is `[{ series, field }, ...]`; every column is placed on ONE
    * shared axis, so charts built from the same call line up exactly and the
-   * synced cursor points at the same day on all of them.
+   * synced cursor points at the same day on all of them. That is the right
+   * grouping only for cards whose histories start together; see `isolate`.
    *
    * Three decisions worth stating, because each of them is a way to get this
    * wrong that produces a plausible-looking chart:
@@ -3139,6 +3195,7 @@ footer a:hover { color: var(--txt); }
     bind: bind,
     colour: colour,
     expand: expand,
+    isolate: isolate,
     mount: mount,
     zeroBasedCounts: zeroBasedCounts
   };
@@ -3213,16 +3270,22 @@ footer a:hover { color: var(--txt); }
       uniques: { label: "Unique cloners", token: "--amber", fallback: "#fcd34d" }
     },
     /*
-     * Directly below the clone chart, sharing its x axis and its cursor,
-     * because it is the explanation for most of that chart's shape: GitHub
-     * counts every `actions/checkout` this repository runs as a clone.
+     * Directly below the clone chart, sharing its cursor, because it is the
+     * explanation for most of that chart's shape: GitHub counts every
+     * `actions/checkout` this repository runs as a clone.
      *
      * Deliberately a SEPARATE chart rather than a second line on the clone
      * chart. An overlay invites reading a ratio off the two lines, and no
      * stable ratio exists — measured here, 218 checkout steps produced 155
-     * clones on one day and 180 produced 189 on another. Stacked charts on a
-     * shared axis show the co-occurrence, which is what the archive can
-     * actually support, and claim nothing about the coefficient.
+     * clones on one day and 180 produced 189 on another. Stacked charts show
+     * the co-occurrence, which is what the archive can actually support, and
+     * claim nothing about the coefficient.
+     *
+     * It does NOT share the clone chart's x axis. This series is reconstructed
+     * from the Actions API and reaches back to the first release, where
+     * traffic begins on the day the collector first ran, so one axis for both
+     * would flatten the traffic charts against their right-hand edge. The
+     * cursor group carries the comparison instead; see `isolate`.
      *
      * One series, no `uniques`: a workflow run has no unique-visitor reading.
      */
@@ -3235,7 +3298,12 @@ footer a:hover { color: var(--txt); }
         "charts above. The Actions API is asked for a date range and answers it completely, " +
         "so a day with no runs is a measurement; the traffic endpoints omit a day they " +
         "recorded nothing for, so an absent day there is genuinely unmeasured. A break in " +
-        "this line means the collector did not run, or ran before this series existed.",
+        "this line means the collector did not run, or ran before this series existed. " +
+        "That same difference is why this chart's span reaches further back than the two " +
+        "above: each chart is drawn across its own measured days, so peaks cannot be " +
+        "compared by their position across charts. Hovering lands on the same day in every " +
+        "chart whose span covers it, and dragging sideways across one puts them all on the " +
+        "same span.",
       count: {
         label: "Workflow runs",
         token: "--rose", fallback: "#fda4af",
@@ -3303,13 +3371,25 @@ footer a:hover { color: var(--txt); }
    * as what the page does with it, because a break in a line is the one thing
    * on this page a reader is most likely to read as a fall to zero.
    */
-  function metaLine(axis, offsets, spec) {
+  function metaLine(axis, offsets, spec, win) {
     var stepDays = axis.stepDays;
     var total = axis.xs.length;
-    var counted = axis.measured[offsets.count];
-    var missing = total - counted;
 
     var note = el("p", "chart-meta");
+
+    /* A card with no measured row has no span of its own to state: `expand`
+     * found no first or last day for it, and printing the window as one would
+     * claim an axis this card never drew. The window is the only true thing
+     * left to say, so it is said under its own name. */
+    if (total === 0) {
+      note.appendChild(pair("window",
+        I.formatDay(win.startMs) + " → " + I.formatDay(win.endMs)));
+      note.appendChild(pair("measured", "nothing in this window"));
+      return note;
+    }
+
+    var counted = axis.measured[offsets.count];
+    var missing = total - counted;
     note.appendChild(pair("span", I.formatDay(axis.startMs) + " → " + I.formatDay(axis.endMs)));
     note.appendChild(pair("measured", counted + " of " + steps(total, stepDays)));
     if (missing > 0) {
@@ -3345,10 +3425,10 @@ footer a:hover { color: var(--txt); }
    * only after the next collection run, so every new series is empty on the
    * deploy that introduces it.
    */
-  function buildEmptyCard(stack, spec, axis, offsets) {
+  function buildEmptyCard(stack, spec, axis, offsets, win) {
     var card = el("div", "chart-card");
     card.appendChild(el("p", "chart-title", spec.title));
-    card.appendChild(metaLine(axis, offsets, spec));
+    card.appendChild(metaLine(axis, offsets, spec, win));
     card.appendChild(el("p", "slot-note",
       "No measurement of " + spec.count.label.toLowerCase() + " falls inside this window, so " +
       "there is no line to draw. An empty frame would look like a failure rather than an " +
@@ -3357,10 +3437,10 @@ footer a:hover { color: var(--txt); }
     stack.appendChild(card);
   }
 
-  function buildChart(stack, spec, axis, offsets, downsampled) {
+  function buildChart(stack, spec, axis, offsets, downsampled, win) {
     var card = el("div", "chart-card");
     card.appendChild(el("p", "chart-title", spec.title));
-    card.appendChild(metaLine(axis, offsets, spec));
+    card.appendChild(metaLine(axis, offsets, spec, win));
 
     var host = el("div", "chart-scroll");
     card.appendChild(host);
@@ -3412,9 +3492,10 @@ footer a:hover { color: var(--txt); }
    * code" — and send whoever reads it to the wrong repository entirely. So the
    * reader is told what the console is told: a date in the archive is wrong.
    */
-  function overrunNote(axis) {
-    var detail = "The traffic series would run from " + I.formatDay(axis.startMs) + " to " +
-      I.formatDay(axis.endMs) + ", which needs " + I.formatCount(axis.overrunSteps) +
+  function overrunNote(spec, axis) {
+    var detail = "The " + spec.title + " chart's series would run from " +
+      I.formatDay(axis.startMs) + " to " + I.formatDay(axis.endMs) + ", which needs " +
+      I.formatCount(axis.overrunSteps) +
       " points on the time axis — far longer than this archive can really cover. A date in " +
       "the archive itself is wrong. No chart is drawn, rather than one built around a date " +
       "that cannot be true.";
@@ -3454,22 +3535,51 @@ footer a:hover { color: var(--txt); }
     slot.appendChild(windowLine(win));
 
     var stepDays = I.resolutionStepDays();
-    /* One expansion for both charts, so both get the identical x axis and the
-     * synced cursor lands on the same day in each. The columns come from the
-     * cards that read them rather than from a literal of their own, so a card
-     * cannot be drawn from a column it does not name; see `bind`. */
+    /* ONE EXPANSION PER CARD, each axis spanning only the days that card was
+     * measured on.
+     *
+     * Expanding all three together gave them one axis, which was right while
+     * every card here was a traffic series collected from the same first day.
+     * It stopped being right when the CI series joined them: its history is
+     * reconstructed from the Actions API back to the first release, so the
+     * union reached 47 days further back than traffic does and both traffic
+     * charts were drawn with their entire history crushed into the right-hand
+     * quarter of an otherwise empty frame. The captions said so truthfully and
+     * the charts still looked broken.
+     *
+     * The comparison the shared axis was for is not lost with it: the cursor
+     * group syncs on scale values, so a hover still lands on the same day in
+     * every chart, and a drag-zoom still puts them all on one span. See
+     * `isolate`.
+     *
+     * The columns come from the cards that read them rather than from a
+     * literal of their own, so a card cannot be drawn from a column it does
+     * not name; see `bind`, which validates every card up front so a bundle
+     * missing a series fails the section rather than half-drawing it. */
     var bound = C.bind("chart-reach", data, CHARTS);
-    var axis = C.expand(bound.columns, win, stepDays);
 
-    /* Before the `empty` branch: an overrun sets `empty` too, as a fail-safe
-     * for a caller that forgets this check, and the specific reason is the
-     * more useful of the two. */
-    if (axis.overrun) {
-      slot.appendChild(overrunNote(axis));
-      return;
+    var i;
+    var drawable = [];
+    var plottable = 0;
+    for (i = 0; i < bound.cards.length; i++) {
+      var own = C.isolate(bound, bound.cards[i]);
+      var axis = C.expand(own.columns, win, stepDays);
+
+      /* Before the `empty` branch: an overrun sets `empty` too, as a fail-safe
+       * for a caller that forgets this check, and the specific reason is the
+       * more useful of the two. An impossible date is a fault in the archive
+       * rather than in one card, so it stops the section: publishing the two
+       * charts either side of it would present a section quietly missing a
+       * chart it says it draws. */
+      if (axis.overrun) {
+        slot.appendChild(overrunNote(bound.cards[i].spec, axis));
+        return;
+      }
+      if (!axis.empty) plottable++;
+      drawable.push({ spec: bound.cards[i].spec, axis: axis, offsets: own.offsets });
     }
 
-    if (axis.empty) {
+    if (plottable === 0) {
       slot.appendChild(el("p", "slot-note",
         "No traffic or CI series carries a row inside " + win.title.toLowerCase() + " (" +
         I.formatDay(win.startMs) + " to " + I.formatDay(win.endMs) +
@@ -3482,20 +3592,25 @@ footer a:hover { color: var(--txt); }
 
     var created = [];
     try {
-      for (var i = 0; i < bound.cards.length; i++) {
-        var card = bound.cards[i];
-        if (axis.measured[card.offsets.count] === 0) {
-          buildEmptyCard(stack, card.spec, axis, card.offsets);
+      for (i = 0; i < drawable.length; i++) {
+        var card = drawable[i];
+        /* `empty` first: an empty axis carries no `measured` entries at all,
+         * so the count lookup below is `undefined` rather than `0` for it. */
+        if (card.axis.empty || card.axis.measured[card.offsets.count] === 0) {
+          buildEmptyCard(stack, card.spec, card.axis, card.offsets, win);
           continue;
         }
-        created.push(buildChart(stack, card.spec, axis, card.offsets, data.downsampled));
+        created.push(buildChart(stack, card.spec, card.axis, card.offsets,
+          data.downsampled, win));
       }
-      /* Both charts sit in one cursor-sync group, and uPlot propagates the drag
-       * selection through it, so a zoom on either moves both — and moves the
-       * growth charts too, which join the same group. The sentence saying so is
-       * the toolkit's, not this section's: written here it disappeared whenever
-       * this section declined to draw, however many other charts were on the
-       * page. */
+      /* Every chart here sits in one cursor-sync group, and uPlot propagates
+       * the drag selection through it, so a zoom on any of them moves them all
+       * — and moves the growth charts too, which join the same group. That
+       * group, not a shared axis, is what keeps these charts readable against
+       * each other now that each is drawn on its own span. The sentence saying
+       * so is the toolkit's, not this section's: written here it disappeared
+       * whenever this section declined to draw, however many other charts were
+       * on the page. */
     } catch (error) {
       /* `live` is assigned only once every chart is built, so a throw part-way
        * leaves `created` referenced by nothing but this frame: the shell's

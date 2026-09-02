@@ -437,7 +437,7 @@ function readDimensionSeries(store: Store, file: string): DimensionSeries {
 }
 
 /**
- * Earliest date across the six dated series, or null when none of them holds
+ * Earliest date across the seven dated series, or null when none of them holds
  * a row.
  *
  * Computed from the data rather than hardcoded or taken from `meta.json`, so
@@ -796,7 +796,7 @@ function copyDimensionSeries(series: DimensionSeries): DimensionSeries {
 }
 
 /**
- * Reduces the six dated series to weekly buckets, keyed on the UTC Monday.
+ * Reduces the seven dated series to weekly buckets, keyed on the UTC Monday.
  *
  * Pure, exactly as `buildDashboardData` is: no clock, no environment, no
  * writes, and no mutation of the argument — the caller keeps a usable daily
