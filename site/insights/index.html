@@ -243,7 +243,11 @@ h1 {
 .resolution:empty { display: none; }
 
 /* ================= Sections ================= */
-section.panel { padding: 60px 0 0; scroll-margin-top: 132px; }
+/* Clears both pieces of sticky chrome, measured rather than guessed: the 60px
+   nav plus the range bar. At 132px an anchor jump landed 18px under the bar and
+   clipped the heading it had just scrolled to. Kept a little generous so the
+   heading has air above it rather than sitting flush against the border. */
+section.panel { padding: 60px 0 0; scroll-margin-top: 168px; }
 section.panel:last-of-type { padding-bottom: 96px; }
 .ch-label {
   font-family: var(--mono); font-size: 13px; font-weight: 500;
@@ -439,6 +443,42 @@ h2 {
   background: rgba(255, 255, 255, 0.05); overflow: hidden;
 }
 .rank-fill { height: 100%; border-radius: 999px; }
+
+/* One snapshot-to-snapshot change, shown as a signed bar against a zero rule.
+   Used instead of a line chart when only one difference exists: see changeCard. */
+.changes { display: grid; gap: 12px; margin-top: 4px; }
+.change-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(110px, 1.6fr) auto;
+  gap: 14px; align-items: center;
+}
+.change-name {
+  font-size: 14.8px; font-weight: 560; color: var(--txt);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.change-track {
+  position: relative; height: 8px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+}
+.change-zero {
+  position: absolute; top: -4px; bottom: -4px; width: 1px;
+  background: rgba(255, 255, 255, 0.2);
+}
+.change-fill { position: absolute; top: 0; bottom: 0; border-radius: 999px; }
+/* A measured zero gets a visible mark of its own. Rendering it as a bar of no
+   width would make "moved by nothing" look identical to "no row at all",
+   which is the one distinction this page exists to keep. */
+.change-nil {
+  position: absolute; top: 50%; width: 5px; height: 5px;
+  margin-top: -2.5px; border-radius: 50%;
+}
+.change-num {
+  font-family: var(--mono); font-size: 12.5px; color: var(--txt2);
+  text-align: right; white-space: nowrap; min-width: 4.5ch;
+}
+@media (max-width: 560px) {
+  .change-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .change-track { grid-column: 1 / -1; }
+}
 /* Below this the count would crowd the name into a few characters. Given its
    own line it keeps the name readable at 360px without the row wrapping into
    something a reader has to reassemble. */
@@ -1112,9 +1152,9 @@ footer a:hover { color: var(--txt); }
   function controlNote() {
     if (state.status === "ok") {
       if (state.data.downsampled) {
-        return "The bundle was downsampled to fit its size budget, so every dated series here — at 30d as much as at all — is drawn in weekly buckets rather than daily points. The referrer and path snapshots are not bucketed: those two sections state their own resolution.";
+        return "Dated series: weekly buckets, the bundle was downsampled to fit its budget.";
       }
-      return "Daily resolution. Every dated series is drawn from one point per measured day, and the referrer and path sections from one point per snapshot date.";
+      return "Dated series: one point per measured day.";
     }
     if (state.status === "empty") {
       return "There are no measurements to select a range from yet.";
@@ -4668,7 +4708,7 @@ footer a:hover { color: var(--txt); }
    * the five with a line below" directly above a paragraph explaining that
    * there is no chart below — a caption for something that is not there,
    * which is the failure this page's whole discipline exists to avoid. */
-  function rankedHint(spec, lines, rankedCount) {
+  function rankedHint(spec, lines, rankedCount, asChange) {
     var text = "These are not daily figures. GitHub reports a " + spec.one + "'s traffic " +
       "only as one trailing " + AGGREGATE_DAYS + "-day total per snapshot and lists at most " +
       GITHUB_TOP_N + " rows, so every count above covers a fortnight and there is no finer " +
@@ -4685,11 +4725,24 @@ footer a:hover { color: var(--txt); }
      *   the sentence would be pointing at rows that are not on the page.
      */
     if (lines.length > 0) {
-      text += " The range does move the movement chart below, which is drawn across snapshot " +
-        "dates. " + (lines.length === 1
-          ? "The one row drawn in colour is the one with a line in that same colour there"
-          : "A row drawn in colour is one of the " + lines.length +
-            " with a line in that same colour there");
+      /* Two different things can sit below this list, and the sentence has to
+       * name the one actually there. With a single difference the section
+       * shows signed bars, not a chart: they carry no time axis, so the range
+       * control does not move them and there is no line to point at. */
+      if (asChange) {
+        text += " Below, the one change the archive can state so far is shown as signed bars " +
+          "rather than as a chart; the range control does not move them, since a single " +
+          "difference has no time axis to select from. " + (lines.length === 1
+            ? "The one row drawn in colour is the one with a bar in that same colour there"
+            : "A row drawn in colour is one of the " + lines.length +
+              " with a bar in that same colour there");
+      } else {
+        text += " The range does move the movement chart below, which is drawn across snapshot " +
+          "dates. " + (lines.length === 1
+            ? "The one row drawn in colour is the one with a line in that same colour there"
+            : "A row drawn in colour is one of the " + lines.length +
+              " with a line in that same colour there");
+      }
       text += rankedCount > lines.length ? "; the rest are ranked here only." : ".";
     }
     return el("p", "chart-hint", text);
@@ -5053,6 +5106,145 @@ footer a:hover { color: var(--txt); }
    * the reader is looking at ten filled bars and one absent chart and is owed
    * an account of why only one of them is missing.
    */
+  /*
+   * How many positions on the axis carry a point from ANY drawn line.
+   *
+   * A movement line needs two of them. With exactly two snapshots there is
+   * only ever one: a trajectory is a difference, so the first snapshot carries
+   * nothing by construction, and every line's single value lands on the same
+   * day. uPlot given that draws each series as one dot in one column — the
+   * measured archive rendered as a 7-pixel smear against the right edge of a
+   * 1034-pixel canvas, which reads as a broken chart rather than as a thin one.
+   */
+  function measuredPositions(axis, lines) {
+    var seen = {};
+    var n = 0;
+    for (var l = 0; l < lines.length; l++) {
+      var col = axis.values[lines[l].offset];
+      if (!col) continue;
+      for (var i = 0; i < col.length; i++) {
+        if (col[i] === null || col[i] === undefined) continue;
+        if (seen[i] !== true) { seen[i] = true; n++; }
+      }
+    }
+    return n;
+  }
+
+  /* The one measured value on a line, for the single-difference case. */
+  function soleValue(axis, line) {
+    var col = axis.values[line.offset];
+    if (!col) return null;
+    for (var i = 0; i < col.length; i++) {
+      if (col[i] !== null && col[i] !== undefined) return col[i];
+    }
+    return null;
+  }
+
+  /*
+   * The single available difference, drawn as signed bars against a zero rule.
+   *
+   * Reached when the archive holds exactly two snapshots. The numbers are real
+   * measurements, so withholding them until a third snapshot arrives would
+   * hide data the page has; drawing them on a time axis misrepresents one
+   * difference as a trajectory. A ranked, signed comparison is what the data
+   * actually supports, and it says outright that it is not the chart.
+   */
+  function changeCard(spec, series, axis, lines) {
+    var card = el("div", "chart-card");
+    card.appendChild(el("p", "chart-title", "Change since the previous snapshot"));
+
+    var total = series.snapshots.length;
+    var previous = total >= 2 ? series.snapshots[total - 2] : null;
+    var newest = total >= 1 ? series.snapshots[total - 1] : null;
+    var meta = el("p", "chart-meta");
+    meta.appendChild(pair("between", (previous === null ? "?" : previous) + " \u2192 " +
+      (newest === null ? "?" : newest)));
+    meta.appendChild(pair("basis", AGGREGATE_DAYS + "-day counts, differenced"));
+    meta.appendChild(pair("lines", lines.length + " " +
+      plural(lines.length, "dimension", "dimensions") + ", joined to the ranking above by name"));
+    card.appendChild(meta);
+
+    var rows = [];
+    var widest = 0;
+    var anyFall = false;
+    for (var i = 0; i < lines.length; i++) {
+      var v = soleValue(axis, lines[i]);
+      if (v === null) continue;
+      if (Math.abs(v) > widest) widest = Math.abs(v);
+      if (v < 0) anyFall = true;
+      rows.push({ line: lines[i], value: v });
+    }
+    rows.sort(function (a, b) { return Math.abs(b.value) - Math.abs(a.value); });
+
+    /*
+     * Where zero sits. Centred only when something actually fell: with every
+     * change in one direction a centred rule spends half the track on a range
+     * no bar can enter, which shrinks every bar to half the width it could
+     * have had and reads as a chart that is mostly empty. Anchored left the
+     * bars use the full track, and the caption below names whichever layout
+     * was chosen so the rule is never left to be inferred from the pixels.
+     */
+    var zeroAt = anyFall ? 50 : 0;
+    var span = anyFall ? 50 : 100;
+
+    var list = el("div", "changes");
+    for (var r = 0; r < rows.length; r++) {
+      var row = el("div", "change-row");
+      var name = el("span", "change-name", rows[r].line.label);
+      name.title = rows[r].line.dimension;
+      row.appendChild(name);
+
+      var track = el("span", "change-track");
+      var rule = el("span", "change-zero");
+      rule.style.left = zeroAt + "%";
+      track.appendChild(rule);
+      var value = rows[r].value;
+      if (value === 0) {
+        /* Measured, and moved by nothing. Marked, never left blank. */
+        var nil = el("span", "change-nil");
+        nil.style.background = rows[r].line.stroke;
+        nil.style.left = zeroAt + "%";
+        /* Centred on the rule, except where the rule is the track's own left
+         * edge: there the centring offset would hang the dot outside the
+         * track it belongs to. Nudged fully inside instead, which keeps it
+         * legible as "on the rule" without breaking the bounds. */
+        nil.style.marginLeft = zeroAt === 0 ? "0px" : "-2.5px";
+        track.appendChild(nil);
+      } else {
+        var frac = widest === 0 ? 0 : Math.abs(value) / widest;
+        var reach = frac * span;
+        var fill = el("span", "change-fill");
+        fill.style.background = rows[r].line.stroke;
+        fill.style.width = reach + "%";
+        fill.style.left = value > 0 ? zeroAt + "%" : (zeroAt - reach) + "%";
+        track.appendChild(fill);
+      }
+      row.appendChild(track);
+
+      var num = el("span", "change-num",
+        (value > 0 ? "+" : "") + I.formatCount(value));
+      row.appendChild(num);
+      list.appendChild(row);
+    }
+    card.appendChild(list);
+
+    var why = el("p", "chart-hint");
+    why.appendChild(document.createTextNode(
+      "The archive holds two snapshots of " + spec.many + ", which is exactly one difference: " +
+      "a trajectory needs a third before there is a line to draw. Each bar above is that one " +
+      "change in a " + spec.one + "'s " + AGGREGATE_DAYS + "-day count, measured against the " +
+      "zero rule " + (anyFall
+        ? "in the middle — right of it a rise, left of it a fall"
+        : "at the left, where every bar starts, because nothing fell between these two " +
+          "snapshots; a fall would place the rule in the middle and run left of it") +
+      ". A dot on the rule is a " +
+      "measured zero: the " + spec.one + " was listed in both snapshots and did not move. A " +
+      spec.one + " absent from either snapshot carries no row here at all, because a difference " +
+      "against a value GitHub never reported is not a number this page can honestly state."));
+    card.appendChild(why);
+    return card;
+  }
+
   function historyNote(spec, series, axis, win, lines, counts) {
     var box = el("div", "slot-note slot-note-detail");
     var total = series.snapshots.length;
@@ -5215,9 +5407,22 @@ footer a:hover { color: var(--txt); }
       var drawnLines = (axis === null || axis.overrun || axis.empty)
         ? []
         : linesWithPoints(axis, bound.lines);
+      /*
+       * Positions that actually carry a point, not days on the axis. A
+       * movement LINE needs two of them; `axis.xs.length >= 2` only says the
+       * axis is two days wide, which two snapshots satisfy while still leaving
+       * every line a single dot in a single column. See measuredPositions.
+       */
+      var positions = (axis === null || axis.overrun || axis.empty)
+        ? 0
+        : measuredPositions(axis, drawnLines);
       var drawing = axis !== null && !axis.overrun && !axis.empty &&
-        axis.xs.length >= 2 && drawnLines.length > 0;
-      if (!drawing) drawnLines = [];
+        axis.xs.length >= 2 && drawnLines.length > 0 && positions >= 2;
+      /* Exactly one difference exists: real measurements, but not a
+       * trajectory. Shown as signed bars rather than drawn as a chart that
+       * cannot contain a line, and rather than withheld. */
+      var singleChange = !drawing && positions === 1 && drawnLines.length > 0;
+      if (!drawing && !singleChange) drawnLines = [];
       var tally = drawing ? pointTally(axis, drawnLines, counts.differenceable) : null;
 
       var stack = el("div", "chart-stack");
@@ -5226,7 +5431,7 @@ footer a:hover { color: var(--txt); }
       var rankCard = el("div", "chart-card");
       rankCard.appendChild(el("p", "chart-title", spec.rankedTitle));
       rankCard.appendChild(rankedList(series, drawnLines));
-      rankCard.appendChild(rankedHint(spec, drawnLines, series.latest.length));
+      rankCard.appendChild(rankedHint(spec, drawnLines, series.latest.length, singleChange));
       stack.appendChild(rankCard);
 
       if (win === null) {
@@ -5242,6 +5447,11 @@ footer a:hover { color: var(--txt); }
        * more useful of the two. */
       if (axis.overrun) {
         slot.appendChild(overrunNote(axis));
+        return;
+      }
+
+      if (singleChange) {
+        stack.appendChild(changeCard(spec, series, axis, drawnLines));
         return;
       }
 
