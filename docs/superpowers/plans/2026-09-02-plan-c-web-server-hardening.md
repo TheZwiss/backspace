@@ -1493,3 +1493,65 @@ plan's follow-up list rather than smuggled in here:
 - `docs/systems/uploads.md` should mention that served files carry their own
   sandbox policy and that the app policy stands aside for them. Small, and it
   belongs to Task 7's doc pass only if the reviewer wants it there.
+
+---
+
+## Execution notes
+
+Written after the fact. The plan was executed 2026-09-02 by one agent per task.
+Six places where the plan was wrong and the implementation deviated, recorded so
+the committed plan does not misdescribe the code.
+
+**Task 3, the content-type parser.** The plan's `addContentTypeParser` form was
+not a real Fastify 4 overload. The shipped code uses the two-argument raw-stream
+form. The plan's suggested fallback of `{ parseAs: 'string' }` was also refused,
+correctly: that form enforces `bodyLimit` by answering 413, so an oversized
+report would be dropped rather than truncated and `MAX_REPORT_BYTES` would mean
+nothing.
+
+**Task 4, the report sink was exempt from rate limiting.** The plan registered
+`cspReportRoutes` immediately after the CSP hook, which is before
+`app.register(rateLimit)`. `@fastify/rate-limit` only covers routes registered
+after it. Measured on a live instance: 260 POSTs to the sink all returned 204
+while 260 GETs to an ordinary route returned 194 × 200 and 66 × 429. The
+registration moved down beside the other routes. The ordering is load-bearing
+and is documented in `docs/systems/web-security.md`.
+
+**Task 4, the upload-override test was vacuous.** It asserted only inside
+`if (enforced !== null)` and requested a path that does not exist, and
+`routes/uploads.ts` sets its sandbox header after an `fs.existsSync` check, so
+the 404 never reached it and the conditional never fired. The suite now points
+`UPLOAD_DIR` at a scratch directory, writes a fixture, and asserts
+unconditionally on the 200.
+
+**Task 4, `STORAGE_PATH` is dead env.** `test/helpers/twoInstanceHarness.ts` sets
+it, `config.ts` reads `UPLOAD_DIR` and nothing reads `STORAGE_PATH`, so every
+spawned instance was serving from the repo's own `data/uploads`. Known already;
+this is the first task it actually affected.
+
+**Task 5, the meta policy blocked the WebSocket heartbeat.** The plan's meta tag
+had no `worker-src`, and a meta policy intersects with the header rather than
+replacing it, so `script-src 'self'` blocked the blob-URL Worker at
+`packages/web/src/hooks/useWebSocket.ts:90` even though the header allowed it.
+Found by driving headless Chrome over CDP against the built bundle, not by
+reasoning. `worker-src 'self' blob:` was added. Note the failure mode:
+`new Worker()` does not throw, so a probe that only caught exceptions would have
+reported success.
+
+**Task 7, the CORS call ordering in the plan is wrong.** "Corrections to the
+spec" says the browser calls `instance.info()`, then `register()`, then
+`login()`. The real order is `probeInstance` (`instanceStore.ts:348`) making an
+unauthenticated `instance.info()` at `:365`, then `connectToRemote` (`:370`)
+doing `register()` at `:430` or `login()` at `:401`/`:453`, then a second
+`instance.info()` at `:476`, the WebSocket at `:511`, and `ensurePeered` at
+`:518`. The conclusion is unaffected: all of it is cross-origin and all of it
+precedes peering. `docs/systems/web-security.md` carries the accurate sequence.
+
+**Verified state at completion.** Server 1017 tests / 120 files. Web 493 / 61.
+Desktop 63. `tsc --noEmit` exit 0 in shared, server and web. `pnpm typecheck:e2e`
+exit 0, now covering both new suites. `vite build` succeeds.
+
+**Task 8 has not been run** and must not be until its preconditions hold. The
+server policy ships report-only. Note when scheduling it that the meta policy in
+`packages/web/index.html` already enforces, so the voice path is worth
+exercising regardless of what the report log says.
