@@ -8,7 +8,7 @@ import { config } from '../config.js';
 import type { RegisterRequest, LoginRequest, AuthResponse } from '@backspace/shared';
 import { AVATAR_COLORS } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
-import { findFederatedUser, extractDomain } from './federation.js';
+import { extractDomain } from './federation.js';
 import { fetchPeerEpoch } from '../utils/federationEpoch.js';
 import { getInviteByToken, inviteStatus, redeemInvite, InviteUnavailableError } from '../utils/inviteService.js';
 
@@ -106,7 +106,8 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       if (!federatedRegistrationOpen) {
         return reply.code(403).send({ error: 'Federated registration is closed on this instance', statusCode: 403 });
       }
-      // Fall through to existing federated stub upgrade / new federated user logic below.
+      // Falls through to the normal create-a-new-row path below. A federated
+      // registration NEVER binds credentials to a pre-existing row.
     } else {
       // Local path: registrationOpen is the primary gate. A valid invite token
       // bypasses it when closed. When open, the token is silently ignored.
@@ -128,70 +129,19 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
     const passwordHash = await hashPassword(password);
 
-    // --- Federated stub upgrade path (BEFORE username uniqueness check) ---
-    // If this is a federated registration, check if a relay-created stub already
-    // exists for this person. If so, upgrade it (add credentials, update username)
-    // instead of creating a duplicate record. The user gets their full DM history.
-    // This must run BEFORE the username check because the stub may have a different
-    // username (e.g., "291255103060533248@nova.ddns.net") that wouldn't collide.
-    if (homeInstance && homeUserId) {
-      const usernameBase = trimmedUsername.includes('@') ? trimmedUsername.split('@')[0]! : trimmedUsername;
-      const existingStub = findFederatedUser(homeUserId, homeInstance, db, { username: usernameBase });
-
-      if (existingStub) {
-        // If the found user already has real credentials, they already registered.
-        // Return 409 so the client falls back to login.
-        if (existingStub.passwordHash !== '!federation-replicated') {
-          return reply.code(409).send({ error: 'Username already taken', statusCode: 409 });
-        }
-
-        // Check the NEW username isn't taken by someone else (not the stub itself)
-        const usernameCollision = db.select().from(schema.users)
-          .where(eq(schema.users.username, trimmedUsername)).get();
-        if (usernameCollision && usernameCollision.id !== existingStub.id) {
-          return reply.code(409).send({ error: 'Username already taken', statusCode: 409 });
-        }
-
-        // Upgrade the stub: add credentials, update username and profile
-        const updates: Record<string, string | number | null> = {
-          passwordHash,
-          username: trimmedUsername,
-          homeUserId,
-        };
-        if (displayName?.trim() && !existingStub.displayName) {
-          updates.displayName = displayName.trim();
-        }
-        const avatarColor = (requestedAvatarColor && (AVATAR_COLORS as readonly string[]).includes(requestedAvatarColor))
-          ? requestedAvatarColor
-          : AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)]!;
-        if (!existingStub.avatarColor) {
-          updates.avatarColor = avatarColor;
-        }
-
-        db.update(schema.users)
-          .set(updates)
-          .where(eq(schema.users.id, existingStub.id))
-          .run();
-
-        const upgraded = db.select().from(schema.users).where(eq(schema.users.id, existingStub.id)).get();
-        if (!upgraded) {
-          return reply.code(500).send({ error: 'Failed to upgrade user stub', statusCode: 500 });
-        }
-
-        console.log(`[auth] Upgraded federation stub ${existingStub.id} (${existingStub.username} → ${trimmedUsername}) to full account`);
-
-        const token = signJwt({ userId: upgraded.id, username: upgraded.username });
-        const response: AuthResponse = {
-          token,
-          user: sanitizeUser(upgraded, true),
-        };
-        return reply.code(200).send(response);
-      }
-    }
-
-    // --- Normal registration path (no existing stub found) ---
-    // Username uniqueness check (for non-federated registrations, or federated
-    // registrations where no stub was found to upgrade)
+    // --- Registration always creates a NEW row ---
+    // This endpoint is public and unauthenticated: the caller supplies
+    // `homeInstance`/`homeUserId` with no proof whatsoever that they control
+    // that federated identity. It therefore must never bind these credentials
+    // to a row that already exists — in particular not to a relay-created stub
+    // (`passwordHash = '!federation-replicated'`), which is a placeholder for a
+    // person who has never authenticated here. `homeUserId` is only unique
+    // WITHIN an instance, so it is not an identifier we can match on either.
+    //
+    // Merging a stub into a real account (so the owner inherits their DM
+    // history) is exclusively the job of the authenticated, S2S-proof-gated
+    // reattach flow: POST /api/users/@me/reattach, which requires an
+    // attach-proof token minted by the home instance.
     const existing = db.select().from(schema.users).where(eq(schema.users.username, trimmedUsername)).get();
     if (existing) {
       return reply.code(409).send({ error: 'Username already taken', statusCode: 409 });
@@ -228,9 +178,9 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       createdAt: now,
     };
 
-    // Only the LOCAL-CLOSED-WITH-VALID-TOKEN path consumes an invite. The federated
-    // paths (handled above and in the stub-upgrade block) and the local-open path
-    // never touch the invite_links table.
+    // Only the LOCAL-CLOSED-WITH-VALID-TOKEN path consumes an invite. The
+    // federated path (gated above on federatedRegistrationOpen) and the
+    // local-open path never touch the invite_links table.
     const consumesInvite = !homeInstance && !registrationOpen && !!inviteToken;
 
     if (consumesInvite) {
