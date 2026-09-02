@@ -14,12 +14,11 @@ import {
  * re-runnable) job that seeds history `backfill.ts` can reconstruct from
  * GitHub's permanent per-item timestamps.
  *
- * This file, `cli-collect.ts`, and `cli-record-failure.ts` are deliberately
- * the only three files in this package that read `process.env` or the
- * system clock — `backfill` itself needs no clock input at all (every date
- * it writes comes from a GitHub timestamp, never "today"), which is why,
- * unlike `cli-collect.ts` and `cli-record-failure.ts`, this file never
- * calls `new Date()`.
+ * Reading `process.env` and the system clock is confined to this package's
+ * `cli-*.ts` entrypoints, and this one exercises only the first half of
+ * that licence: `backfill` needs no clock input at all (every date it
+ * writes comes from a GitHub timestamp, never "today"), which is why,
+ * alone among the entrypoints, this file never calls `new Date()`.
  */
 async function main(): Promise<void> {
   const token = requiredEnv(process.env, 'METRICS_TOKEN');

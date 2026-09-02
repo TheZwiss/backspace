@@ -17,9 +17,9 @@ import type { IsoDate } from './types.ts';
  * never a value where the whitespace is meaningful.
  *
  * Takes `env` as a parameter rather than reading `process.env` itself so
- * this function stays a pure, unit-testable helper — `cli-collect.ts` and
- * `cli-backfill.ts` are the only two places in this package allowed to read
- * the real `process.env`, and both do so by passing it in here.
+ * this function stays a pure, unit-testable helper — the package's
+ * `cli-*.ts` entrypoints are the only files allowed to read the real
+ * `process.env`, and each of them does so by passing it in here.
  */
 export function requiredEnv(
   env: Readonly<Record<string, string | undefined>>,
