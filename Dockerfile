@@ -2,7 +2,45 @@
 # Backspace — Multi-stage Docker build
 # ============================================================
 
-# Stage 1: Install dependencies and build frontend
+# Stage 1: Production dependencies
+#
+# better-sqlite3 12.x ships prebuilt binaries for Node ABI v127, v137, v141 and
+# v147 (Node 22 and newer). It ships none for v115, which is the ABI of Node 20,
+# the version this repo pins. prebuild-install gets a 404 and falls back to
+# `node-gyp rebuild`, which needs Python and a C++ compiler; node:20-slim has
+# neither. The toolchain is installed here and nowhere else. The runtime stage
+# copies the resulting node_modules and runs no install of its own.
+FROM node:20-slim AS deps
+
+RUN corepack enable && corepack prepare pnpm@10.34.3 --activate
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends python3 make g++ && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy workspace config
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
+COPY tsconfig.base.json ./
+
+# Copy package.json files for all workspace packages
+COPY packages/shared/package.json packages/shared/
+COPY packages/server/package.json packages/server/
+COPY packages/web/package.json packages/web/
+
+# Copy patches (referenced by pnpm-lock.yaml)
+COPY patches/ patches/
+
+# The production dependency tree that ships in the runtime image
+RUN pnpm install --prod --frozen-lockfile
+
+# ============================================================
+# Stage 2: Build the frontend
+#
+# Installs only @backspace/web and what it depends on (@backspace/shared). That
+# keeps the server dependencies, better-sqlite3 among them, out of this stage, so
+# the native build runs once in `deps` and this stage needs no toolchain.
 FROM node:20-slim AS builder
 
 RUN corepack enable && corepack prepare pnpm@10.34.3 --activate
@@ -21,25 +59,24 @@ COPY packages/web/package.json packages/web/
 # Copy patches (referenced by pnpm-lock.yaml)
 COPY patches/ patches/
 
-# Install dependencies
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile --filter @backspace/web...
 
 # Copy source code (excluding desktop — not needed in Docker)
 COPY packages/shared/ packages/shared/
-COPY packages/server/ packages/server/
 COPY packages/web/ packages/web/
 
 # Build the web frontend
 RUN pnpm --filter @backspace/web build
 
 # ============================================================
-# Stage 2: Production runtime
+# Stage 3: Production runtime
 FROM node:20-slim AS runtime
 
 RUN corepack enable && corepack prepare pnpm@10.34.3 --activate
 
 # Runtime deps only: ffmpeg (media processing) + gosu (drop to non-root in the
-# entrypoint). No C toolchain — better-sqlite3 and sharp load prebuilt binaries.
+# entrypoint). No C toolchain. The native modules are compiled in `deps` and
+# copied in below.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends ffmpeg gosu && \
     rm -rf /var/lib/apt/lists/*
@@ -55,17 +92,16 @@ COPY packages/shared/package.json packages/shared/
 COPY packages/server/package.json packages/server/
 COPY packages/web/package.json packages/web/
 
-# Copy patches (referenced by pnpm-lock.yaml)
-COPY patches/ patches/
-
-# Install production dependencies only (tsx is in server dependencies)
-RUN pnpm install --prod --frozen-lockfile
-
 # Copy shared source (needed at runtime since server imports types directly)
 COPY packages/shared/ packages/shared/
 
 # Copy server source
 COPY packages/server/ packages/server/
+
+# Production dependencies, built in the `deps` stage. All of pnpm's symlinks are
+# relative to /app, so the tree works unchanged after the copy.
+COPY --from=deps /app/node_modules node_modules
+COPY --from=deps /app/packages/server/node_modules packages/server/node_modules
 
 # Copy built frontend from builder stage
 COPY --from=builder /app/packages/web/dist packages/web/dist
