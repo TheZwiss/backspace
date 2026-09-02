@@ -16,6 +16,7 @@ const REPO_FILE = 'repo.csv';
 const RELEASES_FILE = 'releases.csv';
 const REFERRERS_FILE = 'traffic/referrers.ndjson';
 const PATHS_FILE = 'traffic/paths.ndjson';
+const WORKFLOWS_FILE = 'workflows.csv';
 
 /** How many of the latest snapshot's dimensions get a trajectory line. */
 const TRAJECTORY_LIMIT = 5;
@@ -28,6 +29,20 @@ export interface TrafficSeries {
   dates: string[];
   count: Array<number | null>;
   uniques: Array<number | null>;
+}
+
+/**
+ * This repository's own CI activity per day, index-aligned with `dates`.
+ *
+ * A `0` here is a measured zero and plots AT zero; only an absent date or a
+ * `null` is "not measured". That differs from the traffic series on the same
+ * chart, where GitHub omits a zero-traffic day entirely — the difference is a
+ * property of the two APIs, not a rendering choice, and it is why the two must
+ * not share a gap-filling rule.
+ */
+export interface WorkflowSeries {
+  dates: string[];
+  runs: Array<number | null>;
 }
 
 /** A cumulative counter (stars, forks, contributors) over time. */
@@ -139,6 +154,8 @@ export interface DashboardData {
     forks: CountSeries;
     contributors: CountSeries;
     repo: RepoSeries;
+    /** Present from the day `workflows.csv` first appears; empty before that. */
+    workflows: WorkflowSeries;
   };
   releases: ReleaseEntry[];
   dimensions: {
@@ -238,6 +255,14 @@ function readTrafficSeries(store: Store, file: string): TrafficSeries {
     dates: rows.map((row) => row.date),
     count: rows.map((row) => toNumberOrNull(row.fields['count'], `${file} count`, row.date)),
     uniques: rows.map((row) => toNumberOrNull(row.fields['uniques'], `${file} uniques`, row.date)),
+  };
+}
+
+function readWorkflowSeries(store: Store): WorkflowSeries {
+  const rows = readDatedRows(store, WORKFLOWS_FILE);
+  return {
+    dates: rows.map((row) => row.date),
+    runs: rows.map((row) => toNumberOrNull(row.fields['runs'], `${WORKFLOWS_FILE} runs`, row.date)),
   };
 }
 
@@ -462,12 +487,13 @@ export function buildDashboardData(store: Store, generatedAt: string): Dashboard
   const forks = readCountSeries(store, FORKS_FILE);
   const contributors = readCountSeries(store, CONTRIBUTORS_FILE);
   const repo = readRepoSeries(store);
+  const workflows = readWorkflowSeries(store);
   const releases = readReleases(store);
   const referrers = readDimensionSeries(store, REFERRERS_FILE);
   const paths = readDimensionSeries(store, PATHS_FILE);
   const meta = store.readMeta();
 
-  const series = { views, clones, stars, forks, contributors, repo };
+  const series = { views, clones, stars, forks, contributors, repo, workflows };
 
   // "Holds no rows at all" — releases and dimensions count here even though
   // they are excluded from `collection_started`. The two questions are
@@ -689,6 +715,25 @@ function downsampleTraffic(series: TrafficSeries): TrafficSeries {
   };
 }
 
+/**
+ * Workflow runs SUM within a week, like the traffic counts and unlike the
+ * cumulative counters: a run is an event that happened on its day, so a week's
+ * runs are genuinely the sum of its days'. Taking the last day would report
+ * one day as if it were seven, and would flatten exactly the CI spikes this
+ * series exists to make visible next to the clone line.
+ *
+ * `sumBucket` preserves the not-measured distinction the same way it does for
+ * traffic, so a week in which the collector never ran stays `null` rather than
+ * summing to a zero that would read as a genuinely quiet week.
+ */
+function downsampleWorkflows(series: WorkflowSeries): WorkflowSeries {
+  const buckets = weekBuckets(series.dates);
+  return {
+    dates: buckets.map((bucket) => bucket.monday),
+    runs: buckets.map((bucket) => sumBucket(series.runs, bucket.indices)),
+  };
+}
+
 function downsampleCount(series: CountSeries): CountSeries {
   const buckets = weekBuckets(series.dates);
   return {
@@ -768,6 +813,8 @@ function copyDimensionSeries(series: DimensionSeries): DimensionSeries {
  * - `views` and `clones` are per-day event counts and SUM within a week.
  * - `stars`, `forks`, `contributors` and every field of `repo` are
  *   point-in-time totals and take the week's LAST measured value.
+ * - `workflows.runs` sums, for the same reason the traffic counts do: a run is
+ *   an event on its day, not a running total.
  * - `releases` and `dimensions` are not bucketed at all. Releases are sparse
  *   — there is no space to save, and merging two tags published in one week
  *   into one marker would destroy the annotation the Growth chart exists
@@ -797,6 +844,7 @@ export function downsampleWeekly(data: DashboardData): DashboardData {
       forks: downsampleCount(data.series.forks),
       contributors: downsampleCount(data.series.contributors),
       repo: downsampleRepo(data.series.repo),
+      workflows: downsampleWorkflows(data.series.workflows),
     },
     releases: data.releases.map((release) => ({ ...release })),
     dimensions: {

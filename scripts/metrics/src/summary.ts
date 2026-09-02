@@ -55,6 +55,12 @@ export interface SummaryFacts {
   clonesPeak: PeakDay | null;
   viewsDays: number;
   clonesDays: number;
+  /**
+   * The heaviest day of this repository's own CI, which is what the clone
+   * caveat points at. Stated so a reader that quotes the clone peak has the
+   * number that explains it in the same paragraph rather than in a chart.
+   */
+  workflowsPeak: PeakDay | null;
   topReferrer: { label: string; detail: string | null; count: number; uniques: number } | null;
   topPath: { label: string; detail: string | null; count: number; uniques: number } | null;
   latestRelease: { tag: string; date: string } | null;
@@ -82,10 +88,15 @@ function newestMeasured(
 }
 
 /** The measured day with the highest count. Ties keep the earliest day. */
+/**
+ * `uniques` is optional: a workflow run has no unique-visitor reading, and
+ * passing an empty array rather than making the parameter nullable keeps the
+ * one code path — `uniques[i] ?? null` already yields null for a short array.
+ */
 function peakDay(
   dates: readonly string[],
   counts: ReadonlyArray<number | null>,
-  uniques: ReadonlyArray<number | null>,
+  uniques: ReadonlyArray<number | null> = [],
 ): PeakDay | null {
   let best: PeakDay | null = null;
   for (let i = 0; i < Math.min(dates.length, counts.length); i++) {
@@ -149,7 +160,7 @@ function labelled(entry: {
 }
 
 export function buildSummary(data: DashboardData): SummaryFacts {
-  const { views, clones, stars, forks, contributors, repo } = data.series;
+  const { views, clones, stars, forks, contributors, repo, workflows } = data.series;
   const referrer = data.dimensions.referrers.latest[0];
   const path = data.dimensions.paths.latest[0];
   // `releases` is sorted (date asc, tag asc) by the archive's own comparator,
@@ -168,6 +179,7 @@ export function buildSummary(data: DashboardData): SummaryFacts {
     clonesPeak: peakDay(clones.dates, clones.count, clones.uniques),
     viewsDays: countMeasured(views.count),
     clonesDays: countMeasured(clones.count),
+    workflowsPeak: peakDay(workflows.dates, workflows.runs),
     topReferrer: referrer === undefined ? null : labelled(referrer),
     topPath: path === undefined ? null : labelled(path),
     latestRelease: release === undefined ? null : { tag: release.tag, date: release.date },
@@ -233,7 +245,16 @@ export function renderSummaryHtml(facts: SummaryFacts): string {
   if (facts.clonesPeak !== null) {
     sentences.push(
       `Busiest day for clones: ${count(facts.clonesPeak.value, 'clone')} on ` +
-        `${escapeHtml(facts.clonesPeak.date)}, across ${count(facts.clonesDays, 'measured day')}.`,
+        `${escapeHtml(facts.clonesPeak.date)}, across ${count(facts.clonesDays, 'measured day')}. ` +
+        'Clone counts include this repository\u2019s own CI checkouts, which on a heavy build ' +
+        'day outnumber human clones.',
+    );
+  }
+  if (facts.workflowsPeak !== null) {
+    sentences.push(
+      'Busiest day for this repository\u2019s own CI: ' +
+        `${count(facts.workflowsPeak.value, 'workflow run')} on ` +
+        `${escapeHtml(facts.workflowsPeak.date)}.`,
     );
   }
   const named = (d: { label: string; detail: string | null }): string =>

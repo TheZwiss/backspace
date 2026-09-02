@@ -58,6 +58,19 @@ export interface GitHubClient {
    * following a cycle forever.
    */
   paginate<T>(path: string, accept?: string): Promise<T[]>;
+  /**
+   * As `paginate`, for the endpoints that wrap their list in an envelope
+   * object rather than returning a bare array — `/actions/runs` answers
+   * `{ total_count, workflow_runs: [...] }`, and `paginate` correctly refuses
+   * it rather than silently yielding nothing.
+   *
+   * A page whose `key` is missing or is not an array throws, and does NOT
+   * degrade to an empty page: a shape change upstream would otherwise show up
+   * as a series that quietly counts zero on every day, which is far worse
+   * than a failed run in an archive whose whole premise is that a zero was
+   * measured.
+   */
+  paginateEnvelope<T>(path: string, key: string, accept?: string): Promise<T[]>;
 }
 
 export interface ClientOptions {
@@ -192,7 +205,21 @@ export function createClient(token: string, options: ClientOptions = {}): GitHub
     return null;
   }
 
-  async function paginate<T>(path: string, accept?: string): Promise<T[]> {
+  /**
+   * The page walk both public pagination methods share: follows `rel="next"`
+   * to exhaustion and flattens each page through `itemsOf`.
+   *
+   * Extracted rather than duplicated because the valuable part of this loop is
+   * not the flattening — it is the cycle detection and the origin assertion,
+   * and a second copy of those is a second place for them to drift or be
+   * forgotten. The two public methods differ only in how a page yields its
+   * items, so that is the only thing passed in.
+   */
+  async function walkPages<T>(
+    path: string,
+    accept: string | undefined,
+    itemsOf: (page: unknown, url: string) => T[],
+  ): Promise<T[]> {
     const separator = path.includes('?') ? '&' : '?';
     let url: string | null = absolute(`${path}${separator}per_page=100`);
     const items: T[] = [];
@@ -216,12 +243,7 @@ export function createClient(token: string, options: ClientOptions = {}): GitHub
       const response: Response = await request(url, accept);
       if (!response.ok) return throwForStatus(response);
       const page = await parseBody<unknown>(response);
-      if (!Array.isArray(page)) {
-        throw new Error(
-          `paginate: expected an array from ${url} but got ${typeof page} — the pagination sequence is truncated or the endpoint does not return a list`,
-        );
-      }
-      items.push(...(page as T[]));
+      items.push(...itemsOf(page, url));
       const next = nextLink(response.headers.get('link'));
       if (next !== null) assertGitHubOrigin(next);
       url = next;
@@ -229,5 +251,33 @@ export function createClient(token: string, options: ClientOptions = {}): GitHub
     return items;
   }
 
-  return { get, getStats, paginate };
+  async function paginate<T>(path: string, accept?: string): Promise<T[]> {
+    return walkPages<T>(path, accept, (page, url) => {
+      if (!Array.isArray(page)) {
+        throw new Error(
+          `paginate: expected an array from ${url} but got ${typeof page} — the pagination sequence is truncated or the endpoint does not return a list`,
+        );
+      }
+      return page as T[];
+    });
+  }
+
+  async function paginateEnvelope<T>(path: string, key: string, accept?: string): Promise<T[]> {
+    return walkPages<T>(path, accept, (page, url) => {
+      if (page === null || typeof page !== 'object' || Array.isArray(page)) {
+        throw new Error(
+          `paginateEnvelope: expected an object from ${url} but got ${Array.isArray(page) ? 'array' : typeof page} — the endpoint does not return a "${key}" envelope`,
+        );
+      }
+      const items = (page as Record<string, unknown>)[key];
+      if (!Array.isArray(items)) {
+        throw new Error(
+          `paginateEnvelope: ${url} returned an object with no array at "${key}" — the envelope shape changed, and treating that as an empty page would silently under-count`,
+        );
+      }
+      return items as T[];
+    });
+  }
+
+  return { get, getStats, paginate, paginateEnvelope };
 }

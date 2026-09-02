@@ -195,6 +195,7 @@ export function renderDataPage(data: DashboardData, options: DataPageOptions = {
       'unique visitors',
       'repository clones',
       'unique cloners',
+      'workflow runs',
       'stars',
       'forks',
       'contributors',
@@ -253,11 +254,15 @@ ${seriesTable(s.views.dates, [
 ])}
 
 <h2>Clones</h2>
-<p>Daily <code>git clone</code> operations, with the number of distinct cloners.</p>
+<p>Daily <code>git clone</code> operations, with the number of distinct cloners. GitHub counts this repository&rsquo;s own <code>actions/checkout</code> steps here too, so a day of heavy continuous integration inflates the figure well above human traffic; clones far above one per unique cloner is the signature.</p>
 ${seriesTable(s.clones.dates, [
   { label: 'clones', values: s.clones.count },
   { label: 'unique cloners', values: s.clones.uniques },
 ])}
+
+<h2>CI activity</h2>
+<p>Workflow runs this repository started each day, published beside the clone table above because they are the reason it moves. A <code>0</code> here is a measured zero, not a gap: the Actions API is asked for a date range and answers it completely, where the traffic endpoints omit a day they recorded nothing for. History before daily collection began is reconstructed only as far back as GitHub still retains runs, because a day whose runs have been deleted cannot be told apart from a day that had none.</p>
+${seriesTable(s.workflows.dates, [{ label: 'workflow runs', values: s.workflows.runs }])}
 
 <h2>Stars</h2>
 <p>Cumulative star count, one row per day. A day on which nobody starred carries the previous day's total, because that total is known rather than missing. History before daily collection began is reconstructed from each star's permanent timestamp, which counts only stars that still exist, so those early totals are a lower bound on what the counter read at the time.</p>

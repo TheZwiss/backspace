@@ -47,6 +47,16 @@ const RELEASES = [
 ];
 const CONTRIBUTORS = [{ weeks: [{ w: 1771200000, c: 3 }] }, { weeks: [{ w: 1771804800, c: 1 }] }];
 
+// Three runs on 08-24, one on 08-25 (today, still in progress), and one dated
+// before the window opens so the range filter has something to reject.
+const WORKFLOW_RUNS = [
+  { created_at: '2026-08-24T09:00:00Z' },
+  { created_at: '2026-08-24T11:30:00Z' },
+  { created_at: '2026-08-24T23:59:00Z' },
+  { created_at: '2026-08-25T02:00:00Z' },
+  { created_at: '2026-08-01T02:00:00Z' },
+];
+
 function fakeClient(overrides: Partial<Record<string, unknown>> = {}): GitHubClient {
   const routes: Record<string, unknown> = {
     '/repos/o/r/traffic/views': VIEWS,
@@ -86,6 +96,19 @@ function fakeClient(overrides: Partial<Record<string, unknown>> = {}): GitHubCli
       if (value === undefined) throw new Error(`unexpected paginate ${p}`);
       return value as T[];
     },
+    async paginateEnvelope<T>(p: string, key: string): Promise<T[]> {
+      // `/actions/runs` is the only envelope-paginated endpoint collect.ts
+      // uses; anything else reaching here is a mistake worth failing on.
+      if (!p.startsWith('/repos/o/r/actions/runs')) {
+        throw new Error(`collect must not envelope-paginate ${p}`);
+      }
+      if (key !== 'workflow_runs') throw new Error(`unexpected envelope key ${key}`);
+      const value = Object.prototype.hasOwnProperty.call(overrides, '/repos/o/r/actions/runs')
+        ? overrides['/repos/o/r/actions/runs']
+        : WORKFLOW_RUNS;
+      if (value instanceof Error) throw value;
+      return value as T[];
+    },
   };
 }
 
@@ -99,6 +122,71 @@ describe('collect', () => {
       { date: '2026-08-23', count: '40', uniques: '12' },
       { date: '2026-08-24', count: '51', uniques: '15' },
     ]);
+  });
+
+  // The whole point of the series: a day this repo ran no CI is a day the
+  // Actions API was asked about and answered "none", which is a measurement.
+  // Writing no row would render it on the chart as collector downtime.
+  it('writes a measured zero for a day inside the window with no runs', async () => {
+    const store = createStore(dir);
+    await collect({ client: fakeClient(), store, ...base });
+    const rows = store.readCsv('workflows.csv');
+    expect(rows.find((r) => r.date === '2026-08-24')).toEqual({ date: '2026-08-24', runs: '3' });
+    expect(rows.find((r) => r.date === '2026-08-23')).toEqual({ date: '2026-08-23', runs: '0' });
+    expect(rows.find((r) => r.date === '2026-08-25')).toEqual({ date: '2026-08-25', runs: '1' });
+  });
+
+  it('covers the whole trailing window, not only the days that had runs', async () => {
+    const store = createStore(dir);
+    await collect({ client: fakeClient(), store, ...base });
+    const dates = store.readCsv('workflows.csv').map((r) => r.date);
+    expect(dates[0]).toBe('2026-08-12'); // today minus 13
+    expect(dates[dates.length - 1]).toBe('2026-08-25');
+    expect(dates).toHaveLength(14);
+  });
+
+  // A run older than the window is outside what this call claims to have
+  // counted; recording it would produce the only row for a day whose other
+  // runs were never fetched.
+  it('drops a run dated before the window opens', async () => {
+    const store = createStore(dir);
+    await collect({ client: fakeClient(), store, ...base });
+    const dates = store.readCsv('workflows.csv').map((r) => r.date);
+    expect(dates).not.toContain('2026-08-01');
+  });
+
+  // Today's count is always partial — the day is still running when the
+  // collector fires — so a later run must be able to correct it upward.
+  it('overwrites an earlier partial count for the same day', async () => {
+    const store = createStore(dir);
+    await collect({ client: fakeClient(), store, ...base });
+    expect(store.readCsv('workflows.csv').find((r) => r.date === '2026-08-25')?.runs).toBe('1');
+    await collect({
+      client: fakeClient({
+        '/repos/o/r/actions/runs': [
+          ...WORKFLOW_RUNS,
+          { created_at: '2026-08-25T18:00:00Z' },
+          { created_at: '2026-08-25T21:00:00Z' },
+        ],
+      }),
+      store,
+      ...base,
+    });
+    expect(store.readCsv('workflows.csv').find((r) => r.date === '2026-08-25')?.runs).toBe('3');
+  });
+
+  // The failure mode that would poison the series permanently: a zero is a
+  // legitimate value here, so a fabricated one is indistinguishable from a
+  // real measurement forever after.
+  it('skips the series rather than writing zeros when the runs fetch fails', async () => {
+    const store = createStore(dir);
+    const result = await collect({
+      client: fakeClient({ '/repos/o/r/actions/runs': new Error('boom') }),
+      store,
+      ...base,
+    });
+    expect(store.readCsv('workflows.csv')).toEqual([]);
+    expect(result.skipped).toContain('workflows.csv');
   });
 
   it('does not invent a row for today when the window ends yesterday', async () => {

@@ -82,7 +82,7 @@ site/                                the GitHub Pages site
 branch: metrics-data (orphan, ruleset-protected — see §8)
   traffic/views.csv, traffic/clones.csv
   traffic/referrers.ndjson, traffic/paths.ndjson
-  stars.csv, forks.csv, releases.csv, contributors.csv, repo.csv
+  stars.csv, forks.csv, releases.csv, contributors.csv, repo.csv, workflows.csv
   meta.json
 ```
 
@@ -114,12 +114,22 @@ All files live at the root of the `metrics-data` branch. CSVs are sorted ascendi
 | File | Columns | One row means |
 |---|---|---|
 | `traffic/views.csv` | `date,count,uniques` | Total views and unique visitors on that UTC date |
-| `traffic/clones.csv` | `date,count,uniques` | Total clones and unique cloners on that UTC date |
+| `traffic/clones.csv` | `date,count,uniques` | Total clones and unique cloners on that UTC date — see the caveat below the table |
 | `stars.csv` | `date,total` | The repo's live `stargazers_count` as read on that date (a point-in-time snapshot, not a delta) — see the caveat below the table |
 | `forks.csv` | `date,total` | The repo's live `forks_count` as read on that date — see the caveat below the table |
 | `releases.csv` | `date,tag,name` | A release published on that UTC date (`date` = `published_at`'s UTC day) — see the caveat below the table |
 | `contributors.csv` | `date,total` | Cumulative distinct-contributor count, where a contributor counts from the UTC date of the start of their first commit week onward. Capped: see the note below the table |
 | `repo.csv` | `date,subscribers,open_issues,downloads_total,downloads_app,downloads_updates` | The repo object's counters as read on that date, plus release asset `download_count` sums: every asset, then that total split into app installs and update-check traffic |
+| `workflows.csv` | `date,runs` | Workflow runs this repository started on that UTC date. A `0` is a measured zero, never a gap — see the caveat below the table |
+
+#### Caveats on the table above
+
+**Clones count this repository's own CI.** GitHub counts every `actions/checkout` in the clone statistics, so `traffic/clones.csv` measures the build pipeline and the audience together, with no field distinguishing them. Measured on this repo: days with no workflow runs sit at 2-30 clones, while 2026-08-25 and 2026-09-01 recorded 155 and 189 clones against 218 and 180 successful checkout steps. Clones far above one per unique cloner is the signature. The ratio is not a constant and this archive does not model it: neither the run count nor the checkout-step count predicts the clone figure closely (218 checkout steps produced 155 clones, 180 produced 189), so only the co-occurrence is established, not a coefficient. That is exactly why nothing here publishes a "clones minus CI" figure: that would be a model, and the premise of this archive is that every number on it is a measurement. Page views are unaffected, because a checkout loads no page. The confound is disclosed on the clones card, in the Reach section copy, in the static data page's clones blurb, and in the `BUILD:SUMMARY` sentence that states the peak clone day. It is also *shown*: `workflows.csv` records this repository's own daily workflow-run count, and the dashboard plots it as a third chart on the Reach section's shared axis, directly under clones. The two series are never combined into one corrected figure — see §4.5.
+
+**`stars.csv` and `forks.csv` are point-in-time snapshots, not deltas.** Each row is the live counter as read that day, so it correctly reflects someone who starred and later unstarred. A row written by `backfill()` instead reconstructs the value from `/stargazers`' `starred_at`, which lists only *current* stargazers, making a reconstructed row a **lower bound**. Nothing on disk distinguishes the two writers. See §4.2.
+
+**`releases.csv` is keyed on `tag`, not `date`.** It is the one CSV where more than one row can legitimately share a date, so its merge uses `upsertByKey` with a `tag` ascending tie-break (`compareReleaseRows`) rather than `upsertByDate`. See §4.2.
+
 
 ### The static data page
 
@@ -226,10 +236,22 @@ Once the write phase starts, its very first action is a synchronous read, not a 
 
 Nothing in this package ever writes `0` to stand in for "not measured." `repo.csv.downloads_total` is left as a blank CSV field (`null` in memory) when the optional `/releases` fetch fails, specifically so a missing measurement can never be mistaken for a real zero download count. A version that instead carried the previous run's value forward under today's date was considered and rejected during review: a flat line in that case would be indistinguishable from a genuinely quiet day, whereas a hole in the data is visible and honestly represents "we don't know." The same principle governs the dimensional files (§3.2, a dropped-out referrer is an absent row, never a zero) and `getStats()` (§6, a persistent 202 is `null`, never a zero).
 
+The rule has a counterpart that `workflows.csv` is the first series to exercise: **a measured zero must not be hidden either.** The Actions list endpoint is asked for a date range and answers it completely, so a day inside the requested window with no runs is a day this collector measured and found empty. Writing no row for it would render on the chart as collector downtime — the same class of lie, pointed the other way. So `countByDay` (`series.ts`) emits a row for every day in the range it is given, zeros included, and the caller owns the claim that the range was fully observed. Contrast the traffic endpoints, which omit a zero-traffic day entirely: there, absence really is "not measured", which is why the two series must never share a fill rule.
+
 ### 4.4 Self-healing (traffic only)
 
 The traffic window is 14 buckets wide, so any gap of **≤13 full days** without a successful run is silently repaired the next time `collect()` runs — the next successful fetch's window simply covers the missed dates again, and `upsertByDate`'s overwrite mode fills them in. A missed cron, a transient API outage, or a rejected push therefore costs nothing as long as the next run succeeds within two weeks. As established in §4.1, this self-healing property belongs to `traffic/*` specifically and does not extend to `stars.csv`, `forks.csv`, or `repo.csv`.
 
+
+### 4.5 Workflow runs are counted over a window, and never subtracted from clones
+
+`workflows.csv` exists because GitHub counts every `actions/checkout` in the clone statistics (§3.1), so the clone line is partly a picture of this project's build pipeline. Two properties keep it honest.
+
+**It is collected over a trailing 14-day window, not for `today` alone.** The collector runs mid-morning UTC, so the current day's run count is always partial. Counting only `today` and never revisiting it would freeze every day at whatever fraction had happened by ~10:00 — a uniform understatement nothing downstream could detect. The window matches the traffic window it is compared against, the fetch is bounded server-side with `created=>=`, and the merge is `'overwrite'`, so yesterday's partial count is replaced by its complete one on the next run. Re-counting a settled day writes an identical value, so this costs no extra diff.
+
+**Backfill stops at the oldest surviving run.** GitHub deletes workflow runs once they pass the repository's retention period (90 days by default). Reconstructing a day older than the oldest run still returned would write a confident `0` for a day whose evidence has been destroyed — a fabricated measurement, indistinguishable ever after from a genuinely quiet day. Inside the surviving span the zeros are sound, because retention deletes uniformly by age: if the oldest surviving run is still present, no later day has lost runs. Below that date the reconstruction writes nothing, leaving a gap, which is the truthful encoding.
+
+**The two series are never combined.** No "clones minus estimated CI" figure is published anywhere. The relationship is not a stable coefficient — measured on this repository, 218 successful checkout steps accompanied 155 clones on one day and 180 accompanied 189 on another — so a corrected number would be a model, on a page whose entire claim is that every figure was measured. Both series are plotted on a shared axis, as separate stacked charts rather than one dual-axis chart, precisely so the co-occurrence is visible without inviting a ratio to be read off them.
 ---
 
 ## 5. The 202 problem
@@ -263,6 +285,7 @@ These are documented because reading the obviously-named GitHub field would sile
 1. **Create a fine-grained personal access token**, scoped to this repository only, with:
    - **Administration: read** — the traffic endpoints (`/traffic/views`, `/traffic/clones`, `/traffic/popular/referrers`, `/traffic/popular/paths`) require this permission specifically, and it is the exact documented requirement for all of them.
    - **Contents: read** — needed to read the repo object and its release/star/fork data.
+   - **Actions: read** — needed for `/actions/runs`, which backs `workflows.csv` (§4.5). **Added after the token was first issued**, so an existing `METRICS_TOKEN` will not have it: without this permission the runs fetch 403s, the collector skips the series (it is optional, so the run still succeeds and every other series is written) and `meta.json` lists `workflows.csv` under `skipped`. The CI chart then renders its "no measurement falls inside this window" note rather than a line. Grant the permission on the existing token; nothing needs to be re-created and no data is lost, because backfill can reconstruct the series as far back as GitHub still retains runs.
 2. **Store it as the `METRICS_TOKEN` repository secret** (Settings → Secrets and variables → Actions → New repository secret).
 3. **Create a branch protection ruleset on `metrics-data`** blocking **deletion** and **force-push (non-fast-forward)**, with **no bypass actors**. `gh ruleset list` on this repo shows the two precedents: `Protect CLA signature store` and, for this branch, `Protect metrics data store`. Do **not** require pull requests or status checks — both workflows commit directly to the branch, and requiring a PR would break every run. This branch is the only place in the repository holding genuinely irreplaceable data (the traffic history), so it is the one branch that most needs this protection.
 
@@ -315,6 +338,8 @@ node scripts/metrics/src/cli-backfill.ts
 ```
 
 Safe to run at any time, including repeatedly — every write is if-absent (§4.2), so no value a rerun disagrees with is ever replaced. "Changes nothing" is the normal outcome but not a guarantee: a rerun still *adds* rows for dates no writer has ever recorded, so an archive seeded before the fill described in §3.1 gains its quiet days on the next dispatch (that is how the existing archive was brought forward), and a collector-era gap gains a row it is better off without — see §9 before dispatching against an archive with collector history in it. The CLI's summary line is deliberately phrased "backfill target files (write-if-absent, listed whether or not they changed this run)" rather than "wrote," because `backfill()`'s `written` result is the fixed, exhaustive list of files it is *permitted* to touch, not the set that actually gained a row this run — see `formatBackfillSummary` in `cli-support.ts`.
+
+One asymmetry to know before dispatching for `workflows.csv` specifically: unlike stars and forks, whose evidence (`starred_at`, `created_at`) is permanent, workflow runs are **deleted at the retention horizon**. A backfill run today reconstructs further back than one run in three months will, and the days it can no longer reach are gone for good. If the CI series matters, the useful dispatch is the earliest one, not the most convenient one. Everything it does write is still if-absent, so it remains safe to repeat.
 
 ### Building the dashboard bundle locally
 
@@ -405,7 +430,7 @@ One case worth naming explicitly: `error` can be non-null while `last_success` i
 
 `site/insights/index.html` is the public read side of the archive, published by GitHub Pages at `https://thezwiss.github.io/backspace/insights/`. It is **one HTML file** with its CSS and JavaScript inline, plus two vendored uPlot files next to it (§10.4). No framework, no bundler, no build step, no network request of any kind except the single relative, same-origin `fetch("data.json")` — which is aborted at 15 seconds.
 
-Five sections, each registered against a slot and re-rendered on every range change: **at a glance** (seven cards — stars, forks, watchers, views, clones, contributors, release downloads), **reach** (views and clones), **growth** (stars and forks, annotated with release markers), **referrers**, and **paths**. The range control offers `30d`, `90d`, `1y` and `all`, defaulting to `all` — the only one that cannot imply a window wider than what was actually measured.
+Five sections, each registered against a slot and re-rendered on every range change: **at a glance** (eight cards — stars, forks, watchers, views, clones, contributors, app downloads, update checks; the clones card carries a standing note that CI checkouts are counted in it), **reach** (views, clones, and this repository's own CI activity), **growth** (stars and forks, annotated with release markers), **referrers**, and **paths**. The range control offers `30d`, `90d`, `1y` and `all`, defaulting to `all` — the only one that cannot imply a window wider than what was actually measured.
 
 The page has **no automated tests**. It is the untested side of a contract whose other side is heavily tested, which is why §10.2 is written as a contract rather than as a description, and why the page validates the payload strictly before rendering a single figure.
 
@@ -439,6 +464,7 @@ interface DashboardData {
     views: TrafficSeries;  clones: TrafficSeries;
     stars: CountSeries;    forks: CountSeries;   contributors: CountSeries;
     repo: RepoSeries;
+    workflows: WorkflowSeries;
   };
   releases: Array<{ date: string; tag: string; name: string }>;
   dimensions: { referrers: DimensionSeries; paths: DimensionSeries };
@@ -447,6 +473,7 @@ interface DashboardData {
 /** Parallel arrays, index-aligned with `dates`. */
 interface TrafficSeries { dates: string[]; count: Array<number | null>; uniques: Array<number | null>; }
 interface CountSeries   { dates: string[]; total: Array<number | null>; }
+interface WorkflowSeries{ dates: string[]; runs: Array<number | null>; }
 interface RepoSeries    { dates: string[]; subscribers: Array<number | null>;
                           open_issues: Array<number | null>; downloads_total: Array<number | null>;
                           downloads_app: Array<number | null>; downloads_updates: Array<number | null>; }
@@ -568,6 +595,8 @@ Two limits, stated so they are not rediscovered as surprises:
 
 **A 404 on `data.json` and `empty: true` are different conditions and the page says different things about them.** Conflating them would be the page making a claim about data it has not seen.
 
+There is a third, per-chart case worth stating because it is the normal state of any newly added series: a bundle can be perfectly healthy while one series inside it is empty. A series enters the `data.json` contract the moment the collector gains it, but enters the archive only on the next successful collection run, so on the deploy that introduces it there is nothing to plot. uPlot answers that with an empty frame on an invented 0..1 axis — a chart that looks broken while its own caption reads "measured 0 of 15 days". So a chart card whose primary series has no measured step inside the window renders a sentence in place of the plot, and the section still reports the span and the unmeasured count above it. That is also what the CI chart shows if `METRICS_TOKEN` lacks **Actions: read** (§7).
+
 | Page status | Cause | What it says |
 |---|---|---|
 | `unavailable` | the fetch failed: 404, non-2xx, timeout, unparseable JSON, or a payload `validateBundle` rejected | "The archive is not available here" — the bundle is generated at deploy time and is not committed, so when the archive or the deploy step is unavailable there are no figures, and inventing them would be worse |
@@ -591,18 +620,21 @@ Whenever the banner fires it also reports `last_success`, because when the colle
 
 ## 11. Testing
 
-`scripts/metrics`'s `test` script is `tsc --noEmit && vitest run` — it runs through the existing root `pnpm -r test` step with no `ci.yml` change required, and covers both types and behavior in one script. All tests are fixture-driven and touch no network; filesystem tests use a per-test `mkdtempSync` directory, cleaned up in `afterEach`. As of this writing there are **257 tests across 9 files**, all passing:
+`scripts/metrics`'s `test` script is `tsc --noEmit && vitest run` — it runs through the existing root `pnpm -r test` step with no `ci.yml` change required, and covers both types and behavior in one script. All tests are fixture-driven and touch no network; filesystem tests use a per-test `mkdtempSync` directory, cleaned up in `afterEach`. As of this writing there are **338 tests across 12 files**, all passing:
 
 ```
 src/no-runtime-deps.test.ts   9
 src/vendor-check.test.ts      6
-src/series.test.ts           47
-src/github.test.ts           17
+src/sitemap.test.ts           5
+src/datapage.test.ts         14
+src/github.test.ts           21
+src/backfill.test.ts         22
 src/store.test.ts            23
+src/summary.test.ts          26
+src/collect.test.ts          33
 src/cli-support.test.ts      35
-src/backfill.test.ts         12
-src/collect.test.ts          25
-src/bundle.test.ts           83
+src/series.test.ts           55
+src/bundle.test.ts           89
 ```
 
 `bundle.test.ts` is the largest of them because it carries the whole of §10.2's contract: the null-versus-zero rule at every read, the trajectory invariants, the two weekly aggregators, and the budget sequence. `vendor-check.test.ts` is not a unit test at all — it hashes the committed uPlot files against `vendor.json` (§10.4) and has its own `vendor:check` script for running it alone.

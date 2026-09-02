@@ -95,6 +95,60 @@ describe('createClient.getStats', () => {
   });
 });
 
+describe('createClient.paginateEnvelope', () => {
+  it('follows rel=next and flattens the named array from each page', async () => {
+    const pages = [
+      jsonResponse(
+        { total_count: 3, workflow_runs: [{ id: 1 }, { id: 2 }] },
+        { headers: { link: '<https://api.github.com/x?page=2>; rel="next"' } },
+      ),
+      jsonResponse({ total_count: 3, workflow_runs: [{ id: 3 }] }),
+    ];
+    let call = 0;
+    const client = createClient('t', {
+      fetchImpl: (async () => pages[call++]) as unknown as typeof fetch,
+      sleep: noSleep,
+    });
+    await expect(client.paginateEnvelope('/x', 'workflow_runs')).resolves.toEqual([
+      { id: 1 },
+      { id: 2 },
+      { id: 3 },
+    ]);
+  });
+
+  // Degrading a shape change to an empty page would show up as a series that
+  // silently counts zero every day — indistinguishable, in an archive whose
+  // premise is that a zero was measured, from a genuinely quiet repository.
+  it('throws rather than treating a missing key as an empty page', async () => {
+    const client = createClient('t', {
+      fetchImpl: (async () => jsonResponse({ total_count: 0 })) as unknown as typeof fetch,
+      sleep: noSleep,
+    });
+    await expect(client.paginateEnvelope('/x', 'workflow_runs')).rejects.toThrow(
+      /no array at "workflow_runs"/,
+    );
+  });
+
+  it('throws when the endpoint returns a bare array instead of an envelope', async () => {
+    const client = createClient('t', {
+      fetchImpl: (async () => jsonResponse([{ id: 1 }])) as unknown as typeof fetch,
+      sleep: noSleep,
+    });
+    await expect(client.paginateEnvelope('/x', 'workflow_runs')).rejects.toThrow(
+      /expected an object/,
+    );
+  });
+
+  it('still refuses an envelope on the array-shaped paginate', async () => {
+    const client = createClient('t', {
+      fetchImpl: (async () =>
+        jsonResponse({ workflow_runs: [{ id: 1 }] })) as unknown as typeof fetch,
+      sleep: noSleep,
+    });
+    await expect(client.paginate('/x')).rejects.toThrow(/expected an array/);
+  });
+});
+
 describe('createClient.paginate', () => {
   it('follows rel=next until it is absent and concatenates pages', async () => {
     const fetchImpl = vi

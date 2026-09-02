@@ -8,6 +8,8 @@ import {
   parseNdjson,
   formatNdjson,
   upsertDimensional,
+  countByDay,
+  utcDayStart,
 } from './series.ts';
 import type { DimensionRow, ReleaseRow } from './types.ts';
 
@@ -442,5 +444,58 @@ describe('formatNdjson key order', () => {
     expect(text).toBe(
       '{"snapshot_date":"2026-08-01","dimension":"a.com","title":"Home","count":5,"uniques":2}\n',
     );
+  });
+});
+
+describe('countByDay', () => {
+  it('emits one row per day across the whole range, zeros included', () => {
+    const rows = countByDay(['2026-08-02', '2026-08-02', '2026-08-04'], '2026-08-01', '2026-08-05');
+    expect(rows).toEqual([
+      { date: '2026-08-01', count: 0 },
+      { date: '2026-08-02', count: 2 },
+      { date: '2026-08-03', count: 0 },
+      { date: '2026-08-04', count: 1 },
+      { date: '2026-08-05', count: 0 },
+    ]);
+  });
+
+  // The caller's range is a claim about what was fully observed. An event
+  // outside it would otherwise contribute the only row for a day this call
+  // never counted completely.
+  it('drops events outside the requested range instead of extending it', () => {
+    const rows = countByDay(['2026-07-30', '2026-08-02', '2026-08-09'], '2026-08-01', '2026-08-03');
+    expect(rows.map((r) => r.date)).toEqual(['2026-08-01', '2026-08-02', '2026-08-03']);
+    expect(rows.reduce((sum, r) => sum + r.count, 0)).toBe(1);
+  });
+
+  it('returns a single row when the range is one day', () => {
+    expect(countByDay(['2026-08-01'], '2026-08-01', '2026-08-01')).toEqual([
+      { date: '2026-08-01', count: 1 },
+    ]);
+  });
+
+  it('returns nothing when the range runs backwards', () => {
+    expect(countByDay(['2026-08-02'], '2026-08-05', '2026-08-01')).toEqual([]);
+  });
+
+  it('steps across a month boundary in UTC', () => {
+    const rows = countByDay(['2026-09-01'], '2026-08-30', '2026-09-01');
+    expect(rows.map((r) => r.date)).toEqual(['2026-08-30', '2026-08-31', '2026-09-01']);
+  });
+});
+
+describe('utcDayStart', () => {
+  it('rejects a date that is not a real day rather than rolling it over', () => {
+    // 2026-02-30 silently becomes 2 March through Date.UTC, which would shift
+    // every row after it by two days under a date that still looks ordinary.
+    expect(() => utcDayStart('2026-02-30')).toThrow(/not a real calendar date/);
+  });
+
+  it('rejects a non-ISO spelling that would parse host-dependently', () => {
+    expect(() => utcDayStart('2026-9-1')).toThrow(/expected a YYYY-MM-DD date/);
+  });
+
+  it('returns UTC midnight for a valid date', () => {
+    expect(utcDayStart('2026-08-01')).toBe(Date.UTC(2026, 7, 1));
   });
 });

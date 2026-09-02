@@ -1,4 +1,12 @@
-import { upsertByDate, upsertByKey, compareReleaseRows, compareStrings } from './series.ts';
+import {
+  upsertByDate,
+  upsertByKey,
+  compareReleaseRows,
+  compareStrings,
+  countByDay,
+  utcDayStart,
+  MS_PER_DAY,
+} from './series.ts';
 import type { GitHubClient } from './github.ts';
 import type { Store } from './store.ts';
 import type { CountPoint, IsoDate, ReleaseRow } from './types.ts';
@@ -7,6 +15,9 @@ interface StargazerResponse {
   starred_at: string;
 }
 interface ForkResponse {
+  created_at: string;
+}
+interface WorkflowRunResponse {
   created_at: string;
 }
 interface ReleaseResponse {
@@ -49,8 +60,6 @@ export interface BackfillOptions {
  */
 const WRITABLE = ['stars.csv', 'forks.csv', 'releases.csv'] as const;
 
-const MS_PER_DAY = 86_400_000;
-
 /**
  * Upper bound on the number of days one reconstruction may write. GitHub
  * launched in 2008, so a repository history longer than this is not a long
@@ -61,32 +70,6 @@ const MS_PER_DAY = 86_400_000;
  */
 const MAX_RECONSTRUCTED_DAYS = 20_000;
 
-const ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
-
-/**
- * Converts a `YYYY-MM-DD` date to the epoch milliseconds of its UTC midnight,
- * so the fill in `cumulativeByDay` can step a day at a time.
- *
- * Built from the matched components through `Date.UTC` rather than
- * `new Date(string)`, and then round-tripped back to a string, for the same
- * reasons `bundle.ts`'s `utcMonday` does it this way: a non-ISO spelling like
- * `2026-9-1` parses host-dependently, and an impossible date like `2026-02-30`
- * rolls silently over to 2 March, which would shift every row after it by two
- * days under a date that still looks perfectly ordinary. The round trip
- * catches both, along with the legacy two-digit-year mapping in `Date.UTC`
- * where year 50 means 1950.
- */
-function utcDayStart(date: IsoDate): number {
-  const match = ISO_DATE_RE.exec(date);
-  if (match === null) {
-    throw new Error(`backfill: expected a YYYY-MM-DD date, got ${JSON.stringify(date)}`);
-  }
-  const time = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
-  if (!Number.isFinite(time) || new Date(time).toISOString().slice(0, 10) !== date) {
-    throw new Error(`backfill: ${JSON.stringify(date)} is not a real calendar date`);
-  }
-  return time;
-}
 
 /**
  * Converts an ISO timestamp to its UTC calendar date. Mirrors `collect.ts`'s
@@ -244,6 +227,10 @@ export async function backfill(options: BackfillOptions): Promise<{ written: str
   );
   const forks = await client.paginate<ForkResponse>(`${repoPath}/forks?sort=oldest`);
   const releases = await client.paginate<ReleaseResponse>(`${repoPath}/releases`);
+  const workflowRuns = await client.paginateEnvelope<WorkflowRunResponse>(
+    `${repoPath}/actions/runs`,
+    'workflow_runs',
+  );
 
   /**
    * Reads `file`, merges `incoming` into it with `'if-absent'`, and writes
@@ -279,6 +266,40 @@ export async function backfill(options: BackfillOptions): Promise<{ written: str
     ['date', 'total'],
     cumulativeByDay(forks.map((item) => toDate(item.created_at)), today),
   );
+
+  // Reconstructed only across the span where a run actually survives, which is
+  // NOT the same as "every day up to today".
+  //
+  // GitHub deletes workflow runs once they pass the repository's retention
+  // period (90 days by default). Counting a day older than the oldest
+  // surviving run would therefore reconstruct a confident `0` for a day that
+  // may have been the busiest in the archive — a fabricated zero, which is the
+  // single thing §4.3 forbids outright, and one that would be indistinguishable
+  // from a real quiet day forever after.
+  //
+  // Inside the surviving span the zeros ARE honest, and the reason is worth
+  // stating because it is what makes the bound sound: retention deletes by age,
+  // uniformly, so if a run from the oldest surviving date is still here, no run
+  // from any LATER date has been deleted. Every zero at or after that date is a
+  // day GitHub still remembers and reports nothing for.
+  //
+  // Below that date this writes nothing at all, leaving a gap — "not measured"
+  // — which is the truthful encoding of a period whose evidence GitHub has
+  // already destroyed.
+  const runDates = workflowRuns.map((run) => run.created_at.slice(0, 10)).sort(compareStrings);
+  const oldestRun = runDates[0];
+  const newestRun = runDates[runDates.length - 1];
+  if (oldestRun !== undefined && newestRun !== undefined) {
+    // `today` bounds the fill forward but must never truncate evidence, the
+    // same rule `cumulativeByDay` follows: a run that lands while this job is
+    // paging through the list is dated after `today` and still gets its row.
+    const through = compareStrings(newestRun, today) > 0 ? newestRun : today;
+    mergeIfAbsent(
+      'workflows.csv',
+      ['date', 'runs'],
+      countByDay(runDates, oldestRun, through).map((day) => ({ date: day.date, runs: day.count })),
+    );
+  }
 
   // A draft release carries `published_at: null` and is excluded: it has no
   // publish date to record, and being unpublished, it is not yet a public
