@@ -360,8 +360,9 @@ footer a:hover { color: var(--txt); }
       <h2>At a glance</h2>
       <p class="sec-copy">
         Stars, forks, watchers, views and clones since collection began, contributors and total
-        release downloads — each with a 30-day delta. A delta is only shown when the archive
-        actually covers the full 30 days; otherwise it reads as a dash.
+        release downloads — each with a 30-day delta. A delta appears only when the archive
+        covers the window it describes; otherwise it reads as a dash, and a figure that could
+        only be assembled from a different span is labelled with the span it actually covers.
       </p>
       <div class="slot" id="header-stats"></div>
     </div>
@@ -849,7 +850,7 @@ footer a:hover { color: var(--txt); }
     var startedMs = parseInstant(data.collection_started);
     dom.since.textContent = isNaN(startedMs) ? DASH : "since " + data.collection_started;
     dom.since.title = isNaN(startedMs)
-      ? "No dated traffic measurement exists in the archive yet."
+      ? "No dated measurement of any kind exists in the archive yet."
       : "Earliest dated measurement in the archive.";
 
     dom.generated.textContent = formatInstant(parseInstant(data.generated_at));
@@ -1449,6 +1450,11 @@ footer a:hover { color: var(--txt); }
    *   flow  — a per-day count (views, clones). Its delta is what accrued
    *           inside the window, so every day of the window has to be
    *           measured or the total is short by an unknown amount.
+   *   step  — a total recorded when it CHANGES rather than sampled daily
+   *           (contributors). Between two rows the total is unchanged rather
+   *           than unmeasured, so the age of its newest row says nothing
+   *           about freshness and the daily-sample staleness test must not be
+   *           applied to it. See stepDelta.
    */
   var CARDS = [
     { label: "Stars", kind: "point", series: "stars", field: "total" },
@@ -1456,7 +1462,7 @@ footer a:hover { color: var(--txt); }
     { label: "Watchers", kind: "point", series: "repo", field: "subscribers" },
     { label: "Views", kind: "flow", series: "views", field: "count" },
     { label: "Clones", kind: "flow", series: "clones", field: "count" },
-    { label: "Contributors", kind: "point", series: "contributors", field: "total" },
+    { label: "Contributors", kind: "step", series: "contributors", field: "total" },
     { label: "Release downloads", kind: "point", series: "repo", field: "downloads_total" }
   ];
 
@@ -1467,7 +1473,7 @@ footer a:hover { color: var(--txt); }
     { label: "clones", series: "clones", field: "count" },
     { label: "stars", series: "stars", field: "total" },
     { label: "forks", series: "forks", field: "total" },
-    { label: "contributors", series: "contributors", field: "total" },
+    { label: "contributors", series: "contributors", field: "total", step: true },
     { label: "repo snapshots", series: "repo", field: "subscribers" }
   ];
 
@@ -1526,6 +1532,14 @@ footer a:hover { color: var(--txt); }
       (step === 1 ? plural(count, "day", "days") : plural(count, "weekly bucket", "weekly buckets"));
   }
 
+  /* A step series is counted in the changes it records, not in days measured:
+   * saying "1 measured day" of a series that samples nothing would describe
+   * it as a thin daily series rather than as a complete one that rarely
+   * moves. */
+  function recordsLabel(count) {
+    return count + " recorded " + plural(count, "change", "changes");
+  }
+
   /*
    * A point-in-time delta over `win`, whose startMs is the day the window
    * opens against — one full DELTA_DAYS before its close, because the change
@@ -1562,8 +1576,70 @@ footer a:hover { color: var(--txt); }
       available: true,
       signed: true,
       value: current.value - baseline.value,
+      windowDays: I.DELTA_DAYS,
+      headline: "Change over the " + I.DELTA_DAYS + " days to " + I.formatDay(win.endMs) +
+        I.resolutionSuffix(),
       detail: "Measured " + I.formatCount(baseline.value) + " on " + I.formatDay(baseline.dayMs) +
         " and " + I.formatCount(current.value) + " on " + I.formatDay(current.dayMs) + "."
+    };
+  }
+
+  /*
+   * A step series' delta.
+   *
+   * `contributors.csv` is written from every contributor's first-commit week
+   * and is recomputed in full from the commit history on every successful run,
+   * so it is not a daily sample of anything: a row appears exactly when the
+   * total moves, and between two rows the total is unchanged rather than
+   * unmeasured. Two things follow, and pointDelta gets both wrong for it.
+   *
+   * First, the newest row's date is an EVENT date, not a measurement date. Its
+   * age says nothing about whether the collector is running, so the
+   * daily-sample staleness test would dash this card permanently — and blame
+   * a collector that is working perfectly — the moment the newest contributor
+   * joined more than a day ago, which is the ordinary state of a mature
+   * repository.
+   *
+   * Second, because the value holds between rows, the change across a window
+   * is exactly the steps recorded inside it, and needs no measurement sitting
+   * on either edge. So the honest answer for a repository that gained nobody
+   * this month is 0, and this returns 0 rather than declining to speak.
+   *
+   * What it still declines: a window that opens before the series' first row,
+   * where what the total stood at is genuinely unrecorded. It does NOT assume
+   * the count was zero before its first row, even though a cumulative count of
+   * contributors must have been — that is an inference about the metric's
+   * meaning, and this page does not print inferences.
+   */
+  function stepDelta(series, field, win) {
+    var current = newestMeasured(series, field, null);
+    if (current === null) {
+      return unavailable("this metric has never been recorded, so there is no value to compare.");
+    }
+    var baseline = newestMeasured(series, field, win.startMs);
+    if (baseline === null) {
+      var first = oldestMeasured(series, field);
+      return unavailable("this metric's own history starts on " + I.formatDay(first.dayMs) +
+        ", after the window opens on " + I.formatDay(win.startMs) +
+        ", so what it stood at when the window opened was never recorded.");
+    }
+    var change = current.value - baseline.value;
+    var detail = "This series records a row when its total changes rather than sampling daily, " +
+      "so the total holds between rows. ";
+    detail += change === 0
+      ? "No change is recorded inside the window: the total has stood at " +
+        I.formatCount(current.value) + " since " + I.formatDay(current.dayMs) + "."
+      : "It stood at " + I.formatCount(baseline.value) + " when the window opened (last change " +
+        "recorded " + I.formatDay(baseline.dayMs) + ") and at " + I.formatCount(current.value) +
+        " after the change recorded on " + I.formatDay(current.dayMs) + ".";
+    return {
+      available: true,
+      signed: true,
+      value: change,
+      windowDays: I.DELTA_DAYS,
+      headline: "Change over the " + I.DELTA_DAYS + " days to " + I.formatDay(win.endMs) +
+        I.resolutionSuffix(),
+      detail: detail
     };
   }
 
@@ -1632,16 +1708,48 @@ footer a:hover { color: var(--txt); }
     }
     var gap = coverageGap(days, win, step);
     if (gap !== null) return unavailable(gap);
+    /*
+     * What was actually summed. A bucket is dated on the Monday that opens its
+     * ISO week and holds that whole week's total (bundle.ts: `weekBuckets` +
+     * `sumBucket`), so N whole buckets stand for 7N days — never for 30 — and
+     * they cannot be split at the window's edges. Summing them and calling the
+     * result a 30-day figure would be wrong by up to a fifth in either
+     * direction while looking entirely ordinary on the card.
+     *
+     * So the span the buckets stand for is measured here and the chip is
+     * labelled with THAT, rather than the 30 days that were asked for. On a
+     * daily bundle the coverage tests above have already forced days[0] onto
+     * the window's first day and days[last] onto its last, so this resolves to
+     * exactly 30 and the label is unchanged.
+     */
+    var spanStart = days[0];
+    var spanEnd = days[days.length - 1] + (step - 1) * I.DAY_MS;
+    var spanDays = I.dayGap(spanEnd, spanStart) + 1;
+    if (spanDays === I.DELTA_DAYS) {
+      return {
+        available: true,
+        signed: false,
+        value: sum,
+        windowDays: I.DELTA_DAYS,
+        headline: "Total over the " + I.DELTA_DAYS + " days to " + I.formatDay(win.endMs),
+        detail: "Totalled from " + rowsLabel(days.length, step) + " covering " +
+          I.formatDay(win.startMs) + " to " + I.formatDay(win.endMs) + "."
+      };
+    }
     return {
       available: true,
       signed: false,
       value: sum,
-      detail: "Totalled from " + rowsLabel(days.length, step) + " covering " +
-        I.formatDay(win.startMs) + " to " + I.formatDay(win.endMs) + "."
+      windowDays: spanDays,
+      headline: "Total over " + spanDays + " days" + I.resolutionSuffix(),
+      detail: "Not a " + I.DELTA_DAYS + "-day total: this bundle is bucketed by week, and a " +
+        "whole-week bucket cannot be split at the edge of a " + I.DELTA_DAYS + "-day window. " +
+        "Totalled from " + rowsLabel(days.length, step) + ", which stand for " +
+        I.formatDay(spanStart) + " to " + I.formatDay(spanEnd) + "."
     };
   }
 
-  function deltaChip(delta, endMs) {
+  function deltaChip(delta) {
     var tone;
     var text;
     if (!delta.available) {
@@ -1655,15 +1763,15 @@ footer a:hover { color: var(--txt); }
       text = I.formatCount(delta.value);
     }
 
-    var explanation;
-    if (!delta.available) {
-      explanation = "No " + I.DELTA_DAYS + "-day figure: " + delta.reason;
-    } else {
-      explanation = (delta.signed ? "Change over the " : "Total over the ") + I.DELTA_DAYS +
-        " days to " + I.formatDay(endMs) + I.resolutionSuffix() + ". " + delta.detail;
-    }
+    /* The width is the delta's own, not a constant: a weekly bundle's flow
+     * total covers the span its buckets stand for, and the chip must say which
+     * span it is showing rather than inherit the one that was asked for. */
+    var explanation = delta.available
+      ? delta.headline + ". " + delta.detail
+      : "No " + I.DELTA_DAYS + "-day figure: " + delta.reason;
+    var width = delta.available ? delta.windowDays : I.DELTA_DAYS;
 
-    var chip = el("span", "stat-delta " + tone, text + " · " + I.DELTA_DAYS + "d");
+    var chip = el("span", "stat-delta " + tone, text + " · " + width + "d");
     chip.title = explanation;
     /* The dash is the whole point of this chip and announces nothing on its
      * own, so the reason travels with it for anyone not reading a tooltip. */
@@ -1717,12 +1825,30 @@ footer a:hover { color: var(--txt); }
     return body;
   }
 
-  function buildCard(card, body, endMs) {
+  /* The caption says when the total last CHANGED, not "as of": a step series'
+   * newest row is an event date, and reading it as the date of the last
+   * measurement is the same mistake stepDelta exists to avoid. */
+  function stepCard(card, data, win) {
+    var series = data.series[card.series];
+    var current = newestMeasured(series, card.field, null);
+    var body = { valueText: DASH, unmeasured: true, sub: "No change recorded." };
+    if (current !== null) {
+      body.valueText = I.formatCount(current.value);
+      body.unmeasured = false;
+      body.sub = "latest change recorded " + I.formatDay(current.dayMs);
+    }
+    body.delta = win === null
+      ? unavailable("the archive holds no dated measurement to anchor a window to.")
+      : stepDelta(series, card.field, win);
+    return body;
+  }
+
+  function buildCard(card, body) {
     var box = el("div", "stat");
     box.appendChild(el("p", "stat-label", card.label));
     box.appendChild(el("p", "stat-value" + (body.unmeasured ? " is-unmeasured" : ""), body.valueText));
     box.appendChild(el("p", "stat-sub", body.sub));
-    box.appendChild(deltaChip(body.delta, endMs));
+    box.appendChild(deltaChip(body.delta));
     return box;
   }
 
@@ -1757,8 +1883,8 @@ footer a:hover { color: var(--txt); }
       var entry = COVERAGE[i];
       var series = data.series[entry.series];
       var slice = I.rangeSlice(series, win);
-      note.appendChild(pair(entry.label,
-        rowsLabel(countMeasured(series, entry.field, slice.start, slice.end), step)));
+      var rows = countMeasured(series, entry.field, slice.start, slice.end);
+      note.appendChild(pair(entry.label, entry.step ? recordsLabel(rows) : rowsLabel(rows, step)));
     }
     return note;
   }
@@ -1769,18 +1895,21 @@ footer a:hover { color: var(--txt); }
     var hasAnchor = !isNaN(endMs);
     /* The delta window is fixed at 30 days and is NOT the selected range: the
      * seven figures stay comparable to each other whatever the control shows.
-     * `point` windows open a full 30 days before the close, `flow` windows on
-     * the first of the 30 days — see flowDelta for why they differ by one. */
+     * `point` and `step` windows open a full 30 days before the close, `flow`
+     * windows on the first of the 30 days — see flowDelta for why they differ
+     * by one. A flow total can still end up labelled wider than 30 days when
+     * the bundle is weekly; the chip says so when it does. */
     var pointWin = hasAnchor ? { startMs: endMs - I.DELTA_DAYS * I.DAY_MS, endMs: endMs } : null;
     var flowWin = hasAnchor ? { startMs: endMs - (I.DELTA_DAYS - 1) * I.DAY_MS, endMs: endMs } : null;
 
     var grid = el("div", "stat-grid");
     for (var i = 0; i < CARDS.length; i++) {
       var card = CARDS[i];
-      var body = card.kind === "flow"
-        ? flowCard(card, data, flowWin, step)
-        : pointCard(card, data, pointWin, step);
-      grid.appendChild(buildCard(card, body, endMs));
+      var body;
+      if (card.kind === "flow") body = flowCard(card, data, flowWin, step);
+      else if (card.kind === "step") body = stepCard(card, data, pointWin);
+      else body = pointCard(card, data, pointWin, step);
+      grid.appendChild(buildCard(card, body));
     }
     slot.appendChild(grid);
     slot.appendChild(windowNote(data, rangeKey, step));
