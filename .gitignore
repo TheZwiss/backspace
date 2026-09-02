@@ -111,3 +111,8 @@ site/insights/data.json
 # static, no-JavaScript tables. Listed explicitly rather than left to the
 # generic `data/` rule above, which exists for packages/server/data/.
 site/insights/data/
+# Also written at deploy time by cli-bundle.ts, from the archive's coverage.
+# Not committed for the same reason as the two above, plus one of its own:
+# every `lastmod` in it would be wrong the moment the collector next runs, and
+# a lastmod that lies tells a crawler not to come back.
+site/sitemap.xml
