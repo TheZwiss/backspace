@@ -42,8 +42,28 @@ interface ReleaseResponse {
   tag_name: string;
   name: string | null;
   published_at: string | null;
-  assets: Array<{ download_count: number }>;
+  assets: Array<{ name: string; download_count: number }>;
 }
+/**
+ * Whether a release asset is update machinery rather than a user-initiated
+ * download.
+ *
+ * electron-updater fetches `latest.yml` / `latest-mac.yml` / `latest-linux.yml`
+ * on every update check from every installed client, and `.blockmap` files
+ * while performing a differential update. GitHub counts those in
+ * `download_count` exactly like an installer, so summing every asset reports
+ * mostly polling traffic: on this repo the feed files outnumbered real
+ * installer downloads by roughly five to one, which made a published
+ * "release downloads" figure overstate installs several-fold.
+ *
+ * "How many people installed this" and "how many clients are checking in" are
+ * two different questions, so they are recorded as two different columns
+ * rather than one number that answers neither.
+ */
+export function isUpdateArtifact(assetName: string): boolean {
+  return /\.(ya?ml|blockmap)$/i.test(assetName);
+}
+
 interface ContributorResponse {
   weeks: Array<{ w: number; c: number }>;
 }
@@ -189,15 +209,35 @@ export async function collect(options: CollectOptions): Promise<CollectResult> {
   // the required repo-object fetch, which has already resolved successfully
   // by the time this runs, so a `releases` failure never costs the row those
   // two required fields.
+  //
+  // `downloads_total` keeps its original meaning — every asset, including
+  // update machinery — because it is an existing series and redefining a
+  // column in place would silently change what its historical rows mean.
+  // `downloads_app` and `downloads_updates` decompose it, and hold for every
+  // row written from here on; rows written before the split stay blank in
+  // both, which renders as a break rather than a fabricated zero. For any row
+  // carrying all three, `downloads_app + downloads_updates === downloads_total`.
   let downloadsTotal: number | null;
+  let downloadsApp: number | null;
+  let downloadsUpdates: number | null;
   if (releases !== null) {
-    downloadsTotal = releases.reduce(
-      (sum, release) =>
-        sum + release.assets.reduce((assetSum, asset) => assetSum + asset.download_count, 0),
-      0,
-    );
+    let total = 0;
+    let app = 0;
+    let updates = 0;
+    for (const release of releases) {
+      for (const asset of release.assets) {
+        total += asset.download_count;
+        if (isUpdateArtifact(asset.name)) updates += asset.download_count;
+        else app += asset.download_count;
+      }
+    }
+    downloadsTotal = total;
+    downloadsApp = app;
+    downloadsUpdates = updates;
   } else {
     downloadsTotal = null;
+    downloadsApp = null;
+    downloadsUpdates = null;
     skipped.push('repo.csv:downloads_total');
   }
 
@@ -326,8 +366,14 @@ export async function collect(options: CollectOptions): Promise<CollectResult> {
     subscribers: repo.subscribers_count,
     open_issues: repo.open_issues_count,
     downloads_total: downloadsTotal,
+    downloads_app: downloadsApp,
+    downloads_updates: downloadsUpdates,
   };
-  writeCsvSeries('repo.csv', ['date', 'subscribers', 'open_issues', 'downloads_total'], [repoPoint]);
+  writeCsvSeries(
+    'repo.csv',
+    ['date', 'subscribers', 'open_issues', 'downloads_total', 'downloads_app', 'downloads_updates'],
+    [repoPoint],
+  );
 
   if (releases !== null) {
     const releaseRows: ReleaseRow[] = releases

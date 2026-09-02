@@ -130,6 +130,32 @@ describe('buildDashboardData — the not-measured distinction', () => {
     expect(build().series.repo.downloads_total[0]).toBe(0);
   });
 
+  it('maps a pre-split repo row to null for the download split, never to zero', () => {
+    // Exactly the shape on disk for every row written before the split
+    // columns existed: the field is ABSENT from the header, not merely blank.
+    writeRaw('repo.csv', 'date,subscribers,open_issues,downloads_total\n2026-09-01,1,18,1802\n');
+    const data = build();
+    expect(data.series.repo.downloads_total).toEqual([1802]);
+    expect(data.series.repo.downloads_app).toEqual([null]);
+    expect(data.series.repo.downloads_updates).toEqual([null]);
+    expect(data.series.repo.downloads_app[0]).not.toBe(0);
+    expect(data.series.repo.downloads_updates[0]).not.toBe(0);
+  });
+
+  it('parses a populated download split and keeps a measured zero at zero', () => {
+    writeRaw(
+      'repo.csv',
+      'date,subscribers,open_issues,downloads_total,downloads_app,downloads_updates\n' +
+        '2026-09-03,1,18,323,323,0\n',
+    );
+    const data = build();
+    expect(data.series.repo.downloads_app).toEqual([323]);
+    // A release with no update feed yet genuinely has zero update traffic.
+    // That is a measurement, and must not be flattened into a break.
+    expect(data.series.repo.downloads_updates).toEqual([0]);
+    expect(data.series.repo.downloads_updates[0]).not.toBeNull();
+  });
+
   it('parses a populated downloads_total as a number', () => {
     writeRaw('repo.csv', 'date,subscribers,open_issues,downloads_total\n2026-09-01,1,18,4210\n');
 
@@ -220,6 +246,8 @@ describe('buildDashboardData — absent vs. corrupt files', () => {
       subscribers: [],
       open_issues: [],
       downloads_total: [],
+      downloads_app: [],
+      downloads_updates: [],
     });
     expect(data.releases).toEqual([]);
     expect(data.dimensions.referrers).toEqual({ snapshots: [], latest: [], trajectories: [] });
@@ -741,7 +769,14 @@ function makeData(overrides: Partial<DashboardData> = {}): DashboardData {
       stars: { dates: [], total: [] },
       forks: { dates: [], total: [] },
       contributors: { dates: [], total: [] },
-      repo: { dates: [], subscribers: [], open_issues: [], downloads_total: [] },
+      repo: {
+        dates: [],
+        subscribers: [],
+        open_issues: [],
+        downloads_total: [],
+        downloads_app: [],
+        downloads_updates: [],
+      },
     },
     releases: [],
     dimensions: {
@@ -824,6 +859,10 @@ describe('downsampleWeekly — sum vs. last', () => {
       subscribers: [12],
       open_issues: [22],
       downloads_total: [320],
+      // Absent from this pre-split fixture, so the weekly bucket carries the
+      // same "not measured" it was given, never a zero.
+      downloads_app: [null],
+      downloads_updates: [null],
     });
   });
 
@@ -1124,6 +1163,8 @@ describe('downsampleWeekly — what it must not touch', () => {
       subscribers: [],
       open_issues: [],
       downloads_total: [],
+      downloads_app: [],
+      downloads_updates: [],
     });
     expect(weekly.empty).toBe(true);
   });

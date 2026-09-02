@@ -858,7 +858,8 @@ footer a:hover { color: var(--txt); }
       checkSeries(d.series.stars, "series.stars", ["total"]) ||
       checkSeries(d.series.forks, "series.forks", ["total"]) ||
       checkSeries(d.series.contributors, "series.contributors", ["total"]) ||
-      checkSeries(d.series.repo, "series.repo", ["subscribers", "open_issues", "downloads_total"]) ||
+      checkSeries(d.series.repo, "series.repo",
+        ["subscribers", "open_issues", "downloads_total", "downloads_app", "downloads_updates"]) ||
       checkReleases(d.releases);
     if (problem !== null) return problem;
 
@@ -1623,7 +1624,17 @@ footer a:hover { color: var(--txt); }
     { label: "Views", kind: "flow", series: "views", field: "count" },
     { label: "Clones", kind: "flow", series: "clones", field: "count" },
     { label: "Contributors", kind: "step", series: "contributors", field: "total" },
-    { label: "Release downloads", kind: "point", series: "repo", field: "downloads_total" }
+    /* Deliberately NOT one "Release downloads" figure. GitHub counts an
+       electron-updater feed file (`latest.yml`) and a `.blockmap` in
+       `download_count` exactly like an installer, and every installed client
+       fetches the feed on every update check, so a combined total is
+       dominated by polling: when this split was introduced the feed files
+       outnumbered real installs about five to one. Two cards answer two
+       different questions instead of one number answering neither.
+       Both read null for rows the archive recorded before the split, which
+       renders as a dash rather than a zero. */
+    { label: "App downloads", kind: "point", series: "repo", field: "downloads_app" },
+    { label: "Update checks", kind: "point", series: "repo", field: "downloads_updates" }
   ];
 
   /* The series whose coverage inside the selected range is worth stating, and

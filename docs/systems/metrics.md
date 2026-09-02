@@ -119,7 +119,13 @@ All files live at the root of the `metrics-data` branch. CSVs are sorted ascendi
 | `forks.csv` | `date,total` | The repo's live `forks_count` as read on that date — see the caveat below the table |
 | `releases.csv` | `date,tag,name` | A release published on that UTC date (`date` = `published_at`'s UTC day) — see the caveat below the table |
 | `contributors.csv` | `date,total` | Cumulative distinct-contributor count, where a contributor counts from the UTC date of the start of their first commit week onward. Capped: see the note below the table |
-| `repo.csv` | `date,subscribers,open_issues,downloads_total` | The repo object's counters as read on that date, plus the sum of every release asset's `download_count` |
+| `repo.csv` | `date,subscribers,open_issues,downloads_total,downloads_app,downloads_updates` | The repo object's counters as read on that date, plus release asset `download_count` sums: every asset, then that total split into app installs and update-check traffic |
+
+**The download split.** `downloads_total` sums every release asset. That number is dominated by update machinery rather than by installs: electron-updater fetches `latest.yml` / `latest-mac.yml` / `latest-linux.yml` on every update check from every installed client, and `.blockmap` files during a differential update, and GitHub counts all of them in `download_count` exactly like an installer. When the split was added on 2026-09-02 the feed files had 1,519 downloads against 323 for every real installer and archive combined, so the single figure overstated installs by roughly 5.7x.
+
+`downloads_app` counts installers and archives; `downloads_updates` counts anything matching `*.yml`, `*.yaml` or `*.blockmap` (`isUpdateArtifact` in `collect.ts`). For any row carrying all three, `downloads_app + downloads_updates === downloads_total`.
+
+`downloads_total` keeps its original meaning and is still written, because redefining a column in place would silently change what its historical rows mean. Rows written before the split stay **blank** in the two new columns, never `0`: the archive never measured that split for those days, and `formatCsv` writes a missing field as an empty value, which the bundler maps to `null`. The dashboard shows `downloads_app` and `downloads_updates` as separate cards and no longer shows the combined total, which answered neither question.
 
 `repo.csv.downloads_total` is a `number | null` in memory (`RepoPoint` in `types.ts`) and is written as a **blank CSV field**, never `0`, whenever the optional `/releases` fetch fails that run (see §5). `subscribers` and `open_issues` are never blank — they come from the required `/repos/{slug}` fetch, which has already succeeded by the time `repo.csv` is written.
 
@@ -404,7 +410,8 @@ interface DashboardData {
 interface TrafficSeries { dates: string[]; count: Array<number | null>; uniques: Array<number | null>; }
 interface CountSeries   { dates: string[]; total: Array<number | null>; }
 interface RepoSeries    { dates: string[]; subscribers: Array<number | null>;
-                          open_issues: Array<number | null>; downloads_total: Array<number | null>; }
+                          open_issues: Array<number | null>; downloads_total: Array<number | null>;
+                          downloads_app: Array<number | null>; downloads_updates: Array<number | null>; }
 
 interface DimensionSeries {
   /** Snapshot dates, ascending. */

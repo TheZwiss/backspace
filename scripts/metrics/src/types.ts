@@ -34,6 +34,14 @@ export interface RepoPoint {
   subscribers: number;
   open_issues: number;
   downloads_total: number | null;
+  /**
+   * `downloads_total` split by what the asset is for: `downloads_app` counts
+   * installers and archives, `downloads_updates` counts electron-updater feed
+   * files and blockmaps that every installed client fetches on an update
+   * check. Both are blank for rows written before the split existed.
+   */
+  downloads_app: number | null;
+  downloads_updates: number | null;
 }
 
 /**

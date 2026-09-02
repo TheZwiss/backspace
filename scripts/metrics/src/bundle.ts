@@ -42,6 +42,8 @@ export interface RepoSeries {
   subscribers: Array<number | null>;
   open_issues: Array<number | null>;
   downloads_total: Array<number | null>;
+  downloads_app: Array<number | null>;
+  downloads_updates: Array<number | null>;
 }
 
 /**
@@ -259,6 +261,15 @@ function readRepoSeries(store: Store): RepoSeries {
     ),
     downloads_total: rows.map((row) =>
       toNumberOrNull(row.fields['downloads_total'], `${REPO_FILE} downloads_total`, row.date),
+    ),
+    // Absent from every row written before the split existed. `toNumberOrNull`
+    // maps both an absent field and a blank one to null, so those rows read as
+    // "not measured" rather than as a zero download count.
+    downloads_app: rows.map((row) =>
+      toNumberOrNull(row.fields['downloads_app'], `${REPO_FILE} downloads_app`, row.date),
+    ),
+    downloads_updates: rows.map((row) =>
+      toNumberOrNull(row.fields['downloads_updates'], `${REPO_FILE} downloads_updates`, row.date),
     ),
   };
 }
@@ -698,6 +709,12 @@ function downsampleRepo(series: RepoSeries): RepoSeries {
     ),
     downloads_total: buckets.map((bucket) =>
       lastBucket(series.dates, series.downloads_total, bucket.indices),
+    ),
+    downloads_app: buckets.map((bucket) =>
+      lastBucket(series.dates, series.downloads_app, bucket.indices),
+    ),
+    downloads_updates: buckets.map((bucket) =>
+      lastBucket(series.dates, series.downloads_updates, bucket.indices),
     ),
   };
 }
