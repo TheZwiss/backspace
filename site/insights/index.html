@@ -412,8 +412,13 @@ footer a:hover { color: var(--txt); }
       <p class="ch-label ch-sky">reach</p>
       <h2>Reach</h2>
       <p class="sec-copy">
-        Page views and repository clones with their unique-visitor counts. A gap in a line means
-        that day was never measured, not that it fell to zero.
+        Page views and repository clones with their unique-visitor counts. A break in a line
+        means nothing was measured at that point on the axis &mdash; a day, or a whole week once
+        the bundle is bucketed by week &mdash; not that the figure fell to zero. GitHub reports
+        views and clones from two separate endpoints and <strong>omits a day entirely when it
+        recorded no traffic</strong>, so a quiet day arrives here as a break rather than as a
+        zero, and the two charts can honestly disagree about which days exist. A break is not,
+        on its own, evidence that the collector failed.
       </p>
       <div class="slot" id="chart-reach"></div>
     </div>
@@ -2170,25 +2175,33 @@ footer a:hover { color: var(--txt); }
 
     if (isNaN(startMs)) {
       return {
-        empty: true, xs: [], values: [], measured: [],
+        empty: true, overrun: false, overrunSteps: 0,
+        xs: [], values: [], measured: [],
         startMs: NaN, endMs: NaN, stepDays: stepDays, offGrid: 0
       };
     }
 
     /*
      * `parseDay` accepts any well-formed four-digit year, so one corrupt row
-     * dated 9999-01-01 would ask for millions of axis steps and freeze the
-     * tab while it built them. The cap is far above any span this archive can
-     * really hold — 20,000 daily steps is roughly 55 years — and refusing
-     * loudly hands the shell a named failure for this one slot, which is a
-     * great deal better than a browser that stops responding.
+     * dated 9999-01-01 would ask for millions of axis steps and freeze the tab
+     * while it built them. The cap is far above any span this archive can
+     * really hold — 20,000 daily steps is roughly 55 years.
+     *
+     * Reported as a RESULT rather than thrown. A throw would reach the shell's
+     * generic section-failure note, which tells the reader "the fault is in
+     * this page's code" — and this fault is in the data. Blaming the wrong
+     * component sends whoever reads it to the wrong place, so the caller is
+     * handed the numbers and says what is actually wrong. `empty` is set too,
+     * so a caller that forgets to check `overrun` still draws nothing rather
+     * than an axis it never built.
      */
     var stepCount = Math.floor((endMs - startMs) / stepMs) + 1;
     if (stepCount > MAX_AXIS_STEPS) {
-      throw new Error("insights: the series span " + I.formatDay(startMs) + " to " +
-        I.formatDay(endMs) + " needs " + stepCount + " axis steps, past the " +
-        MAX_AXIS_STEPS + " this page will build. A date in the archive is almost " +
-        "certainly wrong.");
+      return {
+        empty: true, overrun: true, overrunSteps: stepCount,
+        xs: [], values: [], measured: [],
+        startMs: startMs, endMs: endMs, stepDays: stepDays, offGrid: 0
+      };
     }
 
     var seen = {};
@@ -2240,6 +2253,8 @@ footer a:hover { color: var(--txt); }
 
     return {
       empty: false,
+      overrun: false,
+      overrunSteps: 0,
       xs: xs,
       values: values,
       measured: measured,
@@ -2347,12 +2362,20 @@ footer a:hover { color: var(--txt); }
   }
 
   /*
-   * Counts start at zero. A per-day event count has a true floor at 0, and an
-   * auto-fitted baseline part-way up the axis turns an ordinary week into a
-   * dramatic one — the visual equivalent of a truncated bar chart. The 8%
-   * headroom keeps the highest point off the frame.
+   * A y-scale policy for per-day event counts: start at zero.
+   *
+   * Such a count has a true floor at 0, and an auto-fitted baseline part-way up
+   * the axis turns an ordinary week into a dramatic one — the visual equivalent
+   * of a truncated bar chart. The 8% headroom keeps the highest point off the
+   * frame.
+   *
+   * Exported, and passed by name rather than relied on as a hidden default,
+   * because it is NOT right for every series. A cumulative counter that has sat
+   * near 60 for a year would be drawn as a flat line at the top of an axis that
+   * is 98% empty; that chart wants its own policy, which is what `mount`'s
+   * `yRange` option is for.
    */
-  function countRange(u, min, max) {
+  function zeroBasedCounts(u, min, max) {
     var top = max;
     if (typeof top !== "number" || !isFinite(top) || top <= 0) return [0, 1];
     return [0, top * 1.08];
@@ -2418,11 +2441,40 @@ footer a:hover { color: var(--txt); }
    * compare two lines that are not comparable, so this deliberately does not
    * offer one.
    *
+   * `settings` is optional and is the ONLY way a caller varies the plot:
+   *
+   *   yRange       (u, min, max) -> [min, max]. The y-scale policy.
+   *                Default `zeroBasedCounts`.
+   *   hooks        A uPlot hooks object. Drawing over the plot — release
+   *                annotations on the time axis — belongs here.
+   *   plugins      A uPlot plugins array.
+   *   syncFilters  `{ pub?, sub? }` for `cursor.sync.filters`: how a chart
+   *                opts out of part of the shared group without leaving it,
+   *                and the supported way to decline the shared zoom while
+   *                keeping the shared cursor.
+   *   padding      A uPlot padding tuple. The default reserves room above the
+   *                plot so the highest point marker is not clipped, and leaves
+   *                every other side to uPlot, which already reserves what the
+   *                axis labels need.
+   *
+   * It is a CLOSED set of named extension points rather than a merge into the
+   * uPlot options, because what it must not be able to reach is exactly what
+   * this page depends on: `spanGaps: false`, the sync key, the UTC `tzDate`,
+   * and data that came from `expand`. A general escape hatch would put all
+   * four one keystroke away from being switched off.
+   *
+   * There is exactly one `new uPlot(...)` on this page and it is below. Every
+   * chart section goes through it, including this one's own two charts, so no
+   * section ends up on a construction path of its own — which is how the gap
+   * expansion would come to exist in two copies that drift, and a break would
+   * quietly become a straight line in one chart and not the other.
+   *
    * Returns `{ plot, destroy }`. `destroy` is not optional: removing the DOM
    * node leaves uPlot's window listeners, its entry in the cursor-sync group
    * and its resize observer alive.
    */
-  function mount(host, xs, defs) {
+  function mount(host, xs, defs, settings) {
+    var opts = settings || {};
     var size = plotSize(host);
     var axisStroke = colour("--txt4", "#5c5c68");
 
@@ -2456,7 +2508,16 @@ footer a:hover { color: var(--txt); }
          * continuity `expand` exists to make visible. Stated explicitly rather
          * than left to the default so it cannot be changed by accident. */
         spanGaps: false,
-        points: { size: 6, space: 14, filter: isolatedPoints },
+        /* Markers in the series' own colour, stroke and fill both. uPlot's
+         * default point fill is an opaque white belonging to no Aether Drift
+         * token — the one colour on these charts that would not have come from
+         * the palette. A solid dot in the series colour is also the most
+         * visible thing available for the marker that matters most: the one
+         * drawn for a lone measurement between two unmeasured stretches. */
+        points: {
+          size: 6, space: 14, filter: isolatedPoints,
+          stroke: def.stroke, fill: def.stroke
+        },
         value: seriesValue
       };
       if (def.fill !== undefined) entry.fill = def.fill;
@@ -2465,38 +2526,43 @@ footer a:hover { color: var(--txt); }
       data.push(def.values);
     }
 
-    var options = {
+    /* One key for the whole page. `scales: ["x", null]` joins the plots on the
+     * time scale only, so two charts with unrelated y magnitudes do not push
+     * each other's vertical cursor about. uPlot propagates the drag selection
+     * through this same group, so a zoom on one chart zooms every chart onto
+     * the same span — the behaviour worth having when the whole point is
+     * reading them against each other. A chart that wants out of part of that
+     * passes `syncFilters` rather than editing this. */
+    var sync = { key: SYNC_KEY, setSeries: false, scales: ["x", null] };
+    if (opts.syncFilters !== undefined) sync.filters = opts.syncFilters;
+
+    var config = {
       width: size.width,
       height: size.height,
       tzDate: utcDate,
       legend: { live: true },
       cursor: {
-        /* One key for the whole page. `scales: ["x", null]` joins the plots on
-         * the time scale only, so two charts with unrelated y magnitudes do
-         * not push each other's vertical cursor about. uPlot propagates the
-         * drag selection through this same group, so a zoom on one chart zooms
-         * every chart onto the same span — which is the behaviour worth having
-         * when the whole point is reading them against each other. */
-        sync: { key: SYNC_KEY, setSeries: false, scales: ["x", null] },
+        sync: sync,
         /* Drag-to-zoom on the time axis (spec §7). `dist` is a few pixels so a
          * click that slips does not zoom into an empty sliver. */
         drag: { x: true, y: false, setScale: true, dist: 6 },
         points: { size: 7 }
       },
-      /* A little room above the plot so the highest point's marker is not
-       * clipped by the top of the canvas. Every other side is left to uPlot,
-       * which already reserves what the axis labels need — pinning the right
-       * side by hand sliced the final day label in half. */
-      padding: [8, null, null, null],
-      scales: { x: { time: true }, y: { range: countRange } },
+      padding: opts.padding !== undefined ? opts.padding : [8, null, null, null],
+      scales: {
+        x: { time: true },
+        y: { range: typeof opts.yRange === "function" ? opts.yRange : zeroBasedCounts }
+      },
       axes: [
         axis({ space: daySpace, values: dayTicks }),
         axis({ size: 56, incrs: COUNT_INCRS, values: countTicks })
       ],
       series: series
     };
+    if (opts.hooks !== undefined) config.hooks = opts.hooks;
+    if (opts.plugins !== undefined) config.plugins = opts.plugins;
 
-    var plot = new window.uPlot(options, data, host);
+    var plot = new window.uPlot(config, data, host);
     var detach = trackSize(plot, host);
     return {
       plot: plot,
@@ -2513,7 +2579,8 @@ footer a:hover { color: var(--txt); }
     SYNC_KEY: SYNC_KEY,
     colour: colour,
     expand: expand,
-    mount: mount
+    mount: mount,
+    zeroBasedCounts: zeroBasedCounts
   };
 })();
 </script>
@@ -2686,7 +2753,35 @@ footer a:hover { color: var(--txt); }
         dash: [5, 4],
         values: axis.values[offset + 1]
       }
-    ]);
+    ], {
+      /* Stated rather than left to the default. Both series here are per-day
+       * event counts with a true floor at zero, so this is the right policy —
+       * and a shipped caller exercising the extension point is what keeps it
+       * from being wrong the first time another section reaches for it. */
+      yRange: C.zeroBasedCounts
+    });
+  }
+
+  /*
+   * A span so long it cannot be real is a fault in the ARCHIVE, and this page
+   * must not report it as one of its own. Letting `expand` throw would reach
+   * the shell's generic section-failure note — "the fault is in this page's
+   * code" — and send whoever reads it to the wrong repository entirely. So the
+   * reader is told what the console is told: a date in the archive is wrong.
+   */
+  function overrunNote(axis) {
+    var detail = "The traffic series would run from " + I.formatDay(axis.startMs) + " to " +
+      I.formatDay(axis.endMs) + ", which needs " + I.formatCount(axis.overrunSteps) +
+      " points on the time axis — far longer than this archive can really cover. A date in " +
+      "the archive itself is wrong. No chart is drawn, rather than one built around a date " +
+      "that cannot be true.";
+    if (typeof console !== "undefined" && typeof console.error === "function") {
+      console.error("insights: chart-reach declined to plot. " + detail);
+    }
+    var note = el("p", "slot-note slot-note-error");
+    note.appendChild(el("strong", null, "These charts cannot be drawn from this archive."));
+    note.appendChild(document.createTextNode(" " + detail));
+    return note;
   }
 
   /*
@@ -2725,6 +2820,14 @@ footer a:hover { color: var(--txt); }
       { series: data.series.clones, field: "uniques" }
     ], win, stepDays);
 
+    /* Before the `empty` branch: an overrun sets `empty` too, as a fail-safe
+     * for a caller that forgets this check, and the specific reason is the
+     * more useful of the two. */
+    if (axis.overrun) {
+      slot.appendChild(overrunNote(axis));
+      return;
+    }
+
     if (axis.empty) {
       slot.appendChild(el("p", "slot-note",
         "Neither views nor clones carry a row inside " + win.title.toLowerCase() + " (" +
@@ -2746,8 +2849,8 @@ footer a:hover { color: var(--txt); }
        * a browser rather than assumed — the wording has to match what the page
        * actually does. */
       slot.appendChild(el("p", "chart-hint",
-        "Hovering either chart moves the cursor on both. Drag sideways across either one to " +
-        "zoom the shared time axis; double-click to return to the full span."));
+        "Hovering any chart moves the cursor on every chart on this page. Drag sideways across " +
+        "any of them to zoom the shared time axis; double-click to return to the full span."));
     } catch (error) {
       /* Teardown is skipped after a failed render, so nothing else will
        * release these. Destroy what was built, then let the shell render its
