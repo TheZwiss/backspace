@@ -1033,10 +1033,24 @@ footer a:hover { color: var(--txt); }
   }
 
   /*
-   * `downsampled` is a single wholesale flag: when it is true EVERY range is in
-   * weekly buckets, not just "all". There is no per-range breakdown in the data,
-   * so the label has to say so once, for all of them. Later sections that need
-   * the wording inline should call INSIGHTS.resolutionSuffix().
+   * `downsampled` is a single wholesale flag ACROSS THE DATED SERIES: when it
+   * is true every range of them is in weekly buckets, not just "all". There is
+   * no per-range breakdown in the data, so the label has to say so once, for
+   * all of them. Sections that need the wording inline should call
+   * INSIGHTS.resolutionSuffix().
+   *
+   * It is NOT a claim about the whole page, and saying so once was a
+   * contradiction the page carried against itself. `downsampleWeekly` copies
+   * `dimensions` through untouched — a referrer trajectory is a difference
+   * between consecutive snapshots, and weekly bucketing would silently
+   * redefine that into a different quantity with the same name — so the
+   * referrer and path sections keep their own daily snapshot dates whatever
+   * this flag says. A note reading "every range is drawn in weekly buckets"
+   * over two sections measurably stepping by one day is the page asserting
+   * something about its own contents that is not true, which is the one thing
+   * it exists not to do. So the claim is scoped to what it governs and the two
+   * dimensional sections state their resolution themselves, beside their own
+   * figures.
    *
    * The other statuses get their own line rather than a resolution claim: an
    * archive with no rows has no resolution, and saying "daily" there would be
@@ -1045,9 +1059,9 @@ footer a:hover { color: var(--txt); }
   function controlNote() {
     if (state.status === "ok") {
       if (state.data.downsampled) {
-        return "The bundle was downsampled to fit its size budget, so every range — including 30d — is drawn in weekly buckets, not daily points.";
+        return "The bundle was downsampled to fit its size budget, so every dated series here — at 30d as much as at all — is drawn in weekly buckets rather than daily points. The referrer and path snapshots are not bucketed: those two sections state their own resolution.";
       }
-      return "Daily resolution. Every range is drawn from one point per measured day.";
+      return "Daily resolution. Every dated series is drawn from one point per measured day, and the referrer and path sections from one point per snapshot date.";
     }
     if (state.status === "empty") {
       return "There are no measurements to select a range from yet.";
@@ -2124,6 +2138,16 @@ footer a:hover { color: var(--txt); }
   /* The container of every live plot, in mount order. */
   var liveHosts = [];
 
+  /* The toolkit's own console channel. The shell's `reportFailure` is private
+   * to the shell, and a failure inside `mount` needs saying somewhere a
+   * developer will find it even though the exception itself is re-thrown to
+   * the caller. */
+  function reportChartFailure(what, error) {
+    if (typeof console !== "undefined" && typeof console.error === "function") {
+      console.error("insights: " + what + " failed.", error);
+    }
+  }
+
   function forgetHost(host) {
     for (var i = 0; i < liveHosts.length; i++) {
       if (liveHosts[i] === host) {
@@ -2237,6 +2261,45 @@ footer a:hover { color: var(--txt); }
     1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500,
     1000, 2000, 2500, 5000, 10000, 20000, 25000, 50000,
     100000, 200000, 250000, 500000, 1000000, 2000000, 5000000, 10000000
+  ];
+
+  /*
+   * Whole-day tick increments for the shared time axis, in seconds.
+   *
+   * uPlot's own time increments run down to the millisecond, and it picks the
+   * smallest one whose pixel spacing clears the axis' `space`. On a short span
+   * — six days across a wide plot, which is precisely what a young archive
+   * gives this page — that lands on a SUB-DAY increment, and every tick then
+   * gets labelled by `dayTicks` with the day it falls in: `09-01 09-01 09-01
+   * 09-02 09-02 …`. Duplicated labels are the visible half of the problem.
+   * The invisible half is worse: gridlines at noon and 6am on an archive whose
+   * finest reading is one row per day, drawing a resolution nothing here has.
+   *
+   * This is uPlot's OWN list (`ve()` in the vendored build) with everything
+   * below a day removed, rather than a list invented here — so every value
+   * left is one its `timeAxisSplits` already aligns correctly: day multiples
+   * up to 15 days snap to UTC midnight, the 30-day multiples are its month
+   * increments and snap to the first of a month, and the 365-day multiples are
+   * its year increments and snap to the first of January. Inventing round
+   * numbers instead would hand it a "2 month" increment it would divide into a
+   * fractional month count and step irregularly.
+   *
+   * Below one day there is nothing to show, so a drag zoom past that point now
+   * thins the ticks out rather than repeating a date across them. The archive
+   * has one point per day; the axis says so.
+   *
+   * Lives here rather than in a chart section because all four sections draw
+   * on this one axis, and a fix applied in one of them would leave the other
+   * three printing the same duplicated dates.
+   */
+  var DAY_S = 86400;
+  var MONTH_S = DAY_S * 30;
+  var YEAR_S = DAY_S * 365;
+  var DAY_INCRS = [
+    DAY_S, 2 * DAY_S, 3 * DAY_S, 4 * DAY_S, 5 * DAY_S, 6 * DAY_S, 7 * DAY_S,
+    8 * DAY_S, 9 * DAY_S, 10 * DAY_S, 15 * DAY_S,
+    MONTH_S, 2 * MONTH_S, 3 * MONTH_S, 4 * MONTH_S, 6 * MONTH_S,
+    YEAR_S, 2 * YEAR_S, 5 * YEAR_S, 10 * YEAR_S, 25 * YEAR_S, 50 * YEAR_S, 100 * YEAR_S
   ];
 
   /*
@@ -2561,9 +2624,9 @@ footer a:hover { color: var(--txt); }
    * the full `YYYY-MM-DD` once it does not, so a January tick is never
    * ambiguous about which January.
    *
-   * Zooming below one day is possible — the drag is free-form — and produces
-   * ticks that repeat the same day. That is honest: the archive has one point
-   * per day and no finer reading exists to show.
+   * The splits themselves are constrained to whole days by `DAY_INCRS`, so a
+   * label is never printed twice: without that, a short span picks a sub-day
+   * increment and every tick inside a day is stamped with that same day.
    */
   function dayTicks(u, splits) {
     var spansYears = false;
@@ -2806,7 +2869,11 @@ footer a:hover { color: var(--txt); }
         y: { range: typeof opts.yRange === "function" ? opts.yRange : zeroBasedCounts }
       },
       axes: [
-        axis({ space: daySpace, values: dayTicks }),
+        /* `incrs` before `space`: the increment decides which days get a tick,
+         * and the spacing decides how many of them fit. Both are needed —
+         * `space` alone cannot exclude a sub-day increment without also
+         * excluding the one-day increment at spans where a day is narrow. */
+        axis({ incrs: DAY_INCRS, space: daySpace, values: dayTicks }),
         axis({ size: 56, incrs: COUNT_INCRS, values: countTicks })
       ],
       series: series
@@ -2815,10 +2882,58 @@ footer a:hover { color: var(--txt); }
     if (opts.plugins !== undefined) config.plugins = opts.plugins;
 
     var plot = new window.uPlot(config, data, host);
-    var detach = trackSize(plot, host);
-    livePlots += 1;
-    liveHosts.push(host);
-    syncHint();
+    /*
+     * Everything after the constructor runs under a rollback.
+     *
+     * Once `new uPlot` returns, the instance is live: it holds window
+     * listeners, a canvas and a slot in the page's cursor-sync group, and only
+     * `destroy()` releases them. A throw between here and the return would
+     * leave all of that alive with no reference for anyone to destroy — the
+     * caller never received one, and the shell skips a section's teardown
+     * after a failed render precisely because it cannot know what was built.
+     *
+     * A caller CAN avoid the window by constructing last, and this page's
+     * sections do. But that is a discipline every future caller would have to
+     * repeat and could silently drop, where this is a property of the one
+     * construction path. The bookkeeping is rolled back in the reverse order
+     * it was applied, so a failure part-way through cannot leave the live-plot
+     * count or the hint describing a chart that does not exist.
+     */
+    var detach = null;
+    var counted = false;
+    try {
+      detach = trackSize(plot, host);
+      livePlots += 1;
+      counted = true;
+      liveHosts.push(host);
+      syncHint();
+    } catch (error) {
+      if (counted) {
+        livePlots -= 1;
+        forgetHost(host);
+      }
+      if (detach !== null) {
+        try {
+          detach();
+        } catch (detachError) {
+          /* The construction failure is the one worth reporting; a resize
+           * observer that also fails to disconnect is logged rather than
+           * allowed to replace it. */
+          reportChartFailure("Detaching a resize observer after a failed mount", detachError);
+        }
+      }
+      try {
+        plot.destroy();
+      } catch (destroyError) {
+        reportChartFailure("Destroying a plot after a failed mount", destroyError);
+      }
+      try {
+        syncHint();
+      } catch (hintError) {
+        reportChartFailure("Restoring the chart hint after a failed mount", hintError);
+      }
+      throw error;
+    }
     /* `released` guards the count against a double destroy. A section that
      * tears down and then has its slot emptied would otherwise be able to
      * decrement twice and drive the hint off the page while charts are still
