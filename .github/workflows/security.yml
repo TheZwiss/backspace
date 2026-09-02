@@ -84,6 +84,9 @@ jobs:
         with:
           scan-type: config
           scan-ref: .
+          # Named explicitly rather than relying on the default working
+          # directory. Every entry in that file carries its reason.
+          trivyignores: .trivyignore
           format: sarif
           output: trivy-config.sarif
       - name: Upload Trivy config SARIF
