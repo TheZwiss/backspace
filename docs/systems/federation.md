@@ -1451,13 +1451,14 @@ Profile data is synced server-to-server. The home instance is authoritative — 
 When a `profile_update` relay carries avatar or banner absolute URLs, the receiving instance downloads the image files locally rather than storing remote URLs. This eliminates cross-origin dependencies — avatars render from the local `/api/uploads/` endpoint.
 
 **Flow:** `processProfileUpdateEvent` calls `downloadProfileAsset(url, sourceInstance)` for each of avatar/banner:
-1. SSRF check (URL hostname must match authenticated source instance)
-2. `fetch` with 10s timeout
+1. Origin check (URL hostname must match authenticated source instance). This constrains the first request only, which is why step 2 does not use bare `fetch`.
+2. `safeFetch` with 10s timeout. It validates the target and re-validates the destination of every redirect hop before following it, so the origin check cannot be sidestepped by a peer answering with a 30x.
 3. Content-type validation (`image/*` only)
-4. Stream to temp file (`temp_{snowflake}{ext}`), atomic rename to `{snowflake}{ext}`
-5. Store local bare filename in user row
+4. Size cap (`MAX_PROFILE_ASSET_BYTES`, 8 MiB). A declared `content-length` over the cap is refused before the file is opened; the body is then counted as it streams and the transfer is aborted the moment it exceeds the cap, so a peer cannot answer with an unbounded body.
+5. Stream to temp file (`temp_{snowflake}{ext}`), atomic rename to `{snowflake}{ext}`
+6. Store local bare filename in user row
 
-**Fallback:** On any download failure (timeout, HTTP error, non-image content, SSRF mismatch), the absolute URL is stored instead. This degrades to the pre-replication behavior — the avatar loads cross-origin from the home instance.
+**Fallback:** On any download failure (timeout, HTTP error, non-image content, origin mismatch, refused redirect target, over-cap body), the absolute URL is stored instead. The temp file is unlinked on every failure path. This degrades to the pre-replication behavior — the avatar loads cross-origin from the home instance.
 
 **File cleanup:** When avatar/banner changes, the old local file is deleted via `deleteUploadFile()`. The check `!oldValue.startsWith('http')` ensures only locally-downloaded files are deleted, not absolute URL strings.
 
