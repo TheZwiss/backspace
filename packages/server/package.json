@@ -10,8 +10,10 @@
     "start": "node --import tsx/esm src/index.ts",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
+    "typecheck:e2e": "tsc -p tsconfig.e2e.json --noEmit",
     "test": "vitest run",
     "test:federation-identity": "vitest run test/federation-identity-deletion.test.ts",
+    "test:federation-e2e": "vitest run federation-e2e",
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate"
   },
