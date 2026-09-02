@@ -26,12 +26,17 @@ on:
 
 permissions:
   contents: read
-  packages: write
-  security-events: write
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    # Scoped to this job. `packages: write` pushes the built image to
+    # ghcr.io/<repo>; `security-events: write` uploads the Trivy image scan
+    # SARIF to code scanning. Neither is needed by anything at workflow level.
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

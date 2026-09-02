@@ -59,8 +59,20 @@ jobs:
     # loudly on a schedule the fork owner never opted into.
     if: ${{ !github.event.repository.fork }}
     runs-on: ubuntu-latest
+    # Both scopes are load-bearing, and Scorecard's Token-Permissions check
+    # reports a job-level `contents` or `actions` write whatever the reason
+    # for it. Do not remove either to clear that finding.
     permissions:
+      # Pushes the day's rows to the metrics-data branch. Without it the
+      # collection is thrown away, and the traffic endpoints only expose a
+      # trailing 14-day window, so a lost day cannot be fetched again later.
       contents: write
+      # Required by the "Keep the schedule alive" step, which calls
+      # `gh workflow enable` (PUT /actions/workflows/{id}/enable). GitHub
+      # disables a scheduled workflow after 60 days without repository
+      # activity and that endpoint is what resets it. The same scope also
+      # covers the `actions: read` that METRICS_ACTIONS_TOKEN uses to read
+      # /actions/runs for workflows.csv.
       actions: write
     steps:
       - name: Harden the runner
@@ -120,12 +132,12 @@ jobs:
         env:
           METRICS_TOKEN: ${{ secrets.METRICS_TOKEN }}
           # `/actions/runs` (workflows.csv) only. It needs `actions: read`,
-          # which this job already holds via the `actions: write` it uses to
-          # call the deploy workflow — and unlike the traffic endpoints'
-          # `administration` requirement, `actions` exists in the Actions
-          # permissions vocabulary, so the built-in token reaches it. Keeping
-          # the scope here rather than on METRICS_TOKEN leaves the long-lived
-          # PAT no wider than the endpoints that genuinely force one.
+          # which this job already holds via the `actions: write` that the
+          # schedule keep-alive step below requires. Unlike the traffic
+          # endpoints' `administration` requirement, `actions` exists in the
+          # Actions permissions vocabulary, so the built-in token reaches it.
+          # Keeping the scope here rather than on METRICS_TOKEN leaves the
+          # long-lived PAT no wider than the endpoints that force one.
           METRICS_ACTIONS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           METRICS_DATA_DIR: ${{ github.workspace }}/.metrics-data

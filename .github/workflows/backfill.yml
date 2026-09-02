@@ -62,6 +62,10 @@ jobs:
     # the next scheduled collection, not a limit expected to be hit.
     timeout-minutes: 30
     permissions:
+      # Pushes the reconstructed rows to the metrics-data branch, which is the
+      # whole point of the job. Scorecard's Token-Permissions check reports a
+      # job-level `contents` write whatever the reason for it; do not remove
+      # this to clear that finding.
       contents: write
       # `/actions/runs`, which backs workflows.csv. This job already runs on
       # GITHUB_TOKEN (see the Backfill step below), and naming any

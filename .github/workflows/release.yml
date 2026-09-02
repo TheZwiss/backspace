@@ -6,10 +6,15 @@ on:
       - 'v*'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
+    # `contents: write` is scoped to this job: electron-builder runs with
+    # `--publish always`, which creates the GitHub release for the tag and
+    # uploads the installers and the updater feed files to it.
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
