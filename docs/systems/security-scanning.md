@@ -483,10 +483,14 @@ rename.
 - [ ] The five Scorecard checks that are maintainer settings or process rather than
       code, and therefore cannot be fixed from a pull request: `Branch-Protection`,
       `CII-Best-Practices`, `Code-Review`, `Fuzzing`, `Security-Policy`.
-      `Security-Policy` should resolve on its own now that `SECURITY.md` documents
-      the testing pipeline; re-check it after the next Scorecard run. `Code-Review`
-      reflects commits reaching `main` without a reviewed pull request, which is
-      inherent to a single-maintainer repository.
+      `Security-Policy` was expected to resolve once `SECURITY.md` documented the
+      testing pipeline. **It did not.** Measured after the Scorecard run on
+      `16828e99`, which is the commit that added that section: the finding is
+      still open. The check scores the file's contents rather than its existence,
+      so more prose does not move it on its own. Investigate what it actually
+      wants before assuming the next edit will clear it. `Code-Review` reflects
+      commits reaching `main` without a reviewed pull request, which is inherent
+      to a single-maintainer repository.
 - [ ] **Manual image bumps:** Dependabot does not track `docker-compose.yml`
       `image:` pins — update `caddy` and `livekit/livekit-server` by hand when new
       releases ship. (Renovate, which parses compose, is an optional future
