@@ -1,8 +1,14 @@
 name: Security
 
-# Report-only in this plan: every scanner is non-blocking and uploads SARIF to
-# the Security tab. Enforcement (fail on fixable HIGH/CRITICAL, block on secrets)
-# is flipped on in Plan E after the remediation pass.
+# Enforcing. Every scanner uploads SARIF to the Security tab AND fails the job on
+# a finding that the tiered policy says must block: a gitleaks secret hit, a
+# HIGH/CRITICAL Trivy config or license finding, and any dependency vulnerability
+# that is not listed in osv-scanner.toml.
+#
+# osv-scanner.toml is a ratchet, not a waiver. It holds the backlog that existed
+# when enforcement was turned on, each entry with a reason and an expiry date, so
+# a NEW vulnerability blocks while the documented backlog stays visible. See
+# docs/systems/security-scanning.md.
 
 on:
   pull_request:
@@ -33,7 +39,6 @@ jobs:
           fetch-depth: 0 # gitleaks scans the whole git history, not just the diff
       - name: Run gitleaks
         uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
-        continue-on-error: true # report-only; enforcement flipped on in Plan E
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -52,9 +57,12 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Run OSV-Scanner
         uses: google/osv-scanner-action/osv-scanner-action@6e4298ebc4db23e847df9b2e2de2939d6f066c67 # v2.5.1
-        continue-on-error: true # report-only; enforcement flipped on in Plan E
         with:
+          # Exits non-zero on any vulnerability that osv-scanner.toml does not
+          # already account for. That file is the ratchet: the backlog is listed
+          # with reasons and expiry dates, so anything new fails this job.
           scan-args: |-
+            --config=osv-scanner.toml
             --lockfile=./pnpm-lock.yaml
             --format=sarif
             --output=osv-results.sarif
@@ -80,7 +88,6 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Trivy config scan (Dockerfile + docker-compose)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        continue-on-error: true # report-only; enforcement flipped on in Plan E
         with:
           scan-type: config
           scan-ref: .
@@ -89,6 +96,11 @@ jobs:
           trivyignores: .trivyignore
           format: sarif
           output: trivy-config.sarif
+          # In sarif mode Trivy exits 0 whatever it finds, so removing
+          # continue-on-error is not by itself enforcement. exit-code is.
+          # Scoped to HIGH/CRITICAL to match the tiered policy.
+          severity: 'HIGH,CRITICAL'
+          exit-code: '1'
       - name: Upload Trivy config SARIF
         if: always()
         uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
@@ -111,13 +123,16 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Trivy license scan
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        continue-on-error: true # report-only; enforcement flipped on in Plan E
         with:
           scan-type: fs
           scan-ref: .
           scanners: license
           format: sarif
           output: trivy-license.sarif
+          # As above: sarif mode exits 0 on its own. HIGH/CRITICAL here means a
+          # license Trivy classifies as forbidden or restricted.
+          severity: 'HIGH,CRITICAL'
+          exit-code: '1'
       - name: Upload Trivy license SARIF
         if: always()
         uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9

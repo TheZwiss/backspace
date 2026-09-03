@@ -8,8 +8,11 @@
 
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-3da639.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6.svg)](https://www.typescriptlang.org/)
-[![Node.js](https://img.shields.io/badge/node-20_LTS-339933.svg)](https://nodejs.org/)
-[![Version](https://img.shields.io/badge/version-1.0.0-16a34a.svg)](#project-status)
+[![Node.js](https://img.shields.io/badge/node-24_LTS-339933.svg)](https://nodejs.org/)
+[![Release](https://img.shields.io/github/v/release/TheZwiss/backspace?color=16a34a&label=release)](https://github.com/TheZwiss/backspace/releases)
+[![CodeQL](https://github.com/TheZwiss/backspace/actions/workflows/codeql.yml/badge.svg)](https://github.com/TheZwiss/backspace/actions/workflows/codeql.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/TheZwiss/backspace/badge)](https://scorecard.dev/viewer/?uri=github.com/TheZwiss/backspace)
+[![Security policy](https://img.shields.io/badge/security-policy-blue.svg)](SECURITY.md)
 
 </div>
 
@@ -691,6 +694,34 @@ If you discover a security vulnerability, please **do not** open a public issue.
 Report it privately via a GitHub security advisory on this repository. See
 [`SECURITY.md`](SECURITY.md). We'll work with you on a fix and coordinated
 disclosure.
+
+### Security and supply chain
+
+Every change is scanned automatically before and after it lands. Results are
+published to this repository's Security tab.
+
+| What | Tool | When |
+|------|------|------|
+| Static analysis of the TypeScript | CodeQL | every pull request, every push to `main`, weekly |
+| Known vulnerabilities in dependencies | OSV-Scanner | every pull request, every push to `main`, weekly |
+| Secrets, across the full git history | gitleaks | every pull request, every push to `main`, weekly |
+| Infrastructure and container config | Trivy | every pull request, every push to `main`, weekly |
+| Dependency licenses | Trivy | every pull request, every push to `main`, weekly |
+| The published container image | Trivy | on every image publish |
+| Repository security posture | OpenSSF Scorecard | every push to `main`, weekly |
+| A running instance | OWASP ZAP baseline | every push to `main`, weekly |
+| Dependency and base image updates | Dependabot | weekly |
+
+Supporting practice: every GitHub Action is pinned to a full commit SHA rather
+than a tag, every job runs on a hardened runner with egress auditing, and
+workflow permissions are granted per job instead of repository-wide. Published
+images carry a software bill of materials and build provenance.
+
+Findings are triaged rather than accumulated. Anything dismissed carries a
+written reason, recorded in
+[`docs/systems/security-scanning.md`](docs/systems/security-scanning.md), which
+also documents the scan policy, the known gaps, and the deployment-time settings
+a self-hoster should check.
 
 ## License
 
