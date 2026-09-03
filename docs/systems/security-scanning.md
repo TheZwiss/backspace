@@ -14,6 +14,7 @@ later change once the remediation pass has cleared the backlog.
 | `.github/workflows/codeql.yml` | CodeQL SAST (`javascript-typescript`, build-mode none) | PR + push main + weekly | Security tab |
 | `.github/workflows/security.yml` | gitleaks (secrets, full history), OSV-Scanner (deps), Trivy config (IaC), Trivy license | PR + push main + weekly | Security tab |
 | `.github/workflows/scorecard.yml` | OpenSSF Scorecard (repo posture) | push main + weekly + on branch-protection change | Security tab + public badge |
+| `.github/workflows/dast.yml` | ZAP baseline against an ephemeral instance (spider + passive, unauthenticated) | push main + weekly + manual + PRs touching its own config | Job summary + artifact (advisory) |
 | `.github/workflows/docker-publish.yml` | Image scan (Trivy) + SBOM + provenance for the published container | tag push / manual | image scan (report-only) + SBOM + provenance |
 
 > **gitleaks findings** surface in the workflow's job log and PR summary — the
@@ -30,6 +31,132 @@ later change once the remediation pass has cleared the backlog.
 Code-level gates (OSV, Trivy, gitleaks) block via workflow exit codes. CodeQL
 merge-blocking, Dependabot alerts, and native secret-scanning are GitHub *settings*
 — see the checklist below.
+
+## Dynamic scanning (DAST)
+
+`dast.yml` builds the image from the tree under test, starts a single container,
+and runs an OWASP ZAP baseline against it. Baseline means spider plus passive
+checks: ZAP sends no attack traffic.
+
+**The rig is the production compose file, not a separate one.** The workflow runs
+`docker compose -p backspace-dast up -d --build --wait backspace`, naming the one
+service it wants. That single detail is what keeps the rig small:
+
+- `caddy` sits in the default profile and would hang on ACME without public DNS,
+  so it must not be started. Naming `backspace` explicitly is what excludes it.
+- `livekit` is already gated behind the `voice` profile and never starts here.
+- The compose file publishes no ports for `backspace`, so ZAP joins the compose
+  network and addresses the container as `http://backspace:3000`. Nothing is
+  reachable on the runner's localhost, and nothing needs to be. The `-p` flag
+  fixes the project name, which is what makes the network name
+  (`backspace-dast_internal`) deterministic.
+- `--wait` blocks on the healthcheck already declared in the compose file, so the
+  workflow needs no polling loop.
+- A throwaway `.env` is written first, because the service declares
+  `env_file: .env` and compose fails outright without it. `DOMAIN` has to be set
+  even though `caddy` never starts: compose interpolates the entire file before it
+  filters services, and the `caddy` service declares
+  `${DOMAIN:?Set DOMAIN in .env}`.
+
+ZAP runs as a plain `docker run` rather than through the marketplace action,
+because the target only resolves if the scanner is on the compose network, and
+`--network` is a `docker run` flag that the action does not expose.
+
+**What it covers, measured rather than assumed.** The scan is unauthenticated, and
+the spider reaches the SPA shell and its static assets only. The measured run
+visited 11 URLs: `/`, the JS bundle, three icons, `manifest.webmanifest`, and ZAP's
+own probes for `robots.txt` and `sitemap.xml`. **None were under `/api/`**, because
+the shell contains no links for the spider to follow. Adding explicit seed URLs
+would widen this. It has not been done, because the API routes carry the identical
+security header set (verified in the same run) and the passive checks would
+therefore find nothing new.
+
+Treat the job as proof that the image still builds and the container still becomes
+healthy, plus a passive header check on what it reaches. It is not an assessment of
+the application. Note also that `/robots.txt` and `/sitemap.xml` return the SPA
+shell with HTTP 200, because `setNotFoundHandler` in `packages/server/src/index.ts`
+serves `index.html` for every path that is not under `/api/` or `/ws`.
+
+**Advisory, deliberately.** ZAP runs with `-I`, so a finding never fails the job. A
+container that will not become healthy does fail it, because that is a real
+regression and the reason the job is worth running on every push to `main`.
+
+**Why not on every pull request.** It builds the whole image, which costs minutes
+of runner time, and an advisory result does not belong in the merge path. It does
+run on pull requests that touch `.github/workflows/dast.yml` or `.zap/**`, so its
+own configuration is self-testing.
+
+### Tuned rules
+
+`.zap/rules.tsv` is the only place a rule is downgraded, one line per rule with the
+reason inline. `IGNORE` is reserved for findings that are artefacts of scanning the
+app container directly instead of the deployed system. Everything else stays at
+`WARN`.
+
+| Rule | Alert | Why it is ignored |
+|---|---|---|
+| 10038 | Content Security Policy (CSP) Report-Only Header Found | The policy ships as report-only by design today (`Content-Security-Policy-Report-Only`, set by the `onSend` hook). **This line is deleted when the policy flips to enforcing.** Leaving it in place afterwards would hide a real regression. |
+| 10109 | Modern Web Application | Not a finding. ZAP is reporting that the target is a single-page app and that spider coverage is therefore limited, which is a statement about the scanner rather than about the app. |
+
+Two back-to-back runs against the same live container on 2026-09-03 give the exact
+effect of the file. Control, with no rule file:
+
+```
+FAIL-NEW: 0  WARN-NEW: 7  IGNORE: 0  PASS: 60
+```
+
+Tuned, with `-c /zap/cfg/rules.tsv`:
+
+```
+FAIL-NEW: 0  WARN-NEW: 5  IGNORE: 2  PASS: 60
+```
+
+The two moved to `IGNORE` are 10038 and 10109. The five that stay at `WARN` are
+10027, 10049, 10055, 10063 and 90004. Two of those look like candidates for
+`IGNORE` and deliberately are not:
+
+- **10055 (CSP directive warnings)** evaluates the narrow enforcing policy in the
+  `index.html` meta tag, not the report-only header, so today it is noise. It will
+  evaluate the real policy the moment the CSP flips to enforcing, and silencing it
+  now would hide a regression at exactly the point it starts to matter. `-I` means
+  a warning never fails the job, so the noise costs nothing.
+- **90004 (insufficient site isolation)** is deliberate: `crossOriginEmbedderPolicy`
+  is off because embeds pull third-party images that carry no CORP header. That is
+  a property of the deployed system, not an artefact of scanning it, so it stays
+  visible.
+
+**`Strict-Transport-Security` (rule 10035) is deliberately absent from this file.**
+It never fires. ZAP raises it only over HTTPS and this rig is plain HTTP, so the one
+header Caddy owns is also the one header ZAP never asks about. It reported `PASS`.
+An earlier draft of this document listed it as the main entry; that was a
+prediction, and the measured run disproved it. Do not add it back.
+
+**Open finding this scan surfaced, not tuned away:** the app sends no
+`Permissions-Policy` header on any route (rule 10063). helmet adds none by default,
+and unlike HSTS, Caddy does not supply it either, so a real deployment has the same
+gap. It is not fixed here because a wrong value silently breaks voice and screen
+sharing, which need `camera`, `microphone` and `display-capture` granted to self.
+It belongs with the CSP enforcement flip, which already carries the real-deployment
+observation phase a change like this needs.
+
+**The generated reports are not filtered.** The `-c` rule file changes only the
+console classification and the exit-code arithmetic. `report.md`, `report.html` and
+`report.json` still carry full entries for the ignored rules, so the job summary
+built from `report.md` shows them too. The `IGNORE:` count on the console
+classification line is the thing to read, not the body of the report.
+
+**The file needs three tab separated columns, not two.** `zap_common.py:148` splits
+each line on tabs and raises `ValueError` if it finds fewer than two, and ZAP then
+aborts the scan without writing any report at all. The third column is only a
+label, so it holds the alert name as ZAP prints it. A space separated line is the
+same trap. Check the separators after any edit:
+
+```bash
+grep -Pn '^\d+\t(WARN|IGNORE|FAIL)\t' .zap/rules.tsv
+```
+
+The trailing `\t` in that pattern is the point: it is what proves a third column
+exists. Every non-comment line in the file must match.
 
 ## Triage policy
 
@@ -288,7 +415,13 @@ settings or process. They belong to the checklist below, not to remediation.
   `metrics.yml`'s `uses: ./.github/workflows/deploy-pages.yml`. GitHub rejects
   `@ref` on a `./` path and resolves a local reusable workflow from the calling
   run's own commit, which is tighter than a SHA pin. Not a gap — do not "fix" it.
-- `step-security/harden-runner` (egress-policy `audit`) on Linux jobs.
+- `step-security/harden-runner` (egress-policy `audit`) on every workflow in
+  `.github/workflows/`. Two jobs deliberately go without it, and neither is a gap:
+  `ci.yml`'s `build-and-test-required`, which only compares a `needs` result and
+  makes no network call, and `metrics.yml`'s `deploy-dashboard`, which is a call
+  into the local reusable `deploy-pages.yml` whose own job is hardened. In
+  `release.yml` the step is gated on `runner.os == 'Linux'`, because harden-runner
+  does not support the macOS and Windows legs of the build matrix.
 - Least-privilege `permissions:` per workflow/job.
 - SBOM + SLSA provenance are attached to the published container image at push
   (`.github/workflows/docker-publish.yml`), alongside a report-only Trivy scan
@@ -344,6 +477,16 @@ rename.
       check from `security.yml`, `codeql.yml`, or `scorecard.yml` — add those
       contexts when enforcement is turned on, or the tiered policy above has no
       gate on `main`.
+- [ ] Settings → Code security: enable **Secret scanning validity checks**.
+      Currently disabled. It asks the provider whether a detected credential is
+      still live, which is the difference between an alert and an incident.
+- [ ] The five Scorecard checks that are maintainer settings or process rather than
+      code, and therefore cannot be fixed from a pull request: `Branch-Protection`,
+      `CII-Best-Practices`, `Code-Review`, `Fuzzing`, `Security-Policy`.
+      `Security-Policy` should resolve on its own now that `SECURITY.md` documents
+      the testing pipeline; re-check it after the next Scorecard run. `Code-Review`
+      reflects commits reaching `main` without a reviewed pull request, which is
+      inherent to a single-maintainer repository.
 - [ ] **Manual image bumps:** Dependabot does not track `docker-compose.yml`
       `image:` pins — update `caddy` and `livekit/livekit-server` by hand when new
       releases ship. (Renovate, which parses compose, is an optional future
