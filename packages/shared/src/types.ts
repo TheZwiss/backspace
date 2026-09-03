@@ -813,6 +813,40 @@ export interface InstanceInfoResponse {
   commit: string | null;
 }
 
+/**
+ * What the admin Updates panel renders. Admin-only.
+ *
+ * `state` is deliberately three-valued. An instance with no outbound internet,
+ * or one whose operator turned the lookup off, must be able to say "I do not
+ * know" instead of implying it is current.
+ */
+export interface InstanceUpdateStatus {
+  current: {
+    version: string;
+    /** Short git SHA baked at build time; null in dev builds. */
+    commit: string | null;
+  };
+  latest: {
+    version: string;
+    url: string;
+    /** ISO 8601, or an empty string when the release carried no date. */
+    publishedAt: string;
+  } | null;
+  state: 'up-to-date' | 'update-available' | 'unknown';
+  /** Epoch ms of the lookup this answer came from; null when none was made. */
+  checkedAt: number | null;
+  /** False when BACKSPACE_UPDATE_CHECK=false. */
+  checkEnabled: boolean;
+  /** Why `state` is unknown, when it is. Null otherwise. */
+  reason: 'disabled' | 'unreachable' | 'rate-limited' | 'unparseable' | null;
+  /**
+   * How this instance gets its image. `unknown` on installs that predate
+   * install.sh recording it, which the panel handles by showing both sets of
+   * manual commands rather than guessing.
+   */
+  channel: 'prebuilt' | 'source' | 'unknown';
+}
+
 export interface VerifyPasswordRequest {
   password: string;
 }

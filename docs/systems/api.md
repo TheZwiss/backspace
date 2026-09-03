@@ -276,6 +276,23 @@ POST   /admin/users/:id/reset-password                     → { temporaryPasswo
 DELETE /admin/users/:id                                    → { success }
 ```
 
+## Admin: Instance Updates (`routes/adminUpdates.ts`) — admin required
+```
+GET    /admin/instance/update-status  ?refresh=true    → InstanceUpdateStatus
+```
+
+Read-only. There is deliberately no endpoint that applies an update: doing so from
+inside the container needs `/var/run/docker.sock` mounted, which is host root.
+See [admin.md](admin.md) for the full rationale and [deployment.md](deployment.md)
+for `./update.sh`, which the panel points at instead.
+
+The GitHub lookup runs only on this request path, never on a timer, and is cached
+6h (failures for a tenth of that). `?refresh=true` bypasses the cache for an
+explicit re-check but cannot bypass `BACKSPACE_UPDATE_CHECK=false`, which makes
+the endpoint return `checkEnabled: false, reason: 'disabled'` without opening a
+socket. Every network failure is soft: `state: 'unknown'` with a `reason`, never a
+5xx, so the panel always reports the running version.
+
 ## Admin: Invite Management (`routes/invites.ts`) — admin required
 
 All endpoints sit behind `[authenticate, requireAdmin]`. Mutating endpoints wrap their read-modify-write in a SQLite transaction with an in-txn re-fetch + status re-derive; any state mismatch returns 409. Service layer: `packages/server/src/utils/inviteService.ts` (`InviteValidationError` → 400, `InviteNotFoundError` → 404, `InviteStateConflictError` → 409).

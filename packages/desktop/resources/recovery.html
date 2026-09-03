@@ -163,19 +163,25 @@
       }
       if (reasonCode === 'render-gone' || reasonCode === 'unresponsive') {
         if (updateState === 'downloaded') {
-          return 'Something inside the app failed. An update is ready — click Restart to Install.';
+          return 'Something inside the app failed. An update is ready, so click Restart to Install.';
+        }
+        if (updateState === 'available-manual') {
+          return 'Something inside the app failed. A newer version is available, but this build cannot install it itself. Download it and replace the app.';
         }
         if (updateState === 'downloading') {
-          return 'Something inside the app failed. An update is downloading — wait for it to finish, then restart.';
+          return 'Something inside the app failed. An update is downloading, so wait for it to finish and then restart.';
         }
         return 'Something inside the app failed. Try reloading or check for an update.';
       }
       if (reasonCode === 'renderer-stalled') {
         if (updateState === 'downloaded') {
-          return "The app didn't finish loading. An update is ready — click Restart to Install.";
+          return "The app didn't finish loading. An update is ready, so click Restart to Install.";
+        }
+        if (updateState === 'available-manual') {
+          return "The app didn't finish loading. A newer version is available, but this build cannot install it itself. Download it and replace the app.";
         }
         if (updateState === 'downloading') {
-          return "The app didn't finish loading. An update is downloading — wait for it to finish, then restart.";
+          return "The app didn't finish loading. An update is downloading, so wait for it to finish and then restart.";
         }
         return "The app didn't finish loading in time. Try reloading, or check for an update if reloading doesn't help.";
       }
@@ -187,6 +193,7 @@
         case 'checking': return 'Checking…';
         case 'downloading': return 'Downloading Update…';
         case 'downloaded': return 'Update Ready';
+        case 'available-manual': return 'Update Available';
         case 'error': return 'Check for Updates';
         case 'idle':
         default: return 'Check for Updates';
@@ -194,7 +201,10 @@
     }
 
     function checkButtonEnabled(updateState) {
-      return updateState !== 'checking' && updateState !== 'downloading' && updateState !== 'downloaded';
+      return updateState !== 'checking'
+        && updateState !== 'downloading'
+        && updateState !== 'downloaded'
+        && updateState !== 'available-manual';
     }
 
     function checkResultText(lastCheckResult) {
@@ -223,11 +233,17 @@
       $('btn-check').textContent = checkButtonLabel(state.updateState);
       $('btn-check').disabled = !checkButtonEnabled(state.updateState);
 
-      // Restart visibility
+      // Restart visibility. Only ever shown when the update is genuinely staged
+      // and installable, so this surface can never present a dead button.
       $('btn-restart').style.display = state.updateState === 'downloaded' ? '' : 'none';
 
-      // Open Releases visibility
-      $('btn-releases').style.display = state.updateState === 'error' ? '' : 'none';
+      // Open Releases visibility. Shown after a failed update, and on builds
+      // that cannot install in place, where downloading is the only real action.
+      const manual = state.updateState === 'available-manual';
+      $('btn-releases').style.display = (state.updateState === 'error' || manual) ? '' : 'none';
+      $('btn-releases').textContent = manual
+        ? (state.updateVersion ? 'Download Backspace ' + state.updateVersion : 'Download the Update')
+        : 'Open Releases Page';
 
       // Inline check result
       const cr = $('check-result');

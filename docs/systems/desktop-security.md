@@ -111,10 +111,36 @@ AppImage/`.deb` distribution does not require a paid certificate; Linux package 
 `main.ts`'s `initAutoUpdater()` runs unconditionally on every platform (`electron-updater`'s GitHub provider, configured in `electron-builder.yml`'s `publish:` block; first check 10s after launch, then every 4 hours). What that buys differs per platform:
 
 - **Windows — updates install without a code-signature check**, because there is no signature to check: the app is unsigned, so `electron-updater`'s NSIS path has no publisher name to validate the downloaded installer against. A compromised GitHub release or publishing token could therefore ship a malicious update that installs with nothing to alert the user. (Releases are served over HTTPS, so a plain network MITM is not the concern here.)
-- **macOS — auto-update is unavailable, not merely unverified.** There *is* a signature, but it is ad-hoc. `electron-updater` checks and downloads, then hands the update to Electron's native `autoUpdater` (Squirrel.Mac), which will only swap in a bundle whose code signature matches the running app's. An ad-hoc signature carries no team identifier and its cdhash changes with every build, so no new release can ever match — the install step fails and the app stays on the old version. Until Developer ID signing lands, macOS users have to download new releases by hand.
+- **macOS — auto-update is unavailable, not merely unverified.** There *is* a signature, but it is ad-hoc. `electron-updater` checks and downloads, then hands the update to Electron's native `autoUpdater` (Squirrel.Mac), which will only swap in a bundle whose code signature matches the running app's. An ad-hoc signature carries no team identifier and its cdhash changes with every build, so no new release can ever match — the install step fails and the app stays on the old version. Until Developer ID signing lands, macOS users have to download new releases by hand. Measured on a shipped 1.0.3 build, and see "The exact mechanism" below.
 - **Linux — no signature check either.** `electron-updater` selects its AppImage or `.deb` updater from how the app was installed; neither verifies a signature, and the artifacts are unsigned.
 
 Once Developer ID / Authenticode signing (above) is wired up, `electron-updater` will verify the update package's signature before install on Windows, and Squirrel.Mac will be able to validate macOS updates at all. This is flagged as a known gap, not fixed by this plan.
+
+#### The exact mechanism
+
+Squirrel.Mac validates a staged update against the **running app's designated requirement**. For an ad-hoc signed bundle, `codesign` derives that requirement from the binary's own code directory hash. Read off a shipped 1.0.3 build:
+
+```
+$ codesign -d -r- /Applications/Backspace.app
+Executable=/Applications/Backspace.app/Contents/MacOS/Backspace
+# designated => cdhash H"4a9e49fe20f82802702a4e9d752748e990909659"
+
+$ codesign -dv /Applications/Backspace.app
+CodeDirectory v=20400 size=302 flags=0x2(adhoc) ...
+Signature=adhoc
+TeamIdentifier=not set
+```
+
+A 1.0.4 binary has a different cdhash, so it cannot satisfy `cdhash H"4a9e49fe…"`. This is not a flaky or intermittent failure: it is arithmetically impossible for every past and future release while the build is ad-hoc signed. A Developer ID signed bundle instead reports a requirement anchored to the certificate, which every later build from the same team satisfies:
+
+```
+designated => identifier "com.example.app" and anchor apple generic and
+  certificate leaf[subject.OU] = "TEAMID"
+```
+
+`~/Library/Caches/com.backspace.desktop.ShipIt` exists but is empty on affected machines: Squirrel created its state directory, failed validation, and wrote nothing.
+
+**The app now measures this at runtime** rather than hardcoding "macOS cannot update". `packages/desktop/src/updateCapability.ts` runs the `codesign -d -r-` probe, classifies the requirement, and reports `manual` for a bare cdhash and `auto` for anything certificate-anchored. Consequences: `autoDownload` is off in manual mode (the ad-hoc build was otherwise pulling the full release archive on every check and storing it twice, 228 MB measured, for a file it could never apply), no Restart button is offered, and the copy says plainly that the build cannot update itself. **When a Developer ID lands in CI, that probe flips to `auto` on its own with no code change.** See [desktop.md](desktop.md) for the full update flow.
 
 ## Not verified
 

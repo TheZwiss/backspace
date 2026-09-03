@@ -23,7 +23,13 @@ contextBridge.exposeInMainWorld('backspace', {
     ipcRenderer.send('set-badge-count', count);
   },
 
-  // Auto-update
+  // Auto-update, legacy per-event channels.
+  //
+  // Superseded by getUpdateStatus/onUpdateStatusChanged below and unused by the
+  // current web client, but deliberately kept. The desktop app and the instance
+  // it connects to version independently: a newer app can be pointed at an older
+  // instance that still serves a client calling these. Removing them would make
+  // that client throw inside a useEffect and take the whole renderer down.
   onUpdateAvailable: (callback: (info: { version: string }) => void) => {
     ipcRenderer.on('update-available', (_event, info) => callback(info));
   },
@@ -40,6 +46,24 @@ contextBridge.exposeInMainWorld('backspace', {
     ipcRenderer.send('check-for-updates');
   },
   getVersion: () => ipcRenderer.invoke('get-app-version'),
+
+  // Auto-update, current surface. One snapshot carrying the capability of this
+  // build, the version the user has already waved away, and the current status.
+  getUpdateStatus: (): Promise<unknown> => ipcRenderer.invoke('get-update-status'),
+
+  onUpdateStatusChanged: (callback: (snapshot: unknown) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, snapshot: unknown) => callback(snapshot);
+    ipcRenderer.on('update-status-changed', handler);
+    return () => { ipcRenderer.removeListener('update-status-changed', handler); };
+  },
+
+  dismissUpdate: (version: string): void => {
+    ipcRenderer.send('dismiss-update', { version });
+  },
+
+  openReleasePage: (): void => {
+    ipcRenderer.send('open-release-page');
+  },
 
   // Window focus
   onWindowFocusChange: (callback: (focused: boolean) => void) => {

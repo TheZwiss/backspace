@@ -44,6 +44,7 @@ import type {
   AdminUserListResponse,
   AdminUser,
   AdminResetPasswordResponse,
+  InstanceUpdateStatus,
   ExploreSpace,
   JoinRequest,
   Role,
@@ -327,6 +328,7 @@ export class BackspaceApiClient {
     setUserRole: (userId: string, isAdmin: boolean) => Promise<AdminUser>;
     resetUserPassword: (userId: string) => Promise<AdminResetPasswordResponse>;
     deleteUser: (userId: string) => Promise<{ success: boolean }>;
+    updateStatus: (refresh?: boolean) => Promise<InstanceUpdateStatus>;
   };
 
   constructor(baseUrl: string, getToken: () => string | null, onUnauthorized?: () => void) {
@@ -819,6 +821,13 @@ export class BackspaceApiClient {
         request<AdminResetPasswordResponse>('POST', `/admin/users/${userId}/reset-password`),
       deleteUser: (userId) =>
         request<{ success: boolean }>('DELETE', `/admin/users/${userId}`),
+      // `refresh` bypasses the server's six-hour cache for an explicit
+      // "Check again" click. It cannot bypass BACKSPACE_UPDATE_CHECK.
+      updateStatus: (refresh = false) =>
+        request<InstanceUpdateStatus>(
+          'GET',
+          `/admin/instance/update-status${refresh ? '?refresh=true' : ''}`,
+        ),
     };
   }
 }

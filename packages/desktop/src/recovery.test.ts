@@ -342,3 +342,64 @@ describe('armBootTimer / clearBootTimer', () => {
     expect(isBootArmed()).toBe(false);
   });
 });
+
+describe('manual-download update state in the menus', () => {
+  it('offers a versioned Download item instead of Restart to Install', () => {
+    // An ad-hoc signed macOS build. Restart to Install would be a dead button
+    // here, because Squirrel.Mac can never satisfy the running app's
+    // cdhash-literal designated requirement.
+    const items = buildTrayMenuTemplate(
+      defaultState({ updateState: 'available-manual', updateVersion: '1.0.4' }),
+    );
+    const ids = items.map((i) => i.id);
+    expect(ids).toContain('download-update');
+    expect(ids).not.toContain('restart-to-install');
+    expect(items.find((i) => i.id === 'download-update')!.label)
+      .toBe('Download Backspace 1.0.4…');
+  });
+
+  it('falls back to an unversioned label when no version is known', () => {
+    const items = buildTrayMenuTemplate(
+      defaultState({ updateState: 'available-manual', updateVersion: null }),
+    );
+    expect(items.find((i) => i.id === 'download-update')!.label)
+      .toBe('Download the Update…');
+  });
+
+  it('wires the Download item to the open-releases action', () => {
+    let opened = 0;
+    const items = buildTrayMenuTemplate(
+      defaultState({ updateState: 'available-manual', updateVersion: '1.0.4' }),
+      { onOpenReleases: () => { opened += 1; } },
+    );
+    (items.find((i) => i.id === 'download-update')!.click as () => void)();
+    expect(opened).toBe(1);
+  });
+
+  it('disables Check for Updates while an update is already known', () => {
+    const items = buildTrayMenuTemplate(defaultState({ updateState: 'available-manual' }));
+    const check = items.find((i) => i.id === 'check-for-updates')!;
+    expect(check.label).toBe('Update Available');
+    expect(check.enabled).toBe(false);
+  });
+
+  it('applies the same treatment to the macOS app menu', () => {
+    const template = buildAppMenuTemplate(
+      'Backspace',
+      defaultState({ updateState: 'available-manual', updateVersion: '1.0.4' }),
+    );
+    const appSubmenu = template[0]!.submenu as Array<{ id?: string; label?: string }>;
+    const ids = appSubmenu.map((i) => i.id);
+    expect(ids).toContain('download-update');
+    expect(ids).not.toContain('restart-to-install');
+  });
+
+  it('still offers Restart to Install when the update really is staged', () => {
+    const items = buildTrayMenuTemplate(
+      defaultState({ updateState: 'downloaded', updateVersion: '1.0.4' }),
+    );
+    const ids = items.map((i) => i.id);
+    expect(ids).toContain('restart-to-install');
+    expect(ids).not.toContain('download-update');
+  });
+});
