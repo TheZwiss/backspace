@@ -1,0 +1,21 @@
+# ZAP baseline rule tuning. Consumed by .github/workflows/dast.yml.
+# Format: <rule id>\t<WARN|IGNORE|FAIL>\t<rule name>, tab separated. The third
+# column is required: zap_common.py rejects the whole file if a line carries
+# fewer than two tabs, and the scan then aborts without a report. It is only a
+# label, so it holds the alert name as ZAP prints it.
+#
+# IGNORE is only for a finding that is an artefact of scanning the app
+# container directly instead of the deployed system. Everything else stays at
+# WARN so it shows up in the report. The reasoning lives in
+# docs/systems/security-scanning.md, section "Dynamic scanning (DAST)".
+
+# The CSP ships as Content-Security-Policy-Report-Only today, and this rule
+# fires as "Report-Only Header Found". DELETE THIS LINE when the policy flips
+# to enforcing (Plan C Task 8). Leaving it after the flip would hide a real
+# regression.
+10038	IGNORE	Content Security Policy (CSP) Report-Only Header Found
+
+# Not a finding. ZAP reporting that the target is a single-page app, and that
+# its spider coverage is therefore limited, is a statement about the scanner
+# rather than about the app.
+10109	IGNORE	Modern Web Application

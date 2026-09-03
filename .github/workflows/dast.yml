@@ -1,0 +1,126 @@
+name: DAST
+
+# Dynamic scan of a running instance, as opposed to the static analysis in
+# codeql.yml and the dependency scanning in security.yml. It stands up one
+# ephemeral container from the tree under test and runs an OWASP ZAP baseline
+# against it: spider plus passive checks, no active attack traffic.
+#
+# Scope, stated honestly and measured rather than assumed: the scan is
+# unauthenticated and the spider reaches the SPA shell and its static assets
+# only. A measured run visited 11 URLs and none of them were under /api/,
+# because the shell contains no links for a spider to follow. It does not
+# exercise the API, spaces, channels, uploads, federation or voice. Its value is
+# that it proves the image still builds and the container still becomes healthy,
+# and it passively checks response headers on what it does reach. It is not an
+# assessment of the application.
+#
+# Advisory by design. A finding never fails this workflow. A container that
+# will not become healthy does, because that is a real regression.
+#
+# Not on every pull request: the job builds the full image, which is minutes of
+# runner time, and an advisory result does not belong in the merge path. It runs
+# on every push to main, weekly, on demand, and on pull requests that touch its
+# own configuration so that it self-tests when changed.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - '.github/workflows/dast.yml'
+      - '.zap/**'
+  schedule:
+    # Wednesday 04:17 UTC. Off the hour so it does not queue behind the
+    # every-scanner-at-midnight crowd on the hosted runners.
+    - cron: '17 4 * * 3'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  zap-baseline:
+    name: ZAP baseline
+    runs-on: ubuntu-latest
+    # No write scope anywhere. The report leaves as an artifact rather than as
+    # SARIF: ZAP's SARIF conversion is not part of the baseline image, and a
+    # code-scanning upload would need security-events: write for results that
+    # are advisory and mostly about deployment-time headers.
+    permissions:
+      contents: read
+
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # docker-compose.yml reads env_file: .env, and compose fails outright if
+      # that file is absent. DOMAIN is required even though caddy never starts:
+      # compose interpolates the whole file before it filters services, and the
+      # caddy service declares ${DOMAIN:?...}. dast.invalid is an RFC 2606
+      # reserved name that cannot resolve. The secret is a throwaway that only
+      # has to clear the 32-character floor in config.ts.
+      - name: Write the ephemeral env file
+        run: |
+          cat > .env <<'EOF'
+          DOMAIN=dast.invalid
+          JWT_SECRET=0000000000000000000000000000000000000000000000000000000000000000
+          PORT=3000
+          NODE_ENV=production
+          REGISTRATION_OPEN=true
+          EOF
+
+      # Only the backspace service. caddy sits in the default profile and would
+      # hang on ACME without public DNS; livekit is already gated behind the
+      # voice profile. --wait blocks on the healthcheck declared in the compose
+      # file, so no polling loop is needed. The -p flag fixes the project name,
+      # which is what makes the network name below deterministic.
+      - name: Start an ephemeral instance
+        run: docker compose -p backspace-dast up -d --build --wait backspace
+
+      # ZAP joins the compose network and addresses the container by service
+      # name. The compose file publishes no ports, so there is nothing to reach
+      # on the runner's localhost, and this avoids depending on how any
+      # marketplace action wires up its own container networking.
+      - name: Run the ZAP baseline
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/zap-out"
+          docker run --rm \
+            --network backspace-dast_internal \
+            -v "$GITHUB_WORKSPACE/zap-out:/zap/wrk/:rw" \
+            -v "$GITHUB_WORKSPACE/.zap:/zap/cfg/:ro" \
+            ghcr.io/zaproxy/zaproxy@sha256:781a2bdaea47324e7bab583e2263f21d257b0aee61ed51521a5be45f5f5081ef \
+            zap-baseline.py \
+              -t http://backspace:3000 \
+              -c /zap/cfg/rules.tsv \
+              -I \
+              -r report.html -w report.md -J report.json
+
+      - name: Summarise the findings
+        if: always()
+        run: |
+          if [ -f zap-out/report.md ]; then
+            {
+              echo '## ZAP baseline'
+              echo
+              cat zap-out/report.md
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'ZAP produced no report. The scan step failed before writing one.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: zap-baseline-report
+          path: zap-out/
+          retention-days: 30
+
+      - name: Tear down
+        if: always()
+        run: docker compose -p backspace-dast down -v
