@@ -73,7 +73,17 @@ RUN pnpm --filter @backspace/web build
 # Base: node:24-slim, Node v24.20.0.
 FROM node:24-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e AS runtime
 
-RUN corepack enable && corepack prepare pnpm@10.34.3 --activate
+# No package manager ships in the runtime image. This stage installs nothing
+# from a registry: node_modules arrives from `deps` as a finished tree and the
+# CMD starts node directly, so neither pnpm nor npm is ever invoked here. Both
+# used to be present anyway. pnpm because this stage also ran `corepack prepare`
+# (now removed), npm because node:24-slim bundles it. Between them they were
+# most of the image's fixable HIGH/CRITICAL scan findings, all of it in code
+# that never runs. Deleting them deletes the findings.
+#
+# If a future change needs to install something at image build time, do it in
+# `deps` and copy the result in, the way better-sqlite3 already works.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 
 # Runtime deps only: ffmpeg (media processing) + gosu (drop to non-root in the
 # entrypoint). No C toolchain. The native modules come from `deps` as prebuilt
