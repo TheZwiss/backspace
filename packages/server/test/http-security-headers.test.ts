@@ -58,15 +58,15 @@ describe('HTTP security headers, LiveKit unconfigured', () => {
     await rm(uploadDir, { recursive: true, force: true });
   });
 
-  it('ships the policy report-only, so nothing is blocked yet', async () => {
+  it('ships the policy enforcing, so a violation is blocked and not merely logged', async () => {
     const res = await fetch(`${h.home.origin}/api/instance/info`);
-    expect(res.headers.get('content-security-policy-report-only')).toBeTruthy();
-    expect(res.headers.get('content-security-policy')).toBeNull();
+    expect(res.headers.get('content-security-policy')).toBeTruthy();
+    expect(res.headers.get('content-security-policy-report-only')).toBeNull();
   });
 
   it('carries the directives that stop injection and framing', async () => {
     const res = await fetch(`${h.home.origin}/api/instance/info`);
-    const p = parsePolicy(res.headers.get('content-security-policy-report-only') ?? '');
+    const p = parsePolicy(res.headers.get('content-security-policy') ?? '');
     expect(p['object-src']).toEqual(["'none'"]);
     expect(p['frame-ancestors']).toEqual(["'none'"]);
     expect(p['base-uri']).toEqual(["'self'"]);
@@ -76,7 +76,7 @@ describe('HTTP security headers, LiveKit unconfigured', () => {
 
   it('names no LiveKit origin when voice is off', async () => {
     const res = await fetch(`${h.home.origin}/api/instance/info`);
-    const header = res.headers.get('content-security-policy-report-only') ?? '';
+    const header = res.headers.get('content-security-policy') ?? '';
     expect(header).not.toContain('livekit.test.local');
   });
 
@@ -109,14 +109,20 @@ describe('HTTP security headers, LiveKit unconfigured', () => {
 
   it('does not override a route that already set its own stricter policy', async () => {
     // routes/uploads.ts serves user files under a `default-src 'none'` sandbox.
-    // That policy is stricter than the app policy and must survive, and the
-    // permissive report-only header must not be attached alongside it.
+    // That policy is stricter than the app policy and must survive. Since the
+    // flip to enforcing both carry the same header name, so the app policy must
+    // not overwrite it either.
     //
     // The request has to hit a file that exists. A missing filename returns 404
     // from before the header is set, so asking for one would assert nothing.
     const res = await fetch(`${h.home.origin}/api/uploads/${SERVED_FIXTURE}`);
     expect(res.status).toBe(200);
-    expect(res.headers.get('content-security-policy')).toContain("default-src 'none'");
+    const policy = res.headers.get('content-security-policy') ?? '';
+    expect(policy).toContain("default-src 'none'");
+    // Both headers now share a name, so "the route won" can only be asserted on
+    // the value. `object-src` is in the app policy and not in the file sandbox,
+    // so its absence is what proves the hook did not overwrite this.
+    expect(policy).not.toContain('object-src');
     expect(res.headers.get('content-security-policy-report-only')).toBeNull();
   });
 
@@ -125,8 +131,10 @@ describe('HTTP security headers, LiveKit unconfigured', () => {
     // the file route sets, so the hook must fill it in like any other response.
     const res = await fetch(`${h.home.origin}/api/uploads/does-not-exist.png`);
     expect(res.status).toBe(404);
-    expect(res.headers.get('content-security-policy')).toBeNull();
-    expect(res.headers.get('content-security-policy-report-only')).toContain("object-src 'none'");
+    const policy = res.headers.get('content-security-policy') ?? '';
+    expect(policy).toContain("object-src 'none'");
+    expect(policy).toContain("default-src 'self'");
+    expect(res.headers.get('content-security-policy-report-only')).toBeNull();
   });
 
   it('accepts a violation report over the wire', async () => {
@@ -152,7 +160,7 @@ describe('HTTP security headers, LiveKit configured', () => {
 
   it('names the configured LiveKit origin in connect-src', async () => {
     const res = await fetch(`${h.home.origin}/api/instance/info`);
-    const p = parsePolicy(res.headers.get('content-security-policy-report-only') ?? '');
+    const p = parsePolicy(res.headers.get('content-security-policy') ?? '');
     expect(p['connect-src']).toContain('wss://livekit.test.local');
   });
 });

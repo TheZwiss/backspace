@@ -10,12 +10,12 @@ Source files:
 - `packages/server/test/http-security-headers.test.ts`, `packages/server/test/cors-posture.test.ts` - live-server assertions against spawned instances.
 - `packages/server/src/utils/csp.test.ts`, `packages/server/src/routes/cspReport.test.ts` - unit tests.
 
-> **Current state: report-only.** The server sends the policy as
-> `Content-Security-Policy-Report-Only`. It blocks nothing. A browser evaluates
-> it, posts violations to the sink, and loads the resource anyway. Read
-> "Rollout" below before assuming any of this stops an attack today. The one
-> exception is the meta tag in `packages/web/index.html`, which is an enforcing
-> policy and does block. See "The meta policy".
+> **Current state: enforcing.** The server sends the policy as
+> `Content-Security-Policy`, flipped on 2026-09-03 after the observation phase
+> in "Rollout". A violation is blocked, and also still reported to the sink.
+> Before the flip the header was `Content-Security-Policy-Report-Only` and
+> blocked nothing; the meta tag in `packages/web/index.html` was the only part
+> that enforced. See "Rollout" for what the flip did and did not change.
 
 ---
 
@@ -121,14 +121,16 @@ default-src 'none'; style-src 'unsafe-inline'; img-src 'self'
 
 That is stricter than the app policy and it must survive. The `onSend` hook in
 `index.ts` therefore checks `reply.getHeader('Content-Security-Policy')` and
-does nothing when a route has already set one. Attaching a permissive
-report-only policy alongside a sandbox would only fill the sink with reports
-from responses that are already locked down.
+does nothing when a route has already set one. Overwriting a sandbox with the
+app policy would widen it.
 
+Since the flip to enforcing both carry the same header name, so this is now a
+plain first-writer-wins and the tests can no longer tell the two apart by name.
 Verified by observed headers, not assumed. A request for a file that exists
 returns `content-security-policy: default-src 'none'; style-src 'unsafe-inline'; img-src 'self'`
-and no report-only header. An ordinary route returns the full report-only
-policy and no enforcing one. Both are asserted in
+and nothing else; the app policy is recognisable by `object-src`, which the file
+sandbox does not carry, so its absence is what proves the hook stood aside. An
+ordinary route returns the full app policy. Both are asserted in
 `test/http-security-headers.test.ts`, along with the case that catches the
 obvious mistake: the 404 path in `uploads.ts` returns before the header is set,
 so a missing file must still get the app policy. A test that requested a
@@ -142,7 +144,7 @@ completely. The app policy will not be merged in.
 
 | Header | Owner | Value | Note |
 |---|---|---|---|
-| `Content-Security-Policy-Report-Only` | app (`onSend` hook) | built at boot | Report-only. See "Rollout". |
+| `Content-Security-Policy` | app (`onSend` hook) | built at boot | Enforcing since 2026-09-03. See "Rollout". `routes/uploads.ts` sets its own and the hook stands aside. |
 | `Reporting-Endpoints` | app (`onSend` hook) | `csp="/api/csp-report"` | Attached with the policy. |
 | `Cross-Origin-Resource-Policy` | app (helmet) | `cross-origin` | Deliberate. See below. |
 | `Cross-Origin-Opener-Policy` | app (helmet) | `same-origin` | |
@@ -244,10 +246,25 @@ section has to be revisited first, because the reasoning above no longer holds.
 
 ## 7. Rollout
 
-The policy ships as `Content-Security-Policy-Report-Only`. It blocks nothing
-today. A browser evaluates it, posts a report to `/api/csp-report`, and loads
-the resource anyway. Nobody should describe this as protecting the app until
-the flip below has happened.
+The policy shipped as `Content-Security-Policy-Report-Only` from the start and
+was flipped to `Content-Security-Policy` on 2026-09-03, after the observation
+phase recorded below. It now blocks rather than logs.
+
+**What the flip actually changed is narrower than it sounds, and section 8 is
+why.** `index.html` already carries an enforcing `<meta http-equiv>` policy for
+`script-src`, `worker-src`, `object-src` and `base-uri`, so the four directives
+that carry the anti-injection weight have been enforcing in the browser all
+along, whatever the server header said. This is not a deduction; round 4 of the
+observation below caught each injected violation twice, once with
+`disposition: "report"` from the header and once with `disposition: "enforce"`
+from the meta tag.
+
+The directives the flip newly enforces are therefore the rest: `default-src`,
+`style-src`, `img-src`, `media-src`, `font-src`, `connect-src`, `child-src`,
+`frame-src`, `manifest-src`, `form-action` and `frame-ancestors`. All the
+content directives among those are deliberately permissive (section 1), so the
+ones that can actually block something are `frame-src`, `form-action` and
+`frame-ancestors`.
 
 ### Observation log
 
@@ -412,14 +429,46 @@ why. Do not tidy it back up next to the hook. A test in
 2. `grep 'CSP violation reported'` is empty in every instance log across that period, or every violation found has been resolved by an explicit change to `utils/csp.ts` and the clock restarted.
 3. The evidence is written into this section first: which instances, over what period, which flows were exercised, what the log contained. An empty log with no record of what was exercised is not evidence of a clean policy. It is an absence of data.
 
-The flip itself is one line in `index.ts`, changing `cspHeaderName` from
+The flip itself was one line in `index.ts`, changing `cspHeaderName` from
 `Content-Security-Policy-Report-Only` to `Content-Security-Policy`, plus the
-corresponding header names in `test/http-security-headers.test.ts`. The
-`Reporting-Endpoints` header and the sink stay. An enforcing policy still
-reports, and those reports become the only signal that the flip broke a flow
-nobody exercised.
+corresponding header names in `test/http-security-headers.test.ts` and the
+deletion of the `10038` line from `.zap/rules.tsv`. The `Reporting-Endpoints`
+header and the sink stay. An enforcing policy still reports, and those reports
+are now the only signal that the flip broke a flow nobody exercised.
 
-**Evidence log:** none yet. Report-only has not been deployed.
+One test consequence is worth knowing. `routes/uploads.ts` sets its own
+`Content-Security-Policy` and the `onSend` hook skips any response that already
+has one. Before the flip the two policies had different header names, so a test
+could tell them apart by name. They now share a name, and the two tests in
+`http-security-headers.test.ts` that cover this assert on the *value* instead:
+the file sandbox is identified by `default-src 'none'` and by the absence of
+`object-src`, which only the app policy carries.
+
+**Which of the three conditions above were met, stated honestly.**
+
+- Condition 1 is met except for the cross-instance federated conversation, which
+  was deliberately not run. The reasoning is in "Federation" above: `img-src`
+  and `media-src` already permit `https:` and `http:` from any origin, and
+  `connect-src` permits every scheme a peer could use, so a federated exchange
+  has no CSP surface that a same-instance exchange does not already cover.
+  Recorded as a reasoned exception, not as coverage.
+- `frame-src` was **not** exercised in a browser either, and cannot easily be:
+  both embed iframes are click-to-load (`RichEmbed.tsx`, `VideoEmbed.tsx`), so
+  no page load creates one. It is verified by construction instead. Those two
+  components are the only iframes in the client, both take their `src` from
+  `embed.embedUrl`, and `utils/embedClassifier.ts` sets that field to exactly
+  three values, which are exactly the three entries in `EMBED_FRAME_ORIGINS`. A
+  fourth provider added to the classifier without a matching entry there will
+  render a blank box in production, and nothing in CI will catch it.
+- Conditions 2 and 3 are met: the sink was empty across the observation, and
+  this section is the written record condition 3 asks for.
+
+**Evidence log:** report-only ran on two deployments, the Pi-hosted instance and
+the test VM, across four observation rounds on 2026-09-02 and 2026-09-03. The
+detector was validated on both hosts in every round that made a claim. Zero
+violations were logged that were not injected by the harness itself. Round 4 is
+the one that ran against the released 1.0.3 build; see the observation log above
+for what each round did and did not cover.
 
 ## 8. The meta policy
 

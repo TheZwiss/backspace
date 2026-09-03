@@ -138,7 +138,6 @@ app container directly instead of the deployed system. Everything else stays at
 
 | Rule | Alert | Why it is ignored |
 |---|---|---|
-| 10038 | Content Security Policy (CSP) Report-Only Header Found | The policy ships as report-only by design today (`Content-Security-Policy-Report-Only`, set by the `onSend` hook). **This line is deleted when the policy flips to enforcing.** Leaving it in place afterwards would hide a real regression. |
 | 10109 | Modern Web Application | Not a finding. ZAP is reporting that the target is a single-page app and that spider coverage is therefore limited, which is a statement about the scanner rather than about the app. |
 
 Two back-to-back runs against the same live container on 2026-09-03 give the exact
@@ -154,15 +153,23 @@ Tuned, with `-c /zap/cfg/rules.tsv`:
 FAIL-NEW: 0  WARN-NEW: 5  IGNORE: 2  PASS: 60
 ```
 
-The two moved to `IGNORE` are 10038 and 10109. The five that stay at `WARN` are
-10027, 10049, 10055, 10063 and 90004. Two of those look like candidates for
-`IGNORE` and deliberately are not:
+**That measurement was taken while the rule file still carried two entries**,
+10038 and 10109. 10038 was deleted when the CSP flipped to enforcing on
+2026-09-03, because the alert it silenced ("Report-Only Header Found") can no
+longer fire for a good reason and silencing it would hide a regression. The
+control run is unaffected; the tuned run should now read `IGNORE: 1`, and 10038
+should not appear at all. That has not been re-measured, and the next scheduled
+DAST run is what will confirm it.
 
-- **10055 (CSP directive warnings)** evaluates the narrow enforcing policy in the
-  `index.html` meta tag, not the report-only header, so today it is noise. It will
-  evaluate the real policy the moment the CSP flips to enforcing, and silencing it
-  now would hide a regression at exactly the point it starts to matter. `-I` means
-  a warning never fails the job, so the noise costs nothing.
+The one moved to `IGNORE` is 10109. The five that stay at `WARN` are 10027,
+10049, 10055, 10063 and 90004. Two of those look like candidates for `IGNORE`
+and deliberately are not:
+
+- **10055 (CSP directive warnings)** used to evaluate only the narrow enforcing
+  policy in the `index.html` meta tag, because the real policy was report-only.
+  Since the flip on 2026-09-03 it evaluates the real policy, so its output is now
+  worth reading rather than noise. It stays at WARN: `-I` means a warning never
+  fails the job.
 - **90004 (insufficient site isolation)** is deliberate: `crossOriginEmbedderPolicy`
   is off because embeds pull third-party images that carry no CORP header. That is
   a property of the deployed system, not an artefact of scanning it, so it stays
@@ -249,9 +256,10 @@ Three plausible ways of measuring give a wrong answer.
   no analysis is recorded against a branch ref, and `refs/pull/N/merge` reports only
   findings that fall on the changed lines, so a clean PR run means "nothing on this
   diff" rather than "nothing in the repository".
-- **A green scanner check is not a measurement.** While the policy is report-only
-  every scan step carries `continue-on-error: true`. The check passing means the
-  analysis ran and the SARIF uploaded.
+- **A green scanner check is not always a measurement.** Where a scan step still
+  carries `continue-on-error: true`, the check passing means the analysis ran and
+  the SARIF uploaded, nothing more. Since the enforcement flip in PR #77 that
+  applies only to the container image scan in `docker-publish.yml`.
 - **`trivy config .` reports more locally than in CI.** Run locally after an install
   it walks `node_modules` and reports DS-0001, DS-0017 and DS-0026 against a
   Dockerfile vendored inside `@surma/rollup-plugin-off-main-thread`. The CI job
