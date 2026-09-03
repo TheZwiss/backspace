@@ -3,7 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { ImageCropModal } from './ImageCropModal';
 
 // These cases mount the real react-easy-crop widget rather than a stub. jsdom
-// gives every box a zero size, so the crop geometry is meaningless here — what
+// gives every box a zero size, so the crop geometry is meaningless here. What
 // is being pinned is that the widget mounts, receives the props this modal
 // passes it, and still injects its own stylesheet. A version bump that dropped
 // any of those would otherwise render an invisible cropper with no error.
