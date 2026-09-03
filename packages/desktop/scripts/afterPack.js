@@ -8,10 +8,10 @@
 //      `prebuilds/` directory.
 //   2. Electron security fuses — flips RunAsNode/EnableNodeCliInspectArguments/
 //      OnlyLoadAppFromAsar on the packaged Electron binary. This runs via
-//      `@electron/fuses` directly (NOT electron-builder's `electronFuses:`
-//      config key) because the installed electron-builder (25.1.8) predates
-//      that feature — see docs/systems/desktop-security.md for how this was
-//      confirmed and when to migrate to the config key.
+//      `@electron/fuses` directly, not electron-builder's `electronFuses:`
+//      config key. electron-builder 26 supports that key, but it flips the
+//      fuses after this hook returns, which is after macSign.js has sealed
+//      the bundle below. See docs/systems/desktop-security.md.
 //   3. On macOS, ad-hoc sign the bundle (see macSign.js).
 //
 // Order matters, and it is load-bearing in both directions:
@@ -104,10 +104,12 @@ function cleanNativeModules(appDir, platform) {
  * the entire bundle rather than just the one binary. Enabling the option
  * here would be a weaker, redundant seal on darwin and a no-op elsewhere.
  *
- * `EnableEmbeddedAsarIntegrityValidation` is intentionally NOT flipped here
- * — see docs/systems/desktop-security.md for why (it requires a macOS
- * Info.plist hash-injection step this build pipeline doesn't automate, and
- * flipping it without that step makes the app fail closed at launch).
+ * `EnableEmbeddedAsarIntegrityValidation` is intentionally NOT flipped here.
+ * See docs/systems/desktop-security.md for why. electron-builder does
+ * write the matching `ElectronAsarIntegrity` hash into Info.plist, but the
+ * fuse fails closed if the hash does not match at launch, and an ad-hoc
+ * signature gives an attacker no obstacle to recomputing it, so the fuse
+ * buys little until Developer ID signing is in place.
  *
  * @param {object} context electron-builder afterPack hook context.
  * @param {string} platform electron-builder platform name.

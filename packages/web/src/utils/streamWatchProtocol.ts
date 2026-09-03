@@ -10,8 +10,15 @@ export interface StreamWatchPayload {
   watching: boolean;
 }
 
-export function encodeStreamWatch(payload: StreamWatchPayload): Uint8Array {
-  return new TextEncoder().encode(JSON.stringify(payload));
+/**
+ * Returns a `Uint8Array` explicitly backed by an `ArrayBuffer` rather than the
+ * `ArrayBufferLike` that `TextEncoder.encode` is declared to return. LiveKit's
+ * `publishData` accepts only non-shared buffers (`ReturnType<typeof
+ * Uint8Array.from>`), so the copy through `Uint8Array.from` is what makes the
+ * buffer kind provable at the type level. Payloads are a few dozen bytes.
+ */
+export function encodeStreamWatch(payload: StreamWatchPayload): Uint8Array<ArrayBuffer> {
+  return Uint8Array.from(new TextEncoder().encode(JSON.stringify(payload)));
 }
 
 export function isStreamWatchPayload(value: unknown): value is StreamWatchPayload {

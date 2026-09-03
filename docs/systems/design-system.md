@@ -81,6 +81,8 @@ Font: DM Sans (primary) with system fallbacks
 }
 ```
 
+**Vendor prefix order is load-bearing.** In `globals.css`, write `-webkit-backdrop-filter` **first** and the unprefixed `backdrop-filter` **last**. Vite 8 minifies CSS with Lightning CSS, which folds a prefixed and an unprefixed declaration of the same property into one and keeps whichever came last. With the unprefixed line first, the build ships only `-webkit-backdrop-filter`, which Firefox does not implement, so every glass surface loses its blur there with nothing in the console. The same order applies to any other property written in both forms.
+
 ---
 
 ## Input Tiers

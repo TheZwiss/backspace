@@ -40,7 +40,7 @@ Signing is automatic and takes one comment:
 
 ## Development setup
 
-Requirements: **Node.js 20 (LTS)** and **pnpm 10**. Run `nvm use` (reads
+Requirements: **Node.js 24 (LTS)** and **pnpm 10**. Run `nvm use` (reads
 `.nvmrc`); Corepack activates the pinned pnpm from the `packageManager` field
 automatically, so don't install pnpm globally.
 

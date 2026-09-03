@@ -169,7 +169,7 @@ export async function downloadProfileAsset(
   } catch (err) {
     // Clean up temp file on any failure
     try { fs.unlinkSync(tempPath); } catch { /* may not exist */ }
-    console.warn(`[federation] Profile asset download failed for ${url}:`, (err as Error).message);
+    console.warn('[federation] Profile asset download failed for %s:', url, (err as Error).message);
     return null;
   }
 }
