@@ -3,6 +3,7 @@ import type { BrowserWindow, MenuItemConstructorOptions } from 'electron';
 import type { AppUpdater } from 'electron-updater';
 import path from 'path';
 import { loadInstanceUrl, clearInstanceUrl, getPickerPath } from './instanceUrl';
+import { RELEASES_URL } from './updateStatus';
 
 export type RecoveryReasonCode =
   | 'load-failed'
@@ -14,6 +15,12 @@ export type UpdateState =
   | 'idle'
   | 'checking'
   | 'downloading'
+  // An update exists but this build cannot install it in place (an ad-hoc
+  // signed macOS build, where Squirrel.Mac can never satisfy the running app's
+  // cdhash-literal designated requirement). The only useful action is a manual
+  // download, so the recovery surface offers that instead of a Restart button
+  // that would do nothing. See updateCapability.ts.
+  | 'available-manual'
   | 'downloaded'
   | 'error';
 
@@ -96,6 +103,9 @@ interface MenuActions {
   onChangeInstance: () => void;
   onCheckForUpdates: () => void;
   onRestartToInstall: () => void;
+  // Manual-download path: opens the releases page for builds that cannot
+  // install their own updates.
+  onOpenReleases: () => void;
   // AGPL-3.0 § 13: open the Corresponding Source of the running instance.
   onOpenSource: () => void;
   onQuit: () => void;
@@ -109,12 +119,46 @@ function checkForUpdatesItem(state: RecoveryState, click: () => void): MenuItemC
       return { id: 'check-for-updates', label: 'Downloading Update…', enabled: false };
     case 'downloaded':
       return { id: 'check-for-updates', label: 'Update Ready', enabled: false };
+    case 'available-manual':
+      return { id: 'check-for-updates', label: 'Update Available', enabled: false };
     case 'error':
       return { id: 'check-for-updates', label: 'Check for Updates… (last attempt failed)', enabled: true, click };
     case 'idle':
     default:
       return { id: 'check-for-updates', label: 'Check for Updates…', enabled: true, click };
   }
+}
+
+/**
+ * The action item that sits under "Check for Updates" once an update is known.
+ *
+ * Which action that is depends on whether the build can install in place. A
+ * build that cannot must never show "Restart to Install Update", because that
+ * is precisely the dead button this work exists to remove.
+ */
+function updateActionItem(
+  state: RecoveryState,
+  actions?: Partial<MenuActions>,
+): MenuItemConstructorOptions | null {
+  if (state.updateState === 'downloaded') {
+    return {
+      id: 'restart-to-install',
+      label: 'Restart to Install Update',
+      enabled: true,
+      click: actions?.onRestartToInstall,
+    };
+  }
+  if (state.updateState === 'available-manual') {
+    return {
+      id: 'download-update',
+      label: state.updateVersion
+        ? `Download Backspace ${state.updateVersion}…`
+        : 'Download the Update…',
+      enabled: true,
+      click: actions?.onOpenReleases,
+    };
+  }
+  return null;
 }
 
 export function buildTrayMenuTemplate(
@@ -128,14 +172,8 @@ export function buildTrayMenuTemplate(
     checkForUpdatesItem(state, () => actions?.onCheckForUpdates?.()),
   ];
 
-  if (state.updateState === 'downloaded') {
-    items.push({
-      id: 'restart-to-install',
-      label: 'Restart to Install Update',
-      enabled: true,
-      click: actions?.onRestartToInstall,
-    });
-  }
+  const updateAction = updateActionItem(state, actions);
+  if (updateAction) items.push(updateAction);
 
   items.push(
     { type: 'separator' },
@@ -160,14 +198,8 @@ export function buildAppMenuTemplate(
     checkForUpdatesItem(state, () => actions?.onCheckForUpdates?.()),
   ];
 
-  if (state.updateState === 'downloaded') {
-    appSubmenu.push({
-      id: 'restart-to-install',
-      label: 'Restart to Install Update',
-      enabled: true,
-      click: actions?.onRestartToInstall,
-    });
-  }
+  const updateAction = updateActionItem(state, actions);
+  if (updateAction) appSubmenu.push(updateAction);
 
   appSubmenu.push(
     { type: 'separator' },
@@ -440,7 +472,7 @@ export function handleRecoveryAction(action: RecoveryAction): void {
       return;
     }
     case 'open-releases': {
-      shell.openExternal('https://github.com/TheZwiss/backspace/releases/latest');
+      shell.openExternal(RELEASES_URL);
       return;
     }
     case 'quit': {

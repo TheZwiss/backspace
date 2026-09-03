@@ -1,97 +1,130 @@
-import { useState, useEffect } from 'react';
-import { isElectron } from '../../platform/platform';
-import { Trans } from 'react-i18next';
+import { useEffect } from 'react';
+import {
+  useUpdateStore,
+  shouldPrompt,
+  canRestartToInstall,
+  statusVersion,
+} from '../../stores/updateStore';
+import { useUIStore } from '../../stores/uiStore';
 import { translate } from '../../i18n';
 
-interface UpdateError {
-  message: string;
-  releaseUrl: string;
-}
-
 /**
- * Persistent toast shown when an Electron auto-update has been downloaded
- * or when auto-update fails (offers manual download link).
- * Renders nothing in browser environments.
+ * The persistent update prompt.
+ *
+ * Renders nothing in a browser, nothing while an update is merely downloading
+ * or being checked for, and nothing for a version the user has already
+ * dismissed. When it does render, every button it offers actually does
+ * something: a Restart button appears only on a build that can install in
+ * place, and a build that cannot says so in plain words instead of presenting a
+ * control that silently fails.
+ *
+ * Surface tier is `.glass-bubble`: this is a persistent floating control, which
+ * is that tier's definition in docs/systems/design-system.md. It was previously
+ * `.glass-pill`, which the spec reserves for inline decorations.
  */
 export function UpdateToast() {
-  const [downloadedVersion, setDownloadedVersion] = useState<string | null>(null);
-  const [failedUpdate, setFailedUpdate] = useState<UpdateError | null>(null);
+  const initialize = useUpdateStore((s) => s.initialize);
+  const snapshot = useUpdateStore((s) => s.snapshot);
+  const currentVersion = useUpdateStore((s) => s.currentVersion);
+  const dismiss = useUpdateStore((s) => s.dismiss);
+  const install = useUpdateStore((s) => s.install);
+  const openDownloadPage = useUpdateStore((s) => s.openDownloadPage);
+  const addToast = useUIStore((s) => s.addToast);
 
-  useEffect(() => {
-    if (!isElectron() || !window.backspace) return;
+  useEffect(() => initialize(), [initialize]);
 
-    window.backspace.onUpdateDownloaded((info) => {
-      setDownloadedVersion(info.version);
-      // Auto-download succeeded — clear any previous error state
-      setFailedUpdate(null);
-    });
+  if (!shouldPrompt(snapshot) || snapshot === null) return null;
 
-    window.backspace.onUpdateError((error) => {
-      setFailedUpdate(error);
-    });
-  }, []);
+  const version = statusVersion(snapshot.status);
+  if (version === null) return null;
 
-  // Nothing to show
-  if (!downloadedVersion && !failedUpdate) return null;
+  const canRestart = canRestartToInstall(snapshot);
+  const failed = snapshot.status.phase === 'failed';
 
-  // Auto-download succeeded — show restart toast
-  if (downloadedVersion) {
-    return (
-      <div className="fixed bottom-6 left-6 z-[300] animate-slide-up">
-        <div className="glass-pill rounded-xl px-4 py-3 flex items-center gap-3 max-w-[340px]">
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-txt-primary"><Trans i18nKey="ui.UpdateToast.updateReady">Update ready</Trans></p>
-            <p className="text-xs text-txt-secondary truncate">
-              <Trans i18nKey="ui.UpdateToast.version">Version</Trans> {downloadedVersion} <Trans i18nKey="ui.UpdateToast.hasBeenDownloaded">has been downloaded</Trans>
-            </p>
-          </div>
-          <button
-            onClick={() => window.backspace?.installUpdate()}
-            className="shrink-0 px-3 py-1.5 text-xs font-medium rounded-lg bg-accent-primary hover:bg-accent-primary/80 text-white transition-colors"
+  const handleLater = () => {
+    dismiss();
+    // The prompt is gone but the update is not lost, and the user has no way to
+    // know that unless they are told once, at the moment they need to know it.
+    addToast(translate('runtime.expressions.UpdateToast.installLater'), 'info', 5000);
+  };
+
+  let title: string;
+  let body: string;
+  if (failed) {
+    title = translate('runtime.expressions.UpdateToast.installFailed');
+    body = translate('runtime.expressions.UpdateToast.installFailedBody', { version });
+  } else if (canRestart) {
+    title = translate('ui.UpdateToast.updateReady');
+    body = translate('runtime.expressions.UpdateToast.readyBody', { version });
+  } else {
+    title = translate('runtime.expressions.UpdateToast.available', { version });
+    body = currentVersion
+      ? translate('runtime.expressions.UpdateToast.manualBodyWithCurrent', { currentVersion })
+      : translate('runtime.expressions.UpdateToast.manualBody');
+  }
+
+  return (
+    <div className="fixed bottom-6 left-6 z-[300] animate-slide-up max-w-[calc(100vw-3rem)]">
+      <div className="glass-bubble rounded-2xl p-4 w-[380px] max-w-full">
+        <div className="flex items-start gap-3">
+          <div
+            className={`shrink-0 mt-0.5 w-8 h-8 rounded-full flex items-center justify-center ${
+              failed ? 'bg-accent-rose/15 text-accent-rose' : 'bg-accent-primary/15 text-accent-primary'
+            }`}
+            aria-hidden="true"
           >
-            <Trans i18nKey="ui.UpdateToast.restart">Restart</Trans>
-          </button>
+            {failed ? (
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+              </svg>
+            ) : (
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v12m0 0 4-4m-4 4-4-4M4 20h16" />
+              </svg>
+            )}
+          </div>
+
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-txt-primary">{title}</p>
+            {/* Deliberately wraps. The previous version truncated this line
+                mid-word inside a fixed-width pill. */}
+            <p className="text-xs text-txt-secondary mt-1 leading-relaxed">{body}</p>
+          </div>
+
           <button
-            onClick={() => setDownloadedVersion(null)}
-            className="shrink-0 p-1 text-txt-tertiary hover:text-txt-secondary transition-colors"
-            aria-label={translate("runtime.attributes.UpdateToast.dismiss")}
+            onClick={handleLater}
+            className="shrink-0 -mt-1 -mr-1 p-1.5 rounded-lg text-txt-tertiary hover:text-txt-secondary hover:bg-white/[0.06] transition-colors"
+            aria-label={translate('runtime.attributes.UpdateToast.dismissThisUpdate')}
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
-      </div>
-    );
-  }
 
-  // Auto-download failed — show manual download toast
-  return (
-    <div className="fixed bottom-6 left-6 z-[300] animate-slide-up">
-      <div className="glass-pill rounded-xl px-4 py-3 flex items-center gap-3 max-w-[380px]">
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-txt-primary"><Trans i18nKey="ui.UpdateToast.updateFailed">Update failed</Trans></p>
-          <p className="text-xs text-txt-secondary truncate">
-            <Trans i18nKey="ui.UpdateToast.autoUpdateFailedDownloadManually">Auto-update failed — download manually</Trans>
-          </p>
+        <div className="flex items-center gap-2 mt-3.5 pl-11">
+          {canRestart ? (
+            <button
+              onClick={install}
+              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-accent-primary hover:bg-accent-primary/80 text-white transition-colors"
+            >
+              {translate('runtime.expressions.UpdateToast.restartNow')}
+            </button>
+          ) : (
+            <button
+              onClick={openDownloadPage}
+              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-accent-primary hover:bg-accent-primary/80 text-white transition-colors"
+            >
+              {translate('ui.UpdateToast.download')}
+            </button>
+          )}
+          <button
+            onClick={handleLater}
+            className="px-3 py-1.5 text-xs font-medium rounded-lg text-txt-secondary hover:text-txt-primary hover:bg-white/[0.06] transition-colors"
+          >
+            {translate('runtime.expressions.UpdateToast.later')}
+          </button>
         </div>
-        <a
-          href={failedUpdate!.releaseUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="shrink-0 px-3 py-1.5 text-xs font-medium rounded-lg bg-accent-primary hover:bg-accent-primary/80 text-white transition-colors"
-        >
-          <Trans i18nKey="ui.UpdateToast.download">Download</Trans>
-        </a>
-        <button
-          onClick={() => setFailedUpdate(null)}
-          className="shrink-0 p-1 text-txt-tertiary hover:text-txt-secondary transition-colors"
-          aria-label={translate("runtime.attributes.UpdateToast.dismiss2")}
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
       </div>
     </div>
   );

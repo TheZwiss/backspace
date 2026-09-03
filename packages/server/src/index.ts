@@ -24,6 +24,7 @@ import { invitesRoutes } from './routes/invites.js';
 import { exploreRoutes } from './routes/explore.js';
 import { searchRoutes } from './routes/search.js';
 import { adminRoutes } from './routes/admin.js';
+import { adminUpdateRoutes } from './routes/adminUpdates.js';
 import { gifRoutes } from './routes/gif.js';
 import { federationRoutes } from './routes/federation.js';
 import { cspReportRoutes } from './routes/cspReport.js';
@@ -120,18 +121,22 @@ async function main(): Promise<void> {
   // The policy is built once at boot because its only input is config, which
   // does not change while the process runs.
   const cspHeaderValue = buildCspHeaderValue({ livekitUrl: config.livekit.url });
-  // Report-only for now. Flipping this to `Content-Security-Policy` is a
-  // separate, deliberate change gated on a clean report log from real
-  // deployments. See docs/systems/web-security.md, "Rollout".
-  const cspHeaderName = 'Content-Security-Policy-Report-Only';
+  // Enforcing since 2026-09-03. It shipped report-only first and was flipped
+  // only after the observation phase in docs/systems/web-security.md section 7
+  // ran on two real deployments with a violation detector validated on each.
+  // `Reporting-Endpoints` and the sink below stay: an enforcing policy still
+  // reports, and those reports are now the only signal that this broke a flow
+  // nobody exercised.
+  const cspHeaderName = 'Content-Security-Policy';
   const reportingEndpoints = `${CSP_REPORT_GROUP}="${CSP_REPORT_PATH}"`;
 
   app.addHook('onSend', async (_request, reply, payload) => {
-    // A route that has already set an enforcing policy is asserting something
+    // A route that has already set its own policy is asserting something
     // stricter about its own response than the app policy can. routes/uploads.ts
-    // sandboxes served user files under `default-src 'none'`, and attaching a
-    // permissive report-only policy next to it would only produce noise in the
-    // sink from responses that are already locked down.
+    // sandboxes served user files under `default-src 'none'`; overwriting that
+    // with the app policy would widen it. The guard and the header below now
+    // carry the same name, which is why this reads as a plain "first writer
+    // wins" rather than as two competing headers.
     if (!reply.getHeader('Content-Security-Policy')) {
       reply.header(cspHeaderName, cspHeaderValue);
       reply.header('Reporting-Endpoints', reportingEndpoints);
@@ -194,6 +199,7 @@ async function main(): Promise<void> {
   await app.register(exploreRoutes);
   await app.register(searchRoutes);
   await app.register(adminRoutes);
+  await app.register(adminUpdateRoutes);
   await app.register(gifRoutes);
   await app.register(federationRoutes);
   // Registered here rather than beside the hook above so it sits behind the

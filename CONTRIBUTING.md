@@ -14,6 +14,16 @@ sizes are welcome: bug reports, fixes, features, documentation, and design.
   something that conflicts with planned direction. Small fixes can go straight
   to a pull request.
 - **One logical change per pull request.** Keep diffs focused and reviewable.
+- **Keep pull requests small enough to review.** Review capacity is the
+  bottleneck on this project, not authoring capacity. A change touching a
+  hundred files waits longer than five changes touching twenty, and may be asked
+  to split. If something is genuinely large and indivisible, agree the shape on
+  an issue before writing it.
+- **You own your diff.** Use whatever tools you like, including AI assistants;
+  nobody will ask. What matters is that you can explain any line of it, that you
+  have run it, and that it does not contain two solutions to the same problem
+  sitting side by side. Code the author has not read is the only kind of
+  contribution that costs more to review than it did to write.
 
 ## Contributor License Agreement (required)
 
@@ -84,6 +94,18 @@ it.
 - **Localization.** Add user-facing web copy through the translation catalog and
   update every shipped locale. See [`docs/systems/localization.md`](docs/systems/localization.md).
 
+## Packaging, platform, and UI changes need evidence
+
+A build that compiles is not a build that runs. If a change affects how the app
+is packaged, installed, sandboxed, or launched (Electron builds, Flatpak, Docker,
+installers, the desktop shell), run the result and show it: a screenshot, a short
+recording, or a terminal session, and say which OS and desktop environment. UI
+work is the same, with a screenshot of the changed surface.
+
+Automated checks cover the scriptable part. Whether the app actually starts,
+finds its tray icon, shows a notification, or can open a file is not scriptable,
+and it is the part that breaks.
+
 ## Before you open a pull request
 
 - `pnpm build` succeeds (shared types, server, and web all build).
@@ -92,6 +114,8 @@ it.
 - You updated the relevant `docs/systems/` spec if your change altered schema,
   API routes, WebSocket events, the federation protocol, permissions, or the
   design system.
+- You ran the thing you changed, and attached evidence if it affects packaging,
+  installation, or the UI (see above).
 
 ## Reporting bugs and requesting features
 

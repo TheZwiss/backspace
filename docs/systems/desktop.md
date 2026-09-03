@@ -3,6 +3,10 @@
 Source files:
 - `packages/desktop/src/main.ts` — Main process: window management, tray, IPC handlers, auto-update, deep links, app lifecycle
 - `packages/desktop/src/preload.ts` — Context bridge: exposes `window.backspace` API to renderer
+- `packages/desktop/src/updateCapability.ts` — Signature probe: can this build install its own updates
+- `packages/desktop/src/updateStatus.ts` — Update status union, store, and the shared prompt predicate
+- `packages/desktop/src/updateDismissal.ts` — Per-version dismissal persisted to userData
+- `packages/desktop/src/updaterCache.ts` — Reclaims the updater download cache on manual-mode builds
 - `packages/desktop/src/activityDetector.ts` — Process polling, game dictionary loading/sync, activity change detection
 - `packages/desktop/src/keybindManager.ts` — Global keybinds via uIOhook, native keycode mapping, press/release tracking
 - `packages/web/src/stores/keybindStore.ts` — Client-side keybind persistence (Zustand + localStorage)
@@ -234,30 +238,200 @@ Registered via `app.setAsDefaultProtocolClient('backspace')` and in `electron-bu
 
 ## Auto-Update
 
-Powered by `electron-updater`. Loaded via `require()` (not import) for graceful degradation when not available.
+Powered by `electron-updater`. Loaded via `require()` (not import) for graceful
+degradation when not available.
+
+Source files:
+- `updateCapability.ts` — measures whether this build can install its own updates
+- `updateStatus.ts` — the `UpdateStatus` union, the `UpdateStatusStore`, and the
+  shared "should we interrupt the user" predicate
+- `updateDismissal.ts` — per-version dismissal persisted to userData
+- `updaterCache.ts` — reclaims the download cache on builds that cannot install
+- `packages/web/src/stores/updateStore.ts` — the renderer mirror
+- `packages/web/src/components/ui/UpdateToast.tsx` — the prompt
+
+### Update capability, and why it is measured rather than assumed
+
+```
+type UpdateCapability = 'auto' | 'manual';
+```
+
+`getUpdateCapability()` (memoised, `updateCapability.ts`) decides in this order:
+
+1. `!app.isPackaged` → `manual`. A dev build has no feed and must never offer to install.
+2. Not darwin → `auto`. NSIS and AppImage apply unsigned updates without complaint.
+3. darwin → run `codesign -d -r- <bundle>` and classify the designated requirement:
+   - a bare `cdhash H"…"` → `adhoc` → `manual`
+   - anything mentioning `anchor` or `certificate` → `identified` → `auto`
+   - unreadable → `unknown` → `manual`
+4. Any failure → `manual`.
+
+Every uncertain path resolves to `manual` deliberately. A download link always
+works, so guessing "manual" wrongly costs one extra click, while guessing "auto"
+wrongly produces a button that silently does nothing.
+
+**Nothing here hardcodes "macOS cannot update".** It measures the property that
+actually decides the outcome, so the day CI signs with a Developer ID this
+returns `auto` with no code change. See [desktop-security.md](desktop-security.md)
+for why the ad-hoc signature makes it impossible today.
 
 ### Configuration (`initAutoUpdater()`)
 
 ```
-autoDownload: true
-autoInstallOnAppQuit: true
+autoDownload         = capability === 'auto'
+autoInstallOnAppQuit = capability === 'auto'
 Publish: GitHub (TheZwiss/backspace)
 ```
 
-**Signing status:** no Apple Developer ID or Windows certificate. macOS builds
-are ad-hoc signed by `scripts/macSign.js` (see below); Windows and Linux builds
-are unsigned. Consequences:
-- **macOS:** Squirrel.Mac refuses to apply updates without a real signing
-  identity — auto-update is effectively disabled on macOS until a Developer ID
-  certificate + notarization are added to the CI build. Users update manually
-  from the releases page. The app is not notarized, so first launch is blocked
-  by Gatekeeper and must be approved once via System Settings → Privacy &
-  Security → Open Anyway. Ad-hoc signatures also have no stable identity, so
-  the cdhash changes every release and macOS drops the Input Monitoring and
-  Screen Recording grants (global keybinds, screen share) on each update.
-- **Windows:** NSIS auto-update works unsigned; SmartScreen warns on first
-  install only.
-- **Linux:** AppImage auto-update works unsigned.
+In `manual` mode nothing is downloaded, so no proxy server is created, Squirrel
+is never invoked, and the spurious install error never fires. `purgeUpdaterCache`
+also runs once at startup to reclaim archives stranded by earlier versions
+(measured at 228 MB on a real macOS install, because the archive is stored
+twice). The directory to delete is read from the packaged `app-update.yml`'s
+`updaterCacheDirName` rather than reconstructed, and must pass
+`isSafeUpdaterCacheDirName` (no separators, no traversal, mandatory `-updater`
+suffix) before anything is removed.
+
+### The `update-downloaded` trap
+
+`MacUpdater.doDownloadUpdate()` fires `dispatchUpdateDownloaded()` **inside the
+`server.listen` callback**, the moment its local proxy server is up, and *before*
+Squirrel has been asked to do anything:
+
+```js
+this.server.listen(0, "127.0.0.1", () => {
+    this.nativeUpdater.setFeedURL({ ... });
+    this.dispatchUpdateDownloaded(event);      // fires here
+    if (this.autoInstallOnAppQuit) {
+        this.nativeUpdater.checkForUpdates();   // Squirrel fails later
+    }
+});
+```
+
+So on macOS `update-downloaded` means "the archive is on disk", **not** "the
+update can be installed". Treating it as the latter is what produced a Restart
+button that did nothing. `MacUpdater.quitAndInstall()` then takes a branch that
+registers a listener for an event that never fires and returns, with no error and
+no exception.
+
+### Status model
+
+One value, replaced wholesale by every event, so a stale `ready` can never
+outrank a fresh `failed`:
+
+```typescript
+type UpdateStatus =
+  | { phase: 'idle' }
+  | { phase: 'checking' }
+  | { phase: 'available'; version: string }
+  | { phase: 'downloading'; version: string; percent: number; bytesPerSecond: number }
+  | { phase: 'ready'; version: string }
+  | { phase: 'failed'; version: string | null; message: string }
+  | { phase: 'up-to-date'; checkedAt: number };
+
+interface UpdateSnapshot {
+  capability: UpdateCapability;
+  dismissedVersion: string | null;
+  status: UpdateStatus;
+}
+```
+
+`capability` and `dismissedVersion` are ambient facts about the install; `status`
+is the event-driven part. They travel together so a dismissed update stays
+*visible* in Settings while being *silent* in the toast. Suppressing it in main
+would make it unreachable, turning "Later" into "never".
+
+`shouldPromptForUpdate(snapshot)` is the single definition of "interrupt the
+user". Both the toast and the native notification call it, so they cannot
+disagree about whether the user already said later. It returns false for
+`checking`, `downloading` and `up-to-date` (progress, not news), for a dismissed
+version, and for a `failed` that never learned a version.
+
+### Dismissal
+
+Persisted to `{userData}/update-state.json` as `{ dismissedVersion }`.
+
+It lives in the **main process, not localStorage**, because an available update
+is a property of the installed app, not of whichever instance the user happens to
+be connected to. Per-origin storage would re-nag anyone who switches instances
+and would lose the dismissal when site data is cleared.
+
+Exactly one version is remembered, compared by equality. Dismissing 1.0.4
+silences 1.0.4 and nothing else, so 1.0.5 surfaces normally. A corrupt or
+truncated file yields "nothing dismissed" rather than throwing at startup.
+
+### Check schedule
+
+| Trigger | Delay |
+|---------|-------|
+| Initial check | 10 seconds after app ready |
+| Periodic check | Every 4 hours |
+| Manual check | `check-for-updates` IPC from renderer |
+
+### Event flow (main -> renderer)
+
+| Event | IPC Channel | Payload | Condition |
+|-------|------------|---------|-----------|
+| Snapshot changed | `update-status-changed` | `UpdateSnapshot` | Every status or dismissal change |
+| Update found | `update-available` | `{ version }` | Always (legacy) |
+| Download complete | `update-downloaded` | `{ version }` | Always (legacy) |
+| Error | `update-error` | `{ message, releaseUrl }` | Only if `updateConfirmed` (legacy) |
+
+The three legacy per-event channels are **kept even though the current client no
+longer reads them**. The desktop app and the instance it connects to version
+independently: a newer app can be pointed at an older instance still serving a
+client that calls `onUpdateDownloaded`, and removing them would throw inside that
+client's `useEffect` and take the renderer down. The reverse case is handled on
+the web side, where `updateStore.ts` feature-detects `getUpdateStatus` and falls
+back to reconstructing a snapshot from the legacy channels.
+
+`download-progress` is wired and drives the `downloading` phase. Pushes are
+throttled to whole-percent changes, so at most 101 IPC messages per download.
+
+Check-phase errors are recorded as `{ phase: 'failed', version: null }`, which
+keeps them out of the toast while leaving them visible in Settings. Interrupting
+someone because a background poll hit a flaky network is noise.
+
+### Install
+
+`install-update` IPC:
+
+- `capability !== 'auto'` → opens the releases page. There is no in-place install
+  to run, so calling a method that returns without doing anything is not an option.
+- otherwise → `autoUpdater.quitAndInstall()`, then a **4-second watchdog**. If the
+  app is still alive and still `ready` after it, the status flips to `failed`.
+  A successful install takes the app down before the timer fires. This is defence
+  in depth against the silent no-op recurring on a platform we did not anticipate.
+
+### Notification
+
+Fires on `update-available` in manual mode and `update-downloaded` in auto mode,
+suppressed when the window is focused (the in-app toast covers that) and when
+`shouldPromptForUpdate` says no.
+
+| Capability | Title | Body | Click |
+|---|---|---|---|
+| `auto` | Backspace update ready | Click to restart and install version X. | `quitAndInstall()` |
+| `manual` | Backspace X is available | Click to open the download page. | `shell.openExternal(RELEASES_URL)` |
+
+Win32 only: `app.setAppUserModelId('com.backspace.desktop')` is set early in
+startup so notifications attribute to "Backspace" in Windows Action Center.
+
+### Recovery integration
+
+All `autoUpdater` events update the `RecoveryStateStore`. `UpdateState` gained
+**`available-manual`**: an update exists but this build cannot install it. The
+recovery surface then offers a versioned "Download Backspace X" button
+(`open-releases` action) instead of "Restart to Install Update", and the tray and
+macOS app menus do the same via `updateActionItem`. Without this the recovery
+screen, which is the escape hatch for a user whose app will not start, would
+present the one button guaranteed not to help them.
+
+`extractErrorCode(err)` in `recovery.ts` extracts the `code` field from
+`electron-updater` errors when present (string only); used to populate
+`RecoveryState.lastUpdateError.code`.
+
+### Release publishing
 
 CI publishes via `.github/workflows/release.yml` (tag `v*` on the public repo).
 A `create-release` job runs first and creates the draft for the tag, then four
@@ -273,39 +447,6 @@ split across the pair, which needed manual consolidation before the release
 could be published. Creating the draft once, ahead of the matrix, leaves the
 build jobs with nothing to create.
 
-### Check Schedule
-
-| Trigger | Delay |
-|---------|-------|
-| Initial check | 10 seconds after app ready |
-| Periodic check | Every 4 hours |
-| Manual check | `check-for-updates` IPC from renderer |
-
-### Event Flow (main -> renderer)
-
-| Event | IPC Channel | Payload | Condition |
-|-------|------------|---------|-----------|
-| Update found | `update-available` | `{ version }` | Always |
-| Download complete | `update-downloaded` | `{ version }` | Always |
-| Error | `update-error` | `{ message, releaseUrl }` | Only if `updateConfirmed` is true (download failed after update was confirmed) |
-
-Check-phase errors (network, auth, 404) are silently ignored — nothing actionable for the user.
-
-### Install
-
-`install-update` IPC triggers `autoUpdater.quitAndInstall()`.
-
-### Recovery Integration
-
-All `autoUpdater` events update the `RecoveryStateStore` (drives tray + macOS menu UI dynamically). Existing renderer IPC channels (`update-available`, `update-downloaded`, `update-error`) are preserved unchanged.
-
-On `update-downloaded`, a native OS notification fires **only when `mainWindow?.isFocused()` is false** — symmetric suppression across normal and recovery modes (the in-app banner / Restart button is visible to a focused user; the notification covers minimized/tray/background-desktop cases). Notification click calls `autoUpdater.quitAndInstall()` directly (force-kill fix path — see Recovery Mode section).
-
-Win32 only: `app.setAppUserModelId('com.backspace.desktop')` is set early in startup so notifications attribute to "Backspace" instead of "Electron" in Windows Action Center.
-
-`extractErrorCode(err)` in `recovery.ts` extracts the `code` field from `electron-updater` errors when present (string only); used to populate `RecoveryState.lastUpdateError.code`.
-
----
 
 ## Recovery Mode
 
@@ -324,7 +465,9 @@ Source files:
 interface RecoveryState {
   mode: 'normal' | 'recovery';
   reason: { code: 'load-failed' | 'render-gone' | 'unresponsive' | 'renderer-stalled'; detail: string } | null;
-  updateState: 'idle' | 'checking' | 'downloading' | 'downloaded' | 'error';
+  // 'available-manual': an update exists but this build cannot install it in
+  // place, so the surface offers a download rather than a dead Restart button.
+  updateState: 'idle' | 'checking' | 'downloading' | 'available-manual' | 'downloaded' | 'error';
   updateVersion: string | null;
   lastUpdateError: { message: string; code: string | null; at: number } | null;
   lastCheckResult: 'up-to-date' | 'failed' | null;  // transient, 5s decay
@@ -361,9 +504,14 @@ Page reads initial state via `getRecoveryState()` IPC and subscribes to `recover
 |--------|---------|---------|
 | Reload | always | always |
 | Restart to Install Update | `updateState === 'downloaded'` | always when visible |
-| Check for Updates | always | not in `'checking'` / `'downloading'` / `'downloaded'` |
+| Check for Updates | always | not in `'checking'` / `'downloading'` / `'downloaded'` / `'available-manual'` |
 | Change Instance | always | always |
-| Open Releases Page | `updateState === 'error'` | always when visible |
+| Open Releases Page | `updateState === 'error'` or `'available-manual'` | always when visible |
+
+In `'available-manual'` the Open Releases button relabels to "Download Backspace
+X". Restart to Install is never shown in that state, because the build cannot
+install in place.
+
 | Quit Backspace | always | always |
 
 **Change Instance from recovery is non-destructive.** The saved URL is not cleared when navigating to the picker; see the Instance Picker section above for the full behavior (pre-filled input, Cancel button, header copy update).
@@ -503,8 +651,10 @@ All handlers registered in `main.ts:registerIpcHandlers()`.
 | `minimize-window` | R->M | — | Minimize window |
 | `maximize-window` | R->M | — | Toggle maximize/unmaximize |
 | `close-window` | R->M | — | Close (hides to tray) |
-| `install-update` | R->M | — | `autoUpdater.quitAndInstall()` |
+| `install-update` | R->M | — | `quitAndInstall()` on auto-capable builds, otherwise opens the releases page. 4s watchdog flips the status to `failed` if the app is still running |
 | `check-for-updates` | R->M | — | `autoUpdater.checkForUpdates()` |
+| `dismiss-update` | R->M | `{ version }` | Persists the dismissal and re-pushes the snapshot |
+| `open-release-page` | R->M | — | `shell.openExternal(RELEASES_URL)` |
 | `screen-share-selected` | R->M | `sourceId, shareAudio?` | Safety net (actual handler is `ipcMain.once` in display media flow) |
 | `keybinds-sync` | R->M | `KeybindConfig[]` | `keybindManager.updateKeybinds()` |
 | `set-connected-origins` | R->M | `string[]` | Update `knownInstanceOrigins` set (used by in-instance `/join/` interception) |
@@ -524,6 +674,7 @@ All handlers registered in `main.ts:registerIpcHandlers()`.
 | `get-current-activity` | R->M | `Activity \| null` | Current detected game activity |
 | `check-accessibility` | R->M | `boolean` | macOS accessibility permission check |
 | `get-recovery-state` | R->M | `RecoveryState` | Recovery page reads initial state on mount |
+| `get-update-status` | R->M | `UpdateSnapshot` | Renderer reads the current snapshot on mount |
 
 ### Main -> Renderer Events
 
@@ -541,6 +692,7 @@ All handlers registered in `main.ts:registerIpcHandlers()`.
 | `keybind-hook-error` | `{ message }` | uIOhook start failure |
 | `open-internal-route` | `string` (path) | In-instance `/join/` interception: renderer navigates to `path` instead of opening externally |
 | `recovery-state-changed` | `RecoveryState` | Store subscriber, mode-gated to `mode === 'recovery'` |
+| `update-status-changed` | `UpdateSnapshot` | Every status or dismissal change |
 
 ---
 
@@ -588,6 +740,15 @@ Detection: `typeof window.backspace !== 'undefined'` (see `platform.ts:isElectro
 | `getRecoveryState()` | invoke | R->M | Returns `Promise<RecoveryState>` |
 | `onRecoveryStateChanged(cb)` | listen | M->R | Returns cleanup function; recovery.html subscribes |
 | `recoveryAction(action)` | fire | R->M | Single channel for all recovery button clicks |
+| `getUpdateStatus()` | invoke | R->M | Returns `Promise<UpdateSnapshot>`. Optional: absent on pre-1.0.5 apps |
+| `onUpdateStatusChanged(cb)` | listen | M->R | Returns cleanup function. Optional |
+| `dismissUpdate(version)` | fire | R->M | Optional |
+| `openReleasePage()` | fire | R->M | Optional |
+
+The four update-snapshot methods are declared **optional** in
+`electron.d.ts`. A client served by a newer instance can be running inside an
+older desktop app that does not expose them, so every call site feature-detects.
+`updateStore.ts` falls back to the legacy per-event channels when they are absent.
 
 Direction legend: **fire** = `ipcRenderer.send` (no response), **invoke** = `ipcRenderer.invoke` (returns Promise), **listen** = `ipcRenderer.on` (event subscription).
 
@@ -1014,6 +1175,7 @@ Earlier builds wrote to `<appData>/@backspace/desktop/`. On first launch after t
 | `instance-url.json` | `{ url: string }` | Saved instance URL |
 | `window-state.json` | `WindowState` | Window position, size, maximize state |
 | `auto-launch.json` | `AutoLaunchSettings` | Open at login + start minimized prefs |
+| `update-state.json` | `{ dismissedVersion }` | The update version the user waved away. Belongs to the app, not to an instance |
 | `games-cache.json` | `VersionedDictionary` | Cached remote game dictionary |
 | `games-cache-etag.txt` | ETag string | For conditional HTTP requests |
 

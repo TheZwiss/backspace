@@ -10,6 +10,7 @@ Source files:
 - `Caddyfile` -- reverse proxy / auto-HTTPS config (All-in-One mode only)
 - `install.sh` -- interactive first-time setup, mode-aware (allinone / proxy / tunnel)
 - `deploy.sh` -- rsync + rebuild to Heidi's two boxes
+- `update.sh` -- operator update: snapshot, fetch, restart, verify, roll back
 - `backup.sh` / `restore.sh` -- manual snapshot + restore tooling (host side)
 - `packages/server/src/config.ts` -- `config.backup.*` env parsing
 - `packages/server/src/utils/backup.ts` -- `createSnapshot` (VACUUM INTO), `listSnapshots`, `pruneSnapshots`, off-box hook
@@ -168,6 +169,40 @@ Caddy provisions and renews TLS certificates automatically for `DOMAIN`; the per
 | `all` / `both` (default) | Both, in parallel |
 
 The `data/` directory is excluded from the rsync, so application data on each box is never overwritten by a deploy.
+
+### Update a running instance: `update.sh`
+
+The operator-facing update path, and what the admin Updates panel points at.
+
+```
+./update.sh              Update, with one confirmation prompt
+./update.sh --check      Report whether an update exists. Changes nothing
+./update.sh --yes        Update without prompting (ssh, cron)
+./update.sh --no-backup  Skip the pre-update snapshot. Not recommended
+```
+
+Sequence:
+
+1. **Preflight.** Docker reachable (falls back to `sudo` the way `install.sh` does), Compose v2 present, `.env` and `docker-compose.yml` present, and the compose project actually defines a `backspace` service. `COMPOSE_FILE` lives in `.env`, so proxy and tunnel installs resolve both files with no `-f` flags.
+2. **Record the rollback point.** `docker inspect` for the running container's image ID. Refuses to proceed if it cannot determine one.
+3. **Resolve the target reference.** `docker compose config --images backspace`, which is **not** necessarily the reference the running container was created from. An operator who repins `BACKSPACE_IMAGE_TAG` changes the former without touching the latter, and rolling back against the running container's reference would restore the old image under a name compose no longer looks at, bringing the failed version straight back up.
+4. **Refresh the checkout, tolerantly.** No `.git` (an rsync-deployed host) says so and carries on. A dirty tree or a diverged branch refuses to pull, says why, and carries on. Local edits are never clobbered, and the image update still applies.
+5. **Back up.** Calls `./backup.sh`. **The one step whose failure is fatal**, because everything after it is only safe to attempt because it happened.
+6. **Fetch.** `docker compose pull backspace`, or `docker compose build backspace` on a from-source install, chosen from `BACKSPACE_INSTALL_CHANNEL` and falling back to inferring it from the image reference.
+7. **Skip a no-op.** If the fetched image ID equals the recorded one, report and exit 0 without restarting. Restarting a chat server for nothing disconnects everyone in a voice call.
+8. **Restart.** `docker compose up -d backspace`. **The service is named explicitly and `--remove-orphans` is never passed.** Compose actively suggests that flag on hosts running other containers in the same project, and following it would delete them. Both live instances run co-hosted services behind the same Caddy, so this is a real deletion, not a hypothetical one.
+9. **Health gate.** Polls `docker inspect` for `healthy`, up to 180s. The compose healthcheck is `interval: 30s, retries: 5, start_period: 30s`, so anything under roughly 120s would produce false failures. On timeout it prints the container state, the last health-probe output, and the tail of the logs.
+10. **Verify the version moved.** Reads `/api/instance/info` through the container and compares against the pre-update value. A container that comes up healthy while still running the old code is a failed update, and this is the only check that catches it.
+11. **Roll back on failure.** Re-tags the recorded image ID to the target reference, `up -d backspace`, waits for healthy, and reports both the failure and the restored version. It then warns that the local tag now points at the previous image and should be restored with `docker compose pull backspace` once the problem is fixed.
+
+`--check` is read-only. It reports the running version and the install channel, then looks up the latest release tag from the GitHub API with `curl` or `wget` and compares. It touches no Docker state and degrades to a plain statement of the running version when neither tool is available.
+
+**Rehearsed end to end** on a live throwaway instance before shipping: a real update, a no-op re-run, and a deliberately broken update (image repinned at `alpine:3.20`) that failed the health gate and rolled back to a healthy instance on the previous image. Co-hosted containers were untouched throughout.
+
+Two shell traps this script exists on the far side of, worth knowing before editing it:
+
+- **`grep -q` under `set -o pipefail`.** `grep -q` exits at its first match, which SIGPIPEs the upstream command and fails the pipeline. `docker compose config --services | grep -qx backspace` reported "no backspace service" against a compose file whose *first* listed service is backspace. Membership is now tested with a bash `contains_line` helper. The same applies to any `… | head -1` without a trailing `|| true`.
+- **`sed -i`** differs between GNU and BSD. `install.sh`'s `record_install_channel` rewrites `.env` through a temp file instead.
 
 ---
 
