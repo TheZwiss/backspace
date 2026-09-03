@@ -1,0 +1,14 @@
+# Trivy findings that are deliberately not fixed. Each entry states the reason
+# so a reader can judge it rather than take it on trust. An entry without a
+# reason is not a dismissal.
+#
+# DS-0002: "Specify at least 1 USER command in Dockerfile with non-root user".
+# The image deliberately has no USER line. docker-entrypoint.sh runs as root
+# only to chown the mounted data volume, then execs the CMD as the unprivileged
+# `node` user. A USER directive would run before the entrypoint and leave the
+# volume unwritable on first start. The container does not run its workload as
+# root; the check cannot see the entrypoint. See docs/systems/deployment.md.
+#
+# Checked against the current Dockerfile and entrypoint on 2026-09-03: a
+# container started from a fresh build reports Uid 1000 for pid 1.
+DS-0002

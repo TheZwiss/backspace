@@ -1266,6 +1266,7 @@
       "JoinPage.noInviteCodeProvided": "Пригласительный код не предоставлен",
       "JoinPage.invalidInviteCode": "Неверный код приглашения",
       "JoinPage.failedToLoadInvite": "Не удалось загрузить приглашение.",
+      "JoinPage.enterDomainOnItsOwn": "Введите только домен, например my-instance.com",
       "DmRosterPanel.failedToRemoveFriend": "Не удалось удалить друга",
       "DmRosterPanel.failedToRemoveMember": "Не удалось удалить участника",
       "DmRosterPanel.failedToTransferOwnership": "Не удалось передать право собственности.",

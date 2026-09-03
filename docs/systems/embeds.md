@@ -4,7 +4,8 @@ Source files:
 - `packages/server/src/utils/embedClassifier.ts` — URL classification and provider detection
 - `packages/server/src/utils/embedResolver.ts` — URL extraction, embed resolution pipeline, DB persistence, batch fetching
 - `packages/server/src/utils/metadataFetcher.ts` — OpenGraph/HTML metadata scraping with Cheerio
-- `packages/server/src/utils/ssrf.ts` — SSRF protection (DNS resolution, private IP blocking)
+- `packages/server/src/utils/ssrf.ts` — SSRF protection (URL validation, DNS resolution, per-hop redirect re-validation)
+- `packages/server/src/utils/ipClass.ts` (address classification: parses an IPv4, IPv6 or IPv4-mapped IPv6 address and reports which range it falls in)
 - `packages/web/src/components/chat/EmbedRenderer.tsx` — Client-side embed routing by type
 - `packages/web/src/components/chat/embeds/GenericEmbed.tsx` — Generic link preview card
 - `packages/web/src/components/chat/embeds/ImageEmbed.tsx` — Direct image embed with lightbox
@@ -146,23 +147,54 @@ All outbound fetches to user- or peer-supplied URLs go through `safeFetch()`, wh
 1. **URL parsing** — `new URL(url)` must succeed
 2. **Scheme check** — only `http:` and `https:` allowed
 3. **DNS resolution** — `dns.promises.lookup(hostname)` resolves hostname to IP
-4. **Private IP check** — `isPrivateIp(address)` rejects internal addresses
+4. **Private IP check** — `isPrivateIp(address)` rejects anything that is not a publicly routable address
+
+Step 3 resolves `URL.hostname` with the square brackets around an IPv6 literal
+stripped first, because `dns.lookup` does not accept them. That is also what
+makes an IPv6-literal URL usable: with the brackets attached, resolution always
+failed and the URL was refused for the wrong reason.
 
 ### Blocked IP Ranges
 
-`ssrf.ts:isPrivateIp()`
+`ssrf.ts:isPrivateIp()` is a thin wrapper: it calls `classifyAddress()`
+(`utils/ipClass.ts`) and reports true for anything that does not come back
+`public`. The classifier parses the address into octets or 16-bit groups and
+tests range membership, so a range's boundaries are exact rather than whatever
+a string prefix happens to cover.
 
-| Range | Description |
-|-------|-------------|
-| `127.*` | Loopback |
-| `0.*`, `0.0.0.0` | Unspecified |
-| `10.*` | Private class A |
-| `192.168.*` | Private class C |
-| `172.16.0.0/12` | Private class B (172.16–172.31, checked via integer parse of second octet) |
-| `169.254.*` | Link-local |
-| `::1` | IPv6 loopback |
-| `fc*`, `fd*` | IPv6 unique local |
-| `fe80*` | IPv6 link-local |
+`classifyAddress()` returns one of `public`, `loopback`, `private`,
+`link-local`, `cgnat`, `unspecified`, `multicast` or `reserved`. Only `public`
+is allowed out.
+
+| Range | Class | Description |
+|-------|-------|-------------|
+| `127.0.0.0/8` | `loopback` | Loopback, the whole /8 |
+| `0.0.0.0` | `unspecified` | Binds every interface |
+| `0.0.0.0/8` (rest) | `reserved` | This-network |
+| `10.0.0.0/8` | `private` | RFC 1918 |
+| `172.16.0.0/12` | `private` | RFC 1918, 172.16 through 172.31 inclusive and nothing either side of it |
+| `192.168.0.0/16` | `private` | RFC 1918 |
+| `169.254.0.0/16` | `link-local` | Includes the cloud instance-metadata address |
+| `100.64.0.0/10` | `cgnat` | RFC 6598 carrier-grade NAT |
+| `192.0.0.0/24`, `192.0.2.0/24`, `198.18.0.0/15`, `198.51.100.0/24`, `203.0.113.0/24` | `reserved` | Protocol assignments, benchmarking, TEST-NET-1/2/3 |
+| `224.0.0.0/4` | `multicast` | RFC 5771 |
+| `240.0.0.0/4` | `reserved` | Includes the broadcast address |
+| `::` | `unspecified` | Reaches loopback on most stacks |
+| `::1` | `loopback` | IPv6 loopback |
+| `fc00::/7` | `private` | Unique local, `fc` and `fd` |
+| `fe80::/10` | `link-local` | The full /10, `fe80` through `febf` |
+| `ff00::/8` | `multicast` | |
+
+**IPv4-mapped IPv6** is unwrapped to its IPv4 form before classification, in
+both spellings: the hex form `::ffff:7f00:1` that the WHATWG URL parser emits
+and the dotted form `::ffff:127.0.0.1` that glibc's `inet_ntop` emits. Which
+one arrives depends on the resolution path, so both are handled. A mapped
+address that unwraps to a public IPv4 stays `public`.
+
+**Fail-closed.** Anything the classifier cannot parse (an empty string, a
+malformed address, an out-of-range octet) returns `reserved`, never `public`.
+A classifier that answers "public" when it does not understand its input is
+worse than none at all, because callers read `public` as permission.
 
 ### Redirect Handling
 

@@ -3,9 +3,11 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'path';
+import { devCspPreamble } from './src/build/devCsp';
 
 export default defineConfig({
   plugins: [
+    devCspPreamble(),
     react(),
     VitePWA({
       registerType: 'autoUpdate',
@@ -43,7 +45,7 @@ export default defineConfig({
   resolve: {
     extensions: ['.tsx', '.ts', '.jsx', '.js', '.mjs', '.mts', '.json'],
     alias: {
-      '@': path.resolve(__dirname, './src'),
+      '@': path.resolve(import.meta.dirname, './src'),
     },
   },
   server: {

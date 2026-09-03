@@ -53,7 +53,7 @@ function preprocessMentions(raw: string): string {
 }
 
 // ─── URL Transform: Allow mention:// Scheme ─────────────────────────────────
-// react-markdown v9's defaultUrlTransform strips URLs with unknown protocols.
+// react-markdown's defaultUrlTransform strips URLs with unknown protocols.
 // We whitelist mention:// so the `a` component override receives the full href.
 
 function urlTransform(url: string): string {

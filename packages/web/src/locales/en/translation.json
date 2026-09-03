@@ -1266,6 +1266,7 @@
       "JoinPage.noInviteCodeProvided": "No invite code provided",
       "JoinPage.invalidInviteCode": "Invalid invite code",
       "JoinPage.failedToLoadInvite": "Failed to load invite",
+      "JoinPage.enterDomainOnItsOwn": "Enter a domain on its own, for example my-instance.com",
       "DmRosterPanel.failedToRemoveFriend": "Failed to remove friend",
       "DmRosterPanel.failedToRemoveMember": "Failed to remove member",
       "DmRosterPanel.failedToTransferOwnership": "Failed to transfer ownership",

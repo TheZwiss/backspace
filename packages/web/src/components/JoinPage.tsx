@@ -4,7 +4,7 @@ import { useAuthStore } from '../stores/authStore';
 import { useSpaceStore, NotConnectedError } from '../stores/spaceStore';
 import { useInstanceStore, DifferentPasswordError } from '../stores/instanceStore';
 import { api, createApiClient } from '../api/client';
-import { parseInviteInput } from '../utils/inviteParser';
+import { parseInviteInput, buildInstanceJoinUrl } from '../utils/inviteParser';
 import { Avatar } from './ui/Avatar';
 import type { InvitePreview } from '@backspace/shared';
 import { Trans } from 'react-i18next';
@@ -185,7 +185,15 @@ export function JoinPage() {
     const originHost = parsed?.origin ? new URL(parsed.origin).host : window.location.host;
     const code = parsed?.code || rawInviteCode || '';
     const qualifiedCode = `${code}@${originHost}`;
-    const targetUrl = `https://${domain}/join/${encodeURIComponent(qualifiedCode)}`;
+
+    // The domain is typed here, so it is checked before it becomes a URL:
+    // a path, a query, a fragment or a userinfo section in that field would
+    // send the browser somewhere other than the instance the user named.
+    const targetUrl = buildInstanceJoinUrl(domain, qualifiedCode);
+    if (!targetUrl) {
+      setError(translate('runtime.messages.JoinPage.enterDomainOnItsOwn'));
+      return;
+    }
     window.location.href = targetUrl;
   };
 

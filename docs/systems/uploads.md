@@ -287,6 +287,17 @@ Strips the original extension, appends `_thumb.webp`.
 | `Accept-Ranges` | `bytes` | Advertises Range support |
 | `Content-Length` | File size in bytes | |
 
+**The served-file policy is enforcing, and it owns the response.** The app-wide
+CSP hook in `index.ts` attaches its report-only policy only when a route has
+not already set `Content-Security-Policy`, so it stands aside here rather than
+attaching a second, looser policy next to a sandbox. Any future route that sets
+an enforcing policy takes on the same ownership: the app policy will not be
+merged into it. One case is worth knowing about because it is easy to get
+backwards: the 404 branch returns before these headers are set, so a request
+for a missing file gets the ordinary app policy, not the sandbox. Both are
+asserted in `test/http-security-headers.test.ts`. Full construction and rollout
+state in `docs/systems/web-security.md`.
+
 ### Content-Disposition (Forced Download)
 
 Files that trigger `Content-Disposition: attachment`:
