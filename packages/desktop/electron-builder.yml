@@ -46,6 +46,12 @@ win:
   target:
     - nsis
 linux:
+  # electron-builder 26 derives executableName from package.json `name` when it is
+  # not set, and this package is named `@backspace/desktop`. Stripping the unsafe
+  # characters leaves `@backspacedesktop`, which it then rejects, so both Linux
+  # targets fail to build. Version 25 defaulted to productName instead, so this
+  # pins the value 25 produced rather than introducing a new one.
+  executableName: Backspace
   icon: build/icons/
   target:
     - AppImage
