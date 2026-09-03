@@ -10,6 +10,7 @@ type UpdateState =
   | 'checking'
   | 'downloading'
   | 'available-manual'
+  | 'external'
   | 'downloaded'
   | 'error';
 interface RecoveryState {
@@ -63,7 +64,7 @@ type DesktopUpdateStatus =
  * and the user has to download a new build, which is the case for ad-hoc signed
  * macOS builds. The renderer never reasons about code signing; it reads this.
  */
-type DesktopUpdateCapability = 'auto' | 'manual';
+type DesktopUpdateCapability = 'auto' | 'manual' | 'external';
 
 interface DesktopUpdateSnapshot {
   capability: DesktopUpdateCapability;
@@ -74,7 +75,6 @@ interface DesktopUpdateSnapshot {
 interface BackspaceElectronAPI {
   // Platform info
   platform: NodeJS.Platform;
-
   // Window controls
   minimize: () => void;
   maximize: () => void;
@@ -101,6 +101,7 @@ interface BackspaceElectronAPI {
   // by a newer instance can find itself running inside an older app, so every
   // call site must feature-detect. See updateStore.ts.
   getUpdateStatus?: () => Promise<unknown>;
+  isSandboxed?: () => Promise<boolean>;
   onUpdateStatusChanged?: (callback: (snapshot: unknown) => void) => (() => void);
   dismissUpdate?: (version: string) => void;
   openReleasePage?: () => void;

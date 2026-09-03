@@ -72,6 +72,13 @@ describe('shouldPromptForUpdate', () => {
       status: { phase: 'failed', version: null, message: 'network unreachable' },
     }))).toBe(false);
   });
+
+  it('stays quiet when updates are owned by the package manager', () => {
+    expect(shouldPromptForUpdate(snap({
+      capability: 'external',
+      status: { phase: 'available', version: '1.0.5' },
+    }))).toBe(false);
+  });
 });
 
 describe('canInstallInPlace', () => {

@@ -16,6 +16,8 @@ Source files:
 - `packages/desktop/electron-builder.yml` — Build config, protocol registration, afterPack hook
 - `packages/desktop/scripts/afterPack.js` — Cross-platform native module cleanup (critical for builds), then macOS signing
 - `packages/desktop/scripts/macSign.js` — Ad-hoc macOS code signing fallback (critical: without it the app will not launch)
+- `io.github.TheZwiss.backspace.yml` — Flatpak manifest (offline x86_64/aarch64 source build)
+- `flatpak/` — Flatpak launcher, desktop entry, AppStream metadata, and build instructions
 - `packages/desktop/resources/games.json` — Bundled game dictionary seed (versioned)
 
 ---
@@ -141,6 +143,13 @@ The OS is the source of truth for `openAtLogin` on all platforms. Disk is used o
 - **Windows:** OS-authoritative for `openAtLogin` (via `executableWillLaunchAtLogin`, which honours Task Manager's `StartupApproved\Run` disable). For `startMinimized`: derived from `launchItems[].args` when an entry exists; falls back to the disk cache when no entry exists, so the user's preference survives an off/on cycle.
 - **macOS:** OS-authoritative for `openAtLogin`. Disk-cached for `startMinimized` (no introspection available).
 - **Linux:** OS-authoritative for `openAtLogin`. Disk-cached for `startMinimized` (we deliberately do not parse `Exec=` lines from `.desktop` files; out-of-band edits are rare and parsing shell-quoted strings is fragile).
+
+Flatpak is the exception: Electron cannot register a host login item across the
+sandbox boundary, so both auto-launch IPC handlers return disabled settings and
+the renderer hides the controls. This is decided by the dedicated
+`isSandboxed()` predicate and `is-sandboxed` IPC query, not by
+`UpdateCapability`; sandbox restrictions and update ownership are independent
+capabilities even though `FLATPAK_ID` currently affects both.
 
 ### Platform-Specific Implementation (`applyLoginItemSettings()`)
 
@@ -396,8 +405,9 @@ someone because a background poll hit a flaky network is noise.
 
 `install-update` IPC:
 
-- `capability !== 'auto'` → opens the releases page. There is no in-place install
-  to run, so calling a method that returns without doing anything is not an option.
+- `manual` → opens the releases page because there is no in-place install.
+- `external` → does nothing because the package manager owns the entire update
+  lifecycle and no in-app action is presented for this capability.
 - otherwise → `autoUpdater.quitAndInstall()`, then a **4-second watchdog**. If the
   app is still alive and still `ready` after it, the status flips to `failed`.
   A successful install takes the app down before the timer fires. This is defence
@@ -413,6 +423,7 @@ suppressed when the window is focused (the in-app toast covers that) and when
 |---|---|---|---|
 | `auto` | Backspace update ready | Click to restart and install version X. | `quitAndInstall()` |
 | `manual` | Backspace X is available | Click to open the download page. | `shell.openExternal(RELEASES_URL)` |
+| `external` | — | No in-app notification; the package manager notifies the user. | — |
 
 Win32 only: `app.setAppUserModelId('com.backspace.desktop')` is set early in
 startup so notifications attribute to "Backspace" in Windows Action Center.
@@ -432,6 +443,28 @@ present the one button guaranteed not to help them.
 `RecoveryState.lastUpdateError.code`.
 
 ### Release publishing
+
+Flatpak is represented by the standard update-capability abstraction: when the
+runtime exposes `FLATPAK_ID`, `getUpdateCapability()` returns `external`.
+Updater initialization, checks, prompts, install actions, recovery controls,
+and update settings all consume that capability. Flatpak owns application
+updates because `/app` is immutable; the manifest also removes `app-update.yml`.
+The manifest checks out a pinned source commit, installs dependencies from a
+generated offline pnpm store, compiles TypeScript, and has electron-builder
+produce an unpacked Linux application inside the SDK. It then installs that
+output on the Electron BaseApp and uses `zypak-wrapper` for Chromium sandbox
+integration.
+
+The published manifest remains pinned to a released commit. Pull-request CI
+uses `flatpak/prepare-ci-manifest.mjs` to generate an ignored manifest whose
+application source is `type: dir`, so both x86_64 and aarch64 jobs compile the
+actual checkout. On each `v*` tag, `release.yml` updates the source pin,
+AppStream release and screenshot tag, regenerates `node-sources.json`, validates
+the metadata, uploads those exact generated files, and builds their published
+manifest natively on x86_64 and aarch64. Only after both builds pass does it
+open or update the dedicated Flatpak metadata pull request. This validation is
+part of the release workflow because pushes and pull requests created with its
+`GITHUB_TOKEN` do not trigger the normal `pull_request` workflow.
 
 CI publishes via `.github/workflows/release.yml` (tag `v*` on the public repo).
 A `create-release` job runs first and creates the draft for the tag, then four
@@ -675,6 +708,7 @@ All handlers registered in `main.ts:registerIpcHandlers()`.
 | `check-accessibility` | R->M | `boolean` | macOS accessibility permission check |
 | `get-recovery-state` | R->M | `RecoveryState` | Recovery page reads initial state on mount |
 | `get-update-status` | R->M | `UpdateSnapshot` | Renderer reads the current snapshot on mount |
+| `is-sandboxed` | R->M | `boolean` | Detect package sandbox restrictions independently of update capability |
 
 ### Main -> Renderer Events
 
@@ -1192,10 +1226,14 @@ Earlier builds wrote to `<appData>/@backspace/desktop/`. On first launch after t
 5. Create main window (with state restoration)
    - After the BrowserWindow is constructed, `setMainWindow(mainWindow)` and `attachRecoveryHandlers(mainWindow)` are called. The `closed` event handler calls `setMainWindow(null)`.
 6. Create tray icon
-7. Initialize auto-updater (10s delayed first check)
+7. Resolve the update capability, then initialize the auto-updater (10s delayed
+   first check). An `external` capability, including Flatpak, records that state
+   without loading `electron-updater`.
 8. Wire recovery store subscriber (rebuilds tray + macOS menu on every state change; pushes `recovery-state-changed` to renderer when in recovery mode)
 9. `setOnQuitRequested(requestQuit)` so recovery's Quit button uses the same `isQuitting + app.quit()` pattern as the tray
-10. Start activity detection (immediate first poll, 15s interval, background remote sync)
+10. Start activity detection (immediate first poll, 15s interval, background
+    remote sync). Flatpak uses the same platform-dependent behavior as global
+    keybinds instead of applying a contradictory package-wide disable.
 11. Linux/AppImage path-refresh: re-apply autostart entry if `$APPIMAGE` path changed (conditional; no-op on Windows/macOS)
 12. Check for deep link in launch args
 

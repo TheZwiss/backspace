@@ -150,6 +150,12 @@ function UpdateSettings() {
       detail = 'Check for new versions of the desktop app';
   }
 
+  if (capability === 'external') {
+    detail = 'Updates are installed through your Flatpak software manager';
+    tone = 'text-txt-tertiary';
+    action = null;
+  }
+
   return (
     <div className="space-y-2.5">
       <div className="flex items-center justify-between py-1">
@@ -168,13 +174,15 @@ function UpdateSettings() {
               {action.label}
             </button>
           )}
-          <button
-            onClick={checkNow}
-            disabled={busy}
-            className="px-3 py-1.5 text-sm text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] rounded-lg transition-colors disabled:opacity-50"
-          >
-            {status.phase === 'checking' ? 'Checking...' : 'Check for Updates'}
-          </button>
+          {capability !== 'external' && (
+            <button
+              onClick={checkNow}
+              disabled={busy}
+              className="px-3 py-1.5 text-sm text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] rounded-lg transition-colors disabled:opacity-50"
+            >
+              {status.phase === 'checking' ? 'Checking...' : 'Check for Updates'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -194,17 +202,38 @@ function UpdateSettings() {
           steps on your platform.
         </p>
       )}
+      {capability === 'external' && (
+        <p className="text-xs text-txt-tertiary leading-relaxed">
+          Flatpak applies updates atomically outside the app. Use your software
+          manager or the <code>flatpak update</code> command to update Backspace.
+        </p>
+      )}
     </div>
   );
 }
 
 export function DesktopPanel() {
+  const initialize = useUpdateStore((s) => s.initialize);
+  const [sandboxed, setSandboxed] = useState<boolean | null>(null);
+
+  useEffect(() => initialize(), [initialize]);
+  useEffect(() => {
+    const probe = window.backspace?.isSandboxed;
+    if (!probe) {
+      // Older desktop builds predate sandbox support and are ordinary native
+      // packages, so preserving the existing controls is the compatible path.
+      setSandboxed(false);
+      return;
+    }
+    probe().then(setSandboxed).catch(() => setSandboxed(false));
+  }, []);
+
   return (
     <div className="space-y-5">
       <h2 className="text-lg font-semibold text-txt-primary mb-6">Desktop</h2>
 
       <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5 space-y-3">
-        <AutoLaunchSettings />
+        {sandboxed === false && <AutoLaunchSettings />}
         <UpdateSettings />
 
         <div className="border-t border-white/[0.04]" />

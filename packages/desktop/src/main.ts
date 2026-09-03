@@ -24,7 +24,7 @@ import {
   clearInstanceUrl,
   getPickerPath,
 } from './instanceUrl';
-import { getUpdateCapability } from './updateCapability';
+import { getUpdateCapability, isSandboxed } from './updateCapability';
 import { loadDismissedVersion, setDismissedVersion } from './updateDismissal';
 import { purgeUpdaterCache } from './updaterCache';
 import {
@@ -610,7 +610,8 @@ function registerIpcHandlers(): void {
     // A build that cannot install in place has no in-place install to run. Send
     // the user to the download instead of calling a method that returns without
     // doing anything, which is the defect this whole path exists to remove.
-    if (snapshot.capability !== 'auto') {
+    if (snapshot.capability === 'external') return;
+    if (snapshot.capability === 'manual') {
       void shell.openExternal(RELEASES_URL);
       return;
     }
@@ -642,6 +643,7 @@ function registerIpcHandlers(): void {
   });
 
   ipcMain.on('check-for-updates', () => {
+    if (getUpdateCapability() === 'external') return;
     try {
       const { autoUpdater } = require('electron-updater');
       autoUpdater.checkForUpdates().catch(() => {});
@@ -651,6 +653,10 @@ function registerIpcHandlers(): void {
   });
 
   ipcMain.handle('get-update-status', () => getUpdateStore().get());
+
+  // Sandbox restrictions are independent of update capability. A package may
+  // delegate updates while still supporting host login-item registration.
+  ipcMain.handle('is-sandboxed', () => isSandboxed());
 
   ipcMain.on('dismiss-update', (_event, payload: { version?: unknown }) => {
     const version = typeof payload?.version === 'string' ? payload.version.trim() : '';
@@ -676,6 +682,10 @@ function registerIpcHandlers(): void {
 
   // Auto-launch settings
   ipcMain.handle('get-auto-launch-settings', (): { openAtLogin: boolean; startMinimized: boolean } => {
+    if (isSandboxed()) {
+      return { openAtLogin: false, startMinimized: false };
+    }
+
     if (process.platform === 'win32') {
       // Pass path/args so getLoginItemSettings can find the matching launchItems[] entry.
       // We can't know in advance whether the user's saved choice was minimized or not,
@@ -710,6 +720,10 @@ function registerIpcHandlers(): void {
   });
 
   ipcMain.handle('set-auto-launch-settings', (_event, settings: { openAtLogin?: boolean; startMinimized?: boolean }) => {
+    if (isSandboxed()) {
+      return { openAtLogin: false, startMinimized: false };
+    }
+
     // Read current truth from the OS (not from disk) so a partial update preserves
     // whatever the user (or Task Manager / System Settings) most recently set.
     let currentOpenAtLogin: boolean;
@@ -848,11 +862,17 @@ function notifyAboutUpdate(
 }
 
 function initAutoUpdater(): void {
+  const capability = getUpdateCapability();
+  const store = getUpdateStore();
+
+  if (capability === 'external') {
+    recoveryStore.update({ updateState: 'external' });
+    console.log('[update] capability=external (updates are managed by Flatpak)');
+    return;
+  }
+
   try {
     const { autoUpdater } = require('electron-updater');
-
-    const capability = getUpdateCapability();
-    const store = getUpdateStore();
 
     // A build that cannot install its own updates must not download them.
     //

@@ -10,6 +10,7 @@
   },
   "homepage": "https://github.com/TheZwiss/backspace",
   "main": "dist/main.js",
+  "desktopName": "io.github.TheZwiss.backspace.desktop",
   "scripts": {
     "build:ts": "tsc",
     "dev": "cp build/icon.icns $(find ../../node_modules -path '*/electron/dist/Electron.app/Contents/Resources/electron.icns' 2>/dev/null | head -1) 2>/dev/null; tsc && electron .",

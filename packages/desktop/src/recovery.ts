@@ -21,6 +21,8 @@ export type UpdateState =
   // download, so the recovery surface offers that instead of a Restart button
   // that would do nothing. See updateCapability.ts.
   | 'available-manual'
+  // Flatpak owns updates. No updater action belongs in recovery or menus.
+  | 'external'
   | 'downloaded'
   | 'error';
 
@@ -111,8 +113,13 @@ interface MenuActions {
   onQuit: () => void;
 }
 
-function checkForUpdatesItem(state: RecoveryState, click: () => void): MenuItemConstructorOptions {
+function checkForUpdatesItem(
+  state: RecoveryState,
+  click: () => void,
+): MenuItemConstructorOptions | null {
   switch (state.updateState) {
+    case 'external':
+      return null;
     case 'checking':
       return { id: 'check-for-updates', label: 'Checking for Updates…', enabled: false };
     case 'downloading':
@@ -168,9 +175,10 @@ export function buildTrayMenuTemplate(
   const items: MenuItemConstructorOptions[] = [
     { label: 'Show Backspace', click: actions?.onShow },
     { label: 'Hide', click: actions?.onHide },
-    { type: 'separator' },
-    checkForUpdatesItem(state, () => actions?.onCheckForUpdates?.()),
   ];
+
+  const checkItem = checkForUpdatesItem(state, () => actions?.onCheckForUpdates?.());
+  if (checkItem) items.push({ type: 'separator' }, checkItem);
 
   const updateAction = updateActionItem(state, actions);
   if (updateAction) items.push(updateAction);
@@ -194,9 +202,10 @@ export function buildAppMenuTemplate(
   const appSubmenu: MenuItemConstructorOptions[] = [
     { role: 'about' },
     { label: 'Source code (AGPL)', click: () => actions?.onOpenSource?.() },
-    { type: 'separator' },
-    checkForUpdatesItem(state, () => actions?.onCheckForUpdates?.()),
   ];
+
+  const checkItem = checkForUpdatesItem(state, () => actions?.onCheckForUpdates?.());
+  if (checkItem) appSubmenu.push({ type: 'separator' }, checkItem);
 
   const updateAction = updateActionItem(state, actions);
   if (updateAction) appSubmenu.push(updateAction);
@@ -439,6 +448,7 @@ export function handleRecoveryAction(action: RecoveryAction): void {
       return;
     }
     case 'check-update': {
+      if (recoveryStore.get().updateState === 'external') return;
       recoveryStore.update({ updateState: 'checking', lastCheckResult: null });
       autoUpdaterRef?.checkForUpdates().catch(() => { /* check-phase errors stay silent */ });
       return;

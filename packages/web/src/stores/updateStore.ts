@@ -52,7 +52,7 @@ export function coerceSnapshot(value: unknown): DesktopUpdateSnapshot | null {
   const raw = value as Record<string, unknown>;
 
   const capability = raw.capability;
-  if (capability !== 'auto' && capability !== 'manual') return null;
+  if (capability !== 'auto' && capability !== 'manual' && capability !== 'external') return null;
 
   const dismissedVersion = raw.dismissedVersion;
   if (dismissedVersion !== null && typeof dismissedVersion !== 'string') return null;
@@ -130,6 +130,7 @@ export function statusVersion(status: DesktopUpdateStatus): string | null {
  */
 export function shouldPrompt(snapshot: DesktopUpdateSnapshot | null): boolean {
   if (snapshot === null) return false;
+  if (snapshot.capability === 'external') return false;
   const { status, dismissedVersion } = snapshot;
   if (status.phase !== 'available' && status.phase !== 'ready' && status.phase !== 'failed') {
     return false;
