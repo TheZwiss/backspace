@@ -35,16 +35,18 @@ id = "CVE-2026-25224"
 ignoreUntil = 2026-12-01
 reason = "fastify 4.29.1, fixed in 5.x. Major upgrade, tracked in security-scanning.md."
 
-# @fastify/static 7.0.4 -> 10.x. Gated behind the fastify 5 upgrade above.
+# @fastify/static 7.0.4 -> 10.1.2 or later. Gated behind the fastify 5 upgrade
+# above. Note the two advisories below need different floors, and the higher one
+# wins: 10.1.1 still carries CVE-2026-7120.
 [[IgnoredVulns]]
 id = "CVE-2026-15074"
 ignoreUntil = 2026-12-01
-reason = "@fastify/static 7.0.4, fixed in 10.x. Gated behind the fastify 5 upgrade."
+reason = "@fastify/static 7.0.4, fixed in 10.1.1. Gated behind the fastify 5 upgrade."
 
 [[IgnoredVulns]]
 id = "CVE-2026-7120"
 ignoreUntil = 2026-12-01
-reason = "@fastify/static 7.0.4, fixed in 10.x. Gated behind the fastify 5 upgrade."
+reason = "@fastify/static 7.0.4, fixed in 10.1.2. 10.1.1 is still affected. Gated behind the fastify 5 upgrade."
 
 # find-my-way 8.2.2 -> 9.7.0. Transitive through fastify.
 [[IgnoredVulns]]
@@ -63,12 +65,15 @@ id = "CVE-2026-53669"
 ignoreUntil = 2026-12-01
 reason = "react-router 6.30.6, fixed in 7.18.0. Major upgrade, tracked in security-scanning.md."
 
-# electron 40.10.6 -> 41.10.3. No fix exists in the 40 line, so this needs a
-# major Electron upgrade and a re-run of the desktop hardening verification.
+# electron 40.10.6. No fix exists in the 40 line, so this needs a major Electron
+# upgrade and a re-run of the desktop hardening verification. 41.10.3 carries the
+# fix, but do not target it: Electron supports the latest three majors only, and
+# with 44 current the 41 line is already end of life, as is the 40 line we run.
+# The upgrade target is a supported major.
 [[IgnoredVulns]]
 id = "CVE-2026-70608"
 ignoreUntil = 2026-12-01
-reason = "electron 40.10.6, no fix in the 40 line. Needs the 41 upgrade plus fuse re-verification."
+reason = "electron 40.10.6, no fix in the 40 line. Needs a major upgrade to a supported Electron line plus fuse re-verification."
 
 # lodash 4.17.23 -> 4.18.0. Build-time only: electron-builder to
 # @malept/flatpak-bundler. Never ships in the app or the server image.
