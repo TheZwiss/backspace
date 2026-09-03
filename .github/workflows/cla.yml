@@ -19,16 +19,32 @@ on:
   pull_request_target:
     types: [opened, closed, synchronize]
 
-# `contents: write` lets the action commit the signatures file back to the repo.
+# Nothing at workflow level needs more than read. The write scopes the action
+# needs are granted on the one job that runs it, below.
 permissions:
-  actions: write
-  contents: write
-  pull-requests: write
-  statuses: write
+  contents: read
 
 jobs:
   cla-assistant:
     runs-on: ubuntu-latest
+    # Scoped to this job because it is the only one that runs the action.
+    # contributor-assistant/github-action, pinned below, makes these calls:
+    #   contents: write       commits signatures/cla.json to the cla-signatures
+    #                         branch of this repository, and creates the
+    #                         sign-off commit
+    #   pull-requests: write  posts and updates the signature comment on the
+    #                         pull request, and locks it
+    #   actions: write        re-runs the last failed CLA run once a signature
+    #                         comment arrives (actions.reRunWorkflow). The
+    #                         workflow and run lookups that find that run are
+    #                         reads, covered by the same scope.
+    # The action's README also lists `statuses: write`. The pinned revision
+    # calls no commit-status endpoint, so it is not granted here. Check that
+    # again before bumping the pin.
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
     # Skip CLA enforcement on bot-authored PRs (e.g. Dependabot) and on the
     # maintainer's own PRs via the allowlist below.
     steps:

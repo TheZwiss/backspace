@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { eq, desc, sql } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
+import type { DBHandle } from '../db/index.js';
 import { generateSnowflake } from './snowflake.js';
 import { config } from '../config.js';
 import type {
@@ -174,7 +175,7 @@ function rowToSummary(
  */
 function resolveLastRedeemedAt(
   inviteId: string,
-  dbHandle: ReturnType<typeof getDb> = getDb(),
+  dbHandle: DBHandle = getDb(),
 ): number | null {
   const result = dbHandle
     .select({ maxAt: sql<number | null>`MAX(${schema.inviteRedemptions.redeemedAt})` })
@@ -195,7 +196,7 @@ function resolveLastRedeemedAt(
  */
 function resolveCreatorUsername(
   creatorId: string,
-  dbHandle: ReturnType<typeof getDb> = getDb(),
+  dbHandle: DBHandle = getDb(),
 ): string | null {
   const u = dbHandle.select({ username: schema.users.username, isDeleted: schema.users.isDeleted })
     .from(schema.users)

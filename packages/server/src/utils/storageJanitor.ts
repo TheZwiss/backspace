@@ -6,6 +6,7 @@ import { config } from '../config.js';
 import { getDb, getRawDb, schema } from '../db/index.js';
 import { deleteUploadFile, deleteAttachmentFiles } from './fileCleanup.js';
 import { generateSnowflake } from './snowflake.js';
+import { federationFetch } from './federationFetch.js';
 import type { StorageStats, StorageBreakdown, OrphanedFile, CleanupResult } from '@backspace/shared';
 
 const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.ico', '.bmp', '.avif']);
@@ -555,12 +556,14 @@ export async function cleanupExpiredApprovalRequests(): Promise<number> {
 
     let sent = false;
     try {
-      const response = await fetch(`${req.origin}/api/federation/peer/denied`, {
+      // 'asserted': the origin came from an inbound peering request that
+      // expired without ever being accepted, so nothing has approved it.
+      const response = await federationFetch(req.origin, '/api/federation/peer/denied', {
         method: 'POST',
         headers,
         body: denialBody,
         signal: AbortSignal.timeout(10_000),
-      });
+      }, 'asserted');
       sent = response.ok;
     } catch {
       // Network error — will retry next cycle

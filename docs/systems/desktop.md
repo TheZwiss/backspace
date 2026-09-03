@@ -912,7 +912,9 @@ output: dist-electron
 
 **Dependency:** `uiohook-napi` (native N-API addon for global input hooks)
 
-**Rebuild:** `electron-rebuild -f -w uiohook-napi` runs on `postinstall` to compile for the build machine's Electron ABI.
+**Rebuild:** `electron-rebuild -f -w uiohook-napi` runs on `postinstall` to compile for the build machine's Electron ABI. `uiohook-napi` is the only native module this rebuild touches, and it is the only one in the desktop dependency tree. `better-sqlite3` belongs to `packages/server` and never enters the packaged app, so an Electron ABI mismatch cannot reach it.
+
+`@electron/rebuild` 4 is ESM-only and declares `engines.node: >=22.12.0`, while `release.yml` and one leg of `ci.yml` run Node 20. Measured on Node 20.19.5, the CLI loads and completes the rebuild anyway: it uses `parseArgs`, `styleText` and `import.meta.dirname`, all of which exist in 20.19. The `postinstall` also ends in `|| node -e "console.warn(...)"`, so a future failure degrades to a warning rather than breaking `pnpm install`. That fallback is what makes the engines mismatch tolerable, not the measurement: if the rebuild ever does stop running on Node 20, `pnpm dev` breaks locally while release builds keep working, because packaging uses `prebuilds/` and `npmRebuild: false`.
 
 **ASAR unpacking:** All `.node` files are unpacked from the ASAR archive (`asarUnpack: "**/*.node"`). Native modules cannot load from inside ASAR.
 

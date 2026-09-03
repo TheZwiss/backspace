@@ -11,6 +11,7 @@ import { getDmMessageWithUser } from '../routes/dm.js';
 import { connectionManager } from '../ws/handler.js';
 import { generateThumbnail } from './thumbnail.js';
 import { safeFetch } from './ssrf.js';
+import { federationFetch } from './federationFetch.js';
 import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent } from '@backspace/shared';
 import { startupBootstrapSync, onPeerDeactivated } from './federationPeerActivation.js';
 import { probePeerReachable, recoverOrDetectReset, detectResetOnNeedsAttentionPeers, detectResetForPeer } from './federationRecovery.js';
@@ -251,7 +252,7 @@ export async function processOutboxTick(): Promise<void> {
     outboxAbortController = new AbortController();
 
     try {
-      const response = await fetch(`${peerOrigin}/api/federation/relay`, {
+      const response = await federationFetch(peerOrigin, '/api/federation/relay', {
         method: 'POST',
         headers,
         body: bodyString,
@@ -259,7 +260,7 @@ export async function processOutboxTick(): Promise<void> {
           outboxAbortController.signal,
           AbortSignal.timeout(OUTBOX_FETCH_TIMEOUT_MS),
         ]),
-      });
+      }, 'approved');
 
       if (response.ok) {
         const result = await response.json() as FederationRelayResponse;
@@ -1169,12 +1170,12 @@ async function processHealthCheckTick(): Promise<void> {
       const rotateBody = JSON.stringify({ newSecret });
       const headers = buildFederationHeaders(rotateBody, peer.hmacSecret, ourOrigin);
 
-      const response = await fetch(`${peer.origin}/api/federation/peer/rotate`, {
+      const response = await federationFetch(peer.origin, '/api/federation/peer/rotate', {
         method: 'POST',
         headers,
         body: rotateBody,
         signal: AbortSignal.timeout(10_000),
-      });
+      }, 'approved');
 
       if (response.ok) {
         // Store pending locally AFTER remote peer confirms acceptance

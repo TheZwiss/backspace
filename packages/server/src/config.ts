@@ -121,6 +121,23 @@ export const config = {
     apiSecret: envOptional('LIVEKIT_API_SECRET'),
   },
 
+  federation: {
+    /**
+     * Allow an origin that a stranger asserted to resolve to a private address.
+     *
+     * Off by default. While it is off, an origin supplied by someone with no
+     * established peering relationship must be publicly routable before this
+     * instance will send a request to it. Origins an admin approved are
+     * unaffected either way, so peering with a private peer keeps working
+     * through the admin routes.
+     *
+     * Turn it on for a LAN-only deployment where every instance sits on a
+     * private address and users add each other by handle. The two-instance
+     * test harness sets it for the same reason.
+     */
+    allowPrivatePeers: envBool('FEDERATION_ALLOW_PRIVATE_PEERS', false),
+  },
+
   uploadDir: env('UPLOAD_DIR', resolve(__dirname, '../../../data/uploads')),
   tusUploadDir: resolve(env('UPLOAD_DIR', resolve(__dirname, '../../../data/uploads')), '.tus'),
   tusExpirationMs: envInt('TUS_EXPIRATION_HOURS', 24) * 60 * 60 * 1000,

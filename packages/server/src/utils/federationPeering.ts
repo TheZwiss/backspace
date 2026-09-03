@@ -6,6 +6,7 @@ import { getOurOrigin, generateHmacSecret } from './federationAuth.js';
 import { validateOrigin } from '../routes/federation.js';
 import { onPeerActivated, onPeerDeactivated } from './federationPeerActivation.js';
 import { getInstanceId } from './federationEpoch.js';
+import { federationFetch } from './federationFetch.js';
 import type { EnsurePeeredCallerIntent } from '@backspace/shared';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -413,7 +414,11 @@ async function performHandshake(
   }
 
   try {
-    const response = await fetch(`${origin}/api/federation/peer/accept`, {
+    // 'asserted': performHandshake only runs when no settled peer row exists,
+    // and its origin reaches here from a handle a user typed (friend-add,
+    // POST /peer/ensure) or from a placeholder row local traffic created. No
+    // admin has named it, so it must be publicly routable.
+    const response = await federationFetch(origin, '/api/federation/peer/accept', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -423,7 +428,7 @@ async function performHandshake(
         instanceId: getInstanceId(),
       }),
       signal: AbortSignal.timeout(10_000),
-    });
+    }, 'asserted');
 
     if (response.status === 202) {
       // Capture the approval token from the 202 body if present. Stored on

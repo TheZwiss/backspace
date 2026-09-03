@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
+import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { config } from '../config.js';
 import * as schema from './schema.js';
@@ -68,6 +69,14 @@ export function initDatabase() {
 }
 
 export type DB = ReturnType<typeof initDatabase>;
+
+/**
+ * A handle queries can run on: either the root database or an open
+ * transaction. `DB` itself carries drizzle's `$client` property, which a
+ * transaction handle does not have, so a helper that accepts `db ?? tx` must
+ * be typed against the shared query surface rather than against `DB`.
+ */
+export type DBHandle = BaseSQLiteDatabase<'sync', Database.RunResult, typeof schema>;
 
 let db: DB;
 

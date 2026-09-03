@@ -324,6 +324,32 @@ must be checked against the header rather than reasoned about on its own.
 `packages/web/src/index-html.test.ts` asserts the tag's contents and asserts
 that none of the excluded directives appear in it.
 
+### The dev server needs a relaxed copy of it
+
+The tag enforces on the dev server too, and there the page is a different
+shape. `@vitejs/plugin-react` injects its React Refresh preamble as an inline
+`<script type="module">`. `script-src 'self' 'wasm-unsafe-eval'` has neither
+`'unsafe-inline'` nor a nonce, so the browser blocks it, and every module the
+plugin transforms carries a guard that throws
+`@vitejs/plugin-react can't detect preamble` when it did not run. The result is
+that `pnpm dev` serves a page that throws on first render, with the CSP
+violation in the console as the only clue.
+
+This shipped: the meta tag was verified in a headless browser against the
+**built** bundle, which has no inline script and no preamble, so the check
+passed and the dev path was never loaded.
+
+`packages/web/src/build/devCsp.ts` fixes it with a `transformIndexHtml` plugin
+that adds `'unsafe-inline'` to `script-src` for `vite dev` only. `apply: 'serve'`
+keeps it out of the build, so the shipped artifact is unchanged, and
+`order: 'pre'` puts it ahead of the plugins that inject scripts. The other three
+directives stay on in dev, so a violation of `object-src`, `base-uri` or
+`worker-src` still surfaces locally rather than in production.
+
+**Any future directive added to this tag has to be checked on both paths.**
+Building the page and loading the built page is not sufficient evidence; the dev
+server renders different HTML.
+
 ---
 
 ## Dependency note
@@ -333,3 +359,22 @@ that none of the excluded directives appear in it.
 Fastify 5. This repo is on Fastify 4 and every other plugin is pinned to its
 Fastify 4 major (`@fastify/cors@^9`, `rate-limit@^9`, `static@^7`,
 `websocket@^10`). A helmet bump is a Fastify 5 migration, not a version bump.
+
+`livekit-client` is the dependency the meta policy's two script directives are
+measured against, because it is the only one in the voice path that could start
+a worker or compile WebAssembly. Re-derive that on every bump rather than
+assuming it: grep the installed bundle, not the source repo or the docs.
+
+```bash
+cd packages/web/node_modules/livekit-client
+grep -n "WebAssembly\|new Worker\|importScripts\|wasm" dist/livekit-client.esm.mjs
+```
+
+As of 2.22.2 the only hit is a commented-out `// this.worker = new Worker('')`
+inside the E2EE manager. The library never constructs a worker itself: both the
+E2EE worker and the frame-metadata worker added in the 2.2x line are read from
+`RoomOptions.e2ee.worker` / `RoomOptions.frameMetadata.worker`, which the app
+never passes, and it compiles no WebAssembly. The single `new Worker` and the
+single `WebAssembly.validate` in the built bundle come from
+`useWebSocket.ts` and from RNNoise's SIMD probe, which are the two directives
+already documented above.

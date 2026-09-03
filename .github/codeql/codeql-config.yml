@@ -1,0 +1,16 @@
+name: Backspace CodeQL config
+
+# Test files model attacker behaviour on purpose: a suite that proves a route
+# is rate-limited contains an unlimited-request loop, and one that boots a
+# server from env contains an exec built from env. Analysing them produces
+# findings about the tests rather than about what ships.
+#
+# Every path below holds test code only. No file under packages/*/src that
+# ships to a user is named *.test.ts or *.test.tsx, packages/server/test holds
+# the suite helpers and the vitest env setup, and packages/web/src/test holds
+# the jsdom setup file.
+paths-ignore:
+  - '**/*.test.ts'
+  - '**/*.test.tsx'
+  - 'packages/server/test/**'
+  - 'packages/web/src/test/**'

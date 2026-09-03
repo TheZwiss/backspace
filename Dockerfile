@@ -4,19 +4,16 @@
 
 # Stage 1: Production dependencies
 #
-# better-sqlite3 12.x ships prebuilt binaries for Node ABI v127, v137, v141 and
-# v147 (Node 22 and newer). It ships none for v115, which is the ABI of Node 20,
-# the version this repo pins. prebuild-install gets a 404 and falls back to
-# `node-gyp rebuild`, which needs Python and a C++ compiler; node:20-slim has
-# neither. The toolchain is installed here and nowhere else. The runtime stage
-# copies the resulting node_modules and runs no install of its own.
-FROM node:20-slim AS deps
+# better-sqlite3 12.x ships a prebuilt binary for Node ABI v137, which is the ABI
+# of Node 24. prebuild-install downloads it, so this stage needs no Python and no
+# C++ compiler. The runtime stage copies the resulting node_modules and runs no
+# install of its own.
+#
+# The base is node:24-slim, Node v24.20.0. All three stages pin it by the digest
+# of the multi-arch index, so the same pin resolves on amd64 and on arm64.
+FROM node:24-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e AS deps
 
 RUN corepack enable && corepack prepare pnpm@10.34.3 --activate
-
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends python3 make g++ && \
-    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -40,8 +37,10 @@ RUN pnpm install --prod --frozen-lockfile
 #
 # Installs only @backspace/web and what it depends on (@backspace/shared). That
 # keeps the server dependencies, better-sqlite3 among them, out of this stage, so
-# the native build runs once in `deps` and this stage needs no toolchain.
-FROM node:20-slim AS builder
+# the native module is fetched once, in `deps`.
+#
+# Base: node:24-slim, Node v24.20.0.
+FROM node:24-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e AS builder
 
 RUN corepack enable && corepack prepare pnpm@10.34.3 --activate
 
@@ -70,13 +69,15 @@ RUN pnpm --filter @backspace/web build
 
 # ============================================================
 # Stage 3: Production runtime
-FROM node:20-slim AS runtime
+#
+# Base: node:24-slim, Node v24.20.0.
+FROM node:24-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e AS runtime
 
 RUN corepack enable && corepack prepare pnpm@10.34.3 --activate
 
 # Runtime deps only: ffmpeg (media processing) + gosu (drop to non-root in the
-# entrypoint). No C toolchain. The native modules are compiled in `deps` and
-# copied in below.
+# entrypoint). No C toolchain. The native modules come from `deps` as prebuilt
+# binaries and are copied in below.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends ffmpeg gosu && \
     rm -rf /var/lib/apt/lists/*

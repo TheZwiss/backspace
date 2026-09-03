@@ -6,6 +6,7 @@ import { deleteUploadFile } from '../../utils/fileCleanup.js';
 import { sanitizeUser } from '../../utils/sanitize.js';
 import { generateSnowflake } from '../../utils/snowflake.js';
 import { collectProfileBroadcastTargetIds } from '../../utils/userDeletion.js';
+import { safeFetch } from '../../utils/ssrf.js';
 import { connectionManager } from '../../ws/handler.js';
 import { and, eq, or, sql } from 'drizzle-orm';
 import { Readable } from 'node:stream';
@@ -76,6 +77,14 @@ export async function hydrateReplicatedUserProfile(
 
 
 /**
+ * Cap on a replicated avatar or banner. Peers are admin-approved but explicitly
+ * untrusted; without a cap a peer answers the download with an unbounded body
+ * and fills the instance's disk. 8 MiB is well above any real avatar and well
+ * below anything that matters on a volume.
+ */
+export const MAX_PROFILE_ASSET_BYTES = 8 * 1024 * 1024;
+
+/**
  * Download a profile image (avatar or banner) from a remote instance.
  * Returns the local filename on success, or null on failure.
  * On failure, the caller stores the absolute URL as a display fallback.
@@ -104,7 +113,10 @@ export async function downloadProfileAsset(
   const finalPath = path.join(config.uploadDir, finalFilename);
 
   try {
-    const response = await fetch(url, {
+    // safeFetch, not fetch: the hostname check above constrains the FIRST hop
+    // only, and bare fetch follows redirects without re-checking. safeFetch
+    // re-validates every hop, so a 302 into the local network is refused.
+    const response = await safeFetch(url, {
       signal: AbortSignal.timeout(10_000),
     });
 
@@ -119,11 +131,34 @@ export async function downloadProfileAsset(
       return null;
     }
 
+    // Content-Length is a claim, not a guarantee, but when it is present and
+    // already over the cap there is no reason to open the file at all.
+    const declared = Number(response.headers.get('content-length') ?? '');
+    if (Number.isFinite(declared) && declared > MAX_PROFILE_ASSET_BYTES) {
+      console.warn(`[federation] Profile asset rejected: declared ${declared} bytes exceeds cap`);
+      return null;
+    }
+
     // Ensure upload directory exists
     fs.mkdirSync(config.uploadDir, { recursive: true });
 
-    // Stream to temp file
-    const nodeStream = Readable.fromWeb(response.body as ReadableStream);
+    // Stream to temp file, counting bytes, so the cap is enforced on what
+    // actually arrives rather than on what the peer said it would send. The
+    // controller.error() below rejects the pipeline, and the catch block
+    // removes the partial temp file.
+    let received = 0;
+    const capped = new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        received += chunk.byteLength;
+        if (received > MAX_PROFILE_ASSET_BYTES) {
+          controller.error(new Error('Profile asset exceeds size cap'));
+          return;
+        }
+        controller.enqueue(chunk);
+      },
+    });
+
+    const nodeStream = Readable.fromWeb(response.body.pipeThrough(capped) as ReadableStream);
     const writeStream = fs.createWriteStream(tempPath);
     await pipeline(nodeStream, writeStream);
 
@@ -134,7 +169,7 @@ export async function downloadProfileAsset(
   } catch (err) {
     // Clean up temp file on any failure
     try { fs.unlinkSync(tempPath); } catch { /* may not exist */ }
-    console.warn(`[federation] Profile asset download failed for ${url}:`, (err as Error).message);
+    console.warn('[federation] Profile asset download failed for %s:', url, (err as Error).message);
     return null;
   }
 }
