@@ -8,15 +8,20 @@ owns upgrades of this installation.
 
 ## Build and install locally
 
-Install `flatpak-builder` and add Flathub, then run from the repository root:
+The published manifest deliberately builds the latest released tag. To test
+changes in the current checkout, generate the ignored CI manifest first. It
+replaces only the pinned application source with the current directory:
 
 ```sh
+node flatpak/prepare-ci-manifest.mjs
 flatpak-builder --user --install-deps-from=flathub --install --force-clean \
-  build-flatpak io.github.TheZwiss.backspace.yml
+  build-flatpak io.github.TheZwiss.backspace.ci.yml
 flatpak run io.github.TheZwiss.backspace
 ```
 
-When `pnpm-lock.yaml` changes, regenerate the offline source list:
+Release tags update the manifest commit, AppStream release and screenshot URLs,
+and `node-sources.json` automatically through `.github/workflows/release.yml`.
+To regenerate the offline source list manually after changing `pnpm-lock.yaml`:
 
 ```sh
 flatpak run --filesystem="$PWD" --command=flatpak-node-generator \
@@ -34,13 +39,14 @@ flatpak build-bundle ~/.local/share/flatpak/repo Backspace.flatpak \
   io.github.TheZwiss.backspace
 ```
 
-The manifest intentionally does not expose the host home directory. Network,
-audio, camera/device, graphics, PipeWire screen capture, notifications, and the
-status notifier are enabled because they are core desktop-client features.
+The manifest intentionally does not expose the host home directory or all host
+devices. Network, audio, DRI graphics, notifications, and the status notifier
+are enabled because they are core desktop-client features. Camera access and
+PipeWire screen capture go through the desktop portals.
 Global keybind behavior is desktop-dependent: X11 supports the bundled native
 hook, which is rebuilt against the bundled Electron headers, while Wayland
-compositors may restrict global input observation. The Flatpak sandbox also
-prevents Electron's current start-at-login integration and host process scanning
-from working. The client hides those unsupported controls; use your desktop's
-autostart settings if needed, and expect activity presence to remain unavailable
-in this build.
+compositors may restrict global input observation. Activity detection follows
+the same platform limits as global keybinds; it is not disabled merely because
+the app is packaged as Flatpak. Electron's current start-at-login integration
+does not work across the sandbox boundary, so the client hides that setting;
+use the desktop environment's autostart settings instead.

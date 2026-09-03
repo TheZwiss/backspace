@@ -34,9 +34,30 @@ name: Metrics
 
 on:
   schedule:
-    # 03:00 UTC daily. The exact hour does not matter: the traffic API returns a
-    # 14-day window, so any gap of 13 days or less is repaired by the next run.
-    - cron: '0 3 * * *'
+    # 15:19 UTC daily. The hour is chosen, not arbitrary, and it sits between
+    # two edges.
+    #
+    # The lower edge is GitHub's traffic aggregation. A day's views and clones
+    # appear some hours into the next day, and the boundary moves. Measured
+    # here: the 07:25 UTC run on 2026-09-02 picked up 2026-09-01, but the
+    # 07:28 UTC run on 2026-09-03 found no 2026-09-02 bucket at all, and that
+    # bucket was present by 12:57 UTC the same day. A run sitting on that
+    # boundary collects yesterday's traffic on some days and not others.
+    #
+    # Losing that race costs freshness, not data. The traffic API returns a
+    # 14-day window and the merge overwrites, so the next run fills the gap
+    # (docs/systems/metrics.md, section 4.4). What it does cost is a dashboard
+    # where views and clones publish one to two days behind while stars, forks
+    # and downloads, read from live counters, are same-day.
+    #
+    # The upper edge is midnight UTC. Scheduled runs are queued, not punctual:
+    # `0 3` was dispatching at 07:25 and 07:28, about 4.4 hours late, because
+    # the top of the hour is the most contended slot GitHub has. A run pushed
+    # past 00:00 UTC stamps its rows with the wrong `today`, and stars.csv,
+    # forks.csv and repo.csv only ever write today's row, so a date they skip
+    # is never revisited (section 4.1). 15:19 leaves hours of margin on both
+    # sides, and the odd minute keeps it off the contended slots.
+    - cron: '19 15 * * *'
   workflow_dispatch:
 
 permissions:
@@ -260,7 +281,7 @@ jobs:
   # called deploy runs, and that group is shared with backfill.yml and with this
   # workflow's own next scheduled run. deploy-pages.yml's `deploy` job therefore
   # carries `timeout-minutes`, bounding that hold far below the 24 hours to the
-  # next 03:00 collection; GitHub's 6-hour default job timeout would not.
+  # next scheduled collection; GitHub's 6-hour default job timeout would not.
   #
   # Deliberately carries no `if:`. `needs: collect` alone is both gates this
   # job wants: a FAILED collection skips it via the implicit `success()`, and a

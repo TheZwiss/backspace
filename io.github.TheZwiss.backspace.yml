@@ -16,8 +16,9 @@ finish-args:
   - --socket=wayland
   - --socket=fallback-x11
   - --socket=pulseaudio
-  # Camera access and hardware-accelerated video encoding/decoding.
-  - --device=all
+  # Hardware-accelerated rendering. Camera and screen-capture permission is
+  # mediated by the desktop portals instead of exposing every host device.
+  - --device=dri
   # The Linux tray icon uses the StatusNotifier protocol. Notifications and
   # PipeWire screen capture go through XDG portals provided by the BaseApp.
   - --talk-name=org.kde.StatusNotifierWatcher
@@ -34,7 +35,7 @@ modules:
       # with flatpak/node-sources.json when updating the package.
       - type: git
         url: https://github.com/TheZwiss/backspace.git
-        commit: 671a151c51e952221f2e49b28fe2c2b5b2312117
+        commit: 29cb8ce85db44bf47ad02bc0f092b2df1f735fd5
 
       # Offline pnpm store, Electron archives, native package prebuilts, and
       # Node headers generated from the pinned pnpm-lock.yaml.
@@ -47,9 +48,6 @@ modules:
         sha256: 1c40544020a2e633068ed43a98eb5c0fed7d64a1c6d6f2382e43df91419dad62
         strip-components: 1
         dest: flatpak-pnpm
-
-      - type: patch
-        path: flatpak/flatpak-runtime.patch
 
       - type: file
         path: flatpak/build.sh

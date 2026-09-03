@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Toggle } from '../../ui/Toggle';
+import { useUpdateStore } from '../../../stores/updateStore';
 
 function AutoLaunchSettings() {
   const [openAtLogin, setOpenAtLogin] = useState(false);
@@ -69,56 +70,161 @@ function AutoLaunchSettings() {
   );
 }
 
-function UpdateSettings({ managedByFlatpak }: { managedByFlatpak: boolean }) {
-  const [version, setVersion] = useState<string | null>(null);
-  const [checking, setChecking] = useState(false);
+/**
+ * Formats a byte-per-second rate for the download line. Deliberately coarse:
+ * this is reassurance that something is happening, not a benchmark.
+ */
+function formatRate(bytesPerSecond: number): string {
+  if (bytesPerSecond <= 0) return '';
+  const mb = bytesPerSecond / 1_048_576;
+  if (mb >= 1) return `${mb.toFixed(1)} MB/s`;
+  return `${Math.round(bytesPerSecond / 1024)} KB/s`;
+}
 
-  useEffect(() => {
-    window.backspace?.getVersion().then(setVersion).catch(() => {});
-  }, []);
+/**
+ * Desktop version and update state.
+ *
+ * This panel deliberately ignores whether the user dismissed the update. It is
+ * the place a dismissed update stays reachable, which is the thing that makes
+ * "Later" safe to offer in the toast at all.
+ *
+ * Every state here comes from a real updater event. The previous version faked
+ * a "Checking..." state with a five second timer and a comment claiming
+ * electron-updater has no no-update callback. It emits `update-not-available`
+ * and `download-progress`; both are now wired.
+ */
+function UpdateSettings() {
+  const initialize = useUpdateStore((s) => s.initialize);
+  const snapshot = useUpdateStore((s) => s.snapshot);
+  const currentVersion = useUpdateStore((s) => s.currentVersion);
+  const checkNow = useUpdateStore((s) => s.checkNow);
+  const install = useUpdateStore((s) => s.install);
+  const openDownloadPage = useUpdateStore((s) => s.openDownloadPage);
 
-  const handleCheck = () => {
-    setChecking(true);
-    window.backspace?.checkForUpdates();
-    // Reset after a few seconds — electron-updater doesn't have a "no update" callback
-    setTimeout(() => setChecking(false), 5000);
-  };
+  useEffect(() => initialize(), [initialize]);
+
+  const status = snapshot?.status ?? { phase: 'idle' as const };
+  const capability = snapshot?.capability ?? 'auto';
+  const busy = status.phase === 'checking' || status.phase === 'downloading';
+
+  let detail: string;
+  let tone = 'text-txt-tertiary';
+  let action: { label: string; onClick: () => void } | null = null;
+
+  switch (status.phase) {
+    case 'checking':
+      detail = 'Checking for updates...';
+      break;
+    case 'downloading':
+      detail = `Downloading ${status.version}, ${status.percent}%`;
+      if (status.bytesPerSecond > 0) detail += ` at ${formatRate(status.bytesPerSecond)}`;
+      break;
+    case 'up-to-date':
+      detail = 'You are on the latest version';
+      tone = 'text-accent-mint';
+      break;
+    case 'available':
+      detail = `Version ${status.version} is available`;
+      action = { label: 'Download', onClick: openDownloadPage };
+      break;
+    case 'ready':
+      if (capability === 'auto') {
+        detail = `Version ${status.version} is ready to install`;
+        action = { label: 'Restart', onClick: install };
+      } else {
+        detail = `Version ${status.version} is available`;
+        action = { label: 'Download', onClick: openDownloadPage };
+      }
+      break;
+    case 'failed':
+      if (status.version) {
+        detail = `Version ${status.version} could not be installed`;
+        tone = 'text-accent-rose';
+        action = { label: 'Download', onClick: openDownloadPage };
+      } else {
+        detail = 'The last update check failed';
+        tone = 'text-accent-rose';
+      }
+      break;
+    default:
+      detail = 'Check for new versions of the desktop app';
+  }
+
+  if (capability === 'external') {
+    detail = 'Updates are installed through your Flatpak software manager';
+    tone = 'text-txt-tertiary';
+    action = null;
+  }
 
   return (
-    <div className="flex items-center justify-between py-1">
-      <div className="flex-1 mr-4">
-        <div className="text-sm text-txt-primary">
-          {version ? `Version ${version}` : 'Backspace Desktop'}
+    <div className="space-y-2.5">
+      <div className="flex items-center justify-between py-1">
+        <div className="flex-1 mr-4 min-w-0">
+          <div className="text-sm text-txt-primary">
+            {currentVersion ? `Version ${currentVersion}` : 'Backspace Desktop'}
+          </div>
+          <div className={`text-xs mt-0.5 ${tone}`}>{detail}</div>
         </div>
-        <div className="text-xs text-txt-tertiary mt-0.5">
-          {managedByFlatpak
-            ? 'Updates are installed through your Flatpak software manager'
-            : 'Check for new versions of the desktop app'}
+        <div className="flex items-center gap-2 shrink-0">
+          {action && (
+            <button
+              onClick={action.onClick}
+              className="px-3 py-1.5 text-sm font-medium text-white bg-accent-primary hover:bg-accent-primary/80 rounded-lg transition-colors"
+            >
+              {action.label}
+            </button>
+          )}
+          {capability !== 'external' && (
+            <button
+              onClick={checkNow}
+              disabled={busy}
+              className="px-3 py-1.5 text-sm text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] rounded-lg transition-colors disabled:opacity-50"
+            >
+              {status.phase === 'checking' ? 'Checking...' : 'Check for Updates'}
+            </button>
+          )}
         </div>
       </div>
-      {!managedByFlatpak && (
-        <button
-          onClick={handleCheck}
-          disabled={checking}
-          className="px-3 py-1.5 text-sm text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] rounded-lg transition-colors disabled:opacity-50"
-        >
-          {checking ? 'Checking...' : 'Check for Updates'}
-        </button>
+
+      {status.phase === 'downloading' && (
+        <div className="h-1 rounded-full bg-white/[0.06] overflow-hidden" role="progressbar" aria-valuenow={status.percent} aria-valuemin={0} aria-valuemax={100}>
+          <div
+            className="h-full bg-accent-primary transition-[width] duration-300"
+            style={{ width: `${status.percent}%` }}
+          />
+        </div>
+      )}
+
+      {capability === 'manual' && (
+        <p className="text-xs text-txt-tertiary leading-relaxed">
+          This build cannot install updates itself, so new versions are downloaded
+          from GitHub and replace the app by hand. See the release notes for the
+          steps on your platform.
+        </p>
+      )}
+      {capability === 'external' && (
+        <p className="text-xs text-txt-tertiary leading-relaxed">
+          Flatpak applies updates atomically outside the app. Use your software
+          manager or the <code>flatpak update</code> command to update Backspace.
+        </p>
       )}
     </div>
   );
 }
 
 export function DesktopPanel() {
-  const managedByFlatpak = window.backspace?.packageFormat === 'flatpak';
+  const initialize = useUpdateStore((s) => s.initialize);
+  const capability = useUpdateStore((s) => s.snapshot?.capability);
+
+  useEffect(() => initialize(), [initialize]);
 
   return (
     <div className="space-y-5">
       <h2 className="text-lg font-semibold text-txt-primary mb-6">Desktop</h2>
 
       <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5 space-y-3">
-        {!managedByFlatpak && <AutoLaunchSettings />}
-        <UpdateSettings managedByFlatpak={managedByFlatpak} />
+        {capability !== 'external' && <AutoLaunchSettings />}
+        <UpdateSettings />
 
         <div className="border-t border-white/[0.04]" />
 

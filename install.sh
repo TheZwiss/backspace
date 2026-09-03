@@ -646,24 +646,58 @@ build_from_source() {
 # hosts the ~1.6GB local build that OOMs small boxes). Fall back to a from-source
 # build if the image can't be pulled (not published yet, private, or offline), or
 # if the operator forces a build (BACKSPACE_BUILD=true — e.g. running a fork).
+# Records which path this install actually took, so ./update.sh knows whether to
+# pull an image or rebuild, and the admin Updates panel can say which it is.
+# Written *after* the decision resolves rather than alongside the rest of .env,
+# so a fallback-to-build is recorded truthfully instead of as the pull that was
+# attempted first.
+record_install_channel() {
+  local channel="$1"
+  local tmp
+  if [[ -f .env ]] && grep -q '^BACKSPACE_INSTALL_CHANNEL=' .env; then
+    # Rewritten through a temp file rather than with sed -i: GNU and BSD sed
+    # disagree about -i, and this script is also read on macOS.
+    tmp="$(mktemp)"
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      if [[ "$line" == BACKSPACE_INSTALL_CHANNEL=* ]]; then
+        printf '%s\n' "BACKSPACE_INSTALL_CHANNEL=${channel}"
+      else
+        printf '%s\n' "$line"
+      fi
+    done < .env > "$tmp"
+    mv "$tmp" .env
+  else
+    cat >> .env << EOF
+
+# How this instance gets its image: prebuilt | source
+# Written by install.sh after the pull-or-build decision. ./update.sh reads it.
+BACKSPACE_INSTALL_CHANNEL=${channel}
+EOF
+  fi
+}
+
 if [[ "${BACKSPACE_BUILD:-false}" == "true" ]]; then
   info "BACKSPACE_BUILD=true — building from source (skipping the prebuilt image)."
   build_from_source
+  record_install_channel source
 else
   image_ref="${BACKSPACE_IMAGE:-ghcr.io/thezwiss/backspace}:${BACKSPACE_IMAGE_TAG:-latest}"
   info "Fetching prebuilt image ${image_ref} ..."
   if $COMPOSE pull backspace; then
     success "Pulled prebuilt image"
+    record_install_channel prebuilt
   elif $DOCKER image inspect "$image_ref" >/dev/null 2>&1; then
     # Pull failed (offline / registry hiccup / private) but a usable copy is
     # already on this host (a prior run, an air-gapped `docker load`, or a
     # previous from-source build tagged under this ref) — use it instead of
     # forcing a needless multi-hundred-MB rebuild.
     warn "Could not pull ${image_ref} — using the copy already present on this host."
+    record_install_channel prebuilt
   else
     warn "Prebuilt image unavailable (not published yet, private, or offline)."
     warn "Falling back to a from-source build — slower, and heavy on low-RAM/ARM hosts."
     build_from_source
+    record_install_channel source
   fi
 fi
 
@@ -1010,5 +1044,6 @@ echo -e "  ${BOLD}Commands${NC} (run from this directory):"
 echo "    docker compose logs -f          # Watch logs"
 echo "    docker compose restart          # Restart all services"
 echo "    docker compose down             # Stop everything"
-echo "    docker compose pull && docker compose up -d   # Update to the latest prebuilt image"
+echo "    ./update.sh                                   # Update (snapshots first, rolls back if it fails)"
+echo "    ./update.sh --check                           # Check for an update, changing nothing"
 echo ""

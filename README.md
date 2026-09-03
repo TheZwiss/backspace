@@ -448,23 +448,45 @@ tunnel:
 
 ### Updating a running instance
 
-Back up first. The app auto-snapshots the SQLite DB, and you can take one on
-demand with `./backup.sh` (see [`docs/systems/deployment.md`](docs/systems/deployment.md)).
-Then, from the install directory:
+From the install directory:
+
+```bash
+./update.sh          # update, with one confirmation prompt
+./update.sh --check  # see whether an update exists, changing nothing
+```
+
+`update.sh` takes a database snapshot, refreshes the checkout where that is
+possible, fetches the new image (pulling or rebuilding to match how you
+installed), and restarts only the `backspace` container. It then waits for the
+healthcheck **and verifies the running version actually changed**. If either
+fails, it puts back the image you were on and tells you what happened. A
+no-op update is detected and skips the restart entirely, so nobody gets
+dropped from a voice call for nothing.
+
+Signed-in admins can see the running version and whether an update exists under
+**Instance Settings, Updates**, which also shows the exact command for their
+install.
+
+If you do not have `update.sh` yet (it ships from 1.0.5), take a snapshot with
+`./backup.sh`, then:
 
 ```bash
 git pull                              # refresh compose files / install.sh / docs
 
 # Prebuilt-image installs (the default):
-docker compose pull && docker compose up -d
+docker compose pull backspace && docker compose up -d backspace
 
 # From-source installs (a fork, or BACKSPACE_BUILD=true):
-docker compose up -d --build
+docker compose up -d --build backspace
 ```
 
 Because `COMPOSE_FILE` lives in `.env`, these commands automatically use the
 right compose files in every mode, with no `-f` flags to remember. A redeploy
 briefly restarts the `backspace` container (clients reconnect automatically).
+
+> **Name the `backspace` service and do not pass `--remove-orphans`.** If you run
+> other containers in the same compose project, Compose will suggest that flag,
+> and following it deletes them.
 
 ## Development
 

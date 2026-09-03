@@ -9,8 +9,9 @@ import { FederationPanel } from '../instanceSettingsPanels/FederationPanel';
 import { StreamingPanel } from '../instanceSettingsPanels/StreamingPanel';
 import { StoragePanel } from '../instanceSettingsPanels/StoragePanel';
 import { UsersPanel } from '../instanceSettingsPanels/UsersPanel';
+import { UpdatesPanel } from '../instanceSettingsPanels/UpdatesPanel';
 
-type SubTab = 'general' | 'registration' | 'federation' | 'streaming' | 'storage' | 'users';
+type SubTab = 'general' | 'registration' | 'federation' | 'streaming' | 'storage' | 'users' | 'updates';
 
 export function InstancePanel() {
   const fetchInstanceSettings = useSettingsStore((s) => s.fetchInstanceSettings);
@@ -26,6 +27,7 @@ export function InstancePanel() {
     { id: 'streaming', label: 'Streaming' },
     { id: 'storage', label: 'Storage' },
     { id: 'users', label: 'Users' },
+    { id: 'updates', label: 'Updates' },
   ], [approvalCount]);
 
   const handleNavigate = useCallback((id: string) => {
@@ -50,6 +52,7 @@ export function InstancePanel() {
       {subTab === 'streaming' && <StreamingPanel />}
       {subTab === 'storage' && <StoragePanel />}
       {subTab === 'users' && <UsersPanel />}
+      {subTab === 'updates' && <UpdatesPanel />}
     </div>
   );
 }
