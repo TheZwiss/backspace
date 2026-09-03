@@ -4,6 +4,12 @@ set -eu
 
 PNPM="node $PWD/flatpak-pnpm/bin/pnpm.cjs"
 
+# electron-builder invokes the detected package manager directly while it
+# collects production dependencies. Expose the vendored pnpm CLI under the
+# conventional executable name without allowing Corepack to access the network.
+ln -sf pnpm.cjs "$PWD/flatpak-pnpm/bin/pnpm"
+export PATH="$PWD/flatpak-pnpm/bin:$PATH"
+
 # Every dependency and Electron archive is supplied by node-sources.json.
 # These variables keep package lifecycle scripts inside those offline caches.
 export ELECTRON_CACHE="$PWD/flatpak-node/cache/electron"
@@ -62,7 +68,8 @@ case "$FLATPAK_ARCH" in
 esac
 
 $PNPM --filter @backspace/desktop exec electron-builder \
-  --linux --dir "--$electron_builder_arch"
+  --linux --dir "--$electron_builder_arch" \
+  --config.electronDist="$ELECTRON_CACHE"
 
 packaged_uiohook="packages/desktop/dist-electron/$unpacked_dir/resources/app.asar.unpacked/node_modules/uiohook-napi"
 rm -rf "$packaged_uiohook/prebuilds"
