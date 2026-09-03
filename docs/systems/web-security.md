@@ -306,9 +306,51 @@ The same two positive controls were injected here and both were caught, with bot
 dispositions present. The detector is verified on this host, not assumed from
 round 1.
 
-**Round 2 is unauthenticated only.** This instance has registration closed, so no
-test account could be created, and the authenticated surface (embeds, uploads,
-voice) was not exercised here.
+**Round 3, 2026-09-03, `<pi-host>`, authenticated.** Registration was opened in
+`instance_settings` for the duration and restored to its prior value afterwards;
+the test space was deleted and the `.env` backup restored. Exercised through the
+real UI, not the API:
+
+| Flow | What it covers | Result |
+|---|---|---|
+| Authenticated channel render | app bundle at runtime | no violations |
+| YouTube embed | `frame-src` | rendered, no violations |
+| Fenced code block | `style-src 'unsafe-inline'` | no violations |
+| **File upload through the composer** | the tus client path, then `img-src 'self'` on the rendered attachment | uploaded and rendered, no violations |
+| **Voice join** | `connect-src wss:` to LiveKit | `wss://<host>/livekit/rtc/v1` connected |
+| **Screen share** | `getDisplayMedia` through the app's own control | video element playing 1280x720, not paused |
+| **RNNoise** | `script-src 'wasm-unsafe-eval'` | `assets/rnnoise_simd-*.wasm` requested and loaded, no violations |
+
+The WASM load is the one that matters most. Earlier rounds connected to LiveKit
+without ever requesting a `.wasm` or worker URL, which meant the directive that
+exists specifically for this path had never actually been exercised. It has now.
+
+### Separating injected controls from real findings
+
+The instance log on the test VM showed nine `CSP violation reported` lines, which
+looks alarming until they are attributed. All nine were the positive controls
+described above. This was settled by measurement rather than assumption: a clean
+browser with **no injection of any kind** loaded the authenticated app and the
+log grew by **zero**.
+
+That test is worth repeating whenever this log is non-empty. A violation whose
+`sourceFile` is the document URL with `lineNumber: 0` and an empty `sample` looks
+identical whether it came from an injected control or from the application, so
+counting lines is not attribution.
+
+Note also that the in-page `securitypolicyviolation` listener and the server-side
+report sink do not always agree: the listener attaches at document start and can
+miss a violation that fires during very early parsing, while the sink still
+receives the report. Check both.
+
+### Federation
+
+Not exercised, and deliberately not set up. A cross-instance conversation loads
+peer avatars and attachments over plain `<img>` and `<video>`, which
+`img-src 'self' data: blob: https: http:` and the matching `media-src` already
+permit from any http or https origin. There is no CSP surface left for it to
+exercise. The federation risk in this area is the `Cross-Origin-Resource-Policy`
+value, which is covered in section 5, not the policy.
 
 ### What rounds 1 and 2 do NOT cover
 
@@ -316,8 +358,10 @@ voice) was not exercised here.
 Listing these is the point of the section. Do not treat the tables above as a
 completed observation phase.
 
-- **Two deployments are now covered**, which satisfies the count, but only the
-  test VM was exercised beyond the unauthenticated shell.
+- Cross-instance federation was not run. See the reasoning directly above: its
+  CSP surface is already permitted by `img-src` and `media-src`.
+- Everything else in the precondition has now been exercised on at least one
+  host, across two deployments, with the detector validated on both.
 - **No file upload, and no cross-instance federated conversation.** Federation
   needs a second reachable instance.
 - **The WASM and blob-worker paths were not actually exercised.** The voice
