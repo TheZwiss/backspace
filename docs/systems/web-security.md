@@ -249,6 +249,78 @@ today. A browser evaluates it, posts a report to `/api/csp-report`, and loads
 the resource anyway. Nobody should describe this as protecting the app until
 the flip below has happened.
 
+### Observation log
+
+The flip to enforcing requires the report-only policy to have run on real
+deployments across ordinary use, with the evidence written down. An empty report
+log with no record of what was exercised is not evidence, it is an absence of
+data. What follows is what has actually been run.
+
+**Round 1, 2026-09-03, `<vm-test-host>` (the throwaway test VM), commit `5d6b8ea2`.**
+Driven with Playwright against real Chromium, not curl. This distinction matters
+more than anything else here: **a CSP is evaluated by the browser, so `curl`
+cannot violate one.** Any flow exercised with an HTTP client produces exactly
+zero CSP evidence, however many endpoints it touches.
+
+Exercised, and clean:
+
+| Flow | What it covers | Result |
+|---|---|---|
+| SPA shell load, unauthenticated | `script-src`, `style-src`, `img-src`, `font-src`, `manifest-src` | no violations |
+| Authenticated channel render | the app bundle and its runtime | no violations |
+| YouTube link embed | `frame-src` | iframe rendered, no violations |
+| Fenced code block | `style-src` (syntax highlighting) | no violations |
+| WebSocket connect | `connect-src wss:` | `wss://<host>/ws` connected |
+| Voice channel join | `connect-src wss:` against LiveKit | `wss://<host>/livekit/rtc/v1` connected |
+
+`grep -c 'CSP violation reported'` on the instance log for the window: **0**.
+
+**The harness was validated with positive controls before the negative result was
+believed.** A zero-violation run proves nothing if the detector is broken. Two
+deliberate violations were injected and both were caught:
+
+- a DOM-inserted inline `<script>`: blocked, reported under `script-src-elem`
+  with `disposition: enforce` (the `index.html` meta policy) **and**
+  `disposition: report` (the header). Both policies are live and independent.
+- an external CDN script: blocked and reported by both.
+
+**A method trap worth recording.** Playwright's `page.evaluate` runs through the
+DevTools protocol, which **bypasses page CSP**. An in-page probe that calls
+`new Function()` returns normally and reports nothing, which reads exactly like a
+permissive policy. Probes must go through a path the policy governs, such as a
+DOM-inserted `<script>` element, or they measure nothing. The `eval` control
+above is what exposed this.
+
+### What round 1 does NOT cover
+
+Listing these is the point of the section. Do not treat the table above as a
+completed observation phase.
+
+- **One deployment, not two.** The precondition asks for at least two. The second
+  host is LAN-only and was unreachable.
+- **No file upload, and no cross-instance federated conversation.** Federation
+  needs a second reachable instance.
+- **The WASM and blob-worker paths were not actually exercised.** The voice
+  connection succeeded, but no `.wasm` or worker URL was requested during the
+  run, so RNNoise and any LiveKit worker never loaded. Those are the paths most
+  likely to violate `script-src 'wasm-unsafe-eval'` and `worker-src blob:`, and
+  they remain unobserved. A voice join that connects is not the same as a voice
+  join that has run noise suppression and a screen share end to end.
+- **Screen share was not verified under CSP**, for the `page.evaluate` reason
+  above.
+
+### A deployment gap this round exposed
+
+`deploy.sh` excludes `Caddyfile` from its rsync, deliberately and with a comment:
+a deployed host's Caddyfile carries extra vhost blocks that are not in this
+repository. The consequence is that **a change to this repository's Caddyfile
+never reaches a `deploy.sh`-managed host.** Today that means section 5's
+statement that Caddy owns `Strict-Transport-Security` holds for a self-hoster
+who uses the bundled Caddyfile, but on a `deploy.sh`-managed host the operator's
+own Caddyfile owns it and this repository cannot guarantee it is set. The test
+VM currently sends no HSTS for that reason.
+
+
 Violations land on `POST /api/csp-report`, which is unauthenticated on purpose,
 because a violation can happen on the login screen before any token exists and
 those are exactly the reports worth having. The route registers content-type
