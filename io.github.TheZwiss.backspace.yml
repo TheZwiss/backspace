@@ -30,6 +30,10 @@ modules:
     buildsystem: simple
     build-options:
       append-path: /usr/lib/sdk/node24/bin
+      # Electron binaries are already stripped. Disabling Flatpak's separate
+      # debuginfo pass also avoids trying to mirror deeply nested asar-unpacked
+      # native-module paths into /app/lib/debug.
+      no-debuginfo: true
     sources:
       # Application source and dependency lockfile. Keep this commit in sync
       # with flatpak/node-sources.json when updating the package.
