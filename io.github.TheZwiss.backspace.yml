@@ -19,9 +19,11 @@ finish-args:
   # Hardware-accelerated rendering. Camera and screen-capture permission is
   # mediated by the desktop portals instead of exposing every host device.
   - --device=dri
-  # The Linux tray icon uses the StatusNotifier protocol. Notifications and
-  # PipeWire screen capture go through XDG portals provided by the BaseApp.
+  # Electron's Linux tray uses StatusNotifier and its Notification API talks
+  # directly to the freedesktop notification service. Screen capture remains
+  # mediated by the XDG desktop portal.
   - --talk-name=org.kde.StatusNotifierWatcher
+  - --talk-name=org.freedesktop.Notifications
   # Keep pointer themes correctly scaled when Electron uses native Wayland.
   - --env=XCURSOR_PATH=/run/host/user-share/icons:/run/host/share/icons
 
