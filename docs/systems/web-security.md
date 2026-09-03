@@ -3,7 +3,7 @@
 Source files:
 - `packages/server/src/utils/csp.ts` - pure policy builder. Turns instance config into a directive map and a header string. No Fastify imports, no I/O.
 - `packages/server/src/routes/cspReport.ts` - the violation sink, plus the two content-type parsers browsers use to post reports.
-- `packages/server/src/index.ts` - CORS registration (line 65), helmet registration (line 104), the `onSend` hook that attaches the policy (line 129), and the sink registration (line 202).
+- `packages/server/src/index.ts` - CORS registration (line 65), helmet registration (line 104), the `onSend` hook that attaches the policy (line 132), and the sink registration (line 206).
 - `packages/server/src/routes/uploads.ts:49` - the one route that sets its own, stricter policy.
 - `packages/web/index.html` - the static meta policy.
 - `Caddyfile` - the reverse proxy, which owns HSTS.
@@ -291,6 +291,9 @@ Exercised, and clean:
 | Voice channel join | `connect-src wss:` against LiveKit | `wss://<host>/livekit/rtc/v1` connected |
 
 `grep -c 'CSP violation reported'` on the instance log for the window: **0**.
+(Retained for the record, but see the note on condition 2 below: this number was
+always going to be 0, because the harness runs headless and headless Chromium
+does not deliver CSP reports. It is not evidence.)
 
 **The harness was validated with positive controls before the negative result was
 believed.** A zero-violation run proves nothing if the detector is broken. Two
@@ -402,6 +405,73 @@ own Caddyfile owns it and this repository cannot guarantee it is set. The test
 VM currently sends no HSTS for that reason.
 
 
+### Round 4, 2026-09-03, both deployments, released build 1.0.3, report-only
+
+Run against the shipped 1.0.3 build on both the Pi-hosted instance and the test
+VM, to re-establish the baseline on exactly what users are running.
+
+| Flow | Result |
+|---|---|
+| SPA shell load, both hosts | no violations |
+| Positive control, both hosts | both injected violations caught on each host |
+| Authenticated channel render, both hosts | no violations |
+
+**Two steps in this round did not run, and the zeros they produced mean nothing.**
+The upload and voice steps failed on both hosts with Playwright timeouts, because
+the space and channel IDs the round 3 harness had recorded no longer resolved. A
+zero-violation result from a step that never executed is not evidence, and it is
+recorded here rather than quietly folded into the table above. Round 5 fixed the
+fixtures and re-ran them.
+
+The positive control in this round is what established that `script-src` was
+already enforcing before the flip. Each injected violation was caught **twice**,
+once with `disposition: "report"` from the header and once with
+`disposition: "enforce"` from the `index.html` meta tag.
+
+### Round 5, 2026-09-03, test VM only, commit `2a03c137`, enforcing
+
+The verification round for the flip itself. The Pi-hosted instance was
+deliberately left on report-only 1.0.3 and not touched.
+
+Run in two halves against the same host, so that any difference is attributable
+to the policy and not to the harness:
+
+1. **Baseline, still report-only**, with freshly created fixtures. Upload and
+   voice both executed this time: `PASS upload file via UI`, one uploaded image
+   rendered, `PASS join voice channel`, LiveKit signalling connected. Zero
+   violations.
+2. **After deploying the enforcing build to the same host**, the same four
+   scripts:
+
+| Flow | Result |
+|---|---|
+| SPA shell load | no violations |
+| Positive control | both injected violations caught |
+| Authenticated channel render, file upload, uploaded image displayed | no violations, nothing blocked |
+| Voice channel join, screen share control, settle | no violations, `wss://<host>/ws` and `wss://<host>/livekit/rtc/v1` both connected |
+
+**The positive control is what proves the header actually flipped**, rather than
+the deploy having silently no-opped. In round 4 each injected violation produced
+one `disposition: "report"` and one `disposition: "enforce"`. In round 5 both are
+`"enforce"`: the report-only header is gone and the enforcing header has taken
+its place. The header itself was also read off the wire on both hosts, showing
+`content-security-policy` on the VM and `content-security-policy-report-only`
+still on the Pi.
+
+**Still not exercised, and why it is acceptable.** `wasmOrWorkerRequests` was
+empty again, so RNNoise and the blob heartbeat worker did not load in this round
+either. That gap does not bear on this change: those paths are governed by
+`script-src 'wasm-unsafe-eval'` and `worker-src blob:`, both of which the
+`index.html` meta tag has enforced since 1.0.0. The flip does not alter their
+enforcement, and four released versions have shipped with them enforcing. The
+same reasoning covers `object-src` and `base-uri`.
+
+`form-action 'self'` and `frame-ancestors 'none'` were not exercised either, and
+are inert by construction: no `<form>` in the client carries an `action`
+attribute, so every submission is JavaScript-handled, and the desktop client
+loads an instance with a top-level `loadURL` rather than an iframe or a webview,
+so nothing frames the app.
+
 Violations land on `POST /api/csp-report`, which is unauthenticated on purpose,
 because a violation can happen on the login screen before any token exists and
 those are exactly the reports worth having. The route registers content-type
@@ -426,7 +496,7 @@ why. Do not tidy it back up next to the hook. A test in
 **Conditions for flipping to enforcing.** All of these, not any of them:
 
 1. The report-only policy has run on at least two real deployments for a period covering ordinary use: sending messages, a link embed rendering, a file upload, a cross-instance federated conversation, and a real voice join with screen share. The voice path is the one most likely to violate, because LiveKit brings its own workers and WebAssembly.
-2. `grep 'CSP violation reported'` is empty in every instance log across that period, or every violation found has been resolved by an explicit change to `utils/csp.ts` and the clock restarted.
+2. `grep 'CSP violation reported'` is empty in every instance log across that period, or every violation found has been resolved by an explicit change to `utils/csp.ts` and the clock restarted. **This condition is close to worthless unless the traffic came from a headed browser or a real user; see the note under "which conditions were met" below.**
 3. The evidence is written into this section first: which instances, over what period, which flows were exercised, what the log contained. An empty log with no record of what was exercised is not evidence of a clean policy. It is an absence of data.
 
 The flip itself was one line in `index.ts`, changing `cspHeaderName` from
@@ -434,7 +504,10 @@ The flip itself was one line in `index.ts`, changing `cspHeaderName` from
 corresponding header names in `test/http-security-headers.test.ts` and the
 deletion of the `10038` line from `.zap/rules.tsv`. The `Reporting-Endpoints`
 header and the sink stay. An enforcing policy still reports, and those reports
-are now the only signal that the flip broke a flow nobody exercised.
+are now the only signal that the flip broke a flow nobody exercised. That signal
+is real: a headed browser was observed delivering one end to end. It is also
+only as good as the browsers in play, so a broken flow is not guaranteed to
+announce itself.
 
 One test consequence is worth knowing. `routes/uploads.ts` sets its own
 `Content-Security-Policy` and the `onSend` hook skips any response that already
@@ -452,16 +525,47 @@ the file sandbox is identified by `default-src 'none'` and by the absence of
   `connect-src` permits every scheme a peer could use, so a federated exchange
   has no CSP surface that a same-instance exchange does not already cover.
   Recorded as a reasoned exception, not as coverage.
-- `frame-src` was **not** exercised in a browser either, and cannot easily be:
-  both embed iframes are click-to-load (`RichEmbed.tsx`, `VideoEmbed.tsx`), so
-  no page load creates one. It is verified by construction instead. Those two
-  components are the only iframes in the client, both take their `src` from
+- `frame-src` is covered from both directions. Round 1 rendered a YouTube link
+  embed with no violation, which is the permitted direction. Round 5 injected an
+  `<iframe src="https://example.org/">` on the enforcing VM and the browser
+  blocked it, reporting `effectiveDirective: "frame-src"` with
+  `disposition: "enforce"`. That is the directive doing its job on a real
+  deployment, and it is also the cleanest single proof that the header is
+  enforcing, because `frame-src` appears in the header policy and not in the
+  `index.html` meta tag.
+
+  Which provider origins are permitted is still carried by construction rather
+  than observation, because both embed components are click-to-load
+  (`RichEmbed.tsx`, `VideoEmbed.tsx`) and no page load creates an iframe on its
+  own. Those two are the only iframes in the client, both take their `src` from
   `embed.embedUrl`, and `utils/embedClassifier.ts` sets that field to exactly
   three values, which are exactly the three entries in `EMBED_FRAME_ORIGINS`. A
-  fourth provider added to the classifier without a matching entry there will
-  render a blank box in production, and nothing in CI will catch it.
-- Conditions 2 and 3 are met: the sink was empty across the observation, and
-  this section is the written record condition 3 asks for.
+  unit test asserts that list matches `frame-src`. A fourth provider added to
+  the classifier without a matching entry there will render a blank box in
+  production, and nothing in CI will catch it.
+- Condition 3 is met: this section is the written record it asks for.
+- **Condition 2 was met but was never worth anything, and that is the most
+  important methodology finding of this work.** It asks for
+  `grep 'CSP violation reported'` to be empty in the instance logs. It was empty
+  in every round. It would have been empty no matter what the policy did,
+  because every round drove **headless** Chromium, and headless Chromium does
+  not deliver CSP reports. Measured on the enforcing VM: two separate injected
+  violations, one `script-src` and one `frame-src`, both confirmed blocked by the
+  in-page `securitypolicyviolation` listener, produced **zero** requests to
+  `/api/csp-report` within 70 seconds and zero log lines.
+
+  The sink itself is fine, and that was checked rather than assumed. A direct
+  `POST /api/csp-report` to the deployed VM returned 204 and logged the report.
+  Re-running the identical harness with `headless: false` produced a real
+  Reporting API delivery for the same `frame-src` violation, which the app parsed
+  and logged. So the pipeline works in a real browser and does not work in the
+  harness.
+
+  **The consequence is that the in-page listener is the only observation evidence
+  in this document that carries weight.** Every "the instance log was empty" line
+  in the rounds above is vacuous. It is left in place rather than deleted so that
+  nobody re-derives it as evidence later. If this condition is ever used again,
+  it needs a headed browser or a real user.
 
 **Evidence log:** report-only ran on two deployments, the Pi-hosted instance and
 the test VM, across four observation rounds on 2026-09-02 and 2026-09-03. The
