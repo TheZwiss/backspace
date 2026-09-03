@@ -105,9 +105,17 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # Deliberately still report-only, and this is the one scanner that is.
+      # Measured 2026-09-03 against an image built from main: 20 fixable
+      # HIGH/CRITICAL, none of which the dependency pass covers, because Trivy
+      # sees the image's real node_modules while OSV reads the lockfile. Making
+      # this blocking would fail every release publish until that backlog is
+      # worked, and holding security fixes behind a scanner backlog is the exact
+      # inversion this project already decided against. It needs its own
+      # remediation pass first. See docs/systems/security-scanning.md.
       - name: Trivy image scan (report-only)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        continue-on-error: true # report-only; enforcement flipped on in Plan E
+        continue-on-error: true # report-only: see the note above, not an oversight
         with:
           scan-type: image
           image-ref: backspace:scan
