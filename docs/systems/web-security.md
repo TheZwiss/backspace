@@ -249,6 +249,142 @@ today. A browser evaluates it, posts a report to `/api/csp-report`, and loads
 the resource anyway. Nobody should describe this as protecting the app until
 the flip below has happened.
 
+### Observation log
+
+The flip to enforcing requires the report-only policy to have run on real
+deployments across ordinary use, with the evidence written down. An empty report
+log with no record of what was exercised is not evidence, it is an absence of
+data. What follows is what has actually been run.
+
+**Round 1, 2026-09-03, `<vm-test-host>` (the throwaway test VM), commit `5d6b8ea2`.**
+Driven with Playwright against real Chromium, not curl. This distinction matters
+more than anything else here: **a CSP is evaluated by the browser, so `curl`
+cannot violate one.** Any flow exercised with an HTTP client produces exactly
+zero CSP evidence, however many endpoints it touches.
+
+Exercised, and clean:
+
+| Flow | What it covers | Result |
+|---|---|---|
+| SPA shell load, unauthenticated | `script-src`, `style-src`, `img-src`, `font-src`, `manifest-src` | no violations |
+| Authenticated channel render | the app bundle and its runtime | no violations |
+| YouTube link embed | `frame-src` | iframe rendered, no violations |
+| Fenced code block | `style-src` (syntax highlighting) | no violations |
+| WebSocket connect | `connect-src wss:` | `wss://<host>/ws` connected |
+| Voice channel join | `connect-src wss:` against LiveKit | `wss://<host>/livekit/rtc/v1` connected |
+
+`grep -c 'CSP violation reported'` on the instance log for the window: **0**.
+
+**The harness was validated with positive controls before the negative result was
+believed.** A zero-violation run proves nothing if the detector is broken. Two
+deliberate violations were injected and both were caught:
+
+- a DOM-inserted inline `<script>`: blocked, reported under `script-src-elem`
+  with `disposition: enforce` (the `index.html` meta policy) **and**
+  `disposition: report` (the header). Both policies are live and independent.
+- an external CDN script: blocked and reported by both.
+
+**A method trap worth recording.** Playwright's `page.evaluate` runs through the
+DevTools protocol, which **bypasses page CSP**. An in-page probe that calls
+`new Function()` returns normally and reports nothing, which reads exactly like a
+permissive policy. Probes must go through a path the policy governs, such as a
+DOM-inserted `<script>` element, or they measure nothing. The `eval` control
+above is what exposed this.
+
+**Round 2, 2026-09-03, `<pi-host>` (the Raspberry Pi, ARM64), commit `9f991697`.**
+A genuinely different environment from round 1, not a second copy of the same
+box: different architecture, real users, real traffic, and five other services
+sharing the host. It had been running 1.0.0, so this deployment crossed the
+schema migration; a manual backup was taken first and the instance log shows no
+migration error.
+
+Exercised, and clean: unauthenticated SPA shell load, covering `script-src`,
+`style-src`, `img-src`, `font-src`, `manifest-src` and the WebSocket connect
+attempt. `grep -c 'CSP violation reported'`: **0**.
+
+The same two positive controls were injected here and both were caught, with both
+dispositions present. The detector is verified on this host, not assumed from
+round 1.
+
+**Round 3, 2026-09-03, `<pi-host>`, authenticated.** Registration was opened in
+`instance_settings` for the duration and restored to its prior value afterwards;
+the test space was deleted and the `.env` backup restored. Exercised through the
+real UI, not the API:
+
+| Flow | What it covers | Result |
+|---|---|---|
+| Authenticated channel render | app bundle at runtime | no violations |
+| YouTube embed | `frame-src` | rendered, no violations |
+| Fenced code block | `style-src 'unsafe-inline'` | no violations |
+| **File upload through the composer** | the tus client path, then `img-src 'self'` on the rendered attachment | uploaded and rendered, no violations |
+| **Voice join** | `connect-src wss:` to LiveKit | `wss://<host>/livekit/rtc/v1` connected |
+| **Screen share** | `getDisplayMedia` through the app's own control | video element playing 1280x720, not paused |
+| **RNNoise** | `script-src 'wasm-unsafe-eval'` | `assets/rnnoise_simd-*.wasm` requested and loaded, no violations |
+
+The WASM load is the one that matters most. Earlier rounds connected to LiveKit
+without ever requesting a `.wasm` or worker URL, which meant the directive that
+exists specifically for this path had never actually been exercised. It has now.
+
+### Separating injected controls from real findings
+
+The instance log on the test VM showed nine `CSP violation reported` lines, which
+looks alarming until they are attributed. All nine were the positive controls
+described above. This was settled by measurement rather than assumption: a clean
+browser with **no injection of any kind** loaded the authenticated app and the
+log grew by **zero**.
+
+That test is worth repeating whenever this log is non-empty. A violation whose
+`sourceFile` is the document URL with `lineNumber: 0` and an empty `sample` looks
+identical whether it came from an injected control or from the application, so
+counting lines is not attribution.
+
+Note also that the in-page `securitypolicyviolation` listener and the server-side
+report sink do not always agree: the listener attaches at document start and can
+miss a violation that fires during very early parsing, while the sink still
+receives the report. Check both.
+
+### Federation
+
+Not exercised, and deliberately not set up. A cross-instance conversation loads
+peer avatars and attachments over plain `<img>` and `<video>`, which
+`img-src 'self' data: blob: https: http:` and the matching `media-src` already
+permit from any http or https origin. There is no CSP surface left for it to
+exercise. The federation risk in this area is the `Cross-Origin-Resource-Policy`
+value, which is covered in section 5, not the policy.
+
+### What rounds 1 and 2 do NOT cover
+
+
+Listing these is the point of the section. Do not treat the tables above as a
+completed observation phase.
+
+- Cross-instance federation was not run. See the reasoning directly above: its
+  CSP surface is already permitted by `img-src` and `media-src`.
+- Everything else in the precondition has now been exercised on at least one
+  host, across two deployments, with the detector validated on both.
+- **No file upload, and no cross-instance federated conversation.** Federation
+  needs a second reachable instance.
+- **The WASM and blob-worker paths were not actually exercised.** The voice
+  connection succeeded, but no `.wasm` or worker URL was requested during the
+  run, so RNNoise and any LiveKit worker never loaded. Those are the paths most
+  likely to violate `script-src 'wasm-unsafe-eval'` and `worker-src blob:`, and
+  they remain unobserved. A voice join that connects is not the same as a voice
+  join that has run noise suppression and a screen share end to end.
+- **Screen share was not verified under CSP**, for the `page.evaluate` reason
+  above.
+
+### A deployment gap this round exposed
+
+`deploy.sh` excludes `Caddyfile` from its rsync, deliberately and with a comment:
+a deployed host's Caddyfile carries extra vhost blocks that are not in this
+repository. The consequence is that **a change to this repository's Caddyfile
+never reaches a `deploy.sh`-managed host.** Today that means section 5's
+statement that Caddy owns `Strict-Transport-Security` holds for a self-hoster
+who uses the bundled Caddyfile, but on a `deploy.sh`-managed host the operator's
+own Caddyfile owns it and this repository cannot guarantee it is set. The test
+VM currently sends no HSTS for that reason.
+
+
 Violations land on `POST /api/csp-report`, which is unauthenticated on purpose,
 because a violation can happen on the login screen before any token exists and
 those are exactly the reports worth having. The route registers content-type

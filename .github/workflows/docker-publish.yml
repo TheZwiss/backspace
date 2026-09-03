@@ -38,6 +38,11 @@ jobs:
       packages: write
       security-events: write
     steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -100,9 +105,18 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # Deliberately still report-only, and this is the one scanner that is.
+      # Measured 2026-09-03 against an image built from main, after the runtime
+      # stage stopped shipping pnpm and npm: 3 fixable HIGH/CRITICAL, down from
+      # 20. All three are one cluster (fastify, @fastify/static, find-my-way) and
+      # none has a fix inside the Fastify 4 line, so clearing them is the Fastify
+      # 5 migration, not a version bump. Until that lands, making this blocking
+      # would fail every release publish, and holding security fixes behind a
+      # scanner backlog is the exact inversion this project already decided
+      # against. See docs/systems/security-scanning.md.
       - name: Trivy image scan (report-only)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        continue-on-error: true # report-only; enforcement flipped on in Plan E
+        continue-on-error: true # report-only: see the note above, not an oversight
         with:
           scan-type: image
           image-ref: backspace:scan
