@@ -291,13 +291,33 @@ permissive policy. Probes must go through a path the policy governs, such as a
 DOM-inserted `<script>` element, or they measure nothing. The `eval` control
 above is what exposed this.
 
-### What round 1 does NOT cover
+**Round 2, 2026-09-03, `<pi-host>` (the Raspberry Pi, ARM64), commit `9f991697`.**
+A genuinely different environment from round 1, not a second copy of the same
+box: different architecture, real users, real traffic, and five other services
+sharing the host. It had been running 1.0.0, so this deployment crossed the
+schema migration; a manual backup was taken first and the instance log shows no
+migration error.
 
-Listing these is the point of the section. Do not treat the table above as a
+Exercised, and clean: unauthenticated SPA shell load, covering `script-src`,
+`style-src`, `img-src`, `font-src`, `manifest-src` and the WebSocket connect
+attempt. `grep -c 'CSP violation reported'`: **0**.
+
+The same two positive controls were injected here and both were caught, with both
+dispositions present. The detector is verified on this host, not assumed from
+round 1.
+
+**Round 2 is unauthenticated only.** This instance has registration closed, so no
+test account could be created, and the authenticated surface (embeds, uploads,
+voice) was not exercised here.
+
+### What rounds 1 and 2 do NOT cover
+
+
+Listing these is the point of the section. Do not treat the tables above as a
 completed observation phase.
 
-- **One deployment, not two.** The precondition asks for at least two. The second
-  host is LAN-only and was unreachable.
+- **Two deployments are now covered**, which satisfies the count, but only the
+  test VM was exercised beyond the unauthenticated shell.
 - **No file upload, and no cross-instance federated conversation.** Federation
   needs a second reachable instance.
 - **The WASM and blob-worker paths were not actually exercised.** The voice
