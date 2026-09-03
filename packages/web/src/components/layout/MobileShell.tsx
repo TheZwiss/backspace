@@ -23,6 +23,7 @@ import { FriendsPage } from '../chat/FriendsPage';
 import { ExplorePage } from '../chat/ExplorePage';
 import { UserProfileModal } from '../modals/UserProfileModal';
 import { GeneralPanel } from '../modals/instanceSettingsPanels/GeneralPanel';
+import { UpdatesPanel } from '../modals/instanceSettingsPanels/UpdatesPanel';
 import { RegistrationPanel } from '../modals/instanceSettingsPanels/RegistrationPanel';
 import { FederationPanel } from '../modals/instanceSettingsPanels/FederationPanel';
 import { StreamingPanel } from '../modals/instanceSettingsPanels/StreamingPanel';
@@ -81,6 +82,12 @@ const screenMap: Record<string, (params?: Record<string, string>) => React.React
     <div className="flex flex-col h-full bg-surface-base">
       <MobileScreenHeader title="Storage" rightActions={<TransferIndicator />} />
       <div className="flex-1 overflow-y-auto p-4"><StoragePanel /></div>
+    </div>
+  ),
+  'settings-instance-updates': () => (
+    <div className="flex flex-col h-full bg-surface-base">
+      <MobileScreenHeader title="Updates" rightActions={<TransferIndicator />} />
+      <div className="flex-1 overflow-y-auto p-4"><UpdatesPanel /></div>
     </div>
   ),
   'settings-instance-users': () => (

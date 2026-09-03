@@ -24,6 +24,7 @@ import { invitesRoutes } from './routes/invites.js';
 import { exploreRoutes } from './routes/explore.js';
 import { searchRoutes } from './routes/search.js';
 import { adminRoutes } from './routes/admin.js';
+import { adminUpdateRoutes } from './routes/adminUpdates.js';
 import { gifRoutes } from './routes/gif.js';
 import { federationRoutes } from './routes/federation.js';
 import { cspReportRoutes } from './routes/cspReport.js';
@@ -198,6 +199,7 @@ async function main(): Promise<void> {
   await app.register(exploreRoutes);
   await app.register(searchRoutes);
   await app.register(adminRoutes);
+  await app.register(adminUpdateRoutes);
   await app.register(gifRoutes);
   await app.register(federationRoutes);
   // Registered here rather than beside the hook above so it sits behind the

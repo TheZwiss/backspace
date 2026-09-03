@@ -145,6 +145,25 @@ export const config = {
   dbPath: env('DB_PATH', resolve(__dirname, '../../../data/backspace.db')),
   maxUploadSize: envInt('MAX_UPLOAD_SIZE', 104857600),
   registrationOpen: envBool('REGISTRATION_OPEN', true),
+
+  updates: {
+    /**
+     * Whether the admin Updates panel may look up the newest release.
+     *
+     * There is no background poller anywhere in the server. The lookup happens
+     * only while a signed-in admin has that panel open and the cache is cold,
+     * so an instance whose admin never opens it never contacts github.com. This
+     * switch exists for airgapped deployments and for operators who want the
+     * guarantee rather than the behaviour.
+     */
+    checkEnabled: envBool('BACKSPACE_UPDATE_CHECK', true),
+    /**
+     * prebuilt | source | undefined. install.sh records this after its
+     * pull-or-build decision resolves. Undefined on installs that predate it,
+     * which the panel reports as unknown rather than guessing.
+     */
+    installChannel: envOptional('BACKSPACE_INSTALL_CHANNEL'),
+  },
   backup: {
     dir: envOptional('BACKUP_DIR') ?? resolve(dirname(env('DB_PATH', resolve(__dirname, '../../../data/backspace.db'))), 'backups'),
     intervalHours: envInt('BACKUP_INTERVAL_HOURS', 24),

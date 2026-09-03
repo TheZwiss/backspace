@@ -2,6 +2,8 @@
 
 Source files:
 - `packages/server/src/routes/admin.ts` -- User management, storage management endpoints
+- `packages/server/src/routes/adminUpdates.ts` -- Instance version and update-status endpoint
+- `packages/server/src/utils/releaseCheck.ts` -- Lazy, cached, fail-soft latest-release lookup
 - `packages/server/src/routes/instance.ts` -- Public instance info endpoint
 - `packages/server/src/routes/settings.ts` -- Instance settings and streaming limits endpoints
 - `packages/server/src/utils/auth.ts` -- `requireAdmin` middleware
@@ -14,6 +16,7 @@ Source files:
 - `packages/web/src/components/modals/instanceSettingsPanels/StoragePanel.tsx` -- Storage management UI
 - `packages/web/src/components/modals/instanceSettingsPanels/StreamingPanel.tsx` -- Streaming config UI
 - `packages/web/src/components/modals/instanceSettingsPanels/UsersPanel.tsx` -- User management UI
+- `packages/web/src/components/modals/instanceSettingsPanels/UpdatesPanel.tsx` -- Instance version and update guidance UI
 - `packages/server/src/routes/invites.ts` -- Admin invite-link CRUD endpoints
 - `packages/server/src/utils/inviteService.ts` -- Token generation, derived status, atomic redemption transaction
 - `packages/shared/src/types.ts` -- Shared type interfaces
@@ -50,6 +53,7 @@ Settings are split into two API surfaces:
 | General/Admin | `GET /api/settings/instance` (admin) | `PATCH /api/settings/instance` (admin) |
 | Streaming | `GET /api/settings/streaming` (auth) | `PATCH /api/settings/streaming` (admin) |
 | Public info | `GET /api/instance/info` (public) | N/A (derived from settings) |
+| Update status | `GET /api/admin/instance/update-status` (admin) | N/A (read-only by design, see below) |
 
 ### General Settings Schema (InstanceAdminSettings)
 
@@ -259,6 +263,77 @@ Storage functions (`getStorageStats`, `getOrphanedFiles`, `cleanupStorage`, `cle
 
 **Media cleanup validation:** `maxAgeDays` must be a positive integer >= 1. Returns 400 otherwise.
 
+### Instance Updates
+
+Admin-only, read-only.
+
+```
+GET /api/admin/instance/update-status[?refresh=true] → InstanceUpdateStatus
+```
+
+```typescript
+interface InstanceUpdateStatus {
+  current: { version: string; commit: string | null };
+  latest: { version: string; url: string; publishedAt: string } | null;
+  state: 'up-to-date' | 'update-available' | 'unknown';
+  checkedAt: number | null;
+  checkEnabled: boolean;
+  reason: 'disabled' | 'unreachable' | 'rate-limited' | 'unparseable' | null;
+  channel: 'prebuilt' | 'source' | 'unknown';
+}
+```
+
+**There is no background poller.** The GitHub lookup happens only while a
+signed-in admin has the Updates panel open and the six-hour cache is cold. An
+instance whose admin never opens that panel never contacts github.com. For a
+self-hosted, privacy-positioned product that is a promise worth keeping, and it
+is why the check lives on a request path rather than on a timer.
+
+`releaseCheck.ts` details:
+
+- The URL is the compile-time constant
+  `https://api.github.com/repos/TheZwiss/backspace/releases/latest`. It is never
+  derived from user input, so the SSRF policy in [embeds.md](embeds.md) does not
+  apply.
+- `User-Agent: Backspace`. GitHub requires one. The running version is
+  deliberately omitted so the request carries nothing identifying the instance
+  beyond the IP any outbound request would expose, and so GitHub's logs do not
+  become a version census of every deployment.
+- 5s timeout, `redirect: 'error'`, 512 KB response cap.
+- Successes cached 6h; failures cached for a tenth of that, so a transient
+  outage clears without hammering a rate-limited endpoint.
+- Concurrent requests are coalesced into one outbound call.
+- Every failure is soft: `state: 'unknown'` plus a `reason`. An operator with no
+  outbound internet still gets a panel that reports what they are running.
+- Drafts and prereleases are skipped. An `html_url` that is not on github.com is
+  replaced with a constructed one rather than rendered as a link.
+- `state` is `unknown` rather than a guess whenever either version fails to
+  parse as `major.minor.patch`. Running *ahead* of the latest release reports
+  `up-to-date`, so a maintainer on an unreleased build is not told to downgrade.
+
+**`BACKSPACE_UPDATE_CHECK=false`** disables the lookup outright. The endpoint
+then returns `checkEnabled: false, reason: 'disabled'` without opening a socket,
+and `?refresh=true` cannot override it.
+
+**`BACKSPACE_INSTALL_CHANNEL`** (`prebuilt` | `source`) is written to `.env` by
+`install.sh` after its pull-or-build decision resolves, so a fallback-to-build is
+recorded truthfully. Absent on older installs, which report `unknown`; the panel
+then shows both sets of manual commands rather than guessing. `./update.sh` reads
+the same value.
+
+#### Why there is no endpoint that performs the update
+
+Applying a container update from inside the container requires mounting
+`/var/run/docker.sock`, which grants the container root on the host. Backspace
+parses user-uploaded media, scrapes URLs for embeds, and accepts federation
+payloads from remote instances, so any remote-code-execution bug in it would
+become host root the moment that socket exists. Trading that for a button is not
+a trade worth making. The panel hands the operator an exact, copyable command
+instead, and `./update.sh` (see [deployment.md](deployment.md)) is where the
+effort went.
+
+---
+
 ### User Management
 
 All admin-only.
@@ -446,6 +521,22 @@ Zustand store managing two data objects:
 ### Admin UI Panels
 
 All panels live under `packages/web/src/components/modals/instanceSettingsPanels/`. Each operates as a controlled form with a local `draft` state, detecting changes against the store's server-synced values. Unsaved changes show a sticky glass-bubble save/reset bar at the bottom.
+
+#### UpdatesPanel
+
+Shows the running version, commit, and install channel; whether a newer release
+exists, with its date and a link to the notes; and the exact command to run.
+Ignores nothing and hides nothing: when the lookup could not be made it says so
+and still reports what is running, distinguishing "turned off", "rate-limited",
+and "could not reach GitHub", because those call for different responses.
+
+The command block is `select-all`-friendly with a copy button. A disclosure,
+"I do not have update.sh", expands to `git pull` plus the raw compose commands
+for the relevant channel. That disclosure is necessary because `update.sh` ships
+from 1.0.5 onward, so an operator on 1.0.4 does not have it yet.
+
+Registered as the `updates` sub-tab in `InstancePanel.tsx`, and as
+`settings-instance-updates` in `MobileShell.tsx` / `MobileInstancePanel.tsx`.
 
 #### GeneralPanel
 
