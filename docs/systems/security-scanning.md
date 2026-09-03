@@ -60,20 +60,46 @@ fix is to do the upgrades, not to push the date.
 
 ### The image scan is the exception
 
-`docker-publish.yml`'s Trivy image scan stays report-only. Measured 2026-09-03
-against an image built from `main`: **20 fixable HIGH/CRITICAL**. None of them are
-covered by the dependency pass, because Trivy inspects the image's real
-`node_modules` while OSV reads the lockfile, so the two see different things. Among
-them, `pnpm` itself is present in the runtime image and contributes several, even
-though the final stage never installs it and only copies `node_modules` from the
-deps stage. That is worth its own investigation.
+`docker-publish.yml`'s Trivy image scan stays report-only, but the backlog behind
+that decision is now mostly gone. The findings the scan reports are not the ones
+the dependency pass covers: Trivy inspects the image's real `node_modules` and its
+installed OS and Node packages, while OSV reads the lockfile, so the two see
+different things.
 
-Making this job blocking today would fail every release publish until that backlog
-is worked. Holding security fixes behind a scanner backlog is the exact inversion
-this project already decided against when the release track was changed from one
-release at the end to a patch per landed track. The image scan needs its own
-remediation pass, on the model of the dependency pass, and then it can be flipped
-the same way.
+**Measured 2026-09-03 against an image built from `main`: 20 fixable
+HIGH/CRITICAL.** Seventeen of them had nothing to do with the application. They
+came from two package managers that sat in the runtime image without ever running:
+
+- `pnpm` 10.34.3, which the runtime stage installed itself via
+  `corepack prepare`, along with the copy of `brace-expansion`, `ip-address` and
+  `tar` bundled inside pnpm's own distribution. Those bundled copies are not
+  reachable from `pnpm-lock.yaml`, so no `pnpm.overrides` entry could have fixed
+  them. Thirteen findings.
+- `npm`, which `node:24-slim` bundles, with its own vendored `brace-expansion`,
+  `ip-address` and `tar`. Four findings.
+
+The runtime stage installs nothing from a registry. `node_modules` is copied
+wholesale from `deps` and the CMD starts `node` directly, so neither manager was
+ever invoked. The `Dockerfile` now removes both from that stage (the `deps` and
+`builder` stages still need pnpm and keep it). **The count after that change is 3.**
+
+The three that remain are one cluster, all reached through Fastify 4:
+`fastify` 4.29.1 (CVE-2026-25223), `@fastify/static` 7.0.4 (CVE-2026-15074) and
+`find-my-way` 8.2.2 (CVE-2026-47219). Every fixed version Trivy names is in a
+later major: Fastify 5.7.2, `@fastify/static` 10.1.1, `find-my-way` 9.7.0, and
+`@fastify/static` 10 requires Fastify 5 anyway. There is no fix inside the 4.x
+line, so clearing these is the Fastify 5 migration and its plugin ecosystem, not a
+version bump. That is a code change with a real blast radius and it belongs in its
+own pass.
+
+So the job stays report-only for now. Making it blocking today would fail every
+release publish until the Fastify migration lands, and holding security fixes
+behind a scanner backlog is the exact inversion this project already decided
+against when the release track was changed from one release at the end to a patch
+per landed track. **When the Fastify migration lands, re-measure, and if the count
+is zero add `exit-code: '1'` and drop `continue-on-error` from the Trivy step in
+`docker-publish.yml`.** Do not reach the same place with `.trivyignore` entries;
+suppressing the count is not the same as clearing it.
 
 ## Dynamic scanning (DAST)
 
