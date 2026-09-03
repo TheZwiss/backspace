@@ -24,6 +24,18 @@ export type UpdateCapability = 'auto' | 'manual' | 'external';
 export type SignatureClass = 'adhoc' | 'identified' | 'unknown';
 
 /**
+ * Whether the desktop app is running inside a package sandbox.
+ *
+ * Keep this separate from update capability: an immutable package may delegate
+ * updates without necessarily preventing host login-item registration. Flatpak
+ * currently answers both questions the same way, but they are not the same
+ * capability and must not become coupled at their call sites.
+ */
+export function isSandboxed(): boolean {
+  return Boolean(process.env.FLATPAK_ID);
+}
+
+/**
  * Classifies the designated requirement printed by `codesign -d -r- <bundle>`.
  *
  * This is the property that decides whether macOS auto-update can ever work.
@@ -138,7 +150,7 @@ export function getUpdateCapability(): UpdateCapability {
   // Flatpak deployments are immutable. Updates are installed atomically by
   // Flatpak, so neither electron-updater nor a manual GitHub download is an
   // appropriate action inside the sandbox.
-  if (process.env.FLATPAK_ID) {
+  if (isSandboxed()) {
     cached = 'external';
     return cached;
   }

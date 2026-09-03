@@ -101,6 +101,7 @@ interface BackspaceElectronAPI {
   // by a newer instance can find itself running inside an older app, so every
   // call site must feature-detect. See updateStore.ts.
   getUpdateStatus?: () => Promise<unknown>;
+  isSandboxed?: () => Promise<boolean>;
   onUpdateStatusChanged?: (callback: (snapshot: unknown) => void) => (() => void);
   dismissUpdate?: (version: string) => void;
   openReleasePage?: () => void;

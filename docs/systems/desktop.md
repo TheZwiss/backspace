@@ -144,6 +144,13 @@ The OS is the source of truth for `openAtLogin` on all platforms. Disk is used o
 - **macOS:** OS-authoritative for `openAtLogin`. Disk-cached for `startMinimized` (no introspection available).
 - **Linux:** OS-authoritative for `openAtLogin`. Disk-cached for `startMinimized` (we deliberately do not parse `Exec=` lines from `.desktop` files; out-of-band edits are rare and parsing shell-quoted strings is fragile).
 
+Flatpak is the exception: Electron cannot register a host login item across the
+sandbox boundary, so both auto-launch IPC handlers return disabled settings and
+the renderer hides the controls. This is decided by the dedicated
+`isSandboxed()` predicate and `is-sandboxed` IPC query, not by
+`UpdateCapability`; sandbox restrictions and update ownership are independent
+capabilities even though `FLATPAK_ID` currently affects both.
+
 ### Platform-Specific Implementation (`applyLoginItemSettings()`)
 
 | Platform | Method | Key parameters | Rationale |
@@ -453,7 +460,11 @@ uses `flatpak/prepare-ci-manifest.mjs` to generate an ignored manifest whose
 application source is `type: dir`, so both x86_64 and aarch64 jobs compile the
 actual checkout. On each `v*` tag, `release.yml` updates the source pin,
 AppStream release and screenshot tag, regenerates `node-sources.json`, validates
-the metadata, and opens or updates a dedicated Flatpak metadata pull request.
+the metadata, uploads those exact generated files, and builds their published
+manifest natively on x86_64 and aarch64. Only after both builds pass does it
+open or update the dedicated Flatpak metadata pull request. This validation is
+part of the release workflow because pushes and pull requests created with its
+`GITHUB_TOKEN` do not trigger the normal `pull_request` workflow.
 
 CI publishes via `.github/workflows/release.yml` (tag `v*` on the public repo).
 A `create-release` job runs first and creates the draft for the tag, then four
@@ -697,6 +708,7 @@ All handlers registered in `main.ts:registerIpcHandlers()`.
 | `check-accessibility` | R->M | `boolean` | macOS accessibility permission check |
 | `get-recovery-state` | R->M | `RecoveryState` | Recovery page reads initial state on mount |
 | `get-update-status` | R->M | `UpdateSnapshot` | Renderer reads the current snapshot on mount |
+| `is-sandboxed` | R->M | `boolean` | Detect package sandbox restrictions independently of update capability |
 
 ### Main -> Renderer Events
 

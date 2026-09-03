@@ -24,7 +24,7 @@ import {
   clearInstanceUrl,
   getPickerPath,
 } from './instanceUrl';
-import { getUpdateCapability } from './updateCapability';
+import { getUpdateCapability, isSandboxed } from './updateCapability';
 import { loadDismissedVersion, setDismissedVersion } from './updateDismissal';
 import { purgeUpdaterCache } from './updaterCache';
 import {
@@ -654,6 +654,10 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle('get-update-status', () => getUpdateStore().get());
 
+  // Sandbox restrictions are independent of update capability. A package may
+  // delegate updates while still supporting host login-item registration.
+  ipcMain.handle('is-sandboxed', () => isSandboxed());
+
   ipcMain.on('dismiss-update', (_event, payload: { version?: unknown }) => {
     const version = typeof payload?.version === 'string' ? payload.version.trim() : '';
     if (version === '') return;
@@ -678,7 +682,7 @@ function registerIpcHandlers(): void {
 
   // Auto-launch settings
   ipcMain.handle('get-auto-launch-settings', (): { openAtLogin: boolean; startMinimized: boolean } => {
-    if (getUpdateCapability() === 'external') {
+    if (isSandboxed()) {
       return { openAtLogin: false, startMinimized: false };
     }
 
@@ -716,7 +720,7 @@ function registerIpcHandlers(): void {
   });
 
   ipcMain.handle('set-auto-launch-settings', (_event, settings: { openAtLogin?: boolean; startMinimized?: boolean }) => {
-    if (getUpdateCapability() === 'external') {
+    if (isSandboxed()) {
       return { openAtLogin: false, startMinimized: false };
     }
 

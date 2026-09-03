@@ -21,6 +21,8 @@ flatpak run io.github.TheZwiss.backspace
 
 Release tags update the manifest commit, AppStream release and screenshot URLs,
 and `node-sources.json` automatically through `.github/workflows/release.yml`.
+That workflow builds the exact generated manifest on native x86_64 and aarch64
+runners and opens the metadata pull request only after both builds pass.
 To regenerate the offline source list manually after changing `pnpm-lock.yaml`:
 
 ```sh
