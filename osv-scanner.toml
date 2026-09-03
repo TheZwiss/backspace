@@ -1,0 +1,91 @@
+# OSV-Scanner ratchet. Consumed by .github/workflows/security.yml.
+#
+# The dependency scan blocks on any vulnerability that is NOT listed here, so a
+# newly introduced one fails the build. The entries below are the backlog that
+# existed when enforcement was turned on: every one is fixable, and every one
+# needs a major upgrade that is its own compatibility decision. They are
+# deferred, not dismissed. The argument for each lives in
+# docs/systems/security-scanning.md, section "What is left open, and why".
+#
+# ignoreUntil is deliberate. A waiver with no expiry is how a backlog becomes
+# permanent. When these dates pass the findings come back and block, which
+# forces the upgrade decision to be made rather than forgotten.
+#
+# Removing an entry is the goal. Adding one needs the same written reason.
+
+# fastify 4.29.1 -> 5.x. Four findings. Major upgrade: plugin API and lifecycle
+# changes across every route file.
+[[IgnoredVulns]]
+id = "CVE-2026-25223"
+ignoreUntil = 2026-12-01
+reason = "fastify 4.29.1, fixed in 5.x. Major upgrade, tracked in security-scanning.md."
+
+[[IgnoredVulns]]
+id = "CVE-2026-18504"
+ignoreUntil = 2026-12-01
+reason = "fastify 4.29.1, fixed in 5.x. Major upgrade, tracked in security-scanning.md."
+
+[[IgnoredVulns]]
+id = "CVE-2026-3635"
+ignoreUntil = 2026-12-01
+reason = "fastify 4.29.1, fixed in 5.x. Major upgrade, tracked in security-scanning.md."
+
+[[IgnoredVulns]]
+id = "CVE-2026-25224"
+ignoreUntil = 2026-12-01
+reason = "fastify 4.29.1, fixed in 5.x. Major upgrade, tracked in security-scanning.md."
+
+# @fastify/static 7.0.4 -> 10.x. Gated behind the fastify 5 upgrade above.
+[[IgnoredVulns]]
+id = "CVE-2026-15074"
+ignoreUntil = 2026-12-01
+reason = "@fastify/static 7.0.4, fixed in 10.x. Gated behind the fastify 5 upgrade."
+
+[[IgnoredVulns]]
+id = "CVE-2026-7120"
+ignoreUntil = 2026-12-01
+reason = "@fastify/static 7.0.4, fixed in 10.x. Gated behind the fastify 5 upgrade."
+
+# find-my-way 8.2.2 -> 9.7.0. Transitive through fastify.
+[[IgnoredVulns]]
+id = "CVE-2026-47219"
+ignoreUntil = 2026-12-01
+reason = "find-my-way 8.2.2, fixed in 9.7.0. Transitive through fastify 4."
+
+# react-router 6.30.6 -> 7.18.0. Major upgrade across every route in the SPA.
+[[IgnoredVulns]]
+id = "CVE-2026-53666"
+ignoreUntil = 2026-12-01
+reason = "react-router 6.30.6, fixed in 7.18.0. Major upgrade, tracked in security-scanning.md."
+
+[[IgnoredVulns]]
+id = "CVE-2026-53669"
+ignoreUntil = 2026-12-01
+reason = "react-router 6.30.6, fixed in 7.18.0. Major upgrade, tracked in security-scanning.md."
+
+# electron 40.10.6 -> 41.10.3. No fix exists in the 40 line, so this needs a
+# major Electron upgrade and a re-run of the desktop hardening verification.
+[[IgnoredVulns]]
+id = "CVE-2026-70608"
+ignoreUntil = 2026-12-01
+reason = "electron 40.10.6, no fix in the 40 line. Needs the 41 upgrade plus fuse re-verification."
+
+# lodash 4.17.23 -> 4.18.0. Build-time only: electron-builder to
+# @malept/flatpak-bundler. Never ships in the app or the server image.
+[[IgnoredVulns]]
+id = "CVE-2021-23337"
+ignoreUntil = 2026-12-01
+reason = "lodash 4.17.23, build-time only via electron-builder. Does not ship to users."
+
+[[IgnoredVulns]]
+id = "CVE-2025-13465"
+ignoreUntil = 2026-12-01
+reason = "lodash 4.17.23, build-time only via electron-builder. Does not ship to users."
+
+# esbuild 0.18.20 -> 0.25.0. Build-time only: drizzle-kit to
+# @esbuild-kit/core-utils. Note the separate 0.28.2 copy that tsx pulls into the
+# server image is a different instance and is not affected by this advisory.
+[[IgnoredVulns]]
+id = "GHSA-67mh-4wv8-2f99"
+ignoreUntil = 2026-12-01
+reason = "esbuild 0.18.20, build-time only via drizzle-kit. The runtime copy is 0.28.2."

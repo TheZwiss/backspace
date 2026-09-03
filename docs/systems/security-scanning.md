@@ -2,9 +2,11 @@
 
 Automated, continuous scanning wired into GitHub Actions. This document is the
 reference for what runs, where results go, and the one-time settings a maintainer
-must enable. **Current state: report-only** — scanners surface findings in the
-Security tab but do not block merges yet. Enforcement (blocking) is turned on in a
-later change once the remediation pass has cleared the backlog.
+must enable. **Current state: enforcing**, with one documented exception. The
+scanners in `security.yml` fail the job on a finding the tiered policy says must
+block. The published-image scan in `docker-publish.yml` is the exception and is
+still report-only, for the measured reason in "The image scan is the exception"
+below.
 
 ## Workflows
 
@@ -21,7 +23,7 @@ later change once the remediation pass has cleared the backlog.
 > `gitleaks` job does not upload SARIF, so secret hits do **not** appear under
 > Security → Code scanning (unlike the OSV / Trivy / CodeQL / Scorecard jobs).
 
-## Tiered policy (target, enforced in a later change)
+## Tiered policy
 
 - **Always block:** gitleaks secret hit; OSV/Trivy fixable HIGH/CRITICAL; Trivy
   disallowed license.
@@ -31,6 +33,47 @@ later change once the remediation pass has cleared the backlog.
 Code-level gates (OSV, Trivy, gitleaks) block via workflow exit codes. CodeQL
 merge-blocking, Dependabot alerts, and native secret-scanning are GitHub *settings*
 — see the checklist below.
+
+### How enforcement is actually wired
+
+Turning this on was not a matter of deleting `continue-on-error`. Two things had to
+be true first, and both were measured rather than assumed.
+
+**Trivy exits 0 in SARIF mode whatever it finds.** Removing `continue-on-error`
+alone would have looked like enforcement while enforcing nothing. The config and
+license jobs carry `exit-code: '1'` plus `severity: 'HIGH,CRITICAL'`; the exit code
+is what blocks, and the severity filter is what keeps it aligned with the tiered
+policy above.
+
+**All thirteen remaining OSV findings are fixable**, and five are HIGH, so a plain
+flip would have turned `main` red and blocked every pull request. `osv-scanner.toml`
+resolves that as a **ratchet rather than a waiver**: it lists exactly the backlog
+that existed at flip time, one entry per finding, each with the reason and the
+version that fixes it. Anything not in that file fails the job, so a newly
+introduced vulnerability blocks while the documented backlog stays visible.
+
+Every entry carries `ignoreUntil = 2026-12-01`. **A waiver with no expiry is how a
+backlog becomes permanent.** When that date passes these findings come back and
+block, which forces the upgrade decision instead of letting it rot. That is
+deliberate, and it means `main` can go red on that date if nobody has acted. The
+fix is to do the upgrades, not to push the date.
+
+### The image scan is the exception
+
+`docker-publish.yml`'s Trivy image scan stays report-only. Measured 2026-09-03
+against an image built from `main`: **20 fixable HIGH/CRITICAL**. None of them are
+covered by the dependency pass, because Trivy inspects the image's real
+`node_modules` while OSV reads the lockfile, so the two see different things. Among
+them, `pnpm` itself is present in the runtime image and contributes several, even
+though the final stage never installs it and only copies `node_modules` from the
+deps stage. That is worth its own investigation.
+
+Making this job blocking today would fail every release publish until that backlog
+is worked. Holding security fixes behind a scanner backlog is the exact inversion
+this project already decided against when the release track was changed from one
+release at the end to a patch per landed track. The image scan needs its own
+remediation pass, on the model of the dependency pass, and then it can be flipped
+the same way.
 
 ## Dynamic scanning (DAST)
 
