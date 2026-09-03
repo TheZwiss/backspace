@@ -9,10 +9,84 @@ permissions:
   contents: read
 
 jobs:
+  # Create the draft release once, before the build matrix fans out.
+  #
+  # electron-builder's GitHub publisher lists the repository's releases, looks
+  # for one carrying this tag, and creates a draft when it finds none
+  # (electron-publish, gitHubPublisher.js, getOrCreateRelease). The four matrix
+  # jobs run that lookup concurrently, so all four can see "no release for this
+  # tag" before any of them has finished creating one. On v1.0.3 two of them
+  # went on to create a draft: the tag ended up with two releases and the 22
+  # assets split 12/10 between them, which is easy to miss because a release
+  # listing shows one entry per tag. Consolidating them was manual.
+  #
+  # With the draft already in place, every matrix job takes the "found an
+  # existing draft" branch of that lookup and only uploads. That branch returns
+  # the release untouched — the publisher never rewrites the name or the body of
+  # a release it did not create — so the title set below is the one the release
+  # keeps.
+  create-release:
+    runs-on: ubuntu-latest
+    # Scoped to this job: it is the only one that needs to create a release.
+    permissions:
+      contents: write
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: Create the draft release for this tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        # Listing releases rather than asking for one by tag: the "get a release
+        # by tag name" endpoint does not return drafts, and the release this job
+        # creates is a draft, so a re-run would not find its own work and would
+        # try to create a second one. The list endpoint includes drafts.
+        #
+        # Deliberately not `gh release create ... || true`. That form also
+        # swallows auth and network failures, and the matrix would then race
+        # exactly as before while this job reported success. Look first, create
+        # only on a confirmed absence, and let anything else fail the job.
+        #
+        # The title matches every release shipped so far ("Backspace 1.0.3").
+        # electron-builder would name the draft after the bare version instead,
+        # because `releaseInfo.releaseName` is not set in electron-builder.yml.
+        # Notes stay empty: they are written by hand before the draft is
+        # published, as they have been for every release.
+        run: |
+          set -euo pipefail
+
+          existing="$(gh api --paginate "repos/$GH_REPO/releases" \
+            --jq '.[] | select(.tag_name == env.TAG) | .id')"
+          count="$(printf '%s' "$existing" | grep -c . || true)"
+
+          if [ "$count" -gt 1 ]; then
+            ids="$(printf '%s' "$existing" | tr '\n' ' ')"
+            echo "::error::$count releases already carry the tag $TAG (ids: $ids) — this is the duplicate-release state this job exists to prevent. Consolidate them by hand before re-running."
+            exit 1
+          fi
+
+          if [ "$count" -eq 1 ]; then
+            echo "A release already carries $TAG (id $existing) — leaving it untouched."
+            exit 0
+          fi
+
+          echo "No release carries $TAG yet — creating the draft."
+          gh release create "$TAG" \
+            --draft \
+            --title "Backspace ${TAG#v}" \
+            --notes ""
+
   build:
+    # Every matrix job publishes into the draft that `create-release` has
+    # already made. Without this dependency they race to create it themselves.
+    needs: create-release
     # `contents: write` is scoped to this job: electron-builder runs with
-    # `--publish always`, which creates the GitHub release for the tag and
-    # uploads the installers and the updater feed files to it.
+    # `--publish always`, which uploads the installers and the updater feed
+    # files to the release for the tag.
     permissions:
       contents: write
     strategy:

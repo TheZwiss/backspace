@@ -259,11 +259,19 @@ are unsigned. Consequences:
   install only.
 - **Linux:** AppImage auto-update works unsigned.
 
-CI publishes via `.github/workflows/release.yml` (tag `v*` on the public repo):
-native runners for mac (arm64+x64), win (x64+arm64), linux (x64, arm64), each
-job uploading its installers, `.blockmap`s, and platform `latest*.yml` manifest
-to a single draft release. The draft must be published manually — drafts are
+CI publishes via `.github/workflows/release.yml` (tag `v*` on the public repo).
+A `create-release` job runs first and creates the draft for the tag, then four
+native build jobs fan out (mac arm64+x64, win x64+arm64, linux x64, linux
+arm64), each uploading its installers, `.blockmap`s, and platform `latest*.yml`
+manifest into that one draft. The draft must be published manually — drafts are
 invisible to electron-updater.
+
+The `create-release` job exists because electron-builder creates the release
+itself when it cannot find one for the tag, and four jobs doing that lookup
+concurrently can all miss. On v1.0.3 two of them created a draft and the assets
+split across the pair, which needed manual consolidation before the release
+could be published. Creating the draft once, ahead of the matrix, leaves the
+build jobs with nothing to create.
 
 ### Check Schedule
 

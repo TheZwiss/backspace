@@ -46,11 +46,17 @@ win:
   target:
     - nsis
 linux:
-  # electron-builder 26 derives executableName from package.json `name` when it is
-  # not set, and this package is named `@backspace/desktop`. Stripping the unsafe
-  # characters leaves `@backspacedesktop`, which it then rejects, so both Linux
-  # targets fail to build. Version 25 defaulted to productName instead, so this
-  # pins the value 25 produced rather than introducing a new one.
+  # electron-builder derives the Linux executable name from package.json `name`
+  # when this key is unset (LinuxPackager: `appInfo.sanitizedName.toLowerCase()`),
+  # and this package is named `@backspace/desktop`. Sanitising drops the slash and
+  # leaves `@backspacedesktop`. Version 26 added a whitelist check on that derived
+  # value in the AppImage target (`validateCriticalPathString`, which permits only
+  # letters, digits, dots, underscores, hyphens and spaces), so the leading `@` now
+  # aborts both Linux targets. Version 25 derived exactly the same name but never
+  # validated it, which is why 1.0.2 shipped a Linux executable genuinely called
+  # `@backspacedesktop`. Setting this key is therefore a rename, not a restoration.
+  # Keep the fuse-verification paths in .github/workflows/release.yml in step with
+  # it; nothing else couples them.
   executableName: Backspace
   icon: build/icons/
   target:
