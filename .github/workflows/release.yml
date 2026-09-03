@@ -146,15 +146,16 @@ jobs:
               )
               ;;
             Linux)
-              # Not "backspace": electron-builder names the Linux executable
-              # from package.json `name` ("@backspace/desktop") via
-              # sanitizeFileName().toLowerCase(), which drops the slash but
-              # keeps the leading "@" — the "@" is only special-cased for the
-              # .deb package name, not for the binary.
+              # Was "@backspacedesktop" up to 1.0.2: electron-builder derived the
+              # Linux executable from package.json `name` ("@backspace/desktop"),
+              # dropping the slash but keeping the leading "@". electron-builder 26
+              # validates that name and rejects it outright, so the build now sets
+              # linux.executableName explicitly. Keep this path in step with
+              # packages/desktop/electron-builder.yml; nothing else couples them.
               if [ "$RUNNER_ARCH" = "ARM64" ]; then
-                artifacts=("dist-electron/linux-arm64-unpacked/@backspacedesktop")
+                artifacts=("dist-electron/linux-arm64-unpacked/Backspace")
               else
-                artifacts=("dist-electron/linux-unpacked/@backspacedesktop")
+                artifacts=("dist-electron/linux-unpacked/Backspace")
               fi
               ;;
             *)
