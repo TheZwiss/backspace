@@ -549,17 +549,27 @@ the file sandbox is identified by `default-src 'none'` and by the absence of
   `grep 'CSP violation reported'` to be empty in the instance logs. It was empty
   in every round. It would have been empty no matter what the policy did,
   because every round drove **headless** Chromium, and headless Chromium does
-  not deliver CSP reports. Measured on the enforcing VM: two separate injected
-  violations, one `script-src` and one `frame-src`, both confirmed blocked by the
-  in-page `securitypolicyviolation` listener, produced **zero** requests to
-  `/api/csp-report` within 70 seconds and zero log lines.
+  not deliver CSP reports. Measured on the enforcing VM, counting on the server
+  rather than in the browser: two separate injected violations, one `script-src`
+  and one `frame-src`, both confirmed blocked by the in-page
+  `securitypolicyviolation` listener, produced **zero** requests to
+  `/api/csp-report` and zero log lines within 70 seconds.
 
   The sink itself is fine, and that was checked rather than assumed. A direct
   `POST /api/csp-report` to the deployed VM returned 204 and logged the report.
-  Re-running the identical harness with `headless: false` produced a real
-  Reporting API delivery for the same `frame-src` violation, which the app parsed
-  and logged. So the pipeline works in a real browser and does not work in the
-  harness.
+  Re-running the identical harness with `headless: false` produced three real
+  Reporting API deliveries, including the `frame-src` violation, which the app
+  parsed and logged in `reports+json` form. So the pipeline works in a real
+  browser and does not work in the harness.
+
+  **A second harness trap surfaced while measuring this, and it is the same
+  family as the `page.evaluate` one below.** Playwright's `page.on('request')`
+  never sees a Reporting API delivery. The headed run that the server recorded
+  three reports for reported an empty request list to the harness, because the
+  browser makes those deliveries out of band rather than through the page's
+  network stack. Any future check of this must count on the server. A harness
+  that watches `page.on('request')` for `/api/csp-report` will report zero
+  forever, in every browser, and read exactly like a clean policy.
 
   **The consequence is that the in-page listener is the only observation evidence
   in this document that carries weight.** Every "the instance log was empty" line
