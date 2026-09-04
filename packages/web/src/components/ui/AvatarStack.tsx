@@ -170,6 +170,7 @@ export function AvatarStack({ members, size, border, iconUrl }: AvatarStackProps
         style={{ width: size, height: size }}
       >
         <div
+          // i18n-check: allow-literal: a data attribute for tests, not an input placeholder
           data-avatar-stack-placeholder="true"
           className={`absolute inset-0 rounded-full bg-surface-input border-2 ${borderClass}`}
         />

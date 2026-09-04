@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useSocialStore } from '../../stores/socialStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useActivityStore } from '../../stores/activityStore';
@@ -67,6 +68,7 @@ function ActivityFriendRow({
 }
 
 export function ActivityPanel() {
+  const { t } = useTranslation(['social', 'common']);
   const friends = useSocialStore((s) => s.friends);
   const loadFriends = useSocialStore((s) => s.loadFriends);
   const memberListOpen = useUIStore((s) => s.memberListOpen);
@@ -148,13 +150,13 @@ export function ActivityPanel() {
   return (
     <div className="w-60 bg-surface-channel flex-shrink-0 overflow-y-auto select-none no-scrollbar hidden md:block border-l border-border-hard">
       <div className="p-3">
-        <h3 className="text-[20px] font-bold text-txt-primary mb-4 px-2">Active Now</h3>
+        <h3 className="text-[20px] font-bold text-txt-primary mb-4 px-2">{t('social:activity.title')}</h3>
 
         {activeFriends.length === 0 && onlineFriends.length === 0 && offlineFriends.length === 0 ? (
           <div className="text-center py-8">
-            <div className="text-[16px] font-bold text-txt-primary mb-1">It's quiet for now...</div>
+            <div className="text-[16px] font-bold text-txt-primary mb-1">{t('social:activity.quietTitle')}</div>
             <div className="text-[14px] text-txt-tertiary max-w-[200px] mx-auto">
-              When a friend starts an activity&#8212;like playing a game or hanging out on voice&#8212;we'll show it here!
+              {t('social:activity.quietDescription')}
             </div>
           </div>
         ) : (
@@ -167,7 +169,7 @@ export function ActivityPanel() {
             {onlineFriends.length > 0 && (
               <div className="mb-4">
                 <h3 className="text-[10.5px] font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
-                  ONLINE — {onlineFriends.length}
+                  {t('social:activity.online', { n: onlineFriends.length })}
                 </h3>
                 {onlineFriends.map(f => renderFriend(f))}
               </div>
@@ -175,7 +177,7 @@ export function ActivityPanel() {
             {offlineFriends.length > 0 && (
               <div>
                 <h3 className="text-[10.5px] font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
-                  OFFLINE — {offlineFriends.length}
+                  {t('social:activity.offline', { n: offlineFriends.length })}
                 </h3>
                 {offlineFriends.map(f => renderFriend(f, true))}
               </div>

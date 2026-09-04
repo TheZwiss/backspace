@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import ReactDOM from 'react-dom';
+import { useTranslation } from 'react-i18next';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useSpaceStore, getMyUserIdForOrigin } from '../../stores/spaceStore';
 import type { TaggedSpace } from '../../stores/spaceStore';
@@ -25,14 +26,14 @@ type ResolvedItem =
 // ─── Folder color presets ─────────────────────────────────────────────────
 
 const FOLDER_COLORS = [
-  { name: 'mint', value: '#86efac' },
-  { name: 'peach', value: '#fbbf93' },
-  { name: 'lavender', value: '#c4b5fd' },
-  { name: 'sky', value: '#7dd3fc' },
-  { name: 'amber', value: '#fcd34d' },
-  { name: 'rose', value: '#fda4af' },
-  { name: 'coral', value: '#fb7185' },
-];
+  { name: 'mint', value: '#86efac', labelKey: 'spaces:sidebar.folder.colors.mint' },
+  { name: 'peach', value: '#fbbf93', labelKey: 'spaces:sidebar.folder.colors.peach' },
+  { name: 'lavender', value: '#c4b5fd', labelKey: 'spaces:sidebar.folder.colors.lavender' },
+  { name: 'sky', value: '#7dd3fc', labelKey: 'spaces:sidebar.folder.colors.sky' },
+  { name: 'amber', value: '#fcd34d', labelKey: 'spaces:sidebar.folder.colors.amber' },
+  { name: 'rose', value: '#fda4af', labelKey: 'spaces:sidebar.folder.colors.rose' },
+  { name: 'coral', value: '#fb7185', labelKey: 'spaces:sidebar.folder.colors.coral' },
+] as const;
 
 // ─── SidebarItem ─────────────────────────────────────────────────────────
 
@@ -61,6 +62,7 @@ interface SidebarItemProps {
 }
 
 function SidebarItem({ id, name, icon, avatarColor, active, onClick, onContextMenu, type = 'space', actionType, hasUnread, dimmed, federationBadge, federationDisconnected, tooltipText, draggable, onDragStart, onDragOver, onDragEnd, onDrop, isDragging, dropIndicator }: SidebarItemProps) {
+  const { t } = useTranslation(['spaces', 'common']);
   const [isHovered, setIsHovered] = useState(false);
   const firstLetter = name.charAt(0).toUpperCase();
 
@@ -111,7 +113,7 @@ function SidebarItem({ id, name, icon, avatarColor, active, onClick, onContextMe
   const buttonContent = (
     <button onClick={onClick} className={`${getButtonClasses()} ${dimmed ? 'opacity-40 saturate-50' : ''}`} style={backgroundStyle} title={tooltipText ? undefined : name}>
       {type === 'dm' ? (
-        <img src="/icons/logo-mark.svg" alt="Backspace" className="w-[25px] h-auto" />
+        <img src="/icons/logo-mark.svg" alt={t('common:appName')} className="w-[25px] h-auto" />
       ) : type === 'action' ? (
         actionType === 'add' ? (
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
@@ -527,6 +529,7 @@ function FolderSlot({
   onDrop: (e: React.DragEvent) => void;
   anchorRef: (el: HTMLDivElement | null) => void;
 }) {
+  const { t } = useTranslation(['spaces', 'common']);
   const [isHovered, setIsHovered] = useState(false);
 
   const getPillHeight = () => {
@@ -576,7 +579,7 @@ function FolderSlot({
       {isFlyoutOpen ? (
         iconContent
       ) : (
-        <Tooltip content={folder.name || `Folder (${folderSpaces.length})`} position="right" delay={300}>
+        <Tooltip content={folder.name || t('spaces:sidebar.folder.tooltip', { count: folderSpaces.length })} position="right" delay={300}>
           {iconContent}
         </Tooltip>
       )}
@@ -587,6 +590,7 @@ function FolderSlot({
 // ─── SpaceSidebar (main component) ────────────────────────────────────────
 
 export function SpaceSidebar() {
+  const { t } = useTranslation(['spaces', 'common']);
   const spaces = useSpaceStore((s) => s.spaces);
   const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
   const setCurrentSpace = useSpaceStore((s) => s.setCurrentSpace);
@@ -634,7 +638,7 @@ export function SpaceSidebar() {
       {
         key: 'invite',
         type: 'action',
-        label: 'Invite People',
+        label: t('spaces:sidebar.space.invite'),
         icon: (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
             <path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
@@ -646,16 +650,16 @@ export function SpaceSidebar() {
             const origin = (space as TaggedSpace)._instanceOrigin || window.location.origin;
             const url = `${origin}/invite/${code}`;
             await navigator.clipboard.writeText(url);
-            useUIStore.getState().addToast('Invite link copied to clipboard', 'success', 3000);
+            useUIStore.getState().addToast(t('spaces:sidebar.space.inviteCopied'), 'success', 3000);
           } catch {
-            useUIStore.getState().addToast('Failed to generate invite', 'warning', 3000);
+            useUIStore.getState().addToast(t('spaces:sidebar.space.inviteFailed'), 'warning', 3000);
           }
         },
       },
       {
         key: 'transfer',
         type: 'action',
-        label: 'Transfer Ownership',
+        label: t('spaces:sidebar.space.transferOwnership'),
         hidden: !isOwner,
         icon: (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -667,7 +671,7 @@ export function SpaceSidebar() {
       {
         key: 'leave',
         type: 'action',
-        label: 'Leave Space',
+        label: t('spaces:sidebar.space.leave'),
         hidden: isOwner,
         danger: true,
         icon: (
@@ -680,7 +684,7 @@ export function SpaceSidebar() {
     ];
 
     openContextMenu({ x: e.clientX, y: e.clientY }, items);
-  }, [openContextMenu]);
+  }, [openContextMenu, t]);
 
   // Set of disconnected origins
   const disconnectedOrigins = useMemo(() => {
@@ -774,13 +778,13 @@ export function SpaceSidebar() {
     const origin = space?._instanceOrigin;
     if (origin && disconnectedOrigins.has(origin)) {
       const inst = instances.find(i => i.origin === origin);
-      addToast(`Reconnecting to ${inst?.label || 'remote instance'}...`, 'warning', 4000);
+      addToast(t('spaces:sidebar.space.reconnecting', { instance: inst?.label || t('spaces:sidebar.space.remoteInstance') }), 'warning', 4000);
       return;
     }
     setCurrentSpace(spaceId);
     setShowDms(false);
     navigate(`/channels/${spaceId}`);
-  }, [spaceMap, disconnectedOrigins, instances, addToast, setCurrentSpace, setShowDms, navigate]);
+  }, [spaceMap, disconnectedOrigins, instances, addToast, setCurrentSpace, setShowDms, navigate, t]);
 
   const handleDmClick = () => {
     setShowDms(true);
@@ -1095,7 +1099,7 @@ export function SpaceSidebar() {
     <nav data-pip-obstacle="left" className="w-[72px] bg-surface-base flex flex-col items-center py-3 overflow-y-auto flex-shrink-0 no-scrollbar select-none md:fixed md:inset-y-0 md:left-0 md:z-[100] md:glass-strip" style={{ paddingBottom: floatingPanelHeight + 24, ...(isElectron() ? { top: '33px' } : {}) }} onDragOver={(e) => { if (dragState) e.preventDefault(); }} onDrop={handleDrop}>
       <SidebarItem
         id="@me"
-        name="Direct Messages"
+        name={t('spaces:sidebar.directMessages')}
         active={showDms}
         onClick={handleDmClick}
         type="dm"
@@ -1158,7 +1162,7 @@ export function SpaceSidebar() {
                 {
                   key: 'rename',
                   type: 'action',
-                  label: 'Rename Folder',
+                  label: t('spaces:sidebar.folder.rename'),
                   icon: (
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
@@ -1174,12 +1178,12 @@ export function SpaceSidebar() {
                   type: 'custom',
                   render: () => (
                     <div className="px-3 py-1.5">
-                      <p className="text-[11px] text-txt-tertiary mb-1.5">Folder Color</p>
+                      <p className="text-[11px] text-txt-tertiary mb-1.5">{t('spaces:sidebar.folder.color')}</p>
                       <div className="flex gap-1.5">
                         <button
                           className={`w-5 h-5 rounded-full border-2 ${!folderRef.color ? 'border-white/40' : 'border-transparent'} bg-white/10`}
                           onClick={() => { handleFolderColorChange(folderRef.id, null); useContextMenuStore.getState().close(); }}
-                          title="Default"
+                          title={t('common:states.default')}
                         />
                         {FOLDER_COLORS.map((c) => (
                           <button
@@ -1187,7 +1191,7 @@ export function SpaceSidebar() {
                             className={`w-5 h-5 rounded-full border-2 ${folderRef.color === c.value ? 'border-white/40' : 'border-transparent'}`}
                             style={{ background: c.value }}
                             onClick={() => { handleFolderColorChange(folderRef.id, c.value); useContextMenuStore.getState().close(); }}
-                            title={c.name}
+                            title={t(c.labelKey)}
                           />
                         ))}
                       </div>
@@ -1201,7 +1205,7 @@ export function SpaceSidebar() {
                 {
                   key: 'ungroup',
                   type: 'action',
-                  label: 'Ungroup',
+                  label: t('spaces:sidebar.folder.ungroup'),
                   danger: true,
                   icon: (
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -1229,7 +1233,7 @@ export function SpaceSidebar() {
 
       <SidebarItem
         id="add-space"
-        name="Add a Space"
+        name={t('spaces:sidebar.addSpace')}
         active={false}
         onClick={() => openModal('createSpace')}
         type="action"
@@ -1238,7 +1242,7 @@ export function SpaceSidebar() {
 
       <SidebarItem
         id="join-space"
-        name="Join a Space"
+        name={t('spaces:sidebar.joinSpace')}
         active={false}
         onClick={() => openModal('joinSpace')}
         type="action"
@@ -1247,7 +1251,7 @@ export function SpaceSidebar() {
 
       <SidebarItem
         id="explore"
-        name="Explore Spaces"
+        name={t('spaces:sidebar.exploreSpaces')}
         active={location.pathname === '/explore'}
         onClick={handleExploreClick}
         type="action"
@@ -1275,10 +1279,10 @@ export function SpaceSidebar() {
               leaveSpace(leaveConfirmSpaceId);
               setLeaveConfirmSpaceId(null);
             }}
-            title={`Leave ${space?.name ?? 'Space'}`}
-            description="Are you sure you want to leave this space? You'll need a new invite to rejoin."
+            title={space ? t('spaces:sidebar.space.leaveConfirm.titleNamed', { name: space.name }) : t('spaces:sidebar.space.leaveConfirm.title')}
+            description={t('spaces:sidebar.space.leaveConfirm.description')}
             variant="danger"
-            confirmLabel="Leave"
+            confirmLabel={t('spaces:sidebar.space.leaveConfirm.confirm')}
           />
         );
       })()}

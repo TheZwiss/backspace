@@ -15,7 +15,10 @@ vi.mock('../../audio/AudioManager', () => ({
 
 // Mock the API client so we can assert spaceInvite calls.
 const mockSpaceInvite = vi.fn();
-vi.mock('../../api/client', () => ({
+vi.mock('../../api/client', async (importOriginal) => ({
+  // Keep the real exports (HttpError is what describeError inspects) and
+  // replace only the api surface this test asserts on.
+  ...(await importOriginal<typeof import('../../api/client')>()),
   api: {
     dm: {
       spaceInvite: (...args: unknown[]) => mockSpaceInvite(...args),
@@ -373,7 +376,7 @@ describe('InviteModal', () => {
         expect.stringContaining('/join/abc123'),
       );
     });
-    expect(await screen.findByText('Copied!')).toBeInTheDocument();
+    expect(await screen.findByText('Copied')).toBeInTheDocument();
   });
 
   it('Copy button is disabled while the invite code is loading', () => {
