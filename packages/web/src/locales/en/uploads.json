@@ -1,1 +1,24 @@
-{}
+{
+  "transfers": {
+    "title": "Transfers",
+    "count_one": "{{count}} transfer",
+    "count_other": "{{count}} transfers",
+    "clearCompleted": "Clear completed",
+    "empty": "No active transfers.",
+    "status": {
+      "done": "Done",
+      "failed": "Failed: {{reason}}",
+      "aborted": "Aborted",
+      "progress": "{{loaded}} / {{total}}"
+    },
+    "actions": {
+      "pause": "Pause",
+      "resume": "Resume",
+      "abort": "Abort"
+    }
+  },
+  "crop": {
+    "title": "Crop Image",
+    "applying": "Applying…"
+  }
+}

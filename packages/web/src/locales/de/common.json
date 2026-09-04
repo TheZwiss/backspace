@@ -51,5 +51,21 @@
     "title": "Etwas ist schiefgelaufen",
     "reload": "Seite neu laden",
     "details": "Fehlerdetails"
+  },
+  "app": {
+    "loading": "Backspace wird geladen"
+  },
+  "chrome": {
+    "toggleMemberList": "Mitgliederliste ein- oder ausblenden",
+    "closeSettings": "Einstellungen schließen"
+  },
+  "sourceCode": {
+    "label": "Quellcode (AGPL)",
+    "labelWithBuild": "Quellcode (AGPL) · {{build}}",
+    "title": "Den Quellcode der Version ansehen, die auf dieser Instanz läuft (AGPL-3.0)"
+  },
+  "devices": {
+    "newAudioInput": "{{label}} erkannt. Wähle es in den Sprach-Einstellungen aus, um zu wechseln.",
+    "unnamedAudioInput": "Neues Audiogerät"
   }
 }

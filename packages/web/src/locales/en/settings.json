@@ -224,6 +224,45 @@
     "save": {
       "updated": "Profile updated",
       "failed": "Failed to update profile"
+    },
+    "deletion": {
+      "title": "Delete Account",
+      "warning": {
+        "headline": "This will permanently delete your account.",
+        "spaces": "All space memberships will be removed",
+        "friends": "All friend connections will be removed",
+        "dms": "All DM memberships will be removed",
+        "messages": "Your messages will remain but be attributed to \"Deleted User\""
+      },
+      "ownedSpaces": {
+        "prompt_one": "You own {{count}} space. Handle each before continuing:",
+        "prompt_other": "You own {{count}} spaces. Handle each before continuing:",
+        "transfer": "Transfer",
+        "delete": "Delete Space",
+        "selectOwner": "Select new owner…"
+      },
+      "processing": "Processing…",
+      "confirm": {
+        "permanent": "This action is permanent and cannot be undone.",
+        "usernamePrompt": "Type your username <username>{{username}}</username> to confirm",
+        "password": "Password",
+        "passwordPlaceholder": "Enter your password",
+        "submit": "Delete My Account",
+        "deleting": "Deleting…"
+      },
+      "federation": {
+        "removing": "Removing your account from connected instances…",
+        "deleteAnyway": "Delete Account Now"
+      },
+      "complete": {
+        "title": "Account deleted",
+        "redirecting": "Redirecting to login…"
+      },
+      "errors": {
+        "usernameMismatch": "Username does not match",
+        "spacesFailed": "Failed to process spaces",
+        "deleteFailed": "Failed to delete account"
+      }
     }
   },
   "privacy": {
