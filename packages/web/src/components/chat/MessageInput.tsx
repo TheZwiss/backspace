@@ -88,7 +88,6 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
   const previewUrlsRef = useRef<Map<string, string>>(new Map());
 
   const sendMessage = useChatStore((s) => s.sendMessage);
-  const channelMessages = useChatStore((s) => s.messages.get(channelId));
   const chatReplyTo = useChatStore((s) => s.replyTo);
   const chatSetReplyTo = useChatStore((s) => s.setReplyTo);
   const editingMessageId = useChatStore((s) => s.editingMessageId);
@@ -453,7 +452,10 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
       && !composerState.replyTo;
 
     if (isPlainArrowUp && composerIsEmpty && !editingMessageId) {
-      const message = findLastOwnEditableMessage(channelMessages ?? [], currentUser);
+      // Read the list on demand: subscribing to it would re-render the composer
+      // on every incoming message, and the shortcut only needs it at keypress time.
+      const channelMessages = useChatStore.getState().messages.get(channelId) ?? [];
+      const message = findLastOwnEditableMessage(channelMessages, currentUser);
       if (message) {
         e.preventDefault();
         setActivePopover(null);
