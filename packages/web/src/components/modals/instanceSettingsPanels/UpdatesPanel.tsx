@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { formatters } from '../../../i18n/formatters';
 import { api } from '../../../api/client';
 import { useUIStore } from '../../../stores/uiStore';
 import type { InstanceUpdateStatus } from '@backspace/shared';
@@ -11,7 +12,7 @@ function formatReleaseDate(iso: string): string {
   if (!iso) return '';
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
-  return date.toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
+  return formatters.formatLongDate(date.getTime());
 }
 
 function formatCheckedAt(checkedAt: number | null): string {

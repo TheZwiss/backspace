@@ -1,8 +1,12 @@
 import { useState, useEffect } from 'react';
+import { useTranslation, Trans } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { Toggle } from '../../ui/Toggle';
 import { useUpdateStore } from '../../../stores/updateStore';
+import { useFormatters, type Formatters } from '../../../i18n/formatters';
 
 function AutoLaunchSettings() {
+  const { t } = useTranslation('settings');
   const [openAtLogin, setOpenAtLogin] = useState(false);
   const [startMinimized, setStartMinimized] = useState(true);
   const [loading, setLoading] = useState(true);
@@ -50,18 +54,18 @@ function AutoLaunchSettings() {
     <>
       <div className="flex items-center justify-between py-1">
         <div className="flex-1 mr-4">
-          <div className="text-sm text-txt-primary">Start at boot</div>
+          <div className="text-sm text-txt-primary">{t('desktop.autoLaunch.openAtLogin.label')}</div>
           <div className="text-xs text-txt-tertiary mt-0.5">
-            Automatically launch Backspace when you log in
+            {t('desktop.autoLaunch.openAtLogin.description')}
           </div>
         </div>
         <Toggle enabled={openAtLogin} onChange={handleOpenAtLoginChange} disabled={busy} />
       </div>
       <div className="flex items-center justify-between py-1">
         <div className="flex-1 mr-4">
-          <div className={`text-sm ${openAtLogin ? 'text-txt-primary' : 'text-txt-tertiary'}`}>Start minimized</div>
+          <div className={`text-sm ${openAtLogin ? 'text-txt-primary' : 'text-txt-tertiary'}`}>{t('desktop.autoLaunch.startMinimized.label')}</div>
           <div className="text-xs text-txt-tertiary mt-0.5">
-            Start hidden in the system tray instead of showing the window
+            {t('desktop.autoLaunch.startMinimized.description')}
           </div>
         </div>
         <Toggle enabled={startMinimized} onChange={handleStartMinimizedChange} disabled={busy || !openAtLogin} />
@@ -74,11 +78,11 @@ function AutoLaunchSettings() {
  * Formats a byte-per-second rate for the download line. Deliberately coarse:
  * this is reassurance that something is happening, not a benchmark.
  */
-function formatRate(bytesPerSecond: number): string {
+function formatRate(t: TFunction<'settings'>, formatters: Formatters, bytesPerSecond: number): string {
   if (bytesPerSecond <= 0) return '';
   const mb = bytesPerSecond / 1_048_576;
-  if (mb >= 1) return `${mb.toFixed(1)} MB/s`;
-  return `${Math.round(bytesPerSecond / 1024)} KB/s`;
+  if (mb >= 1) return t('desktop.updates.rateMegabytes', { value: formatters.formatNumber(Math.round(mb * 10) / 10) });
+  return t('desktop.updates.rateKilobytes', { value: formatters.formatNumber(Math.round(bytesPerSecond / 1024)) });
 }
 
 /**
@@ -94,6 +98,8 @@ function formatRate(bytesPerSecond: number): string {
  * and `download-progress`; both are now wired.
  */
 function UpdateSettings() {
+  const { t } = useTranslation('settings');
+  const formatters = useFormatters();
   const initialize = useUpdateStore((s) => s.initialize);
   const snapshot = useUpdateStore((s) => s.snapshot);
   const currentVersion = useUpdateStore((s) => s.currentVersion);
@@ -113,45 +119,52 @@ function UpdateSettings() {
 
   switch (status.phase) {
     case 'checking':
-      detail = 'Checking for updates...';
+      detail = t('desktop.updates.checking');
       break;
-    case 'downloading':
-      detail = `Downloading ${status.version}, ${status.percent}%`;
-      if (status.bytesPerSecond > 0) detail += ` at ${formatRate(status.bytesPerSecond)}`;
+    case 'downloading': {
+      const percent = formatters.formatNumber(status.percent);
+      detail = status.bytesPerSecond > 0
+        ? t('desktop.updates.downloadingWithRate', {
+            version: status.version,
+            percent,
+            rate: formatRate(t, formatters, status.bytesPerSecond),
+          })
+        : t('desktop.updates.downloading', { version: status.version, percent });
       break;
+    }
     case 'up-to-date':
-      detail = 'You are on the latest version';
+      detail = t('desktop.updates.upToDate');
       tone = 'text-accent-mint';
       break;
     case 'available':
-      detail = `Version ${status.version} is available`;
-      action = { label: 'Download', onClick: openDownloadPage };
+      detail = t('desktop.updates.available', { version: status.version });
+      action = { label: t('desktop.updates.download'), onClick: openDownloadPage };
       break;
     case 'ready':
       if (capability === 'auto') {
-        detail = `Version ${status.version} is ready to install`;
-        action = { label: 'Restart', onClick: install };
+        detail = t('desktop.updates.readyToInstall', { version: status.version });
+        action = { label: t('desktop.updates.restart'), onClick: install };
       } else {
-        detail = `Version ${status.version} is available`;
-        action = { label: 'Download', onClick: openDownloadPage };
+        detail = t('desktop.updates.available', { version: status.version });
+        action = { label: t('desktop.updates.download'), onClick: openDownloadPage };
       }
       break;
     case 'failed':
       if (status.version) {
-        detail = `Version ${status.version} could not be installed`;
+        detail = t('desktop.updates.installFailed', { version: status.version });
         tone = 'text-accent-rose';
-        action = { label: 'Download', onClick: openDownloadPage };
+        action = { label: t('desktop.updates.download'), onClick: openDownloadPage };
       } else {
-        detail = 'The last update check failed';
+        detail = t('desktop.updates.checkFailed');
         tone = 'text-accent-rose';
       }
       break;
     default:
-      detail = 'Check for new versions of the desktop app';
+      detail = t('desktop.updates.idle');
   }
 
   if (capability === 'external') {
-    detail = 'Updates are installed through your Flatpak software manager';
+    detail = t('desktop.updates.external');
     tone = 'text-txt-tertiary';
     action = null;
   }
@@ -161,7 +174,7 @@ function UpdateSettings() {
       <div className="flex items-center justify-between py-1">
         <div className="flex-1 mr-4 min-w-0">
           <div className="text-sm text-txt-primary">
-            {currentVersion ? `Version ${currentVersion}` : 'Backspace Desktop'}
+            {currentVersion ? t('desktop.updates.versionLabel', { version: currentVersion }) : t('desktop.updates.appName')}
           </div>
           <div className={`text-xs mt-0.5 ${tone}`}>{detail}</div>
         </div>
@@ -180,7 +193,7 @@ function UpdateSettings() {
               disabled={busy}
               className="px-3 py-1.5 text-sm text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] rounded-lg transition-colors disabled:opacity-50"
             >
-              {status.phase === 'checking' ? 'Checking...' : 'Check for Updates'}
+              {status.phase === 'checking' ? t('desktop.updates.checkingShort') : t('desktop.updates.checkNow')}
             </button>
           )}
         </div>
@@ -197,15 +210,12 @@ function UpdateSettings() {
 
       {capability === 'manual' && (
         <p className="text-xs text-txt-tertiary leading-relaxed">
-          This build cannot install updates itself, so new versions are downloaded
-          from GitHub and replace the app by hand. See the release notes for the
-          steps on your platform.
+          {t('desktop.updates.manualNote')}
         </p>
       )}
       {capability === 'external' && (
         <p className="text-xs text-txt-tertiary leading-relaxed">
-          Flatpak applies updates atomically outside the app. Use your software
-          manager or the <code>flatpak update</code> command to update Backspace.
+          <Trans t={t} i18nKey="desktop.updates.externalNote" components={{ code: <code /> }} />
         </p>
       )}
     </div>
@@ -213,6 +223,7 @@ function UpdateSettings() {
 }
 
 export function DesktopPanel() {
+  const { t } = useTranslation('settings');
   const initialize = useUpdateStore((s) => s.initialize);
   const [sandboxed, setSandboxed] = useState<boolean | null>(null);
 
@@ -230,7 +241,7 @@ export function DesktopPanel() {
 
   return (
     <div className="space-y-5">
-      <h2 className="text-lg font-semibold text-txt-primary mb-6">Desktop</h2>
+      <h2 className="text-lg font-semibold text-txt-primary mb-6">{t('desktop.title')}</h2>
 
       <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5 space-y-3">
         {sandboxed === false && <AutoLaunchSettings />}
@@ -241,13 +252,13 @@ export function DesktopPanel() {
         <div className="flex items-center justify-between">
           <div>
             <div className="text-sm text-txt-primary font-medium">{window.location.origin}</div>
-            <div className="text-xs text-txt-tertiary mt-0.5">Currently connected instance</div>
+            <div className="text-xs text-txt-tertiary mt-0.5">{t('desktop.instance.current')}</div>
           </div>
           <button
             onClick={() => window.backspace?.clearInstanceUrl()}
             className="px-3 py-1.5 text-sm text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] rounded-lg transition-colors"
           >
-            Change Instance
+            {t('desktop.instance.change')}
           </button>
         </div>
       </div>

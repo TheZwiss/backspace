@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { useFormatters } from '../../i18n/formatters';
 import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import type { User } from '@backspace/shared';
@@ -55,6 +56,7 @@ export function UserProfileModal() {
   const closeModal = useUIStore((s) => s.closeModal);
   const addToast = useUIStore((s) => s.addToast);
   const navigate = useNavigate();
+  const f = useFormatters();
   const addDmChannel = useSpaceStore((s) => s.addDmChannel);
   const friends = useSocialStore((s) => s.friends);
   const requests = useSocialStore((s) => s.requests);
@@ -359,11 +361,7 @@ export function UserProfileModal() {
                   Member Since
                 </span>
                 <div className="text-[13px] text-txt-secondary mt-1">
-                  {new Date(user.createdAt).toLocaleDateString(undefined, {
-                    month: 'long',
-                    day: 'numeric',
-                    year: 'numeric',
-                  })}
+                  {f.formatLongDate(user.createdAt)}
                 </div>
               </div>
 

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Modal } from '../ui/Modal';
 import { Avatar } from '../ui/Avatar';
 import { SourceCodeLink } from '../ui/SourceCodeLink';
@@ -52,6 +53,7 @@ function SettingsScrollContainer({ children }: { children: React.ReactNode }) {
 }
 
 export function UserSettingsModal() {
+  const { t } = useTranslation(['settings']);
   const activeModal = useUIStore((s) => s.activeModal);
   const modalData = useUIStore((s) => s.modalData);
   const closeModal = useUIStore((s) => s.closeModal);
@@ -101,13 +103,13 @@ export function UserSettingsModal() {
     closeModal();
   };
 
-  const tabClass = (t: SettingsTab) =>
+  const tabClass = (target: SettingsTab) =>
     `w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
-      tab === t ? 'bg-interactive-selected text-txt-primary font-medium' : 'text-txt-tertiary hover:text-txt-secondary hover:bg-interactive-hover'
+      tab === target ? 'bg-interactive-selected text-txt-primary font-medium' : 'text-txt-tertiary hover:text-txt-secondary hover:bg-interactive-hover'
     }`;
 
-  const handleTabClick = (t: SettingsTab) => {
-    setTab(t);
+  const handleTabClick = (target: SettingsTab) => {
+    setTab(target);
     if (isMobile) setMobileView('content');
   };
 
@@ -134,22 +136,22 @@ export function UserSettingsModal() {
 
           {/* Nav list */}
           <div className="glass-bubble rounded-lg p-2 flex-1 flex flex-col">
-            <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">User Settings</div>
-            <button onClick={() => handleTabClick('account')} className={tabClass('account')}>Account</button>
-            <button onClick={() => handleTabClick('voice')} className={tabClass('voice')}>Voice &amp; Video</button>
-            <button onClick={() => handleTabClick('privacy')} className={tabClass('privacy')}>Privacy</button>
+            <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('settings:nav.userSettings')}</div>
+            <button onClick={() => handleTabClick('account')} className={tabClass('account')}>{t('settings:nav.tabs.account')}</button>
+            <button onClick={() => handleTabClick('voice')} className={tabClass('voice')}>{t('settings:nav.tabs.voice')}</button>
+            <button onClick={() => handleTabClick('privacy')} className={tabClass('privacy')}>{t('settings:nav.tabs.privacy')}</button>
 
             <div className="border-t border-white/[0.04] my-2 mx-2" />
-            <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">App Settings</div>
-            <button onClick={() => handleTabClick('connections')} className={tabClass('connections')}>Connections</button>
-            <button onClick={() => handleTabClick('keybinds')} className={tabClass('keybinds')}>Keybinds</button>
-            {isElectron() && <button onClick={() => handleTabClick('desktop')} className={tabClass('desktop')}>Desktop</button>}
+            <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('settings:nav.appSettings')}</div>
+            <button onClick={() => handleTabClick('connections')} className={tabClass('connections')}>{t('settings:nav.tabs.connections')}</button>
+            <button onClick={() => handleTabClick('keybinds')} className={tabClass('keybinds')}>{t('settings:nav.tabs.keybinds')}</button>
+            {isElectron() && <button onClick={() => handleTabClick('desktop')} className={tabClass('desktop')}>{t('settings:nav.tabs.desktop')}</button>}
 
             {isAdmin && (
               <>
                 <div className="border-t border-white/[0.04] my-2 mx-2" />
-                <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">Administration</div>
-                <button onClick={() => handleTabClick('instance')} className={tabClass('instance')}>Instance</button>
+                <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('settings:nav.administration')}</div>
+                <button onClick={() => handleTabClick('instance')} className={tabClass('instance')}>{t('settings:nav.tabs.instance')}</button>
                 {tab === 'instance' && <SidebarSubLinks />}
               </>
             )}
@@ -161,7 +163,7 @@ export function UserSettingsModal() {
               onClick={handleLogout}
               className="w-full text-left px-3 py-2 rounded-md text-sm text-txt-danger hover:bg-accent-rose/10 transition-colors"
             >
-              Log Out
+              {t('settings:nav.logOut')}
             </button>
 
             {instanceInfo && (
@@ -191,22 +193,22 @@ export function UserSettingsModal() {
             </div>
 
             <div className="glass-bubble rounded-lg p-2 space-y-0.5">
-              <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">User Settings</div>
-              <button onClick={() => handleTabClick('account')} className={tabClass('account')}>Account</button>
-              <button onClick={() => handleTabClick('voice')} className={tabClass('voice')}>Voice &amp; Video</button>
-              <button onClick={() => handleTabClick('privacy')} className={tabClass('privacy')}>Privacy</button>
+              <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('settings:nav.userSettings')}</div>
+              <button onClick={() => handleTabClick('account')} className={tabClass('account')}>{t('settings:nav.tabs.account')}</button>
+              <button onClick={() => handleTabClick('voice')} className={tabClass('voice')}>{t('settings:nav.tabs.voice')}</button>
+              <button onClick={() => handleTabClick('privacy')} className={tabClass('privacy')}>{t('settings:nav.tabs.privacy')}</button>
 
               <div className="border-t border-white/[0.04] my-2 mx-2" />
-              <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">App Settings</div>
-              <button onClick={() => handleTabClick('connections')} className={tabClass('connections')}>Connections</button>
-              <button onClick={() => handleTabClick('keybinds')} className={tabClass('keybinds')}>Keybinds</button>
-              {isElectron() && <button onClick={() => handleTabClick('desktop')} className={tabClass('desktop')}>Desktop</button>}
+              <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('settings:nav.appSettings')}</div>
+              <button onClick={() => handleTabClick('connections')} className={tabClass('connections')}>{t('settings:nav.tabs.connections')}</button>
+              <button onClick={() => handleTabClick('keybinds')} className={tabClass('keybinds')}>{t('settings:nav.tabs.keybinds')}</button>
+              {isElectron() && <button onClick={() => handleTabClick('desktop')} className={tabClass('desktop')}>{t('settings:nav.tabs.desktop')}</button>}
 
               {isAdmin && (
                 <>
                   <div className="border-t border-white/[0.04] my-2 mx-2" />
-                  <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">Administration</div>
-                  <button onClick={() => handleTabClick('instance')} className={tabClass('instance')}>Instance</button>
+                  <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('settings:nav.administration')}</div>
+                  <button onClick={() => handleTabClick('instance')} className={tabClass('instance')}>{t('settings:nav.tabs.instance')}</button>
                 </>
               )}
 
@@ -215,7 +217,7 @@ export function UserSettingsModal() {
                 onClick={handleLogout}
                 className="w-full text-left px-3 py-2 rounded-md text-sm text-txt-danger hover:bg-accent-rose/10 transition-colors"
               >
-                Log Out
+                {t('settings:nav.logOut')}
               </button>
 
               {instanceInfo && (
@@ -236,12 +238,12 @@ export function UserSettingsModal() {
                 <button
                   onClick={() => setMobileView('tabs')}
                   className="flex items-center gap-1.5 text-txt-tertiary hover:text-txt-secondary mb-4 text-sm"
-                  aria-label="Back to settings menu"
+                  aria-label={t('settings:nav.backToMenu')}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" />
                   </svg>
-                  Settings
+                  {t('settings:nav.back')}
                 </button>
               )}
               {tab === 'account' && <AccountPanel />}

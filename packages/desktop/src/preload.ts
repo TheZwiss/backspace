@@ -98,6 +98,9 @@ contextBridge.exposeInMainWorld('backspace', {
   setInstanceUrl: (url: string) => ipcRenderer.invoke('set-instance-url', url),
   clearInstanceUrl: () => ipcRenderer.invoke('clear-instance-url'),
 
+  // Language: the renderer owns the choice; main relabels its tray and menus.
+  setLanguage: (language: string) => ipcRenderer.send('set-language', language),
+
   // Auto-launch settings
   getAutoLaunchSettings: () => ipcRenderer.invoke('get-auto-launch-settings'),
   setAutoLaunchSettings: (settings: { openAtLogin?: boolean; startMinimized?: boolean }) =>

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { formatters } from '../../i18n/formatters';
 import ReactDOM from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import type {
@@ -76,7 +77,7 @@ function formatRelativeTime(timestamp: number | null): string {
 }
 
 function formatAbsoluteDate(timestamp: number): string {
-  return new Date(timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return formatters.formatMediumDate(timestamp);
 }
 
 // ─── Add Instance flow ───────────────────────────────────────────────────────

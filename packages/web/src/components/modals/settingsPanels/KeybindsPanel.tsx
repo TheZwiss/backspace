@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useTranslation, Trans } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { useKeybindStore, BINDABLE_ACTIONS, Keybind } from '../../../stores/keybindStore';
 import { isElectron, isElectronMac } from '../../../platform/platform';
 
@@ -12,16 +14,31 @@ const MODIFIER_CODES = new Set([
 ]);
 
 const MOUSE_BUTTON_MAP: Record<number, number> = { 1: 3, 3: 4, 4: 5 };
-const MOUSE_BUTTON_NAMES: Record<number, string> = { 3: 'Middle Click', 4: 'Mouse 4', 5: 'Mouse 5' };
 
-function keyDisplayName(code: string, key: string): string {
-  if (code.startsWith('Shift')) return 'Shift';
-  if (code.startsWith('Control')) return 'Ctrl';
-  if (code.startsWith('Alt')) return isElectronMac() ? 'Option' : 'Alt';
-  if (code.startsWith('Meta')) return isElectronMac() ? 'Cmd' : 'Win';
+type SettingsT = TFunction<['settings', 'common']>;
+
+/**
+ * The name a mouse button is shown under. The label is composed while the
+ * user records the combo and stored with the keybind, so it is in the
+ * language that was active at recording time.
+ */
+function mouseButtonName(t: SettingsT, button: number): string {
+  switch (button) {
+    case 3: return t('keybinds.key.middleClick');
+    case 4: return t('keybinds.key.mouse4');
+    case 5: return t('keybinds.key.mouse5');
+    default: return t('keybinds.key.mouseGeneric', { button });
+  }
+}
+
+function keyDisplayName(t: SettingsT, code: string, key: string): string {
+  if (code.startsWith('Shift')) return t('keybinds.key.shift');
+  if (code.startsWith('Control')) return t('keybinds.key.ctrl');
+  if (code.startsWith('Alt')) return isElectronMac() ? t('keybinds.key.option') : t('keybinds.key.alt');
+  if (code.startsWith('Meta')) return isElectronMac() ? t('keybinds.key.cmd') : t('keybinds.key.win');
   if (code.startsWith('Key')) return code.slice(3).toUpperCase();
   if (code.startsWith('Digit')) return code.slice(5);
-  if (key === ' ') return 'Space';
+  if (key === ' ') return t('keybinds.key.space');
   return key.length === 1 ? key.toUpperCase() : key;
 }
 
@@ -50,6 +67,7 @@ interface KeybindRowProps {
 }
 
 function KeybindRow({ actionId, label, keybind, isRecording, recordingDisplay, onStartRecording, onDelete, rowRef }: KeybindRowProps) {
+  const { t } = useTranslation(['settings', 'common']);
   return (
     <div
       ref={rowRef}
@@ -64,12 +82,12 @@ function KeybindRow({ actionId, label, keybind, isRecording, recordingDisplay, o
         <div className="text-xs text-txt-tertiary mt-0.5">
           {isRecording ? (
             <span className="text-accent-mint animate-pulse">
-              {recordingDisplay || 'Press a key combo...'}
+              {recordingDisplay || t('keybinds.row.recordingPrompt')}
             </span>
           ) : keybind ? (
             keybind.displayLabel
           ) : (
-            'Not bound'
+            t('keybinds.row.notBound')
           )}
         </div>
       </div>
@@ -80,20 +98,20 @@ function KeybindRow({ actionId, label, keybind, isRecording, recordingDisplay, o
               onClick={onStartRecording}
               className="text-xs px-2.5 py-1 rounded text-txt-tertiary hover:text-txt-primary hover:bg-white/[0.06] transition-colors"
             >
-              {keybind ? 'Edit' : 'Record'}
+              {keybind ? t('common:actions.edit') : t('keybinds.row.record')}
             </button>
             {keybind && (
               <button
                 onClick={onDelete}
                 className="text-xs px-2.5 py-1 rounded text-txt-tertiary hover:text-rose-400 hover:bg-rose-400/10 transition-colors"
               >
-                Delete
+                {t('common:actions.delete')}
               </button>
             )}
           </>
         )}
         {isRecording && (
-          <span className="text-[10px] text-txt-tertiary">ESC to cancel</span>
+          <span className="text-[10px] text-txt-tertiary">{t('keybinds.row.escToCancel')}</span>
         )}
       </div>
     </div>
@@ -115,6 +133,7 @@ interface ConflictInfo {
 // ---------------------------------------------------------------------------
 
 export function KeybindsPanel() {
+  const { t } = useTranslation(['settings', 'common']);
   const { keybinds, setKeybind, removeKeybind, findConflict } = useKeybindStore();
 
   const [recordingActionId, setRecordingActionId] = useState<string | null>(null);
@@ -177,8 +196,8 @@ export function KeybindsPanel() {
 
     const keys = Array.from(codes.values()).map((c) => c.numeric).sort((a, b) => a - b);
     const displayParts = Array.from(codes.values()).map((c) => c.display);
-    if (mouseBtn && MOUSE_BUTTON_NAMES[mouseBtn]) {
-      displayParts.push(MOUSE_BUTTON_NAMES[mouseBtn]);
+    if (mouseBtn) {
+      displayParts.push(mouseButtonName(t, mouseBtn));
     }
     const displayLabel = displayParts.join(' + ');
 
@@ -198,7 +217,7 @@ export function KeybindsPanel() {
 
     setKeybind(newKeybind);
     cancelRecording();
-  }, [findConflict, setKeybind, cancelRecording]);
+  }, [findConflict, setKeybind, cancelRecording, t]);
 
   // --- Recording event listeners ---
   useEffect(() => {
@@ -218,7 +237,7 @@ export function KeybindsPanel() {
         debounceTimerRef.current = null;
       }
 
-      const display = keyDisplayName(e.code, e.key);
+      const display = keyDisplayName(t, e.code, e.key);
       const numeric = codeToNumeric(e.code);
       pressedCodesRef.current.set(e.code, { numeric, display });
 
@@ -251,7 +270,7 @@ export function KeybindsPanel() {
       e.stopPropagation();
 
       mouseButtonRef.current = uiButton;
-      mouseDisplayRef.current = MOUSE_BUTTON_NAMES[uiButton] ?? `Mouse ${uiButton}`;
+      mouseDisplayRef.current = mouseButtonName(t, uiButton);
 
       const parts = Array.from(pressedCodesRef.current.values()).map((c) => c.display);
       parts.push(mouseDisplayRef.current);
@@ -270,7 +289,7 @@ export function KeybindsPanel() {
       window.removeEventListener('mousedown', onMouseDown, true);
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     };
-  }, [recordingActionId, cancelRecording, finalizeRecording]);
+  }, [recordingActionId, cancelRecording, finalizeRecording, t]);
 
   // --- Conflict resolution ---
   const confirmConflict = () => {
@@ -284,15 +303,20 @@ export function KeybindsPanel() {
 
   const getKeybind = (actionId: string) => keybinds.find((kb) => kb.actionId === actionId);
 
+  const conflictAction = conflict
+    ? BINDABLE_ACTIONS.find((a) => a.id === conflict.existingKeybind.actionId)
+    : undefined;
+  const conflictActionLabel = conflictAction ? t(`keybinds.action.${conflictAction.id}`) : '';
+
   return (
     <div className="space-y-5">
-      <h2 className="text-lg font-semibold text-txt-primary mb-6">Keybinds</h2>
+      <h2 className="text-lg font-semibold text-txt-primary mb-6">{t('keybinds.title')}</h2>
       {/* macOS Accessibility Warning */}
       {isElectronMac() && accessibilityTrusted === false && (
         <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3.5">
-          <div className="text-sm text-amber-200 font-medium">Accessibility Permission Required</div>
+          <div className="text-sm text-amber-200 font-medium">{t('keybinds.accessibility.title')}</div>
           <div className="text-xs text-amber-200/70 mt-1">
-            Backspace needs Accessibility permission for global shortcuts to work outside the app.
+            {t('keybinds.accessibility.description')}
           </div>
           <button
             onClick={() => {
@@ -300,7 +324,7 @@ export function KeybindsPanel() {
             }}
             className="mt-2 text-xs px-3 py-1.5 rounded bg-amber-500/20 text-amber-200 hover:bg-amber-500/30 transition-colors"
           >
-            Grant Permission
+            {t('keybinds.accessibility.grant')}
           </button>
         </div>
       )}
@@ -308,9 +332,13 @@ export function KeybindsPanel() {
       {/* Linux hook error warning */}
       {isElectron() && hookError && (
         <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3.5">
-          <div className="text-sm text-amber-200 font-medium">Global Shortcuts Unavailable</div>
+          <div className="text-sm text-amber-200 font-medium">{t('keybinds.hookError.title')}</div>
           <div className="text-xs text-amber-200/70 mt-1">
-            Failed to start input listener. On Linux, your user may need to be in the <code className="bg-black/20 px-1 rounded">input</code> group.
+            <Trans
+              t={t}
+              i18nKey="keybinds.hookError.description"
+              components={{ code: <code className="bg-black/20 px-1 rounded" /> }}
+            />
           </div>
         </div>
       )}
@@ -318,21 +346,21 @@ export function KeybindsPanel() {
       {/* Web limitation note */}
       {!isElectron() && (
         <div className="text-xs text-txt-tertiary px-1">
-          Shortcuts work while this tab is focused. For global shortcuts that work in other apps, use the desktop app.
+          {t('keybinds.note.webOnly')}
         </div>
       )}
 
       {/* Keybind rows */}
       <div>
         <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
-          Voice Shortcuts
+          {t('keybinds.section.voice')}
         </div>
         <div className="space-y-1.5">
           {BINDABLE_ACTIONS.map((action) => (
             <KeybindRow
               key={action.id}
               actionId={action.id}
-              label={action.label}
+              label={t(`keybinds.action.${action.id}`)}
               keybind={getKeybind(action.id)}
               isRecording={recordingActionId === action.id}
               recordingDisplay={recordingDisplay}
@@ -351,24 +379,28 @@ export function KeybindsPanel() {
       {conflict && (
         <div className="rounded-lg bg-surface-elevated border border-white/[0.06] p-3.5">
           <div className="text-sm text-txt-primary">
-            <span className="font-medium">{conflict.pendingKeybind.displayLabel}</span> is already bound to{' '}
-            <span className="font-medium">
-              {BINDABLE_ACTIONS.find((a) => a.id === conflict.existingKeybind.actionId)?.label}
-            </span>
-            . Overwrite?
+            <Trans
+              t={t}
+              i18nKey="keybinds.conflict.message"
+              values={{
+                combo: conflict.pendingKeybind.displayLabel,
+                action: conflictActionLabel,
+              }}
+              components={{ strong: <span className="font-medium" /> }}
+            />
           </div>
           <div className="flex gap-2 mt-2.5">
             <button
               onClick={confirmConflict}
               className="text-xs px-3 py-1.5 rounded bg-accent-mint/20 text-accent-mint hover:bg-accent-mint/30 transition-colors"
             >
-              Overwrite
+              {t('keybinds.conflict.overwrite')}
             </button>
             <button
               onClick={cancelConflict}
               className="text-xs px-3 py-1.5 rounded bg-white/[0.06] text-txt-secondary hover:bg-white/[0.1] transition-colors"
             >
-              Cancel
+              {t('common:actions.cancel')}
             </button>
           </div>
         </div>

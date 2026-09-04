@@ -128,26 +128,26 @@
   <div class="content">
     <div class="container">
       <div class="card">
-        <h1>Backspace couldn't load.</h1>
-        <p class="hint" id="hint">Loading…</p>
+        <h1 data-i18n="title">Backspace couldn't load.</h1>
+        <p class="hint" id="hint" data-i18n="loading">Loading…</p>
 
         <div class="actions">
-          <button class="action primary" id="btn-reload">Reload</button>
-          <button class="action" id="btn-restart" style="display:none">Restart to Install Update</button>
-          <button class="action" id="btn-check">Check for Updates</button>
+          <button class="action primary" id="btn-reload" data-i18n="reload">Reload</button>
+          <button class="action" id="btn-restart" style="display:none" data-i18n="restartToInstall">Restart to Install Update</button>
+          <button class="action" id="btn-check" data-i18n="checkForUpdates">Check for Updates</button>
           <p class="check-result" id="check-result"></p>
-          <button class="action" id="btn-change">Change Instance</button>
-          <button class="action" id="btn-releases" style="display:none">Open Releases Page</button>
+          <button class="action" id="btn-change" data-i18n="changeInstance">Change Instance</button>
+          <button class="action" id="btn-releases" style="display:none" data-i18n="openReleases">Open Releases Page</button>
         </div>
 
         <div class="divider"></div>
 
         <details>
-          <summary>Diagnostic info</summary>
+          <summary data-i18n="diagnostics">Diagnostic info</summary>
           <pre id="diagnostic">loading…</pre>
         </details>
 
-        <button class="action subtle" id="btn-quit">Quit Backspace</button>
+        <button class="action subtle" id="btn-quit" data-i18n="quit">Quit Backspace</button>
       </div>
     </div>
   </div>
@@ -157,50 +157,150 @@
 
     const $ = (id) => document.getElementById(id);
 
+    // Strings for the three shipped languages. The main process passes the
+    // language as ?lang= when it loads this page, because this page is shown
+    // precisely when the renderer (and its catalogs) is unavailable. Keep in
+    // step with packages/desktop/src/l10n.ts and the web `desktop` namespace.
+    const STRINGS = {
+      en: {
+        title: "Backspace couldn't load.",
+        loading: 'Loading…',
+        reload: 'Reload',
+        restartToInstall: 'Restart to Install Update',
+        checkForUpdates: 'Check for Updates',
+        checking: 'Checking…',
+        downloading: 'Downloading Update…',
+        updateReady: 'Update Ready',
+        updateAvailable: 'Update Available',
+        updatesExternal: 'Updates Managed by Flatpak',
+        changeInstance: 'Change Instance',
+        openReleases: 'Open Releases Page',
+        downloadVersion: 'Download Backspace {version}',
+        downloadUpdate: 'Download the Update',
+        diagnostics: 'Diagnostic info',
+        quit: 'Quit Backspace',
+        upToDate: "You're up to date",
+        checkFailed: 'Update check failed',
+        bridgeUnavailable: 'Recovery bridge unavailable. Please quit and reinstall Backspace.',
+        stateLoadFailed: 'Failed to load recovery state: {message}',
+        hintExternal: 'Try reloading the app or changing the connected instance. Updates are managed by Flatpak.',
+        hintLoadFailed: "Couldn't reach your instance. Check your connection or try a different instance.",
+        hintCrashReady: 'Something inside the app failed. An update is ready, so click Restart to Install.',
+        hintCrashManual: 'Something inside the app failed. A newer version is available, but this build cannot install it itself. Download it and replace the app.',
+        hintCrashDownloading: 'Something inside the app failed. An update is downloading, so wait for it to finish and then restart.',
+        hintCrash: 'Something inside the app failed. Try reloading or check for an update.',
+        hintStalledReady: "The app didn't finish loading. An update is ready, so click Restart to Install.",
+        hintStalledManual: "The app didn't finish loading. A newer version is available, but this build cannot install it itself. Download it and replace the app.",
+        hintStalledDownloading: "The app didn't finish loading. An update is downloading, so wait for it to finish and then restart.",
+        hintStalled: "The app didn't finish loading in time. Try reloading, or check for an update if reloading doesn't help.",
+        hintGeneric: 'Something went wrong. Try reloading.',
+      },
+      ru: {
+        title: 'Backspace не удалось загрузить.',
+        loading: 'Загрузка…',
+        reload: 'Перезагрузить',
+        restartToInstall: 'Перезапустить для установки',
+        checkForUpdates: 'Проверить обновления',
+        checking: 'Проверка…',
+        downloading: 'Загрузка обновления…',
+        updateReady: 'Обновление готово',
+        updateAvailable: 'Доступно обновление',
+        updatesExternal: 'Обновлениями управляет Flatpak',
+        changeInstance: 'Сменить сервер',
+        openReleases: 'Открыть страницу релизов',
+        downloadVersion: 'Скачать Backspace {version}',
+        downloadUpdate: 'Скачать обновление',
+        diagnostics: 'Диагностика',
+        quit: 'Выйти из Backspace',
+        upToDate: 'У вас последняя версия',
+        checkFailed: 'Не удалось проверить обновления',
+        bridgeUnavailable: 'Режим восстановления недоступен. Закройте Backspace и переустановите приложение.',
+        stateLoadFailed: 'Не удалось загрузить состояние восстановления: {message}',
+        hintExternal: 'Попробуйте перезагрузить приложение или сменить сервер. Обновлениями управляет Flatpak.',
+        hintLoadFailed: 'Не удалось связаться с сервером. Проверьте подключение или попробуйте другой сервер.',
+        hintCrashReady: 'В приложении произошёл сбой. Обновление готово, нажмите «Перезапустить для установки».',
+        hintCrashManual: 'В приложении произошёл сбой. Доступна новая версия, но эта сборка не может установить её сама. Скачайте её и замените приложение.',
+        hintCrashDownloading: 'В приложении произошёл сбой. Обновление загружается, дождитесь окончания и перезапустите приложение.',
+        hintCrash: 'В приложении произошёл сбой. Попробуйте перезагрузить его или проверить обновления.',
+        hintStalledReady: 'Приложение не завершило загрузку. Обновление готово, нажмите «Перезапустить для установки».',
+        hintStalledManual: 'Приложение не завершило загрузку. Доступна новая версия, но эта сборка не может установить её сама. Скачайте её и замените приложение.',
+        hintStalledDownloading: 'Приложение не завершило загрузку. Обновление загружается, дождитесь окончания и перезапустите приложение.',
+        hintStalled: 'Приложение не загрузилось вовремя. Попробуйте перезагрузить его, а если не поможет, проверьте обновления.',
+        hintGeneric: 'Что-то пошло не так. Попробуйте перезагрузить.',
+      },
+      de: {
+        title: 'Backspace konnte nicht geladen werden.',
+        loading: 'Wird geladen…',
+        reload: 'Neu laden',
+        restartToInstall: 'Neu starten und Update installieren',
+        checkForUpdates: 'Nach Updates suchen',
+        checking: 'Suche…',
+        downloading: 'Update wird heruntergeladen…',
+        updateReady: 'Update bereit',
+        updateAvailable: 'Update verfügbar',
+        updatesExternal: 'Updates werden von Flatpak verwaltet',
+        changeInstance: 'Instanz wechseln',
+        openReleases: 'Release-Seite öffnen',
+        downloadVersion: 'Backspace {version} herunterladen',
+        downloadUpdate: 'Update herunterladen',
+        diagnostics: 'Diagnose',
+        quit: 'Backspace beenden',
+        upToDate: 'Du bist auf dem neuesten Stand',
+        checkFailed: 'Update-Prüfung fehlgeschlagen',
+        bridgeUnavailable: 'Der Wiederherstellungsmodus ist nicht verfügbar. Beende Backspace und installiere es neu.',
+        stateLoadFailed: 'Wiederherstellungsstatus konnte nicht geladen werden: {message}',
+        hintExternal: 'Lade die App neu oder wechsle die Instanz. Updates werden von Flatpak verwaltet.',
+        hintLoadFailed: 'Deine Instanz war nicht erreichbar. Prüfe deine Verbindung oder versuche eine andere Instanz.',
+        hintCrashReady: 'In der App ist etwas fehlgeschlagen. Ein Update ist bereit, klicke auf „Neu starten und Update installieren“.',
+        hintCrashManual: 'In der App ist etwas fehlgeschlagen. Eine neuere Version ist verfügbar, aber dieser Build kann sie nicht selbst installieren. Lade sie herunter und ersetze die App.',
+        hintCrashDownloading: 'In der App ist etwas fehlgeschlagen. Ein Update wird heruntergeladen, warte, bis es fertig ist, und starte dann neu.',
+        hintCrash: 'In der App ist etwas fehlgeschlagen. Lade neu oder suche nach einem Update.',
+        hintStalledReady: 'Die App wurde nicht fertig geladen. Ein Update ist bereit, klicke auf „Neu starten und Update installieren“.',
+        hintStalledManual: 'Die App wurde nicht fertig geladen. Eine neuere Version ist verfügbar, aber dieser Build kann sie nicht selbst installieren. Lade sie herunter und ersetze die App.',
+        hintStalledDownloading: 'Die App wurde nicht fertig geladen. Ein Update wird heruntergeladen, warte, bis es fertig ist, und starte dann neu.',
+        hintStalled: 'Die App wurde nicht rechtzeitig geladen. Lade neu, oder suche nach einem Update, wenn das nicht hilft.',
+        hintGeneric: 'Etwas ist schiefgelaufen. Lade neu.',
+      },
+    };
+    const LANG = new URLSearchParams(window.location.search).get('lang');
+    const T = STRINGS[LANG] || STRINGS.en;
+    document.documentElement.lang = STRINGS[LANG] ? LANG : 'en';
+    function t(key, vars) {
+      const text = T[key] || STRINGS.en[key] || key;
+      return vars ? text.replace(/\{(\w+)\}/g, (m, name) => (name in vars ? vars[name] : m)) : text;
+    }
+    for (const el of document.querySelectorAll('[data-i18n]')) {
+      el.textContent = t(el.getAttribute('data-i18n'));
+    }
+
     function hintFor(reasonCode, updateState) {
-      if (updateState === 'external') {
-        return 'Try reloading the app or changing the connected instance. Updates are managed by Flatpak.';
-      }
-      if (reasonCode === 'load-failed') {
-        return "Couldn't reach your instance. Check your connection or try a different instance.";
-      }
+      if (updateState === 'external') return t('hintExternal');
+      if (reasonCode === 'load-failed') return t('hintLoadFailed');
       if (reasonCode === 'render-gone' || reasonCode === 'unresponsive') {
-        if (updateState === 'downloaded') {
-          return 'Something inside the app failed. An update is ready, so click Restart to Install.';
-        }
-        if (updateState === 'available-manual') {
-          return 'Something inside the app failed. A newer version is available, but this build cannot install it itself. Download it and replace the app.';
-        }
-        if (updateState === 'downloading') {
-          return 'Something inside the app failed. An update is downloading, so wait for it to finish and then restart.';
-        }
-        return 'Something inside the app failed. Try reloading or check for an update.';
+        if (updateState === 'downloaded') return t('hintCrashReady');
+        if (updateState === 'available-manual') return t('hintCrashManual');
+        if (updateState === 'downloading') return t('hintCrashDownloading');
+        return t('hintCrash');
       }
       if (reasonCode === 'renderer-stalled') {
-        if (updateState === 'downloaded') {
-          return "The app didn't finish loading. An update is ready, so click Restart to Install.";
-        }
-        if (updateState === 'available-manual') {
-          return "The app didn't finish loading. A newer version is available, but this build cannot install it itself. Download it and replace the app.";
-        }
-        if (updateState === 'downloading') {
-          return "The app didn't finish loading. An update is downloading, so wait for it to finish and then restart.";
-        }
-        return "The app didn't finish loading in time. Try reloading, or check for an update if reloading doesn't help.";
+        if (updateState === 'downloaded') return t('hintStalledReady');
+        if (updateState === 'available-manual') return t('hintStalledManual');
+        if (updateState === 'downloading') return t('hintStalledDownloading');
+        return t('hintStalled');
       }
-      return 'Something went wrong. Try reloading.';
+      return t('hintGeneric');
     }
 
     function checkButtonLabel(updateState) {
       switch (updateState) {
-        case 'external': return 'Updates Managed by Flatpak';
-        case 'checking': return 'Checking…';
-        case 'downloading': return 'Downloading Update…';
-        case 'downloaded': return 'Update Ready';
-        case 'available-manual': return 'Update Available';
-        case 'error': return 'Check for Updates';
+        case 'external': return t('updatesExternal');
+        case 'checking': return t('checking');
+        case 'downloading': return t('downloading');
+        case 'downloaded': return t('updateReady');
+        case 'available-manual': return t('updateAvailable');
+        case 'error': return t('checkForUpdates');
         case 'idle':
-        default: return 'Check for Updates';
+        default: return t('checkForUpdates');
       }
     }
 
@@ -213,8 +313,8 @@
     }
 
     function checkResultText(lastCheckResult) {
-      if (lastCheckResult === 'up-to-date') return "You're up to date";
-      if (lastCheckResult === 'failed') return 'Update check failed';
+      if (lastCheckResult === 'up-to-date') return t('upToDate');
+      if (lastCheckResult === 'failed') return t('checkFailed');
       return '';
     }
 
@@ -248,8 +348,8 @@
       const manual = state.updateState === 'available-manual';
       $('btn-releases').style.display = (state.updateState === 'error' || manual) ? '' : 'none';
       $('btn-releases').textContent = manual
-        ? (state.updateVersion ? 'Download Backspace ' + state.updateVersion : 'Download the Update')
-        : 'Open Releases Page';
+        ? (state.updateVersion ? t('downloadVersion', { version: state.updateVersion }) : t('downloadUpdate'))
+        : t('openReleases');
 
       // Inline check result
       const cr = $('check-result');
@@ -292,7 +392,7 @@
 
     async function init() {
       if (!window.backspace) {
-        $('hint').textContent = 'Recovery bridge unavailable. Please quit and reinstall Backspace.';
+        $('hint').textContent = t('bridgeUnavailable');
         return;
       }
       try {
@@ -305,7 +405,7 @@
         cachedVersion = version;
         render(initial);
       } catch (err) {
-        $('hint').textContent = 'Failed to load recovery state: ' + (err && err.message ? err.message : String(err));
+        $('hint').textContent = t('stateLoadFailed', { message: err && err.message ? err.message : String(err) });
         return;
       }
       window.backspace.onRecoveryStateChanged((state) => {

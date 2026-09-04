@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { sendError } from '../utils/httpErrors';
 import { eq, or, and, inArray, isNull } from 'drizzle-orm';
 import { randomBytes } from 'node:crypto';
 import { getDb, schema } from '../db/index.js';
@@ -91,7 +92,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     const { currentPassword, newPassword } = request.body;
 
     if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 8) {
-      return reply.code(400).send({ error: 'New password must be at least 8 characters', statusCode: 400 });
+      return sendError(reply, 400, 'password_too_short', { min: 8 });
     }
 
     const db = getDb();
@@ -107,11 +108,11 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     if (!user.homeInstance || user.federationHomeOrphaned === 1) {
       // Local users must provide current password
       if (!currentPassword || typeof currentPassword !== 'string') {
-        return reply.code(400).send({ error: 'Current password is required', statusCode: 400 });
+        return sendError(reply, 400, 'password_required');
       }
       const valid = await verifyPassword(currentPassword, user.passwordHash);
       if (!valid) {
-        return reply.code(403).send({ error: 'Incorrect password', statusCode: 403 });
+        return sendError(reply, 403, 'current_password_incorrect');
       }
     }
 
@@ -158,7 +159,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       }
       const valid = await verifyPassword(password, user.passwordHash);
       if (!valid) {
-        return reply.code(403).send({ error: 'Incorrect password', statusCode: 403 });
+        return sendError(reply, 403, 'account_deletion_password_incorrect');
       }
     }
 
@@ -233,7 +234,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     if (preUpdateUser.homeInstance && preUpdateUser.federationHomeOrphaned !== 1) {
       const hasDurableField = DURABLE_PROFILE_FIELDS.some(f => (request.body as Record<string, unknown>)[f] !== undefined);
       if (hasDurableField) {
-        return reply.code(403).send({ error: 'Profile fields are managed by your home instance', statusCode: 403 });
+        return sendError(reply, 403, 'profile_managed_by_home');
       }
     }
 
@@ -241,7 +242,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       if (displayName !== null && typeof displayName === 'string') {
         const trimmed = displayName.trim();
         if (trimmed.length > 32) {
-          return reply.code(400).send({ error: 'Display name must be 32 characters or less', statusCode: 400 });
+          return sendError(reply, 400, 'display_name_too_long', { max: 32 });
         }
         updateData.displayName = trimmed || null;
       } else {
@@ -313,7 +314,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       if (bio && typeof bio === 'string') {
         const trimmed = bio.trim();
         if (trimmed.length > 190) {
-          return reply.code(400).send({ error: 'Bio must be 190 characters or less', statusCode: 400 });
+          return sendError(reply, 400, 'bio_too_long', { max: 190 });
         }
         updateData.bio = trimmed || null;
       } else {
@@ -325,7 +326,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       if (customStatus !== null && typeof customStatus === 'string') {
         const trimmed = customStatus.trim();
         if (trimmed.length > 128) {
-          return reply.code(400).send({ error: 'Custom status must be 128 characters or less', statusCode: 400 });
+          return sendError(reply, 400, 'custom_status_too_long', { max: 128 });
         }
         updateData.customStatus = trimmed || null;
       } else {

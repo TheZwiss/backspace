@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useCallback, useState, useMemo } from 'react';
+import { formatters } from '../../i18n/formatters';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
 import { Message } from './Message';
@@ -48,13 +49,7 @@ function isSameGroup(prev: MessageWithUser, curr: MessageWithUser): boolean {
 }
 
 function formatDateDivider(timestamp: number): string {
-  const date = new Date(timestamp);
-  return date.toLocaleDateString(undefined, {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
+  return formatters.formatFullDate(timestamp);
 }
 
 function shouldShowDateDivider(prev: MessageWithUser | undefined, curr: MessageWithUser): boolean {

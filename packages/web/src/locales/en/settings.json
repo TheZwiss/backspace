@@ -1,0 +1,344 @@
+{
+  "voice": {
+    "input": {
+      "title": "Input Device",
+      "checkingAccess": "Checking microphone access…",
+      "accessDenied": {
+        "title": "Microphone access denied",
+        "description": "Grant microphone permission to choose an input device.",
+        "retry": "Try again"
+      },
+      "permissionPrompt": {
+        "description": "Microphone permission needed to list and choose an input device.",
+        "enable": "Enable microphone access"
+      },
+      "device": {
+        "systemDefault": "System Default",
+        "currentlyUsing": "Currently using: {{label}}",
+        "none": "No microphones detected."
+      },
+      "volume": {
+        "label": "Input Volume",
+        "percent": "{{value}}%"
+      },
+      "meter": {
+        "hint": "The level meter activates once you join a voice channel."
+      }
+    },
+    "output": {
+      "title": "Output Device",
+      "checkingAccess": "Checking audio access…",
+      "device": {
+        "systemDefault": "System Default",
+        "unsupported": "This browser doesn't support choosing an output device. Audio plays to the system default."
+      },
+      "permissionPrompt": {
+        "description": "Grant microphone permission to list output devices (browsers gate output names behind microphone access).",
+        "enable": "Enable audio access"
+      },
+      "volume": {
+        "label": "Output Volume",
+        "percent": "{{value}}%"
+      },
+      "testSound": "Play test sound"
+    },
+    "video": {
+      "title": "Video",
+      "checkingAccess": "Checking camera access…",
+      "accessDenied": {
+        "title": "Camera access denied",
+        "description": "Grant camera permission to choose a camera.",
+        "retry": "Try again"
+      },
+      "blocked": {
+        "browser": "Camera blocked at browser level. Click the camera icon in your browser's address bar, reset the permission, then click Try again.",
+        "mac": "Grant camera access in System Settings → Privacy & Security → Camera, then restart the app.",
+        "windows": "Grant camera access in Settings → Privacy & Security → Camera, then restart the app.",
+        "other": "Camera permission was denied. Reset it in your browser/Chromium prompt and try again."
+      },
+      "permissionPrompt": {
+        "description": "Camera permission needed to choose a camera and preview.",
+        "enable": "Enable camera preview"
+      },
+      "camera": {
+        "label": "Camera",
+        "auto": "Auto (system default)",
+        "fallbackName": "Camera {{number}}",
+        "detectedFallback": "detected camera",
+        "currentlyUsing": "Currently using: {{label}}",
+        "none": "No cameras detected."
+      },
+      "preview": {
+        "testAria": "Test camera",
+        "testHint": "Click to test camera",
+        "stop": "Stop preview",
+        "retry": "Try again"
+      },
+      "previewError": {
+        "inUse": "Camera is in use by another application.",
+        "unavailable": "Selected camera is unavailable.",
+        "notFound": "No camera detected.",
+        "generic": "Could not start camera preview."
+      }
+    },
+    "title": "Voice & Video",
+    "volume": {
+      "sectionTitle": "Volume",
+      "soundEffects": {
+        "label": "Sound Effects Volume"
+      },
+      "messageSound": {
+        "label": "Play sound for every message",
+        "description": "Off (default): only DMs and messages that mention you. On: every channel."
+      }
+    },
+    "processing": {
+      "sectionTitle": "Voice Processing",
+      "noiseSuppression": {
+        "label": "AI Noise Suppression",
+        "description": "ML-based noise removal (RNNoise). Filters keyboard, fans and background noise."
+      },
+      "echoCancellation": {
+        "label": "Echo Cancellation",
+        "description": "Cancels echo from your speakers feeding back into the mic. Always on for voice channels and calls."
+      },
+      "autoGain": {
+        "label": "Auto Gain Control",
+        "description": "Auto-adjusts mic volume. Can cause voice ducking during streams."
+      }
+    }
+  },
+  "nav": {
+    "userSettings": "User Settings",
+    "appSettings": "App Settings",
+    "administration": "Administration",
+    "tabs": {
+      "account": "Account",
+      "voice": "Voice & Video",
+      "privacy": "Privacy",
+      "connections": "Connections",
+      "keybinds": "Keybinds",
+      "desktop": "Desktop",
+      "instance": "Instance"
+    },
+    "logOut": "Log Out",
+    "backToMenu": "Back to settings menu",
+    "back": "Settings"
+  },
+  "account": {
+    "title": "My Account",
+    "detached": {
+      "notice": "This account is detached from its home instance.",
+      "explanation": "{{homeInstance}} was reset or is no longer available, so this account now operates locally on this instance. Your profile and password are managed here.",
+      "reattachHint": "As {{username}} on {{homeInstance}}, you can re-link this account. Profile and presence will sync from there again.",
+      "reattachButton": "Re-attach to {{homeInstance}}",
+      "reattachConfirm": "Confirm re-attach as {{username}}",
+      "reattaching": "Re-attaching…",
+      "reattachFailed": "Re-attach failed",
+      "reattached": "Account re-linked with {{username}}"
+    },
+    "language": {
+      "sectionTitle": "Language"
+    },
+    "profile": {
+      "sectionTitle": "Profile Customization",
+      "avatar": {
+        "label": "Avatar",
+        "alt": "Your avatar",
+        "change": "Change Avatar",
+        "uploadFailed": "Failed to upload avatar",
+        "cropTitle": "Crop Avatar"
+      },
+      "banner": {
+        "label": "Banner",
+        "change": "Change Banner",
+        "uploadFailed": "Failed to upload banner",
+        "cropTitle": "Crop Banner"
+      },
+      "avatarColor": {
+        "label": "Avatar Color",
+        "names": {
+          "mint": "Mint",
+          "sky": "Sky",
+          "lavender": "Lavender",
+          "coral": "Coral",
+          "rose": "Rose",
+          "teal": "Teal",
+          "amber": "Amber"
+        }
+      },
+      "bannerColor": {
+        "label": "Banner Color",
+        "hexPlaceholder": "#hex"
+      },
+      "bio": {
+        "label": "About Me",
+        "placeholder": "Tell the world about yourself…",
+        "counter": "{{used}}/{{max}}"
+      }
+    },
+    "details": {
+      "sectionTitle": "Account",
+      "status": {
+        "label": "Status",
+        "online": "Online",
+        "idle": "Idle",
+        "dnd": "Do Not Disturb"
+      },
+      "displayName": {
+        "label": "Display Name"
+      },
+      "customStatus": {
+        "label": "Custom Status",
+        "placeholder": "What are you up to?"
+      }
+    },
+    "password": {
+      "sectionTitle": "Password",
+      "current": {
+        "label": "Current Password",
+        "placeholder": "Enter current password"
+      },
+      "new": {
+        "label": "New Password",
+        "placeholder": "Minimum {{min}} characters"
+      },
+      "confirm": {
+        "label": "Confirm New Password",
+        "placeholder": "Confirm new password"
+      },
+      "show": "Show password",
+      "hide": "Hide password",
+      "tooShort": "New password must be at least {{min}} characters",
+      "mismatch": "Passwords do not match",
+      "changed": "Password changed",
+      "changeFailed": "Failed to change password",
+      "submit": "Change Password",
+      "submitting": "Changing…"
+    },
+    "danger": {
+      "sectionTitle": "Danger Zone",
+      "description": "Once you delete your account, there is no going back. Your messages will remain but be attributed to \"Deleted User\".",
+      "deleteButton": "Delete Account"
+    },
+    "save": {
+      "updated": "Profile updated",
+      "failed": "Failed to update profile"
+    }
+  },
+  "privacy": {
+    "title": "Privacy",
+    "discovery": {
+      "sectionTitle": "Discovery",
+      "label": "Allow others to find my profile",
+      "description": "When enabled, your profile appears in Discover People. Others can always add you by exact username."
+    },
+    "activity": {
+      "sectionTitle": "Activity Status",
+      "label": "Share Activity Status",
+      "description": "Allow others to see what you're up to, like games you're playing or music you're listening to."
+    }
+  },
+  "connections": {
+    "title": "Connections"
+  },
+  "instance": {
+    "tabs": {
+      "general": "General",
+      "registration": "Registration",
+      "federation": "Federation",
+      "streaming": "Streaming",
+      "storage": "Storage",
+      "users": "Users",
+      "updates": "Updates"
+    }
+  },
+  "keybinds": {
+    "title": "Keybinds",
+    "note": {
+      "webOnly": "Shortcuts work while this tab is focused. For global shortcuts that work in other apps, use the desktop app."
+    },
+    "section": {
+      "voice": "Voice Shortcuts"
+    },
+    "action": {
+      "toggleMute": "Toggle Mute",
+      "toggleDeafen": "Toggle Deafen",
+      "pushToTalk": "Push to Talk",
+      "toggleCamera": "Toggle Camera",
+      "toggleScreenShare": "Toggle Screen Share",
+      "disconnect": "Disconnect"
+    },
+    "row": {
+      "recordingPrompt": "Press a key combo…",
+      "notBound": "Not bound",
+      "record": "Record",
+      "escToCancel": "ESC to cancel"
+    },
+    "key": {
+      "shift": "Shift",
+      "ctrl": "Ctrl",
+      "alt": "Alt",
+      "option": "Option",
+      "cmd": "Cmd",
+      "win": "Win",
+      "space": "Space",
+      "middleClick": "Middle Click",
+      "mouse4": "Mouse 4",
+      "mouse5": "Mouse 5",
+      "mouseGeneric": "Mouse {{button}}"
+    },
+    "accessibility": {
+      "title": "Accessibility Permission Required",
+      "description": "Backspace needs Accessibility permission for global shortcuts to work outside the app.",
+      "grant": "Grant Permission"
+    },
+    "hookError": {
+      "title": "Global Shortcuts Unavailable",
+      "description": "Failed to start input listener. On Linux, your user may need to be in the <code>input</code> group."
+    },
+    "conflict": {
+      "message": "<strong>{{combo}}</strong> is already bound to <strong>{{action}}</strong>. Overwrite?",
+      "overwrite": "Overwrite"
+    }
+  },
+  "desktop": {
+    "title": "Desktop",
+    "autoLaunch": {
+      "openAtLogin": {
+        "label": "Start at boot",
+        "description": "Automatically launch Backspace when you log in"
+      },
+      "startMinimized": {
+        "label": "Start minimized",
+        "description": "Start hidden in the system tray instead of showing the window"
+      }
+    },
+    "updates": {
+      "appName": "Backspace Desktop",
+      "versionLabel": "Version {{version}}",
+      "checking": "Checking for updates…",
+      "checkingShort": "Checking…",
+      "checkNow": "Check for Updates",
+      "downloading": "Downloading {{version}}, {{percent}}%",
+      "downloadingWithRate": "Downloading {{version}}, {{percent}}% at {{rate}}",
+      "rateMegabytes": "{{value}} MB/s",
+      "rateKilobytes": "{{value}} KB/s",
+      "upToDate": "You are on the latest version",
+      "available": "Version {{version}} is available",
+      "readyToInstall": "Version {{version}} is ready to install",
+      "installFailed": "Version {{version}} could not be installed",
+      "checkFailed": "The last update check failed",
+      "idle": "Check for new versions of the desktop app",
+      "external": "Updates are installed through your Flatpak software manager",
+      "download": "Download",
+      "restart": "Restart",
+      "manualNote": "This build cannot install updates itself, so new versions are downloaded from GitHub and replace the app by hand. See the release notes for the steps on your platform.",
+      "externalNote": "Flatpak applies updates atomically outside the app. Use your software manager or the <code>flatpak update</code> command to update Backspace."
+    },
+    "instance": {
+      "current": "Currently connected instance",
+      "change": "Change Instance"
+    }
+  }
+}

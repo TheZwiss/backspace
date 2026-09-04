@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { formatDmTimestamp, formatDmPreview, formatDmSidebarPreview, formatDmHeaderName, formatDmInputLabel, isDeletedPartnerDm } from './dmFormatters';
+import { setLanguage } from '../i18n';
 import type { DmChannel, DmLastMessagePreview, User } from '@backspace/shared';
 
 /** Build a local-time Date: new Date(year, month-1, day, hour, minute) as a timestamp. */
@@ -18,18 +19,18 @@ describe('formatDmTimestamp', () => {
 
     const twoHoursAgo = localTs(2026, 4, 2, 14, 0); // Apr 2 2026, 2:00 PM local
     const result = formatDmTimestamp(twoHoursAgo);
-    // Should be a time string like "2:00 PM" — not "Yesterday" or a date
-    expect(result).not.toBe('Yesterday');
+    // Should be a time string like "2:00 PM" — not "yesterday" or a date
+    expect(result).not.toBe('yesterday');
     expect(result).not.toMatch(/\d{4}/); // no year
     expect(result).toMatch(/\d{1,2}/); // has a number (hour)
   });
 
-  it('shows "Yesterday" for yesterday', () => {
+  it('shows the word for yesterday, from Intl, for yesterday', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 3, 2, 16, 0)); // Apr 2 2026
 
     const yesterday = localTs(2026, 4, 1, 12, 0); // Apr 1 2026
-    expect(formatDmTimestamp(yesterday)).toBe('Yesterday');
+    expect(formatDmTimestamp(yesterday)).toBe('yesterday');
   });
 
   it('shows month and day for this year', () => {
@@ -56,7 +57,20 @@ describe('formatDmTimestamp', () => {
     vi.setSystemTime(new Date(2026, 3, 2, 0, 5)); // Apr 2 2026, 00:05 local
 
     const lastNight = localTs(2026, 4, 1, 23, 55); // Apr 1 2026, 23:55 local
-    expect(formatDmTimestamp(lastNight)).toBe('Yesterday');
+    expect(formatDmTimestamp(lastNight)).toBe('yesterday');
+  });
+
+  it('follows the selected language, not the browser locale', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 3, 2, 16, 0)); // Apr 2 2026
+
+    await setLanguage('de');
+    try {
+      expect(formatDmTimestamp(localTs(2026, 3, 15, 12, 0))).toBe('15. März');
+      expect(formatDmTimestamp(localTs(2026, 4, 1, 12, 0))).toBe('gestern');
+    } finally {
+      await setLanguage('en');
+    }
   });
 });
 

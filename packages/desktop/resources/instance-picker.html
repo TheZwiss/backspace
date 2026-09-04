@@ -270,13 +270,13 @@
     <div class="container">
       <div class="card">
         <div class="header">
-          <h1>Welcome to Backspace</h1>
-          <p>Connect to your instance</p>
+          <h1 data-i18n="welcomeTitle">Welcome to Backspace</h1>
+          <p data-i18n="welcomeSubtitle">Connect to your instance</p>
         </div>
 
         <form id="picker-form">
           <div class="field">
-            <label for="url-input">Instance URL</label>
+            <label for="url-input" data-i18n="urlLabel">Instance URL</label>
             <input
               id="url-input"
               type="text"
@@ -286,8 +286,8 @@
               autofocus
             />
           </div>
-          <button type="submit" class="connect-btn" id="connect-btn">Connect</button>
-          <button type="button" class="cancel-btn" id="cancel-btn" style="display: none;">Cancel</button>
+          <button type="submit" class="connect-btn" id="connect-btn" data-i18n="connect">Connect</button>
+          <button type="button" class="cancel-btn" id="cancel-btn" style="display: none;" data-i18n="cancel">Cancel</button>
         </form>
 
         <div id="instance-info" class="instance-info" style="display: none;">
@@ -298,13 +298,77 @@
         <div id="error-box" class="error-box" style="display: none;"></div>
 
         <div id="loading" class="loading-text" style="display: none;">
-          <span class="spinner"></span> Connecting...
+          <span class="spinner"></span> <span data-i18n="connecting">Connecting…</span>
         </div>
       </div>
     </div>
   </div>
 
   <script>
+    // Strings for the three shipped languages. The main process passes the
+    // language as ?lang= when it loads this page; before the renderer has ever
+    // run, that is the OS locale. Keep in step with packages/desktop/src/l10n.ts.
+    const STRINGS = {
+      en: {
+        welcomeTitle: 'Welcome to Backspace',
+        welcomeSubtitle: 'Connect to your instance',
+        switchTitle: 'Switch instance',
+        switchSubtitle: 'Connect to a different Backspace instance, or cancel to stay.',
+        urlLabel: 'Instance URL',
+        connect: 'Connect',
+        cancel: 'Cancel',
+        connecting: 'Connecting…',
+        errorEmpty: 'Please enter an instance URL',
+        errorTimeout: 'Connection timed out. Check the URL and try again.',
+        errorUnreachable: 'Could not connect. Check the URL and try again.',
+        errorStatus: 'Could not connect. The server answered with status {status}.',
+        errorNotBackspace: 'That address is not a Backspace instance.',
+        errorOther: 'Could not connect: {message}',
+      },
+      ru: {
+        welcomeTitle: 'Добро пожаловать в Backspace',
+        welcomeSubtitle: 'Подключитесь к своему серверу',
+        switchTitle: 'Сменить сервер',
+        switchSubtitle: 'Подключитесь к другому серверу Backspace или отмените, чтобы остаться.',
+        urlLabel: 'Адрес сервера',
+        connect: 'Подключиться',
+        cancel: 'Отмена',
+        connecting: 'Подключение…',
+        errorEmpty: 'Введите адрес сервера',
+        errorTimeout: 'Время ожидания истекло. Проверьте адрес и попробуйте снова.',
+        errorUnreachable: 'Не удалось подключиться. Проверьте адрес и попробуйте снова.',
+        errorStatus: 'Не удалось подключиться. Сервер ответил статусом {status}.',
+        errorNotBackspace: 'По этому адресу нет сервера Backspace.',
+        errorOther: 'Не удалось подключиться: {message}',
+      },
+      de: {
+        welcomeTitle: 'Willkommen bei Backspace',
+        welcomeSubtitle: 'Verbinde dich mit deiner Instanz',
+        switchTitle: 'Instanz wechseln',
+        switchSubtitle: 'Verbinde dich mit einer anderen Backspace-Instanz oder brich ab, um zu bleiben.',
+        urlLabel: 'Instanz-URL',
+        connect: 'Verbinden',
+        cancel: 'Abbrechen',
+        connecting: 'Verbindung wird hergestellt…',
+        errorEmpty: 'Bitte gib eine Instanz-URL ein',
+        errorTimeout: 'Zeitüberschreitung. Prüfe die URL und versuche es erneut.',
+        errorUnreachable: 'Verbindung nicht möglich. Prüfe die URL und versuche es erneut.',
+        errorStatus: 'Verbindung nicht möglich. Der Server hat mit Status {status} geantwortet.',
+        errorNotBackspace: 'Unter dieser Adresse läuft keine Backspace-Instanz.',
+        errorOther: 'Verbindung nicht möglich: {message}',
+      },
+    };
+    const LANG = new URLSearchParams(window.location.search).get('lang');
+    const T = STRINGS[LANG] || STRINGS.en;
+    document.documentElement.lang = STRINGS[LANG] ? LANG : 'en';
+    function t(key, vars) {
+      const text = T[key] || STRINGS.en[key] || key;
+      return vars ? text.replace(/\{(\w+)\}/g, (m, name) => (name in vars ? vars[name] : m)) : text;
+    }
+    for (const el of document.querySelectorAll('[data-i18n]')) {
+      el.textContent = t(el.getAttribute('data-i18n'));
+    }
+
     const form = document.getElementById('picker-form');
     const input = document.getElementById('url-input');
     const btn = document.getElementById('connect-btn');
@@ -359,8 +423,8 @@
         cancelBtn.style.display = 'block';
         // Update header copy to reflect the "switch" intent rather than the
         // first-run "welcome" framing.
-        document.querySelector('.header h1').textContent = 'Switch instance';
-        document.querySelector('.header p').textContent = 'Connect to a different Backspace instance, or cancel to stay.';
+        document.querySelector('.header h1').textContent = t('switchTitle');
+        document.querySelector('.header p').textContent = t('switchSubtitle');
       }
     }
     init();
@@ -379,7 +443,7 @@
 
       const url = normalizeUrl(input.value);
       if (!url) {
-        showError('Please enter an instance URL');
+        showError(t('errorEmpty'));
         return;
       }
 
@@ -393,13 +457,13 @@
         });
 
         if (!res.ok) {
-          throw new Error('Server returned ' + res.status);
+          throw Object.assign(new Error('Server returned ' + res.status), { pickerReason: 'status', status: res.status });
         }
 
         const data = await res.json();
 
         if (!data.name) {
-          throw new Error('Not a Backspace instance');
+          throw Object.assign(new Error('Not a Backspace instance'), { pickerReason: 'not-backspace' });
         }
 
         // Show instance info
@@ -416,11 +480,15 @@
         setLoading(false);
         infoEl.style.display = 'none';
         if (err.name === 'TimeoutError' || err.name === 'AbortError') {
-          showError('Connection timed out — check the URL and try again');
+          showError(t('errorTimeout'));
+        } else if (err.pickerReason === 'status') {
+          showError(t('errorStatus', { status: String(err.status) }));
+        } else if (err.pickerReason === 'not-backspace') {
+          showError(t('errorNotBackspace'));
         } else if (err.message === 'Failed to fetch' || err.name === 'TypeError') {
-          showError('Could not connect — check the URL and try again');
+          showError(t('errorUnreachable'));
         } else {
-          showError('Could not connect — ' + err.message);
+          showError(t('errorOther', { message: err.message }));
         }
       }
     });
