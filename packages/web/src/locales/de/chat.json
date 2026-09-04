@@ -1,1 +1,49 @@
-{}
+{
+  "attachment": {
+    "progress": {
+      "pausedTitle": "Pausiert – {{percent}}",
+      "resume": "Fortsetzen",
+      "pause": "Pausieren",
+      "abort": "Abbrechen"
+    },
+    "video": {
+      "cannotPlayDownload": "Hier nicht abspielbar – herunterladen",
+      "unsupportedFormat": "Nicht unterstütztes Videoformat",
+      "unsupportedBrowser": "Dein Browser unterstützt keine Videowiedergabe."
+    },
+    "audio": {
+      "unsupportedBrowser": "Dein Browser unterstützt keine Audiowiedergabe."
+    },
+    "federation": {
+      "remoteNamed": "Liegt auf der Instanz von {{sender}}. Lade die Datei herunter, um eine lokale Kopie zu behalten.",
+      "remoteUnknown": "Liegt auf der Instanz des Absenders. Lade die Datei herunter, um eine lokale Kopie zu behalten.",
+      "partialGeneric": "Einige Empfänger können diese Datei nicht lokal zwischenspeichern.",
+      "partialInstance": "der Instanz von {{username}} (Limit: {{limit}})",
+      "partialList": "Die Datei konnte auf {{instances}} nicht zwischengespeichert werden. Sie kann dort weiterhin von deiner Instanz aus angesehen werden.",
+      "listPair": "{{first}} und {{second}}"
+    }
+  },
+  "gif": {
+    "searchPlaceholder": "GIFs suchen",
+    "noResults": "Keine GIFs gefunden",
+    "noTrending": "Keine angesagten GIFs",
+    "attribution": "Bereitgestellt von Klipy"
+  },
+  "preview": {
+    "save": "Bild speichern",
+    "copy": "Bild kopieren",
+    "alt": "Bildvorschau"
+  },
+  "mention": {
+    "membersHeading": "Mitglieder"
+  },
+  "invite": {
+    "sentBy": "{{name}} hat eine Einladung geschickt",
+    "memberCount_one": "{{count}} Mitglied",
+    "memberCount_other": "{{count}} Mitglieder",
+    "revoked": "Einladung nicht mehr gültig",
+    "join": "Beitreten",
+    "joining": "Wird beigetreten…",
+    "joinFailed": "Beitritt fehlgeschlagen"
+  }
+}
