@@ -1,1 +1,333 @@
-{}
+{
+  "time": {
+    "never": "Nie",
+    "justNow": "Gerade eben"
+  },
+  "connections": {
+    "title": "Verbundene Instanzen",
+    "description": "Verknüpfe deine Konten über föderierte Backspace-Instanzen hinweg.",
+    "empty": "Keine entfernten Instanzen verbunden. Füge eine hinzu, um mit der Föderation zu starten.",
+    "addButton": "+ Instanz hinzufügen",
+    "home": {
+      "title": "Heimatinstanz",
+      "asUser": "als {{username}}",
+      "local": "Lokal"
+    },
+    "status": {
+      "connected": "Verbunden",
+      "disconnected": "Getrennt",
+      "unreachable": "Nicht erreichbar",
+      "authExpired": "Anmeldung abgelaufen"
+    },
+    "add": {
+      "title": "Entfernte Instanz hinzufügen",
+      "urlPlaceholder": "https://instanz.example.com",
+      "probing": "Wird geprüft…",
+      "connect": "Verbinden",
+      "connecting": "Wird verbunden…",
+      "registrationClosed": "Diese Instanz nimmt keine neuen föderierten Registrierungen an. Bestehende Konten können sich weiterhin anmelden.",
+      "passwordLabel": "Gib dein Passwort ein, um dich mit {{host}} zu verbinden",
+      "passwordPlaceholder": "Dein Kontopasswort",
+      "passwordHint": "Dein Passwort prüft deine Heimatinstanz, an {{host}} wird es nie gesendet – diese Instanz bekommt eigene, nur für sie erzeugte Zugangsdaten.",
+      "fallbackNotice": "Auf dieser Instanz gibt es bereits ein Konto, das die von deiner Heimatinstanz ausgestellten Zugangsdaten nicht akzeptiert. Melde dich mit dem Passwort an, das du auf dieser Instanz gesetzt hast – danach wird das Konto auf die ausgestellten Zugangsdaten umgestellt.",
+      "usernameLabel": "Benutzername",
+      "usernamePlaceholder": "Dein Benutzername auf dieser Instanz",
+      "remotePasswordLabel": "Passwort für diese Instanz",
+      "remotePasswordPlaceholder": "Passwort auf der entfernten Instanz",
+      "loggingIn": "Anmeldung läuft…",
+      "loginAndConnect": "Anmelden und verbinden"
+    },
+    "filter": {
+      "all": "Alle",
+      "connected": "Verbunden",
+      "disconnected": "Getrennt",
+      "issues": "Probleme",
+      "noMatch": "Keine Instanz passt zum aktuellen Filter."
+    },
+    "sort": {
+      "button": "Sortieren",
+      "heading": "Sortieren nach",
+      "name": "Name (A bis Z)",
+      "dateAdded": "Hinzugefügt am",
+      "lastConnected": "Zuletzt verbunden"
+    },
+    "row": {
+      "asUser": "als {{username}}",
+      "added": "Hinzugefügt am {{date}}",
+      "connectedAgo": "Verbunden {{time}}",
+      "disconnectedAgo": "Getrennt {{time}}",
+      "lastConnectedAgo": "Zuletzt verbunden {{time}}",
+      "remoteUserId": "Entfernte Benutzer-ID",
+      "addedLabel": "Hinzugefügt",
+      "disconnectedLabel": "Getrennt",
+      "lastConnectedLabel": "Zuletzt verbunden",
+      "homePasswordPlaceholder": "Passwort deines Heimatkontos",
+      "disconnect": "Trennen",
+      "reconnect": "Erneut verbinden",
+      "reauthenticate": "Erneut anmelden",
+      "forceRemove": "Erzwungen entfernen",
+      "deleteIdentity": "Identität löschen",
+      "deleteIdentityDisabled": "Trenne zuerst die Verbindung, um die Identität zu löschen"
+    },
+    "forceRemove": {
+      "title": "Eintrag erzwungen entfernen",
+      "description": "Der Eintrag für {{name}} wird aus der Liste entfernt. Die entfernte Instanz wird nicht benachrichtigt. Nutze das nur, wenn die Instanz dauerhaft nicht erreichbar ist.",
+      "confirm": "Erzwungen entfernen"
+    },
+    "deleteIdentity": {
+      "title": "Identität löschen",
+      "description": "Entferne deine föderierte Identität auf <name>{{name}}</name>. Wähle, was mit deinen Daten passieren soll.",
+      "leave": {
+        "title": "Still verlassen",
+        "description": "Verbindung zu dieser Instanz trennen. Dein Konto und alle Daten bleiben erhalten."
+      },
+      "soft": {
+        "title": "Benutzer löschen",
+        "description": "Dein Konto löschen, deine Nachrichten aber behalten. Du erscheinst als „Gelöschter Benutzer“."
+      },
+      "full": {
+        "title": "Alles löschen",
+        "description": "Dein Konto samt allen Nachrichten, Direktnachrichten, Reaktionen und Dateien löschen. Nichts bleibt zurück."
+      },
+      "scope": {
+        "heading": "Umfang",
+        "this": "Nur diese Instanz",
+        "select": "Instanzen auswählen…",
+        "all": "Alle entfernten Instanzen"
+      },
+      "deleting": "Wird gelöscht…",
+      "disconnect": "Trennen",
+      "confirm": "Identität löschen",
+      "toast": {
+        "disconnected": "Verbindung getrennt",
+        "deleted_one": "Identität gelöscht",
+        "deleted_other": "Identität auf {{count}} Instanzen gelöscht",
+        "ownsSpaces": "{{host}}: Übertrage zuerst den Besitz deiner Spaces",
+        "failed": "{{host}}: {{error}}",
+        "failedGeneric": "Fehlgeschlagen"
+      }
+    },
+    "action": {
+      "friendRequest": "Freundschaftsanfrage",
+      "spaceJoin": "Space-Beitritt",
+      "directMessage": "Direktnachricht",
+      "friendRequestTo": "Freundschaftsanfrage an {{target}}",
+      "joinSpace": "{{target}} beitreten",
+      "directMessageTo": "Direktnachricht an {{target}}"
+    },
+    "pending": {
+      "title": "Ausstehende Peering-Freigaben",
+      "description": "Dein Admin muss diese Anfragen freigeben, bevor es weitergeht.",
+      "onPeer": "auf <peer>{{peer}}</peer>",
+      "cancelling": "Wird abgebrochen…",
+      "cancelled": "Peering-Anfrage abgebrochen",
+      "cancelFailed": "Abbrechen fehlgeschlagen: {{error}}"
+    },
+    "outcomes": {
+      "title": "Letzte Peering-Ergebnisse",
+      "approved": "Deine Peering-Anfrage an {{host}} wurde von deinem Admin freigegeben.",
+      "denied": "Deine Peering-Anfrage an {{host}} wurde von deinem Admin abgelehnt.",
+      "expired": "Deine Peering-Anfrage an {{host}} ist ohne Entscheidung des Admins abgelaufen.",
+      "originalAction": "Ursprüngliche Aktion: {{action}}",
+      "retry": "Erneut versuchen: {{action}}",
+      "dismissing": "Wird ausgeblendet…",
+      "dismissAll": "Alle ausblenden",
+      "dismissFailed": "Ausblenden fehlgeschlagen: {{error}}",
+      "dismissAllFailed": "Alle ausblenden fehlgeschlagen: {{error}}"
+    }
+  },
+  "mobileInstance": {
+    "title": "Instanz",
+    "sections": {
+      "general": "Allgemein",
+      "registration": "Registrierung",
+      "federation": "Föderation",
+      "streaming": "Streaming",
+      "storage": "Speicher",
+      "updates": "Updates",
+      "users": "Benutzer"
+    }
+  },
+  "admin": {
+    "title": "Föderation",
+    "description": "Konfiguriere die Weiterleitung, die Rotation der Secrets und verwalte gepeerte Instanzen.",
+    "relay": {
+      "title": "Weiterleitung",
+      "description": "Steuert die Weiterleitung von Direktnachrichten zwischen föderierten Instanzen. Wenn aktiviert, werden Direktnachrichten mit Benutzern gepeerter Instanzen von Server zu Server weitergeleitet.",
+      "enable": {
+        "label": "Weiterleitung von Direktnachrichten aktivieren",
+        "description": "Direktnachrichten an gepeerte Instanzen und zurück weiterleiten"
+      },
+      "autoAccept": {
+        "label": "Peering automatisch annehmen",
+        "description": "Peering-Anfragen anderer Instanzen automatisch annehmen. Wenn deaktiviert, ist nur manuell gestartetes Peering erlaubt."
+      },
+      "ttl": {
+        "label": "Aufbewahrung der Weiterleitung (Tage)",
+        "description": "Wie lange weitergeleitete Nachrichten im Postausgang bleiben, bevor sie aufgeräumt werden"
+      },
+      "rotation": {
+        "label": "Standard-Rotation der Secrets (Tage)",
+        "description": "Intervall der automatischen Rotation für neue Peers. Bestehende Peers behalten ihre Einstellung."
+      },
+      "saved": "Einstellungen gespeichert"
+    },
+    "status": {
+      "active": "Aktiv",
+      "pending": "Ausstehend",
+      "unreachable": "Nicht erreichbar",
+      "rejected": "Abgelehnt (Auto-Peering verweigert)",
+      "rejectedShort": "Abgelehnt",
+      "revoked": "Widerrufen",
+      "awaitingApproval": "Wartet auf Freigabe",
+      "needsAttention": "Braucht Aufmerksamkeit"
+    },
+    "filter": {
+      "button": "Filtern",
+      "statusHeading": "Status",
+      "sortHeading": "Sortieren nach",
+      "sort": {
+        "name": "Name (A bis Z)",
+        "lastSeen": "Zuletzt gesehen",
+        "dateAdded": "Hinzugefügt am",
+        "failures": "Fehlschläge",
+        "revokedDate": "Widerrufen am"
+      }
+    },
+    "views": {
+      "active": "Aktiv",
+      "revoked": "Widerrufen"
+    },
+    "peer": {
+      "revokedMeta": "Widerrufen: {{revoked}} · Gepeert: {{peered}}",
+      "unreachableMeta": "Zuletzt gesehen: {{lastSeen}} · {{failures}}",
+      "activeMeta": "Zuletzt gesehen: {{lastSeen}} · Synchronisiert: {{synced}}",
+      "failures_one": "{{count}} Fehlschlag",
+      "failures_other": "{{count}} Fehlschläge",
+      "reinitiate": "Peering neu starten",
+      "deletePermanently": "Endgültig löschen",
+      "consecutiveFailures": "Fehlschläge in Folge",
+      "authFailures": "Anmeldefehler",
+      "lastFailure": "Letzter Fehlschlag",
+      "peeredSince": "Gepeert seit",
+      "secretRotated": "Secret rotiert",
+      "autoRotate": "Automatische Rotation",
+      "rotationStatus": "Rotationsstatus",
+      "rotateEvery_one": "Alle {{count}} Tag",
+      "rotateEvery_other": "Alle {{count}} Tage",
+      "defaultTag": "(Standard)",
+      "inProgress": "Läuft",
+      "idle": "Ruht",
+      "intervalRange": "Muss zwischen 1 und 365 liegen",
+      "intervalUpdated": "Rotationsintervall aktualisiert",
+      "checking": "Wird geprüft…",
+      "checkNow": "Jetzt prüfen",
+      "resetPeering": "Peering zurücksetzen",
+      "rotateSecret": "Secret rotieren",
+      "rotationInProgress": "Eine Rotation läuft bereits",
+      "revoke": "Widerrufen",
+      "editInterval": "Rotationsintervall bearbeiten"
+    },
+    "approvals": {
+      "title": "Ausstehende Freigabeanfragen",
+      "outboundTitle_one": "{{name}} – {{count}} Benutzer möchte, dass wir peeren",
+      "outboundTitle_other": "{{name}} – {{count}} Benutzer möchten, dass wir peeren",
+      "requested": "Angefragt {{time}}",
+      "subscriber": {
+        "friendAdd": "Freundschaftsanfrage an {{target}}",
+        "spaceJoin": "möchte {{target}} beitreten",
+        "directMessage": "möchte {{target}} eine Direktnachricht schicken"
+      },
+      "approve": "Freigeben",
+      "deny": "Ablehnen",
+      "established": "Peering mit {{name}} hergestellt",
+      "deniedToast": "Peering-Anfrage von {{name}} abgelehnt",
+      "confirm": {
+        "approveTitle": "Peering-Anfrage freigeben",
+        "denyTitle": "Peering-Anfrage ablehnen",
+        "approveOutbound_one": "Startet den Peering-Handshake mit {{name}} im Namen des {{count}} anfragenden Benutzers. Die entfernte Instanz muss erreichbar sein.",
+        "approveOutbound_other": "Startet den Peering-Handshake mit {{name}} im Namen der {{count}} anfragenden Benutzer. Die entfernte Instanz muss erreichbar sein.",
+        "approveInbound": "Startet den Peering-Handshake mit {{name}}. Die entfernte Instanz muss erreichbar sein.",
+        "denyOutbound_one": "Lehnt die ausgehende Peering-Anfrage ab und benachrichtigt den anfragenden Benutzer. Er kann die Anfrage aus seiner Freundesliste erneut auslösen.",
+        "denyOutbound_other": "Lehnt die ausgehende Peering-Anfrage ab und benachrichtigt die anfragenden Benutzer. Sie können die Anfrage aus ihrer Freundesliste erneut auslösen.",
+        "denyInbound": "Lehnt die Anfrage ab und blockiert künftige Auto-Peering-Anfragen von {{name}}. Du kannst die Blockierung später in der Liste der abgelehnten Peers aufheben.",
+        "approveAndPeer": "Freigeben und peeren",
+        "approve": "Freigeben",
+        "denyAndNotify": "Ablehnen und benachrichtigen",
+        "deny": "Ablehnen"
+      }
+    },
+    "resetCleanup": {
+      "title": "Aufräumen nach Reset",
+      "peerReset": "{{name}} wurde zurückgesetzt",
+      "peerResetDescription": "Auf dieser Domain läuft eine neue Instanz. Stelle die Föderation wieder her, um veraltete Freundschaften und Direktnachrichten zu reparieren.",
+      "repeer": "Neu peeren",
+      "resetToast": "{{host}} wurde zurückgesetzt – die Föderation muss neu hergestellt werden",
+      "repeerIncomplete": "Neu-Peering unvollständig – {{name}} hält noch ein veraltetes Peering mit dir. Der dortige Admin muss seine Seite zurücksetzen, dann kannst du erneut neu peeren.",
+      "repeerInitiated": "Neu-Peering mit {{name}} gestartet",
+      "removed": "{{username}} und alle zugehörigen Inhalte entfernt",
+      "ownsSpaces": "{{username}} besitzt Spaces – übertrage zuerst den Besitz (Space-Einstellungen → Besitz).",
+      "staleRemote": "Die entfernte Instanz hält noch ein veraltetes Peering mit dir. Bitte den dortigen Admin, seine Seite zurückzusetzen, und peere dann erneut neu.",
+      "eventSummary": "<host>{{host}}</host> wurde zurückgesetzt – {{identities}} automatisch bereinigt, {{accounts}} mit lokalen Inhalten abgekoppelt. Abgekoppelte Konten funktionieren lokal weiter – ihre Besitzer behalten den Zugang mit ihrem bisherigen Passwort. Der Besitzer kann ein abgekoppeltes Konto in dessen Einstellungen (Konto → Hinweis zur Abkopplung) wieder mit seiner neuen Heimatidentität verbinden, wenn er in beiden angemeldet ist.",
+      "identitiesCleaned_one": "{{count}} replizierte Identität",
+      "identitiesCleaned_other": "{{count}} replizierte Identitäten",
+      "accountsDetached_one": "{{count}} Konto",
+      "accountsDetached_other": "{{count}} Konten",
+      "memberships_one": "{{count}} Mitgliedschaft",
+      "memberships_other": "{{count}} Mitgliedschaften",
+      "messages_one": "{{count}} Nachricht",
+      "messages_other": "{{count}} Nachrichten",
+      "owns": "Besitzt: {{spaces}}",
+      "dismissKeep": "Ausblenden – alle abgekoppelten Konten behalten",
+      "confirm": {
+        "repeerTitle": "Föderation wiederherstellen",
+        "removeTitle": "Abgekoppeltes Konto entfernen",
+        "repeerDescription": "Löscht den lokalen Peer-Eintrag und startet einen neuen authentifizierten Handshake mit {{origin}}. Die Gegenseite muss erreichbar sein und die Anfrage freigeben, falls sie Peering nicht automatisch annimmt.",
+        "removeDescription": "{{username}} und alle zugehörigen Inhalte auf dieser Instanz endgültig löschen? Das lässt sich nicht rückgängig machen.",
+        "repeerConfirm": "Neu peeren und reparieren",
+        "removeConfirm": "Endgültig löschen"
+      }
+    },
+    "peers": {
+      "title": "Gepeerte Instanzen",
+      "empty": "Keine Föderations-Peers eingerichtet. Peers entstehen automatisch, wenn sich Benutzer mit entfernten Instanzen verbinden.",
+      "noMatch": "Kein Peer passt zum aktuellen Filter.",
+      "noRevoked": "Keine widerrufenen Peers.",
+      "backOnline": "{{name}} ist wieder erreichbar",
+      "stillUnreachable": "{{name}} ist weiterhin nicht erreichbar",
+      "rotationInitiated": "Rotation des Secrets gestartet – 15 Minuten Übergangszeit",
+      "revoked": "Peer widerrufen",
+      "reinitiated": "Peering neu gestartet",
+      "reinitiateFailed": "Peer-Eintrag gelöscht, aber der Handshake ist fehlgeschlagen: {{error}}. Peere manuell erneut mit {{origin}}",
+      "deleted": "Peer endgültig gelöscht",
+      "resetDone": "Peering mit {{name}} zurückgesetzt",
+      "confirm": {
+        "rotate": {
+          "title": "HMAC-Secret rotieren",
+          "description": "Erzeugt ein neues HMAC-Secret für {{name}}. Beide Instanzen akzeptieren während einer Übergangszeit von 15 Minuten das alte und das neue Secret.",
+          "confirm": "Rotieren"
+        },
+        "revoke": {
+          "title": "Peer widerrufen",
+          "description": "Stoppt jede Weiterleitung mit {{name}}. Ausstehende Einträge im Postausgang werden verworfen. Du kannst das Peering später neu starten.",
+          "confirm": "Widerrufen"
+        },
+        "reinitiate": {
+          "title": "Peering neu starten",
+          "description": "Löscht den widerrufenen Eintrag und startet einen neuen Handshake mit {{origin}}. Die entfernte Instanz muss erreichbar sein.",
+          "confirm": "Neu starten"
+        },
+        "delete": {
+          "title": "Peer-Eintrag löschen",
+          "description": "Löscht den Peer-Eintrag für {{name}} endgültig. Das lässt sich nicht rückgängig machen.",
+          "confirm": "Löschen"
+        },
+        "reset": {
+          "title": "Peering zurücksetzen",
+          "description": "Peering mit {{name}} zurücksetzen? Löscht den lokalen Peer-Eintrag und alle ausstehenden Einträge im Postausgang. Nach dem Zurücksetzen musst du das Peering außerhalb von Backspace mit dem Admin der Gegenseite neu vereinbaren. Das lässt sich nicht rückgängig machen.",
+          "confirm": "Zurücksetzen"
+        }
+      }
+    }
+  }
+}
