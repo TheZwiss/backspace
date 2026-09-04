@@ -1,1 +1,91 @@
-{}
+{
+  "page": {
+    "title": "Friends"
+  },
+  "tabs": {
+    "online": "Online",
+    "all": "All",
+    "pending": "Pending",
+    "add": "Add Friend",
+    "activity": "Activity"
+  },
+  "sections": {
+    "online": "Online — {{n}}",
+    "all": "All Friends — {{n}}",
+    "pending": "Pending — {{n}}",
+    "active": "Active — {{n}}",
+    "offline": "Offline — {{n}}"
+  },
+  "empty": {
+    "online": "No one's online right now.",
+    "all": "No friends yet — add someone!",
+    "pending": "No pending requests — Nori is napping.",
+    "activity": "It's quiet for now... When friends start an activity, we'll show it here!"
+  },
+  "presence": {
+    "online": "Online",
+    "idle": "Idle",
+    "dnd": "Do Not Disturb",
+    "offline": "Offline"
+  },
+  "friend": {
+    "viaInstance": "via {{host}}",
+    "message": "Message",
+    "remove": "Remove Friend"
+  },
+  "request": {
+    "incoming": "Incoming Friend Request",
+    "outgoing": "Outgoing Friend Request",
+    "accept": "Accept",
+    "decline": "Decline",
+    "ignore": "Ignore",
+    "cancel": "Cancel Request",
+    "send": "Send Friend Request",
+    "pending": "Request Pending",
+    "sending": "Sending...",
+    "cancelling": "Cancelling...",
+    "sent": "Friend request sent!"
+  },
+  "removeFriend": {
+    "title": "Remove Friend",
+    "description": "Are you sure you want to remove {{name}} as a friend? You can always send them a new friend request later.",
+    "fallbackName": "this user"
+  },
+  "add": {
+    "title": "Find People",
+    "hint": "Search by username or use <handle>user@instance</handle> to add someone directly.",
+    "placeholder": "Search or add by username...",
+    "direct": "Send friend request to <handle>{{handle}}</handle>",
+    "sendRequest": "Send Request",
+    "discover": "Discover People",
+    "noSearchResults": "No users match your search.",
+    "noDiscoverable": "No discoverable users yet — invite people to join!"
+  },
+  "mutuals": {
+    "friends_one": "{{count}} mutual friend",
+    "friends_other": "{{count}} mutual friends",
+    "spaces_one": "{{count}} mutual space",
+    "spaces_other": "{{count}} mutual spaces",
+    "noFriends": "No mutual friends",
+    "noSpaces": "No mutual spaces"
+  },
+  "profile": {
+    "tabs": {
+      "about": "About",
+      "mutualFriends": "Mutual Friends",
+      "mutualSpaces": "Mutual Spaces"
+    },
+    "aboutMe": "About Me",
+    "memberSince": "Member Since",
+    "sendMessage": "Send Message",
+    "viewFull": "View Full Profile",
+    "addFriend": "Add Friend"
+  },
+  "activity": {
+    "title": "Active Now",
+    "quietTitle": "It's quiet for now...",
+    "quietDescription": "When a friend starts an activity—like playing a game or hanging out on voice—we'll show it here!",
+    "online": "Online — {{n}}",
+    "offline": "Offline — {{n}}"
+  }
+}

@@ -1,5 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useCallback, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 import {
   useContextMenuStore,
   filterMenuItems,
@@ -141,10 +142,10 @@ interface DesktopLeafItemProps {
 function DesktopLeafItem({ item, close }: DesktopLeafItemProps) {
   switch (item.type) {
     case 'separator':
-      return <div className="h-px bg-white/[0.06] my-1 mx-1.5" />;
+      return <div className="h-px bg-white/[0.06] my-1 mx-1.5" />; // i18n-check: allow-literal (the check reads the following `case` as JSX text)
 
     case 'custom':
-      return <div>{item.render()}</div>;
+      return <div>{item.render()}</div>; // i18n-check: allow-literal (the check reads the following `case` as JSX text)
 
     case 'checkbox':
       return <ReactiveCheckboxItem item={item} />;
@@ -428,10 +429,10 @@ interface MobileLeafItemProps {
 function MobileLeafItem({ item, close }: MobileLeafItemProps) {
   switch (item.type) {
     case 'separator':
-      return <div className="h-px bg-white/[0.06] my-1 mx-1.5" />;
+      return <div className="h-px bg-white/[0.06] my-1 mx-1.5" />; // i18n-check: allow-literal (the check reads the following `case` as JSX text)
 
     case 'custom':
-      return <div>{item.render()}</div>;
+      return <div>{item.render()}</div>; // i18n-check: allow-literal (the check reads the following `case` as JSX text)
 
     case 'checkbox':
       return <ReactiveCheckboxItem item={item} isMobile />;
@@ -465,6 +466,7 @@ interface MobileMenuProps {
 }
 
 function MobileMenu({ items, close }: MobileMenuProps) {
+  const { t } = useTranslation('common');
   const [submenuStack, setSubmenuStack] = useState<ContextMenuSubmenu | null>(null);
   const portalContainer = usePortalContainer();
 
@@ -503,7 +505,7 @@ function MobileMenu({ items, close }: MobileMenuProps) {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0">
               <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" />
             </svg>
-            <span>Back</span>
+            <span>{t('actions.back')}</span>
           </button>
         )}
         <div className="py-1">

@@ -1,1 +1,417 @@
-{}
+{
+  "shared": {
+    "loadingSettings": "Einstellungen werden geladen…",
+    "saved": "Einstellungen gespeichert",
+    "saveFailed": "Speichern fehlgeschlagen",
+    "scanning": "Wird geprüft…",
+    "previous": "Zurück",
+    "next": "Weiter"
+  },
+  "general": {
+    "title": "Allgemein",
+    "description": "Richte deine Backspace-Instanz ein. Diese Einstellungen gelten für alle Nutzer.",
+    "instanceName": {
+      "label": "Instanzname",
+      "description": "Der Name, der auf der Anmeldeseite und gegenüber föderierten Instanzen angezeigt wird.",
+      "counter": "{{length}}/{{max}}"
+    },
+    "discovery": {
+      "label": "Entdecken",
+      "toggleLabel": "Spaces entdecken",
+      "toggleDescription": "Spaces dürfen auf der öffentlichen Entdecken-Seite erscheinen"
+    },
+    "gif": {
+      "label": "GIF-Suche",
+      "description": "Aktiviere die GIF-Suche über Klipy. Einen kostenlosen API-Schlüssel gibt es im Klipy-Entwicklerportal.",
+      "placeholderSaved": "Schlüssel gespeichert — neuen Schlüssel eingeben, um ihn zu ersetzen",
+      "placeholderKey": "Klipy-API-Schlüssel",
+      "enabled": "Aktiviert",
+      "notConfigured": "Nicht eingerichtet",
+      "clearKey": "Schlüssel entfernen"
+    }
+  },
+  "registration": {
+    "title": "Registrierung",
+    "description": "Lege fest, wer auf dieser Instanz Konten anlegen darf. Die öffentliche Registrierung betrifft lokale Anmeldungen, die föderierte Registrierung Nutzer verbundener Instanzen, die hier ein Konto anlegen.",
+    "public": {
+      "label": "Öffentliche Registrierung",
+      "toggleLabel": "Neue lokale Konten erlauben",
+      "toggleDescription": "Jeder kann über die Registrierungsseite ein lokales Konto anlegen. Ist dies aus, entstehen neue lokale Konten nur über Einladungslinks."
+    },
+    "federated": {
+      "label": "Föderierte Registrierung",
+      "toggleLabel": "Neue föderierte Konten erlauben",
+      "toggleDescription": "Nutzer anderer Instanzen können hier über ihre Verbindungseinstellungen ein föderiertes Konto anlegen. Bestehende föderierte Konten können sich unabhängig von dieser Einstellung immer anmelden."
+    },
+    "saved": "Registrierungseinstellungen gespeichert",
+    "saveFailed": "Registrierungseinstellungen konnten nicht gespeichert werden"
+  },
+  "invites": {
+    "label": "Einladungslinks",
+    "create": "+ Link erstellen",
+    "tabs": {
+      "active": "Aktiv",
+      "archived": "Archiviert"
+    },
+    "loadFailed": "Einladungen konnten nicht geladen werden",
+    "emptyActive": "Keine aktiven Einladungslinks.",
+    "emptyArchived": "Keine archivierten Einladungslinks.",
+    "noMatch": "Keine Einladungen passen zum aktuellen Filter.",
+    "filter": {
+      "button": "Filtern",
+      "status": "Zustand",
+      "sortBy": "Sortieren nach",
+      "sort": {
+        "recent": "Neueste zuerst",
+        "oldest": "Älteste zuerst",
+        "name": "Name (A bis Z)",
+        "mostUsed": "Am häufigsten genutzt",
+        "expiringSoonest": "Läuft am ehesten ab"
+      }
+    },
+    "status": {
+      "active": "Aktiv",
+      "expired": "Abgelaufen",
+      "exhausted": "Aufgebraucht",
+      "revoked": "Widerrufen"
+    },
+    "expiry": {
+      "preset": {
+        "hour1": "1 Stunde",
+        "hours24": "24 Stunden",
+        "days7": "7 Tage",
+        "days30": "30 Tage",
+        "never": "Nie",
+        "custom": "Eigener Zeitpunkt…"
+      },
+      "keepCurrent": "Aktuellen behalten",
+      "invalidFuture": "Wähle einen Zeitpunkt in der Zukunft",
+      "invalidSelection": "Ungültige Ablaufauswahl",
+      "revokedOn": "Widerrufen am {{date}}",
+      "expiredOn": "Abgelaufen am {{date}}",
+      "exhausted": "Aufgebraucht",
+      "noExpiration": "Kein Ablaufdatum",
+      "inDays_one": "Läuft in {{count}} Tag ab",
+      "inDays_other": "Läuft in {{count}} Tagen ab",
+      "inHours_one": "Läuft in {{count}} Stunde ab",
+      "inHours_other": "Läuft in {{count}} Stunden ab"
+    },
+    "form": {
+      "name": "Bezeichnung",
+      "namePlaceholder": "z. B. Freunde, erste Runde",
+      "maxUses": "Maximale Nutzungen",
+      "unlimited": "Unbegrenzt",
+      "uses": "Nutzungen",
+      "expires": "Läuft ab",
+      "nameLength": "Die Bezeichnung muss 1 bis 64 Zeichen lang sein",
+      "maxUsesInteger": "Maximale Nutzungen müssen eine positive ganze Zahl sein"
+    },
+    "createModal": {
+      "title": "Einladungslink erstellen",
+      "description": "Erzeuge einen teilbaren Link, über den sich Leute auf dieser Instanz registrieren können. Du legst fest, wie oft er genutzt werden kann und wann er abläuft.",
+      "submit": "Link erstellen",
+      "submitting": "Wird erstellt…",
+      "createdCopied": "Link erstellt und in die Zwischenablage kopiert.",
+      "createdManual": "Link erstellt. Kopiere ihn von Hand aus der Zeile.",
+      "failed": "Einladung konnte nicht erstellt werden: {{message}}"
+    },
+    "editModal": {
+      "title": "„{{name}}“ bearbeiten",
+      "description": "Passe die Grenzen dieses Einladungslinks an. Die URL bleibt gleich — wer sie schon hat, kann sie unter den neuen Bedingungen weiter nutzen.",
+      "used": "({{used}} genutzt)",
+      "maxUsesBelowUsed": "Maximale Nutzungen dürfen nicht unter den bisherigen Nutzungen liegen ({{used}})",
+      "noChanges": "Keine Änderungen zum Speichern",
+      "updated": "Einladung aktualisiert",
+      "failed": "Einladung konnte nicht aktualisiert werden: {{message}}",
+      "submit": "Änderungen speichern",
+      "submitting": "Wird gespeichert…"
+    },
+    "reinstateModal": {
+      "title": "„{{name}}“ reaktivieren",
+      "descriptionRevoked": "Diese Einladung wurde widerrufen. Beim Reaktivieren entsteht ein neuer Link mit einer anderen URL — die alte URL bleibt ungültig.",
+      "descriptionLapsed": "Diese Einladung ist nicht mehr gültig. Beim Reaktivieren wird dieselbe URL wieder aktiv — wer sie gespeichert hat, kann sie wieder nutzen.",
+      "newLinkWarning": "Es wird ein neuer Link erzeugt. Wer die alte URL hatte, kann sie nicht mehr nutzen.",
+      "maxUsesMeta": "(aktuell: {{max}}, genutzt: {{used}})",
+      "maxUsesMin": "Maximale Nutzungen müssen mindestens {{min}} sein (bisher genutzt: {{used}})",
+      "submit": "Reaktivieren",
+      "submitNewLink": "Mit neuem Link reaktivieren",
+      "submitting": "Wird reaktiviert…",
+      "doneCopied": "Mit neuem Link reaktiviert und in die Zwischenablage kopiert.",
+      "doneManual": "Mit neuem Link reaktiviert. Kopiere ihn von Hand aus der Zeile.",
+      "doneSameLink": "Reaktiviert. Derselbe Link ist wieder aktiv.",
+      "failed": "Reaktivieren fehlgeschlagen: {{message}}"
+    },
+    "redemptions": {
+      "title": "Einlösungen von „{{name}}“",
+      "description": "Nutzer, die sich über diesen Einladungslink registriert haben, in der Reihenfolge ihrer Anmeldung.",
+      "revokedNotice": "Diese Einladung wurde widerrufen. Die Einlösungen unten stammen von Nutzern, die sich vor dem Widerruf registriert haben.",
+      "revokedNoticeDated": "Diese Einladung wurde am {{date}} widerrufen. Die Einlösungen unten stammen von Nutzern, die sich vor dem Widerruf registriert haben.",
+      "usesOfMax_one": "{{count}} von {{max}} Nutzungen",
+      "usesOfMax_other": "{{count}} von {{max}} Nutzungen",
+      "uses_one": "{{count}} Nutzung",
+      "uses_other": "{{count}} Nutzungen",
+      "loadFailed": "Einlösungen konnten nicht geladen werden",
+      "loadFailedInline": "Einlösungen konnten nicht geladen werden.",
+      "empty": "Noch keine Einlösungen.",
+      "now": "(jetzt {{name}})",
+      "deletedUser": "Gelöschter Nutzer"
+    },
+    "row": {
+      "usage": "{{usage}} Nutzungen",
+      "createdBy": "Erstellt von {{name}}",
+      "unknownCreator": "Unbekannt",
+      "subtitleActive": "{{usage}} · {{expiry}} · {{creator}}",
+      "subtitleArchived": "{{usage}} · {{expiry}} · {{when}}",
+      "used": "Genutzt",
+      "expires": "Läuft ab",
+      "expiredAt": "Abgelaufen",
+      "revokedAt": "Widerrufen",
+      "exhausted": "Aufgebraucht",
+      "created": "Erstellt",
+      "createdByLabel": "Erstellt von",
+      "token": "Code",
+      "lastRedeemed": "Zuletzt eingelöst",
+      "copyLink": "Link kopieren",
+      "revoke": "Widerrufen",
+      "viewRedemptions": "Einlösungen anzeigen",
+      "reinstate": "Reaktivieren",
+      "deletePermanently": "Endgültig löschen",
+      "copied": "Einladungslink kopiert",
+      "copyFailed": "Link konnte nicht kopiert werden",
+      "revoked": "Einladung widerrufen",
+      "revokeFailed": "Widerrufen fehlgeschlagen: {{message}}",
+      "deleted": "Einladung gelöscht",
+      "deleteFailed": "Löschen fehlgeschlagen: {{message}}",
+      "revokeDialog": {
+        "title": "„{{name}}“ widerrufen?",
+        "description": "Der Link funktioniert sofort nicht mehr. Wer die URL hat, kann sie nicht mehr nutzen.<br/><br/>Falls du es dir später anders überlegst, erzeugt <strong>Reaktivieren</strong> einen frischen Link unter diesem Eintrag — die ursprüngliche URL bleibt ungültig.",
+        "confirm": "Link widerrufen"
+      },
+      "deleteDialog": {
+        "title": "„{{name}}“ endgültig löschen?",
+        "description": "Das lässt sich nicht rückgängig machen. Auch die Einlösungshistorie dieses Links wird entfernt. Wenn der Link nur nicht mehr funktionieren soll, nutze stattdessen <strong>Widerrufen</strong> — dabei bleibt die Einlösungshistorie erhalten.",
+        "confirm": "Endgültig löschen"
+      }
+    }
+  },
+  "storage": {
+    "title": "Speicher",
+    "description": "Behalte die Festplattenbelegung im Blick und räume verwaiste Dateien auf, die gelöschte Inhalte oder ersetzte Avatare und Banner zurückgelassen haben.",
+    "loading": "Speicherstatistik wird geladen…",
+    "loadFailed": "Speicherstatistik konnte nicht geladen werden",
+    "refresh": "Statistik aktualisieren",
+    "overview": {
+      "label": "Speicherübersicht",
+      "totalFiles": "Dateien gesamt",
+      "referenced": "In Verwendung",
+      "orphanedFiles": "Verwaiste Dateien",
+      "unlinkedUploads": "Nicht verknüpfte Uploads",
+      "danglingRecords": "Verwaiste Einträge",
+      "staleUploads": "Veraltete Uploads"
+    },
+    "breakdown": {
+      "label": "Nach Dateityp",
+      "entry_one": "{{count}} Datei — {{size}}",
+      "entry_other": "{{count}} Dateien — {{size}}"
+    },
+    "uploadLimit": {
+      "label": "Upload-Limit",
+      "maxFileSize": "Maximale Dateigröße",
+      "saved": "Upload-Limit auf {{limit}} gesetzt",
+      "saveFailed": "Upload-Limit konnte nicht geändert werden"
+    },
+    "cleanup": {
+      "label": "Aufräumen",
+      "nothingFound": "Keine verwaisten Dateien, veralteten Uploads oder verwaisten Einträge gefunden.",
+      "preview": "Vorschau",
+      "run": "Jetzt aufräumen",
+      "running": "Wird aufgeräumt…",
+      "previewResult": "Vorschau — keine Dateien gelöscht",
+      "complete": "Aufräumen abgeschlossen",
+      "orphanedFiles_one": "{{count}} verwaiste Datei ({{size}})",
+      "orphanedFiles_other": "{{count}} verwaiste Dateien ({{size}})",
+      "staleRecords_one": ", {{count}} veralteter Upload-Eintrag",
+      "staleRecords_other": ", {{count}} veraltete Upload-Einträge",
+      "errors_one": "{{count}} Fehler: {{first}}",
+      "errors_other": "{{count}} Fehler: {{first}}",
+      "cleanedToast_one": "{{count}} Datei aufgeräumt ({{size}})",
+      "cleanedToast_other": "{{count}} Dateien aufgeräumt ({{size}})",
+      "failed": "Aufräumen fehlgeschlagen"
+    },
+    "stale": {
+      "label": "Veraltete Uploads",
+      "description": "Abgebrochene tus-Upload-Sitzungen in <code>.tus/</code> (pausiert oder abgestürzt ohne DELETE). Der automatische Ablauf läuft alle 24 Stunden; hier kannst du vorher aufräumen.",
+      "maxAge": "Höchstalter (Stunden)",
+      "sessionFiles_one": "{{count}} Sitzungsdatei ({{size}})",
+      "sessionFiles_other": "{{count}} Sitzungsdateien ({{size}})",
+      "cleanedToast_one": "{{count}} veraltete Upload-Sitzung aufgeräumt ({{size}})",
+      "cleanedToast_other": "{{count}} veraltete Upload-Sitzungen aufgeräumt ({{size}})",
+      "failed": "Veraltete Uploads konnten nicht aufgeräumt werden"
+    },
+    "media": {
+      "label": "Aufbewahrung von Medien",
+      "olderThan": "Chat-Medien löschen, die älter sind als",
+      "days": "Tage",
+      "preview": "Vorschau",
+      "run": "Jetzt löschen",
+      "running": "Wird gelöscht…",
+      "files_one": "{{count}} Datei ({{size}})",
+      "files_other": "{{count}} Dateien ({{size}})",
+      "deletedToast_one": "{{count}} Datei gelöscht ({{size}})",
+      "deletedToast_other": "{{count}} Dateien gelöscht ({{size}})",
+      "failed": "Medien konnten nicht aufgeräumt werden"
+    }
+  },
+  "streaming": {
+    "title": "Streaming",
+    "description": "Diese Grenzen gelten für alle Nutzer dieser Instanz. Nutzer wählen Werte innerhalb dieser Grenzen.",
+    "units": {
+      "kbps": "{{value}} kbit/s",
+      "mbps": "{{value}} Mbit/s",
+      "fps": "{{value}} FPS",
+      "kbpsLabel": "kbit/s"
+    },
+    "bandwidth": {
+      "label": "Bandbreite",
+      "description": "Untere und obere Bitraten-Grenze sowie die Schrittweite des Qualitätsreglers.",
+      "customBitrate": {
+        "label": "Eigene Bitrate erlauben",
+        "description": "Nutzer dürfen ihre Bitrate selbst festlegen, statt die Standardwerte der Matrix zu verwenden"
+      },
+      "range": "Bitratenbereich",
+      "min": "Min.",
+      "max": "Max.",
+      "step": "Reglerschritt"
+    },
+    "quality": {
+      "label": "Qualität",
+      "description": "Verfügbare Auflösungen und Bildraten für die Bildschirmübertragung.",
+      "resolutions": "Erlaubte Auflösungen",
+      "framerates": "Erlaubte Bildraten"
+    },
+    "highEndWarning": {
+      "title": "Hochleistungs-Einstellungen aktiv.",
+      "description": "Streaming über 1080p oder 60 FPS verlangt dem Client viel CPU-/GPU-Leistung fürs Kodieren ab und kann die Serverbandbreite ausschöpfen, besonders wenn Streams über TURN laufen. High-End-Konfigurationen (z. B. 4K bei 120 FPS) können bis zu 45 Mbit/s pro aktivem Stream benötigen. Stelle sicher, dass deine Infrastruktur diese Last trägt, bevor du diese Optionen für alle Nutzer freigibst."
+    },
+    "matrix": {
+      "label": "Bitraten-Matrix",
+      "description": "Standard-Bitraten je Auflösung und Bildrate. Bearbeite einzelne Zellen oder skaliere alle Werte auf einmal.",
+      "scaleAll": "Alle skalieren",
+      "scaleHint": "Ziehen, um alle Bitraten zu skalieren. Einzelne Zellen kannst du unten feinjustieren.",
+      "cellDefault": "Standard: {{value}} (× klicken zum Zurücksetzen)",
+      "cellEdit": "Klicken zum Bearbeiten",
+      "resetAll": "Alle auf Standard zurücksetzen"
+    },
+    "capWarning": {
+      "title": "Matrixwerte überschreiten die globale Obergrenze.",
+      "description": "Einige Bitraten liegen über deinem Maximum von {{max}}. Streams mit diesen Kombinationen werden auf deine Obergrenze heruntergeregelt."
+    }
+  },
+  "updates": {
+    "title": "Updates",
+    "description": "Was auf dieser Instanz läuft und wie es weitergeht.",
+    "loading": "Update-Status wird geladen…",
+    "loadFailed": "Der Update-Status konnte nicht geladen werden.",
+    "copyFailed": "Kopieren nicht möglich. Markiere den Befehl und kopiere ihn von Hand.",
+    "running": {
+      "label": "Läuft",
+      "commit": "Commit {{commit}} · ",
+      "channel": {
+        "prebuilt": "vorgefertigtes Image",
+        "source": "aus dem Quellcode gebaut",
+        "unknown": "Installationsart nicht erfasst"
+      }
+    },
+    "available": {
+      "label": "Verfügbar",
+      "version": "Backspace {{version}} ist verfügbar",
+      "released": "Veröffentlicht am {{date}} · ",
+      "releaseNotes": "Versionshinweise",
+      "fromInstallDir": "Aus deinem Installationsverzeichnis:",
+      "scriptDescription": "Erstellt einen Datenbank-Snapshot, holt das neue Image und startet nur den Backspace-Container neu. Kommt die neue Version nicht gesund hoch oder läuft weiter der alte Code, wird die Version wiederhergestellt, auf der du jetzt bist.",
+      "noScript": "Ich habe kein update.sh",
+      "manualIntro": "update.sh ist ab 1.0.5 dabei. In einem Git-Checkout holt <code>git pull</code> es herein. Andernfalls führe die Schritte von Hand aus, nachdem du mit <code>./backup.sh</code> einen Snapshot erstellt hast.",
+      "prebuiltInstall": "Installation mit vorgefertigtem Image:",
+      "sourceInstall": "Installation aus dem Quellcode:",
+      "manualWarning": "Nenne den Dienst <code>backspace</code> ausdrücklich und übergib nicht <code>--remove-orphans</code>. Compose schlägt das vor, wenn in diesem Projekt weitere Container laufen, und würde sie löschen."
+    },
+    "upToDate": "Du bist auf der neuesten Version.",
+    "disabled": {
+      "title": "Update-Prüfungen sind ausgeschaltet",
+      "description": "Diese Instanz kontaktiert GitHub nicht. Setze <code>BACKSPACE_UPDATE_CHECK=true</code> in deiner <code>.env</code>, um die Abfrage zu erlauben, oder sieh selbst auf der Release-Seite nach."
+    },
+    "rateLimited": {
+      "title": "GitHub hat die Abfrage gedrosselt",
+      "description": "Das sagt nichts darüber aus, ob ein Update existiert. Versuche es später noch einmal."
+    },
+    "unreachable": {
+      "title": "Updates konnten nicht geprüft werden",
+      "description": "GitHub war nicht erreichbar, das sagt also nichts darüber aus, ob ein Update existiert. Deine Instanz ist davon nicht betroffen."
+    },
+    "lastChecked": "Zuletzt geprüft {{when}}",
+    "noLookups": "Es werden keine Abfragen gemacht",
+    "checkAgain": "Erneut prüfen",
+    "checking": "Wird geprüft…"
+  },
+  "users": {
+    "title": "Nutzer",
+    "description": "Nutzerkonten auf dieser Instanz ansehen und verwalten.",
+    "searchPlaceholder": "Nutzer suchen…",
+    "loading": "Nutzer werden geladen…",
+    "loadFailed": "Nutzer konnten nicht geladen werden",
+    "empty": "Keine Nutzer gefunden",
+    "filters": {
+      "allInstances": "Alle Instanzen",
+      "localOnly": "Nur lokale",
+      "allRoles": "Alle Rollen",
+      "admin": "Administrator",
+      "nonAdmin": "Kein Administrator",
+      "joinedAfter": "Beigetreten nach",
+      "joinedBefore": "Beigetreten vor",
+      "newest": "Neueste zuerst",
+      "oldest": "Älteste zuerst",
+      "nameAsc": "Name A bis Z",
+      "nameDesc": "Name Z bis A",
+      "deleted": "Gelöschte",
+      "clear": "Filter zurücksetzen"
+    },
+    "badge": {
+      "admin": "Administrator",
+      "deleted": "Gelöscht"
+    },
+    "actions": {
+      "demote": "Administratorrechte entziehen",
+      "promote": "Zum Administrator machen",
+      "federatedNoAdmin": "Föderierte Nutzer können keine Administratoren sein",
+      "resetPassword": "Passwort zurücksetzen",
+      "federatedNoReset": "Föderierte Nutzer melden sich über ihre Heimatinstanz an",
+      "delete": "Nutzer löschen",
+      "selfDelete": "Dein eigenes Konto löschst du in den Kontoeinstellungen"
+    },
+    "tempPassword": {
+      "label": "Temporäres Passwort:",
+      "note": "Wird nur einmal angezeigt. Der Nutzer wurde getrennt und muss sich neu anmelden."
+    },
+    "pagination": "Seite {{page}} von {{total}} ({{users}})",
+    "count_one": "{{count}} Nutzer",
+    "count_other": "{{count}} Nutzer",
+    "roleFailed": "Rolle konnte nicht geändert werden",
+    "resetFailed": "Passwort konnte nicht zurückgesetzt werden",
+    "actionFailed": "Aktion fehlgeschlagen",
+    "resetDialog": {
+      "title": "Passwort zurücksetzen",
+      "description": "Das Passwort von <strong>{{username}}</strong> zurücksetzen? Die Person wird sofort getrennt und muss sich mit dem neuen temporären Passwort anmelden.",
+      "confirm": "Passwort zurücksetzen"
+    },
+    "demoteDialog": {
+      "title": "Administratorrechte entziehen",
+      "description": "<strong>{{username}}</strong> die Administratorrechte entziehen? Die Person verliert den Zugriff auf die Instanzeinstellungen.",
+      "confirm": "Rechte entziehen"
+    },
+    "deleteDialog": {
+      "title": "Nutzer löschen",
+      "description": "<strong>{{username}}</strong> endgültig löschen? Die Person wird aus allen Spaces, Direktnachrichten und Freundeslisten entfernt. Das lässt sich nicht rückgängig machen.",
+      "confirm": "Nutzer löschen"
+    }
+  }
+}

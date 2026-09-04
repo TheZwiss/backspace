@@ -1,1 +1,11 @@
-{}
+{
+  "settings": {
+    "title": "Einstellungen"
+  },
+  "you": {
+    "editProfile": "Profil bearbeiten",
+    "friends": "Freunde",
+    "homeInstance": "Heimatinstanz: {{domain}}",
+    "logOutConfirm": "Möchtest du dich wirklich abmelden?"
+  }
+}

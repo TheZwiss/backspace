@@ -224,6 +224,45 @@
     "save": {
       "updated": "Profil aktualisiert",
       "failed": "Profil konnte nicht aktualisiert werden"
+    },
+    "deletion": {
+      "title": "Konto löschen",
+      "warning": {
+        "headline": "Dein Konto wird dauerhaft gelöscht.",
+        "spaces": "Alle Space-Mitgliedschaften werden entfernt",
+        "friends": "Alle Freundschaften werden entfernt",
+        "dms": "Du wirst aus allen Direktnachrichten entfernt",
+        "messages": "Deine Nachrichten bleiben erhalten, werden aber „Gelöschter Benutzer“ zugeordnet"
+      },
+      "ownedSpaces": {
+        "prompt_one": "Dir gehört {{count}} Space. Entscheide, was damit passieren soll, bevor du fortfährst:",
+        "prompt_other": "Dir gehören {{count}} Spaces. Entscheide für jeden, was damit passieren soll, bevor du fortfährst:",
+        "transfer": "Übertragen",
+        "delete": "Space löschen",
+        "selectOwner": "Neuen Besitzer wählen…"
+      },
+      "processing": "Wird verarbeitet…",
+      "confirm": {
+        "permanent": "Diese Aktion ist endgültig und kann nicht rückgängig gemacht werden.",
+        "usernamePrompt": "Gib zur Bestätigung deinen Benutzernamen <username>{{username}}</username> ein",
+        "password": "Passwort",
+        "passwordPlaceholder": "Passwort eingeben",
+        "submit": "Mein Konto löschen",
+        "deleting": "Wird gelöscht…"
+      },
+      "federation": {
+        "removing": "Dein Konto wird von den verbundenen Instanzen entfernt…",
+        "deleteAnyway": "Konto jetzt löschen"
+      },
+      "complete": {
+        "title": "Konto gelöscht",
+        "redirecting": "Weiterleitung zur Anmeldung…"
+      },
+      "errors": {
+        "usernameMismatch": "Benutzername stimmt nicht überein",
+        "spacesFailed": "Spaces konnten nicht verarbeitet werden",
+        "deleteFailed": "Konto konnte nicht gelöscht werden"
+      }
     }
   },
   "privacy": {

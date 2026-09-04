@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router-dom';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useChatStore } from '../../stores/chatStore';
@@ -29,6 +30,7 @@ import { isDmChannel, getChannelOrigin } from '../../stores/spaceStore';
 
 export function MainContent() {
   // 1. ALL HOOKS AT THE TOP
+  const { t } = useTranslation(['spaces', 'common']);
   const channels = useSpaceStore((s) => s.channels);
   const currentChannelId = useChatStore((s) => s.currentChannelId);
   const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
@@ -152,6 +154,7 @@ export function MainContent() {
 
   if (showDms || isExplorePage || !currentSpaceId) {
     if (!currentChannelId) {
+      // i18n-check: allow-literal (the "; return" between two JSX returns is code, not text)
       if (isExplorePage) return <ExplorePage />;
       return <FriendsPage />;
     }
@@ -168,7 +171,7 @@ export function MainContent() {
     // so replicated aliases still surface the home-instance display name.
     const dmName = isGroupDm && dmChannel
       ? formatDmHeaderName(dmChannel, authUser)
-      : (firstOther?.displayName ?? (firstBaseName || 'Direct Message'));
+      : (firstOther?.displayName ?? (firstBaseName || t('spaces:main.dm.fallbackName')));
     // Message-input placeholder — groups use `formatDmInputLabel` which
     // collapses unnamed groups to "the group" so the textarea doesn't render
     // "Message #Alice, Bob, Charlie, Dave". 1-on-1 reuses the canonical
@@ -176,9 +179,9 @@ export function MainContent() {
     // resolves the raw partner; on replicated aliases the canonical view
     // can disagree).
     const dmInputPlaceholder = isGroupDm && dmChannel
-      ? `Message ${formatDmInputLabel(dmChannel, authUser)}`
+      ? t('spaces:main.dm.composerPlaceholder', { target: formatDmInputLabel(dmChannel, authUser) })
       : dmChannel
-        ? `Message @${dmName}`
+        ? t('spaces:main.dm.composerPlaceholder', { target: `@${dmName}` })
         : undefined;
     const dmPartnerDeleted = dmChannel ? isDeletedPartnerDm(dmChannel, authUser) : false;
 
@@ -212,14 +215,14 @@ export function MainContent() {
               </svg>
               <span className="font-bold text-[15px] tracking-[-0.02em] text-txt-primary">{dmName}</span>
               {connectionError ? (
-                <span className="text-xs text-txt-danger font-medium ml-2">Connection Failed</span>
+                <span className="text-xs text-txt-danger font-medium ml-2">{t('spaces:main.voice.connectionFailed')}</span>
               ) : isLiveKitConnected ? (
                 <>
-                  <span className="text-xs text-status-online font-medium ml-2">Connected</span>
-                  <span className="text-xs text-txt-tertiary ml-1">{participants.length} in call</span>
+                  <span className="text-xs text-status-online font-medium ml-2">{t('spaces:main.voice.connected')}</span>
+                  <span className="text-xs text-txt-tertiary ml-1">{t('spaces:main.voice.inCall', { count: participants.length })}</span>
                 </>
               ) : (
-                <span className="text-xs text-status-idle font-medium ml-2">Connecting...</span>
+                <span className="text-xs text-status-idle font-medium ml-2">{t('spaces:main.voice.connecting')}</span>
               )}
             </div>
             <div className="flex items-center gap-1 flex-shrink-0">
@@ -248,13 +251,13 @@ export function MainContent() {
               <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="text-status-online animate-pulse">
                 <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
               </svg>
-              <span className="text-status-online text-sm font-medium">Calling {dmName}...</span>
+              <span className="text-status-online text-sm font-medium">{t('spaces:main.dm.calling', { name: dmName })}</span>
             </div>
             <button
               onClick={handleCancelCall}
               className="px-3 py-1 bg-accent-rose hover:bg-accent-rose/80 text-white text-xs font-medium rounded transition-colors"
             >
-              Cancel
+              {t('common:actions.cancel')}
             </button>
           </div>
         )}
@@ -264,7 +267,7 @@ export function MainContent() {
               <div
                 onClick={() => openModal('groupDmSettings', { dmChannelId: currentChannelId, initialTab: 'overview' })}
                 className="flex-shrink-0 cursor-pointer"
-                aria-label="Open group settings"
+                aria-label={t('spaces:main.dm.openGroupSettings')}
               >
                 <AvatarStack members={otherMembers} size={32} border="chat" iconUrl={dmChannel?.icon} />
               </div>
@@ -306,14 +309,14 @@ export function MainContent() {
                 onClick={() => openModal('groupDmSettings', { dmChannelId: currentChannelId, initialTab: 'members' })}
                 className="text-xs text-txt-tertiary flex-shrink-0 cursor-pointer"
               >
-                ({dmChannel?.members.length} members)
+                {t('spaces:main.dm.memberCount', { count: dmChannel?.members.length ?? 0 })}
               </span>
             )}
             {isGroupDm && (
               <button
                 onClick={() => openModal('groupDmSettings', { dmChannelId: currentChannelId, initialTab: 'overview' })}
                 className="w-7 h-7 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[6px] hover:bg-interactive-hover flex-shrink-0"
-                title="Group Settings"
+                title={t('spaces:main.dm.groupSettings')}
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z" />
@@ -326,7 +329,7 @@ export function MainContent() {
               onClick={handleStartVoiceCall}
               disabled={!!outgoingCall || !!activeDmCall}
               className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[6px] hover:bg-interactive-hover disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Start Voice Call"
+              title={t('spaces:main.dm.startVoiceCall')}
             >
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
@@ -336,7 +339,7 @@ export function MainContent() {
               onClick={handleStartVoiceCall}
               disabled={!!outgoingCall || !!activeDmCall}
               className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[6px] hover:bg-interactive-hover disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Start Video Call"
+              title={t('spaces:main.dm.startVideoCall')}
             >
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M21 6.5l-4 4V7c0-.55-.45-1-1-1H9.82L21 17.18V6.5zM3.27 2L2 3.27 4.73 6H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.21 0 .39-.08.54-.18L19.73 21 21 19.73 3.27 2z" />
@@ -345,7 +348,7 @@ export function MainContent() {
             <button
               onClick={() => openModal('addDmMember', { dmChannelId: currentChannelId })}
               className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[6px] hover:bg-interactive-hover"
-              title="Add Friends to DM"
+              title={t('spaces:main.dm.addFriends')}
             >
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M14 8.00598C14 10.211 12.206 12.006 10 12.006C7.795 12.006 6 10.211 6 8.00598C6 5.80098 7.794 4.00598 10 4.00598C12.206 4.00598 14 5.80098 14 8.00598ZM2 19.006C2 15.473 5.29 13.006 10 13.006C14.711 13.006 18 15.473 18 19.006V20.006H2V19.006ZM20 20.006H22V19.006C22 16.451 20.178 14.471 17.532 13.471C19.461 14.601 20 16.561 20 19.006V20.006Z" />
@@ -355,7 +358,7 @@ export function MainContent() {
               ref={searchButtonRef}
               onClick={() => setSearchOpen(!searchOpen)}
               className={`w-8 h-8 flex items-center justify-center transition-colors rounded-[6px] ${searchOpen ? 'text-txt-primary bg-interactive-active' : 'text-txt-tertiary hover:text-txt-primary hover:bg-interactive-hover'}`}
-              title="Search"
+              title={t('common:actions.search')}
             >
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M21.707 20.293l-5.395-5.395A7.457 7.457 0 0018 10.5 7.5 7.5 0 1010.5 18c1.575 0 3.027-.486 4.228-1.31l5.476 5.476a.997.997 0 001.414 0l.089-.089a1 1 0 000-1.414l.001-.37zM10.5 16a5.5 5.5 0 110-11 5.5 5.5 0 010 11z" />
@@ -386,14 +389,14 @@ export function MainContent() {
     return (
       <div className="flex-1 flex flex-col bg-surface-chat relative">
         <div className="h-14 px-5 flex items-center justify-between border-b border-border-hard">
-          <span className="text-txt-tertiary">Select a channel</span>
+          <span className="text-txt-tertiary">{t('spaces:main.selectChannel')}</span>
           <div className="flex items-center gap-1 flex-shrink-0">
             <TransferIndicator />
             <MemberListToggleButton />
           </div>
         </div>
         <div className="flex-1 flex items-center justify-center text-txt-tertiary">
-          <p>Select a text or voice channel to get started</p>
+          <p>{t('spaces:main.selectChannelHint')}</p>
         </div>
       </div>
     );
@@ -421,13 +424,13 @@ export function MainContent() {
             <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(124,108,246,0.12)_0%,transparent_70%)] animate-gradient-pulse pointer-events-none" />
             <div className="text-center relative z-10">
               <h2 className="text-[28px] font-bold text-white mb-3">{channel.name}</h2>
-              <p className="text-txt-tertiary text-[15px]">No one is currently in this voice channel.</p>
+              <p className="text-txt-tertiary text-[15px]">{t('spaces:main.voice.empty')}</p>
             </div>
             <button
               onClick={() => joinVoiceChannel(currentChannelId, useVoiceStore.getState().connectFn ?? undefined)}
               className="relative z-10 px-8 py-3 bg-accent-primary hover:bg-accent-primary-hover text-white font-semibold rounded-full transition-all text-[15px] shadow-[0_4px_20px_rgba(124,108,246,0.3)]"
             >
-              Join Voice
+              {t('spaces:main.voice.join')}
             </button>
           </div>
         </div>
@@ -446,14 +449,14 @@ export function MainContent() {
             </svg>
             <span className="font-bold text-[15px] tracking-[-0.02em] text-txt-primary">{channel.name}</span>
             {connectionError ? (
-              <span className="text-xs text-txt-danger font-medium ml-2">Connection Failed</span>
+              <span className="text-xs text-txt-danger font-medium ml-2">{t('spaces:main.voice.connectionFailed')}</span>
             ) : isLiveKitConnected ? (
               <>
-                <span className="text-xs text-status-online font-medium ml-2">Connected</span>
-                <span className="text-xs text-txt-tertiary ml-1">{participants.length} connected</span>
+                <span className="text-xs text-status-online font-medium ml-2">{t('spaces:main.voice.connected')}</span>
+                <span className="text-xs text-txt-tertiary ml-1">{t('spaces:main.voice.participants', { count: participants.length })}</span>
               </>
             ) : (
-              <span className="text-xs text-status-idle font-medium ml-2">Connecting...</span>
+              <span className="text-xs text-status-idle font-medium ml-2">{t('spaces:main.voice.connecting')}</span>
             )}
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
@@ -488,7 +491,7 @@ export function MainContent() {
           )}
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
-          <button className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[6px] hover:bg-interactive-hover" title="Notification Settings">
+          <button className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[6px] hover:bg-interactive-hover" title={t('spaces:main.notificationSettings')}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.89 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z" />
             </svg>
@@ -497,7 +500,7 @@ export function MainContent() {
             ref={searchButtonRef}
             onClick={() => setSearchOpen(!searchOpen)}
             className={`w-8 h-8 flex items-center justify-center transition-colors rounded-[6px] ${searchOpen ? 'text-txt-primary bg-interactive-active' : 'text-txt-tertiary hover:text-txt-primary hover:bg-interactive-hover'}`}
-            title="Search"
+            title={t('common:actions.search')}
           >
             <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
               <path d="M21.707 20.293l-5.395-5.395A7.457 7.457 0 0018 10.5 7.5 7.5 0 1010.5 18c1.575 0 3.027-.486 4.228-1.31l5.476 5.476a.997.997 0 001.414 0l.089-.089a1 1 0 000-1.414l.001-.37zM10.5 16a5.5 5.5 0 110-11 5.5 5.5 0 010 11z" />

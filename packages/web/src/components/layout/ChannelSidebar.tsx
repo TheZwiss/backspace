@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate, useLocation } from 'react-router-dom';
 import type { Channel } from '@backspace/shared';
 import { useSpaceStore, getChannelOrigin, getMyUserIdForOrigin } from '../../stores/spaceStore';
@@ -25,6 +26,7 @@ import { useAudioDevices } from '../../hooks/useAudioDevices';
 import { DropdownItem } from '../modals/settingsPanels/_shared/SettingsPickerPrimitives';
 
 export function ChannelSidebar() {
+  const { t } = useTranslation(['spaces', 'common']);
   const spaces = useSpaceStore((s) => s.spaces);
   const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
   const loadingSpaceId = useSpaceStore((s) => s.loadingSpaceId);
@@ -317,7 +319,7 @@ export function ChannelSidebar() {
       items.push({
         key: 'create-channel',
         type: 'action',
-        label: 'Create Channel',
+        label: t('spaces:channels.create'),
         icon: (
           <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
             <path d="M2.5 12.5v-9l5-2v9l-5 2zm6-9v9l5-2v-9l-5 2z" opacity="0.5" />
@@ -329,7 +331,7 @@ export function ChannelSidebar() {
       items.push({
         key: 'create-category',
         type: 'action',
-        label: 'Create Category',
+        label: t('spaces:channels.createCategory'),
         icon: (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
@@ -342,7 +344,7 @@ export function ChannelSidebar() {
       items.push({
         key: 'invite',
         type: 'action',
-        label: 'Invite People',
+        label: t('spaces:sidebar.space.invite'),
         icon: (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
             <path d="M21 3H24V5H21V8H19V5H16V3H19V0H21V3ZM10 12C12.21 12 14 10.21 14 8C14 5.79 12.21 4 10 4C7.79 4 6 5.79 6 8C6 10.21 7.79 12 10 12ZM10 13C6.69 13 1 14.66 1 18V20H19V18C19 14.66 13.31 13 10 13Z" />
@@ -354,7 +356,7 @@ export function ChannelSidebar() {
     items.push({
       key: 'settings',
       type: 'action',
-      label: 'Space Settings',
+      label: t('spaces:sidebar.space.settings'),
       icon: (
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
           <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.49.49 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 00-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1112 8.4a3.6 3.6 0 010 7.2z" />
@@ -363,7 +365,7 @@ export function ChannelSidebar() {
       onClick: () => openModal('spaceSettings'),
     });
     openContextMenu({ x: e.clientX, y: e.clientY }, items);
-  }, [canManageChannels, canCreateInvite, openModal, openContextMenu]);
+  }, [canManageChannels, canCreateInvite, openModal, openContextMenu, t]);
 
   const handleDmContextMenu = useCallback((e: React.MouseEvent, dmId: string) => {
     e.preventDefault();
@@ -372,7 +374,7 @@ export function ChannelSidebar() {
       {
         key: 'leave-group',
         type: 'action',
-        label: 'Leave Group',
+        label: t('spaces:sidebar.dmList.leaveGroup'),
         danger: true,
         icon: (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -384,7 +386,7 @@ export function ChannelSidebar() {
         },
       },
     ]);
-  }, [openContextMenu]);
+  }, [openContextMenu, t]);
 
   const handleChannelClick = (channelId: string) => {
     setCurrentChannel(channelId);
@@ -452,7 +454,7 @@ export function ChannelSidebar() {
               <path d="M3 18a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1v-1c0-2.76-5.37-4-8-4s-8 1.24-8 4v1Z" />
               <path d="M3.5 13.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" opacity=".5" />
             </svg>
-            <span className="font-medium text-[16px]">Friends</span>
+            <span className="font-medium text-[16px]">{t('spaces:sidebar.dmList.friends')}</span>
           </div>
 
           {/* Placeholder nav items */}
@@ -462,7 +464,7 @@ export function ChannelSidebar() {
             <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0">
               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
             </svg>
-            <span className="font-medium text-[16px]">Coming Soon</span>
+            <span className="font-medium text-[16px]">{t('spaces:sidebar.dmList.comingSoon')}</span>
           </div>
           <div
             className="flex items-center gap-3 px-2 h-[42px] rounded-[6px] mb-[2px] text-txt-tertiary cursor-default opacity-50"
@@ -470,15 +472,15 @@ export function ChannelSidebar() {
             <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0">
               <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z" />
             </svg>
-            <span className="font-medium text-[16px]">Coming Soon</span>
+            <span className="font-medium text-[16px]">{t('spaces:sidebar.dmList.comingSoon')}</span>
           </div>
 
           <div className="mt-[18px] px-2 mb-1 flex items-center justify-between group">
-            <span className="text-[12px] font-bold text-txt-tertiary tracking-wider">Direct Messages</span>
+            <span className="text-[12px] font-bold text-txt-tertiary tracking-wider">{t('spaces:sidebar.directMessages')}</span>
             <button
               onClick={() => openModal('newDm')}
               className="text-txt-tertiary hover:text-txt-primary transition-colors"
-              title="New Direct Message"
+              title={t('spaces:sidebar.dmList.newDm')}
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M8 2a.5.5 0 01.5.5v5h5a.5.5 0 010 1h-5v5a.5.5 0 01-1 0v-5h-5a.5.5 0 010-1h5v-5A.5.5 0 018 2z" />
@@ -509,7 +511,7 @@ export function ChannelSidebar() {
             {dmChannels.length === 0 && (
               <div className="flex flex-col items-center py-6 opacity-80">
                 <Mascot state="sleeping" className="w-20 h-20 mb-2" />
-                <p className="text-[13px] text-txt-tertiary">No conversations yet.</p>
+                <p className="text-[13px] text-txt-tertiary">{t('spaces:sidebar.dmList.empty')}</p>
               </div>
             )}
           </div>
@@ -536,9 +538,9 @@ export function ChannelSidebar() {
             setLeaveGroupDmLoading(false);
           }
         }}
-        title="Leave Group DM"
-        description="Are you sure you want to leave? You won't be able to rejoin unless someone adds you back."
-        confirmLabel="Leave"
+        title={t('spaces:sidebar.dmList.leaveGroupConfirm.title')}
+        description={t('spaces:sidebar.dmList.leaveGroupConfirm.description')}
+        confirmLabel={t('spaces:sidebar.dmList.leaveGroupConfirm.confirm')}
         variant="danger"
         loading={leaveGroupDmLoading}
       />
@@ -571,7 +573,7 @@ export function ChannelSidebar() {
           <button
             onClick={() => openModal('invite')}
             className="w-10 h-full flex items-center justify-center text-txt-tertiary hover:text-txt-primary hover:bg-interactive-hover transition-all flex-shrink-0"
-            title="Invite People"
+            title={t('spaces:sidebar.space.invite')}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
               <path d="M21 3H24V5H21V8H19V5H16V3H19V0H21V3ZM10 12C12.21 12 14 10.21 14 8C14 5.79 12.21 4 10 4C7.79 4 6 5.79 6 8C6 10.21 7.79 12 10 12ZM10 13C6.69 13 1 14.66 1 18V20H19V18C19 14.66 13.31 13 10 13Z" />
@@ -583,7 +585,7 @@ export function ChannelSidebar() {
       {/* Channels — dynamic category layout */}
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto pt-3 px-2 no-scrollbar" style={{ paddingBottom: floatingPanelHeight + 24 }} onDrop={containerHandlers.onDrop} onDragOver={containerHandlers.onDragOver} onContextMenu={handleSidebarContextMenu}>
         {showChannelSkeleton ? (
-          <div className="px-2 pt-3" role="status" aria-label="Loading channels">
+          <div className="px-2 pt-3" role="status" aria-label={t('spaces:channels.loading')}>
             {/* Category group 1 */}
             <div className="skeleton skeleton-bar h-2 w-[45%] ml-2 mb-3" />
             {Array.from({ length: 3 }, (_, i) => (
@@ -610,7 +612,7 @@ export function ChannelSidebar() {
                 <button
                   onClick={() => openModal('createChannel')}
                   className="text-txt-tertiary hover:text-txt-primary transition-colors"
-                  title="Create Channel"
+                  title={t('spaces:channels.create')}
                 >
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                     <path d="M8 2a.5.5 0 01.5.5v5h5a.5.5 0 010 1h-5v5a.5.5 0 01-1 0v-5h-5a.5.5 0 010-1h5v-5A.5.5 0 018 2z" />
@@ -684,7 +686,7 @@ export function ChannelSidebar() {
                         openModal('createChannel', { categoryId: category.id });
                       }}
                       className="text-txt-tertiary hover:text-txt-primary transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0"
-                      title="Create Channel"
+                      title={t('spaces:channels.create')}
                     >
                       <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                         <path d="M8 2a.5.5 0 01.5.5v5h5a.5.5 0 010 1h-5v5a.5.5 0 01-1 0v-5h-5a.5.5 0 010-1h5v-5A.5.5 0 018 2z" />
@@ -705,7 +707,7 @@ export function ChannelSidebar() {
                     {
                       key: 'category-settings',
                       type: 'action',
-                      label: 'Category Settings',
+                      label: t('spaces:channels.categorySettings'),
                       icon: (
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                           <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.49.49 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 00-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1115.6 12 3.611 3.611 0 0112 15.6z" />
@@ -716,7 +718,7 @@ export function ChannelSidebar() {
                     {
                       key: 'delete-category',
                       type: 'action',
-                      label: 'Delete Category',
+                      label: t('spaces:channels.deleteCategory'),
                       danger: true,
                       icon: (
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -757,7 +759,7 @@ export function ChannelSidebar() {
                     />
                   ))}
                   {catChannels.length === 0 && (
-                    <div className="px-2 py-2 text-[12px] text-txt-tertiary italic opacity-40">No channels</div>
+                    <div className="px-2 py-2 text-[12px] text-txt-tertiary italic opacity-40">{t('spaces:channels.emptyCategory')}</div>
                   )}
                 </div>
               )}
@@ -776,7 +778,7 @@ export function ChannelSidebar() {
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0 opacity-70">
                   <path d="M8 2a.5.5 0 01.5.5v5h5a.5.5 0 010 1h-5v5a.5.5 0 01-1 0v-5h-5a.5.5 0 010-1h5v-5A.5.5 0 018 2z" />
                 </svg>
-                <span className="text-[12px]">Create Channel</span>
+                <span className="text-[12px]">{t('spaces:channels.create')}</span>
               </button>
             )}
             <button
@@ -786,7 +788,7 @@ export function ChannelSidebar() {
               <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0 opacity-70">
                 <path d="M8 2a.5.5 0 01.5.5v5h5a.5.5 0 010 1h-5v5a.5.5 0 01-1 0v-5h-5a.5.5 0 010-1h5v-5A.5.5 0 018 2z" />
               </svg>
-              <span className="text-[12px]">Create Category</span>
+              <span className="text-[12px]">{t('spaces:channels.createCategory')}</span>
             </button>
           </div>
         )}
@@ -811,9 +813,9 @@ export function ChannelSidebar() {
           setDeleteCategoryLoading(false);
         }
       }}
-      title="Delete Category"
-      description="Are you sure you want to delete this category? Channels in this category will be moved to uncategorized — no channels will be deleted."
-      confirmLabel="Delete"
+      title={t('spaces:channels.deleteCategoryConfirm.title')}
+      description={t('spaces:channels.deleteCategoryConfirm.description')}
+      confirmLabel={t('common:actions.delete')}
       variant="danger"
       loading={deleteCategoryLoading}
     />
@@ -844,6 +846,7 @@ function UserAreaPanel({
   onDeafenToggle: () => void;
   onSettingsClick: (tab?: string) => void;
 }) {
+  const { t } = useTranslation(['spaces', 'common']);
   const [openPanel, setOpenPanel] = useState<'input' | 'output' | null>(null);
   const inputDeviceId = useVoiceStore((s) => s.inputDeviceId);
   const outputDeviceId = useVoiceStore((s) => s.outputDeviceId);
@@ -853,12 +856,13 @@ function UserAreaPanel({
   // Shared hook drives lists, permission state, and live devicechange refresh.
   const { permState, inputs: inputDevices, outputs: outputDevices, inputLabels, outputLabels, requestPermission } = useAudioDevices();
 
+  const systemDefaultLabel = t('spaces:sidebar.userArea.systemDefault');
   const selectedInputLabel = inputDeviceId === 'default'
-    ? 'System Default'
-    : inputLabels.get(inputDeviceId) ?? 'System Default';
+    ? systemDefaultLabel
+    : inputLabels.get(inputDeviceId) ?? systemDefaultLabel;
   const selectedOutputLabel = outputDeviceId === 'default'
-    ? 'System Default'
-    : outputLabels.get(outputDeviceId) ?? 'System Default';
+    ? systemDefaultLabel
+    : outputLabels.get(outputDeviceId) ?? systemDefaultLabel;
 
   const inputVolume = useVoiceStore((s) => s.inputVolume);
   const storeSetInputVolume = useVoiceStore((s) => s.setInputVolume);
@@ -957,7 +961,7 @@ function UserAreaPanel({
               className="w-full px-4 py-3 flex items-center justify-between hover:bg-interactive-hover transition-colors"
             >
               <div className="min-w-0 flex-1">
-                <div className="text-[15px] font-semibold text-txt-primary text-left">Input Device</div>
+                <div className="text-[15px] font-semibold text-txt-primary text-left">{t('spaces:sidebar.userArea.inputDevice')}</div>
                 <div className="text-[13px] text-txt-tertiary truncate text-left">{selectedInputLabel}</div>
               </div>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary flex-shrink-0 ml-2">
@@ -968,19 +972,19 @@ function UserAreaPanel({
               <div className="bg-surface-base rounded-lg shadow-lg mx-2 mb-2 py-1 border border-border-hard max-h-64 overflow-y-auto">
                 {permState !== 'granted' && (
                   <div className="px-3 py-2 text-[12px] text-txt-tertiary">
-                    Microphone permission needed.{' '}
+                    {t('spaces:sidebar.userArea.microphonePermission')}{' '}
                     <button
                       onClick={() => { requestPermission().catch(() => {}); }}
                       className="underline text-accent-primary"
                     >
-                      Enable
+                      {t('spaces:sidebar.userArea.enable')}
                     </button>
                   </div>
                 )}
                 {permState === 'granted' && (
                   <>
                     <DropdownItem
-                      label="System Default"
+                      label={systemDefaultLabel}
                       active={inputDeviceId === 'default'}
                       onClick={() => selectInput('default')}
                     />
@@ -1002,7 +1006,7 @@ function UserAreaPanel({
 
                       {/* Input Volume */}
                       <div className="px-4 py-3">
-                        <div className="text-[15px] font-semibold text-txt-primary mb-2">Input Volume</div>
+                        <div className="text-[15px] font-semibold text-txt-primary mb-2">{t('spaces:sidebar.userArea.inputVolume')}</div>
                         <input
                           type="range"
                           min={0}
@@ -1037,7 +1041,7 @@ function UserAreaPanel({
                         onClick={() => onSettingsClick('voice')}
                         className="w-full px-4 py-3 flex items-center justify-between hover:bg-interactive-hover transition-colors"
                       >
-                        <span className="text-[15px] font-semibold text-txt-primary">Voice Settings</span>
+                        <span className="text-[15px] font-semibold text-txt-primary">{t('spaces:sidebar.userArea.voiceSettings')}</span>
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary">
                           <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
                         </svg>
@@ -1055,7 +1059,7 @@ function UserAreaPanel({
                           className="w-full px-4 py-3 flex items-center justify-between hover:bg-interactive-hover transition-colors"
                         >
                           <div className="min-w-0 flex-1">
-                            <div className="text-[15px] font-semibold text-txt-primary text-left">Output Device</div>
+                            <div className="text-[15px] font-semibold text-txt-primary text-left">{t('spaces:sidebar.userArea.outputDevice')}</div>
                             <div className="text-[13px] text-txt-tertiary truncate text-left">{selectedOutputLabel}</div>
                           </div>
                           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary flex-shrink-0 ml-2">
@@ -1066,19 +1070,19 @@ function UserAreaPanel({
                           <div className="bg-surface-base rounded-lg shadow-lg mx-2 mb-2 py-1 border border-border-hard max-h-64 overflow-y-auto">
                             {permState !== 'granted' && (
                               <div className="px-3 py-2 text-[12px] text-txt-tertiary">
-                                Audio permission needed.{' '}
+                                {t('spaces:sidebar.userArea.audioPermission')}{' '}
                                 <button
                                   onClick={() => { requestPermission().catch(() => {}); }}
                                   className="underline text-accent-primary"
                                 >
-                                  Enable
+                                  {t('spaces:sidebar.userArea.enable')}
                                 </button>
                               </div>
                             )}
                             {permState === 'granted' && (
                               <>
                                 <DropdownItem
-                                  label="System Default"
+                                  label={systemDefaultLabel}
                                   active={outputDeviceId === 'default'}
                                   onClick={() => selectOutput('default')}
                                 />
@@ -1100,7 +1104,7 @@ function UserAreaPanel({
           
                       {/* Output Volume */}
                       <div className="px-4 py-3">
-                        <div className="text-[15px] font-semibold text-txt-primary mb-2">Output Volume</div>
+                        <div className="text-[15px] font-semibold text-txt-primary mb-2">{t('spaces:sidebar.userArea.outputVolume')}</div>
                         <input
                           type="range"
                           min={0}
@@ -1123,7 +1127,7 @@ function UserAreaPanel({
             onClick={() => onSettingsClick('voice')}
             className="w-full px-4 py-3 flex items-center justify-between hover:bg-interactive-hover transition-colors"
           >
-            <span className="text-[15px] font-semibold text-txt-primary">Voice Settings</span>
+            <span className="text-[15px] font-semibold text-txt-primary">{t('spaces:sidebar.userArea.voiceSettings')}</span>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary">
               <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
             </svg>
@@ -1151,7 +1155,7 @@ function UserAreaPanel({
               (isSpaceMuted || isSpaceDeafened || isPermissionMuted) ? 'text-accent-amber cursor-not-allowed'
                 : isMuted || isDeafened ? 'text-txt-danger' : 'text-txt-tertiary hover:text-txt-primary'
             }`}
-            title={(isPermissionMuted) ? 'Muted (No Speak Permission)' : (isSpaceMuted || isSpaceDeafened) ? 'Space Muted' : isMuted ? 'Unmute' : 'Mute'}
+            title={(isPermissionMuted) ? t('spaces:sidebar.userArea.permissionMuted') : (isSpaceMuted || isSpaceDeafened) ? t('spaces:sidebar.userArea.spaceMuted') : isMuted ? t('spaces:sidebar.userArea.unmute') : t('spaces:sidebar.userArea.mute')}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
@@ -1165,7 +1169,7 @@ function UserAreaPanel({
             className={`w-[18px] h-8 flex items-center justify-center hover:bg-interactive-hover rounded-r-[4px] transition-colors ${
               openPanel === 'input' ? 'text-txt-primary bg-interactive-hover' : 'text-txt-tertiary hover:text-txt-primary'
             }`}
-            title="Input Devices"
+            title={t('spaces:sidebar.userArea.inputDevices')}
           >
             <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" className={`transition-transform ${openPanel === 'input' ? 'rotate-180' : ''}`}>
               <path d="M7 10l5 5 5-5z" />
@@ -1179,7 +1183,7 @@ function UserAreaPanel({
               isSpaceDeafened ? 'text-accent-amber cursor-not-allowed'
                 : isDeafened ? 'text-txt-danger' : 'text-txt-tertiary hover:text-txt-primary'
             }`}
-            title={isSpaceDeafened ? 'Space Deafened' : isDeafened ? 'Undeafen' : 'Deafen'}
+            title={isSpaceDeafened ? t('spaces:sidebar.userArea.spaceDeafened') : isDeafened ? t('spaces:sidebar.userArea.undeafen') : t('spaces:sidebar.userArea.deafen')}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 3c-4.97 0-9 4.03-9 9v7c0 1.1.9 2 2 2h2v-7H5v-2c0-3.87 3.13-7 7-7s7 3.13 7 7v2h-2v7h2c1.1 0 2-.9 2-2v-7c0-4.97-4.03-9-9-9z" />
@@ -1192,7 +1196,7 @@ function UserAreaPanel({
             className={`w-[18px] h-8 flex items-center justify-center hover:bg-interactive-hover rounded-r-[4px] transition-colors ${
               openPanel === 'output' ? 'text-txt-primary bg-interactive-hover' : 'text-txt-tertiary hover:text-txt-primary'
             }`}
-            title="Output Devices"
+            title={t('spaces:sidebar.userArea.outputDevices')}
           >
             <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" className={`transition-transform ${openPanel === 'output' ? 'rotate-180' : ''}`}>
               <path d="M7 10l5 5 5-5z" />
@@ -1203,7 +1207,7 @@ function UserAreaPanel({
           <button
             onClick={() => onSettingsClick()}
             className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary hover:bg-interactive-hover rounded-[4px] transition-colors"
-            title="Settings"
+            title={t('spaces:sidebar.userArea.settings')}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
               <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
