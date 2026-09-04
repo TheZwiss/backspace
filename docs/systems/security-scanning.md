@@ -538,6 +538,15 @@ rename.
       deliberately does **not** require pull requests or status checks: the
       collector commits directly, and requiring a PR would break every run. This
       branch holds the only irreplaceable data in the repository.
+- [x] Settings → Actions → General: **Allow GitHub Actions to create and approve
+      pull requests** enabled (`can_approve_pull_request_reviews: true` on
+      `GET /repos/{owner}/{repo}/actions/permissions/workflow`; the default
+      workflow token permission stays **read**). The `update-flatpak-metadata`
+      job in `release.yml` opens the `automation/flatpak-<tag>` pull request
+      with `GITHUB_TOKEN`, which GitHub rejects while this is off. It was off
+      when the v1.0.6 chain first ran (2026-09-04) and was turned on before the
+      re-run. Every job still declares its own `permissions:` block, so this
+      widens nothing for jobs that do not ask for `pull-requests: write`.
 
 ### Outstanding
 
