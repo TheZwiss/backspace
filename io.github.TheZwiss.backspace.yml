@@ -16,14 +16,17 @@ finish-args:
   - --socket=wayland
   - --socket=fallback-x11
   - --socket=pulseaudio
-  # Hardware-accelerated rendering. Camera and screen-capture permission is
-  # mediated by the desktop portals instead of exposing every host device.
-  - --device=dri
+  # Hardware-accelerated rendering and direct webcam access. Screen capture is
+  # mediated by the desktop portals.
+  - --device=all
   # Electron's Linux tray uses StatusNotifier and its Notification API talks
   # directly to the freedesktop notification service. Screen capture remains
   # mediated by the XDG desktop portal.
   - --talk-name=org.kde.StatusNotifierWatcher
   - --talk-name=org.freedesktop.Notifications
+  # Chromium uses UPower to observe battery state. Grant only that service
+  # instead of exposing the complete system bus.
+  - --system-talk-name=org.freedesktop.UPower
   # Keep pointer themes correctly scaled when Electron uses native Wayland.
   - --env=XCURSOR_PATH=/run/host/user-share/icons:/run/host/share/icons
 
