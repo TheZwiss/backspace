@@ -242,3 +242,89 @@ describe('POST /api/social/requests — case-insensitive username lookup', () =>
     expect(sent![1].request.user.username).toBe('alice');
   });
 });
+
+describe('social routes — error codes', () => {
+  let app: FastifyInstance;
+
+  beforeEach(async () => {
+    sqlite = new Database(':memory:');
+    testDb = drizzle(sqlite, { schema });
+    applyMigrations(sqlite);
+    seedUser({ id: CALLER_ID, username: 'caller' });
+    seedUser({ id: 'u-bob', username: 'bob' });
+    app = await buildApp();
+  });
+
+  async function sendRequest(username: string) {
+    return app.inject({ method: 'POST', url: '/api/social/requests', payload: { username } });
+  }
+
+  it('sends user_not_found with the legacy text for an unknown handle', async () => {
+    const res = await sendRequest('nobody');
+    expect(res.statusCode).toBe(404);
+    const body = JSON.parse(res.body);
+    expect(body.code).toBe('user_not_found');
+    expect(body.error).toBe('User not found');
+  });
+
+  it('sends cannot_friend_self when the caller names themselves', async () => {
+    const res = await sendRequest('caller');
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).code).toBe('cannot_friend_self');
+  });
+
+  it('sends friend_request_pending when a request between the two users already exists', async () => {
+    expect((await sendRequest('bob')).statusCode).toBe(201);
+    const res = await sendRequest('bob');
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).code).toBe('friend_request_pending');
+  });
+
+  it('sends validation_failed for an unknown status on PATCH', async () => {
+    const res = await app.inject({ method: 'PATCH', url: '/api/social/requests/x', payload: { status: 'maybe' } });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).code).toBe('validation_failed');
+  });
+
+  it('sends friend_request_not_found for a missing request on PATCH and DELETE', async () => {
+    const patched = await app.inject({ method: 'PATCH', url: '/api/social/requests/missing', payload: { status: 'accepted' } });
+    expect(patched.statusCode).toBe(404);
+    expect(JSON.parse(patched.body).code).toBe('friend_request_not_found');
+    const deleted = await app.inject({ method: 'DELETE', url: '/api/social/requests/missing' });
+    expect(deleted.statusCode).toBe(404);
+    expect(JSON.parse(deleted.body).code).toBe('friend_request_not_found');
+  });
+
+  it('sends friend_request_not_recipient when someone else tries to decide a request', async () => {
+    seedUser({ id: 'u-carol', username: 'carol' });
+    testDb.insert(schema.friendRequests).values({
+      id: 'req-1', fromId: 'u-bob', toId: 'u-carol', status: 'pending', createdAt: Date.now(),
+    }).run();
+    const res = await app.inject({ method: 'PATCH', url: '/api/social/requests/req-1', payload: { status: 'accepted' } });
+    expect(res.statusCode).toBe(403);
+    expect(JSON.parse(res.body).code).toBe('friend_request_not_recipient');
+  });
+
+  it('sends friend_request_not_sender and friend_request_not_pending on cancel', async () => {
+    seedUser({ id: 'u-carol', username: 'carol' });
+    testDb.insert(schema.friendRequests).values({
+      id: 'req-1', fromId: 'u-bob', toId: 'u-carol', status: 'pending', createdAt: Date.now(),
+    }).run();
+    const notSender = await app.inject({ method: 'DELETE', url: '/api/social/requests/req-1' });
+    expect(notSender.statusCode).toBe(403);
+    expect(JSON.parse(notSender.body).code).toBe('friend_request_not_sender');
+
+    testDb.insert(schema.friendRequests).values({
+      id: 'req-2', fromId: CALLER_ID, toId: 'u-bob', status: 'declined', createdAt: Date.now(),
+    }).run();
+    const notPending = await app.inject({ method: 'DELETE', url: '/api/social/requests/req-2' });
+    expect(notPending.statusCode).toBe(400);
+    expect(JSON.parse(notPending.body).code).toBe('friend_request_not_pending');
+  });
+
+  it('sends not_friends when removing a user who is not a friend', async () => {
+    const res = await app.inject({ method: 'DELETE', url: '/api/social/friends/u-bob' });
+    expect(res.statusCode).toBe(404);
+    expect(JSON.parse(res.body).code).toBe('not_friends');
+  });
+});
