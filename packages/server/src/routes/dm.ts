@@ -24,6 +24,10 @@ import {
 } from '@backspace/shared';
 import { fetchSpaceInviteSnapshot, getLocalInviteSnapshot } from '../utils/spaceInviteSnapshot.js';
 import { sanitizeUser } from '../utils/sanitize.js';
+import { sendError } from '../utils/httpErrors.js';
+
+/** Members a group DM can hold, the owner included. */
+const GROUP_DM_MAX_MEMBERS = 10;
 import { deleteAttachmentFiles, deleteUploadFile, deleteAttachmentByFilename } from '../utils/fileCleanup.js';
 import { isValidAssetUrl } from './users.js';
 import {
@@ -1020,7 +1024,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
           ))
           .get();
         if (pendingReset) {
-          return reply.code(409).send({ error: 'peer_reset_pending', statusCode: 409 });
+          return sendError(reply, 409, 'peer_reset_pending');
         }
       }
 
@@ -1030,17 +1034,17 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       // Local ID: direct lookup (existing behavior)
       targetUser = db.select().from(schema.users).where(eq(schema.users.id, userId)).get();
     } else {
-      return reply.code(400).send({ error: 'userId or (homeUserId + homeInstance) is required', statusCode: 400 });
+      return sendError(reply, 400, 'dm_target_required');
     }
 
     if (!targetUser) {
-      return reply.code(404).send({ error: 'User not found', statusCode: 404 });
+      return sendError(reply, 404, 'user_not_found');
     }
 
     const targetUserId = targetUser.id;
 
     if (targetUserId === request.userId) {
-      return reply.code(400).send({ error: 'Cannot create DM with yourself', statusCode: 400 });
+      return sendError(reply, 400, 'cannot_dm_self');
     }
 
     // Check if DM channel already exists between these two users
@@ -1196,16 +1200,16 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
 
     // Validate input is a non-empty array of at least 2 identity objects
     if (!Array.isArray(userIdentities) || userIdentities.length < 2) {
-      return reply.code(400).send({ error: 'users must contain at least 2 entries', statusCode: 400 });
+      return sendError(reply, 400, 'group_dm_too_few_members', { min: 2 });
     }
     if (userIdentities.some(u => !u || typeof u.id !== 'string' || !u.id)) {
-      return reply.code(400).send({ error: 'All entries must have a non-empty id', statusCode: 400 });
+      return sendError(reply, 400, 'validation_failed');
     }
 
     // Total members (caller + users) capped at 10
     const totalMembers = 1 + userIdentities.length;
     if (totalMembers > 10) {
-      return reply.code(400).send({ error: `Group DMs are limited to 10 members (requested ${totalMembers})`, statusCode: 400 });
+      return sendError(reply, 400, 'group_dm_too_many_members', { max: GROUP_DM_MAX_MEMBERS, requested: totalMembers });
     }
 
     const db = getDb();
@@ -1232,10 +1236,10 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       }
 
       if (!localUser) {
-        return reply.code(404).send({ error: 'One or more users not found', statusCode: 404 });
+        return sendError(reply, 404, 'users_not_found');
       }
       if (localUser.isDeleted) {
-        return reply.code(404).send({ error: 'One or more users not found', statusCode: 404 });
+        return sendError(reply, 404, 'users_not_found');
       }
 
       targetUsers.push(localUser);
@@ -1244,12 +1248,12 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     // Dedup: check no resolved user appears twice
     const resolvedIds = new Set(targetUsers.map(u => u.id));
     if (resolvedIds.size !== targetUsers.length) {
-      return reply.code(400).send({ error: 'Duplicate users after identity resolution', statusCode: 400 });
+      return sendError(reply, 400, 'duplicate_users');
     }
 
     // Caller cannot include themselves
     if (targetUsers.some(u => u.id === request.userId)) {
-      return reply.code(400).send({ error: 'Do not include yourself — you are added automatically', statusCode: 400 });
+      return sendError(reply, 400, 'group_dm_includes_self');
     }
 
     // When converting a 1-on-1 DM to a group, existing DM members are exempt
@@ -1283,7 +1287,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       ).get();
 
       if (!friendship) {
-        return reply.code(403).send({ error: `You can only add friends to group DMs. ${targetUser.displayName ?? targetUser.username} is not your friend.`, statusCode: 403 });
+        return sendError(reply, 403, 'not_a_friend', { name: targetUser.displayName ?? targetUser.username });
       }
     }
 
@@ -1499,22 +1503,22 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       .where(and(eq(schema.dmChannels.id, id), isNull(schema.dmChannels.deletedAt)))
       .get();
     if (!dmChannel) {
-      return reply.code(404).send({ error: 'DM channel not found', statusCode: 404 });
+      return sendError(reply, 404, 'dm_not_found');
     }
 
     // 1-on-1 DMs (ownerId=NULL) cannot have metadata
     if (!dmChannel.ownerId) {
-      return reply.code(400).send({ error: 'Cannot update metadata on a 1-on-1 DM', statusCode: 400 });
+      return sendError(reply, 400, 'dm_not_group');
     }
 
     // Caller must be a member
     if (!isDmMember(id, request.userId)) {
-      return reply.code(403).send({ error: 'You are not a member of this DM channel', statusCode: 403 });
+      return sendError(reply, 403, 'not_dm_member');
     }
 
     // Caller must be the owner
     if (dmChannel.ownerId !== request.userId) {
-      return reply.code(403).send({ error: 'Only the group owner can update metadata', statusCode: 403 });
+      return sendError(reply, 403, 'dm_owner_only');
     }
 
     const nameProvided = Object.prototype.hasOwnProperty.call(body, 'name');
@@ -1537,7 +1541,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       if (raw === null || raw === undefined) {
         candidate = null;
       } else if (typeof raw !== 'string') {
-        return reply.code(400).send({ error: 'name must be a string or null', statusCode: 400 });
+        return sendError(reply, 400, 'validation_failed');
       } else {
         const trimmed = raw.trim();
         candidate = trimmed.length === 0 ? null : trimmed;
@@ -1548,10 +1552,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       if (candidate !== oldName) {
         if (candidate !== null) {
           if (candidate.length < GROUP_DM_NAME_MIN_LENGTH || candidate.length > GROUP_DM_NAME_MAX_LENGTH) {
-            return reply.code(400).send({
-              error: `Group DM name must be between ${GROUP_DM_NAME_MIN_LENGTH} and ${GROUP_DM_NAME_MAX_LENGTH} characters`,
-              statusCode: 400,
-            });
+            return sendError(reply, 400, 'group_dm_name_length', { min: GROUP_DM_NAME_MIN_LENGTH, max: GROUP_DM_NAME_MAX_LENGTH });
           }
         }
         nextName = candidate;
@@ -1568,13 +1569,13 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       if (raw === null || raw === undefined) {
         candidate = null;
       } else if (typeof raw !== 'string') {
-        return reply.code(400).send({ error: 'icon must be a string or null', statusCode: 400 });
+        return sendError(reply, 400, 'validation_failed');
       } else {
         const trimmed = raw.trim();
         if (trimmed.length === 0) {
           candidate = null;
         } else if (!isValidAssetUrl(trimmed)) {
-          return reply.code(400).send({ error: 'Invalid icon URL', statusCode: 400 });
+          return sendError(reply, 400, 'icon_url_invalid');
         } else if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
           candidate = trimmed;
         } else {
@@ -1595,19 +1596,16 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
             .get();
 
           if (!attachment) {
-            return reply.code(400).send({ error: 'Icon attachment not found', statusCode: 400 });
+            return sendError(reply, 400, 'attachment_not_found');
           }
           if (attachment.uploaderId !== request.userId) {
-            return reply.code(403).send({ error: 'You do not own this icon attachment', statusCode: 403 });
+            return sendError(reply, 403, 'attachment_not_owned');
           }
           if (!attachment.mimetype.startsWith(GROUP_DM_ICON_MIME_PREFIX)) {
-            return reply.code(400).send({ error: 'Icon must be an image', statusCode: 400 });
+            return sendError(reply, 400, 'icon_not_image');
           }
           if (attachment.size > GROUP_DM_ICON_MAX_BYTES) {
-            return reply.code(400).send({
-              error: `Icon must be smaller than ${Math.floor(GROUP_DM_ICON_MAX_BYTES / (1024 * 1024))} MB`,
-              statusCode: 400,
-            });
+            return sendError(reply, 400, 'icon_too_large', { max: Math.floor(GROUP_DM_ICON_MAX_BYTES / (1024 * 1024)) });
           }
         }
         nextIcon = candidate;
@@ -1754,7 +1752,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       .get();
 
     if (!membership) {
-      return reply.code(403).send({ error: 'You are not a member of this DM channel', statusCode: 403 });
+      return sendError(reply, 403, 'not_dm_member');
     }
 
     // Soft close: set closed flag (preserves membership for future message delivery)
@@ -1793,28 +1791,28 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       // Local ID: direct lookup (existing behavior)
       targetUser = db.select().from(schema.users).where(eq(schema.users.id, targetUserIdRaw)).get();
     } else {
-      return reply.code(400).send({ error: 'userId or (homeUserId + homeInstance) is required', statusCode: 400 });
+      return sendError(reply, 400, 'dm_target_required');
     }
 
     if (!targetUser) {
-      return reply.code(404).send({ error: 'User not found', statusCode: 404 });
+      return sendError(reply, 404, 'user_not_found');
     }
 
     const targetUserId = targetUser.id;
 
     // Validate caller is a member
     if (!isDmMember(id, request.userId)) {
-      return reply.code(403).send({ error: 'You are not a member of this DM channel', statusCode: 403 });
+      return sendError(reply, 403, 'not_dm_member');
     }
 
     // Fetch channel and enforce type + ownership constraints
     let dmChannel = db.select().from(schema.dmChannels).where(and(eq(schema.dmChannels.id, id), isNull(schema.dmChannels.deletedAt))).get();
     if (!dmChannel) {
-      return reply.code(404).send({ error: 'DM channel not found', statusCode: 404 });
+      return sendError(reply, 404, 'dm_not_found');
     }
     // 1-on-1 DMs (ownerId=NULL) are immutable — cannot add members
     if (!dmChannel.ownerId) {
-      return reply.code(400).send({ error: 'Cannot add members to a 1-on-1 DM. Use POST /api/dm/group to create a group.', statusCode: 400 });
+      return sendError(reply, 400, 'dm_not_group');
     }
     // Any group DM member can add friends (not just the owner)
 
@@ -1827,7 +1825,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     ).get();
 
     if (!friendship) {
-      return reply.code(403).send({ error: 'You can only add friends to group DMs', statusCode: 403 });
+      return sendError(reply, 403, 'not_a_friend');
     }
 
     // Validate target is not already a member
@@ -1840,7 +1838,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       .get();
 
     if (existingMembership) {
-      return reply.code(400).send({ error: 'User is already a member of this DM channel', statusCode: 400 });
+      return sendError(reply, 400, 'already_member');
     }
 
     // Validate member count < 10
@@ -1850,7 +1848,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       .all();
 
     if (currentMembers.length >= 10) {
-      return reply.code(400).send({ error: 'Group DM cannot exceed 10 members', statusCode: 400 });
+      return sendError(reply, 400, 'group_dm_too_many_members', { max: GROUP_DM_MAX_MEMBERS });
     }
 
     // Insert dm_members row for new user
@@ -2070,16 +2068,16 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
 
     // Validate caller is a member
     if (!isDmMember(id, request.userId)) {
-      return reply.code(403).send({ error: 'You are not a member of this DM channel', statusCode: 403 });
+      return sendError(reply, 403, 'not_dm_member');
     }
 
     // Fetch channel — 1-on-1 DMs (ownerId=NULL) cannot be left, only closed
     const dmChannel = db.select().from(schema.dmChannels).where(and(eq(schema.dmChannels.id, id), isNull(schema.dmChannels.deletedAt))).get();
     if (!dmChannel) {
-      return reply.code(404).send({ error: 'DM channel not found', statusCode: 404 });
+      return sendError(reply, 404, 'dm_not_found');
     }
     if (!dmChannel.ownerId) {
-      return reply.code(400).send({ error: 'Cannot leave a 1-on-1 DM. Use DELETE /api/dm/:id to close it.', statusCode: 400 });
+      return sendError(reply, 400, 'dm_not_group');
     }
 
     // If user is in this DM's VoiceRoom, leave it first
@@ -2128,7 +2126,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     }
 
     if (!targetUserRow) {
-      return reply.code(404).send({ error: 'User not found', statusCode: 404 });
+      return sendError(reply, 404, 'user_not_found');
     }
 
     const targetUserId = targetUserRow.id;
@@ -2136,27 +2134,27 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     // Channel must exist (and not be soft-deleted)
     const dmChannel = db.select().from(schema.dmChannels).where(and(eq(schema.dmChannels.id, id), isNull(schema.dmChannels.deletedAt))).get();
     if (!dmChannel) {
-      return reply.code(404).send({ error: 'DM channel not found', statusCode: 404 });
+      return sendError(reply, 404, 'dm_not_found');
     }
 
     // 1-on-1 DM rejection (ownerId=NULL signals 1-on-1)
     if (!dmChannel.ownerId) {
-      return reply.code(400).send({ error: 'Cannot kick from a 1-on-1 DM', statusCode: 400 });
+      return sendError(reply, 400, 'dm_not_group');
     }
 
     // Caller must be the owner
     if (dmChannel.ownerId !== request.userId) {
-      return reply.code(403).send({ error: 'Only the group owner can remove members', statusCode: 403 });
+      return sendError(reply, 403, 'dm_owner_only');
     }
 
     // Owner cannot kick themselves
     if (targetUserId === request.userId) {
-      return reply.code(400).send({ error: 'Owners cannot kick themselves; use leave instead', statusCode: 400 });
+      return sendError(reply, 400, 'owner_cannot_kick_self');
     }
 
     // Target must be a current member
     if (!isDmMember(id, targetUserId)) {
-      return reply.code(404).send({ error: 'Target user is not a member of this DM channel', statusCode: 404 });
+      return sendError(reply, 404, 'target_not_dm_member');
     }
 
     // If kicked user is in this DM's voice room, evict them first so the call state stays consistent
@@ -2210,10 +2208,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     const hasLocalArg = typeof rawNewOwnerId === 'string' && rawNewOwnerId.length > 0;
 
     if (!hasFederatedArgs && !hasLocalArg) {
-      return reply.code(400).send({
-        error: 'newOwnerId or (homeUserId + homeInstance) is required',
-        statusCode: 400,
-      });
+      return sendError(reply, 400, 'new_owner_required');
     }
 
     const db = getDb();
@@ -2234,7 +2229,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     }
 
     if (!newOwnerRow) {
-      return reply.code(404).send({ error: 'User not found', statusCode: 404 });
+      return sendError(reply, 404, 'user_not_found');
     }
 
     const newOwnerId = newOwnerRow.id;
@@ -2242,27 +2237,27 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     // Channel must exist (and not be soft-deleted)
     const dmChannel = db.select().from(schema.dmChannels).where(and(eq(schema.dmChannels.id, id), isNull(schema.dmChannels.deletedAt))).get();
     if (!dmChannel) {
-      return reply.code(404).send({ error: 'DM channel not found', statusCode: 404 });
+      return sendError(reply, 404, 'dm_not_found');
     }
 
     // 1-on-1 DM rejection (ownerId=NULL signals 1-on-1)
     if (!dmChannel.ownerId) {
-      return reply.code(400).send({ error: 'Cannot transfer ownership of a 1-on-1 DM', statusCode: 400 });
+      return sendError(reply, 400, 'dm_not_group');
     }
 
     // Caller must be the current owner
     if (dmChannel.ownerId !== request.userId) {
-      return reply.code(403).send({ error: 'Only the group owner can transfer ownership', statusCode: 403 });
+      return sendError(reply, 403, 'dm_owner_only');
     }
 
     // Self-transfer is a no-op
     if (newOwnerId === dmChannel.ownerId) {
-      return reply.code(400).send({ error: 'Cannot transfer to current owner', statusCode: 400 });
+      return sendError(reply, 400, 'already_owner');
     }
 
     // Target must be a current member
     if (!isDmMember(id, newOwnerId)) {
-      return reply.code(400).send({ error: 'Target user is not a member of this DM channel', statusCode: 400 });
+      return sendError(reply, 400, 'target_not_dm_member');
     }
 
     const previousOwnerId = dmChannel.ownerId;
@@ -2278,7 +2273,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     const limit = Math.min(Math.max(Number(request.query.limit) || 50, 1), 100);
 
     if (!isDmMember(id, request.userId)) {
-      return reply.code(403).send({ error: 'You are not a member of this DM channel', statusCode: 403 });
+      return sendError(reply, 403, 'not_dm_member');
     }
 
     const db = getDb();
@@ -2493,27 +2488,27 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     const { content, attachments: attachmentIds, replyToId } = request.body;
 
     if (!isDmMember(id, request.userId)) {
-      return reply.code(403).send({ error: 'You are not a member of this DM channel', statusCode: 403 });
+      return sendError(reply, 403, 'not_dm_member');
     }
 
     if (isDeadOneOnOne(id, request.userId)) {
-      return reply.code(403).send({ error: "This user's account was deleted", code: 'recipient_deleted', statusCode: 403 });
+      return sendError(reply, 403, 'recipient_deleted');
     }
 
     const hasContent = content && typeof content === 'string' && content.trim().length > 0;
     const hasAttachments = attachmentIds && attachmentIds.length > 0;
 
     if (!hasContent && !hasAttachments) {
-      return reply.code(400).send({ error: 'Message must have content or attachments', statusCode: 400 });
+      return sendError(reply, 400, 'content_required');
     }
 
     if (content && content.length > MAX_MESSAGE_LENGTH) {
-      return reply.code(400).send({ error: `Message content must be ${MAX_MESSAGE_LENGTH} characters or less`, statusCode: 400 });
+      return sendError(reply, 400, 'content_too_long', { max: MAX_MESSAGE_LENGTH });
     }
 
     // A reply may only target a message in the channel it is posted into.
     if (replyToId && !isDmReplyTargetInChannel(id, replyToId)) {
-      return reply.code(400).send({ error: 'Invalid reply target', statusCode: 400 });
+      return sendError(reply, 400, 'reply_target_invalid');
     }
 
     const db = getDb();
@@ -2525,10 +2520,10 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       for (const attId of attachmentIds) {
         const att = db.select().from(schema.attachments).where(eq(schema.attachments.id, attId)).get();
         if (!att || att.messageId || att.dmMessageId) {
-          return reply.code(400).send({ error: 'Invalid or already-used attachment', statusCode: 400 });
+          return sendError(reply, 400, 'attachment_invalid');
         }
         if (att.uploaderId && att.uploaderId !== request.userId) {
-          return reply.code(400).send({ error: 'You do not own this attachment', statusCode: 400 });
+          return sendError(reply, 400, 'attachment_not_owned');
         }
       }
     }
@@ -2556,7 +2551,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
 
     const message = getDmMessageWithUser(messageId);
     if (!message) {
-      return reply.code(500).send({ error: 'Failed to create message', statusCode: 500 });
+      return sendError(reply, 500, 'message_create_failed');
     }
 
     // Broadcast to all DM members (including those who closed the channel)
@@ -2579,26 +2574,26 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     const { content } = request.body;
 
     if (!content || typeof content !== 'string' || content.trim().length === 0) {
-      return reply.code(400).send({ error: 'Message content is required', statusCode: 400 });
+      return sendError(reply, 400, 'content_required');
     }
 
     if (content.length > MAX_MESSAGE_LENGTH) {
-      return reply.code(400).send({ error: `Message content must be ${MAX_MESSAGE_LENGTH} characters or less`, statusCode: 400 });
+      return sendError(reply, 400, 'content_too_long', { max: MAX_MESSAGE_LENGTH });
     }
 
     const db = getDb();
 
     const msg = db.select().from(schema.dmMessages).where(eq(schema.dmMessages.id, id)).get();
     if (!msg) {
-      return reply.code(404).send({ error: 'Message not found', statusCode: 404 });
+      return sendError(reply, 404, 'message_not_found');
     }
 
     if (msg.userId !== request.userId) {
-      return reply.code(403).send({ error: 'You can only edit your own messages', statusCode: 403 });
+      return sendError(reply, 403, 'not_message_author');
     }
 
     if (isDeadOneOnOne(msg.dmChannelId, request.userId)) {
-      return reply.code(403).send({ error: "This user's account was deleted", code: 'recipient_deleted', statusCode: 403 });
+      return sendError(reply, 403, 'recipient_deleted');
     }
 
     const now = Date.now();
@@ -2612,7 +2607,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
 
     const updated = getDmMessageWithUser(id);
     if (!updated) {
-      return reply.code(500).send({ error: 'Failed to update message', statusCode: 500 });
+      return sendError(reply, 500, 'message_update_failed');
     }
 
     // Broadcast to all DM members
@@ -2646,15 +2641,15 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
 
     const msg = db.select().from(schema.dmMessages).where(eq(schema.dmMessages.id, id)).get();
     if (!msg) {
-      return reply.code(404).send({ error: 'Message not found', statusCode: 404 });
+      return sendError(reply, 404, 'message_not_found');
     }
 
     if (msg.userId !== request.userId) {
-      return reply.code(403).send({ error: 'You can only delete your own messages', statusCode: 403 });
+      return sendError(reply, 403, 'not_message_author');
     }
 
     if (isDeadOneOnOne(msg.dmChannelId, request.userId)) {
-      return reply.code(403).send({ error: "This user's account was deleted", code: 'recipient_deleted', statusCode: 403 });
+      return sendError(reply, 403, 'recipient_deleted');
     }
 
     // Collect attachment filenames before deleting

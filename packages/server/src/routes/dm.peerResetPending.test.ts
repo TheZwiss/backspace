@@ -131,7 +131,8 @@ describe('POST /api/dm — limbo-window peer_reset_pending guard', () => {
     });
 
     expect(res.statusCode).toBe(409);
-    expect(res.json().error).toBe('peer_reset_pending');
+    expect(res.json().code).toBe('peer_reset_pending');
+    expect(res.json().error).toMatch(/being reset/);
     // No stub created and no DM channel created for the reset-pending peer.
     expect(testDb.select().from(schema.dmChannels).all()).toHaveLength(0);
     expect(testDb.select().from(schema.users).where(eq(schema.users.homeUserId, 'remote-bob')).all()).toHaveLength(0);
