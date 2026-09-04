@@ -1,1 +1,172 @@
-{}
+{
+  "names": {
+    "group": "Группа",
+    "directMessage": "Личные сообщения",
+    "theGroup": "группе",
+    "unknownHandle": "неизвестный",
+    "groupFallback": "Групповая беседа",
+    "emptyGroup": "Пустая группа"
+  },
+  "preview": {
+    "image": "Изображение",
+    "video": "Видео",
+    "audio": "Аудио",
+    "files_one": "📎 {{count}} файл",
+    "files_few": "📎 {{count}} файла",
+    "files_many": "📎 {{count}} файлов",
+    "files_other": "📎 {{count}} файла",
+    "withSender": "{{name}}: {{text}}"
+  },
+  "system": {
+    "spaceInviteNamed": "📨 Приглашение в {{spaceName}}",
+    "spaceInvite": "📨 Приглашение в пространство",
+    "memberAdded": "{{actor}} добавил(а) {{target}}",
+    "memberLeft": "{{target}} покинул(а) группу",
+    "memberRemoved": "{{actor}} удалил(а) {{target}}",
+    "ownerChanged": "{{newOwner}} теперь владелец группы",
+    "renamed": "{{actor}} переименовал(а) группу",
+    "nameCleared": "{{actor}} убрал(а) название группы",
+    "iconChanged": "{{actor}} обновил(а) значок группы",
+    "generic": "Системное сообщение",
+    "someone": "кого-то",
+    "aMember": "Участник"
+  },
+  "deletedNotice": {
+    "accountDeleted": "Аккаунт этого пользователя был удалён"
+  },
+  "memberRow": {
+    "viewProfile": "Открыть профиль",
+    "transferOwnership": "Передать права владельца",
+    "removeFromGroup": "Удалить из группы",
+    "removeFriend": "Удалить из друзей",
+    "ownerTooltip": "Владелец группы",
+    "actions": "Действия с участником"
+  },
+  "roster": {
+    "members": "Участники",
+    "owner": "Владелец",
+    "online": "В сети",
+    "offline": "Не в сети",
+    "sectionCount": "{{label}} — {{total}}"
+  },
+  "kick": {
+    "title": "Удалить из группы",
+    "description": "Удалить {{name}} из этой группы? Новые сообщения будут этому участнику недоступны.",
+    "success": "Участник {{name}} удалён из группы",
+    "failed": "Не удалось удалить участника"
+  },
+  "transfer": {
+    "title": "Передать права владельца",
+    "description": "Передать права владельца {{name}}? Вы лишитесь прав владельца.",
+    "confirm": "Передать",
+    "success": "Права владельца переданы {{name}}",
+    "failed": "Не удалось передать права владельца"
+  },
+  "removeFriend": {
+    "failed": "Не удалось удалить из друзей"
+  },
+  "leave": {
+    "title": "Покинуть группу",
+    "description": "Покинуть «{{name}}»? Вы перестанете получать сообщения из этой беседы.",
+    "confirm": "Покинуть",
+    "inProgress": "Выход…",
+    "failed": "Не удалось покинуть группу",
+    "explanation": "Вы перестанете получать сообщения из этой беседы. Остальные участники увидят системное сообщение."
+  },
+  "search": {
+    "trigger": "Найти или начать беседу",
+    "placeholder": "Поиск…",
+    "emptyHint": "Найдите пользователя, чтобы начать общение",
+    "conversations": "Беседы",
+    "users": "Пользователи",
+    "searching": "Поиск…",
+    "noResults": "Ничего не найдено",
+    "createFailed": "Не удалось создать беседу"
+  },
+  "list": {
+    "title": "Сообщения",
+    "friends": "Друзья",
+    "empty": "Пока нет бесед.",
+    "leaveGroup": "Покинуть группу",
+    "justNow": "сейчас",
+    "minutesShort_one": "{{count}} мин",
+    "minutesShort_few": "{{count}} мин",
+    "minutesShort_many": "{{count}} мин",
+    "minutesShort_other": "{{count}} мин",
+    "hoursShort_one": "{{count}} ч",
+    "hoursShort_few": "{{count}} ч",
+    "hoursShort_many": "{{count}} ч",
+    "hoursShort_other": "{{count}} ч",
+    "daysShort_one": "{{count}} д",
+    "daysShort_few": "{{count}} д",
+    "daysShort_many": "{{count}} д",
+    "daysShort_other": "{{count}} д"
+  },
+  "newDm": {
+    "title": "Новое личное сообщение",
+    "searchPlaceholder": "Поиск пользователя…",
+    "noUsers": "Пользователи не найдены"
+  },
+  "addMember": {
+    "title": "Добавить друзей в беседу",
+    "description": "Выберите друзей, которых хотите добавить в эту беседу.",
+    "capacity": "{{current}}/{{max}}",
+    "searchPlaceholder": "Поиск друзей…",
+    "limitReached": "В этой группе достигнут предел в {{max}} участников.",
+    "alreadyInDm": "Уже в этой беседе",
+    "noMatch": "Нет друзей, соответствующих запросу",
+    "noFriends": "Друзей пока нет",
+    "selectFriends": "Выберите друзей",
+    "addCount_one": "Добавить {{count}} друга",
+    "addCount_few": "Добавить {{count}} друзей",
+    "addCount_many": "Добавить {{count}} друзей",
+    "addCount_other": "Добавить {{count}} друга",
+    "adding": "Добавление…",
+    "noOtherMember": "Не удалось определить второго участника этой беседы.",
+    "failed": "Не удалось добавить участников"
+  },
+  "groupSettings": {
+    "title": "Настройки группы",
+    "general": "Общие",
+    "overview": "Обзор",
+    "members": "Участники",
+    "backToMenu": "Назад к меню настроек группы",
+    "changeIcon": "Изменить значок группы",
+    "icon": "Значок группы",
+    "clickToUpload": "Нажмите, чтобы загрузить",
+    "removeIcon": "Удалить значок группы",
+    "nameLabel": "Название группы",
+    "nameAria": "Название группы",
+    "nameCount": "{{current}}/{{max}}",
+    "addMember": "Добавить участника",
+    "groupFull": "Группа заполнена",
+    "groupFullSuffix": "— Группа заполнена",
+    "cropTitle": "Обрезать значок группы",
+    "saveFailed": "Не удалось сохранить настройки"
+  },
+  "groupInfo": {
+    "title": "О группе",
+    "plainTitle": "Информация",
+    "notFound": "Беседа не найдена.",
+    "notGroup": "У этой беседы нет информации о группе.",
+    "cancelEdit": "Отменить редактирование",
+    "federated": "Федеративная группа",
+    "memberCount_one": "{{count}} участник",
+    "memberCount_few": "{{count}} участника",
+    "memberCount_many": "{{count}} участников",
+    "memberCount_other": "{{count}} участника"
+  },
+  "spaceOwnership": {
+    "title": "Передать права владельца",
+    "description": "Выберите участника, который станет новым владельцем <name>{{name}}</name>",
+    "confirmQuestion": "Передать права владельца <name>{{space}}</name> пользователю <name>{{member}}</name>?",
+    "regularMember": "Вы станете обычным участником.",
+    "transferring": "Передача…",
+    "confirm": "Передать",
+    "searchPlaceholder": "Поиск участников…",
+    "loading": "Загрузка участников…",
+    "noMembers": "Участники не найдены",
+    "success": "Права владельца переданы {{name}}",
+    "failed": "Не удалось передать права владельца"
+  }
+}
