@@ -1,5 +1,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { useFormatters } from '../../i18n/formatters';
+import { describeError } from '../../i18n/errors';
 import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import type { User } from '@backspace/shared';
@@ -9,7 +12,6 @@ import { useUIStore } from '../../stores/uiStore';
 import { useSpaceStore, getApiForOrigin, resolveUserOrigin } from '../../stores/spaceStore';
 import { api } from '../../api/client';
 import { useSocialStore, type TaggedFriend, type TaggedFriendRequest } from '../../stores/socialStore';
-import { mapServerErrorToMessage } from '../../utils/friendErrors';
 import { useAuthStore } from '../../stores/authStore';
 import { getAvatarGradient, getSpaceGradient, adjustColor, mutedGradient } from '../../utils/gradients';
 import { parseFederatedUsername, isSelf, canonicalUserMatch } from '../../utils/identity';
@@ -50,7 +52,18 @@ function getFriendshipStatus(
   return { state: 'none' };
 }
 
+/** Presence is a closed union; every member is listed so the catalog keys stay discoverable. */
+function presenceLabel(t: TFunction<['social', 'common']>, status: string | null | undefined): string {
+  switch (status) {
+    case 'online': return t('social:presence.online');
+    case 'idle': return t('social:presence.idle');
+    case 'dnd': return t('social:presence.dnd');
+    default: return t('social:presence.offline');
+  }
+}
+
 export function UserProfileModal() {
+  const { t } = useTranslation(['social', 'common']);
   const activeModal = useUIStore((s) => s.activeModal);
   const modalData = useUIStore((s) => s.modalData);
   const closeModal = useUIStore((s) => s.closeModal);
@@ -189,11 +202,7 @@ export function UserProfileModal() {
     try {
       await sendFriendRequest(user.username);
     } catch (err) {
-      // The shared API client throws `new Error(body.error)` for non-2xx
-      // responses (api/client.ts:298), so err.message carries the server's
-      // error code (e.g. 'peer_pending_approval').
-      const code = err instanceof Error ? err.message : undefined;
-      addToast(mapServerErrorToMessage(code, code, user.username), 'warning');
+      addToast(describeError(err), 'warning');
     } finally {
       setFriendActionLoading(false);
     }
@@ -203,7 +212,7 @@ export function UserProfileModal() {
     if (friendship.state !== 'friends') return;
     setFriendActionLoading(true);
     try { await removeFriend(friendship.friend.id); }
-    catch (err) { addToast((err as Error).message, 'warning'); }
+    catch (err) { addToast(describeError(err), 'warning'); }
     finally { setFriendActionLoading(false); }
   };
 
@@ -211,7 +220,7 @@ export function UserProfileModal() {
     if (friendship.state !== 'outbound_pending') return;
     setFriendActionLoading(true);
     try { await cancelFriendRequest(friendship.request.id); }
-    catch (err) { addToast((err as Error).message, 'warning'); }
+    catch (err) { addToast(describeError(err), 'warning'); }
     finally { setFriendActionLoading(false); }
   };
 
@@ -219,7 +228,7 @@ export function UserProfileModal() {
     if (friendship.state !== 'inbound_pending') return;
     setFriendActionLoading(true);
     try { await updateFriendRequest(friendship.request.id, 'accepted'); }
-    catch (err) { addToast((err as Error).message, 'warning'); }
+    catch (err) { addToast(describeError(err), 'warning'); }
     finally { setFriendActionLoading(false); }
   };
 
@@ -227,7 +236,7 @@ export function UserProfileModal() {
     if (friendship.state !== 'inbound_pending') return;
     setFriendActionLoading(true);
     try { await updateFriendRequest(friendship.request.id, 'declined'); }
-    catch (err) { addToast((err as Error).message, 'warning'); }
+    catch (err) { addToast(describeError(err), 'warning'); }
     finally { setFriendActionLoading(false); }
   };
 
@@ -247,9 +256,9 @@ export function UserProfileModal() {
   };
 
   const tabs: { key: Tab; label: string; count?: number }[] = [
-    { key: 'about', label: 'About' },
-    { key: 'friends', label: 'Mutual Friends', count: mutualFriends.length },
-    { key: 'spaces', label: 'Mutual Spaces', count: mutualSpaces.length },
+    { key: 'about', label: t('social:profile.tabs.about') },
+    { key: 'friends', label: t('social:profile.tabs.mutualFriends'), count: mutualFriends.length },
+    { key: 'spaces', label: t('social:profile.tabs.mutualSpaces'), count: mutualSpaces.length },
   ];
 
   return (
@@ -337,7 +346,7 @@ export function UserProfileModal() {
               {user.bio && (
                 <div>
                   <span className="text-[11px] uppercase tracking-wide font-semibold text-txt-tertiary">
-                    About Me
+                    {t('social:profile.aboutMe')}
                   </span>
                   <div className="text-[13px] text-txt-secondary mt-1 whitespace-pre-wrap break-words leading-relaxed [&_strong]:font-semibold [&_strong]:text-txt-primary [&_em]:italic [&_a]:text-accent-primary [&_a]:underline">
                     <ReactMarkdown
@@ -358,7 +367,7 @@ export function UserProfileModal() {
               {/* Member Since */}
               <div>
                 <span className="text-[11px] uppercase tracking-wide font-semibold text-txt-tertiary">
-                  Member Since
+                  {t('social:profile.memberSince')}
                 </span>
                 <div className="text-[13px] text-txt-secondary mt-1">
                   {f.formatLongDate(user.createdAt)}
@@ -379,7 +388,7 @@ export function UserProfileModal() {
                 </div>
               ) : mutualFriends.length === 0 ? (
                 <div className="text-center py-8 text-txt-tertiary text-[13px]">
-                  No mutual friends
+                  {t('social:mutuals.noFriends')}
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-2">
@@ -403,8 +412,8 @@ export function UserProfileModal() {
                           <div className="text-[13px] font-medium text-txt-primary truncate">
                             {fname}
                           </div>
-                          <div className="text-[11px] text-txt-tertiary capitalize">
-                            {friend.status}
+                          <div className="text-[11px] text-txt-tertiary">
+                            {presenceLabel(t, friend.status)}
                           </div>
                           {friend._instanceOrigin && (
                             <div className="flex items-center gap-1 text-[10px] text-txt-tertiary/70 truncate">
@@ -434,7 +443,7 @@ export function UserProfileModal() {
                 </div>
               ) : mutualSpaces.length === 0 ? (
                 <div className="text-center py-8 text-txt-tertiary text-[13px]">
-                  No mutual spaces
+                  {t('social:mutuals.noSpaces')}
                 </div>
               ) : (
                 <div className="space-y-1">
@@ -497,20 +506,20 @@ export function UserProfileModal() {
             onClick={handleSendMessage}
             className="flex-1 py-2 rounded-lg text-[13px] font-medium text-white bg-accent-primary hover:bg-accent-primary/80 transition-colors"
           >
-            Send Message
+            {t('social:profile.sendMessage')}
           </button>
 
           {friendship.state === 'none' && (
             <button onClick={handleAddFriend} disabled={friendActionLoading}
               className="flex-1 py-2 rounded-lg text-[13px] font-medium text-txt-primary border border-white/[0.08] bg-white/[0.06] hover:bg-white/[0.10] transition-colors disabled:opacity-50">
-              {friendActionLoading ? '...' : 'Add Friend'}
+              {friendActionLoading ? '...' : t('social:profile.addFriend')}
             </button>
           )}
 
           {friendship.state === 'outbound_pending' && (
             <button onClick={handleCancelRequest} disabled={friendActionLoading}
               className="flex-1 py-2 rounded-lg text-[13px] font-medium text-amber-400 border border-amber-400/30 hover:bg-amber-400/10 transition-colors disabled:opacity-50">
-              {friendActionLoading ? '...' : 'Cancel Request'}
+              {friendActionLoading ? '...' : t('social:request.cancel')}
             </button>
           )}
 
@@ -518,11 +527,11 @@ export function UserProfileModal() {
             <>
               <button onClick={handleAcceptRequest} disabled={friendActionLoading}
                 className="flex-1 py-2 rounded-lg text-[13px] font-medium text-white bg-accent-primary hover:bg-accent-primary/80 transition-colors disabled:opacity-50">
-                {friendActionLoading ? '...' : 'Accept'}
+                {friendActionLoading ? '...' : t('social:request.accept')}
               </button>
               <button onClick={handleDeclineRequest} disabled={friendActionLoading}
                 className="py-2 px-3 rounded-lg text-[13px] font-medium text-txt-tertiary border border-white/[0.06] hover:bg-white/[0.06] transition-colors disabled:opacity-50">
-                {friendActionLoading ? '...' : 'Ignore'}
+                {friendActionLoading ? '...' : t('social:request.ignore')}
               </button>
             </>
           )}
@@ -530,7 +539,7 @@ export function UserProfileModal() {
           {friendship.state === 'friends' && (
             <button onClick={handleRemoveFriend} disabled={friendActionLoading}
               className="flex-1 py-2 rounded-lg text-[13px] font-medium text-txt-danger border border-txt-danger/30 hover:bg-txt-danger/10 transition-colors disabled:opacity-50">
-              {friendActionLoading ? '...' : 'Remove Friend'}
+              {friendActionLoading ? '...' : t('social:friend.remove')}
             </button>
           )}
         </div>
