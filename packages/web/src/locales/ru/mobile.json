@@ -1,1 +1,11 @@
-{}
+{
+  "settings": {
+    "title": "Настройки"
+  },
+  "you": {
+    "editProfile": "Редактировать профиль",
+    "friends": "Друзья",
+    "homeInstance": "Домашний сервер: {{domain}}",
+    "logOutConfirm": "Вы уверены, что хотите выйти?"
+  }
+}

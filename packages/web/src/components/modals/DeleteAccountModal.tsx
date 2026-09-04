@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
 import { useAuthStore } from '../../stores/authStore';
 import { useInstanceStore } from '../../stores/instanceStore';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { api } from '../../api/client';
+import { describeError } from '../../i18n/errors';
 import { deleteAccountOnRemotes, type FederationOpResult } from '../../utils/federationOps';
 
 interface DeleteAccountModalProps {
@@ -21,6 +23,7 @@ interface OwnedSpaceInfo {
 }
 
 export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps) {
+  const { t } = useTranslation(['settings', 'common']);
   const user = useAuthStore((s) => s.user);
   const instances = useInstanceStore((s) => s.instances);
   const spaces = useSpaceStore((s) => s.spaces);
@@ -125,7 +128,7 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
       }
       setStep('confirm');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to process spaces');
+      setError(err instanceof Error ? describeError(err) : t('settings:account.deletion.errors.spacesFailed'));
     } finally {
       setIsLoading(false);
     }
@@ -133,7 +136,7 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
 
   const handleConfirmDelete = async () => {
     if (confirmUsername !== user.username) {
-      setError('Username does not match');
+      setError(t('settings:account.deletion.errors.usernameMismatch'));
       return;
     }
 
@@ -157,7 +160,7 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
         setStep('complete');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete account');
+      setError(err instanceof Error ? describeError(err) : t('settings:account.deletion.errors.deleteFailed'));
       if (step === 'federation') {
         // Stay on federation step so user can see results
       } else {
@@ -176,7 +179,7 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
       setDeletionComplete(true);
       setStep('complete');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete account');
+      setError(err instanceof Error ? describeError(err) : t('settings:account.deletion.errors.deleteFailed'));
     } finally {
       setIsLoading(false);
     }
@@ -188,9 +191,9 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
       <div className="relative max-w-lg w-full mx-4 max-h-[calc(100vh-2rem)] flex flex-col bg-surface-elevated rounded-lg shadow-xl animate-slide-up overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 flex-shrink-0">
-          <h2 className="text-lg font-bold text-txt-primary">Delete Account</h2>
+          <h2 className="text-lg font-bold text-txt-primary">{t('settings:account.deletion.title')}</h2>
           {step !== 'complete' && (
-            <button onClick={onClose} className="text-txt-tertiary hover:text-txt-primary transition-colors p-1">
+            <button onClick={onClose} className="text-txt-tertiary hover:text-txt-primary transition-colors p-1" aria-label={t('common:actions.close')}>
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>
@@ -203,19 +206,19 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
           {step === 'warning' && (
             <>
               <div className="bg-accent-rose/10 border border-accent-rose/20 rounded-lg p-3.5">
-                <p className="text-sm text-txt-primary font-medium mb-2">This will permanently delete your account.</p>
+                <p className="text-sm text-txt-primary font-medium mb-2">{t('settings:account.deletion.warning.headline')}</p>
                 <ul className="text-xs text-txt-secondary space-y-1">
-                  <li>- All space memberships will be removed</li>
-                  <li>- All friend connections will be removed</li>
-                  <li>- All DM memberships will be removed</li>
-                  <li>- Your messages will remain but be attributed to "Deleted User"</li>
+                  <li>- {t('settings:account.deletion.warning.spaces')}</li>
+                  <li>- {t('settings:account.deletion.warning.friends')}</li>
+                  <li>- {t('settings:account.deletion.warning.dms')}</li>
+                  <li>- {t('settings:account.deletion.warning.messages')}</li>
                 </ul>
               </div>
 
               {ownedSpaces.length > 0 && (
                 <div>
                   <p className="text-sm text-txt-primary font-medium mb-2">
-                    You own {ownedSpaces.length} space{ownedSpaces.length > 1 ? 's' : ''}. Handle each before continuing:
+                    {t('settings:account.deletion.ownedSpaces.prompt', { count: ownedSpaces.length })}
                   </p>
                   <div className="space-y-3">
                     {ownedSpaces.map(space => (
@@ -230,7 +233,7 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
                                 : 'bg-white/[0.06] text-txt-secondary hover:text-txt-primary'
                             }`}
                           >
-                            Transfer
+                            {t('settings:account.deletion.ownedSpaces.transfer')}
                           </button>
                           <button
                             onClick={() => handleSpaceAction(space.id, 'delete')}
@@ -240,7 +243,7 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
                                 : 'bg-white/[0.06] text-txt-secondary hover:text-txt-primary'
                             }`}
                           >
-                            Delete Space
+                            {t('settings:account.deletion.ownedSpaces.delete')}
                           </button>
                         </div>
                         {space.action === 'transfer' && (
@@ -249,7 +252,7 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
                             onChange={(e) => handleTransferTo(space.id, e.target.value)}
                             className="input-standard w-full px-2.5 py-1.5 text-xs"
                           >
-                            <option value="">Select new owner...</option>
+                            <option value="">{t('settings:account.deletion.ownedSpaces.selectOwner')}</option>
                             {space.members.map(m => (
                               <option key={m.userId} value={m.userId}>
                                 {m.displayName || m.username}
@@ -275,7 +278,7 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
                 }
                 className="w-full py-2 bg-accent-rose hover:bg-accent-rose/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isLoading ? 'Processing...' : 'Continue'}
+                {isLoading ? t('settings:account.deletion.processing') : t('common:actions.continue')}
               </button>
             </>
           )}
@@ -284,12 +287,17 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
           {step === 'confirm' && (
             <form onSubmit={(e) => { e.preventDefault(); handleConfirmDelete(); }} className="space-y-4">
               <div className="bg-accent-rose/10 border border-accent-rose/20 rounded-lg p-3.5">
-                <p className="text-sm text-txt-danger font-medium">This action is permanent and cannot be undone.</p>
+                <p className="text-sm text-txt-danger font-medium">{t('settings:account.deletion.confirm.permanent')}</p>
               </div>
 
               <div>
                 <label className="block text-xs text-txt-secondary mb-1.5">
-                  Type your username <span className="font-mono text-txt-primary">{user.username}</span> to confirm
+                  <Trans
+                    t={t}
+                    i18nKey="settings:account.deletion.confirm.usernamePrompt"
+                    values={{ username: user.username }}
+                    components={{ username: <span className="font-mono text-txt-primary" /> }}
+                  />
                 </label>
                 <input
                   type="text"
@@ -301,13 +309,13 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
               </div>
 
               <div>
-                <label className="block text-xs text-txt-secondary mb-1.5">Password</label>
+                <label className="block text-xs text-txt-secondary mb-1.5">{t('settings:account.deletion.confirm.password')}</label>
                 <input
                   type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   className="input-danger w-full"
-                  placeholder="Enter your password"
+                  placeholder={t('settings:account.deletion.confirm.passwordPlaceholder')}
                   autoComplete="current-password"
                 />
               </div>
@@ -321,14 +329,14 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
                   onClick={() => { setStep('warning'); setError(''); }}
                   className="flex-1 py-2 bg-white/[0.06] hover:bg-white/[0.1] text-txt-secondary text-sm font-medium rounded-lg transition-colors"
                 >
-                  Back
+                  {t('common:actions.back')}
                 </button>
                 <button
                   type="submit"
                   disabled={isLoading || confirmUsername !== user.username || !confirmPassword}
                   className="flex-1 py-2 bg-accent-rose hover:bg-accent-rose/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isLoading ? 'Deleting...' : 'Delete My Account'}
+                  {isLoading ? t('settings:account.deletion.confirm.deleting') : t('settings:account.deletion.confirm.submit')}
                 </button>
               </div>
             </form>
@@ -337,7 +345,7 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
           {/* Step 3: Federation Progress */}
           {step === 'federation' && (
             <>
-              <p className="text-sm text-txt-secondary">Removing your account from connected instances...</p>
+              <p className="text-sm text-txt-secondary">{t('settings:account.deletion.federation.removing')}</p>
               <div className="space-y-2">
                 {instances.filter(i => i.status === 'connected').map(inst => {
                   const result = federationResults.find(r => r.origin === inst.origin);
@@ -376,7 +384,7 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
                   disabled={isLoading}
                   className="w-full py-2 bg-accent-rose hover:bg-accent-rose/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
                 >
-                  {isLoading ? 'Deleting...' : 'Delete Account Now'}
+                  {isLoading ? t('settings:account.deletion.confirm.deleting') : t('settings:account.deletion.federation.deleteAnyway')}
                 </button>
               )}
             </>
@@ -388,8 +396,8 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
               <svg className="w-12 h-12 text-txt-tertiary mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
-              <p className="text-lg font-medium text-txt-primary mb-1">Account deleted</p>
-              <p className="text-sm text-txt-tertiary">Redirecting to login...</p>
+              <p className="text-lg font-medium text-txt-primary mb-1">{t('settings:account.deletion.complete.title')}</p>
+              <p className="text-sm text-txt-tertiary">{t('settings:account.deletion.complete.redirecting')}</p>
             </div>
           )}
         </div>
