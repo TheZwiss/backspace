@@ -169,3 +169,54 @@ describe('PATCH /api/settings/instance — federatedRegistrationOpen', () => {
     expect(row?.federatedRegistrationOpen).toBe(0);
   });
 });
+
+describe('error codes on the settings routes', () => {
+  it('rejects an out-of-range maxBitrateKbps with streaming_max_bitrate_out_of_range', async () => {
+    const res = await app.inject({ method: 'PATCH', url: '/api/settings/streaming', payload: { maxBitrateKbps: 10 } });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toMatchObject({
+      code: 'streaming_max_bitrate_out_of_range',
+      details: { min: 500, max: 1000000 },
+      error: 'maxBitrateKbps must be between 500 and 1000000',
+    });
+  });
+
+  it('names the offending resolutions in streaming_resolutions_invalid', async () => {
+    const res = await app.inject({ method: 'PATCH', url: '/api/settings/streaming', payload: { allowedResolutions: [999, 720] } });
+    expect(res.statusCode).toBe(400);
+    const body = res.json();
+    expect(body.code).toBe('streaming_resolutions_invalid');
+    expect(body.details.invalid).toBe('999');
+    expect(body.details.allowed).toMatch(/native/);
+  });
+
+  it('rejects min >= max with streaming_min_bitrate_not_below_max', async () => {
+    const res = await app.inject({ method: 'PATCH', url: '/api/settings/streaming', payload: { minBitrateKbps: 5000, maxBitrateKbps: 5000 } });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().code).toBe('streaming_min_bitrate_not_below_max');
+  });
+
+  it('rejects a bad matrix key with streaming_bitrate_matrix_key_invalid', async () => {
+    const res = await app.inject({ method: 'PATCH', url: '/api/settings/streaming', payload: { bitrateMatrixOverrides: { bogus: 100 } } });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toMatchObject({ code: 'streaming_bitrate_matrix_key_invalid', details: { key: 'bogus' } });
+  });
+
+  it('rejects an over-long instance name with instance_name_length', async () => {
+    const res = await app.inject({ method: 'PATCH', url: '/api/settings/instance', payload: { instanceName: 'x'.repeat(33) } });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toMatchObject({ code: 'instance_name_length', details: { min: 1, max: 32 } });
+  });
+
+  it('rejects a non-boolean federatedRegistrationOpen with field_not_boolean', async () => {
+    const res = await app.inject({ method: 'PATCH', url: '/api/settings/instance', payload: { federatedRegistrationOpen: 'yes' } });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toMatchObject({ code: 'field_not_boolean', details: { field: 'federatedRegistrationOpen' } });
+  });
+
+  it('rejects a bad relay TTL with relay_ttl_out_of_range', async () => {
+    const res = await app.inject({ method: 'PATCH', url: '/api/settings/instance', payload: { federationRelayTtlDays: 0 } });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toMatchObject({ code: 'relay_ttl_out_of_range', details: { min: 1, max: 365 } });
+  });
+});
