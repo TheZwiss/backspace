@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { Trans, useTranslation } from 'react-i18next';
 import { useAuthStore } from '../stores/authStore';
 import { useSpaceStore, NotConnectedError } from '../stores/spaceStore';
 import { useInstanceStore, DifferentPasswordError } from '../stores/instanceStore';
@@ -7,10 +8,12 @@ import { api, createApiClient } from '../api/client';
 import { parseInviteInput, buildInstanceJoinUrl } from '../utils/inviteParser';
 import { Avatar } from './ui/Avatar';
 import type { InvitePreview } from '@backspace/shared';
+import { describeError } from '../i18n/errors';
 
 type JoinPhase = 'preview' | 'connect' | 'fallback' | 'other-instance' | 'already-member';
 
 export function JoinPage() {
+  const { t } = useTranslation(['auth', 'common']);
   const { inviteCode: rawInviteCode } = useParams<{ inviteCode: string }>();
   const navigate = useNavigate();
   const token = useAuthStore((s) => s.token);
@@ -59,13 +62,13 @@ export function JoinPage() {
   // Fetch preview on mount
   useEffect(() => {
     if (!rawInviteCode) {
-      setPreviewError('No invite code provided');
+      setPreviewError(t('auth:join.errors.noCode'));
       setIsLoadingPreview(false);
       return;
     }
 
     if (!parsed) {
-      setPreviewError('Invalid invite code');
+      setPreviewError(t('auth:join.errors.invalidCode'));
       setIsLoadingPreview(false);
       return;
     }
@@ -84,7 +87,7 @@ export function JoinPage() {
         const data = await client.spaces.invitePreview(parsed.code);
         setPreview(data);
       } catch (err) {
-        setPreviewError(err instanceof Error ? err.message : 'Failed to load invite');
+        setPreviewError(err instanceof Error ? describeError(err) : t('auth:join.errors.loadFailed'));
       } finally {
         setIsLoadingPreview(false);
       }
@@ -106,12 +109,12 @@ export function JoinPage() {
         setPhase('connect');
         setError('');
       } else {
-        const msg = err instanceof Error ? err.message : 'Failed to join space';
+        const msg = err instanceof Error ? err.message : '';
         if (msg.toLowerCase().includes('already a member')) {
           setPhase('already-member');
           setError('');
         } else {
-          setError(msg);
+          setError(err instanceof Error ? describeError(err) : t('auth:join.errors.joinFailed'));
         }
       }
     } finally {
@@ -136,12 +139,12 @@ export function JoinPage() {
         setFallbackPassword('');
         setError('');
       } else {
-        const msg = err instanceof Error ? err.message : 'Failed to connect';
+        const msg = err instanceof Error ? err.message : '';
         if (msg.toLowerCase().includes('already a member')) {
           setPhase('already-member');
           setError('');
         } else {
-          setError(msg);
+          setError(err instanceof Error ? describeError(err) : t('auth:join.errors.connectFailed'));
         }
       }
     } finally {
@@ -160,12 +163,12 @@ export function JoinPage() {
       const space = await joinByCode(parsed.code, parsed.origin);
       navigate(`/channels/${space.id}`);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to log in';
+      const msg = err instanceof Error ? err.message : '';
       if (msg.toLowerCase().includes('already a member')) {
         setPhase('already-member');
         setError('');
       } else {
-        setError(msg);
+        setError(err instanceof Error ? describeError(err) : t('auth:join.errors.loginFailed'));
       }
     } finally {
       setIsJoining(false);
@@ -189,7 +192,7 @@ export function JoinPage() {
     // send the browser somewhere other than the instance the user named.
     const targetUrl = buildInstanceJoinUrl(domain, qualifiedCode);
     if (!targetUrl) {
-      setError('Enter a domain on its own, for example my-instance.com');
+      setError(t('auth:join.errors.domainOnly'));
       return;
     }
     window.location.href = targetUrl;
@@ -212,7 +215,7 @@ export function JoinPage() {
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
           </svg>
-          <p className="text-txt-tertiary">Loading invite...</p>
+          <p className="text-txt-tertiary">{t('auth:join.loading')}</p>
         </div>
       </div>
     );
@@ -229,23 +232,23 @@ export function JoinPage() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
             </svg>
           </div>
-          <h1 className="text-xl font-bold text-txt-primary mb-2">Invalid Invite</h1>
+          <h1 className="text-xl font-bold text-txt-primary mb-2">{t('auth:join.invalid.title')}</h1>
           <p className="text-txt-secondary text-sm mb-6">
-            {previewError || 'This invite link is invalid or has expired.'}
+            {previewError || t('auth:join.invalid.description')}
           </p>
           {token ? (
             <button
               onClick={() => navigate('/channels/@me')}
               className="px-6 py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors"
             >
-              Back to Backspace
+              {t('auth:join.invalid.backToApp')}
             </button>
           ) : (
             <Link
               to="/login"
               className="inline-block px-6 py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors"
             >
-              Log In
+              {t('auth:join.invalid.login')}
             </Link>
           )}
         </div>
@@ -268,7 +271,7 @@ export function JoinPage() {
               avatarColor={preview.avatarColor}
             />
           </div>
-          <p className="text-xs text-txt-tertiary uppercase tracking-wide mb-1">You've been invited to join</p>
+          <p className="text-xs text-txt-tertiary uppercase tracking-wide mb-1">{t('auth:join.invitedTo')}</p>
           <h1 className="text-2xl font-bold text-txt-primary">{preview.spaceName}</h1>
           {preview.description && (
             <p className="text-txt-secondary text-sm mt-2">{preview.description}</p>
@@ -276,7 +279,7 @@ export function JoinPage() {
           <div className="flex items-center justify-center gap-4 mt-3 text-xs text-txt-tertiary">
             <span className="flex items-center gap-1">
               <span className="w-2 h-2 rounded-full bg-txt-tertiary/40" />
-              {preview.memberCount} {preview.memberCount === 1 ? 'member' : 'members'}
+              {t('auth:join.memberCount', { count: preview.memberCount })}
             </span>
             <span>{preview.instanceName}</span>
           </div>
@@ -311,16 +314,16 @@ export function JoinPage() {
                   disabled={isJoining}
                   className="w-full py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isJoining ? 'Joining...' : `Join as ${user.displayName || user.username}`}
+                  {isJoining ? t('auth:join.joining') : t('auth:join.joinAs', { name: user.displayName || user.username })}
                 </button>
                 <p className="text-center text-xs text-txt-tertiary">
-                  Not you?{' '}
+                  {t('auth:join.notYou')}{' '}
                   <button
                     type="button"
                     onClick={() => { logout(); navigate(`/login${redirectParam}`); }}
                     className="text-accent-primary hover:underline"
                   >
-                    Log in
+                    {t('auth:join.switchAccount')}
                   </button>
                   {' · '}
                   <button
@@ -328,7 +331,7 @@ export function JoinPage() {
                     onClick={() => { setPhase('other-instance'); setError(''); }}
                     className="text-accent-primary hover:underline"
                   >
-                    I use another instance
+                    {t('auth:join.otherInstance')}
                   </button>
                 </p>
               </div>
@@ -338,7 +341,7 @@ export function JoinPage() {
                 disabled
                 className="w-full py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Loading...
+                {t('common:states.loading')}
               </button>
             ) : (
               /* Unauthenticated user */
@@ -347,19 +350,19 @@ export function JoinPage() {
                   to={`/login${redirectParam}`}
                   className="block w-full py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors text-center"
                 >
-                  Log in to join
+                  {t('auth:join.loginToJoin')}
                 </Link>
                 <Link
                   to={`/register${redirectParam}`}
                   className="block w-full py-2.5 bg-surface-input hover:bg-surface-elevated text-txt-primary font-medium rounded transition-colors text-center"
                 >
-                  Create an account
+                  {t('auth:join.createAccount')}
                 </Link>
 
                 {/* Divider */}
                 <div className="flex items-center gap-3">
                   <div className="flex-1 h-px bg-border-soft" />
-                  <span className="text-xs text-txt-tertiary">or</span>
+                  <span className="text-xs text-txt-tertiary">{t('auth:join.or')}</span>
                   <div className="flex-1 h-px bg-border-soft" />
                 </div>
 
@@ -368,7 +371,7 @@ export function JoinPage() {
                   onClick={() => { setPhase('other-instance'); setError(''); }}
                   className="block w-full py-2.5 bg-surface-input hover:bg-surface-elevated text-txt-primary font-medium rounded transition-colors text-center"
                 >
-                  I use another instance
+                  {t('auth:join.otherInstance')}
                 </button>
               </div>
             )}
@@ -379,14 +382,14 @@ export function JoinPage() {
         {phase === 'other-instance' && (
           <form onSubmit={handleOtherInstanceRedirect}>
             <label className="block text-xs font-bold text-txt-secondary uppercase mb-1.5">
-              Your instance domain
+              {t('auth:join.domain.label')}
             </label>
             <div className="flex gap-2 mb-1.5">
               <input
                 type="text"
                 value={otherDomain}
                 onChange={(e) => setOtherDomain(e.target.value)}
-                placeholder="e.g. my-instance.com"
+                placeholder={t('auth:join.domain.placeholder')}
                 className="input-standard flex-1 py-2.5"
                 autoFocus
               />
@@ -395,18 +398,18 @@ export function JoinPage() {
                 disabled={!otherDomain.trim()}
                 className="px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
               >
-                Go
+                {t('auth:join.domain.go')}
               </button>
             </div>
             <p className="text-xs text-txt-tertiary mb-4">
-              You'll be redirected to your home instance to complete joining.
+              {t('auth:join.domain.redirectNote')}
             </p>
             <button
               type="button"
               onClick={() => { setPhase('preview'); setOtherDomain(''); setError(''); }}
               className="px-4 py-2.5 text-txt-tertiary hover:text-txt-secondary text-sm transition-colors"
             >
-              Back
+              {t('common:actions.back')}
             </button>
           </form>
         )}
@@ -429,24 +432,29 @@ export function JoinPage() {
               </div>
             </div>
             <p className="text-txt-tertiary text-xs mb-4">
-              Connecting to <span className="text-txt-secondary font-medium">{hostDisplay}</span>
+              <Trans
+                t={t}
+                i18nKey="auth:join.connect.connectingTo"
+                values={{ host: hostDisplay }}
+                components={{ host: <span className="text-txt-secondary font-medium" /> }}
+              />
             </p>
             <div className="mb-4">
               <label className="block text-xs font-bold text-txt-secondary uppercase mb-1.5">
-                Password
+                {t('auth:fields.password')}
               </label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Your account password"
+                placeholder={t('auth:join.connect.passwordPlaceholder')}
                 className="input-standard w-full py-2.5"
                 disabled={isJoining}
                 autoFocus
                 autoComplete="current-password"
               />
               <p className="text-xs text-txt-tertiary mt-1">
-                Your password is checked by your home instance and is never sent to {hostDisplay} — that instance gets a unique credential generated for it alone.
+                {t('auth:join.connect.passwordNote', { host: hostDisplay })}
               </p>
             </div>
             <div className="flex gap-2">
@@ -455,14 +463,14 @@ export function JoinPage() {
                 onClick={() => { setPhase('preview'); setPassword(''); setError(''); }}
                 className="px-4 py-2.5 text-txt-tertiary hover:text-txt-secondary text-sm transition-colors"
               >
-                Back
+                {t('common:actions.back')}
               </button>
               <button
                 type="submit"
                 disabled={isJoining || !password}
                 className="flex-1 py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isJoining ? 'Connecting...' : 'Connect & Join'}
+                {isJoining ? t('auth:join.connect.submitting') : t('auth:join.connect.submit')}
               </button>
             </div>
           </form>
@@ -477,28 +485,28 @@ export function JoinPage() {
         {phase === 'fallback' && (
           <form onSubmit={handleFallbackLogin}>
             <div className="mb-3 p-2 bg-accent-amber/10 border border-accent-amber/30 rounded text-xs text-accent-amber">
-              An account already exists on {hostDisplay} and it does not accept the credential your home instance issued. Sign in with the password you set on that instance — it will be switched to the issued credential afterwards.
+              {t('auth:join.fallback.notice', { host: hostDisplay })}
             </div>
             <div className="mb-4 space-y-3">
               <div>
-                <label className="block text-xs font-bold text-txt-secondary uppercase mb-1.5">Username</label>
+                <label className="block text-xs font-bold text-txt-secondary uppercase mb-1.5">{t('auth:fields.username')}</label>
                 <input
                   type="text"
                   value={fallbackUsername}
                   onChange={(e) => setFallbackUsername(e.target.value)}
-                  placeholder="Your username on this instance"
+                  placeholder={t('auth:join.fallback.usernamePlaceholder')}
                   className="input-standard w-full py-2.5"
                   disabled={isJoining}
                   autoComplete="username"
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-txt-secondary uppercase mb-1.5">Password for this instance</label>
+                <label className="block text-xs font-bold text-txt-secondary uppercase mb-1.5">{t('auth:join.fallback.passwordLabel')}</label>
                 <input
                   type="password"
                   value={fallbackPassword}
                   onChange={(e) => setFallbackPassword(e.target.value)}
-                  placeholder="Password on the remote instance"
+                  placeholder={t('auth:join.fallback.passwordPlaceholder')}
                   className="input-standard w-full py-2.5"
                   disabled={isJoining}
                   autoFocus
@@ -512,14 +520,14 @@ export function JoinPage() {
                 onClick={() => { setPhase('connect'); setFallbackPassword(''); setError(''); }}
                 className="px-4 py-2.5 text-txt-tertiary hover:text-txt-secondary text-sm transition-colors"
               >
-                Back
+                {t('common:actions.back')}
               </button>
               <button
                 type="submit"
                 disabled={isJoining || !fallbackUsername || !fallbackPassword}
                 className="flex-1 py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isJoining ? 'Logging in...' : 'Login & Join'}
+                {isJoining ? t('auth:join.fallback.submitting') : t('auth:join.fallback.submit')}
               </button>
             </div>
           </form>
@@ -530,6 +538,7 @@ export function JoinPage() {
 }
 
 function AlreadyMemberCard({ spaceName, spaceId, navigate }: { spaceName: string; spaceId: string; navigate: (path: string) => void }) {
+  const { t } = useTranslation(['auth']);
   useEffect(() => {
     const timer = setTimeout(() => navigate(`/channels/${spaceId}`), 2000);
     return () => clearTimeout(timer);
@@ -542,13 +551,13 @@ function AlreadyMemberCard({ spaceName, spaceId, navigate }: { spaceName: string
           <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
         </svg>
       </div>
-      <p className="text-txt-primary font-medium mb-1">You're already in {spaceName}!</p>
-      <p className="text-txt-tertiary text-xs mb-4">Redirecting you now...</p>
+      <p className="text-txt-primary font-medium mb-1">{t('auth:join.alreadyMember.title', { space: spaceName })}</p>
+      <p className="text-txt-tertiary text-xs mb-4">{t('auth:join.alreadyMember.redirecting')}</p>
       <button
         onClick={() => navigate(`/channels/${spaceId}`)}
         className="px-6 py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors"
       >
-        Go to {spaceName}
+        {t('auth:join.alreadyMember.go', { space: spaceName })}
       </button>
     </div>
   );
