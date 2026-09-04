@@ -8,7 +8,12 @@ import { connectionManager } from '../ws/handler.js';
 import { tombstoneUser, collectDeletionBroadcastTargets } from '../utils/userDeletion.js';
 import { deleteUploadFile } from '../utils/fileCleanup.js';
 import { sanitizeUser } from '../utils/sanitize.js';
+import { sendError, ERROR_MESSAGES } from '../utils/httpErrors.js';
 import type { AdminUser, AdminUserListResponse, AdminResetPasswordResponse } from '@backspace/shared';
+
+function reasonOf(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
 
 function toAdminUser(row: typeof schema.users.$inferSelect): AdminUser {
   return {
@@ -33,8 +38,8 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     try {
       const stats = getStorageStats();
       return reply.code(200).send(stats);
-    } catch (err: any) {
-      return reply.code(500).send({ error: `Failed to compute storage stats: ${err.message}`, statusCode: 500 });
+    } catch (err: unknown) {
+      return sendError(reply, 500, 'storage_stats_failed', { reason: reasonOf(err) });
     }
   });
 
@@ -43,8 +48,8 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     try {
       const orphans = getOrphanedFiles();
       return reply.code(200).send({ orphans });
-    } catch (err: any) {
-      return reply.code(500).send({ error: `Failed to list orphaned files: ${err.message}`, statusCode: 500 });
+    } catch (err: unknown) {
+      return sendError(reply, 500, 'storage_orphans_failed', { reason: reasonOf(err) });
     }
   });
 
@@ -54,8 +59,8 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       const dryRun = request.body?.dryRun ?? false;
       const result = cleanupStorage(dryRun);
       return reply.code(200).send(result);
-    } catch (err: any) {
-      return reply.code(500).send({ error: `Cleanup failed: ${err.message}`, statusCode: 500 });
+    } catch (err: unknown) {
+      return sendError(reply, 500, 'storage_cleanup_failed', { reason: reasonOf(err) });
     }
   });
 
@@ -64,13 +69,13 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     try {
       const maxAgeDays = Number(request.body?.maxAgeDays);
       if (isNaN(maxAgeDays) || maxAgeDays < 1) {
-        return reply.code(400).send({ error: 'maxAgeDays must be a positive number', statusCode: 400 });
+        return sendError(reply, 400, 'cleanup_age_invalid', { field: 'maxAgeDays' });
       }
       const dryRun = request.body?.dryRun ?? false;
       const result = cleanupOldMedia(maxAgeDays, dryRun);
       return reply.code(200).send(result);
-    } catch (err: any) {
-      return reply.code(500).send({ error: `Media cleanup failed: ${err.message}`, statusCode: 500 });
+    } catch (err: unknown) {
+      return sendError(reply, 500, 'media_cleanup_failed', { reason: reasonOf(err) });
     }
   });
 
@@ -83,7 +88,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       const rawAge = request.body?.maxAgeHours;
       const maxAgeHours = rawAge === undefined ? 1 : Number(rawAge);
       if (!Number.isFinite(maxAgeHours) || maxAgeHours <= 0) {
-        return reply.code(400).send({ error: 'maxAgeHours must be a positive finite number', statusCode: 400 });
+        return sendError(reply, 400, 'cleanup_age_invalid', { field: 'maxAgeHours' });
       }
       const dryRun = request.body?.dryRun ?? false;
       const thresholdMs = maxAgeHours * 60 * 60 * 1000;
@@ -95,8 +100,8 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         deletedAttachmentRecords: 0,
         errors: result.errors,
       });
-    } catch (err: any) {
-      return reply.code(500).send({ error: `Tus cleanup failed: ${err.message}`, statusCode: 500 });
+    } catch (err: unknown) {
+      return sendError(reply, 500, 'upload_session_cleanup_failed', { reason: reasonOf(err) });
     }
   });
 
@@ -210,21 +215,21 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       const { isAdmin } = request.body;
 
       if (typeof isAdmin !== 'boolean') {
-        return reply.code(400).send({ error: 'isAdmin must be a boolean', statusCode: 400 });
+        return sendError(reply, 400, 'field_not_boolean', { field: 'isAdmin' });
       }
 
       const db = getDb();
       const target = db.select().from(schema.users).where(eq(schema.users.id, targetId)).get();
       if (!target) {
-        return reply.code(404).send({ error: 'User not found', statusCode: 404 });
+        return sendError(reply, 404, 'user_not_found');
       }
       if (target.isDeleted === 1) {
-        return reply.code(400).send({ error: 'Cannot change role of a deleted user', statusCode: 400 });
+        return sendError(reply, 400, 'deleted_user_role_change');
       }
 
       // Promote: block federated users
       if (isAdmin && target.homeInstance) {
-        return reply.code(403).send({ error: 'Federated users cannot be promoted to admin', statusCode: 403 });
+        return sendError(reply, 403, 'federated_user_cannot_be_admin');
       }
 
       // Demote: prevent removing the last admin
@@ -234,7 +239,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
           .where(and(eq(schema.users.isAdmin, 1), eq(schema.users.isDeleted, 0)))
           .get();
         if ((adminCount?.count ?? 0) <= 1) {
-          return reply.code(400).send({ error: 'Cannot demote the last admin', statusCode: 400 });
+          return sendError(reply, 400, 'last_admin_cannot_be_demoted');
         }
       }
 
@@ -265,13 +270,13 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
 
       const target = db.select().from(schema.users).where(eq(schema.users.id, targetId)).get();
       if (!target) {
-        return reply.code(404).send({ error: 'User not found', statusCode: 404 });
+        return sendError(reply, 404, 'user_not_found');
       }
       if (target.isDeleted === 1) {
-        return reply.code(400).send({ error: 'Cannot reset password of a deleted user', statusCode: 400 });
+        return sendError(reply, 400, 'deleted_user_password_reset');
       }
       if (target.homeInstance) {
-        return reply.code(400).send({ error: 'Federated users authenticate via their home instance', statusCode: 400 });
+        return sendError(reply, 400, 'federated_user_password_managed_by_home');
       }
 
       const temporaryPassword = crypto.randomBytes(12).toString('base64url');
@@ -299,15 +304,15 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       const db = getDb();
 
       if (targetId === request.userId) {
-        return reply.code(400).send({ error: 'Use account settings to delete your own account', statusCode: 400 });
+        return sendError(reply, 400, 'admin_cannot_delete_self');
       }
 
       const target = db.select().from(schema.users).where(eq(schema.users.id, targetId)).get();
       if (!target) {
-        return reply.code(404).send({ error: 'User not found', statusCode: 404 });
+        return sendError(reply, 404, 'user_not_found');
       }
       if (target.isDeleted === 1) {
-        return reply.code(400).send({ error: 'User is already deleted', statusCode: 400 });
+        return sendError(reply, 400, 'user_already_deleted');
       }
 
       // Check if user owns any spaces
@@ -316,8 +321,11 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         .where(eq(schema.spaces.ownerId, targetId))
         .all();
       if (ownedSpaces.length > 0) {
+        // Carries the list of spaces on top of the shared error shape, so the
+        // panel can name them; sendError has no slot for extra fields.
         return reply.code(400).send({
-          error: 'User owns spaces — transfer ownership first',
+          error: ERROR_MESSAGES.user_owns_spaces,
+          code: 'user_owns_spaces',
           statusCode: 400,
           ownedSpaces,
         });

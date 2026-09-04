@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { authenticate } from '../utils/auth.js';
+import { sendError } from '../utils/httpErrors.js';
 import { fetchUrlMetadata } from '../utils/metadataFetcher.js';
 
 export async function utilRoutes(app: FastifyInstance): Promise<void> {
@@ -9,7 +10,7 @@ export async function utilRoutes(app: FastifyInstance): Promise<void> {
     const { url } = request.query;
 
     if (!url) {
-      return reply.code(400).send({ error: 'URL is required' });
+      return sendError(reply, 400, 'validation_failed');
     }
 
     const metadata = await fetchUrlMetadata(url);
