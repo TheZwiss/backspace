@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { formatters } from '../../i18n/formatters';
+import { useTranslation, Trans } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import ReactDOM from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import type {
@@ -15,6 +16,10 @@ import { useUIStore } from '../../stores/uiStore';
 import { useFederationStore } from '../../stores/federationStore';
 import { isElectron } from '../../platform/platform';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { useFormatters, type Formatters } from '../../i18n/formatters';
+import { describeError } from '../../i18n/errors';
+
+type FederationT = TFunction<['federation', 'common']>;
 
 // ─── URL helpers ─────────────────────────────────────────────────────────────
 
@@ -54,30 +59,21 @@ function registryStatusDotColor(status: string): string {
   }
 }
 
-function registryStatusLabel(status: string): string {
+function registryStatusLabel(t: FederationT, status: string): string {
   switch (status) {
-    case 'connected': return 'Connected';
-    case 'disconnected': return 'Disconnected';
-    case 'unreachable': return 'Unreachable';
-    case 'auth_expired': return 'Auth Expired';
+    case 'connected': return t('federation:connections.status.connected');
+    case 'disconnected': return t('federation:connections.status.disconnected');
+    case 'unreachable': return t('federation:connections.status.unreachable');
+    case 'auth_expired': return t('federation:connections.status.authExpired');
     default: return status;
   }
 }
 
-function formatRelativeTime(timestamp: number | null): string {
-  if (!timestamp) return 'Never';
-  const seconds = Math.floor((Date.now() - timestamp) / 1000);
-  if (seconds < 60) return 'Just now';
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-}
-
-function formatAbsoluteDate(timestamp: number): string {
-  return formatters.formatMediumDate(timestamp);
+/** "Never" for a missing timestamp, "Just now" under a minute, otherwise the elapsed time. */
+function formatRelativeTime(t: FederationT, formatters: Formatters, timestamp: number | null): string {
+  if (!timestamp) return t('federation:time.never');
+  if (Date.now() - timestamp < 60_000) return t('federation:time.justNow');
+  return formatters.formatRelativeTime(timestamp);
 }
 
 // ─── Add Instance flow ───────────────────────────────────────────────────────
@@ -86,6 +82,7 @@ type AddStep = 'url' | 'auth' | 'done';
 type AuthPhase = 'password' | 'fallback-login';
 
 function AddInstanceFlow({ onDone }: { onDone: () => void }) {
+  const { t } = useTranslation(['federation', 'common']);
   const user = useAuthStore((s) => s.user);
   const connectToRemote = useInstanceStore((s) => s.connectToRemote);
   const loginToRemote = useInstanceStore((s) => s.loginToRemote);
@@ -110,7 +107,7 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
       setAuthPhase('password');
       setStep('auth');
     } catch (err) {
-      setError((err as Error).message);
+      setError(describeError(err));
     } finally {
       setIsLoading(false);
     }
@@ -135,7 +132,7 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
         setFallbackPassword('');
         setError('');
       } else {
-        setError((err as Error).message);
+        setError(describeError(err));
       }
     } finally {
       setIsLoading(false);
@@ -151,7 +148,7 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
       setStep('done');
       onDone();
     } catch (err) {
-      setError((err as Error).message);
+      setError(describeError(err));
     } finally {
       setIsLoading(false);
     }
@@ -164,14 +161,14 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
       {/* Step 1: Enter URL */}
       {step === 'url' && (
         <>
-          <div className="text-sm text-txt-primary font-medium">Add Remote Instance</div>
+          <div className="text-sm text-txt-primary font-medium">{t('federation:connections.add.title')}</div>
           <div className="flex gap-2">
             <input
               type="text"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && !isLoading && url.trim() && handleProbe()}
-              placeholder="https://instance.example.com"
+              placeholder={t('federation:connections.add.urlPlaceholder')}
               className="input-standard flex-1"
               disabled={isLoading}
             />
@@ -180,14 +177,14 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
               disabled={isLoading || !url.trim()}
               className="px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
             >
-              {isLoading ? 'Probing...' : 'Connect'}
+              {isLoading ? t('federation:connections.add.probing') : t('federation:connections.add.connect')}
             </button>
           </div>
           <button
             onClick={onDone}
             className="text-xs text-txt-tertiary hover:text-txt-secondary transition-colors"
           >
-            Cancel
+            {t('common:actions.cancel')}
           </button>
         </>
       )}
@@ -206,7 +203,7 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
 
           {!probeResult.federatedRegistrationOpen && (
             <div className="mb-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-sm text-amber-300">
-              This instance has disabled new federated registrations. Existing accounts can still sign in.
+              {t('federation:connections.add.registrationClosed')}
             </div>
           )}
 
@@ -214,20 +211,20 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
             <input type="text" autoComplete="username" value={user?.username || ''} readOnly tabIndex={-1} className="sr-only" />
             <div>
               <label className="block text-xs text-txt-tertiary mb-1">
-                Enter your password to connect to {new URL(probeResult.origin).host}
+                {t('federation:connections.add.passwordLabel', { host: new URL(probeResult.origin).host })}
               </label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Your account password"
+                placeholder={t('federation:connections.add.passwordPlaceholder')}
                 className="input-standard w-full"
                 disabled={isLoading}
                 autoFocus
                 autoComplete="current-password"
               />
               <div className="text-xs text-txt-tertiary mt-1">
-                Your password is checked by your home instance and is never sent to {new URL(probeResult.origin).host} — that instance gets a unique credential generated for it alone.
+                {t('federation:connections.add.passwordHint', { host: new URL(probeResult.origin).host })}
               </div>
             </div>
             <button
@@ -235,7 +232,7 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
               disabled={isLoading || !password}
               className="w-full px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
             >
-              {isLoading ? 'Connecting...' : 'Connect'}
+              {isLoading ? t('federation:connections.add.connecting') : t('federation:connections.add.connect')}
             </button>
           </form>
 
@@ -244,13 +241,13 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
               onClick={() => { setStep('url'); setProbeResult(null); setError(''); }}
               className="text-xs text-txt-tertiary hover:text-txt-secondary transition-colors"
             >
-              Back
+              {t('common:actions.back')}
             </button>
             <button
               onClick={onDone}
               className="text-xs text-txt-tertiary hover:text-txt-secondary transition-colors"
             >
-              Cancel
+              {t('common:actions.cancel')}
             </button>
           </div>
         </>
@@ -269,29 +266,29 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
           </div>
 
           <div className="p-2 bg-accent-amber/10 border border-accent-amber/30 rounded text-xs text-accent-amber">
-            An account already exists on this instance and it does not accept the credential your home instance issued. Sign in with the password you set on that instance — it will be switched to the issued credential afterwards.
+            {t('federation:connections.add.fallbackNotice')}
           </div>
 
           <form onSubmit={(e) => { e.preventDefault(); handleFallbackLogin(); }} className="space-y-2">
             <div>
-              <label className="block text-xs text-txt-tertiary mb-1">Username</label>
+              <label className="block text-xs text-txt-tertiary mb-1">{t('federation:connections.add.usernameLabel')}</label>
               <input
                 type="text"
                 value={fallbackUsername}
                 onChange={(e) => setFallbackUsername(e.target.value)}
-                placeholder="Your username on this instance"
+                placeholder={t('federation:connections.add.usernamePlaceholder')}
                 className="input-standard w-full"
                 disabled={isLoading}
                 autoComplete="username"
               />
             </div>
             <div>
-              <label className="block text-xs text-txt-tertiary mb-1">Password for this instance</label>
+              <label className="block text-xs text-txt-tertiary mb-1">{t('federation:connections.add.remotePasswordLabel')}</label>
               <input
                 type="password"
                 value={fallbackPassword}
                 onChange={(e) => setFallbackPassword(e.target.value)}
-                placeholder="Password on the remote instance"
+                placeholder={t('federation:connections.add.remotePasswordPlaceholder')}
                 className="input-standard w-full"
                 disabled={isLoading}
                 autoFocus
@@ -303,7 +300,7 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
               disabled={isLoading || !fallbackUsername || !fallbackPassword}
               className="w-full px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
             >
-              {isLoading ? 'Logging in...' : 'Login & Connect'}
+              {isLoading ? t('federation:connections.add.loggingIn') : t('federation:connections.add.loginAndConnect')}
             </button>
           </form>
 
@@ -312,13 +309,13 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
               onClick={() => { setAuthPhase('password'); setPassword(''); setError(''); }}
               className="text-xs text-txt-tertiary hover:text-txt-secondary transition-colors"
             >
-              Back
+              {t('common:actions.back')}
             </button>
             <button
               onClick={onDone}
               className="text-xs text-txt-tertiary hover:text-txt-secondary transition-colors"
             >
-              Cancel
+              {t('common:actions.cancel')}
             </button>
           </div>
         </>
@@ -354,19 +351,20 @@ function RegistryFilterBar({
   setSortBy: (s: SortBy) => void;
   counts: { all: number; connected: number; disconnected: number; issues: number };
 }) {
+  const { t } = useTranslation(['federation', 'common']);
   const [sortOpen, setSortOpen] = useState(false);
 
   const tabs: Array<{ key: StatusFilter; label: string; count: number }> = [
-    { key: 'all', label: 'All', count: counts.all },
-    { key: 'connected', label: 'Connected', count: counts.connected },
-    { key: 'disconnected', label: 'Disconnected', count: counts.disconnected },
-    { key: 'issues', label: 'Issues', count: counts.issues },
+    { key: 'all', label: t('federation:connections.filter.all'), count: counts.all },
+    { key: 'connected', label: t('federation:connections.filter.connected'), count: counts.connected },
+    { key: 'disconnected', label: t('federation:connections.filter.disconnected'), count: counts.disconnected },
+    { key: 'issues', label: t('federation:connections.filter.issues'), count: counts.issues },
   ];
 
   const sortOptions: Array<{ key: SortBy; label: string }> = [
-    { key: 'name', label: 'Name (A-Z)' },
-    { key: 'dateAdded', label: 'Date Added' },
-    { key: 'lastConnected', label: 'Last Connected' },
+    { key: 'name', label: t('federation:connections.sort.name') },
+    { key: 'dateAdded', label: t('federation:connections.sort.dateAdded') },
+    { key: 'lastConnected', label: t('federation:connections.sort.lastConnected') },
   ];
 
   return (
@@ -395,7 +393,7 @@ function RegistryFilterBar({
           <svg width="12" height="12" viewBox="0 0 16 16" fill="none" className="opacity-60">
             <path d="M2 4h12M4 8h8M6 12h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
           </svg>
-          Sort
+          {t('federation:connections.sort.button')}
           <span className="text-[10px]">&#9662;</span>
         </button>
 
@@ -403,7 +401,7 @@ function RegistryFilterBar({
           <>
             <div className="fixed inset-0 z-40" onClick={() => setSortOpen(false)} />
             <div className="absolute right-0 top-full mt-1 z-50 glass rounded-lg p-1.5 w-44">
-              <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-2 py-1">Sort by</div>
+              <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-2 py-1">{t('federation:connections.sort.heading')}</div>
               {sortOptions.map((opt) => (
                 <button
                   key={opt.key}
@@ -438,6 +436,7 @@ function DeleteIdentityDialog({
   label: string;
   onClose: () => void;
 }) {
+  const { t } = useTranslation(['federation', 'common']);
   const deleteIdentity = useInstanceStore((s) => s.deleteIdentity);
   const registry = useInstanceStore((s) => s.registry);
   const [mode, setMode] = useState<DeletionMode>('leave');
@@ -472,10 +471,8 @@ function DeleteIdentityDialog({
     if (failed.length === 0) {
       useUIStore.getState().addToast(
         mode === 'leave'
-          ? 'Disconnected successfully'
-          : targetOrigins.length === 1
-            ? 'Identity deleted successfully'
-            : `Identity deleted on ${targetOrigins.length} instances`,
+          ? t('federation:connections.deleteIdentity.toast.disconnected')
+          : t('federation:connections.deleteIdentity.toast.deleted', { count: targetOrigins.length }),
         'success',
         3000,
       );
@@ -486,13 +483,16 @@ function DeleteIdentityDialog({
         try { host = new URL(failOrigin).hostname; } catch { host = failOrigin; }
         if (result.error === 'owns_spaces') {
           useUIStore.getState().addToast(
-            `${host}: Transfer space ownership first`,
+            t('federation:connections.deleteIdentity.toast.ownsSpaces', { host }),
             'warning',
             5000,
           );
         } else {
           useUIStore.getState().addToast(
-            `${host}: ${result.error || 'Failed'}`,
+            t('federation:connections.deleteIdentity.toast.failed', {
+              host,
+              error: result.error || t('federation:connections.deleteIdentity.toast.failedGeneric'),
+            }),
             'warning',
             5000,
           );
@@ -508,6 +508,12 @@ function DeleteIdentityDialog({
     }
   };
 
+  const scopeOptions: Array<{ key: DeletionScope; label: string }> = [
+    { key: 'this', label: t('federation:connections.deleteIdentity.scope.this') },
+    { key: 'select', label: t('federation:connections.deleteIdentity.scope.select') },
+    { key: 'all', label: t('federation:connections.deleteIdentity.scope.all') },
+  ];
+
   return ReactDOM.createPortal(
     <div className="fixed inset-0 z-[10000] flex items-center justify-center animate-fade-in">
       <div
@@ -515,9 +521,14 @@ function DeleteIdentityDialog({
         onClick={loading ? undefined : onClose}
       />
       <div className="relative max-w-md w-full mx-4 glass-modal rounded-xl p-6 animate-slide-up">
-        <h3 className="text-base font-semibold text-txt-primary mb-1">Delete Identity</h3>
+        <h3 className="text-base font-semibold text-txt-primary mb-1">{t('federation:connections.deleteIdentity.title')}</h3>
         <p className="text-xs text-txt-tertiary mb-4">
-          Remove your federated identity on <span className="text-txt-secondary font-medium">{label}</span>. Choose how your data should be handled.
+          <Trans
+            t={t}
+            i18nKey="federation:connections.deleteIdentity.description"
+            values={{ name: label }}
+            components={{ name: <span className="text-txt-secondary font-medium" /> }}
+          />
         </p>
 
         {/* Deletion mode selection */}
@@ -533,9 +544,9 @@ function DeleteIdentityDialog({
                 : 'bg-transparent border-white/[0.04] hover:border-white/[0.06]'
             } disabled:opacity-50`}
           >
-            <div className="text-sm font-medium text-txt-primary">Leave quietly</div>
+            <div className="text-sm font-medium text-txt-primary">{t('federation:connections.deleteIdentity.leave.title')}</div>
             <div className="text-[11px] text-txt-tertiary mt-0.5">
-              Disconnect from this instance. Your account and all data remain.
+              {t('federation:connections.deleteIdentity.leave.description')}
             </div>
           </button>
 
@@ -550,9 +561,9 @@ function DeleteIdentityDialog({
                 : 'bg-transparent border-white/[0.04] hover:border-white/[0.06]'
             } disabled:opacity-50`}
           >
-            <div className="text-sm font-medium text-txt-primary">Delete User</div>
+            <div className="text-sm font-medium text-txt-primary">{t('federation:connections.deleteIdentity.soft.title')}</div>
             <div className="text-[11px] text-txt-tertiary mt-0.5">
-              Delete your account but keep your messages. You appear as &lsquo;Deleted User&rsquo;.
+              {t('federation:connections.deleteIdentity.soft.description')}
             </div>
           </button>
 
@@ -568,35 +579,28 @@ function DeleteIdentityDialog({
             } disabled:opacity-50`}
           >
             <div className={`text-sm font-medium ${mode === 'full' ? 'text-txt-danger' : 'text-txt-primary'}`}>
-              Nuke everything
+              {t('federation:connections.deleteIdentity.full.title')}
             </div>
             <div className="text-[11px] text-txt-tertiary mt-0.5">
-              Delete your account and all your messages, DMs, reactions, and files. Nothing remains.
+              {t('federation:connections.deleteIdentity.full.description')}
             </div>
           </button>
         </div>
 
         {/* Scope selector */}
         <div className="mb-4">
-          <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">Scope</div>
+          <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">{t('federation:connections.deleteIdentity.scope.heading')}</div>
           <div className="flex gap-1.5">
-            {([
-              { key: 'this' as DeletionScope, label: 'This instance only', disabled: false },
-              { key: 'select' as DeletionScope, label: 'Select instances...', disabled: false },
-              { key: 'all' as DeletionScope, label: 'All remote instances', disabled: false },
-            ]).map((opt) => (
+            {scopeOptions.map((opt) => (
               <button
                 key={opt.key}
                 type="button"
-                onClick={() => !opt.disabled && setScope(opt.key)}
-                disabled={opt.disabled || loading}
-                title={opt.disabled ? 'Coming soon' : undefined}
+                onClick={() => setScope(opt.key)}
+                disabled={loading}
                 className={`flex-1 px-2 py-1.5 text-[11px] font-medium rounded transition-colors ${
-                  opt.disabled
-                    ? 'bg-white/[0.02] text-txt-tertiary/40 cursor-not-allowed'
-                    : scope === opt.key
-                      ? 'bg-accent-lavender/15 text-accent-lavender'
-                      : 'bg-white/[0.04] text-txt-tertiary hover:text-txt-secondary'
+                  scope === opt.key
+                    ? 'bg-accent-lavender/15 text-accent-lavender'
+                    : 'bg-white/[0.04] text-txt-tertiary hover:text-txt-secondary'
                 }`}
               >
                 {opt.label}
@@ -643,14 +647,18 @@ function DeleteIdentityDialog({
             disabled={loading}
             className="flex-1 py-2.5 text-sm font-medium text-txt-secondary bg-interactive-hover hover:bg-interactive-selected rounded-lg transition-colors disabled:opacity-50"
           >
-            Cancel
+            {t('common:actions.cancel')}
           </button>
           <button
             onClick={handleConfirm}
             disabled={loading || (scope === 'select' && selectedOrigins.size === 0)}
             className="flex-1 py-2.5 bg-accent-rose hover:bg-accent-rose/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? 'Deleting...' : mode === 'leave' ? 'Disconnect' : 'Delete Identity'}
+            {loading
+              ? t('federation:connections.deleteIdentity.deleting')
+              : mode === 'leave'
+                ? t('federation:connections.deleteIdentity.disconnect')
+                : t('federation:connections.deleteIdentity.confirm')}
           </button>
         </div>
       </div>
@@ -670,6 +678,8 @@ function RegistryRow({
   expanded: boolean;
   onToggleExpand: () => void;
 }) {
+  const { t } = useTranslation(['federation', 'common']);
+  const formatters = useFormatters();
   const instances = useInstanceStore((s) => s.instances);
   const disconnectInstance = useInstanceStore((s) => s.disconnectInstance);
   const reconnectInstance = useInstanceStore((s) => s.reconnectInstance);
@@ -692,23 +702,21 @@ function RegistryRow({
   const liveInstance = instances.find((i) => i.origin === entry.origin);
 
   // Build context-dependent metadata line
-  let metadataText = '';
+  const metadataParts: string[] = [
+    t('federation:connections.row.added', { date: formatters.formatMediumDate(entry.addedAt) }),
+  ];
   if (isConnected) {
-    metadataText = `Added ${formatAbsoluteDate(entry.addedAt)}`;
     if (entry.lastConnectedAt) {
-      metadataText += ` · Connected ${formatRelativeTime(entry.lastConnectedAt)}`;
+      metadataParts.push(t('federation:connections.row.connectedAgo', { time: formatRelativeTime(t, formatters, entry.lastConnectedAt) }));
     }
   } else if (isDisconnected) {
-    metadataText = `Added ${formatAbsoluteDate(entry.addedAt)}`;
     if (entry.disconnectedAt) {
-      metadataText += ` · Disconnected ${formatRelativeTime(entry.disconnectedAt)}`;
+      metadataParts.push(t('federation:connections.row.disconnectedAgo', { time: formatRelativeTime(t, formatters, entry.disconnectedAt) }));
     }
-  } else {
-    metadataText = `Added ${formatAbsoluteDate(entry.addedAt)}`;
-    if (entry.lastConnectedAt) {
-      metadataText += ` · Last connected ${formatRelativeTime(entry.lastConnectedAt)}`;
-    }
+  } else if (entry.lastConnectedAt) {
+    metadataParts.push(t('federation:connections.row.lastConnectedAgo', { time: formatRelativeTime(t, formatters, entry.lastConnectedAt) }));
   }
+  const metadataText = metadataParts.join(' · ');
 
   const handleDisconnect = () => {
     disconnectInstance(entry.origin);
@@ -734,7 +742,7 @@ function RegistryRow({
       setShowReauth(false);
       setReauthPassword('');
     } catch (err) {
-      setReauthError((err as Error).message);
+      setReauthError(describeError(err));
     } finally {
       setReauthLoading(false);
     }
@@ -754,19 +762,19 @@ function RegistryRow({
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium text-txt-primary truncate">{name}</span>
                 <span className={`inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded ${registryStatusColor(entry.status)}`}>
-                  {registryStatusLabel(entry.status)}
+                  {registryStatusLabel(t, entry.status)}
                 </span>
               </div>
               <div className="text-[11px] text-txt-tertiary truncate">
                 {safeHost(entry.origin)}
                 {entry.username && (
-                  <span className="ml-1">as {entry.username}</span>
+                  <span className="ml-1">{t('federation:connections.row.asUser', { username: entry.username })}</span>
                 )}
               </div>
               <div className="text-[10px] text-txt-tertiary">{metadataText}</div>
             </div>
           </div>
-          <span className="text-txt-tertiary text-xs shrink-0 ml-2">{expanded ? '\u25BE' : '\u25B8'}</span>
+          <span className="text-txt-tertiary text-xs shrink-0 ml-2">{expanded ? '▾' : '▸'}</span>
         </div>
 
         {/* Expanded details */}
@@ -776,26 +784,26 @@ function RegistryRow({
               {/* Stats grid */}
               <div className="grid grid-cols-3 gap-3 mb-3">
                 <div>
-                  <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider mb-0.5">Remote User ID</div>
-                  <div className="text-xs text-txt-secondary truncate" title={entry.remoteUserId || 'Unknown'}>
-                    {entry.remoteUserId ? entry.remoteUserId.slice(0, 12) + '...' : 'Unknown'}
+                  <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider mb-0.5">{t('federation:connections.row.remoteUserId')}</div>
+                  <div className="text-xs text-txt-secondary truncate" title={entry.remoteUserId || t('common:states.unknown')}>
+                    {entry.remoteUserId ? entry.remoteUserId.slice(0, 12) + '...' : t('common:states.unknown')}
                   </div>
                 </div>
                 <div>
-                  <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider mb-0.5">Added</div>
-                  <div className="text-xs text-txt-secondary">{formatAbsoluteDate(entry.addedAt)}</div>
+                  <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider mb-0.5">{t('federation:connections.row.addedLabel')}</div>
+                  <div className="text-xs text-txt-secondary">{formatters.formatMediumDate(entry.addedAt)}</div>
                 </div>
                 <div>
                   {isDisconnected && entry.disconnectedAt ? (
                     <>
-                      <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider mb-0.5">Disconnected</div>
-                      <div className="text-xs text-txt-secondary">{formatAbsoluteDate(entry.disconnectedAt)}</div>
+                      <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider mb-0.5">{t('federation:connections.row.disconnectedLabel')}</div>
+                      <div className="text-xs text-txt-secondary">{formatters.formatMediumDate(entry.disconnectedAt)}</div>
                     </>
                   ) : (
                     <>
-                      <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider mb-0.5">Last Connected</div>
+                      <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider mb-0.5">{t('federation:connections.row.lastConnectedLabel')}</div>
                       <div className="text-xs text-txt-secondary">
-                        {entry.lastConnectedAt ? formatAbsoluteDate(entry.lastConnectedAt) : 'Never'}
+                        {entry.lastConnectedAt ? formatters.formatMediumDate(entry.lastConnectedAt) : t('federation:time.never')}
                       </div>
                     </>
                   )}
@@ -818,7 +826,7 @@ function RegistryRow({
                       type="password"
                       value={reauthPassword}
                       onChange={(e) => setReauthPassword(e.target.value)}
-                      placeholder="Your home account password"
+                      placeholder={t('federation:connections.row.homePasswordPlaceholder')}
                       className="input-standard flex-1 py-1.5"
                       disabled={reauthLoading}
                       autoFocus
@@ -829,14 +837,14 @@ function RegistryRow({
                       disabled={reauthLoading || !reauthPassword}
                       className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-xs font-medium rounded transition-colors disabled:opacity-50"
                     >
-                      {reauthLoading ? 'Connecting...' : 'Connect'}
+                      {reauthLoading ? t('federation:connections.add.connecting') : t('federation:connections.add.connect')}
                     </button>
                     <button
                       type="button"
                       onClick={() => { setShowReauth(false); setReauthPassword(''); setReauthError(''); }}
                       className="px-2 py-1.5 text-xs text-txt-tertiary hover:text-txt-secondary transition-colors"
                     >
-                      Cancel
+                      {t('common:actions.cancel')}
                     </button>
                   </div>
                   {reauthError && (
@@ -856,15 +864,15 @@ function RegistryRow({
                       onClick={(e) => { e.stopPropagation(); handleDisconnect(); }}
                       className="px-3 py-1.5 text-xs font-medium bg-white/[0.06] hover:bg-white/[0.1] text-txt-secondary rounded transition-colors"
                     >
-                      Disconnect
+                      {t('federation:connections.row.disconnect')}
                     </button>
                     <button
                       type="button"
                       disabled
                       className="px-3 py-1.5 text-xs font-medium bg-accent-rose/10 text-txt-danger rounded opacity-50 cursor-not-allowed"
-                      title="Disconnect first to delete identity"
+                      title={t('federation:connections.row.deleteIdentityDisabled')}
                     >
-                      Delete Identity
+                      {t('federation:connections.row.deleteIdentity')}
                     </button>
                   </>
                 )}
@@ -877,7 +885,7 @@ function RegistryRow({
                         onClick={(e) => { e.stopPropagation(); handleReconnect(); }}
                         className="px-3 py-1.5 text-xs font-medium bg-accent-lavender/15 text-accent-lavender hover:bg-accent-lavender/25 rounded transition-colors"
                       >
-                        Reconnect
+                        {t('federation:connections.row.reconnect')}
                       </button>
                     )}
                     <button
@@ -885,14 +893,14 @@ function RegistryRow({
                       onClick={(e) => { e.stopPropagation(); setShowReauth((v) => !v); }}
                       className="px-3 py-1.5 text-xs font-medium bg-accent-amber/15 text-accent-amber hover:bg-accent-amber/25 rounded transition-colors"
                     >
-                      Re-authenticate
+                      {t('federation:connections.row.reauthenticate')}
                     </button>
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); setShowDeleteIdentity(true); }}
                       className="px-3 py-1.5 text-xs font-medium bg-accent-rose/10 text-txt-danger hover:bg-accent-rose/20 rounded transition-colors"
                     >
-                      Delete Identity
+                      {t('federation:connections.row.deleteIdentity')}
                     </button>
                   </>
                 )}
@@ -905,7 +913,7 @@ function RegistryRow({
                         onClick={(e) => { e.stopPropagation(); handleReconnect(); }}
                         className="px-3 py-1.5 text-xs font-medium bg-accent-lavender/15 text-accent-lavender hover:bg-accent-lavender/25 rounded transition-colors"
                       >
-                        Reconnect
+                        {t('federation:connections.row.reconnect')}
                       </button>
                     )}
                     {entry.status === 'auth_expired' && (
@@ -914,7 +922,7 @@ function RegistryRow({
                         onClick={(e) => { e.stopPropagation(); setShowReauth((v) => !v); }}
                         className="px-3 py-1.5 text-xs font-medium bg-accent-amber/15 text-accent-amber hover:bg-accent-amber/25 rounded transition-colors"
                       >
-                        Re-authenticate
+                        {t('federation:connections.row.reauthenticate')}
                       </button>
                     )}
                     <button
@@ -922,14 +930,14 @@ function RegistryRow({
                       onClick={(e) => { e.stopPropagation(); setShowForceRemoveConfirm(true); }}
                       className="px-3 py-1.5 text-xs font-medium bg-white/[0.06] hover:bg-white/[0.1] text-txt-secondary rounded transition-colors"
                     >
-                      Force Remove
+                      {t('federation:connections.row.forceRemove')}
                     </button>
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); setShowDeleteIdentity(true); }}
                       className="px-3 py-1.5 text-xs font-medium bg-accent-rose/10 text-txt-danger hover:bg-accent-rose/20 rounded transition-colors"
                     >
-                      Delete Identity
+                      {t('federation:connections.row.deleteIdentity')}
                     </button>
                   </>
                 )}
@@ -944,9 +952,9 @@ function RegistryRow({
         isOpen={showForceRemoveConfirm}
         onClose={() => setShowForceRemoveConfirm(false)}
         onConfirm={handleForceRemove}
-        title="Force Remove Entry"
-        description={`This will remove the registry entry for ${name}. The remote instance will not be notified. Use this only if the instance is permanently unreachable.`}
-        confirmLabel="Force Remove"
+        title={t('federation:connections.forceRemove.title')}
+        description={t('federation:connections.forceRemove.description', { name })}
+        confirmLabel={t('federation:connections.forceRemove.confirm')}
         variant="warning"
       />
 
@@ -984,25 +992,26 @@ function sortEntries(entries: FederationRegistryEntry[], sortBy: SortBy): Federa
 
 // ─── Outbound peering gate helpers ──────────────────────────────────────────
 
-function actionLabel(reason: PeeringTriggerReason): string {
+function actionLabel(t: FederationT, reason: PeeringTriggerReason): string {
   switch (reason) {
-    case 'friend_add': return 'friend request';
-    case 'space_join': return 'space join';
-    case 'direct_message': return 'direct message';
+    case 'friend_add': return t('federation:connections.action.friendRequest');
+    case 'space_join': return t('federation:connections.action.spaceJoin');
+    case 'direct_message': return t('federation:connections.action.directMessage');
   }
 }
 
-function actionVerbPhrase(reason: PeeringTriggerReason, target: string): string {
+function actionVerbPhrase(t: FederationT, reason: PeeringTriggerReason, target: string): string {
   switch (reason) {
-    case 'friend_add': return `Friend request to ${target}`;
-    case 'space_join': return `Join ${target}`;
-    case 'direct_message': return `Direct message to ${target}`;
+    case 'friend_add': return t('federation:connections.action.friendRequestTo', { target });
+    case 'space_join': return t('federation:connections.action.joinSpace', { target });
+    case 'direct_message': return t('federation:connections.action.directMessageTo', { target });
   }
 }
 
 // ─── Pending peering subscriptions section ──────────────────────────────────
 
 function PendingSubscriptionRow({ subscription }: { subscription: PeeringSubscription }) {
+  const { t } = useTranslation(['federation', 'common']);
   const cancelPeeringSubscription = useFederationStore((s) => s.cancelPeeringSubscription);
   const addToast = useUIStore((s) => s.addToast);
   const [busy, setBusy] = useState(false);
@@ -1014,10 +1023,10 @@ function PendingSubscriptionRow({ subscription }: { subscription: PeeringSubscri
     setBusy(true);
     try {
       await cancelPeeringSubscription(subscription.id);
-      addToast('Peering request cancelled', 'success', 3000);
+      addToast(t('federation:connections.pending.cancelled'), 'success', 3000);
     } catch (err) {
       addToast(
-        `Failed to cancel: ${err instanceof Error ? err.message : 'Unknown error'}`,
+        t('federation:connections.pending.cancelFailed', { error: describeError(err) }),
         'warning',
         5000,
       );
@@ -1029,10 +1038,15 @@ function PendingSubscriptionRow({ subscription }: { subscription: PeeringSubscri
     <div className="bg-white/[0.02] rounded-md px-3 py-2.5 flex items-center justify-between gap-3">
       <div className="min-w-0">
         <div className="text-sm text-txt-primary truncate">
-          {actionVerbPhrase(subscription.triggerReason, subscription.triggerTarget)}
+          {actionVerbPhrase(t, subscription.triggerReason, subscription.triggerTarget)}
         </div>
         <div className="text-[11px] text-txt-tertiary truncate">
-          on <span className="text-txt-secondary">{peerLabel}</span>
+          <Trans
+            t={t}
+            i18nKey="federation:connections.pending.onPeer"
+            values={{ peer: peerLabel }}
+            components={{ peer: <span className="text-txt-secondary" /> }}
+          />
           {subscription.peerInstanceName && (
             <span className="ml-1 text-txt-tertiary/70">({host})</span>
           )}
@@ -1044,13 +1058,14 @@ function PendingSubscriptionRow({ subscription }: { subscription: PeeringSubscri
         disabled={busy}
         className="px-3 py-1.5 text-xs font-medium bg-white/[0.06] hover:bg-white/[0.1] text-txt-secondary rounded transition-colors shrink-0 disabled:opacity-50"
       >
-        {busy ? 'Cancelling...' : 'Cancel'}
+        {busy ? t('federation:connections.pending.cancelling') : t('common:actions.cancel')}
       </button>
     </div>
   );
 }
 
 function PendingPeeringSubscriptionsSection() {
+  const { t } = useTranslation(['federation', 'common']);
   const subscriptions = useFederationStore((s) => s.peeringSubscriptions);
 
   if (subscriptions.length === 0) return null;
@@ -1058,10 +1073,10 @@ function PendingPeeringSubscriptionsSection() {
   return (
     <div>
       <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
-        Pending Peering Approvals
+        {t('federation:connections.pending.title')}
       </div>
       <p className="text-xs text-txt-tertiary mb-2">
-        Your admin must approve before these requests can proceed.
+        {t('federation:connections.pending.description')}
       </p>
       <div className="rounded-lg bg-white/[0.02] p-3 space-y-2">
         {subscriptions.map((s) => (
@@ -1131,6 +1146,7 @@ function PeeringNotificationCard({
   notification: PeeringNotification;
   onRetry: (notification: PeeringNotification) => void;
 }) {
+  const { t } = useTranslation(['federation', 'common']);
   const markPeeringNotificationRead = useFederationStore((s) => s.markPeeringNotificationRead);
   const addToast = useUIStore((s) => s.addToast);
   const [busy, setBusy] = useState(false);
@@ -1144,7 +1160,7 @@ function PeeringNotificationCard({
       await markPeeringNotificationRead(notification.id);
     } catch (err) {
       addToast(
-        `Failed to dismiss: ${err instanceof Error ? err.message : 'Unknown error'}`,
+        t('federation:connections.outcomes.dismissFailed', { error: describeError(err) }),
         'warning',
         5000,
       );
@@ -1161,17 +1177,16 @@ function PeeringNotificationCard({
 
   let primaryText: string;
   if (notification.kind === 'approved') {
-    primaryText = `Your peering request to ${host} was approved by your admin.`;
+    primaryText = t('federation:connections.outcomes.approved', { host });
   } else if (notification.kind === 'denied') {
-    primaryText = `Your peering request to ${host} was denied by your admin.`;
+    primaryText = t('federation:connections.outcomes.denied', { host });
   } else {
-    primaryText = `Your peering request to ${host} expired without admin action.`;
+    primaryText = t('federation:connections.outcomes.expired', { host });
   }
 
-  const contextText =
-    notification.kind === 'approved' && notification.triggerReason !== 'friend_add'
-      ? `Original action: ${actionVerbPhrase(notification.triggerReason, notification.triggerTarget)}.`
-      : `Original action: ${actionVerbPhrase(notification.triggerReason, notification.triggerTarget)}`;
+  const contextText = t('federation:connections.outcomes.originalAction', {
+    action: actionVerbPhrase(t, notification.triggerReason, notification.triggerTarget),
+  });
 
   return (
     <div className={`rounded-md px-3 py-2.5 ${accent.surface}`}>
@@ -1189,7 +1204,7 @@ function PeeringNotificationCard({
                 onClick={() => onRetry(notification)}
                 className="px-3 py-1.5 text-xs font-medium bg-status-online/15 text-status-online hover:bg-status-online/25 rounded transition-colors"
               >
-                Retry your {actionLabel(notification.triggerReason)}
+                {t('federation:connections.outcomes.retry', { action: actionLabel(t, notification.triggerReason) })}
               </button>
             )}
             <button
@@ -1198,7 +1213,7 @@ function PeeringNotificationCard({
               disabled={busy}
               className="px-3 py-1.5 text-xs font-medium bg-white/[0.06] hover:bg-white/[0.1] text-txt-secondary rounded transition-colors disabled:opacity-50"
             >
-              {busy ? 'Dismissing...' : 'Dismiss'}
+              {busy ? t('federation:connections.outcomes.dismissing') : t('common:actions.dismiss')}
             </button>
           </div>
         </div>
@@ -1208,6 +1223,7 @@ function PeeringNotificationCard({
 }
 
 function RecentPeeringOutcomesSection() {
+  const { t } = useTranslation(['federation', 'common']);
   const notifications = useFederationStore((s) => s.peeringNotifications);
   const markAllPeeringNotificationsRead = useFederationStore((s) => s.markAllPeeringNotificationsRead);
   const setPendingFriendAddPrefill = useFederationStore((s) => s.setPendingFriendAddPrefill);
@@ -1253,7 +1269,7 @@ function RecentPeeringOutcomesSection() {
       await markAllPeeringNotificationsRead();
     } catch (err) {
       addToast(
-        `Failed to dismiss all: ${err instanceof Error ? err.message : 'Unknown error'}`,
+        t('federation:connections.outcomes.dismissAllFailed', { error: describeError(err) }),
         'warning',
         5000,
       );
@@ -1265,7 +1281,7 @@ function RecentPeeringOutcomesSection() {
     <div>
       <div className="flex items-center justify-between mb-1.5">
         <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider">
-          Recent Peering Outcomes
+          {t('federation:connections.outcomes.title')}
         </div>
         {notifications.length > 1 && (
           <button
@@ -1274,7 +1290,7 @@ function RecentPeeringOutcomesSection() {
             disabled={bulkBusy}
             className="text-[11px] text-txt-tertiary hover:text-txt-secondary transition-colors disabled:opacity-50"
           >
-            {bulkBusy ? 'Dismissing...' : 'Dismiss all'}
+            {bulkBusy ? t('federation:connections.outcomes.dismissing') : t('federation:connections.outcomes.dismissAll')}
           </button>
         )}
       </div>
@@ -1290,6 +1306,7 @@ function RecentPeeringOutcomesSection() {
 // ─── Main component ──────────────────────────────────────────────────────────
 
 export function ConnectedInstances() {
+  const { t } = useTranslation(['federation', 'common']);
   const instances = useInstanceStore((s) => s.instances);
   const registry = useInstanceStore((s) => s.registry);
   const user = useAuthStore((s) => s.user);
@@ -1352,7 +1369,7 @@ export function ConnectedInstances() {
   const emptyMessage = registryEntries.length === 0
     ? null
     : filteredEntries.length === 0
-      ? 'No instances match the current filter.'
+      ? t('federation:connections.filter.noMatch')
       : null;
 
   return (
@@ -1366,9 +1383,9 @@ export function ConnectedInstances() {
 
       <div>
       <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
-        Connected Instances
+        {t('federation:connections.title')}
       </div>
-      <p className="text-xs text-txt-tertiary mb-2">Link accounts across federated Backspace instances.</p>
+      <p className="text-xs text-txt-tertiary mb-2">{t('federation:connections.description')}</p>
 
       <div className="rounded-lg bg-white/[0.02] p-3 space-y-2">
         {/* Home instance (always pinned, non-filterable) */}
@@ -1377,24 +1394,24 @@ export function ConnectedInstances() {
             <StatusDot status="connected" />
             <div className="min-w-0">
               <div className="text-sm text-txt-primary font-medium truncate">
-                Home Instance
+                {t('federation:connections.home.title')}
               </div>
               <div className="text-xs text-txt-tertiary truncate">
                 {window.location.host}
                 {user?.username && (
-                  <span className="ml-1">as {user.username}</span>
+                  <span className="ml-1">{t('federation:connections.home.asUser', { username: user.username })}</span>
                 )}
               </div>
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0 ml-2">
-            <span className="text-xs text-txt-tertiary">Local</span>
+            <span className="text-xs text-txt-tertiary">{t('federation:connections.home.local')}</span>
             {isElectron() && (
               <button
                 onClick={() => window.backspace?.clearInstanceUrl()}
                 className="px-2 py-1 text-xs text-txt-secondary hover:text-txt-primary hover:bg-white/[0.04] rounded transition-colors"
               >
-                Change
+                {t('common:actions.change')}
               </button>
             )}
           </div>
@@ -1432,7 +1449,7 @@ export function ConnectedInstances() {
 
         {registryEntries.length === 0 && !showAddForm && (
           <div className="text-xs text-txt-tertiary py-2">
-            No remote instances connected. Add one to start federating.
+            {t('federation:connections.empty')}
           </div>
         )}
 
@@ -1444,7 +1461,7 @@ export function ConnectedInstances() {
             onClick={() => setShowAddForm(true)}
             className="w-full p-2 text-sm text-txt-secondary hover:text-txt-primary hover:bg-surface-channel/50 rounded-lg border border-dashed border-white/[0.06] hover:border-white/[0.12] transition-colors"
           >
-            + Add Instance
+            {t('federation:connections.addButton')}
           </button>
         )}
       </div>
