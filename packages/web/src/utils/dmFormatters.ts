@@ -1,5 +1,6 @@
 import type { DmChannel, DmMessageWithUser, DmLastMessagePreview, User, SpaceInviteSystemPayload } from '@backspace/shared';
 import { parseFederatedUsername, isSelf } from './identity';
+import i18n from '../i18n';
 import { formatters } from '../i18n/formatters';
 
 // ─── DM Preview Formatting ────────────────────────────────────────────────────
@@ -37,10 +38,11 @@ function getAttachmentIcon(mimeType: string): string {
 }
 
 function getAttachmentLabel(mimeType: string, name: string): string {
-  if (mimeType.startsWith('image/')) return '📷 Image';
-  if (mimeType.startsWith('video/')) return '🎬 Video';
-  if (mimeType.startsWith('audio/')) return '🎵 Audio';
-  return `📎 ${name}`;
+  const icon = getAttachmentIcon(mimeType);
+  if (mimeType.startsWith('image/')) return `${icon} ${i18n.t('dm:preview.image')}`;
+  if (mimeType.startsWith('video/')) return `${icon} ${i18n.t('dm:preview.video')}`;
+  if (mimeType.startsWith('audio/')) return `${icon} ${i18n.t('dm:preview.audio')}`;
+  return `${icon} ${name}`;
 }
 
 /**
@@ -85,7 +87,7 @@ export function formatDmPreview(lastMessage: PreviewMessage | null | undefined):
       const a = attachments![0]!;
       return getAttachmentLabel(resolveAttachmentType(a), resolveAttachmentName(a));
     }
-    return `📎 ${attachments!.length} files`;
+    return i18n.t('dm:preview.files', { count: attachments!.length });
   }
 
   // Both text and attachments present
@@ -114,9 +116,9 @@ function asString(v: unknown): string | null {
 }
 
 function resolveDisplayName(user: User | null | undefined): string {
-  if (!user) return 'Unknown';
+  if (!user) return i18n.t('common:states.unknown');
   if (user.displayName) return user.displayName;
-  return parseFederatedUsername(user.username ?? '').baseName || 'Unknown';
+  return parseFederatedUsername(user.username ?? '').baseName || i18n.t('common:states.unknown');
 }
 
 /**
@@ -136,35 +138,35 @@ function formatSystemPreview(content: string | null, actor: User | null | undefi
     case 'space_invite': {
       const spaceName = asString((data as Partial<SpaceInviteSystemPayload>).snapshot?.spaceName);
       return spaceName
-        ? `📨 Sent invite to ${spaceName}`
-        : '📨 Sent a space invite';
+        ? i18n.t('dm:system.spaceInviteNamed', { spaceName })
+        : i18n.t('dm:system.spaceInvite');
     }
     case 'member_added': {
-      const target = asString(data.targetDisplayName) ?? 'someone';
-      return `${actorName} added ${target}`;
+      const target = asString(data.targetDisplayName) ?? i18n.t('dm:system.someone');
+      return i18n.t('dm:system.memberAdded', { actor: actorName, target });
     }
     case 'member_removed': {
-      const target = asString(data.targetDisplayName) ?? 'someone';
+      const target = asString(data.targetDisplayName) ?? i18n.t('dm:system.someone');
       const reason = asString(data.reason);
-      if (reason === 'leave') return `${target} left the group`;
-      return `${actorName} removed ${target}`;
+      if (reason === 'leave') return i18n.t('dm:system.memberLeft', { target });
+      return i18n.t('dm:system.memberRemoved', { actor: actorName, target });
     }
     case 'owner_changed': {
-      const newOwner = asString(data.newOwnerDisplayName) ?? 'A member';
-      return `${newOwner} is now the group owner`;
+      const newOwner = asString(data.newOwnerDisplayName) ?? i18n.t('dm:system.aMember');
+      return i18n.t('dm:system.ownerChanged', { newOwner });
     }
     case 'name_changed': {
       // newName === null is a meaningful "cleared" state — distinct from a
       // missing field — so we check for a non-empty string explicitly.
       return asString(data.newName)
-        ? `${actorName} renamed the group`
-        : `${actorName} cleared the group name`;
+        ? i18n.t('dm:system.renamed', { actor: actorName })
+        : i18n.t('dm:system.nameCleared', { actor: actorName });
     }
     case 'icon_changed': {
-      return `${actorName} updated the group icon`;
+      return i18n.t('dm:system.iconChanged', { actor: actorName });
     }
     default:
-      return 'System message';
+      return i18n.t('dm:system.generic');
   }
 }
 
@@ -214,7 +216,7 @@ export function formatDmSidebarPreview(
   const authoredBySelf = currentUser ? isSelf({ id: lastMessage.userId, username: actor?.username ?? '', homeInstance: actor?.homeInstance ?? null }, currentUser) : false;
   if (authoredBySelf) return text;
 
-  return `${resolveDisplayName(actor)}: ${text}`;
+  return i18n.t('dm:preview.withSender', { name: resolveDisplayName(actor), text });
 }
 
 // ─── DM Timestamp Formatting ─────────────────────────────────────────────────
@@ -263,7 +265,7 @@ function memberDisplayName(m: User): string {
 /**
  * Visible header name for a DM channel.
  *
- *   - 1-on-1 DM → the other member's display/base name (or `'Direct Message'`)
+ *   - 1-on-1 DM → the other member's display/base name (or the localized "Direct Message")
  *   - Group with `dm.name` set → that name verbatim
  *   - Group without a name → comma-joined member names (excluding self)
  *
@@ -278,13 +280,13 @@ export function formatDmHeaderName(dm: DmChannel, currentUser: AuthLike): string
 
   if (isGroup) {
     if (dm.name && dm.name.trim().length > 0) return dm.name;
-    if (others.length === 0) return 'Group';
+    if (others.length === 0) return i18n.t('dm:names.group');
     return others.map(memberDisplayName).join(', ');
   }
 
   const partner = others[0];
-  if (!partner) return 'Direct Message';
-  return memberDisplayName(partner) || 'Direct Message';
+  if (!partner) return i18n.t('dm:names.directMessage');
+  return memberDisplayName(partner) || i18n.t('dm:names.directMessage');
 }
 
 /**
@@ -304,12 +306,12 @@ export function formatDmInputLabel(dm: DmChannel, currentUser: AuthLike): string
 
   if (isGroup) {
     if (dm.name && dm.name.trim().length > 0) return `#${dm.name}`;
-    return 'the group';
+    return i18n.t('dm:names.theGroup');
   }
 
   const partner = otherMembersOf(dm, currentUser)[0];
-  if (!partner) return '@unknown';
-  return `@${memberDisplayName(partner) || 'unknown'}`;
+  if (!partner) return `@${i18n.t('dm:names.unknownHandle')}`;
+  return `@${memberDisplayName(partner) || i18n.t('dm:names.unknownHandle')}`;
 }
 
 /**
