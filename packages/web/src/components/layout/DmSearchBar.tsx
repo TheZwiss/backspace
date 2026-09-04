@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import type { User, DmChannel } from '@backspace/shared';
 import { Avatar } from '../ui/Avatar';
@@ -144,6 +145,7 @@ interface UserItem {
 type ResultItem = DmItem | UserItem;
 
 export function DmSearchBar() {
+  const { t } = useTranslation(['dm', 'common']);
   const [active, setActive] = useState(false);
   const [query, setQuery] = useState('');
   const [userResults, setUserResults] = useState<User[]>([]);
@@ -179,7 +181,7 @@ export function DmSearchBar() {
         const displayName = isGroup
           ? (otherMembers.length > 0
             ? otherMembers.map(m => m.displayName ?? parseFederatedUsername(m.username).baseName).join(', ')
-            : 'Empty Group')
+            : t('dm:names.emptyGroup'))
           : otherMembers[0]?.displayName ?? otherMembers[0]?.username ?? '';
         return { type: 'dm', dm, displayName, otherMembers, isGroup };
       })
@@ -194,7 +196,7 @@ export function DmSearchBar() {
         );
       })
       .slice(0, MAX_RECENT);
-  }, [dmChannels, query, user]);
+  }, [dmChannels, query, user, t]);
 
   // De-duplicate user results against shown 1-on-1 DMs
   const filteredUserResults = useMemo((): UserItem[] => {
@@ -307,10 +309,10 @@ export function DmSearchBar() {
         useUIStore.getState().setShowDms(true);
         navigate(`/channels/@me/${channel.id}`);
       } catch (err) {
-        setError((err as Error).message || 'Failed to create DM');
+        setError((err as Error).message || t('dm:search.createFailed'));
       }
     }
-  }, [close, navigate, addDmChannel]);
+  }, [close, navigate, addDmChannel, t]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
@@ -364,7 +366,7 @@ export function DmSearchBar() {
 
         {allItems.length === 0 && !isSearching && query.trim().length === 0 && dmItems.length === 0 && (
           <div className="px-3 py-4 text-center text-txt-tertiary text-[13px]">
-            Search for a user to start chatting
+            {t('dm:search.emptyHint')}
           </div>
         )}
 
@@ -373,7 +375,7 @@ export function DmSearchBar() {
           <>
             {query.trim().length >= 2 && (
               <div className="px-3 pt-1.5 pb-1 text-[11px] font-bold text-txt-tertiary uppercase tracking-wider">
-                Conversations
+                {t('dm:search.conversations')}
               </div>
             )}
             {dmItems.map((item, i) => {
@@ -396,10 +398,10 @@ export function DmSearchBar() {
         {(filteredUserResults.length > 0 || (isSearching && query.trim().length >= 2)) && (
           <>
             <div className="px-3 pt-1.5 pb-1 text-[11px] font-bold text-txt-tertiary uppercase tracking-wider">
-              Users
+              {t('dm:search.users')}
             </div>
             {isSearching && filteredUserResults.length === 0 && (
-              <div className="px-3 py-2 text-center text-txt-tertiary text-[13px]">Searching...</div>
+              <div className="px-3 py-2 text-center text-txt-tertiary text-[13px]">{t('dm:search.searching')}</div>
             )}
             {filteredUserResults.map((item, i) => {
               const globalIndex = dmItems.length + i;
@@ -419,9 +421,10 @@ export function DmSearchBar() {
 
         {/* No results */}
         {!isSearching && query.trim().length >= 2 && allItems.length === 0 && (
-          <div className="px-3 py-4 text-center text-txt-tertiary text-[13px]">No results found</div>
+          <div className="px-3 py-4 text-center text-txt-tertiary text-[13px]">{t('dm:search.noResults')}</div>
         )}
       </div>
+      {/* i18n-check: allow-literal — what follows is the createPortal argument list, not JSX text */}
     </div>,
     document.body,
   ) : null;
@@ -439,7 +442,7 @@ export function DmSearchBar() {
             value={query}
             onChange={(e) => { setQuery(e.target.value); setSelectedIndex(0); }}
             onKeyDown={handleKeyDown}
-            placeholder="Search..."
+            placeholder={t('dm:search.placeholder')}
             className="input-embedded flex-1 min-w-0 text-[13px] font-medium py-[5px]"
           />
         </div>
@@ -448,7 +451,7 @@ export function DmSearchBar() {
           onClick={open}
           className="w-full min-h-8 bg-surface-input text-txt-tertiary text-[13px] font-medium py-[5px] px-2 rounded-[4px] text-left border border-white/[0.06] shadow-input hover:border-white/[0.1] transition-colors"
         >
-          Find or start a conversation
+          {t('dm:search.trigger')}
         </button>
       )}
       {dropdown}
