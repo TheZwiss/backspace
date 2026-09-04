@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { formatters } from '../../i18n/formatters';
 import { createPortal } from 'react-dom';
 import { useFloatingPosition } from '../../hooks/useFloatingPosition';
 import { isDmChannel, getChannelOrigin, getApiForOrigin } from '../../stores/spaceStore';
@@ -24,10 +25,10 @@ function formatTime(timestamp: number): string {
   const yesterday = new Date(now);
   yesterday.setDate(yesterday.getDate() - 1);
   const isYesterday = date.toDateString() === yesterday.toDateString();
-  const time = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const time = formatters.formatTime(timestamp);
   if (isToday) return `Today at ${time}`;
   if (isYesterday) return `Yesterday at ${time}`;
-  return `${date.toLocaleDateString()} ${time}`;
+  return formatters.formatDateTime(timestamp);
 }
 
 function highlightMatch(text: string, query: string): React.ReactNode {

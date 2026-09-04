@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useFormatters } from '../../i18n/formatters';
 import { Modal } from '../ui/Modal';
 import { useUIStore } from '../../stores/uiStore';
 import { useSpaceStore } from '../../stores/spaceStore';
@@ -156,6 +157,7 @@ function DiscoveryPanel({ spaceId }: { spaceId: string }) {
 
 function JoinRequestsSection({ spaceId }: { spaceId: string }) {
   const [requests, setRequests] = useState<JoinRequest[]>([]);
+  const f = useFormatters();
   const [loading, setLoading] = useState(true);
   const [actionError, setActionError] = useState('');
 
@@ -226,7 +228,7 @@ function JoinRequestsSection({ spaceId }: { spaceId: string }) {
                     <p className="text-xs text-txt-secondary mt-0.5 line-clamp-2">{req.message}</p>
                   )}
                   <span className="text-[10px] text-txt-tertiary">
-                    {new Date(req.createdAt).toLocaleDateString()}
+                    {f.formatNumericDate(req.createdAt)}
                   </span>
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">

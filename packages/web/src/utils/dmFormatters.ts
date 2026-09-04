@@ -1,5 +1,6 @@
 import type { DmChannel, DmMessageWithUser, DmLastMessagePreview, User, SpaceInviteSystemPayload } from '@backspace/shared';
 import { parseFederatedUsername, isSelf } from './identity';
+import { formatters } from '../i18n/formatters';
 
 // ─── DM Preview Formatting ────────────────────────────────────────────────────
 
@@ -233,20 +234,16 @@ export function formatDmTimestamp(createdAt: number): string {
 
   if (date >= startOfToday) {
     // Today — show time
-    return date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    return formatters.formatTime(createdAt);
   }
 
   if (date >= startOfYesterday) {
-    return 'Yesterday';
+    // "yesterday" in the selected language
+    return formatters.formatRelativeDay(createdAt, now);
   }
 
-  if (date.getFullYear() === now.getFullYear()) {
-    // This year — "Mar 31"
-    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  }
-
-  // Previous year — "Dec 14, 2025"
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  // This year — "Mar 31"; previous years — "Dec 14, 2025"
+  return formatters.formatShortDate(createdAt, now);
 }
 
 // ─── DM Display Names ─────────────────────────────────────────────────────────

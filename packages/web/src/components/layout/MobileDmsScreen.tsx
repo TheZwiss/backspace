@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { useFormatters } from '../../i18n/formatters';
 import { useUIStore } from '../../stores/uiStore';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useChatStore } from '../../stores/chatStore';
@@ -189,6 +190,7 @@ export function MobileDmsScreen() {
   const authUser = useAuthStore((s) => s.user);
   const friends = useSocialStore((s) => s.friends);
   const navigate = useNavigate();
+  const f = useFormatters();
   const openContextMenu = useContextMenuStore((s) => s.open);
   const setCurrentChannel = useChatStore((s) => s.setCurrentChannel);
 
@@ -244,7 +246,7 @@ export function MobileDmsScreen() {
     if (diff < 3600_000) return `${Math.floor(diff / 60_000)}m`;
     if (diff < 86400_000) return `${Math.floor(diff / 3600_000)}h`;
     if (diff < 604800_000) return `${Math.floor(diff / 86400_000)}d`;
-    return new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    return f.formatShortDate(ts);
   };
 
   return (

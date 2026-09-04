@@ -18,6 +18,12 @@ export interface Formatters {
   formatShortDate: (timestamp: number, now?: Date) => string;
   /** `March 15, 2026` */
   formatLongDate: (timestamp: number) => string;
+  /** `Mar 15, 2026`: always carries the year, for "member since" and audit dates. */
+  formatMediumDate: (timestamp: number) => string;
+  /** `3/15/2026`: all numeric, for dense lists. */
+  formatNumericDate: (timestamp: number) => string;
+  /** `Sunday, March 15, 2026`: with the weekday, for day dividers. */
+  formatFullDate: (timestamp: number) => string;
   /** `Mar 15, 2026, 2:05 PM` */
   formatDateTime: (timestamp: number) => string;
   /** `5 minutes ago`, `20 hours ago`, `in 3 days`: elapsed time in the largest whole unit that fits. */
@@ -94,6 +100,12 @@ export function createFormatters(getLocale: () => string): Formatters {
     },
 
     formatLongDate: (timestamp) => dateFormat({ day: 'numeric', month: 'long', year: 'numeric' }).format(timestamp),
+
+    formatMediumDate: (timestamp) => dateFormat({ dateStyle: 'medium' }).format(timestamp),
+
+    formatNumericDate: (timestamp) => dateFormat({ year: 'numeric', month: 'numeric', day: 'numeric' }).format(timestamp),
+
+    formatFullDate: (timestamp) => dateFormat({ weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }).format(timestamp),
 
     formatDateTime: (timestamp) => dateFormat({ dateStyle: 'medium', timeStyle: 'short' }).format(timestamp),
 

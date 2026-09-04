@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useFormatters } from '../../../i18n/formatters';
 import { Avatar } from '../../ui/Avatar';
 import { useSpaceStore, getApiForOrigin } from '../../../stores/spaceStore';
 
@@ -18,6 +19,7 @@ interface BansPanelProps {
 
 export function BansPanel({ spaceId }: BansPanelProps) {
   const spaces = useSpaceStore((s) => s.spaces);
+  const f = useFormatters();
   const space = spaces.find((s) => s.id === spaceId);
   const spaceApi = getApiForOrigin(space?._instanceOrigin ?? '');
 
@@ -79,7 +81,7 @@ export function BansPanel({ spaceId }: BansPanelProps) {
               {bans.map((ban) => {
                 const displayName = ban.user?.displayName ?? ban.user?.username ?? ban.userId;
                 const moderatorName = ban.moderator?.displayName ?? ban.moderator?.username ?? ban.bannedBy;
-                const bannedDate = new Date(ban.createdAt).toLocaleDateString();
+                const bannedDate = f.formatNumericDate(ban.createdAt);
 
                 return (
                   <div key={ban.userId} className="flex items-center justify-between p-2 rounded hover:bg-interactive-hover transition-colors">

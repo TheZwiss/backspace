@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { formatters } from '../../../i18n/formatters';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { useUIStore } from '../../../stores/uiStore';
 import { Toggle } from '../../ui/Toggle';
@@ -165,7 +166,7 @@ function formatRelativeTime(timestamp: number | null): string {
 }
 
 function formatAbsoluteDate(timestamp: number): string {
-  return new Date(timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return formatters.formatMediumDate(timestamp);
 }
 
 function peerStatusColor(status: string): string {

@@ -24,6 +24,24 @@ describe('createFormatters', () => {
     expect(createFormatters(() => 'ru').formatLongDate(march15)).toBe('15 марта 2026 г.');
   });
 
+  it('formats a medium date that always carries the year', () => {
+    expect(createFormatters(() => 'en').formatMediumDate(march15)).toBe('Mar 15, 2026');
+    expect(createFormatters(() => 'de').formatMediumDate(march15)).toBe('15.03.2026');
+    expect(createFormatters(() => 'ru').formatMediumDate(march15)).toBe('15 мар. 2026 г.');
+  });
+
+  it('formats an all-numeric date', () => {
+    expect(createFormatters(() => 'en').formatNumericDate(march15)).toBe('3/15/2026');
+    expect(createFormatters(() => 'de').formatNumericDate(march15)).toBe('15.3.2026');
+    expect(createFormatters(() => 'ru').formatNumericDate(march15)).toBe('15.03.2026');
+  });
+
+  it('formats a full date with the weekday for day dividers', () => {
+    expect(createFormatters(() => 'en').formatFullDate(march15)).toBe('Sunday, March 15, 2026');
+    expect(createFormatters(() => 'de').formatFullDate(march15)).toBe('Sonntag, 15. März 2026');
+    expect(createFormatters(() => 'ru').formatFullDate(march15)).toBe('воскресенье, 15 марта 2026 г.');
+  });
+
   it('formats a time of day using the language\'s clock convention', () => {
     expect(createFormatters(() => 'en').formatTime(march15)).toBe('2:05 PM');
     expect(createFormatters(() => 'de').formatTime(march15)).toBe('14:05');
