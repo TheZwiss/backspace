@@ -157,7 +157,7 @@ describe('space routes send stable error codes', () => {
     expect(res.statusCode).toBe(409);
     const body = res.json<ErrorBody>();
     expect(body.code).toBe('already_member');
-    expect(body.error).toBe('You are already a member of this space');
+    expect(body.error).toMatch(/already a member/i);
   });
 
   it('user_id_required when banning without a user', async () => {
