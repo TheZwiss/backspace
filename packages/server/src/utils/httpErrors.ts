@@ -53,6 +53,38 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   PEER_EXISTS_RESET_REQUIRED: 'A peer record for this instance already exists; reset it first',
 
   recipient_deleted: "This user's account was deleted",
+
+  // channels-messages
+  space_not_found: 'Space not found',
+  channel_not_found: 'Channel not found',
+  category_not_found: 'Category not found',
+  message_not_found: 'Message not found',
+  not_space_member: 'You are not a member of this space',
+  missing_permission: 'Missing {{permission}} permission',
+  channel_name_required: 'Channel name is required',
+  channel_name_length: 'Channel name must be between {{min}} and {{max}} characters',
+  channel_type_invalid: 'Channel type must be "text" or "voice"',
+  category_not_in_space: 'Category {{id}} does not belong to this space',
+  channel_not_in_space: 'Channel {{id}} does not belong to this space',
+  position_invalid: 'Position must be a non-negative number',
+  no_fields_to_update: 'No fields to update',
+  override_target_invalid: 'targetType must be "role" or "member"',
+  override_target_required: 'targetId is required',
+  override_bits_invalid: 'allow and deny must be valid decimal integer strings',
+  cannot_grant_unowned_permissions: 'Cannot grant permissions you do not possess',
+  cannot_deny_unowned_permissions: 'Cannot deny permissions you do not possess',
+  category_name_required: 'Category name is required',
+  category_name_length: 'Category name must be between {{min}} and {{max}} characters',
+  layout_arrays_required: 'channels and categories arrays are required',
+  message_empty: 'Message must have content or attachments',
+  content_required: 'Content is required',
+  content_too_long: 'Message content must be {{max}} characters or less',
+  reply_target_invalid: 'Invalid reply target',
+  attachment_invalid: 'Invalid or already-used attachment',
+  attachment_not_owned: 'You do not own this attachment',
+  message_edit_not_author: 'You can only edit your own messages',
+  message_delete_forbidden: 'You cannot delete this message',
+  internal_error: 'Something went wrong on the server',
 };
 
 function fillPlaceholders(text: string, details: ErrorDetails | undefined): string {

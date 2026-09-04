@@ -64,6 +64,38 @@ export const ERROR_CODES = [
 
   // Direct messages
   'recipient_deleted',
+
+  // channels-messages
+  'space_not_found',
+  'channel_not_found',
+  'category_not_found',
+  'message_not_found',
+  'not_space_member',
+  'missing_permission',
+  'channel_name_required',
+  'channel_name_length',
+  'channel_type_invalid',
+  'category_not_in_space',
+  'channel_not_in_space',
+  'position_invalid',
+  'no_fields_to_update',
+  'override_target_invalid',
+  'override_target_required',
+  'override_bits_invalid',
+  'cannot_grant_unowned_permissions',
+  'cannot_deny_unowned_permissions',
+  'category_name_required',
+  'category_name_length',
+  'layout_arrays_required',
+  'message_empty',
+  'content_required',
+  'content_too_long',
+  'reply_target_invalid',
+  'attachment_invalid',
+  'attachment_not_owned',
+  'message_edit_not_author',
+  'message_delete_forbidden',
+  'internal_error',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

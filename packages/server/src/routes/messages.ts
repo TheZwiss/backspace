@@ -16,6 +16,7 @@ import {
 } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
+import { sendError } from '../utils/httpErrors.js';
 import { fetchEmbedsForMessages, resolveEmbeds, reResolveEmbeds, embedRowToEmbed } from '../utils/embedResolver.js';
 
 /**
@@ -219,11 +220,11 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
 
     const spaceId = getChannelSpaceId(id);
     if (!spaceId) {
-      return reply.code(404).send({ error: 'Channel not found', statusCode: 404 });
+      return sendError(reply, 404, 'channel_not_found');
     }
 
     if (!hasPermission(request.userId, spaceId, PermissionBits.VIEW_CHANNEL | PermissionBits.READ_MESSAGE_HISTORY, id)) {
-      return reply.code(403).send({ error: 'Missing VIEW_CHANNEL or READ_MESSAGE_HISTORY permission', statusCode: 403 });
+      return sendError(reply, 403, 'missing_permission', { permission: 'VIEW_CHANNEL or READ_MESSAGE_HISTORY' });
     }
 
     const db = getDb();
@@ -315,32 +316,32 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
 
     const spaceId = getChannelSpaceId(id);
     if (!spaceId) {
-      return reply.code(404).send({ error: 'Channel not found', statusCode: 404 });
+      return sendError(reply, 404, 'channel_not_found');
     }
 
     if (!hasPermission(request.userId, spaceId, PermissionBits.SEND_MESSAGES, id)) {
-      return reply.code(403).send({ error: 'Missing SEND_MESSAGES permission', statusCode: 403 });
+      return sendError(reply, 403, 'missing_permission', { permission: 'SEND_MESSAGES' });
     }
 
     if (attachmentIds && attachmentIds.length > 0 &&
         !hasPermission(request.userId, spaceId, PermissionBits.ATTACH_FILES, id)) {
-      return reply.code(403).send({ error: 'Missing ATTACH_FILES permission', statusCode: 403 });
+      return sendError(reply, 403, 'missing_permission', { permission: 'ATTACH_FILES' });
     }
 
     const hasContent = content && typeof content === 'string' && content.trim().length > 0;
     const hasAttachments = attachmentIds && attachmentIds.length > 0;
 
     if (!hasContent && !hasAttachments) {
-      return reply.code(400).send({ error: 'Message must have content or attachments', statusCode: 400 });
+      return sendError(reply, 400, 'message_empty');
     }
 
     if (content && content.length > MAX_MESSAGE_LENGTH) {
-      return reply.code(400).send({ error: `Message content must be ${MAX_MESSAGE_LENGTH} characters or less`, statusCode: 400 });
+      return sendError(reply, 400, 'content_too_long', { max: MAX_MESSAGE_LENGTH });
     }
 
     // A reply may only target a message in the channel it is posted into.
     if (replyToId && !isReplyTargetInChannel(id, replyToId)) {
-      return reply.code(400).send({ error: 'Invalid reply target', statusCode: 400 });
+      return sendError(reply, 400, 'reply_target_invalid');
     }
 
     const db = getDb();
@@ -352,11 +353,11 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
       for (const attId of attachmentIds) {
         const att = db.select().from(schema.attachments).where(eq(schema.attachments.id, attId)).get();
         if (!att || att.messageId || att.dmMessageId) {
-          return reply.code(400).send({ error: 'Invalid or already-used attachment', statusCode: 400 });
+          return sendError(reply, 400, 'attachment_invalid');
         }
         // Skip ownership check for legacy uploads (null uploaderId)
         if (att.uploaderId && att.uploaderId !== request.userId) {
-          return reply.code(400).send({ error: 'You do not own this attachment', statusCode: 400 });
+          return sendError(reply, 400, 'attachment_not_owned');
         }
       }
     }
@@ -384,7 +385,7 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
 
     const user = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
     if (!user) {
-      return reply.code(500).send({ error: 'User not found', statusCode: 500 });
+      return sendError(reply, 500, 'internal_error');
     }
 
     const attachmentRows = db.select()
@@ -394,7 +395,7 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
 
     const message = db.select().from(schema.messages).where(eq(schema.messages.id, messageId)).get();
     if (!message) {
-      return reply.code(500).send({ error: 'Failed to create message', statusCode: 500 });
+      return sendError(reply, 500, 'internal_error');
     }
 
     // Hydrate the reply-to message if present. Reply targets are confined to
@@ -429,21 +430,21 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
     const { content } = request.body;
 
     if (!content || typeof content !== 'string' || content.trim().length === 0) {
-      return reply.code(400).send({ error: 'Content is required', statusCode: 400 });
+      return sendError(reply, 400, 'content_required');
     }
 
     if (content.length > MAX_MESSAGE_LENGTH) {
-      return reply.code(400).send({ error: `Message content must be ${MAX_MESSAGE_LENGTH} characters or less`, statusCode: 400 });
+      return sendError(reply, 400, 'content_too_long', { max: MAX_MESSAGE_LENGTH });
     }
 
     const db = getDb();
     const message = db.select().from(schema.messages).where(eq(schema.messages.id, id)).get();
     if (!message) {
-      return reply.code(404).send({ error: 'Message not found', statusCode: 404 });
+      return sendError(reply, 404, 'message_not_found');
     }
 
     if (message.userId !== request.userId) {
-      return reply.code(403).send({ error: 'You can only edit your own messages', statusCode: 403 });
+      return sendError(reply, 403, 'message_edit_not_author');
     }
 
     const now = Date.now();
@@ -454,12 +455,12 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
 
     const updatedMessage = db.select().from(schema.messages).where(eq(schema.messages.id, id)).get();
     if (!updatedMessage) {
-      return reply.code(500).send({ error: 'Failed to update message', statusCode: 500 });
+      return sendError(reply, 500, 'internal_error');
     }
 
     const user = db.select().from(schema.users).where(eq(schema.users.id, message.userId)).get();
     if (!user) {
-      return reply.code(500).send({ error: 'User not found', statusCode: 500 });
+      return sendError(reply, 500, 'internal_error');
     }
 
     const attachmentRows = db.select()
@@ -510,19 +511,19 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
 
     const message = db.select().from(schema.messages).where(eq(schema.messages.id, id)).get();
     if (!message) {
-      return reply.code(404).send({ error: 'Message not found', statusCode: 404 });
+      return sendError(reply, 404, 'message_not_found');
     }
 
     const spaceId = getChannelSpaceId(message.channelId);
     if (!spaceId) {
-      return reply.code(404).send({ error: 'Channel not found', statusCode: 404 });
+      return sendError(reply, 404, 'channel_not_found');
     }
 
     const isAuthor = message.userId === request.userId;
     const canManageMessages = hasPermission(request.userId, spaceId, PermissionBits.MANAGE_MESSAGES, message.channelId);
 
     if (!isAuthor && !canManageMessages) {
-      return reply.code(403).send({ error: 'You cannot delete this message', statusCode: 403 });
+      return sendError(reply, 403, 'message_delete_forbidden');
     }
 
     // Collect attachment filenames before deleting
