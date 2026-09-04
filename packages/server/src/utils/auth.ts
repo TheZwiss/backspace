@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm';
 import { config } from '../config.js';
 import { getDb, schema } from '../db/index.js';
 import type { FastifyRequest, FastifyReply } from 'fastify';
+import type { ErrorCode } from '@backspace/shared/src/errors';
 
 const SALT_ROUNDS = 12;
 
@@ -40,9 +41,12 @@ export function verifyJwt(token: string): JwtPayload {
  */
 export class AuthError extends Error {
   statusCode: number;
-  constructor(message: string, statusCode: number) {
+  /** Stable code for the client; the message stays the English log text. */
+  code: ErrorCode;
+  constructor(message: string, statusCode: number, code: ErrorCode = 'unauthorized') {
     super(message);
     this.statusCode = statusCode;
+    this.code = code;
   }
 }
 
@@ -76,7 +80,7 @@ export async function verifyJwtAndUser(token: string): Promise<{
   }).from(schema.users).where(eq(schema.users.id, payload.userId)).get();
 
   if (!user || user.isDeleted === 1) {
-    throw new AuthError('This account has been deleted', 401);
+    throw new AuthError('This account has been deleted', 401, 'account_deleted');
   }
 
   // Reject tokens issued before the last password change (token revocation).
@@ -100,7 +104,7 @@ export async function authenticate(
 ): Promise<void> {
   const authHeader = request.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    reply.code(401).send({ error: 'Missing or invalid authorization header', statusCode: 401 });
+    reply.code(401).send({ error: 'Missing or invalid authorization header', code: 'unauthorized', statusCode: 401 });
     return;
   }
 
@@ -112,9 +116,9 @@ export async function authenticate(
     (request as FastifyRequest & { userId: string; username: string }).homeInstance = identity.homeInstance;
   } catch (err) {
     if (err instanceof AuthError) {
-      return reply.code(err.statusCode).send({ error: err.message, statusCode: err.statusCode });
+      return reply.code(err.statusCode).send({ error: err.message, code: err.code, statusCode: err.statusCode });
     }
-    return reply.code(401).send({ error: 'Invalid or expired token', statusCode: 401 });
+    return reply.code(401).send({ error: 'Invalid or expired token', code: 'unauthorized', statusCode: 401 });
   }
 }
 
@@ -125,7 +129,7 @@ export async function requireAdmin(
   const db = getDb();
   const caller = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
   if (!caller || caller.isAdmin !== 1) {
-    return reply.code(403).send({ error: 'Only instance admins can perform this action', statusCode: 403 });
+    return reply.code(403).send({ error: 'Only instance admins can perform this action', code: 'forbidden', statusCode: 403 });
   }
 }
 
@@ -136,6 +140,7 @@ export async function requireLocalUser(
   if (request.homeInstance) {
     return reply.code(403).send({
       error: 'Federated users must use their home instance for DM operations',
+      code: 'forbidden',
       statusCode: 403,
     });
   }

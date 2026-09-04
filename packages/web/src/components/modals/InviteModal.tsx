@@ -7,7 +7,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useSocialStore } from '../../stores/socialStore';
-import { api } from '../../api/client';
+import { api, HttpError } from '../../api/client';
 import { isSelf, parseFederatedUsername } from '../../utils/identity';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { describeError } from '../../i18n/errors';
@@ -21,26 +21,29 @@ type SendStatus =
 type InviteT = TFunction<['spaces', 'common']>;
 
 /**
- * The invite relay answers with a bare reason in its `error` field. These
- * are not `ErrorCode`s yet, so the wording lives in the spaces catalog
- * until the server-side error-code pass reaches the DM routes.
+ * Row-sized copy for each way a space invite can fail. Keyed on the server's
+ * error code; the two message checks below cover a failed fetch and the
+ * client-side "upstream" marker, which never carry a code.
  */
 function reasonForError(error: unknown, t: InviteT): string {
-  if (error instanceof Error) {
-    const msg = error.message;
-    switch (msg) {
+  if (error instanceof HttpError) {
+    switch (error.code) {
       case 'invite_invalid': return t('spaces:invite.failure.inviteInvalid');
       case 'not_a_friend': return t('spaces:invite.failure.notAFriend');
       case 'user_not_found': return t('spaces:invite.failure.userNotFound');
       case 'already_member': return t('spaces:invite.failure.alreadyMember');
-      case 'upstream': return t('spaces:invite.failure.upstream');
       case 'cannot_invite_self': return t('spaces:invite.failure.cannotInviteSelf');
       case 'invalid_body': return t('spaces:invite.failure.invalidBody');
       case 'invalid_target': return t('spaces:invite.failure.invalidTarget');
       default:
         break;
     }
-    if (/network|fetch|failed to fetch/i.test(msg)) {
+  }
+  if (error instanceof Error) {
+    if (error.message === 'upstream') {
+      return t('spaces:invite.failure.upstream');
+    }
+    if (/network|fetch|failed to fetch/i.test(error.message)) {
       return t('spaces:invite.failure.unreachable');
     }
   }

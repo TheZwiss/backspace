@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSpaceStore } from '../../../stores/spaceStore';
 import { useUIStore } from '../../../stores/uiStore';
-import { api } from '../../../api/client';
+import { api, HttpError } from '../../../api/client';
 import { PermissionBits, stringToPermissions, permissionsToString } from '../../../utils/permissions';
 import { usePermissionNames, type PermissionKey } from '../../ui/OverrideEntry';
 import { describeError } from '../../../i18n/errors';
@@ -265,10 +265,8 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
       await loadSpaceDetail(spaceId);
       addToast(t('spaces:roles.saved'), 'success', 2000);
     } catch (err) {
-      // The server has no error code for a duplicate name yet; its English
-      // text is the only signal, so the name-field routing keys off it.
-      const serverText = err instanceof Error ? err.message : '';
-      if (serverText.includes('already exists')) {
+      // A duplicate name belongs on the name field, not in the save banner.
+      if (err instanceof HttpError && err.code === 'role_name_taken') {
         setNameError(t('spaces:roles.nameDuplicate'));
       } else {
         setSaveError(describeError(err));

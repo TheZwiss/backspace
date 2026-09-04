@@ -149,7 +149,7 @@ describe('POST /api/dm/space-invite', () => {
       },
     });
     expect(res.statusCode).toBe(400);
-    expect(JSON.parse(res.body).error).toBe('not_a_friend');
+    expect(JSON.parse(res.body).code).toBe('not_a_friend');
     // Snapshot should not be looked up if friendship gate fails first.
     expect(fetchSpaceInviteSnapshot).not.toHaveBeenCalled();
     expect(getLocalInviteSnapshot).not.toHaveBeenCalled();
@@ -168,7 +168,7 @@ describe('POST /api/dm/space-invite', () => {
       },
     });
     expect(res.statusCode).toBe(400);
-    expect(JSON.parse(res.body).error).toBe('invite_invalid');
+    expect(JSON.parse(res.body).code).toBe('invite_invalid');
     // No DM message should be inserted on failure.
     const messageCount = testDb.select().from(schema.dmMessages).all().length;
     expect(messageCount).toBe(0);
@@ -195,7 +195,7 @@ describe('POST /api/dm/space-invite', () => {
       },
     });
     expect(res.statusCode).toBe(400);
-    expect(JSON.parse(res.body).error).toBe('invite_invalid');
+    expect(JSON.parse(res.body).code).toBe('invite_invalid');
     const messageCount = testDb.select().from(schema.dmMessages).all().length;
     expect(messageCount).toBe(0);
   });

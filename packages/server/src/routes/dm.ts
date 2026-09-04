@@ -2359,7 +2359,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
   }, async (request, reply) => {
     const body = request.body;
     if (!body || !body.spaceId || !body.inviteCode || !body.target) {
-      return reply.code(400).send({ error: 'invalid_body', statusCode: 400 });
+      return sendError(reply, 400, 'invalid_body');
     }
 
     const db = getDb();
@@ -2377,14 +2377,14 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
         db,
       );
     } else {
-      return reply.code(400).send({ error: 'invalid_target', statusCode: 400 });
+      return sendError(reply, 400, 'invalid_target');
     }
 
     if (!targetUser) {
-      return reply.code(404).send({ error: 'user_not_found', statusCode: 404 });
+      return sendError(reply, 404, 'user_not_found');
     }
     if (targetUser.id === callerId) {
-      return reply.code(400).send({ error: 'cannot_invite_self', statusCode: 400 });
+      return sendError(reply, 400, 'cannot_invite_self');
     }
 
     // 2. Friendship check (anti-spam, NOT a permission gate — see spec).
@@ -2395,7 +2395,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       ),
     ).get();
     if (!friendship) {
-      return reply.code(400).send({ error: 'not_a_friend', statusCode: 400 });
+      return sendError(reply, 400, 'not_a_friend');
     }
 
     // 3. Snapshot lookup. For local spaces, read the DB directly — fetching
@@ -2408,11 +2408,11 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       ? getLocalInviteSnapshot(body.inviteCode)
       : await fetchSpaceInviteSnapshot(spaceOrigin, body.inviteCode);
     if (!snapshot) {
-      return reply.code(400).send({ error: 'invite_invalid', statusCode: 400 });
+      return sendError(reply, 400, 'invite_invalid');
     }
     if (snapshot.spaceId !== body.spaceId) {
       // spaceId mismatch — code points at a different space than the client claimed.
-      return reply.code(400).send({ error: 'invite_invalid', statusCode: 400 });
+      return sendError(reply, 400, 'invite_invalid');
     }
 
     // Request-only spaces are approval-gated and have no usable invite links, so
@@ -2425,7 +2425,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     const localSpace = db.select({ visibility: schema.spaces.visibility })
       .from(schema.spaces).where(eq(schema.spaces.id, body.spaceId)).get();
     if (localSpace?.visibility === 'request') {
-      return reply.code(403).send({ error: 'space_requires_approval', statusCode: 403 });
+      return sendError(reply, 403, 'space_requires_approval');
     }
 
     // 4. Resolve / create the 1-on-1 DM (delegate to dedup helper).
@@ -2461,7 +2461,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     // 6. Hydrate + broadcast locally.
     const message = getDmMessageWithUser(messageId);
     if (!message) {
-      return reply.code(500).send({ error: 'message_lookup_failed', statusCode: 500 });
+      return sendError(reply, 500, 'message_lookup_failed');
     }
     broadcastDmMessage(dmChannelId, message);
 

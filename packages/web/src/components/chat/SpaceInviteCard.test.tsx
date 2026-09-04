@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { SpaceInviteCard } from './SpaceInviteCard';
+import { HttpError } from '../../api/client';
 
 const { mockJoinByCode, mockGetApiForOrigin, mockNavigate } = vi.hoisted(() => ({
   mockJoinByCode: vi.fn(),
@@ -14,7 +15,9 @@ vi.mock('../../stores/spaceStore', () => ({
   useSpaceStore: (selector: any) => selector({ joinByCode: mockJoinByCode }),
   getApiForOrigin: mockGetApiForOrigin,
 }));
-vi.mock('../../api/client', () => ({
+// Keep the real exports: HttpError is what the join-error helper inspects.
+vi.mock('../../api/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../api/client')>()),
   createApiClient: vi.fn(),
 }));
 vi.mock('react-router-dom', async () => ({
@@ -105,7 +108,9 @@ describe('SpaceInviteCard', () => {
     const userEvent = (await import('@testing-library/user-event')).default;
     const user = userEvent.setup();
 
-    mockJoinByCode.mockRejectedValueOnce(new Error('You are already a member of this space'));
+    mockJoinByCode.mockRejectedValueOnce(
+      new HttpError(409, 'You are already a member', { error: 'You are already a member', code: 'already_member', statusCode: 409 }, 'already_member'),
+    );
     mockGetApiForOrigin.mockReturnValue({
       spaces: { invitePreview: vi.fn().mockResolvedValue({ ...basePayload.snapshot, spaceId: 'S1' }) },
     });

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { describeError } from '../../i18n/errors';
+import { isAlreadyMemberError } from '../../utils/joinErrors';
 import { Avatar } from '../ui/Avatar';
 import { getApiForOrigin } from '../../stores/spaceStore';
 import { useSpaceStore } from '../../stores/spaceStore';
@@ -76,15 +77,14 @@ export function SpaceInviteCard({ payload, senderName }: Props) {
       const space = await joinByCode(payload.inviteCode, payload.spaceInstanceOrigin || undefined);
       landOnSpace(space.id);
     } catch (err) {
-      const msg = (err as Error)?.message ?? '';
-      if (msg.toLowerCase().includes('already a member')) {
+      if (isAlreadyMemberError(err)) {
         // Already a member is a successful state — just navigate to the space.
         // Look up the space in the store by id; if not found (rare race), stay
         // silent rather than block the user with a noisy error.
         landOnSpace(payload.spaceId);
         return;
       }
-      setJoinError(msg ? describeError(err) : t('chat:invite.joinFailed'));
+      setJoinError(err instanceof Error ? describeError(err) : t('chat:invite.joinFailed'));
       setJoining(false);
     }
   };

@@ -9,6 +9,7 @@ import { parseInviteInput, buildInstanceJoinUrl } from '../utils/inviteParser';
 import { Avatar } from './ui/Avatar';
 import type { InvitePreview } from '@backspace/shared';
 import { describeError } from '../i18n/errors';
+import { isAlreadyMemberError } from '../utils/joinErrors';
 
 type JoinPhase = 'preview' | 'connect' | 'fallback' | 'other-instance' | 'already-member';
 
@@ -109,8 +110,7 @@ export function JoinPage() {
         setPhase('connect');
         setError('');
       } else {
-        const msg = err instanceof Error ? err.message : '';
-        if (msg.toLowerCase().includes('already a member')) {
+        if (isAlreadyMemberError(err)) {
           setPhase('already-member');
           setError('');
         } else {
@@ -139,8 +139,7 @@ export function JoinPage() {
         setFallbackPassword('');
         setError('');
       } else {
-        const msg = err instanceof Error ? err.message : '';
-        if (msg.toLowerCase().includes('already a member')) {
+        if (isAlreadyMemberError(err)) {
           setPhase('already-member');
           setError('');
         } else {
@@ -163,8 +162,7 @@ export function JoinPage() {
       const space = await joinByCode(parsed.code, parsed.origin);
       navigate(`/channels/${space.id}`);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '';
-      if (msg.toLowerCase().includes('already a member')) {
+      if (isAlreadyMemberError(err)) {
         setPhase('already-member');
         setError('');
       } else {

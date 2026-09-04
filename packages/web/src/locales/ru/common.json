@@ -67,7 +67,8 @@
     "loadingSettings": "Загрузка настроек…",
     "settingsSaved": "Настройки сохранены",
     "saveFailed": "Не удалось сохранить",
-    "scanning": "Сканирование…"
+    "scanning": "Сканирование…",
+    "pleaseWait": "Подождите…"
   },
   "labels": {
     "username": "Имя пользователя",

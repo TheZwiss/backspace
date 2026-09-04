@@ -3,7 +3,39 @@
 Written 2026-09-04 before a context compact. Everything below was verified in the
 session that wrote it; the "open" items are marked.
 
-## Status (2026-09-04, later the same day)
+## Status (2026-09-05, morning)
+
+Everything in the plan below is on `main` except the release itself.
+
+- The foundation is #95 (`ef6b9069`).
+- All eleven surface sweeps merged: chat widgets #96, chat messages #97,
+  auth #98, shell #99, DMs #100, social #101, space layout #102, voice #103,
+  federation #104, admin #105, space dialogs #106. Every squash carries
+  `Co-authored-by: st7105` for the Russian lifted from #45.
+- The server error-code pass merged for every route file: spaces #109 (its
+  squash also carried the search/voice/upload and channel/message work, so
+  #107 and #108 were closed as superseded), social and explore #110, admin
+  and settings #111, DMs #112, auth and users #113.
+- The consolidation PR #114 moved shared strings into `common`, extended the
+  allowlist, and regenerated the pending list to empty. The literal check
+  now covers the whole web package.
+- The leftovers PR (this branch) removed the last English-text matching in
+  the client, gave the space-invite endpoint and the auth hooks their codes,
+  converted the two files no sweep owned, and updated the spec.
+- Not done, on purpose: `released` is still false for Russian and German.
+  The gate is a native read of the German; the least-certain phrases are
+  listed in the fork reports. The 1.1.0 release PR flips the flags and bumps
+  the version after that read.
+- Also merged during the night: st7105's Flatpak permissions fix #93.
+- Repo setting changed: pull-request auto-merge is enabled (it was off).
+
+Overnight list from the section below, for the record: sweeps done; PRs
+opened and merged with the co-author trailer, done; shared namespaces
+deep-merged, done; common consolidation, done; server error codes, done;
+#93 merged; nothing tagged, nothing released, no flags flipped, Flathub
+untouched, no deploys.
+
+### Status as it stood on 2026-09-04, later that day
 
 - Step 1 done. `v1.0.6` is tagged at `b3d570eb` (the first tag at `34e69f87`
   was deleted with its draft after the Flatpak prepare job failed on
