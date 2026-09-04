@@ -349,7 +349,7 @@ DOMAIN_HOST="${DOMAIN%%:*}"
 DOMAIN_PORT=""
 if [[ "$DOMAIN" == *:* ]]; then
   DOMAIN_PORT="${DOMAIN##*:}"
-  if ! [[ "$DOMAIN_PORT" =~ ^[0-9]+$ ]] || (( DOMAIN_PORT < 1 || DOMAIN_PORT > 65535 )); then
+  if ! [[ "$DOMAIN_PORT" =~ ^[0-9]+$ ]] || (( 10#$DOMAIN_PORT < 1 || 10#$DOMAIN_PORT > 65535 )); then
     error "DOMAIN='${DOMAIN}' is not a hostname or hostname:port."
     exit 1
   fi

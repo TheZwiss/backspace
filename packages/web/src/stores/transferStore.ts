@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, type PersistStorage, type StorageValue } from 'zustand/middleware';
 import { Upload, type UploadOptions } from 'tus-js-client';
-import { resolveTusUrl } from '../utils/tusUrl';
+import { resolveTusUrl, tusEndpoint } from '../utils/tusUrl';
 import type { Attachment } from '@backspace/shared';
 import { useAuthStore } from './authStore';
 import { getTokenForOrigin } from '../utils/crossStoreResolvers';
@@ -236,8 +236,7 @@ export const useTransferStore = create<TransferStore>()(
         const user = useAuthStore.getState().user;
         if (!token) throw new Error('Cannot start upload — not authenticated');
 
-        const baseOrigin = opts.origin ?? '';
-        const endpoint = `${baseOrigin}/api/files/`;
+        const endpoint = tusEndpoint(opts.origin);
 
         const fileLike = file instanceof File
           ? { name: file.name, size: file.size, mimetype: file.type || 'application/octet-stream' }
@@ -420,7 +419,7 @@ export const useTransferStore = create<TransferStore>()(
           : { name: t.file.name, mimetype: blob.type || t.file.mimetype };
 
         const tusOpts: UploadOptions = {
-          endpoint: t.origin ? `${t.origin}/api/files/` : '/api/files/',
+          endpoint: tusEndpoint(t.origin),
           retryDelays: [0, 1000, 3000, 5000, 10_000],
           chunkSize: 5 * 1024 * 1024,
           headers: { Authorization: `Bearer ${token}` },

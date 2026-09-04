@@ -15,3 +15,13 @@ export function resolveTusUrl(location: string, origin: string | undefined): str
   const base = origin && origin.trim() ? origin.trim() : window.location.origin;
   return new URL(location, base).toString();
 }
+
+/**
+ * The absolute tus endpoint for a transfer origin (`''` or undefined = home).
+ * Absolute on purpose: tus-js-client resolves the relative `Location` against
+ * this, so the upload URL it keeps is complete wherever the page is served
+ * from, including a shell whose page origin is not the instance.
+ */
+export function tusEndpoint(origin: string | undefined): string {
+  return new URL('/api/files/', origin && origin.trim() ? origin.trim() : window.location.origin).toString();
+}
