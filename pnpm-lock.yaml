@@ -179,6 +179,9 @@ importers:
       '@sapphi-red/web-noise-suppressor':
         specifier: ^0.4.0
         version: 0.4.0
+      i18next:
+        specifier: 26.4.2
+        version: 26.4.2(typescript@5.9.3)
       idb:
         specifier: ^8.0.3
         version: 8.0.3
@@ -197,6 +200,9 @@ importers:
       react-easy-crop:
         specifier: ^6.2.2
         version: 6.2.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      react-i18next:
+        specifier: 17.0.13
+        version: 17.0.13(i18next@26.4.2(typescript@5.9.3))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3)
       react-markdown:
         specifier: ^10.1.0
         version: 10.1.0(@types/react@18.3.28)(react@18.3.1)
@@ -211,7 +217,7 @@ importers:
         version: 4.3.1
       zustand:
         specifier: ^5.0.15
-        version: 5.0.15(@types/react@18.3.28)(react@18.3.1)
+        version: 5.0.15(@types/react@18.3.28)(react@18.3.1)(use-sync-external-store@1.6.0(react@18.3.1))
     devDependencies:
       '@testing-library/jest-dom':
         specifier: ^6.9.1
@@ -3331,6 +3337,9 @@ packages:
     resolution: {integrity: sha512-CV9TW3Y3f8/wT0BRFc1/KAVQ3TUHiXmaAb6VW9vtiMFf7SLoMd1PdAc4W3KFOFETBJUb90KatHqlsZMWV+R9Gg==}
     engines: {node: ^20.19.0 || ^22.12.0 || >=24.0.0}
 
+  html-parse-stringify@4.0.1:
+    resolution: {integrity: sha512-0zHsZJrK7S3K2aucXWL6ycoYJ/iNtIcFHC/nYQgFklPtrv5LpJctIiSCroWZWeuoXvuyFdzp6KzjJQ+OT5MfFw==}
+
   html-url-attributes@3.0.1:
     resolution: {integrity: sha512-ol6UPyBWqsrO6EJySPz2O7ZSr856WDrEzM5zMqp+FJJLGMW35cLYmmZnl0vztAZxRUoNZJFTCohfjuIJ8I4QBQ==}
 
@@ -3355,6 +3364,14 @@ packages:
   https-proxy-agent@7.0.6:
     resolution: {integrity: sha512-vK9P5/iUfdl95AI+JVyUuIcVtd4ofvtrOr3HNtM2yxC9bnMbEdp3x01OhQNnjb8IJYi38VlTE3mBXwcfvywuSw==}
     engines: {node: '>= 14'}
+
+  i18next@26.4.2:
+    resolution: {integrity: sha512-RX+R0VLg13IbvRuJSxnqykUFS9vQZTl8wYpWPCIUDWVrSGjsQywB5Y+pjzrkboxGAuYfJZVH1InFTdgBdxq6ug==}
+    peerDependencies:
+      typescript: ^5 || ^6 || ^7
+    peerDependenciesMeta:
+      typescript:
+        optional: true
 
   iconv-lite@0.6.3:
     resolution: {integrity: sha512-4fCk79wshMdzMp2rH06qWrJE4iolqLhCUH+OiuIgU++RB0+94NlDL81atO7GX55uUKueo0txHNtvEyI6D7WdMw==}
@@ -4453,6 +4470,22 @@ packages:
       react: '>=16.4.0'
       react-dom: '>=16.4.0'
 
+  react-i18next@17.0.13:
+    resolution: {integrity: sha512-Cc1PscmblIHA1kljTqDwrcVMI21ydgmUzw0UAeQBe7pAOgfuRLfzXze4EUBQoeDiICzFIXXhHFoZxuetNg5D0Q==}
+    peerDependencies:
+      i18next: '>= 26.2.0'
+      react: '>= 16.8.0'
+      react-dom: '*'
+      react-native: '*'
+      typescript: ^5 || ^6 || ^7
+    peerDependenciesMeta:
+      react-dom:
+        optional: true
+      react-native:
+        optional: true
+      typescript:
+        optional: true
+
   react-is@17.0.2:
     resolution: {integrity: sha512-w2GsyukL62IJnlaff/nRegPQR94C/XXamvMWmSHRJ4y7Ts/4ocGRmTHvOs8PSE6pB3dWOrD/nueuU5sduBsQ4w==}
 
@@ -5167,6 +5200,11 @@ packages:
 
   url-parse@1.5.10:
     resolution: {integrity: sha512-WypcfiRhfeUP9vvF0j6rw0J3hrWrw6iZv3+22h6iRMJ/8z1Tj6XfLP4DsUix5MhMPnXpiHDoKyoZ/bdCkwBCiQ==}
+
+  use-sync-external-store@1.6.0:
+    resolution: {integrity: sha512-Pp6GSwGP/NrPIrxVFAIkOQeyw8lFenOHijQWkUTrDvrF4ALqylP2C/KCkeS9dpUM3KvYRQhna5vt7IL95+ZQ9w==}
+    peerDependencies:
+      react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
   usehooks-ts@3.1.1:
     resolution: {integrity: sha512-I4diPp9Cq6ieSUH2wu+fDAVQO43xwtulo+fKEidHUwZPnYImbtkTjzIJYcDcJqxgmX31GVqNFURodvcgHcW0pA==}
@@ -8622,6 +8660,8 @@ snapshots:
     transitivePeerDependencies:
       - '@noble/hashes'
 
+  html-parse-stringify@4.0.1: {}
+
   html-url-attributes@3.0.1: {}
 
   htmlparser2@10.1.0:
@@ -8659,6 +8699,10 @@ snapshots:
       debug: 4.4.3
     transitivePeerDependencies:
       - supports-color
+
+  i18next@26.4.2(typescript@5.9.3):
+    optionalDependencies:
+      typescript: 5.9.3
 
   iconv-lite@0.6.3:
     dependencies:
@@ -9918,6 +9962,17 @@ snapshots:
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
 
+  react-i18next@17.0.13(i18next@26.4.2(typescript@5.9.3))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3):
+    dependencies:
+      '@babel/runtime': 7.29.7
+      html-parse-stringify: 4.0.1
+      i18next: 26.4.2(typescript@5.9.3)
+      react: 18.3.1
+      use-sync-external-store: 1.6.0(react@18.3.1)
+    optionalDependencies:
+      react-dom: 18.3.1(react@18.3.1)
+      typescript: 5.9.3
+
   react-is@17.0.2: {}
 
   react-markdown@10.1.0(@types/react@18.3.28)(react@18.3.1):
@@ -10838,6 +10893,10 @@ snapshots:
       querystringify: 2.2.0
       requires-port: 1.0.0
 
+  use-sync-external-store@1.6.0(react@18.3.1):
+    dependencies:
+      react: 18.3.1
+
   usehooks-ts@3.1.1(react@18.3.1):
     dependencies:
       lodash.debounce: 4.0.8
@@ -11246,9 +11305,10 @@ snapshots:
 
   yocto-queue@0.1.0: {}
 
-  zustand@5.0.15(@types/react@18.3.28)(react@18.3.1):
+  zustand@5.0.15(@types/react@18.3.28)(react@18.3.1)(use-sync-external-store@1.6.0(react@18.3.1)):
     optionalDependencies:
       '@types/react': 18.3.28
       react: 18.3.1
+      use-sync-external-store: 1.6.0(react@18.3.1)
 
   zwitch@2.0.4: {}

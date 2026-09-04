@@ -1,0 +1,50 @@
+{
+  "appName": "Backspace",
+  "actions": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "close": "Close",
+    "delete": "Delete",
+    "confirm": "Confirm",
+    "copy": "Copy",
+    "copied": "Copied",
+    "retry": "Retry",
+    "back": "Back",
+    "done": "Done",
+    "edit": "Edit",
+    "remove": "Remove",
+    "add": "Add",
+    "apply": "Apply",
+    "reset": "Reset",
+    "continue": "Continue",
+    "dismiss": "Dismiss",
+    "ok": "OK",
+    "search": "Search",
+    "clear": "Clear",
+    "change": "Change",
+    "refresh": "Refresh",
+    "openLink": "Open link"
+  },
+  "states": {
+    "loading": "Loading…",
+    "saving": "Saving…",
+    "saved": "Saved",
+    "unknown": "Unknown",
+    "none": "None",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "on": "On",
+    "off": "Off",
+    "yes": "Yes",
+    "no": "No",
+    "optional": "Optional",
+    "required": "Required",
+    "default": "Default",
+    "recommended": "Recommended"
+  },
+  "language": {
+    "label": "Language",
+    "description": "Menus, buttons and system messages appear in this language. Messages from other people stay as they were written.",
+    "germanReviewNote": "The German translation is new and still being reviewed."
+  }
+}
