@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { useSettingsSections } from '../../../hooks/useSettingsSections';
 import type { SettingsSection } from '../SettingsSectionsContext';
@@ -14,6 +15,7 @@ import { UpdatesPanel } from '../instanceSettingsPanels/UpdatesPanel';
 type SubTab = 'general' | 'registration' | 'federation' | 'streaming' | 'storage' | 'users' | 'updates';
 
 export function InstancePanel() {
+  const { t } = useTranslation(['settings']);
   const fetchInstanceSettings = useSettingsStore((s) => s.fetchInstanceSettings);
   const fetchStreamingLimits = useSettingsStore((s) => s.fetchStreamingLimits);
 
@@ -21,14 +23,14 @@ export function InstancePanel() {
   const [approvalCount, setApprovalCount] = useState(0);
 
   const sections = useMemo<SettingsSection[]>(() => [
-    { id: 'general', label: 'General' },
-    { id: 'registration', label: 'Registration' },
-    { id: 'federation', label: 'Federation', badgeCount: approvalCount },
-    { id: 'streaming', label: 'Streaming' },
-    { id: 'storage', label: 'Storage' },
-    { id: 'users', label: 'Users' },
-    { id: 'updates', label: 'Updates' },
-  ], [approvalCount]);
+    { id: 'general', label: t('settings:instance.tabs.general') },
+    { id: 'registration', label: t('settings:instance.tabs.registration') },
+    { id: 'federation', label: t('settings:instance.tabs.federation'), badgeCount: approvalCount },
+    { id: 'streaming', label: t('settings:instance.tabs.streaming') },
+    { id: 'storage', label: t('settings:instance.tabs.storage') },
+    { id: 'users', label: t('settings:instance.tabs.users') },
+    { id: 'updates', label: t('settings:instance.tabs.updates') },
+  ], [approvalCount, t]);
 
   const handleNavigate = useCallback((id: string) => {
     setSubTab(id as SubTab);
