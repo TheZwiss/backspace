@@ -122,7 +122,7 @@ describe('search routes send error codes', () => {
     permissionMocks.hasPermission.mockReturnValue(false);
     const res = await app.inject({ method: 'GET', url: '/api/channels/c1/search?q=x', headers: auth });
     expect(res.statusCode).toBe(403);
-    expect(res.json()).toMatchObject({ code: 'missing_permission', error: 'Missing permissions' });
+    expect(res.json()).toMatchObject({ code: 'missing_permission', error: 'Missing READ_MESSAGE_HISTORY permission' });
   });
 
   it('dm search: not a member', async () => {
