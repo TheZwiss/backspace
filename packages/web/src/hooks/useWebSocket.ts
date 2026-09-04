@@ -475,7 +475,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
           const { addToast } = useUIStore.getState();
           const count = event.pendingApprovalCount;
           addToast(
-            translate('runtime.templates.useWebSocket.youHavePendingPeeringRequest', { p0: count, p1: translate('runtime.manual.englishPluralSuffix', { count }) }),
+            translate('runtime.templates.useWebSocket.youHavePendingPeeringRequest', { count }),
             'info',
             5000,
           );

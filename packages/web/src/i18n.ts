@@ -1,16 +1,41 @@
-import i18n from 'i18next';
+import i18n, { type BackendModule } from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import en from './locales/en/translation.json';
-import ru from './locales/ru/translation.json';
 
 export const LANGUAGE_STORAGE_KEY = 'backspace-language';
 
 export const supportedLanguages = [
   { code: 'en', nativeName: 'English' },
+  { code: 'de', nativeName: 'Deutsch' },
+  { code: 'es', nativeName: 'Español' },
   { code: 'ru', nativeName: 'Русский' },
 ] as const;
 
 export type SupportedLanguage = (typeof supportedLanguages)[number]['code'];
+
+const localeLoaders = {
+  de: () => import('./locales/de/translation.json'),
+  es: () => import('./locales/es/translation.json'),
+  ru: () => import('./locales/ru/translation.json'),
+};
+
+const translationBackend: BackendModule = {
+  type: 'backend',
+  init: () => {},
+  read(language, _namespace, callback) {
+    if (!isSupportedLanguage(language)) {
+      callback(new Error(`Unsupported language: ${language}`), null);
+      return;
+    }
+    if (language === 'en') {
+      callback(null, en);
+      return;
+    }
+    localeLoaders[language]()
+      .then(({ default: catalog }) => callback(null, catalog))
+      .catch((error: unknown) => callback(error instanceof Error ? error : new Error(String(error)), null));
+  },
+};
 
 export function translate(key: string, options?: Record<string, unknown>): string {
   return i18n.t(key, options);
@@ -25,6 +50,14 @@ export function resolveSupportedLanguage(value: string): SupportedLanguage {
   return isSupportedLanguage(baseLanguage) ? baseLanguage : 'en';
 }
 
+export function resolvePreferredLanguage(values: readonly string[]): SupportedLanguage {
+  for (const value of values) {
+    const baseLanguage = value.toLowerCase().split('-')[0] ?? '';
+    if (isSupportedLanguage(baseLanguage)) return baseLanguage;
+  }
+  return 'en';
+}
+
 function detectLanguage(): SupportedLanguage {
   if (typeof window === 'undefined') return 'en';
 
@@ -37,16 +70,17 @@ function detectLanguage(): SupportedLanguage {
   if (isSupportedLanguage(stored)) return stored;
 
   const browserLanguages = navigator.languages?.length ? navigator.languages : [navigator.language];
-  return browserLanguages.some((language) => language.toLowerCase().startsWith('ru')) ? 'ru' : 'en';
+  return resolvePreferredLanguage(browserLanguages);
 }
 
 void i18n
+  .use(translationBackend)
   .use(initReactI18next)
   .init({
     resources: {
       en: { translation: en },
-      ru: { translation: ru },
     },
+    partialBundledLanguages: true,
     lng: detectLanguage(),
     fallbackLng: 'en',
     supportedLngs: supportedLanguages.map(({ code }) => code),

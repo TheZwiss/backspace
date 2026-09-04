@@ -5,38 +5,57 @@ import ts from '../packages/web/node_modules/typescript/lib/typescript.js';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const webRoot = path.join(repoRoot, 'packages/web/src');
-const en = JSON.parse(fs.readFileSync(path.join(webRoot, 'locales/en/translation.json'), 'utf8'));
-const ru = JSON.parse(fs.readFileSync(path.join(webRoot, 'locales/ru/translation.json'), 'utf8'));
+const localesRoot = path.join(webRoot, 'locales');
+const catalogs = Object.fromEntries(
+  fs.readdirSync(localesRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => [
+      entry.name,
+      JSON.parse(fs.readFileSync(path.join(localesRoot, entry.name, 'translation.json'), 'utf8')),
+    ]),
+);
+const en = catalogs.en;
+if (!en) throw new Error('The English source catalog is missing');
 const errors = [];
 const allowedUntranslated = new Set([
-  'Backspace', 'DMs', 'LIVE', '.tus/', 'NVIDIA / Apple', 'https://instance.example.com',
+  '.tus/', '#hex', 'Admin', 'Administrator', 'Audio', 'Avatar', 'Backspace',
+  'Backspace {{version}}', 'Backspace Desktop', 'Banner', 'Bitrate', 'Chat',
+  'Codec', 'Desktop', 'DMs', 'Emoji', 'error', 'Filter', 'fps', 'Gaming', 'General',
+  'GIF', 'https://instance.example.com', 'Info', 'Jitter', 'kbps', 'Link',
+  'LIVE', 'Local', 'Max', 'Min', 'Name', 'Name (A-Z)', 'Name (A–Z)',
+  'Name A-Z', 'Name Z-A', 'NVIDIA / Apple', 'Offline', 'OFFLINE —', 'ONLINE',
+  'ONLINE —', 'Pause', 'Ping', 'Roles', 'Server', 'Standard', 'Status',
+  'Space', 'Spaces', 'Streaming', 'Text', 'Token', 'Updates', 'user@instance', 'Version',
+  'Version {{version}}', 'Video', 'video', 'Windows', '🎬 Video', '🎵 Audio',
 ]);
 
 function placeholders(value) {
   return [...value.matchAll(/\{\{[^}]+\}\}|<\/?\w+[^>]*>/g)].map(([match]) => match).sort();
 }
 
-function compareCatalogs(english, russian, prefix = '') {
-  for (const key of new Set([...Object.keys(english), ...Object.keys(russian)])) {
+function compareCatalogs(english, translated, locale, prefix = '') {
+  for (const key of new Set([...Object.keys(english), ...Object.keys(translated)])) {
     const current = prefix ? `${prefix}.${key}` : key;
-    if (!(key in english)) errors.push(`Russian-only catalog key: ${current}`);
-    else if (!(key in russian)) errors.push(`Missing Russian catalog key: ${current}`);
+    if (!(key in english)) errors.push(`${locale}-only catalog key: ${current}`);
+    else if (!(key in translated)) errors.push(`Missing ${locale} catalog key: ${current}`);
     else if (typeof english[key] === 'object' && english[key] !== null) {
-      if (typeof russian[key] !== 'object' || russian[key] === null) errors.push(`Catalog type mismatch: ${current}`);
-      else compareCatalogs(english[key], russian[key], current);
-    } else if (typeof english[key] !== typeof russian[key]) {
-      errors.push(`Catalog type mismatch: ${current}`);
+      if (typeof translated[key] !== 'object' || translated[key] === null) errors.push(`${locale} catalog type mismatch: ${current}`);
+      else compareCatalogs(english[key], translated[key], locale, current);
+    } else if (typeof english[key] !== typeof translated[key]) {
+      errors.push(`${locale} catalog type mismatch: ${current}`);
     } else if (typeof english[key] === 'string') {
-      if (english[key] === russian[key] && /[A-Za-z]{3}/.test(english[key]) && !allowedUntranslated.has(english[key])) {
-        errors.push(`Untranslated Russian value: ${current}`);
+      if (english[key] === translated[key] && /[A-Za-z]{3}/.test(english[key]) && !allowedUntranslated.has(english[key])) {
+        errors.push(`Untranslated ${locale} value: ${current}`);
       }
-      if (JSON.stringify(placeholders(english[key])) !== JSON.stringify(placeholders(russian[key]))) {
-        errors.push(`Placeholder mismatch: ${current}`);
+      if (JSON.stringify(placeholders(english[key])) !== JSON.stringify(placeholders(translated[key]))) {
+        errors.push(`${locale} placeholder mismatch: ${current}`);
       }
     }
   }
 }
-compareCatalogs(en, ru);
+for (const [locale, catalog] of Object.entries(catalogs)) {
+  if (locale !== 'en') compareCatalogs(en, catalog, locale);
+}
 
 const attributeNames = new Set([
   'title', 'aria-label', 'placeholder', 'alt', 'label', 'description',
