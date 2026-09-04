@@ -48,20 +48,25 @@
 
   <screenshots>
     <screenshot type="default">
-      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.1.0/docs/screenshots/chat.webp</image>
+      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.1.1/docs/screenshots/chat.webp</image>
       <caption>Text channels with replies, reactions, and typing indicators</caption>
     </screenshot>
     <screenshot>
-      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.1.0/docs/screenshots/voice-video-grid.webp</image>
+      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.1.1/docs/screenshots/voice-video-grid.webp</image>
       <caption>Voice and video calls with screen sharing</caption>
     </screenshot>
     <screenshot>
-      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.1.0/docs/screenshots/user-discovery.webp</image>
+      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.1.1/docs/screenshots/user-discovery.webp</image>
       <caption>Discover users across federated instances</caption>
     </screenshot>
   </screenshots>
 
   <releases>
+    <release version="1.1.1" date="2026-09-04">
+      <description>
+        <p>Backspace 1.1.1 release.</p>
+      </description>
+    </release>
     <release version="1.1.0" date="2026-09-04">
       <description>
         <p>Backspace now speaks English, Russian and German. Pick your language under Settings, Account; dates, numbers and server errors follow the choice. The Flatpak build can also use the webcam and talk to the system power service, so video calls work and the app can keep the system awake during a call.</p>
