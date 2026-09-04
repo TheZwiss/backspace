@@ -64,7 +64,7 @@
   <releases>
     <release version="1.0.6" date="2026-09-04">
       <description>
-        <p>Backspace 1.0.6 release.</p>
+        <p>First release with Flatpak packaging. In the Flatpak build, updates are handled by Flatpak rather than by the app, and the in-app update controls are hidden accordingly.</p>
       </description>
     </release>
     <release version="1.0.5" date="2026-09-03">
