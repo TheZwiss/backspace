@@ -87,7 +87,10 @@
     "today": "Today at {{time}}",
     "yesterday": "Yesterday at {{time}}",
     "never": "Never",
-    "justNow": "Just now"
+    "justNow": "Just now",
+    "minutesShort": "{{minutes}}m",
+    "hoursMinutesShort": "{{hours}}h {{minutes}}m",
+    "elapsed": "{{duration}} elapsed"
   },
   "units": {
     "ms": "{{value}} ms",
