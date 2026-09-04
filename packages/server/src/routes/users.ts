@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { sendError } from '../utils/httpErrors';
+import { sendError, errorText } from '../utils/httpErrors';
 import { eq, or, and, inArray, isNull } from 'drizzle-orm';
 import { randomBytes } from 'node:crypto';
 import { getDb, schema } from '../db/index.js';
@@ -59,7 +59,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
 
     const user = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
     if (!user || user.isDeleted) {
-      return reply.code(401).send({ error: 'This account has been deleted', statusCode: 401 });
+      return sendError(reply, 401, 'account_deleted');
     }
 
     return reply.code(200).send(sanitizeUser(user, true));
@@ -70,13 +70,13 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     const { password } = request.body;
 
     if (!password || typeof password !== 'string') {
-      return reply.code(400).send({ error: 'Password is required', statusCode: 400 });
+      return sendError(reply, 400, 'password_required');
     }
 
     const db = getDb();
     const user = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
     if (!user) {
-      return reply.code(404).send({ error: 'User not found', statusCode: 404 });
+      return sendError(reply, 404, 'user_not_found');
     }
 
     const valid = await verifyPassword(password, user.passwordHash);
@@ -98,7 +98,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     const db = getDb();
     const user = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
     if (!user) {
-      return reply.code(404).send({ error: 'User not found', statusCode: 404 });
+      return sendError(reply, 404, 'user_not_found');
     }
 
     // Federated users (replicas on this instance) don't need currentPassword —
@@ -133,18 +133,18 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     const { password, username } = request.body;
 
     if (!username || typeof username !== 'string') {
-      return reply.code(400).send({ error: 'Username confirmation is required', statusCode: 400 });
+      return sendError(reply, 400, 'username_confirmation_required');
     }
 
     const db = getDb();
     const user = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
     if (!user) {
-      return reply.code(404).send({ error: 'User not found', statusCode: 404 });
+      return sendError(reply, 404, 'user_not_found');
     }
 
     // Verify username matches (confirmation safeguard)
     if (user.username !== username) {
-      return reply.code(400).send({ error: 'Username does not match', statusCode: 400 });
+      return sendError(reply, 400, 'username_confirmation_mismatch');
     }
 
     // Native users must verify password; non-detached federated users rely on
@@ -155,7 +155,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     // change-password (detach spec §4.4).
     if (!user.homeInstance || user.federationHomeOrphaned === 1) {
       if (!password || typeof password !== 'string') {
-        return reply.code(400).send({ error: 'Password is required', statusCode: 400 });
+        return sendError(reply, 400, 'password_required');
       }
       const valid = await verifyPassword(password, user.passwordHash);
       if (!valid) {
@@ -169,8 +169,10 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       .where(eq(schema.spaces.ownerId, request.userId))
       .all();
     if (ownedSpaces.length > 0) {
+      // Not sendError: the dialog needs the list of spaces next to the code.
       return reply.code(400).send({
-        error: 'You must transfer ownership or delete all spaces you own before deleting your account',
+        error: errorText('account_deletion_blocked_owned_spaces'),
+        code: 'account_deletion_blocked_owned_spaces',
         statusCode: 400,
         ownedSpaces,
       });
@@ -224,7 +226,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     const DURABLE_PROFILE_FIELDS = ['displayName', 'avatar', 'banner', 'accentColor', 'avatarColor', 'bio'] as const;
     const preUpdateUser = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
     if (!preUpdateUser) {
-      return reply.code(404).send({ error: 'User not found', statusCode: 404 });
+      return sendError(reply, 404, 'user_not_found');
     }
 
     // Write-protection: replicated users cannot update durable profile fields —
@@ -262,7 +264,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
 
     if (avatar !== undefined) {
       if (!isValidAssetUrl(avatar)) {
-        return reply.code(400).send({ error: 'Avatar URL must be a relative upload path or http/https URL', statusCode: 400 });
+        return sendError(reply, 400, 'avatar_url_invalid');
       }
       updateData.avatar = avatar;
       // Normalize to bare filename — callers may include /api/uploads/ prefix
@@ -273,7 +275,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
 
     if (banner !== undefined) {
       if (!isValidAssetUrl(banner)) {
-        return reply.code(400).send({ error: 'Banner URL must be a relative upload path or http/https URL', statusCode: 400 });
+        return sendError(reply, 400, 'banner_url_invalid');
       }
       if (banner && typeof banner === 'string' && banner.trim().length > 0) {
         updateData.banner = banner.trim();
@@ -290,7 +292,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       if (accentColor && typeof accentColor === 'string' && accentColor.trim().length > 0) {
         const hex = accentColor.trim();
         if (!/^#[0-9a-fA-F]{6}$/.test(hex)) {
-          return reply.code(400).send({ error: 'Accent color must be a valid hex color (e.g. #ff0000)', statusCode: 400 });
+          return sendError(reply, 400, 'accent_color_invalid');
         }
         updateData.accentColor = hex;
       } else {
@@ -302,7 +304,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       if (avatarColor && typeof avatarColor === 'string' && avatarColor.trim().length > 0) {
         const trimmed = avatarColor.trim();
         if (!(AVATAR_COLORS as readonly string[]).includes(trimmed)) {
-          return reply.code(400).send({ error: `Invalid avatar color. Must be one of: ${AVATAR_COLORS.join(', ')}`, statusCode: 400 });
+          return sendError(reply, 400, 'avatar_color_invalid');
         }
         updateData.avatarColor = trimmed;
       } else {
@@ -336,43 +338,43 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
 
     if (status !== undefined) {
       if (!['online', 'idle', 'dnd', 'offline'].includes(status)) {
-        return reply.code(400).send({ error: 'Invalid status', statusCode: 400 });
+        return sendError(reply, 400, 'status_invalid');
       }
       updateData.status = status;
     }
 
     if (replicatedInstances !== undefined) {
       if (!Array.isArray(replicatedInstances)) {
-        return reply.code(400).send({ error: 'replicatedInstances must be an array', statusCode: 400 });
+        return sendError(reply, 400, 'validation_failed', { field: 'replicatedInstances', reason: 'must be an array' });
       }
       if (replicatedInstances.length > 20) {
-        return reply.code(400).send({ error: 'Maximum 20 replicated instances', statusCode: 400 });
+        return sendError(reply, 400, 'validation_failed', { field: 'replicatedInstances', reason: 'at most 20 entries' });
       }
       const domainRegex = /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*$/;
       for (const inst of replicatedInstances) {
         if (!inst || typeof inst.username !== 'string' || inst.username.trim().length === 0) {
-          return reply.code(400).send({ error: 'Each replicated instance must have a non-empty username string', statusCode: 400 });
+          return sendError(reply, 400, 'validation_failed', { field: 'replicatedInstances.username', reason: 'must be a non-empty string' });
         }
         if (inst.username.length > 255) {
-          return reply.code(400).send({ error: 'Instance username must be 255 characters or less', statusCode: 400 });
+          return sendError(reply, 400, 'validation_failed', { field: 'replicatedInstances.username', reason: 'at most 255 characters' });
         }
         if (typeof inst.origin !== 'string' && typeof inst.domain !== 'string') {
-          return reply.code(400).send({ error: 'Each replicated instance must have origin or domain string', statusCode: 400 });
+          return sendError(reply, 400, 'validation_failed', { field: 'replicatedInstances', reason: 'each entry needs an origin or domain string' });
         }
         if (typeof inst.origin === 'string') {
           if (inst.origin.length > 512) {
-            return reply.code(400).send({ error: 'Instance origin must be 512 characters or less', statusCode: 400 });
+            return sendError(reply, 400, 'validation_failed', { field: 'replicatedInstances.origin', reason: 'at most 512 characters' });
           }
           if (!inst.origin.startsWith('https://') && !inst.origin.startsWith('http://')) {
-            return reply.code(400).send({ error: 'Instance origin must start with https:// or http://', statusCode: 400 });
+            return sendError(reply, 400, 'validation_failed', { field: 'replicatedInstances.origin', reason: 'must start with https:// or http://' });
           }
         }
         if (typeof inst.domain === 'string') {
           if (inst.domain.length > 253) {
-            return reply.code(400).send({ error: 'Instance domain must be 253 characters or less', statusCode: 400 });
+            return sendError(reply, 400, 'validation_failed', { field: 'replicatedInstances.domain', reason: 'at most 253 characters' });
           }
           if (!domainRegex.test(inst.domain)) {
-            return reply.code(400).send({ error: 'Instance domain contains invalid characters', statusCode: 400 });
+            return sendError(reply, 400, 'validation_failed', { field: 'replicatedInstances.domain', reason: 'contains invalid characters' });
           }
         }
       }
@@ -440,20 +442,20 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
 
     if (discoverable !== undefined) {
       if (typeof discoverable !== 'boolean') {
-        return reply.code(400).send({ error: 'discoverable must be a boolean', statusCode: 400 });
+        return sendError(reply, 400, 'validation_failed', { field: 'discoverable', reason: 'must be a boolean' });
       }
       (updateData as Record<string, unknown>).discoverable = discoverable ? 1 : 0;
     }
 
     if (showActivity !== undefined) {
       if (typeof showActivity !== 'boolean') {
-        return reply.code(400).send({ error: 'showActivity must be a boolean', statusCode: 400 });
+        return sendError(reply, 400, 'validation_failed', { field: 'showActivity', reason: 'must be a boolean' });
       }
       (updateData as Record<string, unknown>).showActivity = showActivity ? 1 : 0;
     }
 
     if (Object.keys(updateData).length === 0) {
-      return reply.code(400).send({ error: 'No fields to update', statusCode: 400 });
+      return sendError(reply, 400, 'no_fields_to_update');
     }
 
     // Detect profile changes and stamp timestamp
@@ -523,7 +525,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
 
     const updatedUser = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
     if (!updatedUser) {
-      return reply.code(404).send({ error: 'User not found', statusCode: 404 });
+      return sendError(reply, 404, 'user_not_found');
     }
 
     const sanitized = sanitizeUser(updatedUser, true);
@@ -634,33 +636,33 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     const { registry, updatedAt } = request.body;
 
     if (!Array.isArray(registry)) {
-      return reply.code(400).send({ error: 'registry must be an array', statusCode: 400 });
+      return sendError(reply, 400, 'validation_failed', { field: 'registry', reason: 'must be an array' });
     }
     if (typeof updatedAt !== 'number' || updatedAt <= 0) {
-      return reply.code(400).send({ error: 'updatedAt must be a positive number', statusCode: 400 });
+      return sendError(reply, 400, 'validation_failed', { field: 'updatedAt', reason: 'must be a positive number' });
     }
 
     // Size cap — prevent unbounded registry writes
     if (registry.length > 100) {
-      return reply.code(400).send({ error: 'Registry cannot exceed 100 entries', statusCode: 400 });
+      return sendError(reply, 400, 'validation_failed', { field: 'registry', reason: 'at most 100 entries' });
     }
 
     // Duplicate origin check
     const origins = registry.map(e => e.origin);
     if (new Set(origins).size !== origins.length) {
-      return reply.code(400).send({ error: 'Duplicate origins are not allowed', statusCode: 400 });
+      return sendError(reply, 400, 'validation_failed', { field: 'registry', reason: 'duplicate origins' });
     }
 
     const validStatuses = ['connected', 'disconnected', 'unreachable', 'auth_expired'];
     for (const entry of registry) {
       if (!entry || typeof entry.origin !== 'string' || !entry.origin) {
-        return reply.code(400).send({ error: 'Each entry must have a string origin', statusCode: 400 });
+        return sendError(reply, 400, 'validation_failed', { field: 'registry.origin', reason: 'must be a string' });
       }
       if (!validStatuses.includes(entry.status)) {
-        return reply.code(400).send({ error: `Invalid status "${entry.status}" — must be one of: ${validStatuses.join(', ')}`, statusCode: 400 });
+        return sendError(reply, 400, 'validation_failed', { field: 'registry.status', reason: `must be one of: ${validStatuses.join(', ')}` });
       }
       if (typeof entry.addedAt !== 'number') {
-        return reply.code(400).send({ error: 'Each entry must have a numeric addedAt', statusCode: 400 });
+        return sendError(reply, 400, 'validation_failed', { field: 'registry.addedAt', reason: 'must be a number' });
       }
     }
 
@@ -674,7 +676,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
 
     const storedUpdatedAt = user?.federationRegistryUpdatedAt ?? 0;
     if (updatedAt <= storedUpdatedAt) {
-      return reply.code(409).send({ error: 'Conflict: incoming registry is not newer than stored version', statusCode: 409 });
+      return sendError(reply, 409, 'registry_conflict');
     }
 
     // Atomic replace: delete existing, insert all incoming, update timestamp
@@ -729,29 +731,23 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     const { origin, markProvisioned } = request.body ?? {};
 
     if (!origin || typeof origin !== 'string') {
-      return reply.code(400).send({ error: 'Origin is required', statusCode: 400 });
+      return sendError(reply, 400, 'origin_required');
     }
     const target = canonicalRemoteOrigin(origin);
     if (!target) {
-      return reply.code(400).send({ error: 'Invalid origin', statusCode: 400 });
+      return sendError(reply, 400, 'origin_invalid');
     }
     if (normalizeOriginForCompare(target) === normalizeOriginForCompare(getOurOrigin())) {
-      return reply.code(400).send({
-        error: 'Federation credentials are only issued for remote instances',
-        statusCode: 400,
-      });
+      return sendError(reply, 400, 'federation_credential_remote_only');
     }
 
     const db = getDb();
     const user = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
     if (!user || user.isDeleted) {
-      return reply.code(401).send({ error: 'This account has been deleted', statusCode: 401 });
+      return sendError(reply, 401, 'account_deleted');
     }
     if (user.homeInstance && user.federationHomeOrphaned !== 1) {
-      return reply.code(409).send({
-        error: 'Federation credentials are issued by your home instance',
-        statusCode: 409,
-      });
+      return sendError(reply, 409, 'federation_credential_home_only');
     }
 
     const now = Date.now();
@@ -784,7 +780,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       ))
       .get();
     if (!row) {
-      return reply.code(500).send({ error: 'Failed to issue federation credential', statusCode: 500 });
+      return sendError(reply, 500, 'federation_credential_failed');
     }
 
     const response: FederationCredentialResponse = {
@@ -803,10 +799,10 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     const { origins, mode } = request.body;
 
     if (!mode || !['leave', 'soft', 'full'].includes(mode)) {
-      return reply.code(400).send({ error: 'Invalid mode: must be "leave", "soft", or "full"', statusCode: 400 });
+      return sendError(reply, 400, 'validation_failed', { field: 'mode', reason: 'must be "leave", "soft" or "full"' });
     }
     if (!Array.isArray(origins) || origins.length === 0 || !origins.every(o => typeof o === 'string')) {
-      return reply.code(400).send({ error: 'origins must be a non-empty array of strings', statusCode: 400 });
+      return sendError(reply, 400, 'validation_failed', { field: 'origins', reason: 'must be a non-empty array of strings' });
     }
 
     const db = getDb();
@@ -955,23 +951,23 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     const userId = request.userId;
 
     if (!Array.isArray(items)) {
-      return reply.code(400).send({ error: 'items must be an array', statusCode: 400 });
+      return sendError(reply, 400, 'validation_failed', { field: 'items', reason: 'must be an array' });
     }
     if (!folders || typeof folders !== 'object') {
-      return reply.code(400).send({ error: 'folders must be an object', statusCode: 400 });
+      return sendError(reply, 400, 'validation_failed', { field: 'folders', reason: 'must be an object' });
     }
 
     // Validate items
     for (const item of items) {
       if (!item || (item.t !== 's' && item.t !== 'f') || typeof item.id !== 'string') {
-        return reply.code(400).send({ error: 'Each item must have t ("s" or "f") and id string', statusCode: 400 });
+        return sendError(reply, 400, 'validation_failed', { field: 'items', reason: 'each item needs t ("s" or "f") and an id string' });
       }
     }
 
     // Validate folders
     for (const [key, folder] of Object.entries(folders)) {
       if (!Array.isArray(folder.spaceIds)) {
-        return reply.code(400).send({ error: `Folder "${key}" must have spaceIds array`, statusCode: 400 });
+        return sendError(reply, 400, 'validation_failed', { field: `folders.${key}.spaceIds`, reason: 'must be an array' });
       }
     }
 
@@ -1159,7 +1155,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
 
     const user = db.select().from(schema.users).where(eq(schema.users.id, id)).get();
     if (!user) {
-      return reply.code(404).send({ error: 'User not found', statusCode: 404 });
+      return sendError(reply, 404, 'user_not_found');
     }
 
     return reply.code(200).send(sanitizeUser(user));

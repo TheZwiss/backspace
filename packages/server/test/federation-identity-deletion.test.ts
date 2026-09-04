@@ -262,7 +262,7 @@ describe('Federation identity deletion — server suite', () => {
     });
     expect(res.status).toBe(400);
     const body = await res.json();
-    expect(String(body.error)).toMatch(/Invalid mode/);
+    expect(body).toMatchObject({ code: 'validation_failed', details: { field: 'mode' } });
   });
 
   it('#12 returns 400 for empty origins', async () => {
@@ -275,7 +275,7 @@ describe('Federation identity deletion — server suite', () => {
     });
     expect(res.status).toBe(400);
     const body = await res.json();
-    expect(String(body.error)).toMatch(/origins/);
+    expect(body).toMatchObject({ code: 'validation_failed', details: { field: 'origins' } });
   });
 
   it('#1 leave mode: home registry cleaned, remote untouched, no S2S request hits the remote', async () => {

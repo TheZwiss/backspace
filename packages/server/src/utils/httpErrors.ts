@@ -54,6 +54,32 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
 
   recipient_deleted: "This user's account was deleted",
 
+  // auth-users
+  username_length_invalid: 'Username must be between {{min}} and {{max}} characters',
+  username_characters_invalid: 'Username can only contain lowercase letters, numbers, and underscores',
+  home_instance_invalid: 'Invalid homeInstance domain',
+  username_local_part_invalid: 'Username local part must be {{min}}-{{max}} lowercase alphanumeric/underscore characters',
+  username_domain_part_invalid: 'Username domain part is invalid',
+  replicated_username_format_required: 'Replicated users must use username@domain format',
+  federated_registration_closed: 'Federated registration is closed on this instance',
+  user_create_failed: 'Failed to create user',
+  account_deleted: 'This account has been deleted',
+  target_domain_required: 'targetDomain is required (string)',
+  native_account_required: 'Only native accounts can mint attach proofs',
+  username_confirmation_required: 'Username confirmation is required',
+  username_confirmation_mismatch: 'Username does not match',
+  avatar_url_invalid: 'Avatar URL must be a relative upload path or http/https URL',
+  banner_url_invalid: 'Banner URL must be a relative upload path or http/https URL',
+  accent_color_invalid: 'Accent color must be a valid hex color (e.g. #ff0000)',
+  avatar_color_invalid: 'Invalid avatar color',
+  status_invalid: 'Invalid status',
+  no_fields_to_update: 'No fields to update',
+  registry_conflict: 'Conflict: incoming registry is not newer than stored version',
+  origin_required: 'Origin is required',
+  origin_invalid: 'Invalid origin',
+  federation_credential_remote_only: 'Federation credentials are only issued for remote instances',
+  federation_credential_home_only: 'Federation credentials are issued by your home instance',
+  federation_credential_failed: 'Failed to issue federation credential',
   // dm
   peer_reset_pending: 'Federation with this instance is being reset; try again shortly',
   dm_target_required: 'userId or (homeUserId + homeInstance) is required',
@@ -149,9 +175,7 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   space_name_length: 'Space name must be between {{min}} and {{max}} characters',
   space_create_failed: 'Failed to create space',
   not_space_member: 'You are not a member of this space',
-  avatar_color_invalid: 'Invalid avatar color',
   space_visibility_invalid: 'Visibility must be "public", "request", or "private"',
-  no_fields_to_update: 'No fields to update',
   space_update_failed: 'Failed to update space',
   space_owner_only: 'Only the space owner can do that',
   space_uses_join_requests: 'Request-only spaces do not use invite links; entry is by join request',
@@ -209,6 +233,17 @@ function fillPlaceholders(text: string, details: ErrorDetails | undefined): stri
     const value = details[name];
     return value === undefined ? match : String(value);
   });
+}
+
+/**
+ * The English text for a code with its placeholders filled.
+ *
+ * For the rare response whose body is not the error contract (a
+ * `{ available, reason }` availability check, a rejection that also carries
+ * data) but still wants to name the code and its text.
+ */
+export function errorText(code: ErrorCode, details?: ErrorDetails): string {
+  return fillPlaceholders(ERROR_MESSAGES[code], details);
 }
 
 /**
