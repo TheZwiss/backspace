@@ -64,7 +64,7 @@
   <releases>
     <release version="1.1.2" date="2026-09-04">
       <description>
-        <p>Backspace 1.1.2 release.</p>
+        <p>Fixes the Register and Log In links on the login and registration pages, localizes the elapsed time under activities, and adds editing your last message with the up arrow.</p>
       </description>
     </release>
     <release version="1.1.1" date="2026-09-04">
