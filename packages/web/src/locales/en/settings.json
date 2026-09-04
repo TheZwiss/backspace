@@ -252,5 +252,93 @@
       "users": "Users",
       "updates": "Updates"
     }
+  },
+  "keybinds": {
+    "title": "Keybinds",
+    "note": {
+      "webOnly": "Shortcuts work while this tab is focused. For global shortcuts that work in other apps, use the desktop app."
+    },
+    "section": {
+      "voice": "Voice Shortcuts"
+    },
+    "action": {
+      "toggleMute": "Toggle Mute",
+      "toggleDeafen": "Toggle Deafen",
+      "pushToTalk": "Push to Talk",
+      "toggleCamera": "Toggle Camera",
+      "toggleScreenShare": "Toggle Screen Share",
+      "disconnect": "Disconnect"
+    },
+    "row": {
+      "recordingPrompt": "Press a key combo…",
+      "notBound": "Not bound",
+      "record": "Record",
+      "escToCancel": "ESC to cancel"
+    },
+    "key": {
+      "shift": "Shift",
+      "ctrl": "Ctrl",
+      "alt": "Alt",
+      "option": "Option",
+      "cmd": "Cmd",
+      "win": "Win",
+      "space": "Space",
+      "middleClick": "Middle Click",
+      "mouse4": "Mouse 4",
+      "mouse5": "Mouse 5",
+      "mouseGeneric": "Mouse {{button}}"
+    },
+    "accessibility": {
+      "title": "Accessibility Permission Required",
+      "description": "Backspace needs Accessibility permission for global shortcuts to work outside the app.",
+      "grant": "Grant Permission"
+    },
+    "hookError": {
+      "title": "Global Shortcuts Unavailable",
+      "description": "Failed to start input listener. On Linux, your user may need to be in the <code>input</code> group."
+    },
+    "conflict": {
+      "message": "<strong>{{combo}}</strong> is already bound to <strong>{{action}}</strong>. Overwrite?",
+      "overwrite": "Overwrite"
+    }
+  },
+  "desktop": {
+    "title": "Desktop",
+    "autoLaunch": {
+      "openAtLogin": {
+        "label": "Start at boot",
+        "description": "Automatically launch Backspace when you log in"
+      },
+      "startMinimized": {
+        "label": "Start minimized",
+        "description": "Start hidden in the system tray instead of showing the window"
+      }
+    },
+    "updates": {
+      "appName": "Backspace Desktop",
+      "versionLabel": "Version {{version}}",
+      "checking": "Checking for updates…",
+      "checkingShort": "Checking…",
+      "checkNow": "Check for Updates",
+      "downloading": "Downloading {{version}}, {{percent}}%",
+      "downloadingWithRate": "Downloading {{version}}, {{percent}}% at {{rate}}",
+      "rateMegabytes": "{{value}} MB/s",
+      "rateKilobytes": "{{value}} KB/s",
+      "upToDate": "You are on the latest version",
+      "available": "Version {{version}} is available",
+      "readyToInstall": "Version {{version}} is ready to install",
+      "installFailed": "Version {{version}} could not be installed",
+      "checkFailed": "The last update check failed",
+      "idle": "Check for new versions of the desktop app",
+      "external": "Updates are installed through your Flatpak software manager",
+      "download": "Download",
+      "restart": "Restart",
+      "manualNote": "This build cannot install updates itself, so new versions are downloaded from GitHub and replace the app by hand. See the release notes for the steps on your platform.",
+      "externalNote": "Flatpak applies updates atomically outside the app. Use your software manager or the <code>flatpak update</code> command to update Backspace."
+    },
+    "instance": {
+      "current": "Currently connected instance",
+      "change": "Change Instance"
+    }
   }
 }

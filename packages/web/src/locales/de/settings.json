@@ -252,5 +252,93 @@
       "users": "Benutzer",
       "updates": "Updates"
     }
+  },
+  "keybinds": {
+    "title": "Tastenkürzel",
+    "note": {
+      "webOnly": "Tastenkürzel funktionieren, solange dieser Tab im Vordergrund ist. Für globale Tastenkürzel, die auch in anderen Apps gelten, nutze die Desktop-App."
+    },
+    "section": {
+      "voice": "Sprach-Tastenkürzel"
+    },
+    "action": {
+      "toggleMute": "Mikrofon ein/aus",
+      "toggleDeafen": "Ton ein/aus",
+      "pushToTalk": "Push-to-Talk",
+      "toggleCamera": "Kamera ein/aus",
+      "toggleScreenShare": "Bildschirmfreigabe ein/aus",
+      "disconnect": "Verbindung trennen"
+    },
+    "row": {
+      "recordingPrompt": "Tastenkombination drücken…",
+      "notBound": "Nicht belegt",
+      "record": "Aufnehmen",
+      "escToCancel": "ESC zum Abbrechen"
+    },
+    "key": {
+      "shift": "Umschalt",
+      "ctrl": "Strg",
+      "alt": "Alt",
+      "option": "Option",
+      "cmd": "Cmd",
+      "win": "Win",
+      "space": "Leertaste",
+      "middleClick": "Mittlere Maustaste",
+      "mouse4": "Maustaste 4",
+      "mouse5": "Maustaste 5",
+      "mouseGeneric": "Maustaste {{button}}"
+    },
+    "accessibility": {
+      "title": "Bedienungshilfen-Berechtigung erforderlich",
+      "description": "Damit globale Tastenkürzel außerhalb der App funktionieren, braucht Backspace die Berechtigung für Bedienungshilfen.",
+      "grant": "Berechtigung erteilen"
+    },
+    "hookError": {
+      "title": "Globale Tastenkürzel nicht verfügbar",
+      "description": "Der Eingabe-Listener konnte nicht gestartet werden. Unter Linux muss dein Benutzer eventuell in der Gruppe <code>input</code> sein."
+    },
+    "conflict": {
+      "message": "<strong>{{combo}}</strong> ist bereits mit <strong>{{action}}</strong> belegt. Überschreiben?",
+      "overwrite": "Überschreiben"
+    }
+  },
+  "desktop": {
+    "title": "Desktop",
+    "autoLaunch": {
+      "openAtLogin": {
+        "label": "Beim Anmelden starten",
+        "description": "Backspace automatisch starten, wenn du dich anmeldest"
+      },
+      "startMinimized": {
+        "label": "Minimiert starten",
+        "description": "Versteckt im Infobereich starten, statt das Fenster zu zeigen"
+      }
+    },
+    "updates": {
+      "appName": "Backspace Desktop",
+      "versionLabel": "Version {{version}}",
+      "checking": "Suche nach Updates…",
+      "checkingShort": "Suche…",
+      "checkNow": "Nach Updates suchen",
+      "downloading": "{{version}} wird heruntergeladen, {{percent}} %",
+      "downloadingWithRate": "{{version}} wird heruntergeladen, {{percent}} % mit {{rate}}",
+      "rateMegabytes": "{{value}} MB/s",
+      "rateKilobytes": "{{value}} KB/s",
+      "upToDate": "Du hast die neueste Version",
+      "available": "Version {{version}} ist verfügbar",
+      "readyToInstall": "Version {{version}} ist bereit zur Installation",
+      "installFailed": "Version {{version}} konnte nicht installiert werden",
+      "checkFailed": "Die letzte Update-Prüfung ist fehlgeschlagen",
+      "idle": "Nach neuen Versionen der Desktop-App suchen",
+      "external": "Updates werden über deine Flatpak-Softwareverwaltung installiert",
+      "download": "Herunterladen",
+      "restart": "Neu starten",
+      "manualNote": "Diese Version kann Updates nicht selbst installieren. Neue Versionen werden von GitHub heruntergeladen und ersetzen die App von Hand. Die Schritte für deine Plattform stehen in den Versionshinweisen.",
+      "externalNote": "Flatpak wendet Updates atomar außerhalb der App an. Nutze deine Softwareverwaltung oder den Befehl <code>flatpak update</code>, um Backspace zu aktualisieren."
+    },
+    "instance": {
+      "current": "Aktuell verbundene Instanz",
+      "change": "Instanz wechseln"
+    }
   }
 }
