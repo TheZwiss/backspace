@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Trans, useTranslation } from 'react-i18next';
 import { useAuthStore } from '../../stores/authStore';
 import { api, RateLimitError } from '../../api/client';
 import type { InstanceInfoResponse } from '@backspace/shared';
 import { SourceCodeLink } from '../ui/SourceCodeLink';
+import { describeError } from '../../i18n/errors';
 
 export function LoginPage() {
+  const { t } = useTranslation(['auth', 'common']);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -46,11 +49,11 @@ export function LoginPage() {
     setError('');
 
     if (!username.trim()) {
-      setError('Username is required');
+      setError(t('auth:validation.usernameRequired'));
       return;
     }
     if (!password) {
-      setError('Password is required');
+      setError(t('auth:validation.passwordRequired'));
       return;
     }
 
@@ -66,7 +69,7 @@ export function LoginPage() {
         setRetryAfter(err.retryAfter);
         setError('');
       } else {
-        setError(err instanceof Error ? err.message : 'Login failed');
+        setError(err instanceof Error ? describeError(err) : t('auth:login.failed'));
       }
     }
   };
@@ -78,15 +81,15 @@ export function LoginPage() {
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(124,108,246,0.06)_0%,transparent_50%)]" />
       <div className="w-full max-w-[480px] bg-surface-elevated rounded-md p-8 shadow-elevation-high relative z-10">
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-txt-primary">Welcome back!</h1>
-          <p className="text-txt-tertiary mt-1">We're so excited to see you again!</p>
+          <h1 className="text-2xl font-bold text-txt-primary">{t('auth:login.title')}</h1>
+          <p className="text-txt-tertiary mt-1">{t('auth:login.subtitle')}</p>
         </div>
 
         <form onSubmit={handleSubmit}>
           {retryAfter > 0 && (
             <div className="mb-4 p-3 bg-accent-amber/10 border border-accent-amber/30 rounded text-sm">
-              <p className="font-medium text-accent-amber">Too many login attempts</p>
-              <p className="text-txt-secondary mt-0.5">Try again in {retryAfter}s</p>
+              <p className="font-medium text-accent-amber">{t('auth:login.rateLimited.title')}</p>
+              <p className="text-txt-secondary mt-0.5">{t('auth:login.rateLimited.retryIn', { seconds: retryAfter })}</p>
             </div>
           )}
 
@@ -98,7 +101,7 @@ export function LoginPage() {
 
           <div className="mb-5">
             <label className="block text-xs font-bold text-txt-secondary uppercase mb-2">
-              Username <span className="text-txt-danger">*</span>
+              {t('auth:fields.username')} <span className="text-txt-danger">*</span>
             </label>
             <input
               type="text"
@@ -112,7 +115,7 @@ export function LoginPage() {
 
           <div className="mb-5">
             <label className="block text-xs font-bold text-txt-secondary uppercase mb-2">
-              Password <span className="text-txt-danger">*</span>
+              {t('auth:fields.password')} <span className="text-txt-danger">*</span>
             </label>
             <input
               type="password"
@@ -129,17 +132,20 @@ export function LoginPage() {
             className="w-full py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {retryAfter > 0
-              ? `Try again in ${retryAfter}s`
+              ? t('auth:login.rateLimited.retryIn', { seconds: retryAfter })
               : isLoading
-                ? 'Logging in...'
-                : 'Log In'}
+                ? t('auth:login.submitting')
+                : t('auth:login.submit')}
           </button>
 
           <p className="mt-3 text-sm text-txt-tertiary">
-            Need an account?{' '}
-            <Link to={`/register${redirect ? `?redirect=${encodeURIComponent(redirect)}` : ''}`} className="text-accent-primary hover:underline">
-              Register
-            </Link>
+            <Trans
+              t={t}
+              i18nKey="auth:login.registerPrompt"
+              components={{
+                link: <Link to={`/register${redirect ? `?redirect=${encodeURIComponent(redirect)}` : ''}`} className="text-accent-primary hover:underline" />,
+              }}
+            />
           </p>
         </form>
 
