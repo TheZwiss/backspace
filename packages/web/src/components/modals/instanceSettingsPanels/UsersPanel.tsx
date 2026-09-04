@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useTranslation, Trans } from 'react-i18next';
 import { useFormatters } from '../../../i18n/formatters';
+import { describeError } from '../../../i18n/errors';
 import { api } from '../../../api/client';
 import { Avatar } from '../../ui/Avatar';
 import { ConfirmDialog } from '../../ui/ConfirmDialog';
@@ -7,6 +9,7 @@ import { useAuthStore } from '../../../stores/authStore';
 import type { AdminUser, AdminUserListResponse } from '@backspace/shared';
 
 export function UsersPanel() {
+  const { t } = useTranslation(['admin', 'common']);
   const currentUser = useAuthStore((s) => s.user);
   const f = useFormatters();
   const [data, setData] = useState<AdminUserListResponse | null>(null);
@@ -58,11 +61,11 @@ export function UsersPanel() {
       });
       setData(result);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load users');
+      setError(err instanceof Error ? describeError(err) : t('admin:users.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     fetchUsers(query, page, showDeleted, filtersRef.current);
@@ -89,7 +92,7 @@ export function UsersPanel() {
       await api.admin.setUserRole(user.id, true);
       fetchUsers(query, page, showDeleted, filtersRef.current);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update role');
+      setError(err instanceof Error ? describeError(err) : t('admin:users.roleFailed'));
     }
   };
 
@@ -110,7 +113,7 @@ export function UsersPanel() {
       setTempPassword({ userId: resetConfirmUser.id, password: result.temporaryPassword });
       setResetConfirmUser(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to reset password');
+      setError(err instanceof Error ? describeError(err) : t('admin:users.resetFailed'));
       setResetConfirmUser(null);
     } finally {
       setResetLoading(false);
@@ -134,7 +137,7 @@ export function UsersPanel() {
       setConfirmAction(null);
       fetchUsers(query, page, showDeleted, filtersRef.current);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Action failed');
+      setError(err instanceof Error ? describeError(err) : t('admin:users.actionFailed'));
       setConfirmAction(null);
     } finally {
       setActionLoading(false);
@@ -142,14 +145,21 @@ export function UsersPanel() {
   };
 
   const totalPages = data ? Math.max(1, Math.ceil(data.total / pageSize)) : 1;
+  const userCountLabel = t('admin:users.count', { count: data?.total ?? 0 });
 
   const formatDate = (ts: number) => f.formatMediumDate(ts);
 
+  const adminButtonTitle = (user: AdminUser, isFederated: boolean): string => {
+    if (user.isAdmin) return t('admin:users.actions.demote');
+    if (isFederated) return t('admin:users.actions.federatedNoAdmin');
+    return t('admin:users.actions.promote');
+  };
+
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-semibold text-txt-primary">Users</h2>
+      <h2 className="text-lg font-semibold text-txt-primary">{t('admin:users.title')}</h2>
       <div className="text-xs text-txt-tertiary">
-        View and manage user accounts on this instance.
+        {t('admin:users.description')}
       </div>
 
       {/* Search */}
@@ -158,7 +168,7 @@ export function UsersPanel() {
           type="text"
           value={query}
           onChange={(e) => handleSearchChange(e.target.value)}
-          placeholder="Search users..."
+          placeholder={t('admin:users.searchPlaceholder')}
           className="input-search flex-1"
         />
       </div>
@@ -170,8 +180,8 @@ export function UsersPanel() {
           onChange={(e) => { setInstanceFilter(e.target.value); setPage(1); }}
           className="input-search text-xs py-1"
         >
-          <option value="">All instances</option>
-          <option value="local">Local only</option>
+          <option value="">{t('admin:users.filters.allInstances')}</option>
+          <option value="local">{t('admin:users.filters.localOnly')}</option>
           {instances.map((inst) => (
             <option key={inst} value={inst}>{inst}</option>
           ))}
@@ -182,9 +192,9 @@ export function UsersPanel() {
           onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }}
           className="input-search text-xs py-1"
         >
-          <option value="">All roles</option>
-          <option value="admin">Admin</option>
-          <option value="non-admin">Non-admin</option>
+          <option value="">{t('admin:users.filters.allRoles')}</option>
+          <option value="admin">{t('admin:users.filters.admin')}</option>
+          <option value="non-admin">{t('admin:users.filters.nonAdmin')}</option>
         </select>
 
         <input
@@ -192,14 +202,14 @@ export function UsersPanel() {
           value={joinedAfter}
           onChange={(e) => { setJoinedAfter(e.target.value); setPage(1); }}
           className="input-search text-xs py-1"
-          title="Joined after"
+          title={t('admin:users.filters.joinedAfter')}
         />
         <input
           type="date"
           value={joinedBefore}
           onChange={(e) => { setJoinedBefore(e.target.value); setPage(1); }}
           className="input-search text-xs py-1"
-          title="Joined before"
+          title={t('admin:users.filters.joinedBefore')}
         />
 
         <select
@@ -207,10 +217,10 @@ export function UsersPanel() {
           onChange={(e) => { setSortBy(e.target.value); setPage(1); }}
           className="input-search text-xs py-1"
         >
-          <option value="newest">Newest first</option>
-          <option value="oldest">Oldest first</option>
-          <option value="az">Name A-Z</option>
-          <option value="za">Name Z-A</option>
+          <option value="newest">{t('admin:users.filters.newest')}</option>
+          <option value="oldest">{t('admin:users.filters.oldest')}</option>
+          <option value="az">{t('admin:users.filters.nameAsc')}</option>
+          <option value="za">{t('admin:users.filters.nameDesc')}</option>
         </select>
 
         <label className="flex items-center gap-1.5 text-xs text-txt-secondary cursor-pointer whitespace-nowrap">
@@ -220,7 +230,7 @@ export function UsersPanel() {
             onChange={(e) => { setShowDeleted(e.target.checked); setPage(1); }}
             className="w-3 h-3 rounded border-border-soft accent-accent-primary"
           />
-          Deleted
+          {t('admin:users.filters.deleted')}
         </label>
 
         {(instanceFilter || roleFilter || joinedAfter || joinedBefore || sortBy !== 'newest' || showDeleted || query) && (
@@ -233,7 +243,7 @@ export function UsersPanel() {
             }}
             className="text-xs text-accent-primary hover:text-accent-primary/80 whitespace-nowrap"
           >
-            Clear filters
+            {t('admin:users.filters.clear')}
           </button>
         )}
       </div>
@@ -245,14 +255,14 @@ export function UsersPanel() {
 
       {/* Loading */}
       {loading && !data && (
-        <div className="text-sm text-txt-tertiary py-4">Loading users...</div>
+        <div className="text-sm text-txt-tertiary py-4">{t('admin:users.loading')}</div>
       )}
 
       {/* User list */}
       {data && (
         <div className="space-y-1.5">
           {data.users.length === 0 && (
-            <div className="text-sm text-txt-tertiary py-4 text-center">No users found</div>
+            <div className="text-sm text-txt-tertiary py-4 text-center">{t('admin:users.empty')}</div>
           )}
           {data.users.map((user) => {
             const isSelf = user.id === currentUser?.id;
@@ -287,7 +297,7 @@ export function UsersPanel() {
                     <div className="flex items-center gap-1.5 mt-0.5">
                       {user.isAdmin && (
                         <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-accent-amber/20 text-accent-amber">
-                          Admin
+                          {t('admin:users.badge.admin')}
                         </span>
                       )}
                       {isFederated && (
@@ -297,7 +307,7 @@ export function UsersPanel() {
                       )}
                       {isDeleted && (
                         <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-accent-rose/20 text-accent-rose">
-                          Deleted
+                          {t('admin:users.badge.deleted')}
                         </span>
                       )}
                       <span className="text-[10px] text-txt-tertiary">
@@ -313,7 +323,7 @@ export function UsersPanel() {
                       <button
                         onClick={() => handleToggleAdmin(user)}
                         disabled={isFederated && !user.isAdmin}
-                        title={user.isAdmin ? 'Demote from admin' : isFederated ? 'Federated users cannot be admin' : 'Promote to admin'}
+                        title={adminButtonTitle(user, isFederated)}
                         className={`p-1.5 rounded transition-colors ${
                           user.isAdmin
                             ? 'text-accent-amber hover:bg-accent-amber/10'
@@ -331,7 +341,7 @@ export function UsersPanel() {
                       <button
                         onClick={() => handleResetPassword(user)}
                         disabled={isFederated}
-                        title={isFederated ? 'Federated users authenticate via home instance' : 'Reset password'}
+                        title={isFederated ? t('admin:users.actions.federatedNoReset') : t('admin:users.actions.resetPassword')}
                         className={`p-1.5 rounded transition-colors ${
                           isFederated
                             ? 'text-txt-tertiary/30 cursor-not-allowed'
@@ -347,7 +357,7 @@ export function UsersPanel() {
                       <button
                         onClick={() => handleDeleteUser(user)}
                         disabled={isSelf}
-                        title={isSelf ? 'Use account settings to delete your own account' : 'Delete user'}
+                        title={isSelf ? t('admin:users.actions.selfDelete') : t('admin:users.actions.delete')}
                         className={`p-1.5 rounded transition-colors ${
                           isSelf
                             ? 'text-txt-tertiary/30 cursor-not-allowed'
@@ -366,12 +376,12 @@ export function UsersPanel() {
                 {hasTempPassword && (
                   <div className="p-3 bg-status-online/10 border border-status-online/30 border-t-0 rounded-b-lg">
                     <div className="flex items-center justify-between gap-2">
-                      <div className="text-xs text-txt-secondary">Temporary password:</div>
+                      <div className="text-xs text-txt-secondary">{t('admin:users.tempPassword.label')}</div>
                       <button
                         onClick={() => setTempPassword(null)}
                         className="text-txt-tertiary hover:text-txt-secondary text-xs"
                       >
-                        Dismiss
+                        {t('common:actions.dismiss')}
                       </button>
                     </div>
                     <div className="mt-1.5 flex items-center gap-2">
@@ -382,11 +392,11 @@ export function UsersPanel() {
                         onClick={() => navigator.clipboard.writeText(tempPassword.password)}
                         className="px-2 py-1 bg-white/[0.06] hover:bg-white/[0.1] text-txt-secondary text-xs rounded transition-colors"
                       >
-                        Copy
+                        {t('common:actions.copy')}
                       </button>
                     </div>
                     <div className="text-[10px] text-txt-tertiary mt-1">
-                      Shown once. User has been disconnected and must log in again.
+                      {t('admin:users.tempPassword.note')}
                     </div>
                   </div>
                 )}
@@ -404,17 +414,17 @@ export function UsersPanel() {
             disabled={page <= 1}
             className="px-3 py-1 text-sm text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           >
-            Previous
+            {t('admin:shared.previous')}
           </button>
           <span className="text-xs text-txt-tertiary">
-            Page {page} of {totalPages} ({data.total} user{data.total !== 1 ? 's' : ''})
+            {t('admin:users.pagination', { page, total: totalPages, users: userCountLabel })}
           </span>
           <button
             onClick={() => setPage(p => Math.min(totalPages, p + 1))}
             disabled={page >= totalPages}
             className="px-3 py-1 text-sm text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           >
-            Next
+            {t('admin:shared.next')}
           </button>
         </div>
       )}
@@ -424,9 +434,16 @@ export function UsersPanel() {
         isOpen={!!resetConfirmUser}
         onClose={() => setResetConfirmUser(null)}
         onConfirm={handleResetConfirm}
-        title="Reset Password"
-        description={<>Reset the password for <strong>{resetConfirmUser?.username}</strong>? They will be disconnected immediately and must log in with the new temporary password.</>}
-        confirmLabel="Reset Password"
+        title={t('admin:users.resetDialog.title')}
+        description={
+          <Trans
+            t={t}
+            i18nKey="admin:users.resetDialog.description"
+            values={{ username: resetConfirmUser?.username ?? '' }}
+            components={{ strong: <strong /> }}
+          />
+        }
+        confirmLabel={t('admin:users.resetDialog.confirm')}
         variant="warning"
         loading={resetLoading}
       />
@@ -434,9 +451,16 @@ export function UsersPanel() {
         isOpen={confirmAction?.type === 'demote'}
         onClose={() => setConfirmAction(null)}
         onConfirm={handleConfirm}
-        title="Demote Admin"
-        description={<>Remove admin privileges from <strong>{confirmAction?.user.username}</strong>? They will lose access to instance settings.</>}
-        confirmLabel="Demote"
+        title={t('admin:users.demoteDialog.title')}
+        description={
+          <Trans
+            t={t}
+            i18nKey="admin:users.demoteDialog.description"
+            values={{ username: confirmAction?.user.username ?? '' }}
+            components={{ strong: <strong /> }}
+          />
+        }
+        confirmLabel={t('admin:users.demoteDialog.confirm')}
         variant="warning"
         loading={actionLoading}
       />
@@ -444,9 +468,16 @@ export function UsersPanel() {
         isOpen={confirmAction?.type === 'delete'}
         onClose={() => setConfirmAction(null)}
         onConfirm={handleConfirm}
-        title="Delete User"
-        description={<>Permanently delete <strong>{confirmAction?.user.username}</strong>? This will remove them from all spaces, DMs, and friends lists. This cannot be undone.</>}
-        confirmLabel="Delete User"
+        title={t('admin:users.deleteDialog.title')}
+        description={
+          <Trans
+            t={t}
+            i18nKey="admin:users.deleteDialog.description"
+            values={{ username: confirmAction?.user.username ?? '' }}
+            components={{ strong: <strong /> }}
+          />
+        }
+        confirmLabel={t('admin:users.deleteDialog.confirm')}
         variant="danger"
         loading={actionLoading}
       />
