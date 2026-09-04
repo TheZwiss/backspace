@@ -1,1 +1,333 @@
-{}
+{
+  "time": {
+    "never": "Never",
+    "justNow": "Just now"
+  },
+  "connections": {
+    "title": "Connected Instances",
+    "description": "Link accounts across federated Backspace instances.",
+    "empty": "No remote instances connected. Add one to start federating.",
+    "addButton": "+ Add Instance",
+    "home": {
+      "title": "Home Instance",
+      "asUser": "as {{username}}",
+      "local": "Local"
+    },
+    "status": {
+      "connected": "Connected",
+      "disconnected": "Disconnected",
+      "unreachable": "Unreachable",
+      "authExpired": "Auth expired"
+    },
+    "add": {
+      "title": "Add Remote Instance",
+      "urlPlaceholder": "https://instance.example.com",
+      "probing": "Probing…",
+      "connect": "Connect",
+      "connecting": "Connecting…",
+      "registrationClosed": "This instance has disabled new federated registrations. Existing accounts can still sign in.",
+      "passwordLabel": "Enter your password to connect to {{host}}",
+      "passwordPlaceholder": "Your account password",
+      "passwordHint": "Your password is checked by your home instance and is never sent to {{host}} — that instance gets a unique credential generated for it alone.",
+      "fallbackNotice": "An account already exists on this instance and it does not accept the credential your home instance issued. Sign in with the password you set on that instance — it will be switched to the issued credential afterwards.",
+      "usernameLabel": "Username",
+      "usernamePlaceholder": "Your username on this instance",
+      "remotePasswordLabel": "Password for this instance",
+      "remotePasswordPlaceholder": "Password on the remote instance",
+      "loggingIn": "Logging in…",
+      "loginAndConnect": "Login & Connect"
+    },
+    "filter": {
+      "all": "All",
+      "connected": "Connected",
+      "disconnected": "Disconnected",
+      "issues": "Issues",
+      "noMatch": "No instances match the current filter."
+    },
+    "sort": {
+      "button": "Sort",
+      "heading": "Sort by",
+      "name": "Name (A-Z)",
+      "dateAdded": "Date added",
+      "lastConnected": "Last connected"
+    },
+    "row": {
+      "asUser": "as {{username}}",
+      "added": "Added {{date}}",
+      "connectedAgo": "Connected {{time}}",
+      "disconnectedAgo": "Disconnected {{time}}",
+      "lastConnectedAgo": "Last connected {{time}}",
+      "remoteUserId": "Remote user ID",
+      "addedLabel": "Added",
+      "disconnectedLabel": "Disconnected",
+      "lastConnectedLabel": "Last connected",
+      "homePasswordPlaceholder": "Your home account password",
+      "disconnect": "Disconnect",
+      "reconnect": "Reconnect",
+      "reauthenticate": "Re-authenticate",
+      "forceRemove": "Force Remove",
+      "deleteIdentity": "Delete Identity",
+      "deleteIdentityDisabled": "Disconnect first to delete identity"
+    },
+    "forceRemove": {
+      "title": "Force Remove Entry",
+      "description": "This will remove the registry entry for {{name}}. The remote instance will not be notified. Use this only if the instance is permanently unreachable.",
+      "confirm": "Force Remove"
+    },
+    "deleteIdentity": {
+      "title": "Delete Identity",
+      "description": "Remove your federated identity on <name>{{name}}</name>. Choose how your data should be handled.",
+      "leave": {
+        "title": "Leave quietly",
+        "description": "Disconnect from this instance. Your account and all data remain."
+      },
+      "soft": {
+        "title": "Delete User",
+        "description": "Delete your account but keep your messages. You appear as ‘Deleted User’."
+      },
+      "full": {
+        "title": "Nuke everything",
+        "description": "Delete your account and all your messages, DMs, reactions, and files. Nothing remains."
+      },
+      "scope": {
+        "heading": "Scope",
+        "this": "This instance only",
+        "select": "Select instances…",
+        "all": "All remote instances"
+      },
+      "deleting": "Deleting…",
+      "disconnect": "Disconnect",
+      "confirm": "Delete Identity",
+      "toast": {
+        "disconnected": "Disconnected successfully",
+        "deleted_one": "Identity deleted successfully",
+        "deleted_other": "Identity deleted on {{count}} instances",
+        "ownsSpaces": "{{host}}: Transfer space ownership first",
+        "failed": "{{host}}: {{error}}",
+        "failedGeneric": "Failed"
+      }
+    },
+    "action": {
+      "friendRequest": "friend request",
+      "spaceJoin": "space join",
+      "directMessage": "direct message",
+      "friendRequestTo": "Friend request to {{target}}",
+      "joinSpace": "Join {{target}}",
+      "directMessageTo": "Direct message to {{target}}"
+    },
+    "pending": {
+      "title": "Pending Peering Approvals",
+      "description": "Your admin must approve before these requests can proceed.",
+      "onPeer": "on <peer>{{peer}}</peer>",
+      "cancelling": "Cancelling…",
+      "cancelled": "Peering request cancelled",
+      "cancelFailed": "Failed to cancel: {{error}}"
+    },
+    "outcomes": {
+      "title": "Recent Peering Outcomes",
+      "approved": "Your peering request to {{host}} was approved by your admin.",
+      "denied": "Your peering request to {{host}} was denied by your admin.",
+      "expired": "Your peering request to {{host}} expired without admin action.",
+      "originalAction": "Original action: {{action}}",
+      "retry": "Retry your {{action}}",
+      "dismissing": "Dismissing…",
+      "dismissAll": "Dismiss all",
+      "dismissFailed": "Failed to dismiss: {{error}}",
+      "dismissAllFailed": "Failed to dismiss all: {{error}}"
+    }
+  },
+  "mobileInstance": {
+    "title": "Instance",
+    "sections": {
+      "general": "General",
+      "registration": "Registration",
+      "federation": "Federation",
+      "streaming": "Streaming",
+      "storage": "Storage",
+      "updates": "Updates",
+      "users": "Users"
+    }
+  },
+  "admin": {
+    "title": "Federation",
+    "description": "Configure federation relay, secret rotation, and manage peered instances.",
+    "relay": {
+      "title": "Relay Settings",
+      "description": "Control DM relay between federated instances. When enabled, DMs with users on peer instances are relayed server-to-server.",
+      "enable": {
+        "label": "Enable DM Relay",
+        "description": "Relay direct messages to and from peer instances"
+      },
+      "autoAccept": {
+        "label": "Auto-accept peering",
+        "description": "Automatically accept peering requests from other instances. When disabled, only manually initiated peering is allowed."
+      },
+      "ttl": {
+        "label": "Relay TTL (days)",
+        "description": "How long relayed messages are retained in the outbox before cleanup"
+      },
+      "rotation": {
+        "label": "Default Secret Rotation (days)",
+        "description": "Auto-rotation interval for new peers. Existing peers keep their current setting."
+      },
+      "saved": "Settings saved"
+    },
+    "status": {
+      "active": "Active",
+      "pending": "Pending",
+      "unreachable": "Unreachable",
+      "rejected": "Rejected (auto-peering denied)",
+      "rejectedShort": "Rejected",
+      "revoked": "Revoked",
+      "awaitingApproval": "Awaiting Approval",
+      "needsAttention": "Needs Attention"
+    },
+    "filter": {
+      "button": "Filter",
+      "statusHeading": "Status",
+      "sortHeading": "Sort by",
+      "sort": {
+        "name": "Name (A-Z)",
+        "lastSeen": "Last seen",
+        "dateAdded": "Date added",
+        "failures": "Failures",
+        "revokedDate": "Revoked date"
+      }
+    },
+    "views": {
+      "active": "Active",
+      "revoked": "Revoked"
+    },
+    "peer": {
+      "revokedMeta": "Revoked: {{revoked}} · Peered: {{peered}}",
+      "unreachableMeta": "Last seen: {{lastSeen}} · {{failures}}",
+      "activeMeta": "Last seen: {{lastSeen}} · Synced: {{synced}}",
+      "failures_one": "{{count}} failure",
+      "failures_other": "{{count}} failures",
+      "reinitiate": "Re-initiate Peering",
+      "deletePermanently": "Delete Permanently",
+      "consecutiveFailures": "Consecutive Failures",
+      "authFailures": "Auth Failures",
+      "lastFailure": "Last Failure",
+      "peeredSince": "Peered Since",
+      "secretRotated": "Secret Rotated",
+      "autoRotate": "Auto-Rotate",
+      "rotationStatus": "Rotation Status",
+      "rotateEvery_one": "Every {{count}} day",
+      "rotateEvery_other": "Every {{count}} days",
+      "defaultTag": "(default)",
+      "inProgress": "In progress",
+      "idle": "Idle",
+      "intervalRange": "Must be 1-365",
+      "intervalUpdated": "Rotation interval updated",
+      "checking": "Checking…",
+      "checkNow": "Check now",
+      "resetPeering": "Reset Peering",
+      "rotateSecret": "Rotate Secret",
+      "rotationInProgress": "Rotation already in progress",
+      "revoke": "Revoke",
+      "editInterval": "Edit rotation interval"
+    },
+    "approvals": {
+      "title": "Pending Approval Requests",
+      "outboundTitle_one": "{{name}} — {{count}} user wants us to peer",
+      "outboundTitle_other": "{{name}} — {{count}} users want us to peer",
+      "requested": "Requested {{time}}",
+      "subscriber": {
+        "friendAdd": "friend-add to {{target}}",
+        "spaceJoin": "wants to join {{target}}",
+        "directMessage": "wants to DM {{target}}"
+      },
+      "approve": "Approve",
+      "deny": "Deny",
+      "established": "Peering established with {{name}}",
+      "deniedToast": "Denied peering request from {{name}}",
+      "confirm": {
+        "approveTitle": "Approve Peering Request",
+        "denyTitle": "Deny Peering Request",
+        "approveOutbound_one": "This will initiate a peering handshake with {{name}} on behalf of the {{count}} requesting user. The remote instance must be reachable.",
+        "approveOutbound_other": "This will initiate a peering handshake with {{name}} on behalf of the {{count}} requesting users. The remote instance must be reachable.",
+        "approveInbound": "This will initiate a peering handshake with {{name}}. The remote instance must be reachable.",
+        "denyOutbound_one": "This will deny the outbound peering request and notify the requesting user. They can re-trigger the request from their friend list.",
+        "denyOutbound_other": "This will deny the outbound peering request and notify the requesting users. They can re-trigger the request from their friend list.",
+        "denyInbound": "This will deny the request and block future auto-peering requests from {{name}}. You can unblock them later from the rejected peers list.",
+        "approveAndPeer": "Approve & Peer",
+        "approve": "Approve",
+        "denyAndNotify": "Deny & Notify",
+        "deny": "Deny"
+      }
+    },
+    "resetCleanup": {
+      "title": "Reset Cleanup",
+      "peerReset": "{{name}} was reset",
+      "peerResetDescription": "A new instance is running on this domain. Re-establish federation to heal stale friendships and DMs.",
+      "repeer": "Re-peer",
+      "resetToast": "{{host}} was reset — federation needs re-establishing",
+      "repeerIncomplete": "Re-peer incomplete — {{name}} still holds stale peering for you. Its admin must reset their side, then Re-peer again.",
+      "repeerInitiated": "Re-peering initiated with {{name}}",
+      "removed": "Removed {{username}} and all their content",
+      "ownsSpaces": "{{username}} owns spaces — transfer ownership first (Space Settings → Ownership).",
+      "staleRemote": "The remote instance still holds stale peering for you. Ask its admin to reset their side, then Re-peer again.",
+      "eventSummary": "<host>{{host}}</host> was reset — {{identities}} auto-cleaned, {{accounts}} with local content detached. Detached accounts keep working locally — owners keep access with their existing password. The owner can re-attach a detached account to their new home identity from that account's settings (Account → detached notice) when logged into both.",
+      "identitiesCleaned_one": "{{count}} replicated identity",
+      "identitiesCleaned_other": "{{count}} replicated identities",
+      "accountsDetached_one": "{{count}} account",
+      "accountsDetached_other": "{{count}} accounts",
+      "memberships_one": "{{count}} membership",
+      "memberships_other": "{{count}} memberships",
+      "messages_one": "{{count}} message",
+      "messages_other": "{{count}} messages",
+      "owns": "Owns: {{spaces}}",
+      "dismissKeep": "Dismiss — keep all detached accounts",
+      "confirm": {
+        "repeerTitle": "Re-establish Federation",
+        "removeTitle": "Remove detached account",
+        "repeerDescription": "This deletes the local peer record and starts a fresh authenticated handshake with {{origin}}. The remote must be reachable and (if it does not auto-accept) approve the request.",
+        "removeDescription": "Permanently delete {{username}} and all their content on this instance? This cannot be undone.",
+        "repeerConfirm": "Re-peer & heal",
+        "removeConfirm": "Delete permanently"
+      }
+    },
+    "peers": {
+      "title": "Peered Instances",
+      "empty": "No federation peers configured. Peers are created automatically when users connect to remote instances.",
+      "noMatch": "No peers match the current filter.",
+      "noRevoked": "No revoked peers.",
+      "backOnline": "{{name}} is back online",
+      "stillUnreachable": "{{name}} is still unreachable",
+      "rotationInitiated": "Secret rotation initiated — 15 minute grace period",
+      "revoked": "Peer revoked",
+      "reinitiated": "Peering re-initiated",
+      "reinitiateFailed": "Peer record deleted but handshake failed: {{error}}. Re-peer manually with {{origin}}",
+      "deleted": "Peer permanently deleted",
+      "resetDone": "Peering reset for {{name}}",
+      "confirm": {
+        "rotate": {
+          "title": "Rotate HMAC Secret",
+          "description": "This will generate a new HMAC secret for {{name}}. Both instances will accept old and new secrets during a 15-minute grace period.",
+          "confirm": "Rotate"
+        },
+        "revoke": {
+          "title": "Revoke Peer",
+          "description": "This will stop all federation relay traffic with {{name}}. Pending outbox entries will be purged. You can re-initiate peering later.",
+          "confirm": "Revoke"
+        },
+        "reinitiate": {
+          "title": "Re-initiate Peering",
+          "description": "This will delete the revoked record and start a fresh handshake with {{origin}}. The remote instance must be reachable.",
+          "confirm": "Re-initiate"
+        },
+        "delete": {
+          "title": "Delete Peer Record",
+          "description": "This will permanently delete the peer record for {{name}}. This cannot be undone.",
+          "confirm": "Delete"
+        },
+        "reset": {
+          "title": "Reset Peering",
+          "description": "Reset peering with {{name}}? This deletes the local peer record and all pending outbox entries. You must re-initiate peering with the remote admin out of band after reset. This cannot be undone.",
+          "confirm": "Reset"
+        }
+      }
+    }
+  }
+}
