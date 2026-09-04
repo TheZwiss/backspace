@@ -29,3 +29,13 @@
 {"snapshot_date":"2026-09-03","dimension":"ithub.global.ssl.fastly.net","title":"","count":2,"uniques":1}
 {"snapshot_date":"2026-09-03","dimension":"reddit.com","title":"","count":2,"uniques":2}
 {"snapshot_date":"2026-09-03","dimension":"DuckDuckGo","title":"","count":1,"uniques":1}
+{"snapshot_date":"2026-09-04","dimension":"Google","title":"","count":185,"uniques":52}
+{"snapshot_date":"2026-09-04","dimension":"chatgpt.com","title":"","count":151,"uniques":63}
+{"snapshot_date":"2026-09-04","dimension":"github.com","title":"","count":151,"uniques":39}
+{"snapshot_date":"2026-09-04","dimension":"thezwiss.github.io","title":"","count":120,"uniques":18}
+{"snapshot_date":"2026-09-04","dimension":"steamcommunity.com","title":"","count":6,"uniques":2}
+{"snapshot_date":"2026-09-04","dimension":"Bing","title":"","count":5,"uniques":2}
+{"snapshot_date":"2026-09-04","dimension":"yandex.ru","title":"","count":5,"uniques":4}
+{"snapshot_date":"2026-09-04","dimension":"kagi.com","title":"","count":3,"uniques":1}
+{"snapshot_date":"2026-09-04","dimension":"ithub.global.ssl.fastly.net","title":"","count":2,"uniques":1}
+{"snapshot_date":"2026-09-04","dimension":"reddit.com","title":"","count":2,"uniques":2}

@@ -28,3 +28,13 @@
 {"snapshot_date":"2026-09-03","dimension":"/TheZwiss/backspace/tree/main","title":"/tree/main","count":18,"uniques":7}
 {"snapshot_date":"2026-09-03","dimension":"/TheZwiss/backspace/pulse","title":"/pulse","count":13,"uniques":1}
 {"snapshot_date":"2026-09-03","dimension":"/TheZwiss/backspace/blob/main/docs/screenshots/chat.webp","title":"/blob/main/docs/screenshots/chat.webp","count":12,"uniques":10}
+{"snapshot_date":"2026-09-04","dimension":"/TheZwiss/backspace","title":"Overview","count":662,"uniques":260}
+{"snapshot_date":"2026-09-04","dimension":"/TheZwiss/backspace/releases/tag/v1.0.0","title":"/releases/tag/v1.0.0","count":92,"uniques":56}
+{"snapshot_date":"2026-09-04","dimension":"/TheZwiss/backspace/issues","title":"/issues","count":63,"uniques":19}
+{"snapshot_date":"2026-09-04","dimension":"/TheZwiss/backspace/blob/main/docs/screenshots/voice-video-grid.webp","title":"/blob/main/docs/screenshots/voice-video-grid.webp","count":50,"uniques":41}
+{"snapshot_date":"2026-09-04","dimension":"/TheZwiss/backspace/graphs/traffic","title":"/graphs/traffic","count":37,"uniques":1}
+{"snapshot_date":"2026-09-04","dimension":"/TheZwiss/backspace/releases","title":"/releases","count":36,"uniques":17}
+{"snapshot_date":"2026-09-04","dimension":"/TheZwiss/backspace/pulls","title":"/pulls","count":34,"uniques":13}
+{"snapshot_date":"2026-09-04","dimension":"/TheZwiss/backspace/tree/main","title":"/tree/main","count":19,"uniques":8}
+{"snapshot_date":"2026-09-04","dimension":"/TheZwiss/backspace/pulse","title":"/pulse","count":13,"uniques":1}
+{"snapshot_date":"2026-09-04","dimension":"/TheZwiss/backspace/blob/main/docs/screenshots/space-discovery.webp","title":"/blob/main/docs/screenshots/space-discovery.webp","count":11,"uniques":10}
