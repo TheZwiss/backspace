@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Track } from 'livekit-client';
 import { useVoiceStore } from '../../../stores/voiceStore';
 import { getActiveRoom } from '../../../hooks/useLiveKit';
@@ -26,28 +27,32 @@ function errorName(err: unknown): string {
   return err instanceof Error ? err.name : '';
 }
 
-function getHardBlockedCopy(): string {
-  if (!isElectron()) {
-    return "Camera blocked at browser level. Click the camera icon in your browser's address bar, reset the permission, then click Try again.";
-  }
+/** Which recovery instructions apply once a retry has also been denied. */
+type HardBlockedPlatform = 'browser' | 'mac' | 'windows' | 'other';
+
+function getHardBlockedPlatform(): HardBlockedPlatform {
+  if (!isElectron()) return 'browser';
   const platform = getElectronAPI()?.platform;
-  if (platform === 'darwin') {
-    return 'Grant camera access in System Settings → Privacy & Security → Camera, then restart the app.';
-  }
-  if (platform === 'win32') {
-    return 'Grant camera access in Settings → Privacy & Security → Camera, then restart the app.';
-  }
+  if (platform === 'darwin') return 'mac';
+  if (platform === 'win32') return 'windows';
   // linux or unknown
-  return 'Camera permission was denied. Reset it in your browser/Chromium prompt and try again.';
+  return 'other';
 }
+
+/** Why the pre-call preview could not start; rendered through the catalog. */
+type PreviewErrorKind = 'inUse' | 'unavailable' | 'notFound' | 'generic';
 
 /**
  * Build a deviceId → display-label map applying the spec's rules:
- * - Empty `label` falls back to `"Camera N"` using enumeration index.
+ * - Empty `label` falls back to a numbered name (`fallbackName`) using the
+ *   enumeration index.
  * - Duplicate non-empty labels get `" (1)"`, `" (2)"` suffixes by enumeration order.
  *   Single occurrences stay unsuffixed.
  */
-function buildDisplayLabels(devices: MediaDeviceInfo[]): Map<string, string> {
+function buildDisplayLabels(
+  devices: MediaDeviceInfo[],
+  fallbackName: (number: number) => string,
+): Map<string, string> {
   const counts = new Map<string, number>();
   for (const d of devices) {
     if (d.label) counts.set(d.label, (counts.get(d.label) ?? 0) + 1);
@@ -56,7 +61,7 @@ function buildDisplayLabels(devices: MediaDeviceInfo[]): Map<string, string> {
   const labels = new Map<string, string>();
   devices.forEach((d, i) => {
     if (!d.label) {
-      labels.set(d.deviceId, `Camera ${i + 1}`);
+      labels.set(d.deviceId, fallbackName(i + 1));
       return;
     }
     const total = counts.get(d.label) ?? 1;
@@ -72,6 +77,7 @@ function buildDisplayLabels(devices: MediaDeviceInfo[]): Map<string, string> {
 }
 
 export function VideoSection() {
+  const { t } = useTranslation('settings');
   const cameraDeviceId = useVoiceStore((s) => s.cameraDeviceId);
   const setCameraDeviceId = useVoiceStore((s) => s.setCameraDeviceId);
   const isCameraOn = useVoiceStore((s) => s.isCameraOn);
@@ -84,7 +90,7 @@ export function VideoSection() {
   // (a) whether `getUserMedia` is currently running and (b) whether the
   // currently-using subline is visible.
   const [previewActive, setPreviewActive] = useState(false);
-  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewError, setPreviewError] = useState<PreviewErrorKind | null>(null);
   // Tracks the deviceId the browser actually picked for the active preview track.
   // Drives the "Currently using: …" subline shown only when previewActive (or
   // in-call attach) AND cameraDeviceId === null.
@@ -337,12 +343,12 @@ export function VideoSection() {
       } catch (err) {
         if (gen !== startGenRef.current || !mountedRef.current) return;
         const name = errorName(err);
-        if (name === 'NotReadableError') setPreviewError('Camera is in use by another application.');
-        else if (name === 'OverconstrainedError') setPreviewError('Selected camera is unavailable.');
+        if (name === 'NotReadableError') setPreviewError('inUse');
+        else if (name === 'OverconstrainedError') setPreviewError('unavailable');
         else if (name === 'NotAllowedError') {
           setPermState('denied');
           setPreviewActive(false);
-        } else setPreviewError('Could not start camera preview.');
+        } else setPreviewError('generic');
       }
     };
 
@@ -363,7 +369,10 @@ export function VideoSection() {
     };
   }, []);
 
-  const displayLabels = useMemo(() => buildDisplayLabels(devices), [devices]);
+  const displayLabels = useMemo(
+    () => buildDisplayLabels(devices, (number) => t('voice.video.camera.fallbackName', { number })),
+    [devices, t],
+  );
 
   // Explicit user gesture: open getUserMedia for the selected device.
   // Called from (a) click on dormant tile, (b) "Enable camera preview" CTA,
@@ -403,13 +412,13 @@ export function VideoSection() {
         setPermState((prev) => (prev === 'denied' ? 'hard-blocked' : 'denied'));
         setPreviewActive(false);
       } else if (name === 'NotReadableError') {
-        setPreviewError('Camera is in use by another application.');
+        setPreviewError('inUse');
       } else if (name === 'OverconstrainedError') {
-        setPreviewError('Selected camera is unavailable.');
+        setPreviewError('unavailable');
       } else if (name === 'NotFoundError') {
-        setPreviewError('No camera detected.');
+        setPreviewError('notFound');
       } else {
-        setPreviewError('Could not start camera preview.');
+        setPreviewError('generic');
       }
     }
   };
@@ -428,10 +437,10 @@ export function VideoSection() {
     return (
       <div>
         <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
-          Video
+          {t('voice.video.title')}
         </div>
         <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5 text-sm text-txt-tertiary">
-          Checking camera access…
+          {t('voice.video.checkingAccess')}
         </div>
       </div>
     );
@@ -441,20 +450,20 @@ export function VideoSection() {
     return (
       <div>
         <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
-          Video
+          {t('voice.video.title')}
         </div>
         <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5 space-y-2">
-          <div className="text-sm text-txt-primary">⚠ Camera access denied</div>
+          <div className="text-sm text-txt-primary">⚠ {t('voice.video.accessDenied.title')}</div>
           <div className="text-xs text-txt-tertiary">
             {permState === 'hard-blocked'
-              ? getHardBlockedCopy()
-              : 'Grant camera permission to choose a camera.'}
+              ? t(`voice.video.blocked.${getHardBlockedPlatform()}`)
+              : t('voice.video.accessDenied.description')}
           </div>
           <button
             onClick={startPreviewFromUser}
             className="text-xs px-3 py-1.5 rounded-md bg-surface-base hover:bg-interactive-hover text-txt-secondary transition-colors"
           >
-            Try again
+            {t('voice.video.accessDenied.retry')}
           </button>
         </div>
       </div>
@@ -465,7 +474,7 @@ export function VideoSection() {
     return (
       <div>
         <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
-          Video
+          {t('voice.video.title')}
         </div>
         <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5 space-y-3">
           <div className="aspect-video w-full rounded-lg bg-surface-base overflow-hidden relative flex flex-col items-center justify-center text-center px-6">
@@ -473,14 +482,14 @@ export function VideoSection() {
               <path d="M17 10.5V7a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h12a1 1 0 001-1v-3.5l4 4v-11l-4 4z" />
             </svg>
             <div className="text-sm text-txt-secondary mb-1">
-              Camera permission needed to choose a camera and preview.
+              {t('voice.video.permissionPrompt.description')}
             </div>
           </div>
           <button
             onClick={startPreviewFromUser}
             className="w-full text-[13px] px-3 py-2 rounded-md bg-accent-primary hover:bg-accent-primary-hover active:bg-accent-primary-active text-white font-medium transition-colors"
           >
-            Enable camera preview
+            {t('voice.video.permissionPrompt.enable')}
           </button>
         </div>
       </div>
@@ -488,10 +497,11 @@ export function VideoSection() {
   }
 
   // permState === 'granted'
+  const autoLabel = t('voice.video.camera.auto');
   const selectedLabel =
     cameraDeviceId === null
-      ? 'Auto (system default)'
-      : displayLabels.get(cameraDeviceId) ?? 'Auto (system default)';
+      ? autoLabel
+      : displayLabels.get(cameraDeviceId) ?? autoLabel;
 
   const handleSelect = (id: string | null) => {
     setCameraDeviceId(id);
@@ -507,7 +517,7 @@ export function VideoSection() {
   return (
     <div>
       <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
-        Video
+        {t('voice.video.title')}
       </div>
       <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5">
         <div className="aspect-video w-full rounded-lg bg-surface-base overflow-hidden relative mb-3 group">
@@ -523,13 +533,13 @@ export function VideoSection() {
             <button
               type="button"
               onClick={startPreviewFromUser}
-              aria-label="Test camera"
+              aria-label={t('voice.video.preview.testAria')}
               className="absolute inset-0 flex flex-col items-center justify-center text-txt-tertiary hover:text-txt-secondary hover:bg-white/[0.02] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary"
             >
               <svg width="40" height="40" viewBox="0 0 24 24" fill="currentColor" className="mb-2">
                 <path d="M8 5v14l11-7z" />
               </svg>
-              <span className="text-xs">Click to test camera</span>
+              <span className="text-xs">{t('voice.video.preview.testHint')}</span>
             </button>
           )}
           {previewActive && !previewError && (
@@ -542,23 +552,23 @@ export function VideoSection() {
                          min-h-[44px] min-w-[44px] px-3 py-2 text-xs flex items-center justify-center
                          md:min-h-0 md:min-w-0 md:text-[11px] md:px-2 md:py-1 md:opacity-0 md:group-hover:opacity-100"
             >
-              Stop preview
+              {t('voice.video.preview.stop')}
             </button>
           )}
           {previewError && (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-surface-base/90 text-xs text-txt-tertiary text-center px-4 gap-2">
-              <div>{previewError}</div>
+              <div>{t(`voice.video.previewError.${previewError}`)}</div>
               <button
                 type="button"
                 onClick={startPreviewFromUser}
                 className="text-[11px] px-2 py-1 rounded-md bg-surface-base hover:bg-interactive-hover text-txt-secondary transition-colors"
               >
-                Try again
+                {t('voice.video.preview.retry')}
               </button>
             </div>
           )}
         </div>
-        <div className="text-[13px] font-medium text-txt-primary mb-1.5">Camera</div>
+        <div className="text-[13px] font-medium text-txt-primary mb-1.5">{t('voice.video.camera.label')}</div>
         <div ref={dropdownRef}>
           <button
             type="button"
@@ -579,7 +589,7 @@ export function VideoSection() {
           {listOpen && (
             <div className="mt-1 rounded-md bg-surface-base border border-border-hard py-1">
               <DropdownItem
-                label="Auto (system default)"
+                label={autoLabel}
                 active={cameraDeviceId === null}
                 onClick={() => handleSelect(null)}
               />
@@ -599,13 +609,14 @@ export function VideoSection() {
           (previewActive || isCameraOn) &&
           (() => {
             const m = devices.find((d) => d.deviceId === activeDeviceId);
+            const detected = t('voice.video.camera.detectedFallback');
             const label = m
-              ? displayLabels.get(activeDeviceId) ?? (m.label || 'detected camera')
-              : 'detected camera';
-            return <div className="text-xs text-txt-tertiary mt-1">Currently using: {label}</div>;
+              ? displayLabels.get(activeDeviceId) ?? (m.label || detected)
+              : detected;
+            return <div className="text-xs text-txt-tertiary mt-1">{t('voice.video.camera.currentlyUsing', { label })}</div>;
           })()}
         {devices.length === 0 && (
-          <div className="text-xs text-txt-tertiary mt-1">No cameras detected.</div>
+          <div className="text-xs text-txt-tertiary mt-1">{t('voice.video.camera.none')}</div>
         )}
       </div>
     </div>

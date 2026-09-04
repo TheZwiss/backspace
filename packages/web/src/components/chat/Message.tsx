@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { formatters } from '../../i18n/formatters';
 import type { MessageWithUser, Embed, User } from '@backspace/shared';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { MentionBadge } from './MentionBadge';
@@ -72,15 +73,15 @@ function formatTime(timestamp: number): string {
   yesterday.setDate(yesterday.getDate() - 1);
   const isYesterday = date.toDateString() === yesterday.toDateString();
 
-  const time = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const time = formatters.formatTime(timestamp);
 
   if (isToday) return `Today at ${time}`;
   if (isYesterday) return `Yesterday at ${time}`;
-  return `${date.toLocaleDateString()} ${time}`;
+  return formatters.formatDateTime(timestamp);
 }
 
 function formatHoverTime(timestamp: number): string {
-  return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return formatters.formatTime(timestamp);
 }
 
 /** Lightweight inline renderer that resolves <@userId> mentions to MentionBadge components. */

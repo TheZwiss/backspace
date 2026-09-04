@@ -1,4 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useFormatters } from '../../i18n/formatters';
 import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import type { User } from '@backspace/shared';
@@ -26,6 +27,7 @@ interface UserProfilePopoutProps {
 
 export function UserProfilePopout({ user: propUser, onClose, anchor, placement = 'right' }: UserProfilePopoutProps) {
   const navigate = useNavigate();
+  const f = useFormatters();
   const addDmChannel = useSpaceStore((s) => s.addDmChannel);
   const openModal = useUIStore((s) => s.openModal);
   // Resolve to the best-known view of this user from the userViews cache.
@@ -215,7 +217,7 @@ export function UserProfilePopout({ user: propUser, onClose, anchor, placement =
               Member Since
             </span>
             <span className="text-[12px] text-txt-secondary ml-2">
-              {new Date(user.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+              {f.formatMediumDate(user.createdAt)}
             </span>
           </div>
           {mutualCounts && (mutualCounts.friends > 0 || mutualCounts.spaces > 0) && (

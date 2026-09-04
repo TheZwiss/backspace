@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useFormatters } from '../../../i18n/formatters';
 import { api } from '../../../api/client';
 import { Avatar } from '../../ui/Avatar';
 import { ConfirmDialog } from '../../ui/ConfirmDialog';
@@ -7,6 +8,7 @@ import type { AdminUser, AdminUserListResponse } from '@backspace/shared';
 
 export function UsersPanel() {
   const currentUser = useAuthStore((s) => s.user);
+  const f = useFormatters();
   const [data, setData] = useState<AdminUserListResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -141,10 +143,7 @@ export function UsersPanel() {
 
   const totalPages = data ? Math.max(1, Math.ceil(data.total / pageSize)) : 1;
 
-  const formatDate = (ts: number) => {
-    const d = new Date(ts);
-    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-  };
+  const formatDate = (ts: number) => f.formatMediumDate(ts);
 
   return (
     <div className="space-y-4">

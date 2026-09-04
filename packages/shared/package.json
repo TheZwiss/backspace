@@ -14,7 +14,9 @@
     "./src/activities": "./src/activities.ts",
     "./src/activities.js": "./src/activities.ts",
     "./src/constants": "./src/constants.ts",
-    "./src/constants.js": "./src/constants.ts"
+    "./src/constants.js": "./src/constants.ts",
+    "./src/errors": "./src/errors.ts",
+    "./src/errors.js": "./src/errors.ts"
   },
   "scripts": {
     "build": "tsc",

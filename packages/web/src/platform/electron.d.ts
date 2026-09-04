@@ -125,6 +125,10 @@ interface BackspaceElectronAPI {
   setInstanceUrl: (url: string) => Promise<void>;
   clearInstanceUrl: () => Promise<void>;
 
+  // Language: the renderer owns the choice; main relabels its tray and menus.
+  // Optional because an older desktop app does not expose it.
+  setLanguage?: (language: string) => void;
+
   // Auto-launch settings
   getAutoLaunchSettings: () => Promise<{ openAtLogin: boolean; startMinimized: boolean }>;
   setAutoLaunchSettings: (settings: { openAtLogin?: boolean; startMinimized?: boolean }) =>

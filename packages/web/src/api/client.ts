@@ -1,3 +1,4 @@
+import { isErrorCode, type ErrorCode, type ErrorDetails } from '@backspace/shared/src/errors';
 import type {
   AuthResponse,
   RegisterRequest,
@@ -91,11 +92,36 @@ export class RateLimitError extends Error {
 export class HttpError extends Error {
   readonly status: number;
   readonly body?: unknown;
-  constructor(status: number, message: string, body?: unknown) {
+  /** Stable server error code, when the route sends one; see packages/shared/src/errors.ts. */
+  readonly code?: ErrorCode;
+  /** Interpolation values for the localized message, e.g. `{ max: 32 }`. */
+  readonly details?: ErrorDetails;
+
+  constructor(status: number, message: string, body?: unknown, code?: ErrorCode, details?: ErrorDetails) {
     super(message);
     this.name = 'HttpError';
     this.status = status;
     this.body = body;
+    this.code = code;
+    this.details = details;
+  }
+
+  /**
+   * Build from a failed response body of any vintage.
+   *
+   * Current routes send `{ error, code, statusCode, details? }`. Routes not
+   * yet converted, and peers on older versions, send `{ error }` alone, and
+   * some of those put the code in `error` itself. Only codes the shared list
+   * knows are accepted, so a peer cannot inject arbitrary catalog keys.
+   */
+  static fromBody(status: number, body: unknown): HttpError {
+    const record = typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : {};
+    const errorText = typeof record.error === 'string' && record.error.length > 0 ? record.error : `HTTP ${status}`;
+    const code = isErrorCode(record.code) ? record.code : isErrorCode(record.error) ? record.error : undefined;
+    const details = typeof record.details === 'object' && record.details !== null
+      ? (record.details as ErrorDetails)
+      : undefined;
+    return new HttpError(status, errorText, body, code, details);
   }
 }
 
@@ -381,8 +407,7 @@ export class BackspaceApiClient {
             ?? (parseInt(response.headers.get('retry-after') || '', 10) || 60);
           throw new RateLimitError(retryAfter);
         }
-        const error = await response.json().catch(() => ({ error: 'Request failed' }));
-        throw new HttpError(response.status, (error as { error?: string }).error || `HTTP ${response.status}`, error);
+        throw HttpError.fromBody(response.status, await response.json().catch(() => null));
       }
 
       return response.json() as Promise<T>;

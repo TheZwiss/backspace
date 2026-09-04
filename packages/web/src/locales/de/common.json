@@ -1,0 +1,55 @@
+{
+  "appName": "Backspace",
+  "actions": {
+    "save": "Speichern",
+    "cancel": "Abbrechen",
+    "close": "Schließen",
+    "delete": "Löschen",
+    "confirm": "Bestätigen",
+    "copy": "Kopieren",
+    "copied": "Kopiert",
+    "retry": "Erneut versuchen",
+    "back": "Zurück",
+    "done": "Fertig",
+    "edit": "Bearbeiten",
+    "remove": "Entfernen",
+    "add": "Hinzufügen",
+    "apply": "Übernehmen",
+    "reset": "Zurücksetzen",
+    "continue": "Weiter",
+    "dismiss": "Ausblenden",
+    "ok": "OK",
+    "search": "Suchen",
+    "clear": "Leeren",
+    "change": "Ändern",
+    "refresh": "Aktualisieren",
+    "openLink": "Link öffnen",
+    "tryAgain": "Erneut versuchen"
+  },
+  "states": {
+    "loading": "Wird geladen…",
+    "saving": "Wird gespeichert…",
+    "saved": "Gespeichert",
+    "unknown": "Unbekannt",
+    "none": "Keine",
+    "enabled": "Aktiviert",
+    "disabled": "Deaktiviert",
+    "on": "An",
+    "off": "Aus",
+    "yes": "Ja",
+    "no": "Nein",
+    "optional": "Optional",
+    "required": "Erforderlich",
+    "default": "Standard",
+    "recommended": "Empfohlen"
+  },
+  "language": {
+    "label": "Sprache",
+    "description": "Menüs, Schaltflächen und Systemmeldungen erscheinen in dieser Sprache. Nachrichten anderer Personen bleiben, wie sie geschrieben wurden."
+  },
+  "crash": {
+    "title": "Etwas ist schiefgelaufen",
+    "reload": "Seite neu laden",
+    "details": "Fehlerdetails"
+  }
+}

@@ -50,6 +50,7 @@ import {
 } from './recovery';
 import { migrateUserData } from './userDataMigration';
 import { isNavigationAllowed } from './navigationPolicy';
+import { getDesktopLanguage, isDesktopLanguage, saveStoredLanguage, translateDesktop } from './l10n';
 
 // Override Electron's package.json-derived app name so userData lives at
 // "<appData>/Backspace" instead of leaking the monorepo's "@backspace/desktop"
@@ -393,7 +394,7 @@ function createWindow(): void {
     if (savedUrl) {
       mainWindow.loadURL(savedUrl);
     } else {
-      mainWindow.loadFile(getPickerPath());
+      mainWindow.loadFile(getPickerPath(), { query: { lang: getDesktopLanguage() } });
     }
   }
 
@@ -590,7 +591,7 @@ function registerIpcHandlers(): void {
   ipcMain.handle('clear-instance-url', () => {
     clearInstanceUrl();
     if (mainWindow) {
-      mainWindow.loadFile(getPickerPath());
+      mainWindow.loadFile(getPickerPath(), { query: { lang: getDesktopLanguage() } });
       // Force Electron to re-evaluate drag regions after navigation
       mainWindow.webContents.once('did-finish-load', () => {
         if (mainWindow && !mainWindow.isDestroyed()) {
@@ -1097,11 +1098,12 @@ if (!gotTheLock) {
     // Win/Linux: frameless window has no menu bar, but we still need an
     // application menu so keyboard accelerators (Ctrl+C/V/X/Z/A) work.
     // The macOS app menu is owned by the recoveryStore subscriber below
-    // (so it can re-render with current update/recovery state).
-    if (process.platform !== 'darwin') {
+    // (so it can re-render with current update/recovery state). Rebuilt on a
+    // language change, hence a function rather than a one-off.
+    const applyEditOnlyMenu = (): void => {
       Menu.setApplicationMenu(Menu.buildFromTemplate([
         {
-          label: 'Edit',
+          label: translateDesktop(getDesktopLanguage(), 'menu.edit'),
           submenu: [
             { role: 'undo' },
             { role: 'redo' },
@@ -1113,6 +1115,9 @@ if (!gotTheLock) {
           ],
         },
       ]));
+    };
+    if (process.platform !== 'darwin') {
+      applyEditOnlyMenu();
     }
 
     // Purge ALL stale caches so Electron always loads fresh code on launch
@@ -1220,11 +1225,12 @@ if (!gotTheLock) {
     };
 
     const applyMenusForState = (state: RecoveryState): void => {
+      const language = getDesktopLanguage();
       if (tray) {
-        tray.setContextMenu(Menu.buildFromTemplate(buildTrayMenuTemplate(state, trayActions)));
+        tray.setContextMenu(Menu.buildFromTemplate(buildTrayMenuTemplate(state, trayActions, language)));
       }
       if (process.platform === 'darwin') {
-        Menu.setApplicationMenu(Menu.buildFromTemplate(buildAppMenuTemplate(app.name, state, trayActions)));
+        Menu.setApplicationMenu(Menu.buildFromTemplate(buildAppMenuTemplate(app.name, state, trayActions, language)));
       }
       // Mode-gated push to renderer (recovery.html subscribes to this).
       if (state.mode === 'recovery' && mainWindow && !mainWindow.isDestroyed()) {
@@ -1234,6 +1240,20 @@ if (!gotTheLock) {
 
     recoveryStore.subscribe(applyMenusForState);
     applyMenusForState(recoveryStore.get());  // initial fire — subscribers don't auto-fire on subscribe
+
+    // The renderer owns the language choice (settings → Language). Remember
+    // it so the tray is right from the first paint next launch, and relabel
+    // everything main draws right now.
+    ipcMain.on('set-language', (_event, language: unknown) => {
+      if (!isDesktopLanguage(language)) return;
+      try {
+        saveStoredLanguage(language);
+      } catch (err) {
+        console.warn('[main] Failed to persist language:', err);
+      }
+      if (process.platform !== 'darwin') applyEditOnlyMenu();
+      applyMenusForState(recoveryStore.get());
+    });
 
     initAutoUpdater();
 

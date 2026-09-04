@@ -1,4 +1,5 @@
 import '@testing-library/jest-dom/vitest';
+import { initI18n } from '../i18n';
 
 // Node 20+ ships a built-in `localStorage`/`sessionStorage` stub on globalThis
 // that has no methods unless `--localstorage-file=PATH` is provided. Vitest's
@@ -129,3 +130,8 @@ if (!('ResizeObserver' in globalThis)) {
     writable: true,
   });
 }
+
+// Components read their strings through i18next. Start it in English before
+// any test renders, so `t()` returns real text rather than keys. Tests that
+// exercise another language call `setLanguage` themselves.
+await initI18n({ browserLanguages: ['en'] });

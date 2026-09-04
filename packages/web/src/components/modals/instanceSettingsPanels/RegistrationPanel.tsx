@@ -1,4 +1,5 @@
 import { createPortal } from 'react-dom';
+import { formatters, useFormatters } from '../../../i18n/formatters';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { InviteLinkSummary, InviteRedemption, InviteStatus } from '@backspace/shared';
 import { api } from '../../../api/client';
@@ -26,17 +27,17 @@ function formatRelative(ms: number): string {
 
 function formatExpiry(invite: InviteLinkSummary): string {
   if (invite.status === 'revoked' && invite.revokedAt) {
-    return `Revoked ${new Date(invite.revokedAt).toLocaleDateString()}`;
+    return `Revoked ${formatters.formatNumericDate(invite.revokedAt)}`;
   }
   if (invite.status === 'expired' && invite.expiresAt) {
-    return `Expired ${new Date(invite.expiresAt).toLocaleDateString()}`;
+    return `Expired ${formatters.formatNumericDate(invite.expiresAt)}`;
   }
   if (invite.status === 'exhausted') {
     return 'Exhausted';
   }
   if (invite.expiresAt === null) return 'No expiration';
   const remaining = invite.expiresAt - Date.now();
-  if (remaining <= 0) return `Expired ${new Date(invite.expiresAt).toLocaleDateString()}`;
+  if (remaining <= 0) return `Expired ${formatters.formatNumericDate(invite.expiresAt)}`;
   const days = Math.floor(remaining / 86_400_000);
   if (days >= 1) return `Expires in ${days} day${days === 1 ? '' : 's'}`;
   const hours = Math.floor(remaining / 3_600_000);
@@ -1038,6 +1039,7 @@ interface RedemptionsModalProps {
  */
 function RedemptionsModal({ invite, onClose }: RedemptionsModalProps) {
   const addToast = useUIStore((s) => s.addToast);
+  const f = useFormatters();
   const [redemptions, setRedemptions] = useState<InviteRedemption[] | null>(null);
   const [error, setError] = useState(false);
 
@@ -1089,7 +1091,7 @@ function RedemptionsModal({ invite, onClose }: RedemptionsModalProps) {
           <div className="bg-accent-rose/10 border border-accent-rose/30 rounded p-2.5 text-xs text-accent-rose leading-relaxed">
             This invite was revoked
             {invite.revokedAt
-              ? ` ${new Date(invite.revokedAt).toLocaleDateString()}`
+              ? ` ${f.formatNumericDate(invite.revokedAt)}`
               : ''}
             . The redemptions below represent users who registered before revocation.
           </div>
@@ -1131,7 +1133,7 @@ function RedemptionsModal({ invite, onClose }: RedemptionsModalProps) {
                     )}
                   </span>
                   <span className="text-xs text-txt-tertiary shrink-0">
-                    {new Date(r.redeemedAt).toLocaleString()}
+                    {f.formatDateTime(r.redeemedAt)}
                   </span>
                 </div>
               );
