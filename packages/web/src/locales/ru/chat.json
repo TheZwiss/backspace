@@ -1,1 +1,51 @@
-{}
+{
+  "attachment": {
+    "progress": {
+      "pausedTitle": "Приостановлено — {{percent}}",
+      "resume": "Возобновить",
+      "pause": "Приостановить",
+      "abort": "Прервать"
+    },
+    "video": {
+      "cannotPlayDownload": "Здесь не воспроизвести — скачать",
+      "unsupportedFormat": "Неподдерживаемый формат видео",
+      "unsupportedBrowser": "Ваш браузер не поддерживает воспроизведение видео."
+    },
+    "audio": {
+      "unsupportedBrowser": "Ваш браузер не поддерживает воспроизведение аудио."
+    },
+    "federation": {
+      "remoteNamed": "Файл хранится на сервере пользователя {{sender}}. Скачайте его, чтобы сохранить локальную копию.",
+      "remoteUnknown": "Файл хранится на сервере отправителя. Скачайте его, чтобы сохранить локальную копию.",
+      "partialGeneric": "Некоторые получатели не могут сохранить этот файл у себя.",
+      "partialInstance": "сервере пользователя {{username}} (лимит: {{limit}})",
+      "partialList": "Файл не удалось сохранить на {{instances}}. Они всё равно могут открыть его с вашего сервера.",
+      "listPair": "{{first}} и {{second}}"
+    }
+  },
+  "gif": {
+    "searchPlaceholder": "Поиск GIF",
+    "noResults": "GIF не найдены",
+    "noTrending": "Нет популярных GIF",
+    "attribution": "При поддержке Klipy"
+  },
+  "preview": {
+    "save": "Сохранить изображение",
+    "copy": "Копировать изображение",
+    "alt": "Просмотр изображения"
+  },
+  "mention": {
+    "membersHeading": "Участники"
+  },
+  "invite": {
+    "sentBy": "Приглашение от {{name}}",
+    "memberCount_one": "{{count}} участник",
+    "memberCount_few": "{{count}} участника",
+    "memberCount_many": "{{count}} участников",
+    "memberCount_other": "{{count}} участника",
+    "revoked": "Приглашение больше не действительно",
+    "join": "Присоединиться",
+    "joining": "Присоединение…",
+    "joinFailed": "Не удалось присоединиться"
+  }
+}

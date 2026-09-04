@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 import type { MemberWithUser } from '@backspace/shared';
 import { Avatar } from '../ui/Avatar';
 import { useSpaceStore } from '../../stores/spaceStore';
@@ -85,10 +86,11 @@ function MemberList({
   getMemberColor,
   mobile,
 }: ResolvedListProps) {
+  const { t } = useTranslation(['chat']);
   return (
     <>
       <div className="px-2 py-1.5 text-[11px] font-bold text-txt-tertiary uppercase tracking-wider">
-        Members
+        {t('chat:mention.membersHeading')}
       </div>
       {filtered.map((member, i) => (
         <MentionMemberRow

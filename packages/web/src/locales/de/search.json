@@ -1,1 +1,38 @@
-{}
+{
+  "input": {
+    "placeholder": "Nachrichten suchen…"
+  },
+  "filters": {
+    "toggle": "Filter",
+    "from": {
+      "label": "Von",
+      "placeholder": "Benutzername"
+    },
+    "has": {
+      "label": "Enthält",
+      "any": "Beliebig",
+      "file": "Datei",
+      "image": "Bild",
+      "link": "Weblink"
+    },
+    "before": {
+      "label": "Vor"
+    },
+    "after": {
+      "label": "Nach"
+    }
+  },
+  "results": {
+    "empty": "Keine Ergebnisse",
+    "hint": "Tippe, um Nachrichten in diesem Kanal zu suchen",
+    "count_one": "{{count}} Ergebnis",
+    "count_other": "{{count}} Ergebnisse",
+    "loadMore": "Mehr laden ({{remaining}} verbleibend)",
+    "attachments_one": "{{count}} Anhang",
+    "attachments_other": "{{count}} Anhänge"
+  },
+  "time": {
+    "todayAt": "Heute um {{time}}",
+    "yesterdayAt": "Gestern um {{time}}"
+  }
+}

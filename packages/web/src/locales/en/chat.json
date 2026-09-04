@@ -1,1 +1,49 @@
-{}
+{
+  "attachment": {
+    "progress": {
+      "pausedTitle": "Paused — {{percent}}",
+      "resume": "Resume",
+      "pause": "Pause",
+      "abort": "Abort"
+    },
+    "video": {
+      "cannotPlayDownload": "Can't play here — download",
+      "unsupportedFormat": "Unsupported video format",
+      "unsupportedBrowser": "Your browser does not support video playback."
+    },
+    "audio": {
+      "unsupportedBrowser": "Your browser does not support audio playback."
+    },
+    "federation": {
+      "remoteNamed": "Hosted on {{sender}}'s instance. Download to keep a local copy.",
+      "remoteUnknown": "Hosted on the sender's instance. Download to keep a local copy.",
+      "partialGeneric": "Some recipients cannot cache this file locally.",
+      "partialInstance": "{{username}}'s instance (limit: {{limit}})",
+      "partialList": "File couldn't be cached on {{instances}}. They can still view it from yours.",
+      "listPair": "{{first}} and {{second}}"
+    }
+  },
+  "gif": {
+    "searchPlaceholder": "Search GIFs",
+    "noResults": "No GIFs found",
+    "noTrending": "No trending GIFs",
+    "attribution": "Powered by Klipy"
+  },
+  "preview": {
+    "save": "Save image",
+    "copy": "Copy image",
+    "alt": "Image preview"
+  },
+  "mention": {
+    "membersHeading": "Members"
+  },
+  "invite": {
+    "sentBy": "{{name}} sent an invite",
+    "memberCount_one": "{{count}} member",
+    "memberCount_other": "{{count}} members",
+    "revoked": "Invite no longer valid",
+    "join": "Join",
+    "joining": "Joining…",
+    "joinFailed": "Failed to join"
+  }
+}

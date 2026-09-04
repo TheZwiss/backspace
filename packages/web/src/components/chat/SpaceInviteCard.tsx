@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { describeError } from '../../i18n/errors';
 import { Avatar } from '../ui/Avatar';
 import { getApiForOrigin } from '../../stores/spaceStore';
 import { useSpaceStore } from '../../stores/spaceStore';
@@ -17,6 +19,7 @@ interface Props {
 }
 
 export function SpaceInviteCard({ payload, senderName }: Props) {
+  const { t } = useTranslation(['chat']);
   const navigate = useNavigate();
   const joinByCode = useSpaceStore(s => s.joinByCode);
   const [live, setLive] = useState<LiveState>({ kind: 'loading' });
@@ -81,7 +84,7 @@ export function SpaceInviteCard({ payload, senderName }: Props) {
         landOnSpace(payload.spaceId);
         return;
       }
-      setJoinError(msg || 'Failed to join');
+      setJoinError(msg ? describeError(err) : t('chat:invite.joinFailed'));
       setJoining(false);
     }
   };
@@ -89,7 +92,7 @@ export function SpaceInviteCard({ payload, senderName }: Props) {
   return (
     <div className={`my-1.5 max-w-md rounded-lg border border-white/[0.06] bg-surface-channel overflow-hidden ${isRevoked ? 'opacity-50' : ''}`}>
       <div className="px-3 py-1 text-[11px] text-txt-tertiary border-b border-white/[0.06]">
-        {senderName} sent an invite
+        {t('chat:invite.sentBy', { name: senderName })}
       </div>
       <div className="flex items-center gap-3 p-3">
         <Avatar
@@ -103,7 +106,7 @@ export function SpaceInviteCard({ payload, senderName }: Props) {
             {payload.snapshot.spaceName}
           </div>
           <div className="text-[12px] text-txt-tertiary truncate">
-            {memberCount} {memberCount === 1 ? 'member' : 'members'}
+            {t('chat:invite.memberCount', { count: memberCount })}
             {payload.snapshot.instanceName ? ` · ${payload.snapshot.instanceName}` : ''}
             {live.kind === 'loading' && (
               <span aria-hidden className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-txt-tertiary animate-pulse" />
@@ -112,7 +115,7 @@ export function SpaceInviteCard({ payload, senderName }: Props) {
         </div>
         {isRevoked ? (
           <span className="glass-pill px-3 py-1 text-[12px] text-txt-tertiary">
-            Invite no longer valid
+            {t('chat:invite.revoked')}
           </span>
         ) : (
           <button
@@ -120,7 +123,7 @@ export function SpaceInviteCard({ payload, senderName }: Props) {
             disabled={joining}
             className="px-4 py-1.5 rounded-md text-[13px] font-medium bg-accent-mint text-surface-base hover:bg-accent-mint/90 disabled:opacity-50"
           >
-            {joining ? 'Joining…' : 'Join'}
+            {joining ? t('chat:invite.joining') : t('chat:invite.join')}
           </button>
         )}
       </div>
