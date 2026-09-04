@@ -53,6 +53,15 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   PEER_EXISTS_RESET_REQUIRED: 'A peer record for this instance already exists; reset it first',
 
   recipient_deleted: "This user's account was deleted",
+
+  // misc
+  channel_not_found: 'Channel not found',
+  message_not_found: 'Message not found',
+  not_dm_member: 'You are not a member of this DM channel',
+  missing_permission: 'Missing permissions',
+  voice_disabled: 'Voice/video is not configured on this server',
+  voice_connect_forbidden: 'Missing CONNECT permission',
+  file_not_found: 'File not found',
 };
 
 function fillPlaceholders(text: string, details: ErrorDetails | undefined): string {

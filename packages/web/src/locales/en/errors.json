@@ -37,5 +37,12 @@
   "peer_pending_local_admin": "Your admin has to approve federation with that instance first. Your request is listed in Connections.",
   "peer_unreachable": "The other instance cannot be reached right now.",
   "PEER_EXISTS_RESET_REQUIRED": "A connection with that instance already exists. Reset it before connecting again.",
-  "recipient_deleted": "That account was deleted."
+  "recipient_deleted": "That account was deleted.",
+  "channel_not_found": "That channel could not be found.",
+  "message_not_found": "That message could not be found.",
+  "not_dm_member": "You are not part of this conversation.",
+  "missing_permission": "You do not have permission to do that here.",
+  "voice_disabled": "Voice and video are not set up on this instance.",
+  "voice_connect_forbidden": "You are not allowed to join this voice channel.",
+  "file_not_found": "That file could not be found."
 }

@@ -37,5 +37,12 @@
   "peer_pending_local_admin": "Dein Admin muss die Föderation mit dieser Instanz zuerst genehmigen. Deine Anfrage steht unter „Verbindungen“.",
   "peer_unreachable": "Die andere Instanz ist gerade nicht erreichbar.",
   "PEER_EXISTS_RESET_REQUIRED": "Es gibt bereits eine Verbindung zu dieser Instanz. Setze sie zurück, bevor du dich erneut verbindest.",
-  "recipient_deleted": "Dieses Konto wurde gelöscht."
+  "recipient_deleted": "Dieses Konto wurde gelöscht.",
+  "channel_not_found": "Dieser Kanal wurde nicht gefunden.",
+  "message_not_found": "Diese Nachricht wurde nicht gefunden.",
+  "not_dm_member": "Du bist nicht Teil dieser Unterhaltung.",
+  "missing_permission": "Dafür hast du hier keine Berechtigung.",
+  "voice_disabled": "Sprach- und Videochat sind auf dieser Instanz nicht eingerichtet.",
+  "voice_connect_forbidden": "Du darfst diesem Sprachkanal nicht beitreten.",
+  "file_not_found": "Diese Datei wurde nicht gefunden."
 }

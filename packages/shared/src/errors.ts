@@ -64,6 +64,15 @@ export const ERROR_CODES = [
 
   // Direct messages
   'recipient_deleted',
+
+  // misc
+  'channel_not_found',
+  'message_not_found',
+  'not_dm_member',
+  'missing_permission',
+  'voice_disabled',
+  'voice_connect_forbidden',
+  'file_not_found',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
