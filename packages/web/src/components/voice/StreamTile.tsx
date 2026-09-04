@@ -1,4 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useFormatters } from '../../i18n/formatters';
 import { Avatar } from '../ui/Avatar';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useContextMenuStore, type ContextMenuItem } from '../../stores/contextMenuStore';
@@ -18,6 +20,7 @@ interface StreamTileProps {
 
 /** Wrapper component for stream quality settings — needs its own state + close guard. */
 function StreamQualityItem() {
+  const { t } = useTranslation(['voice', 'common']);
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
   const setCloseGuard = useContextMenuStore((s) => s.setCloseGuard);
@@ -26,7 +29,7 @@ function StreamQualityItem() {
   return (
     <div className="p-3">
       <div className="text-xs text-txt-tertiary mb-2 font-medium uppercase tracking-wider">
-        Stream Quality
+        {t('voice:stream.quality')}
       </div>
       <div className="relative">
         <button
@@ -38,7 +41,7 @@ function StreamQualityItem() {
           }}
           className="w-full flex items-center justify-between px-2 py-1.5 text-sm text-txt-secondary hover:bg-interactive-hover rounded transition-colors"
         >
-          <span>{screenShareConfig.height}p {screenShareConfig.fps}fps</span>
+          <span>{t('voice:stream.qualityValue', { height: screenShareConfig.height, fps: screenShareConfig.fps })}</span>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
             <path d="M7 10l5 5 5-5z" />
           </svg>
@@ -60,13 +63,15 @@ function StreamQualityItem() {
 
 /** Wrapper component for stream volume slider — needs store subscription. */
 function StreamVolumeItem({ userId }: { userId: string }) {
+  const { t } = useTranslation(['voice', 'common']);
+  const f = useFormatters();
   const streamVolume = useVoiceStore((s) => s.streamVolumes.get(userId) ?? 100);
   const setStreamVolume = useVoiceStore((s) => s.setStreamVolume);
 
   return (
     <div className="p-3">
       <div className="text-xs text-txt-tertiary mb-2 font-medium uppercase tracking-wider">
-        Stream Volume
+        {t('voice:stream.volume')}
       </div>
       <div className="flex items-center gap-2">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary flex-shrink-0">
@@ -81,7 +86,7 @@ function StreamVolumeItem({ userId }: { userId: string }) {
           className="flex-1 accent-accent-primary h-1"
         />
         <span className="text-xs text-txt-secondary min-w-[32px] text-right">
-          {streamVolume}%
+          {f.formatPercent(streamVolume)}
         </span>
       </div>
     </div>
@@ -90,6 +95,8 @@ function StreamVolumeItem({ userId }: { userId: string }) {
 
 /** Wrapper component for stream attenuation controls — needs store subscription. */
 function StreamAttenuationItem() {
+  const { t } = useTranslation(['voice', 'common']);
+  const f = useFormatters();
   const streamAttenuationEnabled = useVoiceStore((s) => s.streamAttenuationEnabled);
   const streamAttenuationStrength = useVoiceStore((s) => s.streamAttenuationStrength);
   const setAttenuationEnabled = useVoiceStore((s) => s.setStreamAttenuationEnabled);
@@ -103,7 +110,7 @@ function StreamAttenuationItem() {
           className="w-full text-left px-2 py-1.5 mx-1.5 text-sm rounded-sm flex items-center gap-2 text-txt-secondary hover:bg-accent-primary hover:text-white"
           style={{ width: 'calc(100% - 12px)' }}
         >
-          <span className="flex-1">Stream Attenuation</span>
+          <span className="flex-1">{t('voice:stream.attenuation')}</span>
           <div
             className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
               streamAttenuationEnabled
@@ -122,7 +129,7 @@ function StreamAttenuationItem() {
       {streamAttenuationEnabled && (
         <div className="p-3 pt-0">
           <div className="text-xs text-txt-tertiary mb-2 font-medium uppercase tracking-wider">
-            Attenuation Strength
+            {t('voice:stream.attenuationStrength')}
           </div>
           <div className="flex items-center gap-2">
             <input
@@ -134,7 +141,7 @@ function StreamAttenuationItem() {
               className="flex-1 accent-accent-primary h-1"
             />
             <span className="text-xs text-txt-secondary min-w-[32px] text-right">
-              {streamAttenuationStrength}%
+              {f.formatPercent(streamAttenuationStrength)}
             </span>
           </div>
         </div>
@@ -171,6 +178,7 @@ function handleViewerWatchToggle(streamerUserId: string, watching: boolean): voi
 }
 
 export function StreamTile({ tile, large }: StreamTileProps) {
+  const { t } = useTranslation(['voice', 'common']);
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const watchingStreams = useVoiceStore((s) => s.watchingStreams);
@@ -186,8 +194,8 @@ export function StreamTile({ tile, large }: StreamTileProps) {
   const liveScreenTrack = tile.screenTrack?.readyState === 'live' ? tile.screenTrack : null;
   const liveLkScreenTrack = liveScreenTrack ? tile.lkScreenTrack : null;
 
-  // Quality badge state
-  const [qualityBadge, setQualityBadge] = useState<string>('');
+  // Quality badge state: the raw dimensions, rendered through the catalog so a language switch relabels them.
+  const [qualityBadge, setQualityBadge] = useState<{ height: number; fps: number | null } | null>(null);
 
   const openContextMenu = useContextMenuStore((s) => s.open);
 
@@ -207,7 +215,7 @@ export function StreamTile({ tile, large }: StreamTileProps) {
   // Quality badge (poll every 3s)
   useEffect(() => {
     if (!liveScreenTrack) {
-      setQualityBadge('');
+      setQualityBadge(null);
       return;
     }
     const update = () => {
@@ -215,9 +223,9 @@ export function StreamTile({ tile, large }: StreamTileProps) {
       const h = settings.height ?? 0;
       const fps = Math.round(settings.frameRate ?? 0);
       if (h > 0 && fps > 0) {
-        setQualityBadge(`${h}P ${fps}FPS`);
+        setQualityBadge({ height: h, fps });
       } else if (h > 0) {
-        setQualityBadge(`${h}P`);
+        setQualityBadge({ height: h, fps: null });
       }
     };
     update();
@@ -247,7 +255,7 @@ export function StreamTile({ tile, large }: StreamTileProps) {
         items.push({
           key: 'stop-streaming',
           type: 'action',
-          label: 'Stop Streaming',
+          label: t('voice:stream.stop'),
           danger: true,
           icon: React.createElement('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'currentColor', className: 'flex-shrink-0' },
             React.createElement('path', { d: 'M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h7v2H8v2h8v-2h-2v-2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 14H3V5h18v12z' }),
@@ -263,7 +271,7 @@ export function StreamTile({ tile, large }: StreamTileProps) {
         items.push({
           key: 'change-stream',
           type: 'action',
-          label: 'Change Stream',
+          label: t('voice:stream.change'),
           icon: React.createElement('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'currentColor', className: 'flex-shrink-0' },
             React.createElement('path', { d: 'M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z' }),
           ),
@@ -289,7 +297,7 @@ export function StreamTile({ tile, large }: StreamTileProps) {
           items.push({
             key: 'stop-watching',
             type: 'action',
-            label: 'Stop Watching',
+            label: t('voice:stream.stopWatching'),
             icon: React.createElement('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'currentColor', className: 'flex-shrink-0' },
               React.createElement('path', { d: 'M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z' }),
             ),
@@ -303,7 +311,7 @@ export function StreamTile({ tile, large }: StreamTileProps) {
           items.push({
             key: 'watch-stream',
             type: 'action',
-            label: 'Watch Stream',
+            label: t('voice:stream.watch'),
             icon: React.createElement('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'currentColor', className: 'flex-shrink-0' },
               React.createElement('path', { d: 'M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z' }),
             ),
@@ -321,7 +329,7 @@ export function StreamTile({ tile, large }: StreamTileProps) {
         items.push({
           key: 'mute-stream',
           type: 'checkbox',
-          label: 'Mute Stream',
+          label: t('voice:stream.mute'),
           subscribe: useVoiceStore.subscribe,
           getChecked: () => useVoiceStore.getState().streamMutes.get(userId) ?? false,
           onChange: (checked) => useVoiceStore.getState().setStreamMute(userId, checked),
@@ -348,7 +356,7 @@ export function StreamTile({ tile, large }: StreamTileProps) {
 
       openContextMenu({ x: e.clientX, y: e.clientY }, items);
     },
-    [isLocal, userId, participant.identity, openContextMenu],
+    [isLocal, userId, participant.identity, openContextMenu, t],
   );
 
   const handleWatch = useCallback(() => {
@@ -382,14 +390,14 @@ export function StreamTile({ tile, large }: StreamTileProps) {
           </div>
           <div className="text-center px-4">
             <p className="text-txt-primary text-sm font-semibold">
-              {displayName} is streaming
+              {t('voice:stream.isStreaming', { name: displayName })}
             </p>
             {!isLocal && (
               <button
                 onClick={handleWatch}
                 className="mt-2 px-4 py-1.5 bg-accent-primary hover:bg-accent-primary/80 rounded text-white text-xs font-semibold transition-colors"
               >
-                Watch Stream
+                {t('voice:stream.watch')}
               </button>
             )}
           </div>
@@ -398,13 +406,16 @@ export function StreamTile({ tile, large }: StreamTileProps) {
 
       {/* LIVE badge — top left */}
       <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-accent-rose rounded text-[11px] font-bold text-white uppercase tracking-wide">
-        LIVE
+        {t('voice:badges.live')}
       </div>
 
       {/* Quality badge — top right */}
       {qualityBadge && hasVideo && (
         <div className="absolute top-2 right-2 px-1.5 py-0.5 bg-black/60 rounded text-[10px] font-bold text-white/70 uppercase tracking-wide">
-          {qualityBadge}
+          {qualityBadge.fps !== null
+            ? t('voice:stream.qualityValue', { height: qualityBadge.height, fps: qualityBadge.fps })
+            // i18n-check: allow-literal "720p" is the format's name and reads the same in every language
+            : <>{qualityBadge.height}p</>}
         </div>
       )}
 
@@ -427,7 +438,7 @@ export function StreamTile({ tile, large }: StreamTileProps) {
             {displayName}
           </span>
           {isLocal && (
-            <span className="text-[10px] text-white/40 font-medium">(you)</span>
+            <span className="text-[10px] text-white/40 font-medium">{t('voice:badges.you')}</span>
           )}
         </div>
       </div>

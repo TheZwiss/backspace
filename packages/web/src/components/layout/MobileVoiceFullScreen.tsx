@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 import { useUIStore } from '../../stores/uiStore';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useSpaceStore } from '../../stores/spaceStore';
@@ -29,6 +30,7 @@ import { requestMicPermission } from '../../utils/voice';
  * "render-everything-then-let-the-user-pick" pattern.
  */
 export function MobileVoiceFullScreen() {
+  const { t } = useTranslation(['voice', 'common']);
   const popMobileScreen = useUIStore((s) => s.popMobileScreen);
   const pushMobileScreen = useUIStore((s) => s.pushMobileScreen);
 
@@ -249,7 +251,7 @@ export function MobileVoiceFullScreen() {
   }
 
   const isDmCall = currentVoiceChannelId.startsWith('dm-');
-  let channelName = 'Voice Call';
+  let channelName = t('voice:status.voiceCall');
   let spaceName = '';
 
   if (isDmCall) {
@@ -298,7 +300,7 @@ export function MobileVoiceFullScreen() {
         <button
           onClick={popMobileScreen}
           className="w-8 h-8 flex items-center justify-center text-txt-secondary hover:text-txt-primary"
-          aria-label="Collapse call"
+          aria-label={t('voice:mobileCall.collapse')}
         >
           <svg
             className="w-5 h-5"
@@ -323,13 +325,13 @@ export function MobileVoiceFullScreen() {
           )}
         </div>
         <span className="text-xs text-txt-tertiary">
-          {participants.length} connected
+          {t('voice:mobileCall.connectedCount', { count: participants.length })}
         </span>
         {!isDmCall && (
           <button
             onClick={() => pushMobileScreen('members')}
             className="w-8 h-8 flex items-center justify-center text-txt-secondary hover:text-txt-primary"
-            aria-label="View members"
+            aria-label={t('voice:mobileCall.viewMembers')}
           >
             <svg
               className="w-5 h-5"
@@ -373,10 +375,10 @@ export function MobileVoiceFullScreen() {
           </svg>
           <div className="flex-1 min-w-0">
             <p className="text-[12px] font-medium text-accent-amber">
-              Microphone access denied
+              {t('voice:mobileCall.micDenied.title')}
             </p>
             <p className="text-[11px] text-txt-tertiary leading-tight mt-0.5">
-              You're listening only — others can't hear you.
+              {t('voice:mobileCall.micDenied.description')}
             </p>
           </div>
           <button
@@ -386,7 +388,7 @@ export function MobileVoiceFullScreen() {
             }}
             className="text-[11px] font-medium px-3 py-1.5 rounded-md bg-accent-amber/20 text-accent-amber hover:bg-accent-amber/30 transition-colors shrink-0"
           >
-            Allow microphone
+            {t('voice:mobileCall.micDenied.allow')}
           </button>
         </div>
       )}
@@ -411,7 +413,7 @@ export function MobileVoiceFullScreen() {
               ? 'bg-accent-rose/20 text-accent-rose'
               : 'bg-surface-elevated text-txt-primary hover:bg-interactive-hover'
           }`}
-          aria-label={isMuted ? 'Unmute' : 'Mute'}
+          aria-label={isMuted ? t('voice:controls.unmute') : t('voice:controls.mute')}
         >
           <svg
             className="w-5 h-5"
@@ -443,7 +445,7 @@ export function MobileVoiceFullScreen() {
               ? 'bg-accent-rose/20 text-accent-rose'
               : 'bg-surface-elevated text-txt-primary hover:bg-interactive-hover'
           }`}
-          aria-label={isDeafened ? 'Undeafen' : 'Deafen'}
+          aria-label={isDeafened ? t('voice:controls.undeafen') : t('voice:controls.deafen')}
         >
           <svg
             className="w-5 h-5"
@@ -479,7 +481,7 @@ export function MobileVoiceFullScreen() {
                 ? 'bg-accent-mint/20 text-accent-mint'
                 : 'bg-surface-elevated text-txt-primary hover:bg-interactive-hover'
             }`}
-            aria-label={isCameraOn ? 'Turn camera off' : 'Turn camera on'}
+            aria-label={isCameraOn ? t('voice:camera.turnOff') : t('voice:camera.turnOn')}
           >
             <svg
               className="w-5 h-5"
@@ -501,7 +503,7 @@ export function MobileVoiceFullScreen() {
                 e.stopPropagation();
                 setCameraPickerOpen((v) => !v);
               }}
-              aria-label="Switch camera"
+              aria-label={t('voice:camera.switch')}
               aria-haspopup="menu"
               aria-expanded={cameraPickerOpen}
               className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-surface-elevated text-txt-primary flex items-center justify-center shadow-md border border-border-soft active:scale-95 transition-transform"
@@ -542,7 +544,7 @@ export function MobileVoiceFullScreen() {
               : 'bg-surface-elevated text-txt-primary hover:bg-interactive-hover'
           }`}
           aria-label={
-            isScreenSharing ? 'Stop sharing screen' : 'Share screen'
+            isScreenSharing ? t('voice:mobileCall.stopSharingScreen') : t('voice:mobileCall.shareScreen')
           }
         >
           <svg
@@ -564,7 +566,7 @@ export function MobileVoiceFullScreen() {
         <button
           onClick={handleDisconnect}
           className="w-12 h-12 rounded-full bg-accent-rose flex items-center justify-center text-white hover:bg-accent-rose/80 transition-colors"
-          aria-label="Disconnect from call"
+          aria-label={t('voice:mobileCall.disconnect')}
         >
           <svg
             className="w-5 h-5"
@@ -594,7 +596,7 @@ export function MobileVoiceFullScreen() {
           <div
             ref={cameraPickerPopupRef}
             role="menu"
-            aria-label="Select camera"
+            aria-label={t('voice:camera.select')}
             className="fixed z-[60] rounded-md bg-surface-elevated border border-border-hard py-1 shadow-lg overflow-y-auto"
             style={{
               left: cameraPickerRect.left,
@@ -614,7 +616,7 @@ export function MobileVoiceFullScreen() {
                 cameraDeviceId === null ? 'text-txt-primary' : 'text-txt-secondary'
               } active:bg-interactive-hover`}
             >
-              Auto (system default)
+              {t('voice:camera.autoSystemDefault')}
             </button>
             {cameraDevices.map((d, i) => (
               <button
@@ -627,7 +629,7 @@ export function MobileVoiceFullScreen() {
                   cameraDeviceId === d.deviceId ? 'text-txt-primary' : 'text-txt-secondary'
                 } active:bg-interactive-hover`}
               >
-                {d.label || `Camera ${i + 1}`}
+                {d.label || t('voice:camera.fallbackName', { index: i + 1 })}
               </button>
             ))}
           </div>,

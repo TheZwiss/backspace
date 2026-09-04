@@ -1,1 +1,207 @@
-{}
+{
+  "chatPanel": {
+    "title": "Chat",
+    "close": "Close Chat"
+  },
+  "badges": {
+    "mutedNoPermission": "Muted (No Speak Permission)",
+    "spaceMuted": "Space Muted",
+    "mutedSpaceDeafened": "Muted (Space Deafened)",
+    "spaceDeafened": "Space Deafened",
+    "locallyMuted": "Locally Muted",
+    "live": "LIVE",
+    "you": "(you)"
+  },
+  "moderation": {
+    "spaceMute": "Space Mute",
+    "spaceUnmute": "Space Unmute",
+    "spaceDeafen": "Space Deafen",
+    "spaceUndeafen": "Space Undeafen",
+    "disconnect": "Disconnect",
+    "moveTo": "Move to"
+  },
+  "participantMenu": {
+    "watchCamera": "Watch Camera",
+    "stopWatchingCamera": "Stop Watching Camera",
+    "muteUser": "Mute User",
+    "userVolume": "User Volume"
+  },
+  "incomingCall": {
+    "status": "Incoming Voice Call...",
+    "decline": "Decline",
+    "accept": "Accept"
+  },
+  "grid": {
+    "waitingForOthers": "Waiting for others to join...",
+    "returnToGridHint": "Click to return to grid view",
+    "backToGrid": "Back to grid view",
+    "gridButton": "Grid",
+    "showMembers": "Show Members",
+    "hideMembers": "Hide Members"
+  },
+  "connectionInfo": {
+    "title": "Connection Info",
+    "notConnected": "Not connected",
+    "gathering": "Gathering stats...",
+    "section": {
+      "network": "Network",
+      "audio": "Audio",
+      "video": "Video"
+    },
+    "network": {
+      "ping": "Ping",
+      "packetLoss": "Packet Loss",
+      "jitter": "Jitter",
+      "server": "Server",
+      "protocol": "Protocol"
+    },
+    "source": {
+      "microphone": "Microphone",
+      "camera": "Camera",
+      "screen": "Screen",
+      "screenAudio": "Screen Audio",
+      "unknown": "Unknown"
+    },
+    "remoteParticipant": "Remote",
+    "units": {
+      "milliseconds": "{{value}} ms",
+      "percent": "{{value}}%",
+      "kbps": "{{value}} kbps",
+      "mbps": "{{value}} Mbps"
+    }
+  },
+  "screenPicker": {
+    "title": "Share Your Screen",
+    "tabs": {
+      "screens": "Screens",
+      "windows": "Windows"
+    },
+    "searchWindows": "Search windows...",
+    "noWindowsMatch": "No windows match your search",
+    "noScreens": "No screens available",
+    "noWindows": "No windows available",
+    "shareSystemAudio": "Share system audio",
+    "echoWarning": "May echo voices back to viewers — use Chrome browser for echo-free audio",
+    "share": "Share"
+  },
+  "streamSettings": {
+    "title": "Stream Settings",
+    "resolution": "Resolution",
+    "frameRate": "Frame Rate",
+    "contentMode": "Content Mode",
+    "mode": {
+      "gaming": "Gaming",
+      "text": "Text"
+    },
+    "codec": "Codec",
+    "codecOption": {
+      "standard": "Standard",
+      "hardware": "NVIDIA / Apple"
+    },
+    "hardwareNote": "GPU hardware encoder · resets when stream ends",
+    "bitrate": "Bitrate",
+    "resetToAuto": "Reset to Auto",
+    "auto": "Auto",
+    "customBitrateDisabled": "Custom bitrate disabled by administrator",
+    "systemAudio": "System Audio",
+    "chromeEchoNote": "Use Chrome for echo-free audio",
+    "degradation": {
+      "maintainResolution": "hold resolution",
+      "maintainFramerate": "hold framerate",
+      "balanced": "balanced"
+    },
+    "summary": "{{bitrate}} · {{degradation}}"
+  },
+  "stream": {
+    "quality": "Stream Quality",
+    "qualityValue": "{{height}}p {{fps}}fps",
+    "volume": "Stream Volume",
+    "attenuation": "Stream Attenuation",
+    "attenuationStrength": "Attenuation Strength",
+    "stop": "Stop Streaming",
+    "change": "Change Stream",
+    "stopWatching": "Stop Watching",
+    "watch": "Watch Stream",
+    "mute": "Mute Stream",
+    "isStreaming": "{{name}} is streaming"
+  },
+  "controls": {
+    "spaceMutedSelfMuted": "Space Muted (self-muted)",
+    "unmuteShortcut": "Unmute (M)",
+    "muteShortcut": "Mute (M)",
+    "undeafenShortcut": "Undeafen (D)",
+    "deafenShortcut": "Deafen (D)",
+    "unmute": "Unmute",
+    "mute": "Mute",
+    "undeafen": "Undeafen",
+    "deafen": "Deafen",
+    "cameraOff": "Turn Off Camera",
+    "cameraOn": "Turn On Camera",
+    "stopSharing": "Stop Sharing",
+    "shareScreen": "Share Screen",
+    "videoQuality": "Video Quality",
+    "toggleChat": "Toggle Chat",
+    "exitFullscreen": "Exit Fullscreen (Esc)",
+    "fullscreen": "Fullscreen",
+    "disconnect": "Disconnect",
+    "connectionInfo": "Connection Info",
+    "noiseSuppressionOff": "Disable AI Noise Suppression",
+    "noiseSuppressionOn": "Enable AI Noise Suppression"
+  },
+  "status": {
+    "dmCall": "DM Call",
+    "voiceChannel": "Voice Channel",
+    "voiceCall": "Voice Call",
+    "connectionFailed": "Connection Failed",
+    "connected": "Voice Connected",
+    "connecting": "Connecting..."
+  },
+  "camera": {
+    "auto": "Auto",
+    "autoSystemDefault": "Auto (system default)",
+    "selected": "Selected camera",
+    "fallbackName": "Camera {{index}}",
+    "select": "Select camera",
+    "switch": "Switch camera",
+    "turnOn": "Turn camera on",
+    "turnOff": "Turn camera off"
+  },
+  "joinSheet": {
+    "peopleInVoice_one": "{{count}} Person in Voice",
+    "peopleInVoice_other": "{{count}} People in Voice",
+    "switchNotice": "You'll leave <current>{{current}}</current> and join <target>{{target}}</target>",
+    "checkingCamera": "Checking camera…",
+    "tapToPreview": "Tap to preview camera",
+    "cameraDenied": "Camera permission denied.",
+    "stopPreview": "Stop preview",
+    "enablePreview": "Enable camera preview",
+    "previewError": {
+      "inUse": "Camera is in use by another application.",
+      "unavailable": "Selected camera is unavailable.",
+      "notFound": "No camera detected.",
+      "failed": "Could not start camera preview."
+    },
+    "empty": {
+      "title": "No one is in this channel yet.",
+      "hint": "Be the first to join!"
+    },
+    "unmuteMicrophone": "Unmute microphone",
+    "muteMicrophone": "Mute microphone",
+    "switchChannel": "Switch Channel",
+    "join": "Join Voice"
+  },
+  "mobileCall": {
+    "collapse": "Collapse call",
+    "connectedCount_one": "{{count}} connected",
+    "connectedCount_other": "{{count}} connected",
+    "viewMembers": "View members",
+    "micDenied": {
+      "title": "Microphone access denied",
+      "description": "You're listening only — others can't hear you.",
+      "allow": "Allow microphone"
+    },
+    "shareScreen": "Share screen",
+    "stopSharingScreen": "Stop sharing screen",
+    "disconnect": "Disconnect from call"
+  }
+}
