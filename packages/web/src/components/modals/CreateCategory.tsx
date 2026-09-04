@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Modal } from '../ui/Modal';
 import { useUIStore } from '../../stores/uiStore';
 import { useSpaceStore } from '../../stores/spaceStore';
+import { describeError } from '../../i18n/errors';
 
 export function CreateCategoryModal() {
+  const { t } = useTranslation(['spaces', 'common']);
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -19,12 +22,12 @@ export function CreateCategoryModal() {
     setError('');
 
     if (!name.trim()) {
-      setError('Category name is required');
+      setError(t('spaces:category.create.nameRequired'));
       return;
     }
 
     if (!currentSpaceId) {
-      setError('No space selected');
+      setError(t('spaces:category.create.noSpaceSelected'));
       return;
     }
 
@@ -34,14 +37,14 @@ export function CreateCategoryModal() {
       closeModal();
       setName('');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create category');
+      setError(describeError(err));
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={closeModal} title="Create Category" mobileStyle="sheet">
+    <Modal isOpen={isOpen} onClose={closeModal} title={t('spaces:category.create.title')} mobileStyle="sheet">
       <form onSubmit={handleSubmit}>
         {error && (
           <div className="mb-3 p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">
@@ -51,14 +54,14 @@ export function CreateCategoryModal() {
 
         <div className="mb-4">
           <label className="block text-xs font-bold text-txt-secondary uppercase mb-2">
-            Category Name
+            {t('spaces:category.create.nameLabel')}
           </label>
           <input
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
             className="input-standard w-full"
-            placeholder="new-category"
+            placeholder={t('spaces:category.create.namePlaceholder')}
             autoFocus
           />
         </div>
@@ -71,14 +74,14 @@ export function CreateCategoryModal() {
                 onClick={closeModal}
                 className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
               >
-                Cancel
+                {t('common:actions.cancel')}
               </button>
               <button
                 type="submit"
                 disabled={isLoading}
                 className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
               >
-                {isLoading ? 'Creating...' : 'Create Category'}
+                {isLoading ? t('spaces:category.create.submitting') : t('spaces:category.create.submit')}
               </button>
             </div>
           </div>

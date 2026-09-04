@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useFormatters } from '../../i18n/formatters';
+import { describeError } from '../../i18n/errors';
 import { Modal } from '../ui/Modal';
 import { useUIStore } from '../../stores/uiStore';
 import { useSpaceStore } from '../../stores/spaceStore';
@@ -11,9 +13,14 @@ import { OverviewPanel } from './spaceSettingsPanels/OverviewPanel';
 import { MembersPanel } from './spaceSettingsPanels/MembersPanel';
 import { RolesPanel } from './spaceSettingsPanels/RolesPanel';
 import { BansPanel } from './spaceSettingsPanels/BansPanel';
+import { useVisibilityOptions } from './spaceSettingsPanels/spaceOptions';
 import type { SpaceVisibility, JoinRequest } from '@backspace/shared';
 
+const DESCRIPTION_MAX_LENGTH = 200;
+
 function DiscoveryPanel({ spaceId }: { spaceId: string }) {
+  const { t } = useTranslation(['spaces', 'common']);
+  const visibilityOptions = useVisibilityOptions();
   const spaces = useSpaceStore((s) => s.spaces);
   const updateSpace = useSpaceStore((s) => s.updateSpace);
   const discoveryEnabled = useSettingsStore((s) => s.streamingLimits?.discoveryEnabled ?? true);
@@ -46,9 +53,9 @@ function DiscoveryPanel({ spaceId }: { spaceId: string }) {
     setSaveError('');
     try {
       await api.spaces.update(spaceId, { visibility, description: description.trim() });
-      addToast('Settings saved', 'success', 2000);
+      addToast(t('spaces:settings.saved'), 'success', 2000);
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : 'Failed to save');
+      setSaveError(describeError(err));
     } finally {
       setSaving(false);
     }
@@ -60,24 +67,18 @@ function DiscoveryPanel({ spaceId }: { spaceId: string }) {
     setSaveError('');
   };
 
-  const visibilityOptions: { value: SpaceVisibility; label: string; desc: string }[] = [
-    { value: 'private', label: 'Private', desc: 'Only people with an invite link can join' },
-    { value: 'request', label: 'Request to Join', desc: 'Visible in Explore — people can request to join' },
-    { value: 'public', label: 'Public', desc: 'Visible in Explore — anyone can join instantly' },
-  ];
-
   return (
     <div className="space-y-5">
-      <h2 className="text-lg font-semibold text-txt-primary mb-6">Discovery</h2>
+      <h2 className="text-lg font-semibold text-txt-primary mb-6">{t('spaces:settings.discovery.title')}</h2>
       {!discoveryEnabled && (
         <div className="p-2.5 bg-accent-amber/10 border border-accent-amber/30 rounded text-[13px] text-accent-amber">
-          Space discovery is disabled by the instance administrator. Changing visibility will have no effect until discovery is re-enabled.
+          {t('spaces:settings.discovery.disabledNotice')}
         </div>
       )}
 
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">Visibility</div>
-        <p className="text-xs text-txt-tertiary mb-2">Control who can discover and join this space.</p>
+        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('spaces:settings.discovery.visibility.label')}</div>
+        <p className="text-xs text-txt-tertiary mb-2">{t('spaces:settings.discovery.visibility.hint')}</p>
         <div className="rounded-lg bg-white/[0.02] p-3.5">
           <div className="space-y-1.5">
             {visibilityOptions.map((opt) => (
@@ -108,17 +109,19 @@ function DiscoveryPanel({ spaceId }: { spaceId: string }) {
       </div>
 
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">Description</div>
-        <p className="text-xs text-txt-tertiary mb-2">A short summary shown on the Explore page.</p>
+        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('spaces:settings.discovery.description.label')}</div>
+        <p className="text-xs text-txt-tertiary mb-2">{t('spaces:settings.discovery.description.hint')}</p>
         <div className="rounded-lg bg-white/[0.02] p-3.5">
           <textarea
             value={description}
-            onChange={(e) => setDescription(e.target.value.slice(0, 200))}
-            placeholder="A short description for the Explore page..."
+            onChange={(e) => setDescription(e.target.value.slice(0, DESCRIPTION_MAX_LENGTH))}
+            placeholder={t('spaces:settings.discovery.description.placeholder')}
             rows={3}
             className="input-standard w-full resize-none"
           />
-          <div className="text-[11px] text-txt-tertiary text-right">{description.length}/200</div>
+          <div className="text-[11px] text-txt-tertiary text-right">
+            {t('spaces:settings.discovery.description.counter', { length: description.length, max: DESCRIPTION_MAX_LENGTH })}
+          </div>
         </div>
       </div>
 
@@ -138,14 +141,14 @@ function DiscoveryPanel({ spaceId }: { spaceId: string }) {
                 onClick={handleReset}
                 className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
               >
-                Reset
+                {t('common:actions.reset')}
               </button>
               <button
                 onClick={handleSave}
                 disabled={saving}
                 className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
               >
-                {saving ? 'Saving...' : 'Save'}
+                {saving ? t('common:states.saving') : t('common:actions.save')}
               </button>
             </div>
           </div>
@@ -156,6 +159,7 @@ function DiscoveryPanel({ spaceId }: { spaceId: string }) {
 }
 
 function JoinRequestsSection({ spaceId }: { spaceId: string }) {
+  const { t } = useTranslation(['spaces', 'common']);
   const [requests, setRequests] = useState<JoinRequest[]>([]);
   const f = useFormatters();
   const [loading, setLoading] = useState(true);
@@ -183,14 +187,14 @@ function JoinRequestsSection({ spaceId }: { spaceId: string }) {
       await api.explore.decideJoinRequest(spaceId, requestId, action);
       setRequests(prev => prev.filter(r => r.id !== requestId));
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : 'Action failed');
+      setActionError(describeError(err));
     }
   };
 
   return (
     <div className="pt-4 border-t border-border-soft">
       <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-2">
-        Pending Join Requests
+        {t('spaces:settings.discovery.requests.title')}
       </div>
 
       {actionError && (
@@ -200,14 +204,14 @@ function JoinRequestsSection({ spaceId }: { spaceId: string }) {
       )}
 
       {loading ? (
-        <div className="text-sm text-txt-tertiary">Loading...</div>
+        <div className="text-sm text-txt-tertiary">{t('common:states.loading')}</div>
       ) : requests.length === 0 ? (
-        <div className="text-sm text-txt-tertiary">No pending join requests</div>
+        <div className="text-sm text-txt-tertiary">{t('spaces:settings.discovery.requests.empty')}</div>
       ) : (
         <div className="space-y-2 max-h-[240px] overflow-y-auto scrollbar-thin">
           {requests.map((req) => {
             const user = req.user;
-            const displayName = user?.displayName ?? user?.username ?? 'Unknown';
+            const displayName = user?.displayName ?? user?.username ?? t('common:states.unknown');
 
             return (
               <div key={req.id} className="flex items-start gap-3 p-2.5 rounded bg-surface-base">
@@ -235,7 +239,7 @@ function JoinRequestsSection({ spaceId }: { spaceId: string }) {
                   <button
                     onClick={() => handleDecide(req.id, 'accept')}
                     className="p-1.5 rounded text-status-online hover:bg-status-online/20 transition-colors"
-                    title="Accept"
+                    title={t('spaces:settings.discovery.requests.accept')}
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
@@ -244,7 +248,7 @@ function JoinRequestsSection({ spaceId }: { spaceId: string }) {
                   <button
                     onClick={() => handleDecide(req.id, 'decline')}
                     className="p-1.5 rounded text-txt-danger hover:bg-accent-rose/20 transition-colors"
-                    title="Decline"
+                    title={t('spaces:settings.discovery.requests.decline')}
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
@@ -261,6 +265,7 @@ function JoinRequestsSection({ spaceId }: { spaceId: string }) {
 }
 
 export function SpaceSettingsModal() {
+  const { t } = useTranslation(['spaces']);
   const activeModal = useUIStore((s) => s.activeModal);
   const closeModal = useUIStore((s) => s.closeModal);
   const isMobile = useUIStore((s) => s.isMobile);
@@ -288,13 +293,13 @@ export function SpaceSettingsModal() {
 
   if (!space || !currentSpaceId) return null;
 
-  const tabClass = (t: typeof tab) =>
+  const tabClass = (target: typeof tab) =>
     `w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
-      tab === t ? 'bg-interactive-selected text-txt-primary font-medium' : 'text-txt-tertiary hover:text-txt-secondary hover:bg-interactive-hover'
+      tab === target ? 'bg-interactive-selected text-txt-primary font-medium' : 'text-txt-tertiary hover:text-txt-secondary hover:bg-interactive-hover'
     }`;
 
-  const handleTabClick = (t: typeof tab) => {
-    setTab(t);
+  const handleTabClick = (target: typeof tab) => {
+    setTab(target);
     if (isMobile) setMobileView('content');
   };
 
@@ -318,20 +323,20 @@ export function SpaceSettingsModal() {
 
           {/* Nav list */}
           <div className="glass-bubble rounded-lg p-2 flex-1 flex flex-col">
-            <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">General</div>
-            <button onClick={() => handleTabClick('overview')} className={tabClass('overview')}>Overview</button>
+            <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('spaces:settings.nav.general')}</div>
+            <button onClick={() => handleTabClick('overview')} className={tabClass('overview')}>{t('spaces:settings.nav.tabs.overview')}</button>
             {canManageSpace && (
-              <button onClick={() => handleTabClick('discovery')} className={tabClass('discovery')}>Discovery</button>
+              <button onClick={() => handleTabClick('discovery')} className={tabClass('discovery')}>{t('spaces:settings.nav.tabs.discovery')}</button>
             )}
 
             <div className="border-t border-white/[0.04] my-2 mx-2" />
-            <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">Management</div>
-            <button onClick={() => handleTabClick('members')} className={tabClass('members')}>Members</button>
+            <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('spaces:settings.nav.management')}</div>
+            <button onClick={() => handleTabClick('members')} className={tabClass('members')}>{t('spaces:settings.nav.tabs.members')}</button>
             {canManageRoles && (
-              <button onClick={() => handleTabClick('roles')} className={tabClass('roles')}>Roles</button>
+              <button onClick={() => handleTabClick('roles')} className={tabClass('roles')}>{t('spaces:settings.nav.tabs.roles')}</button>
             )}
             {canBanMembers && (
-              <button onClick={() => handleTabClick('bans')} className={tabClass('bans')}>Bans</button>
+              <button onClick={() => handleTabClick('bans')} className={tabClass('bans')}>{t('spaces:settings.nav.tabs.bans')}</button>
             )}
           </div>
         </div>
@@ -353,20 +358,20 @@ export function SpaceSettingsModal() {
             </div>
 
             <div className="glass-bubble rounded-lg p-2 space-y-0.5">
-              <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">General</div>
-              <button onClick={() => handleTabClick('overview')} className={tabClass('overview')}>Overview</button>
+              <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('spaces:settings.nav.general')}</div>
+              <button onClick={() => handleTabClick('overview')} className={tabClass('overview')}>{t('spaces:settings.nav.tabs.overview')}</button>
               {canManageSpace && (
-                <button onClick={() => handleTabClick('discovery')} className={tabClass('discovery')}>Discovery</button>
+                <button onClick={() => handleTabClick('discovery')} className={tabClass('discovery')}>{t('spaces:settings.nav.tabs.discovery')}</button>
               )}
 
               <div className="border-t border-white/[0.04] my-2 mx-2" />
-              <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">Management</div>
-              <button onClick={() => handleTabClick('members')} className={tabClass('members')}>Members</button>
+              <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('spaces:settings.nav.management')}</div>
+              <button onClick={() => handleTabClick('members')} className={tabClass('members')}>{t('spaces:settings.nav.tabs.members')}</button>
               {canManageRoles && (
-                <button onClick={() => handleTabClick('roles')} className={tabClass('roles')}>Roles</button>
+                <button onClick={() => handleTabClick('roles')} className={tabClass('roles')}>{t('spaces:settings.nav.tabs.roles')}</button>
               )}
               {canBanMembers && (
-                <button onClick={() => handleTabClick('bans')} className={tabClass('bans')}>Bans</button>
+                <button onClick={() => handleTabClick('bans')} className={tabClass('bans')}>{t('spaces:settings.nav.tabs.bans')}</button>
               )}
             </div>
           </div>
@@ -381,12 +386,12 @@ export function SpaceSettingsModal() {
                 <button
                   onClick={() => setMobileView('tabs')}
                   className="flex items-center gap-1.5 text-txt-tertiary hover:text-txt-secondary mb-4 text-sm"
-                  aria-label="Back to space settings menu"
+                  aria-label={t('spaces:settings.backAria')}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" />
                   </svg>
-                  Space Settings
+                  {t('spaces:settings.title')}
                 </button>
               )}
               {tab === 'overview' && <OverviewPanel spaceId={currentSpaceId} />}
