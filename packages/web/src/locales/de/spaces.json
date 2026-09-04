@@ -385,5 +385,159 @@
     "saveFailed": "Überschreibungen konnten nicht gespeichert werden",
     "partialFailure_one": "{{count}} Überschreibung konnte nicht gespeichert werden",
     "partialFailure_other": "{{count}} Überschreibungen konnten nicht gespeichert werden"
+  },
+  "sidebar": {
+    "directMessages": "Direktnachrichten",
+    "addSpace": "Space hinzufügen",
+    "joinSpace": "Space beitreten",
+    "exploreSpaces": "Spaces entdecken",
+    "folder": {
+      "tooltip_one": "Ordner ({{count}})",
+      "tooltip_other": "Ordner ({{count}})",
+      "spaceCount_one": "{{count}} Space",
+      "spaceCount_other": "{{count}} Spaces",
+      "unnamed": "Unbenannter Ordner",
+      "rename": "Ordner umbenennen",
+      "color": "Ordnerfarbe",
+      "create": "Ordner erstellen",
+      "moveTo": "In Ordner verschieben",
+      "removeFrom": "Aus Ordner entfernen",
+      "ungroup": "Ordner auflösen",
+      "colors": {
+        "mint": "Mint",
+        "peach": "Pfirsich",
+        "lavender": "Lavendel",
+        "sky": "Himmelblau",
+        "amber": "Bernstein",
+        "rose": "Rosé",
+        "coral": "Koralle"
+      },
+      "created": "Ordner erstellt",
+      "moved": "In Ordner verschoben",
+      "removed": "Aus Ordner entfernt",
+      "ungrouped": "Ordner aufgelöst"
+    },
+    "space": {
+      "invite": "Leute einladen",
+      "inviteCopied": "Einladungslink kopiert",
+      "inviteFailed": "Einladung konnte nicht erstellt werden",
+      "transferOwnership": "Besitz übertragen",
+      "settings": "Space-Einstellungen",
+      "leave": "Space verlassen",
+      "reconnecting": "Verbindung zu {{instance}} wird wiederhergestellt…",
+      "remoteInstance": "der Remote-Instanz",
+      "leaveConfirm": {
+        "title": "Space verlassen",
+        "titleNamed": "{{name}} verlassen",
+        "description": "Willst du diesen Space wirklich verlassen? Zum erneuten Beitreten brauchst du eine neue Einladung.",
+        "confirm": "Verlassen"
+      },
+      "left": "Du hast den Space verlassen",
+      "leaveFailed": "Space konnte nicht verlassen werden"
+    },
+    "dmList": {
+      "friends": "Freunde",
+      "comingSoon": "Demnächst",
+      "newDm": "Neue Direktnachricht",
+      "empty": "Noch keine Unterhaltungen.",
+      "leaveGroup": "Gruppe verlassen",
+      "leaveGroupConfirm": {
+        "title": "Gruppen-DM verlassen",
+        "description": "Willst du die Gruppe wirklich verlassen? Du kommst nur zurück, wenn dich jemand wieder hinzufügt.",
+        "confirm": "Verlassen"
+      }
+    },
+    "userArea": {
+      "inputDevice": "Eingabegerät",
+      "outputDevice": "Ausgabegerät",
+      "inputDevices": "Eingabegeräte",
+      "outputDevices": "Ausgabegeräte",
+      "inputVolume": "Eingabelautstärke",
+      "outputVolume": "Ausgabelautstärke",
+      "systemDefault": "Systemstandard",
+      "microphonePermission": "Mikrofonzugriff wird benötigt.",
+      "audioPermission": "Audiozugriff wird benötigt.",
+      "enable": "Erlauben",
+      "voiceSettings": "Spracheinstellungen",
+      "settings": "Einstellungen",
+      "mute": "Stummschalten",
+      "unmute": "Stummschaltung aufheben",
+      "deafen": "Ton aus",
+      "undeafen": "Ton an",
+      "spaceMuted": "Im Space stummgeschaltet",
+      "spaceDeafened": "Im Space ist der Ton ausgeschaltet",
+      "permissionMuted": "Stummgeschaltet (keine Sprechberechtigung)"
+    }
+  },
+  "channels": {
+    "loading": "Kanäle werden geladen",
+    "create": "Kanal erstellen",
+    "createCategory": "Kategorie erstellen",
+    "settings": "Kanaleinstellungen",
+    "categorySettings": "Kategorieeinstellungen",
+    "delete": "Kanal löschen",
+    "deleteCategory": "Kategorie löschen",
+    "emptyCategory": "Keine Kanäle",
+    "empty": "Noch keine Kanäle.",
+    "deleteConfirm": {
+      "title": "Kanal löschen",
+      "description": "Bist du sicher? Der Kanal und alle seine Nachrichten werden dauerhaft gelöscht."
+    },
+    "deleteCategoryConfirm": {
+      "title": "Kategorie löschen",
+      "description": "Willst du diese Kategorie wirklich löschen? Die Kanäle darin bleiben ohne Kategorie erhalten, es wird kein Kanal gelöscht."
+    },
+    "deleted": "Kanal gelöscht",
+    "deleteFailed": "Kanal konnte nicht gelöscht werden",
+    "categoryDeleted": "Kategorie gelöscht",
+    "categoryDeleteFailed": "Kategorie konnte nicht gelöscht werden"
+  },
+  "members": {
+    "title": "Mitglieder",
+    "titleWithCount_one": "Mitglieder — {{count}}",
+    "titleWithCount_other": "Mitglieder — {{count}}",
+    "loading": "Mitglieder werden geladen",
+    "empty": "Keine Mitglieder gefunden",
+    "groups": {
+      "owner": "Besitzer",
+      "online": "Online",
+      "offline": "Offline"
+    }
+  },
+  "mobile": {
+    "addSheet": {
+      "createSpace": "Space erstellen",
+      "joinSpace": "Space beitreten",
+      "exploreSpaces": "Spaces entdecken"
+    },
+    "muteUser": "Nutzer stummschalten"
+  },
+  "main": {
+    "selectChannel": "Wähle einen Kanal",
+    "selectChannelHint": "Wähle einen Text- oder Sprachkanal, um loszulegen",
+    "notificationSettings": "Benachrichtigungseinstellungen",
+    "voice": {
+      "connectionFailed": "Verbindung fehlgeschlagen",
+      "connected": "Verbunden",
+      "connecting": "Verbindung wird hergestellt…",
+      "participants_one": "{{count}} verbunden",
+      "participants_other": "{{count}} verbunden",
+      "inCall_one": "{{count}} im Anruf",
+      "inCall_other": "{{count}} im Anruf",
+      "empty": "Gerade ist niemand in diesem Sprachkanal.",
+      "join": "Beitreten"
+    },
+    "dm": {
+      "fallbackName": "Direktnachricht",
+      "composerPlaceholder": "Nachricht an {{target}}",
+      "calling": "{{name}} wird angerufen…",
+      "groupSettings": "Gruppeneinstellungen",
+      "openGroupSettings": "Gruppeneinstellungen öffnen",
+      "memberCount_one": "({{count}} Mitglied)",
+      "memberCount_other": "({{count}} Mitglieder)",
+      "startVoiceCall": "Sprachanruf starten",
+      "startVideoCall": "Videoanruf starten",
+      "addFriends": "Freunde zur DM hinzufügen"
+    }
   }
 }

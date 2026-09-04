@@ -385,5 +385,159 @@
     "saveFailed": "Failed to save overrides",
     "partialFailure_one": "{{count}} override failed to save",
     "partialFailure_other": "{{count}} overrides failed to save"
+  },
+  "sidebar": {
+    "directMessages": "Direct Messages",
+    "addSpace": "Add a Space",
+    "joinSpace": "Join a Space",
+    "exploreSpaces": "Explore Spaces",
+    "folder": {
+      "tooltip_one": "Folder ({{count}})",
+      "tooltip_other": "Folder ({{count}})",
+      "spaceCount_one": "{{count}} space",
+      "spaceCount_other": "{{count}} spaces",
+      "unnamed": "Unnamed Folder",
+      "rename": "Rename Folder",
+      "color": "Folder Color",
+      "create": "Create Folder",
+      "moveTo": "Move to Folder",
+      "removeFrom": "Remove from Folder",
+      "ungroup": "Ungroup",
+      "colors": {
+        "mint": "Mint",
+        "peach": "Peach",
+        "lavender": "Lavender",
+        "sky": "Sky",
+        "amber": "Amber",
+        "rose": "Rose",
+        "coral": "Coral"
+      },
+      "created": "Folder created",
+      "moved": "Moved to folder",
+      "removed": "Removed from folder",
+      "ungrouped": "Folder ungrouped"
+    },
+    "space": {
+      "invite": "Invite People",
+      "inviteCopied": "Invite link copied to clipboard",
+      "inviteFailed": "Failed to generate invite",
+      "transferOwnership": "Transfer Ownership",
+      "settings": "Space Settings",
+      "leave": "Leave Space",
+      "reconnecting": "Reconnecting to {{instance}}…",
+      "remoteInstance": "remote instance",
+      "leaveConfirm": {
+        "title": "Leave Space",
+        "titleNamed": "Leave {{name}}",
+        "description": "Are you sure you want to leave this space? You'll need a new invite to rejoin.",
+        "confirm": "Leave"
+      },
+      "left": "Left space",
+      "leaveFailed": "Failed to leave space"
+    },
+    "dmList": {
+      "friends": "Friends",
+      "comingSoon": "Coming Soon",
+      "newDm": "New Direct Message",
+      "empty": "No conversations yet.",
+      "leaveGroup": "Leave Group",
+      "leaveGroupConfirm": {
+        "title": "Leave Group DM",
+        "description": "Are you sure you want to leave? You won't be able to rejoin unless someone adds you back.",
+        "confirm": "Leave"
+      }
+    },
+    "userArea": {
+      "inputDevice": "Input Device",
+      "outputDevice": "Output Device",
+      "inputDevices": "Input Devices",
+      "outputDevices": "Output Devices",
+      "inputVolume": "Input Volume",
+      "outputVolume": "Output Volume",
+      "systemDefault": "System Default",
+      "microphonePermission": "Microphone permission needed.",
+      "audioPermission": "Audio permission needed.",
+      "enable": "Enable",
+      "voiceSettings": "Voice Settings",
+      "settings": "Settings",
+      "mute": "Mute",
+      "unmute": "Unmute",
+      "deafen": "Deafen",
+      "undeafen": "Undeafen",
+      "spaceMuted": "Space Muted",
+      "spaceDeafened": "Space Deafened",
+      "permissionMuted": "Muted (No Speak Permission)"
+    }
+  },
+  "channels": {
+    "loading": "Loading channels",
+    "create": "Create Channel",
+    "createCategory": "Create Category",
+    "settings": "Channel Settings",
+    "categorySettings": "Category Settings",
+    "delete": "Delete Channel",
+    "deleteCategory": "Delete Category",
+    "emptyCategory": "No channels",
+    "empty": "No channels yet.",
+    "deleteConfirm": {
+      "title": "Delete Channel",
+      "description": "Are you sure? This will permanently delete the channel and all its messages."
+    },
+    "deleteCategoryConfirm": {
+      "title": "Delete Category",
+      "description": "Are you sure you want to delete this category? Channels in this category will be moved to uncategorized — no channels will be deleted."
+    },
+    "deleted": "Channel deleted",
+    "deleteFailed": "Failed to delete channel",
+    "categoryDeleted": "Category deleted",
+    "categoryDeleteFailed": "Failed to delete category"
+  },
+  "members": {
+    "title": "Members",
+    "titleWithCount_one": "Members — {{count}}",
+    "titleWithCount_other": "Members — {{count}}",
+    "loading": "Loading members",
+    "empty": "No members found",
+    "groups": {
+      "owner": "Owner",
+      "online": "Online",
+      "offline": "Offline"
+    }
+  },
+  "mobile": {
+    "addSheet": {
+      "createSpace": "Create Space",
+      "joinSpace": "Join Space",
+      "exploreSpaces": "Explore Spaces"
+    },
+    "muteUser": "Mute User"
+  },
+  "main": {
+    "selectChannel": "Select a channel",
+    "selectChannelHint": "Select a text or voice channel to get started",
+    "notificationSettings": "Notification Settings",
+    "voice": {
+      "connectionFailed": "Connection Failed",
+      "connected": "Connected",
+      "connecting": "Connecting…",
+      "participants_one": "{{count}} connected",
+      "participants_other": "{{count}} connected",
+      "inCall_one": "{{count}} in call",
+      "inCall_other": "{{count}} in call",
+      "empty": "No one is currently in this voice channel.",
+      "join": "Join Voice"
+    },
+    "dm": {
+      "fallbackName": "Direct Message",
+      "composerPlaceholder": "Message {{target}}",
+      "calling": "Calling {{name}}…",
+      "groupSettings": "Group Settings",
+      "openGroupSettings": "Open group settings",
+      "memberCount_one": "({{count}} member)",
+      "memberCount_other": "({{count}} members)",
+      "startVoiceCall": "Start Voice Call",
+      "startVideoCall": "Start Video Call",
+      "addFriends": "Add Friends to DM"
+    }
   }
 }

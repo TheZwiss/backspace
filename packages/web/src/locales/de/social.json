@@ -1,1 +1,91 @@
-{}
+{
+  "page": {
+    "title": "Freunde"
+  },
+  "tabs": {
+    "online": "Online",
+    "all": "Alle",
+    "pending": "Ausstehend",
+    "add": "Freund hinzufügen",
+    "activity": "Aktivität"
+  },
+  "sections": {
+    "online": "Online – {{n}}",
+    "all": "Alle Freunde – {{n}}",
+    "pending": "Ausstehend – {{n}}",
+    "active": "Aktiv – {{n}}",
+    "offline": "Offline – {{n}}"
+  },
+  "empty": {
+    "online": "Gerade ist niemand online.",
+    "all": "Noch keine Freunde – füg jemanden hinzu!",
+    "pending": "Keine ausstehenden Anfragen – Nori macht ein Nickerchen.",
+    "activity": "Gerade ist es ruhig… Sobald deine Freunde etwas unternehmen, siehst du es hier!"
+  },
+  "presence": {
+    "online": "Online",
+    "idle": "Abwesend",
+    "dnd": "Bitte nicht stören",
+    "offline": "Offline"
+  },
+  "friend": {
+    "viaInstance": "über {{host}}",
+    "message": "Nachricht",
+    "remove": "Freund entfernen"
+  },
+  "request": {
+    "incoming": "Eingehende Freundschaftsanfrage",
+    "outgoing": "Ausgehende Freundschaftsanfrage",
+    "accept": "Annehmen",
+    "decline": "Ablehnen",
+    "ignore": "Ignorieren",
+    "cancel": "Anfrage zurückziehen",
+    "send": "Freundschaftsanfrage senden",
+    "pending": "Anfrage ausstehend",
+    "sending": "Wird gesendet…",
+    "cancelling": "Wird zurückgezogen…",
+    "sent": "Freundschaftsanfrage gesendet!"
+  },
+  "removeFriend": {
+    "title": "Freund entfernen",
+    "description": "Möchtest du {{name}} wirklich als Freund entfernen? Du kannst später jederzeit eine neue Freundschaftsanfrage senden.",
+    "fallbackName": "diese Person"
+  },
+  "add": {
+    "title": "Leute finden",
+    "hint": "Suche nach dem Benutzernamen oder gib <handle>name@instanz</handle> ein, um jemanden direkt hinzuzufügen.",
+    "placeholder": "Suchen oder per Benutzername hinzufügen…",
+    "direct": "Freundschaftsanfrage senden an <handle>{{handle}}</handle>",
+    "sendRequest": "Anfrage senden",
+    "discover": "Leute entdecken",
+    "noSearchResults": "Keine passenden Personen gefunden.",
+    "noDiscoverable": "Noch niemand zu entdecken – lade Leute ein!"
+  },
+  "mutuals": {
+    "friends_one": "{{count}} gemeinsamer Freund",
+    "friends_other": "{{count}} gemeinsame Freunde",
+    "spaces_one": "{{count}} gemeinsamer Space",
+    "spaces_other": "{{count}} gemeinsame Spaces",
+    "noFriends": "Keine gemeinsamen Freunde",
+    "noSpaces": "Keine gemeinsamen Spaces"
+  },
+  "profile": {
+    "tabs": {
+      "about": "Über",
+      "mutualFriends": "Gemeinsame Freunde",
+      "mutualSpaces": "Gemeinsame Spaces"
+    },
+    "aboutMe": "Über mich",
+    "memberSince": "Mitglied seit",
+    "sendMessage": "Nachricht senden",
+    "viewFull": "Ganzes Profil ansehen",
+    "addFriend": "Freund hinzufügen"
+  },
+  "activity": {
+    "title": "Jetzt aktiv",
+    "quietTitle": "Gerade ist es ruhig…",
+    "quietDescription": "Sobald jemand aus deiner Freundesliste etwas unternimmt – ein Spiel startet oder im Sprachkanal abhängt –, siehst du es hier!",
+    "online": "Online – {{n}}",
+    "offline": "Offline – {{n}}"
+  }
+}
