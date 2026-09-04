@@ -25,9 +25,9 @@ describe('LazyCatalogBackend', () => {
 });
 
 describe('listCatalogPaths', () => {
-  it('sees every shipped language directory', () => {
+  it('sees every lazily loaded language, and not bundled English', () => {
     const languages = new Set(listCatalogPaths().map((p) => p.language));
-    expect([...languages].sort()).toEqual(['de', 'en', 'ru']);
+    expect([...languages].sort()).toEqual(['de', 'ru']);
   });
 
   it('sees the same namespaces for every language', () => {

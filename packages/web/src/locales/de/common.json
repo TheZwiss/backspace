@@ -46,5 +46,10 @@
   "language": {
     "label": "Sprache",
     "description": "Menüs, Schaltflächen und Systemmeldungen erscheinen in dieser Sprache. Nachrichten anderer Personen bleiben, wie sie geschrieben wurden."
+  },
+  "crash": {
+    "title": "Etwas ist schiefgelaufen",
+    "reload": "Seite neu laden",
+    "details": "Fehlerdetails"
   }
 }

@@ -6,7 +6,10 @@
  * splits into their own chunks: a Russian user downloads the Russian
  * catalogs and nothing else, and an English user downloads none.
  */
-const catalogs = import.meta.glob<Record<string, unknown>>('../locales/*/*.json', { import: 'default' });
+const catalogs = import.meta.glob<Record<string, unknown>>(
+  ['../locales/*/*.json', '!../locales/en/*.json'],
+  { import: 'default' },
+);
 
 const PATH_PATTERN = /^\.\.\/locales\/([^/]+)\/([^/]+)\.json$/;
 
@@ -15,7 +18,7 @@ export interface CatalogPath {
   namespace: string;
 }
 
-/** Every catalog file the build can see, whether or not it is ever loaded. */
+/** Every lazily loaded catalog the build can see (every language except bundled English). */
 export function listCatalogPaths(): CatalogPath[] {
   const paths: CatalogPath[] = [];
   for (const path of Object.keys(catalogs)) {

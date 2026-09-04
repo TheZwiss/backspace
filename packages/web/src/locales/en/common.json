@@ -46,5 +46,10 @@
   "language": {
     "label": "Language",
     "description": "Menus, buttons and system messages appear in this language. Messages from other people stay as they were written."
+  },
+  "crash": {
+    "title": "Something went wrong",
+    "reload": "Reload Page",
+    "details": "Error details"
   }
 }

@@ -40,6 +40,7 @@ You are the Lead Developer of Backspace, an open-source (AGPL-3.0, commercially 
 - Permission bits or resolution algorithm
 - Voice/streaming architecture
 - Design system (new surface tiers, input tiers, CSS classes)
+- Localization (new namespaces, error codes, formatters, languages)
 
 Do NOT update docs for standard UI/UX fixes or minor logic bugs. Only structural, architectural, or functional changes.
 
@@ -90,6 +91,7 @@ No resting border — sunken `surface-input` background provides differentiation
 | Voice | LiveKit (livekit-client + livekit-server-sdk), RNNoise |
 | Media | sharp (thumbnails), Cheerio (URL metadata), react-easy-crop |
 | Chat | react-markdown + remark-gfm, prism-react-renderer, emoji-mart |
+| i18n | i18next + react-i18next, `Intl.*` formatters, JSON catalogs per surface |
 | Desktop | Electron 40, electron-updater, uiohook-napi |
 | Testing | Vitest, @testing-library/react |
 
@@ -170,6 +172,7 @@ Before modifying any subsystem, read its spec from `docs/systems/`. After making
 | [activity-presence.md](docs/systems/activity-presence.md) | Presence states, rich activities, activity types/priorities, broadcast pipeline, visibility control, ActivityCard/Panel | Presence, rich activities, activity display, status management |
 | [security-scanning.md](docs/systems/security-scanning.md) | CI security pipeline: Dependabot, CodeQL SAST, gitleaks, OSV-Scanner, Trivy (config, license, and the published image), OpenSSF Scorecard, ZAP baseline DAST, SHA-pinning, harden-runner, tiered enforcement policy, triage policy and dismissal register, maintainer settings checklist | Any CI security work, adding/changing scanners, enabling enforcement, supply-chain hardening |
 | [web-security.md](docs/systems/web-security.md) | Content Security Policy construction and rollout state, the CORS posture and why the origin is reflected, security-header ownership between Caddy and the app, the route-level policy override for served files | Any CSP, CORS or security-header work; before "tightening" CORS |
+| [localization.md](docs/systems/localization.md) | i18next setup, semantic surface-scoped keys, typed catalogs, plural policy, `Intl` formatters bound to the selected language, lazy locale loading, the `ErrorCode` wire contract and `sendError`/`describeError`, desktop main-process catalog and `set-language` IPC, the consistency check and its pending list, sweep order | **Any user-facing string, date, count or error message**; adding a language; converting a surface; adding a server error code |
 | [metrics.md](docs/systems/metrics.md) | Traffic archive: daily collection into the `metrics-data` branch, CSV/NDJSON schemas, upsert and write-if-absent semantics, backfill, the 202 stats problem, PAT scopes, the 60-day schedule hazard; the `site/insights` dashboard: `data.json` contract, 2 MB bundle budget and weekly downsampling, uPlot vendoring, Pages deploy wiring, empty-state behaviour | Any repo-analytics or dashboard work, changing collected series, changing the bundle contract, debugging a stalled collector or a red deploy |
 
 ---

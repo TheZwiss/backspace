@@ -11,21 +11,29 @@ one entry in `supportedLanguages`; nothing else in the code should need to
 know the list.
 
 Source files:
-- Runtime setup: `packages/web/src/i18n/index.ts` (i18next init, detection,
-  persistence, `<html lang>`/`dir` sync)
+- Runtime setup: `packages/web/src/i18n/index.ts` (`initI18n`, `setLanguage`,
+  `getLanguage`; detection, persistence, `<html lang>`/`dir` sync, desktop IPC)
 - Language list: `packages/web/src/i18n/languages.ts` (`supportedLanguages`,
-  `SupportedLanguage`, `resolveSupportedLanguage`)
-- Lazy catalog loader: `packages/web/src/i18n/loader.ts`
+  `SupportedLanguage`, `resolveSupportedLanguage`, `pickLanguage`)
+- Lazy catalog loader: `packages/web/src/i18n/loader.ts` (`LazyCatalogBackend`)
 - Typed keys: `packages/web/src/i18n/resources.ts` and
   `packages/web/src/i18n/i18next.d.ts` (`CustomTypeOptions`)
-- Formatters: `packages/web/src/i18n/formatters.ts`
-- Error mapping: `packages/web/src/i18n/errors.ts`
+- Formatters: `packages/web/src/i18n/formatters.ts` (`createFormatters`,
+  `formatters`, `useFormatters`)
+- Error mapping: `packages/web/src/i18n/errors.ts` (`describeError`)
+- Language picker: `packages/web/src/components/modals/settingsPanels/LanguageSection.tsx`
 - Catalogs: `packages/web/src/locales/<lng>/<namespace>.json`
-- Shared error codes: `packages/shared/src/errors.ts`
-- Server error helper: `packages/server/src/utils/httpErrors.ts`
-- Desktop main-process catalog: `packages/desktop/src/l10n.ts`
-- Consistency check: `scripts/check-i18n.mjs` (runs in `pnpm typecheck` and
-  in the web build)
+- Shared error codes: `packages/shared/src/errors.ts` (`ERROR_CODES`,
+  `ErrorCode`, `ApiErrorBody`, `isErrorCode`)
+- Server error helper: `packages/server/src/utils/httpErrors.ts` (`sendError`,
+  `ERROR_MESSAGES`)
+- Desktop main-process catalog: `packages/desktop/src/l10n.ts`; the recovery
+  and instance-picker pages under `packages/desktop/resources/` carry their
+  own inline catalogs
+- Consistency check: `scripts/check-i18n.mjs` with its rules in
+  `scripts/i18n/check.mjs` (runs in `pnpm typecheck` and in the web build)
+- Test bootstrap: `packages/web/src/test/setup.ts` starts i18next in English
+  before any component test renders
 
 ---
 
@@ -66,7 +74,10 @@ Rules:
   The check script cannot see through it, so the call site names the keys it
   covers in a comment for the check script (see Consistency check).
 - Keys are typed. `t('chat:composer.placeholde')` is a compile error and
-  keys autocomplete in the editor.
+  keys autocomplete in the editor. A component that mixes namespaces declares
+  them both: `useTranslation(['settings', 'common'])`, then
+  `t('common:actions.save')`. With only `useTranslation('settings')` the
+  `common:` prefix is a type error, which is i18next 26 doing its job.
 
 ### Namespaces
 
@@ -155,17 +166,26 @@ formatter reads `i18n.resolvedLanguage` at call time; components use the
 
 | Function | Use | Backing API |
 |----------|-----|-------------|
-| `formatTime(ts)` | Message timestamps, "today" DM previews | `Intl.DateTimeFormat` `{ hour, minute }` |
-| `formatShortDate(ts)` | Day separators, DM previews this year, ban and invite lists | `{ month: 'short', day: 'numeric' }`, year added when not the current year |
-| `formatLongDate(ts)` | Profile "member since", update panel | `{ day: 'numeric', month: 'long', year: 'numeric' }` |
-| `formatDateTime(ts)` | Message hover, search results, redemption log | date plus time |
-| `formatRelativeTime(ts)` | "Last checked 5 minutes ago" | `Intl.RelativeTimeFormat` with `numeric: 'auto'`, which also yields "yesterday" in each language |
+| `formatTime(ts)` | Message timestamps, "today" DM previews | `Intl.DateTimeFormat` `{ hour: 'numeric', minute: '2-digit' }` |
+| `formatShortDate(ts)` | DM previews, day separators | `{ month: 'short', day: 'numeric' }`, year added when not the current year |
+| `formatMediumDate(ts)` | Lists that always want the year: users, bans, peers, profile "member since" | `{ month: 'short', day: 'numeric', year: 'numeric' }` |
+| `formatLongDate(ts)` | Update panel | `{ day: 'numeric', month: 'long', year: 'numeric' }` |
+| `formatFullDate(ts)` | Message list day separators | weekday plus long date |
+| `formatNumericDate(ts)` | Compact tables | `{ dateStyle: 'short' }` |
+| `formatDateTime(ts)` | Message hover, search results, redemption log | `{ dateStyle: 'medium', timeStyle: 'short' }` |
+| `formatRelativeTime(ts)` | "Last checked 5 minutes ago": elapsed time in the largest whole unit | `Intl.RelativeTimeFormat` with `numeric: 'auto'` |
+| `formatRelativeDay(ts)` | "yesterday" in DM previews: the calendar day, so 23:00 and 01:00 are a day apart | `Intl.RelativeTimeFormat`, `day` unit |
 | `formatNumber(n)` | Counts shown as bare numbers | `Intl.NumberFormat` |
+| `formatPercent(p)` | Sliders that show `150%` | `Intl.NumberFormat` `style: 'percent'` |
 | `formatBytes(n)` | Storage panel, transfer indicator | `Intl.NumberFormat` with `style: 'unit'` and the right byte unit |
 
 `formatDmTimestamp` in `dmFormatters.ts` keeps its today/yesterday/this-year
-branching but delegates every branch to these formatters, and the
-"Yesterday" branch becomes `formatRelativeTime` rather than a literal.
+branching but delegates every branch to these formatters, and the "Yesterday"
+branch is `formatRelativeDay` rather than a literal.
+
+The elapsed and calendar variants exist because they answer different
+questions: a message sent at 14:05 yesterday is "20 hours ago" as elapsed time
+and "yesterday" as a calendar day, and each UI wants one of the two.
 
 Tests set the language explicitly through `i18n.changeLanguage` before
 asserting on formatted output. Asserting `Mar 15` without setting the
@@ -200,6 +220,11 @@ Detection order on startup:
 2. `navigator.languages`, first entry whose base language is supported.
 3. `en`.
 
+Detection alone never writes the stored choice. A user who has not picked a
+language keeps following their browser; only the picker persists.
+`initI18n` resolves after the detected language's catalogs are loaded, and
+`main.tsx` awaits it before the first render, so there is no English flash.
+
 The selector lives in the user settings modal, Account panel, section
 "Language". It lists `supportedLanguages`, showing each language by its
 `nativeName` (English, Русский, Deutsch); the list is not translated,
@@ -228,30 +253,45 @@ Wire contract (`packages/shared/src/errors.ts`):
 ```ts
 interface ApiErrorBody {
   error: string;       // English text, kept for older clients and logs
-  code?: ErrorCode;    // stable identifier, e.g. 'auth.invalidCredentials'
+  code?: ErrorCode;    // stable identifier, e.g. 'current_password_incorrect'
   statusCode: number;
   details?: Record<string, string | number>; // interpolation values, e.g. { max: 32 }
 }
 ```
 
-`ErrorCode` is a string union in `packages/shared`. Routes send errors
-through `sendError(reply, status, code, details?)` in
-`packages/server/src/utils/httpErrors.ts`, which looks up the English text
-for the code and fills the body. Routes that have not been converted keep
-sending `{ error, statusCode }`; the contract is backward compatible in both
-directions because a desktop app and an instance version independently.
+`ErrorCode` is a snake_case string union in `packages/shared`. The shape
+follows the codes that already existed before this system (`recipient_deleted`
+in the DM routes, the friend-request codes in `social.ts`,
+`PEER_EXISTS_RESET_REQUIRED` in peering), all of which are members. A code
+never changes meaning once shipped.
 
-The client's `HttpError` carries `code` and `details`. Components render an
-error with `describeError(err)` from `i18n/errors.ts`, which returns the
-localized `errors:` string for the code, interpolating `details`, and falls
-back to the server's English `error` text when there is no code or the
-catalog has no entry. A `code` that is missing from the `errors` namespace
-is a check-script failure, so every code shipped by the server has words in
-every language.
+Routes send errors through `sendError(reply, status, code, details?)` in
+`packages/server/src/utils/httpErrors.ts`, which looks up the English text
+for the code and fills the body. `ERROR_MESSAGES` is typed
+`Record<ErrorCode, string>`, so adding a code without English text does not
+compile. Routes that have not been converted keep sending `{ error,
+statusCode }`; the contract is backward compatible in both directions because
+a desktop app and an instance version independently, and because the web
+client talks directly to federated peers that may run any version.
+
+The client's `HttpError` carries `code` and `details`, parsed by
+`HttpError.fromBody`. It accepts a `code` field, and, for the older routes
+that put the code in `error` itself, an `error` value that is a known code.
+Unknown codes are dropped, so a peer cannot inject arbitrary catalog keys.
+Components render an error with `describeError(err)` from `i18n/errors.ts`,
+which returns the localized `errors:` string for the code, interpolating
+`details`, and falls back to the server's English `error` text when there is
+no code or the catalog has no entry. A `code` that is missing from the
+`errors` namespace is a check-script failure, so every code shipped by the
+server has words in every language.
 
 Federation: error bodies relayed from a peer instance follow the same
 contract, so a code from a newer peer is localized and a bare `error` from
 an older peer is shown as is.
+
+Converted so far: the profile, password and account-deletion routes in
+`users.ts`. Auth, joins, uploads, friends and DM management follow with their
+surface sweeps.
 
 The conversion order is by what users actually see: auth, joining spaces
 and DMs, uploads, friend requests, DM management. Internal and admin errors
@@ -276,16 +316,24 @@ the feature, not a localization task.
 ## Desktop main process
 
 The main process shows a handful of strings outside the renderer: tray menu
-items, the application menu on macOS, the update items and the recovery
-window. These live in `packages/desktop/src/l10n.ts` as a small typed
-catalog with `en`, `ru` and `de` entries.
+items, the application menu (macOS, and the accelerator-only Edit menu on
+Windows and Linux), the update items, the recovery page and the instance
+picker. The menu strings live in `packages/desktop/src/l10n.ts` as a small
+typed catalog with `en`, `ru` and `de` entries; `translateDesktop(language,
+key, values?)` reads it. The recovery and instance-picker pages carry their
+own inline `STRINGS` tables, because they are shown precisely when the
+renderer is unavailable.
 
 Language source, in order: the last `set-language` IPC message from the
-renderer (persisted in the desktop settings store), then `app.getLocale()`
-mapped through the same base-language rule as the web, then `en`. The
-recovery window receives the language as a query parameter on its
-`loadFile` URL and picks strings from an inline catalog, because it is
-shown precisely when the renderer is unavailable.
+renderer, persisted as `language.json` next to `instance-url.json` in
+userData, then `app.getLocale()` mapped through the same base-language rule
+as the web, then `en`. `getDesktopLanguage()` resolves it; the pages receive
+it as `?lang=` on their `loadFile` URL. On `set-language`, main persists the
+choice and rebuilds every menu it owns.
+
+`buildTrayMenuTemplate` and `buildAppMenuTemplate` take the language as a
+trailing parameter that defaults to English, so the pure template builders
+stay testable without Electron.
 
 Notification titles are composed by the renderer and passed to
 `showNotification`, so they need no main-process work.
@@ -310,7 +358,9 @@ It fails on:
    file not listed in `scripts/i18n-pending.txt`. That file is the list of
    source files not yet swept; each sweep PR removes its files from it, and
    the list reaching zero is the definition of done for the first localized
-   release.
+   release. `node scripts/check-i18n.mjs --write-pending` regenerates it from
+   the current tree. A line that is a false positive carries
+   `// i18n-check: allow-literal` on the line above.
 
 The check reports every finding at once, with file and line, so a sweep PR
 can be fixed in one pass.
