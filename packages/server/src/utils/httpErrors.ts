@@ -32,6 +32,8 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   password_unchanged: 'New password must differ from the current password',
   display_name_too_long: 'Display name can be at most {{max}} characters',
   bio_too_long: 'Bio can be at most {{max}} characters',
+  custom_status_too_long: 'Custom status can be at most {{max}} characters',
+  profile_managed_by_home: 'Profile fields are managed by your home instance',
   account_deletion_blocked_owned_spaces: 'Transfer or delete the spaces you own before deleting your account',
   account_deletion_password_incorrect: 'Password is incorrect',
 

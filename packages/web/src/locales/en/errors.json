@@ -20,6 +20,8 @@
   "password_unchanged": "The new password must be different from the current one.",
   "display_name_too_long": "Display names can be at most {{max}} characters.",
   "bio_too_long": "Bios can be at most {{max}} characters.",
+  "custom_status_too_long": "Custom statuses can be at most {{max}} characters.",
+  "profile_managed_by_home": "Your profile is managed by your home instance. Change it there.",
   "account_deletion_blocked_owned_spaces": "Transfer or delete the spaces you own before deleting your account.",
   "account_deletion_password_incorrect": "The password is wrong, so the account was not deleted.",
   "cannot_friend_self": "You cannot add yourself as a friend.",

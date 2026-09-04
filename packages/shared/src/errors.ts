@@ -40,6 +40,8 @@ export const ERROR_CODES = [
   'password_unchanged',
   'display_name_too_long',
   'bio_too_long',
+  'custom_status_too_long',
+  'profile_managed_by_home',
   'account_deletion_blocked_owned_spaces',
   'account_deletion_password_incorrect',
 

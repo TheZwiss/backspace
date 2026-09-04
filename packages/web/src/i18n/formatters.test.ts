@@ -71,6 +71,12 @@ describe('createFormatters', () => {
     expect(createFormatters(() => 'de').formatBytes(1536)).toBe('1,5 kB');
   });
 
+  it('formats a percentage from a whole-number percent value', () => {
+    expect(createFormatters(() => 'en').formatPercent(150)).toBe('150%');
+    expect(createFormatters(() => 'de').formatPercent(150)).toBe('150\u00a0%');
+    expect(createFormatters(() => 'ru').formatPercent(0)).toBe('0\u00a0%');
+  });
+
   it('re-reads the language on every call so a language change takes effect', () => {
     let language = 'en';
     const formatters = createFormatters(() => language);

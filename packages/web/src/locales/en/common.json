@@ -23,7 +23,8 @@
     "clear": "Clear",
     "change": "Change",
     "refresh": "Refresh",
-    "openLink": "Open link"
+    "openLink": "Open link",
+    "tryAgain": "Try again"
   },
   "states": {
     "loading": "Loading…",
@@ -44,7 +45,6 @@
   },
   "language": {
     "label": "Language",
-    "description": "Menus, buttons and system messages appear in this language. Messages from other people stay as they were written.",
-    "germanReviewNote": "The German translation is new and still being reviewed."
+    "description": "Menus, buttons and system messages appear in this language. Messages from other people stay as they were written."
   }
 }

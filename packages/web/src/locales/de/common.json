@@ -23,7 +23,8 @@
     "clear": "Leeren",
     "change": "Ändern",
     "refresh": "Aktualisieren",
-    "openLink": "Link öffnen"
+    "openLink": "Link öffnen",
+    "tryAgain": "Erneut versuchen"
   },
   "states": {
     "loading": "Wird geladen…",
@@ -44,7 +45,6 @@
   },
   "language": {
     "label": "Sprache",
-    "description": "Menüs, Schaltflächen und Systemmeldungen erscheinen in dieser Sprache. Nachrichten anderer Personen bleiben, wie sie geschrieben wurden.",
-    "germanReviewNote": "Die deutsche Übersetzung ist neu und wird noch geprüft."
+    "description": "Menüs, Schaltflächen und Systemmeldungen erscheinen in dieser Sprache. Nachrichten anderer Personen bleiben, wie sie geschrieben wurden."
   }
 }

@@ -25,6 +25,8 @@ export interface Formatters {
   /** `today`, `yesterday`, `3 days ago`: the calendar day, so 11 pm and 1 am are a day apart. */
   formatRelativeDay: (timestamp: number, now?: Date) => string;
   formatNumber: (value: number) => string;
+  /** `150%` / `150 %` from a whole-number percent such as a volume slider value. */
+  formatPercent: (percent: number) => string;
   /** `1.5 kB`, `3 MB`; binary steps of 1024 with the conventional SI labels. */
   formatBytes: (bytes: number) => string;
 }
@@ -113,6 +115,8 @@ export function createFormatters(getLocale: () => string): Formatters {
     },
 
     formatNumber: (value) => numberFormat({}).format(value),
+
+    formatPercent: (percent) => numberFormat({ style: 'percent', maximumFractionDigits: 0 }).format(percent / 100),
 
     formatBytes: (bytes) => {
       let value = Math.max(0, bytes);

@@ -80,6 +80,177 @@
         "notFound": "Keine Kamera gefunden.",
         "generic": "Die Kameravorschau konnte nicht gestartet werden."
       }
+    },
+    "title": "Sprache & Video",
+    "volume": {
+      "sectionTitle": "Lautstärke",
+      "soundEffects": {
+        "label": "Lautstärke der Soundeffekte"
+      },
+      "messageSound": {
+        "label": "Ton bei jeder Nachricht",
+        "description": "Aus (Standard): nur Direktnachrichten und Nachrichten, die dich erwähnen. An: jeder Kanal."
+      }
+    },
+    "processing": {
+      "sectionTitle": "Sprachverarbeitung",
+      "noiseSuppression": {
+        "label": "KI-Rauschunterdrückung",
+        "description": "Rauschentfernung per maschinellem Lernen (RNNoise). Filtert Tastatur, Lüfter und Hintergrundgeräusche."
+      },
+      "echoCancellation": {
+        "label": "Echounterdrückung",
+        "description": "Unterdrückt Echo, wenn deine Lautsprecher ins Mikrofon zurückkoppeln. In Sprachkanälen und Anrufen immer an."
+      },
+      "autoGain": {
+        "label": "Automatische Verstärkung",
+        "description": "Passt die Mikrofonlautstärke automatisch an. Kann während Streams die Stimme leiser machen."
+      }
+    }
+  },
+  "nav": {
+    "userSettings": "Benutzereinstellungen",
+    "appSettings": "App-Einstellungen",
+    "administration": "Verwaltung",
+    "tabs": {
+      "account": "Konto",
+      "voice": "Sprache & Video",
+      "privacy": "Privatsphäre",
+      "connections": "Verbindungen",
+      "keybinds": "Tastenkürzel",
+      "desktop": "Desktop",
+      "instance": "Instanz"
+    },
+    "logOut": "Abmelden",
+    "backToMenu": "Zurück zum Einstellungsmenü",
+    "back": "Einstellungen"
+  },
+  "account": {
+    "title": "Mein Konto",
+    "detached": {
+      "notice": "Dieses Konto ist von seiner Heimatinstanz getrennt.",
+      "explanation": "{{homeInstance}} wurde zurückgesetzt oder ist nicht mehr erreichbar, daher läuft dieses Konto jetzt lokal auf dieser Instanz. Profil und Passwort werden hier verwaltet.",
+      "reattachHint": "Als {{username}} auf {{homeInstance}} kannst du dieses Konto wieder verknüpfen. Profil und Status werden dann wieder von dort synchronisiert.",
+      "reattachButton": "Mit {{homeInstance}} verknüpfen",
+      "reattachConfirm": "Verknüpfung als {{username}} bestätigen",
+      "reattaching": "Wird verknüpft…",
+      "reattachFailed": "Verknüpfen fehlgeschlagen",
+      "reattached": "Konto wieder mit {{username}} verknüpft"
+    },
+    "language": {
+      "sectionTitle": "Sprache"
+    },
+    "profile": {
+      "sectionTitle": "Profil anpassen",
+      "avatar": {
+        "label": "Avatar",
+        "alt": "Dein Avatar",
+        "change": "Avatar ändern",
+        "uploadFailed": "Avatar konnte nicht hochgeladen werden",
+        "cropTitle": "Avatar zuschneiden"
+      },
+      "banner": {
+        "label": "Banner",
+        "change": "Banner ändern",
+        "uploadFailed": "Banner konnte nicht hochgeladen werden",
+        "cropTitle": "Banner zuschneiden"
+      },
+      "avatarColor": {
+        "label": "Avatarfarbe",
+        "names": {
+          "mint": "Mint",
+          "sky": "Himmelblau",
+          "lavender": "Lavendel",
+          "coral": "Koralle",
+          "rose": "Rosé",
+          "teal": "Petrol",
+          "amber": "Bernstein"
+        }
+      },
+      "bannerColor": {
+        "label": "Bannerfarbe",
+        "hexPlaceholder": "#hex"
+      },
+      "bio": {
+        "label": "Über mich",
+        "placeholder": "Erzähl der Welt etwas über dich…",
+        "counter": "{{used}}/{{max}}"
+      }
+    },
+    "details": {
+      "sectionTitle": "Konto",
+      "status": {
+        "label": "Status",
+        "online": "Online",
+        "idle": "Abwesend",
+        "dnd": "Nicht stören"
+      },
+      "displayName": {
+        "label": "Anzeigename"
+      },
+      "customStatus": {
+        "label": "Eigener Status",
+        "placeholder": "Was machst du gerade?"
+      }
+    },
+    "password": {
+      "sectionTitle": "Passwort",
+      "current": {
+        "label": "Aktuelles Passwort",
+        "placeholder": "Aktuelles Passwort eingeben"
+      },
+      "new": {
+        "label": "Neues Passwort",
+        "placeholder": "Mindestens {{min}} Zeichen"
+      },
+      "confirm": {
+        "label": "Neues Passwort bestätigen",
+        "placeholder": "Neues Passwort wiederholen"
+      },
+      "show": "Passwort anzeigen",
+      "hide": "Passwort verbergen",
+      "tooShort": "Das neue Passwort muss mindestens {{min}} Zeichen lang sein",
+      "mismatch": "Die Passwörter stimmen nicht überein",
+      "changed": "Passwort geändert",
+      "changeFailed": "Passwort konnte nicht geändert werden",
+      "submit": "Passwort ändern",
+      "submitting": "Wird geändert…"
+    },
+    "danger": {
+      "sectionTitle": "Gefahrenzone",
+      "description": "Wenn du dein Konto löschst, gibt es kein Zurück. Deine Nachrichten bleiben erhalten, werden aber „Gelöschter Benutzer“ zugeordnet.",
+      "deleteButton": "Konto löschen"
+    },
+    "save": {
+      "updated": "Profil aktualisiert",
+      "failed": "Profil konnte nicht aktualisiert werden"
+    }
+  },
+  "privacy": {
+    "title": "Privatsphäre",
+    "discovery": {
+      "sectionTitle": "Entdecken",
+      "label": "Andere dürfen mein Profil finden",
+      "description": "Wenn aktiviert, erscheint dein Profil unter „Personen entdecken“. Über den genauen Benutzernamen kann dich jeder hinzufügen."
+    },
+    "activity": {
+      "sectionTitle": "Aktivitätsstatus",
+      "label": "Aktivitätsstatus teilen",
+      "description": "Andere dürfen sehen, was du gerade machst, etwa welche Spiele du spielst oder welche Musik du hörst."
+    }
+  },
+  "connections": {
+    "title": "Verbindungen"
+  },
+  "instance": {
+    "tabs": {
+      "general": "Allgemein",
+      "registration": "Registrierung",
+      "federation": "Föderation",
+      "streaming": "Streaming",
+      "storage": "Speicher",
+      "users": "Benutzer",
+      "updates": "Updates"
     }
   }
 }

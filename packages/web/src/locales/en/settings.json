@@ -80,6 +80,177 @@
         "notFound": "No camera detected.",
         "generic": "Could not start camera preview."
       }
+    },
+    "title": "Voice & Video",
+    "volume": {
+      "sectionTitle": "Volume",
+      "soundEffects": {
+        "label": "Sound Effects Volume"
+      },
+      "messageSound": {
+        "label": "Play sound for every message",
+        "description": "Off (default): only DMs and messages that mention you. On: every channel."
+      }
+    },
+    "processing": {
+      "sectionTitle": "Voice Processing",
+      "noiseSuppression": {
+        "label": "AI Noise Suppression",
+        "description": "ML-based noise removal (RNNoise). Filters keyboard, fans and background noise."
+      },
+      "echoCancellation": {
+        "label": "Echo Cancellation",
+        "description": "Cancels echo from your speakers feeding back into the mic. Always on for voice channels and calls."
+      },
+      "autoGain": {
+        "label": "Auto Gain Control",
+        "description": "Auto-adjusts mic volume. Can cause voice ducking during streams."
+      }
+    }
+  },
+  "nav": {
+    "userSettings": "User Settings",
+    "appSettings": "App Settings",
+    "administration": "Administration",
+    "tabs": {
+      "account": "Account",
+      "voice": "Voice & Video",
+      "privacy": "Privacy",
+      "connections": "Connections",
+      "keybinds": "Keybinds",
+      "desktop": "Desktop",
+      "instance": "Instance"
+    },
+    "logOut": "Log Out",
+    "backToMenu": "Back to settings menu",
+    "back": "Settings"
+  },
+  "account": {
+    "title": "My Account",
+    "detached": {
+      "notice": "This account is detached from its home instance.",
+      "explanation": "{{homeInstance}} was reset or is no longer available, so this account now operates locally on this instance. Your profile and password are managed here.",
+      "reattachHint": "As {{username}} on {{homeInstance}}, you can re-link this account. Profile and presence will sync from there again.",
+      "reattachButton": "Re-attach to {{homeInstance}}",
+      "reattachConfirm": "Confirm re-attach as {{username}}",
+      "reattaching": "Re-attaching…",
+      "reattachFailed": "Re-attach failed",
+      "reattached": "Account re-linked with {{username}}"
+    },
+    "language": {
+      "sectionTitle": "Language"
+    },
+    "profile": {
+      "sectionTitle": "Profile Customization",
+      "avatar": {
+        "label": "Avatar",
+        "alt": "Your avatar",
+        "change": "Change Avatar",
+        "uploadFailed": "Failed to upload avatar",
+        "cropTitle": "Crop Avatar"
+      },
+      "banner": {
+        "label": "Banner",
+        "change": "Change Banner",
+        "uploadFailed": "Failed to upload banner",
+        "cropTitle": "Crop Banner"
+      },
+      "avatarColor": {
+        "label": "Avatar Color",
+        "names": {
+          "mint": "Mint",
+          "sky": "Sky",
+          "lavender": "Lavender",
+          "coral": "Coral",
+          "rose": "Rose",
+          "teal": "Teal",
+          "amber": "Amber"
+        }
+      },
+      "bannerColor": {
+        "label": "Banner Color",
+        "hexPlaceholder": "#hex"
+      },
+      "bio": {
+        "label": "About Me",
+        "placeholder": "Tell the world about yourself…",
+        "counter": "{{used}}/{{max}}"
+      }
+    },
+    "details": {
+      "sectionTitle": "Account",
+      "status": {
+        "label": "Status",
+        "online": "Online",
+        "idle": "Idle",
+        "dnd": "Do Not Disturb"
+      },
+      "displayName": {
+        "label": "Display Name"
+      },
+      "customStatus": {
+        "label": "Custom Status",
+        "placeholder": "What are you up to?"
+      }
+    },
+    "password": {
+      "sectionTitle": "Password",
+      "current": {
+        "label": "Current Password",
+        "placeholder": "Enter current password"
+      },
+      "new": {
+        "label": "New Password",
+        "placeholder": "Minimum {{min}} characters"
+      },
+      "confirm": {
+        "label": "Confirm New Password",
+        "placeholder": "Confirm new password"
+      },
+      "show": "Show password",
+      "hide": "Hide password",
+      "tooShort": "New password must be at least {{min}} characters",
+      "mismatch": "Passwords do not match",
+      "changed": "Password changed",
+      "changeFailed": "Failed to change password",
+      "submit": "Change Password",
+      "submitting": "Changing…"
+    },
+    "danger": {
+      "sectionTitle": "Danger Zone",
+      "description": "Once you delete your account, there is no going back. Your messages will remain but be attributed to \"Deleted User\".",
+      "deleteButton": "Delete Account"
+    },
+    "save": {
+      "updated": "Profile updated",
+      "failed": "Failed to update profile"
+    }
+  },
+  "privacy": {
+    "title": "Privacy",
+    "discovery": {
+      "sectionTitle": "Discovery",
+      "label": "Allow others to find my profile",
+      "description": "When enabled, your profile appears in Discover People. Others can always add you by exact username."
+    },
+    "activity": {
+      "sectionTitle": "Activity Status",
+      "label": "Share Activity Status",
+      "description": "Allow others to see what you're up to, like games you're playing or music you're listening to."
+    }
+  },
+  "connections": {
+    "title": "Connections"
+  },
+  "instance": {
+    "tabs": {
+      "general": "General",
+      "registration": "Registration",
+      "federation": "Federation",
+      "streaming": "Streaming",
+      "storage": "Storage",
+      "users": "Users",
+      "updates": "Updates"
     }
   }
 }

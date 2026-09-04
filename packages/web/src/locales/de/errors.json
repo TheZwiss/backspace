@@ -20,6 +20,8 @@
   "password_unchanged": "Das neue Passwort muss sich vom aktuellen unterscheiden.",
   "display_name_too_long": "Anzeigenamen dürfen höchstens {{max}} Zeichen lang sein.",
   "bio_too_long": "Die Beschreibung darf höchstens {{max}} Zeichen lang sein.",
+  "custom_status_too_long": "Der eigene Status darf höchstens {{max}} Zeichen lang sein.",
+  "profile_managed_by_home": "Dein Profil wird von deiner Heimatinstanz verwaltet. Ändere es dort.",
   "account_deletion_blocked_owned_spaces": "Übertrage oder lösche die Spaces, die dir gehören, bevor du dein Konto löschst.",
   "account_deletion_password_incorrect": "Das Passwort ist falsch, das Konto wurde nicht gelöscht.",
   "cannot_friend_self": "Du kannst dich nicht selbst als Freund hinzufügen.",
