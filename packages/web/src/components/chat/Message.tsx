@@ -124,22 +124,38 @@ function getImageEmbedSourceUrl(content: string | null, embeds: Embed[]): string
 export function Message({ message, isCompact, isFirstInGroup, previousMessageId }: MessageProps) {
   const { t } = useTranslation(['chat', 'common']);
   const fmt = useFormatters();
-  const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(message.content ?? '');
   const [isHovered, setIsHovered] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const confirmDeleteTimeout = useRef<ReturnType<typeof setTimeout>>();
+  const editTextareaRef = useRef<HTMLTextAreaElement>(null);
   const reactionPickerBtnRef = useRef<HTMLButtonElement>(null);
   const reactionPickerRef = useRef<HTMLDivElement>(null);
   const currentUser = useAuthStore((s) => s.user);
   const editMessage = useChatStore((s) => s.editMessage);
+  const editingMessageId = useChatStore((s) => s.editingMessageId);
+  const setEditingMessage = useChatStore((s) => s.setEditingMessage);
   const deleteMessage = useChatStore((s) => s.deleteMessage);
   const members = useSpaceStore((s) => s.members);
   const openUserProfile = useUIStore((s) => s.openUserProfile);
 
   const pending = isPendingMessage(message) ? message.__pending : null;
   const showInteractions = !pending;
+  const isEditing = !pending && editingMessageId === message.id;
+
+  useEffect(() => {
+    if (!isEditing) return;
+    const content = message.content ?? '';
+    setEditContent(content);
+    const frame = requestAnimationFrame(() => {
+      const textarea = editTextareaRef.current;
+      if (!textarea) return;
+      textarea.focus();
+      textarea.setSelectionRange(content.length, content.length);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [isEditing, message.content]);
 
   const transfersForRow = useTransferStore((s) => s.transfers);
   const inMemoryFiles = useTransferStore((s) => s.hasInMemoryFile);
@@ -163,6 +179,14 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
     ? message.channelId || message.dmChannelId || ''
     : message.channelId || (message as MessageWithUser & { dmChannelId?: string }).dmChannelId || '';
   const isAuthor = isSelf(message.user, currentUser);
+  const startEditing = () => {
+    setEditContent(message.content ?? '');
+    setEditingMessage(message.id);
+  };
+  const stopEditing = () => {
+    setEditContent(message.content ?? '');
+    setEditingMessage(null);
+  };
   const channelPermissions = useSpaceStore((s) => s.channelPermissions);
   const myChPerms = channelPermissions.get(message.channelId);
   const isDmMessage = isPendingMessage(message)
@@ -330,10 +354,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
       canSendMessages,
       canManageMessages,
       onReply: () => setReplyTo(message),
-      onEdit: () => {
-        setEditContent(message.content ?? '');
-        setIsEditing(true);
-      },
+      onEdit: startEditing,
       onDelete: () => deleteMessage(message.id, channelKey),
       onReaction: (emoji: string) => toggleReaction(emoji),
       onOpenEmojiPicker: () => {
@@ -353,12 +374,11 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
       e.preventDefault();
       if (editContent.trim()) {
         await editMessage(message.id, editContent.trim(), channelKey);
-        setIsEditing(false);
+        setEditingMessage(null);
       }
     }
     if (e.key === 'Escape') {
-      setIsEditing(false);
-      setEditContent(message.content ?? '');
+      stopEditing();
     }
   };
 
@@ -475,6 +495,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
         {isEditing ? (
           <div className="mt-1 w-full">
             <textarea
+              ref={editTextareaRef}
               value={editContent}
               onChange={(e) => setEditContent(e.target.value)}
               onKeyDown={handleEditSubmit}
@@ -487,13 +508,13 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
                 t={t}
                 i18nKey="chat:message.edit.hint"
                 components={{ // i18n-check: allow-literal (the next line is an object key after a JSX element, not text)
-                  cancel: <button onClick={() => setIsEditing(false)} className="text-txt-link hover:underline" />,
+                  cancel: <button onClick={stopEditing} className="text-txt-link hover:underline" />,
                   save: (
                     <button
                       onClick={() => {
                         if (editContent.trim()) {
                           editMessage(message.id, editContent.trim(), channelKey);
-                          setIsEditing(false);
+                          setEditingMessage(null);
                         }
                       }}
                       className="text-txt-link hover:underline"
@@ -711,10 +732,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
           </button>
           {isAuthor && (
             <button
-              onClick={() => {
-                setEditContent(message.content ?? '');
-                setIsEditing(true);
-              }}
+              onClick={startEditing}
               className="px-2 h-full text-txt-tertiary hover:text-txt-primary hover:bg-interactive-hover transition-all flex items-center justify-center"
               title={t('common:actions.edit')}
             >
