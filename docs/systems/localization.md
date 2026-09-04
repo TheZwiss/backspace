@@ -222,14 +222,14 @@ Detection order on startup:
 
 Each entry in `supportedLanguages` carries a `released` flag. Only released
 languages appear in the picker (`availableLanguages`) or can be chosen by
-detection; a stored choice for an unreleased language is ignored. Russian and
-German are complete in code and tests and every surface is translated, but
-they stay unreleased until the German has had a native read, so a release
-cut before 1.1.0 is English-only by construction rather than unreviewed. A
-separate release PR flips the flags. Tests reach the unreleased languages with
-`setLanguage` or `initI18n({ releasedLanguages })`; people reach them with
-`?lang=de` on the URL, which works in development builds only and is never
-persisted.
+detection; a stored choice for an unreleased language is ignored. English,
+Russian and German are all released as of 1.1.0. The flag exists for the next
+language: it lands surface by surface with `released: false`, so a release cut
+in between stays free of that language rather than shipping it half
+translated, and the PR that finishes it flips the flag. Tests reach an
+unreleased language with `setLanguage` or `initI18n({ releasedLanguages })`;
+people reach it with `?lang=<code>` on the URL, which works in development
+builds only and is never persisted.
 
 Detection alone never writes the stored choice. A user who has not picked a
 language keeps following their browser; only the picker persists.
@@ -401,8 +401,8 @@ whole app in PR #45, and that PR also established the detection order, the
 `backspace-language` storage key and the idea of a parity check, all of
 which are kept here. The Russian values are carried over matched by English
 text, with `Co-authored-by` credit on every commit that carries them, and
-st7105 is asked to review the result. German is written by the maintainers
-and marked for a native review before release.
+st7105 is asked to review the result. German is written by the maintainers;
+the release PR that flips its flag is merged only after a native read.
 
 Catalogs are Weblate compatible. No hosted translation platform is
 configured yet; when one is, it points at `packages/web/src/locales` and

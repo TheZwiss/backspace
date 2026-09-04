@@ -32,8 +32,10 @@ describe('initI18n', () => {
 
 describe('initI18n release gate', () => {
   it('ignores a stored unreleased language and starts in English', async () => {
+    // Every shipped language is released now; keep the gate covered with an
+    // explicit released set so the next language can rely on it.
     localStorage.setItem(LANGUAGE_STORAGE_KEY, 'ru');
-    await initI18n({ browserLanguages: ['ru-RU'] });
+    await initI18n({ browserLanguages: ['ru-RU'], releasedLanguages: new Set(['en']) });
     expect(i18n.resolvedLanguage).toBe('en');
   });
 });
