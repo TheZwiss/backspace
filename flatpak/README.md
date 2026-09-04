@@ -45,8 +45,8 @@ The manifest intentionally does not expose the host home directory or the
 unrestricted system bus. Network, audio, host devices (for direct webcam
 access), DRI graphics, notifications, and the status notifier are enabled
 because they are core desktop-client features. System-bus access is limited to
-UPower and login1 so Chromium can observe battery state and suspend/resume.
-PipeWire screen capture goes through the desktop portals.
+UPower so Chromium can observe battery state. PipeWire screen capture goes
+through the desktop portals.
 Global keybind behavior is desktop-dependent: X11 supports the bundled native
 hook, which is rebuilt against the bundled Electron headers, while Wayland
 compositors may restrict global input observation. Activity detection follows
