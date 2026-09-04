@@ -96,8 +96,14 @@ jobs:
 
       - name: Checkout the release tag
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
+
+      # The job runs inside the Flatpak builder container as a different user
+      # than the one the runner used for the checkout. Git treats a repository
+      # owned by another user as untrusted and refuses every command with
+      # "detected dubious ownership", which is how the v1.0.6 run failed on the
+      # `git show` below before it produced anything.
+      - name: Trust the checked-out repository
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Install the pinned Node SDK extension
         run: |
