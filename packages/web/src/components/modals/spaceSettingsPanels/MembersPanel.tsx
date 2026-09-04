@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Avatar } from '../../ui/Avatar';
 import { ConfirmDialog } from '../../ui/ConfirmDialog';
 import { useSpaceStore, getApiForOrigin } from '../../../stores/spaceStore';
@@ -6,6 +7,8 @@ import { useAuthStore } from '../../../stores/authStore';
 import { parseFederatedUsername, isFederationGlobeApplicable } from '../../../utils/identity';
 import { useCanonicalUserView } from '../../../utils/userViewLookup';
 import { hasPermissionBit, PermissionBits } from '../../../utils/permissions';
+import { useFormatters } from '../../../i18n/formatters';
+import { describeError } from '../../../i18n/errors';
 import type { MemberWithUser, Role } from '@backspace/shared';
 
 function MembersPanelRow({
@@ -43,6 +46,7 @@ function MembersPanelRow({
   onCancelRoleChange: (userId: string) => void;
   onPendingAction: (action: { type: 'kick' | 'ban'; userId: string; displayName: string }) => void;
 }) {
+  const { t } = useTranslation(['spaces', 'common']);
   const canonical = useCanonicalUserView(member.user);
   const isOwner = member.userId === ownerId;
   const displayName = canonical.displayName ?? canonical.username;
@@ -75,7 +79,7 @@ function MembersPanelRow({
             <div className="flex items-center gap-1 flex-wrap">
               {isOwner && (
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent-rose/20 text-txt-danger font-medium">
-                  Owner
+                  {t('spaces:settings.members.owner')}
                 </span>
               )}
               {member.roles?.filter((r) => r.id !== spaceId).map((r) => (
@@ -88,7 +92,7 @@ function MembersPanelRow({
                 </span>
               ))}
               {!isOwner && (!member.roles || member.roles.filter((r) => r.id !== spaceId).length === 0) && (
-                <span className="text-[10px] text-txt-tertiary">No roles</span>
+                <span className="text-[10px] text-txt-tertiary">{t('spaces:settings.members.noRoles')}</span>
               )}
             </div>
           </div>
@@ -100,7 +104,7 @@ function MembersPanelRow({
               onClick={(e) => { e.stopPropagation(); onPendingAction({ type: 'ban', userId: member.userId, displayName }); }}
               className="px-2 py-1 text-xs text-txt-danger hover:bg-accent-rose/10 rounded transition-colors"
             >
-              Ban
+              {t('spaces:settings.members.ban')}
             </button>
           )}
           {canKick && member.userId !== currentUserId && !isOwner && (
@@ -108,7 +112,7 @@ function MembersPanelRow({
               onClick={(e) => { e.stopPropagation(); onPendingAction({ type: 'kick', userId: member.userId, displayName }); }}
               className="px-2 py-1 text-xs text-txt-danger hover:bg-accent-rose/10 rounded transition-colors"
             >
-              Kick
+              {t('spaces:settings.members.kick')}
             </button>
           )}
           {expandable && (
@@ -150,13 +154,13 @@ function MembersPanelRow({
                 onClick={() => onSaveRoles(member.userId)}
                 className="px-2 py-0.5 text-xs bg-accent-primary hover:bg-accent-primary/80 text-white rounded transition-colors"
               >
-                Save
+                {t('common:actions.save')}
               </button>
               <button
                 onClick={() => onCancelRoleChange(member.userId)}
                 className="px-2 py-0.5 text-xs text-txt-tertiary hover:text-txt-secondary transition-colors"
               >
-                Cancel
+                {t('common:actions.cancel')}
               </button>
             </div>
           )}
@@ -171,6 +175,8 @@ interface MembersPanelProps {
 }
 
 export function MembersPanel({ spaceId }: MembersPanelProps) {
+  const { t } = useTranslation(['spaces', 'common']);
+  const f = useFormatters();
   const spaces = useSpaceStore((s) => s.spaces);
   const members = useSpaceStore((s) => s.members);
   const roles = useSpaceStore((s) => s.roles);
@@ -224,7 +230,7 @@ export function MembersPanel({ spaceId }: MembersPanelProps) {
       setExpandedMemberId(null);
       await loadSpaceDetail(spaceId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update roles');
+      setError(describeError(err));
     }
   };
 
@@ -241,7 +247,7 @@ export function MembersPanel({ spaceId }: MembersPanelProps) {
       await spaceApi.spaces.removeMember(spaceId, userId);
       await loadSpaceDetail(spaceId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to kick member');
+      setError(describeError(err));
     }
   };
 
@@ -250,7 +256,7 @@ export function MembersPanel({ spaceId }: MembersPanelProps) {
       await spaceApi.spaces.ban(spaceId, userId);
       await loadSpaceDetail(spaceId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to ban member');
+      setError(describeError(err));
     }
   };
 
@@ -259,15 +265,15 @@ export function MembersPanel({ spaceId }: MembersPanelProps) {
 
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-semibold text-txt-primary mb-6">Members</h2>
+      <h2 className="text-lg font-semibold text-txt-primary mb-6">{t('spaces:settings.members.title')}</h2>
       {error && (
         <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">{error}</div>
       )}
-      <p className="text-xs text-txt-tertiary">Manage members of this space. Click a member to edit their roles.</p>
+      <p className="text-xs text-txt-tertiary">{t('spaces:settings.members.description')}</p>
 
       <div>
         <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
-          Members ({members.length})
+          {t('spaces:settings.members.listHeading', { total: f.formatNumber(members.length) })}
         </div>
         <div className="rounded-lg bg-white/[0.02] p-2">
           <div className="space-y-0.5">
@@ -308,14 +314,18 @@ export function MembersPanel({ spaceId }: MembersPanelProps) {
           }
           setPendingAction(null);
         }}
-        title={pendingAction?.type === 'ban' ? `Ban ${pendingAction.displayName}` : `Kick ${pendingAction?.displayName ?? ''}`}
+        title={
+          pendingAction?.type === 'ban'
+            ? t('spaces:settings.members.confirm.banTitle', { name: pendingAction.displayName })
+            : t('spaces:settings.members.confirm.kickTitle', { name: pendingAction?.displayName ?? '' })
+        }
         description={
           pendingAction?.type === 'ban'
-            ? 'They will be permanently banned from this space until unbanned.'
-            : 'They can rejoin with an invite link.'
+            ? t('spaces:settings.members.confirm.banDescription')
+            : t('spaces:settings.members.confirm.kickDescription')
         }
         variant={pendingAction?.type === 'ban' ? 'danger' : 'warning'}
-        confirmLabel={pendingAction?.type === 'ban' ? 'Ban' : 'Kick'}
+        confirmLabel={pendingAction?.type === 'ban' ? t('spaces:settings.members.ban') : t('spaces:settings.members.kick')}
       />
     </div>
   );
