@@ -383,6 +383,10 @@ It fails on:
    `node scripts/check-i18n.mjs --write-pending` regenerates it from the
    current tree. A line that is a false positive carries
    `// i18n-check: allow-literal` on the line above.
+9. Translation markup that differs from English, or a paired HTML void tag
+   (such as `<link>...</link>`) used as a `Trans` component wrapper. Void tags
+   are parsed as empty HTML elements, so wrapper components use distinctive
+   names such as `<actionLink>...</actionLink>` instead.
 
 The check reports every finding at once, with file and line, so a sweep PR
 can be fixed in one pass.

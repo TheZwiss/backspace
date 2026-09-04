@@ -143,7 +143,7 @@ export function LoginPage() {
               t={t}
               i18nKey="auth:login.registerPrompt"
               components={{
-                link: <Link to={`/register${redirect ? `?redirect=${encodeURIComponent(redirect)}` : ''}`} className="text-accent-primary hover:underline" />,
+                actionLink: <Link to={`/register${redirect ? `?redirect=${encodeURIComponent(redirect)}` : ''}`} className="text-accent-primary hover:underline" />,
               }}
             />
           </p>
