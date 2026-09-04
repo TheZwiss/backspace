@@ -1,1 +1,38 @@
-{}
+{
+  "input": {
+    "placeholder": "Search messages…"
+  },
+  "filters": {
+    "toggle": "Filters",
+    "from": {
+      "label": "From",
+      "placeholder": "username"
+    },
+    "has": {
+      "label": "Has",
+      "any": "Any",
+      "file": "File",
+      "image": "Image",
+      "link": "Link"
+    },
+    "before": {
+      "label": "Before"
+    },
+    "after": {
+      "label": "After"
+    }
+  },
+  "results": {
+    "empty": "No results found",
+    "hint": "Type to search messages in this channel",
+    "count_one": "{{count}} result",
+    "count_other": "{{count}} results",
+    "loadMore": "Load more ({{remaining}} remaining)",
+    "attachments_one": "{{count}} attachment",
+    "attachments_other": "{{count}} attachments"
+  },
+  "time": {
+    "todayAt": "Today at {{time}}",
+    "yesterdayAt": "Yesterday at {{time}}"
+  }
+}
