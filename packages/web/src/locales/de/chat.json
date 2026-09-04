@@ -1,1 +1,137 @@
-{}
+{
+  "message": {
+    "timestamp": {
+      "today": "Heute um {{time}}",
+      "yesterday": "Gestern um {{time}}"
+    },
+    "edit": {
+      "hint": "Esc zum <cancel>Abbrechen</cancel> • Enter zum <save>Speichern</save>"
+    },
+    "edited": "(bearbeitet)",
+    "gifAlt": "GIF-Animation",
+    "upload": {
+      "failed": "Upload fehlgeschlagen",
+      "discard": "Verwerfen"
+    },
+    "actions": {
+      "addReaction": "Reaktion hinzufügen",
+      "reply": "Antworten",
+      "confirmDelete": "Löschen bestätigen"
+    }
+  },
+  "list": {
+    "noHistoryPermission": "Du hast keine Berechtigung, den Nachrichtenverlauf dieses Kanals zu sehen",
+    "loading": "Nachrichten werden geladen",
+    "loadingOlder": "Ältere Nachrichten werden geladen",
+    "jumpToPresent": "Zu den neuesten Nachrichten",
+    "welcome": {
+      "channel": {
+        "title": "Willkommen im Kanal!",
+        "description": "Hier beginnt die Unterhaltung."
+      },
+      "group": {
+        "intro": "Hier beginnt eure Gruppenunterhaltung.",
+        "owner": "Besitzer: <owner>@{{name}}</owner>",
+        "federatedNotice": "Nachrichten werden auf deiner Heimatinstanz und denen deiner Gesprächspartner gespeichert. Sie sind nicht Ende-zu-Ende-verschlüsselt.",
+        "openSettings": "Gruppeneinstellungen öffnen",
+        "leave": "Gruppe verlassen"
+      },
+      "dm": {
+        "fallbackName": "Direktnachricht",
+        "intro": "Hier beginnt dein Direktnachrichten-Verlauf mit <strong>@{{name}}</strong>.",
+        "federatedNotice": "Nachrichten werden auf deiner Heimatinstanz und der deines Gesprächspartners gespeichert. Sie sind nicht Ende-zu-Ende-verschlüsselt.",
+        "removeFriend": "Freund entfernen"
+      }
+    }
+  },
+  "composer": {
+    "noPermission": "Du hast keine Berechtigung, in diesem Kanal Nachrichten zu senden",
+    "placeholder": {
+      "channel": "Nachricht an #{{name}}",
+      "dm": "Nachricht an @{{name}}"
+    },
+    "replyingTo": "Antwort an",
+    "cancelReply": "Antwort abbrechen",
+    "removeAttachment": "Anhang entfernen",
+    "attachFile": "Datei anhängen",
+    "uploading": "Wird hochgeladen…",
+    "uploadingLabel": "Wird hochgeladen",
+    "failedCount_one": "{{count}} fehlgeschlagen",
+    "failedCount_other": "{{count}} fehlgeschlagen",
+    "failedHint": "Entferne den fehlgeschlagenen Anhang oder versuche es erneut, um zu senden",
+    "gif": "GIFs",
+    "gifPicker": "GIF-Auswahl",
+    "emoji": "Emojis",
+    "emojiPicker": "Emoji-Auswahl",
+    "send": "Senden",
+    "sendMessage": "Nachricht senden",
+    "uploadFailed": "{{file}} konnte nicht hochgeladen werden: {{reason}}",
+    "uploadFailedReason": "Upload fehlgeschlagen",
+    "sendFailed": "Nachricht konnte nicht gesendet werden"
+  },
+  "menu": {
+    "saveImage": "Bild speichern",
+    "copyImage": "Bild kopieren",
+    "openOriginal": "Original öffnen",
+    "saveVideo": "Video speichern",
+    "saveAudio": "Audio speichern",
+    "copyLink": "Link kopieren",
+    "openLink": "Link öffnen",
+    "addReaction": "Reaktion hinzufügen",
+    "reply": "Antworten",
+    "copySelectedText": "Markierten Text kopieren",
+    "copyText": "Text kopieren",
+    "markUnread": "Als ungelesen markieren",
+    "editMessage": "Nachricht bearbeiten",
+    "deleteMessage": "Nachricht löschen",
+    "linkCopied": "Link kopiert",
+    "linkCopyFailed": "Link konnte nicht kopiert werden"
+  },
+  "attachment": {
+    "progress": {
+      "pausedTitle": "Pausiert – {{percent}}",
+      "resume": "Fortsetzen",
+      "pause": "Pausieren",
+      "abort": "Abbrechen"
+    },
+    "video": {
+      "cannotPlayDownload": "Hier nicht abspielbar – herunterladen",
+      "unsupportedFormat": "Nicht unterstütztes Videoformat",
+      "unsupportedBrowser": "Dein Browser unterstützt keine Videowiedergabe."
+    },
+    "audio": {
+      "unsupportedBrowser": "Dein Browser unterstützt keine Audiowiedergabe."
+    },
+    "federation": {
+      "remoteNamed": "Liegt auf der Instanz von {{sender}}. Lade die Datei herunter, um eine lokale Kopie zu behalten.",
+      "remoteUnknown": "Liegt auf der Instanz des Absenders. Lade die Datei herunter, um eine lokale Kopie zu behalten.",
+      "partialGeneric": "Einige Empfänger können diese Datei nicht lokal zwischenspeichern.",
+      "partialInstance": "der Instanz von {{username}} (Limit: {{limit}})",
+      "partialList": "Die Datei konnte auf {{instances}} nicht zwischengespeichert werden. Sie kann dort weiterhin von deiner Instanz aus angesehen werden.",
+      "listPair": "{{first}} und {{second}}"
+    }
+  },
+  "gif": {
+    "searchPlaceholder": "GIFs suchen",
+    "noResults": "Keine GIFs gefunden",
+    "noTrending": "Keine angesagten GIFs",
+    "attribution": "Bereitgestellt von Klipy"
+  },
+  "preview": {
+    "save": "Bild speichern",
+    "copy": "Bild kopieren",
+    "alt": "Bildvorschau"
+  },
+  "mention": {
+    "membersHeading": "Mitglieder"
+  },
+  "invite": {
+    "sentBy": "{{name}} hat eine Einladung geschickt",
+    "memberCount_one": "{{count}} Mitglied",
+    "memberCount_other": "{{count}} Mitglieder",
+    "revoked": "Einladung nicht mehr gültig",
+    "join": "Beitreten",
+    "joining": "Wird beigetreten…",
+    "joinFailed": "Beitritt fehlgeschlagen"
+  }
+}
