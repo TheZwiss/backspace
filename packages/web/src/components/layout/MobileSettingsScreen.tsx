@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { useUIStore } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
 import { AccountPanel } from '../modals/settingsPanels/AccountPanel';
@@ -15,13 +16,21 @@ interface MobileSettingsScreenProps {
   initialPanel?: string;
 }
 
-const panelConfig: Record<string, { title: string; component: React.ReactNode }> = {
-  account: { title: 'Account', component: <AccountPanel /> },
-  voice: { title: 'Voice & Video', component: <VoicePanel /> },
-  privacy: { title: 'Privacy', component: <PrivacyPanel /> },
-  connections: { title: 'Connections', component: <ConnectionsPanel /> },
-  keybinds: { title: 'Keybinds', component: <KeybindsPanel /> },
-  desktop: { title: 'Desktop', component: <DesktopPanel /> },
+type PanelTitleKey =
+  | 'settings:nav.tabs.account'
+  | 'settings:nav.tabs.voice'
+  | 'settings:nav.tabs.privacy'
+  | 'settings:nav.tabs.connections'
+  | 'settings:nav.tabs.keybinds'
+  | 'settings:nav.tabs.desktop';
+
+const panelConfig: Record<string, { titleKey: PanelTitleKey; component: React.ReactNode }> = {
+  account: { titleKey: 'settings:nav.tabs.account', component: <AccountPanel /> },
+  voice: { titleKey: 'settings:nav.tabs.voice', component: <VoicePanel /> },
+  privacy: { titleKey: 'settings:nav.tabs.privacy', component: <PrivacyPanel /> },
+  connections: { titleKey: 'settings:nav.tabs.connections', component: <ConnectionsPanel /> },
+  keybinds: { titleKey: 'settings:nav.tabs.keybinds', component: <KeybindsPanel /> },
+  desktop: { titleKey: 'settings:nav.tabs.desktop', component: <DesktopPanel /> },
 };
 
 const sectionIcons: Record<string, React.ReactNode> = {
@@ -63,6 +72,7 @@ const sectionIcons: Record<string, React.ReactNode> = {
 };
 
 export function MobileSettingsScreen({ initialPanel }: MobileSettingsScreenProps) {
+  const { t } = useTranslation(['mobile', 'settings']);
   const pushMobileScreen = useUIStore((s) => s.pushMobileScreen);
   const isAdmin = useAuthStore((s) => s.user?.isAdmin);
 
@@ -74,7 +84,7 @@ export function MobileSettingsScreen({ initialPanel }: MobileSettingsScreenProps
 
     return (
       <div className="flex flex-col h-full bg-surface-base">
-        <MobileScreenHeader title={panel.title} rightActions={<TransferIndicator />} />
+        <MobileScreenHeader title={t(panel.titleKey)} rightActions={<TransferIndicator />} />
         <div className="flex-1 overflow-y-auto p-4">
           {panel.component}
         </div>
@@ -89,17 +99,22 @@ export function MobileSettingsScreen({ initialPanel }: MobileSettingsScreenProps
   // since the panel's only-when-tab-focused web fallback isn't a useful
   // mobile feature (no global hooks, no recording flow on touch keyboards).
   const sections = [
-    { id: 'account', label: 'Account' },
-    { id: 'voice', label: 'Voice & Video' },
-    { id: 'privacy', label: 'Privacy' },
-    { id: 'connections', label: 'Connections' },
-    ...(isElectron() ? [{ id: 'keybinds', label: 'Keybinds' }, { id: 'desktop', label: 'Desktop' }] : []),
-    ...(isAdmin ? [{ id: 'instance', label: 'Instance' }] : []),
+    { id: 'account', label: t('settings:nav.tabs.account') },
+    { id: 'voice', label: t('settings:nav.tabs.voice') },
+    { id: 'privacy', label: t('settings:nav.tabs.privacy') },
+    { id: 'connections', label: t('settings:nav.tabs.connections') },
+    ...(isElectron()
+      ? [
+          { id: 'keybinds', label: t('settings:nav.tabs.keybinds') },
+          { id: 'desktop', label: t('settings:nav.tabs.desktop') },
+        ]
+      : []),
+    ...(isAdmin ? [{ id: 'instance', label: t('settings:nav.tabs.instance') }] : []),
   ];
 
   return (
     <div className="flex flex-col h-full bg-surface-base">
-      <MobileScreenHeader title="Settings" rightActions={<TransferIndicator />} />
+      <MobileScreenHeader title={t('mobile:settings.title')} rightActions={<TransferIndicator />} />
       <div className="flex-1 overflow-y-auto">
         {sections.map((section) => (
           <button

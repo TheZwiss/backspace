@@ -1,14 +1,10 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useTransferStore, type Transfer } from '../../stores/transferStore';
-
-function fmt(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-  return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
-}
+import { useFormatters } from '../../i18n/formatters';
 
 export function TransferIndicator() {
+  const { t } = useTranslation(['uploads', 'common']);
   // Subscribe to the Map directly. `listVisible()` returns a fresh array each call,
   // which would force a re-render on every store mutation. The Map reference only
   // changes when transfers are added/removed/updated, so useMemo recomputes only
@@ -64,8 +60,8 @@ export function TransferIndicator() {
             ? 'text-txt-tertiary/60 hover:text-txt-tertiary hover:bg-interactive-hover'
             : 'text-txt-tertiary hover:text-txt-primary hover:bg-interactive-hover'
         }`}
-        title="Transfers"
-        aria-label="Transfers"
+        title={t('uploads:transfers.title')}
+        aria-label={t('uploads:transfers.title')}
       >
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M12 4v12m0 0l-4-4m4 4l4-4M4 20h16" />
@@ -88,7 +84,7 @@ export function TransferIndicator() {
         <div className="fixed right-2 top-14 md:absolute md:right-0 md:top-full md:mt-2 w-[min(300px,calc(100vw-16px))] glass z-50 rounded-lg overflow-hidden">
           <div className="px-3 py-2 border-b border-border-soft text-xs flex justify-between items-center">
             <span className="text-txt-secondary">
-              {visible.length} transfer{visible.length === 1 ? '' : 's'}
+              {t('uploads:transfers.count', { count: visible.length })}
             </span>
             <button
               onClick={() =>
@@ -98,12 +94,12 @@ export function TransferIndicator() {
               }
               className="text-txt-tertiary hover:text-txt-primary transition-colors"
             >
-              Clear completed
+              {t('uploads:transfers.clearCompleted')}
             </button>
           </div>
           {visible.length === 0 && (
             <div className="px-3 py-6 text-center text-txt-tertiary text-xs">
-              No active transfers.
+              {t('uploads:transfers.empty')}
             </div>
           )}
           <div className="max-h-[400px] overflow-y-auto">
@@ -136,6 +132,8 @@ interface TransferRowProps {
 }
 
 function TransferRow({ transfer, onPause, onResume, onAbort, onDismiss }: TransferRowProps) {
+  const { t } = useTranslation(['uploads', 'common']);
+  const { formatBytes } = useFormatters();
   const pct =
     transfer.progress.total > 0
       ? Math.min(100, Math.round((transfer.progress.loaded / transfer.progress.total) * 100))
@@ -160,36 +158,39 @@ function TransferRow({ transfer, onPause, onResume, onAbort, onDismiss }: Transf
       <div className="mt-1 flex justify-between items-center text-[10px] text-txt-tertiary gap-2">
         <span className="truncate">
           {transfer.state === 'completed'
-            ? 'Done'
+            ? t('uploads:transfers.status.done')
             : transfer.state === 'failed'
-            ? `Failed: ${transfer.error?.message ?? 'unknown'}`
+            ? t('uploads:transfers.status.failed', { reason: transfer.error?.message ?? t('common:states.unknown') })
             : transfer.state === 'aborted'
-            ? 'Aborted'
-            : `${fmt(transfer.progress.loaded)} / ${fmt(transfer.progress.total)}`}
+            ? t('uploads:transfers.status.aborted')
+            : t('uploads:transfers.status.progress', {
+                loaded: formatBytes(transfer.progress.loaded),
+                total: formatBytes(transfer.progress.total),
+              })}
         </span>
         <span className="flex gap-2 flex-shrink-0">
           {transfer.state === 'active' && (
             <button onClick={onPause} className="hover:text-txt-primary transition-colors">
-              Pause
+              {t('uploads:transfers.actions.pause')}
             </button>
           )}
           {transfer.state === 'paused' && (
             <button onClick={onResume} className="hover:text-txt-primary transition-colors">
-              Resume
+              {t('uploads:transfers.actions.resume')}
             </button>
           )}
           {(transfer.state === 'active' ||
             transfer.state === 'paused' ||
             transfer.state === 'queued') && (
             <button onClick={onAbort} className="hover:text-accent-rose transition-colors">
-              Abort
+              {t('uploads:transfers.actions.abort')}
             </button>
           )}
           {(transfer.state === 'completed' ||
             transfer.state === 'failed' ||
             transfer.state === 'aborted') && (
             <button onClick={onDismiss} className="hover:text-txt-primary transition-colors">
-              Dismiss
+              {t('common:actions.dismiss')}
             </button>
           )}
         </span>

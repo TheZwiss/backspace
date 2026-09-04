@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   useUpdateStore,
   shouldPrompt,
@@ -22,6 +23,7 @@ import { useUIStore } from '../../stores/uiStore';
  * `.glass-pill`, which the spec reserves for inline decorations.
  */
 export function UpdateToast() {
+  const { t } = useTranslation(['desktop', 'common']);
   const initialize = useUpdateStore((s) => s.initialize);
   const snapshot = useUpdateStore((s) => s.snapshot);
   const currentVersion = useUpdateStore((s) => s.currentVersion);
@@ -44,22 +46,22 @@ export function UpdateToast() {
     dismiss();
     // The prompt is gone but the update is not lost, and the user has no way to
     // know that unless they are told once, at the moment they need to know it.
-    addToast('You can install this later from Settings, Desktop', 'info', 5000);
+    addToast(t('desktop:update.laterHint'), 'info', 5000);
   };
 
   let title: string;
   let body: string;
   if (failed) {
-    title = 'Update could not be installed';
-    body = `Backspace ${version} downloaded, but installing it failed. You can install it by hand instead.`;
+    title = t('desktop:update.failed.title');
+    body = t('desktop:update.failed.body', { version });
   } else if (canRestart) {
-    title = 'Update ready';
-    body = `Backspace ${version} is downloaded and ready to install.`;
+    title = t('desktop:update.ready.title');
+    body = t('desktop:update.ready.body', { version });
   } else {
-    title = `Backspace ${version} is available`;
+    title = t('desktop:update.available.title', { version });
     body = currentVersion
-      ? `You are on ${currentVersion}. This build cannot update itself, so download the new version to move up.`
-      : 'This build cannot update itself, so download the new version to move up.';
+      ? t('desktop:update.available.bodyWithCurrent', { currentVersion })
+      : t('desktop:update.available.body');
   }
 
   return (
@@ -93,7 +95,7 @@ export function UpdateToast() {
           <button
             onClick={handleLater}
             className="shrink-0 -mt-1 -mr-1 p-1.5 rounded-lg text-txt-tertiary hover:text-txt-secondary hover:bg-white/[0.06] transition-colors"
-            aria-label="Dismiss this update"
+            aria-label={t('desktop:update.dismiss')}
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
@@ -107,21 +109,21 @@ export function UpdateToast() {
               onClick={install}
               className="px-3 py-1.5 text-xs font-medium rounded-lg bg-accent-primary hover:bg-accent-primary/80 text-white transition-colors"
             >
-              Restart now
+              {t('desktop:update.restartNow')}
             </button>
           ) : (
             <button
               onClick={openDownloadPage}
               className="px-3 py-1.5 text-xs font-medium rounded-lg bg-accent-primary hover:bg-accent-primary/80 text-white transition-colors"
             >
-              Download
+              {t('desktop:update.download')}
             </button>
           )}
           <button
             onClick={handleLater}
             className="px-3 py-1.5 text-xs font-medium rounded-lg text-txt-secondary hover:text-txt-primary hover:bg-white/[0.06] transition-colors"
           >
-            Later
+            {t('desktop:update.later')}
           </button>
         </div>
       </div>

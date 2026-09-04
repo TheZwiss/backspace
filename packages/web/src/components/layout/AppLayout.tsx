@@ -1,5 +1,7 @@
 import React, { useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import i18n from '../../i18n';
 import { SpaceSidebar } from './SpaceSidebar';
 import { ChannelSidebar } from './ChannelSidebar';
 import { MainContent } from './MainContent';
@@ -43,6 +45,7 @@ import { useVoiceStore } from '../../stores/voiceStore';
 import { AudioManager } from '../../audio/AudioManager';
 
 export function AppLayout() {
+  const { t } = useTranslation('common');
   const { spaceId, channelId } = useParams<{ spaceId?: string; channelId?: string }>();
   const navigate = useNavigate();
   
@@ -155,9 +158,11 @@ export function AppLayout() {
           const newest = devices.find(d =>
             d.kind === 'audioinput' && d.groupId && newGroups.includes(d.groupId) && d.label,
           );
-          const label = newest?.label || 'New audio device';
+          // `i18n.t` rather than the hook's `t`: this closure lives for the
+          // component's lifetime and must follow later language changes.
+          const label = newest?.label || i18n.t('common:devices.unnamedAudioInput');
           useUIStore.getState().addToast(
-            `${label} detected — choose it in Voice settings to switch`,
+            i18n.t('common:devices.newAudioInput', { label }),
             'info',
             6000,
           );
@@ -339,7 +344,7 @@ export function AppLayout() {
 
   if (!user || showBootSkeleton) {
     return (
-      <div className="h-full flex bg-surface-base" role="status" aria-label="Loading Backspace">
+      <div className="h-full flex bg-surface-base" role="status" aria-label={t('app.loading')}>
         {/* Space strip */}
         <div className="w-[72px] hidden md:flex flex-col items-center gap-3 pt-4 bg-surface-base flex-shrink-0">
           {Array.from({ length: 5 }, (_, i) => (
