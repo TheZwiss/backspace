@@ -64,6 +64,33 @@ export const ERROR_CODES = [
 
   // Direct messages
   'recipient_deleted',
+
+  // auth-users
+  'username_length_invalid',
+  'username_characters_invalid',
+  'home_instance_invalid',
+  'username_local_part_invalid',
+  'username_domain_part_invalid',
+  'replicated_username_format_required',
+  'federated_registration_closed',
+  'user_create_failed',
+  'account_deleted',
+  'target_domain_required',
+  'native_account_required',
+  'username_confirmation_required',
+  'username_confirmation_mismatch',
+  'avatar_url_invalid',
+  'banner_url_invalid',
+  'accent_color_invalid',
+  'avatar_color_invalid',
+  'status_invalid',
+  'no_fields_to_update',
+  'registry_conflict',
+  'origin_required',
+  'origin_invalid',
+  'federation_credential_remote_only',
+  'federation_credential_home_only',
+  'federation_credential_failed',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
