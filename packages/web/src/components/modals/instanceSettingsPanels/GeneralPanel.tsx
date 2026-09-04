@@ -1,10 +1,15 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { useUIStore } from '../../../stores/uiStore';
 import { Toggle } from '../../ui/Toggle';
+import { describeError } from '../../../i18n/errors';
 import type { InstanceAdminSettings } from '@backspace/shared';
 
+const INSTANCE_NAME_MAX_LENGTH = 32;
+
 export function GeneralPanel() {
+  const { t } = useTranslation(['admin', 'common']);
   const instanceSettings = useSettingsStore((s) => s.instanceSettings);
   const updateInstanceSettings = useSettingsStore((s) => s.updateInstanceSettings);
 
@@ -24,7 +29,7 @@ export function GeneralPanel() {
     }
   }, [instanceSettings]);
 
-  if (!draft) return <div className="text-sm text-txt-tertiary">Loading settings...</div>;
+  if (!draft) return <div className="text-sm text-txt-tertiary">{t('admin:shared.loadingSettings')}</div>;
 
   const baseChanges = instanceSettings && draft
     ? draft.instanceName !== instanceSettings.instanceName ||
@@ -46,9 +51,9 @@ export function GeneralPanel() {
       await updateInstanceSettings(payload);
       setGifKeyDirty(false);
       setGifKeyDraft('');
-      addToast('Settings saved', 'success', 2000);
+      addToast(t('admin:shared.saved'), 'success', 2000);
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : 'Failed to save');
+      setSaveError(err instanceof Error ? describeError(err) : t('admin:shared.saveFailed'));
     } finally {
       setSaving(false);
     }
@@ -63,35 +68,37 @@ export function GeneralPanel() {
 
   return (
     <form className="space-y-5" onSubmit={(e) => e.preventDefault()}>
-      <h2 className="text-lg font-semibold text-txt-primary">General</h2>
+      <h2 className="text-lg font-semibold text-txt-primary">{t('admin:general.title')}</h2>
       <div className="text-xs text-txt-tertiary">
-        Configure your Backspace instance. These settings affect all users.
+        {t('admin:general.description')}
       </div>
 
       {/* Instance Name */}
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">Instance Name</div>
-        <p className="text-xs text-txt-tertiary mb-2">The name shown on the login page and to federated instances.</p>
+        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:general.instanceName.label')}</div>
+        <p className="text-xs text-txt-tertiary mb-2">{t('admin:general.instanceName.description')}</p>
         <div className="rounded-lg bg-white/[0.02] p-3.5">
           <input
             type="text"
             value={draft.instanceName}
-            onChange={(e) => setDraft({ ...draft, instanceName: e.target.value.slice(0, 32) })}
-            placeholder="Backspace"
+            onChange={(e) => setDraft({ ...draft, instanceName: e.target.value.slice(0, INSTANCE_NAME_MAX_LENGTH) })}
+            placeholder={t('common:appName')}
             className="input-standard w-full"
           />
-          <div className="text-[11px] text-txt-tertiary text-right mt-1">{draft.instanceName.length}/32</div>
+          <div className="text-[11px] text-txt-tertiary text-right mt-1">
+            {t('admin:general.instanceName.counter', { length: draft.instanceName.length, max: INSTANCE_NAME_MAX_LENGTH })}
+          </div>
         </div>
       </div>
 
       {/* Discovery */}
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">Discovery</div>
+        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:general.discovery.label')}</div>
         <div className="rounded-lg bg-white/[0.02] p-3.5">
           <label className="flex items-center justify-between cursor-pointer">
             <div>
-              <div className="text-sm font-medium text-txt-primary">Space Discovery</div>
-              <div className="text-xs text-txt-tertiary mt-0.5">Allow spaces to appear in the public Explore page</div>
+              <div className="text-sm font-medium text-txt-primary">{t('admin:general.discovery.toggleLabel')}</div>
+              <div className="text-xs text-txt-tertiary mt-0.5">{t('admin:general.discovery.toggleDescription')}</div>
             </div>
             <Toggle enabled={draft.discoveryEnabled} onChange={(v) => setDraft({ ...draft, discoveryEnabled: v })} />
           </label>
@@ -100,16 +107,16 @@ export function GeneralPanel() {
 
       {/* GIF Search */}
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">GIF Search</div>
+        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:general.gif.label')}</div>
         <p className="text-xs text-txt-tertiary mb-2">
-          Enable GIF search powered by Klipy. Get a free API key from the Klipy developer portal.
+          {t('admin:general.gif.description')}
         </p>
         <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-2">
           <input
             type="password"
             value={gifKeyDirty ? gifKeyDraft : ''}
             onChange={(e) => { setGifKeyDraft(e.target.value); setGifKeyDirty(true); }}
-            placeholder={draft.gifEnabled ? 'Key saved — enter new key to replace' : 'Klipy API key'}
+            placeholder={draft.gifEnabled ? t('admin:general.gif.placeholderSaved') : t('admin:general.gif.placeholderKey')}
             className="input-standard w-full"
             autoComplete="off"
           />
@@ -117,14 +124,14 @@ export function GeneralPanel() {
             <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded ${
               draft.gifEnabled ? 'bg-status-online/15 text-status-online' : 'bg-white/5 text-txt-tertiary'
             }`}>
-              {draft.gifEnabled ? 'Enabled' : 'Not configured'}
+              {draft.gifEnabled ? t('admin:general.gif.enabled') : t('admin:general.gif.notConfigured')}
             </span>
             {draft.gifEnabled && !gifKeyDirty && (
               <button
                 onClick={() => { setGifKeyDraft(''); setGifKeyDirty(true); }}
                 className="text-[11px] text-txt-tertiary hover:text-txt-danger transition-colors"
               >
-                Clear key
+                {t('admin:general.gif.clearKey')}
               </button>
             )}
           </div>
@@ -144,14 +151,14 @@ export function GeneralPanel() {
                 onClick={handleReset}
                 className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
               >
-                Reset
+                {t('common:actions.reset')}
               </button>
               <button
                 onClick={handleSave}
                 disabled={saving}
                 className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
               >
-                {saving ? 'Saving...' : 'Save'}
+                {saving ? t('common:states.saving') : t('common:actions.save')}
               </button>
             </div>
           </div>
