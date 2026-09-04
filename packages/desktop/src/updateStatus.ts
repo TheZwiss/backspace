@@ -73,6 +73,7 @@ export function statusVersion(status: UpdateStatus): string | null {
  * message list to report them.
  */
 export function shouldPromptForUpdate(snapshot: UpdateSnapshot): boolean {
+  if (snapshot.capability === 'external') return false;
   const { status } = snapshot;
   if (status.phase !== 'available' && status.phase !== 'ready' && status.phase !== 'failed') {
     return false;

@@ -4,6 +4,7 @@ import {
   classifyDesignatedRequirement,
   macAppBundlePath,
   getUpdateCapability,
+  isSandboxed,
   resetUpdateCapabilityForTest,
 } from './updateCapability';
 
@@ -129,8 +130,16 @@ describe('macAppBundlePath', () => {
 
 describe('getUpdateCapability', () => {
   beforeEach(() => {
+    vi.unstubAllEnvs();
     resetUpdateCapabilityForTest();
     mockedApp.isPackaged = true;
+  });
+
+  it('is external inside Flatpak', () => {
+    vi.stubEnv('FLATPAK_ID', 'io.github.TheZwiss.backspace');
+    withPlatform('linux', () => {
+      expect(getUpdateCapability()).toBe('external');
+    });
   });
 
   it('is manual for an unpackaged dev build on every platform', () => {
@@ -158,5 +167,21 @@ describe('getUpdateCapability', () => {
       mockedApp.isPackaged = false; // would flip the answer if it were re-read
       expect(getUpdateCapability()).toBe(first);
     });
+  });
+});
+
+describe('isSandboxed', () => {
+  beforeEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('detects a Flatpak environment independently of update capability', () => {
+    vi.stubEnv('FLATPAK_ID', 'io.github.TheZwiss.backspace');
+    expect(isSandboxed()).toBe(true);
+  });
+
+  it('is false for a regular desktop process', () => {
+    vi.stubEnv('FLATPAK_ID', '');
+    expect(isSandboxed()).toBe(false);
   });
 });

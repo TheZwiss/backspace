@@ -607,6 +607,9 @@ Grab the installer for your platform from the
 On first launch the app asks for your instance URL. Enter the address of the
 Backspace server you use (e.g. `https://chat.example.com`).
 
+Linux users can also build and install the Flatpak manifest locally. See
+[`flatpak/README.md`](flatpak/README.md) for the commands and sandbox details.
+
 ### Building from source
 
 ```bash

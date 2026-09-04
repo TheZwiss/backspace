@@ -221,6 +221,12 @@ describe('buildTrayMenuTemplate', () => {
     expect(downloadedItem!.label).toBe('Restart to Install Update');
     expect(downloadedItem!.enabled).toBe(true);
   });
+
+  it('omits updater actions when updates are managed externally', () => {
+    const items = buildTrayMenuTemplate(defaultState({ updateState: 'external' }));
+    expect(items.find((i) => i.id === 'check-for-updates')).toBeUndefined();
+    expect(items.find((i) => i.id === 'restart-to-install')).toBeUndefined();
+  });
 });
 
 describe('buildAppMenuTemplate', () => {
@@ -262,6 +268,13 @@ describe('buildAppMenuTemplate', () => {
     const restartItem = dlSub.find((i) => i.id === 'restart-to-install');
     expect(restartItem).toBeDefined();
     expect(restartItem!.label).toBe('Restart to Install Update');
+  });
+
+  it('App submenu omits updater actions when updates are managed externally', () => {
+    const [appMenu] = buildAppMenuTemplate('Backspace', defaultState({ updateState: 'external' }));
+    const appSub = appMenu!.submenu as MenuItemConstructorOptions[];
+    expect(appSub.find((i) => i.id === 'check-for-updates')).toBeUndefined();
+    expect(appSub.find((i) => i.id === 'restart-to-install')).toBeUndefined();
   });
 });
 

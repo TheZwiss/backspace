@@ -5,10 +5,11 @@ import path from 'path';
 /**
  * Whether this build can install its own updates.
  *
- * `auto`   — electron-updater can download and apply an update in place.
- * `manual` — it cannot, so the user must be sent to the download page instead.
+ * `auto`     — electron-updater can download and apply an update in place.
+ * `manual`   — it cannot, so the user must be sent to the download page instead.
+ * `external` — the package manager owns updates; the app must not check or install.
  */
-export type UpdateCapability = 'auto' | 'manual';
+export type UpdateCapability = 'auto' | 'manual' | 'external';
 
 /**
  * How the running macOS bundle is signed, as far as Squirrel.Mac cares.
@@ -21,6 +22,18 @@ export type UpdateCapability = 'auto' | 'manual';
  *                unparseable output).
  */
 export type SignatureClass = 'adhoc' | 'identified' | 'unknown';
+
+/**
+ * Whether the desktop app is running inside a package sandbox.
+ *
+ * Keep this separate from update capability: an immutable package may delegate
+ * updates without necessarily preventing host login-item registration. Flatpak
+ * currently answers both questions the same way, but they are not the same
+ * capability and must not become coupled at their call sites.
+ */
+export function isSandboxed(): boolean {
+  return Boolean(process.env.FLATPAK_ID);
+}
 
 /**
  * Classifies the designated requirement printed by `codesign -d -r- <bundle>`.
@@ -90,7 +103,10 @@ export function classifyDesignatedRequirement(codesignOutput: string): Signature
  * Exported for tests; the shape is fixed by the macOS bundle layout.
  */
 export function macAppBundlePath(execPath: string): string {
-  return path.resolve(path.dirname(execPath), '..', '..');
+  // This function always receives a macOS path, including when its unit tests
+  // run on Windows. Use POSIX semantics explicitly so the result is independent
+  // of the machine running the test suite.
+  return path.posix.resolve(path.posix.dirname(execPath), '..', '..');
 }
 
 /**
@@ -130,6 +146,14 @@ let cached: UpdateCapability | null = null;
  */
 export function getUpdateCapability(): UpdateCapability {
   if (cached !== null) return cached;
+
+  // Flatpak deployments are immutable. Updates are installed atomically by
+  // Flatpak, so neither electron-updater nor a manual GitHub download is an
+  // appropriate action inside the sandbox.
+  if (isSandboxed()) {
+    cached = 'external';
+    return cached;
+  }
 
   // A dev build has no update feed and must never offer to install anything.
   if (!app.isPackaged) {

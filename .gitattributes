@@ -1,0 +1,5 @@
+# Flatpak consumes these files inside a Linux build sandbox. Keep their line
+# endings deterministic even when the repository is checked out on Windows.
+/io.github.TheZwiss.backspace.yml text eol=lf
+/flatpak/** text eol=lf
+/.github/workflows/flatpak.yml text eol=lf

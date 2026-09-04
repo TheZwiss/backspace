@@ -20,6 +20,15 @@ describe('coerceSnapshot', () => {
     expect(coerceSnapshot(value)).toEqual(value);
   });
 
+  it('accepts the externally-managed capability', () => {
+    const value = {
+      capability: 'external',
+      dismissedVersion: null,
+      status: { phase: 'idle' },
+    };
+    expect(coerceSnapshot(value)).toEqual(value);
+  });
+
   it('accepts every phase the main process can send', () => {
     const phases: unknown[] = [
       { phase: 'idle' },
@@ -134,6 +143,13 @@ describe('shouldPrompt', () => {
   it('stays quiet for a check failure that never learned a version', () => {
     expect(shouldPrompt(snap({
       status: { phase: 'failed', version: null, message: 'getaddrinfo ENOTFOUND' },
+    }))).toBe(false);
+  });
+
+  it('stays quiet when updates are owned by the package manager', () => {
+    expect(shouldPrompt(snap({
+      capability: 'external',
+      status: { phase: 'available', version: '1.0.5' },
     }))).toBe(false);
   });
 });

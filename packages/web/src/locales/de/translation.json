@@ -747,6 +747,8 @@
     "DesktopPanel.currentlyConnectedInstance": "Derzeit verbundene Instanz",
     "DesktopPanel.changeInstance": "Instanz ändern",
     "DesktopPanel.manualUpdateDescription": "Dieser Build kann Updates nicht selbst installieren, daher werden neue Versionen von GitHub heruntergeladen und die App manuell ersetzt. Siehe die Versionshinweise für die Schritte auf Ihrer Plattform.",
+    "DesktopPanel.updatesInstalledThroughFlatpak": "Updates werden über Ihre Flatpak-Softwareverwaltung installiert",
+    "DesktopPanel.flatpakUpdateDescription": "Flatpak installiert Updates atomar außerhalb der App. Aktualisieren Sie Backspace über Ihre Softwareverwaltung oder mit dem Befehl <code>flatpak update</code>.",
     "UpdatesPanel.loading": "Update-Status wird geladen...",
     "UpdatesPanel.updates": "Updates",
     "UpdatesPanel.tryAgain": "Erneut versuchen",

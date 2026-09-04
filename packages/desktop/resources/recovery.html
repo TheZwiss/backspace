@@ -158,6 +158,9 @@
     const $ = (id) => document.getElementById(id);
 
     function hintFor(reasonCode, updateState) {
+      if (updateState === 'external') {
+        return 'Try reloading the app or changing the connected instance. Updates are managed by Flatpak.';
+      }
       if (reasonCode === 'load-failed') {
         return "Couldn't reach your instance. Check your connection or try a different instance.";
       }
@@ -190,6 +193,7 @@
 
     function checkButtonLabel(updateState) {
       switch (updateState) {
+        case 'external': return 'Updates Managed by Flatpak';
         case 'checking': return 'Checking…';
         case 'downloading': return 'Downloading Update…';
         case 'downloaded': return 'Update Ready';
@@ -201,6 +205,7 @@
     }
 
     function checkButtonEnabled(updateState) {
+      if (updateState === 'external') return false;
       return updateState !== 'checking'
         && updateState !== 'downloading'
         && updateState !== 'downloaded'
@@ -232,6 +237,7 @@
       // Check for Updates button
       $('btn-check').textContent = checkButtonLabel(state.updateState);
       $('btn-check').disabled = !checkButtonEnabled(state.updateState);
+      $('btn-check').style.display = state.updateState === 'external' ? 'none' : '';
 
       // Restart visibility. Only ever shown when the update is genuinely staged
       // and installable, so this surface can never present a dead button.

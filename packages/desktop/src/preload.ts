@@ -3,7 +3,6 @@ import { contextBridge, ipcRenderer } from 'electron';
 contextBridge.exposeInMainWorld('backspace', {
   // Platform info
   platform: process.platform,
-
   // Window controls
   minimize: () => {
     ipcRenderer.send('minimize-window');
@@ -50,6 +49,7 @@ contextBridge.exposeInMainWorld('backspace', {
   // Auto-update, current surface. One snapshot carrying the capability of this
   // build, the version the user has already waved away, and the current status.
   getUpdateStatus: (): Promise<unknown> => ipcRenderer.invoke('get-update-status'),
+  isSandboxed: (): Promise<boolean> => ipcRenderer.invoke('is-sandboxed'),
 
   onUpdateStatusChanged: (callback: (snapshot: unknown) => void): (() => void) => {
     const handler = (_event: Electron.IpcRendererEvent, snapshot: unknown) => callback(snapshot);

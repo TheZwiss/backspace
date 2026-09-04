@@ -747,6 +747,8 @@
     "DesktopPanel.currentlyConnectedInstance": "Текущий сервер",
     "DesktopPanel.changeInstance": "Сменить сервер",
     "DesktopPanel.manualUpdateDescription": "Эта сборка не может устанавливать обновления автоматически. Загрузите новую версию с GitHub и замените приложение вручную, следуя инструкции в примечаниях к выпуску для вашей платформы.",
+    "DesktopPanel.updatesInstalledThroughFlatpak": "Обновления устанавливаются через менеджер приложений Flatpak",
+    "DesktopPanel.flatpakUpdateDescription": "Flatpak устанавливает обновления атомарно вне приложения. Чтобы обновить Backspace, используйте менеджер приложений или команду <code>flatpak update</code>.",
     "UpdatesPanel.loading": "Загрузка сведений об обновлениях...",
     "UpdatesPanel.updates": "Обновления",
     "UpdatesPanel.tryAgain": "Повторить",

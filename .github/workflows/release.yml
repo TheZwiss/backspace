@@ -80,6 +80,165 @@ jobs:
             --title "Backspace ${TAG#v}" \
             --notes ""
 
+  prepare-flatpak-metadata:
+    name: Prepare Flatpak release metadata
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions@sha256:68c521931eccf47dfa05c1c80f43be0993cce516417a633aa34913707da57cf2
+      options: --privileged
+    permissions:
+      contents: read
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout the release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Install the pinned Node SDK extension
+        run: |
+          flatpak remote-add --user --if-not-exists flathub \
+            https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user --noninteractive -y flathub \
+            org.freedesktop.Sdk.Extension.node24//25.08
+
+      - name: Regenerate Flatpak release inputs
+        env:
+          TAG: ${{ github.ref_name }}
+          RELEASE_COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          release_date="$(git show -s --format=%cs "$RELEASE_COMMIT")"
+          node flatpak/update-release.mjs "$TAG" "$RELEASE_COMMIT" "$release_date"
+          flatpak-node-generator --electron-node-headers \
+            --node-sdk-extension org.freedesktop.Sdk.Extension.node24//25.08 \
+            -o flatpak/node-sources.json pnpm pnpm-lock.yaml
+          flatpak-builder-lint manifest io.github.TheZwiss.backspace.yml
+          flatpak-builder-lint appstream flatpak/io.github.TheZwiss.backspace.metainfo.xml
+
+      - name: Preserve generated metadata for validation
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: flatpak-release-metadata
+          retention-days: 1
+          if-no-files-found: error
+          path: |
+            io.github.TheZwiss.backspace.yml
+            flatpak/node-sources.json
+            flatpak/io.github.TheZwiss.backspace.metainfo.xml
+
+  validate-flatpak-metadata:
+    name: Build Flatpak release metadata (${{ matrix.arch }})
+    needs: prepare-flatpak-metadata
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-latest
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions@sha256:68c521931eccf47dfa05c1c80f43be0993cce516417a633aa34913707da57cf2
+      options: --privileged
+    permissions:
+      contents: read
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout the release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Restore generated metadata
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: flatpak-release-metadata
+          path: .
+
+      # GITHUB_TOKEN-created pushes and pull requests do not trigger the normal
+      # pull_request workflows. Build both supported architectures here so the
+      # metadata PR can never bypass the Flatpak validation it exists to obtain.
+      - name: Build generated release manifest
+        uses: flatpak/flatpak-github-actions/flatpak-builder@79327416609af08178ad73b352877e51450790b3 # v6
+        with:
+          manifest-path: io.github.TheZwiss.backspace.yml
+          arch: ${{ matrix.arch }}
+          build-bundle: false
+          upload-artifact: false
+          mirror-screenshots-url: https://dl.flathub.org/media/
+          cache-key: flatpak-release-${{ matrix.arch }}-${{ github.sha }}
+
+  update-flatpak-metadata:
+    name: Open Flatpak metadata update PR
+    needs: validate-flatpak-metadata
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout the release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Restore validated metadata
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: flatpak-release-metadata
+          path: .
+
+      - name: Open the Flatpak metadata update PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          branch="automation/flatpak-${TAG}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add io.github.TheZwiss.backspace.yml \
+            flatpak/node-sources.json \
+            flatpak/io.github.TheZwiss.backspace.metainfo.xml
+
+          if git diff --cached --quiet; then
+            echo "Flatpak metadata already matches $TAG."
+            exit 0
+          fi
+
+          git commit -m "chore(flatpak): update metadata for $TAG"
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+            git fetch origin "refs/heads/$branch:refs/remotes/origin/$branch"
+          fi
+          git push --force-with-lease origin "HEAD:refs/heads/$branch"
+
+          existing="$(gh pr list --repo "$GH_REPO" --state open --head "$branch" \
+            --json number --jq '.[0].number // empty')"
+          if [ -z "$existing" ]; then
+            gh pr create --repo "$GH_REPO" \
+              --base main \
+              --head "$branch" \
+              --title "chore(flatpak): update metadata for $TAG" \
+              --body "Automated by release.yml from $TAG. Updates the pinned source commit, offline dependency sources, AppStream release entry, and screenshot tag."
+          else
+            echo "PR #$existing already tracks $branch."
+          fi
+
   build:
     # Every matrix job publishes into the draft that `create-release` has
     # already made. Without this dependency they race to create it themselves.
