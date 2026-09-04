@@ -1,4 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
+import i18n from '../../i18n';
 import { formatters } from '../../i18n/formatters';
 import { createPortal } from 'react-dom';
 import { useFloatingPosition } from '../../hooks/useFloatingPosition';
@@ -26,8 +28,8 @@ function formatTime(timestamp: number): string {
   yesterday.setDate(yesterday.getDate() - 1);
   const isYesterday = date.toDateString() === yesterday.toDateString();
   const time = formatters.formatTime(timestamp);
-  if (isToday) return `Today at ${time}`;
-  if (isYesterday) return `Yesterday at ${time}`;
+  if (isToday) return i18n.t('search:time.todayAt', { time });
+  if (isYesterday) return i18n.t('search:time.yesterdayAt', { time });
   return formatters.formatDateTime(timestamp);
 }
 
@@ -53,6 +55,7 @@ function SearchResultRow({
   query: string;
   onJumpToMessage: (id: string) => void;
 }) {
+  const { t } = useTranslation(['search']);
   const canonical = useCanonicalUserView(msg.user ?? _FALLBACK_USER);
   const displayName = canonical.displayName ?? canonical.username ?? '?';
   const avatar = msg.user ? canonical.avatar : undefined;
@@ -86,7 +89,7 @@ function SearchResultRow({
             <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
               <path d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5v10.5c0 .55-.45 1-1 1s-1-.45-1-1V6H9v9.5c0 1.38 1.12 2.5 2.5 2.5s2.5-1.12 2.5-2.5V5c0-2.21-1.79-4-4-4S6 2.79 6 5v12.5c0 3.04 2.46 5.5 5.5 5.5s5.5-2.46 5.5-5.5V6h-1.5z" />
             </svg>
-            {msg.attachments.length} attachment{msg.attachments.length !== 1 ? 's' : ''}
+            {t('search:results.attachments', { count: msg.attachments.length })}
           </div>
         )}
       </div>
@@ -95,6 +98,7 @@ function SearchResultRow({
 }
 
 export function SearchPopover({ open, onClose, anchorRef, channelId, isDm, onJumpToMessage }: SearchPopoverProps) {
+  const { t } = useTranslation(['search', 'common']);
   const popoverRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const { style } = useFloatingPosition(anchorRef, popoverRef, {
@@ -225,7 +229,7 @@ export function SearchPopover({ open, onClose, anchorRef, channelId, isDm, onJum
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search messages..."
+            placeholder={t('search:input.placeholder')}
             className="input-embedded flex-1 text-[14px]"
           />
           {query && (
@@ -248,7 +252,7 @@ export function SearchPopover({ open, onClose, anchorRef, channelId, isDm, onJum
           <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className={`transition-transform ${showFilters ? 'rotate-90' : ''}`}>
             <path d="M10 17l5-5-5-5v10z" />
           </svg>
-          Filters
+          {t('search:filters.toggle')}
           {(fromFilter || hasFilter || beforeFilter || afterFilter) && (
             <span className="w-1.5 h-1.5 rounded-full bg-accent-primary" />
           )}
@@ -258,30 +262,30 @@ export function SearchPopover({ open, onClose, anchorRef, channelId, isDm, onJum
         {showFilters && (
           <div className="mt-2 grid grid-cols-2 gap-2">
             <div>
-              <label className="text-[11px] text-txt-tertiary font-medium mb-1 block">From</label>
+              <label className="text-[11px] text-txt-tertiary font-medium mb-1 block">{t('search:filters.from.label')}</label>
               <input
                 type="text"
                 value={fromFilter}
                 onChange={(e) => setFromFilter(e.target.value)}
-                placeholder="username"
+                placeholder={t('search:filters.from.placeholder')}
                 className="input-search w-full px-2 py-1 text-[13px]"
               />
             </div>
             <div>
-              <label className="text-[11px] text-txt-tertiary font-medium mb-1 block">Has</label>
+              <label className="text-[11px] text-txt-tertiary font-medium mb-1 block">{t('search:filters.has.label')}</label>
               <select
                 value={hasFilter}
                 onChange={(e) => setHasFilter(e.target.value)}
                 className="input-search w-full px-2 py-1 text-[13px] appearance-none cursor-pointer"
               >
-                <option value="">Any</option>
-                <option value="file">File</option>
-                <option value="image">Image</option>
-                <option value="link">Link</option>
+                <option value="">{t('search:filters.has.any')}</option>
+                <option value="file">{t('search:filters.has.file')}</option>
+                <option value="image">{t('search:filters.has.image')}</option>
+                <option value="link">{t('search:filters.has.link')}</option>
               </select>
             </div>
             <div>
-              <label className="text-[11px] text-txt-tertiary font-medium mb-1 block">Before</label>
+              <label className="text-[11px] text-txt-tertiary font-medium mb-1 block">{t('search:filters.before.label')}</label>
               <input
                 type="date"
                 value={beforeFilter}
@@ -290,7 +294,7 @@ export function SearchPopover({ open, onClose, anchorRef, channelId, isDm, onJum
               />
             </div>
             <div>
-              <label className="text-[11px] text-txt-tertiary font-medium mb-1 block">After</label>
+              <label className="text-[11px] text-txt-tertiary font-medium mb-1 block">{t('search:filters.after.label')}</label>
               <input
                 type="date"
                 value={afterFilter}
@@ -315,20 +319,20 @@ export function SearchPopover({ open, onClose, anchorRef, channelId, isDm, onJum
             <svg width="40" height="40" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary/50 mb-2">
               <path d="M21.707 20.293l-5.395-5.395A7.457 7.457 0 0018 10.5 7.5 7.5 0 1010.5 18c1.575 0 3.027-.486 4.228-1.31l5.476 5.476a.997.997 0 001.414 0l.089-.089a1 1 0 000-1.414l.001-.37zM10.5 16a5.5 5.5 0 110-11 5.5 5.5 0 010 11z" />
             </svg>
-            <span className="text-txt-tertiary text-[13px]">No results found</span>
+            <span className="text-txt-tertiary text-[13px]">{t('search:results.empty')}</span>
           </div>
         )}
 
         {!query && !fromFilter && !hasFilter && !beforeFilter && !afterFilter && results.length === 0 && (
           <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
-            <span className="text-txt-tertiary text-[13px]">Type to search messages in this channel</span>
+            <span className="text-txt-tertiary text-[13px]">{t('search:results.hint')}</span>
           </div>
         )}
 
         {results.length > 0 && (
           <>
             <div className="px-3 py-2 text-[11px] text-txt-tertiary font-medium">
-              {totalCount} result{totalCount !== 1 ? 's' : ''}
+              {t('search:results.count', { count: totalCount })}
             </div>
             {results.map((msg) => (
               <SearchResultRow
@@ -345,7 +349,7 @@ export function SearchPopover({ open, onClose, anchorRef, channelId, isDm, onJum
                   disabled={isSearching}
                   className="w-full py-1.5 text-[13px] text-accent-primary hover:text-accent-primary-hover transition-colors font-medium disabled:opacity-50"
                 >
-                  {isSearching ? 'Loading...' : `Load more (${totalCount - results.length} remaining)`}
+                  {isSearching ? t('common:states.loading') : t('search:results.loadMore', { remaining: totalCount - results.length })}
                 </button>
               </div>
             )}
