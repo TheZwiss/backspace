@@ -51,5 +51,21 @@
     "title": "Something went wrong",
     "reload": "Reload Page",
     "details": "Error details"
+  },
+  "app": {
+    "loading": "Loading Backspace"
+  },
+  "chrome": {
+    "toggleMemberList": "Toggle Member List",
+    "closeSettings": "Close settings"
+  },
+  "sourceCode": {
+    "label": "Source code (AGPL)",
+    "labelWithBuild": "Source code (AGPL) · {{build}}",
+    "title": "View the source code of the version this instance is running (AGPL-3.0)"
+  },
+  "devices": {
+    "newAudioInput": "{{label}} detected. Choose it in Voice settings to switch.",
+    "unnamedAudioInput": "New audio device"
   }
 }
