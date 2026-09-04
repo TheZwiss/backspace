@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { formatters } from '../../../i18n/formatters';
+import { useTranslation, Trans } from 'react-i18next';
+import { useFormatters, type Formatters } from '../../../i18n/formatters';
+import { describeError } from '../../../i18n/errors';
 import { api } from '../../../api/client';
 import { useUIStore } from '../../../stores/uiStore';
 import type { InstanceUpdateStatus } from '@backspace/shared';
@@ -8,31 +10,16 @@ import type { InstanceUpdateStatus } from '@backspace/shared';
  * Formats an ISO date for the release line. Falls back to the raw string rather
  * than rendering "Invalid Date" if a release ever carries something unexpected.
  */
-function formatReleaseDate(iso: string): string {
+function formatReleaseDate(iso: string, f: Formatters): string {
   if (!iso) return '';
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
-  return formatters.formatLongDate(date.getTime());
+  return f.formatLongDate(date.getTime());
 }
-
-function formatCheckedAt(checkedAt: number | null): string {
-  if (checkedAt === null) return '';
-  const seconds = Math.max(0, Math.round((Date.now() - checkedAt) / 1000));
-  if (seconds < 60) return 'Last checked just now';
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `Last checked ${minutes} minute${minutes === 1 ? '' : 's'} ago`;
-  const hours = Math.round(minutes / 60);
-  return `Last checked ${hours} hour${hours === 1 ? '' : 's'} ago`;
-}
-
-const CHANNEL_LABEL: Record<InstanceUpdateStatus['channel'], string> = {
-  prebuilt: 'prebuilt image',
-  source: 'built from source',
-  unknown: 'install method not recorded',
-};
 
 /** A copyable command block. */
 function CommandBlock({ command }: { command: string }) {
+  const { t } = useTranslation(['admin', 'common']);
   const addToast = useUIStore((s) => s.addToast);
   const [copied, setCopied] = useState(false);
 
@@ -44,7 +31,7 @@ function CommandBlock({ command }: { command: string }) {
     } catch {
       // Clipboard access can be refused. The command is selectable either way,
       // so say so rather than failing silently.
-      addToast('Could not copy. Select the command and copy it by hand.', 'warning', 4000);
+      addToast(t('admin:updates.copyFailed'), 'warning', 4000);
     }
   };
 
@@ -58,7 +45,7 @@ function CommandBlock({ command }: { command: string }) {
         onClick={copy}
         className="shrink-0 px-3 py-2 text-xs font-medium rounded-lg text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] transition-colors"
       >
-        {copied ? 'Copied' : 'Copy'}
+        {copied ? t('common:actions.copied') : t('common:actions.copy')}
       </button>
     </div>
   );
@@ -78,6 +65,8 @@ function CommandBlock({ command }: { command: string }) {
  * did not.
  */
 export function UpdatesPanel() {
+  const { t } = useTranslation(['admin', 'common']);
+  const f = useFormatters();
   const [status, setStatus] = useState<InstanceUpdateStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [checking, setChecking] = useState(false);
@@ -90,7 +79,7 @@ export function UpdatesPanel() {
     try {
       setStatus(await api.admin.updateStatus(refresh));
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : 'Could not load the update status');
+      setLoadError(describeError(err));
     } finally {
       setLoading(false);
       setChecking(false);
@@ -102,21 +91,21 @@ export function UpdatesPanel() {
   // never opens this never contacts github.com at all.
   useEffect(() => { void load(false); }, [load]);
 
-  if (loading) return <div className="text-sm text-txt-tertiary">Loading update status...</div>;
+  if (loading) return <div className="text-sm text-txt-tertiary">{t('admin:updates.loading')}</div>;
 
   if (loadError || status === null) {
     return (
       <div className="space-y-4">
-        <h2 className="text-lg font-semibold text-txt-primary">Updates</h2>
+        <h2 className="text-lg font-semibold text-txt-primary">{t('admin:updates.title')}</h2>
         <div className="rounded-lg bg-accent-rose/10 border border-accent-rose/20 p-3.5 text-sm text-txt-secondary">
-          {loadError || 'Could not load the update status.'}
+          {loadError || t('admin:updates.loadFailed')}
         </div>
         <button
           type="button"
           onClick={() => void load(false)}
           className="px-3 py-1.5 text-sm text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] rounded-lg transition-colors"
         >
-          Try again
+          {t('common:actions.tryAgain')}
         </button>
       </div>
     );
@@ -124,27 +113,41 @@ export function UpdatesPanel() {
 
   const updateAvailable = status.state === 'update-available' && status.latest !== null;
 
+  const channelLabel = (channel: InstanceUpdateStatus['channel']): string => {
+    switch (channel) {
+      case 'prebuilt': return t('admin:updates.running.channel.prebuilt');
+      case 'source': return t('admin:updates.running.channel.source');
+      case 'unknown': return t('admin:updates.running.channel.unknown');
+    }
+  };
+
+  const lastCheckedLine = (): string => {
+    if (!status.checkEnabled) return t('admin:updates.noLookups');
+    if (status.checkedAt === null) return '';
+    return t('admin:updates.lastChecked', { when: f.formatRelativeTime(status.checkedAt) });
+  };
+
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-lg font-semibold text-txt-primary">Updates</h2>
+        <h2 className="text-lg font-semibold text-txt-primary">{t('admin:updates.title')}</h2>
         <div className="text-xs text-txt-tertiary mt-1">
-          What this instance is running, and how to move it forward.
+          {t('admin:updates.description')}
         </div>
       </div>
 
       {/* What is running now */}
       <div>
         <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
-          Running
+          {t('admin:updates.running.label')}
         </div>
         <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5">
           <div className="text-sm text-txt-primary font-medium">
-            Backspace {status.current.version}
+            {t('common:appName')} {status.current.version}
           </div>
           <div className="text-xs text-txt-tertiary mt-0.5">
-            {status.current.commit ? `commit ${status.current.commit} · ` : ''}
-            {CHANNEL_LABEL[status.channel]}
+            {status.current.commit ? t('admin:updates.running.commit', { commit: status.current.commit }) : ''}
+            {channelLabel(status.channel)}
           </div>
         </div>
       </div>
@@ -153,34 +156,31 @@ export function UpdatesPanel() {
       {updateAvailable && status.latest !== null ? (
         <div>
           <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
-            Available
+            {t('admin:updates.available.label')}
           </div>
           <div className="rounded-lg bg-accent-primary/[0.06] border border-accent-primary/25 p-3.5 space-y-3">
             <div>
               <div className="text-sm text-txt-primary font-medium">
-                Backspace {status.latest.version} is available
+                {t('admin:updates.available.version', { version: status.latest.version })}
               </div>
               <div className="text-xs text-txt-tertiary mt-0.5">
-                {status.latest.publishedAt && `Released ${formatReleaseDate(status.latest.publishedAt)} · `}
+                {status.latest.publishedAt && t('admin:updates.available.released', { date: formatReleaseDate(status.latest.publishedAt, f) })}
                 <a
                   href={status.latest.url}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-accent-primary hover:underline"
                 >
-                  Release notes
+                  {t('admin:updates.available.releaseNotes')}
                 </a>
               </div>
             </div>
 
             <div>
-              <div className="text-xs text-txt-secondary mb-1.5">From your install directory:</div>
+              <div className="text-xs text-txt-secondary mb-1.5">{t('admin:updates.available.fromInstallDir')}</div>
               <CommandBlock command="./update.sh" />
               <p className="text-xs text-txt-tertiary mt-2 leading-relaxed">
-                Takes a database snapshot, fetches the new image, and restarts only
-                the Backspace container. If the new version does not come up healthy,
-                or comes up still running the old code, it puts back the version you
-                are on now.
+                {t('admin:updates.available.scriptDescription')}
               </p>
             </div>
 
@@ -198,18 +198,20 @@ export function UpdatesPanel() {
                 >
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
                 </svg>
-                I do not have update.sh
+                {t('admin:updates.available.noScript')}
               </button>
               {showManual && (
                 <div className="mt-2 space-y-2.5">
                   <p className="text-xs text-txt-tertiary leading-relaxed">
-                    update.sh ships from 1.0.5 onward. On a git checkout, <code className="font-mono">git pull</code> brings
-                    it in. Otherwise run the steps by hand, after taking a snapshot
-                    with <code className="font-mono">./backup.sh</code>.
+                    <Trans
+                      t={t}
+                      i18nKey="admin:updates.available.manualIntro"
+                      components={{ code: <code className="font-mono" /> }}
+                    />
                   </p>
                   {status.channel !== 'source' && (
                     <div>
-                      <div className="text-xs text-txt-secondary mb-1.5">Prebuilt-image install:</div>
+                      <div className="text-xs text-txt-secondary mb-1.5">{t('admin:updates.available.prebuiltInstall')}</div>
                       {/* One command per line rather than chained with &&, so
                           the block fits the panel without scrolling sideways. */}
                       <CommandBlock command={'git pull\ndocker compose pull backspace\ndocker compose up -d backspace'} />
@@ -217,14 +219,16 @@ export function UpdatesPanel() {
                   )}
                   {status.channel !== 'prebuilt' && (
                     <div>
-                      <div className="text-xs text-txt-secondary mb-1.5">From-source install:</div>
+                      <div className="text-xs text-txt-secondary mb-1.5">{t('admin:updates.available.sourceInstall')}</div>
                       <CommandBlock command={'git pull\ndocker compose up -d --build backspace'} />
                     </div>
                   )}
                   <p className="text-xs text-txt-tertiary leading-relaxed">
-                    Name the <code className="font-mono">backspace</code> service explicitly and do not
-                    pass <code className="font-mono">--remove-orphans</code>. Compose will suggest it if
-                    you run other containers in this project, and it would delete them.
+                    <Trans
+                      t={t}
+                      i18nKey="admin:updates.available.manualWarning"
+                      components={{ code: <code className="font-mono" /> }}
+                    />
                   </p>
                 </div>
               )}
@@ -234,33 +238,33 @@ export function UpdatesPanel() {
       ) : (
         <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5">
           {status.state === 'up-to-date' && (
-            <div className="text-sm text-accent-mint">You are on the latest release.</div>
+            <div className="text-sm text-accent-mint">{t('admin:updates.upToDate')}</div>
           )}
           {status.state === 'unknown' && status.reason === 'disabled' && (
             <>
-              <div className="text-sm text-txt-primary">Update checks are turned off</div>
+              <div className="text-sm text-txt-primary">{t('admin:updates.disabled.title')}</div>
               <div className="text-xs text-txt-tertiary mt-0.5 leading-relaxed">
-                This instance will not contact GitHub. Set{' '}
-                <code className="font-mono">BACKSPACE_UPDATE_CHECK=true</code> in your{' '}
-                <code className="font-mono">.env</code> to allow the lookup, or check the releases
-                page yourself.
+                <Trans
+                  t={t}
+                  i18nKey="admin:updates.disabled.description"
+                  components={{ code: <code className="font-mono" /> }}
+                />
               </div>
             </>
           )}
           {status.state === 'unknown' && status.reason === 'rate-limited' && (
             <>
-              <div className="text-sm text-txt-primary">GitHub rate-limited the lookup</div>
+              <div className="text-sm text-txt-primary">{t('admin:updates.rateLimited.title')}</div>
               <div className="text-xs text-txt-tertiary mt-0.5">
-                This says nothing about whether an update exists. Try again later.
+                {t('admin:updates.rateLimited.description')}
               </div>
             </>
           )}
           {status.state === 'unknown' && status.reason !== 'disabled' && status.reason !== 'rate-limited' && (
             <>
-              <div className="text-sm text-txt-primary">Could not check for updates</div>
+              <div className="text-sm text-txt-primary">{t('admin:updates.unreachable.title')}</div>
               <div className="text-xs text-txt-tertiary mt-0.5">
-                GitHub could not be reached, so this says nothing about whether an
-                update exists. Your instance is unaffected.
+                {t('admin:updates.unreachable.description')}
               </div>
             </>
           )}
@@ -269,7 +273,7 @@ export function UpdatesPanel() {
 
       <div className="flex items-center justify-between">
         <div className="text-xs text-txt-tertiary">
-          {status.checkEnabled ? formatCheckedAt(status.checkedAt) : 'No lookups are made'}
+          {lastCheckedLine()}
         </div>
         <button
           type="button"
@@ -277,7 +281,7 @@ export function UpdatesPanel() {
           disabled={checking || !status.checkEnabled}
           className="px-3 py-1.5 text-sm text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] rounded-lg transition-colors disabled:opacity-50"
         >
-          {checking ? 'Checking...' : 'Check again'}
+          {checking ? t('admin:updates.checking') : t('admin:updates.checkAgain')}
         </button>
       </div>
     </div>

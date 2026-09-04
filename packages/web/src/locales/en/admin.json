@@ -1,1 +1,417 @@
-{}
+{
+  "shared": {
+    "loadingSettings": "Loading settings…",
+    "saved": "Settings saved",
+    "saveFailed": "Failed to save",
+    "scanning": "Scanning…",
+    "previous": "Previous",
+    "next": "Next"
+  },
+  "general": {
+    "title": "General",
+    "description": "Configure your Backspace instance. These settings affect all users.",
+    "instanceName": {
+      "label": "Instance Name",
+      "description": "The name shown on the login page and to federated instances.",
+      "counter": "{{length}}/{{max}}"
+    },
+    "discovery": {
+      "label": "Discovery",
+      "toggleLabel": "Space Discovery",
+      "toggleDescription": "Allow spaces to appear in the public Explore page"
+    },
+    "gif": {
+      "label": "GIF Search",
+      "description": "Enable GIF search powered by Klipy. Get a free API key from the Klipy developer portal.",
+      "placeholderSaved": "Key saved — enter new key to replace",
+      "placeholderKey": "Klipy API key",
+      "enabled": "Enabled",
+      "notConfigured": "Not configured",
+      "clearKey": "Clear key"
+    }
+  },
+  "registration": {
+    "title": "Registration",
+    "description": "Control who can create accounts on this instance. Public registration covers local sign-ups; federated registration covers users from peered instances creating an account here.",
+    "public": {
+      "label": "Public Registration",
+      "toggleLabel": "Allow new local accounts",
+      "toggleDescription": "Anyone can create a local account from the registration page. When off, only invite links can create new local accounts."
+    },
+    "federated": {
+      "label": "Federated Registration",
+      "toggleLabel": "Allow new federated accounts",
+      "toggleDescription": "Users from other instances can create a federated account here via their Connections settings. Existing federated accounts can always log in regardless of this setting."
+    },
+    "saved": "Registration settings saved",
+    "saveFailed": "Failed to update registration settings"
+  },
+  "invites": {
+    "label": "Invite Links",
+    "create": "+ Create link",
+    "tabs": {
+      "active": "Active",
+      "archived": "Archived"
+    },
+    "loadFailed": "Failed to load invites",
+    "emptyActive": "No active invite links.",
+    "emptyArchived": "No archived invite links.",
+    "noMatch": "No invites match the current filter.",
+    "filter": {
+      "button": "Filter",
+      "status": "Status",
+      "sortBy": "Sort by",
+      "sort": {
+        "recent": "Most recent",
+        "oldest": "Oldest",
+        "name": "Name (A–Z)",
+        "mostUsed": "Most used",
+        "expiringSoonest": "Expiring soonest"
+      }
+    },
+    "status": {
+      "active": "Active",
+      "expired": "Expired",
+      "exhausted": "Exhausted",
+      "revoked": "Revoked"
+    },
+    "expiry": {
+      "preset": {
+        "hour1": "1 hour",
+        "hours24": "24 hours",
+        "days7": "7 days",
+        "days30": "30 days",
+        "never": "Never",
+        "custom": "Custom…"
+      },
+      "keepCurrent": "Keep current",
+      "invalidFuture": "Pick a future date & time",
+      "invalidSelection": "Invalid expiry selection",
+      "revokedOn": "Revoked {{date}}",
+      "expiredOn": "Expired {{date}}",
+      "exhausted": "Exhausted",
+      "noExpiration": "No expiration",
+      "inDays_one": "Expires in {{count}} day",
+      "inDays_other": "Expires in {{count}} days",
+      "inHours_one": "Expires in {{count}} hour",
+      "inHours_other": "Expires in {{count}} hours"
+    },
+    "form": {
+      "name": "Name",
+      "namePlaceholder": "e.g. Friends batch 1",
+      "maxUses": "Max uses",
+      "unlimited": "Unlimited",
+      "uses": "uses",
+      "expires": "Expires",
+      "nameLength": "Name must be 1–64 characters",
+      "maxUsesInteger": "Max uses must be a positive integer"
+    },
+    "createModal": {
+      "title": "Create invite link",
+      "description": "Generate a shareable link that lets people register on this instance. You'll set how many times it can be used and when it expires.",
+      "submit": "Create link",
+      "submitting": "Creating…",
+      "createdCopied": "Link created. Copied to clipboard.",
+      "createdManual": "Link created. Copy manually from the row.",
+      "failed": "Failed to create invite: {{message}}"
+    },
+    "editModal": {
+      "title": "Edit \"{{name}}\"",
+      "description": "Adjust the limits on this invite link. The URL stays the same — anyone who already has it can still redeem under the new constraints.",
+      "used": "({{used}} used)",
+      "maxUsesBelowUsed": "Max uses cannot be less than current uses ({{used}})",
+      "noChanges": "No changes to save",
+      "updated": "Invite updated",
+      "failed": "Failed to update invite: {{message}}",
+      "submit": "Save changes",
+      "submitting": "Saving…"
+    },
+    "reinstateModal": {
+      "title": "Reinstate \"{{name}}\"",
+      "descriptionRevoked": "This invite was revoked. Reinstating generates a new link with a different URL — the old URL stays inactive.",
+      "descriptionLapsed": "This invite has lapsed. Reinstating reactivates the same URL — anyone who saved it will be able to use it again.",
+      "newLinkWarning": "A new link will be generated. Anyone who had the old URL will not be able to use it.",
+      "maxUsesMeta": "(current: {{max}}, used: {{used}})",
+      "maxUsesMin": "Max uses must be at least {{min}} (current uses: {{used}})",
+      "submit": "Reinstate",
+      "submitNewLink": "Reinstate with new link",
+      "submitting": "Reinstating…",
+      "doneCopied": "Reinstated with new link. Copied to clipboard.",
+      "doneManual": "Reinstated with new link. Copy manually from the row.",
+      "doneSameLink": "Reinstated. The same link is active again.",
+      "failed": "Failed to reinstate: {{message}}"
+    },
+    "redemptions": {
+      "title": "Redemptions for \"{{name}}\"",
+      "description": "Users who registered using this invite link, in the order they signed up.",
+      "revokedNotice": "This invite was revoked. The redemptions below represent users who registered before revocation.",
+      "revokedNoticeDated": "This invite was revoked {{date}}. The redemptions below represent users who registered before revocation.",
+      "usesOfMax_one": "{{count}} of {{max}} uses",
+      "usesOfMax_other": "{{count}} of {{max}} uses",
+      "uses_one": "{{count}} use",
+      "uses_other": "{{count}} uses",
+      "loadFailed": "Failed to load redemptions",
+      "loadFailedInline": "Could not load redemptions.",
+      "empty": "No redemptions yet.",
+      "now": "(now {{name}})",
+      "deletedUser": "Deleted User"
+    },
+    "row": {
+      "usage": "{{usage}} uses",
+      "createdBy": "Created by {{name}}",
+      "unknownCreator": "Unknown",
+      "subtitleActive": "{{usage}} · {{expiry}} · {{creator}}",
+      "subtitleArchived": "{{usage}} · {{expiry}} · {{when}}",
+      "used": "Used",
+      "expires": "Expires",
+      "expiredAt": "Expired at",
+      "revokedAt": "Revoked at",
+      "exhausted": "Exhausted",
+      "created": "Created",
+      "createdByLabel": "Created by",
+      "token": "Token",
+      "lastRedeemed": "Last redeemed",
+      "copyLink": "Copy link",
+      "revoke": "Revoke",
+      "viewRedemptions": "View redemptions",
+      "reinstate": "Reinstate",
+      "deletePermanently": "Delete permanently",
+      "copied": "Invite link copied",
+      "copyFailed": "Failed to copy link",
+      "revoked": "Invite revoked",
+      "revokeFailed": "Failed to revoke: {{message}}",
+      "deleted": "Invite deleted",
+      "deleteFailed": "Failed to delete: {{message}}",
+      "revokeDialog": {
+        "title": "Revoke \"{{name}}\"?",
+        "description": "The link stops working immediately. Anyone who has the URL can no longer use it.<br/><br/>If you change your mind later, <strong>Reinstate</strong> issues a fresh link under this entry — the original URL stays inactive.",
+        "confirm": "Revoke link"
+      },
+      "deleteDialog": {
+        "title": "Delete \"{{name}}\" permanently?",
+        "description": "This cannot be undone. Redemption history for this link will also be removed. If you only want to stop the link from working, use <strong>Revoke</strong> instead — that preserves the redemption record.",
+        "confirm": "Delete permanently"
+      }
+    }
+  },
+  "storage": {
+    "title": "Storage",
+    "description": "Monitor disk usage and clean up orphaned files left behind by deleted content or replaced avatars/banners.",
+    "loading": "Loading storage stats…",
+    "loadFailed": "Failed to load storage stats",
+    "refresh": "Refresh Stats",
+    "overview": {
+      "label": "Storage Overview",
+      "totalFiles": "Total Files",
+      "referenced": "Referenced",
+      "orphanedFiles": "Orphaned Files",
+      "unlinkedUploads": "Unlinked Uploads",
+      "danglingRecords": "Dangling Records",
+      "staleUploads": "Stale Uploads"
+    },
+    "breakdown": {
+      "label": "File Type Breakdown",
+      "entry_one": "{{count}} file — {{size}}",
+      "entry_other": "{{count}} files — {{size}}"
+    },
+    "uploadLimit": {
+      "label": "Upload Limit",
+      "maxFileSize": "Max file size",
+      "saved": "Upload limit set to {{limit}}",
+      "saveFailed": "Failed to update upload limit"
+    },
+    "cleanup": {
+      "label": "Cleanup",
+      "nothingFound": "No orphaned files, stale uploads, or dangling records found.",
+      "preview": "Preview Cleanup",
+      "run": "Clean Up Now",
+      "running": "Cleaning…",
+      "previewResult": "Preview — no files deleted",
+      "complete": "Cleanup complete",
+      "orphanedFiles_one": "{{count}} orphaned/dangling file ({{size}})",
+      "orphanedFiles_other": "{{count}} orphaned/dangling files ({{size}})",
+      "staleRecords_one": ", {{count}} stale upload record",
+      "staleRecords_other": ", {{count}} stale upload records",
+      "errors_one": "{{count}} error: {{first}}",
+      "errors_other": "{{count}} errors: {{first}}",
+      "cleanedToast_one": "Cleaned up {{count}} file ({{size}})",
+      "cleanedToast_other": "Cleaned up {{count}} files ({{size}})",
+      "failed": "Cleanup failed"
+    },
+    "stale": {
+      "label": "Stale Uploads",
+      "description": "Abandoned tus upload sessions in <code>.tus/</code> (paused/crashed without DELETE). Auto-expire runs every 24 hours; this lets you sweep proactively.",
+      "maxAge": "Max age (hours)",
+      "sessionFiles_one": "{{count}} session file ({{size}})",
+      "sessionFiles_other": "{{count}} session files ({{size}})",
+      "cleanedToast_one": "Cleaned {{count}} stale upload session ({{size}})",
+      "cleanedToast_other": "Cleaned {{count}} stale upload sessions ({{size}})",
+      "failed": "Stale upload cleanup failed"
+    },
+    "media": {
+      "label": "Media Retention",
+      "olderThan": "Delete chat media older than",
+      "days": "days",
+      "preview": "Preview",
+      "run": "Delete Now",
+      "running": "Deleting…",
+      "files_one": "{{count}} file ({{size}})",
+      "files_other": "{{count}} files ({{size}})",
+      "deletedToast_one": "Deleted {{count}} file ({{size}})",
+      "deletedToast_other": "Deleted {{count}} files ({{size}})",
+      "failed": "Media cleanup failed"
+    }
+  },
+  "streaming": {
+    "title": "Streaming",
+    "description": "These limits apply to all users on this instance. Users can pick values within these bounds.",
+    "units": {
+      "kbps": "{{value}} kbps",
+      "mbps": "{{value}} Mbps",
+      "fps": "{{value}} fps",
+      "kbpsLabel": "kbps"
+    },
+    "bandwidth": {
+      "label": "Bandwidth",
+      "description": "Minimum and maximum bitrate bounds, and the step size for the quality slider.",
+      "customBitrate": {
+        "label": "Allow Custom Bitrate",
+        "description": "Let users set their own bitrate instead of using the matrix defaults"
+      },
+      "range": "Bitrate Range",
+      "min": "Min",
+      "max": "Max",
+      "step": "Slider Step"
+    },
+    "quality": {
+      "label": "Quality",
+      "description": "Available resolution and frame rate options for screen sharing.",
+      "resolutions": "Allowed Resolutions",
+      "framerates": "Allowed Frame Rates"
+    },
+    "highEndWarning": {
+      "title": "High-performance settings enabled.",
+      "description": "Streaming above 1080p or 60 fps requires significant client-side CPU/GPU encoding power and can saturate server bandwidth, especially when streams are routed through TURN. High-end configurations (e.g., 4K at 120 fps) can require up to 45 Mbps per active stream. Ensure your infrastructure can handle this load before enabling these options for all users."
+    },
+    "matrix": {
+      "label": "Bitrate Matrix",
+      "description": "Default bitrates per resolution and frame rate. Edit individual cells or scale all values at once.",
+      "scaleAll": "Scale All",
+      "scaleHint": "Drag to scale all bitrates. Fine-tune individual cells below.",
+      "cellDefault": "Default: {{value}} (click × to reset)",
+      "cellEdit": "Click to edit",
+      "resetAll": "Reset all to defaults"
+    },
+    "capWarning": {
+      "title": "Matrix values exceed global cap.",
+      "description": "Some bitrate values exceed your maximum of {{max}}. Streams at those combos will be quality-degraded to your cap."
+    }
+  },
+  "updates": {
+    "title": "Updates",
+    "description": "What this instance is running, and how to move it forward.",
+    "loading": "Loading update status…",
+    "loadFailed": "Could not load the update status.",
+    "copyFailed": "Could not copy. Select the command and copy it by hand.",
+    "running": {
+      "label": "Running",
+      "commit": "commit {{commit}} · ",
+      "channel": {
+        "prebuilt": "prebuilt image",
+        "source": "built from source",
+        "unknown": "install method not recorded"
+      }
+    },
+    "available": {
+      "label": "Available",
+      "version": "Backspace {{version}} is available",
+      "released": "Released {{date}} · ",
+      "releaseNotes": "Release notes",
+      "fromInstallDir": "From your install directory:",
+      "scriptDescription": "Takes a database snapshot, fetches the new image, and restarts only the Backspace container. If the new version does not come up healthy, or comes up still running the old code, it puts back the version you are on now.",
+      "noScript": "I do not have update.sh",
+      "manualIntro": "update.sh ships from 1.0.5 onward. On a git checkout, <code>git pull</code> brings it in. Otherwise run the steps by hand, after taking a snapshot with <code>./backup.sh</code>.",
+      "prebuiltInstall": "Prebuilt-image install:",
+      "sourceInstall": "From-source install:",
+      "manualWarning": "Name the <code>backspace</code> service explicitly and do not pass <code>--remove-orphans</code>. Compose will suggest it if you run other containers in this project, and it would delete them."
+    },
+    "upToDate": "You are on the latest release.",
+    "disabled": {
+      "title": "Update checks are turned off",
+      "description": "This instance will not contact GitHub. Set <code>BACKSPACE_UPDATE_CHECK=true</code> in your <code>.env</code> to allow the lookup, or check the releases page yourself."
+    },
+    "rateLimited": {
+      "title": "GitHub rate-limited the lookup",
+      "description": "This says nothing about whether an update exists. Try again later."
+    },
+    "unreachable": {
+      "title": "Could not check for updates",
+      "description": "GitHub could not be reached, so this says nothing about whether an update exists. Your instance is unaffected."
+    },
+    "lastChecked": "Last checked {{when}}",
+    "noLookups": "No lookups are made",
+    "checkAgain": "Check again",
+    "checking": "Checking…"
+  },
+  "users": {
+    "title": "Users",
+    "description": "View and manage user accounts on this instance.",
+    "searchPlaceholder": "Search users…",
+    "loading": "Loading users…",
+    "loadFailed": "Failed to load users",
+    "empty": "No users found",
+    "filters": {
+      "allInstances": "All instances",
+      "localOnly": "Local only",
+      "allRoles": "All roles",
+      "admin": "Admin",
+      "nonAdmin": "Non-admin",
+      "joinedAfter": "Joined after",
+      "joinedBefore": "Joined before",
+      "newest": "Newest first",
+      "oldest": "Oldest first",
+      "nameAsc": "Name A-Z",
+      "nameDesc": "Name Z-A",
+      "deleted": "Deleted",
+      "clear": "Clear filters"
+    },
+    "badge": {
+      "admin": "Admin",
+      "deleted": "Deleted"
+    },
+    "actions": {
+      "demote": "Demote from admin",
+      "promote": "Promote to admin",
+      "federatedNoAdmin": "Federated users cannot be admin",
+      "resetPassword": "Reset password",
+      "federatedNoReset": "Federated users authenticate via home instance",
+      "delete": "Delete user",
+      "selfDelete": "Use account settings to delete your own account"
+    },
+    "tempPassword": {
+      "label": "Temporary password:",
+      "note": "Shown once. User has been disconnected and must log in again."
+    },
+    "pagination": "Page {{page}} of {{total}} ({{users}})",
+    "count_one": "{{count}} user",
+    "count_other": "{{count}} users",
+    "roleFailed": "Failed to update role",
+    "resetFailed": "Failed to reset password",
+    "actionFailed": "Action failed",
+    "resetDialog": {
+      "title": "Reset Password",
+      "description": "Reset the password for <strong>{{username}}</strong>? They will be disconnected immediately and must log in with the new temporary password.",
+      "confirm": "Reset Password"
+    },
+    "demoteDialog": {
+      "title": "Demote Admin",
+      "description": "Remove admin privileges from <strong>{{username}}</strong>? They will lose access to instance settings.",
+      "confirm": "Demote"
+    },
+    "deleteDialog": {
+      "title": "Delete User",
+      "description": "Permanently delete <strong>{{username}}</strong>? This will remove them from all spaces, DMs, and friends lists. This cannot be undone.",
+      "confirm": "Delete User"
+    }
+  }
+}

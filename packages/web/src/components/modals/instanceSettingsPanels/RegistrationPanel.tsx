@@ -1,5 +1,8 @@
 import { createPortal } from 'react-dom';
+import { useTranslation, Trans } from 'react-i18next';
+import i18n from '../../../i18n';
 import { formatters, useFormatters } from '../../../i18n/formatters';
+import { describeError } from '../../../i18n/errors';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { InviteLinkSummary, InviteRedemption, InviteStatus } from '@backspace/shared';
 import { api } from '../../../api/client';
@@ -14,34 +17,23 @@ interface RegistrationDraft {
   federatedRegistrationOpen: boolean;
 }
 
-function formatRelative(ms: number): string {
-  const diff = Date.now() - ms;
-  const days = Math.floor(diff / 86_400_000);
-  if (days >= 1) return `${days}d ago`;
-  const hours = Math.floor(diff / 3_600_000);
-  if (hours >= 1) return `${hours}h ago`;
-  const mins = Math.floor(diff / 60_000);
-  if (mins >= 1) return `${mins}m ago`;
-  return 'just now';
-}
-
 function formatExpiry(invite: InviteLinkSummary): string {
   if (invite.status === 'revoked' && invite.revokedAt) {
-    return `Revoked ${formatters.formatNumericDate(invite.revokedAt)}`;
+    return i18n.t('admin:invites.expiry.revokedOn', { date: formatters.formatNumericDate(invite.revokedAt) });
   }
   if (invite.status === 'expired' && invite.expiresAt) {
-    return `Expired ${formatters.formatNumericDate(invite.expiresAt)}`;
+    return i18n.t('admin:invites.expiry.expiredOn', { date: formatters.formatNumericDate(invite.expiresAt) });
   }
   if (invite.status === 'exhausted') {
-    return 'Exhausted';
+    return i18n.t('admin:invites.expiry.exhausted');
   }
-  if (invite.expiresAt === null) return 'No expiration';
+  if (invite.expiresAt === null) return i18n.t('admin:invites.expiry.noExpiration');
   const remaining = invite.expiresAt - Date.now();
-  if (remaining <= 0) return `Expired ${formatters.formatNumericDate(invite.expiresAt)}`;
+  if (remaining <= 0) return i18n.t('admin:invites.expiry.expiredOn', { date: formatters.formatNumericDate(invite.expiresAt) });
   const days = Math.floor(remaining / 86_400_000);
-  if (days >= 1) return `Expires in ${days} day${days === 1 ? '' : 's'}`;
+  if (days >= 1) return i18n.t('admin:invites.expiry.inDays', { count: days });
   const hours = Math.floor(remaining / 3_600_000);
-  return `Expires in ${hours}h`;
+  return i18n.t('admin:invites.expiry.inHours', { count: hours });
 }
 
 function inviteStatusDotColor(status: InviteStatus): string {
@@ -64,10 +56,10 @@ function inviteStatusPillColor(status: InviteStatus): string {
 
 function inviteStatusLabel(status: InviteStatus): string {
   switch (status) {
-    case 'active':    return 'Active';
-    case 'expired':   return 'Expired';
-    case 'exhausted': return 'Exhausted';
-    case 'revoked':   return 'Revoked';
+    case 'active':    return i18n.t('admin:invites.status.active');
+    case 'expired':   return i18n.t('admin:invites.status.expired');
+    case 'exhausted': return i18n.t('admin:invites.status.exhausted');
+    case 'revoked':   return i18n.t('admin:invites.status.revoked');
   }
 }
 
@@ -143,20 +135,21 @@ function FilterDropdown({
   archivedStatusFilter,
   onArchivedStatusToggle,
 }: FilterDropdownProps) {
+  const { t } = useTranslation(['admin', 'common']);
   const [open, setOpen] = useState(false);
 
   const activeSortOptions: Array<{ key: ActiveSort; label: string }> = [
-    { key: 'recent', label: 'Most recent' },
-    { key: 'oldest', label: 'Oldest' },
-    { key: 'name', label: 'Name (A–Z)' },
-    { key: 'mostUsed', label: 'Most used' },
-    { key: 'expiringSoonest', label: 'Expiring soonest' },
+    { key: 'recent', label: t('admin:invites.filter.sort.recent') },
+    { key: 'oldest', label: t('admin:invites.filter.sort.oldest') },
+    { key: 'name', label: t('admin:invites.filter.sort.name') },
+    { key: 'mostUsed', label: t('admin:invites.filter.sort.mostUsed') },
+    { key: 'expiringSoonest', label: t('admin:invites.filter.sort.expiringSoonest') },
   ];
 
   const archivedSortOptions: Array<{ key: ArchivedSort; label: string }> = [
-    { key: 'recent', label: 'Most recent' },
-    { key: 'oldest', label: 'Oldest' },
-    { key: 'name', label: 'Name (A–Z)' },
+    { key: 'recent', label: t('admin:invites.filter.sort.recent') },
+    { key: 'oldest', label: t('admin:invites.filter.sort.oldest') },
+    { key: 'name', label: t('admin:invites.filter.sort.name') },
   ];
 
   const archivedStatusOptions: ArchivedStatus[] = ['expired', 'exhausted', 'revoked'];
@@ -177,7 +170,7 @@ function FilterDropdown({
         <svg width="12" height="12" viewBox="0 0 16 16" fill="none" className="opacity-60">
           <path d="M2 4h12M4 8h8M6 12h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
         </svg>
-        Filter
+        {t('admin:invites.filter.button')}
         <span className="text-[10px]">▾</span>
       </button>
 
@@ -188,7 +181,7 @@ function FilterDropdown({
             {view === 'archived' && (
               <>
                 <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-2 py-1">
-                  Status
+                  {t('admin:invites.filter.status')}
                 </div>
                 {archivedStatusOptions.map((s) => (
                   <button
@@ -209,7 +202,7 @@ function FilterDropdown({
               </>
             )}
             <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-2 py-1">
-              Sort by
+              {t('admin:invites.filter.sortBy')}
             </div>
             {view === 'active'
               ? activeSortOptions.map((opt) => (
@@ -252,16 +245,27 @@ type ExpiryPresetId = '1h' | '24h' | '7d' | '30d' | 'never' | 'custom';
 /** Edit modal additionally supports a 'keep' option (don't change expiry on PATCH). */
 type EditExpiryId = 'keep' | ExpiryPresetId;
 
-const EXPIRY_PRESETS: ReadonlyArray<{ id: ExpiryPresetId; label: string; ms: number | null }> = [
-  { id: '1h', label: '1 hour', ms: 3_600_000 },
-  { id: '24h', label: '24 hours', ms: 86_400_000 },
-  { id: '7d', label: '7 days', ms: 7 * 86_400_000 },
-  { id: '30d', label: '30 days', ms: 30 * 86_400_000 },
-  { id: 'never', label: 'Never', ms: null },
+const EXPIRY_PRESETS: ReadonlyArray<{ id: ExpiryPresetId; ms: number | null }> = [
+  { id: '1h', ms: 3_600_000 },
+  { id: '24h', ms: 86_400_000 },
+  { id: '7d', ms: 7 * 86_400_000 },
+  { id: '30d', ms: 30 * 86_400_000 },
+  { id: 'never', ms: null },
   // Custom uses a free-form datetime input rendered below the preset row;
   // ms is intentionally null and ignored for this id.
-  { id: 'custom', label: 'Custom…', ms: null },
+  { id: 'custom', ms: null },
 ];
+
+function expiryPresetLabel(id: ExpiryPresetId): string {
+  switch (id) {
+    case '1h':     return i18n.t('admin:invites.expiry.preset.hour1');
+    case '24h':    return i18n.t('admin:invites.expiry.preset.hours24');
+    case '7d':     return i18n.t('admin:invites.expiry.preset.days7');
+    case '30d':    return i18n.t('admin:invites.expiry.preset.days30');
+    case 'never':  return i18n.t('admin:invites.expiry.preset.never');
+    case 'custom': return i18n.t('admin:invites.expiry.preset.custom');
+  }
+}
 
 /**
  * Format a millisecond timestamp as a value suitable for `<input type="datetime-local">`.
@@ -294,6 +298,7 @@ interface ExpirySelectorProps {
  *   preset   → expiresAt: Date.now() + preset.ms
  */
 function ExpirySelector({ value, customDateTime, onChange, showKeep, disabled }: ExpirySelectorProps) {
+  const { t } = useTranslation(['admin', 'common']);
   return (
     <div>
       <div className="flex items-center gap-2 flex-wrap">
@@ -308,7 +313,7 @@ function ExpirySelector({ value, customDateTime, onChange, showKeep, disabled }:
                 : 'bg-surface-input text-txt-tertiary hover:text-txt-secondary'
             }`}
           >
-            Keep current
+            {t('admin:invites.expiry.keepCurrent')}
           </button>
         )}
         {EXPIRY_PRESETS.map((p) => (
@@ -323,7 +328,7 @@ function ExpirySelector({ value, customDateTime, onChange, showKeep, disabled }:
                 : 'bg-surface-input text-txt-tertiary hover:text-txt-secondary'
             }`}
           >
-            {p.label}
+            {expiryPresetLabel(p.id)}
           </button>
         ))}
       </div>
@@ -360,18 +365,18 @@ function resolveExpiryFromSelector(
   if (value === 'never') return { kind: 'value', expiresAt: null };
   if (value === 'custom') {
     if (customDateTime === '') {
-      return { kind: 'invalid', message: 'Pick a future date & time' };
+      return { kind: 'invalid', message: i18n.t('admin:invites.expiry.invalidFuture') };
     }
     const ts = new Date(customDateTime).getTime();
     if (!Number.isFinite(ts) || ts <= Date.now()) {
-      return { kind: 'invalid', message: 'Pick a future date & time' };
+      return { kind: 'invalid', message: i18n.t('admin:invites.expiry.invalidFuture') };
     }
     return { kind: 'value', expiresAt: ts };
   }
   const preset = EXPIRY_PRESETS.find((p) => p.id === value);
   if (!preset || preset.ms === null) {
     // Unreachable: 'never' and 'custom' are handled above; remaining ids all carry an ms.
-    return { kind: 'invalid', message: 'Invalid expiry selection' };
+    return { kind: 'invalid', message: i18n.t('admin:invites.expiry.invalidSelection') };
   }
   return { kind: 'value', expiresAt: Date.now() + preset.ms };
 }
@@ -382,6 +387,7 @@ interface CreateInviteModalProps {
 }
 
 function CreateInviteModal({ onClose, onCreated }: CreateInviteModalProps) {
+  const { t } = useTranslation(['admin', 'common']);
   const addToast = useUIStore((s) => s.addToast);
   const [name, setName] = useState('');
   const [unlimited, setUnlimited] = useState(true);
@@ -406,14 +412,14 @@ function CreateInviteModal({ onClose, onCreated }: CreateInviteModalProps) {
   const handleCreate = async () => {
     const trimmed = name.trim();
     if (trimmed.length === 0 || trimmed.length > 64) {
-      addToast('Name must be 1–64 characters', 'warning');
+      addToast(t('admin:invites.form.nameLength'), 'warning');
       return;
     }
     let maxUsesNum: number | null = null;
     if (!unlimited) {
       const parsed = Number(maxUses);
       if (!Number.isInteger(parsed) || parsed < 1) {
-        addToast('Max uses must be a positive integer', 'warning');
+        addToast(t('admin:invites.form.maxUsesInteger'), 'warning');
         return;
       }
       maxUsesNum = parsed;
@@ -428,7 +434,7 @@ function CreateInviteModal({ onClose, onCreated }: CreateInviteModalProps) {
     if (resolved.kind === 'omit') {
       // Unreachable: ExpirySelector for Create is rendered with showKeep={false}, so
       // 'keep' cannot be selected. Defensive guard so future refactors fail loudly.
-      addToast('Invalid expiry selection', 'warning');
+      addToast(t('admin:invites.expiry.invalidSelection'), 'warning');
       return;
     }
     const expiresAt = resolved.expiresAt;
@@ -438,14 +444,14 @@ function CreateInviteModal({ onClose, onCreated }: CreateInviteModalProps) {
       const created = await api.invites.create({ name: trimmed, maxUses: maxUsesNum, expiresAt });
       try {
         await navigator.clipboard.writeText(created.url);
-        addToast('Link created. Copied to clipboard.', 'success', 2000);
+        addToast(t('admin:invites.createModal.createdCopied'), 'success', 2000);
       } catch {
-        addToast('Link created. Copy manually from the row.', 'success', 2000);
+        addToast(t('admin:invites.createModal.createdManual'), 'success', 2000);
       }
       onCreated(created);
       onClose();
     } catch (err) {
-      addToast(`Failed to create invite: ${(err as Error).message}`, 'warning');
+      addToast(t('admin:invites.createModal.failed', { message: describeError(err) }), 'warning');
     } finally {
       setSubmitting(false);
     }
@@ -455,7 +461,7 @@ function CreateInviteModal({ onClose, onCreated }: CreateInviteModalProps) {
     <Modal
       isOpen
       onClose={handleClose}
-      title="Create invite link"
+      title={t('admin:invites.createModal.title')}
       mobileStyle="fullscreen"
       maxWidth="max-w-md"
     >
@@ -470,7 +476,7 @@ function CreateInviteModal({ onClose, onCreated }: CreateInviteModalProps) {
           </svg>
         </div>
         <p className="text-[13px] text-txt-secondary leading-snug min-w-0">
-          Generate a shareable link that lets people register on this instance. You'll set how many times it can be used and when it expires.
+          {t('admin:invites.createModal.description')}
         </p>
       </div>
 
@@ -483,14 +489,14 @@ function CreateInviteModal({ onClose, onCreated }: CreateInviteModalProps) {
       >
         {/* Name */}
         <div>
-          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">Name</div>
+          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">{t('admin:invites.form.name')}</div>
           <input
             ref={nameInputRef}
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
             maxLength={64}
-            placeholder="e.g. Friends batch 1"
+            placeholder={t('admin:invites.form.namePlaceholder')}
             className="input-standard w-full"
             disabled={submitting}
           />
@@ -498,7 +504,7 @@ function CreateInviteModal({ onClose, onCreated }: CreateInviteModalProps) {
 
         {/* Max uses */}
         <div>
-          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">Max uses</div>
+          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">{t('admin:invites.form.maxUses')}</div>
           <div className="flex items-center gap-4 flex-wrap">
             <label className="flex items-center gap-2 text-sm cursor-pointer">
               <input
@@ -509,7 +515,7 @@ function CreateInviteModal({ onClose, onCreated }: CreateInviteModalProps) {
                 disabled={submitting}
                 className="accent-accent-primary"
               />
-              <span className="text-txt-primary">Unlimited</span>
+              <span className="text-txt-primary">{t('admin:invites.form.unlimited')}</span>
             </label>
             <label className="flex items-center gap-2 text-sm cursor-pointer">
               <input
@@ -532,14 +538,14 @@ function CreateInviteModal({ onClose, onCreated }: CreateInviteModalProps) {
                 disabled={submitting}
                 className="input-standard w-16 text-center disabled:opacity-50"
               />
-              <span className="text-txt-secondary">uses</span>
+              <span className="text-txt-secondary">{t('admin:invites.form.uses')}</span>
             </label>
           </div>
         </div>
 
         {/* Expiry */}
         <div>
-          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">Expires</div>
+          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">{t('admin:invites.form.expires')}</div>
           <ExpirySelector
             value={expiryId}
             customDateTime={customDateTime}
@@ -564,14 +570,14 @@ function CreateInviteModal({ onClose, onCreated }: CreateInviteModalProps) {
               disabled={submitting}
               className="px-3 py-1 text-sm text-txt-secondary hover:text-txt-primary transition-colors disabled:opacity-50"
             >
-              Cancel
+              {t('common:actions.cancel')}
             </button>
             <button
               type="submit"
               disabled={submitting}
               className="px-4 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
             >
-              {submitting ? 'Creating…' : 'Create link'}
+              {submitting ? t('admin:invites.createModal.submitting') : t('admin:invites.createModal.submit')}
             </button>
           </div>
         </div>
@@ -593,6 +599,7 @@ interface EditInviteModalProps {
  * — Reinstate is the only path back from revoked).
  */
 function EditInviteModal({ invite, onClose, onUpdated }: EditInviteModalProps) {
+  const { t } = useTranslation(['admin', 'common']);
   const addToast = useUIStore((s) => s.addToast);
   const [name, setName] = useState(invite.name);
   const [unlimited, setUnlimited] = useState(invite.maxUses === null);
@@ -616,7 +623,7 @@ function EditInviteModal({ invite, onClose, onUpdated }: EditInviteModalProps) {
   const handleSave = async () => {
     const trimmed = name.trim();
     if (trimmed.length === 0 || trimmed.length > 64) {
-      addToast('Name must be 1–64 characters', 'warning');
+      addToast(t('admin:invites.form.nameLength'), 'warning');
       return;
     }
 
@@ -626,12 +633,12 @@ function EditInviteModal({ invite, onClose, onUpdated }: EditInviteModalProps) {
     if (!unlimited) {
       const parsed = Number(maxUses);
       if (!Number.isInteger(parsed) || parsed < 1) {
-        addToast('Max uses must be a positive integer', 'warning');
+        addToast(t('admin:invites.form.maxUsesInteger'), 'warning');
         return;
       }
       if (parsed < invite.usedCount) {
         addToast(
-          `Max uses cannot be less than current uses (${invite.usedCount})`,
+          t('admin:invites.editModal.maxUsesBelowUsed', { used: invite.usedCount }),
           'warning',
         );
         return;
@@ -655,18 +662,18 @@ function EditInviteModal({ invite, onClose, onUpdated }: EditInviteModalProps) {
     // 'omit' (Keep current) → leave expiresAt off the body entirely.
 
     if (Object.keys(body).length === 0) {
-      addToast('No changes to save', 'warning');
+      addToast(t('admin:invites.editModal.noChanges'), 'warning');
       return;
     }
 
     setSubmitting(true);
     try {
       await api.invites.update(invite.id, body);
-      addToast('Invite updated', 'success', 2000);
+      addToast(t('admin:invites.editModal.updated'), 'success', 2000);
       onUpdated();
       onClose();
     } catch (err) {
-      addToast(`Failed to update invite: ${(err as Error).message}`, 'warning');
+      addToast(t('admin:invites.editModal.failed', { message: describeError(err) }), 'warning');
     } finally {
       setSubmitting(false);
     }
@@ -680,7 +687,7 @@ function EditInviteModal({ invite, onClose, onUpdated }: EditInviteModalProps) {
     <Modal
       isOpen
       onClose={handleClose}
-      title={`Edit "${invite.name}"`}
+      title={t('admin:invites.editModal.title', { name: invite.name })}
       mobileStyle="fullscreen"
       maxWidth="max-w-md"
     >
@@ -692,7 +699,7 @@ function EditInviteModal({ invite, onClose, onUpdated }: EditInviteModalProps) {
           </svg>
         </div>
         <p className="text-[13px] text-txt-secondary leading-snug min-w-0">
-          Adjust the limits on this invite link. The URL stays the same — anyone who already has it can still redeem under the new constraints.
+          {t('admin:invites.editModal.description')}
         </p>
       </div>
 
@@ -705,7 +712,7 @@ function EditInviteModal({ invite, onClose, onUpdated }: EditInviteModalProps) {
       >
         {/* Name */}
         <div>
-          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">Name</div>
+          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">{t('admin:invites.form.name')}</div>
           <input
             ref={nameInputRef}
             type="text"
@@ -720,7 +727,7 @@ function EditInviteModal({ invite, onClose, onUpdated }: EditInviteModalProps) {
         {/* Max uses */}
         <div>
           <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">
-            Max uses <span className="normal-case font-normal text-txt-tertiary">({invite.usedCount} used)</span>
+            {t('admin:invites.form.maxUses')} <span className="normal-case font-normal text-txt-tertiary">{t('admin:invites.editModal.used', { used: invite.usedCount })}</span>
           </div>
           <div className="flex items-center gap-4 flex-wrap">
             <label className="flex items-center gap-2 text-sm cursor-pointer">
@@ -732,7 +739,7 @@ function EditInviteModal({ invite, onClose, onUpdated }: EditInviteModalProps) {
                 disabled={submitting}
                 className="accent-accent-primary"
               />
-              <span className="text-txt-primary">Unlimited</span>
+              <span className="text-txt-primary">{t('admin:invites.form.unlimited')}</span>
             </label>
             <label className="flex items-center gap-2 text-sm cursor-pointer">
               <input
@@ -755,14 +762,14 @@ function EditInviteModal({ invite, onClose, onUpdated }: EditInviteModalProps) {
                 disabled={submitting}
                 className="input-standard w-16 text-center disabled:opacity-50"
               />
-              <span className="text-txt-secondary">uses</span>
+              <span className="text-txt-secondary">{t('admin:invites.form.uses')}</span>
             </label>
           </div>
         </div>
 
         {/* Expiry */}
         <div>
-          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">Expires</div>
+          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">{t('admin:invites.form.expires')}</div>
           <ExpirySelector
             value={expiryId}
             customDateTime={customDateTime}
@@ -784,14 +791,14 @@ function EditInviteModal({ invite, onClose, onUpdated }: EditInviteModalProps) {
               disabled={submitting}
               className="px-3 py-1 text-sm text-txt-secondary hover:text-txt-primary transition-colors disabled:opacity-50"
             >
-              Cancel
+              {t('common:actions.cancel')}
             </button>
             <button
               type="submit"
               disabled={submitting}
               className="px-4 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
             >
-              {submitting ? 'Saving…' : 'Save changes'}
+              {submitting ? t('admin:invites.editModal.submitting') : t('admin:invites.editModal.submit')}
             </button>
           </div>
         </div>
@@ -820,6 +827,7 @@ interface ReinstateInviteModalProps {
  * the invite's pre-action status, respectively, per spec §4.2.
  */
 function ReinstateInviteModal({ invite, onClose, onReinstated }: ReinstateInviteModalProps) {
+  const { t } = useTranslation(['admin', 'common']);
   const addToast = useUIStore((s) => s.addToast);
   const isRevoked = invite.status === 'revoked';
 
@@ -849,7 +857,7 @@ function ReinstateInviteModal({ invite, onClose, onReinstated }: ReinstateInvite
       const parsed = Number(maxUses);
       if (!Number.isInteger(parsed) || parsed < maxUsesMin) {
         addToast(
-          `Max uses must be at least ${maxUsesMin} (current uses: ${invite.usedCount})`,
+          t('admin:invites.reinstateModal.maxUsesMin', { min: maxUsesMin, used: invite.usedCount }),
           'warning',
         );
         return;
@@ -865,7 +873,7 @@ function ReinstateInviteModal({ invite, onClose, onReinstated }: ReinstateInvite
     }
     if (resolved.kind === 'omit') {
       // Unreachable: ExpirySelector for Reinstate is rendered with showKeep={false}.
-      addToast('Invalid expiry selection', 'warning');
+      addToast(t('admin:invites.expiry.invalidSelection'), 'warning');
       return;
     }
 
@@ -880,31 +888,31 @@ function ReinstateInviteModal({ invite, onClose, onReinstated }: ReinstateInvite
       if (result.tokenRotated) {
         try {
           await navigator.clipboard.writeText(result.invite.url);
-          addToast('Reinstated with new link. Copied to clipboard.', 'success', 2500);
+          addToast(t('admin:invites.reinstateModal.doneCopied'), 'success', 2500);
         } catch {
-          addToast('Reinstated with new link. Copy manually from the row.', 'success', 2500);
+          addToast(t('admin:invites.reinstateModal.doneManual'), 'success', 2500);
         }
       } else {
-        addToast('Reinstated. The same link is active again.', 'success', 2500);
+        addToast(t('admin:invites.reinstateModal.doneSameLink'), 'success', 2500);
       }
       onReinstated();
       onClose();
     } catch (err) {
-      addToast(`Failed to reinstate: ${(err as Error).message}`, 'warning');
+      addToast(t('admin:invites.reinstateModal.failed', { message: describeError(err) }), 'warning');
     } finally {
       setSubmitting(false);
     }
   };
 
   const subtitle = isRevoked
-    ? 'This invite was revoked. Reinstating generates a new link with a different URL — the old URL stays inactive.'
-    : 'This invite has lapsed. Reinstating reactivates the same URL — anyone who saved it will be able to use it again.';
+    ? t('admin:invites.reinstateModal.descriptionRevoked')
+    : t('admin:invites.reinstateModal.descriptionLapsed');
 
   return createPortal(
     <Modal
       isOpen
       onClose={handleClose}
-      title={`Reinstate "${invite.name}"`}
+      title={t('admin:invites.reinstateModal.title', { name: invite.name })}
       mobileStyle="fullscreen"
       maxWidth="max-w-md"
     >
@@ -928,14 +936,14 @@ function ReinstateInviteModal({ invite, onClose, onReinstated }: ReinstateInvite
         {/* Amber callout — only for revoked variant to reinforce the "new URL" consequence */}
         {isRevoked && (
           <div className="p-3 rounded-lg bg-accent-amber/10 border border-accent-amber/20 text-[13px] text-accent-amber">
-            A new link will be generated. Anyone who had the old URL will not be able to use it.
+            {t('admin:invites.reinstateModal.newLinkWarning')}
           </div>
         )}
 
         {/* Max uses */}
         <div>
           <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">
-            Max uses <span className="normal-case font-normal text-txt-tertiary">(current: {invite.maxUses ?? '∞'}, used: {invite.usedCount})</span>
+            {t('admin:invites.form.maxUses')} <span className="normal-case font-normal text-txt-tertiary">{t('admin:invites.reinstateModal.maxUsesMeta', { max: invite.maxUses ?? '∞', used: invite.usedCount })}</span>
           </div>
           <div className="flex items-center gap-4 flex-wrap">
             <label className="flex items-center gap-2 text-sm cursor-pointer">
@@ -947,7 +955,7 @@ function ReinstateInviteModal({ invite, onClose, onReinstated }: ReinstateInvite
                 disabled={submitting}
                 className="accent-accent-primary"
               />
-              <span className="text-txt-primary">Unlimited</span>
+              <span className="text-txt-primary">{t('admin:invites.form.unlimited')}</span>
             </label>
             <label className="flex items-center gap-2 text-sm cursor-pointer">
               <input
@@ -970,14 +978,14 @@ function ReinstateInviteModal({ invite, onClose, onReinstated }: ReinstateInvite
                 disabled={submitting}
                 className="input-standard w-16 text-center disabled:opacity-50"
               />
-              <span className="text-txt-secondary">uses</span>
+              <span className="text-txt-secondary">{t('admin:invites.form.uses')}</span>
             </label>
           </div>
         </div>
 
         {/* Expiry */}
         <div>
-          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">Expires</div>
+          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">{t('admin:invites.form.expires')}</div>
           <ExpirySelector
             value={expiryId}
             customDateTime={customDateTime}
@@ -1000,7 +1008,7 @@ function ReinstateInviteModal({ invite, onClose, onReinstated }: ReinstateInvite
               disabled={submitting}
               className="px-3 py-1 text-sm text-txt-secondary hover:text-txt-primary transition-colors disabled:opacity-50"
             >
-              Cancel
+              {t('common:actions.cancel')}
             </button>
             <button
               type="submit"
@@ -1008,10 +1016,10 @@ function ReinstateInviteModal({ invite, onClose, onReinstated }: ReinstateInvite
               className="px-4 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
             >
               {submitting
-                ? 'Reinstating…'
+                ? t('admin:invites.reinstateModal.submitting')
                 : isRevoked
-                  ? 'Reinstate with new link'
-                  : 'Reinstate'}
+                  ? t('admin:invites.reinstateModal.submitNewLink')
+                  : t('admin:invites.reinstateModal.submit')}
             </button>
           </div>
         </div>
@@ -1038,6 +1046,7 @@ interface RedemptionsModalProps {
  * Adding click-through is a later polish pass — see Task 19 report.
  */
 function RedemptionsModal({ invite, onClose }: RedemptionsModalProps) {
+  const { t } = useTranslation(['admin', 'common']);
   const addToast = useUIStore((s) => s.addToast);
   const f = useFormatters();
   const [redemptions, setRedemptions] = useState<InviteRedemption[] | null>(null);
@@ -1054,18 +1063,18 @@ function RedemptionsModal({ invite, onClose }: RedemptionsModalProps) {
         if (cancelled) return;
         setError(true);
         setRedemptions([]);
-        addToast('Failed to load redemptions', 'warning');
+        addToast(t('admin:invites.redemptions.loadFailed'), 'warning');
       });
     return () => {
       cancelled = true;
     };
-  }, [invite.id, addToast]);
+  }, [invite.id, addToast, t]);
 
   return createPortal(
     <Modal
       isOpen
       onClose={onClose}
-      title={`Redemptions for "${invite.name}"`}
+      title={t('admin:invites.redemptions.title', { name: invite.name })}
       mobileStyle="fullscreen"
       maxWidth="max-w-lg"
     >
@@ -1076,7 +1085,7 @@ function RedemptionsModal({ invite, onClose }: RedemptionsModalProps) {
           </svg>
         </div>
         <p className="text-[13px] text-txt-secondary leading-snug min-w-0">
-          Users who registered using this invite link, in the order they signed up.
+          {t('admin:invites.redemptions.description')}
         </p>
       </div>
 
@@ -1089,27 +1098,25 @@ function RedemptionsModal({ invite, onClose }: RedemptionsModalProps) {
       >
         {invite.status === 'revoked' && (
           <div className="bg-accent-rose/10 border border-accent-rose/30 rounded p-2.5 text-xs text-accent-rose leading-relaxed">
-            This invite was revoked
             {invite.revokedAt
-              ? ` ${f.formatNumericDate(invite.revokedAt)}`
-              : ''}
-            . The redemptions below represent users who registered before revocation.
+              ? t('admin:invites.redemptions.revokedNoticeDated', { date: f.formatNumericDate(invite.revokedAt) })
+              : t('admin:invites.redemptions.revokedNotice')}
           </div>
         )}
 
         <div className="text-sm text-txt-tertiary">
-          {invite.usedCount}
-          {invite.maxUses !== null ? ` of ${invite.maxUses}` : ''} use
-          {invite.usedCount === 1 ? '' : 's'}
+          {invite.maxUses !== null
+            ? t('admin:invites.redemptions.usesOfMax', { count: invite.usedCount, max: invite.maxUses })
+            : t('admin:invites.redemptions.uses', { count: invite.usedCount })}
         </div>
       </div>
 
       <div className="-mx-1">
         {redemptions === null ? (
-          <div className="text-sm text-txt-tertiary px-3 py-2">Loading…</div>
+          <div className="text-sm text-txt-tertiary px-3 py-2">{t('common:states.loading')}</div>
         ) : redemptions.length === 0 ? (
           <div className="text-sm text-txt-tertiary px-3 py-2">
-            {error ? 'Could not load redemptions.' : 'No redemptions yet.'}
+            {error ? t('admin:invites.redemptions.loadFailedInline') : t('admin:invites.redemptions.empty')}
           </div>
         ) : (
           <div className="space-y-0.5">
@@ -1128,7 +1135,9 @@ function RedemptionsModal({ invite, onClose }: RedemptionsModalProps) {
                     {(r.isDeleted || showCurrent) && (
                       <span className="text-txt-tertiary">
                         {' '}
-                        (now {r.isDeleted ? 'Deleted User' : r.currentUsername})
+                        {t('admin:invites.redemptions.now', {
+                          name: r.isDeleted ? t('admin:invites.redemptions.deletedUser') : (r.currentUsername ?? ''),
+                        })}
                       </span>
                     )}
                   </span>
@@ -1164,6 +1173,8 @@ interface InviteRowProps {
  *   - non-active → Reinstate · Delete permanently · View redemptions
  */
 function InviteRow({ invite, expanded, onToggleExpand, onMutate }: InviteRowProps) {
+  const { t } = useTranslation(['admin', 'common']);
+  const f = useFormatters();
   const addToast = useUIStore((s) => s.addToast);
   const [showEdit, setShowEdit] = useState(false);
   const [showReinstate, setShowReinstate] = useState(false);
@@ -1183,9 +1194,9 @@ function InviteRow({ invite, expanded, onToggleExpand, onMutate }: InviteRowProp
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(invite.url);
-      addToast('Invite link copied', 'success', 2000);
+      addToast(t('admin:invites.row.copied'), 'success', 2000);
     } catch {
-      addToast('Failed to copy link', 'warning');
+      addToast(t('admin:invites.row.copyFailed'), 'warning');
     }
   };
 
@@ -1193,11 +1204,11 @@ function InviteRow({ invite, expanded, onToggleExpand, onMutate }: InviteRowProp
     setActionLoading(true);
     try {
       await api.invites.revoke(invite.id);
-      addToast('Invite revoked', 'success', 2000);
+      addToast(t('admin:invites.row.revoked'), 'success', 2000);
       setConfirmRevoke(false);
       onMutate();
     } catch (err) {
-      addToast(`Failed to revoke: ${(err as Error).message}`, 'warning');
+      addToast(t('admin:invites.row.revokeFailed', { message: describeError(err) }), 'warning');
     } finally {
       setActionLoading(false);
     }
@@ -1207,25 +1218,34 @@ function InviteRow({ invite, expanded, onToggleExpand, onMutate }: InviteRowProp
     setActionLoading(true);
     try {
       await api.invites.delete(invite.id);
-      addToast('Invite deleted', 'success', 2000);
+      addToast(t('admin:invites.row.deleted'), 'success', 2000);
       setConfirmDelete(false);
       onMutate();
     } catch (err) {
-      addToast(`Failed to delete: ${(err as Error).message}`, 'warning');
+      addToast(t('admin:invites.row.deleteFailed', { message: describeError(err) }), 'warning');
     } finally {
       setActionLoading(false);
     }
   };
 
   const isActive = invite.status === 'active';
-  const createdByLabel = invite.createdByUsername ?? 'Unknown';
+  const createdByLabel = invite.createdByUsername ?? t('common:states.unknown');
 
   // Subtitle (collapsed view)
   //   active   → "X / Y uses · Expires in 3 days · Created by alice"
-  //   archived → "X / Y uses · Revoked 4/12/2026 · 2d ago"
+  //   archived → "X / Y uses · Revoked 4/12/2026 · 2 days ago"
+  const usageText = t('admin:invites.row.usage', { usage: usageLabel });
   const subtitle = isActive
-    ? `${usageLabel} uses · ${formatExpiry(invite)} · Created by ${createdByLabel}`
-    : `${usageLabel} uses · ${formatExpiry(invite)} · ${formatRelative(invite.createdAt)}`;
+    ? t('admin:invites.row.subtitleActive', {
+        usage: usageText,
+        expiry: formatExpiry(invite),
+        creator: t('admin:invites.row.createdBy', { name: createdByLabel }),
+      })
+    : t('admin:invites.row.subtitleArchived', {
+        usage: usageText,
+        expiry: formatExpiry(invite),
+        when: f.formatRelativeTime(invite.createdAt),
+      });
 
   // Archived row 1 second-cell label + value. EXHAUSTED has no dedicated terminal
   // timestamp on the invite, so we surface lastRedeemedAt (the moment that drove
@@ -1233,21 +1253,21 @@ function InviteRow({ invite, expanded, onToggleExpand, onMutate }: InviteRowProp
   let archivedTerminalLabel: string;
   let archivedTerminalValue: string;
   if (invite.status === 'expired') {
-    archivedTerminalLabel = 'EXPIRED AT';
-    archivedTerminalValue = invite.expiresAt !== null ? formatRelative(invite.expiresAt) : '—';
+    archivedTerminalLabel = t('admin:invites.row.expiredAt');
+    archivedTerminalValue = invite.expiresAt !== null ? f.formatRelativeTime(invite.expiresAt) : '—';
   } else if (invite.status === 'revoked') {
-    archivedTerminalLabel = 'REVOKED AT';
-    archivedTerminalValue = invite.revokedAt !== null ? formatRelative(invite.revokedAt) : '—';
+    archivedTerminalLabel = t('admin:invites.row.revokedAt');
+    archivedTerminalValue = invite.revokedAt !== null ? f.formatRelativeTime(invite.revokedAt) : '—';
   } else {
     // exhausted
-    archivedTerminalLabel = 'EXHAUSTED';
+    archivedTerminalLabel = t('admin:invites.row.exhausted');
     archivedTerminalValue =
-      invite.lastRedeemedAt !== null ? formatRelative(invite.lastRedeemedAt) : '—';
+      invite.lastRedeemedAt !== null ? f.formatRelativeTime(invite.lastRedeemedAt) : '—';
   }
 
   const tokenDisplay = `…${invite.token.slice(-6)}`;
   const lastRedeemedDisplay =
-    invite.lastRedeemedAt !== null ? formatRelative(invite.lastRedeemedAt) : '—';
+    invite.lastRedeemedAt !== null ? f.formatRelativeTime(invite.lastRedeemedAt) : '—';
 
   return (
     <>
@@ -1292,7 +1312,7 @@ function InviteRow({ invite, expanded, onToggleExpand, onMutate }: InviteRowProp
               {/* Row 1: USED · (EXPIRES | terminal-status AT) · CREATED */}
               <div className="grid grid-cols-3 gap-3 mb-3">
                 <div>
-                  <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">Used</div>
+                  <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">{t('admin:invites.row.used')}</div>
                   <div
                     className={`text-xs ${
                       usageNearLimit ? 'text-accent-amber font-medium' : 'text-txt-secondary'
@@ -1303,7 +1323,7 @@ function InviteRow({ invite, expanded, onToggleExpand, onMutate }: InviteRowProp
                 </div>
                 {isActive ? (
                   <div>
-                    <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">Expires</div>
+                    <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">{t('admin:invites.row.expires')}</div>
                     <div className="text-xs text-txt-secondary">{formatExpiry(invite)}</div>
                   </div>
                 ) : (
@@ -1315,27 +1335,27 @@ function InviteRow({ invite, expanded, onToggleExpand, onMutate }: InviteRowProp
                   </div>
                 )}
                 <div>
-                  <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">Created</div>
-                  <div className="text-xs text-txt-secondary">{formatRelative(invite.createdAt)}</div>
+                  <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">{t('admin:invites.row.created')}</div>
+                  <div className="text-xs text-txt-secondary">{f.formatRelativeTime(invite.createdAt)}</div>
                 </div>
               </div>
 
               {/* Row 2: CREATED BY · TOKEN · LAST REDEEMED */}
               <div className="grid grid-cols-3 gap-3 mb-3">
                 <div>
-                  <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">Created by</div>
+                  <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">{t('admin:invites.row.createdByLabel')}</div>
                   <div className="text-xs text-txt-secondary truncate" title={createdByLabel}>
                     {createdByLabel}
                   </div>
                 </div>
                 <div>
-                  <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">Token</div>
+                  <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">{t('admin:invites.row.token')}</div>
                   <div className="text-xs font-mono text-txt-secondary" title={invite.token}>
                     {tokenDisplay}
                   </div>
                 </div>
                 <div>
-                  <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">Last redeemed</div>
+                  <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">{t('admin:invites.row.lastRedeemed')}</div>
                   <div className="text-xs text-txt-secondary">{lastRedeemedDisplay}</div>
                 </div>
               </div>
@@ -1349,28 +1369,28 @@ function InviteRow({ invite, expanded, onToggleExpand, onMutate }: InviteRowProp
                       onClick={(e) => { e.stopPropagation(); handleCopy(); }}
                       className="px-3 py-1.5 text-xs font-medium bg-accent-lavender/10 text-accent-lavender hover:bg-accent-lavender/20 rounded transition-colors"
                     >
-                      Copy link
+                      {t('admin:invites.row.copyLink')}
                     </button>
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); setShowEdit(true); }}
                       className="px-3 py-1.5 text-xs font-medium bg-accent-lavender/10 text-accent-lavender hover:bg-accent-lavender/20 rounded transition-colors"
                     >
-                      Edit
+                      {t('common:actions.edit')}
                     </button>
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); setConfirmRevoke(true); }}
                       className="px-3 py-1.5 text-xs font-medium bg-accent-rose/10 text-txt-danger hover:bg-accent-rose/20 rounded transition-colors"
                     >
-                      Revoke
+                      {t('admin:invites.row.revoke')}
                     </button>
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); setShowRedemptions(true); }}
                       className="text-[11px] text-txt-tertiary hover:text-txt-secondary underline decoration-dotted transition-colors ml-1"
                     >
-                      View redemptions
+                      {t('admin:invites.row.viewRedemptions')}
                     </button>
                   </>
                 ) : (
@@ -1380,21 +1400,21 @@ function InviteRow({ invite, expanded, onToggleExpand, onMutate }: InviteRowProp
                       onClick={(e) => { e.stopPropagation(); setShowReinstate(true); }}
                       className="px-3 py-1.5 text-xs font-medium bg-status-online/10 text-status-online hover:bg-status-online/20 rounded transition-colors"
                     >
-                      Reinstate
+                      {t('admin:invites.row.reinstate')}
                     </button>
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); setConfirmDelete(true); }}
                       className="px-3 py-1.5 text-xs font-medium bg-accent-rose/10 text-txt-danger hover:bg-accent-rose/20 rounded transition-colors"
                     >
-                      Delete permanently
+                      {t('admin:invites.row.deletePermanently')}
                     </button>
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); setShowRedemptions(true); }}
                       className="text-[11px] text-txt-tertiary hover:text-txt-secondary underline decoration-dotted transition-colors ml-1"
                     >
-                      View redemptions
+                      {t('admin:invites.row.viewRedemptions')}
                     </button>
                   </>
                 )}
@@ -1426,16 +1446,15 @@ function InviteRow({ invite, expanded, onToggleExpand, onMutate }: InviteRowProp
         isOpen={confirmRevoke}
         onClose={() => setConfirmRevoke(false)}
         onConfirm={performRevoke}
-        title={`Revoke "${invite.name}"?`}
+        title={t('admin:invites.row.revokeDialog.title', { name: invite.name })}
         description={
-          <>
-            The link stops working immediately. Anyone who has the URL can no longer use it.
-            <br />
-            <br />
-            If you change your mind later, <strong>Reinstate</strong> issues a fresh link under this entry — the original URL stays inactive.
-          </>
+          <Trans
+            t={t}
+            i18nKey="admin:invites.row.revokeDialog.description"
+            components={{ br: <br />, strong: <strong /> }}
+          />
         }
-        confirmLabel="Revoke link"
+        confirmLabel={t('admin:invites.row.revokeDialog.confirm')}
         variant="danger"
         loading={actionLoading}
       />
@@ -1444,15 +1463,15 @@ function InviteRow({ invite, expanded, onToggleExpand, onMutate }: InviteRowProp
         isOpen={confirmDelete}
         onClose={() => setConfirmDelete(false)}
         onConfirm={performDelete}
-        title={`Delete "${invite.name}" permanently?`}
+        title={t('admin:invites.row.deleteDialog.title', { name: invite.name })}
         description={
-          <>
-            This cannot be undone. Redemption history for this link will also be removed.
-            If you only want to stop the link from working, use <strong>Revoke</strong>{' '}
-            instead — that preserves the redemption record.
-          </>
+          <Trans
+            t={t}
+            i18nKey="admin:invites.row.deleteDialog.description"
+            components={{ strong: <strong /> }}
+          />
         }
-        confirmLabel="Delete permanently"
+        confirmLabel={t('admin:invites.row.deleteDialog.confirm')}
         variant="danger"
         loading={actionLoading}
       />
@@ -1461,6 +1480,7 @@ function InviteRow({ invite, expanded, onToggleExpand, onMutate }: InviteRowProp
 }
 
 export function RegistrationPanel() {
+  const { t } = useTranslation(['admin', 'common']);
   const instanceSettings = useSettingsStore((s) => s.instanceSettings);
   const updateInstanceSettings = useSettingsStore((s) => s.updateInstanceSettings);
   const addToast = useUIStore((s) => s.addToast);
@@ -1520,12 +1540,12 @@ export function RegistrationPanel() {
         if (tabRef.current !== which) return;
         setInvites(res.invites);
       } catch {
-        if (tabRef.current === which) addToast('Failed to load invites', 'warning');
+        if (tabRef.current === which) addToast(t('admin:invites.loadFailed'), 'warning');
       } finally {
         if (tabRef.current === which) setInvitesLoading(false);
       }
     },
-    [addToast],
+    [addToast, t],
   );
 
   const refreshCounts = useCallback(async () => {
@@ -1571,7 +1591,7 @@ export function RegistrationPanel() {
     return list;
   }, [invites, tab, activeSort, archivedSort, archivedStatusFilter]);
 
-  if (!draft) return <div className="text-sm text-txt-tertiary">Loading settings...</div>;
+  if (!draft) return <div className="text-sm text-txt-tertiary">{t('admin:shared.loadingSettings')}</div>;
 
   const hasChanges = !!instanceSettings && (
     draft.registrationOpen !== instanceSettings.registrationOpen ||
@@ -1586,11 +1606,11 @@ export function RegistrationPanel() {
         registrationOpen: draft.registrationOpen,
         federatedRegistrationOpen: draft.federatedRegistrationOpen,
       });
-      addToast('Registration settings saved', 'success', 2000);
+      addToast(t('admin:registration.saved'), 'success', 2000);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to save';
+      const message = err instanceof Error ? describeError(err) : t('admin:shared.saveFailed');
       setSaveError(message);
-      addToast('Failed to update registration settings', 'warning');
+      addToast(t('admin:registration.saveFailed'), 'warning');
     } finally {
       setSaving(false);
     }
@@ -1609,22 +1629,20 @@ export function RegistrationPanel() {
   return (
     <>
     <form className="space-y-5" onSubmit={(e) => e.preventDefault()}>
-      <h2 className="text-lg font-semibold text-txt-primary">Registration</h2>
+      <h2 className="text-lg font-semibold text-txt-primary">{t('admin:registration.title')}</h2>
       <div className="text-xs text-txt-tertiary">
-        Control who can create accounts on this instance. Public registration covers local
-        sign-ups; federated registration covers users from peered instances creating an account here.
+        {t('admin:registration.description')}
       </div>
 
       {/* Public registration */}
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">Public Registration</div>
+        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:registration.public.label')}</div>
         <div className="rounded-lg bg-white/[0.02] p-3.5">
           <label className="flex items-center justify-between cursor-pointer gap-4">
             <div className="flex-1">
-              <div className="text-sm font-medium text-txt-primary">Allow new local accounts</div>
+              <div className="text-sm font-medium text-txt-primary">{t('admin:registration.public.toggleLabel')}</div>
               <div className="text-xs text-txt-tertiary mt-0.5">
-                Anyone can create a local account from the registration page. When off, only invite
-                links can create new local accounts.
+                {t('admin:registration.public.toggleDescription')}
               </div>
             </div>
             <Toggle
@@ -1637,14 +1655,13 @@ export function RegistrationPanel() {
 
       {/* Federated registration */}
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">Federated Registration</div>
+        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:registration.federated.label')}</div>
         <div className="rounded-lg bg-white/[0.02] p-3.5">
           <label className="flex items-center justify-between cursor-pointer gap-4">
             <div className="flex-1">
-              <div className="text-sm font-medium text-txt-primary">Allow new federated accounts</div>
+              <div className="text-sm font-medium text-txt-primary">{t('admin:registration.federated.toggleLabel')}</div>
               <div className="text-xs text-txt-tertiary mt-0.5">
-                Users from other instances can create a federated account here via their Connections
-                settings. Existing federated accounts can always log in regardless of this setting.
+                {t('admin:registration.federated.toggleDescription')}
               </div>
             </div>
             <Toggle
@@ -1659,13 +1676,13 @@ export function RegistrationPanel() {
       <div className="border-t border-white/[0.06] pt-5">
         {/* Row 1: heading + create button */}
         <div className="flex items-center justify-between mb-3">
-          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider">Invite Links</div>
+          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider">{t('admin:invites.label')}</div>
           <button
             type="button"
             onClick={() => setShowCreate(true)}
             className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-lg transition-colors"
           >
-            + Create link
+            {t('admin:invites.create')}
           </button>
         </div>
 
@@ -1679,7 +1696,7 @@ export function RegistrationPanel() {
                 tab === 'active' ? 'bg-white/[0.08] text-txt-primary' : 'text-txt-tertiary hover:text-txt-secondary'
               }`}
             >
-              Active <span className="text-[10px] text-txt-tertiary ml-0.5">{activeCount}</span>
+              {t('admin:invites.tabs.active')} <span className="text-[10px] text-txt-tertiary ml-0.5">{activeCount}</span>
             </button>
             <button
               type="button"
@@ -1688,7 +1705,7 @@ export function RegistrationPanel() {
                 tab === 'archived' ? 'bg-white/[0.08] text-txt-primary' : 'text-txt-tertiary hover:text-txt-secondary'
               }`}
             >
-              Archived <span className="text-[10px] text-txt-tertiary ml-0.5">{archivedCount}</span>
+              {t('admin:invites.tabs.archived')} <span className="text-[10px] text-txt-tertiary ml-0.5">{archivedCount}</span>
             </button>
           </div>
           <FilterDropdown
@@ -1703,14 +1720,14 @@ export function RegistrationPanel() {
         </div>
 
         {invitesLoading ? (
-          <div className="text-sm text-txt-tertiary">Loading...</div>
+          <div className="text-sm text-txt-tertiary">{t('common:states.loading')}</div>
         ) : invites.length === 0 ? (
           <div className="text-sm text-txt-tertiary">
-            {tab === 'active' ? 'No active invite links.' : 'No archived invite links.'}
+            {tab === 'active' ? t('admin:invites.emptyActive') : t('admin:invites.emptyArchived')}
           </div>
         ) : displayInvites.length === 0 ? (
           <div className="text-[11px] text-txt-tertiary py-3 text-center">
-            No invites match the current filter.
+            {t('admin:invites.noMatch')}
           </div>
         ) : (
           <div className="space-y-2">
@@ -1742,14 +1759,14 @@ export function RegistrationPanel() {
                 onClick={handleReset}
                 className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
               >
-                Reset
+                {t('common:actions.reset')}
               </button>
               <button
                 onClick={handleSave}
                 disabled={saving}
                 className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
               >
-                {saving ? 'Saving...' : 'Save'}
+                {saving ? t('common:states.saving') : t('common:actions.save')}
               </button>
             </div>
           </div>
