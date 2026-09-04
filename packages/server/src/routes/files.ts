@@ -107,8 +107,14 @@ export async function filesRoutes(app: FastifyInstance): Promise<void> {
       directory: config.tusUploadDir,
       expirationPeriodInMilliseconds: config.tusExpirationMs,
     }),
-    respectForwardedHeaders: true,
-    relativeLocation: false,
+    // The Location header is a path, never an absolute URL. An absolute one has
+    // to be assembled from Host / X-Forwarded-Host, which is whatever the
+    // fronting proxy chose to send: nginx's `$host` drops the port, so an
+    // instance published on a custom port got a Location pointing at a port the
+    // client never used (#44). tus-js-client resolves a relative Location
+    // against the endpoint it uploaded to, which is the one origin guaranteed
+    // to be right.
+    relativeLocation: true,
     disableTerminationForFinishedUploads: true,
 
     // ── Auth: verify JWT on every incoming request ─────────────────────────

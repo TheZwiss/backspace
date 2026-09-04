@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, type PersistStorage, type StorageValue } from 'zustand/middleware';
 import { Upload, type UploadOptions } from 'tus-js-client';
+import { resolveTusUrl, tusEndpoint } from '../utils/tusUrl';
 import type { Attachment } from '@backspace/shared';
 import { useAuthStore } from './authStore';
 import { getTokenForOrigin } from '../utils/crossStoreResolvers';
@@ -235,8 +236,7 @@ export const useTransferStore = create<TransferStore>()(
         const user = useAuthStore.getState().user;
         if (!token) throw new Error('Cannot start upload — not authenticated');
 
-        const baseOrigin = opts.origin ?? '';
-        const endpoint = `${baseOrigin}/api/files/`;
+        const endpoint = tusEndpoint(opts.origin);
 
         const fileLike = file instanceof File
           ? { name: file.name, size: file.size, mimetype: file.type || 'application/octet-stream' }
@@ -272,7 +272,7 @@ export const useTransferStore = create<TransferStore>()(
             const expires = res.getHeader('Upload-Expires');
             if (location && !get().get(id)?.tusUploadUrl) {
               const expiresMs = expires ? new Date(expires).getTime() : Date.now() + 24 * 60 * 60 * 1000;
-              get().setTusUrl(id, location, expiresMs);
+              get().setTusUrl(id, resolveTusUrl(location, opts.origin), expiresMs);
             }
           },
           onSuccess: (payload) => {
@@ -321,10 +321,7 @@ export const useTransferStore = create<TransferStore>()(
           // directly so the partial bytes don't sit on disk until the janitor sweeps.
           const token = getTokenForOrigin(t.origin ?? '');
           if (token) {
-            const fullUrl = t.tusUploadUrl.startsWith('http')
-              ? t.tusUploadUrl
-              : `${t.origin ?? ''}${t.tusUploadUrl}`;
-            void fetch(fullUrl, {
+            void fetch(resolveTusUrl(t.tusUploadUrl, t.origin), {
               method: 'DELETE',
               headers: {
                 Authorization: `Bearer ${token}`,
@@ -390,10 +387,11 @@ export const useTransferStore = create<TransferStore>()(
         // Resume the existing tus session if we have a valid, non-expired URL and
         // we weren't aborted. Otherwise start a fresh session reusing this transferId
         // (retry-after-abort, retry-after-failure, retry-after-expiry).
-        const canResume =
-          !!t.tusUploadUrl &&
-          t.state !== 'aborted' &&
-          Date.now() <= (t.tusExpiresAt ?? 0);
+        const resumeUrl =
+          t.tusUploadUrl && t.state !== 'aborted' && Date.now() <= (t.tusExpiresAt ?? 0)
+            ? resolveTusUrl(t.tusUploadUrl, t.origin)
+            : null;
+        const canResume = resumeUrl !== null;
 
         if (!canResume) {
           // Reset transient state so a fresh tus session starts cleanly.
@@ -421,12 +419,12 @@ export const useTransferStore = create<TransferStore>()(
           : { name: t.file.name, mimetype: blob.type || t.file.mimetype };
 
         const tusOpts: UploadOptions = {
-          endpoint: t.origin ? `${t.origin}/api/files/` : '/api/files/',
+          endpoint: tusEndpoint(t.origin),
           retryDelays: [0, 1000, 3000, 5000, 10_000],
           chunkSize: 5 * 1024 * 1024,
           headers: { Authorization: `Bearer ${token}` },
-          ...(canResume
-            ? { uploadUrl: t.tusUploadUrl }
+          ...(resumeUrl
+            ? { uploadUrl: resumeUrl }
             : { metadata: { filename: fileLike.name, filetype: fileLike.mimetype } }),
           onProgress: (loaded: number) => {
             get().updateProgress(id, loaded);
@@ -440,7 +438,7 @@ export const useTransferStore = create<TransferStore>()(
             const expires = res.getHeader('Upload-Expires');
             if (location && !get().get(id)?.tusUploadUrl) {
               const expiresMs = expires ? new Date(expires).getTime() : Date.now() + 24 * 60 * 60 * 1000;
-              get().setTusUrl(id, location, expiresMs);
+              get().setTusUrl(id, resolveTusUrl(location, t.origin), expiresMs);
             }
           },
           onSuccess: (payload) => {

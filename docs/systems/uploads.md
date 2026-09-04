@@ -41,7 +41,7 @@ The server speaks the [tus resumable upload protocol](https://tus.io/protocols/r
 
 | Method | Path | Purpose | Auth | Hooks |
 |--------|------|---------|------|-------|
-| `POST` | `/api/files/` | Create upload session. Returns `Location` (per-upload URL) and `Upload-Expires` (24 h). | JWT | PRE_CREATE: rate limit 30/min/user, size validation, snowflake assignment |
+| `POST` | `/api/files/` | Create upload session. Returns `Location` as a path (`/api/files/<id>`, see below) and `Upload-Expires` (24 h). | JWT | PRE_CREATE: rate limit 30/min/user, size validation, snowflake assignment |
 | `HEAD` | `/api/files/:uploadId` | Resume probe. Returns `Upload-Offset`. | JWT + ownership | -- |
 | `PATCH` | `/api/files/:uploadId` | Append bytes at offset. | JWT + ownership | PRE_PATCH: slowloris rate ~1000/min/IP |
 | `DELETE` | `/api/files/:uploadId` | Abort and discard partial bytes. | JWT + ownership | -- |
@@ -82,6 +82,7 @@ Stats: `getStorageStats()` exposes `staleTusSessions` + `staleTusSize` for the a
 - JWT verified on every tus request (PRE_CREATE, PRE_PATCH, finalize, HEAD, DELETE).
 - **Federated uploads use a per-origin JWT.** When the target space is hosted on a remote instance, the client must send that instance's scoped token (resolved via `getTokenForOrigin(origin)` in `crossStoreResolvers.ts`), not the home-instance token — otherwise the remote rejects the request as it can't verify the home signature or resolve the userId.
 - **CORS for federated tus uploads.** The server's `@fastify/cors` registration in `index.ts` permits the tus protocol's request headers (`Tus-Resumable`, `Upload-Length`, `Upload-Offset`, `Upload-Metadata`, `Upload-Defer-Length`, `Upload-Concat`, `Upload-Checksum`, `X-HTTP-Method-Override`) and exposes the response headers tus-js-client needs to read across origins (`Location`, `Tus-Resumable`, `Tus-Version`, `Tus-Extension`, `Tus-Max-Size`, `Tus-Checksum-Algorithm`, `Upload-Offset`, `Upload-Length`, `Upload-Metadata`, `Upload-Expires`). Without these, browser preflight blocks cross-origin POST/HEAD/PATCH/DELETE on `/api/files/*`.
+- **`Location` is relative (`relativeLocation: true`).** An absolute Location would have to be assembled from `Host` / `X-Forwarded-Host`, which is whatever the fronting proxy chose to send; nginx's `$host` drops the port, so an instance on a custom public port handed out a Location pointing at a port the client never used (#44). tus-js-client resolves a relative Location against the endpoint it uploaded to, and `transferStore` stores the resolved absolute URL (`utils/tusUrl.ts`: `tusEndpoint(origin)` gives the absolute endpoint, `resolveTusUrl(location, origin)` resolves the Location; home origin when `origin` is empty) so resume and cancel work for federated uploads too.
 - PRE_PATCH ownership check: `metadata.userId === req.user.id`. Required to prevent in-flight upload hijack between session creation and finalize.
 - Size validated against `instance_settings.maxUploadSizeBytes` at PRE_CREATE; tus's own `maxSize` is set as defense-in-depth.
 - Original filename round-trips through tus metadata (base64-encoded per spec); the on-disk filename uses snowflake + sanitized extension only.
