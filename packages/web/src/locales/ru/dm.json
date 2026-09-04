@@ -20,13 +20,13 @@
   "system": {
     "spaceInviteNamed": "📨 Приглашение в {{spaceName}}",
     "spaceInvite": "📨 Приглашение в пространство",
-    "memberAdded": "{{actor}} добавил(а) {{target}}",
-    "memberLeft": "{{target}} покинул(а) группу",
-    "memberRemoved": "{{actor}} удалил(а) {{target}}",
+    "memberAdded": "{{actor}} добавляет в группу: {{target}}",
+    "memberLeft": "{{target}} выходит из группы",
+    "memberRemoved": "{{actor}} удаляет из группы: {{target}}",
     "ownerChanged": "{{newOwner}} теперь владелец группы",
-    "renamed": "{{actor}} переименовал(а) группу",
-    "nameCleared": "{{actor}} убрал(а) название группы",
-    "iconChanged": "{{actor}} обновил(а) значок группы",
+    "renamed": "{{actor}} меняет название группы",
+    "nameCleared": "{{actor}} удаляет название группы",
+    "iconChanged": "{{actor}} меняет значок группы",
     "generic": "Системное сообщение",
     "someone": "кого-то",
     "aMember": "Участник"
@@ -48,7 +48,7 @@
   },
   "kick": {
     "title": "Удалить из группы",
-    "description": "Удалить {{name}} из этой группы? Новые сообщения будут этому участнику недоступны.",
+    "description": "Удалить {{name}} из этой группы? Этот участник больше не увидит новые сообщения.",
     "success": "Участник {{name}} удалён из группы",
     "failed": "Не удалось удалить участника"
   },
@@ -107,7 +107,7 @@
     "description": "Выберите друзей, которых хотите добавить в эту беседу.",
     "capacity": "{{current}}/{{max}}",
     "searchPlaceholder": "Поиск друзей…",
-    "limitReached": "В этой группе достигнут предел в {{max}} участников.",
+    "limitReached": "В этой группе уже максимальное число участников: {{max}}.",
     "alreadyInDm": "Уже в этой беседе",
     "noMatch": "Нет друзей, соответствующих запросу",
     "noFriends": "Друзей пока нет",

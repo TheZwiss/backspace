@@ -5,12 +5,11 @@
  */
 export const supportedLanguages = [
   { code: 'en', nativeName: 'English', dir: 'ltr', released: true },
-  // Russian and German are complete in code and tests but stay hidden from
-  // users until every surface is translated (the 1.1.0 gate), so a release
-  // cut in between is English-only rather than half translated. Flip
-  // `released` in the PR that empties scripts/i18n-pending.txt.
-  { code: 'ru', nativeName: 'Русский', dir: 'ltr', released: false },
-  { code: 'de', nativeName: 'Deutsch', dir: 'ltr', released: false },
+  // A new language starts with `released: false` so it can land surface by
+  // surface without reaching users half translated; flip it in the release
+  // PR once every surface is covered and the translation has been reviewed.
+  { code: 'ru', nativeName: 'Русский', dir: 'ltr', released: true },
+  { code: 'de', nativeName: 'Deutsch', dir: 'ltr', released: true },
 ] as const satisfies readonly { code: string; nativeName: string; dir: 'ltr' | 'rtl'; released: boolean }[];
 
 export type SupportedLanguage = (typeof supportedLanguages)[number]['code'];

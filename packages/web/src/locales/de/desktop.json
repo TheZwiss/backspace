@@ -1,6 +1,6 @@
 {
   "update": {
-    "laterHint": "Du kannst das Update später unter Einstellungen, Desktop installieren",
+    "laterHint": "Du kannst das Update später in den Einstellungen unter Desktop installieren",
     "dismiss": "Dieses Update ausblenden",
     "failed": {
       "title": "Update konnte nicht installiert werden",
@@ -12,8 +12,8 @@
     },
     "available": {
       "title": "Backspace {{version}} ist verfügbar",
-      "body": "Dieser Build kann sich nicht selbst aktualisieren. Lade die neue Version herunter, um umzusteigen.",
-      "bodyWithCurrent": "Du verwendest {{currentVersion}}. Dieser Build kann sich nicht selbst aktualisieren. Lade die neue Version herunter, um umzusteigen."
+      "body": "Dieser Build kann sich nicht selbst aktualisieren. Lade die neue Version herunter, um darauf umzusteigen.",
+      "bodyWithCurrent": "Du verwendest {{currentVersion}}. Dieser Build kann sich nicht selbst aktualisieren. Lade die neue Version herunter, um darauf umzusteigen."
     },
     "restartNow": "Jetzt neu starten",
     "download": "Herunterladen",

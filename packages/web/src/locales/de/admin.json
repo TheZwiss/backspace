@@ -10,12 +10,12 @@
     "discovery": {
       "label": "Entdecken",
       "toggleLabel": "Spaces entdecken",
-      "toggleDescription": "Spaces dürfen auf der öffentlichen Entdecken-Seite erscheinen"
+      "toggleDescription": "Spaces dürfen auf der öffentlichen Seite „Entdecken“ erscheinen"
     },
     "gif": {
       "label": "GIF-Suche",
       "description": "Aktiviere die GIF-Suche über Klipy. Einen kostenlosen API-Schlüssel gibt es im Klipy-Entwicklerportal.",
-      "placeholderSaved": "Schlüssel gespeichert — neuen Schlüssel eingeben, um ihn zu ersetzen",
+      "placeholderSaved": "Schlüssel gespeichert – neuen Schlüssel eingeben, um ihn zu ersetzen",
       "placeholderKey": "Klipy-API-Schlüssel",
       "enabled": "Aktiviert",
       "notConfigured": "Nicht eingerichtet",
@@ -28,7 +28,7 @@
     "public": {
       "label": "Öffentliche Registrierung",
       "toggleLabel": "Neue lokale Konten erlauben",
-      "toggleDescription": "Jeder kann über die Registrierungsseite ein lokales Konto anlegen. Ist dies aus, entstehen neue lokale Konten nur über Einladungslinks."
+      "toggleDescription": "Jeder kann über die Registrierungsseite ein lokales Konto anlegen. Wenn ausgeschaltet, entstehen neue lokale Konten nur über Einladungslinks."
     },
     "federated": {
       "label": "Föderierte Registrierung",
@@ -50,7 +50,7 @@
     "emptyArchived": "Keine archivierten Einladungslinks.",
     "noMatch": "Keine Einladungen passen zum aktuellen Filter.",
     "filter": {
-      "status": "Zustand",
+      "status": "Status",
       "sort": {
         "recent": "Neueste zuerst",
         "oldest": "Älteste zuerst",
@@ -106,7 +106,7 @@
     },
     "editModal": {
       "title": "„{{name}}“ bearbeiten",
-      "description": "Passe die Grenzen dieses Einladungslinks an. Die URL bleibt gleich — wer sie schon hat, kann sie unter den neuen Bedingungen weiter nutzen.",
+      "description": "Passe die Grenzen dieses Einladungslinks an. Die URL bleibt gleich – wer sie schon hat, kann sie unter den neuen Bedingungen weiter nutzen.",
       "used": "({{used}} genutzt)",
       "maxUsesBelowUsed": "Maximale Nutzungen dürfen nicht unter den bisherigen Nutzungen liegen ({{used}})",
       "noChanges": "Keine Änderungen zum Speichern",
@@ -117,8 +117,8 @@
     },
     "reinstateModal": {
       "title": "„{{name}}“ reaktivieren",
-      "descriptionRevoked": "Diese Einladung wurde widerrufen. Beim Reaktivieren entsteht ein neuer Link mit einer anderen URL — die alte URL bleibt ungültig.",
-      "descriptionLapsed": "Diese Einladung ist nicht mehr gültig. Beim Reaktivieren wird dieselbe URL wieder aktiv — wer sie gespeichert hat, kann sie wieder nutzen.",
+      "descriptionRevoked": "Diese Einladung wurde widerrufen. Beim Reaktivieren entsteht ein neuer Link mit einer anderen URL – die alte URL bleibt ungültig.",
+      "descriptionLapsed": "Diese Einladung ist nicht mehr gültig. Beim Reaktivieren wird dieselbe URL wieder aktiv – wer sie gespeichert hat, kann sie wieder nutzen.",
       "newLinkWarning": "Es wird ein neuer Link erzeugt. Wer die alte URL hatte, kann sie nicht mehr nutzen.",
       "maxUsesMeta": "(aktuell: {{max}}, genutzt: {{used}})",
       "maxUsesMin": "Maximale Nutzungen müssen mindestens {{min}} sein (bisher genutzt: {{used}})",
@@ -173,12 +173,12 @@
       "deleteFailed": "Löschen fehlgeschlagen: {{message}}",
       "revokeDialog": {
         "title": "„{{name}}“ widerrufen?",
-        "description": "Der Link funktioniert sofort nicht mehr. Wer die URL hat, kann sie nicht mehr nutzen.<br/><br/>Falls du es dir später anders überlegst, erzeugt <strong>Reaktivieren</strong> einen frischen Link unter diesem Eintrag — die ursprüngliche URL bleibt ungültig.",
+        "description": "Der Link funktioniert sofort nicht mehr. Wer die URL hat, kann sie nicht mehr nutzen.<br/><br/>Falls du es dir später anders überlegst, erzeugt <strong>Reaktivieren</strong> einen frischen Link unter diesem Eintrag – die ursprüngliche URL bleibt ungültig.",
         "confirm": "Link widerrufen"
       },
       "deleteDialog": {
         "title": "„{{name}}“ endgültig löschen?",
-        "description": "Das lässt sich nicht rückgängig machen. Auch die Einlösungshistorie dieses Links wird entfernt. Wenn der Link nur nicht mehr funktionieren soll, nutze stattdessen <strong>Widerrufen</strong> — dabei bleibt die Einlösungshistorie erhalten.",
+        "description": "Das lässt sich nicht rückgängig machen. Auch die Einlösungshistorie dieses Links wird entfernt. Wenn der Link nur nicht mehr funktionieren soll, nutze stattdessen <strong>Widerrufen</strong> – dabei bleibt die Einlösungshistorie erhalten.",
         "confirm": "Endgültig löschen"
       }
     }
@@ -200,8 +200,8 @@
     },
     "breakdown": {
       "label": "Nach Dateityp",
-      "entry_one": "{{count}} Datei — {{size}}",
-      "entry_other": "{{count}} Dateien — {{size}}"
+      "entry_one": "{{count}} Datei – {{size}}",
+      "entry_other": "{{count}} Dateien – {{size}}"
     },
     "uploadLimit": {
       "label": "Upload-Limit",
@@ -215,7 +215,7 @@
       "preview": "Vorschau",
       "run": "Jetzt aufräumen",
       "running": "Wird aufgeräumt…",
-      "previewResult": "Vorschau — keine Dateien gelöscht",
+      "previewResult": "Vorschau – keine Dateien gelöscht",
       "complete": "Aufräumen abgeschlossen",
       "orphanedFiles_one": "{{count}} verwaiste Datei ({{size}})",
       "orphanedFiles_other": "{{count}} verwaiste Dateien ({{size}})",
@@ -271,9 +271,9 @@
     },
     "quality": {
       "label": "Qualität",
-      "description": "Verfügbare Auflösungen und Bildraten für die Bildschirmübertragung.",
+      "description": "Verfügbare Auflösungen und Framerates für die Bildschirmübertragung.",
       "resolutions": "Erlaubte Auflösungen",
-      "framerates": "Erlaubte Bildraten"
+      "framerates": "Erlaubte Framerates"
     },
     "highEndWarning": {
       "title": "Hochleistungs-Einstellungen aktiv.",
@@ -281,7 +281,7 @@
     },
     "matrix": {
       "label": "Bitraten-Matrix",
-      "description": "Standard-Bitraten je Auflösung und Bildrate. Bearbeite einzelne Zellen oder skaliere alle Werte auf einmal.",
+      "description": "Standard-Bitraten je Auflösung und Framerate. Bearbeite einzelne Zellen oder skaliere alle Werte auf einmal.",
       "scaleAll": "Alle skalieren",
       "scaleHint": "Ziehen, um alle Bitraten zu skalieren. Einzelne Zellen kannst du unten feinjustieren.",
       "cellDefault": "Standard: {{value}} (× klicken zum Zurücksetzen)",
@@ -314,7 +314,7 @@
       "released": "Veröffentlicht am {{date}} · ",
       "releaseNotes": "Versionshinweise",
       "fromInstallDir": "Aus deinem Installationsverzeichnis:",
-      "scriptDescription": "Erstellt einen Datenbank-Snapshot, holt das neue Image und startet nur den Backspace-Container neu. Kommt die neue Version nicht gesund hoch oder läuft weiter der alte Code, wird die Version wiederhergestellt, auf der du jetzt bist.",
+      "scriptDescription": "Erstellt einen Datenbank-Snapshot, holt das neue Image und startet nur den Backspace-Container neu. Startet die neue Version nicht fehlerfrei oder läuft danach weiter der alte Code, wird die Version wiederhergestellt, die du jetzt verwendest.",
       "noScript": "Ich habe kein update.sh",
       "manualIntro": "update.sh ist ab 1.0.5 dabei. In einem Git-Checkout holt <code>git pull</code> es herein. Andernfalls führe die Schritte von Hand aus, nachdem du mit <code>./backup.sh</code> einen Snapshot erstellt hast.",
       "prebuiltInstall": "Installation mit vorgefertigtem Image:",
@@ -408,7 +408,7 @@
       "streaming": "Streaming",
       "storage": "Speicher",
       "updates": "Updates",
-      "users": "Benutzer"
+      "users": "Nutzer"
     }
   }
 }

@@ -39,18 +39,25 @@ describe('pickLanguage', () => {
 });
 
 describe('availableLanguages', () => {
-  it('offers only released languages to users', () => {
-    // Russian and German are complete in code and tests but hidden until the
-    // whole app is translated, so an intermediate release stays English-only.
-    expect(availableLanguages.map((l) => l.code)).toEqual(['en']);
+  it('offers every released language to users', () => {
+    // English, Russian and German all ship since 1.1.0.
+    expect(availableLanguages.map((l) => l.code)).toEqual(['en', 'ru', 'de']);
   });
 
-  it('never lets detection pick an unreleased language', () => {
-    expect(pickLanguage('ru', ['ru-RU'])).toBe('en');
-    expect(pickLanguage(null, ['de-DE'])).toBe('en');
+  it('never lets detection pick a language that is not released', () => {
+    // The gate stays in place for the next language; exercise it with an
+    // explicit released set so the test does not depend on the shipped flags.
+    const englishOnly = new Set(['en']);
+    expect(pickLanguage('ru', ['ru-RU'], englishOnly)).toBe('en');
+    expect(pickLanguage(null, ['de-DE'], englishOnly)).toBe('en');
   });
 
-  it('still lets code select an unreleased language explicitly', () => {
+  it('lets detection pick a released language', () => {
+    expect(pickLanguage('ru', ['en'])).toBe('ru');
+    expect(pickLanguage(null, ['de-DE'])).toBe('de');
+  });
+
+  it('still lets code select any supported language explicitly', () => {
     expect(isSupportedLanguage('ru')).toBe(true);
     expect(resolveSupportedLanguage('de-CH')).toBe('de');
   });

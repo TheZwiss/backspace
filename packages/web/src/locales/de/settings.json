@@ -128,7 +128,7 @@
       "notice": "Dieses Konto ist von seiner Heimatinstanz getrennt.",
       "explanation": "{{homeInstance}} wurde zurückgesetzt oder ist nicht mehr erreichbar, daher läuft dieses Konto jetzt lokal auf dieser Instanz. Profil und Passwort werden hier verwaltet.",
       "reattachHint": "Als {{username}} auf {{homeInstance}} kannst du dieses Konto wieder verknüpfen. Profil und Status werden dann wieder von dort synchronisiert.",
-      "reattachButton": "Mit {{homeInstance}} verknüpfen",
+      "reattachButton": "Wieder mit {{homeInstance}} verknüpfen",
       "reattachConfirm": "Verknüpfung als {{username}} bestätigen",
       "reattaching": "Wird verknüpft…",
       "reattachFailed": "Verknüpfen fehlgeschlagen",
@@ -249,7 +249,7 @@
     "discovery": {
       "sectionTitle": "Entdecken",
       "label": "Andere dürfen mein Profil finden",
-      "description": "Wenn aktiviert, erscheint dein Profil unter „Personen entdecken“. Über den genauen Benutzernamen kann dich jeder hinzufügen."
+      "description": "Wenn aktiviert, erscheint dein Profil unter „Leute entdecken“. Über den genauen Benutzernamen kann dich jeder hinzufügen."
     },
     "activity": {
       "sectionTitle": "Aktivitätsstatus",
@@ -267,7 +267,7 @@
       "federation": "Föderation",
       "streaming": "Streaming",
       "storage": "Speicher",
-      "users": "Benutzer",
+      "users": "Nutzer",
       "updates": "Updates"
     }
   },
@@ -351,7 +351,7 @@
       "external": "Updates werden über deine Flatpak-Softwareverwaltung installiert",
       "download": "Herunterladen",
       "restart": "Neu starten",
-      "manualNote": "Diese Version kann Updates nicht selbst installieren. Neue Versionen werden von GitHub heruntergeladen und ersetzen die App von Hand. Die Schritte für deine Plattform stehen in den Versionshinweisen.",
+      "manualNote": "Diese Version kann Updates nicht selbst installieren. Neue Versionen lädst du von GitHub herunter und ersetzt die App damit von Hand. Die Schritte für deine Plattform stehen in den Versionshinweisen.",
       "externalNote": "Flatpak wendet Updates atomar außerhalb der App an. Nutze deine Softwareverwaltung oder den Befehl <code>flatpak update</code>, um Backspace zu aktualisieren."
     },
     "instance": {

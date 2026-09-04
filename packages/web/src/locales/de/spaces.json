@@ -16,11 +16,11 @@
     "visibilityLabel": "Sichtbarkeit",
     "description": {
       "label": "Beschreibung",
-      "placeholder": "Eine kurze Beschreibung deines Space …",
+      "placeholder": "Eine kurze Beschreibung deines Space…",
       "counter": "{{length}}/{{max}}"
     },
     "submit": "Erstellen",
-    "submitting": "Wird erstellt …"
+    "submitting": "Wird erstellt…"
   },
   "channel": {
     "create": {
@@ -45,7 +45,7 @@
       "nameRequired": "Gib dem Kanal einen Namen",
       "noSpaceSelected": "Kein Space ausgewählt",
       "submit": "Kanal erstellen",
-      "submitting": "Wird erstellt …"
+      "submitting": "Wird erstellt…"
     },
     "settings": {
       "title": "Kanaleinstellungen",
@@ -72,7 +72,7 @@
       "nameRequired": "Gib der Kategorie einen Namen",
       "noSpaceSelected": "Kein Space ausgewählt",
       "submit": "Kategorie erstellen",
-      "submitting": "Wird erstellt …"
+      "submitting": "Wird erstellt…"
     },
     "settings": {
       "title": "Kategorieeinstellungen",
@@ -94,10 +94,10 @@
     "title": "Freunde einladen",
     "intro": "Schick die Einladung an Freunde oder teile einen Link.",
     "requestOnly": {
-      "notice": "In diesen Space kommt man auf Anfrage: Wer beitreten will, bittet eine verwaltende Person um Freigabe. Deshalb gibt es hier keinen Einladungslink.",
+      "notice": "Dieser Space nutzt Beitrittsanfragen. Wer beitreten will, bittet die Verwaltung um Freigabe, deshalb gibt es keinen Einladungslink zum Teilen.",
       "dismiss": "Verstanden"
     },
-    "searchPlaceholder": "Freunde suchen …",
+    "searchPlaceholder": "Freunde suchen…",
     "noMatches": "Keine Freunde passen zu deiner Suche",
     "noFriends": "Noch keine Freunde",
     "alreadyMember": "Bereits im Space",
@@ -105,14 +105,14 @@
     "selectFriends": "Freunde auswählen",
     "send_one": "{{count}} Einladung senden",
     "send_other": "{{count}} Einladungen senden",
-    "sending": "Wird gesendet …",
+    "sending": "Wird gesendet…",
     "retryFailed": "Fehlgeschlagene erneut senden",
     "status": {
       "sent": "✓ Gesendet",
       "failed": "✗ {{reason}}"
     },
     "shareLink": "Oder teile einen Link",
-    "generating": "Link wird erzeugt …",
+    "generating": "Link wird erzeugt…",
     "generateFailed": "Einladungslink konnte nicht erzeugt werden",
     "failure": {
       "inviteInvalid": "Der Einladungslink ist nicht mehr gültig",
@@ -137,27 +137,27 @@
     "inviteDivider": "Hast du einen Einladungscode?",
     "invitePlaceholder": "z. B. abc123 oder https://instance.com/join/abc123",
     "submit": "Space beitreten",
-    "submitting": "Trete bei …",
+    "submitting": "Beitritt läuft…",
     "connect": {
       "intro": "Verbinde dich mit <host>{{host}}</host>, um diesem Space beizutreten.",
       "passwordLabel": "Gib dein Passwort ein, um dich zu verbinden",
       "passwordPlaceholder": "Passwort deines Kontos",
-      "passwordNote": "Dein Passwort prüft deine Heimatinstanz; es wird nie an {{host}} gesendet. Diese Instanz bekommt eigene Zugangsdaten, die nur für sie erzeugt werden.",
+      "passwordNote": "Dein Passwort wird von deiner Heimatinstanz geprüft und nie an {{host}} gesendet. Diese Instanz erhält eigene Zugangsdaten, die nur für sie erzeugt werden.",
       "submit": "Verbinden und beitreten",
-      "submitting": "Verbinde …"
+      "submitting": "Verbindung wird hergestellt…"
     },
     "fallback": {
-      "notice": "Auf {{host}} gibt es bereits ein Konto, und es akzeptiert die Zugangsdaten deiner Heimatinstanz nicht. Melde dich mit dem Passwort an, das du auf dieser Instanz gesetzt hast; danach wird es auf die ausgestellten Zugangsdaten umgestellt.",
+      "notice": "Auf {{host}} gibt es bereits ein Konto, das die von deiner Heimatinstanz ausgestellten Zugangsdaten nicht akzeptiert. Melde dich mit dem Passwort an, das du auf dieser Instanz gesetzt hast. Danach wird es auf die ausgestellten Zugangsdaten umgestellt.",
       "usernamePlaceholder": "Dein Benutzername auf dieser Instanz",
       "passwordLabel": "Passwort für diese Instanz",
-      "passwordPlaceholder": "Passwort auf der entfernten Instanz",
+      "passwordPlaceholder": "Passwort auf der anderen Instanz",
       "submit": "Anmelden und beitreten",
-      "submitting": "Melde an …"
+      "submitting": "Anmeldung läuft…"
     }
   },
   "explore": {
     "title": "Entdecken",
-    "searchPlaceholder": "Spaces suchen …",
+    "searchPlaceholder": "Spaces suchen…",
     "discoveryDisabled": "Das Entdecken von Spaces wurde von der Instanzverwaltung ausgeschaltet.",
     "noMatches": "Keine Spaces passen zu deiner Suche.",
     "empty": "Noch keine Spaces zum Entdecken.",
@@ -173,18 +173,18 @@
     "memberCount_other": "{{count}} Mitglieder",
     "viewSpace": "Space öffnen",
     "join": "Space beitreten",
-    "joining": "Trete bei …",
+    "joining": "Beitritt läuft…",
     "requestPending": "Anfrage ausstehend",
     "requestMessagePlaceholder": "Warum möchtest du beitreten? (optional)",
     "sendRequest": "Anfrage senden",
-    "sendingRequest": "Wird gesendet …",
+    "sendingRequest": "Wird gesendet…",
     "requestToJoin": "Beitritt anfragen",
     "preview": {
       "join": "Beitreten",
-      "joining": "Trete bei …",
+      "joining": "Beitritt läuft…",
       "pending": "Ausstehend",
       "request": "Anfragen",
-      "sending": "Wird gesendet …"
+      "sending": "Wird gesendet…"
     }
   },
   "settings": {
@@ -216,13 +216,13 @@
       "cropIconTitle": "Space-Symbol zuschneiden",
       "cropBannerTitle": "Space-Banner zuschneiden",
       "transfer": {
-        "description": "Übertrage die Eigentümerschaft an ein anderes Mitglied. Du wirst dann ein normales Mitglied.",
-        "prompt": "Eigentümerschaft an <strong>{{name}}</strong> übertragen?",
-        "button": "Eigentümerschaft übertragen",
+        "description": "Übertrage den Besitz an ein anderes Mitglied. Du wirst dann ein normales Mitglied.",
+        "prompt": "Besitz an <strong>{{name}}</strong> übertragen?",
+        "button": "Besitz übertragen",
         "confirm": "Übertragen",
-        "transferring": "Wird übertragen …",
-        "success": "Eigentümerschaft an {{name}} übertragen",
-        "failed": "Eigentümerschaft konnte nicht übertragen werden"
+        "transferring": "Wird übertragen…",
+        "success": "Besitz an {{name}} übertragen",
+        "failed": "Besitz konnte nicht übertragen werden"
       },
       "delete": {
         "description": "Löscht diesen Space und alle seine Daten endgültig. Das lässt sich nicht rückgängig machen.",
@@ -255,7 +255,7 @@
       "description": {
         "label": "Beschreibung",
         "hint": "Eine kurze Zusammenfassung, die unter „Entdecken“ angezeigt wird.",
-        "placeholder": "Eine kurze Beschreibung für die Seite „Entdecken“ …",
+        "placeholder": "Eine kurze Beschreibung für die Seite „Entdecken“…",
         "counter": "{{length}}/{{max}}"
       },
       "requests": {
@@ -267,7 +267,7 @@
     "members": {
       "description": "Verwalte die Mitglieder dieses Space. Klick auf ein Mitglied, um seine Rollen zu bearbeiten.",
       "listHeading": "Mitglieder ({{total}})",
-      "owner": "Eigentümer",
+      "owner": "Besitzer",
       "noRoles": "Keine Rollen",
       "ban": "Sperren",
       "kick": "Entfernen",
@@ -285,7 +285,7 @@
   "bans": {
     "title": "Sperren",
     "description": "Gesperrte Personen können diesem Space erst wieder beitreten, wenn die Sperre aufgehoben wird.",
-    "loading": "Sperren werden geladen …",
+    "loading": "Sperren werden geladen…",
     "empty": "Keine gesperrten Personen",
     "listHeading": "Sperren ({{total}})",
     "bannedBy": "Gesperrt von {{moderator}} am {{date}}",
@@ -297,7 +297,7 @@
   "roles": {
     "title": "Rollen",
     "create": "Rolle erstellen",
-    "creating": "Wird erstellt …",
+    "creating": "Wird erstellt…",
     "listHeading": "Rollen",
     "description": "Rollen legen fest, welche Berechtigungen Mitglieder haben. Höhere Rollen haben Vorrang.",
     "defaultName": "neue Rolle",
@@ -316,9 +316,9 @@
     },
     "saved": "Rolle gespeichert",
     "copy": "Rolle kopieren",
-    "copying": "Wird kopiert …",
+    "copying": "Wird kopiert…",
     "delete": "Rolle löschen",
-    "deleting": "Wird gelöscht …",
+    "deleting": "Wird gelöscht…",
     "confirmDelete": "Bestätigen?",
     "createFailed": "Rolle konnte nicht erstellt werden",
     "saveFailed": "Rolle konnte nicht gespeichert werden",
@@ -344,14 +344,14 @@
       "connect": "Verbinden",
       "speak": "Sprechen",
       "muteMembers": "Mitglieder stummschalten",
-      "deafenMembers": "Mitgliedern den Ton abschalten",
+      "deafenMembers": "Mitgliedern den Ton ausschalten",
       "moveMembers": "Mitglieder verschieben",
       "stream": "Streamen",
       "disconnectMembers": "Mitglieder trennen"
     },
     "tristate": {
       "deny": "Verbieten",
-      "neutral": "Neutral (erben)",
+      "neutral": "Neutral (geerbt)",
       "allow": "Erlauben"
     },
     "overrideCount_one": "{{count}} Überschreibung",
@@ -411,7 +411,7 @@
       "empty": "Noch keine Unterhaltungen.",
       "leaveGroup": "Gruppe verlassen",
       "leaveGroupConfirm": {
-        "title": "Gruppen-DM verlassen",
+        "title": "Gruppe verlassen",
         "description": "Willst du die Gruppe wirklich verlassen? Du kommst nur zurück, wenn dich jemand wieder hinzufügt."
       }
     },
@@ -429,10 +429,10 @@
       "voiceSettings": "Spracheinstellungen",
       "mute": "Stummschalten",
       "unmute": "Stummschaltung aufheben",
-      "deafen": "Ton aus",
-      "undeafen": "Ton an",
+      "deafen": "Ton ausschalten",
+      "undeafen": "Ton einschalten",
       "spaceMuted": "Im Space stummgeschaltet",
-      "spaceDeafened": "Im Space ist der Ton ausgeschaltet",
+      "spaceDeafened": "Ton im Space ausgeschaltet",
       "permissionMuted": "Stummgeschaltet (keine Sprechberechtigung)"
     }
   },
@@ -460,8 +460,8 @@
     "categoryDeleteFailed": "Kategorie konnte nicht gelöscht werden"
   },
   "members": {
-    "titleWithCount_one": "Mitglieder — {{count}}",
-    "titleWithCount_other": "Mitglieder — {{count}}",
+    "titleWithCount_one": "Mitglieder – {{count}}",
+    "titleWithCount_other": "Mitglieder – {{count}}",
     "loading": "Mitglieder werden geladen",
     "groups": {
       "owner": "Besitzer"
@@ -500,7 +500,7 @@
       "memberCount_other": "({{count}} Mitglieder)",
       "startVoiceCall": "Sprachanruf starten",
       "startVideoCall": "Videoanruf starten",
-      "addFriends": "Freunde zur DM hinzufügen"
+      "addFriends": "Freunde zur Unterhaltung hinzufügen"
     }
   },
   "ownership": {

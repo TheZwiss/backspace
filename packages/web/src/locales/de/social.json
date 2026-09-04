@@ -59,7 +59,7 @@
   },
   "profile": {
     "tabs": {
-      "about": "Über",
+      "about": "Info",
       "mutualFriends": "Gemeinsame Freunde",
       "mutualSpaces": "Gemeinsame Spaces"
     },
@@ -72,7 +72,7 @@
   "activity": {
     "title": "Jetzt aktiv",
     "quietTitle": "Gerade ist es ruhig…",
-    "quietDescription": "Sobald jemand aus deiner Freundesliste etwas unternimmt – ein Spiel startet oder im Sprachkanal abhängt –, siehst du es hier!",
+    "quietDescription": "Sobald deine Freunde etwas unternehmen, etwa ein Spiel spielen oder im Sprachkanal abhängen, siehst du es hier!",
     "online": "Online – {{n}}",
     "offline": "Offline – {{n}}"
   }

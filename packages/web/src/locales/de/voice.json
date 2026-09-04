@@ -30,7 +30,7 @@
     "status": "Eingehender Sprachanruf…"
   },
   "grid": {
-    "waitingForOthers": "Warten, bis andere beitreten…",
+    "waitingForOthers": "Warten auf weitere Teilnehmer…",
     "returnToGridHint": "Klicken, um zur Rasteransicht zurückzukehren",
     "backToGrid": "Zurück zur Rasteransicht",
     "gridButton": "Raster",
@@ -78,7 +78,7 @@
   "streamSettings": {
     "title": "Stream-Einstellungen",
     "resolution": "Auflösung",
-    "frameRate": "Bildrate",
+    "frameRate": "Framerate",
     "contentMode": "Inhaltsmodus",
     "mode": {
       "gaming": "Gaming",
@@ -98,7 +98,7 @@
     "chromeEchoNote": "Für echofreies Audio Chrome verwenden",
     "degradation": {
       "maintainResolution": "Auflösung halten",
-      "maintainFramerate": "Bildrate halten",
+      "maintainFramerate": "Framerate halten",
       "balanced": "ausgewogen"
     },
     "summary": "{{bitrate}} · {{degradation}}"
@@ -145,7 +145,7 @@
     "voiceCall": "Sprachanruf",
     "connectionFailed": "Verbindung fehlgeschlagen",
     "connected": "Sprachverbindung aktiv",
-    "connecting": "Verbinden…"
+    "connecting": "Verbindung wird hergestellt…"
   },
   "camera": {
     "auto": "Auto",

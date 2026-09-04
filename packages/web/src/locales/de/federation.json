@@ -24,8 +24,8 @@
       "registrationClosed": "Diese Instanz nimmt keine neuen föderierten Registrierungen an. Bestehende Konten können sich weiterhin anmelden.",
       "passwordLabel": "Gib dein Passwort ein, um dich mit {{host}} zu verbinden",
       "passwordPlaceholder": "Dein Kontopasswort",
-      "passwordHint": "Dein Passwort prüft deine Heimatinstanz, an {{host}} wird es nie gesendet – diese Instanz bekommt eigene, nur für sie erzeugte Zugangsdaten.",
-      "fallbackNotice": "Auf dieser Instanz gibt es bereits ein Konto, das die von deiner Heimatinstanz ausgestellten Zugangsdaten nicht akzeptiert. Melde dich mit dem Passwort an, das du auf dieser Instanz gesetzt hast – danach wird das Konto auf die ausgestellten Zugangsdaten umgestellt.",
+      "passwordHint": "Dein Passwort wird von deiner Heimatinstanz geprüft und nie an {{host}} gesendet. Diese Instanz erhält eigene Zugangsdaten, die nur für sie erzeugt werden.",
+      "fallbackNotice": "Auf dieser Instanz gibt es bereits ein Konto, das die von deiner Heimatinstanz ausgestellten Zugangsdaten nicht akzeptiert. Melde dich mit dem Passwort an, das du auf dieser Instanz gesetzt hast. Danach wird das Konto auf die ausgestellten Zugangsdaten umgestellt.",
       "usernamePlaceholder": "Dein Benutzername auf dieser Instanz",
       "remotePasswordLabel": "Passwort für diese Instanz",
       "remotePasswordPlaceholder": "Passwort auf der entfernten Instanz",
@@ -57,14 +57,14 @@
       "disconnect": "Trennen",
       "reconnect": "Erneut verbinden",
       "reauthenticate": "Erneut anmelden",
-      "forceRemove": "Erzwungen entfernen",
+      "forceRemove": "Entfernen erzwingen",
       "deleteIdentity": "Identität löschen",
       "deleteIdentityDisabled": "Trenne zuerst die Verbindung, um die Identität zu löschen"
     },
     "forceRemove": {
-      "title": "Eintrag erzwungen entfernen",
+      "title": "Eintrag zwangsweise entfernen",
       "description": "Der Eintrag für {{name}} wird aus der Liste entfernt. Die entfernte Instanz wird nicht benachrichtigt. Nutze das nur, wenn die Instanz dauerhaft nicht erreichbar ist.",
-      "confirm": "Erzwungen entfernen"
+      "confirm": "Entfernen erzwingen"
     },
     "deleteIdentity": {
       "title": "Identität löschen",
@@ -129,12 +129,12 @@
   },
   "admin": {
     "title": "Föderation",
-    "description": "Konfiguriere die Weiterleitung, die Rotation der Secrets und verwalte gepeerte Instanzen.",
+    "description": "Konfiguriere das Relay, die Rotation der Secrets und verwalte gepeerte Instanzen.",
     "relay": {
-      "title": "Weiterleitung",
-      "description": "Steuert die Weiterleitung von Direktnachrichten zwischen föderierten Instanzen. Wenn aktiviert, werden Direktnachrichten mit Benutzern gepeerter Instanzen von Server zu Server weitergeleitet.",
+      "title": "Relay",
+      "description": "Steuert das Relay von Direktnachrichten zwischen föderierten Instanzen. Wenn aktiviert, werden Direktnachrichten mit Benutzern gepeerter Instanzen von Server zu Server weitergeleitet.",
       "enable": {
-        "label": "Weiterleitung von Direktnachrichten aktivieren",
+        "label": "DM-Relay aktivieren",
         "description": "Direktnachrichten an gepeerte Instanzen und zurück weiterleiten"
       },
       "autoAccept": {
@@ -142,7 +142,7 @@
         "description": "Peering-Anfragen anderer Instanzen automatisch annehmen. Wenn deaktiviert, ist nur manuell gestartetes Peering erlaubt."
       },
       "ttl": {
-        "label": "Aufbewahrung der Weiterleitung (Tage)",
+        "label": "Relay-Aufbewahrung (Tage)",
         "description": "Wie lange weitergeleitete Nachrichten im Postausgang bleiben, bevor sie aufgeräumt werden"
       },
       "rotation": {
@@ -158,7 +158,7 @@
       "rejectedShort": "Abgelehnt",
       "revoked": "Widerrufen",
       "awaitingApproval": "Wartet auf Freigabe",
-      "needsAttention": "Braucht Aufmerksamkeit"
+      "needsAttention": "Handlungsbedarf"
     },
     "filter": {
       "statusHeading": "Status",
@@ -182,17 +182,17 @@
       "reinitiate": "Peering neu starten",
       "deletePermanently": "Endgültig löschen",
       "consecutiveFailures": "Fehlschläge in Folge",
-      "authFailures": "Anmeldefehler",
+      "authFailures": "Authentifizierungsfehler",
       "lastFailure": "Letzter Fehlschlag",
       "peeredSince": "Gepeert seit",
       "secretRotated": "Secret rotiert",
       "autoRotate": "Automatische Rotation",
       "rotationStatus": "Rotationsstatus",
-      "rotateEvery_one": "Alle {{count}} Tag",
+      "rotateEvery_one": "Im Abstand von {{count}} Tag",
       "rotateEvery_other": "Alle {{count}} Tage",
       "defaultTag": "(Standard)",
       "inProgress": "Läuft",
-      "idle": "Ruht",
+      "idle": "Inaktiv",
       "intervalRange": "Muss zwischen 1 und 365 liegen",
       "intervalUpdated": "Rotationsintervall aktualisiert",
       "checking": "Wird geprüft…",
@@ -233,7 +233,7 @@
       }
     },
     "resetCleanup": {
-      "title": "Aufräumen nach Reset",
+      "title": "Bereinigung nach Zurücksetzen",
       "peerReset": "{{name}} wurde zurückgesetzt",
       "peerResetDescription": "Auf dieser Domain läuft eine neue Instanz. Stelle die Föderation wieder her, um veraltete Freundschaften und Direktnachrichten zu reparieren.",
       "repeer": "Neu peeren",
@@ -242,8 +242,8 @@
       "repeerInitiated": "Neu-Peering mit {{name}} gestartet",
       "removed": "{{username}} und alle zugehörigen Inhalte entfernt",
       "ownsSpaces": "{{username}} besitzt Spaces – übertrage zuerst den Besitz (Space-Einstellungen → Besitz).",
-      "staleRemote": "Die entfernte Instanz hält noch ein veraltetes Peering mit dir. Bitte den dortigen Admin, seine Seite zurückzusetzen, und peere dann erneut neu.",
-      "eventSummary": "<host>{{host}}</host> wurde zurückgesetzt – {{identities}} automatisch bereinigt, {{accounts}} mit lokalen Inhalten abgekoppelt. Abgekoppelte Konten funktionieren lokal weiter – ihre Besitzer behalten den Zugang mit ihrem bisherigen Passwort. Der Besitzer kann ein abgekoppeltes Konto in dessen Einstellungen (Konto → Hinweis zur Abkopplung) wieder mit seiner neuen Heimatidentität verbinden, wenn er in beiden angemeldet ist.",
+      "staleRemote": "Die entfernte Instanz hält noch ein veraltetes Peering mit dir. Bitte den dortigen Admin, seine Seite zurückzusetzen, und peere danach noch einmal neu.",
+      "eventSummary": "<host>{{host}}</host> wurde zurückgesetzt – {{identities}} automatisch bereinigt, {{accounts}} mit lokalen Inhalten abgekoppelt. Abgekoppelte Konten funktionieren lokal weiter, ihre Inhaber behalten den Zugang mit ihrem bisherigen Passwort. Wer in beiden Konten angemeldet ist, kann ein abgekoppeltes Konto in dessen Einstellungen (Konto → Hinweis zur Abkopplung) wieder mit der neuen Heimatidentität verbinden.",
       "identitiesCleaned_one": "{{count}} replizierte Identität",
       "identitiesCleaned_other": "{{count}} replizierte Identitäten",
       "accountsDetached_one": "{{count}} Konto",
@@ -270,7 +270,7 @@
       "noRevoked": "Keine widerrufenen Peers.",
       "backOnline": "{{name}} ist wieder erreichbar",
       "stillUnreachable": "{{name}} ist weiterhin nicht erreichbar",
-      "rotationInitiated": "Rotation des Secrets gestartet – 15 Minuten Übergangszeit",
+      "rotationInitiated": "Rotation des Secrets gestartet – Übergangszeit von 15 Minuten",
       "revoked": "Peer widerrufen",
       "reinitiated": "Peering neu gestartet",
       "reinitiateFailed": "Peer-Eintrag gelöscht, aber der Handshake ist fehlgeschlagen: {{error}}. Peere manuell erneut mit {{origin}}",
@@ -284,7 +284,7 @@
         },
         "revoke": {
           "title": "Peer widerrufen",
-          "description": "Stoppt jede Weiterleitung mit {{name}}. Ausstehende Einträge im Postausgang werden verworfen. Du kannst das Peering später neu starten.",
+          "description": "Stoppt den gesamten Relay-Verkehr mit {{name}}. Ausstehende Einträge im Postausgang werden verworfen. Du kannst das Peering später neu starten.",
           "confirm": "Widerrufen"
         },
         "reinitiate": {

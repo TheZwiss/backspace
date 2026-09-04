@@ -32,7 +32,7 @@
       },
       "dm": {
         "fallbackName": "Direktnachricht",
-        "intro": "Hier beginnt dein Direktnachrichten-Verlauf mit <strong>@{{name}}</strong>.",
+        "intro": "Hier beginnt deine Unterhaltung mit <strong>@{{name}}</strong>.",
         "federatedNotice": "Nachrichten werden auf deiner Heimatinstanz und der deines Gesprächspartners gespeichert. Sie sind nicht Ende-zu-Ende-verschlüsselt.",
         "removeFriend": "Freund entfernen"
       }
@@ -96,14 +96,14 @@
       "remoteUnknown": "Liegt auf der Instanz des Absenders. Lade die Datei herunter, um eine lokale Kopie zu behalten.",
       "partialGeneric": "Einige Empfänger können diese Datei nicht lokal zwischenspeichern.",
       "partialInstance": "der Instanz von {{username}} (Limit: {{limit}})",
-      "partialList": "Die Datei konnte auf {{instances}} nicht zwischengespeichert werden. Sie kann dort weiterhin von deiner Instanz aus angesehen werden.",
+      "partialList": "Die Datei konnte auf {{instances}} nicht zwischengespeichert werden. Die Empfänger können sie weiterhin über deine Instanz ansehen.",
       "listPair": "{{first}} und {{second}}"
     }
   },
   "gif": {
     "searchPlaceholder": "GIFs suchen",
     "noResults": "Keine GIFs gefunden",
-    "noTrending": "Keine angesagten GIFs",
+    "noTrending": "Keine beliebten GIFs",
     "attribution": "Bereitgestellt von Klipy"
   },
   "preview": {
@@ -117,7 +117,7 @@
     "memberCount_other": "{{count}} Mitglieder",
     "revoked": "Einladung nicht mehr gültig",
     "join": "Beitreten",
-    "joining": "Wird beigetreten…",
+    "joining": "Beitritt läuft…",
     "joinFailed": "Beitritt fehlgeschlagen"
   }
 }
