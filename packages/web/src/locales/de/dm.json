@@ -42,11 +42,11 @@
   },
   "roster": {
     "owner": "Besitzer",
-    "sectionCount": "{{label}} — {{total}}"
+    "sectionCount": "{{label}} – {{total}}"
   },
   "kick": {
     "title": "Aus Gruppe entfernen",
-    "description": "{{name}} aus dieser Gruppe entfernen? Neue Nachrichten sind dann nicht mehr sichtbar.",
+    "description": "{{name}} aus dieser Gruppe entfernen? Neue Nachrichten sind für diese Person dann nicht mehr sichtbar.",
     "success": "{{name}} wurde aus der Gruppe entfernt",
     "failed": "Mitglied konnte nicht entfernt werden"
   },
@@ -70,7 +70,7 @@
   "search": {
     "trigger": "Unterhaltung finden oder starten",
     "placeholder": "Suchen…",
-    "emptyHint": "Such nach einer Person, um zu chatten",
+    "emptyHint": "Suche nach einer Person, um zu chatten",
     "conversations": "Unterhaltungen",
     "users": "Nutzer",
     "searching": "Suche läuft…",
@@ -124,7 +124,7 @@
     "nameCount": "{{current}}/{{max}}",
     "addMember": "Mitglied hinzufügen",
     "groupFull": "Gruppe ist voll",
-    "groupFullSuffix": "— Gruppe ist voll",
+    "groupFullSuffix": "– Gruppe ist voll",
     "cropTitle": "Gruppensymbol zuschneiden",
     "saveFailed": "Einstellungen konnten nicht gespeichert werden"
   },
