@@ -96,6 +96,11 @@ export const ERROR_CODES = [
   'message_edit_not_author',
   'message_delete_forbidden',
   'internal_error',
+  // misc
+  'not_dm_member',
+  'voice_disabled',
+  'voice_connect_forbidden',
+  'file_not_found',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

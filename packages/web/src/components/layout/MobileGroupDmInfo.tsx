@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { DmChannel, User } from '@backspace/shared';
 import { useUIStore } from '../../stores/uiStore';
 import { useSpaceStore } from '../../stores/spaceStore';
@@ -63,6 +64,7 @@ interface MobileGroupDmInfoProps {
  * `MobileChatScreen`'s members button).
  */
 export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
+  const { t } = useTranslation(['dm', 'common']);
   const channelId = params?.channelId ?? null;
 
   const dmChannels = useSpaceStore((s) => s.dmChannels);
@@ -133,9 +135,9 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
   if (!dmChannel) {
     return (
       <div className="flex flex-col h-full bg-surface-base">
-        <MobileScreenHeader title="Group Info" />
+        <MobileScreenHeader title={t('dm:groupInfo.title')} />
         <div className="flex-1 flex items-center justify-center text-txt-tertiary text-sm">
-          Conversation not found.
+          {t('dm:groupInfo.notFound')}
         </div>
       </div>
     );
@@ -144,9 +146,9 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
   if (!dmChannel.ownerId) {
     return (
       <div className="flex flex-col h-full bg-surface-base">
-        <MobileScreenHeader title="Info" />
+        <MobileScreenHeader title={t('dm:groupInfo.plainTitle')} />
         <div className="flex-1 flex items-center justify-center text-txt-tertiary text-sm">
-          This conversation has no group info.
+          {t('dm:groupInfo.notGroup')}
         </div>
       </div>
     );
@@ -162,7 +164,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
     .map((m) => m.displayName ?? parseFederatedUsername(m.username).baseName)
     .join(', ');
 
-  const displayName = dmChannel.name && dmChannel.name.length > 0 ? dmChannel.name : fallbackName || 'Group DM';
+  const displayName = dmChannel.name && dmChannel.name.length > 0 ? dmChannel.name : fallbackName || t('dm:names.groupFallback');
 
   const currentName = dmChannel.name ?? '';
   const trimmedName = name.trim();
@@ -273,7 +275,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
       });
       setEditing(false);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to save settings';
+      const msg = err instanceof Error ? err.message : t('dm:groupSettings.saveFailed');
       setSaveError(msg);
       addToast(msg, 'warning', 4000);
     } finally {
@@ -291,7 +293,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
       // MobileChatScreen). The user is no longer a member.
       popMobileScreen();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to leave group';
+      const msg = err instanceof Error ? err.message : t('dm:leave.failed');
       addToast(msg, 'warning', 4000);
     } finally {
       setLeaving(false);
@@ -320,7 +322,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
         await useSocialStore.getState().removeFriend(member.id);
       } catch (err) {
         addToast(
-          err instanceof Error ? err.message : 'Failed to remove friend',
+          err instanceof Error ? err.message : t('dm:removeFriend.failed'),
           'warning',
           3000,
         );
@@ -338,14 +340,14 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
         : undefined;
       await api.dm.kickMember(channelId, pendingKick.id, federated);
       addToast(
-        `Removed ${pendingKick.displayName ?? parseFederatedUsername(pendingKick.username).baseName} from the group`,
+        t('dm:kick.success', { name: pendingKick.displayName ?? parseFederatedUsername(pendingKick.username).baseName }),
         'success',
         3000,
       );
       setPendingKick(null);
     } catch (err) {
       addToast(
-        err instanceof Error ? err.message : 'Failed to remove member',
+        err instanceof Error ? err.message : t('dm:kick.failed'),
         'warning',
         3000,
       );
@@ -364,14 +366,14 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
         : undefined;
       await api.dm.transferOwnership(channelId, pendingTransfer.id, federated);
       addToast(
-        `Ownership transferred to ${pendingTransfer.displayName ?? parseFederatedUsername(pendingTransfer.username).baseName}`,
+        t('dm:transfer.success', { name: pendingTransfer.displayName ?? parseFederatedUsername(pendingTransfer.username).baseName }),
         'success',
         3000,
       );
       setPendingTransfer(null);
     } catch (err) {
       addToast(
-        err instanceof Error ? err.message : 'Failed to transfer ownership',
+        err instanceof Error ? err.message : t('dm:transfer.failed'),
         'warning',
         3000,
       );
@@ -405,16 +407,16 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
       onClick={handleCancel}
       className="px-2 py-1 text-sm text-txt-tertiary hover:text-txt-secondary"
       data-mobile-edit-cancel
-      aria-label="Cancel edit"
+      aria-label={t('dm:groupInfo.cancelEdit')}
     >
-      Cancel
+      {t('common:actions.cancel')}
     </button>
   ) : null;
 
   // ── Render ─────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col h-full bg-surface-base">
-      <MobileScreenHeader title="Group Info" rightActions={headerRight} />
+      <MobileScreenHeader title={t('dm:groupInfo.title')} rightActions={headerRight} />
 
       <div
         className="flex-1 overflow-y-auto"
@@ -430,7 +432,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
               onClick={handleHeroClick}
               disabled={!editing || !isOwner}
               data-mobile-group-icon-hero
-              aria-label={editing && isOwner ? 'Change group icon' : 'Group icon'}
+              aria-label={editing && isOwner ? t('dm:groupSettings.changeIcon') : t('dm:groupSettings.icon')}
               className={`relative block rounded-full overflow-hidden ${
                 editing && isOwner ? 'cursor-pointer' : 'cursor-default'
               }`}
@@ -450,7 +452,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
                 type="button"
                 onClick={handleClearIcon}
                 data-mobile-group-icon-clear
-                aria-label="Remove group icon"
+                aria-label={t('dm:groupSettings.removeIcon')}
                 className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-surface-elevated border border-border-hard flex items-center justify-center text-txt-tertiary hover:text-txt-danger hover:bg-accent-rose/10 transition-colors"
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
@@ -476,11 +478,11 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value.slice(0, MAX_NAME_LENGTH))}
-              placeholder={fallbackName || 'Group DM'}
+              placeholder={fallbackName || t('dm:names.groupFallback')}
               maxLength={MAX_NAME_LENGTH}
               disabled={!isOwner}
               data-mobile-group-name-input
-              aria-label="Group name"
+              aria-label={t('dm:groupSettings.nameAria')}
               className="input-standard w-full max-w-[280px] text-center text-base"
             />
           ) : (
@@ -493,7 +495,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
                 {displayName}
               </h1>
               {hasFederatedMember && (
-                <span data-mobile-group-globe className="inline-flex" aria-label="Federated group">
+                <span data-mobile-group-globe className="inline-flex" aria-label={t('dm:groupInfo.federated')}>
                   <GroupGlobeIcon />
                 </span>
               )}
@@ -501,7 +503,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
           )}
 
           <p className="text-xs text-txt-tertiary">
-            {memberCount} {memberCount === 1 ? 'member' : 'members'}
+            {t('dm:groupInfo.memberCount', { count: memberCount })}
           </p>
 
           {/* Edit toggle — owner-only, hidden during edit (Cancel header action takes its place). */}
@@ -512,7 +514,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
               data-mobile-group-edit
               className="mt-1 px-4 py-1.5 rounded-full bg-surface-elevated hover:bg-interactive-hover text-txt-secondary text-xs font-medium transition-colors"
             >
-              Edit
+              {t('common:actions.edit')}
             </button>
           )}
 
@@ -535,9 +537,9 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
               <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
             </svg>
-            Add Member
+            {t('dm:groupSettings.addMember')}
             {!canAddMembers && (
-              <span className="text-[11px] text-txt-tertiary">— Group is full</span>
+              <span className="text-[11px] text-txt-tertiary">{t('dm:groupSettings.groupFullSuffix')}</span>
             )}
           </button>
         </div>
@@ -547,7 +549,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
           {ownerMember && (
             <div data-mobile-group-section="owner" className="mb-4">
               <h3 className="text-[10.5px] font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
-                OWNER
+                {t('dm:roster.owner')}
               </h3>
               {renderMemberRow(ownerMember, true)}
             </div>
@@ -556,7 +558,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
           {onlineMembers.length > 0 && (
             <div data-mobile-group-section="online" className="mb-4">
               <h3 className="text-[10.5px] font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
-                ONLINE — {onlineMembers.length}
+                {t('dm:roster.sectionCount', { label: t('dm:roster.online'), total: onlineMembers.length })}
               </h3>
               {onlineMembers.map((m) => renderMemberRow(m, false))}
             </div>
@@ -565,7 +567,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
           {offlineMembers.length > 0 && (
             <div data-mobile-group-section="offline" className="opacity-60">
               <h3 className="text-[10.5px] font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
-                OFFLINE — {offlineMembers.length}
+                {t('dm:roster.sectionCount', { label: t('dm:roster.offline'), total: offlineMembers.length })}
               </h3>
               {offlineMembers.map((m) => renderMemberRow(m, false))}
             </div>
@@ -581,7 +583,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
             data-mobile-group-leave
             className="w-full px-4 py-2.5 text-accent-rose hover:bg-accent-rose/10 text-sm font-medium rounded-md transition-colors disabled:opacity-50"
           >
-            {leaving ? 'Leaving...' : 'Leave Group'}
+            {leaving ? t('dm:leave.inProgress') : t('dm:leave.title')}
           </button>
         </div>
       </div>
@@ -601,7 +603,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
             className="px-3 py-1.5 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors disabled:opacity-50"
             data-mobile-group-save-cancel
           >
-            Cancel
+            {t('common:actions.cancel')}
           </button>
           <button
             type="button"
@@ -610,7 +612,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
             className="px-4 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             data-mobile-group-save
           >
-            {saving ? 'Saving...' : 'Save'}
+            {saving ? t('common:states.saving') : t('common:actions.save')}
           </button>
         </div>
       )}
@@ -621,7 +623,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
         onClose={() => setCropSrc(null)}
         imageSrc={cropSrc ?? ''}
         onCropComplete={handleCropComplete}
-        title="Crop Group Icon"
+        title={t('dm:groupSettings.cropTitle')}
         cropShape="round"
         aspectRatio={1}
         maxOutputDimension={256}
@@ -632,9 +634,9 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
         isOpen={confirmLeave}
         onClose={() => { if (!leaving) setConfirmLeave(false); }}
         onConfirm={handleConfirmLeave}
-        title="Leave Group"
-        description={`Leave "${displayName}"? You will stop receiving messages from this conversation.`}
-        confirmLabel="Leave"
+        title={t('dm:leave.title')}
+        description={t('dm:leave.description', { name: displayName })}
+        confirmLabel={t('dm:leave.confirm')}
         variant="danger"
         loading={leaving}
       />
@@ -643,13 +645,13 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
         isOpen={!!pendingKick}
         onClose={() => { if (!submittingMemberAction) setPendingKick(null); }}
         onConfirm={confirmKick}
-        title="Remove from Group"
+        title={t('dm:kick.title')}
         description={
           pendingKick
-            ? `Remove ${pendingKick.displayName ?? parseFederatedUsername(pendingKick.username).baseName} from this group? They won't be able to see new messages.`
+            ? t('dm:kick.description', { name: pendingKick.displayName ?? parseFederatedUsername(pendingKick.username).baseName })
             : ''
         }
-        confirmLabel="Remove"
+        confirmLabel={t('common:actions.remove')}
         variant="danger"
         loading={submittingMemberAction}
       />
@@ -658,13 +660,13 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
         isOpen={!!pendingTransfer}
         onClose={() => { if (!submittingMemberAction) setPendingTransfer(null); }}
         onConfirm={confirmTransfer}
-        title="Transfer Ownership"
+        title={t('dm:transfer.title')}
         description={
           pendingTransfer
-            ? `Transfer ownership to ${pendingTransfer.displayName ?? parseFederatedUsername(pendingTransfer.username).baseName}? You'll lose owner privileges.`
+            ? t('dm:transfer.description', { name: pendingTransfer.displayName ?? parseFederatedUsername(pendingTransfer.username).baseName })
             : ''
         }
-        confirmLabel="Transfer"
+        confirmLabel={t('dm:transfer.confirm')}
         variant="warning"
         loading={submittingMemberAction}
       />

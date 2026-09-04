@@ -67,5 +67,9 @@
   "attachment_not_owned": "Dieser Anhang gehört jemand anderem.",
   "message_edit_not_author": "Du kannst nur deine eigenen Nachrichten bearbeiten.",
   "message_delete_forbidden": "Du kannst diese Nachricht nicht löschen.",
-  "internal_error": "Auf dem Server ist etwas schiefgelaufen. Versuche es erneut."
+  "internal_error": "Auf dem Server ist etwas schiefgelaufen. Versuche es erneut.",
+  "not_dm_member": "Du bist nicht Teil dieser Unterhaltung.",
+  "voice_disabled": "Sprach- und Videochat sind auf dieser Instanz nicht eingerichtet.",
+  "voice_connect_forbidden": "Du darfst diesem Sprachkanal nicht beitreten.",
+  "file_not_found": "Diese Datei wurde nicht gefunden."
 }

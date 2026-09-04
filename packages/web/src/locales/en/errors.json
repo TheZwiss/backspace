@@ -67,5 +67,9 @@
   "attachment_not_owned": "That attachment belongs to someone else.",
   "message_edit_not_author": "You can only edit your own messages.",
   "message_delete_forbidden": "You cannot delete this message.",
-  "internal_error": "Something went wrong on the server. Try again."
+  "internal_error": "Something went wrong on the server. Try again.",
+  "not_dm_member": "You are not part of this conversation.",
+  "voice_disabled": "Voice and video are not set up on this instance.",
+  "voice_connect_forbidden": "You are not allowed to join this voice channel.",
+  "file_not_found": "That file could not be found."
 }

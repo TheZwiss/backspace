@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { AccessToken, TrackSource } from 'livekit-server-sdk';
 import { authenticate } from '../utils/auth.js';
+import { sendError } from '../utils/httpErrors.js';
 import { config } from '../config.js';
 import { getChannelSpaceId, hasPermission, computePermissions, isDmMember, PermissionBits } from '../utils/permissions.js';
 import type { LiveKitTokenRequest, LiveKitTokenResponse } from '@backspace/shared';
@@ -44,7 +45,7 @@ export async function livekitRoutes(app: FastifyInstance): Promise<void> {
     preHandler: authenticate,
   }, async (request, reply) => {
     if (!config.livekit.apiKey || !config.livekit.apiSecret) {
-      return reply.code(503).send({ error: 'Voice/video is not configured on this server', statusCode: 503 });
+      return sendError(reply, 503, 'voice_disabled');
     }
 
     const { channelId, dmChannelId } = request.body as { channelId?: string; dmChannelId?: string };
@@ -59,7 +60,7 @@ export async function livekitRoutes(app: FastifyInstance): Promise<void> {
     if (dmChannelId && typeof dmChannelId === 'string') {
       // DM call token
       if (!isDmMember(dmChannelId, request.userId)) {
-        return reply.code(403).send({ error: 'You are not a member of this DM channel', statusCode: 403 });
+        return sendError(reply, 403, 'not_dm_member');
       }
 
       // Federated DMs use federatedId as room name (cross-instance stable).
@@ -75,10 +76,10 @@ export async function livekitRoutes(app: FastifyInstance): Promise<void> {
       // Space voice channel token
       const spaceId = getChannelSpaceId(channelId);
       if (!spaceId) {
-        return reply.code(404).send({ error: 'Channel not found', statusCode: 404 });
+        return sendError(reply, 404, 'channel_not_found');
       }
       if (!hasPermission(request.userId, spaceId, PermissionBits.CONNECT, channelId)) {
-        return reply.code(403).send({ error: 'Missing CONNECT permission', statusCode: 403 });
+        return sendError(reply, 403, 'voice_connect_forbidden');
       }
       // Check SPEAK and STREAM permissions for granular token grants
       const perms = computePermissions(request.userId, spaceId, channelId);
@@ -86,7 +87,7 @@ export async function livekitRoutes(app: FastifyInstance): Promise<void> {
       canStream = (perms & PermissionBits.STREAM) !== 0n || (perms & PermissionBits.ADMINISTRATOR) !== 0n;
       roomName = channelId;
     } else {
-      return reply.code(400).send({ error: 'channelId or dmChannelId is required', statusCode: 400 });
+      return sendError(reply, 400, 'validation_failed');
     }
 
     const identity = `${request.userId}:${request.username}`;

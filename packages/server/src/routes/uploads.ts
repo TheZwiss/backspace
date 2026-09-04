@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { config } from '../config.js';
+import { sendError } from '../utils/httpErrors.js';
 import { getDb, schema } from '../db/index.js';
 import { eq } from 'drizzle-orm';
 import fs from 'fs';
@@ -31,7 +32,7 @@ export async function uploadRoutes(app: FastifyInstance): Promise<void> {
     const filepath = path.join(config.uploadDir, safeName);
 
     if (!fs.existsSync(filepath)) {
-      return reply.code(404).send({ error: 'File not found', statusCode: 404 });
+      return sendError(reply, 404, 'file_not_found');
     }
 
     // Get mimetype from DB, falling back to extension-based lookup for thumbnails/orphans

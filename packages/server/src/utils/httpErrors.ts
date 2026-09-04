@@ -85,6 +85,11 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   message_edit_not_author: 'You can only edit your own messages',
   message_delete_forbidden: 'You cannot delete this message',
   internal_error: 'Something went wrong on the server',
+  // misc
+  not_dm_member: 'You are not a member of this DM channel',
+  voice_disabled: 'Voice/video is not configured on this server',
+  voice_connect_forbidden: 'Missing CONNECT permission',
+  file_not_found: 'File not found',
 };
 
 function fillPlaceholders(text: string, details: ErrorDetails | undefined): string {
