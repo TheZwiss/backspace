@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { pickLanguage, resolveSupportedLanguage, supportedLanguages } from './languages';
+import { availableLanguages, isSupportedLanguage, pickLanguage, resolveSupportedLanguage, supportedLanguages } from './languages';
 
 describe('resolveSupportedLanguage', () => {
   it('maps a regional tag to its base language when that base is shipped', () => {
@@ -18,21 +18,41 @@ describe('resolveSupportedLanguage', () => {
 });
 
 describe('pickLanguage', () => {
+  const allReleased = new Set(['en', 'ru', 'de']);
+
   it('prefers the stored choice over the browser languages', () => {
-    expect(pickLanguage('de', ['ru-RU'])).toBe('de');
+    expect(pickLanguage('de', ['ru-RU'], allReleased)).toBe('de');
   });
 
   it('ignores a stored value that is not a shipped language', () => {
-    expect(pickLanguage('fr', ['ru-RU'])).toBe('ru');
+    expect(pickLanguage('fr', ['ru-RU'], allReleased)).toBe('ru');
   });
 
   it('takes the first browser language that is shipped, in order', () => {
-    expect(pickLanguage(null, ['fr-FR', 'de-DE', 'ru'])).toBe('de');
+    expect(pickLanguage(null, ['fr-FR', 'de-DE', 'ru'], allReleased)).toBe('de');
   });
 
   it('falls back to English when nothing matches', () => {
     expect(pickLanguage(null, ['fr-FR', 'ja'])).toBe('en');
     expect(pickLanguage(null, [])).toBe('en');
+  });
+});
+
+describe('availableLanguages', () => {
+  it('offers only released languages to users', () => {
+    // Russian and German are complete in code and tests but hidden until the
+    // whole app is translated, so an intermediate release stays English-only.
+    expect(availableLanguages.map((l) => l.code)).toEqual(['en']);
+  });
+
+  it('never lets detection pick an unreleased language', () => {
+    expect(pickLanguage('ru', ['ru-RU'])).toBe('en');
+    expect(pickLanguage(null, ['de-DE'])).toBe('en');
+  });
+
+  it('still lets code select an unreleased language explicitly', () => {
+    expect(isSupportedLanguage('ru')).toBe(true);
+    expect(resolveSupportedLanguage('de-CH')).toBe('de');
   });
 });
 

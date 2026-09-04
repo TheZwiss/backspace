@@ -4,10 +4,14 @@
  * under `src/locales/<code>/`; see docs/systems/localization.md.
  */
 export const supportedLanguages = [
-  { code: 'en', nativeName: 'English', dir: 'ltr' },
-  { code: 'ru', nativeName: 'Русский', dir: 'ltr' },
-  { code: 'de', nativeName: 'Deutsch', dir: 'ltr' },
-] as const satisfies readonly { code: string; nativeName: string; dir: 'ltr' | 'rtl' }[];
+  { code: 'en', nativeName: 'English', dir: 'ltr', released: true },
+  // Russian and German are complete in code and tests but stay hidden from
+  // users until every surface is translated (the 1.1.0 gate), so a release
+  // cut in between is English-only rather than half translated. Flip
+  // `released` in the PR that empties scripts/i18n-pending.txt.
+  { code: 'ru', nativeName: 'Русский', dir: 'ltr', released: false },
+  { code: 'de', nativeName: 'Deutsch', dir: 'ltr', released: false },
+] as const satisfies readonly { code: string; nativeName: string; dir: 'ltr' | 'rtl'; released: boolean }[];
 
 export type SupportedLanguage = (typeof supportedLanguages)[number]['code'];
 
@@ -17,6 +21,11 @@ export const DEFAULT_LANGUAGE: SupportedLanguage = 'en';
 export const LANGUAGE_STORAGE_KEY = 'backspace-language';
 
 export const supportedLanguageCodes: readonly SupportedLanguage[] = supportedLanguages.map((l) => l.code);
+
+/** The languages users can pick and detection may choose. */
+export const availableLanguages = supportedLanguages.filter((l) => l.released);
+
+const releasedLanguageCodes: ReadonlySet<string> = new Set(availableLanguages.map((l) => l.code));
 
 export function isSupportedLanguage(value: unknown): value is SupportedLanguage {
   return typeof value === 'string' && (supportedLanguageCodes as readonly string[]).includes(value);
@@ -34,13 +43,18 @@ export function resolveSupportedLanguage(tag: string): SupportedLanguage | null 
 
 /**
  * Detection order: the stored choice, then the browser's languages in the
- * order the user ranked them, then English.
+ * order the user ranked them, then English. Only released languages are
+ * eligible; `released` exists so tests can exercise the others.
  */
-export function pickLanguage(stored: string | null, browserLanguages: readonly string[]): SupportedLanguage {
-  if (isSupportedLanguage(stored)) return stored;
+export function pickLanguage(
+  stored: string | null,
+  browserLanguages: readonly string[],
+  released: ReadonlySet<string> = releasedLanguageCodes,
+): SupportedLanguage {
+  if (isSupportedLanguage(stored) && released.has(stored)) return stored;
   for (const tag of browserLanguages) {
     const match = resolveSupportedLanguage(tag);
-    if (match) return match;
+    if (match && released.has(match)) return match;
   }
   return DEFAULT_LANGUAGE;
 }

@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import i18n, { initI18n, setLanguage, LANGUAGE_STORAGE_KEY } from './index';
 
+const allReleased = new Set(['en', 'ru', 'de']);
+
 beforeEach(() => {
   localStorage.clear();
   document.documentElement.lang = '';
@@ -10,21 +12,29 @@ beforeEach(() => {
 describe('initI18n', () => {
   it('starts in the stored language and reflects it on the document', async () => {
     localStorage.setItem(LANGUAGE_STORAGE_KEY, 'ru');
-    await initI18n({ browserLanguages: ['en-US'] });
+    await initI18n({ browserLanguages: ['en-US'], releasedLanguages: allReleased });
     expect(i18n.resolvedLanguage).toBe('ru');
     expect(document.documentElement.lang).toBe('ru');
     expect(document.documentElement.dir).toBe('ltr');
   });
 
   it('falls back to the browser language when nothing is stored', async () => {
-    await initI18n({ browserLanguages: ['de-DE', 'en'] });
+    await initI18n({ browserLanguages: ['de-DE', 'en'], releasedLanguages: allReleased });
     expect(i18n.resolvedLanguage).toBe('de');
   });
 
   it('has the selected language loaded before it resolves', async () => {
-    await initI18n({ browserLanguages: ['de'] });
+    await initI18n({ browserLanguages: ['de'], releasedLanguages: allReleased });
     expect(i18n.hasResourceBundle('de', 'common')).toBe(true);
     expect(i18n.t('common:actions.cancel')).toBe('Abbrechen');
+  });
+});
+
+describe('initI18n release gate', () => {
+  it('ignores a stored unreleased language and starts in English', async () => {
+    localStorage.setItem(LANGUAGE_STORAGE_KEY, 'ru');
+    await initI18n({ browserLanguages: ['ru-RU'] });
+    expect(i18n.resolvedLanguage).toBe('en');
   });
 });
 

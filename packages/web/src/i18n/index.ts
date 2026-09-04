@@ -12,7 +12,7 @@ import {
   type SupportedLanguage,
 } from './languages';
 
-export { LANGUAGE_STORAGE_KEY, supportedLanguages, type SupportedLanguage } from './languages';
+export { LANGUAGE_STORAGE_KEY, availableLanguages, supportedLanguages, type SupportedLanguage } from './languages';
 
 const i18n = i18next;
 
@@ -53,6 +53,8 @@ function notifyDesktop(language: SupportedLanguage): void {
 export interface InitI18nOptions {
   /** Overrides `navigator.languages`; used by tests and by the desktop shell. */
   browserLanguages?: readonly string[];
+  /** Overrides the set of languages detection may pick; tests use it to reach unreleased ones. */
+  releasedLanguages?: ReadonlySet<string>;
 }
 
 /**
@@ -61,7 +63,7 @@ export interface InitI18nOptions {
  * translated. Safe to call more than once: later calls only re-run detection.
  */
 export async function initI18n(options: InitI18nOptions = {}): Promise<typeof i18n> {
-  const language = pickLanguage(readStoredLanguage(), options.browserLanguages ?? browserLanguages());
+  const language = pickLanguage(readStoredLanguage(), options.browserLanguages ?? browserLanguages(), options.releasedLanguages);
 
   if (i18n.isInitialized) {
     await i18n.changeLanguage(language);

@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { setLanguage, supportedLanguages, type SupportedLanguage } from '../../../i18n';
+import { availableLanguages, setLanguage, type SupportedLanguage } from '../../../i18n';
 import { getLanguage } from '../../../i18n';
 
 /**
@@ -26,7 +26,7 @@ export function LanguageSection() {
           onChange={(e) => { void setLanguage(e.target.value as SupportedLanguage); }}
           className="input-standard w-full appearance-none"
         >
-          {supportedLanguages.map((language) => (
+          {availableLanguages.map((language) => (
             <option key={language.code} value={language.code} lang={language.code}>
               {language.nativeName}
             </option>
