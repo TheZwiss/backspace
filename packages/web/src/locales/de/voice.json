@@ -1,1 +1,207 @@
-{}
+{
+  "chatPanel": {
+    "title": "Textchat",
+    "close": "Chat schließen"
+  },
+  "badges": {
+    "mutedNoPermission": "Stummgeschaltet (keine Sprechberechtigung)",
+    "spaceMuted": "Im Space stummgeschaltet",
+    "mutedSpaceDeafened": "Stummgeschaltet (Ton im Space ausgeschaltet)",
+    "spaceDeafened": "Ton im Space ausgeschaltet",
+    "locallyMuted": "Lokal stummgeschaltet",
+    "live": "Live",
+    "you": "(du)"
+  },
+  "moderation": {
+    "spaceMute": "Im Space stummschalten",
+    "spaceUnmute": "Stummschaltung im Space aufheben",
+    "spaceDeafen": "Ton im Space ausschalten",
+    "spaceUndeafen": "Ton im Space einschalten",
+    "disconnect": "Trennen",
+    "moveTo": "Verschieben nach"
+  },
+  "participantMenu": {
+    "watchCamera": "Kamera ansehen",
+    "stopWatchingCamera": "Kamera nicht mehr ansehen",
+    "muteUser": "Nutzer stummschalten",
+    "userVolume": "Nutzerlautstärke"
+  },
+  "incomingCall": {
+    "status": "Eingehender Sprachanruf…",
+    "decline": "Ablehnen",
+    "accept": "Annehmen"
+  },
+  "grid": {
+    "waitingForOthers": "Warten, bis andere beitreten…",
+    "returnToGridHint": "Klicken, um zur Rasteransicht zurückzukehren",
+    "backToGrid": "Zurück zur Rasteransicht",
+    "gridButton": "Raster",
+    "showMembers": "Mitglieder anzeigen",
+    "hideMembers": "Mitglieder ausblenden"
+  },
+  "connectionInfo": {
+    "title": "Verbindungsinfo",
+    "notConnected": "Nicht verbunden",
+    "gathering": "Statistiken werden gesammelt…",
+    "section": {
+      "network": "Netzwerk",
+      "audio": "Ton",
+      "video": "Video"
+    },
+    "network": {
+      "ping": "Latenz",
+      "packetLoss": "Paketverlust",
+      "jitter": "Laufzeitschwankung",
+      "server": "Serveradresse",
+      "protocol": "Protokoll"
+    },
+    "source": {
+      "microphone": "Mikrofon",
+      "camera": "Kamera",
+      "screen": "Bildschirm",
+      "screenAudio": "Bildschirmaudio",
+      "unknown": "Unbekannt"
+    },
+    "remoteParticipant": "Gegenstelle",
+    "units": {
+      "milliseconds": "{{value}} ms",
+      "percent": "{{value}} %",
+      "kbps": "{{value}} kbit/s",
+      "mbps": "{{value}} Mbit/s"
+    }
+  },
+  "screenPicker": {
+    "title": "Bildschirm teilen",
+    "tabs": {
+      "screens": "Bildschirme",
+      "windows": "Fenster"
+    },
+    "searchWindows": "Fenster suchen…",
+    "noWindowsMatch": "Keine Fenster passen zu deiner Suche",
+    "noScreens": "Keine Bildschirme verfügbar",
+    "noWindows": "Keine Fenster verfügbar",
+    "shareSystemAudio": "Systemaudio teilen",
+    "echoWarning": "Zuschauer hören eventuell ein Echo der Stimmen. Für echofreies Audio Chrome verwenden",
+    "share": "Teilen"
+  },
+  "streamSettings": {
+    "title": "Stream-Einstellungen",
+    "resolution": "Auflösung",
+    "frameRate": "Bildrate",
+    "contentMode": "Inhaltsmodus",
+    "mode": {
+      "gaming": "Spielmodus",
+      "text": "Textmodus"
+    },
+    "codec": "Kodierung",
+    "codecOption": {
+      "standard": "Normal",
+      "hardware": "NVIDIA oder Apple"
+    },
+    "hardwareNote": "GPU-Hardware-Encoder · wird nach dem Stream zurückgesetzt",
+    "bitrate": "Datenrate",
+    "resetToAuto": "Auf Automatisch zurücksetzen",
+    "auto": "Automatisch",
+    "customBitrateDisabled": "Eigene Bitrate vom Administrator deaktiviert",
+    "systemAudio": "Systemaudio",
+    "chromeEchoNote": "Für echofreies Audio Chrome verwenden",
+    "degradation": {
+      "maintainResolution": "Auflösung halten",
+      "maintainFramerate": "Bildrate halten",
+      "balanced": "ausgewogen"
+    },
+    "summary": "{{bitrate}} · {{degradation}}"
+  },
+  "stream": {
+    "quality": "Stream-Qualität",
+    "qualityValue": "{{height}}p {{fps}} fps",
+    "volume": "Stream-Lautstärke",
+    "attenuation": "Stream-Dämpfung",
+    "attenuationStrength": "Stärke der Dämpfung",
+    "stop": "Streaming beenden",
+    "change": "Stream wechseln",
+    "stopWatching": "Nicht mehr ansehen",
+    "watch": "Stream ansehen",
+    "mute": "Stream stummschalten",
+    "isStreaming": "{{name}} streamt"
+  },
+  "controls": {
+    "spaceMutedSelfMuted": "Im Space stummgeschaltet (auch selbst stummgeschaltet)",
+    "unmuteShortcut": "Stummschaltung aufheben (M)",
+    "muteShortcut": "Stummschalten (M)",
+    "undeafenShortcut": "Ton einschalten (D)",
+    "deafenShortcut": "Ton ausschalten (D)",
+    "unmute": "Stummschaltung aufheben",
+    "mute": "Stummschalten",
+    "undeafen": "Ton einschalten",
+    "deafen": "Ton ausschalten",
+    "cameraOff": "Kamera ausschalten",
+    "cameraOn": "Kamera einschalten",
+    "stopSharing": "Teilen beenden",
+    "shareScreen": "Bildschirm teilen",
+    "videoQuality": "Videoqualität",
+    "toggleChat": "Chat ein- oder ausblenden",
+    "exitFullscreen": "Vollbild verlassen (Esc)",
+    "fullscreen": "Vollbild",
+    "disconnect": "Trennen",
+    "connectionInfo": "Verbindungsinfo",
+    "noiseSuppressionOff": "KI-Rauschunterdrückung ausschalten",
+    "noiseSuppressionOn": "KI-Rauschunterdrückung einschalten"
+  },
+  "status": {
+    "dmCall": "Direktanruf",
+    "voiceChannel": "Sprachkanal",
+    "voiceCall": "Sprachanruf",
+    "connectionFailed": "Verbindung fehlgeschlagen",
+    "connected": "Sprachverbindung aktiv",
+    "connecting": "Verbinden…"
+  },
+  "camera": {
+    "auto": "Automatisch",
+    "autoSystemDefault": "Auto (Systemstandard)",
+    "selected": "Ausgewählte Kamera",
+    "fallbackName": "Kamera {{index}}",
+    "select": "Kamera auswählen",
+    "switch": "Kamera wechseln",
+    "turnOn": "Kamera einschalten",
+    "turnOff": "Kamera ausschalten"
+  },
+  "joinSheet": {
+    "peopleInVoice_one": "{{count}} Person im Sprachkanal",
+    "peopleInVoice_other": "{{count}} Personen im Sprachkanal",
+    "switchNotice": "Du verlässt <current>{{current}}</current> und trittst <target>{{target}}</target> bei",
+    "checkingCamera": "Kamera wird geprüft…",
+    "tapToPreview": "Tippen für Kameravorschau",
+    "cameraDenied": "Kamerazugriff verweigert.",
+    "stopPreview": "Vorschau beenden",
+    "enablePreview": "Kameravorschau aktivieren",
+    "previewError": {
+      "inUse": "Die Kamera wird von einer anderen Anwendung verwendet.",
+      "unavailable": "Die ausgewählte Kamera ist nicht verfügbar.",
+      "notFound": "Keine Kamera gefunden.",
+      "failed": "Die Kameravorschau konnte nicht gestartet werden."
+    },
+    "empty": {
+      "title": "Hier ist noch niemand.",
+      "hint": "Sei die erste Person, die beitritt!"
+    },
+    "unmuteMicrophone": "Mikrofon einschalten",
+    "muteMicrophone": "Mikrofon stummschalten",
+    "switchChannel": "Kanal wechseln",
+    "join": "Beitreten"
+  },
+  "mobileCall": {
+    "collapse": "Anruf minimieren",
+    "connectedCount_one": "{{count}} verbunden",
+    "connectedCount_other": "{{count}} verbunden",
+    "viewMembers": "Mitglieder anzeigen",
+    "micDenied": {
+      "title": "Mikrofonzugriff verweigert",
+      "description": "Du hörst nur zu. Die anderen können dich nicht hören.",
+      "allow": "Mikrofon erlauben"
+    },
+    "shareScreen": "Bildschirm teilen",
+    "stopSharingScreen": "Bildschirmübertragung beenden",
+    "disconnect": "Anruf verlassen"
+  }
+}
