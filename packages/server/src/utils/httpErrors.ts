@@ -100,7 +100,7 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   attachment_not_owned: 'You do not own this attachment',
   icon_not_image: 'Icon must be an image',
   icon_too_large: 'Icon must be smaller than {{max}} MB',
-  already_member: 'Already a member',
+  already_member: 'You are already a member',
   owner_cannot_kick_self: 'Owners cannot kick themselves; use leave instead',
   target_not_dm_member: 'Target user is not a member of this DM channel',
   new_owner_required: 'newOwnerId or (homeUserId + homeInstance) is required',
