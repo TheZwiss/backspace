@@ -53,6 +53,26 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   PEER_EXISTS_RESET_REQUIRED: 'A peer record for this instance already exists; reset it first',
 
   recipient_deleted: "This user's account was deleted",
+
+  // social-explore
+  friend_request_pending: 'A friend request is already pending',
+  friend_request_not_found: 'Friend request not found',
+  friend_request_not_recipient: 'You can only manage requests sent to you',
+  friend_request_not_sender: 'You can only cancel requests you sent',
+  friend_request_not_pending: 'Can only cancel pending requests',
+  not_friends: 'You are not friends with this user',
+  peer_reset_pending: 'The remote instance was reset; an admin must re-peer it before users there can be added',
+  lookup_failed: 'Looking up the user on the remote instance failed',
+  space_not_found: 'Space not found',
+  space_not_public: 'This space does not allow public joins',
+  space_not_requestable: 'This space does not accept join requests',
+  space_load_failed: 'Failed to load space',
+  user_banned: 'You are banned from this space',
+  already_member: 'You are already a member of this space',
+  missing_permission: 'Missing {{permission}} permission',
+  join_request_pending: 'You already have a pending request for this space',
+  join_request_not_found: 'Join request not found',
+  join_request_decided: 'This request has already been decided',
 };
 
 function fillPlaceholders(text: string, details: ErrorDetails | undefined): string {

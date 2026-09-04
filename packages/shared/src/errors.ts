@@ -64,6 +64,26 @@ export const ERROR_CODES = [
 
   // Direct messages
   'recipient_deleted',
+
+  // social-explore
+  'friend_request_pending',
+  'friend_request_not_found',
+  'friend_request_not_recipient',
+  'friend_request_not_sender',
+  'friend_request_not_pending',
+  'not_friends',
+  'peer_reset_pending',
+  'lookup_failed',
+  'space_not_found',
+  'space_not_public',
+  'space_not_requestable',
+  'space_load_failed',
+  'user_banned',
+  'already_member',
+  'missing_permission',
+  'join_request_pending',
+  'join_request_not_found',
+  'join_request_decided',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
