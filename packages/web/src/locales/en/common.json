@@ -67,7 +67,8 @@
     "loadingSettings": "Loading settings…",
     "settingsSaved": "Settings saved",
     "saveFailed": "Failed to save",
-    "scanning": "Scanning…"
+    "scanning": "Scanning…",
+    "pleaseWait": "Please wait…"
   },
   "labels": {
     "username": "Username",

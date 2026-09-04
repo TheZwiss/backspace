@@ -67,7 +67,8 @@
     "loadingSettings": "Einstellungen werden geladen…",
     "settingsSaved": "Einstellungen gespeichert",
     "saveFailed": "Speichern fehlgeschlagen",
-    "scanning": "Wird geprüft…"
+    "scanning": "Wird geprüft…",
+    "pleaseWait": "Bitte warten…"
   },
   "labels": {
     "username": "Benutzername",

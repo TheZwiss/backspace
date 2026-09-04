@@ -32,6 +32,7 @@ describe('requireLocalUser', () => {
     expect(reply.code).toHaveBeenCalledWith(403);
     expect(reply.send).toHaveBeenCalledWith({
       error: 'Federated users must use their home instance for DM operations',
+      code: 'forbidden',
       statusCode: 403,
     });
   });

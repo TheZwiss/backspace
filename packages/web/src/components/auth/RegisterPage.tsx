@@ -7,7 +7,7 @@ import { ImageCropModal } from '../ui/ImageCropModal';
 import { AVATAR_GRADIENT_MAP } from '../../utils/gradients';
 import { AVATAR_COLORS } from '@backspace/shared';
 import type { AvatarColor, CheckInviteResponse, InstanceInfoResponse } from '@backspace/shared';
-import { api, RateLimitError } from '../../api/client';
+import { api, HttpError, RateLimitError } from '../../api/client';
 import { useTransferStore } from '../../stores/transferStore';
 import { waitForTransferAttachment } from '../../utils/waitForTransfer';
 import { SourceCodeLink } from '../ui/SourceCodeLink';
@@ -215,9 +215,13 @@ export function RegisterPage() {
         const result = await api.auth.checkUsername(trimmed);
         if (controller.signal.aborted) return;
 
-        if (result.reason) {
+        if (result.reason || result.code) {
           setUsernameStatus('invalid');
-          setUsernameStatusMessage(result.reason);
+          // Localize by code when the server sends one; the English reason is
+          // the fallback for an instance that predates the codes.
+          setUsernameStatusMessage(
+            describeError(new HttpError(200, result.reason ?? '', result, result.code, result.details)),
+          );
         } else if (result.available) {
           setUsernameStatus('available');
           setUsernameStatusMessage(t('auth:validation.usernameAvailable'));

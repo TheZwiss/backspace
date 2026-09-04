@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { User, InstanceInfoResponse, ReplicatedInstance, AuthResponse, FederationRegistryEntry } from '@backspace/shared';
-import { BackspaceApiClient, createApiClient, api } from '../api/client';
+import { BackspaceApiClient, HttpError, createApiClient, api } from '../api/client';
 import { useAuthStore } from './authStore';
 import {
   setApiForOriginResolver,
@@ -435,11 +435,17 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
             homeUserId: trueHomeUserId,
           });
         } catch (err) {
-          const message = (err as Error).message;
-          if (message.includes('already taken') || message.includes('409') ||
-              message.includes('Registration is currently closed') || message.includes('403')) {
-            // Already registered or registration closed — fall through to login
-          } else {
+          // Already registered, or registration closed: fall through to login.
+          // The status fallback covers a remote instance on a version that
+          // sends no code yet.
+          const registeredOrClosed = err instanceof HttpError && (
+            err.code === 'username_taken' ||
+            err.code === 'registration_closed' ||
+            err.code === 'federated_registration_closed' ||
+            err.status === 409 ||
+            err.status === 403
+          );
+          if (!registeredOrClosed) {
             throw err;
           }
         }

@@ -89,6 +89,18 @@ export class RateLimitError extends Error {
   }
 }
 
+/**
+ * Reply of the username availability check. `reason` is the server's
+ * English text; `code` and `details` let the client say it in the user's
+ * language.
+ */
+export interface CheckUsernameResponse {
+  available: boolean;
+  reason?: string;
+  code?: ErrorCode;
+  details?: ErrorDetails;
+}
+
 export class HttpError extends Error {
   readonly status: number;
   readonly body?: unknown;
@@ -129,7 +141,7 @@ export class BackspaceApiClient {
   readonly auth: {
     register: (data: RegisterRequest) => Promise<AuthResponse>;
     login: (data: LoginRequest) => Promise<AuthResponse>;
-    checkUsername: (username: string) => Promise<{ available: boolean; reason?: string }>;
+    checkUsername: (username: string) => Promise<CheckUsernameResponse>;
     checkInvite: (token: string) => Promise<CheckInviteResponse>;
     attachProof: (targetDomain: string) => Promise<AttachProofResponse>;
   };
@@ -419,7 +431,7 @@ export class BackspaceApiClient {
       login: (data: LoginRequest) =>
         request<AuthResponse>('POST', '/auth/login', data, false),
       checkUsername: (username: string) =>
-        request<{ available: boolean; reason?: string }>('GET', `/auth/check-username?username=${encodeURIComponent(username)}`, undefined, false),
+        request<CheckUsernameResponse>('GET', `/auth/check-username?username=${encodeURIComponent(username)}`, undefined, false),
       checkInvite: (token: string) =>
         request<CheckInviteResponse>('GET', `/auth/check-invite?token=${encodeURIComponent(token)}`, undefined, false),
       attachProof: (targetDomain: string) =>

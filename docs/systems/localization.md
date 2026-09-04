@@ -223,10 +223,10 @@ Detection order on startup:
 Each entry in `supportedLanguages` carries a `released` flag. Only released
 languages appear in the picker (`availableLanguages`) or can be chosen by
 detection; a stored choice for an unreleased language is ignored. Russian and
-German are complete in code and tests but stay unreleased until every surface
-is translated, so a release cut between the foundation and 1.1.0 is
-English-only by construction rather than half translated. The PR that empties
-the pending list flips the flags. Tests reach the unreleased languages with
+German are complete in code and tests and every surface is translated, but
+they stay unreleased until the German has had a native read, so a release
+cut before 1.1.0 is English-only by construction rather than unreviewed. A
+separate release PR flips the flags. Tests reach the unreleased languages with
 `setLanguage` or `initI18n({ releasedLanguages })`; people reach them with
 `?lang=de` on the URL, which works in development builds only and is never
 persisted.
@@ -300,13 +300,22 @@ Federation: error bodies relayed from a peer instance follow the same
 contract, so a code from a newer peer is localized and a bare `error` from
 an older peer is shown as is.
 
-Converted so far: the profile, password and account-deletion routes in
-`users.ts`. Auth, joins, uploads, friends and DM management follow with their
-surface sweeps.
+Every route file is converted: auth, users, spaces, channels, messages, DMs
+(including the space-invite endpoint), social, explore, admin, settings,
+search, LiveKit, uploads, GIF and URL metadata. The `authenticate`,
+`requireAdmin` and `requireLocalUser` hooks in `utils/auth.ts` send codes
+too (`unauthorized`, `account_deleted`, `forbidden`) while keeping their
+English text. Two responses carry extra fields next to the shared shape: the
+username availability check (`available`, `reason`) and the owned-spaces
+rejection (`ownedSpaces`). The only sites left without codes are the
+test-only peer seeding route and the WebSocket handler's error messages,
+which are a separate protocol.
 
-The conversion order is by what users actually see: auth, joining spaces
-and DMs, uploads, friend requests, DM management. Internal and admin errors
-follow as their panels are swept.
+The web client no longer matches on English error text. The places that
+used to (the join page, the space invite card, the invite modal, the roles
+panel, the federated account registration in `instanceStore`) check
+`err.code`; the join helper in `utils/joinErrors.ts` keeps a text fallback
+for a federated peer on a version that predates the codes.
 
 ---
 
@@ -361,16 +370,18 @@ It fails on:
 3. A plural key missing a CLDR category for its language.
 4. A `t()` call that passes `count` to a key without plural forms.
 5. A non-English value byte-identical to the English one, outside the
-   allowlist in `scripts/i18n-allowlist.json` (brand names, "OK", URLs).
+   allowlist in `scripts/i18n-allowlist.json` (brand names, "OK", URLs, and
+   the words German shares with English such as Link, Info, Token, Codec).
 6. A direct `toLocale*` or `Intl.*` call in the web package outside
    `formatters.ts`.
 7. An `ErrorCode` with no entry in `errors.json`.
 8. A literal user-facing string in JSX or in a `addToast(...)` call, in any
-   file not listed in `scripts/i18n-pending.txt`. That file is the list of
-   source files not yet swept; each sweep PR removes its files from it, and
-   the list reaching zero is the definition of done for the first localized
-   release. `node scripts/check-i18n.mjs --write-pending` regenerates it from
-   the current tree. A line that is a false positive carries
+   file not listed in `scripts/i18n-pending.txt`. That file listed the
+   source files not yet swept while the sweeps ran; it has been empty since
+   they finished, so the rule covers every file, and it stays as the
+   mechanism for a surface that has to land untranslated for a while.
+   `node scripts/check-i18n.mjs --write-pending` regenerates it from the
+   current tree. A line that is a false positive carries
    `// i18n-check: allow-literal` on the line above.
 
 The check reports every finding at once, with file and line, so a sweep PR

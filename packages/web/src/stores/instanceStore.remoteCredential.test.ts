@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { User } from '@backspace/shared';
 import type { BackspaceApiClient } from '../api/client';
+import { HttpError } from '../api/client';
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
 // Obvious fakes only. HOME_PASSWORD is the value that must never leave the
@@ -26,7 +27,10 @@ const remoteRegister = vi.fn();
 const remoteLogin = vi.fn();
 const remoteInfo = vi.fn(async () => ({ name: 'Orbit' }));
 
-vi.mock('../api/client', () => ({
+// Keep the real exports: HttpError is what the store inspects on a failed
+// remote registration.
+vi.mock('../api/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../api/client')>()),
   api: {
     users: {
       verifyPassword: (password: string) => verifyPassword(password),
@@ -155,7 +159,9 @@ describe('connectToRemote never hands the home password to a remote instance', (
   });
 
   it('falls back to login with the issued secret when the account already exists', async () => {
-    remoteRegister.mockRejectedValue(new Error('Username already taken'));
+    remoteRegister.mockRejectedValue(
+      new HttpError(409, 'Username is already taken', { error: 'Username is already taken', code: 'username_taken', statusCode: 409 }, 'username_taken'),
+    );
     remoteLogin.mockResolvedValue(authResponse());
 
     await useInstanceStore.getState().connectToRemote(REMOTE, HOME_PASSWORD, 'Erin');
@@ -168,7 +174,9 @@ describe('connectToRemote never hands the home password to a remote instance', (
   });
 
   it('never retries a failed remote login with the home password', async () => {
-    remoteRegister.mockRejectedValue(new Error('Username already taken'));
+    remoteRegister.mockRejectedValue(
+      new HttpError(409, 'Username is already taken', { error: 'Username is already taken', code: 'username_taken', statusCode: 409 }, 'username_taken'),
+    );
     remoteLogin.mockRejectedValue(new Error('Invalid username or password'));
 
     await expect(

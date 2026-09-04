@@ -1,5 +1,6 @@
 import React, { useEffect, useCallback } from 'react';
 import ReactDOM from 'react-dom';
+import { useTranslation } from 'react-i18next';
 import { usePortalContainer } from '../../hooks/usePortalContainer';
 
 interface ConfirmDialogProps {
@@ -20,11 +21,12 @@ export function ConfirmDialog({
   onConfirm,
   title,
   description,
-  confirmLabel = 'Confirm',
-  cancelLabel = 'Cancel',
+  confirmLabel,
+  cancelLabel,
   variant = 'danger',
   loading = false,
 }: ConfirmDialogProps) {
+  const { t } = useTranslation(['common']);
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.key === 'Escape' && !loading) {
       e.stopPropagation();
@@ -64,14 +66,14 @@ export function ConfirmDialog({
               disabled={loading}
               className="flex-1 py-2.5 text-sm font-medium text-txt-secondary bg-interactive-hover hover:bg-interactive-selected rounded-lg transition-colors disabled:opacity-50"
             >
-              {cancelLabel}
+              {cancelLabel ?? t('common:actions.cancel')}
             </button>
             <button
               onClick={onConfirm}
               disabled={loading}
               className={`flex-1 py-2.5 ${confirmBg} text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50`}
             >
-              {loading ? 'Please wait...' : confirmLabel}
+              {loading ? t('common:states.pleaseWait') : (confirmLabel ?? t('common:actions.confirm'))}
             </button>
           </div>
         </div>
