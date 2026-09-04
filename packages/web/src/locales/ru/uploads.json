@@ -1,1 +1,26 @@
-{}
+{
+  "transfers": {
+    "title": "Передачи",
+    "count_one": "{{count}} передача",
+    "count_few": "{{count}} передачи",
+    "count_many": "{{count}} передач",
+    "count_other": "{{count}} передачи",
+    "clearCompleted": "Убрать завершённые",
+    "empty": "Нет активных передач.",
+    "status": {
+      "done": "Готово",
+      "failed": "Ошибка: {{reason}}",
+      "aborted": "Прервано",
+      "progress": "{{loaded}} / {{total}}"
+    },
+    "actions": {
+      "pause": "Пауза",
+      "resume": "Продолжить",
+      "abort": "Прервать"
+    }
+  },
+  "crop": {
+    "title": "Обрезать изображение",
+    "applying": "Применение…"
+  }
+}
