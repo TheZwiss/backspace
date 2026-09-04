@@ -1,5 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 import { useVoiceStore } from '../../stores/voiceStore';
 import type { ScreenShareConfig } from '../../stores/voiceStore';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -9,6 +10,8 @@ import { usePortalContainer } from '../../hooks/usePortalContainer';
 import { Toggle } from '../ui/Toggle';
 import { isElectron } from '../../platform/platform';
 import { RESOLUTION_LABELS } from '@backspace/shared/src/constants';
+import i18n from '../../i18n';
+import { formatters } from '../../i18n/formatters';
 
 interface ScreenShareSettingsPopoverProps {
   open: boolean;
@@ -16,36 +19,41 @@ interface ScreenShareSettingsPopoverProps {
   anchorRef: React.RefObject<HTMLElement | null>;
 }
 
-const MODES: { value: ScreenShareConfig['mode']; label: string }[] = [
-  { value: 'gaming', label: 'Gaming' },
-  { value: 'text', label: 'Text' },
+const MODES: { value: ScreenShareConfig['mode']; labelKey: 'voice:streamSettings.mode.gaming' | 'voice:streamSettings.mode.text' }[] = [
+  { value: 'gaming', labelKey: 'voice:streamSettings.mode.gaming' },
+  { value: 'text', labelKey: 'voice:streamSettings.mode.text' },
 ];
 
 const CODEC_OPTIONS = [
-  { value: 'vp9' as const, label: 'Standard', sub: 'VP9' },
-  { value: 'hw' as const, label: 'NVIDIA / Apple', sub: 'H.264' },
+  { value: 'vp9' as const, labelKey: 'voice:streamSettings.codecOption.standard' as const, sub: 'VP9' },
+  { value: 'hw' as const, labelKey: 'voice:streamSettings.codecOption.hardware' as const, sub: 'H.264' },
 ];
 
+/** Whole Mbps when the value is round, otherwise one decimal; the number goes through the locale. */
 function formatBitrate(bps: number): string {
-  return `${(bps / 1_000_000).toFixed(bps % 1_000_000 === 0 ? 0 : 1)} Mbps`;
+  const mbps = bps % 1_000_000 === 0 ? bps / 1_000_000 : Math.round(bps / 100_000) / 10;
+  return i18n.t('voice:connectionInfo.units.mbps', { value: formatters.formatNumber(mbps) });
 }
 
 function formatDegradation(pref: RTCDegradationPreference): string {
   switch (pref) {
-    case 'maintain-resolution': return 'hold resolution';
-    case 'maintain-framerate': return 'hold framerate';
-    case 'balanced': return 'balanced';
+    case 'maintain-resolution': return i18n.t('voice:streamSettings.degradation.maintainResolution');
+    case 'maintain-framerate': return i18n.t('voice:streamSettings.degradation.maintainFramerate');
+    case 'balanced': return i18n.t('voice:streamSettings.degradation.balanced');
     default: return pref;
   }
 }
 
 function formatKbps(kbps: number): string {
-  return kbps >= 1000
-    ? `${(kbps / 1000).toFixed(kbps % 1000 === 0 ? 0 : 1)} Mbps`
-    : `${kbps} kbps`;
+  if (kbps >= 1000) {
+    const mbps = kbps % 1000 === 0 ? kbps / 1000 : Math.round(kbps / 100) / 10;
+    return i18n.t('voice:connectionInfo.units.mbps', { value: formatters.formatNumber(mbps) });
+  }
+  return i18n.t('voice:connectionInfo.units.kbps', { value: formatters.formatNumber(kbps) });
 }
 
 export function ScreenShareSettingsPopover({ open, onClose, anchorRef }: ScreenShareSettingsPopoverProps) {
+  const { t } = useTranslation(['voice', 'common']);
   const popoverRef = useRef<HTMLDivElement>(null);
   const portalContainer = usePortalContainer();
   const config = useVoiceStore((s) => s.screenShareConfig);
@@ -129,14 +137,14 @@ export function ScreenShareSettingsPopover({ open, onClose, anchorRef }: ScreenS
       className="w-[260px] glass rounded-lg overflow-hidden"
     >
       <div className="px-3 py-2 border-b border-border-hard">
-        <span className="text-[14px] font-bold text-txt-primary">Stream Settings</span>
+        <span className="text-[14px] font-bold text-txt-primary">{t('voice:streamSettings.title')}</span>
       </div>
 
       <div className="px-3 py-3 flex flex-col gap-3">
         {/* Resolution */}
         <div>
           <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-1.5">
-            Resolution
+            {t('voice:streamSettings.resolution')}
           </div>
           <div className="grid grid-cols-3 gap-1.5">
             {RESOLUTIONS.map((r) => (
@@ -154,7 +162,7 @@ export function ScreenShareSettingsPopover({ open, onClose, anchorRef }: ScreenS
         {/* Frame Rate */}
         <div>
           <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-1.5">
-            Frame Rate
+            {t('voice:streamSettings.frameRate')}
           </div>
           <div className="grid grid-cols-3 gap-1.5">
             {FRAME_RATES.map((f) => (
@@ -172,7 +180,7 @@ export function ScreenShareSettingsPopover({ open, onClose, anchorRef }: ScreenS
         {/* Content Mode */}
         <div>
           <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-1.5">
-            Content Mode
+            {t('voice:streamSettings.contentMode')}
           </div>
           <div className="flex gap-1.5">
             {MODES.map((m) => (
@@ -181,7 +189,7 @@ export function ScreenShareSettingsPopover({ open, onClose, anchorRef }: ScreenS
                 onClick={() => setConfig({ mode: m.value })}
                 className={`${pillBase} ${config.mode === m.value ? pillSelected : pillUnselected}`}
               >
-                {m.label}
+                {t(m.labelKey)}
               </button>
             ))}
           </div>
@@ -190,7 +198,7 @@ export function ScreenShareSettingsPopover({ open, onClose, anchorRef }: ScreenS
         {/* Codec */}
         <div>
           <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-1.5">
-            Codec
+            {t('voice:streamSettings.codec')}
           </div>
           <div className="flex gap-1.5">
             {CODEC_OPTIONS.map((c) => {
@@ -206,7 +214,7 @@ export function ScreenShareSettingsPopover({ open, onClose, anchorRef }: ScreenS
                       : (isHw ? 'bg-surface-elevated/50 text-txt-tertiary hover:bg-interactive-hover' : pillUnselected)
                   }`}
                 >
-                  <span>{c.label}</span>
+                  <span>{t(c.labelKey)}</span>
                   <span className="text-[10px] opacity-60">{c.sub}</span>
                 </button>
               );
@@ -214,7 +222,7 @@ export function ScreenShareSettingsPopover({ open, onClose, anchorRef }: ScreenS
           </div>
           {hwOverdrive && (
             <div className="text-[10px] text-accent-amber/80 mt-1">
-              GPU hardware encoder · resets when stream ends
+              {t('voice:streamSettings.hardwareNote')}
             </div>
           )}
         </div>
@@ -223,14 +231,14 @@ export function ScreenShareSettingsPopover({ open, onClose, anchorRef }: ScreenS
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider">
-              Bitrate
+              {t('voice:streamSettings.bitrate')}
             </div>
             {limits?.allowCustomBitrate !== false && config.customBitrateKbps != null && (
               <button
                 onClick={() => setConfig({ customBitrateKbps: null })}
                 className="text-[11px] text-accent-primary hover:text-accent-lavender font-medium transition-colors"
               >
-                Reset to Auto
+                {t('voice:streamSettings.resetToAuto')}
               </button>
             )}
           </div>
@@ -255,7 +263,7 @@ export function ScreenShareSettingsPopover({ open, onClose, anchorRef }: ScreenS
               }`}>
                 {config.customBitrateKbps != null
                   ? formatKbps(config.customBitrateKbps)
-                  : `Auto`}
+                  : t('voice:streamSettings.auto')}
               </span>
             </div>
           ) : (
@@ -264,7 +272,7 @@ export function ScreenShareSettingsPopover({ open, onClose, anchorRef }: ScreenS
                 {formatKbps(Math.round(result.publish.videoEncoding.maxBitrate / 1000))}
               </div>
               <div className="text-[10px] text-txt-tertiary mt-0.5">
-                Custom bitrate disabled by administrator
+                {t('voice:streamSettings.customBitrateDisabled')}
               </div>
             </div>
           )}
@@ -275,11 +283,11 @@ export function ScreenShareSettingsPopover({ open, onClose, anchorRef }: ScreenS
           <div className="flex items-center justify-between">
             <div>
               <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider">
-                System Audio
+                {t('voice:streamSettings.systemAudio')}
               </div>
               {isElectron() && config.shareAudio && (
                 <div className="text-[10px] text-accent-amber/80 mt-0.5">
-                  Use Chrome for echo-free audio
+                  {t('voice:streamSettings.chromeEchoNote')}
                 </div>
               )}
             </div>
@@ -294,7 +302,10 @@ export function ScreenShareSettingsPopover({ open, onClose, anchorRef }: ScreenS
       {/* Footer — computed stats */}
       <div className="px-3 py-2 border-t border-border-hard">
         <span className="text-[12px] text-txt-tertiary">
-          {formatBitrate(result.publish.videoEncoding.maxBitrate)} · {formatDegradation(result.overdrive.degradationPreference)}
+          {t('voice:streamSettings.summary', {
+            bitrate: formatBitrate(result.publish.videoEncoding.maxBitrate),
+            degradation: formatDegradation(result.overdrive.degradationPreference),
+          })}
         </span>
       </div>
     </div>,

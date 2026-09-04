@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ProfileAvatar } from '../ui/ProfileAvatar';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useContextMenuStore, type ContextMenuItem } from '../../stores/contextMenuStore';
@@ -14,6 +15,7 @@ interface VoiceUserProps {
 }
 
 export function VoiceUser({ tile, large }: VoiceUserProps) {
+  const { t } = useTranslation(['voice', 'common']);
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const { participant } = tile;
@@ -91,7 +93,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
         items.push({
           key: 'camera-toggle',
           type: 'action',
-          label: isCameraUnwatched ? 'Watch Camera' : 'Stop Watching Camera',
+          label: isCameraUnwatched ? t('voice:participantMenu.watchCamera') : t('voice:participantMenu.stopWatchingCamera'),
           icon: React.createElement('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'currentColor', className: 'flex-shrink-0' },
             ...(isCameraUnwatched
               ? [React.createElement('path', { key: 'cam', d: 'M17 10.5V7c0-.55-.45-1-1-1H2c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h14c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z' })]
@@ -119,7 +121,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
       items.push({
         key: 'mute-user',
         type: 'checkbox',
-        label: 'Mute User',
+        label: t('voice:participantMenu.muteUser'),
         subscribe: useVoiceStore.subscribe,
         getChecked: () => useVoiceStore.getState().participantMutes.get(targetUserId) ?? false,
         onChange: (checked) => useVoiceStore.getState().setParticipantMute(targetUserId, checked),
@@ -136,7 +138,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
 
       openContextMenu({ x: e.clientX, y: e.clientY }, items);
     },
-    [isLocal, currentVoiceChannelId, participant.userId, openContextMenu],
+    [isLocal, currentVoiceChannelId, participant.userId, openContextMenu, t],
   );
 
   return (
@@ -184,7 +186,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
             </span>
             {isLocal && (
               <span className="text-[10px] text-white/40 font-medium">
-                (you)
+                {t('voice:badges.you')}
               </span>
             )}
           </div>
@@ -238,7 +240,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
                     </div>
                   )}
                   {!isLocal && participantMutes.get(participant.userId) && (
-                    <div className="w-5 h-5 bg-white/20 rounded-full flex items-center justify-center" title="Locally Muted">
+                    <div className="w-5 h-5 bg-white/20 rounded-full flex items-center justify-center" title={t('voice:badges.locallyMuted')}>
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="white">
                         <path d="M3 9v6h4l5 5V4L7 9H3z" />
                         <line x1="17" y1="7" x2="23" y2="13" stroke="white" strokeWidth="2" strokeLinecap="round" />
