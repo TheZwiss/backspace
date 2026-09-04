@@ -91,7 +91,7 @@
     },
     "hardwareNote": "Аппаратный кодировщик GPU · сбрасывается после завершения трансляции",
     "bitrate": "Битрейт",
-    "resetToAuto": "Сбросить на Авто",
+    "resetToAuto": "Сбросить на «Авто»",
     "auto": "Авто",
     "customBitrateDisabled": "Пользовательский битрейт отключён администратором",
     "systemAudio": "Системный звук",
@@ -117,7 +117,7 @@
     "isStreaming": "{{name}} ведёт трансляцию"
   },
   "controls": {
-    "spaceMutedSelfMuted": "Микрофон отключён в пространстве (и вами)",
+    "spaceMutedSelfMuted": "Микрофон отключён в пространстве и у вас",
     "unmuteShortcut": "Включить микрофон (M)",
     "muteShortcut": "Отключить микрофон (M)",
     "undeafenShortcut": "Включить звук (D)",
@@ -144,12 +144,12 @@
     "voiceChannel": "Голосовой канал",
     "voiceCall": "Голосовой звонок",
     "connectionFailed": "Не удалось подключиться",
-    "connected": "Голосовая связь подключена",
+    "connected": "Голосовая связь установлена",
     "connecting": "Подключение…"
   },
   "camera": {
     "auto": "Авто",
-    "autoSystemDefault": "Авто (системная по умолчанию)",
+    "autoSystemDefault": "Авто (по умолчанию в системе)",
     "selected": "Выбранная камера",
     "fallbackName": "Камера {{index}}",
     "select": "Выбрать камеру",
