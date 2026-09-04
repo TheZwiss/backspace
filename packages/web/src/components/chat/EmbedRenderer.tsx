@@ -12,9 +12,11 @@ interface EmbedRendererProps {
 export function EmbedRenderer({ embed }: EmbedRendererProps) {
   switch (embed.embedType) {
     case 'video':
+      // i18n-check: allow-literal (switch/case punctuation between JSX returns, not text)
       return <VideoEmbed embed={embed} />;
 
     case 'image':
+      // i18n-check: allow-literal (switch/case punctuation between JSX returns, not text)
       return <ImageEmbed embed={embed} />;
 
     case 'audio':
@@ -40,6 +42,7 @@ export function EmbedRenderer({ embed }: EmbedRendererProps) {
       );
 
     case 'rich':
+      // i18n-check: allow-literal (switch/case punctuation between JSX returns, not text)
       return <RichEmbed embed={embed} />;
 
     case 'generic':

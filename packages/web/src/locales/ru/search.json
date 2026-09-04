@@ -1,1 +1,42 @@
-{}
+{
+  "input": {
+    "placeholder": "Поиск сообщений…"
+  },
+  "filters": {
+    "toggle": "Фильтры",
+    "from": {
+      "label": "От кого",
+      "placeholder": "имя пользователя"
+    },
+    "has": {
+      "label": "Содержит",
+      "any": "Любое",
+      "file": "Файл",
+      "image": "Изображение",
+      "link": "Ссылку"
+    },
+    "before": {
+      "label": "До"
+    },
+    "after": {
+      "label": "После"
+    }
+  },
+  "results": {
+    "empty": "Ничего не найдено",
+    "hint": "Введите запрос, чтобы искать сообщения в этом канале",
+    "count_one": "{{count}} результат",
+    "count_few": "{{count}} результата",
+    "count_many": "{{count}} результатов",
+    "count_other": "{{count}} результата",
+    "loadMore": "Показать ещё (осталось {{remaining}})",
+    "attachments_one": "{{count}} вложение",
+    "attachments_few": "{{count}} вложения",
+    "attachments_many": "{{count}} вложений",
+    "attachments_other": "{{count}} вложения"
+  },
+  "time": {
+    "todayAt": "Сегодня в {{time}}",
+    "yesterdayAt": "Вчера в {{time}}"
+  }
+}
