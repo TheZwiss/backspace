@@ -1,1 +1,168 @@
-{}
+{
+  "sidebar": {
+    "directMessages": "Личные сообщения",
+    "addSpace": "Добавить пространство",
+    "joinSpace": "Присоединиться к пространству",
+    "exploreSpaces": "Обзор пространств",
+    "folder": {
+      "tooltip_one": "Папка ({{count}})",
+      "tooltip_few": "Папка ({{count}})",
+      "tooltip_many": "Папка ({{count}})",
+      "tooltip_other": "Папка ({{count}})",
+      "spaceCount_one": "{{count}} пространство",
+      "spaceCount_few": "{{count}} пространства",
+      "spaceCount_many": "{{count}} пространств",
+      "spaceCount_other": "{{count}} пространства",
+      "unnamed": "Безымянная папка",
+      "rename": "Переименовать папку",
+      "color": "Цвет папки",
+      "create": "Создать папку",
+      "moveTo": "Переместить в папку",
+      "removeFrom": "Убрать из папки",
+      "ungroup": "Разгруппировать",
+      "colors": {
+        "mint": "Мятный",
+        "peach": "Персиковый",
+        "lavender": "Лавандовый",
+        "sky": "Небесный",
+        "amber": "Янтарный",
+        "rose": "Розовый",
+        "coral": "Коралловый"
+      },
+      "created": "Папка создана",
+      "moved": "Перемещено в папку",
+      "removed": "Убрано из папки",
+      "ungrouped": "Папка разгруппирована"
+    },
+    "space": {
+      "invite": "Пригласить людей",
+      "inviteCopied": "Ссылка-приглашение скопирована",
+      "inviteFailed": "Не удалось создать приглашение",
+      "transferOwnership": "Передать права владельца",
+      "settings": "Настройки пространства",
+      "leave": "Покинуть пространство",
+      "reconnecting": "Переподключение к {{instance}}…",
+      "remoteInstance": "удалённому серверу",
+      "leaveConfirm": {
+        "title": "Покинуть пространство",
+        "titleNamed": "Покинуть {{name}}",
+        "description": "Вы уверены, что хотите покинуть это пространство? Чтобы снова присоединиться, вам понадобится новое приглашение.",
+        "confirm": "Покинуть"
+      },
+      "left": "Вы покинули пространство",
+      "leaveFailed": "Не удалось покинуть пространство"
+    },
+    "dmList": {
+      "friends": "Друзья",
+      "comingSoon": "Скоро",
+      "newDm": "Новое личное сообщение",
+      "empty": "Пока нет бесед.",
+      "leaveGroup": "Покинуть группу",
+      "leaveGroupConfirm": {
+        "title": "Покинуть групповой чат",
+        "description": "Вы уверены, что хотите выйти? Вернуться получится, только если кто-то добавит вас снова.",
+        "confirm": "Покинуть"
+      }
+    },
+    "userArea": {
+      "inputDevice": "Устройство ввода",
+      "outputDevice": "Устройство вывода",
+      "inputDevices": "Устройства ввода",
+      "outputDevices": "Устройства вывода",
+      "inputVolume": "Громкость микрофона",
+      "outputVolume": "Громкость вывода",
+      "systemDefault": "Системное по умолчанию",
+      "microphonePermission": "Нужен доступ к микрофону.",
+      "audioPermission": "Нужен доступ к аудио.",
+      "enable": "Включить",
+      "voiceSettings": "Настройки голоса",
+      "settings": "Настройки",
+      "mute": "Выключить микрофон",
+      "unmute": "Включить микрофон",
+      "deafen": "Отключить звук",
+      "undeafen": "Включить звук",
+      "spaceMuted": "Микрофон отключён в пространстве",
+      "spaceDeafened": "Звук отключён в пространстве",
+      "permissionMuted": "Микрофон отключён (нет права говорить)"
+    }
+  },
+  "channels": {
+    "loading": "Загрузка каналов",
+    "create": "Создать канал",
+    "createCategory": "Создать категорию",
+    "settings": "Настройки канала",
+    "categorySettings": "Настройки категории",
+    "delete": "Удалить канал",
+    "deleteCategory": "Удалить категорию",
+    "emptyCategory": "Нет каналов",
+    "empty": "Пока нет каналов.",
+    "deleteConfirm": {
+      "title": "Удалить канал",
+      "description": "Вы уверены? Канал и все его сообщения будут удалены безвозвратно."
+    },
+    "deleteCategoryConfirm": {
+      "title": "Удалить категорию",
+      "description": "Вы уверены, что хотите удалить эту категорию? Каналы из неё останутся без категории — сами каналы удалены не будут."
+    },
+    "deleted": "Канал удалён",
+    "deleteFailed": "Не удалось удалить канал",
+    "categoryDeleted": "Категория удалена",
+    "categoryDeleteFailed": "Не удалось удалить категорию"
+  },
+  "members": {
+    "title": "Участники",
+    "titleWithCount_one": "Участники — {{count}}",
+    "titleWithCount_few": "Участники — {{count}}",
+    "titleWithCount_many": "Участники — {{count}}",
+    "titleWithCount_other": "Участники — {{count}}",
+    "loading": "Загрузка участников",
+    "empty": "Участники не найдены",
+    "groups": {
+      "owner": "Владелец",
+      "online": "В сети",
+      "offline": "Не в сети"
+    }
+  },
+  "mobile": {
+    "addSheet": {
+      "createSpace": "Создать пространство",
+      "joinSpace": "Присоединиться к пространству",
+      "exploreSpaces": "Обзор пространств"
+    },
+    "muteUser": "Отключить звук пользователя"
+  },
+  "main": {
+    "selectChannel": "Выберите канал",
+    "selectChannelHint": "Выберите текстовый или голосовой канал, чтобы начать",
+    "notificationSettings": "Настройки уведомлений",
+    "voice": {
+      "connectionFailed": "Не удалось подключиться",
+      "connected": "Подключено",
+      "connecting": "Подключение…",
+      "participants_one": "{{count}} участник подключён",
+      "participants_few": "{{count}} участника подключены",
+      "participants_many": "{{count}} участников подключено",
+      "participants_other": "{{count}} участника подключены",
+      "inCall_one": "{{count}} участник в звонке",
+      "inCall_few": "{{count}} участника в звонке",
+      "inCall_many": "{{count}} участников в звонке",
+      "inCall_other": "{{count}} участника в звонке",
+      "empty": "В этом голосовом канале сейчас никого нет.",
+      "join": "Подключиться к голосовому каналу"
+    },
+    "dm": {
+      "fallbackName": "Личное сообщение",
+      "composerPlaceholder": "Сообщение {{target}}",
+      "calling": "Звоним {{name}}…",
+      "groupSettings": "Настройки группы",
+      "openGroupSettings": "Открыть настройки группы",
+      "memberCount_one": "({{count}} участник)",
+      "memberCount_few": "({{count}} участника)",
+      "memberCount_many": "({{count}} участников)",
+      "memberCount_other": "({{count}} участника)",
+      "startVoiceCall": "Начать голосовой звонок",
+      "startVideoCall": "Начать видеозвонок",
+      "addFriends": "Добавить друзей в беседу"
+    }
+  }
+}
