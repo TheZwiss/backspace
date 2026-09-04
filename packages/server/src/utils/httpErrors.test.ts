@@ -52,7 +52,7 @@ describe('ERROR_MESSAGES', () => {
   it('references only placeholders that a caller can fill', () => {
     for (const [code, text] of Object.entries(ERROR_MESSAGES)) {
       for (const placeholder of text.matchAll(/\{\{(\w+)\}\}/g)) {
-        expect(['min', 'max'], `${code} uses {{${placeholder[1]}}}`).toContain(placeholder[1]);
+        expect(['min', 'max', 'permission', 'roleId'], `${code} uses {{${placeholder[1]}}}`).toContain(placeholder[1]);
       }
     }
   });
