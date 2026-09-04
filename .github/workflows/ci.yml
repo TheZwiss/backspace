@@ -89,6 +89,37 @@ jobs:
       - name: Test
         run: pnpm -r test
 
+  # The container image has its own build graph: the Dockerfile copies files
+  # into the builder stage one path at a time, so a build script that starts
+  # reading a new path passes every job above and still fails the image. That
+  # is how 1.1.0 shipped without an image: the web build gained the
+  # localization check under scripts/, and nothing built the Dockerfile until
+  # the tag did. Building the amd64 image here (never pushed) closes that gap
+  # on every PR. The buildx cache makes an unchanged image a few seconds.
+  build-image:
+    name: Build container image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - name: Build amd64 image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
   # Aggregate gate reporting a single, matrix-independent "Build & test" status.
   # Branch protection on main requires the "Build & test" context, but the matrix
   # job above reports per-version contexts ("Build & test (Node 20/24)"). This job
@@ -98,7 +129,7 @@ jobs:
   build-and-test-required:
     name: Build & test
     if: always()
-    needs: build-and-test
+    needs: [build-and-test, build-image]
     runs-on: ubuntu-latest
     steps:
       - name: Verify matrix result
@@ -107,4 +138,8 @@ jobs:
             echo "Matrix build-and-test did not succeed: ${{ needs.build-and-test.result }}"
             exit 1
           fi
-          echo "All matrix legs passed."
+          if [ "${{ needs.build-image.result }}" != "success" ]; then
+            echo "Container image build did not succeed: ${{ needs.build-image.result }}"
+            exit 1
+          fi
+          echo "All matrix legs passed and the image builds."

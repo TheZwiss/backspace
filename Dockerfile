@@ -64,6 +64,13 @@ RUN pnpm install --frozen-lockfile --filter @backspace/web...
 COPY packages/shared/ packages/shared/
 COPY packages/web/ packages/web/
 
+# The web build starts with the localization consistency check, which lives
+# in scripts/ and reads its allowlist and pending list from there. Only the
+# check is copied: scripts/metrics is a workspace package the image does not
+# build, and its lockfile entries are already filtered out by the install above.
+COPY scripts/check-i18n.mjs scripts/i18n-allowlist.json scripts/i18n-pending.txt scripts/
+COPY scripts/i18n/ scripts/i18n/
+
 # Build the web frontend
 RUN pnpm --filter @backspace/web build
 

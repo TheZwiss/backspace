@@ -7,6 +7,7 @@ Source files:
 - `docker-compose.yml` -- base stack: `backspace` + `caddy` (+ optional `livekit`) services, healthcheck
 - `docker-compose.proxy.yml` -- proxy/tunnel overlay: publishes the app on `127.0.0.1:APP_PORT` and drops Caddy
 - `.github/workflows/docker-publish.yml` -- multi-arch (amd64+arm64) GHCR image publish
+- `.github/workflows/ci.yml` (`build-image` job) -- builds the amd64 image on every PR and push to main without pushing it, so a Dockerfile that no longer matches the build scripts fails before a tag does (1.1.0 shipped without an image for that reason)
 - `Caddyfile` -- reverse proxy / auto-HTTPS config (All-in-One mode only)
 - `install.sh` -- interactive first-time setup, mode-aware (allinone / proxy / tunnel)
 - `deploy.sh` -- rsync + rebuild to Heidi's two boxes
