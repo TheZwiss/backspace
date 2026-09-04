@@ -87,7 +87,10 @@
     "today": "Сегодня в {{time}}",
     "yesterday": "Вчера в {{time}}",
     "never": "Никогда",
-    "justNow": "Только что"
+    "justNow": "Только что",
+    "minutesShort": "{{minutes}} мин.",
+    "hoursMinutesShort": "{{hours}} ч {{minutes}} мин.",
+    "elapsed": "Прошло {{duration}}"
   },
   "units": {
     "ms": "{{value}} мс",
