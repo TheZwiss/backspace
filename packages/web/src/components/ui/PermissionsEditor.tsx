@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { permissionsToString, stringToPermissions } from '../../utils/permissions';
 import { OverrideEntry, type PermissionDef } from './OverrideEntry';
+import { describeError } from '../../i18n/errors';
 import type { Role, MemberWithUser } from '@backspace/shared';
 
 export interface Override {
@@ -30,6 +32,7 @@ export function PermissionsEditor({
   putOverride,
   deleteOverride,
 }: PermissionsEditorProps) {
+  const { t } = useTranslation(['spaces', 'common']);
   const roles = useSpaceStore((s) => s.roles);
   const members = useSpaceStore((s) => s.members);
 
@@ -65,7 +68,7 @@ export function PermissionsEditor({
         setOverrides(data);
       })
       .catch((err: Error) => {
-        setFetchError(err.message || 'Failed to load overrides');
+        setFetchError(describeError(err));
       });
   }, []);
 
@@ -308,7 +311,11 @@ export function PermissionsEditor({
       const failures = results.filter(r => r.status === 'rejected');
       if (failures.length > 0) {
         const first = failures[0] as PromiseRejectedResult;
-        setSaveError(first.reason?.message || `${failures.length} override(s) failed to save`);
+        setSaveError(
+          first.reason instanceof Error
+            ? describeError(first.reason)
+            : t('spaces:permissions.partialFailure', { count: failures.length }),
+        );
       }
 
       // Reset draft state and re-fetch overrides
@@ -317,11 +324,11 @@ export function PermissionsEditor({
       setPendingRemovals(new Set());
       fetchOverrides();
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : 'Failed to save overrides');
+      setSaveError(describeError(err));
     } finally {
       setSaving(false);
     }
-  }, [draftOverrides, newOverrides, pendingRemovals, deleteOverride, putOverride, fetchOverrides]);
+  }, [draftOverrides, newOverrides, pendingRemovals, deleteOverride, putOverride, fetchOverrides, t]);
 
   // Build ordered lists of role and member overrides
   const roleOverrides = useMemo(() => {
@@ -391,7 +398,7 @@ export function PermissionsEditor({
       {/* Role Overrides */}
       <div>
         <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">
-          Role Overrides
+          {t('spaces:permissions.roleOverrides')}
         </div>
         <div className="space-y-1.5">
           {roleOverrides.map(({ key, role }) => {
@@ -422,13 +429,13 @@ export function PermissionsEditor({
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
               </svg>
-              Add Role
+              {t('spaces:permissions.addRole')}
             </button>
           ) : (
             <div ref={roleDropdownRef} className="glass rounded-lg overflow-hidden">
               <div className="p-1.5 max-h-48 overflow-y-auto scrollbar-thin">
                 {availableRoles.length === 0 ? (
-                  <div className="px-2.5 py-1.5 text-xs text-txt-muted">No more roles to add</div>
+                  <div className="px-2.5 py-1.5 text-xs text-txt-muted">{t('spaces:permissions.noMoreRoles')}</div>
                 ) : (
                   availableRoles.map(role => (
                     <button
@@ -450,7 +457,7 @@ export function PermissionsEditor({
                   onClick={() => setShowAddRole(false)}
                   className="w-full text-xs text-txt-muted hover:text-txt-tertiary px-2.5 py-1 transition-colors"
                 >
-                  Cancel
+                  {t('common:actions.cancel')}
                 </button>
               </div>
             </div>
@@ -461,7 +468,7 @@ export function PermissionsEditor({
       {/* Member Overrides */}
       <div>
         <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">
-          Member Overrides
+          {t('spaces:permissions.memberOverrides')}
         </div>
         <div className="space-y-1.5">
           {memberOverrides.map(({ key, member }) => {
@@ -490,7 +497,7 @@ export function PermissionsEditor({
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
               </svg>
-              Add Member
+              {t('spaces:permissions.addMember')}
             </button>
           ) : (
             <div ref={memberDropdownRef} className="glass rounded-lg overflow-hidden">
@@ -499,14 +506,14 @@ export function PermissionsEditor({
                   type="text"
                   value={memberSearch}
                   onChange={(e) => setMemberSearch(e.target.value)}
-                  placeholder="Search members..."
+                  placeholder={t('spaces:settings.members.searchPlaceholder')}
                   className="input-search w-full mb-1"
                   autoFocus
                 />
               </div>
               <div className="px-1.5 max-h-48 overflow-y-auto scrollbar-thin">
                 {availableMembers.length === 0 ? (
-                  <div className="px-2.5 py-1.5 text-xs text-txt-muted">No members found</div>
+                  <div className="px-2.5 py-1.5 text-xs text-txt-muted">{t('spaces:settings.members.noneFound')}</div>
                 ) : (
                   availableMembers.map(member => (
                     <button
@@ -527,7 +534,7 @@ export function PermissionsEditor({
                   onClick={() => { setShowAddMember(false); setMemberSearch(''); }}
                   className="w-full text-xs text-txt-muted hover:text-txt-tertiary px-2.5 py-1 transition-colors"
                 >
-                  Cancel
+                  {t('common:actions.cancel')}
                 </button>
               </div>
             </div>
@@ -551,14 +558,14 @@ export function PermissionsEditor({
                 onClick={handleDiscard}
                 className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
               >
-                Discard
+                {t('spaces:settings.discardChanges')}
               </button>
               <button
                 onClick={handleSave}
                 disabled={saving}
                 className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
               >
-                {saving ? 'Saving...' : 'Save'}
+                {saving ? t('common:states.saving') : t('common:actions.save')}
               </button>
             </div>
           </div>
