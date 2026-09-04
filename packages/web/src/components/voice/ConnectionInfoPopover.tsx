@@ -1,9 +1,12 @@
 import React, { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 import { useTrackStats, AudioTrackStat, VideoTrackStat } from '../../hooks/useTrackStats';
 import { getActiveRoom } from '../../hooks/useLiveKit';
 import { useFloatingPosition } from '../../hooks/useFloatingPosition';
 import { usePortalContainer } from '../../hooks/usePortalContainer';
+import i18n from '../../i18n';
+import { formatters } from '../../i18n/formatters';
 
 interface ConnectionInfoPopoverProps {
   open: boolean;
@@ -11,9 +14,22 @@ interface ConnectionInfoPopoverProps {
   anchorRef: React.RefObject<HTMLElement | null>;
 }
 
+/** Whole kbps below 1 Mbps, one decimal up to 10 Mbps, whole Mbps above; the number itself goes through the locale. */
 function formatBitrate(kbps: number): string {
-  if (kbps < 1000) return `${Math.round(kbps)} kbps`;
-  return `${(kbps / 1000).toFixed(kbps >= 10000 ? 0 : 1)} Mbps`;
+  if (kbps < 1000) {
+    return i18n.t('voice:connectionInfo.units.kbps', { value: formatters.formatNumber(Math.round(kbps)) });
+  }
+  const mbps = kbps >= 10000 ? Math.round(kbps / 1000) : Math.round(kbps / 100) / 10;
+  return i18n.t('voice:connectionInfo.units.mbps', { value: formatters.formatNumber(mbps) });
+}
+
+function formatMilliseconds(ms: number): string {
+  return i18n.t('voice:connectionInfo.units.milliseconds', { value: formatters.formatNumber(ms) });
+}
+
+/** Packet loss keeps one decimal so a 0.3% loss does not read as 0%. */
+function formatLossPercent(pct: number): string {
+  return i18n.t('voice:connectionInfo.units.percent', { value: formatters.formatNumber(Math.round(pct * 10) / 10) });
 }
 
 function pingColor(ms: number): string {
@@ -36,11 +52,11 @@ function jitterColor(ms: number): string {
 
 function sourceLabel(source: string): string {
   switch (source) {
-    case 'microphone': return 'Microphone';
-    case 'camera': return 'Camera';
-    case 'screen_share': return 'Screen';
-    case 'screen_share_audio': return 'Screen Audio';
-    default: return 'Unknown';
+    case 'microphone': return i18n.t('voice:connectionInfo.source.microphone');
+    case 'camera': return i18n.t('voice:connectionInfo.source.camera');
+    case 'screen_share': return i18n.t('voice:connectionInfo.source.screen');
+    case 'screen_share_audio': return i18n.t('voice:connectionInfo.source.screenAudio');
+    default: return i18n.t('voice:connectionInfo.source.unknown');
   }
 }
 
@@ -49,7 +65,7 @@ function trackLabel(direction: 'send' | 'recv', source: string, participantName:
   if (direction === 'send') {
     return `${sourceLabel(source)} ${arrow}`;
   }
-  const name = participantName ?? 'Remote';
+  const name = participantName ?? i18n.t('voice:connectionInfo.remoteParticipant');
   return `${name} ${sourceLabel(source)} ${arrow}`;
 }
 
@@ -118,6 +134,7 @@ function VideoTrackRow({ track }: { track: VideoTrackStat }) {
 }
 
 export function ConnectionInfoPopover({ open, onClose, anchorRef }: ConnectionInfoPopoverProps) {
+  const { t } = useTranslation(['voice', 'common']);
   const popoverRef = useRef<HTMLDivElement>(null);
   const portalContainer = usePortalContainer();
   const stats = useTrackStats(open);
@@ -151,36 +168,36 @@ export function ConnectionInfoPopover({ open, onClose, anchorRef }: ConnectionIn
       className="w-[300px] glass rounded-lg overflow-hidden"
     >
       <div className="px-3 py-2 border-b border-border-hard">
-        <span className="text-[14px] font-bold text-txt-primary">Connection Info</span>
+        <span className="text-[14px] font-bold text-txt-primary">{t('voice:connectionInfo.title')}</span>
       </div>
 
       <div className="px-3 py-2 max-h-[calc(100vh-32px)] overflow-y-auto scrollbar-thin">
         {!room ? (
-          <div className="text-[12px] text-txt-tertiary py-2 text-center">Not connected</div>
+          <div className="text-[12px] text-txt-tertiary py-2 text-center">{t('voice:connectionInfo.notConnected')}</div>
         ) : !stats ? (
-          <div className="text-[12px] text-txt-tertiary py-2 text-center">Gathering stats...</div>
+          <div className="text-[12px] text-txt-tertiary py-2 text-center">{t('voice:connectionInfo.gathering')}</div>
         ) : (
           <>
             {/* Network */}
-            <SectionHeader title="Network" />
+            <SectionHeader title={t('voice:connectionInfo.section.network')} />
             <Row
-              label="Ping"
-              value={stats.network.ping !== null ? `${stats.network.ping} ms` : '\u2014'}
+              label={t('voice:connectionInfo.network.ping')}
+              value={stats.network.ping !== null ? formatMilliseconds(stats.network.ping) : '\u2014'}
               colorClass={stats.network.ping !== null ? pingColor(stats.network.ping) : undefined}
             />
             <Row
-              label="Packet Loss"
-              value={stats.network.packetLoss !== null ? `${stats.network.packetLoss.toFixed(1)}%` : '\u2014'}
+              label={t('voice:connectionInfo.network.packetLoss')}
+              value={stats.network.packetLoss !== null ? formatLossPercent(stats.network.packetLoss) : '\u2014'}
               colorClass={stats.network.packetLoss !== null ? lossColor(stats.network.packetLoss) : undefined}
             />
             <Row
-              label="Jitter"
-              value={stats.network.jitter !== null ? `${stats.network.jitter} ms` : '\u2014'}
+              label={t('voice:connectionInfo.network.jitter')}
+              value={stats.network.jitter !== null ? formatMilliseconds(stats.network.jitter) : '\u2014'}
               colorClass={stats.network.jitter !== null ? jitterColor(stats.network.jitter) : undefined}
             />
-            <Row label="Server" value={stats.network.serverAddress ?? '\u2014'} />
+            <Row label={t('voice:connectionInfo.network.server')} value={stats.network.serverAddress ?? '\u2014'} />
             <Row
-              label="Protocol"
+              label={t('voice:connectionInfo.network.protocol')}
               value={
                 stats.network.protocol
                   ? `${stats.network.protocol}${stats.network.candidateType ? ` (${stats.network.candidateType})` : ''}`
@@ -192,7 +209,7 @@ export function ConnectionInfoPopover({ open, onClose, anchorRef }: ConnectionIn
             {stats.audioTracks.length > 0 && (
               <>
                 <Divider />
-                <SectionHeader title="Audio" />
+                <SectionHeader title={t('voice:connectionInfo.section.audio')} />
                 {stats.audioTracks.map((t) => (
                   <AudioTrackRow key={t.key} track={t} />
                 ))}
@@ -203,7 +220,7 @@ export function ConnectionInfoPopover({ open, onClose, anchorRef }: ConnectionIn
             {stats.videoTracks.length > 0 && (
               <>
                 <Divider />
-                <SectionHeader title="Video" />
+                <SectionHeader title={t('voice:connectionInfo.section.video')} />
                 {stats.videoTracks.map((t) => (
                   <VideoTrackRow key={t.key} track={t} />
                 ))}
