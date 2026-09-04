@@ -1,1 +1,160 @@
-{}
+{
+  "names": {
+    "group": "Gruppe",
+    "directMessage": "Direktnachricht",
+    "theGroup": "die Gruppe",
+    "unknownHandle": "unbekannt",
+    "groupFallback": "Gruppenchat",
+    "emptyGroup": "Leere Gruppe"
+  },
+  "preview": {
+    "image": "Bild",
+    "video": "Video",
+    "audio": "Audiodatei",
+    "files_one": "📎 {{count}} Datei",
+    "files_other": "📎 {{count}} Dateien",
+    "withSender": "{{name}}: {{text}}"
+  },
+  "system": {
+    "spaceInviteNamed": "📨 Einladung zu {{spaceName}} gesendet",
+    "spaceInvite": "📨 Space-Einladung gesendet",
+    "memberAdded": "{{actor}} hat {{target}} hinzugefügt",
+    "memberLeft": "{{target}} hat die Gruppe verlassen",
+    "memberRemoved": "{{actor}} hat {{target}} entfernt",
+    "ownerChanged": "{{newOwner}} ist jetzt Besitzer der Gruppe",
+    "renamed": "{{actor}} hat die Gruppe umbenannt",
+    "nameCleared": "{{actor}} hat den Gruppennamen entfernt",
+    "iconChanged": "{{actor}} hat das Gruppensymbol geändert",
+    "generic": "Systemmeldung",
+    "someone": "jemanden",
+    "aMember": "Ein Mitglied"
+  },
+  "deletedNotice": {
+    "accountDeleted": "Das Konto dieser Person wurde gelöscht"
+  },
+  "memberRow": {
+    "viewProfile": "Profil anzeigen",
+    "transferOwnership": "Besitz übertragen",
+    "removeFromGroup": "Aus Gruppe entfernen",
+    "removeFriend": "Freund entfernen",
+    "ownerTooltip": "Gruppenbesitzer",
+    "actions": "Mitgliederaktionen"
+  },
+  "roster": {
+    "members": "Mitglieder",
+    "owner": "Besitzer",
+    "online": "Online",
+    "offline": "Nicht online",
+    "sectionCount": "{{label}} — {{total}}"
+  },
+  "kick": {
+    "title": "Aus Gruppe entfernen",
+    "description": "{{name}} aus dieser Gruppe entfernen? Neue Nachrichten sind dann nicht mehr sichtbar.",
+    "success": "{{name}} wurde aus der Gruppe entfernt",
+    "failed": "Mitglied konnte nicht entfernt werden"
+  },
+  "transfer": {
+    "title": "Besitz übertragen",
+    "description": "Besitz an {{name}} übertragen? Du verlierst deine Besitzerrechte.",
+    "confirm": "Übertragen",
+    "success": "Besitz an {{name}} übertragen",
+    "failed": "Besitz konnte nicht übertragen werden"
+  },
+  "removeFriend": {
+    "failed": "Freund konnte nicht entfernt werden"
+  },
+  "leave": {
+    "title": "Gruppe verlassen",
+    "description": "„{{name}}“ verlassen? Du bekommst dann keine Nachrichten mehr aus dieser Unterhaltung.",
+    "confirm": "Verlassen",
+    "inProgress": "Wird verlassen…",
+    "failed": "Gruppe konnte nicht verlassen werden",
+    "explanation": "Du bekommst dann keine Nachrichten mehr aus dieser Unterhaltung. Die anderen Mitglieder sehen eine Systemmeldung."
+  },
+  "search": {
+    "trigger": "Unterhaltung finden oder starten",
+    "placeholder": "Suchen…",
+    "emptyHint": "Such nach einer Person, um zu chatten",
+    "conversations": "Unterhaltungen",
+    "users": "Nutzer",
+    "searching": "Suche läuft…",
+    "noResults": "Keine Ergebnisse",
+    "createFailed": "Direktnachricht konnte nicht erstellt werden"
+  },
+  "list": {
+    "title": "Nachrichten",
+    "friends": "Freunde",
+    "empty": "Noch keine Unterhaltungen.",
+    "leaveGroup": "Gruppe verlassen",
+    "justNow": "jetzt",
+    "minutesShort_one": "{{count}} Min",
+    "minutesShort_other": "{{count}} Min",
+    "hoursShort_one": "{{count}} Std",
+    "hoursShort_other": "{{count}} Std",
+    "daysShort_one": "{{count}} T",
+    "daysShort_other": "{{count}} T"
+  },
+  "newDm": {
+    "title": "Neue Direktnachricht",
+    "searchPlaceholder": "Nach einer Person suchen…",
+    "noUsers": "Keine Nutzer gefunden"
+  },
+  "addMember": {
+    "title": "Freunde zur Unterhaltung hinzufügen",
+    "description": "Wähle Freunde aus, die du zu dieser Unterhaltung hinzufügen möchtest.",
+    "capacity": "{{current}}/{{max}}",
+    "searchPlaceholder": "Freunde suchen…",
+    "limitReached": "Diese Gruppe hat das Limit von {{max}} Mitgliedern erreicht.",
+    "alreadyInDm": "Bereits in dieser Unterhaltung",
+    "noMatch": "Keine Freunde passen zu deiner Suche",
+    "noFriends": "Noch keine Freunde",
+    "selectFriends": "Freunde auswählen",
+    "addCount_one": "{{count}} Freund hinzufügen",
+    "addCount_other": "{{count}} Freunde hinzufügen",
+    "adding": "Wird hinzugefügt…",
+    "noOtherMember": "Das andere Mitglied dieser Unterhaltung konnte nicht bestimmt werden.",
+    "failed": "Mitglieder konnten nicht hinzugefügt werden"
+  },
+  "groupSettings": {
+    "title": "Gruppeneinstellungen",
+    "general": "Allgemein",
+    "overview": "Übersicht",
+    "members": "Mitglieder",
+    "backToMenu": "Zurück zum Menü der Gruppeneinstellungen",
+    "changeIcon": "Gruppensymbol ändern",
+    "icon": "Gruppensymbol",
+    "clickToUpload": "Zum Hochladen klicken",
+    "removeIcon": "Gruppensymbol entfernen",
+    "nameLabel": "Gruppenname",
+    "nameAria": "Gruppenname",
+    "nameCount": "{{current}}/{{max}}",
+    "addMember": "Mitglied hinzufügen",
+    "groupFull": "Gruppe ist voll",
+    "groupFullSuffix": "— Gruppe ist voll",
+    "cropTitle": "Gruppensymbol zuschneiden",
+    "saveFailed": "Einstellungen konnten nicht gespeichert werden"
+  },
+  "groupInfo": {
+    "title": "Gruppeninfo",
+    "plainTitle": "Details",
+    "notFound": "Unterhaltung nicht gefunden.",
+    "notGroup": "Diese Unterhaltung hat keine Gruppeninfo.",
+    "cancelEdit": "Bearbeiten abbrechen",
+    "federated": "Föderierte Gruppe",
+    "memberCount_one": "{{count}} Mitglied",
+    "memberCount_other": "{{count}} Mitglieder"
+  },
+  "spaceOwnership": {
+    "title": "Besitz übertragen",
+    "description": "Wähle ein Mitglied, das neuer Besitzer von <name>{{name}}</name> wird",
+    "confirmQuestion": "Besitz von <name>{{space}}</name> an <name>{{member}}</name> übertragen?",
+    "regularMember": "Du wirst ein normales Mitglied.",
+    "transferring": "Wird übertragen…",
+    "confirm": "Übertragen",
+    "searchPlaceholder": "Mitglieder suchen…",
+    "loading": "Mitglieder werden geladen…",
+    "noMembers": "Keine Mitglieder gefunden",
+    "success": "Besitz an {{name}} übertragen",
+    "failed": "Besitz konnte nicht übertragen werden"
+  }
+}
