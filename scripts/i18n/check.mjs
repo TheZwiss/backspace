@@ -518,6 +518,94 @@ export function listLiteralStringFiles(root) {
 }
 
 // ---------------------------------------------------------------------------
+// Rule 9: markup
+// ---------------------------------------------------------------------------
+
+// html-parse-stringify (used by react-i18next's Trans component) parses these
+// as HTML void elements. They cannot be used as wrappers for React components:
+// `<link>text</link>`, for example, renders an empty <link> and leaves `text`
+// outside the component supplied to Trans.
+const HTML_VOID_TAGS = new Set([
+  'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta',
+  'param', 'source', 'track', 'wbr',
+]);
+const MARKUP_TAG_RE = /<\/?([A-Za-z][\w-]*)\b[^>]*>/g;
+
+function markupTagsOf(value) {
+  const tags = new Set();
+  for (const match of String(value).matchAll(MARKUP_TAG_RE)) tags.add(match[1]);
+  return tags;
+}
+
+function pairedVoidTagsOf(value) {
+  const text = String(value);
+  const opening = new Set();
+  const closing = new Set();
+  for (const match of text.matchAll(MARKUP_TAG_RE)) {
+    const full = match[0];
+    // html-parse-stringify deliberately keeps this lookup case-sensitive, so
+    // `<Link>` is a valid component name while lowercase `<link>` is void.
+    const tag = match[1];
+    if (!HTML_VOID_TAGS.has(tag)) continue;
+    if (full.startsWith('</')) closing.add(tag);
+    else if (!full.endsWith('/>')) opening.add(tag);
+  }
+  return new Set([...opening].filter((tag) => closing.has(tag)));
+}
+
+export function checkMarkup(root) {
+  const loaded = loadCatalogs(root);
+  const findings = [];
+  const source = loaded.catalogs[SOURCE_LANGUAGE] ?? {};
+
+  // Validate every catalog, including English: unsafe markup in the source is
+  // just as capable of breaking a Trans component as a translator's change.
+  for (const lng of loaded.languages) {
+    for (const [ns, flat] of Object.entries(loaded.catalogs[lng] ?? {})) {
+      for (const [key, value] of Object.entries(flat)) {
+        for (const tag of pairedVoidTagsOf(value)) {
+          findings.push({
+            rule: 'markup',
+            file: fileFor(loaded, lng, ns),
+            message: `key "${key}" uses HTML void tag <${tag}> as a wrapper; use a non-HTML Trans component name`,
+          });
+        }
+      }
+    }
+  }
+
+  // As with interpolation placeholders, markup is part of a translation's
+  // contract. Compare the union across plural forms because CLDR categories
+  // differ between languages.
+  for (const lng of loaded.languages) {
+    if (lng === SOURCE_LANGUAGE) continue;
+    for (const ns of loaded.namespaces) {
+      const target = loaded.catalogs[lng]?.[ns];
+      if (!target) continue;
+      const sourceFamilies = families(source[ns]);
+      const targetFamilies = families(target);
+      for (const [base, sourceForms] of sourceFamilies) {
+        const targetForms = targetFamilies.get(base);
+        if (!targetForms) continue;
+        const expected = new Set();
+        for (const value of sourceForms.values()) for (const tag of markupTagsOf(value)) expected.add(tag);
+        const actual = new Set();
+        for (const value of targetForms.values()) for (const tag of markupTagsOf(value)) actual.add(tag);
+        if (!sameSet(expected, actual)) {
+          findings.push({
+            rule: 'markup',
+            file: fileFor(loaded, lng, ns),
+            message: `key "${base}" uses <${[...actual].join('>, <')}> in ${lng} but <${[...expected].join('>, <')}> in ${SOURCE_LANGUAGE}`,
+          });
+        }
+      }
+    }
+  }
+
+  return findings;
+}
+
+// ---------------------------------------------------------------------------
 // All together
 // ---------------------------------------------------------------------------
 
@@ -530,6 +618,7 @@ export const RULES = [
   'direct-intl',
   'error-code-missing',
   'literal-string',
+  'markup',
 ];
 
 export function runAllChecks(root, options = {}) {
@@ -542,6 +631,7 @@ export function runAllChecks(root, options = {}) {
     ...checkDirectIntl(root),
     ...checkErrorCodes(root),
     ...checkLiteralStrings(root, options),
+    ...checkMarkup(root),
   ];
 }
 

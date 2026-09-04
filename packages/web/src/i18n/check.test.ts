@@ -11,6 +11,7 @@ import {
   checkDirectIntl,
   checkErrorCodes,
   checkLiteralStrings,
+  checkMarkup,
   listLiteralStringFiles,
   runAllChecks,
 } from '../../../../scripts/i18n/check.mjs';
@@ -274,6 +275,38 @@ describe('literal-string', () => {
       'packages/web/src/components/Q.tsx': 'const x = 1;',
     });
     expect(listLiteralStringFiles(root)).toEqual(['packages/web/src/components/P.tsx']);
+  });
+});
+
+describe('markup', () => {
+  it('reports a paired HTML void tag used as a Trans component wrapper', () => {
+    const root = makeRoot({
+      [locale('en', 'auth')]: { prompt: 'No account? <link>Register</link>' },
+      [locale('de', 'auth')]: { prompt: 'Kein Konto? <link>Registrieren</link>' },
+    });
+    const findings = checkMarkup(root) as Finding[];
+    expect(findings).toHaveLength(2);
+    expect(findings.every((f) => f.rule === 'markup')).toBe(true);
+    expect(findings.every((f) => f.message.includes('HTML void tag <link>'))).toBe(true);
+  });
+
+  it('reports markup that differs between languages', () => {
+    const root = makeRoot({
+      [locale('en', 'common')]: { greeting: 'Hello <strong>{{name}}</strong>' },
+      [locale('ru', 'common')]: { greeting: 'Привет, {{name}}' },
+    });
+    const findings = checkMarkup(root) as Finding[];
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({ rule: 'markup', file: locale('ru', 'common') });
+    expect(findings[0]!.message).toContain('<strong>');
+  });
+
+  it('allows safe component wrappers and self-closing basic HTML tags', () => {
+    const root = makeRoot({
+      [locale('en', 'common')]: { prompt: 'First<br/>Then <actionLink>continue</actionLink> or <Link>leave</Link>' },
+      [locale('de', 'common')]: { prompt: 'Zuerst<br/>Dann <actionLink>weiter</actionLink> oder <Link>gehen</Link>' },
+    });
+    expect(checkMarkup(root)).toEqual([]);
   });
 });
 
