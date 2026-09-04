@@ -47,6 +47,7 @@ interface ChatState {
   isLoading: boolean;
   loadError: string | null;
   replyTo: MessageWithUser | null;
+  editingMessageId: string | null;
   readStates: Map<string, string>;
   unreadChannels: Set<string>;
   realtimeMessageEvents: RealtimeMessageEvent[];
@@ -55,6 +56,7 @@ interface ChatState {
   setCurrentChannel: (channelId: string | null) => void;
   saveScrollPosition: (channelId: string, messageId: string) => void;
   setReplyTo: (message: MessageWithUser | null) => void;
+  setEditingMessage: (messageId: string | null) => void;
   loadMessages: (channelId: string, force?: boolean) => Promise<void>;
   clearAllMessages: () => void;
   loadMoreMessages: (channelId: string) => Promise<boolean>;
@@ -104,6 +106,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isLoading: false,
   loadError: null,
   replyTo: null,
+  editingMessageId: null,
   readStates: new Map(),
   unreadChannels: new Set(),
   realtimeMessageEvents: [],
@@ -150,6 +153,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       return {
         currentChannelId: channelId,
+        editingMessageId: state.currentChannelId === channelId ? state.editingMessageId : null,
         channelAccessTimes: newAccessTimes,
         messages: newMessages,
         hasMore: newHasMore,
@@ -158,6 +162,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
   setReplyTo: (message) => set({ replyTo: message }),
+  setEditingMessage: (messageId) => set({ editingMessageId: messageId }),
 
   clearAllMessages: () => set({
     messages: new Map(),
@@ -170,6 +175,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     scrollPositions: new Map(),
     currentChannelId: null,
     replyTo: null,
+    editingMessageId: null,
   }),
 
   loadMessages: async (channelId: string, force?: boolean) => {
@@ -517,7 +523,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const current = newMessages.get(channelId);
       if (!current) return state;
       newMessages.set(channelId, current.filter(m => m.id !== messageId));
-      return { messages: newMessages };
+      return {
+        messages: newMessages,
+        editingMessageId: state.editingMessageId === messageId ? null : state.editingMessageId,
+      };
     });
   },
 

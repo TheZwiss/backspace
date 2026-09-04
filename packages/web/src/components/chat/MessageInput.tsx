@@ -16,6 +16,8 @@ import { useTransferStore, type Transfer } from '../../stores/transferStore';
 import { usePendingMessageStore } from '../../stores/pendingMessageStore';
 import { putHandle, supportsFsHandles, supportsDnDHandles } from '../../utils/idbHandles';
 import { useVisualViewportInset } from '../../hooks/useVisualViewportInset';
+import { useAuthStore } from '../../stores/authStore';
+import { findLastOwnEditableMessage } from './messageEditing';
 
 interface MessageInputProps {
   channelId: string;
@@ -86,8 +88,12 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
   const previewUrlsRef = useRef<Map<string, string>>(new Map());
 
   const sendMessage = useChatStore((s) => s.sendMessage);
+  const channelMessages = useChatStore((s) => s.messages.get(channelId));
   const chatReplyTo = useChatStore((s) => s.replyTo);
   const chatSetReplyTo = useChatStore((s) => s.setReplyTo);
+  const editingMessageId = useChatStore((s) => s.editingMessageId);
+  const setEditingMessage = useChatStore((s) => s.setEditingMessage);
+  const currentUser = useAuthStore((s) => s.user);
   const members = useSpaceStore((s) => s.members);
 
   const addToast = useUIStore((s) => s.addToast);
@@ -129,6 +135,11 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
       textareaRef.current?.focus();
     }
   }, [chatReplyTo]);
+
+  // Return focus to the composer after inline editing is saved or cancelled.
+  useEffect(() => {
+    if (!editingMessageId) textareaRef.current?.focus();
+  }, [editingMessageId]);
 
   // Close popover on channel change
   useEffect(() => {
@@ -426,6 +437,27 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
       if (e.key === 'Escape') {
         e.preventDefault();
         setMentionState(null);
+        return;
+      }
+    }
+
+    const isPlainArrowUp = e.key === 'ArrowUp'
+      && !e.altKey
+      && !e.ctrlKey
+      && !e.metaKey
+      && !e.shiftKey
+      && !e.nativeEvent.isComposing;
+    const composerIsEmpty = draftText.length === 0
+      && composerState.stagedTransferIds.length === 0
+      && !chatReplyTo
+      && !composerState.replyTo;
+
+    if (isPlainArrowUp && composerIsEmpty && !editingMessageId) {
+      const message = findLastOwnEditableMessage(channelMessages ?? [], currentUser);
+      if (message) {
+        e.preventDefault();
+        setActivePopover(null);
+        setEditingMessage(message.id);
         return;
       }
     }
