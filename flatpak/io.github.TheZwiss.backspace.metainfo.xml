@@ -64,7 +64,7 @@
   <releases>
     <release version="1.1.1" date="2026-09-04">
       <description>
-        <p>Backspace 1.1.1 release.</p>
+        <p>Rebuilds the container image that failed to build for 1.1.0. No changes to the app beyond the version number.</p>
       </description>
     </release>
     <release version="1.1.0" date="2026-09-04">
