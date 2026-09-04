@@ -1,1 +1,90 @@
-{}
+{
+  "message": {
+    "timestamp": {
+      "today": "Today at {{time}}",
+      "yesterday": "Yesterday at {{time}}"
+    },
+    "edit": {
+      "hint": "escape to <cancel>cancel</cancel> • enter to <save>save</save>"
+    },
+    "edited": "(edited)",
+    "gifAlt": "GIF",
+    "upload": {
+      "failed": "Upload failed",
+      "discard": "Discard"
+    },
+    "actions": {
+      "addReaction": "Add reaction",
+      "reply": "Reply",
+      "confirmDelete": "Confirm delete"
+    }
+  },
+  "list": {
+    "noHistoryPermission": "You do not have permission to view message history in this channel",
+    "loading": "Loading messages",
+    "loadingOlder": "Loading older messages",
+    "jumpToPresent": "Jump to Present",
+    "welcome": {
+      "channel": {
+        "title": "Welcome to the channel!",
+        "description": "This is the start of the conversation."
+      },
+      "group": {
+        "intro": "This is the beginning of your group conversation.",
+        "owner": "Owner: <owner>@{{name}}</owner>",
+        "federatedNotice": "Messages are stored on your and your recipients' home instances. They are not end-to-end encrypted.",
+        "openSettings": "Open Group Settings",
+        "leave": "Leave Group"
+      },
+      "dm": {
+        "fallbackName": "Direct Message",
+        "intro": "This is the beginning of your direct message history with <strong>@{{name}}</strong>.",
+        "federatedNotice": "Messages are stored on your and your recipient's home instances. They are not end-to-end encrypted.",
+        "removeFriend": "Remove Friend"
+      }
+    }
+  },
+  "composer": {
+    "noPermission": "You do not have permission to send messages in this channel",
+    "placeholder": {
+      "channel": "Message #{{name}}",
+      "dm": "Message @{{name}}"
+    },
+    "replyingTo": "Replying to",
+    "cancelReply": "Cancel reply",
+    "removeAttachment": "Remove attachment",
+    "attachFile": "Attach file",
+    "uploading": "Uploading…",
+    "uploadingLabel": "Uploading",
+    "failedCount_one": "{{count}} failed",
+    "failedCount_other": "{{count}} failed",
+    "failedHint": "Remove or retry the failed attachment to send",
+    "gif": "GIF",
+    "gifPicker": "GIF picker",
+    "emoji": "Emoji",
+    "emojiPicker": "Emoji picker",
+    "send": "Send",
+    "sendMessage": "Send message",
+    "uploadFailed": "Failed to upload {{file}}: {{reason}}",
+    "uploadFailedReason": "Upload failed",
+    "sendFailed": "Failed to send message"
+  },
+  "menu": {
+    "saveImage": "Save Image",
+    "copyImage": "Copy Image",
+    "openOriginal": "Open Original",
+    "saveVideo": "Save Video",
+    "saveAudio": "Save Audio",
+    "copyLink": "Copy Link",
+    "openLink": "Open Link",
+    "addReaction": "Add reaction",
+    "reply": "Reply",
+    "copySelectedText": "Copy Selected Text",
+    "copyText": "Copy Text",
+    "markUnread": "Mark Unread",
+    "editMessage": "Edit Message",
+    "deleteMessage": "Delete Message",
+    "linkCopied": "Copied link",
+    "linkCopyFailed": "Failed to copy link"
+  }
+}

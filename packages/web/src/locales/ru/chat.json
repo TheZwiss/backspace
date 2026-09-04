@@ -1,1 +1,92 @@
-{}
+{
+  "message": {
+    "timestamp": {
+      "today": "Сегодня в {{time}}",
+      "yesterday": "Вчера в {{time}}"
+    },
+    "edit": {
+      "hint": "Esc для <cancel>отмены</cancel> • Enter для <save>сохранения</save>"
+    },
+    "edited": "(изменено)",
+    "gifAlt": "GIF-анимация",
+    "upload": {
+      "failed": "Не удалось загрузить файл",
+      "discard": "Отменить отправку"
+    },
+    "actions": {
+      "addReaction": "Добавить реакцию",
+      "reply": "Ответить",
+      "confirmDelete": "Подтвердить удаление"
+    }
+  },
+  "list": {
+    "noHistoryPermission": "У вас нет разрешения на просмотр истории сообщений в этом канале",
+    "loading": "Загрузка сообщений",
+    "loadingOlder": "Загрузка предыдущих сообщений",
+    "jumpToPresent": "К новым сообщениям",
+    "welcome": {
+      "channel": {
+        "title": "Добро пожаловать в канал!",
+        "description": "Это начало беседы."
+      },
+      "group": {
+        "intro": "Это начало вашей групповой беседы.",
+        "owner": "Владелец: <owner>@{{name}}</owner>",
+        "federatedNotice": "Сообщения хранятся на домашних серверах — вашем и ваших собеседников. Сквозное шифрование не используется.",
+        "openSettings": "Открыть настройки группы",
+        "leave": "Покинуть группу"
+      },
+      "dm": {
+        "fallbackName": "Личные сообщения",
+        "intro": "Это начало вашей переписки с <strong>@{{name}}</strong>.",
+        "federatedNotice": "Сообщения хранятся на домашних серверах — вашем и вашего собеседника. Сквозное шифрование не используется.",
+        "removeFriend": "Удалить из друзей"
+      }
+    }
+  },
+  "composer": {
+    "noPermission": "У вас нет разрешения на отправку сообщений в этом канале",
+    "placeholder": {
+      "channel": "Написать в #{{name}}",
+      "dm": "Написать @{{name}}"
+    },
+    "replyingTo": "Ответ для",
+    "cancelReply": "Отменить ответ",
+    "removeAttachment": "Удалить вложение",
+    "attachFile": "Прикрепить файл",
+    "uploading": "Загрузка…",
+    "uploadingLabel": "Загрузка",
+    "failedCount_one": "{{count}} с ошибкой",
+    "failedCount_few": "{{count}} с ошибкой",
+    "failedCount_many": "{{count}} с ошибкой",
+    "failedCount_other": "{{count}} с ошибкой",
+    "failedHint": "Удалите вложение с ошибкой или повторите загрузку, чтобы отправить сообщение",
+    "gif": "GIF-анимации",
+    "gifPicker": "Выбор GIF",
+    "emoji": "Эмодзи",
+    "emojiPicker": "Выбор эмодзи",
+    "send": "Отправить",
+    "sendMessage": "Отправить сообщение",
+    "uploadFailed": "Не удалось загрузить {{file}}: {{reason}}",
+    "uploadFailedReason": "Ошибка загрузки",
+    "sendFailed": "Не удалось отправить сообщение"
+  },
+  "menu": {
+    "saveImage": "Сохранить изображение",
+    "copyImage": "Копировать изображение",
+    "openOriginal": "Открыть оригинал",
+    "saveVideo": "Сохранить видео",
+    "saveAudio": "Сохранить аудио",
+    "copyLink": "Копировать ссылку",
+    "openLink": "Открыть ссылку",
+    "addReaction": "Добавить реакцию",
+    "reply": "Ответить",
+    "copySelectedText": "Копировать выделенный текст",
+    "copyText": "Копировать текст",
+    "markUnread": "Отметить как непрочитанное",
+    "editMessage": "Изменить сообщение",
+    "deleteMessage": "Удалить сообщение",
+    "linkCopied": "Ссылка скопирована",
+    "linkCopyFailed": "Не удалось скопировать ссылку"
+  }
+}
