@@ -1,4 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useFormatters } from '../../i18n/formatters';
 import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
@@ -26,6 +27,7 @@ interface UserProfilePopoutProps {
 }
 
 export function UserProfilePopout({ user: propUser, onClose, anchor, placement = 'right' }: UserProfilePopoutProps) {
+  const { t } = useTranslation(['social', 'common']);
   const navigate = useNavigate();
   const f = useFormatters();
   const addDmChannel = useSpaceStore((s) => s.addDmChannel);
@@ -189,7 +191,7 @@ export function UserProfilePopout({ user: propUser, onClose, anchor, placement =
             <div className="border-t border-white/[0.06] my-3" />
             <div>
               <span className="text-[11px] uppercase tracking-wide font-semibold text-txt-tertiary">
-                About Me
+                {t('social:profile.aboutMe')}
               </span>
               <div className="text-[13px] text-txt-secondary mt-1 whitespace-pre-wrap break-words leading-relaxed [&_strong]:font-semibold [&_strong]:text-txt-primary [&_em]:italic [&_a]:text-accent-primary [&_a]:underline">
                 <ReactMarkdown
@@ -214,7 +216,7 @@ export function UserProfilePopout({ user: propUser, onClose, anchor, placement =
         <div className="space-y-1.5">
           <div>
             <span className="text-[11px] uppercase tracking-wide font-semibold text-txt-tertiary">
-              Member Since
+              {t('social:profile.memberSince')}
             </span>
             <span className="text-[12px] text-txt-secondary ml-2">
               {f.formatMediumDate(user.createdAt)}
@@ -223,13 +225,13 @@ export function UserProfilePopout({ user: propUser, onClose, anchor, placement =
           {mutualCounts && (mutualCounts.friends > 0 || mutualCounts.spaces > 0) && (
             <div className="text-[12px] text-txt-tertiary">
               {mutualCounts.friends > 0 && (
-                <span>{mutualCounts.friends} mutual friend{mutualCounts.friends !== 1 ? 's' : ''}</span>
+                <span>{t('social:mutuals.friends', { count: mutualCounts.friends })}</span>
               )}
               {mutualCounts.friends > 0 && mutualCounts.spaces > 0 && (
                 <span className="mx-1">&middot;</span>
               )}
               {mutualCounts.spaces > 0 && (
-                <span>{mutualCounts.spaces} mutual space{mutualCounts.spaces !== 1 ? 's' : ''}</span>
+                <span>{t('social:mutuals.spaces', { count: mutualCounts.spaces })}</span>
               )}
             </div>
           )}
@@ -240,13 +242,13 @@ export function UserProfilePopout({ user: propUser, onClose, anchor, placement =
           onClick={handleSendMessage}
           className="w-full mt-3 py-2 rounded-lg text-[13px] font-medium text-txt-primary bg-white/[0.06] hover:bg-white/[0.10] border border-white/[0.08] transition-colors"
         >
-          Send Message
+          {t('social:profile.sendMessage')}
         </button>
         <button
           onClick={handleViewFullProfile}
           className="w-full mt-1.5 py-2 rounded-lg text-[13px] font-medium text-txt-tertiary hover:text-txt-secondary bg-transparent hover:bg-white/[0.04] transition-colors"
         >
-          View Full Profile
+          {t('social:profile.viewFull')}
         </button>
       </div>
     </div>

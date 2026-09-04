@@ -24,7 +24,9 @@ vi.mock('../../audio/AudioManager', () => ({
 }));
 
 // Mock the api module
-vi.mock('../../api/client', () => ({
+// Keep the real HttpError class: describeError narrows on it when a request fails.
+vi.mock('../../api/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../api/client')>()),
   api: {
     dm: {
       create: vi.fn(),
