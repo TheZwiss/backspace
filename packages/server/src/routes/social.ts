@@ -19,6 +19,7 @@ import type {
   DiscoverUser,
 } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
+import { sendError } from '../utils/httpErrors.js';
 
 export function buildProfileSnapshot(user: typeof schema.users.$inferSelect): FederationRelayProfileSnapshot {
   if (user.isDeleted) {
@@ -57,11 +58,11 @@ async function handleLocalFriendRequest(
   // Find the target user
   const targetUser = db.select().from(schema.users).where(eq(schema.users.username, lookupUsername)).get();
   if (!targetUser) {
-    return reply.code(404).send({ error: 'User not found', statusCode: 404 });
+    return sendError(reply, 404, 'user_not_found');
   }
 
   if (targetUser.id === request.userId) {
-    return reply.code(400).send({ error: 'You cannot add yourself as a friend', statusCode: 400 });
+    return sendError(reply, 400, 'cannot_friend_self');
   }
 
   // Check if already friends
@@ -71,7 +72,7 @@ async function handleLocalFriendRequest(
   )).get();
 
   if (existingFriend) {
-    return reply.code(400).send({ error: 'You are already friends with this user', statusCode: 400 });
+    return sendError(reply, 400, 'already_friends');
   }
 
   // Check for existing pending request
@@ -84,7 +85,7 @@ async function handleLocalFriendRequest(
   )).get();
 
   if (existingRequest) {
-    return reply.code(400).send({ error: 'A friend request is already pending', statusCode: 400 });
+    return sendError(reply, 400, 'friend_request_pending');
   }
 
   // Create the request
@@ -184,7 +185,7 @@ async function handleFederatedFriendRequest(
   // 1. Resolve scheme
   const peerOrigin = resolveOriginFromHostname(targetDomain);
   if (!peerOrigin) {
-    return reply.code(400).send({ error: 'invalid_target_domain', statusCode: 400, domain: targetDomain });
+    return sendError(reply, 400, 'invalid_target_domain', { domain: targetDomain });
   }
 
   // 1a. Limbo-window guard (federation instance-epoch self-healing §5.3).
@@ -210,7 +211,7 @@ async function handleFederatedFriendRequest(
     ))
     .get();
   if (pendingReset) {
-    return reply.code(409).send({ error: 'peer_reset_pending', statusCode: 409 });
+    return sendError(reply, 409, 'peer_reset_pending');
   }
 
   // 2. ensurePeered — block until 'active', or surface peer status as error
@@ -221,10 +222,10 @@ async function handleFederatedFriendRequest(
     target: `${baseName}@${targetDomain}`,
   });
   if (peering.status === 'rejected') {
-    return reply.code(403).send({ error: 'peer_rejected', statusCode: 403, domain: targetDomain });
+    return sendError(reply, 403, 'peer_rejected', { domain: targetDomain });
   }
   if (peering.status === 'failed') {
-    return reply.code(503).send({ error: 'peer_unreachable', statusCode: 503, domain: targetDomain });
+    return sendError(reply, 503, 'peer_unreachable', { domain: targetDomain });
   }
   if (peering.status === 'pending') {
     const peerRow = db.select({ status: schema.federationPeers.status })
@@ -232,16 +233,12 @@ async function handleFederatedFriendRequest(
       .where(eq(schema.federationPeers.origin, peerOrigin))
       .get();
     if (peerRow?.status === 'awaiting_approval') {
-      return reply.code(409).send({ error: 'peer_pending_approval', statusCode: 409, domain: targetDomain });
+      return sendError(reply, 409, 'peer_pending_approval', { domain: targetDomain });
     }
-    return reply.code(409).send({ error: 'peer_pending', statusCode: 409, domain: targetDomain });
+    return sendError(reply, 409, 'peer_pending', { domain: targetDomain });
   }
   if (peering.status === 'admin_required') {
-    return reply.code(409).send({
-      error: 'peer_pending_local_admin',
-      statusCode: 409,
-      domain: targetDomain,
-    });
+    return sendError(reply, 409, 'peer_pending_local_admin', { domain: targetDomain });
   }
   // peering.status === 'active' — continue
 
@@ -256,22 +253,22 @@ async function handleFederatedFriendRequest(
     lookup = await lookupRemoteUser(peerOrigin, baseName);
   } catch (err) {
     console.error(`[social] federated friend-add lookup failed for ${peerOrigin}:`, err);
-    return reply.code(503).send({ error: 'peer_unreachable', statusCode: 503, domain: targetDomain });
+    return sendError(reply, 503, 'peer_unreachable', { domain: targetDomain });
   }
   if (!lookup.ok) {
     if (lookup.reason === 'not_found') {
-      return reply.code(404).send({ error: 'user_not_found', statusCode: 404, domain: targetDomain, handle: baseName });
+      return sendError(reply, 404, 'user_not_found', { domain: targetDomain, handle: baseName });
     }
     if (lookup.reason === 'unreachable') {
-      return reply.code(503).send({ error: 'peer_unreachable', statusCode: 503, domain: targetDomain });
+      return sendError(reply, 503, 'peer_unreachable', { domain: targetDomain });
     }
     if (lookup.reason === 'rate_limited') {
       const headers: Record<string, string> = {};
       if (lookup.retryAfter) headers['Retry-After'] = String(lookup.retryAfter);
-      return reply.code(429).headers(headers).send({ error: 'lookup_rate_limited', statusCode: 429 });
+      return sendError(reply.headers(headers), 429, 'lookup_rate_limited');
     }
     // Exhaustive — should be unreachable.
-    return reply.code(500).send({ error: 'unknown_lookup_failure', statusCode: 500 });
+    return sendError(reply, 500, 'lookup_failed');
   }
 
   // 4. Self-friend pre-check
@@ -280,14 +277,14 @@ async function handleFederatedFriendRequest(
     lookup.homeUserId === senderCanonicalId &&
     normalizeOriginForCompare(peerOrigin) === normalizeOriginForCompare(ourOrigin)
   ) {
-    return reply.code(400).send({ error: 'cannot_friend_self', statusCode: 400 });
+    return sendError(reply, 400, 'cannot_friend_self');
   }
 
   // 5. Resolve / hydrate stub
   const stub = resolveOrCreateReplicatedUser(lookup.homeUserId, targetDomain, db, { username: lookup.username, status: lookup.profile.status });
   if (!stub) {
     // Tombstoned identity — refuse to resurrect.
-    return reply.code(404).send({ error: 'user_not_found', statusCode: 404, domain: targetDomain, handle: baseName });
+    return sendError(reply, 404, 'user_not_found', { domain: targetDomain, handle: baseName });
   }
   const stubHydrated = await hydrateReplicatedUserProfile(stub, lookup.profile, db);
 
@@ -306,11 +303,7 @@ async function handleFederatedFriendRequest(
       return reply.code(200).send({ success: true, requestId: existingRequest.id });
     } else {
       // Opposite direction — incoming request already exists
-      return reply.code(409).send({
-        error: 'incoming_request_exists',
-        statusCode: 409,
-        requestId: existingRequest.id,
-      });
+      return sendError(reply, 409, 'incoming_request_exists', { requestId: existingRequest.id });
     }
   }
 
@@ -321,7 +314,7 @@ async function handleFederatedFriendRequest(
   )).get();
 
   if (existingFriend) {
-    return reply.code(409).send({ error: 'already_friends', statusCode: 409 });
+    return sendError(reply, 409, 'already_friends');
   }
 
   // 6. Transaction: insert + log + queue outbox
@@ -486,14 +479,14 @@ export async function socialRoutes(app: FastifyInstance): Promise<void> {
     const db = getDb();
 
     if (!username || typeof username !== 'string') {
-      return reply.code(400).send({ error: 'username_required', statusCode: 400 });
+      return sendError(reply, 400, 'username_required');
     }
 
     const raw = username.trim();
-    if (!raw) return reply.code(400).send({ error: 'username_required', statusCode: 400 });
+    if (!raw) return sendError(reply, 400, 'username_required');
 
     const sender = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
-    if (!sender) return reply.code(401).send({ error: 'authenticated user not found', statusCode: 401 });
+    if (!sender) return sendError(reply, 401, 'unauthorized');
 
     const ourOrigin = getOurOrigin();
     const ourHost = normalizeOriginForCompare(ourOrigin);
@@ -502,7 +495,7 @@ export async function socialRoutes(app: FastifyInstance): Promise<void> {
     // outbox events from this instance (spec §5.6). Done before any branching.
     const senderHomeNorm = normalizeOriginForCompare(sender.homeInstance);
     if (senderHomeNorm && senderHomeNorm !== ourHost) {
-      return reply.code(403).send({ error: 'not_authoritative_for_sender', statusCode: 403 });
+      return sendError(reply, 403, 'not_authoritative_for_sender');
     }
 
     const atIndex = raw.lastIndexOf('@');
@@ -527,16 +520,16 @@ export async function socialRoutes(app: FastifyInstance): Promise<void> {
     const db = getDb();
 
     if (!['accepted', 'declined'].includes(status)) {
-      return reply.code(400).send({ error: 'Invalid status', statusCode: 400 });
+      return sendError(reply, 400, 'validation_failed');
     }
 
     const friendRequest = db.select().from(schema.friendRequests).where(eq(schema.friendRequests.id, id)).get();
     if (!friendRequest) {
-      return reply.code(404).send({ error: 'Friend request not found', statusCode: 404 });
+      return sendError(reply, 404, 'friend_request_not_found');
     }
 
     if (friendRequest.toId !== request.userId) {
-      return reply.code(403).send({ error: 'You can only manage requests sent to you', statusCode: 403 });
+      return sendError(reply, 403, 'friend_request_not_recipient');
     }
 
     if (status === 'accepted') {
@@ -661,16 +654,16 @@ export async function socialRoutes(app: FastifyInstance): Promise<void> {
 
     const friendRequest = db.select().from(schema.friendRequests).where(eq(schema.friendRequests.id, id)).get();
     if (!friendRequest) {
-      return reply.code(404).send({ error: 'Friend request not found', statusCode: 404 });
+      return sendError(reply, 404, 'friend_request_not_found');
     }
 
     // Only the sender can cancel an outgoing request
     if (friendRequest.fromId !== request.userId) {
-      return reply.code(403).send({ error: 'You can only cancel requests you sent', statusCode: 403 });
+      return sendError(reply, 403, 'friend_request_not_sender');
     }
 
     if (friendRequest.status !== 'pending') {
-      return reply.code(400).send({ error: 'Can only cancel pending requests', statusCode: 400 });
+      return sendError(reply, 400, 'friend_request_not_pending');
     }
 
     db.delete(schema.friendRequests)
@@ -740,7 +733,7 @@ export async function socialRoutes(app: FastifyInstance): Promise<void> {
     )).get();
 
     if (!existing) {
-      return reply.code(404).send({ error: 'You are not friends with this user', statusCode: 404 });
+      return sendError(reply, 404, 'not_friends');
     }
 
     db.delete(schema.friends).where(or(
