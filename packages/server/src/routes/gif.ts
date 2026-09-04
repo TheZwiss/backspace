@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { eq } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
+import { sendError } from '../utils/httpErrors.js';
 import type { GifResult } from '@backspace/shared';
 
 interface KlipyGifFile {
@@ -143,7 +144,7 @@ export async function gifRoutes(app: FastifyInstance): Promise<void> {
 
     const q = request.query.q?.trim();
     if (!q) {
-      return reply.code(400).send({ error: 'Search query is required', statusCode: 400 });
+      return sendError(reply, 400, 'validation_failed');
     }
 
     const perPage = Math.min(Math.max(Number(request.query.limit) || 24, 1), 50);

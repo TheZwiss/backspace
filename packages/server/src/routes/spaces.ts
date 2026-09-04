@@ -27,6 +27,7 @@ import { AVATAR_COLORS } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { checkVoicePermissions } from '../ws/events.js';
 import { getLocalInviteSnapshot } from '../utils/spaceInviteSnapshot.js';
+import { sendError } from '../utils/httpErrors';
 
 function rowToSpace(row: typeof schema.spaces.$inferSelect): Space {
   return {
@@ -68,12 +69,12 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     const { name, icon, banner, avatarColor, visibility, description } = request.body;
 
     if (!name || typeof name !== 'string') {
-      return reply.code(400).send({ error: 'Space name is required', statusCode: 400 });
+      return sendError(reply, 400, 'space_name_required');
     }
 
     const trimmedName = name.trim();
     if (trimmedName.length < 1 || trimmedName.length > 100) {
-      return reply.code(400).send({ error: 'Space name must be between 1 and 100 characters', statusCode: 400 });
+      return sendError(reply, 400, 'space_name_length', { min: 1, max: 100 });
     }
 
     // Validate visibility
@@ -171,7 +172,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
 
     const server = db.select().from(schema.spaces).where(eq(schema.spaces.id, spaceId)).get();
     if (!server) {
-      return reply.code(500).send({ error: 'Failed to create space', statusCode: 500 });
+      return sendError(reply, 500, 'space_create_failed');
     }
 
     // Register the creator in connectionManager so they receive WS broadcasts for this space
@@ -231,11 +232,11 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
 
     const server = db.select().from(schema.spaces).where(eq(schema.spaces.id, id)).get();
     if (!server) {
-      return reply.code(404).send({ error: 'Space not found', statusCode: 404 });
+      return sendError(reply, 404, 'space_not_found');
     }
 
     if (!isMember(id, request.userId)) {
-      return reply.code(403).send({ error: 'You are not a member of this space', statusCode: 403 });
+      return sendError(reply, 403, 'not_space_member');
     }
 
     const channels = db.select()
@@ -390,11 +391,11 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
 
     const server = db.select().from(schema.spaces).where(eq(schema.spaces.id, id)).get();
     if (!server) {
-      return reply.code(404).send({ error: 'Space not found', statusCode: 404 });
+      return sendError(reply, 404, 'space_not_found');
     }
 
     if (!hasPermission(request.userId, id, PermissionBits.MANAGE_SPACE)) {
-      return reply.code(403).send({ error: 'Missing MANAGE_SPACE permission', statusCode: 403 });
+      return sendError(reply, 403, 'missing_permission', { permission: 'MANAGE_SPACE' });
     }
 
     const updates: Partial<typeof schema.spaces.$inferInsert> = {};
@@ -402,7 +403,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     if (name !== undefined) {
       const trimmedName = name.trim();
       if (trimmedName.length < 1 || trimmedName.length > 100) {
-        return reply.code(400).send({ error: 'Space name must be between 1 and 100 characters', statusCode: 400 });
+        return sendError(reply, 400, 'space_name_length', { min: 1, max: 100 });
       }
       updates.name = trimmedName;
     }
@@ -425,14 +426,14 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       } else if ((AVATAR_COLORS as readonly string[]).includes(avatarColor)) {
         updates.avatarColor = avatarColor;
       } else {
-        return reply.code(400).send({ error: 'Invalid avatar color', statusCode: 400 });
+        return sendError(reply, 400, 'avatar_color_invalid');
       }
     }
 
     if (visibility !== undefined) {
       const validVisibilities = ['public', 'request', 'private'];
       if (!validVisibilities.includes(visibility)) {
-        return reply.code(400).send({ error: 'Visibility must be "public", "request", or "private"', statusCode: 400 });
+        return sendError(reply, 400, 'space_visibility_invalid');
       }
       updates.visibility = visibility;
     }
@@ -443,7 +444,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     }
 
     if (Object.keys(updates).length === 0) {
-      return reply.code(400).send({ error: 'No fields to update', statusCode: 400 });
+      return sendError(reply, 400, 'no_fields_to_update');
     }
 
     db.update(schema.spaces).set(updates).where(eq(schema.spaces.id, id)).run();
@@ -478,7 +479,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
 
     const updated = db.select().from(schema.spaces).where(eq(schema.spaces.id, id)).get();
     if (!updated) {
-      return reply.code(500).send({ error: 'Failed to update space', statusCode: 500 });
+      return sendError(reply, 500, 'space_update_failed');
     }
 
     const spaceData = rowToSpace(updated);
@@ -501,11 +502,11 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
 
     const server = db.select().from(schema.spaces).where(eq(schema.spaces.id, id)).get();
     if (!server) {
-      return reply.code(404).send({ error: 'Space not found', statusCode: 404 });
+      return sendError(reply, 404, 'space_not_found');
     }
 
     if (!isSpaceOwner(id, request.userId)) {
-      return reply.code(403).send({ error: 'Only the space owner can delete the space', statusCode: 403 });
+      return sendError(reply, 403, 'space_owner_only');
     }
 
     // Collect all attachment files before cascade-deleting DB records
@@ -557,7 +558,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
 
     const server = db.select().from(schema.spaces).where(eq(schema.spaces.id, id)).get();
     if (!server) {
-      return reply.code(404).send({ error: 'Space not found', statusCode: 404 });
+      return sendError(reply, 404, 'space_not_found');
     }
 
     if (!hasPermission(request.userId, id, PermissionBits.CREATE_INVITE)) {
@@ -565,16 +566,16 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       // here is either a non-member or a member without CREATE_INVITE. Give the
       // non-member a clearer "go join first" message instead of a permission error.
       if (!isMember(id, request.userId)) {
-        return reply.code(403).send({ error: 'Space membership required', statusCode: 403 });
+        return sendError(reply, 403, 'not_space_member');
       }
-      return reply.code(403).send({ error: 'Missing CREATE_INVITE permission', statusCode: 403 });
+      return sendError(reply, 403, 'missing_permission', { permission: 'CREATE_INVITE' });
     }
 
     // Request-only spaces are approval-gated and never joinable by invite code
     // (see the join endpoints), so they have no usable invite links. Refuse to
     // hand one out rather than mint a code that would dead-end at the join guard.
     if (server.visibility === 'request') {
-      return reply.code(403).send({ error: 'Request-only spaces do not use invite links; entry is by join request', statusCode: 403 });
+      return sendError(reply, 403, 'space_uses_join_requests');
     }
 
     // Return existing invite code if one exists, otherwise generate a new one
@@ -596,33 +597,33 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     const { inviteCode } = request.body;
 
     if (!inviteCode || typeof inviteCode !== 'string') {
-      return reply.code(400).send({ error: 'Invite code is required', statusCode: 400 });
+      return sendError(reply, 400, 'invite_code_required');
     }
 
     const db = getDb();
 
     const server = db.select().from(schema.spaces).where(eq(schema.spaces.id, id)).get();
     if (!server) {
-      return reply.code(404).send({ error: 'Space not found', statusCode: 404 });
+      return sendError(reply, 404, 'space_not_found');
     }
 
     if (server.inviteCode !== inviteCode) {
-      return reply.code(400).send({ error: 'Invalid invite code', statusCode: 400 });
+      return sendError(reply, 400, 'invite_not_found');
     }
 
     if (isBanned(id, request.userId)) {
-      return reply.code(403).send({ error: 'You are banned from this space', statusCode: 403 });
+      return sendError(reply, 403, 'user_banned');
     }
 
     if (isMember(id, request.userId)) {
-      return reply.code(409).send({ error: 'You are already a member of this space', statusCode: 409 });
+      return sendError(reply, 409, 'already_member');
     }
 
     // Request-only spaces are gated by manager approval: entry must go through
     // POST /request-join + approval, never a bearer invite code. (Private spaces
     // remain invite-joinable — that is their only entry path; public too.)
     if (server.visibility === 'request') {
-      return reply.code(403).send({ error: 'This space requires an approved join request', statusCode: 403 });
+      return sendError(reply, 403, 'join_request_required');
     }
 
     const now = Date.now();
@@ -663,27 +664,27 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     const { inviteCode } = request.body;
 
     if (!inviteCode || typeof inviteCode !== 'string') {
-      return reply.code(400).send({ error: 'Invite code is required', statusCode: 400 });
+      return sendError(reply, 400, 'invite_code_required');
     }
 
     const db = getDb();
 
     const server = db.select().from(schema.spaces).where(eq(schema.spaces.inviteCode, inviteCode)).get();
     if (!server) {
-      return reply.code(404).send({ error: 'Invalid invite code', statusCode: 404 });
+      return sendError(reply, 404, 'invite_not_found');
     }
 
     if (isBanned(server.id, request.userId)) {
-      return reply.code(403).send({ error: 'You are banned from this space', statusCode: 403 });
+      return sendError(reply, 403, 'user_banned');
     }
 
     if (isMember(server.id, request.userId)) {
-      return reply.code(409).send({ error: 'You are already a member of this space', statusCode: 409 });
+      return sendError(reply, 409, 'already_member');
     }
 
     // Request-only spaces are gated by manager approval (see POST /:id/join).
     if (server.visibility === 'request') {
-      return reply.code(403).send({ error: 'This space requires an approved join request', statusCode: 403 });
+      return sendError(reply, 403, 'join_request_required');
     }
 
     const now = Date.now();
@@ -726,11 +727,11 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
 
     const server = db.select().from(schema.spaces).where(eq(schema.spaces.id, id)).get();
     if (!server) {
-      return reply.code(404).send({ error: 'Space not found', statusCode: 404 });
+      return sendError(reply, 404, 'space_not_found');
     }
 
     if (!isMember(id, request.userId)) {
-      return reply.code(403).send({ error: 'You are not a member of this space', statusCode: 403 });
+      return sendError(reply, 403, 'not_space_member');
     }
 
     const memberRows = db.select()
@@ -800,24 +801,24 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
 
     const server = db.select().from(schema.spaces).where(eq(schema.spaces.id, id)).get();
     if (!server) {
-      return reply.code(404).send({ error: 'Space not found', statusCode: 404 });
+      return sendError(reply, 404, 'space_not_found');
     }
 
     if (!hasPermission(request.userId, id, PermissionBits.MANAGE_ROLES)) {
-      return reply.code(403).send({ error: 'Missing MANAGE_ROLES permission', statusCode: 403 });
+      return sendError(reply, 403, 'missing_permission', { permission: 'MANAGE_ROLES' });
     }
 
     if (uid === request.userId) {
-      return reply.code(400).send({ error: 'You cannot change your own roles', statusCode: 400 });
+      return sendError(reply, 400, 'cannot_change_own_roles');
     }
 
     if (!Array.isArray(roleIds)) {
-      return reply.code(400).send({ error: 'roleIds must be an array of role IDs', statusCode: 400 });
+      return sendError(reply, 400, 'role_ids_invalid');
     }
 
     // Cannot modify the server owner's roles unless you are the owner
     if (isSpaceOwner(id, uid) && !isSpaceOwner(id, request.userId)) {
-      return reply.code(403).send({ error: 'Only the space owner can modify their own roles', statusCode: 403 });
+      return sendError(reply, 403, 'space_owner_only');
     }
 
     const member = db.select()
@@ -829,7 +830,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       .get();
 
     if (!member) {
-      return reply.code(404).send({ error: 'Member not found', statusCode: 404 });
+      return sendError(reply, 404, 'member_not_found');
     }
 
     // Validate all roleIds belong to this server and are not @everyone
@@ -843,10 +844,10 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
 
       for (const roleId of roleIds) {
         if (!spaceRoleIds.has(roleId)) {
-          return reply.code(400).send({ error: `Role ${roleId} does not belong to this space`, statusCode: 400 });
+          return sendError(reply, 400, 'role_not_in_space', { roleId });
         }
         if (roleId === id) {
-          return reply.code(400).send({ error: '@everyone role is implicit and cannot be assigned', statusCode: 400 });
+          return sendError(reply, 400, 'everyone_role_not_assignable');
         }
       }
     }
@@ -885,12 +886,12 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       .get();
 
     if (!updatedMember) {
-      return reply.code(500).send({ error: 'Failed to update member', statusCode: 500 });
+      return sendError(reply, 500, 'member_update_failed');
     }
 
     const user = db.select().from(schema.users).where(eq(schema.users.id, uid)).get();
     if (!user) {
-      return reply.code(500).send({ error: 'User not found', statusCode: 500 });
+      return sendError(reply, 500, 'user_not_found');
     }
 
     const updatedRoleRows = db.select()
@@ -940,7 +941,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
 
     const server = db.select().from(schema.spaces).where(eq(schema.spaces.id, id)).get();
     if (!server) {
-      return reply.code(404).send({ error: 'Space not found', statusCode: 404 });
+      return sendError(reply, 404, 'space_not_found');
     }
 
     const isSelf = uid === request.userId;
@@ -948,12 +949,12 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     const canKick = hasPermission(request.userId, id, PermissionBits.KICK_MEMBERS);
 
     if (!isSelf && !canKick) {
-      return reply.code(403).send({ error: 'Missing KICK_MEMBERS permission', statusCode: 403 });
+      return sendError(reply, 403, 'missing_permission', { permission: 'KICK_MEMBERS' });
     }
 
     // Owner cannot leave their own server - they must delete it
     if (isSelf && isOwnerUser) {
-      return reply.code(400).send({ error: 'Space owner cannot leave. Transfer ownership or delete the space.', statusCode: 400 });
+      return sendError(reply, 400, 'space_owner_cannot_leave');
     }
 
     const member = db.select()
@@ -965,12 +966,12 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       .get();
 
     if (!member) {
-      return reply.code(404).send({ error: 'Member not found', statusCode: 404 });
+      return sendError(reply, 404, 'member_not_found');
     }
 
     // Cannot kick the owner
     if (isSpaceOwner(id, uid)) {
-      return reply.code(400).send({ error: 'Cannot remove the space owner', statusCode: 400 });
+      return sendError(reply, 400, 'cannot_target_owner');
     }
 
     db.delete(schema.spaceMembers)
@@ -1019,7 +1020,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     const db = getDb();
 
     if (!hasPermission(request.userId, id, PermissionBits.MANAGE_ROLES)) {
-      return reply.code(403).send({ error: 'Missing MANAGE_ROLES permission', statusCode: 403 });
+      return sendError(reply, 403, 'missing_permission', { permission: 'MANAGE_ROLES' });
     }
 
     // Validate permissions string is a valid bigint if provided
@@ -1029,7 +1030,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
         BigInt(permissions);
         permStr = permissions;
       } catch {
-        return reply.code(400).send({ error: 'Invalid permissions value', statusCode: 400 });
+        return sendError(reply, 400, 'permissions_invalid');
       }
     } else {
       // Default to @everyone baseline so new roles start functional
@@ -1045,7 +1046,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       'SELECT id FROM roles WHERE space_id = ? AND name COLLATE NOCASE = ?'
     ).get(id, roleName);
     if (duplicate) {
-      return reply.code(409).send({ error: 'A role with this name already exists', statusCode: 409 });
+      return sendError(reply, 409, 'role_name_taken');
     }
 
     const roleId = generateSnowflake();
@@ -1080,14 +1081,14 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     const db = getDb();
 
     if (!hasPermission(request.userId, id, PermissionBits.MANAGE_ROLES)) {
-      return reply.code(403).send({ error: 'Missing MANAGE_ROLES permission', statusCode: 403 });
+      return sendError(reply, 403, 'missing_permission', { permission: 'MANAGE_ROLES' });
     }
 
     const updates: Partial<typeof schema.roles.$inferInsert> = {};
     if (name !== undefined) {
       const trimmed = name.trim();
       if (!trimmed) {
-        return reply.code(400).send({ error: 'Role name cannot be empty', statusCode: 400 });
+        return sendError(reply, 400, 'role_name_required');
       }
       // Check for case-insensitive duplicate name within the space
       const rawDb = getRawDb();
@@ -1095,7 +1096,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
         'SELECT id FROM roles WHERE space_id = ? AND name COLLATE NOCASE = ? AND id != ?'
       ).get(id, trimmed, roleId);
       if (duplicate) {
-        return reply.code(409).send({ error: 'A role with this name already exists', statusCode: 409 });
+        return sendError(reply, 409, 'role_name_taken');
       }
       updates.name = trimmed;
     }
@@ -1107,12 +1108,12 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
         BigInt(permissions);
         updates.permissions = permissions;
       } catch {
-        return reply.code(400).send({ error: 'Invalid permissions value', statusCode: 400 });
+        return sendError(reply, 400, 'permissions_invalid');
       }
     }
 
     if (Object.keys(updates).length === 0) {
-      return reply.code(400).send({ error: 'No fields to update', statusCode: 400 });
+      return sendError(reply, 400, 'no_fields_to_update');
     }
 
     db.update(schema.roles).set(updates).where(and(eq(schema.roles.id, roleId), eq(schema.roles.spaceId, id))).run();
@@ -1136,12 +1137,12 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     const db = getDb();
 
     if (!hasPermission(request.userId, id, PermissionBits.MANAGE_ROLES)) {
-      return reply.code(403).send({ error: 'Missing MANAGE_ROLES permission', statusCode: 403 });
+      return sendError(reply, 403, 'missing_permission', { permission: 'MANAGE_ROLES' });
     }
 
     // Cannot delete @everyone role
     if (roleId === id) {
-      return reply.code(400).send({ error: 'Cannot delete the @everyone role', statusCode: 400 });
+      return sendError(reply, 400, 'everyone_role_not_deletable');
     }
 
     // Delete channel overrides referencing this role
@@ -1170,7 +1171,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     const db = getDb();
 
     if (!hasPermission(request.userId, id, PermissionBits.MANAGE_ROLES)) {
-      return reply.code(403).send({ error: 'Missing MANAGE_ROLES permission', statusCode: 403 });
+      return sendError(reply, 403, 'missing_permission', { permission: 'MANAGE_ROLES' });
     }
 
     db.insert(schema.memberRoles).values({
@@ -1190,7 +1191,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     const db = getDb();
 
     if (!hasPermission(request.userId, id, PermissionBits.MANAGE_ROLES)) {
-      return reply.code(403).send({ error: 'Missing MANAGE_ROLES permission', statusCode: 403 });
+      return sendError(reply, 403, 'missing_permission', { permission: 'MANAGE_ROLES' });
     }
 
     db.delete(schema.memberRoles).where(and(
@@ -1211,32 +1212,32 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     const db = getDb();
 
     if (!newOwnerId || typeof newOwnerId !== 'string') {
-      return reply.code(400).send({ error: 'newOwnerId is required', statusCode: 400 });
+      return sendError(reply, 400, 'new_owner_required');
     }
 
     const server = db.select().from(schema.spaces).where(eq(schema.spaces.id, id)).get();
     if (!server) {
-      return reply.code(404).send({ error: 'Space not found', statusCode: 404 });
+      return sendError(reply, 404, 'space_not_found');
     }
 
     if (!isSpaceOwner(id, request.userId)) {
-      return reply.code(403).send({ error: 'Only the space owner can transfer ownership', statusCode: 403 });
+      return sendError(reply, 403, 'space_owner_only');
     }
 
     if (newOwnerId === request.userId) {
-      return reply.code(400).send({ error: 'You are already the owner', statusCode: 400 });
+      return sendError(reply, 400, 'already_owner');
     }
 
     // Verify new owner is a member
     if (!isMember(id, newOwnerId)) {
-      return reply.code(400).send({ error: 'New owner must be a member of the space', statusCode: 400 });
+      return sendError(reply, 400, 'new_owner_not_member');
     }
 
     db.update(schema.spaces).set({ ownerId: newOwnerId }).where(eq(schema.spaces.id, id)).run();
 
     const updated = db.select().from(schema.spaces).where(eq(schema.spaces.id, id)).get();
     if (!updated) {
-      return reply.code(500).send({ error: 'Failed to transfer ownership', statusCode: 500 });
+      return sendError(reply, 500, 'ownership_transfer_failed');
     }
 
     const spaceData = rowToSpace(updated);
@@ -1255,7 +1256,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     const { code } = request.params;
     const snapshot = getLocalInviteSnapshot(code);
     if (!snapshot) {
-      return reply.code(404).send({ error: 'Invalid invite code', statusCode: 404 });
+      return sendError(reply, 404, 'invite_not_found');
     }
     return reply.code(200).send(snapshot);
   });
@@ -1270,7 +1271,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     const db = getDb();
 
     if (!hasPermission(request.userId, id, PermissionBits.BAN_MEMBERS)) {
-      return reply.code(403).send({ error: 'Missing BAN_MEMBERS permission', statusCode: 403 });
+      return sendError(reply, 403, 'missing_permission', { permission: 'BAN_MEMBERS' });
     }
 
     const banRows = db.select().from(schema.bans)
@@ -1313,26 +1314,26 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     const db = getDb();
 
     if (!targetId || typeof targetId !== 'string') {
-      return reply.code(400).send({ error: 'userId is required', statusCode: 400 });
+      return sendError(reply, 400, 'user_id_required');
     }
 
     if (!hasPermission(request.userId, id, PermissionBits.BAN_MEMBERS)) {
-      return reply.code(403).send({ error: 'Missing BAN_MEMBERS permission', statusCode: 403 });
+      return sendError(reply, 403, 'missing_permission', { permission: 'BAN_MEMBERS' });
     }
 
     // Cannot ban the space owner
     if (isSpaceOwner(id, targetId)) {
-      return reply.code(400).send({ error: 'Cannot ban the space owner', statusCode: 400 });
+      return sendError(reply, 400, 'cannot_target_owner');
     }
 
     // Cannot ban yourself
     if (targetId === request.userId) {
-      return reply.code(400).send({ error: 'Cannot ban yourself', statusCode: 400 });
+      return sendError(reply, 400, 'cannot_target_self');
     }
 
     // Check if already banned
     if (isBanned(id, targetId)) {
-      return reply.code(409).send({ error: 'User is already banned', statusCode: 409 });
+      return sendError(reply, 409, 'already_banned');
     }
 
     const now = Date.now();
@@ -1403,7 +1404,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     const db = getDb();
 
     if (!hasPermission(request.userId, id, PermissionBits.BAN_MEMBERS)) {
-      return reply.code(403).send({ error: 'Missing BAN_MEMBERS permission', statusCode: 403 });
+      return sendError(reply, 403, 'missing_permission', { permission: 'BAN_MEMBERS' });
     }
 
     const result = db.delete(schema.bans).where(and(
@@ -1412,7 +1413,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     )).run();
 
     if (result.changes === 0) {
-      return reply.code(404).send({ error: 'Ban not found', statusCode: 404 });
+      return sendError(reply, 404, 'ban_not_found');
     }
 
     return reply.code(200).send({ success: true });
