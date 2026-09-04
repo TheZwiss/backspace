@@ -77,8 +77,8 @@ function formatMessageTimestamp(t: TFunction<['chat', 'common']>, fmt: typeof fo
 
   const time = fmt.formatTime(timestamp);
 
-  if (isToday) return t('chat:message.timestamp.today', { time });
-  if (isYesterday) return t('chat:message.timestamp.yesterday', { time });
+  if (isToday) return t('common:time.today', { time });
+  if (isYesterday) return t('common:time.yesterday', { time });
   return fmt.formatDateTime(timestamp);
 }
 
@@ -692,7 +692,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
                 className={`p-1 hover:bg-interactive-hover rounded transition-colors text-[14px] leading-none ${
                   showReactionPicker ? 'text-accent-primary' : 'text-txt-tertiary hover:text-txt-secondary'
                 }`}
-                title={t('chat:message.actions.addReaction')}
+                title={t('common:actions.addReaction')}
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm1-13h-2v4H7v2h4v4h2v-4h4v-2h-4V7z" />
@@ -703,7 +703,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
           <button
             onClick={() => setReplyTo(message)}
             className="px-2 h-full text-txt-tertiary hover:text-txt-primary hover:bg-interactive-hover transition-all flex items-center justify-center"
-            title={t('chat:message.actions.reply')}
+            title={t('common:actions.reply')}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
               <path d="M10 9V5L3 12L10 19V14.9C15 14.9 18.5 16.5 21 20C20 15 17 10 10 9Z" />

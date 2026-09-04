@@ -193,7 +193,7 @@ export function DmRosterPanel() {
           data-dm-roster-header
           className="text-[10.5px] font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-2"
         >
-          {t('dm:roster.sectionCount', { label: t('dm:roster.members'), total: totalCount })}
+          {t('dm:roster.sectionCount', { label: t('common:labels.members'), total: totalCount })}
         </h3>
 
         {ownerMember && (
@@ -216,7 +216,7 @@ export function DmRosterPanel() {
         {onlineMembers.length > 0 && (
           <div data-dm-roster-section="online" className="mb-4">
             <h4 className="text-[10.5px] font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
-              {t('dm:roster.sectionCount', { label: t('dm:roster.online'), total: onlineMembers.length })}
+              {t('dm:roster.sectionCount', { label: t('common:states.online'), total: onlineMembers.length })}
             </h4>
             {onlineMembers.map((m) => (
               <DmMemberRow
@@ -236,7 +236,7 @@ export function DmRosterPanel() {
         {offlineMembers.length > 0 && (
           <div data-dm-roster-section="offline" className="opacity-60">
             <h4 className="text-[10.5px] font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
-              {t('dm:roster.sectionCount', { label: t('dm:roster.offline'), total: offlineMembers.length })}
+              {t('dm:roster.sectionCount', { label: t('common:states.offline'), total: offlineMembers.length })}
             </h4>
             {offlineMembers.map((m) => (
               <DmMemberRow

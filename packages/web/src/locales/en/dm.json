@@ -41,10 +41,7 @@
     "actions": "Member actions"
   },
   "roster": {
-    "members": "Members",
     "owner": "Owner",
-    "online": "Online",
-    "offline": "Offline",
     "sectionCount": "{{label}} — {{total}}"
   },
   "kick": {
@@ -66,7 +63,6 @@
   "leave": {
     "title": "Leave Group",
     "description": "Leave “{{name}}”? You will stop receiving messages from this conversation.",
-    "confirm": "Leave",
     "inProgress": "Leaving…",
     "failed": "Failed to leave group",
     "explanation": "You will stop receiving messages from this conversation. Other members will see a system message."
@@ -83,7 +79,6 @@
   },
   "list": {
     "title": "Messages",
-    "friends": "Friends",
     "empty": "No conversations yet.",
     "leaveGroup": "Leave Group",
     "justNow": "now",
@@ -119,7 +114,6 @@
     "title": "Group Settings",
     "general": "General",
     "overview": "Overview",
-    "members": "Members",
     "backToMenu": "Back to group DM settings menu",
     "changeIcon": "Change group icon",
     "icon": "Group icon",
@@ -143,18 +137,5 @@
     "federated": "Federated group",
     "memberCount_one": "{{count}} member",
     "memberCount_other": "{{count}} members"
-  },
-  "spaceOwnership": {
-    "title": "Transfer Ownership",
-    "description": "Choose a member to become the new owner of <name>{{name}}</name>",
-    "confirmQuestion": "Transfer ownership of <name>{{space}}</name> to <name>{{member}}</name>?",
-    "regularMember": "You will become a regular member.",
-    "transferring": "Transferring…",
-    "confirm": "Transfer",
-    "searchPlaceholder": "Search members…",
-    "loading": "Loading members…",
-    "noMembers": "No members found",
-    "success": "Ownership transferred to {{name}}",
-    "failed": "Failed to transfer ownership"
   }
 }

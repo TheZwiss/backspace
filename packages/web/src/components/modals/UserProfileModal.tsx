@@ -1,6 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { TFunction } from 'i18next';
 import { useFormatters } from '../../i18n/formatters';
 import { describeError } from '../../i18n/errors';
 import { useNavigate } from 'react-router-dom';
@@ -16,6 +15,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { getAvatarGradient, getSpaceGradient, adjustColor, mutedGradient } from '../../utils/gradients';
 import { parseFederatedUsername, isSelf, canonicalUserMatch } from '../../utils/identity';
 import { loadFederatedMutuals, type TaggedMutualFriend, type MutualSpace } from '../../utils/mutuals';
+import { presenceLabel } from '../../i18n/presence';
 
 type Tab = 'about' | 'friends' | 'spaces';
 
@@ -50,16 +50,6 @@ function getFriendshipStatus(
   }
 
   return { state: 'none' };
-}
-
-/** Presence is a closed union; every member is listed so the catalog keys stay discoverable. */
-function presenceLabel(t: TFunction<['social', 'common']>, status: string | null | undefined): string {
-  switch (status) {
-    case 'online': return t('social:presence.online');
-    case 'idle': return t('social:presence.idle');
-    case 'dnd': return t('social:presence.dnd');
-    default: return t('social:presence.offline');
-  }
 }
 
 export function UserProfileModal() {
@@ -527,7 +517,7 @@ export function UserProfileModal() {
             <>
               <button onClick={handleAcceptRequest} disabled={friendActionLoading}
                 className="flex-1 py-2 rounded-lg text-[13px] font-medium text-white bg-accent-primary hover:bg-accent-primary/80 transition-colors disabled:opacity-50">
-                {friendActionLoading ? '...' : t('social:request.accept')}
+                {friendActionLoading ? '...' : t('common:actions.accept')}
               </button>
               <button onClick={handleDeclineRequest} disabled={friendActionLoading}
                 className="py-2 px-3 rounded-lg text-[13px] font-medium text-txt-tertiary border border-white/[0.06] hover:bg-white/[0.06] transition-colors disabled:opacity-50">

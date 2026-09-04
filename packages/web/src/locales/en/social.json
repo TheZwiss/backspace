@@ -1,9 +1,5 @@
 {
-  "page": {
-    "title": "Friends"
-  },
   "tabs": {
-    "online": "Online",
     "all": "All",
     "pending": "Pending",
     "add": "Add Friend",
@@ -22,12 +18,6 @@
     "pending": "No pending requests — Nori is napping.",
     "activity": "It's quiet for now... When friends start an activity, we'll show it here!"
   },
-  "presence": {
-    "online": "Online",
-    "idle": "Idle",
-    "dnd": "Do Not Disturb",
-    "offline": "Offline"
-  },
   "friend": {
     "viaInstance": "via {{host}}",
     "message": "Message",
@@ -36,8 +26,6 @@
   "request": {
     "incoming": "Incoming Friend Request",
     "outgoing": "Outgoing Friend Request",
-    "accept": "Accept",
-    "decline": "Decline",
     "ignore": "Ignore",
     "cancel": "Cancel Request",
     "send": "Send Friend Request",

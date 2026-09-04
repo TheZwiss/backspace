@@ -17,19 +17,19 @@ interface ConnectionInfoPopoverProps {
 /** Whole kbps below 1 Mbps, one decimal up to 10 Mbps, whole Mbps above; the number itself goes through the locale. */
 function formatBitrate(kbps: number): string {
   if (kbps < 1000) {
-    return i18n.t('voice:connectionInfo.units.kbps', { value: formatters.formatNumber(Math.round(kbps)) });
+    return i18n.t('common:units.kbps', { value: formatters.formatNumber(Math.round(kbps)) });
   }
   const mbps = kbps >= 10000 ? Math.round(kbps / 1000) : Math.round(kbps / 100) / 10;
-  return i18n.t('voice:connectionInfo.units.mbps', { value: formatters.formatNumber(mbps) });
+  return i18n.t('common:units.mbps', { value: formatters.formatNumber(mbps) });
 }
 
 function formatMilliseconds(ms: number): string {
-  return i18n.t('voice:connectionInfo.units.milliseconds', { value: formatters.formatNumber(ms) });
+  return i18n.t('common:units.ms', { value: formatters.formatNumber(ms) });
 }
 
 /** Packet loss keeps one decimal so a 0.3% loss does not read as 0%. */
 function formatLossPercent(pct: number): string {
-  return i18n.t('voice:connectionInfo.units.percent', { value: formatters.formatNumber(Math.round(pct * 10) / 10) });
+  return i18n.t('common:units.percent', { value: formatters.formatNumber(Math.round(pct * 10) / 10) });
 }
 
 function pingColor(ms: number): string {

@@ -516,7 +516,7 @@ export function GroupDmSettings() {
   const membersPanel = (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-txt-primary">{t('dm:groupSettings.members')}</h2>
+        <h2 className="text-lg font-semibold text-txt-primary">{t('common:labels.members')}</h2>
         <span className="text-[12px] text-txt-tertiary">
           {t('dm:addMember.capacity', { current: memberCount, max: MAX_GROUP_MEMBERS })}
         </span>
@@ -593,7 +593,7 @@ export function GroupDmSettings() {
               {t('dm:groupSettings.overview')}
             </button>
             <button type="button" onClick={() => handleTabClick('members')} className={tabBtnClass('members')}>
-              {t('dm:groupSettings.members')}
+              {t('common:labels.members')}
             </button>
           </div>
         </div>
@@ -621,7 +621,7 @@ export function GroupDmSettings() {
                 {t('dm:groupSettings.overview')}
               </button>
               <button type="button" onClick={() => handleTabClick('members')} className={tabBtnClass('members')}>
-                {t('dm:groupSettings.members')}
+                {t('common:labels.members')}
               </button>
             </div>
           </div>
@@ -670,7 +670,7 @@ export function GroupDmSettings() {
         onConfirm={handleConfirmLeave}
         title={t('dm:leave.title')}
         description={t('dm:leave.description', { name: headerName })}
-        confirmLabel={t('dm:leave.confirm')}
+        confirmLabel={t('common:actions.leave')}
         variant="danger"
         loading={leaving}
       />

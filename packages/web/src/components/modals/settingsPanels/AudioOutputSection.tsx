@@ -36,7 +36,7 @@ export function AudioOutputSection() {
 }
 
 function AudioOutputSectionInner() {
-  const { t } = useTranslation('settings');
+  const { t } = useTranslation(['settings', 'common']);
   const outputDeviceId = useVoiceStore((s) => s.outputDeviceId);
   const setOutputDevice = useVoiceStore((s) => s.setOutputDevice);
   const outputVolume = useVoiceStore((s) => s.outputVolume);
@@ -176,7 +176,7 @@ function AudioOutputSectionInner() {
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <div className="text-[13px] font-medium text-txt-primary">{t('voice.output.volume.label')}</div>
-            <div className="text-xs text-txt-tertiary tabular-nums">{t('voice.output.volume.percent', { value: outputVolume })}</div>
+            <div className="text-xs text-txt-tertiary tabular-nums">{t('common:units.percent', { value: outputVolume })}</div>
           </div>
           <input
             type="range"

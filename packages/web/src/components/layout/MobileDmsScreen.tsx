@@ -262,7 +262,7 @@ export function MobileDmsScreen() {
             onClick={() => pushMobileScreen('friends')}
             className="h-8 px-3 rounded-lg text-xs font-medium text-accent-primary hover:bg-interactive-hover transition-colors"
           >
-            {t('dm:list.friends')}
+            {t('common:labels.friends')}
           </button>
         </div>
       </header>

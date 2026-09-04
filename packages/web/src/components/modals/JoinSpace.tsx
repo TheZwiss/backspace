@@ -343,7 +343,7 @@ export function JoinSpaceModal() {
           </div>
           <div className="mb-4 space-y-3">
             <div>
-              <label className="block text-xs text-txt-tertiary mb-1">{t('spaces:join.fallback.usernameLabel')}</label>
+              <label className="block text-xs text-txt-tertiary mb-1">{t('common:labels.username')}</label>
               <input
                 type="text"
                 value={fallbackUsername}

@@ -1,9 +1,5 @@
 {
   "message": {
-    "timestamp": {
-      "today": "Today at {{time}}",
-      "yesterday": "Yesterday at {{time}}"
-    },
     "edit": {
       "hint": "escape to <cancel>cancel</cancel> • enter to <save>save</save>"
     },
@@ -14,8 +10,6 @@
       "discard": "Discard"
     },
     "actions": {
-      "addReaction": "Add reaction",
-      "reply": "Reply",
       "confirmDelete": "Confirm delete"
     }
   },
@@ -77,8 +71,6 @@
     "saveAudio": "Save Audio",
     "copyLink": "Copy Link",
     "openLink": "Open Link",
-    "addReaction": "Add reaction",
-    "reply": "Reply",
     "copySelectedText": "Copy Selected Text",
     "copyText": "Copy Text",
     "markUnread": "Mark Unread",
@@ -89,10 +81,7 @@
   },
   "attachment": {
     "progress": {
-      "pausedTitle": "Paused — {{percent}}",
-      "resume": "Resume",
-      "pause": "Pause",
-      "abort": "Abort"
+      "pausedTitle": "Paused — {{percent}}"
     },
     "video": {
       "cannotPlayDownload": "Can't play here — download",
@@ -121,9 +110,6 @@
     "save": "Save image",
     "copy": "Copy image",
     "alt": "Image preview"
-  },
-  "mention": {
-    "membersHeading": "Members"
   },
   "invite": {
     "sentBy": "{{name}} sent an invite",

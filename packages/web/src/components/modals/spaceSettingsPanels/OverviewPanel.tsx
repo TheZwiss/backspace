@@ -209,7 +209,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
         URL.revokeObjectURL(bannerPreview);
         setBannerPreview(null);
       }
-      addToast(t('spaces:settings.saved'), 'success', 2000);
+      addToast(t('common:states.settingsSaved'), 'success', 2000);
     } catch (err) {
       setSaveError(describeError(err));
     } finally {
@@ -465,7 +465,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
         {/* Danger Zone */}
         {isOwner && (
           <div>
-            <div className="text-[11px] font-semibold text-txt-danger uppercase tracking-wider mb-1.5">{t('spaces:settings.dangerZone')}</div>
+            <div className="text-[11px] font-semibold text-txt-danger uppercase tracking-wider mb-1.5">{t('common:labels.dangerZone')}</div>
             <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-4">
               {/* Transfer Ownership */}
               <div>
@@ -508,13 +508,13 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
                         type="text"
                         value={transferSearch}
                         onChange={(e) => setTransferSearch(e.target.value)}
-                        placeholder={t('spaces:settings.members.searchPlaceholder')}
+                        placeholder={t('common:labels.searchMembers')}
                         className="input-search w-full"
                         autoFocus
                       />
                       <div className="max-h-[160px] overflow-y-auto space-y-0.5">
                         {transferCandidates.length === 0 ? (
-                          <p className="text-xs text-txt-tertiary text-center py-3">{t('spaces:settings.members.noneFound')}</p>
+                          <p className="text-xs text-txt-tertiary text-center py-3">{t('common:labels.noMembersFound')}</p>
                         ) : (
                           transferCandidates.map((member) => {
                             const avatarUrl = member.user.avatar

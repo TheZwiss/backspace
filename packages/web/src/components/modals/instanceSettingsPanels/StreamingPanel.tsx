@@ -53,10 +53,10 @@ export function StreamingPanel() {
   // Mbps with one decimal, kbps below a megabit; the unit words come from the catalog.
   const formatKbps = (kbps: number): string =>
     kbps >= 1000
-      ? t('admin:streaming.units.mbps', { value: f.formatNumber(Math.round(kbps / 100) / 10) })
-      : t('admin:streaming.units.kbps', { value: f.formatNumber(kbps) });
+      ? t('common:units.mbps', { value: f.formatNumber(Math.round(kbps / 100) / 10) })
+      : t('common:units.kbps', { value: f.formatNumber(kbps) });
 
-  if (!draft) return <div className="text-sm text-txt-tertiary">{t('admin:shared.loadingSettings')}</div>;
+  if (!draft) return <div className="text-sm text-txt-tertiary">{t('common:states.loadingSettings')}</div>;
 
   const getDefaultKbps = (key: string): number => {
     const parts = key.split('_').map(Number);
@@ -115,9 +115,9 @@ export function StreamingPanel() {
         bitrateMatrixOverrides: Object.keys(overrides).length > 0 ? overrides : null,
       };
       await updateStreamingLimits(payload);
-      addToast(t('admin:shared.saved'), 'success', 2000);
+      addToast(t('common:states.settingsSaved'), 'success', 2000);
     } catch (err) {
-      setSaveError(err instanceof Error ? describeError(err) : t('admin:shared.saveFailed'));
+      setSaveError(err instanceof Error ? describeError(err) : t('common:states.saveFailed'));
     } finally {
       setSaving(false);
     }

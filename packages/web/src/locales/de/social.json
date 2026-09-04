@@ -1,9 +1,5 @@
 {
-  "page": {
-    "title": "Freunde"
-  },
   "tabs": {
-    "online": "Online",
     "all": "Alle",
     "pending": "Ausstehend",
     "add": "Freund hinzufügen",
@@ -22,12 +18,6 @@
     "pending": "Keine ausstehenden Anfragen – Nori macht ein Nickerchen.",
     "activity": "Gerade ist es ruhig… Sobald deine Freunde etwas unternehmen, siehst du es hier!"
   },
-  "presence": {
-    "online": "Online",
-    "idle": "Abwesend",
-    "dnd": "Bitte nicht stören",
-    "offline": "Offline"
-  },
   "friend": {
     "viaInstance": "über {{host}}",
     "message": "Nachricht",
@@ -36,8 +26,6 @@
   "request": {
     "incoming": "Eingehende Freundschaftsanfrage",
     "outgoing": "Ausgehende Freundschaftsanfrage",
-    "accept": "Annehmen",
-    "decline": "Ablehnen",
     "ignore": "Ignorieren",
     "cancel": "Anfrage zurückziehen",
     "send": "Freundschaftsanfrage senden",

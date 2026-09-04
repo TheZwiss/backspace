@@ -83,7 +83,7 @@ Rules:
 
 | Namespace | Covers |
 |-----------|--------|
-| `common` | Shared verbs and nouns used across surfaces: Save, Cancel, Close, Delete, Copy, Loading, Yes, No, Unknown; the language selector |
+| `common` | Shared strings used across surfaces, grouped as `actions` (Save, Cancel, Accept, Leave, Log In…), `states` (Loading, Enabled, the four presence labels, Settings saved…), `labels` (Username, Password, Members, Friends, Danger Zone…), `time` (Today at, Yesterday at, Never, Just now), `units` (ms, %, kbps, Mbps) and `colors` (the avatar and folder colour names); the language selector. `src/i18n/presence.ts` maps a presence status to its `states` key so every surface shows the same words |
 | `auth` | Login, register, join-by-invite, password fields, federated account creation |
 | `chat` | Message list, composer, attachments, embeds, reactions, replies, typing, jump-to-message |
 | `dm` | DM list, group DM management, DM calls, DM system messages |

@@ -29,7 +29,7 @@ export function GeneralPanel() {
     }
   }, [instanceSettings]);
 
-  if (!draft) return <div className="text-sm text-txt-tertiary">{t('admin:shared.loadingSettings')}</div>;
+  if (!draft) return <div className="text-sm text-txt-tertiary">{t('common:states.loadingSettings')}</div>;
 
   const baseChanges = instanceSettings && draft
     ? draft.instanceName !== instanceSettings.instanceName ||
@@ -51,9 +51,9 @@ export function GeneralPanel() {
       await updateInstanceSettings(payload);
       setGifKeyDirty(false);
       setGifKeyDraft('');
-      addToast(t('admin:shared.saved'), 'success', 2000);
+      addToast(t('common:states.settingsSaved'), 'success', 2000);
     } catch (err) {
-      setSaveError(err instanceof Error ? describeError(err) : t('admin:shared.saveFailed'));
+      setSaveError(err instanceof Error ? describeError(err) : t('common:states.saveFailed'));
     } finally {
       setSaving(false);
     }

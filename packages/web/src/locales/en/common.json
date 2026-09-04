@@ -24,7 +24,25 @@
     "change": "Change",
     "refresh": "Refresh",
     "openLink": "Open link",
-    "tryAgain": "Try again"
+    "tryAgain": "Try again",
+    "reply": "Reply",
+    "addReaction": "Add reaction",
+    "share": "Share",
+    "accept": "Accept",
+    "decline": "Decline",
+    "pause": "Pause",
+    "resume": "Resume",
+    "abort": "Abort",
+    "dismissAll": "Dismiss all",
+    "filter": "Filter",
+    "sort": "Sort",
+    "sortBy": "Sort by",
+    "leave": "Leave",
+    "invitePeople": "Invite People",
+    "previous": "Previous",
+    "next": "Next",
+    "preview": "Preview",
+    "logIn": "Log In"
   },
   "states": {
     "loading": "Loading…",
@@ -41,7 +59,50 @@
     "optional": "Optional",
     "required": "Required",
     "default": "Default",
-    "recommended": "Recommended"
+    "recommended": "Recommended",
+    "online": "Online",
+    "idle": "Idle",
+    "doNotDisturb": "Do Not Disturb",
+    "offline": "Offline",
+    "loadingSettings": "Loading settings…",
+    "settingsSaved": "Settings saved",
+    "saveFailed": "Failed to save",
+    "scanning": "Scanning…"
+  },
+  "labels": {
+    "username": "Username",
+    "password": "Password",
+    "displayName": "Display Name",
+    "friends": "Friends",
+    "members": "Members",
+    "settings": "Settings",
+    "dangerZone": "Danger Zone",
+    "searchMembers": "Search members…",
+    "noMembersFound": "No members found",
+    "or": "or",
+    "nameAZ": "Name (A-Z)"
+  },
+  "time": {
+    "today": "Today at {{time}}",
+    "yesterday": "Yesterday at {{time}}",
+    "never": "Never",
+    "justNow": "Just now"
+  },
+  "units": {
+    "ms": "{{value}} ms",
+    "percent": "{{value}}%",
+    "kbps": "{{value}} kbps",
+    "mbps": "{{value}} Mbps"
+  },
+  "colors": {
+    "mint": "Mint",
+    "sky": "Sky",
+    "lavender": "Lavender",
+    "coral": "Coral",
+    "rose": "Rose",
+    "teal": "Teal",
+    "amber": "Amber",
+    "peach": "Peach"
   },
   "language": {
     "label": "Language",

@@ -8,15 +8,6 @@
       "cropTitle": "Crop Space Icon",
       "uploadFailed": "Failed to upload icon"
     },
-    "colorNames": {
-      "mint": "Mint",
-      "sky": "Sky",
-      "lavender": "Lavender",
-      "coral": "Coral",
-      "rose": "Rose",
-      "teal": "Teal",
-      "amber": "Amber"
-    },
     "name": {
       "label": "Space Name",
       "placeholder": "My Awesome Space",
@@ -157,7 +148,6 @@
     },
     "fallback": {
       "notice": "An account already exists on {{host}} and it does not accept the credential your home instance issued. Sign in with the password you set on that instance; it will be switched to the issued credential afterwards.",
-      "usernameLabel": "Username",
       "usernamePlaceholder": "Your username on this instance",
       "passwordLabel": "Password for this instance",
       "passwordPlaceholder": "Password on the remote instance",
@@ -206,15 +196,11 @@
       "tabs": {
         "overview": "Overview",
         "discovery": "Discovery",
-        "members": "Members",
         "roles": "Roles",
         "bans": "Bans"
       }
     },
-    "dangerZone": "Danger Zone",
     "discardChanges": "Discard",
-    "saved": "Settings saved",
-    "saveFailed": "Failed to save",
     "overview": {
       "identity": "Space Identity",
       "iconLabel": "Space Icon",
@@ -275,21 +261,16 @@
       "requests": {
         "title": "Pending Join Requests",
         "empty": "No pending join requests",
-        "accept": "Accept",
-        "decline": "Decline",
         "actionFailed": "Action failed"
       }
     },
     "members": {
-      "title": "Members",
       "description": "Manage members of this space. Click a member to edit their roles.",
       "listHeading": "Members ({{total}})",
       "owner": "Owner",
       "noRoles": "No roles",
       "ban": "Ban",
       "kick": "Kick",
-      "searchPlaceholder": "Search members...",
-      "noneFound": "No members found",
       "confirm": {
         "banTitle": "Ban {{name}}",
         "kickTitle": "Kick {{name}}",
@@ -403,22 +384,12 @@
       "moveTo": "Move to Folder",
       "removeFrom": "Remove from Folder",
       "ungroup": "Ungroup",
-      "colors": {
-        "mint": "Mint",
-        "peach": "Peach",
-        "lavender": "Lavender",
-        "sky": "Sky",
-        "amber": "Amber",
-        "rose": "Rose",
-        "coral": "Coral"
-      },
       "created": "Folder created",
       "moved": "Moved to folder",
       "removed": "Removed from folder",
       "ungrouped": "Folder ungrouped"
     },
     "space": {
-      "invite": "Invite People",
       "inviteCopied": "Invite link copied to clipboard",
       "inviteFailed": "Failed to generate invite",
       "transferOwnership": "Transfer Ownership",
@@ -429,22 +400,19 @@
       "leaveConfirm": {
         "title": "Leave Space",
         "titleNamed": "Leave {{name}}",
-        "description": "Are you sure you want to leave this space? You'll need a new invite to rejoin.",
-        "confirm": "Leave"
+        "description": "Are you sure you want to leave this space? You'll need a new invite to rejoin."
       },
       "left": "Left space",
       "leaveFailed": "Failed to leave space"
     },
     "dmList": {
-      "friends": "Friends",
       "comingSoon": "Coming Soon",
       "newDm": "New Direct Message",
       "empty": "No conversations yet.",
       "leaveGroup": "Leave Group",
       "leaveGroupConfirm": {
         "title": "Leave Group DM",
-        "description": "Are you sure you want to leave? You won't be able to rejoin unless someone adds you back.",
-        "confirm": "Leave"
+        "description": "Are you sure you want to leave? You won't be able to rejoin unless someone adds you back."
       }
     },
     "userArea": {
@@ -459,7 +427,6 @@
       "audioPermission": "Audio permission needed.",
       "enable": "Enable",
       "voiceSettings": "Voice Settings",
-      "settings": "Settings",
       "mute": "Mute",
       "unmute": "Unmute",
       "deafen": "Deafen",
@@ -493,15 +460,11 @@
     "categoryDeleteFailed": "Failed to delete category"
   },
   "members": {
-    "title": "Members",
     "titleWithCount_one": "Members — {{count}}",
     "titleWithCount_other": "Members — {{count}}",
     "loading": "Loading members",
-    "empty": "No members found",
     "groups": {
-      "owner": "Owner",
-      "online": "Online",
-      "offline": "Offline"
+      "owner": "Owner"
     }
   },
   "mobile": {
@@ -539,5 +502,16 @@
       "startVideoCall": "Start Video Call",
       "addFriends": "Add Friends to DM"
     }
+  },
+  "ownership": {
+    "title": "Transfer Ownership",
+    "description": "Choose a member to become the new owner of <name>{{name}}</name>",
+    "confirmQuestion": "Transfer ownership of <name>{{space}}</name> to <name>{{member}}</name>?",
+    "regularMember": "You will become a regular member.",
+    "transferring": "Transferring…",
+    "confirm": "Transfer",
+    "loading": "Loading members…",
+    "success": "Ownership transferred to {{name}}",
+    "failed": "Failed to transfer ownership"
   }
 }

@@ -14,7 +14,7 @@ export interface VisibilityOption {
  * the same setting in the same words.
  */
 export function useVisibilityOptions(): VisibilityOption[] {
-  const { t } = useTranslation(['spaces']);
+  const { t } = useTranslation(['spaces', 'common']);
   return useMemo(() => [
     {
       value: 'private',
@@ -36,14 +36,14 @@ export function useVisibilityOptions(): VisibilityOption[] {
 
 /** Tooltip names for the icon colour swatches, keyed by `AvatarColor`. */
 export function useAvatarColorNames(): Record<AvatarColor, string> {
-  const { t } = useTranslation(['spaces']);
+  const { t } = useTranslation(['spaces', 'common']);
   return useMemo(() => ({
-    mint: t('spaces:create.colorNames.mint'),
-    sky: t('spaces:create.colorNames.sky'),
-    lavender: t('spaces:create.colorNames.lavender'),
-    coral: t('spaces:create.colorNames.coral'),
-    rose: t('spaces:create.colorNames.rose'),
-    teal: t('spaces:create.colorNames.teal'),
-    amber: t('spaces:create.colorNames.amber'),
+    mint: t('common:colors.mint'),
+    sky: t('common:colors.sky'),
+    lavender: t('common:colors.lavender'),
+    coral: t('common:colors.coral'),
+    rose: t('common:colors.rose'),
+    teal: t('common:colors.teal'),
+    amber: t('common:colors.amber'),
   }), [t]);
 }

@@ -53,7 +53,7 @@ function DiscoveryPanel({ spaceId }: { spaceId: string }) {
     setSaveError('');
     try {
       await api.spaces.update(spaceId, { visibility, description: description.trim() });
-      addToast(t('spaces:settings.saved'), 'success', 2000);
+      addToast(t('common:states.settingsSaved'), 'success', 2000);
     } catch (err) {
       setSaveError(describeError(err));
     } finally {
@@ -239,7 +239,7 @@ function JoinRequestsSection({ spaceId }: { spaceId: string }) {
                   <button
                     onClick={() => handleDecide(req.id, 'accept')}
                     className="p-1.5 rounded text-status-online hover:bg-status-online/20 transition-colors"
-                    title={t('spaces:settings.discovery.requests.accept')}
+                    title={t('common:actions.accept')}
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
@@ -248,7 +248,7 @@ function JoinRequestsSection({ spaceId }: { spaceId: string }) {
                   <button
                     onClick={() => handleDecide(req.id, 'decline')}
                     className="p-1.5 rounded text-txt-danger hover:bg-accent-rose/20 transition-colors"
-                    title={t('spaces:settings.discovery.requests.decline')}
+                    title={t('common:actions.decline')}
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
@@ -265,7 +265,7 @@ function JoinRequestsSection({ spaceId }: { spaceId: string }) {
 }
 
 export function SpaceSettingsModal() {
-  const { t } = useTranslation(['spaces']);
+  const { t } = useTranslation(['spaces', 'common']);
   const activeModal = useUIStore((s) => s.activeModal);
   const closeModal = useUIStore((s) => s.closeModal);
   const isMobile = useUIStore((s) => s.isMobile);
@@ -331,7 +331,7 @@ export function SpaceSettingsModal() {
 
             <div className="border-t border-white/[0.04] my-2 mx-2" />
             <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('spaces:settings.nav.management')}</div>
-            <button onClick={() => handleTabClick('members')} className={tabClass('members')}>{t('spaces:settings.nav.tabs.members')}</button>
+            <button onClick={() => handleTabClick('members')} className={tabClass('members')}>{t('common:labels.members')}</button>
             {canManageRoles && (
               <button onClick={() => handleTabClick('roles')} className={tabClass('roles')}>{t('spaces:settings.nav.tabs.roles')}</button>
             )}
@@ -366,7 +366,7 @@ export function SpaceSettingsModal() {
 
               <div className="border-t border-white/[0.04] my-2 mx-2" />
               <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('spaces:settings.nav.management')}</div>
-              <button onClick={() => handleTabClick('members')} className={tabClass('members')}>{t('spaces:settings.nav.tabs.members')}</button>
+              <button onClick={() => handleTabClick('members')} className={tabClass('members')}>{t('common:labels.members')}</button>
               {canManageRoles && (
                 <button onClick={() => handleTabClick('roles')} className={tabClass('roles')}>{t('spaces:settings.nav.tabs.roles')}</button>
               )}

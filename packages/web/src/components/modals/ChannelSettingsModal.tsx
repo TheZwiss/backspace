@@ -57,7 +57,7 @@ function OverviewTab({
   onTogglePrivate: () => void;
   onDeleteChannel: () => void;
 }) {
-  const { t } = useTranslation(['spaces']);
+  const { t } = useTranslation(['spaces', 'common']);
   return (
     <div className="space-y-4">
       <div>
@@ -111,7 +111,7 @@ function OverviewTab({
 
       {canManageChannels && (
         <div className="pt-4 border-t border-border-soft">
-          <label className="block text-xs font-bold text-accent-rose uppercase mb-2">{t('spaces:settings.dangerZone')}</label>
+          <label className="block text-xs font-bold text-accent-rose uppercase mb-2">{t('common:labels.dangerZone')}</label>
           <button
             onClick={onDeleteChannel}
             className="w-full px-3 py-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-accent-rose text-sm font-medium hover:bg-accent-rose/20 transition-colors"
@@ -127,7 +127,7 @@ function OverviewTab({
 // ─── Main Modal ─────────────────────────────────────────────────────────────────
 
 export function ChannelSettingsModal() {
-  const { t } = useTranslation(['spaces']);
+  const { t } = useTranslation(['spaces', 'common']);
   const activeModal = useUIStore((s) => s.activeModal);
   const modalData = useUIStore((s) => s.modalData);
   const closeModal = useUIStore((s) => s.closeModal);

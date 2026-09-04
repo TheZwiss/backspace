@@ -312,7 +312,7 @@ export function StoragePanel() {
                 disabled={cleaning}
                 className="px-3 py-1.5 bg-white/[0.06] hover:bg-white/[0.1] text-txt-secondary text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
               >
-                {cleaning ? t('admin:shared.scanning') : t('admin:storage.cleanup.preview')}
+                {cleaning ? t('common:states.scanning') : t('admin:storage.cleanup.preview')}
               </button>
               <button
                 onClick={() => handleCleanup(false)}
@@ -383,7 +383,7 @@ export function StoragePanel() {
               disabled={tusCleaning || tusMaxAgeHours <= 0}
               className="px-3 py-1.5 bg-white/[0.06] hover:bg-white/[0.1] text-txt-secondary text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
             >
-              {tusCleaning ? t('admin:shared.scanning') : t('admin:storage.cleanup.preview')}
+              {tusCleaning ? t('common:states.scanning') : t('admin:storage.cleanup.preview')}
             </button>
             <button
               onClick={() => handleTusCleanup(false)}
@@ -440,7 +440,7 @@ export function StoragePanel() {
               disabled={mediaCleaning || mediaAgeDays < 1}
               className="px-3 py-1.5 bg-white/[0.06] hover:bg-white/[0.1] text-txt-secondary text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
             >
-              {mediaCleaning ? t('admin:shared.scanning') : t('admin:storage.media.preview')}
+              {mediaCleaning ? t('common:states.scanning') : t('common:actions.preview')}
             </button>
             <button
               onClick={() => handleMediaCleanup(false)}

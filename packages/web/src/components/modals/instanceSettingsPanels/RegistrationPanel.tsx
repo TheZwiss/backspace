@@ -170,7 +170,7 @@ function FilterDropdown({
         <svg width="12" height="12" viewBox="0 0 16 16" fill="none" className="opacity-60">
           <path d="M2 4h12M4 8h8M6 12h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
         </svg>
-        {t('admin:invites.filter.button')}
+        {t('common:actions.filter')}
         <span className="text-[10px]">▾</span>
       </button>
 
@@ -202,7 +202,7 @@ function FilterDropdown({
               </>
             )}
             <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-2 py-1">
-              {t('admin:invites.filter.sortBy')}
+              {t('common:actions.sortBy')}
             </div>
             {view === 'active'
               ? activeSortOptions.map((opt) => (
@@ -262,7 +262,7 @@ function expiryPresetLabel(id: ExpiryPresetId): string {
     case '24h':    return i18n.t('admin:invites.expiry.preset.hours24');
     case '7d':     return i18n.t('admin:invites.expiry.preset.days7');
     case '30d':    return i18n.t('admin:invites.expiry.preset.days30');
-    case 'never':  return i18n.t('admin:invites.expiry.preset.never');
+    case 'never':  return i18n.t('common:time.never');
     case 'custom': return i18n.t('admin:invites.expiry.preset.custom');
   }
 }
@@ -1591,7 +1591,7 @@ export function RegistrationPanel() {
     return list;
   }, [invites, tab, activeSort, archivedSort, archivedStatusFilter]);
 
-  if (!draft) return <div className="text-sm text-txt-tertiary">{t('admin:shared.loadingSettings')}</div>;
+  if (!draft) return <div className="text-sm text-txt-tertiary">{t('common:states.loadingSettings')}</div>;
 
   const hasChanges = !!instanceSettings && (
     draft.registrationOpen !== instanceSettings.registrationOpen ||
@@ -1608,7 +1608,7 @@ export function RegistrationPanel() {
       });
       addToast(t('admin:registration.saved'), 'success', 2000);
     } catch (err) {
-      const message = err instanceof Error ? describeError(err) : t('admin:shared.saveFailed');
+      const message = err instanceof Error ? describeError(err) : t('common:states.saveFailed');
       setSaveError(message);
       addToast(t('admin:registration.saveFailed'), 'warning');
     } finally {

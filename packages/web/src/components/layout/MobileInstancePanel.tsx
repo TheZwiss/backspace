@@ -127,7 +127,7 @@ function useFederationApprovalCount(enabled: boolean) {
 }
 
 export function MobileInstancePanel() {
-  const { t } = useTranslation(['federation', 'common']);
+  const { t } = useTranslation(['federation', 'admin', 'common']);
   const pushMobileScreen = useUIStore((s) => s.pushMobileScreen);
   const fetchInstanceSettings = useSettingsStore((s) => s.fetchInstanceSettings);
   const fetchStreamingLimits = useSettingsStore((s) => s.fetchStreamingLimits);
@@ -143,7 +143,7 @@ export function MobileInstancePanel() {
 
   return (
     <div className="flex flex-col h-full bg-surface-base">
-      <MobileScreenHeader title={t('federation:mobileInstance.title')} rightActions={<TransferIndicator />} />
+      <MobileScreenHeader title={t('admin:mobile.title')} rightActions={<TransferIndicator />} />
       <div className="flex-1 overflow-y-auto">
         {sections.map((section) => {
           const badge = section.id === 'federation' && approvalCount > 0 ? approvalCount : null;
@@ -154,7 +154,7 @@ export function MobileInstancePanel() {
               className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-interactive-hover text-left transition-colors"
             >
               {section.icon}
-              <span className="text-sm text-txt-primary flex-1">{t(`federation:mobileInstance.sections.${section.id}`)}</span>
+              <span className="text-sm text-txt-primary flex-1">{t(`admin:mobile.sections.${section.id}`)}</span>
               {badge !== null && (
                 <span className="min-w-[18px] h-[18px] px-1.5 bg-notification text-white text-[10px] font-bold rounded-full flex items-center justify-center">
                   {badge > 99 ? '99+' : badge}

@@ -24,7 +24,25 @@
     "change": "Изменить",
     "refresh": "Обновить",
     "openLink": "Открыть ссылку",
-    "tryAgain": "Попробовать снова"
+    "tryAgain": "Попробовать снова",
+    "reply": "Ответить",
+    "addReaction": "Добавить реакцию",
+    "share": "Поделиться",
+    "accept": "Принять",
+    "decline": "Отклонить",
+    "pause": "Пауза",
+    "resume": "Возобновить",
+    "abort": "Прервать",
+    "dismissAll": "Скрыть все",
+    "filter": "Фильтр",
+    "sort": "Сортировка",
+    "sortBy": "Сортировать по",
+    "leave": "Покинуть",
+    "invitePeople": "Пригласить людей",
+    "previous": "Назад",
+    "next": "Далее",
+    "preview": "Предпросмотр",
+    "logIn": "Войти"
   },
   "states": {
     "loading": "Загрузка…",
@@ -41,7 +59,50 @@
     "optional": "Необязательно",
     "required": "Обязательно",
     "default": "По умолчанию",
-    "recommended": "Рекомендуется"
+    "recommended": "Рекомендуется",
+    "online": "В сети",
+    "idle": "Неактивен",
+    "doNotDisturb": "Не беспокоить",
+    "offline": "Не в сети",
+    "loadingSettings": "Загрузка настроек…",
+    "settingsSaved": "Настройки сохранены",
+    "saveFailed": "Не удалось сохранить",
+    "scanning": "Сканирование…"
+  },
+  "labels": {
+    "username": "Имя пользователя",
+    "password": "Пароль",
+    "displayName": "Отображаемое имя",
+    "friends": "Друзья",
+    "members": "Участники",
+    "settings": "Настройки",
+    "dangerZone": "Опасная зона",
+    "searchMembers": "Поиск участников…",
+    "noMembersFound": "Участники не найдены",
+    "or": "или",
+    "nameAZ": "Имя (А–Я)"
+  },
+  "time": {
+    "today": "Сегодня в {{time}}",
+    "yesterday": "Вчера в {{time}}",
+    "never": "Никогда",
+    "justNow": "Только что"
+  },
+  "units": {
+    "ms": "{{value}} мс",
+    "percent": "{{value}}%",
+    "kbps": "{{value}} кбит/с",
+    "mbps": "{{value}} Мбит/с"
+  },
+  "colors": {
+    "mint": "Мятный",
+    "sky": "Небесный",
+    "lavender": "Лавандовый",
+    "coral": "Коралловый",
+    "rose": "Розовый",
+    "teal": "Бирюзовый",
+    "amber": "Янтарный",
+    "peach": "Персиковый"
   },
   "language": {
     "label": "Язык",

@@ -27,9 +27,7 @@
     "userVolume": "Громкость пользователя"
   },
   "incomingCall": {
-    "status": "Входящий голосовой звонок…",
-    "decline": "Отклонить",
-    "accept": "Принять"
+    "status": "Входящий голосовой звонок…"
   },
   "grid": {
     "waitingForOthers": "Ждём, пока присоединятся другие…",
@@ -62,13 +60,7 @@
       "screenAudio": "Звук экрана",
       "unknown": "Неизвестно"
     },
-    "remoteParticipant": "Удалённый",
-    "units": {
-      "milliseconds": "{{value}} мс",
-      "percent": "{{value}}%",
-      "kbps": "{{value}} кбит/с",
-      "mbps": "{{value}} Мбит/с"
-    }
+    "remoteParticipant": "Удалённый"
   },
   "screenPicker": {
     "title": "Демонстрация экрана",
@@ -81,8 +73,7 @@
     "noScreens": "Нет доступных экранов",
     "noWindows": "Нет доступных окон",
     "shareSystemAudio": "Передавать системный звук",
-    "echoWarning": "Зрители могут слышать эхо голосов. Для звука без эха используйте Chrome",
-    "share": "Поделиться"
+    "echoWarning": "Зрители могут слышать эхо голосов. Для звука без эха используйте Chrome"
   },
   "streamSettings": {
     "title": "Настройки трансляции",

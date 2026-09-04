@@ -1,12 +1,4 @@
 {
-  "shared": {
-    "loadingSettings": "Loading settings…",
-    "saved": "Settings saved",
-    "saveFailed": "Failed to save",
-    "scanning": "Scanning…",
-    "previous": "Previous",
-    "next": "Next"
-  },
   "general": {
     "title": "General",
     "description": "Configure your Backspace instance. These settings affect all users.",
@@ -58,9 +50,7 @@
     "emptyArchived": "No archived invite links.",
     "noMatch": "No invites match the current filter.",
     "filter": {
-      "button": "Filter",
       "status": "Status",
-      "sortBy": "Sort by",
       "sort": {
         "recent": "Most recent",
         "oldest": "Oldest",
@@ -81,7 +71,6 @@
         "hours24": "24 hours",
         "days7": "7 days",
         "days30": "30 days",
-        "never": "Never",
         "custom": "Custom…"
       },
       "keepCurrent": "Keep current",
@@ -252,7 +241,6 @@
       "label": "Media Retention",
       "olderThan": "Delete chat media older than",
       "days": "days",
-      "preview": "Preview",
       "run": "Delete Now",
       "running": "Deleting…",
       "files_one": "{{count}} file ({{size}})",
@@ -266,8 +254,6 @@
     "title": "Streaming",
     "description": "These limits apply to all users on this instance. Users can pick values within these bounds.",
     "units": {
-      "kbps": "{{value}} kbps",
-      "mbps": "{{value}} Mbps",
       "fps": "{{value}} fps",
       "kbpsLabel": "kbps"
     },
@@ -370,7 +356,6 @@
       "joinedBefore": "Joined before",
       "newest": "Newest first",
       "oldest": "Oldest first",
-      "nameAsc": "Name A-Z",
       "nameDesc": "Name Z-A",
       "deleted": "Deleted",
       "clear": "Clear filters"
@@ -412,6 +397,18 @@
       "title": "Delete User",
       "description": "Permanently delete <strong>{{username}}</strong>? This will remove them from all spaces, DMs, and friends lists. This cannot be undone.",
       "confirm": "Delete User"
+    }
+  },
+  "mobile": {
+    "title": "Instance",
+    "sections": {
+      "general": "General",
+      "registration": "Registration",
+      "federation": "Federation",
+      "streaming": "Streaming",
+      "storage": "Storage",
+      "updates": "Updates",
+      "users": "Users"
     }
   }
 }

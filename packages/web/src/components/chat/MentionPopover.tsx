@@ -86,11 +86,11 @@ function MemberList({
   getMemberColor,
   mobile,
 }: ResolvedListProps) {
-  const { t } = useTranslation(['chat']);
+  const { t } = useTranslation(['chat', 'common']);
   return (
     <>
       <div className="px-2 py-1.5 text-[11px] font-bold text-txt-tertiary uppercase tracking-wider">
-        {t('chat:mention.membersHeading')}
+        {t('common:labels.members')}
       </div>
       {filtered.map((member, i) => (
         <MentionMemberRow

@@ -1,8 +1,4 @@
 {
-  "time": {
-    "never": "Nie",
-    "justNow": "Gerade eben"
-  },
   "connections": {
     "title": "Verbundene Instanzen",
     "description": "Verknüpfe deine Konten über föderierte Backspace-Instanzen hinweg.",
@@ -21,7 +17,7 @@
     },
     "add": {
       "title": "Entfernte Instanz hinzufügen",
-      "urlPlaceholder": "https://instanz.example.com",
+      "urlPlaceholder": "https://instance.example.com",
       "probing": "Wird geprüft…",
       "connect": "Verbinden",
       "connecting": "Wird verbunden…",
@@ -30,7 +26,6 @@
       "passwordPlaceholder": "Dein Kontopasswort",
       "passwordHint": "Dein Passwort prüft deine Heimatinstanz, an {{host}} wird es nie gesendet – diese Instanz bekommt eigene, nur für sie erzeugte Zugangsdaten.",
       "fallbackNotice": "Auf dieser Instanz gibt es bereits ein Konto, das die von deiner Heimatinstanz ausgestellten Zugangsdaten nicht akzeptiert. Melde dich mit dem Passwort an, das du auf dieser Instanz gesetzt hast – danach wird das Konto auf die ausgestellten Zugangsdaten umgestellt.",
-      "usernameLabel": "Benutzername",
       "usernamePlaceholder": "Dein Benutzername auf dieser Instanz",
       "remotePasswordLabel": "Passwort für diese Instanz",
       "remotePasswordPlaceholder": "Passwort auf der entfernten Instanz",
@@ -45,9 +40,6 @@
       "noMatch": "Keine Instanz passt zum aktuellen Filter."
     },
     "sort": {
-      "button": "Sortieren",
-      "heading": "Sortieren nach",
-      "name": "Name (A bis Z)",
       "dateAdded": "Hinzugefügt am",
       "lastConnected": "Zuletzt verbunden"
     },
@@ -131,21 +123,8 @@
       "originalAction": "Ursprüngliche Aktion: {{action}}",
       "retry": "Erneut versuchen: {{action}}",
       "dismissing": "Wird ausgeblendet…",
-      "dismissAll": "Alle ausblenden",
       "dismissFailed": "Ausblenden fehlgeschlagen: {{error}}",
       "dismissAllFailed": "Alle ausblenden fehlgeschlagen: {{error}}"
-    }
-  },
-  "mobileInstance": {
-    "title": "Instanz",
-    "sections": {
-      "general": "Allgemein",
-      "registration": "Registrierung",
-      "federation": "Föderation",
-      "streaming": "Streaming",
-      "storage": "Speicher",
-      "updates": "Updates",
-      "users": "Benutzer"
     }
   },
   "admin": {
@@ -169,8 +148,7 @@
       "rotation": {
         "label": "Standard-Rotation der Secrets (Tage)",
         "description": "Intervall der automatischen Rotation für neue Peers. Bestehende Peers behalten ihre Einstellung."
-      },
-      "saved": "Einstellungen gespeichert"
+      }
     },
     "status": {
       "active": "Aktiv",
@@ -183,11 +161,8 @@
       "needsAttention": "Braucht Aufmerksamkeit"
     },
     "filter": {
-      "button": "Filtern",
       "statusHeading": "Status",
-      "sortHeading": "Sortieren nach",
       "sort": {
-        "name": "Name (A bis Z)",
         "lastSeen": "Zuletzt gesehen",
         "dateAdded": "Hinzugefügt am",
         "failures": "Fehlschläge",

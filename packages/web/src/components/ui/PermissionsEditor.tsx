@@ -506,14 +506,14 @@ export function PermissionsEditor({
                   type="text"
                   value={memberSearch}
                   onChange={(e) => setMemberSearch(e.target.value)}
-                  placeholder={t('spaces:settings.members.searchPlaceholder')}
+                  placeholder={t('common:labels.searchMembers')}
                   className="input-search w-full mb-1"
                   autoFocus
                 />
               </div>
               <div className="px-1.5 max-h-48 overflow-y-auto scrollbar-thin">
                 {availableMembers.length === 0 ? (
-                  <div className="px-2.5 py-1.5 text-xs text-txt-muted">{t('spaces:settings.members.noneFound')}</div>
+                  <div className="px-2.5 py-1.5 text-xs text-txt-muted">{t('common:labels.noMembersFound')}</div>
                 ) : (
                   availableMembers.map(member => (
                     <button

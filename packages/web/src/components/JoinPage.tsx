@@ -248,7 +248,7 @@ export function JoinPage() {
               to="/login"
               className="inline-block px-6 py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors"
             >
-              {t('auth:join.invalid.login')}
+              {t('common:actions.logIn')}
             </Link>
           )}
         </div>
@@ -362,7 +362,7 @@ export function JoinPage() {
                 {/* Divider */}
                 <div className="flex items-center gap-3">
                   <div className="flex-1 h-px bg-border-soft" />
-                  <span className="text-xs text-txt-tertiary">{t('auth:join.or')}</span>
+                  <span className="text-xs text-txt-tertiary">{t('common:labels.or')}</span>
                   <div className="flex-1 h-px bg-border-soft" />
                 </div>
 
@@ -441,7 +441,7 @@ export function JoinPage() {
             </p>
             <div className="mb-4">
               <label className="block text-xs font-bold text-txt-secondary uppercase mb-1.5">
-                {t('auth:fields.password')}
+                {t('common:labels.password')}
               </label>
               <input
                 type="password"
@@ -489,7 +489,7 @@ export function JoinPage() {
             </div>
             <div className="mb-4 space-y-3">
               <div>
-                <label className="block text-xs font-bold text-txt-secondary uppercase mb-1.5">{t('auth:fields.username')}</label>
+                <label className="block text-xs font-bold text-txt-secondary uppercase mb-1.5">{t('common:labels.username')}</label>
                 <input
                   type="text"
                   value={fallbackUsername}
