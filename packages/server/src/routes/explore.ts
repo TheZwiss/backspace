@@ -6,6 +6,7 @@ import { generateSnowflake } from '../utils/snowflake.js';
 import { isMember, isBanned, isSpaceOwner, hasPermission, computePermissions, PermissionBits, permissionsToString } from '../utils/permissions.js';
 import { connectionManager } from '../ws/handler.js';
 import { sanitizeUser } from '../utils/sanitize.js';
+import { sendError } from '../utils/httpErrors.js';
 import type {
   ExploreSpace,
   JoinRequest,
@@ -275,19 +276,19 @@ export async function exploreRoutes(app: FastifyInstance): Promise<void> {
 
     const space = db.select().from(schema.spaces).where(eq(schema.spaces.id, id)).get();
     if (!space) {
-      return reply.code(404).send({ error: 'Space not found', statusCode: 404 });
+      return sendError(reply, 404, 'space_not_found');
     }
 
     if (space.visibility !== 'public') {
-      return reply.code(403).send({ error: 'This space does not allow public joins', statusCode: 403 });
+      return sendError(reply, 403, 'space_not_public');
     }
 
     if (isBanned(id, request.userId)) {
-      return reply.code(403).send({ error: 'You are banned from this space', statusCode: 403 });
+      return sendError(reply, 403, 'user_banned');
     }
 
     if (isMember(id, request.userId)) {
-      return reply.code(409).send({ error: 'You are already a member of this space', statusCode: 409 });
+      return sendError(reply, 409, 'already_member');
     }
 
     const now = Date.now();
@@ -321,7 +322,7 @@ export async function exploreRoutes(app: FastifyInstance): Promise<void> {
     // Return full space data
     const fullSpace = buildFullSpace(id, request.userId);
     if (!fullSpace) {
-      return reply.code(500).send({ error: 'Failed to load space', statusCode: 500 });
+      return sendError(reply, 500, 'space_load_failed');
     }
 
     return reply.code(200).send(fullSpace);
@@ -342,19 +343,19 @@ export async function exploreRoutes(app: FastifyInstance): Promise<void> {
 
     const space = db.select().from(schema.spaces).where(eq(schema.spaces.id, id)).get();
     if (!space) {
-      return reply.code(404).send({ error: 'Space not found', statusCode: 404 });
+      return sendError(reply, 404, 'space_not_found');
     }
 
     if (space.visibility !== 'request') {
-      return reply.code(403).send({ error: 'This space does not accept join requests', statusCode: 403 });
+      return sendError(reply, 403, 'space_not_requestable');
     }
 
     if (isBanned(id, request.userId)) {
-      return reply.code(403).send({ error: 'You are banned from this space', statusCode: 403 });
+      return sendError(reply, 403, 'user_banned');
     }
 
     if (isMember(id, request.userId)) {
-      return reply.code(409).send({ error: 'You are already a member of this space', statusCode: 409 });
+      return sendError(reply, 409, 'already_member');
     }
 
     // Check for existing pending request
@@ -367,7 +368,7 @@ export async function exploreRoutes(app: FastifyInstance): Promise<void> {
       .get();
 
     if (existingRequest) {
-      return reply.code(409).send({ error: 'You already have a pending request for this space', statusCode: 409 });
+      return sendError(reply, 409, 'join_request_pending');
     }
 
     const requestId = generateSnowflake();
@@ -410,16 +411,16 @@ export async function exploreRoutes(app: FastifyInstance): Promise<void> {
 
     const space = db.select().from(schema.spaces).where(eq(schema.spaces.id, id)).get();
     if (!space) {
-      return reply.code(404).send({ error: 'Space not found', statusCode: 404 });
+      return sendError(reply, 404, 'space_not_found');
     }
 
     if (!isSpaceOwner(id, request.userId) && !hasPermission(request.userId, id, PermissionBits.MANAGE_SPACE)) {
-      return reply.code(403).send({ error: 'Missing MANAGE_SPACE permission', statusCode: 403 });
+      return sendError(reply, 403, 'missing_permission', { permission: 'MANAGE_SPACE' });
     }
 
     const statusFilter = request.query.status ?? 'pending';
     if (!['pending', 'accepted', 'declined'].includes(statusFilter)) {
-      return reply.code(400).send({ error: 'Status must be one of: pending, accepted, declined', statusCode: 400 });
+      return sendError(reply, 400, 'validation_failed');
     }
     const rows = db.select().from(schema.joinRequests)
       .where(and(
@@ -449,25 +450,25 @@ export async function exploreRoutes(app: FastifyInstance): Promise<void> {
     const db = getDb();
 
     if (!action || (action !== 'accept' && action !== 'decline')) {
-      return reply.code(400).send({ error: 'Action must be "accept" or "decline"', statusCode: 400 });
+      return sendError(reply, 400, 'validation_failed');
     }
 
     const space = db.select().from(schema.spaces).where(eq(schema.spaces.id, id)).get();
     if (!space) {
-      return reply.code(404).send({ error: 'Space not found', statusCode: 404 });
+      return sendError(reply, 404, 'space_not_found');
     }
 
     if (!isSpaceOwner(id, request.userId) && !hasPermission(request.userId, id, PermissionBits.MANAGE_SPACE)) {
-      return reply.code(403).send({ error: 'Missing MANAGE_SPACE permission', statusCode: 403 });
+      return sendError(reply, 403, 'missing_permission', { permission: 'MANAGE_SPACE' });
     }
 
     const joinReq = db.select().from(schema.joinRequests).where(eq(schema.joinRequests.id, requestId)).get();
     if (!joinReq || joinReq.spaceId !== id) {
-      return reply.code(404).send({ error: 'Join request not found', statusCode: 404 });
+      return sendError(reply, 404, 'join_request_not_found');
     }
 
     if (joinReq.status !== 'pending') {
-      return reply.code(400).send({ error: 'This request has already been decided', statusCode: 400 });
+      return sendError(reply, 400, 'join_request_decided');
     }
 
     const now = Date.now();
