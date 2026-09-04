@@ -1,4 +1,5 @@
 import React, { useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { User } from '@backspace/shared';
 import { ProfileAvatar } from '../ui/ProfileAvatar';
 import { Username } from '../ui/Username';
@@ -86,6 +87,7 @@ export function DmMemberRow({
   alwaysShowKebab = false,
   onMenuAction,
 }: DmMemberRowProps) {
+  const { t } = useTranslation(['dm', 'common']);
   const canonical = useCanonicalUserView(member);
   const openContextMenu = useContextMenuStore((s) => s.open);
   const rowRef = useRef<HTMLDivElement>(null);
@@ -101,7 +103,7 @@ export function DmMemberRow({
     items.push({
       key: 'profile',
       type: 'action',
-      label: 'View Profile',
+      label: t('dm:memberRow.viewProfile'),
       onClick: () => {
         // Anchor the popout to this row's bounding rect — matches the
         // MemberSidebar pattern (see MemberSidebar.tsx). On mobile the anchor
@@ -125,7 +127,7 @@ export function DmMemberRow({
       items.push({
         key: 'transfer',
         type: 'action',
-        label: 'Transfer Ownership',
+        label: t('dm:memberRow.transferOwnership'),
         onClick: () => onMenuAction('transfer', canonical),
       });
     }
@@ -134,7 +136,7 @@ export function DmMemberRow({
       items.push({
         key: 'kick',
         type: 'action',
-        label: 'Remove from Group',
+        label: t('dm:memberRow.removeFromGroup'),
         danger: true,
         onClick: () => onMenuAction('kick', canonical),
       });
@@ -148,7 +150,7 @@ export function DmMemberRow({
       items.push({
         key: 'remove-friend',
         type: 'action',
-        label: 'Remove Friend',
+        label: t('dm:memberRow.removeFriend'),
         danger: true,
         onClick: () => onMenuAction('remove-friend', canonical),
       });
@@ -206,7 +208,7 @@ export function DmMemberRow({
             </Tooltip>
           )}
           {isOwner && (
-            <Tooltip content="Group Owner" position="top">
+            <Tooltip content={t('dm:memberRow.ownerTooltip')} position="top">
               <span data-owner-crown className="inline-flex">
                 <CrownIcon />
               </span>
@@ -230,7 +232,7 @@ export function DmMemberRow({
       {showKebab && (
         <button
           type="button"
-          aria-label="Member actions"
+          aria-label={t('dm:memberRow.actions')}
           data-dm-member-kebab
           onClick={handleKebabClick}
           onContextMenu={(e) => {
