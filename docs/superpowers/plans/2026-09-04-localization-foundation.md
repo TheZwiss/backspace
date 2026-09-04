@@ -3,6 +3,29 @@
 Written 2026-09-04 before a context compact. Everything below was verified in the
 session that wrote it; the "open" items are marked.
 
+## Status (2026-09-04, later the same day)
+
+- Step 1 done. `v1.0.6` is tagged at `b3d570eb` (the first tag at `34e69f87`
+  was deleted with its draft after the Flatpak prepare job failed on
+  "dubious ownership" inside the container; fixed in #92). Release run green,
+  draft release has 22 assets and written notes; Jannis publishes. The
+  automation PR #94 (manifest pin, AppStream entry) is the gate for Flathub.
+  Repo setting "Allow GitHub Actions to create and approve pull requests" was
+  turned on for the last job of the chain; recorded in security-scanning.md.
+- Steps 2 and 3 done: `docs/systems/localization.md` written and matches the
+  code. Step 4.1 to 4.3 done on branch `feat/localization-foundation`:
+  foundation plus the settings surface (all panels), date formatting across
+  the app, desktop tray/menus/recovery/picker, users.ts error codes, the
+  check script with a 90-file pending list.
+- Open: 4.4 sweep PRs per surface (order in the spec), 4.5 close #45 and
+  comment on #33 once the foundation PR is open, 4.6 release 1.1.0.
+- Follow-ups found during the work: keybind display labels are persisted
+  in English at recording time (`keybindStore`), so they need deriving at
+  render time in the keybinds sweep; `UpdatesPanel.formatCheckedAt` and
+  `RegistrationPanel.formatRelative` build "X minutes ago" by hand (admin
+  sweep); the DM system messages in `dmFormatters.ts` still render English
+  (dm sweep); PR #93 (st7105, Flatpak webcam/UPower permissions) needs review.
+
 ## Decisions already made by Jannis
 
 - Do the localization ourselves end to end (foundation plus the full surface

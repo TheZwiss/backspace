@@ -59,7 +59,6 @@ packages/web/src/components/modals/NewDmModal.tsx
 packages/web/src/components/modals/SpaceSettings.tsx
 packages/web/src/components/modals/TransferOwnershipModal.tsx
 packages/web/src/components/modals/UserProfileModal.tsx
-packages/web/src/components/modals/UserSettings.tsx
 packages/web/src/components/modals/instanceSettingsPanels/FederationPanel.tsx
 packages/web/src/components/modals/instanceSettingsPanels/GeneralPanel.tsx
 packages/web/src/components/modals/instanceSettingsPanels/RegistrationPanel.tsx
@@ -67,10 +66,6 @@ packages/web/src/components/modals/instanceSettingsPanels/StoragePanel.tsx
 packages/web/src/components/modals/instanceSettingsPanels/StreamingPanel.tsx
 packages/web/src/components/modals/instanceSettingsPanels/UpdatesPanel.tsx
 packages/web/src/components/modals/instanceSettingsPanels/UsersPanel.tsx
-packages/web/src/components/modals/settingsPanels/AccountPanel.tsx
-packages/web/src/components/modals/settingsPanels/ConnectionsPanel.tsx
-packages/web/src/components/modals/settingsPanels/PrivacyPanel.tsx
-packages/web/src/components/modals/settingsPanels/VoicePanel.tsx
 packages/web/src/components/modals/spaceSettingsPanels/BansPanel.tsx
 packages/web/src/components/modals/spaceSettingsPanels/MembersPanel.tsx
 packages/web/src/components/modals/spaceSettingsPanels/OverviewPanel.tsx
@@ -98,4 +93,3 @@ packages/web/src/components/voice/VoiceGrid.tsx
 packages/web/src/components/voice/VoiceUser.tsx
 packages/web/src/components/voice/VoiceUserRow.tsx
 packages/web/src/components/voice/voiceMenuItems.tsx
-packages/web/src/main.tsx
