@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useVoiceStore } from '../../../stores/voiceStore';
 import { AudioManager } from '../../../audio/AudioManager';
 import { useAudioDevices } from '../../../hooks/useAudioDevices';
@@ -35,6 +36,7 @@ export function AudioOutputSection() {
 }
 
 function AudioOutputSectionInner() {
+  const { t } = useTranslation('settings');
   const outputDeviceId = useVoiceStore((s) => s.outputDeviceId);
   const setOutputDevice = useVoiceStore((s) => s.setOutputDevice);
   const outputVolume = useVoiceStore((s) => s.outputVolume);
@@ -98,8 +100,8 @@ function AudioOutputSectionInner() {
 
   if (permState === 'unknown') {
     return (
-      <SectionShell title="Output Device">
-        <div className="text-sm text-txt-tertiary">Checking audio access…</div>
+      <SectionShell title={t('voice.output.title')}>
+        <div className="text-sm text-txt-tertiary">{t('voice.output.checkingAccess')}</div>
       </SectionShell>
     );
   }
@@ -108,9 +110,10 @@ function AudioOutputSectionInner() {
   // is not granted we can still let the user adjust output volume + test the
   // current default, but the picker is hidden.
   const showPicker = permState === 'granted' && supportsSinkId;
+  const systemDefaultLabel = t('voice.output.device.systemDefault');
   const selectedLabel = outputDeviceId === 'default'
-    ? 'System Default'
-    : outputLabels.get(outputDeviceId) ?? 'System Default';
+    ? systemDefaultLabel
+    : outputLabels.get(outputDeviceId) ?? systemDefaultLabel;
 
   const handleSelect = (id: string) => {
     setOutputDevice(id);
@@ -123,7 +126,7 @@ function AudioOutputSectionInner() {
   };
 
   return (
-    <SectionShell title="Output Device">
+    <SectionShell title={t('voice.output.title')}>
       <div className="space-y-3">
         {showPicker ? (
           <div ref={dropdownRef}>
@@ -140,7 +143,7 @@ function AudioOutputSectionInner() {
             </button>
             {listOpen && (
               <div className="mt-1 rounded-md bg-surface-base border border-border-hard py-1 max-h-64 overflow-y-auto">
-                <DropdownItem label="System Default" active={outputDeviceId === 'default'} onClick={() => handleSelect('default')} />
+                <DropdownItem label={systemDefaultLabel} active={outputDeviceId === 'default'} onClick={() => handleSelect('default')} />
                 {outputs.filter(d => d.deviceId !== 'default').map((d) => (
                   <DropdownItem
                     key={d.deviceId}
@@ -154,26 +157,26 @@ function AudioOutputSectionInner() {
           </div>
         ) : permState === 'granted' && !supportsSinkId ? (
           <div className="text-xs text-txt-tertiary">
-            This browser doesn't support choosing an output device. Audio plays to the system default.
+            {t('voice.output.device.unsupported')}
           </div>
         ) : (
           <div className="space-y-2">
             <div className="text-xs text-txt-tertiary">
-              Grant microphone permission to list output devices (browsers gate output names behind microphone access).
+              {t('voice.output.permissionPrompt.description')}
             </div>
             <button
               onClick={() => { requestPermission().catch(() => {}); }}
               className="text-[13px] px-3 py-2 rounded-md bg-accent-primary hover:bg-accent-primary-hover text-white font-medium transition-colors"
             >
-              Enable audio access
+              {t('voice.output.permissionPrompt.enable')}
             </button>
           </div>
         )}
 
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <div className="text-[13px] font-medium text-txt-primary">Output Volume</div>
-            <div className="text-xs text-txt-tertiary tabular-nums">{outputVolume}%</div>
+            <div className="text-[13px] font-medium text-txt-primary">{t('voice.output.volume.label')}</div>
+            <div className="text-xs text-txt-tertiary tabular-nums">{t('voice.output.volume.percent', { value: outputVolume })}</div>
           </div>
           <input
             type="range"
@@ -195,7 +198,7 @@ function AudioOutputSectionInner() {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
             <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z" />
           </svg>
-          Play test sound
+          {t('voice.output.testSound')}
         </button>
       </div>
     </SectionShell>

@@ -1,1 +1,85 @@
-{}
+{
+  "voice": {
+    "input": {
+      "title": "Eingabegerät",
+      "checkingAccess": "Mikrofonzugriff wird geprüft…",
+      "accessDenied": {
+        "title": "Mikrofonzugriff verweigert",
+        "description": "Erlaube den Mikrofonzugriff, um ein Eingabegerät auszuwählen.",
+        "retry": "Erneut versuchen"
+      },
+      "permissionPrompt": {
+        "description": "Um Eingabegeräte aufzulisten und auszuwählen, wird der Mikrofonzugriff benötigt.",
+        "enable": "Mikrofonzugriff erlauben"
+      },
+      "device": {
+        "systemDefault": "Systemstandard",
+        "currentlyUsing": "Aktuell verwendet: {{label}}",
+        "none": "Keine Mikrofone gefunden."
+      },
+      "volume": {
+        "label": "Eingabelautstärke",
+        "percent": "{{value}} %"
+      },
+      "meter": {
+        "hint": "Die Pegelanzeige wird aktiv, sobald du einem Sprachkanal beitrittst."
+      }
+    },
+    "output": {
+      "title": "Ausgabegerät",
+      "checkingAccess": "Audiozugriff wird geprüft…",
+      "device": {
+        "systemDefault": "Systemstandard",
+        "unsupported": "Dieser Browser unterstützt die Auswahl eines Ausgabegeräts nicht. Der Ton wird über den Systemstandard ausgegeben."
+      },
+      "permissionPrompt": {
+        "description": "Erlaube den Mikrofonzugriff, um Ausgabegeräte aufzulisten (Browser zeigen Ausgabegerätenamen nur mit Mikrofonzugriff an).",
+        "enable": "Audiozugriff erlauben"
+      },
+      "volume": {
+        "label": "Ausgabelautstärke",
+        "percent": "{{value}} %"
+      },
+      "testSound": "Testton abspielen"
+    },
+    "video": {
+      "title": "Video",
+      "checkingAccess": "Kamerazugriff wird geprüft…",
+      "accessDenied": {
+        "title": "Kamerazugriff verweigert",
+        "description": "Erlaube den Kamerazugriff, um eine Kamera auszuwählen.",
+        "retry": "Erneut versuchen"
+      },
+      "blocked": {
+        "browser": "Die Kamera ist im Browser blockiert. Klicke auf das Kamerasymbol in der Adressleiste deines Browsers, setze die Berechtigung zurück und klicke dann auf „Erneut versuchen“.",
+        "mac": "Erlaube den Kamerazugriff unter Systemeinstellungen → Datenschutz & Sicherheit → Kamera und starte die App danach neu.",
+        "windows": "Erlaube den Kamerazugriff unter Einstellungen → Datenschutz und Sicherheit → Kamera und starte die App danach neu.",
+        "other": "Der Kamerazugriff wurde verweigert. Setze die Berechtigung in deinem Browser bzw. Chromium zurück und versuche es erneut."
+      },
+      "permissionPrompt": {
+        "description": "Um eine Kamera auszuwählen und die Vorschau zu sehen, wird der Kamerazugriff benötigt.",
+        "enable": "Kameravorschau aktivieren"
+      },
+      "camera": {
+        "label": "Kamera",
+        "auto": "Automatisch (Systemstandard)",
+        "fallbackName": "Kamera {{number}}",
+        "detectedFallback": "erkannte Kamera",
+        "currentlyUsing": "Aktuell verwendet: {{label}}",
+        "none": "Keine Kameras gefunden."
+      },
+      "preview": {
+        "testAria": "Kamera testen",
+        "testHint": "Klicken, um die Kamera zu testen",
+        "stop": "Vorschau beenden",
+        "retry": "Erneut versuchen"
+      },
+      "previewError": {
+        "inUse": "Die Kamera wird von einer anderen Anwendung verwendet.",
+        "unavailable": "Die ausgewählte Kamera ist nicht verfügbar.",
+        "notFound": "Keine Kamera gefunden.",
+        "generic": "Die Kameravorschau konnte nicht gestartet werden."
+      }
+    }
+  }
+}

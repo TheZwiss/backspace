@@ -1,1 +1,85 @@
-{}
+{
+  "voice": {
+    "input": {
+      "title": "Input Device",
+      "checkingAccess": "Checking microphone access…",
+      "accessDenied": {
+        "title": "Microphone access denied",
+        "description": "Grant microphone permission to choose an input device.",
+        "retry": "Try again"
+      },
+      "permissionPrompt": {
+        "description": "Microphone permission needed to list and choose an input device.",
+        "enable": "Enable microphone access"
+      },
+      "device": {
+        "systemDefault": "System Default",
+        "currentlyUsing": "Currently using: {{label}}",
+        "none": "No microphones detected."
+      },
+      "volume": {
+        "label": "Input Volume",
+        "percent": "{{value}}%"
+      },
+      "meter": {
+        "hint": "The level meter activates once you join a voice channel."
+      }
+    },
+    "output": {
+      "title": "Output Device",
+      "checkingAccess": "Checking audio access…",
+      "device": {
+        "systemDefault": "System Default",
+        "unsupported": "This browser doesn't support choosing an output device. Audio plays to the system default."
+      },
+      "permissionPrompt": {
+        "description": "Grant microphone permission to list output devices (browsers gate output names behind microphone access).",
+        "enable": "Enable audio access"
+      },
+      "volume": {
+        "label": "Output Volume",
+        "percent": "{{value}}%"
+      },
+      "testSound": "Play test sound"
+    },
+    "video": {
+      "title": "Video",
+      "checkingAccess": "Checking camera access…",
+      "accessDenied": {
+        "title": "Camera access denied",
+        "description": "Grant camera permission to choose a camera.",
+        "retry": "Try again"
+      },
+      "blocked": {
+        "browser": "Camera blocked at browser level. Click the camera icon in your browser's address bar, reset the permission, then click Try again.",
+        "mac": "Grant camera access in System Settings → Privacy & Security → Camera, then restart the app.",
+        "windows": "Grant camera access in Settings → Privacy & Security → Camera, then restart the app.",
+        "other": "Camera permission was denied. Reset it in your browser/Chromium prompt and try again."
+      },
+      "permissionPrompt": {
+        "description": "Camera permission needed to choose a camera and preview.",
+        "enable": "Enable camera preview"
+      },
+      "camera": {
+        "label": "Camera",
+        "auto": "Auto (system default)",
+        "fallbackName": "Camera {{number}}",
+        "detectedFallback": "detected camera",
+        "currentlyUsing": "Currently using: {{label}}",
+        "none": "No cameras detected."
+      },
+      "preview": {
+        "testAria": "Test camera",
+        "testHint": "Click to test camera",
+        "stop": "Stop preview",
+        "retry": "Try again"
+      },
+      "previewError": {
+        "inUse": "Camera is in use by another application.",
+        "unavailable": "Selected camera is unavailable.",
+        "notFound": "No camera detected.",
+        "generic": "Could not start camera preview."
+      }
+    }
+  }
+}
