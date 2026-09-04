@@ -211,7 +211,7 @@ export function buildMessageMenuItems(params: MessageMenuParams): ContextMenuIte
               onOpenEmojiPicker();
             }}
             className="glass-pill w-9 h-9 flex items-center justify-center text-txt-tertiary hover:text-txt-secondary hover:bg-interactive-hover rounded-lg transition-colors"
-            title={i18n.t('chat:menu.addReaction')}
+            title={i18n.t('common:actions.addReaction')}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm1-13h-2v4H7v2h4v4h2v-4h4v-2h-4V7z" />
@@ -229,7 +229,7 @@ export function buildMessageMenuItems(params: MessageMenuParams): ContextMenuIte
     items.push({
       key: 'reply',
       type: 'action',
-      label: i18n.t('chat:menu.reply'),
+      label: i18n.t('common:actions.reply'),
       icon: (
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
           <path d="M10 9V5L3 12L10 19V14.9C15 14.9 18.5 16.5 21 20C20 15 17 10 10 9Z" />

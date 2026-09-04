@@ -34,9 +34,5 @@
     "attachments_few": "{{count}} вложения",
     "attachments_many": "{{count}} вложений",
     "attachments_other": "{{count}} вложения"
-  },
-  "time": {
-    "todayAt": "Сегодня в {{time}}",
-    "yesterdayAt": "Вчера в {{time}}"
   }
 }

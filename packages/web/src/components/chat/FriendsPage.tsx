@@ -24,18 +24,9 @@ import { parseFederatedUsername, isFederationGlobeApplicable } from '../../utils
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { Username } from '../ui/Username';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { presenceLabel } from '../../i18n/presence';
 
 type SocialT = TFunction<['social', 'common']>;
-
-/** Presence is a closed union; every member is listed so the catalog keys stay discoverable. */
-function presenceLabel(t: SocialT, status: string | null | undefined): string {
-  switch (status) {
-    case 'online': return t('social:presence.online');
-    case 'idle': return t('social:presence.idle');
-    case 'dnd': return t('social:presence.dnd');
-    default: return t('social:presence.offline');
-  }
-}
 
 function ActivityFriendItem({
   friend,
@@ -107,7 +98,7 @@ type Tab = 'online' | 'all' | 'pending' | 'add' | 'activity';
 
 function tabLabel(t: SocialT, tab: Tab): string {
   switch (tab) {
-    case 'online': return t('social:tabs.online');
+    case 'online': return t('common:states.online');
     case 'all': return t('social:tabs.all');
     case 'pending': return t('social:tabs.pending');
     case 'add': return t('social:tabs.add');
@@ -364,7 +355,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
               <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
             </svg>
           </button>
-          <span className="font-semibold text-sm text-txt-primary">{t('social:page.title')}</span>
+          <span className="font-semibold text-sm text-txt-primary">{t('common:labels.friends')}</span>
         </div>
       ) : (
         <div className="h-14 px-4 flex items-center border-b border-border-hard flex-shrink-0 z-10 bg-surface-chat">
@@ -372,11 +363,11 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
             <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary">
               <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
             </svg>
-            <span className="font-bold text-txt-primary">{t('social:page.title')}</span>
+            <span className="font-bold text-txt-primary">{t('common:labels.friends')}</span>
           </div>
           <div className="w-[1px] h-6 bg-surface-elevated mx-2" />
           <div className="flex items-center gap-4 ml-2">
-            <TabButton active={activeTab === 'online'} onClick={() => setActiveTab('online')}>{t('social:tabs.online')}</TabButton>
+            <TabButton active={activeTab === 'online'} onClick={() => setActiveTab('online')}>{t('common:states.online')}</TabButton>
             <TabButton active={activeTab === 'all'} onClick={() => setActiveTab('all')}>{t('social:tabs.all')}</TabButton>
             <TabButton active={activeTab === 'pending'} onClick={() => setActiveTab('pending')}>
               {t('social:tabs.pending')}
@@ -888,14 +879,14 @@ function UserDiscoverCard({
               disabled={actionLoading}
               className="flex-1 py-1.5 bg-status-online/20 hover:bg-status-online/30 text-status-online text-[13px] font-medium rounded transition-colors disabled:opacity-50"
             >
-              {t('social:request.accept')}
+              {t('common:actions.accept')}
             </button>
             <button
               onClick={handleDecline}
               disabled={actionLoading}
               className="flex-1 py-1.5 bg-accent-rose/15 hover:bg-accent-rose/25 text-accent-rose text-[13px] font-medium rounded transition-colors disabled:opacity-50"
             >
-              {t('social:request.decline')}
+              {t('common:actions.decline')}
             </button>
           </div>
         )}
@@ -1014,7 +1005,7 @@ function RequestItem({ request, type, onAccept, onDecline, onCancel }: {
             <button
               onClick={() => onAccept?.()}
               className="p-2 bg-surface-base rounded-full text-status-online hover:bg-status-online hover:text-white transition-all"
-              title={t('social:request.accept')}
+              title={t('common:actions.accept')}
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
@@ -1023,7 +1014,7 @@ function RequestItem({ request, type, onAccept, onDecline, onCancel }: {
             <button
               onClick={() => onDecline?.()}
               className="p-2 bg-surface-base rounded-full text-txt-danger hover:bg-accent-rose hover:text-white transition-all"
-              title={t('social:request.decline')}
+              title={t('common:actions.decline')}
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />

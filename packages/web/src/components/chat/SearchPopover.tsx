@@ -28,8 +28,8 @@ function formatTime(timestamp: number): string {
   yesterday.setDate(yesterday.getDate() - 1);
   const isYesterday = date.toDateString() === yesterday.toDateString();
   const time = formatters.formatTime(timestamp);
-  if (isToday) return i18n.t('search:time.todayAt', { time });
-  if (isYesterday) return i18n.t('search:time.yesterdayAt', { time });
+  if (isToday) return i18n.t('common:time.today', { time });
+  if (isYesterday) return i18n.t('common:time.yesterday', { time });
   return formatters.formatDateTime(timestamp);
 }
 

@@ -32,7 +32,7 @@ const CODEC_OPTIONS = [
 /** Whole Mbps when the value is round, otherwise one decimal; the number goes through the locale. */
 function formatBitrate(bps: number): string {
   const mbps = bps % 1_000_000 === 0 ? bps / 1_000_000 : Math.round(bps / 100_000) / 10;
-  return i18n.t('voice:connectionInfo.units.mbps', { value: formatters.formatNumber(mbps) });
+  return i18n.t('common:units.mbps', { value: formatters.formatNumber(mbps) });
 }
 
 function formatDegradation(pref: RTCDegradationPreference): string {
@@ -47,9 +47,9 @@ function formatDegradation(pref: RTCDegradationPreference): string {
 function formatKbps(kbps: number): string {
   if (kbps >= 1000) {
     const mbps = kbps % 1000 === 0 ? kbps / 1000 : Math.round(kbps / 100) / 10;
-    return i18n.t('voice:connectionInfo.units.mbps', { value: formatters.formatNumber(mbps) });
+    return i18n.t('common:units.mbps', { value: formatters.formatNumber(mbps) });
   }
-  return i18n.t('voice:connectionInfo.units.kbps', { value: formatters.formatNumber(kbps) });
+  return i18n.t('common:units.kbps', { value: formatters.formatNumber(kbps) });
 }
 
 export function ScreenShareSettingsPopover({ open, onClose, anchorRef }: ScreenShareSettingsPopoverProps) {

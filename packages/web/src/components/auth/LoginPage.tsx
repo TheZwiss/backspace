@@ -101,7 +101,7 @@ export function LoginPage() {
 
           <div className="mb-5">
             <label className="block text-xs font-bold text-txt-secondary uppercase mb-2">
-              {t('auth:fields.username')} <span className="text-txt-danger">*</span>
+              {t('common:labels.username')} <span className="text-txt-danger">*</span>
             </label>
             <input
               type="text"
@@ -115,7 +115,7 @@ export function LoginPage() {
 
           <div className="mb-5">
             <label className="block text-xs font-bold text-txt-secondary uppercase mb-2">
-              {t('auth:fields.password')} <span className="text-txt-danger">*</span>
+              {t('common:labels.password')} <span className="text-txt-danger">*</span>
             </label>
             <input
               type="password"
@@ -135,7 +135,7 @@ export function LoginPage() {
               ? t('auth:login.rateLimited.retryIn', { seconds: retryAfter })
               : isLoading
                 ? t('auth:login.submitting')
-                : t('auth:login.submit')}
+                : t('common:actions.logIn')}
           </button>
 
           <p className="mt-3 text-sm text-txt-tertiary">

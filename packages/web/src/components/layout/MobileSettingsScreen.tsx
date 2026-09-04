@@ -72,7 +72,7 @@ const sectionIcons: Record<string, React.ReactNode> = {
 };
 
 export function MobileSettingsScreen({ initialPanel }: MobileSettingsScreenProps) {
-  const { t } = useTranslation(['mobile', 'settings']);
+  const { t } = useTranslation(['mobile', 'settings', 'common']);
   const pushMobileScreen = useUIStore((s) => s.pushMobileScreen);
   const isAdmin = useAuthStore((s) => s.user?.isAdmin);
 
@@ -114,7 +114,7 @@ export function MobileSettingsScreen({ initialPanel }: MobileSettingsScreenProps
 
   return (
     <div className="flex flex-col h-full bg-surface-base">
-      <MobileScreenHeader title={t('mobile:settings.title')} rightActions={<TransferIndicator />} />
+      <MobileScreenHeader title={t('common:labels.settings')} rightActions={<TransferIndicator />} />
       <div className="flex-1 overflow-y-auto">
         {sections.map((section) => (
           <button

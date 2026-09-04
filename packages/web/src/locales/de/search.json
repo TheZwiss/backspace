@@ -13,7 +13,7 @@
       "any": "Beliebig",
       "file": "Datei",
       "image": "Bild",
-      "link": "Weblink"
+      "link": "Link"
     },
     "before": {
       "label": "Vor"
@@ -30,9 +30,5 @@
     "loadMore": "Mehr laden ({{remaining}} verbleibend)",
     "attachments_one": "{{count}} Anhang",
     "attachments_other": "{{count}} Anhänge"
-  },
-  "time": {
-    "todayAt": "Heute um {{time}}",
-    "yesterdayAt": "Gestern um {{time}}"
   }
 }

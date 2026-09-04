@@ -1,8 +1,4 @@
 {
-  "time": {
-    "never": "Never",
-    "justNow": "Just now"
-  },
   "connections": {
     "title": "Connected Instances",
     "description": "Link accounts across federated Backspace instances.",
@@ -30,7 +26,6 @@
       "passwordPlaceholder": "Your account password",
       "passwordHint": "Your password is checked by your home instance and is never sent to {{host}} — that instance gets a unique credential generated for it alone.",
       "fallbackNotice": "An account already exists on this instance and it does not accept the credential your home instance issued. Sign in with the password you set on that instance — it will be switched to the issued credential afterwards.",
-      "usernameLabel": "Username",
       "usernamePlaceholder": "Your username on this instance",
       "remotePasswordLabel": "Password for this instance",
       "remotePasswordPlaceholder": "Password on the remote instance",
@@ -45,9 +40,6 @@
       "noMatch": "No instances match the current filter."
     },
     "sort": {
-      "button": "Sort",
-      "heading": "Sort by",
-      "name": "Name (A-Z)",
       "dateAdded": "Date added",
       "lastConnected": "Last connected"
     },
@@ -131,21 +123,8 @@
       "originalAction": "Original action: {{action}}",
       "retry": "Retry your {{action}}",
       "dismissing": "Dismissing…",
-      "dismissAll": "Dismiss all",
       "dismissFailed": "Failed to dismiss: {{error}}",
       "dismissAllFailed": "Failed to dismiss all: {{error}}"
-    }
-  },
-  "mobileInstance": {
-    "title": "Instance",
-    "sections": {
-      "general": "General",
-      "registration": "Registration",
-      "federation": "Federation",
-      "streaming": "Streaming",
-      "storage": "Storage",
-      "updates": "Updates",
-      "users": "Users"
     }
   },
   "admin": {
@@ -169,8 +148,7 @@
       "rotation": {
         "label": "Default Secret Rotation (days)",
         "description": "Auto-rotation interval for new peers. Existing peers keep their current setting."
-      },
-      "saved": "Settings saved"
+      }
     },
     "status": {
       "active": "Active",
@@ -183,11 +161,8 @@
       "needsAttention": "Needs Attention"
     },
     "filter": {
-      "button": "Filter",
       "statusHeading": "Status",
-      "sortHeading": "Sort by",
       "sort": {
-        "name": "Name (A-Z)",
         "lastSeen": "Last seen",
         "dateAdded": "Date added",
         "failures": "Failures",

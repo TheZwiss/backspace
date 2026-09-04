@@ -41,10 +41,7 @@
     "actions": "Mitgliederaktionen"
   },
   "roster": {
-    "members": "Mitglieder",
     "owner": "Besitzer",
-    "online": "Online",
-    "offline": "Nicht online",
     "sectionCount": "{{label}} — {{total}}"
   },
   "kick": {
@@ -66,7 +63,6 @@
   "leave": {
     "title": "Gruppe verlassen",
     "description": "„{{name}}“ verlassen? Du bekommst dann keine Nachrichten mehr aus dieser Unterhaltung.",
-    "confirm": "Verlassen",
     "inProgress": "Wird verlassen…",
     "failed": "Gruppe konnte nicht verlassen werden",
     "explanation": "Du bekommst dann keine Nachrichten mehr aus dieser Unterhaltung. Die anderen Mitglieder sehen eine Systemmeldung."
@@ -83,7 +79,6 @@
   },
   "list": {
     "title": "Nachrichten",
-    "friends": "Freunde",
     "empty": "Noch keine Unterhaltungen.",
     "leaveGroup": "Gruppe verlassen",
     "justNow": "jetzt",
@@ -119,7 +114,6 @@
     "title": "Gruppeneinstellungen",
     "general": "Allgemein",
     "overview": "Übersicht",
-    "members": "Mitglieder",
     "backToMenu": "Zurück zum Menü der Gruppeneinstellungen",
     "changeIcon": "Gruppensymbol ändern",
     "icon": "Gruppensymbol",
@@ -136,25 +130,12 @@
   },
   "groupInfo": {
     "title": "Gruppeninfo",
-    "plainTitle": "Details",
+    "plainTitle": "Info",
     "notFound": "Unterhaltung nicht gefunden.",
     "notGroup": "Diese Unterhaltung hat keine Gruppeninfo.",
     "cancelEdit": "Bearbeiten abbrechen",
     "federated": "Föderierte Gruppe",
     "memberCount_one": "{{count}} Mitglied",
     "memberCount_other": "{{count}} Mitglieder"
-  },
-  "spaceOwnership": {
-    "title": "Besitz übertragen",
-    "description": "Wähle ein Mitglied, das neuer Besitzer von <name>{{name}}</name> wird",
-    "confirmQuestion": "Besitz von <name>{{space}}</name> an <name>{{member}}</name> übertragen?",
-    "regularMember": "Du wirst ein normales Mitglied.",
-    "transferring": "Wird übertragen…",
-    "confirm": "Übertragen",
-    "searchPlaceholder": "Mitglieder suchen…",
-    "loading": "Mitglieder werden geladen…",
-    "noMembers": "Keine Mitglieder gefunden",
-    "success": "Besitz an {{name}} übertragen",
-    "failed": "Besitz konnte nicht übertragen werden"
   }
 }

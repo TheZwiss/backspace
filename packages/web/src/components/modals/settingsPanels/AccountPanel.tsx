@@ -524,8 +524,8 @@ export function AccountPanel() {
                       borderColor: avatarColorState === key ? 'white' : 'transparent',
                       boxShadow: avatarColorState === key ? `0 0 0 2px ${entry.glow}40` : 'none',
                     }}
-                    title={t(`settings:account.profile.avatarColor.names.${key}`)}
-                    aria-label={t(`settings:account.profile.avatarColor.names.${key}`)}
+                    title={t(`common:colors.${key}`)}
+                    aria-label={t(`common:colors.${key}`)}
                   />
                 );
               })}
@@ -622,14 +622,14 @@ export function AccountPanel() {
               onChange={(e) => setStatus(e.target.value as UserStatus)}
               className="input-standard w-full appearance-none"
             >
-              <option value="online">{t('settings:account.details.status.online')}</option>
-              <option value="idle">{t('settings:account.details.status.idle')}</option>
-              <option value="dnd">{t('settings:account.details.status.dnd')}</option>
+              <option value="online">{t('common:states.online')}</option>
+              <option value="idle">{t('common:states.idle')}</option>
+              <option value="dnd">{t('common:states.doNotDisturb')}</option>
             </select>
           </div>
 
           <div>
-            <label className="block text-xs text-txt-secondary mb-1.5">{t('settings:account.details.displayName.label')}</label>
+            <label className="block text-xs text-txt-secondary mb-1.5">{t('common:labels.displayName')}</label>
             <input
               type="text"
               value={displayName}
@@ -653,7 +653,7 @@ export function AccountPanel() {
 
       {/* ── Password ── */}
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('settings:account.password.sectionTitle')}</div>
+        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('common:labels.password')}</div>
         <form onSubmit={(e) => { e.preventDefault(); handleChangePassword(); }} className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5 space-y-3">
           <input type="text" autoComplete="username" value={user.username} readOnly tabIndex={-1} className="sr-only" />
           <div>
@@ -743,7 +743,7 @@ export function AccountPanel() {
 
       {/* ── Danger Zone ── */}
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('settings:account.danger.sectionTitle')}</div>
+        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('common:labels.dangerZone')}</div>
         <div className="rounded-lg bg-accent-rose/5 border border-accent-rose/20 p-3.5">
           <p className="text-sm text-txt-secondary mb-3">
             {t('settings:account.danger.description')}

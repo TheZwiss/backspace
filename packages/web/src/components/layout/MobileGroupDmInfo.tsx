@@ -558,7 +558,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
           {onlineMembers.length > 0 && (
             <div data-mobile-group-section="online" className="mb-4">
               <h3 className="text-[10.5px] font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
-                {t('dm:roster.sectionCount', { label: t('dm:roster.online'), total: onlineMembers.length })}
+                {t('dm:roster.sectionCount', { label: t('common:states.online'), total: onlineMembers.length })}
               </h3>
               {onlineMembers.map((m) => renderMemberRow(m, false))}
             </div>
@@ -567,7 +567,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
           {offlineMembers.length > 0 && (
             <div data-mobile-group-section="offline" className="opacity-60">
               <h3 className="text-[10.5px] font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
-                {t('dm:roster.sectionCount', { label: t('dm:roster.offline'), total: offlineMembers.length })}
+                {t('dm:roster.sectionCount', { label: t('common:states.offline'), total: offlineMembers.length })}
               </h3>
               {offlineMembers.map((m) => renderMemberRow(m, false))}
             </div>
@@ -636,7 +636,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
         onConfirm={handleConfirmLeave}
         title={t('dm:leave.title')}
         description={t('dm:leave.description', { name: displayName })}
-        confirmLabel={t('dm:leave.confirm')}
+        confirmLabel={t('common:actions.leave')}
         variant="danger"
         loading={leaving}
       />

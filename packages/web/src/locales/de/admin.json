@@ -1,12 +1,4 @@
 {
-  "shared": {
-    "loadingSettings": "Einstellungen werden geladen…",
-    "saved": "Einstellungen gespeichert",
-    "saveFailed": "Speichern fehlgeschlagen",
-    "scanning": "Wird geprüft…",
-    "previous": "Zurück",
-    "next": "Weiter"
-  },
   "general": {
     "title": "Allgemein",
     "description": "Richte deine Backspace-Instanz ein. Diese Einstellungen gelten für alle Nutzer.",
@@ -58,9 +50,7 @@
     "emptyArchived": "Keine archivierten Einladungslinks.",
     "noMatch": "Keine Einladungen passen zum aktuellen Filter.",
     "filter": {
-      "button": "Filtern",
       "status": "Zustand",
-      "sortBy": "Sortieren nach",
       "sort": {
         "recent": "Neueste zuerst",
         "oldest": "Älteste zuerst",
@@ -81,7 +71,6 @@
         "hours24": "24 Stunden",
         "days7": "7 Tage",
         "days30": "30 Tage",
-        "never": "Nie",
         "custom": "Eigener Zeitpunkt…"
       },
       "keepCurrent": "Aktuellen behalten",
@@ -169,7 +158,7 @@
       "exhausted": "Aufgebraucht",
       "created": "Erstellt",
       "createdByLabel": "Erstellt von",
-      "token": "Code",
+      "token": "Token",
       "lastRedeemed": "Zuletzt eingelöst",
       "copyLink": "Link kopieren",
       "revoke": "Widerrufen",
@@ -252,7 +241,6 @@
       "label": "Aufbewahrung von Medien",
       "olderThan": "Chat-Medien löschen, die älter sind als",
       "days": "Tage",
-      "preview": "Vorschau",
       "run": "Jetzt löschen",
       "running": "Wird gelöscht…",
       "files_one": "{{count}} Datei ({{size}})",
@@ -266,9 +254,7 @@
     "title": "Streaming",
     "description": "Diese Grenzen gelten für alle Nutzer dieser Instanz. Nutzer wählen Werte innerhalb dieser Grenzen.",
     "units": {
-      "kbps": "{{value}} kbit/s",
-      "mbps": "{{value}} Mbit/s",
-      "fps": "{{value}} FPS",
+      "fps": "{{value}} fps",
       "kbpsLabel": "kbit/s"
     },
     "bandwidth": {
@@ -370,7 +356,6 @@
       "joinedBefore": "Beigetreten vor",
       "newest": "Neueste zuerst",
       "oldest": "Älteste zuerst",
-      "nameAsc": "Name A bis Z",
       "nameDesc": "Name Z bis A",
       "deleted": "Gelöschte",
       "clear": "Filter zurücksetzen"
@@ -412,6 +397,18 @@
       "title": "Nutzer löschen",
       "description": "<strong>{{username}}</strong> endgültig löschen? Die Person wird aus allen Spaces, Direktnachrichten und Freundeslisten entfernt. Das lässt sich nicht rückgängig machen.",
       "confirm": "Nutzer löschen"
+    }
+  },
+  "mobile": {
+    "title": "Instanz",
+    "sections": {
+      "general": "Allgemein",
+      "registration": "Registrierung",
+      "federation": "Föderation",
+      "streaming": "Streaming",
+      "storage": "Speicher",
+      "updates": "Updates",
+      "users": "Benutzer"
     }
   }
 }

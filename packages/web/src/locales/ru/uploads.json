@@ -12,11 +12,6 @@
       "failed": "Ошибка: {{reason}}",
       "aborted": "Прервано",
       "progress": "{{loaded}} / {{total}}"
-    },
-    "actions": {
-      "pause": "Пауза",
-      "resume": "Продолжить",
-      "abort": "Прервать"
     }
   },
   "crop": {

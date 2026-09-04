@@ -1,10 +1,6 @@
 {
-  "settings": {
-    "title": "Settings"
-  },
   "you": {
     "editProfile": "Edit Profile",
-    "friends": "Friends",
     "homeInstance": "Home instance: {{domain}}",
     "logOutConfirm": "Are you sure you want to log out?"
   }

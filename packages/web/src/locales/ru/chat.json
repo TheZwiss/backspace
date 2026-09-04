@@ -1,9 +1,5 @@
 {
   "message": {
-    "timestamp": {
-      "today": "Сегодня в {{time}}",
-      "yesterday": "Вчера в {{time}}"
-    },
     "edit": {
       "hint": "Esc для <cancel>отмены</cancel> • Enter для <save>сохранения</save>"
     },
@@ -14,8 +10,6 @@
       "discard": "Отменить отправку"
     },
     "actions": {
-      "addReaction": "Добавить реакцию",
-      "reply": "Ответить",
       "confirmDelete": "Подтвердить удаление"
     }
   },
@@ -79,8 +73,6 @@
     "saveAudio": "Сохранить аудио",
     "copyLink": "Копировать ссылку",
     "openLink": "Открыть ссылку",
-    "addReaction": "Добавить реакцию",
-    "reply": "Ответить",
     "copySelectedText": "Копировать выделенный текст",
     "copyText": "Копировать текст",
     "markUnread": "Отметить как непрочитанное",
@@ -91,10 +83,7 @@
   },
   "attachment": {
     "progress": {
-      "pausedTitle": "Приостановлено — {{percent}}",
-      "resume": "Возобновить",
-      "pause": "Приостановить",
-      "abort": "Прервать"
+      "pausedTitle": "Приостановлено — {{percent}}"
     },
     "video": {
       "cannotPlayDownload": "Здесь не воспроизвести — скачать",
@@ -123,9 +112,6 @@
     "save": "Сохранить изображение",
     "copy": "Копировать изображение",
     "alt": "Просмотр изображения"
-  },
-  "mention": {
-    "membersHeading": "Участники"
   },
   "invite": {
     "sentBy": "Приглашение от {{name}}",

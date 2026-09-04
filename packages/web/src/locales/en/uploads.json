@@ -10,11 +10,6 @@
       "failed": "Failed: {{reason}}",
       "aborted": "Aborted",
       "progress": "{{loaded}} / {{total}}"
-    },
-    "actions": {
-      "pause": "Pause",
-      "resume": "Resume",
-      "abort": "Abort"
     }
   },
   "crop": {

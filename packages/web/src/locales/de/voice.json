@@ -1,6 +1,6 @@
 {
   "chatPanel": {
-    "title": "Textchat",
+    "title": "Chat",
     "close": "Chat schließen"
   },
   "badges": {
@@ -9,7 +9,7 @@
     "mutedSpaceDeafened": "Stummgeschaltet (Ton im Space ausgeschaltet)",
     "spaceDeafened": "Ton im Space ausgeschaltet",
     "locallyMuted": "Lokal stummgeschaltet",
-    "live": "Live",
+    "live": "LIVE",
     "you": "(du)"
   },
   "moderation": {
@@ -27,9 +27,7 @@
     "userVolume": "Nutzerlautstärke"
   },
   "incomingCall": {
-    "status": "Eingehender Sprachanruf…",
-    "decline": "Ablehnen",
-    "accept": "Annehmen"
+    "status": "Eingehender Sprachanruf…"
   },
   "grid": {
     "waitingForOthers": "Warten, bis andere beitreten…",
@@ -45,14 +43,14 @@
     "gathering": "Statistiken werden gesammelt…",
     "section": {
       "network": "Netzwerk",
-      "audio": "Ton",
+      "audio": "Audio",
       "video": "Video"
     },
     "network": {
-      "ping": "Latenz",
+      "ping": "Ping",
       "packetLoss": "Paketverlust",
-      "jitter": "Laufzeitschwankung",
-      "server": "Serveradresse",
+      "jitter": "Jitter",
+      "server": "Server",
       "protocol": "Protokoll"
     },
     "source": {
@@ -62,13 +60,7 @@
       "screenAudio": "Bildschirmaudio",
       "unknown": "Unbekannt"
     },
-    "remoteParticipant": "Gegenstelle",
-    "units": {
-      "milliseconds": "{{value}} ms",
-      "percent": "{{value}} %",
-      "kbps": "{{value}} kbit/s",
-      "mbps": "{{value}} Mbit/s"
-    }
+    "remoteParticipant": "Gegenstelle"
   },
   "screenPicker": {
     "title": "Bildschirm teilen",
@@ -81,8 +73,7 @@
     "noScreens": "Keine Bildschirme verfügbar",
     "noWindows": "Keine Fenster verfügbar",
     "shareSystemAudio": "Systemaudio teilen",
-    "echoWarning": "Zuschauer hören eventuell ein Echo der Stimmen. Für echofreies Audio Chrome verwenden",
-    "share": "Teilen"
+    "echoWarning": "Zuschauer hören eventuell ein Echo der Stimmen. Für echofreies Audio Chrome verwenden"
   },
   "streamSettings": {
     "title": "Stream-Einstellungen",
@@ -90,18 +81,18 @@
     "frameRate": "Bildrate",
     "contentMode": "Inhaltsmodus",
     "mode": {
-      "gaming": "Spielmodus",
-      "text": "Textmodus"
+      "gaming": "Gaming",
+      "text": "Text"
     },
-    "codec": "Kodierung",
+    "codec": "Codec",
     "codecOption": {
-      "standard": "Normal",
+      "standard": "Standard",
       "hardware": "NVIDIA oder Apple"
     },
     "hardwareNote": "GPU-Hardware-Encoder · wird nach dem Stream zurückgesetzt",
-    "bitrate": "Datenrate",
-    "resetToAuto": "Auf Automatisch zurücksetzen",
-    "auto": "Automatisch",
+    "bitrate": "Bitrate",
+    "resetToAuto": "Auf Auto zurücksetzen",
+    "auto": "Auto",
     "customBitrateDisabled": "Eigene Bitrate vom Administrator deaktiviert",
     "systemAudio": "Systemaudio",
     "chromeEchoNote": "Für echofreies Audio Chrome verwenden",
@@ -157,7 +148,7 @@
     "connecting": "Verbinden…"
   },
   "camera": {
-    "auto": "Automatisch",
+    "auto": "Auto",
     "autoSystemDefault": "Auto (Systemstandard)",
     "selected": "Ausgewählte Kamera",
     "fallbackName": "Kamera {{index}}",

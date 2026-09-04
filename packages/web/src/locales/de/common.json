@@ -24,7 +24,25 @@
     "change": "Ändern",
     "refresh": "Aktualisieren",
     "openLink": "Link öffnen",
-    "tryAgain": "Erneut versuchen"
+    "tryAgain": "Erneut versuchen",
+    "reply": "Antworten",
+    "addReaction": "Reaktion hinzufügen",
+    "share": "Teilen",
+    "accept": "Annehmen",
+    "decline": "Ablehnen",
+    "pause": "Pausieren",
+    "resume": "Fortsetzen",
+    "abort": "Abbrechen",
+    "dismissAll": "Alle ausblenden",
+    "filter": "Filtern",
+    "sort": "Sortieren",
+    "sortBy": "Sortieren nach",
+    "leave": "Verlassen",
+    "invitePeople": "Leute einladen",
+    "previous": "Zurück",
+    "next": "Weiter",
+    "preview": "Vorschau",
+    "logIn": "Anmelden"
   },
   "states": {
     "loading": "Wird geladen…",
@@ -41,7 +59,50 @@
     "optional": "Optional",
     "required": "Erforderlich",
     "default": "Standard",
-    "recommended": "Empfohlen"
+    "recommended": "Empfohlen",
+    "online": "Online",
+    "idle": "Abwesend",
+    "doNotDisturb": "Nicht stören",
+    "offline": "Offline",
+    "loadingSettings": "Einstellungen werden geladen…",
+    "settingsSaved": "Einstellungen gespeichert",
+    "saveFailed": "Speichern fehlgeschlagen",
+    "scanning": "Wird geprüft…"
+  },
+  "labels": {
+    "username": "Benutzername",
+    "password": "Passwort",
+    "displayName": "Anzeigename",
+    "friends": "Freunde",
+    "members": "Mitglieder",
+    "settings": "Einstellungen",
+    "dangerZone": "Gefahrenzone",
+    "searchMembers": "Mitglieder suchen…",
+    "noMembersFound": "Keine Mitglieder gefunden",
+    "or": "oder",
+    "nameAZ": "Name (A bis Z)"
+  },
+  "time": {
+    "today": "Heute um {{time}}",
+    "yesterday": "Gestern um {{time}}",
+    "never": "Nie",
+    "justNow": "Gerade eben"
+  },
+  "units": {
+    "ms": "{{value}} ms",
+    "percent": "{{value}} %",
+    "kbps": "{{value}} kbit/s",
+    "mbps": "{{value}} Mbit/s"
+  },
+  "colors": {
+    "mint": "Mint",
+    "sky": "Himmelblau",
+    "lavender": "Lavendel",
+    "coral": "Koralle",
+    "rose": "Rosé",
+    "teal": "Petrol",
+    "amber": "Bernstein",
+    "peach": "Pfirsich"
   },
   "language": {
     "label": "Sprache",

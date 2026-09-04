@@ -27,9 +27,7 @@
     "userVolume": "User Volume"
   },
   "incomingCall": {
-    "status": "Incoming Voice Call...",
-    "decline": "Decline",
-    "accept": "Accept"
+    "status": "Incoming Voice Call..."
   },
   "grid": {
     "waitingForOthers": "Waiting for others to join...",
@@ -62,13 +60,7 @@
       "screenAudio": "Screen Audio",
       "unknown": "Unknown"
     },
-    "remoteParticipant": "Remote",
-    "units": {
-      "milliseconds": "{{value}} ms",
-      "percent": "{{value}}%",
-      "kbps": "{{value}} kbps",
-      "mbps": "{{value}} Mbps"
-    }
+    "remoteParticipant": "Remote"
   },
   "screenPicker": {
     "title": "Share Your Screen",
@@ -81,8 +73,7 @@
     "noScreens": "No screens available",
     "noWindows": "No windows available",
     "shareSystemAudio": "Share system audio",
-    "echoWarning": "May echo voices back to viewers — use Chrome browser for echo-free audio",
-    "share": "Share"
+    "echoWarning": "May echo voices back to viewers — use Chrome browser for echo-free audio"
   },
   "streamSettings": {
     "title": "Stream Settings",

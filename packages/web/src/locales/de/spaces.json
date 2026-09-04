@@ -8,15 +8,6 @@
       "cropTitle": "Space-Symbol zuschneiden",
       "uploadFailed": "Symbol konnte nicht hochgeladen werden"
     },
-    "colorNames": {
-      "mint": "Mint",
-      "sky": "Himmelblau",
-      "lavender": "Lavendel",
-      "coral": "Koralle",
-      "rose": "Rosé",
-      "teal": "Petrol",
-      "amber": "Bernstein"
-    },
     "name": {
       "label": "Name des Space",
       "placeholder": "Mein großartiger Space",
@@ -37,7 +28,7 @@
       "typeLabel": "Kanaltyp",
       "types": {
         "text": {
-          "name": "Textkanal",
+          "name": "Text",
           "description": "Nachrichten, Bilder und Dateien senden"
         },
         "voice": {
@@ -157,7 +148,6 @@
     },
     "fallback": {
       "notice": "Auf {{host}} gibt es bereits ein Konto, und es akzeptiert die Zugangsdaten deiner Heimatinstanz nicht. Melde dich mit dem Passwort an, das du auf dieser Instanz gesetzt hast; danach wird es auf die ausgestellten Zugangsdaten umgestellt.",
-      "usernameLabel": "Benutzername",
       "usernamePlaceholder": "Dein Benutzername auf dieser Instanz",
       "passwordLabel": "Passwort für diese Instanz",
       "passwordPlaceholder": "Passwort auf der entfernten Instanz",
@@ -206,15 +196,11 @@
       "tabs": {
         "overview": "Übersicht",
         "discovery": "Entdecken",
-        "members": "Mitglieder",
         "roles": "Rollen",
         "bans": "Sperren"
       }
     },
-    "dangerZone": "Gefahrenzone",
     "discardChanges": "Verwerfen",
-    "saved": "Einstellungen gespeichert",
-    "saveFailed": "Speichern fehlgeschlagen",
     "overview": {
       "identity": "Erscheinungsbild",
       "iconLabel": "Space-Symbol",
@@ -275,21 +261,16 @@
       "requests": {
         "title": "Offene Beitrittsanfragen",
         "empty": "Keine offenen Beitrittsanfragen",
-        "accept": "Annehmen",
-        "decline": "Ablehnen",
         "actionFailed": "Aktion fehlgeschlagen"
       }
     },
     "members": {
-      "title": "Mitglieder",
       "description": "Verwalte die Mitglieder dieses Space. Klick auf ein Mitglied, um seine Rollen zu bearbeiten.",
       "listHeading": "Mitglieder ({{total}})",
       "owner": "Eigentümer",
       "noRoles": "Keine Rollen",
       "ban": "Sperren",
       "kick": "Entfernen",
-      "searchPlaceholder": "Mitglieder suchen …",
-      "noneFound": "Keine Mitglieder gefunden",
       "confirm": {
         "banTitle": "{{name}} sperren",
         "kickTitle": "{{name}} entfernen",
@@ -347,7 +328,7 @@
   "permissions": {
     "title": "Berechtigungen",
     "names": {
-      "administrator": "Admin",
+      "administrator": "Administrator",
       "viewChannel": "Kanäle sehen",
       "manageChannels": "Kanäle verwalten",
       "manageRoles": "Rollen verwalten",
@@ -403,22 +384,12 @@
       "moveTo": "In Ordner verschieben",
       "removeFrom": "Aus Ordner entfernen",
       "ungroup": "Ordner auflösen",
-      "colors": {
-        "mint": "Mint",
-        "peach": "Pfirsich",
-        "lavender": "Lavendel",
-        "sky": "Himmelblau",
-        "amber": "Bernstein",
-        "rose": "Rosé",
-        "coral": "Koralle"
-      },
       "created": "Ordner erstellt",
       "moved": "In Ordner verschoben",
       "removed": "Aus Ordner entfernt",
       "ungrouped": "Ordner aufgelöst"
     },
     "space": {
-      "invite": "Leute einladen",
       "inviteCopied": "Einladungslink kopiert",
       "inviteFailed": "Einladung konnte nicht erstellt werden",
       "transferOwnership": "Besitz übertragen",
@@ -429,22 +400,19 @@
       "leaveConfirm": {
         "title": "Space verlassen",
         "titleNamed": "{{name}} verlassen",
-        "description": "Willst du diesen Space wirklich verlassen? Zum erneuten Beitreten brauchst du eine neue Einladung.",
-        "confirm": "Verlassen"
+        "description": "Willst du diesen Space wirklich verlassen? Zum erneuten Beitreten brauchst du eine neue Einladung."
       },
       "left": "Du hast den Space verlassen",
       "leaveFailed": "Space konnte nicht verlassen werden"
     },
     "dmList": {
-      "friends": "Freunde",
       "comingSoon": "Demnächst",
       "newDm": "Neue Direktnachricht",
       "empty": "Noch keine Unterhaltungen.",
       "leaveGroup": "Gruppe verlassen",
       "leaveGroupConfirm": {
         "title": "Gruppen-DM verlassen",
-        "description": "Willst du die Gruppe wirklich verlassen? Du kommst nur zurück, wenn dich jemand wieder hinzufügt.",
-        "confirm": "Verlassen"
+        "description": "Willst du die Gruppe wirklich verlassen? Du kommst nur zurück, wenn dich jemand wieder hinzufügt."
       }
     },
     "userArea": {
@@ -459,7 +427,6 @@
       "audioPermission": "Audiozugriff wird benötigt.",
       "enable": "Erlauben",
       "voiceSettings": "Spracheinstellungen",
-      "settings": "Einstellungen",
       "mute": "Stummschalten",
       "unmute": "Stummschaltung aufheben",
       "deafen": "Ton aus",
@@ -493,15 +460,11 @@
     "categoryDeleteFailed": "Kategorie konnte nicht gelöscht werden"
   },
   "members": {
-    "title": "Mitglieder",
     "titleWithCount_one": "Mitglieder — {{count}}",
     "titleWithCount_other": "Mitglieder — {{count}}",
     "loading": "Mitglieder werden geladen",
-    "empty": "Keine Mitglieder gefunden",
     "groups": {
-      "owner": "Besitzer",
-      "online": "Online",
-      "offline": "Offline"
+      "owner": "Besitzer"
     }
   },
   "mobile": {
@@ -539,5 +502,16 @@
       "startVideoCall": "Videoanruf starten",
       "addFriends": "Freunde zur DM hinzufügen"
     }
+  },
+  "ownership": {
+    "title": "Besitz übertragen",
+    "description": "Wähle ein Mitglied, das neuer Besitzer von <name>{{name}}</name> wird",
+    "confirmQuestion": "Besitz von <name>{{space}}</name> an <name>{{member}}</name> übertragen?",
+    "regularMember": "Du wirst ein normales Mitglied.",
+    "transferring": "Wird übertragen…",
+    "confirm": "Übertragen",
+    "loading": "Mitglieder werden geladen…",
+    "success": "Besitz an {{name}} übertragen",
+    "failed": "Besitz konnte nicht übertragen werden"
   }
 }

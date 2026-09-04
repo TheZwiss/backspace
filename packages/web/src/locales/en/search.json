@@ -30,9 +30,5 @@
     "loadMore": "Load more ({{remaining}} remaining)",
     "attachments_one": "{{count}} attachment",
     "attachments_other": "{{count}} attachments"
-  },
-  "time": {
-    "todayAt": "Today at {{time}}",
-    "yesterdayAt": "Yesterday at {{time}}"
   }
 }

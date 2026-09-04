@@ -184,7 +184,7 @@ export function MemberSidebar() {
 
   const groupHeading = (kind: MemberGroupKind, label: string | null): string => {
     if (kind === 'owner') return t('spaces:members.groups.owner');
-    if (kind === 'online') return t('spaces:members.groups.online');
+    if (kind === 'online') return t('common:states.online');
     return label ?? '';
   };
 
@@ -245,7 +245,7 @@ export function MemberSidebar() {
         {offlineMembers.length > 0 && (
           <div>
             <h3 className="text-[10.5px] font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
-              {t('spaces:members.groups.offline')} — {formatNumber(offlineMembers.length)}
+              {t('common:states.offline')} — {formatNumber(offlineMembers.length)}
             </h3>
             {offlineMembers.map((m) => renderMember(m, true))}
           </div>

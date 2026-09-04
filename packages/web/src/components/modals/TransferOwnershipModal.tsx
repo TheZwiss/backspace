@@ -45,7 +45,7 @@ function TransferMemberRow({
 }
 
 export function TransferOwnershipModal({ spaceId, onClose }: { spaceId: string; onClose: () => void }) {
-  const { t } = useTranslation(['dm', 'common']);
+  const { t } = useTranslation(['spaces', 'common']);
   const modalRef = useRef<HTMLDivElement>(null);
   const space = useSpaceStore((s) => s.spaces.find(sp => sp.id === spaceId));
   const currentUserId = useAuthStore((s) => s.user?.id);
@@ -126,10 +126,10 @@ export function TransferOwnershipModal({ spaceId, onClose }: { spaceId: string; 
     setTransferring(true);
     try {
       await transferOwnership(spaceId, selectedUserId);
-      addToast(t('dm:spaceOwnership.success', { name: selectedMember?.user.displayName || selectedMember?.user.username }), 'success', 3000);
+      addToast(t('spaces:ownership.success', { name: selectedMember?.user.displayName || selectedMember?.user.username }), 'success', 3000);
       onClose();
     } catch (err) {
-      addToast(err instanceof Error ? err.message : t('dm:spaceOwnership.failed'), 'warning', 3000);
+      addToast(err instanceof Error ? err.message : t('spaces:ownership.failed'), 'warning', 3000);
     } finally {
       setTransferring(false);
     }
@@ -143,11 +143,11 @@ export function TransferOwnershipModal({ spaceId, onClose }: { spaceId: string; 
       >
         {/* Header */}
         <div className="px-4 pt-4 pb-3 border-b border-white/[0.06]">
-          <h3 className="text-base font-semibold text-txt-primary">{t('dm:spaceOwnership.title')}</h3>
+          <h3 className="text-base font-semibold text-txt-primary">{t('spaces:ownership.title')}</h3>
           <p className="text-xs text-txt-tertiary mt-0.5">
             <Trans
               t={t}
-              i18nKey="dm:spaceOwnership.description"
+              i18nKey="spaces:ownership.description"
               values={{ name: space.name }}
               components={{ name: <span className="font-medium text-txt-secondary" /> }}
             />
@@ -161,12 +161,12 @@ export function TransferOwnershipModal({ spaceId, onClose }: { spaceId: string; 
               <p className="text-sm text-txt-secondary">
                 <Trans
                   t={t}
-                  i18nKey="dm:spaceOwnership.confirmQuestion"
+                  i18nKey="spaces:ownership.confirmQuestion"
                   values={{ space: space.name, member: selectedMember.user.displayName || selectedMember.user.username }}
                   components={{ name: <span className="font-semibold text-txt-primary" /> }}
                 />
               </p>
-              <p className="text-xs text-txt-tertiary mt-1.5">{t('dm:spaceOwnership.regularMember')}</p>
+              <p className="text-xs text-txt-tertiary mt-1.5">{t('spaces:ownership.regularMember')}</p>
             </div>
             <div className="flex gap-3">
               <button
@@ -181,7 +181,7 @@ export function TransferOwnershipModal({ spaceId, onClose }: { spaceId: string; 
                 disabled={transferring}
                 className="flex-1 py-2.5 bg-accent-amber hover:bg-accent-amber/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
               >
-                {transferring ? t('dm:spaceOwnership.transferring') : t('dm:spaceOwnership.confirm')}
+                {transferring ? t('spaces:ownership.transferring') : t('spaces:ownership.confirm')}
               </button>
             </div>
           </div>
@@ -193,16 +193,16 @@ export function TransferOwnershipModal({ spaceId, onClose }: { spaceId: string; 
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder={t('dm:spaceOwnership.searchPlaceholder')}
+                placeholder={t('common:labels.searchMembers')}
                 className="input-search w-full"
                 autoFocus
               />
             </div>
             <div className="flex-1 overflow-y-auto p-2 min-h-0">
               {loading ? (
-                <p className="text-xs text-txt-tertiary text-center py-4">{t('dm:spaceOwnership.loading')}</p>
+                <p className="text-xs text-txt-tertiary text-center py-4">{t('spaces:ownership.loading')}</p>
               ) : filteredMembers.length === 0 ? (
-                <p className="text-xs text-txt-tertiary text-center py-4">{t('dm:spaceOwnership.noMembers')}</p>
+                <p className="text-xs text-txt-tertiary text-center py-4">{t('common:labels.noMembersFound')}</p>
               ) : (
                 filteredMembers.map((member) => (
                   <TransferMemberRow

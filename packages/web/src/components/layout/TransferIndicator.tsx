@@ -171,19 +171,19 @@ function TransferRow({ transfer, onPause, onResume, onAbort, onDismiss }: Transf
         <span className="flex gap-2 flex-shrink-0">
           {transfer.state === 'active' && (
             <button onClick={onPause} className="hover:text-txt-primary transition-colors">
-              {t('uploads:transfers.actions.pause')}
+              {t('common:actions.pause')}
             </button>
           )}
           {transfer.state === 'paused' && (
             <button onClick={onResume} className="hover:text-txt-primary transition-colors">
-              {t('uploads:transfers.actions.resume')}
+              {t('common:actions.resume')}
             </button>
           )}
           {(transfer.state === 'active' ||
             transfer.state === 'paused' ||
             transfer.state === 'queued') && (
             <button onClick={onAbort} className="hover:text-accent-rose transition-colors">
-              {t('uploads:transfers.actions.abort')}
+              {t('common:actions.abort')}
             </button>
           )}
           {(transfer.state === 'completed' ||

@@ -309,7 +309,7 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
               </div>
 
               <div>
-                <label className="block text-xs text-txt-secondary mb-1.5">{t('settings:account.deletion.confirm.password')}</label>
+                <label className="block text-xs text-txt-secondary mb-1.5">{t('common:labels.password')}</label>
                 <input
                   type="password"
                   value={confirmPassword}

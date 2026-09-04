@@ -71,8 +71,8 @@ function registryStatusLabel(t: FederationT, status: string): string {
 
 /** "Never" for a missing timestamp, "Just now" under a minute, otherwise the elapsed time. */
 function formatRelativeTime(t: FederationT, formatters: Formatters, timestamp: number | null): string {
-  if (!timestamp) return t('federation:time.never');
-  if (Date.now() - timestamp < 60_000) return t('federation:time.justNow');
+  if (!timestamp) return t('common:time.never');
+  if (Date.now() - timestamp < 60_000) return t('common:time.justNow');
   return formatters.formatRelativeTime(timestamp);
 }
 
@@ -271,7 +271,7 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
 
           <form onSubmit={(e) => { e.preventDefault(); handleFallbackLogin(); }} className="space-y-2">
             <div>
-              <label className="block text-xs text-txt-tertiary mb-1">{t('federation:connections.add.usernameLabel')}</label>
+              <label className="block text-xs text-txt-tertiary mb-1">{t('common:labels.username')}</label>
               <input
                 type="text"
                 value={fallbackUsername}
@@ -362,7 +362,7 @@ function RegistryFilterBar({
   ];
 
   const sortOptions: Array<{ key: SortBy; label: string }> = [
-    { key: 'name', label: t('federation:connections.sort.name') },
+    { key: 'name', label: t('common:labels.nameAZ') },
     { key: 'dateAdded', label: t('federation:connections.sort.dateAdded') },
     { key: 'lastConnected', label: t('federation:connections.sort.lastConnected') },
   ];
@@ -393,7 +393,7 @@ function RegistryFilterBar({
           <svg width="12" height="12" viewBox="0 0 16 16" fill="none" className="opacity-60">
             <path d="M2 4h12M4 8h8M6 12h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
           </svg>
-          {t('federation:connections.sort.button')}
+          {t('common:actions.sort')}
           <span className="text-[10px]">&#9662;</span>
         </button>
 
@@ -401,7 +401,7 @@ function RegistryFilterBar({
           <>
             <div className="fixed inset-0 z-40" onClick={() => setSortOpen(false)} />
             <div className="absolute right-0 top-full mt-1 z-50 glass rounded-lg p-1.5 w-44">
-              <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-2 py-1">{t('federation:connections.sort.heading')}</div>
+              <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-2 py-1">{t('common:actions.sortBy')}</div>
               {sortOptions.map((opt) => (
                 <button
                   key={opt.key}
@@ -803,7 +803,7 @@ function RegistryRow({
                     <>
                       <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider mb-0.5">{t('federation:connections.row.lastConnectedLabel')}</div>
                       <div className="text-xs text-txt-secondary">
-                        {entry.lastConnectedAt ? formatters.formatMediumDate(entry.lastConnectedAt) : t('federation:time.never')}
+                        {entry.lastConnectedAt ? formatters.formatMediumDate(entry.lastConnectedAt) : t('common:time.never')}
                       </div>
                     </>
                   )}
@@ -1290,7 +1290,7 @@ function RecentPeeringOutcomesSection() {
             disabled={bulkBusy}
             className="text-[11px] text-txt-tertiary hover:text-txt-secondary transition-colors disabled:opacity-50"
           >
-            {bulkBusy ? t('federation:connections.outcomes.dismissing') : t('federation:connections.outcomes.dismissAll')}
+            {bulkBusy ? t('federation:connections.outcomes.dismissing') : t('common:actions.dismissAll')}
           </button>
         )}
       </div>

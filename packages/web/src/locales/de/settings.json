@@ -18,8 +18,7 @@
         "none": "Keine Mikrofone gefunden."
       },
       "volume": {
-        "label": "Eingabelautstärke",
-        "percent": "{{value}} %"
+        "label": "Eingabelautstärke"
       },
       "meter": {
         "hint": "Die Pegelanzeige wird aktiv, sobald du einem Sprachkanal beitrittst."
@@ -37,8 +36,7 @@
         "enable": "Audiozugriff erlauben"
       },
       "volume": {
-        "label": "Ausgabelautstärke",
-        "percent": "{{value}} %"
+        "label": "Ausgabelautstärke"
       },
       "testSound": "Testton abspielen"
     },
@@ -122,8 +120,7 @@
       "instance": "Instanz"
     },
     "logOut": "Abmelden",
-    "backToMenu": "Zurück zum Einstellungsmenü",
-    "back": "Einstellungen"
+    "backToMenu": "Zurück zum Einstellungsmenü"
   },
   "account": {
     "title": "Mein Konto",
@@ -156,16 +153,7 @@
         "cropTitle": "Banner zuschneiden"
       },
       "avatarColor": {
-        "label": "Avatarfarbe",
-        "names": {
-          "mint": "Mint",
-          "sky": "Himmelblau",
-          "lavender": "Lavendel",
-          "coral": "Koralle",
-          "rose": "Rosé",
-          "teal": "Petrol",
-          "amber": "Bernstein"
-        }
+        "label": "Avatarfarbe"
       },
       "bannerColor": {
         "label": "Bannerfarbe",
@@ -180,13 +168,7 @@
     "details": {
       "sectionTitle": "Konto",
       "status": {
-        "label": "Status",
-        "online": "Online",
-        "idle": "Abwesend",
-        "dnd": "Nicht stören"
-      },
-      "displayName": {
-        "label": "Anzeigename"
+        "label": "Status"
       },
       "customStatus": {
         "label": "Eigener Status",
@@ -194,7 +176,6 @@
       }
     },
     "password": {
-      "sectionTitle": "Passwort",
       "current": {
         "label": "Aktuelles Passwort",
         "placeholder": "Aktuelles Passwort eingeben"
@@ -217,7 +198,6 @@
       "submitting": "Wird geändert…"
     },
     "danger": {
-      "sectionTitle": "Gefahrenzone",
       "description": "Wenn du dein Konto löschst, gibt es kein Zurück. Deine Nachrichten bleiben erhalten, werden aber „Gelöschter Benutzer“ zugeordnet.",
       "deleteButton": "Konto löschen"
     },
@@ -245,7 +225,6 @@
       "confirm": {
         "permanent": "Diese Aktion ist endgültig und kann nicht rückgängig gemacht werden.",
         "usernamePrompt": "Gib zur Bestätigung deinen Benutzernamen <username>{{username}}</username> ein",
-        "password": "Passwort",
         "passwordPlaceholder": "Passwort eingeben",
         "submit": "Mein Konto löschen",
         "deleting": "Wird gelöscht…"

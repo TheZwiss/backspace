@@ -511,7 +511,7 @@ export function RegisterPage() {
 
               <div className="mb-5">
                 <label className="block text-xs font-bold text-txt-secondary uppercase mb-2">
-                  {t('auth:fields.username')} <span className="text-txt-danger">*</span>
+                  {t('common:labels.username')} <span className="text-txt-danger">*</span>
                 </label>
                 <input
                   type="text"
@@ -551,7 +551,7 @@ export function RegisterPage() {
 
               <div className="mb-5">
                 <label className="block text-xs font-bold text-txt-secondary uppercase mb-2">
-                  {t('auth:fields.password')} <span className="text-txt-danger">*</span>
+                  {t('common:labels.password')} <span className="text-txt-danger">*</span>
                 </label>
                 <input
                   type="password"
@@ -662,7 +662,7 @@ export function RegisterPage() {
             {/* Display Name */}
             <div className="mb-5">
               <label className="block text-xs font-bold text-txt-secondary uppercase mb-2">
-                {t('auth:fields.displayName')}
+                {t('common:labels.displayName')}
               </label>
               <input
                 type="text"
@@ -697,8 +697,8 @@ export function RegisterPage() {
                         boxShadow: avatarColor === key ? `0 0 0 2px ${entry.glow}40` : 'none',
                       }}
                       // `key` is the closed AvatarColor union; the catalog lists every member:
-                      // auth:register.avatarColorNames.{mint,sky,lavender,coral,rose,teal,amber}
-                      title={t(`auth:register.avatarColorNames.${key}`)}
+                      // common:colors.{mint,sky,lavender,coral,rose,teal,amber}
+                      title={t(`common:colors.${key}`)}
                     />
                   );
                 })}

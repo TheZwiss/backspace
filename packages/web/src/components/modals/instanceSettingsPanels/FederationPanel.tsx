@@ -51,7 +51,7 @@ function FederationGlobalSettings() {
     setSaveError('');
     try {
       await updateInstanceSettings(draft);
-      addToast(t('federation:admin.relay.saved'), 'success', 2000);
+      addToast(t('common:states.settingsSaved'), 'success', 2000);
     } catch (err) {
       setSaveError(describeError(err));
     } finally {
@@ -161,8 +161,8 @@ function FederationGlobalSettings() {
 
 /** "Never" for a missing timestamp, "Just now" under a minute, otherwise the elapsed time. */
 function formatRelativeTime(t: FederationT, formatters: Formatters, timestamp: number | null): string {
-  if (!timestamp) return t('federation:time.never');
-  if (Date.now() - timestamp < 60_000) return t('federation:time.justNow');
+  if (!timestamp) return t('common:time.never');
+  if (Date.now() - timestamp < 60_000) return t('common:time.justNow');
   return formatters.formatRelativeTime(timestamp);
 }
 
@@ -243,13 +243,13 @@ function FilterDropdown({
 
   const sortOptions: Array<{ key: SortBy; label: string }> = view === 'active'
     ? [
-        { key: 'name', label: t('federation:admin.filter.sort.name') },
+        { key: 'name', label: t('common:labels.nameAZ') },
         { key: 'lastSeen', label: t('federation:admin.filter.sort.lastSeen') },
         { key: 'dateAdded', label: t('federation:admin.filter.sort.dateAdded') },
         { key: 'failures', label: t('federation:admin.filter.sort.failures') },
       ]
     : [
-        { key: 'name', label: t('federation:admin.filter.sort.name') },
+        { key: 'name', label: t('common:labels.nameAZ') },
         { key: 'dateAdded', label: t('federation:admin.filter.sort.revokedDate') },
       ];
 
@@ -263,7 +263,7 @@ function FilterDropdown({
         <svg width="12" height="12" viewBox="0 0 16 16" fill="none" className="opacity-60">
           <path d="M2 4h12M4 8h8M6 12h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
         </svg>
-        {t('federation:admin.filter.button')}
+        {t('common:actions.filter')}
         <span className="text-[10px]">▾</span>
       </button>
 
@@ -290,7 +290,7 @@ function FilterDropdown({
                 <div className="h-px bg-white/[0.06] my-1" />
               </>
             )}
-            <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-2 py-1">{t('federation:admin.filter.sortHeading')}</div>
+            <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-2 py-1">{t('common:actions.sortBy')}</div>
             {sortOptions.map((opt) => (
               <button
                 key={opt.key}

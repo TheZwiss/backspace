@@ -26,13 +26,13 @@ type ResolvedItem =
 // ─── Folder color presets ─────────────────────────────────────────────────
 
 const FOLDER_COLORS = [
-  { name: 'mint', value: '#86efac', labelKey: 'spaces:sidebar.folder.colors.mint' },
-  { name: 'peach', value: '#fbbf93', labelKey: 'spaces:sidebar.folder.colors.peach' },
-  { name: 'lavender', value: '#c4b5fd', labelKey: 'spaces:sidebar.folder.colors.lavender' },
-  { name: 'sky', value: '#7dd3fc', labelKey: 'spaces:sidebar.folder.colors.sky' },
-  { name: 'amber', value: '#fcd34d', labelKey: 'spaces:sidebar.folder.colors.amber' },
-  { name: 'rose', value: '#fda4af', labelKey: 'spaces:sidebar.folder.colors.rose' },
-  { name: 'coral', value: '#fb7185', labelKey: 'spaces:sidebar.folder.colors.coral' },
+  { name: 'mint', value: '#86efac', labelKey: 'common:colors.mint' },
+  { name: 'peach', value: '#fbbf93', labelKey: 'common:colors.peach' },
+  { name: 'lavender', value: '#c4b5fd', labelKey: 'common:colors.lavender' },
+  { name: 'sky', value: '#7dd3fc', labelKey: 'common:colors.sky' },
+  { name: 'amber', value: '#fcd34d', labelKey: 'common:colors.amber' },
+  { name: 'rose', value: '#fda4af', labelKey: 'common:colors.rose' },
+  { name: 'coral', value: '#fb7185', labelKey: 'common:colors.coral' },
 ] as const;
 
 // ─── SidebarItem ─────────────────────────────────────────────────────────
@@ -638,7 +638,7 @@ export function SpaceSidebar() {
       {
         key: 'invite',
         type: 'action',
-        label: t('spaces:sidebar.space.invite'),
+        label: t('common:actions.invitePeople'),
         icon: (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
             <path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
@@ -1282,7 +1282,7 @@ export function SpaceSidebar() {
             title={space ? t('spaces:sidebar.space.leaveConfirm.titleNamed', { name: space.name }) : t('spaces:sidebar.space.leaveConfirm.title')}
             description={t('spaces:sidebar.space.leaveConfirm.description')}
             variant="danger"
-            confirmLabel={t('spaces:sidebar.space.leaveConfirm.confirm')}
+            confirmLabel={t('common:actions.leave')}
           />
         );
       })()}

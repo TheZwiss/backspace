@@ -6,7 +6,7 @@ import { useAudioDevices } from '../../../hooks/useAudioDevices';
 import { SectionShell, DropdownItem } from './_shared/SettingsPickerPrimitives';
 
 export function AudioInputSection() {
-  const { t } = useTranslation('settings');
+  const { t } = useTranslation(['settings', 'common']);
   const inputDeviceId = useVoiceStore((s) => s.inputDeviceId);
   const setInputDevice = useVoiceStore((s) => s.setInputDevice);
   const inputVolume = useVoiceStore((s) => s.inputVolume);
@@ -193,7 +193,7 @@ export function AudioInputSection() {
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <div className="text-[13px] font-medium text-txt-primary">{t('voice.input.volume.label')}</div>
-            <div className="text-xs text-txt-tertiary tabular-nums">{t('voice.input.volume.percent', { value: inputVolume })}</div>
+            <div className="text-xs text-txt-tertiary tabular-nums">{t('common:units.percent', { value: inputVolume })}</div>
           </div>
           <input
             type="range"

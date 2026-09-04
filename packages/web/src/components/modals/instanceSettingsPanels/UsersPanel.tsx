@@ -219,7 +219,7 @@ export function UsersPanel() {
         >
           <option value="newest">{t('admin:users.filters.newest')}</option>
           <option value="oldest">{t('admin:users.filters.oldest')}</option>
-          <option value="az">{t('admin:users.filters.nameAsc')}</option>
+          <option value="az">{t('common:labels.nameAZ')}</option>
           <option value="za">{t('admin:users.filters.nameDesc')}</option>
         </select>
 
@@ -414,7 +414,7 @@ export function UsersPanel() {
             disabled={page <= 1}
             className="px-3 py-1 text-sm text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           >
-            {t('admin:shared.previous')}
+            {t('common:actions.previous')}
           </button>
           <span className="text-xs text-txt-tertiary">
             {t('admin:users.pagination', { page, total: totalPages, users: userCountLabel })}
@@ -424,7 +424,7 @@ export function UsersPanel() {
             disabled={page >= totalPages}
             className="px-3 py-1 text-sm text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           >
-            {t('admin:shared.next')}
+            {t('common:actions.next')}
           </button>
         </div>
       )}

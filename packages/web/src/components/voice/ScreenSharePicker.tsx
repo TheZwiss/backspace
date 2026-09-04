@@ -214,7 +214,7 @@ export function ScreenSharePicker() {
               disabled={!selectedId}
               className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary-hover text-white text-sm font-medium rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              {t('voice:screenPicker.share')}
+              {t('common:actions.share')}
             </button>
           </div>
         </div>
