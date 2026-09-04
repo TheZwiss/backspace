@@ -100,7 +100,9 @@ describe('transferStore.startUpload', () => {
     expect(t!.state).toBe('completed');
     expect(t!.attachmentId).toBe('att-9');
     expect(t!.attachmentFilename).toBe('a.png');
-    expect(t!.tusUploadUrl).toBe('/api/files/abc-123');
+    // The server sends the Location as a path; the store keeps it resolved
+    // against the origin it uploaded to (the page origin for home).
+    expect(t!.tusUploadUrl).toBe('http://localhost:3000/api/files/abc-123');
     expect(t!.tusExpiresAt).toBeGreaterThan(Date.now());
   });
 
@@ -162,6 +164,9 @@ describe('transferStore.startUpload', () => {
     const opts = lastUploadOpts();
     expect(opts.endpoint).toBe('https://remote.example.com/api/files/');
     expect(opts.headers.Authorization).toBe('Bearer federated-token-XYZ');
+    // The relative Location resolves against the remote, not the page origin,
+    // so a later resume or cancel reaches the instance that holds the bytes.
+    expect(t!.tusUploadUrl).toBe('https://remote.example.com/api/files/abc-123');
   });
 
   it('startUpload throws when no resolver is registered for the federated origin', async () => {

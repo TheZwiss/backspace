@@ -305,6 +305,15 @@ scheme/IP), and a **body-size limit** matching `MAX_UPLOAD_SIZE` (default 100 MB
 
 Replace `chat.example.com` and `8080` with your domain and `APP_PORT`.
 
+If your public port is not 443 (a home connection where the ISP blocks 80 and
+443, say), put the port in `DOMAIN` itself: `DOMAIN=chat.example.com:1443`. That
+is the host clients type, and every URL the instance advertises is built from
+it. Make your proxy listen on that port and pass the `Host` header through
+unchanged; the snippets below already do (`$http_host` in nginx, since `$host`
+drops the port). Only `proxy` mode supports this: the bundled Caddy needs 80
+and 443 for certificates, and a tunnel always serves on 443 at its edge.
+Federation with a port in `DOMAIN` is not supported yet.
+
 **nginx.** The `map` goes in `http { }` once; the `server` block per site:
 
 ```nginx
@@ -322,11 +331,11 @@ server {
     location / {
         proxy_pass http://127.0.0.1:8080;
         proxy_http_version 1.1;
-        proxy_set_header Host              $host;
+        proxy_set_header Host              $http_host;   # not $host: it drops the port
         proxy_set_header X-Real-IP         $remote_addr;
         proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Forwarded-Host  $host;
+        proxy_set_header X-Forwarded-Host  $http_host;
         proxy_set_header Upgrade    $http_upgrade;        # WebSocket
         proxy_set_header Connection $connection_upgrade;  # WebSocket
         proxy_read_timeout 3600s;
@@ -337,7 +346,7 @@ server {
     # location /livekit/ {
     #     proxy_pass http://127.0.0.1:7880/;
     #     proxy_http_version 1.1;
-    #     proxy_set_header Host       $host;
+    #     proxy_set_header Host       $http_host;
     #     proxy_set_header Upgrade    $http_upgrade;
     #     proxy_set_header Connection $connection_upgrade;
     # }

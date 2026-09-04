@@ -335,33 +335,60 @@ if [[ -z "${DOMAIN:-}" ]]; then
   exit 1
 fi
 
+if [[ "$DOMAIN" == *://* || "$DOMAIN" == */* ]]; then
+  error "DOMAIN is a hostname, not a URL: use chat.example.com, not ${DOMAIN}."
+  exit 1
+fi
+
+# A public port other than 443 belongs in DOMAIN itself (chat.example.com:1443):
+# it is the host clients type, and every URL the instance advertises is built
+# from it. Only proxy mode can honour one. The bundled Caddy owns 80/443 and
+# needs them for certificate issuance, and a tunnel always answers on 443 at
+# the provider's edge.
+DOMAIN_HOST="${DOMAIN%%:*}"
+DOMAIN_PORT=""
+if [[ "$DOMAIN" == *:* ]]; then
+  DOMAIN_PORT="${DOMAIN##*:}"
+  if ! [[ "$DOMAIN_PORT" =~ ^[0-9]+$ ]] || (( DOMAIN_PORT < 1 || DOMAIN_PORT > 65535 )); then
+    error "DOMAIN='${DOMAIN}' is not a hostname or hostname:port."
+    exit 1
+  fi
+  if [[ "$DEPLOY_MODE" != "proxy" ]]; then
+    error "A custom public port (DOMAIN=${DOMAIN}) only works in proxy mode."
+    error "All-in-One needs 80/443 for Caddy and its certificates; a tunnel serves on 443 at its edge."
+    error "Re-run with DEPLOY_MODE=proxy, or drop the port from DOMAIN."
+    exit 1
+  fi
+  info "Public port ${DOMAIN_PORT}: your reverse proxy listens there and must pass the Host header through unchanged (the snippets below do)."
+fi
+
 # DNS verification is meaningful for All-in-One (Caddy must reach this host to
 # issue a certificate). In proxy/tunnel mode the DNS record points at your proxy
 # or tunnel edge — often NOT this host's IP (that's the whole point) — so we only
 # note what it resolves to, without warning about a mismatch.
-info "Checking DNS for ${DOMAIN}..."
+info "Checking DNS for ${DOMAIN_HOST}..."
 resolved_ip=""
 if command -v dig &>/dev/null; then
-  resolved_ip=$(dig +short "$DOMAIN" A 2>/dev/null | tail -1 || true)
+  resolved_ip=$(dig +short "$DOMAIN_HOST" A 2>/dev/null | tail -1 || true)
 elif command -v getent &>/dev/null; then
-  resolved_ip=$(getent hosts "$DOMAIN" 2>/dev/null | awk '{print $1}' | head -1 || true)
+  resolved_ip=$(getent hosts "$DOMAIN_HOST" 2>/dev/null | awk '{print $1}' | head -1 || true)
 fi
 
 if [[ "$DEPLOY_MODE" == "allinone" ]]; then
   my_ip=$(curl -s4 --connect-timeout 5 ifconfig.me 2>/dev/null || curl -s4 --connect-timeout 5 icanhazip.com 2>/dev/null || echo "")
   if [[ -z "$resolved_ip" ]]; then
-    warn "Could not resolve ${DOMAIN}. Ensure DNS is configured before Caddy can issue certificates."
+    warn "Could not resolve ${DOMAIN_HOST}. Ensure DNS is configured before Caddy can issue certificates."
   elif [[ -n "$my_ip" && "$resolved_ip" != "$my_ip" ]]; then
-    warn "${DOMAIN} resolves to ${resolved_ip}, but this server appears to be ${my_ip}"
+    warn "${DOMAIN_HOST} resolves to ${resolved_ip}, but this server appears to be ${my_ip}"
     warn "Let's Encrypt certificate issuance may fail if DNS doesn't point here."
   else
-    success "${DOMAIN} resolves to ${resolved_ip:-verified}"
+    success "${DOMAIN_HOST} resolves to ${resolved_ip:-verified}"
   fi
 else
   if [[ -n "$resolved_ip" ]]; then
-    info "${DOMAIN} currently resolves to ${resolved_ip} (should point at your proxy/tunnel edge)."
+    info "${DOMAIN_HOST} currently resolves to ${resolved_ip} (should point at your proxy/tunnel edge)."
   else
-    info "${DOMAIN} does not resolve yet — point it at your proxy/tunnel edge when ready."
+    info "${DOMAIN_HOST} does not resolve yet — point it at your proxy/tunnel edge when ready."
   fi
 fi
 
@@ -812,12 +839,12 @@ map \$http_upgrade \$connection_upgrade {
 }
 
 server {
-    listen 443 ssl;
-    server_name ${DOMAIN};
+    listen ${DOMAIN_PORT:-443} ssl;
+    server_name ${DOMAIN_HOST};
 
     # Your TLS certs (certbot, your proxy manager, etc.):
-    # ssl_certificate     /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
-    # ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+    # ssl_certificate     /etc/letsencrypt/live/${DOMAIN_HOST}/fullchain.pem;
+    # ssl_certificate_key /etc/letsencrypt/live/${DOMAIN_HOST}/privkey.pem;
 
     client_max_body_size ${max_mb}m;   # match MAX_UPLOAD_SIZE (${MAX_UPLOAD_SIZE} bytes)
 EOF
@@ -828,7 +855,7 @@ EOF
     location /livekit/ {
         proxy_pass http://127.0.0.1:7880/;
         proxy_http_version 1.1;
-        proxy_set_header Host              \$host;
+        proxy_set_header Host              \$http_host;
         proxy_set_header Upgrade           \$http_upgrade;
         proxy_set_header Connection        \$connection_upgrade;
         proxy_set_header X-Forwarded-For   \$proxy_add_x_forwarded_for;
@@ -841,11 +868,13 @@ EOF
     location / {
         proxy_pass http://127.0.0.1:${APP_PORT_FINAL};
         proxy_http_version 1.1;
-        proxy_set_header Host              \$host;
+        # \$http_host, not \$host: \$host drops the port, and the app must see
+        # the host clients actually use when the public port is not 443.
+        proxy_set_header Host              \$http_host;
         proxy_set_header X-Real-IP         \$remote_addr;
         proxy_set_header X-Forwarded-For   \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_set_header X-Forwarded-Host  \$host;
+        proxy_set_header X-Forwarded-Host  \$http_host;
         # WebSocket upgrade (chat, live events, voice signaling):
         proxy_set_header Upgrade    \$http_upgrade;
         proxy_set_header Connection \$connection_upgrade;
@@ -893,7 +922,7 @@ print_traefik_snippet() {
 http:
   routers:
     backspace:
-      rule: "Host(\`${DOMAIN}\`)"
+      rule: "Host(\`${DOMAIN_HOST}\`)"
       entryPoints: [websecure]
       service: backspace
       tls:
@@ -902,7 +931,7 @@ EOF
   if [[ "$ENABLE_VOICE" == true ]]; then
     cat << EOF
     backspace-livekit:
-      rule: "Host(\`${DOMAIN}\`) && PathPrefix(\`/livekit\`)"
+      rule: "Host(\`${DOMAIN_HOST}\`) && PathPrefix(\`/livekit\`)"
       entryPoints: [websecure]
       service: backspace-livekit
       priority: 100
