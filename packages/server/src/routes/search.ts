@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { eq, and, desc, lt, gt, like, inArray, sql, asc } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
+import { sendError } from '../utils/httpErrors.js';
 import { hasPermission, getChannelSpaceId, PermissionBits, isDmMember } from '../utils/permissions.js';
 import { fetchReactionsForMessages, fetchReplyToMessages, buildMessageWithUser } from './messages.js';
 import { fetchDmReactionsForMessages, fetchDmReplyToMessages, buildDmMessageWithUser } from './dm.js';
@@ -35,11 +36,11 @@ export async function searchRoutes(app: FastifyInstance): Promise<void> {
 
     const spaceId = getChannelSpaceId(id);
     if (!spaceId) {
-      return reply.code(404).send({ error: 'Channel not found', statusCode: 404 });
+      return sendError(reply, 404, 'channel_not_found');
     }
 
     if (!hasPermission(request.userId, spaceId, PermissionBits.VIEW_CHANNEL | PermissionBits.READ_MESSAGE_HISTORY, id)) {
-      return reply.code(403).send({ error: 'Missing permissions', statusCode: 403 });
+      return sendError(reply, 403, 'missing_permission');
     }
 
     const db = getDb();
@@ -170,7 +171,7 @@ export async function searchRoutes(app: FastifyInstance): Promise<void> {
     const limit = Math.min(Math.max(Number(request.query.limit) || 25, 1), 50);
 
     if (!isDmMember(id, request.userId)) {
-      return reply.code(403).send({ error: 'You are not a member of this DM channel', statusCode: 403 });
+      return sendError(reply, 403, 'not_dm_member');
     }
 
     const db = getDb();
@@ -299,16 +300,16 @@ export async function searchRoutes(app: FastifyInstance): Promise<void> {
     const half = Math.floor(limit / 2);
 
     if (!messageId) {
-      return reply.code(400).send({ error: 'messageId is required', statusCode: 400 });
+      return sendError(reply, 400, 'validation_failed');
     }
 
     const spaceId = getChannelSpaceId(id);
     if (!spaceId) {
-      return reply.code(404).send({ error: 'Channel not found', statusCode: 404 });
+      return sendError(reply, 404, 'channel_not_found');
     }
 
     if (!hasPermission(request.userId, spaceId, PermissionBits.VIEW_CHANNEL | PermissionBits.READ_MESSAGE_HISTORY, id)) {
-      return reply.code(403).send({ error: 'Missing permissions', statusCode: 403 });
+      return sendError(reply, 403, 'missing_permission');
     }
 
     const db = getDb();
@@ -318,7 +319,7 @@ export async function searchRoutes(app: FastifyInstance): Promise<void> {
       .where(and(eq(schema.messages.id, messageId), eq(schema.messages.channelId, id)))
       .get();
     if (!target) {
-      return reply.code(404).send({ error: 'Message not found', statusCode: 404 });
+      return sendError(reply, 404, 'message_not_found');
     }
 
     // Messages before (inclusive of target)
@@ -404,11 +405,11 @@ export async function searchRoutes(app: FastifyInstance): Promise<void> {
     const half = Math.floor(limit / 2);
 
     if (!messageId) {
-      return reply.code(400).send({ error: 'messageId is required', statusCode: 400 });
+      return sendError(reply, 400, 'validation_failed');
     }
 
     if (!isDmMember(id, request.userId)) {
-      return reply.code(403).send({ error: 'You are not a member of this DM channel', statusCode: 403 });
+      return sendError(reply, 403, 'not_dm_member');
     }
 
     const db = getDb();
@@ -417,7 +418,7 @@ export async function searchRoutes(app: FastifyInstance): Promise<void> {
       .where(and(eq(schema.dmMessages.id, messageId), eq(schema.dmMessages.dmChannelId, id)))
       .get();
     if (!target) {
-      return reply.code(404).send({ error: 'Message not found', statusCode: 404 });
+      return sendError(reply, 404, 'message_not_found');
     }
 
     const beforeRows = db.select()

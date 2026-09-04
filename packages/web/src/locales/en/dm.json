@@ -1,1 +1,160 @@
-{}
+{
+  "names": {
+    "group": "Group",
+    "directMessage": "Direct Message",
+    "theGroup": "the group",
+    "unknownHandle": "unknown",
+    "groupFallback": "Group DM",
+    "emptyGroup": "Empty Group"
+  },
+  "preview": {
+    "image": "Image",
+    "video": "Video",
+    "audio": "Audio",
+    "files_one": "📎 {{count}} file",
+    "files_other": "📎 {{count}} files",
+    "withSender": "{{name}}: {{text}}"
+  },
+  "system": {
+    "spaceInviteNamed": "📨 Sent invite to {{spaceName}}",
+    "spaceInvite": "📨 Sent a space invite",
+    "memberAdded": "{{actor}} added {{target}}",
+    "memberLeft": "{{target}} left the group",
+    "memberRemoved": "{{actor}} removed {{target}}",
+    "ownerChanged": "{{newOwner}} is now the group owner",
+    "renamed": "{{actor}} renamed the group",
+    "nameCleared": "{{actor}} cleared the group name",
+    "iconChanged": "{{actor}} updated the group icon",
+    "generic": "System message",
+    "someone": "someone",
+    "aMember": "A member"
+  },
+  "deletedNotice": {
+    "accountDeleted": "This user’s account was deleted"
+  },
+  "memberRow": {
+    "viewProfile": "View Profile",
+    "transferOwnership": "Transfer Ownership",
+    "removeFromGroup": "Remove from Group",
+    "removeFriend": "Remove Friend",
+    "ownerTooltip": "Group Owner",
+    "actions": "Member actions"
+  },
+  "roster": {
+    "members": "Members",
+    "owner": "Owner",
+    "online": "Online",
+    "offline": "Offline",
+    "sectionCount": "{{label}} — {{total}}"
+  },
+  "kick": {
+    "title": "Remove from Group",
+    "description": "Remove {{name}} from this group? They won’t be able to see new messages.",
+    "success": "Removed {{name}} from the group",
+    "failed": "Failed to remove member"
+  },
+  "transfer": {
+    "title": "Transfer Ownership",
+    "description": "Transfer ownership to {{name}}? You’ll lose owner privileges.",
+    "confirm": "Transfer",
+    "success": "Ownership transferred to {{name}}",
+    "failed": "Failed to transfer ownership"
+  },
+  "removeFriend": {
+    "failed": "Failed to remove friend"
+  },
+  "leave": {
+    "title": "Leave Group",
+    "description": "Leave “{{name}}”? You will stop receiving messages from this conversation.",
+    "confirm": "Leave",
+    "inProgress": "Leaving…",
+    "failed": "Failed to leave group",
+    "explanation": "You will stop receiving messages from this conversation. Other members will see a system message."
+  },
+  "search": {
+    "trigger": "Find or start a conversation",
+    "placeholder": "Search…",
+    "emptyHint": "Search for a user to start chatting",
+    "conversations": "Conversations",
+    "users": "Users",
+    "searching": "Searching…",
+    "noResults": "No results found",
+    "createFailed": "Failed to create DM"
+  },
+  "list": {
+    "title": "Messages",
+    "friends": "Friends",
+    "empty": "No conversations yet.",
+    "leaveGroup": "Leave Group",
+    "justNow": "now",
+    "minutesShort_one": "{{count}}m",
+    "minutesShort_other": "{{count}}m",
+    "hoursShort_one": "{{count}}h",
+    "hoursShort_other": "{{count}}h",
+    "daysShort_one": "{{count}}d",
+    "daysShort_other": "{{count}}d"
+  },
+  "newDm": {
+    "title": "New Direct Message",
+    "searchPlaceholder": "Search for a user…",
+    "noUsers": "No users found"
+  },
+  "addMember": {
+    "title": "Add Friends to DM",
+    "description": "Select friends to add to this conversation.",
+    "capacity": "{{current}}/{{max}}",
+    "searchPlaceholder": "Search friends…",
+    "limitReached": "This group DM has reached the {{max}}-member limit.",
+    "alreadyInDm": "Already in this DM",
+    "noMatch": "No friends match your search",
+    "noFriends": "No friends yet",
+    "selectFriends": "Select Friends",
+    "addCount_one": "Add {{count}} Friend",
+    "addCount_other": "Add {{count}} Friends",
+    "adding": "Adding…",
+    "noOtherMember": "Could not determine the other member of this conversation.",
+    "failed": "Failed to add members"
+  },
+  "groupSettings": {
+    "title": "Group Settings",
+    "general": "General",
+    "overview": "Overview",
+    "members": "Members",
+    "backToMenu": "Back to group DM settings menu",
+    "changeIcon": "Change group icon",
+    "icon": "Group icon",
+    "clickToUpload": "Click to upload",
+    "removeIcon": "Remove group icon",
+    "nameLabel": "Group Name",
+    "nameAria": "Group name",
+    "nameCount": "{{current}}/{{max}}",
+    "addMember": "Add Member",
+    "groupFull": "Group is full",
+    "groupFullSuffix": "— Group is full",
+    "cropTitle": "Crop Group Icon",
+    "saveFailed": "Failed to save settings"
+  },
+  "groupInfo": {
+    "title": "Group Info",
+    "plainTitle": "Info",
+    "notFound": "Conversation not found.",
+    "notGroup": "This conversation has no group info.",
+    "cancelEdit": "Cancel edit",
+    "federated": "Federated group",
+    "memberCount_one": "{{count}} member",
+    "memberCount_other": "{{count}} members"
+  },
+  "spaceOwnership": {
+    "title": "Transfer Ownership",
+    "description": "Choose a member to become the new owner of <name>{{name}}</name>",
+    "confirmQuestion": "Transfer ownership of <name>{{space}}</name> to <name>{{member}}</name>?",
+    "regularMember": "You will become a regular member.",
+    "transferring": "Transferring…",
+    "confirm": "Transfer",
+    "searchPlaceholder": "Search members…",
+    "loading": "Loading members…",
+    "noMembers": "No members found",
+    "success": "Ownership transferred to {{name}}",
+    "failed": "Failed to transfer ownership"
+  }
+}

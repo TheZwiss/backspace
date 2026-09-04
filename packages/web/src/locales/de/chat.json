@@ -1,4 +1,92 @@
 {
+  "message": {
+    "timestamp": {
+      "today": "Heute um {{time}}",
+      "yesterday": "Gestern um {{time}}"
+    },
+    "edit": {
+      "hint": "Esc zum <cancel>Abbrechen</cancel> • Enter zum <save>Speichern</save>"
+    },
+    "edited": "(bearbeitet)",
+    "gifAlt": "GIF-Animation",
+    "upload": {
+      "failed": "Upload fehlgeschlagen",
+      "discard": "Verwerfen"
+    },
+    "actions": {
+      "addReaction": "Reaktion hinzufügen",
+      "reply": "Antworten",
+      "confirmDelete": "Löschen bestätigen"
+    }
+  },
+  "list": {
+    "noHistoryPermission": "Du hast keine Berechtigung, den Nachrichtenverlauf dieses Kanals zu sehen",
+    "loading": "Nachrichten werden geladen",
+    "loadingOlder": "Ältere Nachrichten werden geladen",
+    "jumpToPresent": "Zu den neuesten Nachrichten",
+    "welcome": {
+      "channel": {
+        "title": "Willkommen im Kanal!",
+        "description": "Hier beginnt die Unterhaltung."
+      },
+      "group": {
+        "intro": "Hier beginnt eure Gruppenunterhaltung.",
+        "owner": "Besitzer: <owner>@{{name}}</owner>",
+        "federatedNotice": "Nachrichten werden auf deiner Heimatinstanz und denen deiner Gesprächspartner gespeichert. Sie sind nicht Ende-zu-Ende-verschlüsselt.",
+        "openSettings": "Gruppeneinstellungen öffnen",
+        "leave": "Gruppe verlassen"
+      },
+      "dm": {
+        "fallbackName": "Direktnachricht",
+        "intro": "Hier beginnt dein Direktnachrichten-Verlauf mit <strong>@{{name}}</strong>.",
+        "federatedNotice": "Nachrichten werden auf deiner Heimatinstanz und der deines Gesprächspartners gespeichert. Sie sind nicht Ende-zu-Ende-verschlüsselt.",
+        "removeFriend": "Freund entfernen"
+      }
+    }
+  },
+  "composer": {
+    "noPermission": "Du hast keine Berechtigung, in diesem Kanal Nachrichten zu senden",
+    "placeholder": {
+      "channel": "Nachricht an #{{name}}",
+      "dm": "Nachricht an @{{name}}"
+    },
+    "replyingTo": "Antwort an",
+    "cancelReply": "Antwort abbrechen",
+    "removeAttachment": "Anhang entfernen",
+    "attachFile": "Datei anhängen",
+    "uploading": "Wird hochgeladen…",
+    "uploadingLabel": "Wird hochgeladen",
+    "failedCount_one": "{{count}} fehlgeschlagen",
+    "failedCount_other": "{{count}} fehlgeschlagen",
+    "failedHint": "Entferne den fehlgeschlagenen Anhang oder versuche es erneut, um zu senden",
+    "gif": "GIFs",
+    "gifPicker": "GIF-Auswahl",
+    "emoji": "Emojis",
+    "emojiPicker": "Emoji-Auswahl",
+    "send": "Senden",
+    "sendMessage": "Nachricht senden",
+    "uploadFailed": "{{file}} konnte nicht hochgeladen werden: {{reason}}",
+    "uploadFailedReason": "Upload fehlgeschlagen",
+    "sendFailed": "Nachricht konnte nicht gesendet werden"
+  },
+  "menu": {
+    "saveImage": "Bild speichern",
+    "copyImage": "Bild kopieren",
+    "openOriginal": "Original öffnen",
+    "saveVideo": "Video speichern",
+    "saveAudio": "Audio speichern",
+    "copyLink": "Link kopieren",
+    "openLink": "Link öffnen",
+    "addReaction": "Reaktion hinzufügen",
+    "reply": "Antworten",
+    "copySelectedText": "Markierten Text kopieren",
+    "copyText": "Text kopieren",
+    "markUnread": "Als ungelesen markieren",
+    "editMessage": "Nachricht bearbeiten",
+    "deleteMessage": "Nachricht löschen",
+    "linkCopied": "Link kopiert",
+    "linkCopyFailed": "Link konnte nicht kopiert werden"
+  },
   "attachment": {
     "progress": {
       "pausedTitle": "Pausiert – {{percent}}",
