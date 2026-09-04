@@ -1,5 +1,7 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import type { TransferState } from '../../stores/transferStore';
+import { useFormatters } from '../../i18n/formatters';
 
 interface Props {
   loaded: number;
@@ -14,14 +16,9 @@ interface Props {
   size?: 'tile' | 'pill';
 }
 
-function fmt(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-  return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
-}
-
 export function AttachmentProgress({ loaded, total, state, filename, error, onPause, onResume, onAbort, size = 'tile' }: Props) {
+  const { t } = useTranslation(['chat', 'common']);
+  const { formatBytes, formatPercent } = useFormatters();
   const pct = total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : 0;
   const bg = state === 'failed' ? 'bg-accent-rose/30' : state === 'paused' ? 'bg-white/5' : 'bg-accent-mint/30';
   const isFinal = state === 'completed' || state === 'aborted';
@@ -32,7 +29,7 @@ export function AttachmentProgress({ loaded, total, state, filename, error, onPa
   const ringTitle = state === 'failed'
     ? error
     : state === 'paused'
-      ? `Paused — ${pct}%`
+      ? t('chat:attachment.progress.pausedTitle', { percent: formatPercent(pct) })
       : undefined;
   return (
     <div className={`absolute inset-0 flex flex-col items-center justify-center gap-2 backdrop-blur-[2px] ${state === 'failed' ? 'bg-accent-rose/20' : 'bg-black/50'} pointer-events-auto`}>
@@ -50,26 +47,26 @@ export function AttachmentProgress({ loaded, total, state, filename, error, onPa
           ) : state === 'failed' ? (
             '!'
           ) : (
-            `${pct}%`
+            formatPercent(pct)
           )}
         </div>
       </div>
       {size === 'tile' && (
         <div className="text-[10px] text-txt-primary text-center leading-tight px-1">
           <div className="truncate max-w-[120px]">{filename}</div>
-          <div className="opacity-60">{fmt(loaded)} / {fmt(total)}</div>
+          <div className="opacity-60">{formatBytes(loaded)} / {formatBytes(total)}</div>
         </div>
       )}
       {!isFinal && (
         <div className="absolute top-1 right-1 flex gap-1">
           {state === 'paused' && onResume && (
-            <button onClick={onResume} className="bg-black/60 hover:bg-black/80 text-white w-5 h-5 rounded text-[9px]" aria-label="Resume">▶</button>
+            <button onClick={onResume} className="bg-black/60 hover:bg-black/80 text-white w-5 h-5 rounded text-[9px]" aria-label={t('chat:attachment.progress.resume')}>▶</button>
           )}
           {state === 'active' && onPause && (
-            <button onClick={onPause} className="bg-black/60 hover:bg-black/80 text-white w-5 h-5 rounded text-[9px]" aria-label="Pause">⏸</button>
+            <button onClick={onPause} className="bg-black/60 hover:bg-black/80 text-white w-5 h-5 rounded text-[9px]" aria-label={t('chat:attachment.progress.pause')}>⏸</button>
           )}
           {onAbort && (
-            <button onClick={onAbort} className="bg-black/60 hover:bg-black/80 text-white w-5 h-5 rounded text-[9px]" aria-label="Abort">✕</button>
+            <button onClick={onAbort} className="bg-black/60 hover:bg-black/80 text-white w-5 h-5 rounded text-[9px]" aria-label={t('chat:attachment.progress.abort')}>✕</button>
           )}
         </div>
       )}
