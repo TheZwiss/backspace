@@ -1,17 +1,21 @@
 import type { Activity } from '@backspace/shared';
 import { getPrimaryActivity } from '@backspace/shared/src/activities.js';
+import type { TFunction } from 'i18next';
+import { useTranslation } from 'react-i18next';
 
 interface ActivityCardProps {
   activities: Activity[];
   fallbackCustomStatus?: string | null;
 }
 
-function formatElapsed(startMs: number): string {
+function formatElapsed(startMs: number, t: TFunction<'common'>): string {
   const elapsed = Date.now() - startMs;
   const minutes = Math.floor(elapsed / 60000);
   const hours = Math.floor(minutes / 60);
-  if (hours > 0) return `${hours}h ${minutes % 60}m`;
-  return `${minutes}m`;
+  const duration = hours > 0
+    ? t('time.hoursMinutesShort', { hours, minutes: minutes % 60 })
+    : t('time.minutesShort', { minutes });
+  return t('time.elapsed', { duration });
 }
 
 /** Returns the accent border color class for an activity type */
@@ -36,6 +40,7 @@ export function hasRichActivity(activities: Activity[]): boolean {
  * The glass card wrapper is applied by the parent row container.
  */
 export function ActivityCard({ activities, fallbackCustomStatus }: ActivityCardProps) {
+  const { t } = useTranslation('common');
   const primary = getPrimaryActivity(activities);
 
   if (!primary) {
@@ -58,7 +63,7 @@ export function ActivityCard({ activities, fallbackCustomStatus }: ActivityCardP
       </div>
       {primary.timestamps?.start && (
         <div className="text-[10px] leading-[1.3] text-txt-tertiary">
-          {formatElapsed(primary.timestamps.start)} elapsed
+          {formatElapsed(primary.timestamps.start, t)}
         </div>
       )}
     </>
