@@ -8,6 +8,7 @@ import {
   getLanguageDirection,
   isSupportedLanguage,
   pickLanguage,
+  readPreviewLanguage,
   supportedLanguageCodes,
   type SupportedLanguage,
 } from './languages';
@@ -55,6 +56,8 @@ export interface InitI18nOptions {
   browserLanguages?: readonly string[];
   /** Overrides the set of languages detection may pick; tests use it to reach unreleased ones. */
   releasedLanguages?: ReadonlySet<string>;
+  /** A language to show regardless of release state, not persisted; `?lang=` fills it in development. */
+  previewLanguage?: SupportedLanguage | null;
 }
 
 /**
@@ -63,7 +66,10 @@ export interface InitI18nOptions {
  * translated. Safe to call more than once: later calls only re-run detection.
  */
 export async function initI18n(options: InitI18nOptions = {}): Promise<typeof i18n> {
-  const language = pickLanguage(readStoredLanguage(), options.browserLanguages ?? browserLanguages(), options.releasedLanguages);
+  const preview = options.previewLanguage !== undefined
+    ? options.previewLanguage
+    : readPreviewLanguage(typeof window === 'undefined' ? '' : window.location.search, import.meta.env.DEV);
+  const language = preview ?? pickLanguage(readStoredLanguage(), options.browserLanguages ?? browserLanguages(), options.releasedLanguages);
 
   if (i18n.isInitialized) {
     await i18n.changeLanguage(language);

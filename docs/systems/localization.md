@@ -227,7 +227,9 @@ German are complete in code and tests but stay unreleased until every surface
 is translated, so a release cut between the foundation and 1.1.0 is
 English-only by construction rather than half translated. The PR that empties
 the pending list flips the flags. Tests reach the unreleased languages with
-`setLanguage` or `initI18n({ releasedLanguages })`.
+`setLanguage` or `initI18n({ releasedLanguages })`; people reach them with
+`?lang=de` on the URL, which works in development builds only and is never
+persisted.
 
 Detection alone never writes the stored choice. A user who has not picked a
 language keeps following their browser; only the picker persists.

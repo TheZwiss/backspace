@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { availableLanguages, setLanguage, type SupportedLanguage } from '../../../i18n';
+import { availableLanguages, setLanguage, supportedLanguages, type SupportedLanguage } from '../../../i18n';
 import { getLanguage } from '../../../i18n';
 
 /**
@@ -10,6 +10,11 @@ import { getLanguage } from '../../../i18n';
 export function LanguageSection() {
   const { t } = useTranslation(['common']);
   const current = getLanguage();
+  // A previewed unreleased language (dev `?lang=`) is shown as the current
+  // option so the select does not silently display the wrong value.
+  const options = availableLanguages.some((l) => l.code === current)
+    ? availableLanguages
+    : [...availableLanguages, ...supportedLanguages.filter((l) => l.code === current)];
 
   return (
     <div>
@@ -26,7 +31,7 @@ export function LanguageSection() {
           onChange={(e) => { void setLanguage(e.target.value as SupportedLanguage); }}
           className="input-standard w-full appearance-none"
         >
-          {availableLanguages.map((language) => (
+          {options.map((language) => (
             <option key={language.code} value={language.code} lang={language.code}>
               {language.nativeName}
             </option>

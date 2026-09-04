@@ -62,3 +62,14 @@ export function pickLanguage(
 export function getLanguageDirection(language: SupportedLanguage): 'ltr' | 'rtl' {
   return supportedLanguages.find((l) => l.code === language)?.dir ?? 'ltr';
 }
+
+/**
+ * `?lang=de` on the URL previews a language regardless of its `released`
+ * flag, for translators and reviewers. Development builds only: in
+ * production the release gate is the whole point.
+ */
+export function readPreviewLanguage(search: string, isDev: boolean): SupportedLanguage | null {
+  if (!isDev) return null;
+  const value = new URLSearchParams(search).get('lang');
+  return value ? resolveSupportedLanguage(value) : null;
+}

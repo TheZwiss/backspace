@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { availableLanguages, isSupportedLanguage, pickLanguage, resolveSupportedLanguage, supportedLanguages } from './languages';
+import { availableLanguages, isSupportedLanguage, pickLanguage, readPreviewLanguage, resolveSupportedLanguage, supportedLanguages } from './languages';
 
 describe('resolveSupportedLanguage', () => {
   it('maps a regional tag to its base language when that base is shipped', () => {
@@ -63,5 +63,21 @@ describe('supportedLanguages', () => {
       expect(language.nativeName.length).toBeGreaterThan(0);
       expect(['ltr', 'rtl']).toContain(language.dir);
     }
+  });
+});
+
+describe('readPreviewLanguage', () => {
+  it('reads ?lang= in development so unreleased languages can be reviewed', () => {
+    expect(readPreviewLanguage('?lang=de', true)).toBe('de');
+    expect(readPreviewLanguage('?foo=1&lang=ru-RU', true)).toBe('ru');
+  });
+
+  it('ignores the parameter in production builds', () => {
+    expect(readPreviewLanguage('?lang=de', false)).toBeNull();
+  });
+
+  it('ignores values that are not shipped languages', () => {
+    expect(readPreviewLanguage('?lang=fr', true)).toBeNull();
+    expect(readPreviewLanguage('', true)).toBeNull();
   });
 });

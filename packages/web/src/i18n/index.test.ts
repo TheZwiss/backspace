@@ -38,6 +38,14 @@ describe('initI18n release gate', () => {
   });
 });
 
+describe('initI18n preview', () => {
+  it('shows an explicitly previewed language without persisting it', async () => {
+    await initI18n({ browserLanguages: ['en'], previewLanguage: 'de' });
+    expect(i18n.resolvedLanguage).toBe('de');
+    expect(localStorage.getItem(LANGUAGE_STORAGE_KEY)).toBeNull();
+  });
+});
+
 describe('setLanguage', () => {
   it('switches, persists, and updates the document', async () => {
     await initI18n({ browserLanguages: ['en'] });
