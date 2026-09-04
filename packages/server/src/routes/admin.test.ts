@@ -7,6 +7,7 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { eq } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import { setWorkerId } from '../utils/snowflake.js';
 import { signJwt } from '../utils/auth.js';
@@ -230,5 +231,110 @@ describe('POST /api/admin/storage/cleanup-tus', () => {
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.deletedFiles).toBe(1);
+  });
+});
+
+describe('error codes on the admin routes', () => {
+  it('rejects a non-boolean isAdmin with field_not_boolean', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/admin/users/${USER_ID}/role`,
+      headers: { Authorization: `Bearer ${adminToken()}` },
+      payload: { isAdmin: 'yes' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toMatchObject({ code: 'field_not_boolean', details: { field: 'isAdmin' }, statusCode: 400 });
+  });
+
+  it('reports an unknown user with user_not_found', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/admin/users/nobody/role',
+      headers: { Authorization: `Bearer ${adminToken()}` },
+      payload: { isAdmin: true },
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json()).toMatchObject({ code: 'user_not_found', error: 'User not found' });
+  });
+
+  it('refuses to demote the last admin with last_admin_cannot_be_demoted', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/admin/users/${ADMIN_ID}/role`,
+      headers: { Authorization: `Bearer ${adminToken()}` },
+      payload: { isAdmin: false },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toMatchObject({ code: 'last_admin_cannot_be_demoted', error: 'Cannot demote the last admin' });
+  });
+
+  it('refuses to promote a federated user with federated_user_cannot_be_admin', async () => {
+    testDb.update(schema.users).set({ homeInstance: 'remote.example' }).where(eq(schema.users.id, USER_ID)).run();
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/admin/users/${USER_ID}/role`,
+      headers: { Authorization: `Bearer ${adminToken()}` },
+      payload: { isAdmin: true },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().code).toBe('federated_user_cannot_be_admin');
+  });
+
+  it('refuses to reset a federated password with federated_user_password_managed_by_home', async () => {
+    testDb.update(schema.users).set({ homeInstance: 'remote.example' }).where(eq(schema.users.id, USER_ID)).run();
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/admin/users/${USER_ID}/reset-password`,
+      headers: { Authorization: `Bearer ${adminToken()}` },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().code).toBe('federated_user_password_managed_by_home');
+  });
+
+  it("refuses to reset a deleted user's password with deleted_user_password_reset", async () => {
+    testDb.update(schema.users).set({ isDeleted: 1 }).where(eq(schema.users.id, USER_ID)).run();
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/admin/users/${USER_ID}/reset-password`,
+      headers: { Authorization: `Bearer ${adminToken()}` },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().code).toBe('deleted_user_password_reset');
+  });
+
+  it('refuses self-deletion with admin_cannot_delete_self', async () => {
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/admin/users/${ADMIN_ID}`,
+      headers: { Authorization: `Bearer ${adminToken()}` },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().code).toBe('admin_cannot_delete_self');
+  });
+
+  it('refuses to delete a space owner with user_owns_spaces and still lists the spaces', async () => {
+    testDb.insert(schema.spaces).values({ id: 'space-1', name: 'Owned', ownerId: USER_ID, createdAt: Date.now() }).run();
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/admin/users/${USER_ID}`,
+      headers: { Authorization: `Bearer ${adminToken()}` },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toMatchObject({
+      code: 'user_owns_spaces',
+      statusCode: 400,
+      ownedSpaces: [{ id: 'space-1', name: 'Owned' }],
+    });
+  });
+
+  it('rejects a bad maxAgeDays with cleanup_age_invalid', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/admin/storage/cleanup-media',
+      headers: { Authorization: `Bearer ${adminToken()}` },
+      payload: { maxAgeDays: 0 },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toMatchObject({ code: 'cleanup_age_invalid', details: { field: 'maxAgeDays' } });
   });
 });
