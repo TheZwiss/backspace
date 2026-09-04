@@ -40,7 +40,7 @@ export async function searchRoutes(app: FastifyInstance): Promise<void> {
     }
 
     if (!hasPermission(request.userId, spaceId, PermissionBits.VIEW_CHANNEL | PermissionBits.READ_MESSAGE_HISTORY, id)) {
-      return sendError(reply, 403, 'missing_permission');
+      return sendError(reply, 403, 'missing_permission', { permission: 'READ_MESSAGE_HISTORY' });
     }
 
     const db = getDb();
@@ -309,7 +309,7 @@ export async function searchRoutes(app: FastifyInstance): Promise<void> {
     }
 
     if (!hasPermission(request.userId, spaceId, PermissionBits.VIEW_CHANNEL | PermissionBits.READ_MESSAGE_HISTORY, id)) {
-      return sendError(reply, 403, 'missing_permission');
+      return sendError(reply, 403, 'missing_permission', { permission: 'READ_MESSAGE_HISTORY' });
     }
 
     const db = getDb();
