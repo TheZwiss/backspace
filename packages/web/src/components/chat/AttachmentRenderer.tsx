@@ -1,17 +1,13 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { Attachment } from '@backspace/shared';
 import { useUIStore } from '../../stores/uiStore';
 import { useTransferStore } from '../../stores/transferStore';
 import { Tooltip } from '../ui/Tooltip';
+import { useFormatters } from '../../i18n/formatters';
 
 interface AttachmentRendererProps {
   attachment: Attachment;
-}
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1048576).toFixed(1)} MB`;
 }
 
 /** Format a duration in seconds as `m:ss` (or `h:mm:ss` for long clips). */
@@ -81,6 +77,8 @@ interface VideoAttachmentProps {
  * duration and size, and a one-tap download — never a silently broken player.
  */
 function VideoAttachment({ attachment, attUrl, thumbUrl, federationInlineBadge }: VideoAttachmentProps) {
+  const { t } = useTranslation(['chat']);
+  const { formatBytes } = useFormatters();
   const startDownload = useTransferStore((s) => s.startDownload);
   // Pre-fail only when the server flagged it unplayable AND this browser can't
   // decode it anyway. Capable browsers (Safari/WebKit ⇒ HEVC) attempt playback
@@ -94,7 +92,7 @@ function VideoAttachment({ attachment, attUrl, thumbUrl, federationInlineBadge }
     : undefined;
 
   if (failed) {
-    const meta = [duration ? formatDuration(duration) : null, formatFileSize(size)]
+    const meta = [duration ? formatDuration(duration) : null, formatBytes(size)]
       .filter(Boolean)
       .join(' · ');
     return (
@@ -118,7 +116,7 @@ function VideoAttachment({ attachment, attUrl, thumbUrl, federationInlineBadge }
                 <svg className="w-9 h-9" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
                 </svg>
-                <span className="text-[12px] font-medium">Can't play here — download</span>
+                <span className="text-[12px] font-medium">{t('chat:attachment.video.cannotPlayDownload')}</span>
               </div>
             </div>
           )}
@@ -133,7 +131,7 @@ function VideoAttachment({ attachment, attUrl, thumbUrl, federationInlineBadge }
             <div className="min-w-0 flex-1">
               <p className="text-txt-link text-[14px] font-medium truncate group-hover/vid:underline">{originalName}</p>
               <p className="text-[12px] text-txt-tertiary">
-                {meta ? `${meta} · ` : ''}Unsupported video format
+                {meta ? `${meta} · ` : ''}{t('chat:attachment.video.unsupportedFormat')}
               </p>
             </div>
           </div>
@@ -157,7 +155,7 @@ function VideoAttachment({ attachment, attUrl, thumbUrl, federationInlineBadge }
           onError={() => setFailed(true)}
           className="w-full h-full rounded-lg"
         >
-          Your browser does not support video playback.
+          {t('chat:attachment.video.unsupportedBrowser')}
         </video>
       </div>
       {federationInlineBadge && <div className="mt-1">{federationInlineBadge}</div>}
@@ -166,6 +164,8 @@ function VideoAttachment({ attachment, attUrl, thumbUrl, federationInlineBadge }
 }
 
 export function AttachmentRenderer({ attachment }: AttachmentRendererProps) {
+  const { t } = useTranslation(['chat']);
+  const { formatBytes } = useFormatters();
   const openImagePreview = useUIStore((s) => s.openImagePreview);
   const startDownload = useTransferStore((s) => s.startDownload);
 
@@ -184,27 +184,32 @@ export function AttachmentRenderer({ attachment }: AttachmentRendererProps) {
     if (!attachment.federationStatus) return null;
 
     if (attachment.federationStatus === 'remote') {
-      let senderName = 'the sender';
+      let senderName: string | null = null;
       if (attachment.federationMeta) {
         try {
           const meta = JSON.parse(attachment.federationMeta);
           if (meta.sourceUsername) senderName = meta.sourceUsername;
         } catch { /* ignore */ }
       }
-      return { text: `Hosted on ${senderName}'s instance. Download to keep a local copy.`, type: 'remote' as const };
+      const text = senderName
+        ? t('chat:attachment.federation.remoteNamed', { sender: senderName })
+        : t('chat:attachment.federation.remoteUnknown');
+      return { text, type: 'remote' as const };
     }
 
     if (attachment.federationStatus === 'remote_partial') {
-      let text = 'Some recipients cannot cache this file locally.';
+      let text = t('chat:attachment.federation.partialGeneric');
       if (attachment.federationMeta) {
         try {
           const meta: Array<{ username: string; limit: number }> = JSON.parse(attachment.federationMeta);
           if (meta.length > 0) {
-            const parts = meta.map(u => {
-              const limitMb = Math.round(u.limit / (1024 * 1024));
-              return `${u.username}'s instance (limit: ${limitMb} MB)`;
-            });
-            text = `File couldn't be cached on ${parts.join(' and ')}. They can still view it from yours.`;
+            const parts = meta.map(u =>
+              t('chat:attachment.federation.partialInstance', { username: u.username, limit: formatBytes(u.limit) }),
+            );
+            const instances = parts.reduce((first, second) =>
+              t('chat:attachment.federation.listPair', { first, second }),
+            );
+            text = t('chat:attachment.federation.partialList', { instances });
           }
         } catch { /* ignore */ }
       }
@@ -277,14 +282,14 @@ export function AttachmentRenderer({ attachment }: AttachmentRendererProps) {
           <div className="min-w-0">
             <p className="text-txt-primary text-[14px] font-medium truncate">{originalName}</p>
             <div className="flex items-center gap-2">
-              <p className="text-[12px] text-txt-tertiary">{formatFileSize(size)}</p>
+              <p className="text-[12px] text-txt-tertiary">{formatBytes(size)}</p>
               {federationInlineBadge}
             </div>
           </div>
         </div>
         <audio controls preload="metadata" className="w-full mt-2 h-8">
           <source src={attUrl} type={mimetype} />
-          Your browser does not support audio playback.
+          {t('chat:attachment.audio.unsupportedBrowser')}
         </audio>
       </div>
     );
@@ -326,7 +331,7 @@ export function AttachmentRenderer({ attachment }: AttachmentRendererProps) {
       <div className="min-w-0 flex-1">
         <p className="text-txt-link text-[15px] font-medium truncate hover:underline">{originalName}</p>
         <div className="flex items-center gap-2 flex-wrap">
-          <p className="text-[12px] text-txt-tertiary font-medium">{formatFileSize(size)}</p>
+          <p className="text-[12px] text-txt-tertiary font-medium">{formatBytes(size)}</p>
           {federationInlineBadge}
         </div>
       </div>
