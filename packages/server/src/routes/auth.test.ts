@@ -298,7 +298,7 @@ describe('POST /api/auth/register — federation gate split', () => {
       payload: { username: 'newalice', password: 'password123', inviteToken: 'fakefakefakefakefakeXX' },
     });
     expect(res.statusCode).toBe(403);
-    expect(res.json().error).toContain('Invalid or expired');
+    expect(res.json().code).toBe('invite_invalid');
   });
 
   it('open registration with token: usedCount NOT incremented', async () => {

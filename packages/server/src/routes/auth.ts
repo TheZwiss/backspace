@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 import { eq, or, lt } from 'drizzle-orm';
 import { randomBytes } from 'node:crypto';
 import { getDb, schema } from '../db/index.js';
@@ -12,6 +12,32 @@ import { extractDomain } from './federation.js';
 import { fetchPeerEpoch } from '../utils/federationEpoch.js';
 import { stripTrailingSlashes } from '../utils/federationAuth.js';
 import { getInviteByToken, inviteStatus, redeemInvite, InviteUnavailableError } from '../utils/inviteService.js';
+import { sendError, errorText } from '../utils/httpErrors.js';
+import type { ErrorCode, ErrorDetails } from '@backspace/shared/src/errors';
+
+const USERNAME_MIN = 3;
+const USERNAME_MAX = 32;
+const FEDERATED_USERNAME_MAX = 100;
+const PASSWORD_MIN = 8;
+
+/**
+ * The availability check answers `{ available, reason }` rather than the
+ * error contract, so a client that predates codes keeps working; the code
+ * and details ride along for clients that localize.
+ */
+function unavailable(
+  reply: FastifyReply,
+  statusCode: number,
+  code: ErrorCode,
+  details?: ErrorDetails,
+): FastifyReply {
+  return reply.code(statusCode).send({
+    available: false,
+    reason: errorText(code, details),
+    code,
+    ...(details ? { details } : {}),
+  });
+}
 
 export async function authRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Body: RegisterRequest }>('/api/auth/register', {
@@ -26,11 +52,11 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     const { username, password, displayName, avatarColor: requestedAvatarColor, homeInstance, homeUserId } = request.body;
 
     if (!username || typeof username !== 'string') {
-      return reply.code(400).send({ error: 'Username is required', statusCode: 400 });
+      return sendError(reply, 400, 'username_required');
     }
 
     if (!password || typeof password !== 'string') {
-      return reply.code(400).send({ error: 'Password is required', statusCode: 400 });
+      return sendError(reply, 400, 'password_required');
     }
 
     const trimmedUsername = username.trim().toLowerCase();
@@ -40,7 +66,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     if (homeInstance) {
       // Validate homeInstance is a reasonable domain string
       if (typeof homeInstance !== 'string' || homeInstance.length > 253 || !/^[a-zA-Z0-9._-]+$/.test(homeInstance)) {
-        return reply.code(400).send({ error: 'Invalid homeInstance domain', statusCode: 400 });
+        return sendError(reply, 400, 'home_instance_invalid');
       }
 
       if (trimmedUsername.includes('@')) {
@@ -49,32 +75,32 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         const localPart = trimmedUsername.slice(0, atIndex);
         const domainPart = trimmedUsername.slice(atIndex + 1);
 
-        if (localPart.length < 3 || localPart.length > 32 || !/^[a-z0-9_]+$/.test(localPart)) {
-          return reply.code(400).send({ error: 'Username local part must be 3-32 lowercase alphanumeric/underscore characters', statusCode: 400 });
+        if (localPart.length < USERNAME_MIN || localPart.length > USERNAME_MAX || !/^[a-z0-9_]+$/.test(localPart)) {
+          return sendError(reply, 400, 'username_local_part_invalid', { min: USERNAME_MIN, max: USERNAME_MAX });
         }
         if (domainPart.length === 0 || domainPart.length > 253 || !/^[a-zA-Z0-9._-]+$/.test(domainPart)) {
-          return reply.code(400).send({ error: 'Username domain part is invalid', statusCode: 400 });
+          return sendError(reply, 400, 'username_domain_part_invalid');
         }
-        if (trimmedUsername.length > 100) {
-          return reply.code(400).send({ error: 'Username must be 100 characters or less', statusCode: 400 });
+        if (trimmedUsername.length > FEDERATED_USERNAME_MAX) {
+          return sendError(reply, 400, 'username_too_long', { max: FEDERATED_USERNAME_MAX });
         }
       } else {
         // Replicated users MUST use username@domain format — plain usernames
         // are reserved exclusively for native users of this instance
-        return reply.code(400).send({ error: 'Replicated users must use username@domain format', statusCode: 400 });
+        return sendError(reply, 400, 'replicated_username_format_required');
       }
     } else {
       // Local registration — strict validation
-      if (trimmedUsername.length < 3 || trimmedUsername.length > 32) {
-        return reply.code(400).send({ error: 'Username must be between 3 and 32 characters', statusCode: 400 });
+      if (trimmedUsername.length < USERNAME_MIN || trimmedUsername.length > USERNAME_MAX) {
+        return sendError(reply, 400, 'username_length_invalid', { min: USERNAME_MIN, max: USERNAME_MAX });
       }
       if (!/^[a-z0-9_]+$/.test(trimmedUsername)) {
-        return reply.code(400).send({ error: 'Username can only contain lowercase letters, numbers, and underscores', statusCode: 400 });
+        return sendError(reply, 400, 'username_characters_invalid');
       }
     }
 
-    if (password.length < 8) {
-      return reply.code(400).send({ error: 'Password must be at least 8 characters', statusCode: 400 });
+    if (password.length < PASSWORD_MIN) {
+      return sendError(reply, 400, 'password_too_short', { min: PASSWORD_MIN });
     }
 
     const db = getDb();
@@ -105,7 +131,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     if (homeInstance) {
       // Federated path: token IGNORED entirely. Gate is federatedRegistrationOpen.
       if (!federatedRegistrationOpen) {
-        return reply.code(403).send({ error: 'Federated registration is closed on this instance', statusCode: 403 });
+        return sendError(reply, 403, 'federated_registration_closed');
       }
       // Falls through to the normal create-a-new-row path below. A federated
       // registration NEVER binds credentials to a pre-existing row.
@@ -114,14 +140,14 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       // bypasses it when closed. When open, the token is silently ignored.
       if (!registrationOpen) {
         if (!inviteToken) {
-          return reply.code(403).send({ error: 'Registration is closed. An invite is required.', statusCode: 403 });
+          return sendError(reply, 403, 'invite_required');
         }
         // Pre-flight check: reject obviously-invalid tokens before any expensive
         // work (bcrypt). The final enforcement still happens inside the redemption
         // transaction below — this only short-circuits the easy reject path.
         const inviteRow = getInviteByToken(inviteToken);
         if (!inviteRow || inviteStatus(inviteRow) !== 'active') {
-          return reply.code(403).send({ error: 'Invalid or expired invite', statusCode: 403 });
+          return sendError(reply, 403, 'invite_invalid');
         }
       }
       // If registrationOpen is true: inviteToken is silently ignored — no validation,
@@ -145,7 +171,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     // attach-proof token minted by the home instance.
     const existing = db.select().from(schema.users).where(eq(schema.users.username, trimmedUsername)).get();
     if (existing) {
-      return reply.code(409).send({ error: 'Username already taken', statusCode: 409 });
+      return sendError(reply, 409, 'username_taken');
     }
 
     const userId = generateSnowflake();
@@ -198,7 +224,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       } catch (err) {
         if (err instanceof InviteUnavailableError) {
           // Concurrent revoke / last-slot race / expiry-while-typing all surface here.
-          return reply.code(403).send({ error: 'Invalid or expired invite', statusCode: 403 });
+          return sendError(reply, 403, 'invite_invalid');
         }
         throw err;
       }
@@ -209,7 +235,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
     const user = db.select().from(schema.users).where(eq(schema.users.id, userId)).get();
     if (!user) {
-      return reply.code(500).send({ error: 'Failed to create user', statusCode: 500 });
+      return sendError(reply, 500, 'user_create_failed');
     }
 
     const token = signJwt({ userId: user.id, username: user.username });
@@ -233,17 +259,17 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   }, async (request, reply) => {
     const raw = request.query.username;
     if (!raw || typeof raw !== 'string') {
-      return reply.code(400).send({ available: false, reason: 'Username is required' });
+      return unavailable(reply, 400, 'username_required');
     }
 
     const trimmed = raw.trim().toLowerCase();
 
     // Format validation (same rules as registration)
-    if (trimmed.length < 3 || trimmed.length > 32) {
-      return reply.code(200).send({ available: false, reason: 'Username must be between 3 and 32 characters' });
+    if (trimmed.length < USERNAME_MIN || trimmed.length > USERNAME_MAX) {
+      return unavailable(reply, 200, 'username_length_invalid', { min: USERNAME_MIN, max: USERNAME_MAX });
     }
     if (!/^[a-z0-9_]+$/.test(trimmed)) {
-      return reply.code(200).send({ available: false, reason: 'Username can only contain lowercase letters, numbers, and underscores' });
+      return unavailable(reply, 200, 'username_characters_invalid');
     }
 
     // Check registration is open
@@ -253,7 +279,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       ? instanceRow.registrationOpen === 1
       : config.registrationOpen;
     if (!registrationOpen) {
-      return reply.code(403).send({ available: false, reason: 'Registration is currently closed' });
+      return unavailable(reply, 403, 'registration_closed');
     }
 
     const existing = db.select().from(schema.users).where(eq(schema.users.username, trimmed)).get();
@@ -314,22 +340,22 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     const { username, password } = request.body;
 
     if (!username || typeof username !== 'string') {
-      return reply.code(400).send({ error: 'Username is required', statusCode: 400 });
+      return sendError(reply, 400, 'username_required');
     }
 
     if (!password || typeof password !== 'string') {
-      return reply.code(400).send({ error: 'Password is required', statusCode: 400 });
+      return sendError(reply, 400, 'password_required');
     }
 
     const db = getDb();
 
     const user = db.select().from(schema.users).where(eq(schema.users.username, username.trim().toLowerCase())).get();
     if (!user) {
-      return reply.code(401).send({ error: 'Invalid username or password', statusCode: 401 });
+      return sendError(reply, 401, 'invalid_credentials');
     }
 
     if (user.isDeleted) {
-      return reply.code(401).send({ error: 'This account has been deleted', statusCode: 401 });
+      return sendError(reply, 401, 'account_deleted');
     }
 
     const validPassword = await verifyPassword(password, user.passwordHash);
@@ -345,7 +371,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         // way in — the hash was only ever written by the owner's registration
         // or an epoch-gated self-heal against the OLD incarnation.
         if (user.federationHomeOrphaned === 1) {
-          return reply.code(401).send({ error: 'Invalid username or password', statusCode: 401 });
+          return sendError(reply, 401, 'invalid_credentials');
         }
         try {
           const homeUsername = user.username.includes('@')
@@ -393,7 +419,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
                 app.log.warn(
                   `Refused self-heal for ${user.username}: home epoch ${currentEpoch ?? 'unknown'} != baseline ${peer.peerInstanceId}`,
                 );
-                return reply.code(401).send({ error: 'Invalid username or password', statusCode: 401 });
+                return sendError(reply, 401, 'invalid_credentials');
               }
             }
             // No peer row / null baseline → legacy allow (fall through to self-heal).
@@ -410,14 +436,14 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
             app.log.info(`Self-healed password hash for federated user ${user.username} via ${user.homeInstance}`);
           } else {
             // Home instance also rejected — password is genuinely wrong
-            return reply.code(401).send({ error: 'Invalid username or password', statusCode: 401 });
+            return sendError(reply, 401, 'invalid_credentials');
           }
         } catch {
           // Home instance unreachable — fall back to local-only rejection
-          return reply.code(401).send({ error: 'Invalid username or password', statusCode: 401 });
+          return sendError(reply, 401, 'invalid_credentials');
         }
       } else {
-        return reply.code(401).send({ error: 'Invalid username or password', statusCode: 401 });
+        return sendError(reply, 401, 'invalid_credentials');
       }
     }
 
@@ -452,20 +478,20 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
     const rawTarget = request.body?.targetDomain;
     if (typeof rawTarget !== 'string' || rawTarget.trim().length === 0 || rawTarget.length > 255) {
-      return reply.code(400).send({ error: 'targetDomain is required (string)', statusCode: 400 });
+      return sendError(reply, 400, 'target_domain_required');
     }
     const targetDomain = stripTrailingSlashes(rawTarget.trim().toLowerCase().replace(/^https?:\/\//, ''));
     // Re-check emptiness AFTER normalization: inputs like "https://" or "/"
     // pass the pre-normalization guard but collapse to "" — never persist an
     // inert target_domain='' proof row.
     if (targetDomain.length === 0) {
-      return reply.code(400).send({ error: 'targetDomain is required (string)', statusCode: 400 });
+      return sendError(reply, 400, 'target_domain_required');
     }
 
     // Native accounts only — a federated/replicated account has no authority
     // to mint proofs for this domain's identities.
     if (request.homeInstance) {
-      return reply.code(403).send({ error: 'Only native accounts can mint attach proofs', statusCode: 403 });
+      return sendError(reply, 403, 'native_account_required');
     }
 
     const now = Date.now();
