@@ -11,6 +11,7 @@ import { isElectron } from './platform/platform';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const token = useAuthStore((s) => s.token);
+  // i18n-check: allow-literal — the `; return` between the two elements is code, not text.
   if (!token) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }
