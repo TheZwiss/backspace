@@ -1,1 +1,543 @@
-{}
+{
+  "create": {
+    "title": "Create a Space",
+    "icon": {
+      "upload": "Upload",
+      "previewAlt": "Icon preview",
+      "colorLabel": "Icon Color",
+      "cropTitle": "Crop Space Icon",
+      "uploadFailed": "Failed to upload icon"
+    },
+    "colorNames": {
+      "mint": "Mint",
+      "sky": "Sky",
+      "lavender": "Lavender",
+      "coral": "Coral",
+      "rose": "Rose",
+      "teal": "Teal",
+      "amber": "Amber"
+    },
+    "name": {
+      "label": "Space Name",
+      "placeholder": "My Awesome Space",
+      "required": "Space name is required"
+    },
+    "visibilityLabel": "Visibility",
+    "description": {
+      "label": "Description",
+      "placeholder": "A short description for your space...",
+      "counter": "{{length}}/{{max}}"
+    },
+    "submit": "Create",
+    "submitting": "Creating..."
+  },
+  "channel": {
+    "create": {
+      "title": "Create Channel",
+      "typeLabel": "Channel Type",
+      "types": {
+        "text": {
+          "name": "Text",
+          "description": "Send messages, images, and files"
+        },
+        "voice": {
+          "name": "Voice",
+          "description": "Hang out with voice and video"
+        }
+      },
+      "nameLabel": "Channel Name",
+      "namePlaceholder": "new-channel",
+      "topicLabel": "Topic (optional)",
+      "topicPlaceholder": "What's this channel about?",
+      "categoryLabel": "Category",
+      "noCategory": "No Category",
+      "nameRequired": "Channel name is required",
+      "noSpaceSelected": "No space selected",
+      "submit": "Create Channel",
+      "submitting": "Creating..."
+    },
+    "settings": {
+      "title": "Channel Settings",
+      "channelLabel": "Channel",
+      "private": {
+        "label": "Private Channel",
+        "description": "Only selected members and roles will be able to view this channel.",
+        "note": "This channel is hidden from members without explicit access. Users with the Administrator permission or space owners can always see all channels."
+      },
+      "deleteButton": "Delete Channel"
+    },
+    "delete": {
+      "title": "Delete #{{name}}?",
+      "description": "This will permanently delete <strong>#{{name}}</strong> and all of its messages. This action cannot be undone.",
+      "descriptionVoice": "This will permanently delete <strong>#{{name}}</strong> and all of its messages. Any users currently in this voice channel will be disconnected. This action cannot be undone.",
+      "confirm": "Delete Channel"
+    }
+  },
+  "category": {
+    "create": {
+      "title": "Create Category",
+      "nameLabel": "Category Name",
+      "namePlaceholder": "new-category",
+      "nameRequired": "Category name is required",
+      "noSpaceSelected": "No space selected",
+      "submit": "Create Category",
+      "submitting": "Creating..."
+    },
+    "settings": {
+      "title": "Category Settings",
+      "categoryLabel": "Category",
+      "private": {
+        "label": "Private Category",
+        "description": "Only selected members and roles will be able to view channels in this category.",
+        "note": "This category is hidden from members without explicit access. Channels inside inherit this restriction unless they explicitly override it."
+      },
+      "deleteButton": "Delete Category"
+    },
+    "delete": {
+      "title": "Delete \"{{name}}\"?",
+      "description": "This will permanently delete the <strong>{{name}}</strong> category. Channels inside it will be moved to the top level. This action cannot be undone.",
+      "confirm": "Delete Category"
+    }
+  },
+  "invite": {
+    "title": "Invite Friends",
+    "intro": "Send to friends, or share a link.",
+    "requestOnly": {
+      "notice": "This space uses join requests. People join by requesting approval from a manager, so it has no invite link to share.",
+      "dismiss": "Got it"
+    },
+    "searchPlaceholder": "Search friends...",
+    "noMatches": "No friends match your search",
+    "noFriends": "No friends yet",
+    "alreadyMember": "Already in space",
+    "removeSelected": "Remove {{name}}",
+    "selectFriends": "Select Friends",
+    "send_one": "Send {{count}} Invite",
+    "send_other": "Send {{count}} Invites",
+    "sending": "Sending...",
+    "retryFailed": "Retry failed",
+    "status": {
+      "sent": "✓ Sent",
+      "failed": "✗ {{reason}}"
+    },
+    "shareLink": "Or share a link",
+    "generating": "Generating...",
+    "generateFailed": "Failed to generate invite link",
+    "failure": {
+      "inviteInvalid": "Invite link no longer valid",
+      "notAFriend": "Not a friend",
+      "userNotFound": "User not found",
+      "alreadyMember": "Already a member",
+      "upstream": "Couldn't verify invite, try again",
+      "cannotInviteSelf": "Cannot invite yourself",
+      "invalidBody": "Invalid request",
+      "invalidTarget": "Invalid target",
+      "unreachable": "Couldn't reach your instance",
+      "serverError": "Couldn't send (server error)"
+    }
+  },
+  "join": {
+    "title": "Join a Space",
+    "discoverIntro": "Discover spaces to join, or browse them all in Explore.",
+    "discoverError": "Couldn't load spaces to discover right now. You can still join with an invite code below.",
+    "discoverEmpty": "No spaces to discover yet. Try an invite code below, or check back later.",
+    "browseExplore": "Browse all in Explore",
+    "discoveryOff": "Space discovery is turned off on this instance. You can still join with an invite code.",
+    "inviteDivider": "Have an invite code?",
+    "invitePlaceholder": "e.g. abc123 or https://instance.com/join/abc123",
+    "submit": "Join Space",
+    "submitting": "Joining...",
+    "connect": {
+      "intro": "Connect to <host>{{host}}</host> to join this space.",
+      "passwordLabel": "Enter your password to connect",
+      "passwordPlaceholder": "Your account password",
+      "passwordNote": "Your password is checked by your home instance and is never sent to {{host}}. That instance gets a unique credential generated for it alone.",
+      "submit": "Connect & Join",
+      "submitting": "Connecting..."
+    },
+    "fallback": {
+      "notice": "An account already exists on {{host}} and it does not accept the credential your home instance issued. Sign in with the password you set on that instance; it will be switched to the issued credential afterwards.",
+      "usernameLabel": "Username",
+      "usernamePlaceholder": "Your username on this instance",
+      "passwordLabel": "Password for this instance",
+      "passwordPlaceholder": "Password on the remote instance",
+      "submit": "Login & Join",
+      "submitting": "Logging in..."
+    }
+  },
+  "explore": {
+    "title": "Explore",
+    "searchPlaceholder": "Search spaces...",
+    "discoveryDisabled": "Space discovery is disabled by the instance administrator.",
+    "noMatches": "No spaces match your search.",
+    "empty": "No discoverable spaces yet.",
+    "allJoined": "You're in all discoverable spaces",
+    "joinedSection": "Joined",
+    "badges": {
+      "joined": "Joined",
+      "public": "Public",
+      "request": "Request"
+    },
+    "noDescription": "No description",
+    "memberCount_one": "{{count}} member",
+    "memberCount_other": "{{count}} members",
+    "viewSpace": "View Space",
+    "join": "Join Space",
+    "joining": "Joining...",
+    "requestPending": "Request Pending",
+    "requestMessagePlaceholder": "Why do you want to join? (optional)",
+    "sendRequest": "Send Request",
+    "sendingRequest": "Sending...",
+    "requestToJoin": "Request to Join",
+    "preview": {
+      "join": "Join",
+      "joining": "Joining…",
+      "pending": "Pending",
+      "request": "Request",
+      "sending": "Sending…"
+    }
+  },
+  "settings": {
+    "title": "Space Settings",
+    "backAria": "Back to space settings menu",
+    "nav": {
+      "general": "General",
+      "management": "Management",
+      "tabs": {
+        "overview": "Overview",
+        "discovery": "Discovery",
+        "members": "Members",
+        "roles": "Roles",
+        "bans": "Bans"
+      }
+    },
+    "dangerZone": "Danger Zone",
+    "discardChanges": "Discard",
+    "saved": "Settings saved",
+    "saveFailed": "Failed to save",
+    "overview": {
+      "identity": "Space Identity",
+      "iconLabel": "Space Icon",
+      "iconAlt": "Space icon",
+      "colorLabel": "Icon Color",
+      "bannerLabel": "Space Banner",
+      "bannerAlt": "Space banner",
+      "uploadBanner": "Upload banner (16:9)",
+      "removeBanner": "Remove banner",
+      "nameLabel": "Space Name",
+      "iconUploadFailed": "Failed to upload icon",
+      "bannerUploadFailed": "Failed to upload banner",
+      "cropIconTitle": "Crop Space Icon",
+      "cropBannerTitle": "Crop Space Banner",
+      "transfer": {
+        "description": "Transfer ownership to another member. You will become a regular member.",
+        "prompt": "Transfer ownership to <strong>{{name}}</strong>?",
+        "button": "Transfer Ownership",
+        "confirm": "Transfer",
+        "transferring": "Transferring...",
+        "success": "Ownership transferred to {{name}}",
+        "failed": "Failed to transfer ownership"
+      },
+      "delete": {
+        "description": "Permanently delete this space and all its data. This cannot be undone.",
+        "button": "Delete Space",
+        "confirmAgain": "Click again to confirm deletion",
+        "failed": "Failed to delete space"
+      }
+    },
+    "discovery": {
+      "title": "Discovery",
+      "disabledNotice": "Space discovery is disabled by the instance administrator. Changing visibility will have no effect until discovery is re-enabled.",
+      "visibility": {
+        "label": "Visibility",
+        "hint": "Control who can discover and join this space.",
+        "options": {
+          "private": {
+            "label": "Private",
+            "description": "Only people with an invite link can join"
+          },
+          "request": {
+            "label": "Request to Join",
+            "description": "Visible in Explore; people can request to join"
+          },
+          "public": {
+            "label": "Public",
+            "description": "Visible in Explore; anyone can join instantly"
+          }
+        }
+      },
+      "description": {
+        "label": "Description",
+        "hint": "A short summary shown on the Explore page.",
+        "placeholder": "A short description for the Explore page...",
+        "counter": "{{length}}/{{max}}"
+      },
+      "requests": {
+        "title": "Pending Join Requests",
+        "empty": "No pending join requests",
+        "accept": "Accept",
+        "decline": "Decline",
+        "actionFailed": "Action failed"
+      }
+    },
+    "members": {
+      "title": "Members",
+      "description": "Manage members of this space. Click a member to edit their roles.",
+      "listHeading": "Members ({{total}})",
+      "owner": "Owner",
+      "noRoles": "No roles",
+      "ban": "Ban",
+      "kick": "Kick",
+      "searchPlaceholder": "Search members...",
+      "noneFound": "No members found",
+      "confirm": {
+        "banTitle": "Ban {{name}}",
+        "kickTitle": "Kick {{name}}",
+        "banDescription": "They will be permanently banned from this space until unbanned.",
+        "kickDescription": "They can rejoin with an invite link."
+      },
+      "updateRolesFailed": "Failed to update roles",
+      "kickFailed": "Failed to kick member",
+      "banFailed": "Failed to ban member"
+    }
+  },
+  "bans": {
+    "title": "Bans",
+    "description": "Banned users cannot rejoin this space until unbanned.",
+    "loading": "Loading bans...",
+    "empty": "No banned users",
+    "listHeading": "Bans ({{total}})",
+    "bannedBy": "Banned by {{moderator}} on {{date}}",
+    "bannedByWithReason": "Banned by {{moderator}} on {{date}}: {{reason}}",
+    "unban": "Unban",
+    "loadFailed": "Failed to load bans",
+    "unbanFailed": "Failed to unban user"
+  },
+  "roles": {
+    "title": "Roles",
+    "create": "Create Role",
+    "creating": "Creating...",
+    "listHeading": "Roles",
+    "description": "Roles define what permissions members have. Higher roles take priority.",
+    "defaultName": "new role",
+    "copyName": "Copy of {{name}}",
+    "backToList": "Back to roles",
+    "created": "Role created. Customize it below.",
+    "identity": "Identity",
+    "nameLabel": "Role Name",
+    "colorLabel": "Role Color",
+    "nameEmpty": "Role name cannot be empty",
+    "nameDuplicate": "A role with this name already exists",
+    "groups": {
+      "general": "General",
+      "text": "Text",
+      "voice": "Voice"
+    },
+    "saved": "Role saved",
+    "copy": "Copy Role",
+    "copying": "Copying...",
+    "delete": "Delete Role",
+    "deleting": "Deleting...",
+    "confirmDelete": "Confirm?",
+    "createFailed": "Failed to create role",
+    "saveFailed": "Failed to save role",
+    "deleteFailed": "Failed to delete role",
+    "copyFailed": "Failed to copy role"
+  },
+  "permissions": {
+    "title": "Permissions",
+    "names": {
+      "administrator": "Administrator",
+      "viewChannel": "View Channels",
+      "manageChannels": "Manage Channels",
+      "manageRoles": "Manage Roles",
+      "manageSpace": "Manage Space",
+      "createInvite": "Create Invite",
+      "kickMembers": "Kick Members",
+      "banMembers": "Ban Members",
+      "sendMessages": "Send Messages",
+      "manageMessages": "Manage Messages",
+      "attachFiles": "Attach Files",
+      "readMessageHistory": "Read Message History",
+      "addReactions": "Add Reactions",
+      "connect": "Connect",
+      "speak": "Speak",
+      "muteMembers": "Mute Members",
+      "deafenMembers": "Deafen Members",
+      "moveMembers": "Move Members",
+      "stream": "Stream",
+      "disconnectMembers": "Disconnect Members"
+    },
+    "tristate": {
+      "deny": "Deny",
+      "neutral": "Neutral (inherit)",
+      "allow": "Allow"
+    },
+    "overrideCount_one": "{{count}} override",
+    "overrideCount_other": "{{count}} overrides",
+    "removeOverride": "Remove override",
+    "roleOverrides": "Role Overrides",
+    "memberOverrides": "Member Overrides",
+    "addRole": "Add Role",
+    "addMember": "Add Member",
+    "noMoreRoles": "No more roles to add",
+    "loadFailed": "Failed to load overrides",
+    "saveFailed": "Failed to save overrides",
+    "partialFailure_one": "{{count}} override failed to save",
+    "partialFailure_other": "{{count}} overrides failed to save"
+  },
+  "sidebar": {
+    "directMessages": "Direct Messages",
+    "addSpace": "Add a Space",
+    "joinSpace": "Join a Space",
+    "exploreSpaces": "Explore Spaces",
+    "folder": {
+      "tooltip_one": "Folder ({{count}})",
+      "tooltip_other": "Folder ({{count}})",
+      "spaceCount_one": "{{count}} space",
+      "spaceCount_other": "{{count}} spaces",
+      "unnamed": "Unnamed Folder",
+      "rename": "Rename Folder",
+      "color": "Folder Color",
+      "create": "Create Folder",
+      "moveTo": "Move to Folder",
+      "removeFrom": "Remove from Folder",
+      "ungroup": "Ungroup",
+      "colors": {
+        "mint": "Mint",
+        "peach": "Peach",
+        "lavender": "Lavender",
+        "sky": "Sky",
+        "amber": "Amber",
+        "rose": "Rose",
+        "coral": "Coral"
+      },
+      "created": "Folder created",
+      "moved": "Moved to folder",
+      "removed": "Removed from folder",
+      "ungrouped": "Folder ungrouped"
+    },
+    "space": {
+      "invite": "Invite People",
+      "inviteCopied": "Invite link copied to clipboard",
+      "inviteFailed": "Failed to generate invite",
+      "transferOwnership": "Transfer Ownership",
+      "settings": "Space Settings",
+      "leave": "Leave Space",
+      "reconnecting": "Reconnecting to {{instance}}…",
+      "remoteInstance": "remote instance",
+      "leaveConfirm": {
+        "title": "Leave Space",
+        "titleNamed": "Leave {{name}}",
+        "description": "Are you sure you want to leave this space? You'll need a new invite to rejoin.",
+        "confirm": "Leave"
+      },
+      "left": "Left space",
+      "leaveFailed": "Failed to leave space"
+    },
+    "dmList": {
+      "friends": "Friends",
+      "comingSoon": "Coming Soon",
+      "newDm": "New Direct Message",
+      "empty": "No conversations yet.",
+      "leaveGroup": "Leave Group",
+      "leaveGroupConfirm": {
+        "title": "Leave Group DM",
+        "description": "Are you sure you want to leave? You won't be able to rejoin unless someone adds you back.",
+        "confirm": "Leave"
+      }
+    },
+    "userArea": {
+      "inputDevice": "Input Device",
+      "outputDevice": "Output Device",
+      "inputDevices": "Input Devices",
+      "outputDevices": "Output Devices",
+      "inputVolume": "Input Volume",
+      "outputVolume": "Output Volume",
+      "systemDefault": "System Default",
+      "microphonePermission": "Microphone permission needed.",
+      "audioPermission": "Audio permission needed.",
+      "enable": "Enable",
+      "voiceSettings": "Voice Settings",
+      "settings": "Settings",
+      "mute": "Mute",
+      "unmute": "Unmute",
+      "deafen": "Deafen",
+      "undeafen": "Undeafen",
+      "spaceMuted": "Space Muted",
+      "spaceDeafened": "Space Deafened",
+      "permissionMuted": "Muted (No Speak Permission)"
+    }
+  },
+  "channels": {
+    "loading": "Loading channels",
+    "create": "Create Channel",
+    "createCategory": "Create Category",
+    "settings": "Channel Settings",
+    "categorySettings": "Category Settings",
+    "delete": "Delete Channel",
+    "deleteCategory": "Delete Category",
+    "emptyCategory": "No channels",
+    "empty": "No channels yet.",
+    "deleteConfirm": {
+      "title": "Delete Channel",
+      "description": "Are you sure? This will permanently delete the channel and all its messages."
+    },
+    "deleteCategoryConfirm": {
+      "title": "Delete Category",
+      "description": "Are you sure you want to delete this category? Channels in this category will be moved to uncategorized — no channels will be deleted."
+    },
+    "deleted": "Channel deleted",
+    "deleteFailed": "Failed to delete channel",
+    "categoryDeleted": "Category deleted",
+    "categoryDeleteFailed": "Failed to delete category"
+  },
+  "members": {
+    "title": "Members",
+    "titleWithCount_one": "Members — {{count}}",
+    "titleWithCount_other": "Members — {{count}}",
+    "loading": "Loading members",
+    "empty": "No members found",
+    "groups": {
+      "owner": "Owner",
+      "online": "Online",
+      "offline": "Offline"
+    }
+  },
+  "mobile": {
+    "addSheet": {
+      "createSpace": "Create Space",
+      "joinSpace": "Join Space",
+      "exploreSpaces": "Explore Spaces"
+    },
+    "muteUser": "Mute User"
+  },
+  "main": {
+    "selectChannel": "Select a channel",
+    "selectChannelHint": "Select a text or voice channel to get started",
+    "notificationSettings": "Notification Settings",
+    "voice": {
+      "connectionFailed": "Connection Failed",
+      "connected": "Connected",
+      "connecting": "Connecting…",
+      "participants_one": "{{count}} connected",
+      "participants_other": "{{count}} connected",
+      "inCall_one": "{{count}} in call",
+      "inCall_other": "{{count}} in call",
+      "empty": "No one is currently in this voice channel.",
+      "join": "Join Voice"
+    },
+    "dm": {
+      "fallbackName": "Direct Message",
+      "composerPlaceholder": "Message {{target}}",
+      "calling": "Calling {{name}}…",
+      "groupSettings": "Group Settings",
+      "openGroupSettings": "Open group settings",
+      "memberCount_one": "({{count}} member)",
+      "memberCount_other": "({{count}} members)",
+      "startVoiceCall": "Start Voice Call",
+      "startVideoCall": "Start Video Call",
+      "addFriends": "Add Friends to DM"
+    }
+  }
+}

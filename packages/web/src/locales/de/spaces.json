@@ -1,1 +1,543 @@
-{}
+{
+  "create": {
+    "title": "Space erstellen",
+    "icon": {
+      "upload": "Hochladen",
+      "previewAlt": "Vorschau des Symbols",
+      "colorLabel": "Symbolfarbe",
+      "cropTitle": "Space-Symbol zuschneiden",
+      "uploadFailed": "Symbol konnte nicht hochgeladen werden"
+    },
+    "colorNames": {
+      "mint": "Mint",
+      "sky": "Himmelblau",
+      "lavender": "Lavendel",
+      "coral": "Koralle",
+      "rose": "Rosé",
+      "teal": "Petrol",
+      "amber": "Bernstein"
+    },
+    "name": {
+      "label": "Name des Space",
+      "placeholder": "Mein großartiger Space",
+      "required": "Gib dem Space einen Namen"
+    },
+    "visibilityLabel": "Sichtbarkeit",
+    "description": {
+      "label": "Beschreibung",
+      "placeholder": "Eine kurze Beschreibung deines Space …",
+      "counter": "{{length}}/{{max}}"
+    },
+    "submit": "Erstellen",
+    "submitting": "Wird erstellt …"
+  },
+  "channel": {
+    "create": {
+      "title": "Kanal erstellen",
+      "typeLabel": "Kanaltyp",
+      "types": {
+        "text": {
+          "name": "Textkanal",
+          "description": "Nachrichten, Bilder und Dateien senden"
+        },
+        "voice": {
+          "name": "Sprachkanal",
+          "description": "Mit Sprache und Video zusammen abhängen"
+        }
+      },
+      "nameLabel": "Kanalname",
+      "namePlaceholder": "neuer-kanal",
+      "topicLabel": "Thema (optional)",
+      "topicPlaceholder": "Worum geht es in diesem Kanal?",
+      "categoryLabel": "Kategorie",
+      "noCategory": "Keine Kategorie",
+      "nameRequired": "Gib dem Kanal einen Namen",
+      "noSpaceSelected": "Kein Space ausgewählt",
+      "submit": "Kanal erstellen",
+      "submitting": "Wird erstellt …"
+    },
+    "settings": {
+      "title": "Kanaleinstellungen",
+      "channelLabel": "Kanal",
+      "private": {
+        "label": "Privater Kanal",
+        "description": "Nur ausgewählte Mitglieder und Rollen können diesen Kanal sehen.",
+        "note": "Dieser Kanal ist für Mitglieder ohne ausdrücklichen Zugriff verborgen. Wer die Administrator-Berechtigung hat oder den Space besitzt, sieht immer alle Kanäle."
+      },
+      "deleteButton": "Kanal löschen"
+    },
+    "delete": {
+      "title": "#{{name}} löschen?",
+      "description": "<strong>#{{name}}</strong> und alle Nachrichten darin werden endgültig gelöscht. Das lässt sich nicht rückgängig machen.",
+      "descriptionVoice": "<strong>#{{name}}</strong> und alle Nachrichten darin werden endgültig gelöscht. Wer sich gerade in diesem Sprachkanal befindet, wird getrennt. Das lässt sich nicht rückgängig machen.",
+      "confirm": "Kanal löschen"
+    }
+  },
+  "category": {
+    "create": {
+      "title": "Kategorie erstellen",
+      "nameLabel": "Kategoriename",
+      "namePlaceholder": "neue-kategorie",
+      "nameRequired": "Gib der Kategorie einen Namen",
+      "noSpaceSelected": "Kein Space ausgewählt",
+      "submit": "Kategorie erstellen",
+      "submitting": "Wird erstellt …"
+    },
+    "settings": {
+      "title": "Kategorieeinstellungen",
+      "categoryLabel": "Kategorie",
+      "private": {
+        "label": "Private Kategorie",
+        "description": "Nur ausgewählte Mitglieder und Rollen können die Kanäle in dieser Kategorie sehen.",
+        "note": "Diese Kategorie ist für Mitglieder ohne ausdrücklichen Zugriff verborgen. Die Kanäle darin erben diese Einschränkung, sofern sie sie nicht ausdrücklich überschreiben."
+      },
+      "deleteButton": "Kategorie löschen"
+    },
+    "delete": {
+      "title": "„{{name}}“ löschen?",
+      "description": "Die Kategorie <strong>{{name}}</strong> wird endgültig gelöscht. Die Kanäle darin werden auf die oberste Ebene verschoben. Das lässt sich nicht rückgängig machen.",
+      "confirm": "Kategorie löschen"
+    }
+  },
+  "invite": {
+    "title": "Freunde einladen",
+    "intro": "Schick die Einladung an Freunde oder teile einen Link.",
+    "requestOnly": {
+      "notice": "In diesen Space kommt man auf Anfrage: Wer beitreten will, bittet eine verwaltende Person um Freigabe. Deshalb gibt es hier keinen Einladungslink.",
+      "dismiss": "Verstanden"
+    },
+    "searchPlaceholder": "Freunde suchen …",
+    "noMatches": "Keine Freunde passen zu deiner Suche",
+    "noFriends": "Noch keine Freunde",
+    "alreadyMember": "Bereits im Space",
+    "removeSelected": "{{name}} entfernen",
+    "selectFriends": "Freunde auswählen",
+    "send_one": "{{count}} Einladung senden",
+    "send_other": "{{count}} Einladungen senden",
+    "sending": "Wird gesendet …",
+    "retryFailed": "Fehlgeschlagene erneut senden",
+    "status": {
+      "sent": "✓ Gesendet",
+      "failed": "✗ {{reason}}"
+    },
+    "shareLink": "Oder teile einen Link",
+    "generating": "Link wird erzeugt …",
+    "generateFailed": "Einladungslink konnte nicht erzeugt werden",
+    "failure": {
+      "inviteInvalid": "Der Einladungslink ist nicht mehr gültig",
+      "notAFriend": "Kein Freund",
+      "userNotFound": "Person nicht gefunden",
+      "alreadyMember": "Bereits Mitglied",
+      "upstream": "Einladung konnte nicht geprüft werden, versuch es noch einmal",
+      "cannotInviteSelf": "Du kannst dich nicht selbst einladen",
+      "invalidBody": "Ungültige Anfrage",
+      "invalidTarget": "Ungültiges Ziel",
+      "unreachable": "Deine Instanz ist nicht erreichbar",
+      "serverError": "Senden fehlgeschlagen (Serverfehler)"
+    }
+  },
+  "join": {
+    "title": "Einem Space beitreten",
+    "discoverIntro": "Entdecke Spaces, denen du beitreten kannst, oder sieh dir alle unter „Entdecken“ an.",
+    "discoverError": "Die Spaces zum Entdecken konnten gerade nicht geladen werden. Du kannst unten trotzdem mit einem Einladungscode beitreten.",
+    "discoverEmpty": "Noch keine Spaces zum Entdecken. Probier unten einen Einladungscode oder schau später noch einmal vorbei.",
+    "browseExplore": "Alle unter „Entdecken“ ansehen",
+    "discoveryOff": "Das Entdecken von Spaces ist auf dieser Instanz ausgeschaltet. Du kannst trotzdem mit einem Einladungscode beitreten.",
+    "inviteDivider": "Hast du einen Einladungscode?",
+    "invitePlaceholder": "z. B. abc123 oder https://instance.com/join/abc123",
+    "submit": "Space beitreten",
+    "submitting": "Trete bei …",
+    "connect": {
+      "intro": "Verbinde dich mit <host>{{host}}</host>, um diesem Space beizutreten.",
+      "passwordLabel": "Gib dein Passwort ein, um dich zu verbinden",
+      "passwordPlaceholder": "Passwort deines Kontos",
+      "passwordNote": "Dein Passwort prüft deine Heimatinstanz; es wird nie an {{host}} gesendet. Diese Instanz bekommt eigene Zugangsdaten, die nur für sie erzeugt werden.",
+      "submit": "Verbinden und beitreten",
+      "submitting": "Verbinde …"
+    },
+    "fallback": {
+      "notice": "Auf {{host}} gibt es bereits ein Konto, und es akzeptiert die Zugangsdaten deiner Heimatinstanz nicht. Melde dich mit dem Passwort an, das du auf dieser Instanz gesetzt hast; danach wird es auf die ausgestellten Zugangsdaten umgestellt.",
+      "usernameLabel": "Benutzername",
+      "usernamePlaceholder": "Dein Benutzername auf dieser Instanz",
+      "passwordLabel": "Passwort für diese Instanz",
+      "passwordPlaceholder": "Passwort auf der entfernten Instanz",
+      "submit": "Anmelden und beitreten",
+      "submitting": "Melde an …"
+    }
+  },
+  "explore": {
+    "title": "Entdecken",
+    "searchPlaceholder": "Spaces suchen …",
+    "discoveryDisabled": "Das Entdecken von Spaces wurde von der Instanzverwaltung ausgeschaltet.",
+    "noMatches": "Keine Spaces passen zu deiner Suche.",
+    "empty": "Noch keine Spaces zum Entdecken.",
+    "allJoined": "Du bist in allen Spaces, die es zu entdecken gibt",
+    "joinedSection": "Beigetreten",
+    "badges": {
+      "joined": "Beigetreten",
+      "public": "Öffentlich",
+      "request": "Auf Anfrage"
+    },
+    "noDescription": "Keine Beschreibung",
+    "memberCount_one": "{{count}} Mitglied",
+    "memberCount_other": "{{count}} Mitglieder",
+    "viewSpace": "Space öffnen",
+    "join": "Space beitreten",
+    "joining": "Trete bei …",
+    "requestPending": "Anfrage ausstehend",
+    "requestMessagePlaceholder": "Warum möchtest du beitreten? (optional)",
+    "sendRequest": "Anfrage senden",
+    "sendingRequest": "Wird gesendet …",
+    "requestToJoin": "Beitritt anfragen",
+    "preview": {
+      "join": "Beitreten",
+      "joining": "Trete bei …",
+      "pending": "Ausstehend",
+      "request": "Anfragen",
+      "sending": "Wird gesendet …"
+    }
+  },
+  "settings": {
+    "title": "Space-Einstellungen",
+    "backAria": "Zurück zum Menü der Space-Einstellungen",
+    "nav": {
+      "general": "Allgemein",
+      "management": "Verwaltung",
+      "tabs": {
+        "overview": "Übersicht",
+        "discovery": "Entdecken",
+        "members": "Mitglieder",
+        "roles": "Rollen",
+        "bans": "Sperren"
+      }
+    },
+    "dangerZone": "Gefahrenzone",
+    "discardChanges": "Verwerfen",
+    "saved": "Einstellungen gespeichert",
+    "saveFailed": "Speichern fehlgeschlagen",
+    "overview": {
+      "identity": "Erscheinungsbild",
+      "iconLabel": "Space-Symbol",
+      "iconAlt": "Space-Symbol",
+      "colorLabel": "Symbolfarbe",
+      "bannerLabel": "Space-Banner",
+      "bannerAlt": "Space-Banner",
+      "uploadBanner": "Banner hochladen (16:9)",
+      "removeBanner": "Banner entfernen",
+      "nameLabel": "Name des Space",
+      "iconUploadFailed": "Symbol konnte nicht hochgeladen werden",
+      "bannerUploadFailed": "Banner konnte nicht hochgeladen werden",
+      "cropIconTitle": "Space-Symbol zuschneiden",
+      "cropBannerTitle": "Space-Banner zuschneiden",
+      "transfer": {
+        "description": "Übertrage die Eigentümerschaft an ein anderes Mitglied. Du wirst dann ein normales Mitglied.",
+        "prompt": "Eigentümerschaft an <strong>{{name}}</strong> übertragen?",
+        "button": "Eigentümerschaft übertragen",
+        "confirm": "Übertragen",
+        "transferring": "Wird übertragen …",
+        "success": "Eigentümerschaft an {{name}} übertragen",
+        "failed": "Eigentümerschaft konnte nicht übertragen werden"
+      },
+      "delete": {
+        "description": "Löscht diesen Space und alle seine Daten endgültig. Das lässt sich nicht rückgängig machen.",
+        "button": "Space löschen",
+        "confirmAgain": "Noch einmal klicken, um das Löschen zu bestätigen",
+        "failed": "Space konnte nicht gelöscht werden"
+      }
+    },
+    "discovery": {
+      "title": "Entdecken",
+      "disabledNotice": "Das Entdecken von Spaces wurde von der Instanzverwaltung ausgeschaltet. Eine geänderte Sichtbarkeit wirkt sich erst aus, wenn es wieder eingeschaltet ist.",
+      "visibility": {
+        "label": "Sichtbarkeit",
+        "hint": "Lege fest, wer diesen Space finden und ihm beitreten kann.",
+        "options": {
+          "private": {
+            "label": "Privat",
+            "description": "Nur wer einen Einladungslink hat, kann beitreten"
+          },
+          "request": {
+            "label": "Beitritt auf Anfrage",
+            "description": "Unter „Entdecken“ sichtbar; Beitritt kann angefragt werden"
+          },
+          "public": {
+            "label": "Öffentlich",
+            "description": "Unter „Entdecken“ sichtbar; alle können sofort beitreten"
+          }
+        }
+      },
+      "description": {
+        "label": "Beschreibung",
+        "hint": "Eine kurze Zusammenfassung, die unter „Entdecken“ angezeigt wird.",
+        "placeholder": "Eine kurze Beschreibung für die Seite „Entdecken“ …",
+        "counter": "{{length}}/{{max}}"
+      },
+      "requests": {
+        "title": "Offene Beitrittsanfragen",
+        "empty": "Keine offenen Beitrittsanfragen",
+        "accept": "Annehmen",
+        "decline": "Ablehnen",
+        "actionFailed": "Aktion fehlgeschlagen"
+      }
+    },
+    "members": {
+      "title": "Mitglieder",
+      "description": "Verwalte die Mitglieder dieses Space. Klick auf ein Mitglied, um seine Rollen zu bearbeiten.",
+      "listHeading": "Mitglieder ({{total}})",
+      "owner": "Eigentümer",
+      "noRoles": "Keine Rollen",
+      "ban": "Sperren",
+      "kick": "Entfernen",
+      "searchPlaceholder": "Mitglieder suchen …",
+      "noneFound": "Keine Mitglieder gefunden",
+      "confirm": {
+        "banTitle": "{{name}} sperren",
+        "kickTitle": "{{name}} entfernen",
+        "banDescription": "Die Person wird dauerhaft aus diesem Space gesperrt, bis die Sperre aufgehoben wird.",
+        "kickDescription": "Die Person kann mit einem Einladungslink wieder beitreten."
+      },
+      "updateRolesFailed": "Rollen konnten nicht aktualisiert werden",
+      "kickFailed": "Mitglied konnte nicht entfernt werden",
+      "banFailed": "Mitglied konnte nicht gesperrt werden"
+    }
+  },
+  "bans": {
+    "title": "Sperren",
+    "description": "Gesperrte Personen können diesem Space erst wieder beitreten, wenn die Sperre aufgehoben wird.",
+    "loading": "Sperren werden geladen …",
+    "empty": "Keine gesperrten Personen",
+    "listHeading": "Sperren ({{total}})",
+    "bannedBy": "Gesperrt von {{moderator}} am {{date}}",
+    "bannedByWithReason": "Gesperrt von {{moderator}} am {{date}}: {{reason}}",
+    "unban": "Sperre aufheben",
+    "loadFailed": "Sperren konnten nicht geladen werden",
+    "unbanFailed": "Sperre konnte nicht aufgehoben werden"
+  },
+  "roles": {
+    "title": "Rollen",
+    "create": "Rolle erstellen",
+    "creating": "Wird erstellt …",
+    "listHeading": "Rollen",
+    "description": "Rollen legen fest, welche Berechtigungen Mitglieder haben. Höhere Rollen haben Vorrang.",
+    "defaultName": "neue Rolle",
+    "copyName": "Kopie von {{name}}",
+    "backToList": "Zurück zu den Rollen",
+    "created": "Rolle erstellt. Passe sie unten an.",
+    "identity": "Erscheinungsbild",
+    "nameLabel": "Rollenname",
+    "colorLabel": "Rollenfarbe",
+    "nameEmpty": "Der Rollenname darf nicht leer sein",
+    "nameDuplicate": "Eine Rolle mit diesem Namen gibt es bereits",
+    "groups": {
+      "general": "Allgemein",
+      "text": "Textkanäle",
+      "voice": "Sprachkanäle"
+    },
+    "saved": "Rolle gespeichert",
+    "copy": "Rolle kopieren",
+    "copying": "Wird kopiert …",
+    "delete": "Rolle löschen",
+    "deleting": "Wird gelöscht …",
+    "confirmDelete": "Bestätigen?",
+    "createFailed": "Rolle konnte nicht erstellt werden",
+    "saveFailed": "Rolle konnte nicht gespeichert werden",
+    "deleteFailed": "Rolle konnte nicht gelöscht werden",
+    "copyFailed": "Rolle konnte nicht kopiert werden"
+  },
+  "permissions": {
+    "title": "Berechtigungen",
+    "names": {
+      "administrator": "Admin",
+      "viewChannel": "Kanäle sehen",
+      "manageChannels": "Kanäle verwalten",
+      "manageRoles": "Rollen verwalten",
+      "manageSpace": "Space verwalten",
+      "createInvite": "Einladungen erstellen",
+      "kickMembers": "Mitglieder entfernen",
+      "banMembers": "Mitglieder sperren",
+      "sendMessages": "Nachrichten senden",
+      "manageMessages": "Nachrichten verwalten",
+      "attachFiles": "Dateien anhängen",
+      "readMessageHistory": "Nachrichtenverlauf lesen",
+      "addReactions": "Reaktionen hinzufügen",
+      "connect": "Verbinden",
+      "speak": "Sprechen",
+      "muteMembers": "Mitglieder stummschalten",
+      "deafenMembers": "Mitgliedern den Ton abschalten",
+      "moveMembers": "Mitglieder verschieben",
+      "stream": "Streamen",
+      "disconnectMembers": "Mitglieder trennen"
+    },
+    "tristate": {
+      "deny": "Verbieten",
+      "neutral": "Neutral (erben)",
+      "allow": "Erlauben"
+    },
+    "overrideCount_one": "{{count}} Überschreibung",
+    "overrideCount_other": "{{count}} Überschreibungen",
+    "removeOverride": "Überschreibung entfernen",
+    "roleOverrides": "Überschreibungen für Rollen",
+    "memberOverrides": "Überschreibungen für Mitglieder",
+    "addRole": "Rolle hinzufügen",
+    "addMember": "Mitglied hinzufügen",
+    "noMoreRoles": "Keine weiteren Rollen zum Hinzufügen",
+    "loadFailed": "Überschreibungen konnten nicht geladen werden",
+    "saveFailed": "Überschreibungen konnten nicht gespeichert werden",
+    "partialFailure_one": "{{count}} Überschreibung konnte nicht gespeichert werden",
+    "partialFailure_other": "{{count}} Überschreibungen konnten nicht gespeichert werden"
+  },
+  "sidebar": {
+    "directMessages": "Direktnachrichten",
+    "addSpace": "Space hinzufügen",
+    "joinSpace": "Space beitreten",
+    "exploreSpaces": "Spaces entdecken",
+    "folder": {
+      "tooltip_one": "Ordner ({{count}})",
+      "tooltip_other": "Ordner ({{count}})",
+      "spaceCount_one": "{{count}} Space",
+      "spaceCount_other": "{{count}} Spaces",
+      "unnamed": "Unbenannter Ordner",
+      "rename": "Ordner umbenennen",
+      "color": "Ordnerfarbe",
+      "create": "Ordner erstellen",
+      "moveTo": "In Ordner verschieben",
+      "removeFrom": "Aus Ordner entfernen",
+      "ungroup": "Ordner auflösen",
+      "colors": {
+        "mint": "Mint",
+        "peach": "Pfirsich",
+        "lavender": "Lavendel",
+        "sky": "Himmelblau",
+        "amber": "Bernstein",
+        "rose": "Rosé",
+        "coral": "Koralle"
+      },
+      "created": "Ordner erstellt",
+      "moved": "In Ordner verschoben",
+      "removed": "Aus Ordner entfernt",
+      "ungrouped": "Ordner aufgelöst"
+    },
+    "space": {
+      "invite": "Leute einladen",
+      "inviteCopied": "Einladungslink kopiert",
+      "inviteFailed": "Einladung konnte nicht erstellt werden",
+      "transferOwnership": "Besitz übertragen",
+      "settings": "Space-Einstellungen",
+      "leave": "Space verlassen",
+      "reconnecting": "Verbindung zu {{instance}} wird wiederhergestellt…",
+      "remoteInstance": "der Remote-Instanz",
+      "leaveConfirm": {
+        "title": "Space verlassen",
+        "titleNamed": "{{name}} verlassen",
+        "description": "Willst du diesen Space wirklich verlassen? Zum erneuten Beitreten brauchst du eine neue Einladung.",
+        "confirm": "Verlassen"
+      },
+      "left": "Du hast den Space verlassen",
+      "leaveFailed": "Space konnte nicht verlassen werden"
+    },
+    "dmList": {
+      "friends": "Freunde",
+      "comingSoon": "Demnächst",
+      "newDm": "Neue Direktnachricht",
+      "empty": "Noch keine Unterhaltungen.",
+      "leaveGroup": "Gruppe verlassen",
+      "leaveGroupConfirm": {
+        "title": "Gruppen-DM verlassen",
+        "description": "Willst du die Gruppe wirklich verlassen? Du kommst nur zurück, wenn dich jemand wieder hinzufügt.",
+        "confirm": "Verlassen"
+      }
+    },
+    "userArea": {
+      "inputDevice": "Eingabegerät",
+      "outputDevice": "Ausgabegerät",
+      "inputDevices": "Eingabegeräte",
+      "outputDevices": "Ausgabegeräte",
+      "inputVolume": "Eingabelautstärke",
+      "outputVolume": "Ausgabelautstärke",
+      "systemDefault": "Systemstandard",
+      "microphonePermission": "Mikrofonzugriff wird benötigt.",
+      "audioPermission": "Audiozugriff wird benötigt.",
+      "enable": "Erlauben",
+      "voiceSettings": "Spracheinstellungen",
+      "settings": "Einstellungen",
+      "mute": "Stummschalten",
+      "unmute": "Stummschaltung aufheben",
+      "deafen": "Ton aus",
+      "undeafen": "Ton an",
+      "spaceMuted": "Im Space stummgeschaltet",
+      "spaceDeafened": "Im Space ist der Ton ausgeschaltet",
+      "permissionMuted": "Stummgeschaltet (keine Sprechberechtigung)"
+    }
+  },
+  "channels": {
+    "loading": "Kanäle werden geladen",
+    "create": "Kanal erstellen",
+    "createCategory": "Kategorie erstellen",
+    "settings": "Kanaleinstellungen",
+    "categorySettings": "Kategorieeinstellungen",
+    "delete": "Kanal löschen",
+    "deleteCategory": "Kategorie löschen",
+    "emptyCategory": "Keine Kanäle",
+    "empty": "Noch keine Kanäle.",
+    "deleteConfirm": {
+      "title": "Kanal löschen",
+      "description": "Bist du sicher? Der Kanal und alle seine Nachrichten werden dauerhaft gelöscht."
+    },
+    "deleteCategoryConfirm": {
+      "title": "Kategorie löschen",
+      "description": "Willst du diese Kategorie wirklich löschen? Die Kanäle darin bleiben ohne Kategorie erhalten, es wird kein Kanal gelöscht."
+    },
+    "deleted": "Kanal gelöscht",
+    "deleteFailed": "Kanal konnte nicht gelöscht werden",
+    "categoryDeleted": "Kategorie gelöscht",
+    "categoryDeleteFailed": "Kategorie konnte nicht gelöscht werden"
+  },
+  "members": {
+    "title": "Mitglieder",
+    "titleWithCount_one": "Mitglieder — {{count}}",
+    "titleWithCount_other": "Mitglieder — {{count}}",
+    "loading": "Mitglieder werden geladen",
+    "empty": "Keine Mitglieder gefunden",
+    "groups": {
+      "owner": "Besitzer",
+      "online": "Online",
+      "offline": "Offline"
+    }
+  },
+  "mobile": {
+    "addSheet": {
+      "createSpace": "Space erstellen",
+      "joinSpace": "Space beitreten",
+      "exploreSpaces": "Spaces entdecken"
+    },
+    "muteUser": "Nutzer stummschalten"
+  },
+  "main": {
+    "selectChannel": "Wähle einen Kanal",
+    "selectChannelHint": "Wähle einen Text- oder Sprachkanal, um loszulegen",
+    "notificationSettings": "Benachrichtigungseinstellungen",
+    "voice": {
+      "connectionFailed": "Verbindung fehlgeschlagen",
+      "connected": "Verbunden",
+      "connecting": "Verbindung wird hergestellt…",
+      "participants_one": "{{count}} verbunden",
+      "participants_other": "{{count}} verbunden",
+      "inCall_one": "{{count}} im Anruf",
+      "inCall_other": "{{count}} im Anruf",
+      "empty": "Gerade ist niemand in diesem Sprachkanal.",
+      "join": "Beitreten"
+    },
+    "dm": {
+      "fallbackName": "Direktnachricht",
+      "composerPlaceholder": "Nachricht an {{target}}",
+      "calling": "{{name}} wird angerufen…",
+      "groupSettings": "Gruppeneinstellungen",
+      "openGroupSettings": "Gruppeneinstellungen öffnen",
+      "memberCount_one": "({{count}} Mitglied)",
+      "memberCount_other": "({{count}} Mitglieder)",
+      "startVoiceCall": "Sprachanruf starten",
+      "startVideoCall": "Videoanruf starten",
+      "addFriends": "Freunde zur DM hinzufügen"
+    }
+  }
+}
