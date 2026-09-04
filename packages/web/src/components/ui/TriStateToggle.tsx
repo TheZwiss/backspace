@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 
 export type TriState = 'allow' | 'neutral' | 'deny';
 
@@ -11,6 +12,7 @@ export function TriStateToggle({
   onChange: (v: TriState) => void;
   disabled?: boolean;
 }) {
+  const { t } = useTranslation(['spaces']);
   const btnClass = (v: TriState, active: boolean) => {
     const base = 'w-6 h-6 flex items-center justify-center rounded-full transition-colors text-xs font-bold';
     if (disabled) return `${base} cursor-not-allowed opacity-40`;
@@ -27,21 +29,21 @@ export function TriStateToggle({
       <button
         className={btnClass('deny', value === 'deny')}
         onClick={() => !disabled && onChange(value === 'deny' ? 'neutral' : 'deny')}
-        title="Deny"
+        title={t('spaces:permissions.tristate.deny')}
       >
         ✕
       </button>
       <button
         className={btnClass('neutral', value === 'neutral')}
         onClick={() => !disabled && onChange('neutral')}
-        title="Neutral (inherit)"
+        title={t('spaces:permissions.tristate.neutral')}
       >
         /
       </button>
       <button
         className={btnClass('allow', value === 'allow')}
         onClick={() => !disabled && onChange(value === 'allow' ? 'neutral' : 'allow')}
-        title="Allow"
+        title={t('spaces:permissions.tristate.allow')}
       >
         ✓
       </button>
