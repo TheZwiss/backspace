@@ -89,8 +89,8 @@ export function Void({ ids }: { ids: SceneIds }) {
         <rect width="480" height="320" fill={P.void} />
       </g>
       <g data-layer="nebula">
-        <rect width="480" height="320" fill={P.nebulaA} opacity="0.16" filter={`url(#${ids.nebula})`} mask={`url(#${ids.maskA})`} />
-        <rect width="480" height="320" fill={P.nebulaB} opacity="0.11" filter={`url(#${ids.nebula})`} mask={`url(#${ids.maskB})`} />
+        <rect width="480" height="320" fill={P.nebulaA} opacity="0.22" filter={`url(#${ids.nebula})`} mask={`url(#${ids.maskA})`} />
+        <rect width="480" height="320" fill={P.nebulaB} opacity="0.15" filter={`url(#${ids.nebula})`} mask={`url(#${ids.maskB})`} />
       </g>
       <g data-layer="stars">
         <g data-part="far" className="hs-far" opacity="0.55">

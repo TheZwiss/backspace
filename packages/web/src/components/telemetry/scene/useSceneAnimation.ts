@@ -61,7 +61,7 @@ export function useSceneAnimation(svgRef: React.RefObject<SVGSVGElement | null>,
       play(part('lit'), [{ opacity: 0 }, { opacity: 1 }], { duration: 300, easing: EASING.softOut, fill: 'forwards' });
       play(
         part('glow'),
-        [{ opacity: 0.5, transform: 'scale(1)' }, { opacity: 1, transform: 'scale(1.3)' }],
+        [{ opacity: 0.4, transform: 'scale(1)' }, { opacity: 0.85, transform: 'scale(1.2)' }],
         { duration: 300, easing: EASING.softOut, fill: 'forwards' },
       );
       play(
@@ -76,7 +76,7 @@ export function useSceneAnimation(svgRef: React.RefObject<SVGSVGElement | null>,
       parts('pulse').forEach((star, i) => {
         play(
           star,
-          [{ transform: 'scale(1)' }, { transform: 'scale(2.2)', opacity: 1, offset: 0.5 }, { transform: 'scale(1)' }],
+          [{ transform: 'scale(1)' }, { transform: 'scale(1.8)', opacity: 1, offset: 0.5 }, { transform: 'scale(1)' }],
           { duration: 400, delay: 600 + i * 40, easing: EASING.gentle },
         );
       });
@@ -113,7 +113,7 @@ export function useSceneAnimation(svgRef: React.RefObject<SVGSVGElement | null>,
       if (mood === 'happy') {
         play(part('lit'), [{ opacity: 0 }, { opacity: 1 }], fade);
         play(part('ray'), [{ opacity: 0 }, { opacity: BEAM_OPACITY }], fade);
-        play(part('glow'), [{ opacity: 0.5 }, { opacity: 1 }], fade);
+        play(part('glow'), [{ opacity: 0.4 }, { opacity: 0.85 }], fade);
       } else if (mood === 'farewell') {
         play(part('arm'), [{ opacity: 1 }, { opacity: 0 }], fade);
         play(part('arm-rest'), [{ opacity: 0 }, { opacity: 1 }], fade);

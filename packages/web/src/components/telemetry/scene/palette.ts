@@ -13,7 +13,7 @@ export const SCENE_PALETTE = {
   // --accent-mint, the lit side of the hull.
   hull: '#86efac',
   // --accent-lavender pulled toward --accent-primary: the shaded rim, fins and porthole ring.
-  hullShade: '#9d8ef4',
+  hullShade: '#b3a7f3',
   // --accent-amber toned down, the cabin light in idle.
   window: '#f2c76a',
   // --accent-amber lifted, the cabin when it brightens and the pilot's eyes.
@@ -21,7 +21,7 @@ export const SCENE_PALETTE = {
   // --bg-channel warmed, the pilot silhouette.
   pilot: '#1c1826',
   // Between window and windowLit, so the beam reads as the window's own light.
-  beam: '#fbe4a6',
+  beam: '#fdf0c8',
 } as const;
 
 export type ScenePalette = typeof SCENE_PALETTE;

@@ -25,7 +25,19 @@ export interface SceneIds {
   clip: string;
 }
 
-const ID_KEYS: readonly (keyof SceneIds)[] = ['hull', 'cabin', 'beam', 'glow', 'nebula', 'fade', 'maskA', 'maskB', 'clip'];
+function makeIds(uid: string): SceneIds {
+  return {
+    hull: `hs-${uid}-hull`,
+    cabin: `hs-${uid}-cabin`,
+    beam: `hs-${uid}-beam`,
+    glow: `hs-${uid}-glow`,
+    nebula: `hs-${uid}-nebula`,
+    fade: `hs-${uid}-fade`,
+    maskA: `hs-${uid}-maskA`,
+    maskB: `hs-${uid}-maskB`,
+    clip: `hs-${uid}-clip`,
+  };
+}
 
 // Ambient loops and the reduced-motion still frames. Only transform and
 // opacity move. The choreography of happy and farewell lives in the hook.
@@ -36,7 +48,7 @@ const STYLE = `
 @keyframes hs-far{to{transform:translateX(-12px)}}
 @keyframes hs-near{to{transform:translateX(-20px)}}
 @keyframes hs-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
-@keyframes hs-wave{0%,100%{transform:rotate(-14deg)}50%{transform:rotate(18deg)}}
+@keyframes hs-wave{0%,100%{transform:rotate(-10deg)}50%{transform:rotate(16deg)}}
 .hs-root .hs-tw0{animation:hs-tw0 3.1s ease-in-out infinite}
 .hs-root .hs-tw1{animation:hs-tw1 4.7s ease-in-out infinite}
 .hs-root .hs-tw2{animation:hs-tw2 6.3s ease-in-out infinite}
@@ -51,15 +63,14 @@ const STYLE = `
 @media (prefers-reduced-motion:reduce){
 .hs-root .hs-tw0,.hs-root .hs-tw1,.hs-root .hs-tw2,.hs-root .hs-far,.hs-root .hs-near,.hs-root .hs-craft,.hs-root .hs-arm{animation:none}
 .hs-root[data-mood=happy] .hs-ray{transform:scaleX(1);opacity:.6}
-.hs-root[data-mood=happy] [data-part=lit]{opacity:1}
-.hs-root[data-mood=happy] .hs-glow{opacity:1;transform:scale(1.3)}
+.hs-root[data-mood=happy] .hs-lit{opacity:1}
+.hs-root[data-mood=happy] .hs-glow{opacity:.85;transform:scale(1.2)}
 .hs-root[data-mood=farewell] .hs-arm{opacity:0}
 .hs-root[data-mood=farewell] .hs-rest{opacity:1}
 }`;
 
 export function HelloScene({ mood, className }: HelloSceneProps) {
-  const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
-  const ids = Object.fromEntries(ID_KEYS.map((key) => [key, `hs-${uid}-${key}`])) as Record<keyof SceneIds, string>;
+  const ids = makeIds(useId().replace(/[^a-zA-Z0-9]/g, ''));
   const svgRef = useRef<SVGSVGElement>(null);
   useSceneAnimation(svgRef, mood);
 

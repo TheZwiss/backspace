@@ -73,6 +73,7 @@ describe('HelloScene', () => {
       expect(svg.querySelector(`[data-part="${part}"]`), part).not.toBeNull();
     }
     expect(svg.querySelectorAll('text').length).toBe(0);
+    expect(svg.querySelectorAll('*').length).toBeLessThan(200);
     const styleText = svg.querySelector('style')?.textContent ?? '';
     expect(svg.textContent).toBe(styleText);
   });
