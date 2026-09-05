@@ -892,7 +892,64 @@ interface Activity {
 
 ### Overview
 
-Captures global keyboard and mouse events via `uiohook-napi` (OS-level input hook) and matches them against user-configured keybinds. Works even when the Backspace window is not focused.
+Windows, macOS and Linux X11 capture global keyboard and mouse events via
+`uiohook-napi`. Linux Wayland sessions (including an XWayland app window inside
+Wayland) instead use the desktop's `org.freedesktop.portal.GlobalShortcuts`
+interface. An X11 hook cannot observe input to other native Wayland clients.
+
+### Wayland portal
+
+`globalShortcutsPortal.ts` uses a dedicated session-bus connection, registers the
+desktop-file identity `io.github.TheZwiss.backspace` through the host Registry
+when outside Flatpak, and creates a GlobalShortcuts session. Older portals
+without the optional Registry remain supported. Flatpak supplies its own identity;
+no additional bus permissions or unrestricted input-device access are requested.
+
+The desktop is the sole source of truth for Wayland assignments. The application
+registers a stable catalogue of all six voice actions, without preferred triggers
+or dependence on browser/X11 keybind storage. At startup, CreateSession followed
+by ListShortcuts discovers prior system registration; existing assignments are
+rebound for the new session. With no prior registration, startup remains idle and
+does not prompt. Opening Settings → Keybinds initiates registration of all actions.
+After cancellation, only the explicit retry button can request consent again.
+
+On Wayland the settings panel has no local recorder, edit or delete controls.
+It directs users to the system's Backspace shortcut settings and shows a read-only
+list of actual assignments. Closing a session unregisters its runtime listeners;
+it does **not** delete the desktop's persistent shortcut configuration. Change or
+remove those assignments in the desktop settings instead.
+
+Bindings require system consent and a portal backend implementing GlobalShortcuts.
+`Activated` and `Deactivated` both reach the renderer so push-to-talk works while
+unfocused. Electron's press-only `globalShortcut` callback is insufficient here.
+Only signals from the resolved portal owner and current session are accepted.
+Repeated activations are suppressed; stop, revoked bindings, session closure,
+portal restart and transport errors release held actions. Portal failure exposes
+a manual retry in settings (no prompt loop). Local bindings are disabled on
+Wayland even when the portal is unavailable, so a removed system assignment cannot
+unexpectedly continue to work through a stale local binding.
+
+One portal session lasts for the app run; local edits, empty configuration and
+renderer unmount do not recreate it. BindShortcuts is called at most once per
+session. Request responses are subscribed before method calls to handle early
+replies; method and consent waits are bounded and cancelled on shutdown.
+
+Optional preload methods `getKeybindPortalStatus`, `onKeybindPortalStatus` and
+`retryKeybindPortal` report idle/pending/ready/unavailable plus actual assignments.
+ShortcutsChanged triggers a full ListShortcuts refresh instead of treating the
+possibly partial signal as the whole configuration. Window focus and reading
+status also refresh the list, covering changes made in system settings. Removed
+or reassigned held actions are released. PTT mode follows the system's active PTT
+assignment, not local storage; unchanged status refreshes do not re-mute a held PTT.
+Portal events bypass the legacy 100 ms duplicate filter. The browser/non-Wayland
+fallback releases its own held actions on window blur and cleanup.
+
+The MIT-licensed `dbus-next` dependency provides D-Bus message transport without a
+helper executable. Its optional obsolete `usocket` native addon is excluded (no
+file-descriptor transfer is needed), and `xml2js` is overridden to a patched
+version. The normal filesystem session socket works through Node's built-in net
+transport; legacy abstract sockets requiring the optional addon report the portal
+as unavailable. Regenerate Flatpak's offline sources after lockfile changes.
 
 ### Native Keycode to DOM Code Mapping
 

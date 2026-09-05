@@ -3,6 +3,7 @@ import { useTranslation, Trans } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { useKeybindStore, BINDABLE_ACTIONS, Keybind } from '../../../stores/keybindStore';
 import { isElectron, isElectronMac } from '../../../platform/platform';
+import { useKeybindPortalStatus } from '../../../hooks/useKeybindPortalStatus';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -135,6 +136,12 @@ interface ConflictInfo {
 export function KeybindsPanel() {
   const { t } = useTranslation(['settings', 'common']);
   const { keybinds, setKeybind, removeKeybind, findConflict } = useKeybindStore();
+  const portal = useKeybindPortalStatus();
+  useEffect(() => {
+    // Only opening this panel initiates first-time registration. A cancelled
+    // request becomes unavailable and requires an explicit retry, not a loop.
+    if (portal?.state === 'idle') window.backspace?.retryKeybindPortal?.();
+  }, [portal?.state]);
 
   const [recordingActionId, setRecordingActionId] = useState<string | null>(null);
   const [recordingDisplay, setRecordingDisplay] = useState('');
@@ -221,7 +228,7 @@ export function KeybindsPanel() {
 
   // --- Recording event listeners ---
   useEffect(() => {
-    if (!recordingActionId) return;
+    if (portal || !recordingActionId) return;
 
     function onKeyDown(e: KeyboardEvent) {
       e.preventDefault();
@@ -289,7 +296,7 @@ export function KeybindsPanel() {
       window.removeEventListener('mousedown', onMouseDown, true);
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     };
-  }, [recordingActionId, cancelRecording, finalizeRecording, t]);
+  }, [recordingActionId, cancelRecording, finalizeRecording, t, portal]);
 
   // --- Conflict resolution ---
   const confirmConflict = () => {
@@ -307,6 +314,36 @@ export function KeybindsPanel() {
     ? BINDABLE_ACTIONS.find((a) => a.id === conflict.existingKeybind.actionId)
     : undefined;
   const conflictActionLabel = conflictAction ? t(`keybinds.action.${conflictAction.id}`) : '';
+
+  if (portal) {
+    return (
+      <div className="space-y-5">
+        <h2 className="text-lg font-semibold text-txt-primary mb-6">{t('keybinds.title')}</h2>
+        <div className="rounded-lg bg-surface-elevated p-3.5 text-sm text-txt-secondary" role="status">
+          <p>{t('keybinds.portal.description')}</p>
+          <p className="mt-2">{t(`keybinds.portal.${portal.state}`)}</p>
+          {portal.state === 'unavailable' && (
+            <button type="button" onClick={() => window.backspace?.retryKeybindPortal?.()}
+              className="mt-3 rounded px-3 py-1.5 bg-white/[0.06] text-txt-primary hover:bg-white/[0.1]">
+              {t('keybinds.portal.retry')}
+            </button>
+          )}
+        </div>
+        <dl className="space-y-1.5">
+          {BINDABLE_ACTIONS.map((action) => (
+            <div key={action.id} className="rounded-lg bg-surface-primary px-4 py-3">
+              <dt className="text-sm text-txt-primary">{t(`keybinds.action.${action.id}`)}</dt>
+              <dd className="text-xs text-txt-tertiary mt-1">
+                {portal.shortcuts[action.id]
+                  ? t('keybinds.portal.assigned', { shortcut: portal.shortcuts[action.id] })
+                  : t('keybinds.portal.notAssigned')}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">

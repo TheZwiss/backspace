@@ -1,5 +1,7 @@
-import { uIOhook, UiohookKeyboardEvent, UiohookMouseEvent } from 'uiohook-napi';
+import type { UiohookKeyboardEvent, UiohookMouseEvent } from 'uiohook-napi';
 import { BrowserWindow, systemPreferences } from 'electron';
+import { GlobalShortcutsPortal } from './globalShortcutsPortal';
+import { isWayland, PortalKeybindStatus } from './portalShortcut';
 
 // ---------------------------------------------------------------------------
 // Uiohook keycode → DOM event.code mapping
@@ -75,6 +77,30 @@ export class KeybindManager {
   private activeActions = new Set<string>();
   private window: BrowserWindow | null = null;
   private started = false;
+  private hook?: typeof import('uiohook-napi').uIOhook;
+  private portal?: GlobalShortcutsPortal;
+  private portalStatus: PortalKeybindStatus | null = isWayland() ? { state: 'idle', shortcuts: {} } : null;
+
+  getPortalStatus(): PortalKeybindStatus | null { return this.portalStatus; }
+
+  retryPortal(): void {
+    if (this.portalStatus && ['idle', 'unavailable'].includes(this.portalStatus.state)) this.startPortal(true);
+  }
+
+  refreshPortal(): void { void this.portal?.refresh(); }
+
+  private sendPortalStatus = (status: PortalKeybindStatus): void => {
+    this.portalStatus = status;
+    if (this.window && !this.window.isDestroyed()) this.window.webContents.send('keybind-portal-status', status);
+  };
+
+  private startPortal(interactive = false): void {
+    this.portal?.stop();
+    this.portal = undefined;
+    this.sendPortalStatus({ state: 'pending', shortcuts: {} });
+    this.portal = new GlobalShortcutsPortal((id, pressed) => this.sendAction(id, pressed), this.sendPortalStatus);
+    void this.portal.start(interactive);
+  }
 
   constructor() {
     this.onKeyDown = this.onKeyDown.bind(this);
@@ -85,9 +111,20 @@ export class KeybindManager {
 
   setWindow(win: BrowserWindow): void {
     this.window = win;
+    if (this.portalStatus) {
+      if (!this.portal) this.startPortal();
+      win.on('focus', () => this.refreshPortal());
+    }
   }
 
   updateKeybinds(keybinds: KeybindConfig[]): void {
+    if (this.portalStatus) {
+      // Local settings belong to the browser/X11 backend, never to the portal.
+      // In particular renderer unmount or clearing local storage must not close
+      // a Wayland session or pretend to delete persistent system assignments.
+      this.sendPortalStatus(this.portalStatus);
+      return;
+    }
     this.keybinds = keybinds;
     for (const actionId of this.activeActions) {
       if (!keybinds.some((kb) => kb.actionId === actionId)) {
@@ -110,29 +147,44 @@ export class KeybindManager {
       this.sendAccessibilityStatus(trusted);
       if (!trusted) return;
     }
-    uIOhook.on('keydown', this.onKeyDown);
-    uIOhook.on('keyup', this.onKeyUp);
-    uIOhook.on('mousedown', this.onMouseDown);
-    uIOhook.on('mouseup', this.onMouseUp);
     try {
+      // Do not load the X11 native library at all on the Wayland portal path.
+      const { uIOhook } = require('uiohook-napi') as typeof import('uiohook-napi');
+      this.hook = uIOhook;
+      uIOhook.on('keydown', this.onKeyDown);
+      uIOhook.on('keyup', this.onKeyUp);
+      uIOhook.on('mousedown', this.onMouseDown);
+      uIOhook.on('mouseup', this.onMouseUp);
       uIOhook.start();
       this.started = true;
     } catch (err) {
+      this.removeHookListeners();
       console.error('[KeybindManager] Failed to start uiohook:', err);
       this.window?.webContents.send('keybind-hook-error', { message: String(err) });
     }
   }
 
   stop(): void {
+    this.portal?.stop();
+    this.portal = undefined;
+    this.keybinds = [];
+    if (this.portalStatus) this.sendPortalStatus({ state: 'idle', shortcuts: {} });
     if (!this.started) return;
     for (const actionId of this.activeActions) {
       this.sendAction(actionId, false);
     }
     this.activeActions.clear();
     this.pressedKeys.clear();
-    uIOhook.removeAllListeners();
-    try { uIOhook.stop(); } catch { /* ignore */ }
+    this.removeHookListeners();
+    try { this.hook?.stop(); } catch { /* ignore */ }
     this.started = false;
+  }
+
+  private removeHookListeners(): void {
+    this.hook?.removeListener('keydown', this.onKeyDown);
+    this.hook?.removeListener('keyup', this.onKeyUp);
+    this.hook?.removeListener('mousedown', this.onMouseDown);
+    this.hook?.removeListener('mouseup', this.onMouseUp);
   }
 
   checkAccessibility(): boolean {

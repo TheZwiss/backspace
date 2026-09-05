@@ -5,6 +5,7 @@ import { isElectron } from '../platform/platform';
 import { handleMuteAction, handleDeafenAction, handleCameraAction, handleScreenShareAction, handleDisconnectAction } from '../utils/voiceActions';
 import { broadcastVoiceStatus } from '../utils/voice';
 import { getChannelOrigin, getMyUserIdForOrigin, useSpaceStore } from '../stores/spaceStore';
+import { useKeybindPortalStatus } from './useKeybindPortalStatus';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -31,10 +32,10 @@ function getSpaceEnforcementState(): { isSpaceMuted: boolean; isSpaceDeafened: b
 const lastDispatch: Record<string, number> = {};
 
 /** Dispatch a keybind action to the appropriate voice handler */
-function dispatchKeybindAction(actionId: string, pressed: boolean): void {
+function dispatchKeybindAction(actionId: string, pressed: boolean, deduplicate = true): void {
   const now = Date.now();
   const key = `${actionId}:${pressed}`;
-  if (now - (lastDispatch[key] || 0) < 100) return;
+  if (deduplicate && now - (lastDispatch[key] || 0) < 100) return;
   lastDispatch[key] = now;
 
   const voice = useVoiceStore.getState();
@@ -86,9 +87,10 @@ function isInputElement(target: EventTarget | null): boolean {
 
 type WebCleanup = (() => void) | null;
 
-function setupWebFallback(keybindsRef: React.MutableRefObject<Keybind[]>): WebCleanup {
+function setupWebFallback(keybindsRef: React.MutableRefObject<Keybind[]>, deduplicate: boolean): WebCleanup {
   const pressedKeys = new Set<number>();
   const activeActions = new Set<string>();
+  const dispatch = (id: string, pressed: boolean) => dispatchKeybindAction(id, pressed, deduplicate);
 
   function browserCodeToUiohook(code: string): number {
     // djb2 hash — must match codeToNumeric() in KeybindsPanel.tsx
@@ -106,7 +108,7 @@ function setupWebFallback(keybindsRef: React.MutableRefObject<Keybind[]>): WebCl
       if (!kb.mouseButton && keysMatch && kb.keys.length > 0) {
         if (isDown && !activeActions.has(kb.actionId)) {
           activeActions.add(kb.actionId);
-          dispatchKeybindAction(kb.actionId, true);
+          dispatch(kb.actionId, true);
         }
       }
     }
@@ -116,7 +118,7 @@ function setupWebFallback(keybindsRef: React.MutableRefObject<Keybind[]>): WebCl
         const kb = keybindsRef.current.find((k) => k.actionId === actionId);
         if (kb && !kb.keys.every((k) => pressedKeys.has(k))) {
           activeActions.delete(actionId);
-          dispatchKeybindAction(actionId, false);
+          dispatch(actionId, false);
         }
       }
     }
@@ -149,7 +151,7 @@ function setupWebFallback(keybindsRef: React.MutableRefObject<Keybind[]>): WebCl
         const keysMatch = kb.keys.length === 0 || kb.keys.every((k) => pressedKeys.has(k));
         if (keysMatch && !activeActions.has(kb.actionId)) {
           activeActions.add(kb.actionId);
-          dispatchKeybindAction(kb.actionId, true);
+          dispatch(kb.actionId, true);
         }
       }
     }
@@ -163,7 +165,7 @@ function setupWebFallback(keybindsRef: React.MutableRefObject<Keybind[]>): WebCl
       const kb = keybindsRef.current.find((k) => k.actionId === actionId);
       if (kb && kb.mouseButton === uiButton) {
         activeActions.delete(actionId);
-        dispatchKeybindAction(actionId, false);
+        dispatch(actionId, false);
       }
     }
   }
@@ -172,8 +174,16 @@ function setupWebFallback(keybindsRef: React.MutableRefObject<Keybind[]>): WebCl
   window.addEventListener('keyup', onKeyUp, true);
   window.addEventListener('mousedown', onMouseDown, true);
   window.addEventListener('mouseup', onMouseUp, true);
+  const releaseAll = () => {
+    for (const id of activeActions) dispatchKeybindAction(id, false, false);
+    activeActions.clear();
+    pressedKeys.clear();
+  };
+  window.addEventListener('blur', releaseAll);
 
   return () => {
+    releaseAll();
+    window.removeEventListener('blur', releaseAll);
     window.removeEventListener('keydown', onKeyDown, true);
     window.removeEventListener('keyup', onKeyUp, true);
     window.removeEventListener('mousedown', onMouseDown, true);
@@ -188,12 +198,17 @@ function setupWebFallback(keybindsRef: React.MutableRefObject<Keybind[]>): WebCl
 export function useKeybinds(): void {
   const keybinds = useKeybindStore((s) => s.keybinds);
   const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
+  const portalStatus = useKeybindPortalStatus();
+  const portalRef = useRef(portalStatus);
+  portalRef.current = portalStatus;
   const keybindsRef = useRef(keybinds);
   keybindsRef.current = keybinds;
+  const hasPtt = portalStatus
+    ? Object.hasOwn(portalStatus.shortcuts, 'pushToTalk')
+    : keybinds.some((kb) => kb.actionId === 'pushToTalk');
 
   // --- PTT activation lifecycle ---
   useEffect(() => {
-    const hasPtt = keybinds.some((kb) => kb.actionId === 'pushToTalk');
     const inVoice = !!currentVoiceChannelId;
     const voice = useVoiceStore.getState();
 
@@ -204,14 +219,25 @@ export function useKeybinds(): void {
     } else if (voice.pttActive) {
       voice.setPttActive(false);
     }
-  }, [keybinds, currentVoiceChannelId]);
+  }, [hasPtt, currentVoiceChannelId]);
 
-  // --- Electron IPC bridge (global shortcuts via uiohook in main process) ---
+  // Subscribe before syncing. Portal actions have a single source, so rapid PTT
+  // press/release cycles must not pass through the legacy hook's time-based dedup.
   useEffect(() => {
-    if (keybinds.length === 0) return;
     if (!isElectron()) return;
     const api = window.backspace;
     if (!api?.syncKeybinds || !api?.onKeybindAction) return;
+
+    const cleanup = api.onKeybindAction((action) => {
+      dispatchKeybindAction(action.actionId, action.pressed, !portalRef.current);
+    });
+    return () => { api.syncKeybinds([]); cleanup(); };
+  }, []);
+
+  useEffect(() => {
+    if (!isElectron()) return;
+    const api = window.backspace;
+    if (!api?.syncKeybinds) return;
 
     // Sync keybind config to main process — it registers OS-level hooks
     api.syncKeybinds(keybinds.map((kb) => ({
@@ -220,23 +246,16 @@ export function useKeybinds(): void {
       mouseButton: kb.mouseButton,
     })));
 
-    // Listen for matched actions from main process
-    const cleanup = api.onKeybindAction((action) => {
-      dispatchKeybindAction(action.actionId, action.pressed);
-    });
-
-    return cleanup;
   }, [keybinds]);
 
-  // --- Web fallback: always active as safety net ---
+  // --- Local backend: browser and non-Wayland desktop only ---
   // On web: this is the only keybind path (works when tab is focused).
   // On Electron: this provides in-app keybinds even if the OS-level hook
-  // fails to start (e.g. macOS Accessibility permission denied). When the
-  // global hook IS working, both fire but dispatchKeybindAction is
-  // idempotent for toggles (no-op if not in voice / already handled).
+  // fails to start (e.g. macOS Accessibility permission denied). On Wayland,
+  // system assignments are the only source, even when the portal is unavailable.
   useEffect(() => {
-    if (keybinds.length === 0) return;
-    const cleanup = setupWebFallback(keybindsRef);
+    if (portalStatus || keybinds.length === 0) return;
+    const cleanup = setupWebFallback(keybindsRef, isElectron() && !portalStatus);
     return cleanup ?? undefined;
-  }, [keybinds]);
+  }, [keybinds, portalStatus]);
 }

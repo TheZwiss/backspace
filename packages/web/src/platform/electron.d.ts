@@ -139,6 +139,9 @@ interface BackspaceElectronAPI {
   getCurrentActivity: () => Promise<unknown>;
 
   // Keybind support
+  getKeybindPortalStatus?: () => Promise<KeybindPortalStatus | null>;
+  onKeybindPortalStatus?: (callback: (status: KeybindPortalStatus) => void) => () => void;
+  retryKeybindPortal?: () => void;
   syncKeybinds: (keybinds: Array<{ actionId: string; keys: number[]; mouseButton?: number }>) => void;
   onKeybindAction: (callback: (action: { actionId: string; pressed: boolean }) => void) => (() => void);
   onAccessibilityStatus: (callback: (status: { trusted: boolean }) => void) => (() => void);
@@ -154,4 +157,9 @@ interface BackspaceElectronAPI {
 
 interface Window {
   backspace?: BackspaceElectronAPI;
+}
+
+interface KeybindPortalStatus {
+  state: 'idle' | 'pending' | 'ready' | 'unavailable';
+  shortcuts: Record<string, string>;
 }

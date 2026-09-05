@@ -115,6 +115,13 @@ contextBridge.exposeInMainWorld('backspace', {
   getCurrentActivity: () => ipcRenderer.invoke('get-current-activity'),
 
   // Keybind support
+  getKeybindPortalStatus: () => ipcRenderer.invoke('keybind-portal-status'),
+  retryKeybindPortal: () => ipcRenderer.send('keybind-portal-retry'),
+  onKeybindPortalStatus: (callback: (status: import('./portalShortcut').PortalKeybindStatus) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, status: import('./portalShortcut').PortalKeybindStatus) => callback(status);
+    ipcRenderer.on('keybind-portal-status', handler);
+    return () => { ipcRenderer.removeListener('keybind-portal-status', handler); };
+  },
   syncKeybinds: (keybinds: Array<{ actionId: string; keys: number[]; mouseButton?: number }>) => {
     ipcRenderer.send('keybinds-sync', keybinds);
   },

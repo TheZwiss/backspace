@@ -272,6 +272,16 @@
     }
   },
   "keybinds": {
+    "portal": {
+      "description": "On Wayland, the desktop manages all Backspace shortcuts. Assign, change or remove keys in the system's keyboard shortcut settings, under Backspace. Local browser/X11 bindings are not used here.",
+      "idle": "Preparing first-time registration of all available actions.",
+      "pending": "Connecting to the desktop portal. If a system dialog appears, choose shortcuts for the actions you want to use.",
+      "ready": "Backspace is registered. Open your system's keyboard shortcut settings to change or remove assignments. The list below is read-only and refreshes when you return to Backspace.",
+      "unavailable": "The portal is unavailable, permission was denied, or the session ended. A Global Shortcuts portal backend is required. Local bindings are disabled on Wayland.",
+      "retry": "Register or reconnect shortcuts",
+      "assigned": "System shortcut: {{shortcut}}",
+      "notAssigned": "No active system assignment"
+    },
     "title": "Keybinds",
     "note": {
       "webOnly": "Shortcuts work while this tab is focused. For global shortcuts that work in other apps, use the desktop app."
