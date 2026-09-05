@@ -6,6 +6,8 @@ export default {
   ],
   theme: {
     extend: {
+      height: { screen: 'calc(100 * var(--app-vh))' },
+      minHeight: { screen: 'calc(100 * var(--app-vh))' },
       colors: {
         // ── AETHER DRIFT TOKENS ──
         // RGB-channel variables enable Tailwind opacity modifiers (e.g. bg-accent-rose/10)

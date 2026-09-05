@@ -65,7 +65,7 @@ export function UpdateToast() {
   }
 
   return (
-    <div className="fixed bottom-6 left-6 z-[300] animate-slide-up max-w-[calc(100vw-3rem)]">
+    <div className="fixed bottom-6 left-6 z-[300] animate-slide-up max-w-[calc(calc(100*var(--app-vw))-3rem)]">
       <div className="glass-bubble rounded-2xl p-4 w-[380px] max-w-full">
         <div className="flex items-start gap-3">
           <div

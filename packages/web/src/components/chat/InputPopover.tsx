@@ -1,3 +1,4 @@
+import { layoutRect, layoutPixels } from '../../platform/interfaceScale';
 import React, { useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { EmojiPicker } from './EmojiPicker';
@@ -66,9 +67,9 @@ function DesktopPopover({
     const floating = floatingRef.current;
     if (!anchor || !floating) return;
 
-    const anchorRect = anchor.getBoundingClientRect();
-    const floatingRect = floating.getBoundingClientRect();
-    const vw = window.innerWidth;
+    const anchorRect = layoutRect(anchor.getBoundingClientRect());
+    const floatingRect = layoutRect(floating.getBoundingClientRect());
+    const vw = layoutPixels(window.innerWidth);
 
     let left = anchorRect.right - floatingRect.width;
     let top = anchorRect.top - floatingRect.height - 8;
@@ -200,7 +201,7 @@ function MobileSheet({
           // just above the keyboard naturally.
           bottom: 'env(keyboard-inset-height, 0px)',
           paddingBottom: 'env(safe-area-inset-bottom)',
-          maxHeight: 'min(60dvh, 60vh)',
+          maxHeight: 'min(calc(60*var(--app-dvh)), calc(60*var(--app-vh)))',
           ...sheetStyle,
         }}
         onMouseDown={(e) => e.stopPropagation()}

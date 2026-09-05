@@ -1,4 +1,9 @@
 {
+  "interfaceScale": {
+    "label": "Interface scale",
+    "description": "Resize text, buttons, and panels. Saved in this browser or app on this device.",
+    "reset": "Reset to 100%"
+  },
   "voice": {
     "input": {
       "title": "Input Device",

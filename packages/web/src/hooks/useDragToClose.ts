@@ -1,3 +1,4 @@
+import { layoutPixels } from '../platform/interfaceScale';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
@@ -132,9 +133,9 @@ export function useDragToClose({
       if (!enabledRef.current || startYRef.current === null) return;
       const touch = e.touches[0];
       if (!touch) return;
-      const dy = touch.clientY - startYRef.current;
+      const dy = layoutPixels(touch.clientY) - startYRef.current;
       const now = performance.now();
-      lastYRef.current = touch.clientY;
+      lastYRef.current = layoutPixels(touch.clientY);
       lastTimeRef.current = now;
 
       // Dead-zone: ignore the first ~6 px to avoid stealing taps and tiny
@@ -165,7 +166,7 @@ export function useDragToClose({
         setIsDragging(false);
         setIsClosing(true);
         const startOffset = Math.max(0, releaseDy);
-        const exitDistance = window.innerHeight; // generous — sheet may be tall
+        const exitDistance = layoutPixels(window.innerHeight); // generous — sheet may be tall
         // Apply the start offset on the same frame we flip transition on, so
         // the browser has a stable "from" value before we animate to "to".
         setDragOffset(startOffset);
@@ -229,8 +230,8 @@ export function useDragToClose({
     if (e.touches.length !== 1) return;
     const touch = e.touches[0];
     if (!touch) return;
-    startYRef.current = touch.clientY;
-    lastYRef.current = touch.clientY;
+    startYRef.current = layoutPixels(touch.clientY);
+    lastYRef.current = layoutPixels(touch.clientY);
     startTimeRef.current = performance.now();
     lastTimeRef.current = startTimeRef.current;
     movedPastDeadzoneRef.current = false;

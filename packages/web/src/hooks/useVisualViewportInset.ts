@@ -1,3 +1,4 @@
+import { layoutPixels } from '../platform/interfaceScale';
 import { useEffect, useState } from 'react';
 
 /**
@@ -116,18 +117,18 @@ export function useVisualViewportInset(): VisualViewportInset {
       const next: VisualViewportInset =
         occlusion > 1
           ? {
-              value: `${Math.round(occlusion)}px`,
+              value: `${Math.round(layoutPixels(occlusion))}px`,
               keyboardOpen: true,
               textInputFocused: textInputFocusedRef.current,
-              height: vv.height,
-              offsetTop: vv.offsetTop,
+              height: layoutPixels(vv.height),
+              offsetTop: layoutPixels(vv.offsetTop),
             }
           : {
               value: 'env(safe-area-inset-bottom)',
               keyboardOpen: false,
               textInputFocused: textInputFocusedRef.current,
-              height: vv.height,
-              offsetTop: vv.offsetTop,
+              height: layoutPixels(vv.height),
+              offsetTop: layoutPixels(vv.offsetTop),
             };
 
       // Functional update + shallow compare so identical re-measurements
@@ -230,6 +231,7 @@ export function useVisualViewportInset(): VisualViewportInset {
 
     measure();
     vv.addEventListener('resize', update);
+    window.addEventListener('resize', update);
     vv.addEventListener('scroll', update);
     window.addEventListener('focusin', onFocusChange, true);
     window.addEventListener('focusout', onFocusChange, true);
@@ -237,6 +239,7 @@ export function useVisualViewportInset(): VisualViewportInset {
       if (raf) cancelAnimationFrame(raf);
       if (pollTimer) clearInterval(pollTimer);
       vv.removeEventListener('resize', update);
+      window.removeEventListener('resize', update);
       vv.removeEventListener('scroll', update);
       window.removeEventListener('focusin', onFocusChange, true);
       window.removeEventListener('focusout', onFocusChange, true);

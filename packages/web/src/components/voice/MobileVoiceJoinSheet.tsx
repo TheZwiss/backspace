@@ -1,3 +1,4 @@
+import { layoutRect, layoutPixels } from '../../platform/interfaceScale';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation, Trans } from 'react-i18next';
@@ -235,11 +236,11 @@ export function MobileVoiceJoinSheet({
     const anchorBtn = pickerAnchorRef.current?.querySelector('button');
     if (!anchorBtn) return;
     const update = () => {
-      const r = anchorBtn.getBoundingClientRect();
+      const r = layoutRect(anchorBtn.getBoundingClientRect());
       setPickerPopupRect({
         left: r.left,
         // distance from viewport bottom to anchor top, plus a small gap
-        bottom: window.innerHeight - r.top + 4,
+        bottom: layoutPixels(window.innerHeight) - r.top + 4,
       });
     };
     update();
@@ -647,7 +648,7 @@ export function MobileVoiceJoinSheet({
             // Cap to leave room above the safe area / sheet header. Combined with
             // overflow-y-auto this guarantees every entry stays reachable
             // regardless of device count.
-            maxHeight: 'min(50vh, 320px)',
+            maxHeight: 'min(calc(50*var(--app-vh)), 320px)',
             // iOS Safari scroll momentum
             WebkitOverflowScrolling: 'touch',
           }}

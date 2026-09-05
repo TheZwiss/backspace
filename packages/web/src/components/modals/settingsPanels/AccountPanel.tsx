@@ -15,6 +15,7 @@ import { AVATAR_COLORS } from '@backspace/shared';
 import type { User, UserStatus, AvatarColor } from '@backspace/shared';
 import { describeError } from '../../../i18n/errors';
 import { LanguageSection } from './LanguageSection';
+import { InterfaceScaleSection } from './InterfaceScaleSection';
 
 const BIO_MAX_LENGTH = 190;
 const PASSWORD_MIN_LENGTH = 8;
@@ -333,6 +334,7 @@ export function AccountPanel() {
         </div>
       )}
       <LanguageSection />
+      <InterfaceScaleSection />
 
       {/* ── Profile Customization ── */}
       <div>

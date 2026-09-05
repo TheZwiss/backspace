@@ -81,7 +81,7 @@ export function TransferIndicator() {
         // viewport's right edge — `right-0` would otherwise anchor the
         // panel to the trigger's right and let the 300px panel extend off
         // the left of the viewport.
-        <div className="fixed right-2 top-14 md:absolute md:right-0 md:top-full md:mt-2 w-[min(300px,calc(100vw-16px))] glass z-50 rounded-lg overflow-hidden">
+        <div className="fixed right-2 top-14 md:absolute md:right-0 md:top-full md:mt-2 w-[min(300px,calc(calc(100*var(--app-vw))-16px))] glass z-50 rounded-lg overflow-hidden">
           <div className="px-3 py-2 border-b border-border-soft text-xs flex justify-between items-center">
             <span className="text-txt-secondary">
               {t('uploads:transfers.count', { count: visible.length })}

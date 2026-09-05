@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import i18n from '../../i18n';
 import { useUIStore } from '../../stores/uiStore';
@@ -131,6 +131,7 @@ export function MobileShell() {
     enabled: mobileStack.length > 0,
   });
 
+  const initialRouteSync = useRef(true);
   // Reconstruct mobile stack from URL on mount AND on subsequent pathname
   // changes (deep link, refresh, programmatic navigate from SpaceInviteCard
   // Join, joinByCode flows, etc.).
@@ -152,6 +153,10 @@ export function MobileShell() {
   // pops both the browser history AND our stack; the resulting pathname change
   // matches the new top entry, so we skip.
   useEffect(() => {
+    const initial = initialRouteSync.current;
+    initialRouteSync.current = false;
+    // Scaling can move the open account settings from desktop into this shell.
+    if (initial && useUIStore.getState().mobileStack.at(-1)?.screen === 'settings-account') return;
     const path = location.pathname;
     const match = path.match(/^\/channels\/([^/]+)\/([^/]+)$/);
     if (!match) return;
@@ -204,7 +209,7 @@ export function MobileShell() {
   // the iOS-PWA-specific fallback (focusin polling) that updates `height`
   // even when no `resize` event ever lands.
   const { keyboardOpen, height: vvHeight } = useVisualViewportInset();
-  const shellHeight = keyboardOpen && vvHeight !== null ? `${vvHeight}px` : '100dvh';
+  const shellHeight = keyboardOpen && vvHeight !== null ? `${vvHeight}px` : 'calc(100*var(--app-dvh))';
 
   return (
     <div className="flex flex-col" style={{ height: shellHeight }}>

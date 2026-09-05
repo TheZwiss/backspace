@@ -1,4 +1,5 @@
 import { type RefObject, type CSSProperties, useState, useLayoutEffect, useCallback } from 'react';
+import { layoutPixels, layoutRect } from '../platform/interfaceScale';
 
 export type Placement = 'top' | 'bottom' | 'left' | 'right';
 /** Cross-axis alignment: centred on the anchor, or flush with its leading edge. */
@@ -56,8 +57,11 @@ export function computeFloatingPosition(
   offset: number,
   align: Alignment = 'center',
 ): { top: number; left: number; actualPlacement: Placement } {
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
+  anchorRect = layoutRect(anchorRect);
+  floatingWidth = layoutPixels(floatingWidth);
+  floatingHeight = layoutPixels(floatingHeight);
+  const vw = layoutPixels(window.innerWidth);
+  const vh = layoutPixels(window.innerHeight);
 
   let top = 0;
   let left = 0;

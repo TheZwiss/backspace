@@ -1,4 +1,9 @@
 {
+  "interfaceScale": {
+    "label": "Oberflächenskalierung",
+    "description": "Größe von Text, Schaltflächen und Bereichen. Wird in diesem Browser oder dieser App auf diesem Gerät gespeichert.",
+    "reset": "Auf 100 % zurücksetzen"
+  },
   "voice": {
     "input": {
       "title": "Eingabegerät",
