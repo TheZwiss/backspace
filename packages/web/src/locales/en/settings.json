@@ -272,6 +272,16 @@
     }
   },
   "keybinds": {
+    "portal": {
+      "description": "Wayland uses the desktop's Global Shortcuts portal. Approve the system dialog; your desktop may choose a different shortcut or keyboard layout. Mouse buttons and multi-key chords without a single main key work only while Backspace is focused.",
+      "idle": "Record a supported keyboard shortcut to enable global shortcuts.",
+      "pending": "Waiting for the desktop portal. Check for a permission dialog.",
+      "ready": "The desktop controls the global shortcuts listed below.",
+      "unavailable": "The portal is unavailable, permission was denied, or the session ended. Shortcuts currently work only while Backspace is focused. Your desktop needs a Global Shortcuts portal backend.",
+      "retry": "Request global shortcuts again",
+      "assigned": "System shortcut: {{shortcut}}",
+      "focusedOnly": "Not registered globally — focused window only"
+    },
     "title": "Keybinds",
     "note": {
       "webOnly": "Shortcuts work while this tab is focused. For global shortcuts that work in other apps, use the desktop app."

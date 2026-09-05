@@ -3,6 +3,7 @@ import { useTranslation, Trans } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { useKeybindStore, BINDABLE_ACTIONS, Keybind } from '../../../stores/keybindStore';
 import { isElectron, isElectronMac } from '../../../platform/platform';
+import { useKeybindPortalStatus } from '../../../hooks/useKeybindPortalStatus';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -64,9 +65,10 @@ interface KeybindRowProps {
   onStartRecording: () => void;
   onDelete: () => void;
   rowRef: React.RefObject<HTMLDivElement>;
+  portalLabel?: string;
 }
 
-function KeybindRow({ actionId, label, keybind, isRecording, recordingDisplay, onStartRecording, onDelete, rowRef }: KeybindRowProps) {
+function KeybindRow({ actionId, label, keybind, isRecording, recordingDisplay, onStartRecording, onDelete, rowRef, portalLabel }: KeybindRowProps) {
   const { t } = useTranslation(['settings', 'common']);
   return (
     <div
@@ -90,6 +92,7 @@ function KeybindRow({ actionId, label, keybind, isRecording, recordingDisplay, o
             t('keybinds.row.notBound')
           )}
         </div>
+        {portalLabel && <div className="text-xs text-txt-tertiary mt-1">{portalLabel}</div>}
       </div>
       <div className="flex items-center gap-1.5 ml-3">
         {!isRecording && (
@@ -135,6 +138,7 @@ interface ConflictInfo {
 export function KeybindsPanel() {
   const { t } = useTranslation(['settings', 'common']);
   const { keybinds, setKeybind, removeKeybind, findConflict } = useKeybindStore();
+  const portal = useKeybindPortalStatus();
 
   const [recordingActionId, setRecordingActionId] = useState<string | null>(null);
   const [recordingDisplay, setRecordingDisplay] = useState('');
@@ -311,6 +315,18 @@ export function KeybindsPanel() {
   return (
     <div className="space-y-5">
       <h2 className="text-lg font-semibold text-txt-primary mb-6">{t('keybinds.title')}</h2>
+      {portal && (
+        <div className="rounded-lg bg-surface-elevated p-3.5 text-xs text-txt-secondary" role="status">
+          <p>{t('keybinds.portal.description')}</p>
+          <p className="mt-2">{t(`keybinds.portal.${portal.state}`)}</p>
+          {portal.state !== 'pending' && keybinds.length > 0 && (
+            <button type="button" onClick={() => window.backspace?.retryKeybindPortal?.()}
+              className="mt-2 rounded px-3 py-1.5 bg-white/[0.06] text-txt-primary hover:bg-white/[0.1]">
+              {t('keybinds.portal.retry')}
+            </button>
+          )}
+        </div>
+      )}
       {/* macOS Accessibility Warning */}
       {isElectronMac() && accessibilityTrusted === false && (
         <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3.5">
@@ -362,6 +378,11 @@ export function KeybindsPanel() {
               actionId={action.id}
               label={t(`keybinds.action.${action.id}`)}
               keybind={getKeybind(action.id)}
+              portalLabel={portal && getKeybind(action.id)
+                ? portal.shortcuts[action.id]
+                  ? t('keybinds.portal.assigned', { shortcut: portal.shortcuts[action.id] })
+                  : t('keybinds.portal.focusedOnly')
+                : undefined}
               isRecording={recordingActionId === action.id}
               recordingDisplay={recordingDisplay}
               onStartRecording={() => {

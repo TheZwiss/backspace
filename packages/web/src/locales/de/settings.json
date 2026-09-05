@@ -272,6 +272,16 @@
     }
   },
   "keybinds": {
+    "portal": {
+      "description": "Unter Wayland wird das Global-Shortcuts-Portal der Desktop-Umgebung verwendet. Bestätige den Systemdialog; die Desktop-Umgebung kann eine andere Tastenkombination oder Tastaturbelegung wählen. Maustasten und Kombinationen mit mehreren Haupttasten funktionieren nur im aktiven Backspace-Fenster.",
+      "idle": "Zeichne eine unterstützte Tastenkombination auf, um globale Tastenkürzel zu aktivieren.",
+      "pending": "Warten auf das Desktop-Portal. Prüfe, ob ein Berechtigungsdialog geöffnet ist.",
+      "ready": "Die Desktop-Umgebung verwaltet die unten aufgeführten globalen Tastenkürzel.",
+      "unavailable": "Das Portal ist nicht verfügbar, die Berechtigung wurde verweigert oder die Sitzung wurde beendet. Tastenkürzel funktionieren derzeit nur im aktiven Backspace-Fenster. Die Desktop-Umgebung muss das Global-Shortcuts-Portal unterstützen.",
+      "retry": "Globale Tastenkürzel erneut anfordern",
+      "assigned": "System-Tastenkürzel: {{shortcut}}",
+      "focusedOnly": "Nicht global registriert — nur im aktiven Fenster"
+    },
     "title": "Tastenkürzel",
     "note": {
       "webOnly": "Tastenkürzel funktionieren, solange dieser Tab im Vordergrund ist. Für globale Tastenkürzel, die auch in anderen Apps gelten, nutze die Desktop-App."

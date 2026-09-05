@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware';
 
 export interface Keybind {
   actionId: string;
-  keys: number[];          // uIOhook keycodes, sorted ascending
+  keys: number[];          // djb2 hashes of DOM KeyboardEvent.code, sorted ascending
   mouseButton?: number;    // uIOhook mouse button (3=middle, 4=back, 5=forward)
   displayLabel: string;    // human-readable, captured at record time
 }

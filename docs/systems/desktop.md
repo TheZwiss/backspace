@@ -892,7 +892,53 @@ interface Activity {
 
 ### Overview
 
-Captures global keyboard and mouse events via `uiohook-napi` (OS-level input hook) and matches them against user-configured keybinds. Works even when the Backspace window is not focused.
+Windows, macOS and Linux X11 capture global keyboard and mouse events via
+`uiohook-napi`. Linux Wayland sessions (including an XWayland app window inside
+Wayland) instead use the desktop's `org.freedesktop.portal.GlobalShortcuts`
+interface. An X11 hook cannot observe input to other native Wayland clients.
+
+### Wayland portal
+
+`globalShortcutsPortal.ts` uses a dedicated session-bus connection, registers the
+desktop-file identity `io.github.TheZwiss.backspace` through the host Registry
+when outside Flatpak, and creates a GlobalShortcuts session. Older portals
+without the optional Registry remain supported. Flatpak supplies its own identity;
+no additional bus permissions or unrestricted input-device access are requested.
+
+`portalShortcut.ts` translates stored DOM-code hashes to preferred XKB keysyms
+using the Shortcuts specification. Only one main keyboard key plus modifiers is
+representable; mouse buttons, unknown keys and multi-main-key chords remain
+focused-window-only. Left/right modifier distinctions are collapsed. These are
+preferences, not physical-key guarantees: the compositor controls assignment and
+layout, and settings show the returned `trigger_description` for each accepted
+action rather than claiming the recorded shortcut was necessarily granted.
+
+Bindings require system consent and a portal backend implementing GlobalShortcuts.
+`Activated` and `Deactivated` both reach the renderer so push-to-talk works while
+unfocused. Electron's press-only `globalShortcut` callback is insufficient here.
+Only signals from the resolved portal owner and current session are accepted.
+Repeated activations are suppressed; stop, revoked bindings, session closure,
+portal restart and transport errors release held actions. Portal failure preserves
+focused-window bindings and exposes a manual retry in settings (no prompt loop).
+
+Each changed configuration closes its old connection/session and, after a short
+debounce, creates a new one: `BindShortcuts` can only be called once per session.
+Empty configuration and renderer unmount unregister everything. Request responses
+are subscribed before method calls to handle early replies; method and consent
+waits are bounded and cancelled on shutdown.
+
+Optional preload methods `getKeybindPortalStatus`, `onKeybindPortalStatus` and
+`retryKeybindPortal` report idle/pending/ready/unavailable plus actual assignments.
+The browser fallback excludes accepted portal actions to prevent double toggles;
+portal press/release events bypass the legacy 100 ms duplicate filter. The fallback
+releases its own held actions on window blur and cleanup.
+
+The MIT-licensed `dbus-next` dependency provides D-Bus message transport without a
+helper executable. Its optional obsolete `usocket` native addon is excluded (no
+file-descriptor transfer is needed), and `xml2js` is overridden to a patched
+version. The normal filesystem session socket works through Node's built-in net
+transport; legacy abstract sockets requiring the optional addon fall back to
+focused-window bindings. Regenerate Flatpak's offline sources after lockfile changes.
 
 ### Native Keycode to DOM Code Mapping
 
