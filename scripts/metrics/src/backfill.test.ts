@@ -4,8 +4,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createStore } from './store.ts';
 import { backfill } from './backfill.ts';
-import { collect } from './collect.ts';
+import { collect, NETWORK_HEADER } from './collect.ts';
 import type { GitHubClient } from './github.ts';
+import type { PingRow } from './telemetry.ts';
 
 let dir = '';
 
@@ -36,6 +37,21 @@ const WORKFLOW_RUNS = [
 const RELEASES = [
   { tag_name: 'v1.0.0', name: 'Backspace 1.0.0', published_at: '2026-08-01T10:00:00Z' },
 ];
+
+// Three instances reporting on three consecutive days, so the two-days-in-30
+// eligibility rule is met from the second day onward.
+const PINGS: PingRow[] = ['a', 'b', 'c'].flatMap((instance) =>
+  ['2026-03-02', '2026-03-03', '2026-03-04'].map((day) => ({
+    instance,
+    day,
+    country: 'DE',
+    schema: 1,
+    body: {
+      build: { version: '1.1.2' },
+      users: { registered: 4, active1d: 1, active7d: 2, active30d: 3 },
+    },
+  })),
+);
 
 function fakeClient(pages: Record<string, unknown[]> = {}): GitHubClient {
   const routes: Record<string, unknown[]> = {
@@ -319,7 +335,15 @@ describe('backfill', () => {
   it('reports exactly the files it may write', async () => {
     const store = createStore(dir);
     const result = await backfill({ client: fakeClient(), store, ...base });
-    expect(result.written.sort()).toEqual(['forks.csv', 'releases.csv', 'stars.csv']);
+    expect(result.written.sort()).toEqual([
+      'forks.csv',
+      'releases.csv',
+      'stars.csv',
+      'telemetry/clients.ndjson',
+      'telemetry/countries.ndjson',
+      'telemetry/network.csv',
+      'telemetry/versions.ndjson',
+    ]);
   });
 
   it('is idempotent across repeated runs', async () => {
@@ -328,6 +352,76 @@ describe('backfill', () => {
     const first = store.readCsv('stars.csv');
     await backfill({ client: fakeClient(), store, ...base });
     expect(store.readCsv('stars.csv')).toEqual(first);
+  });
+
+  it('pulls the telemetry retention window in chunks of at most 31 days', async () => {
+    const store = createStore(dir);
+    const seen: Array<[string, string]> = [];
+    await backfill({
+      client: fakeClient(),
+      store,
+      ...base,
+      telemetry: async (from, to) => {
+        seen.push([from, to]);
+        return [];
+      },
+    });
+    expect(seen).toEqual([
+      ['2025-12-06', '2026-01-05'],
+      ['2026-01-06', '2026-02-05'],
+      ['2026-02-06', '2026-03-04'],
+    ]);
+  });
+
+  it('fills a telemetry day with no row and leaves a day that has one alone', async () => {
+    const store = createStore(dir);
+    // A row the collector already wrote for 2026-03-04, with a value no
+    // reconstruction from the pings below could produce.
+    store.writeCsv('telemetry/network.csv', NETWORK_HEADER, [
+      {
+        date: '2026-03-04',
+        instances_1d: 99,
+        instances_7d: 99,
+        instances_30d: 99,
+        users_registered: 99,
+        users_active1d: 99,
+        users_active7d: 99,
+        users_active30d: 99,
+        messages7d: 99,
+        storage_mib: 99,
+        voice_instances: 99,
+        federation_instances: 99,
+      },
+    ]);
+
+    await backfill({
+      client: fakeClient(),
+      store,
+      ...base,
+      telemetry: async () => PINGS,
+    });
+
+    const rows = store.readCsv('telemetry/network.csv');
+    expect(rows.find((r) => r.date === '2026-03-04')).toMatchObject({ instances_7d: '99' });
+    expect(rows.find((r) => r.date === '2026-03-03')).toMatchObject({
+      instances_7d: '3',
+      users_registered: '12',
+    });
+    // Nothing before the oldest day the export carries: the receiver keeps 90
+    // days, but a day it holds no row for at all may simply predate it, and a
+    // zero there would be a fabricated measurement (§4.3).
+    expect(rows.find((r) => r.date === '2026-01-01')).toBeUndefined();
+    expect(rows[0]?.date).toBe('2026-03-02');
+    expect(store.readNdjson('telemetry/versions.ndjson')).toEqual([
+      { snapshot_date: '2026-03-03', dimension: '1.1.2', title: '', count: 3, uniques: 3 },
+      { snapshot_date: '2026-03-04', dimension: '1.1.2', title: '', count: 3, uniques: 3 },
+    ]);
+  });
+
+  it('writes no telemetry files at all when no fetcher is given', async () => {
+    const store = createStore(dir);
+    await backfill({ client: fakeClient(), store, ...base });
+    expect(existsSync(path.join(dir, 'telemetry'))).toBe(false);
   });
 
   it('handles multi-page stargazer results', async () => {

@@ -1,15 +1,18 @@
 import {
   upsertByDate,
   upsertByKey,
+  upsertDimensional,
   compareReleaseRows,
   compareStrings,
   countByDay,
   utcDayStart,
   MS_PER_DAY,
 } from './series.ts';
+import { NETWORK_HEADER } from './collect.ts';
+import { aggregateTelemetry, type PingRow, type TelemetryFetcher } from './telemetry.ts';
 import type { GitHubClient } from './github.ts';
 import type { Store } from './store.ts';
-import type { CountPoint, IsoDate, ReleaseRow } from './types.ts';
+import type { CountPoint, DimensionRow, IsoDate, NetworkPoint, ReleaseRow } from './types.ts';
 
 interface StargazerResponse {
   starred_at: string;
@@ -44,6 +47,17 @@ export interface BackfillOptions {
    * row.
    */
   today: IsoDate;
+  /**
+   * Fetches raw telemetry rows for a day range from the receiver. Optional,
+   * exactly as in `CollectOptions`: absent when TELEMETRY_EXPORT_TOKEN is
+   * unset, in which case nothing under `telemetry/` is touched.
+   *
+   * Unlike the collector, a failure here is not caught. This job is dispatched
+   * by hand and watched, it has no `skipped` channel to report a degraded run
+   * through, and every write happens after every fetch, so a rejection leaves
+   * the archive untouched rather than half-reconstructed.
+   */
+  telemetry?: TelemetryFetcher;
 }
 
 /**
@@ -57,8 +71,47 @@ export interface BackfillOptions {
  * the `/stats/contributors` weekly buckets already cover all of history
  * whenever the daily collector can fetch them, so there is no gap for a
  * one-shot backfill to fill, and no cheaper reconstruction exists.
+ *
+ * The four `telemetry/` files are included because the receiver keeps raw
+ * pings for 90 days, so a stretch the collector missed genuinely is
+ * reconstructable from them. They are listed here whether or not this run had
+ * a fetcher to reach the receiver with, matching what this constant means:
+ * the files backfill may touch, not the files it touched.
  */
-const WRITABLE = ['stars.csv', 'forks.csv', 'releases.csv'] as const;
+const WRITABLE = [
+  'stars.csv',
+  'forks.csv',
+  'releases.csv',
+  'telemetry/network.csv',
+  'telemetry/versions.ndjson',
+  'telemetry/countries.ndjson',
+  'telemetry/clients.ndjson',
+] as const;
+
+/**
+ * How far back a telemetry reconstruction can reach: the receiver's retention.
+ *
+ * Nothing older exists to fetch, so this is a hard ceiling rather than a
+ * policy. A dispatch made today can recover days a dispatch made next month
+ * never will, the same asymmetry `workflows.csv` has against the Actions
+ * retention horizon.
+ */
+const TELEMETRY_RETENTION_DAYS = 90;
+
+/**
+ * How many days each export request covers.
+ *
+ * The whole window in one request would be a single large response held
+ * entirely in memory on both ends; splitting it keeps each request the same
+ * size as the one the daily collector already makes, which is the shape the
+ * receiver is sized for.
+ */
+const TELEMETRY_CHUNK_DAYS = 31;
+
+/** The UTC date `days` days before `date`. Mirrors `collect.ts`'s helper. */
+function daysBefore(date: IsoDate, days: number): IsoDate {
+  return new Date(utcDayStart(date) - days * MS_PER_DAY).toISOString().slice(0, 10);
+}
 
 /**
  * Upper bound on the number of days one reconstruction may write. GitHub
@@ -187,9 +240,15 @@ function cumulativeByDay(dates: readonly IsoDate[], through: IsoDate): CountPoin
  * package's own first run can ever be recovered, and this function does not
  * try.
  *
- * Every write goes through `upsertByDate(existing, incoming, 'if-absent')`,
- * never `'overwrite'`. That is the one property this function exists to
- * guarantee, and the reason is structural, not a style preference:
+ * The telemetry series are the one thing here that is not reconstructed from
+ * GitHub at all: they come from the receiver's export, which keeps 90 days of
+ * raw pings, so a stretch of failed collections inside that window really is
+ * recoverable. See the write at the end of this function for what it can and
+ * cannot reach.
+ *
+ * Every dated write goes through `upsertByDate(existing, incoming,
+ * 'if-absent')`, never `'overwrite'`. That is the one property this function
+ * exists to guarantee, and the reason is structural, not a style preference:
  * `/stargazers` lists only *current* stargazers, so a person who starred and
  * later unstarred is permanently invisible to it, while the daily
  * collector's `stars.csv` row for that same date came from the repo
@@ -202,6 +261,10 @@ function cumulativeByDay(dates: readonly IsoDate[], through: IsoDate): CountPoin
  * same property makes repeated runs of this function idempotent for free: a
  * date it wrote itself on a previous run is "absent" to nothing on the next
  * one, so nothing changes.
+ *
+ * The three telemetry NDJSON files are the single exception, because
+ * `upsertDimensional` has no if-absent mode. They stay idempotent anyway, and
+ * safe against the collector, for the reason given at `mergeDimensional`.
  */
 /**
  * The returned `written` lists the files backfill is PERMITTED to write —
@@ -232,6 +295,20 @@ export async function backfill(options: BackfillOptions): Promise<{ written: str
     'workflow_runs',
   );
 
+  // The export is pulled in chunks the size of one daily collection rather
+  // than as one 90-day response, and sequentially rather than in parallel:
+  // this job is dispatched by hand with no deadline, and the receiver is a
+  // single worker that the daily collector otherwise only ever asks for 31
+  // days at a time.
+  const fetchTelemetry = options.telemetry;
+  const pings: PingRow[] = [];
+  if (fetchTelemetry !== undefined) {
+    for (let start = TELEMETRY_RETENTION_DAYS - 1; start >= 1; start -= TELEMETRY_CHUNK_DAYS) {
+      const end = Math.max(start - TELEMETRY_CHUNK_DAYS + 1, 1);
+      pings.push(...(await fetchTelemetry(daysBefore(today, start), daysBefore(today, end))));
+    }
+  }
+
   /**
    * Reads `file`, merges `incoming` into it with `'if-absent'`, and writes
    * the result back. Generic over `T` — inferred from `incoming` at each
@@ -254,6 +331,26 @@ export async function backfill(options: BackfillOptions): Promise<{ written: str
     const existing = store.readCsv(file) as unknown as T[];
     const merged = upsertByDate(existing, incoming, 'if-absent');
     store.writeCsv(file, header, merged as unknown as Array<Record<string, string | number>>);
+  }
+
+  /**
+   * Reads `file`, merges `incoming` into it keyed on
+   * `(snapshot_date, dimension)`, and writes the result back.
+   *
+   * The one write in this function that is not if-absent, because
+   * `upsertDimensional` has no such mode and adding one would be the wrong
+   * fix. The if-absent rule exists where the two writers measure a date by
+   * different methods and the collector's is the true one: a reconstructed
+   * star count comes from `/stargazers`, which cannot see an unstar, so it can
+   * only ever be a lower bound. These rows have no such split. Both writers
+   * call `aggregateTelemetry` on rows from the same export, so for any day
+   * inside both windows they compute the identical value and the overwrite is
+   * a no-op. Where they can differ is the start of the reconstructed range,
+   * whose short lookback is described at the write site below and which the
+   * collector, running daily, never has.
+   */
+  function mergeDimensional(file: string, incoming: readonly DimensionRow[]): void {
+    store.writeNdjson(file, upsertDimensional(store.readNdjson(file), incoming));
   }
 
   mergeIfAbsent(
@@ -338,6 +435,50 @@ export async function backfill(options: BackfillOptions): Promise<{ written: str
     ['date', 'tag', 'name'],
     mergedReleases as unknown as Array<Record<string, string | number>>,
   );
+
+  // The reconstructed range starts at the oldest day the export actually
+  // carries, not at the retention horizon, for the same reason the workflow
+  // fill starts at the oldest surviving run: below that day there is no
+  // evidence either way. The receiver keeps 90 days, but it has not existed
+  // for 90 days on every dispatch, and an aggregate over a day it holds no
+  // row for is an all-zero snapshot that reads on the chart as a measured
+  // empty fleet. Section 4.3 forbids exactly that. An empty export therefore
+  // writes nothing at all rather than 88 zero rows.
+  //
+  // Inside the range the earliest days are still computed over a short
+  // history: the snapshot rule looks back thirty days to decide which
+  // instances count, and a day near the start of the export has fewer than
+  // thirty behind it, so its instance counts are a lower bound. That is
+  // inherent to a 90-day retention and cannot be fetched around; the merge is
+  // if-absent, so any day the collector measured keeps its own row.
+  const oldestPing = pings.reduce<IsoDate | null>(
+    (oldest, ping) => (oldest === null || ping.day < oldest ? ping.day : oldest),
+    null,
+  );
+  if (oldestPing !== null) {
+    const network: NetworkPoint[] = [];
+    const versions: DimensionRow[] = [];
+    const countries: DimensionRow[] = [];
+    const clients: DimensionRow[] = [];
+    // Starts one day inside the fetched window, at `today - 88` rather than
+    // `today - 89`: no instance can have reported on two distinct days by the
+    // oldest day the export can possibly hold, so that day's snapshot is empty
+    // by construction and writing it would state a fleet of zero for a day
+    // nothing is known about.
+    for (let offset = TELEMETRY_RETENTION_DAYS - 2; offset >= 1; offset -= 1) {
+      const day = daysBefore(today, offset);
+      if (day < oldestPing) continue;
+      const aggregate = aggregateTelemetry(pings, day);
+      network.push(aggregate.network);
+      versions.push(...aggregate.versions);
+      countries.push(...aggregate.countries);
+      clients.push(...aggregate.clients);
+    }
+    mergeIfAbsent('telemetry/network.csv', NETWORK_HEADER, network);
+    mergeDimensional('telemetry/versions.ndjson', versions);
+    mergeDimensional('telemetry/countries.ndjson', countries);
+    mergeDimensional('telemetry/clients.ndjson', clients);
+  }
 
   return { written: [...WRITABLE] };
 }
