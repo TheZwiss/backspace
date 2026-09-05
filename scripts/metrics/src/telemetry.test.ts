@@ -92,4 +92,12 @@ describe('createTelemetryFetcher', () => {
     const fetchFn = (async () => new Response(null, { status: 401 })) as typeof fetch;
     await expect(createTelemetryFetcher(fetchFn, 'https://hello.test', 'tok')('2026-09-01', '2026-09-06')).rejects.toThrow(/401/);
   });
+  it('throws when every line was rejected, rather than reporting an empty day', async () => {
+    const fetchFn = (async () => new Response('not json\n{"instance":"a"}\n', { status: 200 })) as typeof fetch;
+    await expect(createTelemetryFetcher(fetchFn, 'https://hello.test', 'tok')('2026-09-01', '2026-09-06')).rejects.toThrow(/2 malformed/);
+  });
+  it('resolves to no rows when the export is genuinely empty', async () => {
+    const fetchFn = (async () => new Response('', { status: 200 })) as typeof fetch;
+    await expect(createTelemetryFetcher(fetchFn, 'https://hello.test', 'tok')('2026-09-01', '2026-09-06')).resolves.toEqual([]);
+  });
 });

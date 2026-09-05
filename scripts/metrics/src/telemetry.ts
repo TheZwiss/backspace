@@ -260,6 +260,14 @@ export function aggregateTelemetry(rows: readonly PingRow[], date: IsoDate): Tel
  * stub in a test, matching how `github.ts` takes its fetch. Anything but a
  * 200 throws, including a 401 for a stale token: the collector must fail the
  * telemetry step loudly rather than write a day of empty rows over real ones.
+ *
+ * An answer that parsed to nothing at all throws for the same reason. A 200
+ * whose every line was rejected is a broken parser, not a quiet day: rename a
+ * field in the receiver's envelope, or stop sending `body` as a JSON string,
+ * and this would otherwise hand the collector a well-formed all-zero snapshot
+ * to upsert over the real row, every day, until somebody read a CI log. A
+ * genuinely empty export has no lines to reject and still resolves to no rows,
+ * which is what a day before the first instance opted in looks like.
  */
 export function createTelemetryFetcher(fetchFn: typeof fetch, endpoint: string, token: string): TelemetryFetcher {
   return async (from, to) => {
@@ -269,6 +277,9 @@ export function createTelemetryFetcher(fetchFn: typeof fetch, endpoint: string, 
     });
     if (response.status !== 200) throw new Error(`telemetry export answered ${response.status}`);
     const { rows, skipped } = parseExportNdjson(await response.text());
+    if (rows.length === 0 && skipped > 0) {
+      throw new Error(`telemetry export: ${skipped} malformed row(s) and nothing parsed, the export format may have changed`);
+    }
     if (skipped > 0) console.warn(`telemetry export: skipped ${skipped} malformed row(s)`);
     return rows;
   };
