@@ -508,6 +508,8 @@ interface DashboardData {
   };
   releases: Array<{ date: string; tag: string; name: string }>;
   dimensions: { referrers: DimensionSeries; paths: DimensionSeries };
+  /** Instance telemetry. Every field empty until the first ping is archived. */
+  telemetry: TelemetryBlock;
 }
 
 /** Parallel arrays, index-aligned with `dates`. */
@@ -526,7 +528,49 @@ interface DimensionSeries {
   /** Top 5 dimensions of `latest` only, differenced between CONSECUTIVE snapshots. */
   trajectories: Array<{ dimension: string; delta: Array<number | null> }>;
 }
+
+interface TelemetryBlock {
+  network: TelemetryNetworkSeries;
+  versions: DimensionSeries; countries: DimensionSeries; clients: DimensionSeries;
+  /** The LATEST day's `instances_7d`, or null. The publication threshold, precomputed. */
+  instances7d: number | null;
+}
+
+/** Parallel arrays, index-aligned with `dates`. Every column is a GAUGE, never a daily total. */
+interface TelemetryNetworkSeries {
+  dates: string[];
+  instances_1d: Array<number | null>; instances_7d: Array<number | null>; instances_30d: Array<number | null>;
+  users_registered: Array<number | null>; users_active1d: Array<number | null>;
+  users_active7d: Array<number | null>; users_active30d: Array<number | null>;
+  messages7d: Array<number | null>; storage_mib: Array<number | null>;
+  voice_instances: Array<number | null>; federation_instances: Array<number | null>;
+}
 ```
+
+**The telemetry block reads `telemetry/network.csv` and the three
+`telemetry/*.ndjson` files, and an archive that has none of them yields empty
+arrays and `instances7d: null` rather than a thrown bundle.** That absence is
+the normal state, not an edge case: telemetry was added after collection had
+already been running, so every archived day before the first ping has no
+`telemetry/` directory at all, and a reader that treated it as corruption
+would take the whole dashboard down for the state it is in today.
+
+`instances7d` is carried as its own field so the page can apply the
+publication threshold (charts only once the latest `instances_7d` is 10 or
+more, spec section 9) with a comparison instead of arithmetic over a parallel
+array. It is the LAST day's value, not the last measured one: the threshold is
+a claim about the trailing seven days, and answering it from an older row
+would publish charts on a bar that is no longer cleared. A last day that did
+not measure the column reads as `null`, which fails the threshold.
+
+**The data tables under `site/insights/data/` are public from the first
+archived ping, whatever the charts do.** The threshold governs drawing a line,
+not disclosing a figure: three points plotted as a trend claim a shape the
+data does not have, while three rows in a table state their own size.
+`telemetry` is also excluded from both `empty` and `collection_started`. The
+collector only ever writes the telemetry files inside a run that also wrote
+the traffic series, so a telemetry-only archive is not a state it can produce,
+and telemetry cannot hold the earliest date in an archive it postdates.
 
 **`null` means "not measured". `0` means "measured as zero".** This is the rule the whole subsystem exists to enforce, and it holds at every layer without exception:
 
@@ -575,6 +619,7 @@ Downsampling only on failure is the point of the order. Doing it unconditionally
 
 - **Traffic counts sum within a bucket** (`sumBucket`): `views` and `clones`, both `count` and `uniques`. `uniques` summing is an acknowledged over-count — someone who visited Monday and Thursday is counted twice, and a true weekly unique figure is not recoverable from daily rows at any resolution — but it is an upper bound that moves with the quantity it describes, where taking the last day's uniques would report one day as if it were seven.
 - **Cumulative counters take the week's last measured value** (`lastBucket`): `stars`, `forks`, `contributors`, and every field of `repo`. Summing these would be meaningless in a way that looks entirely plausible on a chart — seven daily readings of a star count that sat at 66 all week would publish 462 stars. "Last **measured**", not "last element": a week whose final days are null was still measured earlier in the week. The pick is by highest *date*, not highest index.
+- **Every column of `telemetry.network` takes the week's last measured value** (`lastBucket`), for the same reason the cumulative counters do: they are gauges describing the fleet on a day, so summing seven readings of a steady twelve instances would publish 84. The trap is sharper here than for `stars`, because two of the names (`messages7d`, `users_active7d`) read like per-day event counts and are not. They are trailing-window figures the instances themselves computed, each already covering seven days, so summing a week of them would over-count by roughly a further factor of seven. The buckets are keyed on the UTC Monday like every other series: a telemetry series keyed on bucket END dates would sit up to six days ahead of the rest of the bundle and silently widen every window `rangeWindow` anchors. `telemetry`'s three dimension series are left daily, exactly as `referrers` and `paths` are, and `instances7d` is recomputed from the bucketed series so the published threshold figure always appears in the published series.
 - **`releases` and `dimensions` are not bucketed at all.** Releases are sparse, so there is no space to save, and merging two tags published in one week into one marker would destroy the annotation the growth chart exists for. Dimensions are already bounded at top-10-per-snapshot.
 - **`collection_started` and `empty` are carried through, not recomputed.** A first measurement on a Wednesday buckets under the preceding Monday, and recomputing from the bucket keys would back-date the page's "since <date>" label onto a day on which nothing was measured. A bucket key labels a week; `collection_started` is a claim about a measurement.
 

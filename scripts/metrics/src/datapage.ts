@@ -110,6 +110,100 @@ function dimensionTable(rows: readonly DimensionEntry[], first: string): string 
   );
 }
 
+/**
+ * A telemetry dimension as two columns: the value and how many of something
+ * reported it.
+ *
+ * Not `dimensionTable`, and the difference is about honesty rather than
+ * layout. That table's numeric columns are headed "views" and "unique
+ * visitors", which is what GitHub reports for a referrer and is not what
+ * these rows hold: a version's figure is a count of instances, a client
+ * kind's is a count of people. Its `title` column would also be empty in
+ * every row, since a ping carries no title, and its `uniques` column would
+ * repeat `count` verbatim. Three columns of noise around one real figure is
+ * how a reader ends up citing the wrong number.
+ */
+function telemetryDimensionTable(
+  rows: readonly DimensionEntry[],
+  first: string,
+  countLabel: string,
+): string {
+  return table(
+    [
+      { label: first, numeric: false },
+      { label: countLabel, numeric: true },
+    ],
+    rows.map(
+      (r) =>
+        `<tr><td>${escapeHtml(r.dimension)}</td>` +
+        `<td class="n">${r.count.toLocaleString('en-US')}</td></tr>`,
+    ),
+  );
+}
+
+/**
+ * The telemetry section, or the empty string when no instance has reported.
+ *
+ * Rendered from the first archived ping, well before the charts are: the
+ * dashboard withholds its telemetry charts until ten instances have reported
+ * in seven days, because a line drawn through three points reads as a trend
+ * it is not, but a table of three rows is just three rows and states its own
+ * size. Suppressing the figures until then would be withholding the data
+ * rather than declining to draw it.
+ *
+ * Returning the empty string rather than a "nothing yet" placeholder is the
+ * point of the guard: an archive with no telemetry at all is the normal state
+ * today, and a heading over four empty tables would read as a broken
+ * collector rather than as a feature nobody has switched on.
+ */
+function telemetrySection(telemetry: DashboardData['telemetry']): string {
+  if (telemetry.network.dates.length === 0) return '';
+  return `
+<h2>Usage pings</h2>
+<p>These pings are opt-in. A self-hosted instance can choose to send one small ping a day; most
+instances do not, and an instance that never opts in is invisible here, so every figure in this
+section is a <strong>lower bound</strong> on the real network rather than a total. Counts are
+rounded to two significant digits on the instance and again on arrival, so they are the right size
+but not exact. An instance is counted only once it has reported on two separate days within the
+last thirty, which keeps a single curious request to the endpoint out of the totals. A version,
+country or client kind held by fewer than three instances is folded into <code>other</code> before
+anything is written here, so no row can point at one instance. A ping carries no domain, no
+instance or account name, no message content, no file names and no IP address.</p>
+<p>Each row describes the fleet on its date, built from the most recent ping per instance in the
+seven days ending on that date, so a quiet instance keeps its last reported figures for up to a
+week. Every column is a reading taken on that day, not a daily total: rows are comparable to each
+other but must not be added together.</p>
+${seriesTable(telemetry.network.dates, [
+  { label: 'instances reporting today', values: telemetry.network.instances_1d },
+  { label: 'within 7 days', values: telemetry.network.instances_7d },
+  { label: 'within 30 days', values: telemetry.network.instances_30d },
+  { label: 'registered users', values: telemetry.network.users_registered },
+  { label: 'active today', values: telemetry.network.users_active1d },
+  { label: 'active 7 days', values: telemetry.network.users_active7d },
+  { label: 'active 30 days', values: telemetry.network.users_active30d },
+  { label: 'messages last 7 days', values: telemetry.network.messages7d },
+  { label: 'storage MiB', values: telemetry.network.storage_mib },
+  { label: 'instances with voice', values: telemetry.network.voice_instances },
+  { label: 'instances federating', values: telemetry.network.federation_instances },
+])}
+
+<h3>Server versions</h3>
+<p>How many reporting instances run each release, at the latest snapshot.</p>
+${telemetryDimensionTable(telemetry.versions.latest, 'version', 'instances')}
+
+<h3>Countries</h3>
+<p>Where reporting instances are hosted, as a two-letter country code the receiver derives from the
+connecting address. The address itself is neither stored nor published; a code it cannot resolve is
+recorded as <code>ZZ</code>.</p>
+${telemetryDimensionTable(telemetry.countries.latest, 'country', 'instances')}
+
+<h3>Client kinds</h3>
+<p>How people reach their instance. This one counts users rather than instances: the fold threshold
+still protects the instance, so a kind is published only when at least three instances report it.</p>
+${telemetryDimensionTable(telemetry.clients.latest, 'client', 'users')}
+`;
+}
+
 function releaseTable(rows: readonly ReleaseEntry[]): string {
   return table(
     [
@@ -135,6 +229,7 @@ body { margin:0; padding:40px 24px 72px; background:var(--bg); color:var(--txt);
 main { max-width:1080px; margin:0 auto; }
 h1 { font-size:30px; letter-spacing:-.02em; margin:0 0 12px; }
 h2 { font-size:20px; letter-spacing:-.01em; margin:44px 0 6px; }
+h3 { font-size:16px; letter-spacing:-.01em; margin:30px 0 6px; color:var(--txt2); }
 p { color:var(--txt2); max-width:70ch; }
 a { color:var(--accent); }
 code, .d, .n, .na { font-family:var(--mono); font-size:13px; }
@@ -296,7 +391,7 @@ ${dimensionTable(data.dimensions.referrers.latest, 'referring site')}
 <h2>Popular paths</h2>
 <p>The most-visited paths in the repository, on the same trailing 14-day basis.</p>
 ${dimensionTable(data.dimensions.paths.latest, 'path')}
-
+${telemetrySection(data.telemetry)}
 <h2>Releases</h2>
 ${releaseTable(data.releases)}
 

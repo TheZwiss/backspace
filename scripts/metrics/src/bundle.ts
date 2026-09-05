@@ -17,6 +17,10 @@ const RELEASES_FILE = 'releases.csv';
 const REFERRERS_FILE = 'traffic/referrers.ndjson';
 const PATHS_FILE = 'traffic/paths.ndjson';
 const WORKFLOWS_FILE = 'workflows.csv';
+const TELEMETRY_NETWORK_FILE = 'telemetry/network.csv';
+const TELEMETRY_VERSIONS_FILE = 'telemetry/versions.ndjson';
+const TELEMETRY_COUNTRIES_FILE = 'telemetry/countries.ndjson';
+const TELEMETRY_CLIENTS_FILE = 'telemetry/clients.ndjson';
 
 /** How many of the latest snapshot's dimensions get a trajectory line. */
 const TRAJECTORY_LIMIT = 5;
@@ -115,6 +119,63 @@ export interface DimensionSeries {
 }
 
 /**
+ * The instance-telemetry network snapshot over time, index-aligned with
+ * `dates`.
+ *
+ * Every field is a GAUGE describing the fleet on its date, never a per-day
+ * event count: `users_registered` is how many accounts the reporting
+ * instances held that day, not how many were created. Two consequences the
+ * rest of this file depends on. Weekly bucketing takes the last value of a
+ * week and never sums (see `downsampleTelemetryNetwork`), and a reader must
+ * not add two rows together to get a two-day figure.
+ *
+ * Every figure is a LOWER BOUND on the real network. Telemetry is opt-in, so
+ * the instances that never turned it on are absent from every column here,
+ * and counts arrive rounded to two significant digits. The page says so; this
+ * type records it so the qualification cannot be lost between the two.
+ */
+export interface TelemetryNetworkSeries {
+  dates: string[];
+  instances_1d: Array<number | null>;
+  instances_7d: Array<number | null>;
+  instances_30d: Array<number | null>;
+  users_registered: Array<number | null>;
+  users_active1d: Array<number | null>;
+  users_active7d: Array<number | null>;
+  users_active30d: Array<number | null>;
+  messages7d: Array<number | null>;
+  storage_mib: Array<number | null>;
+  voice_instances: Array<number | null>;
+  federation_instances: Array<number | null>;
+}
+
+/** Everything the page needs about the instances that opted in to telemetry. */
+export interface TelemetryBlock {
+  network: TelemetryNetworkSeries;
+  /** Server versions, reporting countries, and client kinds (web, desktop, mobile). */
+  versions: DimensionSeries;
+  countries: DimensionSeries;
+  clients: DimensionSeries;
+  /**
+   * The LATEST day's `instances_7d`, or null when that day did not measure it
+   * or the archive holds no telemetry at all.
+   *
+   * Carried as its own field so the page can apply the publication threshold
+   * (charts only at 10 or more instances in the trailing 7 days, spec §9)
+   * with a comparison rather than with arithmetic over the series. The page
+   * is the untested side of this contract, and "find the last non-empty
+   * element of a parallel array" is exactly the kind of step that gets
+   * written as `at(-1)` in one place and as a reduce in another.
+   *
+   * The last DAY's value, not the last MEASURED one: the threshold is a claim
+   * about the last seven days, and answering it from an older row would
+   * publish charts on a bar that is no longer cleared. `downsampleWeekly`
+   * recomputes it from the bucketed series so the two can never disagree.
+   */
+  instances7d: number | null;
+}
+
+/**
  * Everything the static dashboard page renders, in one JSON-serialisable
  * object.
  *
@@ -162,6 +223,13 @@ export interface DashboardData {
     referrers: DimensionSeries;
     paths: DimensionSeries;
   };
+  /**
+   * Empty in every field until the first telemetry ping is archived, which is
+   * the state of the live archive today. It is a sibling of `series` rather
+   * than a member of it because it measures something else entirely: `series`
+   * is this repository on GitHub, `telemetry` is the instances people run.
+   */
+  telemetry: TelemetryBlock;
 }
 
 /**
@@ -296,6 +364,70 @@ function readRepoSeries(store: Store): RepoSeries {
     downloads_updates: rows.map((row) =>
       toNumberOrNull(row.fields['downloads_updates'], `${REPO_FILE} downloads_updates`, row.date),
     ),
+  };
+}
+
+/** The gauge columns of `telemetry/network.csv`, i.e. every field but `dates`. */
+type NetworkColumn = keyof Omit<TelemetryNetworkSeries, 'dates'>;
+
+/**
+ * Reads `telemetry/network.csv`.
+ *
+ * Written out column by column rather than looped over a list of names, for
+ * the reason `copyDimensionSeries` is explicit: the shape is a published
+ * contract, so an explicit build fails to compile the day the interface grows
+ * a field, where a loop with a cast would carry the new field silently and
+ * hide the fact that nobody decided how it should be bucketed.
+ *
+ * An absent file yields empty arrays rather than throwing, because
+ * `store.readCsv` returns no rows for one. That is not incidental: telemetry
+ * was added after collection had already been running, so an archive with no
+ * `telemetry/` directory at all is the state on the day this shipped, and a
+ * reader that treated that absence as an error would take the whole dashboard
+ * down for the state that is currently normal.
+ */
+function readTelemetryNetwork(store: Store): TelemetryNetworkSeries {
+  const rows = readDatedRows(store, TELEMETRY_NETWORK_FILE);
+  const column = (name: NetworkColumn): Array<number | null> =>
+    rows.map((row) =>
+      toNumberOrNull(row.fields[name], `${TELEMETRY_NETWORK_FILE} ${name}`, row.date),
+    );
+  return {
+    dates: rows.map((row) => row.date),
+    instances_1d: column('instances_1d'),
+    instances_7d: column('instances_7d'),
+    instances_30d: column('instances_30d'),
+    users_registered: column('users_registered'),
+    users_active1d: column('users_active1d'),
+    users_active7d: column('users_active7d'),
+    users_active30d: column('users_active30d'),
+    messages7d: column('messages7d'),
+    storage_mib: column('storage_mib'),
+    voice_instances: column('voice_instances'),
+    federation_instances: column('federation_instances'),
+  };
+}
+
+/**
+ * The latest day's `instances_7d`, as `TelemetryBlock.instances7d` defines it.
+ *
+ * `at(-1)` on the raw array, deliberately: `undefined` (no rows) and a
+ * measured `null` (the last row did not carry the column) both mean "the
+ * threshold cannot be shown to be met", and both must read as null rather
+ * than as an older day's count.
+ */
+function latestInstances7d(network: TelemetryNetworkSeries): number | null {
+  return network.instances_7d.at(-1) ?? null;
+}
+
+function readTelemetryBlock(store: Store): TelemetryBlock {
+  const network = readTelemetryNetwork(store);
+  return {
+    network,
+    versions: readDimensionSeries(store, TELEMETRY_VERSIONS_FILE),
+    countries: readDimensionSeries(store, TELEMETRY_COUNTRIES_FILE),
+    clients: readDimensionSeries(store, TELEMETRY_CLIENTS_FILE),
+    instances7d: latestInstances7d(network),
   };
 }
 
@@ -491,6 +623,7 @@ export function buildDashboardData(store: Store, generatedAt: string): Dashboard
   const releases = readReleases(store);
   const referrers = readDimensionSeries(store, REFERRERS_FILE);
   const paths = readDimensionSeries(store, PATHS_FILE);
+  const telemetry = readTelemetryBlock(store);
   const meta = store.readMeta();
 
   const series = { views, clones, stars, forks, contributors, repo, workflows };
@@ -502,6 +635,15 @@ export function buildDashboardData(store: Store, generatedAt: string): Dashboard
   // `collection_started` asks how far back the measured timeline reaches.
   // An archive holding only `meta.json` — the state right after bootstrap —
   // is empty by this test.
+  //
+  // Telemetry counts towards NEITHER question, and that is a decision rather
+  // than an omission. `collect.ts` writes the telemetry files only inside a
+  // run that also wrote the traffic series, so a telemetry-only archive is
+  // not a state the collector can produce; and telemetry began years after
+  // collection did, so it can never hold the earliest date. Adding it to
+  // `collection_started` would instead risk the opposite error the field
+  // exists to prevent, moving the "since <date>" label onto whichever series
+  // happened to start first.
   const empty =
     Object.values(series).every((one) => one.dates.length === 0) &&
     releases.length === 0 &&
@@ -520,6 +662,7 @@ export function buildDashboardData(store: Store, generatedAt: string): Dashboard
     series,
     releases,
     dimensions: { referrers, paths },
+    telemetry,
   };
 }
 
@@ -765,6 +908,72 @@ function downsampleRepo(series: RepoSeries): RepoSeries {
 }
 
 /**
+ * Buckets the telemetry network series, taking each week's LAST measured
+ * value for every column.
+ *
+ * `lastBucket`, never `sumBucket`. Every column here is a gauge: a week of
+ * seven daily readings of a fleet that held steady at 12 instances would
+ * publish 84 instances if summed, which is the same failure the cumulative
+ * counters are protected from and is just as plausible-looking on a chart.
+ * The trap is sharper for this series than for `stars`, because a couple of
+ * these names (`messages7d`, `users_active7d`) read like per-day event counts
+ * and are not: they are trailing-window figures the instances themselves
+ * computed, already covering seven days each, so summing a week of them would
+ * over-count by a factor of about seven on top of everything else.
+ *
+ * Bucketed under the UTC Monday, like every other series in the bundle. The
+ * page shares one x-axis across the whole payload and `rangeWindow` anchors
+ * every range on the newest dated series row, so a telemetry series keyed on
+ * bucket END dates would sit up to six days ahead of the rest of the bundle
+ * and quietly widen every window that includes it.
+ */
+function downsampleTelemetryNetwork(series: TelemetryNetworkSeries): TelemetryNetworkSeries {
+  const buckets = weekBuckets(series.dates);
+  const gauge = (values: ReadonlyArray<number | null>): Array<number | null> =>
+    buckets.map((bucket) => lastBucket(series.dates, values, bucket.indices));
+  return {
+    dates: buckets.map((bucket) => bucket.monday),
+    instances_1d: gauge(series.instances_1d),
+    instances_7d: gauge(series.instances_7d),
+    instances_30d: gauge(series.instances_30d),
+    users_registered: gauge(series.users_registered),
+    users_active1d: gauge(series.users_active1d),
+    users_active7d: gauge(series.users_active7d),
+    users_active30d: gauge(series.users_active30d),
+    messages7d: gauge(series.messages7d),
+    storage_mib: gauge(series.storage_mib),
+    voice_instances: gauge(series.voice_instances),
+    federation_instances: gauge(series.federation_instances),
+  };
+}
+
+/**
+ * The weekly form of the telemetry block: the network series bucketed, the
+ * three dimension series copied unchanged.
+ *
+ * The dimension series are left daily for exactly the reason `referrers` and
+ * `paths` are, and the reason applies more strongly here: their trajectories
+ * are differences between CONSECUTIVE snapshots, and bucketing the snapshots
+ * would redefine that quantity while leaving its name and its type alone.
+ *
+ * `instances7d` is RECOMPUTED from the bucketed series rather than carried
+ * over. The two differ whenever the final partial week ends on a day that is
+ * not the last measured one, and a threshold read off a figure that no longer
+ * appears anywhere in the published series would be unverifiable from the
+ * bundle itself.
+ */
+function downsampleTelemetry(block: TelemetryBlock): TelemetryBlock {
+  const network = downsampleTelemetryNetwork(block.network);
+  return {
+    network,
+    versions: copyDimensionSeries(block.versions),
+    countries: copyDimensionSeries(block.countries),
+    clients: copyDimensionSeries(block.clients),
+    instances7d: latestInstances7d(network),
+  };
+}
+
+/**
  * A structural copy of a dimension series, down to the individual entries.
  *
  * The bucketed series are rebuilt from scratch, so they are new arrays
@@ -815,6 +1024,9 @@ function copyDimensionSeries(series: DimensionSeries): DimensionSeries {
  *   point-in-time totals and take the week's LAST measured value.
  * - `workflows.runs` sums, for the same reason the traffic counts do: a run is
  *   an event on its day, not a running total.
+ * - every column of `telemetry.network` is a gauge and takes the week's last
+ *   measured value, like the cumulative counters and unlike the event counts,
+ *   even where the column name reads like a per-day total.
  * - `releases` and `dimensions` are not bucketed at all. Releases are sparse
  *   — there is no space to save, and merging two tags published in one week
  *   into one marker would destroy the annotation the Growth chart exists
@@ -851,6 +1063,7 @@ export function downsampleWeekly(data: DashboardData): DashboardData {
       referrers: copyDimensionSeries(data.dimensions.referrers),
       paths: copyDimensionSeries(data.dimensions.paths),
     },
+    telemetry: downsampleTelemetry(data.telemetry),
   };
 }
 
