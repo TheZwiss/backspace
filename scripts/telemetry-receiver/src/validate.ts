@@ -16,12 +16,18 @@ const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 /** How far a reported day may sit from the receiver's own UTC day, in either direction. */
 const MAX_DAY_DRIFT = 2;
 
-/** The numeric fields schema 1 defines. Anything else in the body is opaque. */
+/**
+ * Every numeric field schema 1 defines, section 5 of the spec. Anything else in
+ * the body is opaque and passes through untouched. A field missing from this list
+ * is neither range checked nor rounded, so a new numeric field in the payload has
+ * to be added here in the same change.
+ */
 const COUNT_FIELDS: ReadonlyArray<readonly [string, string]> = [
   ['users', 'registered'], ['users', 'active1d'], ['users', 'active7d'], ['users', 'active30d'],
   ['clients', 'web'], ['clients', 'desktop'], ['clients', 'mobile'],
   ['content', 'spaces'], ['content', 'channels'], ['content', 'messages'], ['content', 'messages7d'], ['content', 'storageMiB'],
   ['features', 'peers'],
+  ['runtime', 'node'],
 ];
 
 export interface ValidPing { instance: string; day: string; schema: number; body: string }
