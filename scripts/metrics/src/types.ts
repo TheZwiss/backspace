@@ -79,3 +79,33 @@ export interface DimensionRow {
   count: number;
   uniques: number;
 }
+
+/**
+ * One day of the instance-telemetry network snapshot.
+ *
+ * Every field is a gauge, not a running total: the row describes the fleet as
+ * it looked on `date`, built from the latest ping per instance in the seven
+ * days ending on `date`. A quiet instance keeps its last reported values for
+ * up to a week, so consecutive rows are comparable but must never be summed
+ * across days. See `telemetry.ts` for the snapshot rule and spec section 8.
+ *
+ * `instances_1d` counts instances that pinged on `date` itself, `instances_7d`
+ * counts the snapshot, and `instances_30d` counts every eligible instance seen
+ * in the trailing thirty days. Only `users_active1d` is restricted to rows
+ * dated `date`; the other sums run over the snapshot, so a figure can move on
+ * a day when nothing was reported at all.
+ */
+export interface NetworkPoint {
+  date: IsoDate;
+  instances_1d: number;
+  instances_7d: number;
+  instances_30d: number;
+  users_registered: number;
+  users_active1d: number;
+  users_active7d: number;
+  users_active30d: number;
+  messages7d: number;
+  storage_mib: number;
+  voice_instances: number;
+  federation_instances: number;
+}
