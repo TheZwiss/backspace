@@ -608,6 +608,18 @@ Executed before each release. See `docs/superpowers/specs/2026-05-03-electron-re
 - `silent: false` (plays system sound)
 - Click handler: defaults to show + focus the main window; an optional `onClick` parameter overrides this (used by the update-ready notification to call `autoUpdater.quitAndInstall()` directly)
 
+Chat notifications carry optional `{ channelId, spaceId, userId }` context through
+`showNotification(title, body, options?)`. Clicking restores a minimized window,
+shows it, and sends `notification-click` back to the originating renderer only
+while its home origin still matches. `onNotificationClick` returns an unsubscribe
+function; the web client feature-detects it for compatibility with older shells.
+`NotificationController` validates the signed-in home user and current channel
+membership before navigating to `/channels/<spaceId or @me>/<channelId>`.
+The space comes from `channelToSpaceMap`, including remote spaces; existing
+channel-origin routing selects the API instance. Browser notifications use the
+same navigation handler and close on click. Mobile navigation also brings the
+chat screen to the top when the URL already points at that chat.
+
 Badge count: `set-badge-count` IPC calls `app.setBadgeCount()` (macOS dock badge, Windows taskbar overlay).
 
 **Win32 attribution:** `app.setAppUserModelId('com.backspace.desktop')` set early in startup so notifications attribute to "Backspace" in Windows Action Center.
@@ -679,7 +691,8 @@ All handlers registered in `main.ts:registerIpcHandlers()`.
 
 | Channel | Direction | Payload | Action |
 |---------|-----------|---------|--------|
-| `show-notification` | R->M | `{ title, body }` | Show native notification |
+| `show-notification` | R->M | `{ title, body, options?: { channelId?, spaceId?, userId? } }` | Show native notification with optional chat target |
+| `notification-click` | M->R | `{ channelId?, spaceId?, userId? }` | Open the notification's chat in the originating session |
 | `set-badge-count` | R->M | `number` | Set dock/taskbar badge |
 | `minimize-window` | R->M | — | Minimize window |
 | `maximize-window` | R->M | — | Toggle maximize/unmaximize |

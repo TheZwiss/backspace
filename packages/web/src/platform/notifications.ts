@@ -1,28 +1,33 @@
 import { isElectron } from './platform';
-import { useUIStore } from '../stores/uiStore';
 
-interface NotificationOptions {
+export interface NotificationOptions {
   channelId?: string;
   spaceId?: string;
+  userId?: string;
+}
+
+const clicks = new EventTarget();
+
+/** One subscription per mounted controller, including older desktop bridges. */
+export function onNotificationClick(callback: (options: NotificationOptions) => void): () => void {
+  const handler = (event: Event) => callback((event as CustomEvent<NotificationOptions>).detail);
+  clicks.addEventListener('click', handler);
+  const unsubscribe = window.backspace?.onNotificationClick?.(callback);
+  return () => {
+    clicks.removeEventListener('click', handler);
+    unsubscribe?.();
+  };
 }
 
 export function sendNotification(title: string, body: string, options?: NotificationOptions): void {
   if (isElectron()) {
-    window.backspace!.showNotification(title, body);
+    window.backspace!.showNotification(title, body, options);
   } else if ('Notification' in window && Notification.permission === 'granted') {
     const notification = new Notification(title, { body, icon: '/icons/icon-192.png' });
     notification.onclick = () => {
       window.focus();
-      const { channelId, spaceId } = options ?? {};
-      if (channelId) {
-        const isMobile = useUIStore.getState().isMobile;
-        if (isMobile) {
-          useUIStore.getState().pushMobileScreen('channel-chat', {
-            channelId,
-            spaceId: spaceId || '@me',
-          });
-        }
-      }
+      notification.close();
+      if (options) clicks.dispatchEvent(new CustomEvent('click', { detail: options }));
     };
   }
 }
