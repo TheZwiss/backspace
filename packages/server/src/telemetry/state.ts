@@ -38,16 +38,24 @@ export function readTelemetryState(sqlite: Database.Database): TelemetryStatus {
 }
 
 /**
- * The single on/off transition. Enabling mints a fresh id and stamps today as
- * the last reported day so the first ping goes out tomorrow at the slot, never
- * within the minute. Disabling clears the id: a later re-enable is a new
- * anonymous instance as far as the receiver can tell.
+ * The single on/off transition. An off-to-on transition mints a fresh id and
+ * stamps today as the last reported day so the first ping goes out tomorrow at
+ * the slot, never within the minute. Turning off clears the id: a later
+ * re-enable is a new anonymous instance as far as the receiver can tell.
+ *
+ * Enabling an instance that is already on changes nothing. Rotating the id
+ * there would make one instance look like two to the receiver and reset its
+ * two-days-in-thirty qualification, and restamping the last day would skip
+ * that day's ping. A repeated admin save and a re-run of install.sh with
+ * TELEMETRY=on both take this path.
  */
 export function setTelemetryEnabled(
   sqlite: Database.Database,
   enabled: boolean,
   today: string,
 ): TelemetryStatus {
+  const current = readTelemetryState(sqlite);
+  if (enabled && current.enabled === true) return current;
   if (enabled) {
     sqlite.prepare(
       'UPDATE instance_settings SET telemetry_enabled = 1, telemetry_id = ?, telemetry_last_day = ?, telemetry_last_error = NULL, updated_at = ? WHERE id = 1',

@@ -50,11 +50,18 @@ describe('telemetry state', () => {
     expect(second).not.toBe(first);
   });
 
-  it('mints a fresh id when enable is called twice in a row', () => {
-    const first = setTelemetryEnabled(db, true, '2026-09-06').id;
-    const second = setTelemetryEnabled(db, true, '2026-09-07').id;
-    expect(second).not.toBe(first);
-    expect(readTelemetryState(db).lastDay).toBe('2026-09-07');
+  it('keeps the id and last day when enable is called while already enabled', () => {
+    const first = setTelemetryEnabled(db, true, '2026-09-06');
+    const second = setTelemetryEnabled(db, true, '2026-09-07');
+    expect(second.id).toBe(first.id);
+    expect(second.lastDay).toBe('2026-09-06');
+    expect(readTelemetryState(db)).toMatchObject({ enabled: true, id: first.id, lastDay: '2026-09-06' });
+  });
+
+  it('keeps a pending error when enable is called while already enabled', () => {
+    setTelemetryEnabled(db, true, '2026-09-06');
+    recordTelemetryFailure(db, '2026-09-07', 503);
+    expect(setTelemetryEnabled(db, true, '2026-09-07').lastError).toEqual({ day: '2026-09-07', status: 503 });
   });
 
   it('clears the last day and the last error on disable', () => {
