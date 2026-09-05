@@ -1472,3 +1472,12 @@ export interface CheckInviteInvalidResponse {
 }
 
 export type CheckInviteResponse = CheckInviteValidResponse | CheckInviteInvalidResponse;
+
+export interface TelemetryStatus {
+  /** null = never asked. */
+  enabled: boolean | null;
+  lastDay: string | null;
+  lastError: { day: string; status: number } | null;
+  /** The random telemetry id, or null while off. */
+  id: string | null;
+}
