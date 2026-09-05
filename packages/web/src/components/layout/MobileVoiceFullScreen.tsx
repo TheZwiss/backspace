@@ -1,3 +1,4 @@
+import { layoutRect, layoutPixels } from '../../platform/interfaceScale';
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
@@ -136,10 +137,10 @@ export function MobileVoiceFullScreen() {
     const anchorBtn = cameraPickerAnchorRef.current?.querySelector('button');
     if (!anchorBtn) return;
     const update = () => {
-      const r = anchorBtn.getBoundingClientRect();
+      const r = layoutRect(anchorBtn.getBoundingClientRect());
       setCameraPickerRect({
         left: r.left,
-        bottom: window.innerHeight - r.top + 6,
+        bottom: layoutPixels(window.innerHeight) - r.top + 6,
       });
     };
     update();
@@ -603,7 +604,7 @@ export function MobileVoiceFullScreen() {
               bottom: cameraPickerRect.bottom,
               minWidth: 180,
               maxWidth: 260,
-              maxHeight: 'min(50vh, 320px)',
+              maxHeight: 'min(calc(50*var(--app-vh)), 320px)',
               WebkitOverflowScrolling: 'touch',
             }}
           >

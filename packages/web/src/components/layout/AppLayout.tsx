@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { layoutPixels } from '../../platform/interfaceScale';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import i18n from '../../i18n';
@@ -268,7 +269,7 @@ export function AppLayout() {
 
   // Responsive detection
   useEffect(() => {
-    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    const checkMobile = () => setIsMobile(layoutPixels(window.innerWidth) < 768);
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);

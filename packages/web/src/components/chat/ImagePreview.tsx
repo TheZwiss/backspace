@@ -60,7 +60,7 @@ export function ImagePreview() {
       <img
         src={imageUrl}
         alt={t('chat:preview.alt')}
-        className="max-w-[90vw] max-h-[90vh] object-contain rounded shadow-elevation-high"
+        className="max-w-[calc(90*var(--app-vw))] max-h-[calc(90*var(--app-vh))] object-contain rounded shadow-elevation-high"
         onClick={(e) => e.stopPropagation()}
       />
     </div>

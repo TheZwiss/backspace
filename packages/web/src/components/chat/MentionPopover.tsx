@@ -181,7 +181,7 @@ function MobileMention({
         style={{
           bottom: 'env(keyboard-inset-height, 0px)',
           paddingBottom: 'env(safe-area-inset-bottom)',
-          maxHeight: 'min(50dvh, 50vh)',
+          maxHeight: 'min(calc(50*var(--app-dvh)), calc(50*var(--app-vh)))',
         }}
       >
         {/* Drag handle */}

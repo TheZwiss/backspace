@@ -1,3 +1,4 @@
+import { layoutRect, layoutPixels } from '../../platform/interfaceScale';
 import React, { useEffect, useLayoutEffect, useRef, useCallback, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
@@ -93,19 +94,19 @@ function SubmenuFlyout({ submenu, triggerRef, onMouseEnter, onMouseLeave, close 
     const trigger = triggerRef.current;
     if (!flyout || !trigger) return;
 
-    const tRect = trigger.getBoundingClientRect();
-    const fRect = flyout.getBoundingClientRect();
+    const tRect = layoutRect(trigger.getBoundingClientRect());
+    const fRect = layoutRect(flyout.getBoundingClientRect());
     const gap = 4;
 
     let left = tRect.right + gap;
-    if (left + fRect.width > window.innerWidth) {
+    if (left + fRect.width > layoutPixels(window.innerWidth)) {
       left = tRect.left - fRect.width - gap;
     }
     if (left < 8) left = 8;
 
     let top = tRect.top;
-    if (top + fRect.height > window.innerHeight - 8) {
-      top = window.innerHeight - fRect.height - 8;
+    if (top + fRect.height > layoutPixels(window.innerHeight) - 8) {
+      top = layoutPixels(window.innerHeight) - fRect.height - 8;
     }
     if (top < 8) top = 8;
 
@@ -290,11 +291,11 @@ function DesktopMenu({ items, position, close, closeGuard }: DesktopMenuProps) {
   useLayoutEffect(() => {
     const el = menuRef.current;
     if (!el) return;
-    const rect = el.getBoundingClientRect();
-    let x = position.x;
-    let y = position.y;
-    if (x + rect.width > window.innerWidth - 8) x = window.innerWidth - rect.width - 8;
-    if (y + rect.height > window.innerHeight - 8) y = window.innerHeight - rect.height - 8;
+    const rect = layoutRect(el.getBoundingClientRect());
+    let x = layoutPixels(position.x);
+    let y = layoutPixels(position.y);
+    if (x + rect.width > layoutPixels(window.innerWidth) - 8) x = layoutPixels(window.innerWidth) - rect.width - 8;
+    if (y + rect.height > layoutPixels(window.innerHeight) - 8) y = layoutPixels(window.innerHeight) - rect.height - 8;
     if (x < 8) x = 8;
     if (y < 8) y = 8;
     el.style.left = `${x}px`;
@@ -405,7 +406,7 @@ function DesktopMenu({ items, position, close, closeGuard }: DesktopMenuProps) {
       <div
         ref={menuRef}
         tabIndex={-1}
-        className="fixed z-[200] min-w-[180px] py-1.5 glass rounded-md animate-fade-in max-h-[calc(100vh-16px)] overflow-y-auto scrollbar-thin outline-none"
+        className="fixed z-[200] min-w-[180px] py-1.5 glass rounded-md animate-fade-in max-h-[calc(calc(100*var(--app-vh))-16px)] overflow-y-auto scrollbar-thin outline-none"
         style={{ left: position.x, top: position.y }}
         onKeyDown={handleKeyDown}
         onMouseDown={(e) => e.stopPropagation()}

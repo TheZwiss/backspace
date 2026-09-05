@@ -305,7 +305,7 @@ export function CategorySettingsModal() {
     <>
       <Modal isOpen={isOpen} onClose={closeModal} title={t('spaces:category.settings.title')} mobileStyle="fullscreen" maxWidth={showTabs ? 'max-w-2xl' : 'max-w-md'}>
         {showTabs ? (
-          <div className="flex gap-4 h-[min(520px,70vh)]">
+          <div className="flex gap-4 h-[min(520px,calc(70*var(--app-vh)))]">
             {/* Tabs */}
             <div className="w-32 flex-shrink-0 self-start z-10">
               <div className="glass-bubble rounded-lg p-1.5 space-y-0.5">

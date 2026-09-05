@@ -1,3 +1,4 @@
+import { layoutRect } from '../../platform/interfaceScale';
 import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useChatStore } from '../../stores/chatStore';
@@ -723,8 +724,8 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
       // the parent's bottom edge to the bubble's bottom edge (which folds
       // in `env(safe-area-inset-bottom) + 6` on mobile or `12 px` on
       // desktop, whichever the composer's `bottom` resolves to).
-      const composerRect = el.getBoundingClientRect();
-      const parentRect = target.getBoundingClientRect();
+      const composerRect = layoutRect(el.getBoundingClientRect());
+      const parentRect = layoutRect(target.getBoundingClientRect());
       const bottomOffset = Math.max(0, parentRect.bottom - composerRect.bottom);
       const clearance = Math.round(composerRect.height + bottomOffset + 12);
       target.style.setProperty('--composer-clearance', `${clearance}px`);
@@ -957,7 +958,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
                 ? t('chat:composer.placeholder.dm', { name: channelName.slice(1) })
                 : t('chat:composer.placeholder.channel', { name: channelName }))
             }
-            className="input-embedded flex-1 py-[10px] px-1 resize-none text-[15px] leading-[1.375rem] max-h-[50vh] scrollbar-thin"
+            className="input-embedded flex-1 py-[10px] px-1 resize-none text-[15px] leading-[1.375rem] max-h-[calc(50*var(--app-vh))] scrollbar-thin"
             rows={1}
           />
 

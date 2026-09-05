@@ -1,3 +1,4 @@
+import { layoutPixels } from '../../platform/interfaceScale';
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
@@ -343,7 +344,7 @@ export function DmSearchBar() {
     if (!active || !anchorRef.current) return;
     const update = () => {
       const rect = anchorRef.current?.getBoundingClientRect();
-      if (rect) setDropdownWidth(rect.width);
+      if (rect) setDropdownWidth(layoutPixels(rect.width));
     };
     update();
     const ro = new ResizeObserver(update);

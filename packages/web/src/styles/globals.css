@@ -20,6 +20,10 @@
 
 @layer base {
   :root {
+    --interface-scale: 1;
+    --app-vh: calc(1vh / var(--interface-scale));
+    --app-dvh: calc(1dvh / var(--interface-scale));
+    --app-vw: calc(1vw / var(--interface-scale));
     /* ── Matte Surfaces (RGB channels for Tailwind opacity support) ── */
     --bg-base: 11 11 16;
     --bg-channel: 26 26 35;

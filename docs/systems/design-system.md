@@ -15,6 +15,31 @@ Font: DM Sans (primary) with system fallbacks
 - `prefers-reduced-transparency` → fall back to solid surfaces
 - NOT a Discord clone — Backspace has its own visual identity
 
+## Interface scale
+
+Account settings include a device-local interface scale: 75–250% in 25% steps,
+default/reset 100%. `interfaceScaleStore` persists the percentage under
+`backspace-interface-scale`; unsupported stored values fall back to 100%.
+`main.tsx` applies it before mounting React, including auth pages and portals.
+English, German, and Russian labels live in the `settings` namespace.
+
+The web and Electron clients share root CSS `zoom`. This is independent of the
+browser's own zoom controls. CSS viewport units do **not** compensate for CSS
+zoom, so viewport-constrained surfaces use `--app-vh`, `--app-dvh`, and `--app-vw`
+(one viewport unit divided by `--interface-scale`). Tailwind's `h-screen` and
+`min-h-screen` use the same units. Keep Electron's title-bar reservation in
+physical pixels by dividing it by the scale as well.
+
+DOM rectangles and pointer coordinates are visual pixels. Convert them with
+`layoutPixels` / `layoutRect` before assigning CSS positions, sizes, or drag
+offsets. `computeFloatingPosition` accepts visual rectangles and dimensions and
+returns layout coordinates; its callers must not pre-convert them. Pure hit
+tests comparing two visual coordinates do not need conversion.
+
+Changing scale dispatches `resize` to update floating surfaces and the effective
+mobile breakpoint. The account settings stay accessible when crossing that
+breakpoint. Native browser zoom and pinch gestures retain their normal behavior.
+
 ---
 
 ## Color Palette

@@ -139,7 +139,7 @@ export function VoiceGrid({ participants }: VoiceGridProps) {
 
         {/* Bottom strip of other tiles */}
         {!stripHidden && otherTiles.length > 0 && (
-          <div className="h-[120px] max-h-[20vh] min-h-[80px] flex-shrink-0 flex items-center justify-center gap-2 p-2 bg-surface-base/50 overflow-x-auto no-scrollbar">
+          <div className="h-[120px] max-h-[calc(20*var(--app-vh))] min-h-[80px] flex-shrink-0 flex items-center justify-center gap-2 p-2 bg-surface-base/50 overflow-x-auto no-scrollbar">
             {otherTiles.map((t) => (
               <div
                 key={t.key}
