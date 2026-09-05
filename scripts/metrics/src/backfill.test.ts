@@ -418,6 +418,36 @@ describe('backfill', () => {
     ]);
   });
 
+  // A reconstruction cannot see the full 30-day lookback for the earliest days
+  // it covers, so its dimension rows for those days are a lower bound and can
+  // fold a value into `other` that the collector, running daily with full
+  // history, named outright. Merging those in by (snapshot_date, dimension)
+  // both replaces a measured row with a worse one and leaves the collector's
+  // row beside the folded one, double-counting the day. A day the file already
+  // carries is therefore left exactly as it is.
+  it('never touches a telemetry day the dimensional file already has rows for', async () => {
+    const store = createStore(dir);
+    const existing = [
+      { snapshot_date: '2026-03-03', dimension: '1.1.2', title: '', count: 5, uniques: 5 },
+      { snapshot_date: '2026-03-03', dimension: '9.9.9', title: '', count: 4, uniques: 4 },
+    ];
+    store.writeNdjson('telemetry/versions.ndjson', existing);
+
+    await backfill({
+      client: fakeClient(),
+      store,
+      ...base,
+      telemetry: async () => PINGS,
+    });
+
+    // 2026-03-03 is byte-identical and gained nothing; 2026-03-04 was absent
+    // and was filled.
+    expect(store.readNdjson('telemetry/versions.ndjson')).toEqual([
+      ...existing,
+      { snapshot_date: '2026-03-04', dimension: '1.1.2', title: '', count: 3, uniques: 3 },
+    ]);
+  });
+
   it('writes no telemetry files at all when no fetcher is given', async () => {
     const store = createStore(dir);
     await backfill({ client: fakeClient(), store, ...base });

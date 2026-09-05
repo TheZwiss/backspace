@@ -262,9 +262,11 @@ function cumulativeByDay(dates: readonly IsoDate[], through: IsoDate): CountPoin
  * date it wrote itself on a previous run is "absent" to nothing on the next
  * one, so nothing changes.
  *
- * The three telemetry NDJSON files are the single exception, because
- * `upsertDimensional` has no if-absent mode. They stay idempotent anyway, and
- * safe against the collector, for the reason given at `mergeDimensional`.
+ * The three telemetry NDJSON files hold to the same rule at a coarser grain:
+ * `upsertDimensional` has no if-absent mode, so `mergeDimensional` applies one
+ * itself and skips every day the file already carries a row for. A day is
+ * filled whole or left alone; see that function for why a row-keyed if-absent
+ * would double-count instead.
  */
 /**
  * The returned `written` lists the files backfill is PERMITTED to write —
@@ -334,23 +336,38 @@ export async function backfill(options: BackfillOptions): Promise<{ written: str
   }
 
   /**
-   * Reads `file`, merges `incoming` into it keyed on
-   * `(snapshot_date, dimension)`, and writes the result back.
+   * Reads `file`, adds only the rows for days the file does not already carry,
+   * and writes the result back.
    *
-   * The one write in this function that is not if-absent, because
-   * `upsertDimensional` has no such mode and adding one would be the wrong
-   * fix. The if-absent rule exists where the two writers measure a date by
-   * different methods and the collector's is the true one: a reconstructed
-   * star count comes from `/stargazers`, which cannot see an unstar, so it can
-   * only ever be a lower bound. These rows have no such split. Both writers
-   * call `aggregateTelemetry` on rows from the same export, so for any day
-   * inside both windows they compute the identical value and the overwrite is
-   * a no-op. Where they can differ is the start of the reconstructed range,
-   * whose short lookback is described at the write site below and which the
-   * collector, running daily, never has.
+   * If-absent by DAY, not by `(snapshot_date, dimension)`, which is the key
+   * `upsertDimensional` merges on. Both halves of that are load-bearing.
+   *
+   * If-absent at all, because the two writers do not agree. They call the same
+   * `aggregateTelemetry`, but not over the same rows: for a day near the start
+   * of the reconstructed range the fetched export cannot reach back the full
+   * thirty days the eligibility rule looks over, so instances lose their second
+   * reporting day, drop out of the eligible set, and their dimension values
+   * fall under the folding threshold. The reconstruction is a lower bound there
+   * in exactly the way a rebuilt star count is, and section 4.2's rule applies
+   * unchanged: a day the collector measured with full history is never replaced.
+   *
+   * By day rather than by row, because `dimension` is part of the merge key. A
+   * version that folds into `other` on a truncated lookback does not collide
+   * with the collector's row naming it, so a row-keyed merge would leave
+   * `{D, "1.1.2", 5}` in place and add `{D, "other", 3}` beside it, and the day
+   * would count eight instances where five reported. A day is one indivisible
+   * measurement here; it is filled whole or left alone.
    */
   function mergeDimensional(file: string, incoming: readonly DimensionRow[]): void {
-    store.writeNdjson(file, upsertDimensional(store.readNdjson(file), incoming));
+    const existing = store.readNdjson(file);
+    const measured = new Set(existing.map((row) => row.snapshot_date));
+    store.writeNdjson(
+      file,
+      upsertDimensional(
+        existing,
+        incoming.filter((row) => !measured.has(row.snapshot_date)),
+      ),
+    );
   }
 
   mergeIfAbsent(
