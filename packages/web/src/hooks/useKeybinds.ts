@@ -202,11 +202,13 @@ export function useKeybinds(): void {
   const portalRef = useRef(portalStatus);
   portalRef.current = portalStatus;
   const keybindsRef = useRef(keybinds);
-  keybindsRef.current = keybinds.filter((kb) => !Object.hasOwn(portalStatus?.shortcuts ?? {}, kb.actionId));
+  keybindsRef.current = keybinds;
+  const hasPtt = portalStatus
+    ? Object.hasOwn(portalStatus.shortcuts, 'pushToTalk')
+    : keybinds.some((kb) => kb.actionId === 'pushToTalk');
 
   // --- PTT activation lifecycle ---
   useEffect(() => {
-    const hasPtt = keybinds.some((kb) => kb.actionId === 'pushToTalk');
     const inVoice = !!currentVoiceChannelId;
     const voice = useVoiceStore.getState();
 
@@ -217,7 +219,7 @@ export function useKeybinds(): void {
     } else if (voice.pttActive) {
       voice.setPttActive(false);
     }
-  }, [keybinds, currentVoiceChannelId]);
+  }, [hasPtt, currentVoiceChannelId]);
 
   // Subscribe before syncing. Portal actions have a single source, so rapid PTT
   // press/release cycles must not pass through the legacy hook's time-based dedup.
@@ -246,13 +248,13 @@ export function useKeybinds(): void {
 
   }, [keybinds]);
 
-  // --- Web fallback: always active as safety net ---
+  // --- Local backend: browser and non-Wayland desktop only ---
   // On web: this is the only keybind path (works when tab is focused).
   // On Electron: this provides in-app keybinds even if the OS-level hook
-  // fails to start (e.g. macOS Accessibility permission denied). When the
-  // portal is working, exclude its accepted actions to avoid double toggles.
+  // fails to start (e.g. macOS Accessibility permission denied). On Wayland,
+  // system assignments are the only source, even when the portal is unavailable.
   useEffect(() => {
-    if (keybinds.length === 0) return;
+    if (portalStatus || keybinds.length === 0) return;
     const cleanup = setupWebFallback(keybindsRef, isElectron() && !portalStatus);
     return cleanup ?? undefined;
   }, [keybinds, portalStatus]);

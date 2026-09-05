@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { EventEmitter } from 'node:events';
 import { DBusError, Message, MessageBus, MessageType, sessionBus, Variant } from 'dbus-next';
-import { KeybindConfig, PortalKeybindStatus, preferredTrigger } from './portalShortcut';
+import { PortalKeybindStatus } from './portalShortcut';
 
 const SERVICE = 'org.freedesktop.portal.Desktop';
 const PATH = '/org/freedesktop/portal/desktop';
@@ -14,7 +14,7 @@ const ACTIONS: Record<string, string> = {
 type Properties = Record<string, Variant<unknown>>;
 type Shortcut = [string, Properties];
 
-/** One connection/session per configuration. BindShortcuts may only be called once per session. */
+/** The desktop owns assignments. One stable action catalogue and one session per app run. */
 export class GlobalShortcutsPortal {
   private bus?: MessageBus;
   private session?: string;
@@ -23,7 +23,10 @@ export class GlobalShortcutsPortal {
   private closed = false;
   private active = new Set<string>();
   private shortcuts: Record<string, string> = {};
-  private requested = new Set<string>();
+  private requested = new Set(Object.keys(ACTIONS));
+  private bound = false;
+  private refreshing?: Promise<void>;
+  private refreshAgain = false;
   private responses = new Map<string, (body: unknown[]) => void>();
   private cancellations = new Set<() => void>();
 
@@ -33,22 +36,8 @@ export class GlobalShortcutsPortal {
     private readonly createBus: () => MessageBus = sessionBus,
   ) {}
 
-  async start(bindings: KeybindConfig[]): Promise<void> {
+  async start(interactive = false): Promise<void> {
     if (this.closed || this.bus) return;
-    const shortcuts: Shortcut[] = [];
-    for (const binding of bindings) {
-      const trigger = preferredTrigger(binding);
-      if (!trigger || !ACTIONS[binding.actionId] || this.requested.has(binding.actionId)) continue;
-      this.requested.add(binding.actionId);
-      shortcuts.push([binding.actionId, {
-        description: new Variant('s', ACTIONS[binding.actionId]),
-        preferred_trigger: new Variant('s', trigger),
-      }]);
-    }
-    if (!shortcuts.length) {
-      this.status({ state: 'idle', shortcuts: {} });
-      return;
-    }
     this.status({ state: 'pending', shortcuts: {} });
     try {
       this.bus = this.createBus();
@@ -91,12 +80,50 @@ export class GlobalShortcutsPortal {
         throw new Error('Portal returned an invalid session handle');
       }
       this.session = session;
+      const previous = await this.listShortcuts();
+      // Do not prompt on a first app launch. Opening Keybinds explicitly opts in.
+      // On subsequent launches restore the registered actions even with no local bindings.
+      if (!interactive && (!Array.isArray(previous) || !previous.length)) {
+        this.status({ state: 'idle', shortcuts: {} });
+        return;
+      }
+      const shortcuts: Shortcut[] = Object.entries(ACTIONS).map(([id, description]) =>
+        [id, { description: new Variant('s', description) }]);
       const bound = await this.request('BindShortcuts', 'oa(sa{sv})sa{sv}',
         (token) => [session, shortcuts, '', { handle_token: new Variant('s', token) }]);
+      this.bound = true;
       this.setShortcuts(bound.shortcuts?.value);
     } catch (error) {
       if (!this.closed) this.fail(error);
     }
+  }
+
+  private async listShortcuts(): Promise<unknown> {
+    const result = await this.request('ListShortcuts', 'oa{sv}',
+      (token) => [this.session, { handle_token: new Variant('s', token) }]);
+    if (!Array.isArray(result.shortcuts?.value)) throw new Error('Portal returned invalid shortcuts');
+    return result.shortcuts.value;
+  }
+
+  /** Signals can describe only changed entries; re-read the authoritative full list. */
+  refresh(): Promise<void> {
+    if (this.closed || !this.bound) return Promise.resolve();
+    if (this.refreshing) {
+      this.refreshAgain = true;
+      return this.refreshing;
+    }
+    this.refreshing = (async () => {
+      try {
+        do {
+          this.refreshAgain = false;
+          const shortcuts = await this.listShortcuts();
+          if (!this.closed) this.setShortcuts(shortcuts);
+        } while (this.refreshAgain && !this.closed);
+      } catch (error) {
+        if (!this.closed) this.fail(error);
+      } finally { this.refreshing = undefined; }
+    })();
+    return this.refreshing;
   }
 
   private call(iface: string, member: string, signature: string, body: unknown[], path = PATH, destination = SERVICE): Promise<Message | null> {
@@ -157,7 +184,7 @@ export class GlobalShortcutsPortal {
     } else if (message.interface === INTERFACE && message.path === PATH && message.body[0] === this.session) {
       const id: unknown = message.body[1];
       if (message.member === 'ShortcutsChanged') {
-        try { this.setShortcuts(id); } catch (error) { this.fail(error); }
+        void this.refresh();
       }
       else if (typeof id === 'string' && Object.hasOwn(this.shortcuts, id)) {
         if (message.member === 'Activated' && !this.active.has(id)) {
@@ -177,7 +204,7 @@ export class GlobalShortcutsPortal {
       if (typeof description === 'string' && description.length) next[entry[0]] = description;
     }
     for (const id of this.active) {
-      if (!Object.hasOwn(next, id)) {
+      if (next[id] !== this.shortcuts[id]) {
         this.active.delete(id);
         this.action(id, false);
       }

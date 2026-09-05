@@ -67,9 +67,34 @@ describe('global shortcut renderer bridge', () => {
     });
     expect(mock.voice.setMuted.mock.calls).toEqual([[false], [true], [false], [true]]);
   });
-  it('keeps focused-only fallback for unregistered bindings and releases it on blur', () => {
+  it('does not use stale local bindings when the Wayland portal is unavailable', () => {
     renderHook(() => useKeybinds());
     act(() => statusListener({ state: 'unavailable', shortcuts: {} }));
+    mock.voice.setMuted.mockClear();
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyV', key: 'v' }));
+      window.dispatchEvent(new Event('blur'));
+    });
+    expect(mock.voice.setMuted).not.toHaveBeenCalled();
+  });
+  it('activates PTT from system assignments without a local binding', () => {
+    useKeybindStore.setState({ keybinds: [] });
+    renderHook(() => useKeybinds());
+    act(() => statusListener({ state: 'ready', shortcuts: { pushToTalk: 'F9' } }));
+    expect(mock.voice.setPttActive).toHaveBeenLastCalledWith(true);
+    expect(mock.voice.setMuted).toHaveBeenLastCalledWith(true);
+    act(() => actionListener({ actionId: 'pushToTalk', pressed: true }));
+    mock.voice.setMuted.mockClear();
+    act(() => statusListener({ state: 'ready', shortcuts: { pushToTalk: 'F9', toggleMute: 'F8' } }));
+    expect(mock.voice.setMuted).not.toHaveBeenCalled();
+    mock.voice.pttActive = true;
+    act(() => statusListener({ state: 'ready', shortcuts: {} }));
+    expect(mock.voice.setPttActive).toHaveBeenLastCalledWith(false);
+    mock.voice.pttActive = false;
+  });
+  it('preserves local bindings in a browser and releases held PTT on blur', () => {
+    delete window.backspace;
+    renderHook(() => useKeybinds());
     mock.voice.setMuted.mockClear();
     act(() => {
       window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyV', key: 'v' }));

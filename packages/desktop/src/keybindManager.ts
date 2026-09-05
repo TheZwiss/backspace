@@ -79,31 +79,27 @@ export class KeybindManager {
   private started = false;
   private hook?: typeof import('uiohook-napi').uIOhook;
   private portal?: GlobalShortcutsPortal;
-  private portalTimer?: ReturnType<typeof setTimeout>;
   private portalStatus: PortalKeybindStatus | null = isWayland() ? { state: 'idle', shortcuts: {} } : null;
 
   getPortalStatus(): PortalKeybindStatus | null { return this.portalStatus; }
 
   retryPortal(): void {
-    if (this.portalStatus) this.updatePortal();
+    if (this.portalStatus && ['idle', 'unavailable'].includes(this.portalStatus.state)) this.startPortal(true);
   }
+
+  refreshPortal(): void { void this.portal?.refresh(); }
 
   private sendPortalStatus = (status: PortalKeybindStatus): void => {
     this.portalStatus = status;
     if (this.window && !this.window.isDestroyed()) this.window.webContents.send('keybind-portal-status', status);
   };
 
-  private updatePortal(): void {
-    clearTimeout(this.portalTimer);
+  private startPortal(interactive = false): void {
     this.portal?.stop();
     this.portal = undefined;
-    this.sendPortalStatus({ state: this.keybinds.length ? 'pending' : 'idle', shortcuts: {} });
-    if (!this.keybinds.length) return;
-    // Coalesce config changes (including conflict replacement) into one consent dialog.
-    this.portalTimer = setTimeout(() => {
-      this.portal = new GlobalShortcutsPortal((id, pressed) => this.sendAction(id, pressed), this.sendPortalStatus);
-      void this.portal.start(this.keybinds);
-    }, 300);
+    this.sendPortalStatus({ state: 'pending', shortcuts: {} });
+    this.portal = new GlobalShortcutsPortal((id, pressed) => this.sendAction(id, pressed), this.sendPortalStatus);
+    void this.portal.start(interactive);
   }
 
   constructor() {
@@ -115,16 +111,18 @@ export class KeybindManager {
 
   setWindow(win: BrowserWindow): void {
     this.window = win;
+    if (this.portalStatus) {
+      if (!this.portal) this.startPortal();
+      win.on('focus', () => this.refreshPortal());
+    }
   }
 
   updateKeybinds(keybinds: KeybindConfig[]): void {
     if (this.portalStatus) {
-      if (JSON.stringify(this.keybinds) === JSON.stringify(keybinds)) {
-        this.sendPortalStatus(this.portalStatus);
-        return;
-      }
-      this.keybinds = keybinds;
-      this.updatePortal();
+      // Local settings belong to the browser/X11 backend, never to the portal.
+      // In particular renderer unmount or clearing local storage must not close
+      // a Wayland session or pretend to delete persistent system assignments.
+      this.sendPortalStatus(this.portalStatus);
       return;
     }
     this.keybinds = keybinds;
@@ -167,7 +165,6 @@ export class KeybindManager {
   }
 
   stop(): void {
-    clearTimeout(this.portalTimer);
     this.portal?.stop();
     this.portal = undefined;
     this.keybinds = [];

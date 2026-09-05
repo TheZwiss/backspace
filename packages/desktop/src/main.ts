@@ -769,7 +769,10 @@ function registerIpcHandlers(): void {
   ipcMain.on('keybinds-sync', (_event, keybinds) => {
     keybindManager.updateKeybinds(keybinds);
   });
-  ipcMain.handle('keybind-portal-status', () => keybindManager.getPortalStatus());
+  ipcMain.handle('keybind-portal-status', () => {
+    keybindManager.refreshPortal();
+    return keybindManager.getPortalStatus();
+  });
   ipcMain.on('keybind-portal-retry', () => keybindManager.retryPortal());
 
   ipcMain.handle('check-accessibility', () => {
