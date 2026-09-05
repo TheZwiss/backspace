@@ -15,4 +15,10 @@ describe('day helpers', () => {
     expect(isIsoDay('2026-9-6')).toBe(false);
     expect(isIsoDay(20260906)).toBe(false);
   });
+  it('rejects days that do not exist in the calendar', () => {
+    expect(isIsoDay('2026-02-30')).toBe(false);
+    expect(isIsoDay('2026-04-31')).toBe(false);
+    expect(isIsoDay('2026-13-01')).toBe(false);
+    expect(isIsoDay('2024-02-29')).toBe(true);
+  });
 });

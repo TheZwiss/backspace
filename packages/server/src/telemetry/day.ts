@@ -9,6 +9,14 @@ export function addDays(day: string, delta: number): string {
   return new Date(ms).toISOString().slice(0, 10);
 }
 
+/**
+ * True only for a real UTC calendar day. The regex alone is not enough:
+ * Date.parse rolls an impossible day such as 2026-02-30 forward instead of
+ * failing, so the value has to survive a round trip through the Date unchanged.
+ */
 export function isIsoDay(value: unknown): value is string {
-  return typeof value === 'string' && ISO_DAY.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00Z`));
+  if (typeof value !== 'string' || !ISO_DAY.test(value)) return false;
+  const ms = Date.parse(`${value}T00:00:00Z`);
+  if (Number.isNaN(ms)) return false;
+  return new Date(ms).toISOString().slice(0, 10) === value;
 }
