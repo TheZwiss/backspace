@@ -2,6 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useUIStore } from '../../stores/uiStore';
 import { saveImage, copyImageToClipboard } from '../../utils/imageActions';
+import { isElectron } from '../../platform/platform';
 
 export function ImagePreview() {
   const { t } = useTranslation(['chat', 'common']);
@@ -11,9 +12,13 @@ export function ImagePreview() {
 
   if (activeModal !== 'imagePreview' || !imageUrl) return null;
 
+  // Fixed positioning escapes App's 32px title bar and 1px divider. Keep the
+  // preview below that native-control area without changing browser layout.
+  const topInsetClass = isElectron() ? 'top-[33px]' : 'top-0';
+
   return (
     <div
-      className="fixed inset-0 z-[200] flex items-center justify-center bg-surface-overlay animate-fade-in cursor-pointer"
+      className={`fixed inset-x-0 bottom-0 z-[200] flex items-center justify-center bg-surface-overlay animate-fade-in cursor-pointer ${topInsetClass}`}
       onClick={closeImagePreview}
     >
       {/* Toolbar: download, copy, close */}
