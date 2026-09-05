@@ -4,8 +4,8 @@ import { ensureDefaults } from './migrate.js';
 
 function freshDb(): Database.Database {
   const db = new Database(':memory:');
-  db.exec(`CREATE TABLE instance_settings (id integer PRIMARY KEY, worker_id integer, instance_id text, max_bitrate_kbps integer, min_bitrate_kbps integer, bitrate_step_kbps integer, allowed_resolutions text, allowed_framerates text, max_resolution integer, max_framerate integer, updated_at integer);
-    CREATE TABLE users (id text PRIMARY KEY, is_admin integer DEFAULT 0, created_at integer);`);
+  db.exec(`CREATE TABLE instance_settings (id integer PRIMARY KEY, worker_id integer, instance_id text, max_bitrate_kbps integer, min_bitrate_kbps integer, bitrate_step_kbps integer, allowed_resolutions text, allowed_framerates text, max_resolution integer, max_framerate integer, installed_at integer, updated_at integer);
+    CREATE TABLE users (id text PRIMARY KEY, is_admin integer DEFAULT 0, home_instance text, is_deleted integer DEFAULT 0, created_at integer);`);
   return db;
 }
 
