@@ -1473,6 +1473,22 @@ export interface CheckInviteInvalidResponse {
 
 export type CheckInviteResponse = CheckInviteValidResponse | CheckInviteInvalidResponse;
 
+export type ClientKind = 'web' | 'desktop' | 'mobile';
+
+/** Schema 1 of the opt-in daily instance report. See docs/systems/telemetry.md. */
+export interface TelemetryPayload {
+  schema: 1;
+  instance: string;
+  day: string;
+  build: { version: string; commit: string | null; modified: boolean };
+  users: { registered: number; active1d: number; active7d: number; active30d: number };
+  clients: { web: number; desktop: number; mobile: number };
+  content: { spaces: number; channels: number; messages: number; messages7d: number; storageMiB: number };
+  features: { voice: boolean; federation: boolean; peers: number; registrationOpen: boolean };
+  runtime: { install: 'prebuilt' | 'source' | null; os: string; arch: string; node: number };
+  installedAt: string;
+}
+
 export interface TelemetryStatus {
   /** null = never asked. */
   enabled: boolean | null;
