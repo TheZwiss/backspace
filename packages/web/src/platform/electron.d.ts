@@ -81,7 +81,8 @@ interface BackspaceElectronAPI {
   close: () => void;
 
   // Notifications & badge
-  showNotification: (title: string, body: string) => void;
+  showNotification: (title: string, body: string, options?: import('./notifications').NotificationOptions) => void;
+  onNotificationClick?: (callback: (options: import('./notifications').NotificationOptions) => void) => () => void;
   setBadgeCount: (count: number) => void;
 
   // Auto-update, legacy per-event channels.
