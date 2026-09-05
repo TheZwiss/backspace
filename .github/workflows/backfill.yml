@@ -149,6 +149,9 @@ jobs:
           # it answers 401 unauthenticated -- so this cannot simply drop the
           # token instead.
           METRICS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Optional. Unset until the receiver is live, and the reconstruction
+          # then covers every series except the telemetry ones.
+          TELEMETRY_EXPORT_TOKEN: ${{ secrets.TELEMETRY_EXPORT_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           METRICS_DATA_DIR: ${{ github.workspace }}/.metrics-data
         run: node scripts/metrics/src/cli-backfill.ts
