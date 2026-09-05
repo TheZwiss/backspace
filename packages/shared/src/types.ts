@@ -396,7 +396,7 @@ export interface DmCallUndeliverableFailure {
 
 // Client → Server Events
 export type ClientEvent =
-  | { type: 'auth'; token: string }
+  | { type: 'auth'; token: string; client?: ClientKind }
   | { type: 'message_create'; channelId: string; content: string; replyToId?: string }
   | { type: 'message_edit'; messageId: string; content: string }
   | { type: 'message_delete'; messageId: string }
