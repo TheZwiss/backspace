@@ -28,7 +28,15 @@ browser's own zoom controls. CSS viewport units do **not** compensate for CSS
 zoom, so viewport-constrained surfaces use `--app-vh`, `--app-dvh`, and `--app-vw`
 (one viewport unit divided by `--interface-scale`). Tailwind's `h-screen` and
 `min-h-screen` use the same units. Keep Electron's title-bar reservation in
-physical pixels by dividing it by the scale as well.
+physical pixels using the shared `--titlebar-inset` (33px divided by the scale
+under Electron, zero in the browser). `App`, `SpaceSidebar` and `ImagePreview`
+must all use this property rather than separate fixed offsets.
+
+`ImageCropModal` cancels root zoom only on the cropper container with
+`zoom: calc(1 / var(--interface-scale, 1))`. react-easy-crop mixes visual DOM
+measurements and pointer deltas with CSS pixels, so this subtree must operate
+at effective 100%. The surrounding dialog controls retain the interface scale.
+Validate both dragging and the exported crop pixels when changing this boundary.
 
 DOM rectangles and pointer coordinates are visual pixels. Convert them with
 `layoutPixels` / `layoutRect` before assigning CSS positions, sizes, or drag

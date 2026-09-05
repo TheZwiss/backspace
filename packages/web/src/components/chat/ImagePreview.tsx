@@ -14,7 +14,7 @@ export function ImagePreview() {
 
   // Fixed positioning escapes App's 32px title bar and 1px divider. Keep the
   // preview below that native-control area without changing browser layout.
-  const topInsetClass = isElectron() ? 'top-[33px]' : 'top-0';
+  const topInsetClass = isElectron() ? 'top-[var(--titlebar-inset)]' : 'top-0';
 
   return (
     <div

@@ -87,8 +87,10 @@ Instance URL management functions: `loadInstanceUrl()`, `saveInstanceUrl()`, `cl
 
 The account settings' interface-scale control is shared with the web client
 (75–250%, saved locally). It uses root CSS zoom; the native title bar is not
-scaled. `App` compensates its 32 px title-bar spacer and 1 px divider so they
-continue matching the native overlay. See `design-system.md` → Interface scale.
+scaled. `--titlebar-inset` is the single 33 px reservation (32 px drag region
+plus 1 px divider), divided by interface scale. `App`, `SpaceSidebar` and
+`ImagePreview` share it so fixed overlays and normal layout continue matching
+the native controls at every scale. See `design-system.md` → Interface scale.
 
 ### Focus Tracking
 

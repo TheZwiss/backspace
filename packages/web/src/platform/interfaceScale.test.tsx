@@ -11,11 +11,26 @@ afterEach(() => {
   useInterfaceScaleStore.getState().setScale(100);
   document.documentElement.style.removeProperty('zoom');
   document.documentElement.style.removeProperty('--interface-scale');
+  document.documentElement.style.removeProperty('--titlebar-inset');
+  delete window.backspace;
   vi.restoreAllMocks();
   useUIStore.setState({ isMobile: false, activeModal: null, mobileStack: [] });
 });
 
 describe('interface scale', () => {
+  it.each(INTERFACE_SCALES)('shares the unscaled native titlebar inset at %i%%', scale => {
+    window.backspace = {} as BackspaceElectronAPI;
+    useInterfaceScaleStore.getState().setScale(scale);
+    const stop = initializeInterfaceScale();
+    expect(document.documentElement.style.getPropertyValue('--titlebar-inset')).toBe('calc(33px / var(--interface-scale))');
+    expect(document.documentElement.style.getPropertyValue('--interface-scale')).toBe(String(scale / 100));
+    stop();
+  });
+  it('reserves no titlebar inset in the browser', () => {
+    const stop = initializeInterfaceScale();
+    expect(document.documentElement.style.getPropertyValue('--titlebar-inset')).toBe('0px');
+    stop();
+  });
   it.each(INTERFACE_SCALES)('persists and restores %i%%', async scale => {
     useInterfaceScaleStore.getState().setScale(scale);
     const persisted = localStorage.getItem('backspace-interface-scale');

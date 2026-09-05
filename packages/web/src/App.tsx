@@ -50,10 +50,10 @@ export function App() {
 
   return (
     <div className={`flex flex-col ${showTitleBar ? 'h-screen' : 'contents'}`}>
-      {showTitleBar && <>
-        <div className="flex-shrink-0 bg-surface-base titlebar-drag" style={{ height: 'calc(32px / var(--interface-scale))' }} />
-        <div className="flex-shrink-0 bg-border-hard" style={{ height: 'calc(1px / var(--interface-scale))' }} />
-      </>}
+      {showTitleBar && (
+        <div className="flex-shrink-0 bg-surface-base border-b border-border-hard titlebar-drag"
+          style={{ height: 'var(--titlebar-inset)', borderBottomWidth: 'calc(1px / var(--interface-scale))' }} />
+      )}
       <div className={showTitleBar ? 'flex-1 min-h-0' : 'contents'}>
         <SwAutoUpdate />
         <ScreenSharePicker />
