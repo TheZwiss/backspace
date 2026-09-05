@@ -534,8 +534,20 @@ function showNotification(title: string, body: string, onClick?: () => void): vo
 // ─── IPC Handlers ───────────────────────────────────────────────────────────
 
 function registerIpcHandlers(): void {
-  ipcMain.on('show-notification', (_event, data: { title: string; body: string }) => {
-    showNotification(data.title, data.body);
+  ipcMain.on('show-notification', (event, data: { title: string; body: string; options?: { channelId?: string; spaceId?: string; userId?: string } }) => {
+    if (event.sender !== mainWindow?.webContents) return;
+    const sender = event.sender;
+    const origin = new URL(sender.getURL()).origin;
+    showNotification(data.title, data.body, () => {
+      if (!mainWindow || mainWindow.isDestroyed() || sender.isDestroyed()) return;
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+      // A toast from a previous home instance must not open IDs on the new one.
+      if (sender === mainWindow.webContents && new URL(sender.getURL()).origin === origin && data.options) {
+        sender.send('notification-click', data.options);
+      }
+    });
   });
 
   ipcMain.on('set-badge-count', (_event, count: number) => {
