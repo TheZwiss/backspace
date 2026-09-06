@@ -778,9 +778,15 @@ function registerIpcHandlers(): void {
   });
 
   // Keybinds
-  ipcMain.on('keybinds-sync', (_event, keybinds) => {
+  ipcMain.handle('keybinds-sync', (_event, keybinds) => {
     keybindManager.updateKeybinds(keybinds);
+    return keybindManager.isHookRunning();
   });
+  ipcMain.handle('keybind-portal-status', () => {
+    keybindManager.refreshPortal();
+    return keybindManager.getPortalStatus();
+  });
+  ipcMain.on('keybind-portal-retry', () => keybindManager.retryPortal());
 
   ipcMain.handle('check-accessibility', () => {
     return keybindManager.checkAccessibility();

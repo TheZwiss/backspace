@@ -38,10 +38,8 @@ const RELEASES = [
   { tag_name: 'v1.0.0', name: 'Backspace 1.0.0', published_at: '2026-08-01T10:00:00Z' },
 ];
 
-// Three instances reporting on three consecutive days, so the two-days-in-30
-// eligibility rule is met from the second day onward.
-const PINGS: PingRow[] = ['a', 'b', 'c'].flatMap((instance) =>
-  ['2026-03-02', '2026-03-03', '2026-03-04'].map((day) => ({
+function ping(instance: string, day: string): PingRow {
+  return {
     instance,
     day,
     country: 'DE',
@@ -50,7 +48,13 @@ const PINGS: PingRow[] = ['a', 'b', 'c'].flatMap((instance) =>
       build: { version: '1.1.2' },
       users: { registered: 4, active1d: 1, active7d: 2, active30d: 3 },
     },
-  })),
+  };
+}
+
+// Three instances reporting on three consecutive days, so the two-days-in-30
+// eligibility rule is met from the second day onward.
+const PINGS: PingRow[] = ['a', 'b', 'c'].flatMap((instance) =>
+  ['2026-03-02', '2026-03-03', '2026-03-04'].map((day) => ping(instance, day)),
 );
 
 function fakeClient(pages: Record<string, unknown[]> = {}): GitHubClient {
@@ -409,9 +413,12 @@ describe('backfill', () => {
     });
     // Nothing before the oldest day the export carries: the receiver keeps 90
     // days, but a day it holds no row for at all may simply predate it, and a
-    // zero there would be a fabricated measurement (§4.3).
+    // zero there would be a fabricated measurement (§4.3). The oldest day the
+    // export does carry gets no row either, because no instance can be
+    // eligible on it and its aggregate is all zeros by construction.
     expect(rows.find((r) => r.date === '2026-01-01')).toBeUndefined();
-    expect(rows[0]?.date).toBe('2026-03-02');
+    expect(rows.find((r) => r.date === '2026-03-02')).toBeUndefined();
+    expect(rows[0]?.date).toBe('2026-03-03');
     expect(store.readNdjson('telemetry/versions.ndjson')).toEqual([
       { snapshot_date: '2026-03-03', dimension: '1.1.2', title: '', count: 3, uniques: 3 },
       { snapshot_date: '2026-03-04', dimension: '1.1.2', title: '', count: 3, uniques: 3 },
@@ -446,6 +453,71 @@ describe('backfill', () => {
       ...existing,
       { snapshot_date: '2026-03-04', dimension: '1.1.2', title: '', count: 3, uniques: 3 },
     ]);
+  });
+
+  it('writes no network row for the oldest day the export carries', async () => {
+    // Eligibility needs two distinct reporting days inside the trailing
+    // thirty. On the oldest day the export holds, there is exactly one, so the
+    // aggregate is all zeros by construction. Writing it would state a
+    // measured empty fleet for the first day evidence exists, which is the
+    // fabricated zero section 4.3 forbids.
+    const oldest = '2026-01-24';
+    const next = '2026-01-25';
+    const store = createStore(dir);
+    await backfill({
+      client: fakeClient(),
+      store,
+      ...base,
+      telemetry: async () => [
+        ping('i1', oldest),
+        ping('i1', next),
+        ping('i2', oldest),
+        ping('i2', next),
+      ],
+    });
+
+    const dates = store.readCsv('telemetry/network.csv').map((row) => row['date']);
+    expect(dates).not.toContain(oldest);
+    expect(dates[0]).toBe(next);
+  });
+
+  // The skip above removes only what the reconstruction would have invented.
+  // A row the collector measured on that same day is a real observation and
+  // the if-absent merge has to keep it, zeros included.
+  it('keeps a measured row on the oldest day the export carries', async () => {
+    const oldest = '2026-01-24';
+    const store = createStore(dir);
+    store.writeCsv('telemetry/network.csv', NETWORK_HEADER, [
+      {
+        date: oldest,
+        instances_1d: 0,
+        instances_7d: 7,
+        instances_30d: 0,
+        users_registered: 0,
+        users_active1d: 0,
+        users_active7d: 0,
+        users_active30d: 0,
+        messages7d: 0,
+        storage_mib: 0,
+        voice_instances: 0,
+        federation_instances: 0,
+      },
+    ]);
+
+    await backfill({
+      client: fakeClient(),
+      store,
+      ...base,
+      telemetry: async () => [
+        ping('i1', oldest),
+        ping('i1', '2026-01-25'),
+        ping('i2', oldest),
+        ping('i2', '2026-01-25'),
+      ],
+    });
+
+    const rows = store.readCsv('telemetry/network.csv');
+    expect(rows.find((r) => r.date === oldest)).toMatchObject({ instances_7d: '7' });
   });
 
   it('writes no telemetry files at all when no fetcher is given', async () => {

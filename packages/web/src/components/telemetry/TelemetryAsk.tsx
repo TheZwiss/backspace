@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuthStore } from '../../stores/authStore';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { recordDismissal, shouldShowAsk } from '../../utils/telemetryAsk';
+import { askIsOver, recordDismissal, shouldShowAsk } from '../../utils/telemetryAsk';
 import { HelloModal } from './HelloModal';
 
 /**
@@ -19,12 +19,20 @@ export function TelemetryAsk() {
   const fetchPreview = useSettingsStore((s) => s.fetchTelemetryPreview);
   const setEnabled = useSettingsStore((s) => s.setTelemetryEnabled);
   const [open, setOpen] = useState(false);
+  const [previewFailed, setPreviewFailed] = useState(false);
   // In-session suppression: the ask is opened at most once per page load, so a
   // dismissal that could not be written to storage still ends it for now.
   const asked = useRef(false);
+  // Read once per mount. Nothing but this component's own dismissal changes
+  // it, and that closes the modal in the same gesture.
+  const over = useRef(askIsOver(localStorage));
 
   useEffect(() => {
-    if (!isAdmin) return;
+    // The status request exists to decide whether to ask. A browser that has
+    // spent both dismissals will never ask again, so requesting it on every
+    // page load for the rest of this admin's life buys nothing. The settings
+    // panel fetches its own status and is unaffected.
+    if (!isAdmin || over.current) return;
     void fetchTelemetry().catch(() => undefined);
   }, [isAdmin, fetchTelemetry]);
 
@@ -33,7 +41,7 @@ export function TelemetryAsk() {
     if (!shouldShowAsk(telemetry, isAdmin, localStorage, Date.now())) return;
     asked.current = true;
     setOpen(true);
-    void fetchPreview().catch(() => undefined);
+    void fetchPreview().catch(() => setPreviewFailed(true));
   }, [isAdmin, telemetry, fetchPreview]);
 
   const onAnswer = useCallback((enabled: boolean) => setEnabled(enabled), [setEnabled]);
@@ -49,5 +57,5 @@ export function TelemetryAsk() {
 
   if (!open) return null;
 
-  return <HelloModal open onAnswer={onAnswer} onDismiss={onDismiss} preview={preview} />;
+  return <HelloModal open onAnswer={onAnswer} onDismiss={onDismiss} preview={preview} previewFailed={previewFailed} />;
 }

@@ -6,6 +6,14 @@ on:
     paths:
       - 'site/**'
       - 'scripts/metrics/**' # a bundler change must redeploy, or the site silently serves stale data
+      # ...but not the local fixture harness. Nothing under `fixtures/` is read
+      # by `cli-bundle.ts` or shipped in the Pages artifact: the two scripts
+      # there build a throwaway archive and drive a browser over a throwaway
+      # copy of the site. Editing them cannot change what this workflow
+      # publishes, so it should not spend a production deploy. Order matters
+      # here: a later negative pattern narrows an earlier positive one, so a
+      # push that touches the bundler and a fixture still redeploys.
+      - '!scripts/metrics/fixtures/**'
       - '.github/workflows/deploy-pages.yml'
   workflow_dispatch:
   # Called by metrics.yml after a successful collection, so the dashboard
