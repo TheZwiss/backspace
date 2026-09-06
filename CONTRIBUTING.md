@@ -13,17 +13,67 @@ sizes are welcome: bug reports, fixes, features, documentation, and design.
 - **Open an issue first for anything non-trivial.** It saves you from building
   something that conflicts with planned direction. Small fixes can go straight
   to a pull request.
+- **Architectural changes need an approved design before any code.** See
+  [Design before code](#design-before-code) below for what counts and how it
+  works. Opening an issue is not the same as agreeing a design: wait for a
+  maintainer to say "approved to implement" before you branch.
 - **One logical change per pull request.** Keep diffs focused and reviewable.
 - **Keep pull requests small enough to review.** Review capacity is the
   bottleneck on this project, not authoring capacity. A change touching a
   hundred files waits longer than five changes touching twenty, and may be asked
-  to split. If something is genuinely large and indivisible, agree the shape on
-  an issue before writing it.
+  to split. If something is genuinely large and indivisible, it needs a design
+  proposal first (see below).
 - **You own your diff.** Use whatever tools you like, including AI assistants;
   nobody will ask. What matters is that you can explain any line of it, that you
   have run it, and that it does not contain two solutions to the same problem
   sitting side by side. Code the author has not read is the only kind of
   contribution that costs more to review than it did to write.
+
+## Design before code
+
+Some changes set a rule that every later contributor has to follow, or close
+off a path the project may need later. For those, a short conversation before
+the code is the difference between a change that merges and one that gets
+reworked after it is finished. The point of this section is to protect your
+time, not to add a hurdle: the discussion is the same either way, and it is
+much cheaper before the implementation exists.
+
+A change is architectural, and needs a design proposal, if it does any of:
+
+- introduces a mechanism or convention that other code must comply with from
+  then on (a coordinate model, a new state layer, a required wrapper around a
+  browser API, a naming or file-layout rule);
+- adds a framework-level dependency, a build tool, or a new runtime mode or
+  platform layer (an ordinary library falls under the dependency rule below
+  and only needs a sentence in the issue);
+- changes the database schema, a REST or WebSocket contract, the federation
+  protocol, the permission model, or the preload bridge between the desktop
+  shell and the web client;
+- spans more than two subsystems in `docs/systems/` with one mechanism.
+
+When in doubt, ask on the issue. The answer "no proposal needed" takes a
+maintainer a minute; an unwanted rewrite takes days on both sides.
+
+How it works:
+
+1. Open an issue with the **Design proposal** template. State the problem, the
+   approach you intend to take, the alternatives you considered and why they
+   lost, and what other contributors will have to do differently afterwards.
+   A few paragraphs is the normal size. Prototyping to find out whether the
+   idea works is fine and often helps the discussion; just do not polish
+   before the approach is agreed, because it may change.
+2. A maintainer replies within a few days: with questions, with "approved to
+   implement", or, for the largest decisions, with a request to write it up as
+   an ADR in `docs/decisions/` so the reasoning outlives the pull request. A
+   proposal that sits unanswered for a week is a bug in the process; nudge it.
+3. Implement against the agreed design and link the proposal from the pull
+   request.
+
+If a pull request arrives with an architectural change and no proposal, review
+pauses while the design is discussed on the pull request itself. That works,
+and nobody is turned away for it, but it is the slow path: by then the
+discussion is about finished code, and changing the approach means redoing
+work that a proposal would have avoided.
 
 ## Contributor License Agreement (required)
 
@@ -114,6 +164,8 @@ and it is the part that breaks.
   design system.
 - You ran the thing you changed, and attached evidence if it affects packaging,
   installation, or the UI (see above).
+- If the change is architectural (see [Design before code](#design-before-code)),
+  the pull request links the approved design proposal.
 
 ## Reporting bugs and requesting features
 
