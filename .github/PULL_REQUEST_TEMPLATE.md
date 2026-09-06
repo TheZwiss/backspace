@@ -22,6 +22,10 @@ Closes #
 - [ ] I ran the change myself, and attached evidence (screenshot, recording, or
       terminal output) if it affects packaging, installation, or the UI
 - [ ] I updated the relevant `docs/systems/` spec if this changed schema, API routes, WebSocket events, the federation protocol, permissions, or the design system
+- [ ] If this is an architectural change (new convention, dependency, schema, protocol,
+      preload bridge, or more than two subsystems), it links the approved design proposal:
+      #
+- [ ] I reviewed the full diff after the last commit (with an agent, if one wrote it) and fixed what I found
 - [ ] This change resolves the correct federated identity where it compares IDs, checks permissions, or talks to remote servers (no assumption of a single global user ID)
 - [ ] I have read and agree to the [CLA](../CLA.md) — ticking this box is not the
       signature. After opening this PR, post a separate comment containing exactly:

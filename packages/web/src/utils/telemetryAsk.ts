@@ -36,6 +36,21 @@ export function shouldShowAsk(status: TelemetryStatus | null, isAdmin: boolean, 
 }
 
 /**
+ * True when this browser has spent every dismissal the ask allows, so it will
+ * never be shown here again whatever the server says.
+ *
+ * Separate from `shouldShowAsk` because it answers a question that does not
+ * need the server: it is what lets the caller skip the status request
+ * altogether rather than fetch a status only to discard it. A storage that
+ * throws reads as "not over", the same way `read` treats an unreadable record
+ * as never dismissed: losing the ask because a browser blocked storage is the
+ * worse of the two failures.
+ */
+export function askIsOver(storage: Store): boolean {
+  return read(storage).dismissals >= ASK_MAX_DISMISSALS;
+}
+
+/**
  * Records a dismissal without an answer: it snoozes the ask for seven days in
  * this browser, and once the count reaches ASK_MAX_DISMISSALS the ask is over
  * for good here.

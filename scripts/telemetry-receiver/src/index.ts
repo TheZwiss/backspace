@@ -1,5 +1,5 @@
 import type { Env } from './env';
-import { parsePing, normaliseCountry, MAX_BODY_BYTES } from './validate';
+import { parsePing, normaliseCountry, isCalendarDay, MAX_BODY_BYTES } from './validate';
 import { upsertPing, exportRange, deleteOlderThan } from './store';
 import { ROOT_PAGE } from './page';
 
@@ -7,6 +7,28 @@ const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Largest inclusive export range, in days. The collector asks for 30 at a time. */
 const MAX_EXPORT_DAYS = 31;
+
+/**
+ * Largest number of rows one export answers with.
+ *
+ * A range holds at most `MAX_EXPORT_DAYS x fleet` rows, since an instance
+ * writes one row per day, so this is 31 days times about 320 instances
+ * reporting every single day. That is far above any fleet in sight and far
+ * below a read that could hurt D1. Whoever raises it should read
+ * `MAX_EXPORT_BYTES` below first: the two bound different things.
+ */
+const MAX_EXPORT_ROWS = 10_000;
+
+/**
+ * Largest body this route will build, in bytes.
+ *
+ * The row cap alone does not bound the response: `parsePing` allows a stored
+ * body of up to 4096 bytes, so 10,000 rows is about 6 MB at the payload the
+ * spec defines and about 43 MB if every instance padded its unknown fields to
+ * the maximum. A Worker assembling a 43 MB string in memory is the case this
+ * stops. At real payload sizes it never bites and the row cap governs.
+ */
+const MAX_EXPORT_BYTES = 8 * 1024 * 1024;
 
 /** How long a row lives. Section 7 of the spec. */
 const RETENTION_DAYS = 90;
@@ -83,18 +105,44 @@ async function handleExport(request: Request, env: Env): Promise<Response> {
   const from = url.searchParams.get('from') ?? '';
   const to = url.searchParams.get('to') ?? '';
   if (!ISO_DAY.test(from) || !ISO_DAY.test(to)) return new Response(null, { status: 400 });
+  // Shape is not enough. `Date.parse` rolls `2026-02-30` into March, so a range
+  // ending on a day that does not exist measured its span from a different day
+  // than the one it named and could reach past the 31-day limit.
+  if (!isCalendarDay(from) || !isCalendarDay(to)) return new Response(null, { status: 400 });
   const span = daysBetween(from, to);
   if (!Number.isFinite(span) || span < 0 || span >= MAX_EXPORT_DAYS) return new Response(null, { status: 400 });
 
-  const rows = await exportRange(env.DB, from, to);
+  const rows = await exportRange(env.DB, from, to, MAX_EXPORT_ROWS);
+
   // NDJSON: one row per line, a trailing newline only when there is a line to
   // end. An empty range answers with an empty body, which the collector reads
   // as a day nobody reported on.
-  const body = rows.map((row) => JSON.stringify(row)).join('\n') + (rows.length > 0 ? '\n' : '');
-  return new Response(body, {
-    status: 200,
-    headers: { 'content-type': 'application/x-ndjson; charset=utf-8', 'cache-control': 'no-store' },
-  });
+  //
+  // Lines are accumulated rather than mapped so the byte budget can stop
+  // partway. The body's shape is unchanged either way, so a collector that
+  // knows nothing about truncation still parses what it gets; the header is
+  // what tells one that does.
+  const lines: string[] = [];
+  let bytes = 0;
+  for (const row of rows) {
+    const line = JSON.stringify(row);
+    const size = new TextEncoder().encode(line).byteLength + 1;
+    if (bytes + size > MAX_EXPORT_BYTES) break;
+    bytes += size;
+    lines.push(line);
+  }
+  const truncated = lines.length < rows.length || rows.length === MAX_EXPORT_ROWS;
+
+  const body = lines.join('\n') + (lines.length > 0 ? '\n' : '');
+  const headers: Record<string, string> = {
+    'content-type': 'application/x-ndjson; charset=utf-8',
+    'cache-control': 'no-store',
+  };
+  // Announced rather than inferred. A truncated answer looks exactly like a
+  // complete one, and a collector that silently archived a short day would
+  // publish a fleet smaller than the one that reported.
+  if (truncated) headers['x-export-truncated'] = '1';
+  return new Response(body, { status: 200, headers });
 }
 
 export default {

@@ -8,6 +8,8 @@ import {
   deriveRunTimestamps,
   formatBackfillSummary,
   describeFailure,
+  telemetryEndpoint,
+  telemetrySkipNotice,
 } from './cli-support.ts';
 
 /**
@@ -35,10 +37,12 @@ async function main(): Promise<void> {
 
   // Optional, exactly as in `cli-collect.ts`: without it the reconstruction
   // covers everything except the telemetry series, and says so in the log.
-  const telemetryToken = process.env['TELEMETRY_EXPORT_TOKEN'] ?? '';
+  const telemetryToken = (process.env['TELEMETRY_EXPORT_TOKEN'] ?? '').trim();
   if (telemetryToken !== '') assertHeaderSafeToken(telemetryToken);
-  else console.log('telemetry: skipped, TELEMETRY_EXPORT_TOKEN is not set');
-  const telemetryEndpoint = process.env['TELEMETRY_ENDPOINT'] ?? 'https://hello.backspacechat.com';
+  const notice = telemetrySkipNotice(process.env);
+  // stderr, not stdout, for the reason given in `cli-collect.ts`.
+  if (notice !== null) console.warn(notice);
+  const endpoint = telemetryEndpoint(process.env);
 
   const { today } = deriveRunTimestamps(new Date());
 
@@ -50,7 +54,7 @@ async function main(): Promise<void> {
     telemetry:
       telemetryToken === ''
         ? undefined
-        : createTelemetryFetcher(globalThis.fetch, telemetryEndpoint, telemetryToken),
+        : createTelemetryFetcher(globalThis.fetch, endpoint, telemetryToken),
   });
 
   console.log(formatBackfillSummary(result));

@@ -231,7 +231,8 @@ export async function requestMicPermission(): Promise<boolean> {
     // Resume context first — iOS may have suspended it during the denied
     // state.
     await audioManager.resumeContext();
-    await audioManager.setInputDevice(inputDeviceId);
+    const stream = await audioManager.setInputDevice(inputDeviceId);
+    if (!stream) return false;
     useVoiceStore.getState().setMicPermissionDenied(false);
     return true;
   } catch (err: unknown) {

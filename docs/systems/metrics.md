@@ -99,6 +99,7 @@ Both `metrics.yml` and `backfill.yml`:
 - Bootstrap the `metrics-data` branch via `git ls-remote --exit-code --heads origin metrics-data` **before** any `actions/checkout` step references it. `actions/checkout` hard-fails the job if given a nonexistent `ref`, so the check has to run first. If the branch is absent, both workflows create it with `git worktree add --orphan` into a scratch directory (`.metrics-init`), commit an empty initial commit, push, and remove the worktree — never touching the primary checkout, so an early exit can't leave that tree modified.
 - Check out `metrics-data` into `./.metrics-data` (gitignored — see `.gitignore`'s `.metrics-data/` entry — so `git status` on the main checkout stays clean) and pin `actions/setup-node` to `node-version: 24`.
 - Run `step-security/harden-runner` with `egress-policy: audit`, and pin every `uses:` to a full commit SHA with a trailing `# vX.Y.Z` comment, per this repo's standing CI convention (see `docs/systems/security-scanning.md`).
+- Pass the telemetry pair to their run step: `TELEMETRY_EXPORT_TOKEN` from `secrets`, and `TELEMETRY_ENDPOINT` from `vars`. Both are optional and both are unset on this repository. The token being unset turns the telemetry step off and prints a notice on stderr; the endpoint being unset interpolates the empty string, which `telemetryEndpoint` in `cli-support.ts` reads as "use the default receiver" (§3). The endpoint is a repository variable rather than a secret because it is a hostname that is already written down here, and a secret would be one nobody could read back to check.
 
 `metrics.yml` runs `collect` (`node scripts/metrics/src/cli-collect.ts`); `backfill.yml` runs `backfill` (`node scripts/metrics/src/cli-backfill.ts`). Both of those jobs declare only `contents: write` (plus `actions: write` on `metrics.yml`, for the schedule-keepalive step in §8).
 
@@ -155,9 +156,23 @@ All files live at the root of the `metrics-data` branch. CSVs are sorted ascendi
 - **`instances_1d` / `instances_7d` / `instances_30d`** count eligible instances that pinged on D, that are in the snapshot, and that were seen anywhere in `[D-29, D]`, respectively.
 - **Only payload schema `1` is interpreted.** The envelope's `schema` field is parsed and carried on the row, and nothing reads it: every value is pulled through accessors that treat a missing or unexpected field as `0`/`false`, so an older or newer instance contributes whatever it happens to share with schema 1 and never fails the run. When a schema `2` exists and means something different, that is the point at which this file has to start branching on the field.
 
-**Each collection rewrites two days, and a telemetry failure is a skip.** The collector aggregates `today-1` and `today-2` on every run and merges with `'overwrite'`, so a ping that arrived late (an instance retries the next day) corrects the day before yesterday, exactly as `workflows.csv` re-counts its window (§4.5). To do that it pulls the raw export for `[today-31, today-1]`, which is the exact input the thirty-day eligibility window of the older of those two days needs, and no more. If that fetch fails for any reason (a non-2xx answer, or a `200` whose every line was rejected, both of which `createTelemetryFetcher` raises), the run records `telemetry (<reason>)` in `skipped`, writes nothing under `telemetry/`, and finishes the traffic collection normally. Catching the failure and writing anyway would upsert a well-formed all-zero snapshot over the real row every day until somebody read a CI log; a skipped day costs nothing, because the next run refetches the same 31-day window.
+**Each collection rewrites two days, and a telemetry failure is a skip.** The collector aggregates `today-1` and `today-2` on every run and merges with `'overwrite'`, so a ping that arrived late (an instance retries the next day) corrects the day before yesterday, exactly as `workflows.csv` re-counts its window (§4.5). To do that it pulls the raw export for `[today-31, today-1]`, which is the exact input the thirty-day eligibility window of the older of those two days needs, and no more. If that fetch fails for any reason (a non-2xx answer, a `200` whose every line was rejected, or a truncated export, all three of which `createTelemetryFetcher` raises), the run records `telemetry (<reason>)` in `skipped`, writes nothing under `telemetry/`, and finishes the traffic collection normally. Catching the failure and writing anyway would upsert a well-formed all-zero snapshot over the real row every day until somebody read a CI log; a skipped day costs nothing, because the next run refetches the same 31-day window.
 
-**The step is off until the receiver has a token.** `TELEMETRY_EXPORT_TOKEN` is an optional secret on `metrics.yml`'s "Collect" step (and `backfill.yml`'s "Backfill" step). Unset, `cli-collect.ts` passes no fetcher and the four files are never touched; `TELEMETRY_ENDPOINT` overrides the default `https://hello.backspacechat.com` and is only needed to point at a staging receiver.
+**A truncated export is refused, not aggregated.** The receiver caps an answer at 10,000 rows and 8 MiB and announces the cut with an `x-export-truncated` response header (see docs/systems/telemetry.md). That is the one failure the body cannot show: a truncated answer keeps the NDJSON shape exactly, every line parses and every row is well formed, so the partial window is indistinguishable from a genuinely smaller fleet. `createTelemetryFetcher` therefore reads the header before it reads the body and throws, which puts a truncated day on the same path as a 401: the partial rows are discarded unparsed, nothing under `telemetry/` is written, `series_last_date` gains no telemetry key, and the run's `skipped` line carries the reason, the requested range and what to do about it. The check fires on the header being *present*, not on it holding the exact value `1`, because the failure of reading it too narrowly is a published number that is quietly too small. The collector's exit code is unchanged: the traffic series are the irreplaceable half of the run (GitHub deletes its window after 14 days, the receiver keeps 90), so failing the job would cost a day of traffic history to report a telemetry day that the next run refetches anyway. `backfill.yml` is the exception, and deliberately so: it does not catch a telemetry failure at all, so a truncated export there aborts the dispatch with a non-zero exit and the message on stderr, which is the right outcome for a job somebody is watching.
+
+**The step is off until the receiver has a token.** `TELEMETRY_EXPORT_TOKEN` is an optional secret on `metrics.yml`'s "Collect" step (and `backfill.yml`'s "Backfill" step). Unset, `cli-collect.ts` passes no fetcher, the four files are never touched, and
+the run prints a one-line notice naming `TELEMETRY_EXPORT_TOKEN` on **stderr**
+before finishing green. The notice is the point: a secret rotated away would
+otherwise stop the telemetry collection silently, for as long as nobody looked
+at the archive, with every run still passing. `TELEMETRY_ENDPOINT` overrides the
+default `https://hello.backspacechat.com` and
+is only needed to point at a staging receiver. It is wired into both workflows
+as an optional repository **variable** (`vars.TELEMETRY_ENDPOINT`), not a
+secret: it is a hostname, it is documented here, and a secret would be one
+nobody could read back to check what it was set to. An unset `vars` entry
+interpolates the empty string rather than nothing, so `telemetryEndpoint` in
+`cli-support.ts` treats blank as absent; reading it with `?? default` would hand
+the fetcher an empty base URL on every repository that has not set it.
 
 ### The static data page
 
@@ -179,6 +194,16 @@ The static data page solves the crawler problem for a reader that follows the li
 
 - **`<!-- BUILD:SUMMARY -->`** — a paragraph of headline measurements: the latest measured value of each counter with the date it was measured, the peak day of views and clones, the leading referrer and path, and the archive's coverage and resolution. Rendered by `renderSummaryHtml` in `summary.ts`.
 - **`<!-- BUILD:JSONLD -->`** — the schema.org `Dataset` block, regenerated so `variableMeasured` carries `PropertyValue` entries with real values and `temporalCoverage` states the archive's actual span. Rendered by `renderDatasetJsonLd`. Skipped when `METRICS_SITE_URL` is unset, since every URL in it is absolute; the committed block stands in that case.
+  The telemetry variables (`reporting instances`, `active users on reporting
+  instances`, `server versions in use`, `countries instances report from`,
+  `client kinds in use`), the sentence naming the second source and the second
+  clause of `measurementTechnique` are emitted only when the archive holds at
+  least one ping, gated on `SummaryFacts.telemetryInstances` in `summary.ts`
+  and on `telemetry.network.dates` in `datapage.ts`. A variable declared over
+  an archive that has never measured it is a claimed measurement, which is the
+  one thing this subsystem exists not to publish. The committed fallback in
+  `site/insights/index.html` carries the extended form, because the live
+  archive holds pings.
 
 Four properties this depends on:
 
@@ -278,7 +303,7 @@ Once the write phase starts, its very first action is a synchronous read, not a 
 
 `backfill()` is permitted to touch exactly `stars.csv`, `forks.csv`, `releases.csv` and the four `telemetry/*` files (the `WRITABLE` constant in `backfill.ts`). It never opens `traffic/*` (no historical traffic API exists at all) or `repo.csv` (`subscribers` has no historical API either — a stray rewrite there would be a permanent, unrecoverable loss) or `contributors.csv` (the `/stats/contributors` weekly buckets the daily collector reads already cover all of history whenever that endpoint answers, so there is no gap for a one-shot backfill to fill).
 
-**Telemetry backfill has a hard 90-day reach and starts where the evidence starts.** The receiver keeps raw pings for 90 days, so a dispatch pulls `[today-89, today-1]` in three requests of at most 31 days each and can aggregate any day in `[today-88, today-1]`. It does not aggregate all of them: the fill begins at the oldest day the export actually carries, for the same reason the workflow fill begins at the oldest surviving run (§4.5). The receiver has not existed for 90 days on every dispatch, and an aggregate over a day it holds no row for is an all-zero snapshot that reads as a measured empty fleet, which §4.3 forbids. An empty export therefore writes nothing at all. Inside the range the earliest days are still computed over a short history, because the snapshot rule looks back thirty days to decide which instances count and a day near the start of the export has fewer than thirty behind it: those instance counts are a lower bound, and there is no way to fetch around it. `network.csv` merges if-absent like every other backfilled CSV, so any day the collector measured keeps its own row. The three NDJSON files hold to the same rule at a coarser grain: `upsertDimensional` has no if-absent mode, so `mergeDimensional` applies one itself and drops every incoming row whose `snapshot_date` the file already carries. It has to be by day rather than by row, because `dimension` is part of `upsertDimensional`'s key: a version that folds into `other` on a truncated lookback does not collide with the collector's row naming it, so a row-keyed merge would leave `{D, "1.1.2", 5}` in place and add `{D, "other", 3}` beside it, and the day would count eight instances where five reported. So a telemetry day is filled whole or left exactly as it is, and dispatching `backfill.yml` for stars or forks never rewrites telemetry history. A backfill dispatched without `TELEMETRY_EXPORT_TOKEN` set touches nothing under `telemetry/` and reconstructs everything else normally. Unlike the collector, a failed telemetry fetch here is not caught: this job is dispatched by hand and watched, it has no `skipped` channel, and every fetch happens before every write, so a rejection leaves the archive untouched.
+**Telemetry backfill has a hard 90-day reach and starts where the evidence starts.** The receiver keeps raw pings for 90 days, so a dispatch pulls `[today-89, today-1]` in three requests of at most 31 days each and can aggregate any day in `[today-88, today-1]`. It does not aggregate all of them: the fill is bounded below by the oldest day the export actually carries, for the same reason the workflow fill begins at the oldest surviving run (§4.5). The receiver has not existed for 90 days on every dispatch, and an aggregate over a day it holds no row for is an all-zero snapshot that reads as a measured empty fleet, which §4.3 forbids. An empty export therefore writes nothing at all, and neither does the oldest day the export does carry: eligibility needs two distinct reporting days inside the trailing thirty, and that day has exactly one by definition, so its aggregate is all zeros by construction. The fill starts one day after it. Inside the range the earliest days are still computed over a short history, because the snapshot rule looks back thirty days to decide which instances count and a day near the start of the export has fewer than thirty behind it: those instance counts are a lower bound, and there is no way to fetch around it. `network.csv` merges if-absent like every other backfilled CSV, so any day the collector measured keeps its own row. The three NDJSON files hold to the same rule at a coarser grain: `upsertDimensional` has no if-absent mode, so `mergeDimensional` applies one itself and drops every incoming row whose `snapshot_date` the file already carries. It has to be by day rather than by row, because `dimension` is part of `upsertDimensional`'s key: a version that folds into `other` on a truncated lookback does not collide with the collector's row naming it, so a row-keyed merge would leave `{D, "1.1.2", 5}` in place and add `{D, "other", 3}` beside it, and the day would count eight instances where five reported. So a telemetry day is filled whole or left exactly as it is, and dispatching `backfill.yml` for stars or forks never rewrites telemetry history. A backfill dispatched without `TELEMETRY_EXPORT_TOKEN` set touches nothing under `telemetry/` and reconstructs everything else normally. Unlike the collector, a failed telemetry fetch here is not caught: this job is dispatched by hand and watched, it has no `skipped` channel, and every fetch happens before every write, so a rejection leaves the archive untouched.
 
 ### 4.3 No zero-filling
 
@@ -373,7 +398,7 @@ METRICS_DATA_DIR=/path/to/a/checkout/of/metrics-data \
 node scripts/metrics/src/cli-collect.ts
 ```
 
-All three environment variables are required (`requiredEnv` in `cli-support.ts` throws immediately if any is missing, empty, or whitespace-only). Three more are optional. `METRICS_ACTIONS_TOKEN` is read by `cli-collect.ts` alone (see `workflows.csv`, §4.5). `TELEMETRY_EXPORT_TOKEN` enables the telemetry step and `TELEMETRY_ENDPOINT` overrides the receiver's default `https://hello.backspacechat.com`; `cli-collect.ts` and `cli-backfill.ts` read that pair identically. `METRICS_DATA_DIR` must point at a directory containing (or where you want created) the series files described in §3 — normally a local checkout of the `metrics-data` branch. Requires Node ≥22.18 for unflagged type stripping (the package's `engines` field); the workflow itself pins Node 24. This has not been exercised against the live API as part of writing this document — it is a direct read of what `cli-collect.ts` requires, not a verified live run.
+All three environment variables are required (`requiredEnv` in `cli-support.ts` throws immediately if any is missing, empty, or whitespace-only). Three more are optional. `METRICS_ACTIONS_TOKEN` is read by `cli-collect.ts` alone (see `workflows.csv`, §4.5). `TELEMETRY_EXPORT_TOKEN` enables the telemetry step and `TELEMETRY_ENDPOINT` overrides the receiver's default `https://hello.backspacechat.com`; `cli-collect.ts` and `cli-backfill.ts` read that pair identically. Both entrypoints read the endpoint through `telemetryEndpoint` in `cli-support.ts`, which holds the single copy of that default and treats a blank or whitespace-only value as unset. `TELEMETRY_ENDPOINT` is wired into both workflows as an optional repository **variable** (`vars.TELEMETRY_ENDPOINT`), not a secret: it is a hostname, it is documented here, and a secret would be one nobody could read back to check what it was set to. An unset `vars` entry interpolates the empty string rather than nothing, which is exactly the case `telemetryEndpoint` exists to absorb. Leave `TELEMETRY_EXPORT_TOKEN` out and the run prints a one-line notice naming it on stderr and collects everything else normally, rather than skipping telemetry silently. `METRICS_DATA_DIR` must point at a directory containing (or where you want created) the series files described in §3 — normally a local checkout of the `metrics-data` branch. Requires Node ≥22.18 for unflagged type stripping (the package's `engines` field); the workflow itself pins Node 24. This has not been exercised against the live API as part of writing this document — it is a direct read of what `cli-collect.ts` requires, not a verified live run.
 
 ### Running a backfill
 
@@ -572,7 +597,12 @@ more, spec section 9) with a comparison instead of arithmetic over a parallel
 array. It is the LAST day's value, not the last measured one: the threshold is
 a claim about the trailing seven days, and answering it from an older row
 would publish charts on a bar that is no longer cleared. A last day that did
-not measure the column reads as `null`, which fails the threshold.
+not measure the column reads as `null`, which fails the threshold, and it
+reads as `null` on the weekly path too: `downsampleWeekly` carries the daily
+figure through rather than recomputing it. The two agree in every other case,
+because the final bucket's last measured value is the final day whenever that
+day measured anything, and recomputing would differ only by reaching back up
+to six days for a value the threshold is not about.
 
 **The data tables under `site/insights/data/` are public from the first
 archived ping, whatever the charts do.** The threshold governs drawing a line,
@@ -630,7 +660,7 @@ Downsampling only on failure is the point of the order. Doing it unconditionally
 
 - **Traffic counts sum within a bucket** (`sumBucket`): `views` and `clones`, both `count` and `uniques`. `uniques` summing is an acknowledged over-count — someone who visited Monday and Thursday is counted twice, and a true weekly unique figure is not recoverable from daily rows at any resolution — but it is an upper bound that moves with the quantity it describes, where taking the last day's uniques would report one day as if it were seven.
 - **Cumulative counters take the week's last measured value** (`lastBucket`): `stars`, `forks`, `contributors`, and every field of `repo`. Summing these would be meaningless in a way that looks entirely plausible on a chart — seven daily readings of a star count that sat at 66 all week would publish 462 stars. "Last **measured**", not "last element": a week whose final days are null was still measured earlier in the week. The pick is by highest *date*, not highest index.
-- **Every column of `telemetry.network` takes the week's last measured value** (`lastBucket`), for the same reason the cumulative counters do: they are gauges describing the fleet on a day, so summing seven readings of a steady twelve instances would publish 84. The trap is sharper here than for `stars`, because two of the names (`messages7d`, `users_active7d`) read like per-day event counts and are not. They are trailing-window figures the instances themselves computed, each already covering seven days, so summing a week of them would over-count by roughly a further factor of seven. The buckets are keyed on the UTC Monday like every other series: a telemetry series keyed on bucket END dates would sit up to six days ahead of the rest of the bundle and silently widen every window `rangeWindow` anchors. `telemetry`'s three dimension series are left daily, exactly as `referrers` and `paths` are, and `instances7d` is recomputed from the bucketed series so the published threshold figure always appears in the published series.
+- **Every column of `telemetry.network` takes the week's last measured value** (`lastBucket`), for the same reason the cumulative counters do: they are gauges describing the fleet on a day, so summing seven readings of a steady twelve instances would publish 84. The trap is sharper here than for `stars`, because two of the names (`messages7d`, `users_active7d`) read like per-day event counts and are not. They are trailing-window figures the instances themselves computed, each already covering seven days, so summing a week of them would over-count by roughly a further factor of seven. The buckets are keyed on the UTC Monday like every other series: a telemetry series keyed on bucket END dates would sit up to six days ahead of the rest of the bundle and silently widen every window `rangeWindow` anchors. `telemetry`'s three dimension series are left daily, exactly as `referrers` and `paths` are, and `instances7d` is carried through from the daily bundle, which is the same value as the final bucket's whenever the final day measured the column and is `null` when it did not.
 - **`releases` and `dimensions` are not bucketed at all.** Releases are sparse, so there is no space to save, and merging two tags published in one week into one marker would destroy the annotation the growth chart exists for. Dimensions are already bounded at top-10-per-snapshot.
 - **`collection_started` and `empty` are carried through, not recomputed.** A first measurement on a Wednesday buckets under the preceding Monday, and recomputing from the bucket keys would back-date the page's "since <date>" label onto a day on which nothing was measured. A bucket key labels a week; `collection_started` is a claim about a measurement.
 
@@ -697,7 +727,7 @@ There is a third, per-chart case worth stating because it is the normal state of
 |---|---|---|
 | `unavailable` | the fetch failed: 404, non-2xx, timeout, unparseable JSON, or a payload `validateBundle` rejected | "The archive is not available here" — the bundle is generated at deploy time and is not committed, so when the archive or the deploy step is unavailable there are no figures, and inventing them would be worse |
 | `empty` | the bundle loaded and validated, and `empty` is `true` | "Collection has not produced any rows yet" — the archive holds no traffic, no growth snapshots, no releases; figures appear after the collector's first successful run |
-| `ok` | loaded, validated, non-empty | the five sections render |
+| `ok` | loaded, validated, non-empty | the six sections render |
 
 `empty` is true when all seven dated series, `releases`, and both dimension snapshot lists are empty — the state an archive is in immediately after the branch is bootstrapped, when it holds only `meta.json`. Note that `empty` and `collection_started` answer different questions: an archive holding only releases or only dimension snapshots is **not** empty yet has no dated series, so `collection_started` is `null` and the range control has nothing to anchor on.
 
@@ -733,26 +763,83 @@ Each card's caption states the span it drew, and the CI card's note says outrigh
 1. `SERIES_NAMES` in the page's range control is the list of dated series allowed to move the window. A series left out of it can hold a row outside every other series' history, and that row is measured, bundled, and then silently clipped out of every range including `all`. `workflows` was added to that list for exactly this reason; add any new dated series to it in the same commit.
 2. `validateBundle` must gain a `checkSeries` line for any new series. Without one the bundle validates, and the failure surfaces later and further away — as a section-wide error note, or a throw inside the range control that is outside any section's error boundary. `series.workflows` was missing from it until this rule was written down.
 
+### 10.8 The telemetry section and its publication threshold
+
+The sixth section, slot `telemetry`, draws the opt-in fleet figures. Two rules
+govern it and neither is negotiable from inside the section.
+
+**The `telemetry` block may be absent, and that is valid.** `validateBundle`
+checks it only when it is present (`checkTelemetry`). A bundle built before the
+key entered the contract must still load: rejecting it would answer an old
+artefact with "the archive is not available", which is a claim about the
+archive made because of a key the archive predates. Present and malformed is
+still rejected, for the reason every other series is checked -- the section
+indexes these arrays without re-checking them.
+
+**Nothing is charted until the latest `instances_7d` reaches 10** (spec section
+9). The gate reads `telemetry.instances7d`, which the bundler carries as its own
+field so the page compares rather than computes, and which is the last DAY's
+value rather than the last measured one. Below the mark the section prints the
+count and the threshold in a `slot-note-detail`, in one of three wordings: no
+block at all, a block whose latest day did not measure the column, and a real
+count below ten. They are three different statements and the page does not
+collapse them into one. Printing nothing would read as a broken collector, and
+the figures are public in `/insights/data/` from the first archived ping either
+way: the threshold governs drawing a line, not disclosing a figure.
+
+**`telemetry.network` is deliberately absent from `SERIES_NAMES`**, the list of
+dated series allowed to anchor the range window (section 10.7, trap 1). That
+list reads `data.series[name]` and telemetry is a sibling of `series`, not a
+member of it -- but the substantive reason is that it must not anchor: the
+collector writes the telemetry files only inside a run that also wrote the
+traffic series, so a telemetry date can never lie outside the traffic history
+and can never be clipped by a window the traffic anchored. Trap 1 does not
+apply here, and adding it would be the change that makes it apply.
+
+**The two time-series cards do not go through `bind`.** `bind` resolves a
+card's declared columns out of `data.series[...]`, and `telemetry.network` is a
+sibling of `series` rather than a member of it. The section builds its
+`[{ series, field }]` array directly and hands it to `expand`, which takes that
+shape as its argument. Everything `bind` exists to prevent is still prevented:
+each card names its own columns in its own declaration and the lines are built
+from that same declaration in the same loop, so a card cannot be drawn from a
+column it does not name.
+
+Each card is expanded on its own columns, so its axis spans the days that card
+was measured on. In practice both cards share a history, since a network row
+carries every gauge or none, but the per-card expansion costs nothing and keeps
+the section on the same rule as Reach (section 10.7).
+
+**The three rankings render `latest` only, with no trajectory chart.** They use
+the same `.rank-*` markup as the referrer and path sections, and every bar takes
+the neutral fill rather than a palette colour, because on this page a palette
+colour means "this row has a line below it in this colour" and this section
+draws no per-dimension lines. A ranking's `count` is not the same unit across
+the three: versions and countries count INSTANCES, clients counts PEOPLE, and
+each card names its own unit on every row. The rankings are a snapshot rather
+than a window, so the range control does not move them, and each card states the
+snapshot date it drew.
+
 ---
 
 ## 11. Testing
 
-`scripts/metrics`'s `test` script is `tsc --noEmit && vitest run` — it runs through the existing root `pnpm -r test` step with no `ci.yml` change required, and covers both types and behavior in one script. All tests are fixture-driven and touch no network; filesystem tests use a per-test `mkdtempSync` directory, cleaned up in `afterEach`. As of this writing there are **369 tests across 15 files**, all passing:
+`scripts/metrics`'s `test` script is `tsc --noEmit && vitest run` — it runs through the existing root `pnpm -r test` step with no `ci.yml` change required, and covers both types and behavior in one script. All tests are fixture-driven and touch no network; filesystem tests use a per-test `mkdtempSync` directory, cleaned up in `afterEach`. As of this writing there are **396 tests across 15 files**, all passing:
 
 ```
-src/collect.telemetry.test.ts  3
+src/collect.telemetry.test.ts  4
 src/sitemap.test.ts            5
-src/bundle.telemetry.test.ts   6
 src/vendor-check.test.ts       6
 src/no-runtime-deps.test.ts    9
-src/telemetry.test.ts         14
-src/datapage.test.ts          16
+src/bundle.telemetry.test.ts  13
+src/telemetry.test.ts         18
+src/datapage.test.ts          21
 src/github.test.ts            21
 src/store.test.ts             23
-src/backfill.test.ts          26
-src/summary.test.ts           26
+src/backfill.test.ts          28
+src/summary.test.ts           28
 src/collect.test.ts           35
-src/cli-support.test.ts       35
+src/cli-support.test.ts       41
 src/series.test.ts            55
 src/bundle.test.ts            89
 ```
@@ -761,7 +848,7 @@ src/bundle.test.ts            89
 
 `bundle.test.ts` is the largest of them because it carries the whole of §10.2's contract: the null-versus-zero rule at every read, the trajectory invariants, the two weekly aggregators, and the budget sequence. `vendor-check.test.ts` is not a unit test at all — it hashes the committed uPlot files against `vendor.json` (§10.4) and has its own `vendor:check` script for running it alone.
 
-**The dashboard page itself has no tests.** `site/insights/index.html` is not exercised by anything in CI; the contract in §10.2 and the page's own `validateBundle` are what stand in for them.
+**The dashboard page itself has no tests.** `site/insights/index.html` is not exercised by anything in CI; the contract in §10.2 and the page's own `validateBundle` are what stand in for them. What stands in for them by hand is the pair of scripts in `scripts/metrics/fixtures/`, neither of which adds a dependency: `insights-fixture.mjs` writes a throwaway archive in one of seven states (`none`, `low`, `threshold`, `high`, `high-other`, `high-nodims`, `sparse`) plus a copy of `site/` to serve, and `insights-check.mjs` loads that copy in whatever Chrome the machine has and reports the console, the failed requests, the rendered telemetry section, the rankings under each range button, and whether a drag on one chart rezoomed the rest. `threshold` is the state worth keeping: it produces exactly ten reporting instances, the value the published promise turns on. `high-other` is the second: `high` gives the folded `other` row the lowest count, so only `high-other` can show that `other` ranks where its count places it rather than at the bottom. A bundle with no `telemetry` key at all is not one of the seven states, because `buildDashboardData` always writes the key; running the fixture again after the bundle step with `--strip-telemetry` deletes it from the built `data.json`, which is the only way to see the wording the page keeps for a bundle made before the pings existed. Both scripts need Node 22.18 or newer for unflagged type stripping, which the root engine range of `>=20.0.0` does not guarantee: a shell left on Node 20 satisfies the root range and still fails the fixture script with `ERR_UNKNOWN_FILE_EXTENSION`. Run `insights-check.mjs` with `--prove-console` at least once per session: it plants a `console.warn` in the page before any page script and fails if it does not come back, because a capture that was never attached and a page that logged nothing are indistinguishable otherwise.
 
 `cli-record-failure.ts` has no dedicated `.test.ts` of its own, matching `cli-collect.ts`, `cli-backfill.ts` and `cli-bundle.ts` — all four are thin `process.env`/clock-reading wrappers with no branching logic of their own to unit-test. Its testable core, `recordFailure()`, is covered in `cli-support.test.ts` alongside the module's other shared helpers; `collect.ts`'s corresponding `series_last_date`-seeding logic is covered in `collect.test.ts`, and `cli-bundle.ts`'s core is `buildDashboardData`/`serialiseWithinBudget` in `bundle.test.ts`.
 

@@ -50,6 +50,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Test manifest preparation
+        run: node --test flatpak/prepare-ci-manifest.test.mjs
+
+      - name: Install the pinned Node SDK extension
+        run: |
+          flatpak remote-add --user --if-not-exists flathub \
+            https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user --noninteractive -y flathub \
+            org.freedesktop.Sdk.Extension.node24//25.08
+
+      # Generate from this checkout on each architecture, without overwriting
+      # the offline sources paired with the published release commit.
+      - name: Generate working-tree offline sources
+        run: |
+          flatpak-node-generator --electron-node-headers \
+            --node-sdk-extension org.freedesktop.Sdk.Extension.node24//25.08 \
+            -o flatpak/node-sources.ci.json pnpm pnpm-lock.yaml
+
       - name: Prepare working-tree manifest
         run: node flatpak/prepare-ci-manifest.mjs
 

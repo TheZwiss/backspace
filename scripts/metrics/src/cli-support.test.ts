@@ -13,6 +13,9 @@ import {
   recordFailure,
   formatRecordFailureSummary,
   describeFailure,
+  telemetryEndpoint,
+  telemetrySkipNotice,
+  DEFAULT_TELEMETRY_ENDPOINT,
 } from './cli-support.ts';
 
 describe('requiredEnv', () => {
@@ -319,5 +322,42 @@ describe('describeFailure', () => {
         process.env['METRICS_TOKEN'] = originalToken;
       }
     }
+  });
+});
+
+describe('telemetryEndpoint', () => {
+  it('defaults when the variable is absent', () => {
+    expect(telemetryEndpoint({})).toBe(DEFAULT_TELEMETRY_ENDPOINT);
+  });
+
+  it('treats an empty or whitespace-only value as absent', () => {
+    // An Actions `env:` entry interpolating an unset repository variable sets
+    // the empty string rather than nothing, so `?? default` would hand the
+    // fetcher an empty base URL on every repo that has not set it.
+    expect(telemetryEndpoint({ TELEMETRY_ENDPOINT: '' })).toBe(DEFAULT_TELEMETRY_ENDPOINT);
+    expect(telemetryEndpoint({ TELEMETRY_ENDPOINT: '   ' })).toBe(DEFAULT_TELEMETRY_ENDPOINT);
+  });
+
+  it('honours an override and trims it', () => {
+    expect(telemetryEndpoint({ TELEMETRY_ENDPOINT: 'https://staging.test\n' })).toBe('https://staging.test');
+  });
+});
+
+describe('telemetrySkipNotice', () => {
+  it('names the variable when the token is unset', () => {
+    const notice = telemetrySkipNotice({});
+    expect(notice).not.toBeNull();
+    // The variable's exact name, because the reader of a green CI log has to be
+    // able to grep for the thing that is missing.
+    expect(notice).toContain('TELEMETRY_EXPORT_TOKEN');
+    expect(telemetrySkipNotice({ TELEMETRY_EXPORT_TOKEN: '  ' })).toBe(notice);
+  });
+
+  it('says nothing when the token is set', () => {
+    expect(telemetrySkipNotice({ TELEMETRY_EXPORT_TOKEN: 'abc' })).toBeNull();
+  });
+
+  it('never repeats the token', () => {
+    expect(telemetrySkipNotice({ TELEMETRY_EXPORT_TOKEN: '' })).not.toContain('=');
   });
 });

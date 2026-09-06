@@ -19,6 +19,7 @@ below.
 | `.github/workflows/dast.yml` | ZAP baseline against an ephemeral instance (spider + passive, unauthenticated) | push main + weekly + manual + PRs touching its own config | Job summary + artifact (advisory) |
 | `.github/workflows/docker-publish.yml` | Image scan (Trivy) + SBOM + provenance for the published container | tag push / manual | image scan (report-only) + SBOM + provenance |
 | `.github/workflows/telemetry-receiver.yml` | Typecheck + Workers test suite for `scripts/telemetry-receiver`, and its deploy to Cloudflare | PR + push main, both path-filtered to the package; deploy on manual dispatch only | job status; a published Worker |
+| `.github/workflows/pr-triage.yml` | Fork PR triage: "routine" or "read first" verdict for the CI approval click, plus lockfile and Flatpak source summary | `pull_request_target` on fork PRs + manual | one comment per PR, updated in place |
 
 > **gitleaks findings** surface in the workflow's job log and PR summary — the
 > `gitleaks` job does not upload SARIF, so secret hits do **not** appear under
@@ -493,7 +494,10 @@ settings or process. They belong to the checklist below, not to remediation.
   `@ref` on a `./` path and resolves a local reusable workflow from the calling
   run's own commit, which is tighter than a SHA pin. Not a gap — do not "fix" it.
 - `step-security/harden-runner` (egress-policy `audit`) on every workflow in
-  `.github/workflows/`. Two jobs deliberately go without it, and neither is a gap:
+  `.github/workflows/`, except `pr-triage.yml`, which runs with a write token
+  on fork activity and therefore uses `block` with an allowlist (the GitHub
+  API and the hosts setup-node downloads from). Two jobs deliberately go
+  without it, and neither is a gap:
   `ci.yml`'s `build-and-test-required`, which only compares a `needs` result and
   makes no network call, and `metrics.yml`'s `deploy-dashboard`, which is a call
   into the local reusable `deploy-pages.yml` whose own job is hardened. In
@@ -540,6 +544,100 @@ GitHub, and the only one whose tests do not run in Node. What guards it:
   place a version below Cloudflare's declared floor first misbehaves.
 - **`permissions: contents: read`** at workflow level and nothing added at job
   level. The `environment:` key needs no scope of its own.
+
+## Fork PR triage
+
+`pr-triage.yml` answers one question on every fork pull request, before the
+maintainer clicks "Approve and run": **is approving this PR's CI runs routine,
+or does something need reading first?** The answer is a comment on the PR,
+posted by `github-actions[bot]`, updated in place on every push, and visible
+on a phone. The code lives in `scripts/pr-triage` (a workspace package with
+the same shape as `scripts/metrics`: TypeScript run directly by Node 24, no
+runtime dependencies, `tsc --noEmit && vitest run`).
+
+### What the approval click actually releases
+
+A `pull_request` workflow run from a fork gets no secrets and a read-only
+`GITHUB_TOKEN`. That is a platform guarantee, not a repository setting. What
+the approval gate holds back is compute: on approval the fork's code executes
+on a GitHub-hosted runner inside `pnpm install`, `pnpm build`, `pnpm -r test`,
+the Docker build and (for `flatpak/**` changes) flatpak-builder in a
+privileged container. Every PR does that; it is what CI is for. The approval
+decision is therefore not "does this PR run code" but "does this PR change
+the pipeline the code runs in". The bot's verdict encodes exactly that split:
+
+- **routine**: no file in the PR changes the pipeline. The PR's code runs
+  inside the same steps every PR runs in.
+- **read first**: the PR changes the pipeline itself. The verdict names the
+  files. The maintainer reads them before approving.
+- **could not analyse**: some part of the analysis failed (an unparseable
+  lockfile, a truncated file listing, an API error). The verdict says what
+  failed; the maintainer reads the full diff. The bot never turns a failure
+  into "routine".
+
+### The signals
+
+| Row | What counts | Affects the verdict |
+|-----|-------------|---------------------|
+| CI workflows | `.github/workflows/**`, `.github/actions/**`, including the previous name of a rename | yes |
+| Install-time code | `.pnpmfile.cjs` and `.npmrc` at any depth, `pnpm-workspace.yaml`, `patches/**`; and any `package.json` whose `scripts.*`, `pnpm.*` or `packageManager` changed (a dependency bump alone does not count) | yes |
+| Build recipes | `Dockerfile*`, `docker-compose*.yml`, `docker-entrypoint.sh`, `Caddyfile`, `install.sh`, `deploy.sh`, `restore.sh`, `io.github.TheZwiss.backspace*.yml`, `flatpak/*.{sh,mjs,cjs,js,py}`, `packages/desktop/electron-builder.yml`, `packages/desktop/scripts/**` | yes |
+| Scanner configuration | `.github/codeql/**`, `osv-scanner.toml`, `.trivyignore`, `.zap/**`, `.gitleaks.toml` | yes |
+| `pnpm-lock.yaml` | new package names vs. version bumps vs. removals; entries whose resolution is not exactly `{integrity: ...}` with a bare semver (git, tarball URL, directory, `file:`); importer specifiers new at head that point outside the registry; `overrides` and `patchedDependencies` blocks | only `overrides` and `patchedDependencies` |
+| `flatpak/node-sources.json` | added `file`/`archive` entries with a checksum from the hosts the generator uses (npm registry, Electron releases on github.com, Node headers on electronjs.org) are "known"; `shell`, `script`, `patch`, unknown types, and `inline` entries with a script name or a shebang are "executable"; downloads from any other host or without a checksum are "foreign" | executable and foreign entries |
+
+Deliberately not a signal: application source, tests, Vite/PostCSS/vitest
+configs, `scripts/*.mjs`. All of it executes on the runner inside the build
+and test steps, and that is true of every PR. Listing it would make every PR
+"read first" and the verdict worthless. Also not a signal: new or bumped
+registry packages. pnpm 10 runs no dependency lifecycle scripts unless the
+package is allowlisted in `pnpm.onlyBuiltDependencies` (or its siblings),
+and the allowlist is covered by the install-time row. Those rows are for the
+merge review, which is where a malicious dependency would actually enter.
+
+### Why `pull_request_target` is safe here
+
+The event runs in this repository's context with a write token, which is
+what lets the comment appear before the approval gate, and what makes the
+job dangerous if it ever executed PR content. It does not:
+
+- The checkout is the base branch (the event's default; `ref` is left
+  unset). The script that runs is the one on `main`.
+- PR file contents are fetched over the API as text
+  (`/repos/{base}/contents/{path}?ref={headSha}`, raw media type) and
+  parsed by hand-written, dependency-free readers. The fork repository is
+  never addressed; a head commit is reachable through the base repository
+  whether the fork still exists or not.
+- Nothing from the event payload reaches a `run:` line. The script reads
+  the PR number from `GITHUB_EVENT_PATH`.
+- Every PR-derived string in the comment (paths, package names, resolution
+  text, the author login) goes through `sanitize.ts`: control and bidi
+  characters stripped, backticks and pipes neutralised, lengths and list
+  sizes capped, the login validated before it is mentioned.
+- Paths are URL-encoded per segment and refused if they contain control
+  characters or dot segments; files above 20 MB are refused.
+- The job has `permissions: {contents: read, pull-requests: write}`,
+  `persist-credentials: false`, a 10-minute timeout, per-PR concurrency,
+  and harden-runner in `block` mode.
+
+Base files are read at the PR's merge base (from the compare endpoint), not
+at the base branch tip, so commits `main` gained since the PR branched are
+not attributed to the PR.
+
+### Operating it
+
+- `workflow_dispatch` with a PR number re-runs the bot on any PR, fork or
+  not. Use it after changing the bot, or for a PR opened before it existed.
+- Locally: `GITHUB_TOKEN=$(gh auth token) GITHUB_REPOSITORY=TheZwiss/backspace PR_NUMBER=137 node scripts/pr-triage/src/cli.ts --dry-run`
+  prints the comment without posting.
+- Adding a signal: extend `paths.ts` (path rules), `package-json.ts`,
+  `lockfile.ts` or `sources.ts`, and `verdict.ts` if it should affect the
+  verdict. Every module has tests, two of them against the repository's
+  real `pnpm-lock.yaml` and `flatpak/node-sources.json`, so a layout change
+  in either file fails the suite rather than the bot.
+- The bot posts as `github-actions[bot]`, the same identity as the CLA
+  bot. It finds its own comment by the `<!-- backspace-pr-triage -->`
+  marker on the first line.
 
 ## Maintainer checklist (one-time GitHub settings — NOT code)
 
