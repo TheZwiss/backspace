@@ -302,6 +302,15 @@ export async function backfill(options: BackfillOptions): Promise<{ written: str
   // this job is dispatched by hand with no deadline, and the receiver is a
   // single worker that the daily collector otherwise only ever asks for 31
   // days at a time.
+  //
+  // `daysBefore(today, TELEMETRY_RETENTION_DAYS - 1)` is the oldest `from`
+  // this loop ever sends, and nothing here re-checks that the rows a chunk
+  // answers with actually stay inside `[from, to]`. That is deliberate, not
+  // an oversight: the receiver's `exportRange` (scripts/telemetry-receiver/
+  // src/store.ts) reads `WHERE day >= ?1 AND day <= ?2` straight from these
+  // same two parameters, so a row outside the requested range is a receiver
+  // defect, not something a second local clamp here could catch any more
+  // reliably. `pings` is trusted as exactly what was asked for.
   const fetchTelemetry = options.telemetry;
   const pings: PingRow[] = [];
   if (fetchTelemetry !== undefined) {
@@ -460,7 +469,7 @@ export async function backfill(options: BackfillOptions): Promise<{ written: str
   // for 90 days on every dispatch, and an aggregate over a day it holds no
   // row for is an all-zero snapshot that reads on the chart as a measured
   // empty fleet. Section 4.3 forbids exactly that. An empty export therefore
-  // writes nothing at all rather than a stretch of zero rows.
+  // writes nothing at all rather than 89 zero rows.
   //
   // Inside the range the earliest days are still computed over a short
   // history: the snapshot rule looks back thirty days to decide which

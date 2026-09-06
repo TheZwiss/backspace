@@ -289,10 +289,10 @@ export function aggregateTelemetry(rows: readonly PingRow[], date: IsoDate): Tel
  * distinct days inside the trailing thirty. On the oldest day any ping in
  * `pings` carries, and on every day before it, no instance can possibly have
  * a second reporting day behind it yet, so the aggregate for that day is all
- * zeros by construction — the structural absence of evidence, not a
+ * zeros by construction: the structural absence of evidence, not a
  * measurement of an empty fleet. Publishing it would chart a measured empty
  * fleet on a day nothing was measured (docs/systems/metrics.md section 4.3).
- * `pings` empty — a fetch that reached the receiver and got nothing back —
+ * `pings` empty, a fetch that reached the receiver and got nothing back,
  * excludes every candidate for the identical reason: there is no oldest ping
  * to be strictly after.
  *

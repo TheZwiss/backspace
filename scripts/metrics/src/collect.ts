@@ -500,8 +500,12 @@ export async function collect(options: CollectOptions): Promise<CollectResult> {
   // before the oldest ping this fetch actually returned (or every day, when
   // the fetch returned nothing at all) is structurally unmeasured rather than
   // measured-empty, per `publishableTelemetryDays`. When that leaves nothing
-  // to write, none of the four files are touched at all — a day before
-  // telemetry existed must not appear as a zero row.
+  // to write, none of the four files are touched at all, and this still gets
+  // a line in `skipped` even though the fetch itself succeeded: a wiped
+  // receiver or a fleet that stopped reporting would otherwise be a green,
+  // silent run forever, with nothing in the log to say telemetry published
+  // nothing. The reason distinguishes the two ways that can happen, since an
+  // operator needs to know whether the receiver answered at all.
   if (telemetryRows !== null) {
     // Copied to a `const` so the narrowing survives into the callback below,
     // which it would not for a `let`.
@@ -518,6 +522,12 @@ export async function collect(options: CollectOptions): Promise<CollectResult> {
       writeDimensional('telemetry/versions.ndjson', aggregates.flatMap((a) => a.versions));
       writeDimensional('telemetry/countries.ndjson', aggregates.flatMap((a) => a.countries));
       writeDimensional('telemetry/clients.ndjson', aggregates.flatMap((a) => a.clients));
+    } else {
+      skipped.push(
+        rows.length === 0
+          ? 'telemetry (no pings in the fetched window)'
+          : 'telemetry (every candidate day is at or before the oldest ping)',
+      );
     }
   }
 
