@@ -2171,8 +2171,8 @@ footer a:hover { color: var(--txt); }
   }
 
   /*
-   * The two fixed 30-day windows every figure on this page is measured over,
-   * and the reason they are computed once rather than per card.
+   * The fixed 30-day windows every figure on this page is measured over, one
+   * per kind, and the reason they are computed once rather than per card.
    *
    * `point` and `step` windows open a full 30 days before the close, `flow`
    * windows on the first of the 30 days: a sum counts the days it covers,
@@ -2180,6 +2180,14 @@ footer a:hover { color: var(--txt); }
    * The two kinds genuinely need windows offset by one day from each other,
    * and collapsing them would either drop a day from the sum or claim a
    * comparison the archive cannot make.
+   *
+   * There are three keys for two distinct spans, and that is deliberate.
+   * `step` is `point`'s arithmetic under its own name, so that a later change
+   * to what one kind measures over cannot silently move the other. Aliasing
+   * the two would make exactly that divergence invisible, and a step series
+   * has its own reasons for the window it wants: see stepDelta, which reads a
+   * window's open as the last recorded change at or before it rather than as
+   * a measurement taken on that day.
    *
    * Null when the archive holds no dated row to anchor them to.
    */

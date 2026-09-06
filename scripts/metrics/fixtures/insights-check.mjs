@@ -114,7 +114,7 @@ function connect(wsUrl, onEvent) {
       const entry = pending.get(message.id);
       pending.delete(message.id);
       if (entry === undefined) return;
-      if (message.error) entry.reject(new Error(`${message.method}: ${message.error.message}`));
+      if (message.error) entry.reject(new Error(`${entry.method}: ${message.error.message}`));
       else entry.resolve(message.result);
       return;
     }
@@ -266,7 +266,7 @@ const OBSERVE = `(function () {
     });
     return entry;
   }
-  var out = { slots: [], stats: [], hint: null, nav: [], sections: [] };
+  var out = { slots: [], hint: null, nav: [], sections: [] };
   var hint = document.getElementById("chart-hint");
   out.hint = hint === null ? null : {
     text: text(hint),
@@ -304,8 +304,13 @@ const OBSERVE = `(function () {
       figures: [],
       cards: []
     };
-    slot.querySelectorAll(":scope > .slot-note, :scope > .slot-note-detail").forEach(function (n) {
-      entry.notes.push(text(n));
+    /* Any standing note in the slot, at any depth, EXCEPT one that belongs to
+     * a card: cardOf already reports those, and counting them twice would
+     * make a card's note read as a slot's. Depth matters because a slot's
+     * content can be wrapped in bands, and a note the report cannot see is,
+     * for review purposes, a note that does not exist. */
+    slot.querySelectorAll(".slot-note, .slot-note-detail").forEach(function (n) {
+      if (n.closest(".chart-card") === null) entry.notes.push(text(n));
     });
     slot.querySelectorAll(".stat, .lead-figure, .group-head").forEach(function (box) {
       entry.figures.push(figureOf(box));
@@ -592,8 +597,9 @@ async function main() {
       ranges.push({
         label,
         outcome,
-        window: await evaluate('(document.querySelector(".slot .chart-window") || { textContent: "" })'
-          + '.textContent.replace(/\\s+/g, " ").trim()'),
+        window: await evaluate('(function () {'
+          + ' var w = document.querySelector(".slot .chart-window");'
+          + ' return w === null ? null : w.textContent.replace(/\\s+/g, " ").trim(); })()'),
         rankings: await evaluate(RANKING_DIGEST),
         coverage: await evaluate(METHOD_COVERAGE),
       });
@@ -635,18 +641,47 @@ async function main() {
   console.log('\n=== page ===');
   console.log(JSON.stringify(observed, null, 2));
 
+  /*
+   * A verdict is only printed over a reading that was actually taken.
+   *
+   * "Rankings identical to the first range" is the PASS wording for this
+   * check, so printing it after a walk that matched nothing is the worst
+   * output this script can produce: four green lines over a comparison of two
+   * empty arrays, under a `console capture proof: PASS`, at exit 0. An
+   * expression that throws can no longer reach the report, but an expression
+   * whose selectors quietly stop matching returns an honest empty array, and
+   * Tasks 4 to 8 rebuild every card on the page, so a renamed `.rank-row` is
+   * not a hypothetical. The same reasoning covers a page that offered no
+   * range button and a page whose charts have no canvas: in both cases the
+   * loop below would print nothing at all and the heading alone would read as
+   * a section that passed.
+   */
   console.log('\n=== range sweep ===');
   const first = ranges[0]?.rankings;
+  const noRankings = !Array.isArray(first) || first.length === 0;
+  if (ranges.length === 0) {
+    console.log('  NOTHING SWEPT: the page offered no range button, so no range was exercised');
+  }
   for (const r of ranges) {
-    const same = JSON.stringify(r.rankings) === JSON.stringify(first);
-    console.log(`  ${r.label} (${r.outcome}): rankings ${same ? 'identical to the first range' : 'CHANGED'}; ${r.window}`);
+    const verdict = noRankings
+      ? 'NO RANKING ROWS TO COMPARE'
+      : `rankings ${JSON.stringify(r.rankings) === JSON.stringify(first) ? 'identical to the first range' : 'CHANGED'}`;
+    console.log(`  ${r.label} (${r.outcome}): ${verdict}; ${r.window === null ? '(no chart-window)' : r.window}`);
     console.log(`    method coverage: ${r.coverage === null ? '(no method-coverage slot)' : r.coverage}`);
   }
-  console.log('  rankings seen: ' + JSON.stringify(first, null, 2));
+  if (ranges.length > 0 && noRankings) {
+    console.log('  NO RANKING ROWS FOUND ANYWHERE ON THE PAGE: the verdicts above compared nothing.');
+    console.log('  Either no card ranks anything, or the ranking walk stopped matching the markup.');
+  }
+  console.log('  rankings seen: ' + JSON.stringify(first ?? null, null, 2));
 
   console.log('\n=== zoom sync ===');
   console.log(`drag (first chart on the page): ${dragResult}`);
-  for (const key of Object.keys(after ?? {})) {
+  const canvasKeys = Object.keys(after ?? {});
+  if (canvasKeys.length === 0) {
+    console.log('  NO CHART CANVAS FOUND ON THE PAGE: nothing was compared across the drag');
+  }
+  for (const key of canvasKeys) {
     const moved = before?.[key] !== after[key];
     console.log(`  ${moved ? 'redrew' : 'unchanged'}  ${key}  ${before?.[key]} -> ${after[key]}`);
   }
