@@ -1086,9 +1086,30 @@ class ConnectionManager {
 
 export const connectionManager = new ConnectionManager();
 
-// One warning per process is enough: the pong path runs every 30s per socket,
-// so a database that keeps refusing the write would otherwise flood the log.
-let activityWriteWarned = false;
+// The pong path runs every 30 seconds per socket, so a database that keeps
+// refusing this write would flood the log at one line per socket per pong. One
+// line per hour is the compromise: quiet enough that a persistent fault does
+// not bury everything else, loud enough that an outage lasting a week stays
+// visible for the whole week. A one-shot flag was the earlier form and it went
+// permanently silent after the first failure, so an outage that began before
+// anyone looked left no trace at all.
+const ACTIVITY_WARN_INTERVAL_MS = 60 * 60 * 1000;
+let activityWarnedAt = 0;
+
+/**
+ * The last UTC day each live connection recorded activity for.
+ *
+ * Keyed on the socket, so it dies with the socket and holds nothing across
+ * reconnects. `touchUserActivity` already refuses to rewrite a row that holds
+ * today, so this memo changes no stored value; what it avoids is the round
+ * trip. Without it an `UPDATE` runs for every socket on every pong, which on an
+ * instance holding a few hundred desktop clients open is constant write-lock
+ * churn on `users` for a column that moves once a day.
+ *
+ * A miss is always safe: a connection with no memo simply writes, and the
+ * statement's own predicate makes that a no-op when the day is already there.
+ */
+const activityDayByConnection: WeakMap<object, string> = new WeakMap();
 
 /**
  * Day-coarse activity for the opt-in telemetry counts. `authMessage` is the
@@ -1098,23 +1119,40 @@ let activityWriteWarned = false;
  * A failed write is swallowed: this bookkeeping is optional, and it runs on the
  * auth path (where a throw would look like a rejected token) and inside the
  * 'pong' listener (where an uncaught throw would take the process down).
+ *
+ * `connection` is the socket, used as the key of a per-connection memo of the
+ * day already recorded. Given, a pong that has already recorded today returns
+ * without touching the database. Omitted, every call writes.
  */
 export function recordConnectionActivity(
   userId: string,
   authMessage: Record<string, unknown> | null,
   now: Date,
+  connection?: object,
 ): void {
+  const today = utcDay(now);
+  // The auth path is never skipped: it carries the client kind, which can
+  // differ from what the row holds even on a day already recorded. Only the
+  // pong path, which touches the day and nothing else, has anything to skip.
+  if (authMessage === null && connection !== undefined
+    && activityDayByConnection.get(connection) === today) {
+    return;
+  }
   try {
     const db = getDb();
     if (authMessage) {
-      touchUserActivity(db, userId, utcDay(now), parseClientKind(authMessage.client));
+      touchUserActivity(db, userId, today, parseClientKind(authMessage.client));
     } else {
-      touchUserActivity(db, userId, utcDay(now));
+      touchUserActivity(db, userId, today);
     }
+    // Recorded only after the write did not throw, so a failing database is
+    // retried on the next pong rather than memoised as done.
+    if (connection !== undefined) activityDayByConnection.set(connection, today);
   } catch (err) {
-    if (!activityWriteWarned) {
-      activityWriteWarned = true;
-      console.warn(`[ws] could not record activity: ${(err as Error).message}`);
+    const at = now.getTime();
+    if (activityWarnedAt === 0 || at - activityWarnedAt >= ACTIVITY_WARN_INTERVAL_MS) {
+      activityWarnedAt = at;
+      console.warn(`[ws] could not record activity: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 }
@@ -1783,7 +1821,9 @@ export async function registerWebSocket(app: FastifyInstance): Promise<void> {
           wsIsAlive.set(ws, true);
           ws.on('pong', () => {
             wsIsAlive.set(ws, true);
-            recordConnectionActivity(activeUserId, null, new Date());
+            // `ws` is the memo key: this socket writes the day once and then
+            // stops asking until the day rolls over.
+            recordConnectionActivity(activeUserId, null, new Date(), ws);
           });
 
           // Build and send ready payload
