@@ -43,6 +43,14 @@ describe('slotMinute', () => {
     expect(a).toBeLessThan(1440);
     expect(slotMinute('other')).not.toBe(a);
   });
+
+  it('reads enough of the digest to tell two close ids apart', () => {
+    // These two strings hash to the same first two bytes, so a slot derived
+    // from a 16-bit read gives them the same minute. The slot has to look at
+    // more of the digest than that, both to keep instances spread out and to
+    // keep the modulo bias off the early hours of the day.
+    expect(slotMinute('slot-probe-164')).not.toBe(slotMinute('slot-probe-408'));
+  });
 });
 
 describe('reporterTick', () => {
@@ -102,6 +110,19 @@ describe('reporterTick', () => {
     const d = deps('2026-09-08T23:59:59Z');
     (d.fetch as unknown as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('offline'));
     expect(await reporterTick(d)).toBe('failed');
+    expect(readTelemetryState(db).lastError).toEqual({ day: '2026-09-08', status: 0 });
+  });
+
+  it('records a status-0 failure when the payload cannot be built', async () => {
+    setTelemetryEnabled(db, true, '2026-09-06');
+    // A build that throws (a query against a database in an unexpected state)
+    // must burn the day like any other failure. Escaping the tick instead
+    // would leave lastError unset and the minute timer would retry the same
+    // throw sixty times an hour until midnight.
+    db.exec('DROP TABLE messages');
+    const d = deps('2026-09-08T23:59:59Z');
+    expect(await reporterTick(d)).toBe('failed');
+    expect(fetchMock).not.toHaveBeenCalled();
     expect(readTelemetryState(db).lastError).toEqual({ day: '2026-09-08', status: 0 });
   });
 
