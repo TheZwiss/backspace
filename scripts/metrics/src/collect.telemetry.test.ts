@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createStore } from './store.ts';
 import { collect } from './collect.ts';
+import { createTelemetryFetcher } from './telemetry.ts';
 import type { GitHubClient } from './github.ts';
 import type { PingRow } from './telemetry.ts';
 
@@ -145,5 +146,41 @@ describe('collect with telemetry', () => {
     });
     expect(result.written).toContain('stars.csv');
     expect(store.readCsv('stars.csv')).toEqual([{ date: '2026-09-06', total: '1' }]);
+  });
+
+  // End to end over the real fetcher rather than a throwing stub, because the
+  // property under test is that a truncated export cannot reach the archive by
+  // any path: the body parses, the rows are well formed, and the only thing
+  // saying the window is short is a response header.
+  it('publishes nothing when the receiver truncated the export', async () => {
+    const store = createStore(dir);
+    const lines = ['2026-09-02', '2026-09-03', '2026-09-04', '2026-09-05']
+      .flatMap((day) => ['a', 'b', 'c'].map((id) => ping(id, day)))
+      .map((row) => JSON.stringify({ ...row, receivedAt: 'x', body: JSON.stringify(row.body) }))
+      .join('\n');
+    const fetchFn = (async () =>
+      new Response(lines + '\n', {
+        status: 200,
+        headers: { 'x-export-truncated': '1' },
+      })) as typeof fetch;
+
+    const result = await collect({
+      client: fakeClient(),
+      store,
+      ...base,
+      telemetry: createTelemetryFetcher(fetchFn, 'https://hello.test', 'tok'),
+    });
+
+    expect(result.written).not.toContain('telemetry/network.csv');
+    expect(store.readCsv('telemetry/network.csv')).toEqual([]);
+    expect(store.readNdjson('telemetry/versions.ndjson')).toEqual([]);
+    expect(store.readNdjson('telemetry/countries.ndjson')).toEqual([]);
+    expect(store.readNdjson('telemetry/clients.ndjson')).toEqual([]);
+    // The run stays green, so the skip line is the only place an operator can
+    // learn this happened. It has to say what it was.
+    expect(result.skipped.some((s) => s.includes('truncated'))).toBe(true);
+    expect(store.readMeta()?.series_last_date['telemetry/network.csv']).toBeUndefined();
+    // The irreplaceable half of the run is unaffected.
+    expect(result.written).toContain('stars.csv');
   });
 });

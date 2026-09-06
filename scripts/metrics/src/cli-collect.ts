@@ -8,6 +8,8 @@ import {
   deriveRunTimestamps,
   formatCollectSummary,
   describeFailure,
+  telemetryEndpoint,
+  telemetrySkipNotice,
 } from './cli-support.ts';
 
 /**
@@ -43,10 +45,15 @@ async function main(): Promise<void> {
   // rather than silent, so a run that quietly stopped collecting telemetry
   // because the secret was rotated away is visible in the workflow log, which
   // is what `metrics.yml` promises next to the secret.
-  const telemetryToken = process.env['TELEMETRY_EXPORT_TOKEN'] ?? '';
+  const telemetryToken = (process.env['TELEMETRY_EXPORT_TOKEN'] ?? '').trim();
   if (telemetryToken !== '') assertHeaderSafeToken(telemetryToken);
-  else console.log('telemetry: skipped, TELEMETRY_EXPORT_TOKEN is not set');
-  const telemetryEndpoint = process.env['TELEMETRY_ENDPOINT'] ?? 'https://hello.backspacechat.com';
+  const notice = telemetrySkipNotice(process.env);
+  // stderr, not stdout. The run stays green and the exit code is untouched, but
+  // the line sits where the bundle's budget warning already sits rather than
+  // among the summary lines, so a skip is visible in an otherwise clean log
+  // instead of being read as part of the report.
+  if (notice !== null) console.warn(notice);
+  const endpoint = telemetryEndpoint(process.env);
 
   const { now, today } = deriveRunTimestamps(new Date());
 
@@ -60,7 +67,7 @@ async function main(): Promise<void> {
     telemetry:
       telemetryToken === ''
         ? undefined
-        : createTelemetryFetcher(globalThis.fetch, telemetryEndpoint, telemetryToken),
+        : createTelemetryFetcher(globalThis.fetch, endpoint, telemetryToken),
   });
 
   for (const line of formatCollectSummary(result)) {
