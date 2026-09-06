@@ -64,6 +64,16 @@ export interface SummaryFacts {
   topReferrer: { label: string; detail: string | null; count: number; uniques: number } | null;
   topPath: { label: string; detail: string | null; count: number; uniques: number } | null;
   latestRelease: { tag: string; date: string } | null;
+  /**
+   * The newest measured `instances_7d` with the day it was measured, or null
+   * when the archive holds no ping at all.
+   *
+   * Carried so the Dataset block can declare the telemetry variables only when
+   * they exist. A variable the archive has never measured is a claimed
+   * measurement, and this file's whole rule is that a figure with no
+   * measurement behind it loses its clause rather than printing a placeholder.
+   */
+  telemetryInstances: DatedValue | null;
 }
 
 /**
@@ -183,6 +193,10 @@ export function buildSummary(data: DashboardData): SummaryFacts {
     topReferrer: referrer === undefined ? null : labelled(referrer),
     topPath: path === undefined ? null : labelled(path),
     latestRelease: release === undefined ? null : { tag: release.tag, date: release.date },
+    telemetryInstances: newestMeasured(
+      data.telemetry.network.dates,
+      data.telemetry.network.instances_7d,
+    ),
   };
 }
 
@@ -344,21 +358,56 @@ export function buildDatasetJsonLd(
     variables.push({ '@type': 'PropertyValue', name });
   }
 
+  // Declared only when the archive holds a ping. These come from a second
+  // source entirely, the opt-in instance pings rather than GitHub, and a
+  // crawler told the dataset measures "reporting instances" while it holds
+  // none has been told something untrue.
+  if (facts.telemetryInstances !== null) {
+    add('reporting instances', 'instances', facts.telemetryInstances);
+    for (const name of [
+      'active users on reporting instances',
+      'server versions in use',
+      'countries instances report from',
+      'client kinds in use',
+    ]) {
+      variables.push({ '@type': 'PropertyValue', name });
+    }
+  }
+
+  // Both of these carry a second clause once the archive holds a ping, because
+  // the GitHub sentence on its own is then a description of part of the
+  // dataset offered as a description of all of it. The added clause states the
+  // figures as a lower bound: the pings are opt-in, so they measure the
+  // instances that turned reporting on and nothing about the ones that did not.
+  const description =
+    "Daily archive of the Backspace repository's GitHub traffic, stars, forks, contributors " +
+    'and releases. GitHub discards repository traffic data after 14 days; this archive records ' +
+    'it once per day and retains it indefinitely. Every figure is measured, never estimated; a ' +
+    'value that was not measured is recorded as absent rather than as zero.' +
+    (facts.telemetryInstances === null
+      ? ''
+      : ' It also carries opt-in usage pings from self-hosted Backspace instances: rounded ' +
+        'counts of instances, active users, versions, countries and client kinds, published as ' +
+        'a lower bound because an instance that never opts in is not counted.');
+
+  const measurementTechnique =
+    'GitHub REST API, collected once daily by a scheduled job and committed to a public git branch' +
+    (facts.telemetryInstances === null
+      ? ''
+      : '. The usage figures come from a daily ping sent by each self-hosted instance whose ' +
+        'operator opted in, received by a public endpoint and archived on the same branch; they ' +
+        'cover only those instances.');
+
   const dataset: Record<string, unknown> = {
     '@context': 'https://schema.org',
     '@type': 'Dataset',
     name: 'Backspace repository traffic and growth archive',
-    description:
-      "Daily archive of the Backspace repository's GitHub traffic, stars, forks, contributors " +
-      'and releases. GitHub discards repository traffic data after 14 days; this archive records ' +
-      'it once per day and retains it indefinitely. Every figure is measured, never estimated; a ' +
-      'value that was not measured is recorded as absent rather than as zero.',
+    description,
     url: `${base}/insights/`,
     license: 'https://www.gnu.org/licenses/agpl-3.0.html',
     isAccessibleForFree: true,
     creator: { '@type': 'Organization', name: 'Backspace' },
-    measurementTechnique:
-      'GitHub REST API, collected once daily by a scheduled job and committed to a public git branch',
+    measurementTechnique,
     variableMeasured: variables,
     distribution: [
       {

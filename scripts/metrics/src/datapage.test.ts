@@ -296,6 +296,22 @@ describe('renderDataPage', () => {
     expect(html).not.toContain('<script>x</script>');
   });
 
+  it('names the usage pings in the page description and the Dataset once they exist', () => {
+    const html = renderDataPage(withTelemetry());
+
+    expect(html).toContain('opt-in usage pings');
+    expect(html).toContain('"reporting instances"');
+    expect(html).toContain('opted in');
+  });
+
+  it('leaves the description and the Dataset to the GitHub data while no ping exists', () => {
+    const html = renderDataPage(data());
+
+    expect(html).not.toContain('opt-in usage pings');
+    expect(html).not.toContain('"reporting instances"');
+    expect(html).not.toContain('opted in');
+  });
+
   it('omits the telemetry section entirely when no instance has reported', () => {
     const html = renderDataPage(data());
 

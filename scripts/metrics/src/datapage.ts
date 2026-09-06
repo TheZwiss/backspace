@@ -269,9 +269,17 @@ export function renderDataPage(data: DashboardData, options: DataPageOptions = {
       ? 'nothing recorded yet'
       : `${data.collection_started} to ${data.generated_at.slice(0, 10)}`;
 
+  // Gated on the archive itself, exactly as `telemetrySection` is: the page
+  // must not declare a variable it holds no measurement of, and the two must
+  // never disagree about whether this page carries usage pings.
+  const hasTelemetry = data.telemetry.network.dates.length > 0;
+
   // schema.org Dataset. This is what makes the archive discoverable as data
   // rather than as prose: it names the machine-readable distribution
   // explicitly, so a crawler does not have to guess that data.json exists.
+  // Its description, measurement technique and telemetry variables are kept
+  // word for word in step with the block `summary.ts` builds for the charted
+  // page; a crawler that reads both must not get two answers.
   const dataset = {
     '@context': 'https://schema.org',
     '@type': 'Dataset',
@@ -281,7 +289,12 @@ export function renderDataPage(data: DashboardData, options: DataPageOptions = {
       'contributors and releases. GitHub discards repository traffic data after 14 days; ' +
       'this archive records it once per day and retains it indefinitely. Every figure is ' +
       'measured, never estimated; a value that was not measured is recorded as absent ' +
-      'rather than as zero.',
+      'rather than as zero.' +
+      (hasTelemetry
+        ? ' It also carries opt-in usage pings from self-hosted Backspace instances: rounded ' +
+          'counts of instances, active users, versions, countries and client kinds, published ' +
+          'as a lower bound because an instance that never opts in is not counted.'
+        : ''),
     url: `${insights}data/`,
     license: 'https://www.gnu.org/licenses/agpl-3.0.html',
     isAccessibleForFree: true,
@@ -289,7 +302,13 @@ export function renderDataPage(data: DashboardData, options: DataPageOptions = {
     temporalCoverage: data.collection_started === null ? undefined : `${data.collection_started}/..`,
     dateModified: data.generated_at,
     measurementTechnique:
-      'GitHub REST API, collected once daily by a scheduled job and committed to a public git branch',
+      'GitHub REST API, collected once daily by a scheduled job and committed to a public ' +
+      'git branch' +
+      (hasTelemetry
+        ? '. The usage figures come from a daily ping sent by each self-hosted instance whose ' +
+          'operator opted in, received by a public endpoint and archived on the same branch; ' +
+          'they cover only those instances.'
+        : ''),
     variableMeasured: [
       'page views',
       'unique visitors',
@@ -304,6 +323,15 @@ export function renderDataPage(data: DashboardData, options: DataPageOptions = {
       'release asset downloads',
       'referring sites',
       'popular paths',
+      ...(hasTelemetry
+        ? [
+            'reporting instances',
+            'active users on reporting instances',
+            'server versions in use',
+            'countries instances report from',
+            'client kinds in use',
+          ]
+        : []),
     ],
     distribution: [
       {
@@ -321,7 +349,7 @@ export function renderDataPage(data: DashboardData, options: DataPageOptions = {
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Backspace repository data: every recorded figure</title>
-<meta name="description" content="The complete Backspace repository traffic and growth archive as plain tables: daily page views, clones, stars, forks, contributors, referrers and paths. Measured daily, never estimated, retained past GitHub's 14-day window." />
+<meta name="description" content="The complete Backspace repository traffic and growth archive as plain tables: daily page views, clones, stars, forks, contributors, referrers and paths${hasTelemetry ? ', plus opt-in usage pings from self-hosted instances' : ''}. Measured daily, never estimated, retained past GitHub's 14-day window." />
 <link rel="canonical" href="${escapeHtml(`${insights}data/`)}" />
 <style>${STYLE}</style>
 <script type="application/ld+json">

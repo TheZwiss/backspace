@@ -194,6 +194,16 @@ The static data page solves the crawler problem for a reader that follows the li
 
 - **`<!-- BUILD:SUMMARY -->`** — a paragraph of headline measurements: the latest measured value of each counter with the date it was measured, the peak day of views and clones, the leading referrer and path, and the archive's coverage and resolution. Rendered by `renderSummaryHtml` in `summary.ts`.
 - **`<!-- BUILD:JSONLD -->`** — the schema.org `Dataset` block, regenerated so `variableMeasured` carries `PropertyValue` entries with real values and `temporalCoverage` states the archive's actual span. Rendered by `renderDatasetJsonLd`. Skipped when `METRICS_SITE_URL` is unset, since every URL in it is absolute; the committed block stands in that case.
+  The telemetry variables (`reporting instances`, `active users on reporting
+  instances`, `server versions in use`, `countries instances report from`,
+  `client kinds in use`), the sentence naming the second source and the second
+  clause of `measurementTechnique` are emitted only when the archive holds at
+  least one ping, gated on `SummaryFacts.telemetryInstances` in `summary.ts`
+  and on `telemetry.network.dates` in `datapage.ts`. A variable declared over
+  an archive that has never measured it is a claimed measurement, which is the
+  one thing this subsystem exists not to publish. The committed fallback in
+  `site/insights/index.html` carries the extended form, because the live
+  archive holds pings.
 
 Four properties this depends on:
 

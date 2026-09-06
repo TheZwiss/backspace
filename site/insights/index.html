@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Backspace insights: repository traffic and growth</title>
-<meta name="description" content="Traffic, growth and referral figures for the Backspace repository, collected daily into a public archive and rendered from a single static bundle." />
+<meta name="description" content="Traffic, growth and referral figures for the Backspace repository, plus opt-in usage pings from self-hosted instances, collected daily into a public archive and rendered from a single static bundle." />
 <link rel="canonical" href="https://thezwiss.github.io/backspace/insights/" />
 <!-- Declares the archive as a dataset rather than as prose, and names its
      machine-readable distribution explicitly. Without this a crawler reads the
@@ -17,16 +17,18 @@
   "@context": "https://schema.org",
   "@type": "Dataset",
   "name": "Backspace repository traffic and growth archive",
-  "description": "Daily archive of the Backspace repository's GitHub traffic, stars, forks, contributors and releases. GitHub discards repository traffic data after 14 days; this archive records it once per day and retains it indefinitely. Every figure is measured, never estimated; a value that was not measured is recorded as absent rather than as zero.",
+  "description": "Daily archive of the Backspace repository's GitHub traffic, stars, forks, contributors and releases. GitHub discards repository traffic data after 14 days; this archive records it once per day and retains it indefinitely. Every figure is measured, never estimated; a value that was not measured is recorded as absent rather than as zero. It also carries opt-in usage pings from self-hosted Backspace instances: rounded counts of instances, active users, versions, countries and client kinds, published as a lower bound because an instance that never opts in is not counted.",
   "url": "https://thezwiss.github.io/backspace/insights/",
   "license": "https://www.gnu.org/licenses/agpl-3.0.html",
   "isAccessibleForFree": true,
   "creator": { "@type": "Organization", "name": "Backspace" },
-  "measurementTechnique": "GitHub REST API, collected once daily by a scheduled job and committed to a public git branch",
+  "measurementTechnique": "GitHub REST API, collected once daily by a scheduled job and committed to a public git branch. The usage figures come from a daily ping sent by each self-hosted instance whose operator opted in, received by a public endpoint and archived on the same branch; they cover only those instances.",
   "variableMeasured": [
     "page views", "unique visitors", "repository clones", "unique cloners",
     "stars", "forks", "contributors", "watchers", "open issues",
-    "release asset downloads", "referring sites", "popular paths"
+    "release asset downloads", "referring sites", "popular paths",
+    "reporting instances", "active users on reporting instances",
+    "server versions in use", "countries instances report from", "client kinds in use"
   ],
   "distribution": [
     {
