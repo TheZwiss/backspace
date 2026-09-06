@@ -3,7 +3,6 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { TelemetryPayload } from '@backspace/shared';
 import { HelloModal } from './HelloModal';
-import { FAREWELL_WAVE_MS } from './scene/useSceneAnimation';
 
 vi.mock('./scene/HelloScene', () => ({
   HelloScene: ({ mood }: { mood: string }) => <div data-testid="scene" data-mood={mood} />,
@@ -22,14 +21,6 @@ const preview: TelemetryPayload = {
   installedAt: '2026-08-01',
 };
 
-/** The class list without the colour utilities, so the two buttons can be compared on size and weight. */
-function shape(button: HTMLElement): string {
-  return button.className
-    .split(' ')
-    .filter((cls) => !cls.startsWith('bg-') && !cls.startsWith('hover:') && cls !== 'text-white' && !cls.startsWith('text-txt-'))
-    .join(' ');
-}
-
 afterEach(() => {
   vi.useRealTimers();
 });
@@ -41,8 +32,7 @@ describe('HelloModal', () => {
     expect(screen.getByText("Hi. It's Jannis. I built this.")).toBeInTheDocument();
     const yes = screen.getByRole('button', { name: 'Say hi' });
     const no = screen.getByRole('button', { name: 'No thanks' });
-    expect(shape(yes)).toBe(shape(no));
-    expect(yes.className).not.toBe(no.className);
+    expect(yes.className).toBe(no.className);
 
     await userEvent.click(screen.getByRole('button', { name: 'Show the message' }));
     expect(screen.getByText(/"instance": "preview"/)).toBeInTheDocument();
@@ -72,25 +62,20 @@ describe('HelloModal', () => {
     expect(screen.getByRole('button', { name: 'Close' })).toBeEnabled();
   });
 
-  it('closes the farewell once the wave has finished', async () => {
+  it('keeps the farewell open until Close is pressed', async () => {
     vi.useFakeTimers();
     const onDismiss = vi.fn();
     render(<HelloModal open onAnswer={vi.fn().mockResolvedValue(undefined)} onDismiss={onDismiss} preview={preview} />);
 
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'No thanks' })); });
     expect(screen.getByText('Understood.')).toBeInTheDocument();
+
+    act(() => { vi.advanceTimersByTime(10_000); });
+    fireEvent.click(screen.getByText('Understood.'));
     expect(onDismiss).not.toHaveBeenCalled();
+    expect(screen.getByText('Understood.')).toBeInTheDocument();
 
-    act(() => { vi.advanceTimersByTime(FAREWELL_WAVE_MS); });
-    expect(onDismiss).toHaveBeenCalledTimes(1);
-  });
-
-  it('closes the farewell on a click anywhere in it', async () => {
-    const onDismiss = vi.fn();
-    render(<HelloModal open onAnswer={vi.fn().mockResolvedValue(undefined)} onDismiss={onDismiss} preview={preview} />);
-
-    await userEvent.click(screen.getByRole('button', { name: 'No thanks' }));
-    await userEvent.click(await screen.findByText('Understood.'));
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 
@@ -124,6 +109,14 @@ describe('HelloModal', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Decide later' }));
     await userEvent.keyboard('{Escape}');
     expect(onDismiss).toHaveBeenCalledTimes(2);
+  });
+
+  it('is a labelled dialog that takes focus when it opens', () => {
+    render(<HelloModal open onAnswer={vi.fn().mockResolvedValue(undefined)} onDismiss={vi.fn()} preview={preview} />);
+
+    const dialog = screen.getByRole('dialog', { name: "Hi. It's Jannis. I built this." });
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+    expect(dialog).toHaveFocus();
   });
 
   it('waits for the preview instead of showing an empty message', async () => {

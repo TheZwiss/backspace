@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TelemetryPayload } from '@backspace/shared';
 import { Modal } from '../ui/Modal';
 import { HelloScene, type SceneMood } from './scene/HelloScene';
-import { FAREWELL_WAVE_MS } from './scene/useSceneAnimation';
 import { PayloadPreview } from './PayloadPreview';
 
 interface HelloModalProps {
@@ -17,51 +16,40 @@ interface HelloModalProps {
 
 type Stage = 'ask' | 'saving' | 'yes' | 'no';
 
-/** Both answers are the same button in a different colour: neither choice is nudged. */
-const BUTTON_BASE = 'flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-50';
-const BUTTON_YES = 'bg-accent-primary hover:bg-accent-primary/80 text-white';
-const BUTTON_NO = 'bg-surface-elevated hover:bg-interactive-selected text-txt-primary';
+/**
+ * One class string for every button in the ask. The two answers must not
+ * differ in size, weight or colour, so neither of them is the nudged one.
+ */
+const BUTTON = 'flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 bg-surface-elevated hover:bg-interactive-selected text-txt-primary';
 
 /**
  * The one-time ask. The answer is saved before anything animates, so the
  * scene only ever celebrates something that is already stored, and a failed
- * save leaves the admin on the ask with an explanation.
+ * save leaves the admin on the ask with an explanation. Nothing closes on its
+ * own: every state ends with the admin pressing something.
  */
 export function HelloModal({ open, onAnswer, onDismiss, preview }: HelloModalProps) {
   const { t } = useTranslation('telemetry');
   const [stage, setStage] = useState<Stage>('ask');
   const [failed, setFailed] = useState(false);
-  const farewellClosed = useRef(false);
+  const headingId = useId();
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (open) {
-      setStage('ask');
-      setFailed(false);
-    }
+    if (!open) return;
+    setStage('ask');
+    setFailed(false);
+    // The ask arrives unprompted, so it takes focus: screen readers announce it
+    // and the keyboard reaches its controls without a click first.
+    dialogRef.current?.focus();
   }, [open]);
-
-  /** The farewell closes once, whether the hold ran out or the admin clicked. */
-  const endFarewell = useCallback(() => {
-    if (farewellClosed.current) return;
-    farewellClosed.current = true;
-    onDismiss();
-  }, [onDismiss]);
-
-  useEffect(() => {
-    if (stage !== 'no') return;
-    farewellClosed.current = false;
-    // The farewell stays on screen until the goodbye wave has played out, then closes itself.
-    const timer = window.setTimeout(endFarewell, FAREWELL_WAVE_MS);
-    return () => window.clearTimeout(timer);
-  }, [stage, endFarewell]);
 
   // Closing while the answer is in flight would snooze an ask that is about to
   // be answered, so every closing path waits for the save to land.
   const close = useCallback(() => {
     if (stage === 'saving') return;
-    if (stage === 'no') endFarewell();
-    else onDismiss();
-  }, [stage, endFarewell, onDismiss]);
+    onDismiss();
+  }, [stage, onDismiss]);
 
   const answer = async (enabled: boolean): Promise<void> => {
     setStage('saving');
@@ -81,34 +69,38 @@ export function HelloModal({ open, onAnswer, onDismiss, preview }: HelloModalPro
   return (
     <Modal isOpen={open} onClose={close} maxWidth="max-w-3xl" mobileStyle="fullscreen">
       <div
-        className="flex flex-col md:flex-row gap-6"
-        onClick={stage === 'no' ? endFarewell : undefined}
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={headingId}
+        tabIndex={-1}
+        className="flex flex-col md:flex-row gap-6 outline-none"
       >
-        <div className="md:w-1/2 md:flex-shrink-0 self-start w-full aspect-[3/2] rounded-2xl overflow-hidden bg-surface-base">
+        <div className="md:w-1/2 md:flex-shrink-0 self-center w-full aspect-[3/2] rounded-2xl overflow-hidden bg-surface-base">
           <HelloScene mood={mood} />
         </div>
         <div className="md:w-1/2 min-w-0 space-y-4 text-sm text-txt-secondary leading-relaxed">
           {stage === 'yes' && (
             <>
-              <h2 className="text-lg font-semibold text-txt-primary">{t('yes.title')}</h2>
+              <h2 id={headingId} className="text-lg font-semibold text-txt-primary">{t('yes.title')}</h2>
               <p>{t('yes.body')}</p>
-              <button type="button" className={`${BUTTON_BASE} ${BUTTON_YES} w-full`} onClick={close}>
+              <button type="button" className={`${BUTTON} w-full`} onClick={close}>
                 {t('yes.close')}
               </button>
             </>
           )}
           {stage === 'no' && (
             <>
-              <h2 className="text-lg font-semibold text-txt-primary">{t('no.title')}</h2>
+              <h2 id={headingId} className="text-lg font-semibold text-txt-primary">{t('no.title')}</h2>
               <p>{t('no.body')}</p>
-              <button type="button" className={`${BUTTON_BASE} ${BUTTON_YES} w-full`} onClick={endFarewell}>
+              <button type="button" className={`${BUTTON} w-full`} onClick={close}>
                 {t('no.close')}
               </button>
             </>
           )}
           {asking && (
             <>
-              <h2 className="text-lg font-semibold text-txt-primary">{t('ask.title')}</h2>
+              <h2 id={headingId} className="text-lg font-semibold text-txt-primary">{t('ask.title')}</h2>
               <p>{t('ask.p1')}</p>
               <p>{t('ask.p2')}</p>
               <p className="text-txt-primary">{t('ask.previewLead')}</p>
@@ -119,7 +111,7 @@ export function HelloModal({ open, onAnswer, onDismiss, preview }: HelloModalPro
                 <button
                   type="button"
                   disabled={stage === 'saving'}
-                  className={`${BUTTON_BASE} ${BUTTON_YES}`}
+                  className={BUTTON}
                   onClick={() => { void answer(true); }}
                 >
                   {t('ask.yes')}
@@ -127,7 +119,7 @@ export function HelloModal({ open, onAnswer, onDismiss, preview }: HelloModalPro
                 <button
                   type="button"
                   disabled={stage === 'saving'}
-                  className={`${BUTTON_BASE} ${BUTTON_NO}`}
+                  className={BUTTON}
                   onClick={() => { void answer(false); }}
                 >
                   {t('ask.no')}
