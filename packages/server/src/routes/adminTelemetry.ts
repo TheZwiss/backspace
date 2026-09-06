@@ -16,7 +16,7 @@ import type { TelemetryStatus, TelemetryPayload } from '@backspace/shared';
  * See docs/systems/telemetry.md.
  */
 export async function adminTelemetryRoutes(app: FastifyInstance): Promise<void> {
-  // GET /api/admin/telemetry — the current opt-in state, including the id so
+  // GET /api/admin/telemetry: the current opt-in state, including the id so
   // the settings panel can show it masked and the admin can quote it if a ping
   // ever needs tracing.
   app.get(
@@ -25,7 +25,7 @@ export async function adminTelemetryRoutes(app: FastifyInstance): Promise<void> 
     async (): Promise<TelemetryStatus> => readTelemetryState(getRawDb()),
   );
 
-  // PUT /api/admin/telemetry — the on/off transition. Enabling an instance
+  // PUT /api/admin/telemetry: the on/off transition. Enabling an instance
   // that is already on is a no-op in setTelemetryEnabled: a repeated save must
   // not rotate the id or restamp the last reported day.
   app.put<{ Body: { enabled?: unknown } | undefined }>(
@@ -41,7 +41,7 @@ export async function adminTelemetryRoutes(app: FastifyInstance): Promise<void> 
     },
   );
 
-  // GET /api/admin/telemetry/preview — the exact document a ping would carry
+  // GET /api/admin/telemetry/preview: the exact document a ping would carry
   // right now, built by the same function the reporter uses so the modal and
   // the settings panel can never show something the reporter would not send.
   //
