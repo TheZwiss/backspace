@@ -185,4 +185,22 @@ describe('telemetry block', () => {
     expect(weekly.telemetry.countries.latest).not.toBe(daily.telemetry.countries.latest);
     expect(weekly.telemetry.countries.latest).toEqual(daily.telemetry.countries.latest);
   });
+
+  it('yields a well-formed block with a null threshold when the files exist but hold no rows', () => {
+    // The state between the collector's first telemetry-enabled run and the
+    // first archived ping. The page reads `instances7d` and nothing else to
+    // decide whether to draw, so this must be a clean null rather than an
+    // absent field: `undefined < 10` is false, and a gate written against it
+    // would publish charts over an empty fleet.
+    const s = store();
+    s.writeCsv('telemetry/network.csv', NETWORK_HEADER, []);
+    s.writeNdjson('telemetry/versions.ndjson', []);
+
+    const block = buildDashboardData(s, '2026-09-06T00:00:00Z').telemetry;
+
+    expect(block.instances7d).toBeNull();
+    expect(block.network.dates).toEqual([]);
+    expect(block.versions.latest).toEqual([]);
+    expect(block.versions.snapshots).toEqual([]);
+  });
 });

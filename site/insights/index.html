@@ -265,6 +265,7 @@ section.panel:last-of-type { padding-bottom: 96px; }
 .ch-sky::before { color: var(--sky); }
 .ch-peach::before { color: var(--peach); }
 .ch-amber::before { color: var(--amber); }
+.ch-rose::before { color: var(--rose); }
 h2 {
   font-size: clamp(1.5rem, 3vw, 2.1rem);
   font-weight: 620; letter-spacing: -0.026em; line-height: 1.12;
@@ -520,6 +521,7 @@ footer a:hover { color: var(--txt); }
     <a class="nav-link" href="#growth">Growth</a>
     <a class="nav-link" href="#referrers">Referrers</a>
     <a class="nav-link" href="#paths">Paths</a>
+    <a class="nav-link" href="#instances">Instances</a>
     <a class="btn btn-primary btn-sm" href="https://github.com/TheZwiss/backspace">GitHub</a>
   </div>
 </header>
@@ -679,6 +681,30 @@ footer a:hover { color: var(--txt); }
     </div>
   </section>
 
+  <section class="panel" id="instances">
+    <div class="wrap">
+      <p class="ch-label ch-rose">opt-in-numbers</p>
+      <h2>Opt-in numbers, lower bound</h2>
+      <p class="sec-copy">
+        Everything above measures this repository on GitHub. This section measures something
+        else: the Backspace instances people actually run. A self-hosted instance can choose
+        to send one small ping a day, and most do not, so <strong>every figure here is a lower
+        bound</strong> rather than a total. An instance that never opts in is invisible, counts
+        arrive rounded to two significant digits, and an instance is counted only once it has
+        reported on two separate days inside the last thirty. A ping carries no domain, no
+        instance or account name, no message content, no file names and no address.
+      </p>
+      <p class="sec-copy">
+        Nothing is charted until at least ten instances have reported inside the same seven
+        days. Three points plotted as a line claim a shape the data does not have, so below that
+        mark this section states the count instead of drawing it. The figures themselves are
+        public from the first archived ping either way, in the
+        <a href="data/">plain tables</a>.
+      </p>
+      <div class="slot" id="telemetry"></div>
+    </div>
+  </section>
+
 </main>
 
 <footer>
@@ -756,7 +782,7 @@ footer a:hover { color: var(--txt); }
     resolution: document.getElementById("resolution")
   };
 
-  var SLOT_IDS = ["header-stats", "chart-reach", "chart-growth", "ranked-referrers", "ranked-paths"];
+  var SLOT_IDS = ["header-stats", "chart-reach", "chart-growth", "ranked-referrers", "ranked-paths", "telemetry"];
 
   /* ---------------------------------------------------------------- helpers */
 
@@ -967,6 +993,38 @@ footer a:hover { color: var(--txt); }
   }
 
   /*
+   * The telemetry block, checked only when the bundle carries one.
+   *
+   * ABSENT IS VALID and that is the whole point of splitting this out. The
+   * `telemetry` key entered the contract long after the first bundles were
+   * built, and a page that rejected a bundle without it would answer an old
+   * artefact with "the archive is not available" -- a claim about the archive,
+   * made because of a key the archive predates.
+   *
+   * PRESENT AND MALFORMED IS NOT VALID, for the reason every other series is
+   * checked here: the telemetry section indexes these arrays without
+   * re-checking them, and a ragged column would shift a whole chart sideways
+   * with nothing on the page to show it.
+   */
+  function checkTelemetry(value) {
+    if (value === undefined) return null;
+    if (!isPlainObject(value)) return "telemetry is neither an object nor absent";
+    var problem = checkSeries(value.network, "telemetry.network", [
+      "instances_1d", "instances_7d", "instances_30d",
+      "users_registered", "users_active1d", "users_active7d", "users_active30d",
+      "messages7d", "storage_mib", "voice_instances", "federation_instances"
+    ]) ||
+      checkDimension(value.versions, "telemetry.versions") ||
+      checkDimension(value.countries, "telemetry.countries") ||
+      checkDimension(value.clients, "telemetry.clients");
+    if (problem !== null) return problem;
+    if (!isNumberOrNull(value.instances7d)) {
+      return "telemetry.instances7d is neither a number nor null";
+    }
+    return null;
+  }
+
+  /*
    * Returns null when the payload matches the data contract, or a short reason
    * why it does not.
    *
@@ -1006,7 +1064,8 @@ footer a:hover { color: var(--txt); }
 
     if (!isPlainObject(d.dimensions)) return "dimensions is missing";
     return checkDimension(d.dimensions.referrers, "dimensions.referrers") ||
-      checkDimension(d.dimensions.paths, "dimensions.paths");
+      checkDimension(d.dimensions.paths, "dimensions.paths") ||
+      checkTelemetry(d.telemetry);
   }
 
   /* ------------------------------------------------------------- freshness */
@@ -5794,6 +5853,168 @@ footer a:hover { color: var(--txt); }
     var renderer = makeRenderer(SECTIONS[s]);
     I.registerSection(SECTIONS[s].slotId, renderer.render, renderer.teardown);
   }
+})();
+</script>
+
+<script>
+/*
+ * Section "telemetry" -- spec section 9's opt-in fleet figures.
+ *
+ * Registered like every other section, so it inherits the same guarantees: it
+ * is called only with a validated, non-empty bundle, its slot is emptied
+ * before every call, and a throw is contained to this slot.
+ *
+ * Two things make it different from the four sections above it.
+ *
+ * 1. THE BLOCK MAY NOT BE THERE. `telemetry` entered the bundle contract long
+ *    after the page shipped, and `validateBundle` accepts a bundle without it
+ *    on purpose. So every read starts from `telemetryOf`, which answers null
+ *    for an old bundle, and the section says so rather than throwing.
+ *
+ * 2. IT IS GATED. Nothing is drawn until the latest `instances_7d` reaches
+ *    ten. The gate reads `telemetry.instances7d`, which the bundler carries as
+ *    its own field precisely so this comparison is a comparison and not
+ *    arithmetic over a parallel array, and which is the LAST day's value
+ *    rather than the last measured one -- a threshold answered from an older
+ *    row would publish charts on a bar that is no longer cleared.
+ *
+ * Below the gate the section prints the count and the mark. Printing nothing
+ * would read as a broken collector, and the figures are public in the data
+ * tables regardless: the threshold governs drawing a line, not disclosing a
+ * number.
+ */
+(function () {
+  "use strict";
+
+  var I = window.INSIGHTS;
+  var C = window.INSIGHTS_CHARTS;
+
+  /* Spec section 9. Ten instances inside the trailing seven days. */
+  var THRESHOLD = 10;
+
+  /* Every uPlot instance this section has built, for teardown. Empty until
+   * Task 2 puts charts in it; the teardown is written now so the section owes
+   * one from its first render, as the shell's contract requires. */
+  var live = [];
+
+  function el(tag, className, text) {
+    var node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+
+  function pair(key, value) {
+    var span = el("span");
+    span.appendChild(el("span", "k", key));
+    span.appendChild(document.createTextNode(" "));
+    span.appendChild(el("span", "v", value));
+    return span;
+  }
+
+  /*
+   * The telemetry block, or null when this bundle carries none.
+   *
+   * `validateBundle` has already accepted whatever is here, so a non-null
+   * answer is structurally sound and every later read can index it directly.
+   */
+  function telemetryOf(data) {
+    var block = data.telemetry;
+    return block === undefined || block === null ? null : block;
+  }
+
+  /*
+   * A stated reason, not a failure. `slot-note-detail` is the page's existing
+   * variant for exactly this: solid rather than dashed, and readable rather
+   * than dimmed, because the words are the content here and not a placeholder
+   * standing in for it.
+   */
+  function stateNote(sentences) {
+    var box = el("div", "slot-note slot-note-detail");
+    for (var i = 0; i < sentences.length; i++) {
+      box.appendChild(el("p", null, sentences[i]));
+    }
+    return box;
+  }
+
+  /* The newest snapshot date across the whole block, as the page prints dates,
+   * or null when nothing is dated. Used to say WHEN the count below the
+   * threshold was taken, so the reader is not left to assume it is current. */
+  function latestDay(block) {
+    var dates = block.network.dates;
+    if (dates.length === 0) return null;
+    var ms = I.parseDay(dates[dates.length - 1]);
+    return isNaN(ms) ? null : I.formatDay(ms);
+  }
+
+  /* The sentence naming the current count and the mark. Three cases, because
+   * "no bundle", "no rows" and "some rows, not enough" are three different
+   * statements and collapsing them would have the page assert one it cannot
+   * support. */
+  function belowThresholdNote(block) {
+    if (block === null) {
+      return stateNote([
+        "This page was built from a bundle made before the instance pings were collected, so it carries no fleet figures at all.",
+        "Charts appear here once at least " + THRESHOLD +
+          " instances have reported inside the same seven days. Until then the figures, when there are any, are in the plain tables linked above."
+      ]);
+    }
+    var count = block.instances7d;
+    var day = latestDay(block);
+    if (typeof count !== "number") {
+      return stateNote([
+        block.network.dates.length === 0
+          ? "No instance has reported yet, so there is nothing to count."
+          : "The most recent archived day did not measure how many instances reported in the seven days ending on it, so the count for that day is unknown rather than low.",
+        "Charts appear here once at least " + THRESHOLD +
+          " instances have reported inside the same seven days."
+      ]);
+    }
+    return stateNote([
+      I.formatCount(count) + " " + (count === 1 ? "instance" : "instances") +
+        " reported inside the seven days ending " + (day === null ? "on the archive's most recent day" : day) + ".",
+      "Charts appear here once that count reaches " + THRESHOLD +
+        ". A line through a handful of points says more about those instances than about the project, so below the mark this section states the count instead of drawing it. Every figure the archive holds is in the plain tables linked above from the first archived ping."
+    ]);
+  }
+
+  function render(slot, data, rangeKey) {
+    var block = telemetryOf(data);
+    if (block === null || typeof block.instances7d !== "number" || block.instances7d < THRESHOLD) {
+      slot.appendChild(belowThresholdNote(block));
+      return;
+    }
+    /* The cleared-threshold branch. It states the count until the cards below
+     * it exist, and is replaced wholesale once they do. */
+    var day = latestDay(block);
+    slot.appendChild(stateNote([
+      I.formatCount(block.instances7d) + " instances reported inside the seven days ending " +
+        (day === null ? "on the archive's most recent day" : day) + ".",
+      "The charts for this section are not built yet."
+    ]));
+  }
+
+  /*
+   * Runs before the slot is emptied, including after a render that threw, so
+   * it must be safe on a partial build. `live` is cleared first so a destroy
+   * that throws cannot leave a half-released instance to be destroyed twice;
+   * the first failure is re-thrown once the rest are released.
+   */
+  function teardown() {
+    var pending = live;
+    live = [];
+    var failure = null;
+    for (var i = 0; i < pending.length; i++) {
+      try {
+        pending[i].destroy();
+      } catch (error) {
+        if (failure === null) failure = error;
+      }
+    }
+    if (failure !== null) throw failure;
+  }
+
+  I.registerSection("telemetry", render, teardown);
 })();
 </script>
 </body>
