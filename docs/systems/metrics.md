@@ -225,6 +225,17 @@ What is still true: nothing recorded on disk distinguishes which of the two writ
 
 The three `telemetry/*.ndjson` files share that shape and that merge, and add one rule of their own. **A dimension value held by fewer than three instances on a day folds into `other` before anything is written** (`MIN_INSTANCES_PER_DIMENSION` in `telemetry.ts`). Nothing in the public archive names a version, a country or a client kind that one or two instances carry, because with a fleet this small that is close to naming the instance. `other` is written last and omitted entirely when nothing folded into it, and `title` is always `''` on all three. The rows follow the same snapshot as `network.csv`: the latest ping per eligible instance in the seven days ending on `snapshot_date`.
 
+`versions.ndjson` adds a shape check on top of the threshold. `build.version` is
+free text an instance chose, and three instances agreeing on a value is enough to
+clear the fold, so a value that does not match `/^\d+\.\d+\.\d+(-[0-9A-Za-z.]{1,16})?$/`
+is counted as `other` before the tally is folded (`releaseVersion` in
+`telemetry.ts`). A missing version counts there too. The receiver bounds the
+field on arrival as well, but rows stored before that bound existed can still
+carry anything, so the only version strings the archive names are ones the
+collector recognises. `other` is one bucket either way: a mapped value and a
+folded value share the single row, they never produce two rows with the same
+key.
+
 `clients.ndjson` is the one file where the folding threshold and the published figure count different things: a client kind folds by **how many instances** report it, and the number written is **how many users** are on it. The threshold protects the instance, so it has to count instances; the figure worth charting is people. `count` and `uniques` are equal on all three files, carried only because the format is shared with the traffic dimensionals.
 
 ### 3.3 Collector state (`meta.json`)

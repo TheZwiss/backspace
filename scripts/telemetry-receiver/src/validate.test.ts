@@ -75,6 +75,34 @@ describe('parsePing', () => {
     const big = JSON.stringify({ ...good, pad: 'x'.repeat(MAX_BODY_BYTES) });
     expect(parsePing(big, '2026-09-06').ok).toBe(false);
   });
+  // build.version is the one free text field that reaches the public archive:
+  // the collector tallies it and folds it into a published dimension. Bound it
+  // here so nothing longer or stranger than a version string is ever stored.
+  it('bounds build.version and keeps it optional', () => {
+    const withVersion = (version: unknown) =>
+      parsePing(JSON.stringify({ ...good, build: { ...good.build, version } }), '2026-09-06');
+    expect(withVersion('1.1.2').ok).toBe(true);
+    expect(withVersion('1.2.0-rc.1').ok).toBe(true);
+    expect(withVersion('x'.repeat(32)).ok).toBe(true);
+    expect(withVersion('x'.repeat(33)).ok).toBe(false);
+    expect(withVersion('1.1.2 <script>').ok).toBe(false);
+    expect(withVersion('').ok).toBe(false);
+    expect(withVersion(2).ok).toBe(false);
+    // Absent stays allowed: the field is optional in schema 1, and a build
+    // without a version reports the rest of its payload as usual.
+    const { build, ...noBuild } = good;
+    expect(parsePing(JSON.stringify(noBuild), '2026-09-06').ok).toBe(true);
+    expect(parsePing(JSON.stringify({ ...good, build: { commit: '0a1c465' } }), '2026-09-06').ok).toBe(true);
+  });
+  // The id the server mints is crypto.randomUUID(), always v4. A v1 id carries
+  // the minting machine's MAC address, which is exactly the kind of thing this
+  // endpoint must never accept, let alone store for ninety days.
+  it('accepts a v4 id and rejects other UUID versions', () => {
+    const withId = (instance: string) => parsePing(JSON.stringify({ ...good, instance }), '2026-09-06');
+    expect(withId('3f6c9e2a-1b2c-4d5e-8f90-1234567890ab').ok).toBe(true);
+    expect(withId('3f6c9e2a-1b2c-1d5e-8f90-1234567890ab').ok).toBe(false);
+    expect(withId('3f6c9e2a-1b2c-5d5e-8f90-1234567890ab').ok).toBe(false);
+  });
 });
 
 describe('roundTwoSignificant', () => {

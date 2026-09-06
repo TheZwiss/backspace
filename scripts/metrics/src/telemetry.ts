@@ -46,6 +46,9 @@ export type TelemetryFetcher = (from: IsoDate, to: IsoDate) => Promise<PingRow[]
  */
 export const MIN_INSTANCES_PER_DIMENSION = 3;
 
+/** The dimension every folded and every unrecognised value is counted under. */
+const OTHER = 'other';
+
 /**
  * Per-row ceiling applied to every count before it is summed.
  *
@@ -57,6 +60,28 @@ export const MIN_INSTANCES_PER_DIMENSION = 3;
 export const MAX_ROW_VALUE = 1_000_000_000;
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * What a Backspace release version looks like: `1.1.2`, optionally with a
+ * pre-release suffix such as `1.2.0-rc.1`.
+ */
+const RELEASE_VERSION = /^\d+\.\d+\.\d+(-[0-9A-Za-z.]{1,16})?$/;
+
+/**
+ * The dimension a row's reported version is tallied under.
+ *
+ * `build.version` is text an instance chose, and once three instances report
+ * the same value it clears the fold threshold and is written to the public
+ * metrics branch under its own name. The receiver bounds the field on arrival,
+ * but rows stored before that bound existed, or an export replayed from an
+ * older archive, can still carry anything at all. Anything that is not shaped
+ * like a release, a missing version included, is counted as `other`, so the
+ * only version strings the archive ever names are ones this collector
+ * recognises.
+ */
+function releaseVersion(value: unknown): string {
+  return typeof value === 'string' && RELEASE_VERSION.test(value) ? value : OTHER;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -160,11 +185,15 @@ function foldSmall(counts: Map<string, number>, date: IsoDate): DimensionRow[] {
   let other = 0;
   const kept: DimensionRow[] = [];
   for (const [dimension, count] of counts) {
-    if (count < MIN_INSTANCES_PER_DIMENSION) other += count;
+    // A tally can already hold the `other` key before anything folds, because
+    // `releaseVersion` maps an unrecognised version there. It goes through the
+    // same bucket whatever its count, so the file carries one `other` row
+    // rather than two rows that would collide on the dimensional upsert.
+    if (dimension === OTHER || count < MIN_INSTANCES_PER_DIMENSION) other += count;
     else kept.push({ snapshot_date: date, dimension, title: '', count, uniques: count });
   }
   kept.sort((a, b) => b.count - a.count || (a.dimension < b.dimension ? -1 : 1));
-  if (other > 0) kept.push({ snapshot_date: date, dimension: 'other', title: '', count: other, uniques: other });
+  if (other > 0) kept.push({ snapshot_date: date, dimension: OTHER, title: '', count: other, uniques: other });
   return kept;
 }
 
@@ -225,7 +254,7 @@ export function aggregateTelemetry(rows: readonly PingRow[], date: IsoDate): Tel
   const clientInstances = new Map<string, number>();
   const clientUsers = new Map<string, number>();
   for (const row of snapshot) {
-    const version = typeof row.body.build?.version === 'string' ? row.body.build.version : 'unknown';
+    const version = releaseVersion(row.body.build?.version);
     versionCounts.set(version, (versionCounts.get(version) ?? 0) + 1);
     countryCounts.set(row.country, (countryCounts.get(row.country) ?? 0) + 1);
     for (const kind of ['web', 'desktop', 'mobile'] as const) {
@@ -247,7 +276,7 @@ export function aggregateTelemetry(rows: readonly PingRow[], date: IsoDate): Tel
     else clients.push({ snapshot_date: date, dimension: kind, title: '', count: users, uniques: users });
   }
   clients.sort((a, b) => b.count - a.count);
-  if (otherUsers > 0) clients.push({ snapshot_date: date, dimension: 'other', title: '', count: otherUsers, uniques: otherUsers });
+  if (otherUsers > 0) clients.push({ snapshot_date: date, dimension: OTHER, title: '', count: otherUsers, uniques: otherUsers });
 
   return { network, versions: foldSmall(versionCounts, date), countries: foldSmall(countryCounts, date), clients };
 }

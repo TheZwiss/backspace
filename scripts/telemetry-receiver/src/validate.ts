@@ -10,8 +10,20 @@ export const MAX_BODY_BYTES = 4096;
 /** No count in a real payload comes near this; anything above it is a broken or hostile sender. */
 export const MAX_COUNT = 1_000_000_000;
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+// Version 4 only, per section 7 of the spec. The server mints its id with
+// crypto.randomUUID(), which is always v4; a v1 id would carry the minting
+// machine's MAC address, so no other version is worth accepting here.
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * `build.version` is the only free text in a ping that reaches the public
+ * archive: the collector tallies it and, once three instances share a value,
+ * writes it to the metrics branch, where the insights page renders it. Bound it
+ * on arrival to what a version string can look like. The field stays optional, so
+ * a build that reports no version at all is still a valid ping.
+ */
+const BUILD_VERSION = /^[0-9A-Za-z.+-]{1,32}$/;
 
 /** How far a reported day may sit from the receiver's own UTC day, in either direction. */
 const MAX_DAY_DRIFT = 2;
@@ -99,6 +111,12 @@ export function parsePing(text: string, receiverToday: string): ParseResult {
   // reject rather than let the comparison fall through as "in range".
   const offset = dayOffset(day, receiverToday);
   if (!Number.isFinite(offset) || Math.abs(offset) > MAX_DAY_DRIFT) return { ok: false, reason: 'day out of range' };
+
+  const build = parsed['build'];
+  if (isRecord(build) && build['version'] !== undefined) {
+    const version = build['version'];
+    if (typeof version !== 'string' || !BUILD_VERSION.test(version)) return { ok: false, reason: 'build.version' };
+  }
 
   for (const [group, field] of COUNT_FIELDS) {
     const g = parsed[group];
