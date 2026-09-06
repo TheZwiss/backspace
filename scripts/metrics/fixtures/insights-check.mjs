@@ -210,16 +210,22 @@ const OBSERVE = `(function () {
 const RANGE_LABELS = `Array.prototype.map.call(
   document.querySelectorAll(".range-btn"), function (b) { return b.textContent.trim(); })`;
 
-/* Clicks one range button by its label and answers whether it was found. */
+/*
+ * Clicks one range button by its label and says what happened. A disabled
+ * button is reported as such rather than as a click, because a click that
+ * did nothing would make "the rankings did not move" true for the wrong
+ * reason.
+ */
 function clickRange(label) {
   return `(function () {
   var hit = null;
   document.querySelectorAll(".range-btn").forEach(function (b) {
     if (b.textContent.trim() === ${JSON.stringify(label)}) hit = b;
   });
-  if (hit === null) return false;
+  if (hit === null) return "missing";
+  if (hit.disabled) return "disabled";
   hit.click();
-  return true;
+  return "clicked";
 })()`;
 }
 
@@ -385,11 +391,11 @@ async function main() {
       (await client.send('Runtime.evaluate', { expression, returnByValue: true })).result.value;
     const labels = await evaluate(RANGE_LABELS);
     for (const label of labels) {
-      const clicked = await evaluate(clickRange(label));
+      const outcome = await evaluate(clickRange(label));
       await new Promise((r) => setTimeout(r, 400));
       ranges.push({
         label,
-        clicked,
+        outcome,
         window: await evaluate('(document.querySelector("#telemetry .chart-window") || { textContent: "" })'
           + '.textContent.replace(/\\s+/g, " ").trim()'),
         rankings: await evaluate(RANKING_DIGEST),
@@ -409,6 +415,9 @@ async function main() {
   } finally {
     if (client !== null) client.close();
     child.kill();
+    // Chrome holds keep-alive sockets, and `close` alone waits for them, so
+    // the run would hang on a browser that is slow to die.
+    server.closeAllConnections();
     server.close();
     await rm(profile, { recursive: true, force: true });
   }
@@ -426,7 +435,7 @@ async function main() {
   const first = ranges[0]?.rankings;
   for (const r of ranges) {
     const same = JSON.stringify(r.rankings) === JSON.stringify(first);
-    console.log(`  ${r.clicked ? '' : '(not found) '}${r.label}: rankings ${same ? 'identical to the first range' : 'CHANGED'}; ${r.window}`);
+    console.log(`  ${r.label} (${r.outcome}): rankings ${same ? 'identical to the first range' : 'CHANGED'}; ${r.window}`);
   }
   console.log('  rankings seen: ' + JSON.stringify(first, null, 2));
 
