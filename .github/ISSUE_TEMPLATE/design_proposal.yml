@@ -7,8 +7,10 @@ body:
       value: |
         For changes that other code will have to live with: a convention, a framework-level
         dependency, a schema or protocol change, the desktop preload bridge. See "Design before code"
-        in CONTRIBUTING.md. A few paragraphs is the normal size. A maintainer replies within a few
-        days; prototyping in the meantime is fine, polishing is premature.
+        in CONTRIBUTING.md. A few paragraphs is the normal size. This is an open thread: anyone who
+        has worked on the affected area is welcome to weigh in, and mentioning them helps. The
+        maintainer makes the final call, normally within a few days. Prototyping in the meantime is
+        fine, polishing is premature.
   - type: textarea
     id: problem
     attributes:
