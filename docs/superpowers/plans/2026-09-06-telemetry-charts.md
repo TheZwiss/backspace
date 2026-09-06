@@ -18,7 +18,7 @@ Every task's requirements implicitly include this section.
 
 - **No new dependencies.** uPlot is vendored under `site/insights/vendor/`; use it. No other chart library, no DOM test harness, no polyfill.
 - **The insights bundle stays under 2 MB.** `BUNDLE_BUDGET_BYTES` is `2 * 1024 * 1024`. The charts read only from `data.json`; the page makes no extra network request of any kind.
-- **The telemetry section must render identically whether or not the `telemetry` block exists in `data.json`.** A bundle built before telemetry shipped has no `telemetry` key at all. That case degrades to the same explanatory empty state, never to a thrown section and never to a blank panel.
+- **The telemetry section must render whether or not the `telemetry` block exists in `data.json`.** A bundle built before telemetry shipped has no `telemetry` key at all. That case degrades to an explanatory empty state, never to a thrown section and never to a blank panel. The wording may differ from the other empty states, and should: a reader is better served by a sentence that says which case they are in than by one sentence covering three.
 - **Section label:** exactly `opt-in numbers, lower bound`. It is the section's `<h2>`, with a leading capital as every other `<h2>` on the page has (`Opt-in numbers, lower bound`); the words themselves are not altered.
 - **Below the threshold the section shows a short explanatory empty state that names the threshold (10) and the current count**, never nothing and never an empty frame.
 - **Copy rules for all text, comments and commit messages:** no em dashes, no buzzword register, plain sentences.
@@ -387,6 +387,8 @@ Insert this whole `<script>` block immediately before `</body>`, after the ranke
 ```
 
 - [ ] **Step 8: Verify against fixtures**
+
+Superseded, see the appendix: the flag spelling below is not the one the fixture takes, `none` shows the "no instance has reported yet" wording rather than the pre-pings one, and above the threshold the section draws the charts rather than saying they are not built yet.
 
 Run the appendix recipe three times and confirm each observation:
 
@@ -2511,13 +2513,21 @@ python3 -m http.server 8765 --directory "$SP/fx/site"
 
 | Mode | State |
 |---|---|
-| `none` | no telemetry files at all, as a bundle built before the pings existed |
+| `none` | no telemetry files in the archive, so the bundle holds a telemetry block with no rows and the page says no instance has reported yet |
 | `low` | four instances in the last seven days, below the mark |
 | `threshold` | exactly ten, the mark itself, which is the value the published promise turns on |
 | `high` | fourteen, above the mark, with all three dimension files populated |
 | `high-other` | fourteen, with the dimensions shaped so `other` ranks second on one card and first on another, one dimension holds a single row, and the folded remainder dominates a third |
 | `high-nodims` | above the mark, but the three dimension files are empty |
 | `sparse` | above the mark on the last row only, with every earlier gauge blank |
+
+**A bundle with no `telemetry` key at all** is not reachable from any mode. `buildDashboardData` always writes the key, so the archive files cannot decide whether it is there. To reach that state, and the one section wording that depends on it, run the fixture a second time after the bundle step:
+
+```bash
+node scripts/metrics/fixtures/insights-fixture.mjs "$SP/fx" --strip-telemetry
+```
+
+It deletes the key from the built `data.json` and leaves the archive and the copied site alone, so the next `insights-check.mjs` run reads the page as it would have looked before the pings existed.
 
 `high-other` exists because `high` cannot show one of the things worth checking. `high` gives `other` a count of 3, tied for last, so a run against it cannot tell "ranked where its count places it" from "pinned to the bottom". `high-other` settles that, and carries the two ranking shapes that have no other example: a dimension with exactly one row, and a folded remainder larger than everything it was folded out of.
 

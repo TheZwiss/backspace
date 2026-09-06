@@ -13,10 +13,12 @@
  *
  * Usage:
  *   node scripts/metrics/fixtures/insights-fixture.mjs <outDir> [mode]
+ *   node scripts/metrics/fixtures/insights-fixture.mjs <outDir> --strip-telemetry
  *
  * Modes:
- *   none         no telemetry files at all, as a bundle built before the
- *                pings existed
+ *   none         no telemetry files in the archive, so the bundle holds a
+ *                telemetry block with no rows and the page says no instance
+ *                has reported yet
  *   low          four instances in the last seven days, below the mark
  *   threshold    exactly ten, the mark itself, which is the value the
  *                published promise turns on
@@ -29,6 +31,13 @@
  *   sparse       above the mark on the last row only, with every earlier
  *                gauge blank
  *
+ * `--strip-telemetry` is a second pass, run after `cli-bundle.ts` rather than
+ * before it. `buildDashboardData` always writes a `telemetry` key, so no set
+ * of archive files can produce the bundle a page built before the pings
+ * existed would read. Deleting the key from the built `data.json` is the only
+ * way to reach that state, and it is the one wording of the section's three
+ * the modes above cannot show.
+ *
  * The output directory mirrors the deployed layout, so `../assets/logo.png`
  * and `../assets/dm-sans.woff2` resolve from the page exactly as they do in
  * production:
@@ -39,7 +48,7 @@
  *
  * Serve `<outDir>/site` and open `/insights/`.
  */
-import { mkdirSync, rmSync, cpSync } from 'node:fs';
+import { mkdirSync, rmSync, cpSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createStore } from '../src/store.ts';
@@ -50,8 +59,22 @@ const MODES = new Set(['none', 'low', 'threshold', 'high', 'high-other', 'high-n
 
 const [, , outDirArg, mode = 'high'] = process.argv;
 if (outDirArg === undefined) {
-  console.error('usage: node insights-fixture.mjs <outDir> [mode]');
+  console.error('usage: node insights-fixture.mjs <outDir> [mode|--strip-telemetry]');
   process.exit(2);
+}
+if (mode === '--strip-telemetry') {
+  // Edits the bundle in place and touches nothing else, so the archive and
+  // the copied site stay exactly as the earlier pass left them.
+  const dataPath = path.join(path.resolve(outDirArg), 'site/insights/data.json');
+  const data = JSON.parse(readFileSync(dataPath, 'utf8'));
+  if (data.telemetry === undefined) {
+    console.error(`${dataPath} has no telemetry key. Run the bundle step first.`);
+    process.exit(2);
+  }
+  delete data.telemetry;
+  writeFileSync(dataPath, JSON.stringify(data));
+  console.log(`telemetry key removed from ${dataPath}`);
+  process.exit(0);
 }
 if (!MODES.has(mode)) {
   console.error(`unknown mode "${mode}". One of: ${[...MODES].join(', ')}`);

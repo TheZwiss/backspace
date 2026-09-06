@@ -20,7 +20,7 @@ This redesign changes the ordering, the weighting and the amount of prose. It ch
 
 ## 2. What the page renders today
 
-Read from `site/insights/index.html` at commit `1c50f51e`. This is the inventory the redesign is checked against: every element of the current page appears below with its destination, and nothing on the page today is absent from it.
+Read from `site/insights/index.html` at commit `1c50f51e`, with row S6 and rows F15 to F19 refreshed against head once Track F drew the telemetry charts. This is the inventory the redesign is checked against: every element of the current page appears below with its destination, and nothing on the page today is absent from it.
 
 ### 2.1 Chrome, prose and page-level regions
 
@@ -49,7 +49,7 @@ Read from `site/insights/index.html` at commit `1c50f51e`. This is the inventory
 | S3 | `#growth` "Growth" | `chart-growth` | one long paragraph | two chart cards, Stars and Forks, on one shared axis, with the release-marker lane painted across both | section dissolves into Reach. Stars and Forks become compact cards with an axis each. The marker lane moves to the Delivery hero. The paragraph moves to `#method` |
 | S4 | `#referrers` "Where people come from" | `ranked-referrers` | one paragraph | a snapshot meta line, a ranked card (list with bars), then either a movement chart card, or a single-change bar card, or a stated reason, plus conditional hints | becomes one detail card in Reach, with all three of its states and every conditional hint unchanged. The paragraph moves to `#method` |
 | S5 | `#paths` "What they look at" | `ranked-paths` | one paragraph | the same three-way structure as S4 | becomes one detail card in Reach, as S4. The paragraph merges into S4's in `#method`, stated once for both |
-| S6 | `#instances` "Opt-in numbers, lower bound" | `telemetry` | two paragraphs | the below-threshold state note in one of three wordings; above the threshold, a placeholder that says the charts are not built yet | becomes Adoption's detail band, with the gate and all three wordings unchanged. Both paragraphs move to `#method`, minus one sentence that becomes Adoption's group caption |
+| S6 | `#instances` "Opt-in numbers, lower bound" | `telemetry` | two paragraphs | the below-threshold state note in one of three wordings; above the threshold, a window line, two time-series chart cards and three ranked cards | becomes Adoption's detail band, with the gate and all three wordings unchanged. Both paragraphs move to `#method`, minus one sentence that becomes Adoption's group caption |
 
 ### 2.3 Every series and figure the page draws
 
@@ -69,11 +69,11 @@ Read from `site/insights/index.html` at commit `1c50f51e`. This is the inventory
 | F12 | Releases | `releases[]` | marker lane on the Growth charts; no card of their own | marker lane on the Delivery hero, plus a Delivery detail card listing every release, and Delivery's lead figure |
 | F13 | Referring sites | `dimensions.referrers` | S4's ranked list and movement chart | Reach, detail card, unchanged in behaviour |
 | F14 | Popular paths | `dimensions.paths` | S5's ranked list and movement chart | Reach, detail card, unchanged in behaviour |
-| F15 | Instances reporting | `telemetry.network.instances_1d/7d/30d` | not drawn; the gate note only | Adoption detail band, drawn by Track F. Gate unchanged |
-| F16 | Active users | `telemetry.network.users_active1d/7d/30d` | not drawn | Adoption detail band, drawn by Track F |
-| F17 | Server versions | `telemetry.versions` | not drawn | Adoption detail band, drawn by Track F |
-| F18 | Countries | `telemetry.countries` | not drawn | Adoption detail band, drawn by Track F |
-| F19 | Client kinds | `telemetry.clients` | not drawn | Adoption detail band, drawn by Track F |
+| F15 | Instances reporting | `telemetry.network.instances_1d/7d/30d` | behind the gate, a chart card with three lines | Adoption detail band, drawn by Track F. Gate unchanged |
+| F16 | Active users | `telemetry.network.users_active1d/7d/30d` | behind the gate, a chart card with three lines | Adoption detail band, drawn by Track F |
+| F17 | Server versions | `telemetry.versions` | behind the gate, a ranked card | Adoption detail band, drawn by Track F |
+| F18 | Countries | `telemetry.countries` | behind the gate, a ranked card | Adoption detail band, drawn by Track F |
+| F19 | Client kinds | `telemetry.clients` | behind the gate, a ranked card | Adoption detail band, drawn by Track F |
 | F20 | Registered users, weekly messages, storage, voice instances, federation instances | `telemetry.network.users_registered`, `.messages7d`, `.storage_mib`, `.voice_instances`, `.federation_instances` | not drawn | still not drawn (section 3.4) |
 | F21 | Open issues | `series.repo.open_issues` | not drawn | still not drawn (section 3.4) |
 | F22 | Total release downloads | `series.repo.downloads_total` | not drawn (deliberately: it answers neither question the split answers) | still not drawn (section 3.4) |

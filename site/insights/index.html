@@ -5927,7 +5927,9 @@ footer a:hover { color: var(--txt); }
     {
       title: "Active users on reporting instances",
       note: "People, not instances, and only the ones on instances that opted in. " +
-        "A user counts as active on a day their client held an authenticated connection, at day precision and no finer.",
+        "A user counts as active on a day their client held an authenticated connection, at day precision and no finer. " +
+        "The first line counts only the instances that reported on that date, while the other two count every instance seen in the seven days ending there, " +
+        "so an instance whose ping was late is absent from the first line and present in the other two.",
       lines: [
         { field: "users_active1d", label: "Active that day", token: "--amber", fallback: "#fcd34d" },
         { field: "users_active7d", label: "Active within 7 days", token: "--peach", fallback: "#fca5a5" },
