@@ -161,7 +161,10 @@ not worked around.
 ## 4. Activity tracking
 
 Two columns on `users`, the only per-person data this feature adds. Both are
-local, both are visible to an admin, and both are day precision.
+local, both are day precision, and both are stored in the database only: no
+endpoint returns them, no screen shows them, and nothing about a person is
+derived from them beyond the rounded counts in section 2. Reading them means
+opening the database file on the host.
 
 | Column | Semantics |
 |---|---|
@@ -368,6 +371,15 @@ never leave the receiver. See [metrics.md](metrics.md) for the schemas, the
 snapshot rule, the two-days-in-thirty eligibility test and the small-N folding
 that replaces any dimension value held by fewer than three instances with
 `other`.
+
+**Every published figure is self-reported by instances that opted in**, so it is
+a lower bound twice over: nothing is counted from an instance that never
+switched the ping on, and an instance that switched it on counts only after it
+reported on two distinct days in the trailing thirty. It is an upper bound only
+in the weak sense that nothing beyond the per-value cap and that eligibility
+rule filters what an instance claims about itself. These are the numbers the
+fleet volunteered, not a measurement of how many people run Backspace, and no
+page should present them as one.
 
 Everything collected is published from the first day it is collected, as static
 tables under `/insights/data/`. Those tables are the public surface today. The

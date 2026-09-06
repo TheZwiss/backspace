@@ -737,15 +737,16 @@ Each card's caption states the span it drew, and the CI card's note says outrigh
 
 ## 11. Testing
 
-`scripts/metrics`'s `test` script is `tsc --noEmit && vitest run` — it runs through the existing root `pnpm -r test` step with no `ci.yml` change required, and covers both types and behavior in one script. All tests are fixture-driven and touch no network; filesystem tests use a per-test `mkdtempSync` directory, cleaned up in `afterEach`. As of this writing there are **357 tests across 14 files**, all passing:
+`scripts/metrics`'s `test` script is `tsc --noEmit && vitest run` — it runs through the existing root `pnpm -r test` step with no `ci.yml` change required, and covers both types and behavior in one script. All tests are fixture-driven and touch no network; filesystem tests use a per-test `mkdtempSync` directory, cleaned up in `afterEach`. As of this writing there are **369 tests across 15 files**, all passing:
 
 ```
 src/collect.telemetry.test.ts  3
 src/sitemap.test.ts            5
+src/bundle.telemetry.test.ts   6
 src/vendor-check.test.ts       6
 src/no-runtime-deps.test.ts    9
-src/telemetry.test.ts         10
-src/datapage.test.ts          14
+src/telemetry.test.ts         14
+src/datapage.test.ts          16
 src/github.test.ts            21
 src/store.test.ts             23
 src/backfill.test.ts          26
@@ -756,7 +757,7 @@ src/series.test.ts            55
 src/bundle.test.ts            89
 ```
 
-`collect.telemetry.test.ts` is separate from `collect.test.ts` rather than folded into it because the two need different fixtures: the telemetry tests want a fleet of pings and the smallest possible GitHub payload, and the traffic tests want the reverse.
+`collect.telemetry.test.ts` is separate from `collect.test.ts` rather than folded into it because the two need different fixtures: the telemetry tests want a fleet of pings and the smallest possible GitHub payload, and the traffic tests want the reverse. `bundle.telemetry.test.ts` splits off `bundle.test.ts` for the same reason: it reads four archive paths no other series touches, and the publication threshold the page applies (`instances7d`) has no counterpart anywhere else in `DashboardData`.
 
 `bundle.test.ts` is the largest of them because it carries the whole of §10.2's contract: the null-versus-zero rule at every read, the trajectory invariants, the two weekly aggregators, and the budget sequence. `vendor-check.test.ts` is not a unit test at all — it hashes the committed uPlot files against `vendor.json` (§10.4) and has its own `vendor:check` script for running it alone.
 

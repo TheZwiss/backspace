@@ -1,7 +1,7 @@
 # Instance telemetry ("Say hi to Jannis") design
 
 Date: 2026-09-06
-Status: approved in conversation, revised after review, awaiting written sign-off
+Status: approved in conversation, revised after review, implemented on branch feat/instance-telemetry, 2026-09-06
 
 ## 1. Purpose
 
@@ -158,7 +158,7 @@ Package `scripts/telemetry-receiver/` (pnpm workspace, added to `pnpm-workspace.
 
 Routes:
 
-- `POST /v1/ping`: reads the body with `request.text()` and rejects anything over 4096 bytes after reading, regardless of `Content-Length`. Validation: `schema` integer ≥ 1, `instance` matches UUID v4, `day` matches `YYYY-MM-DD` and lies within ±2 days of the receiver's UTC date, every known numeric field is a non-negative integer below 10^9. Known counts are rounded to two significant digits on arrival. Unknown fields are kept. Upsert on `(instance, day)` with `INSERT ... ON CONFLICT(instance, day) DO UPDATE SET ... = excluded....`; a later ping for the same day replaces the earlier row. Response 204, no body. Invalid: 400, no body. When the `RETIRED` variable is `"1"`: 410 for every ping. A Workers rate-limit binding (keyed on the source address, 10 requests per 10 seconds) is declared in `wrangler.toml` so the limit is versioned with the code; the Free plan's single WAF rule is not relied on.
+- `POST /v1/ping`: reads the body with `request.text()` and rejects anything over 4096 bytes after reading, regardless of `Content-Length`. Validation: `schema` integer ≥ 1, `instance` matches UUID v4, `day` matches `YYYY-MM-DD` and lies within ±2 days of the receiver's UTC date, `build.version` (optional, but rejected when present and malformed) is a string of at most 32 characters from `[0-9A-Za-z.+-]`, every known numeric field is a non-negative integer below 10^9. Known counts are rounded to two significant digits on arrival. Unknown fields are kept. Upsert on `(instance, day)` with `INSERT ... ON CONFLICT(instance, day) DO UPDATE SET ... = excluded....`; a later ping for the same day replaces the earlier row. Response 204, no body. Invalid: 400, no body. When the `RETIRED` variable is `"1"`: 410 for every ping. A Workers rate-limit binding (keyed on the source address, 10 requests per 10 seconds) is declared in `wrangler.toml` so the limit is versioned with the code; the Free plan's single WAF rule is not relied on.
 - `GET /v1/export?from=YYYY-MM-DD&to=YYYY-MM-DD`: requires `Authorization: Bearer <EXPORT_TOKEN>`, compared with `crypto.subtle.timingSafeEqual`. Returns the rows with `day` in the inclusive range as NDJSON, one `{ instance, day, receivedAt, country, schema, body }` per line, at most 31 days per call. 401 without the token, 400 for a bad range.
 - `GET /`: static plain HTML: what this endpoint is, what a row contains, the 90-day retention, the Cloudflare note, links to the docs and the source.
 - Anything else: 404.
@@ -182,7 +182,7 @@ CREATE INDEX pings_day ON pings (day);
 
 Retention: a scheduled trigger deletes rows with `day` older than 90 days, daily. Ninety days covers the 30-day windows with room to re-run a broken collector; it does not build a lifetime profile per id.
 
-Deployment: `.github/workflows/telemetry-receiver.yml`, SHA-pinned actions per repo policy, guarded with `if: !github.event.repository.fork`, runs the tests on every change under the package and on pushes to `main` runs `wrangler d1 migrations apply --remote` followed by `wrangler deploy`, using the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository secrets. `database_id` lives in `wrangler.toml`. `EXPORT_TOKEN` is a Worker secret set once by hand and mirrored as a repository secret for the collector. `hello.backspacechat.com` is a custom domain on the zone, not a `workers.dev` name.
+Deployment: `.github/workflows/telemetry-receiver.yml`, SHA-pinned actions per repo policy, guarded with `if: !github.event.repository.fork`. It runs the tests on every change under the package, and deploys only on a manual dispatch from the default branch: `wrangler d1 migrations apply --remote` followed by `wrangler deploy`, using the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository secrets. A merge never deploys the receiver. A live endpoint the whole opted-in fleet posts to is republished when someone decides to, not as a side effect of an unrelated merge. `database_id` lives in `wrangler.toml`. `EXPORT_TOKEN` is a Worker secret set once by hand and mirrored as a repository secret for the collector. `hello.backspacechat.com` is a custom domain on the zone, not a `workers.dev` name.
 
 ## 8. Collector and archive
 
@@ -194,7 +194,7 @@ Deployment: `.github/workflows/telemetry-receiver.yml`, SHA-pinned actions per r
 - Writes, upsert by `date`, in `telemetry/` on the `metrics-data` branch, using the existing shapes:
   - `network.csv` (date-keyed, `upsertByDate`): `date, instances_1d, instances_7d, instances_30d, users_registered, users_active1d, users_active7d, users_active30d, messages7d, storage_mib, voice_instances, federation_instances`
   - `versions.ndjson`, `countries.ndjson`, `clients.ndjson` (dimensional rows, `upsertDimensional`): `{ snapshot_date, dimension, title, count, uniques }` with `dimension` the version, country code or client kind, `title` empty, `count` the instance (or user) figure and `uniques` equal to it.
-- Small-N folding: any dimension value with fewer than 3 instances on a day is folded into `other` before writing. Nothing in the public archive names a value held by one or two instances.
+- Small-N folding: any dimension value with fewer than 3 instances on a day is folded into `other` before writing. Nothing in the public archive names a value held by one or two instances. A reported version that is not shaped like a release (`/^\d+\.\d+\.\d+(-[0-9A-Za-z.]{1,16})?$/`), a missing version included, is counted as `other` before the fold, so free text an instance chose is never named by the archive even when three instances share it.
 - The bundler adds a `telemetry` block to `data.json`: `network` downsampled weekly by taking the last value in each bucket (they are gauges, not sums), the three dimension series as their latest day only, inside the 2 MB budget. The block carries `instances7d` of the latest day so the page can apply the threshold without extra logic. The bucketing rule is recorded in `docs/systems/metrics.md`.
 
 Machine-readable tables under `/insights/data/` gain the four series from the first collected day.
