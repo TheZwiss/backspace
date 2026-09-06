@@ -23,6 +23,9 @@
 #     APP_PORT=8080 \                 # proxy/tunnel only; auto-picked if unset
 #     ENABLE_VOICE=true \
 #     INSTANCE_NAME="My Chat" \
+#     TELEMETRY=on|off \              # the optional daily usage ping; leave it
+#                                     # unset and the admin panel asks after the
+#                                     # first login
 #     ./install.sh
 #
 #   BACKSPACE_BUILD=true ./install.sh  Force a local from-source build instead of
@@ -764,6 +767,48 @@ if [[ "$healthy" == true && -n "$INSTANCE_NAME" && "$INSTANCE_NAME" != "Backspac
   ' 2>/dev/null && success "Instance name set to: ${INSTANCE_NAME}" || warn "Could not set instance name (set it manually in admin settings)"
 fi
 
+# ── Phase 7b: Optional usage ping (TELEMETRY=on|off) ────────
+# For unattended installs only. Interactive runs are never asked here: the admin
+# panel asks once after the first login, with the full explanation. Leaving
+# TELEMETRY unset writes nothing to the database and leaves that ask intact.
+#
+# The transition mirrors setTelemetryEnabled() in
+# packages/server/src/telemetry/state.ts: turning on mints a fresh id and stamps
+# today (UTC) as the last reported day so the first ping goes out tomorrow;
+# turning on an instance that is already on changes nothing, because rotating
+# the id would make one instance look like two to the receiver and restamping
+# the day would skip that day's ping; turning off clears the id, the last day
+# and the last error. Nothing here can fail the install.
+if [[ -n "${TELEMETRY:-}" ]]; then
+  if [[ "$TELEMETRY" != "on" && "$TELEMETRY" != "off" ]]; then
+    error "TELEMETRY must be 'on' or 'off' (got '${TELEMETRY}'). Leaving the usage ping unset."
+  elif [[ "$healthy" != true ]]; then
+    warn "Skipped the usage ping setting: the container isn't healthy yet (set it in admin settings)"
+  else
+    # Pass the value through the container environment rather than interpolating
+    # it into the JS source, the same way the instance name is passed above.
+    telemetry_result=$($DOCKER exec -e BS_TELEMETRY="$TELEMETRY" -w /app/packages/server backspace node -e '
+      const Database = require("better-sqlite3");
+      const crypto = require("crypto");
+      const db = new Database("/app/data/backspace.db");
+      const row = db.prepare("SELECT telemetry_enabled FROM instance_settings WHERE id = 1").get();
+      if (!row) { db.close(); console.error("No instance_settings row"); process.exit(1); }
+      const now = Date.now();
+      const today = new Date().toISOString().slice(0, 10);
+      let result;
+      if (process.env.BS_TELEMETRY === "on") {
+        const changes = db.prepare("UPDATE instance_settings SET telemetry_enabled = 1, telemetry_id = ?, telemetry_last_day = ?, telemetry_last_error = NULL, updated_at = ? WHERE id = 1 AND (telemetry_enabled IS NULL OR telemetry_enabled = 0)").run(crypto.randomUUID(), today, now).changes;
+        result = changes === 1 ? "on, the first ping goes out tomorrow" : "already on, left as it is";
+      } else {
+        db.prepare("UPDATE instance_settings SET telemetry_enabled = 0, telemetry_id = NULL, telemetry_last_day = NULL, telemetry_last_error = NULL, updated_at = ? WHERE id = 1").run(now);
+        result = "off, nothing is sent";
+      }
+      db.close();
+      console.log(result);
+    ' 2>/dev/null) && success "Usage ping: ${telemetry_result}" || warn "Could not set the usage ping (set it in admin settings)"
+  fi
+fi
+
 # ── Phase 7.5: Post-deploy reachability check ──────────────
 # What's verifiable differs by mode:
 #   allinone      → prove https://DOMAIN works end-to-end (Caddy has a valid,
@@ -1076,3 +1121,11 @@ echo "    docker compose down             # Stop everything"
 echo "    ./update.sh                                   # Update (snapshots first, rolls back if it fails)"
 echo "    ./update.sh --check                           # Check for an update, changing nothing"
 echo ""
+
+# The teaser for the ask that waits in the app. Skipped when TELEMETRY already
+# answered it on the command line, since Phase 7b printed what it did.
+if [[ -z "${TELEMETRY:-}" ]]; then
+  echo -e "  One more thing waits after your first login: a small, optional usage ping,"
+  echo -e "  and a note from me about why. It is off until you say otherwise."
+  echo ""
+fi

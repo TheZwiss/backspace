@@ -25,6 +25,10 @@ export const users = sqliteTable('users', {
   federationRegistryUpdatedAt: integer('federation_registry_updated_at').default(0),
   federationHealPending: integer('federation_heal_pending').default(0),
   federationHomeOrphaned: integer('federation_home_orphaned').default(0),
+  /** UTC day (YYYY-MM-DD) of the last authenticated WebSocket activity; written at most once per day. */
+  lastActiveDay: text('last_active_day'),
+  /** 'web' | 'desktop' | 'mobile', from the client's auth message. */
+  lastClient: text('last_client'),
   createdAt: integer('created_at').notNull(),
 });
 
@@ -329,6 +333,16 @@ export const instanceSettings = sqliteTable('instance_settings', {
   federationRelayTtlDays: integer('federation_relay_ttl_days').notNull().default(30),
   defaultAutoRotateIntervalDays: integer('default_auto_rotate_interval_days').notNull().default(90),
   autoAcceptPeering: integer('auto_accept_peering').notNull().default(1),
+  /** null = never asked, 0 = off, 1 = on. */
+  telemetryEnabled: integer('telemetry_enabled'),
+  /** Random UUID, minted on every off-to-on transition, cleared on off. Never the federation instance_id. */
+  telemetryId: text('telemetry_id'),
+  /** Last UTC day successfully reported. */
+  telemetryLastDay: text('telemetry_last_day'),
+  /** JSON { day, status } of the last failed attempt, null after a success. */
+  telemetryLastError: text('telemetry_last_error'),
+  /** First-boot timestamp (ms); backfilled by ensureDefaults, so non-null after boot. */
+  installedAt: integer('installed_at'),
   updatedAt: integer('updated_at').notNull(),
 });
 

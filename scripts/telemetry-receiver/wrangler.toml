@@ -1,0 +1,26 @@
+name = "backspace-telemetry-receiver"
+main = "src/index.ts"
+# The newest date the workerd bundled with @cloudflare/vitest-pool-workers 0.22.0
+# supports. A later date makes the test runtime refuse to start.
+compatibility_date = "2026-08-22"
+
+routes = [{ pattern = "hello.backspacechat.com", custom_domain = true }]
+
+[vars]
+RETIRED = "0"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "backspace-telemetry"
+database_id = "55572adf-b982-499d-8695-89673dc9d220"
+migrations_dir = "migrations"
+
+[[ratelimits]]
+name = "RATE_LIMITER"
+namespace_id = "1001"
+[ratelimits.simple]
+limit = 10
+period = 10
+
+[triggers]
+crons = ["17 3 * * *"]

@@ -408,7 +408,8 @@
       "streaming": "Streaming",
       "storage": "Storage",
       "updates": "Updates",
-      "users": "Users"
+      "users": "Users",
+      "telemetry": "Say hi"
     }
   }
 }

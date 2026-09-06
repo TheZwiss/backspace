@@ -361,6 +361,18 @@ When neither native API is available the effect returns without throwing; the `v
 
 **Camera preset:** 1280x720, 2Mbps, 30fps, H.264
 
+### Capture lifecycle on leave — `AudioManager.releaseInputStream()`
+
+The published mic track is a *clone* of `AudioManager`'s `MediaStreamAudioDestinationNode` output, so `Room.disconnect()` stops that clone but never the upstream `getUserMedia` capture (`AudioManager.currentStream`) that feeds the Web Audio graph. Without an explicit release, the browser tab and OS keep the microphone flagged in-use after the user leaves the call.
+
+`AudioManager.releaseInputStream()` closes that gap: it disconnects `inputSource`, detaches each capture track's `onended` handler and `.stop()`s it, nulls `currentStream`, resets `currentInputDeviceId` to `'default'`, and bumps `streamGeneration` so the next join re-acquires instead of short-circuiting. The `AudioContext` and master bus are left intact so sound effects keep working.
+
+`useLiveKit` calls it on explicit leave, a terminal `RoomEvent.Disconnected` from the current room (including an unspecified reason), a failed connection, and hook unmount. Leave and unmount release even before a room exists, covering the pre-arm/token-fetch interval. Explicit leave releases **before** awaiting SDK teardown, and late teardown cannot clear a newer connection's state.
+
+Channel switches detach the old room reference before calling `room.disconnect()` and deliberately **keep capture warm** for the immediate rejoin. Old room events are ignored; releasing there would defeat the `joinVoiceChannel` mic pre-arm and risk the iOS gesture-window hang. Temporary reconnecting events do not release capture.
+
+A separate input-release generation invalidates acquisitions queued or in flight before leave. Queued jobs are skipped; a late `getUserMedia` result is stopped immediately rather than attached to the graph. A stale denial is not cached for the next call. The browser permission prompt itself cannot be cancelled. New requests after release remain valid and reuse the existing serialized acquisition chain. The mic synchronization effect checks room identity and cleanup after awaits so an abandoned effect cannot reacquire or republish after leaving.
+
 ---
 
 ## Audio Device Selection (Microphone & Speakers)

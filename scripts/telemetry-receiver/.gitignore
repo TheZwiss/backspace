@@ -1,0 +1,2 @@
+# Local wrangler state: dev server persistence and build temporaries.
+.wrangler/

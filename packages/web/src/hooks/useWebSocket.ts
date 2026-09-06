@@ -16,6 +16,7 @@ import { useUIStore } from '../stores/uiStore';
 import { useActivityStore } from '../stores/activityStore';
 import { useDiscoverStore } from '../stores/discoverStore';
 import { useFederationStore } from '../stores/federationStore';
+import { detectClientKind } from '../platform/clientKind';
 
 // ─── Rejected peer origins (for unreachable member indicators) ───────────────
 const rejectedPeerOrigins = new Set<string>();
@@ -1377,7 +1378,7 @@ function connectToOrigin(origin: string, token: string): void {
 
   ws.onopen = () => {
     conn.reconnectAttempts = 0;
-    ws.send(JSON.stringify({ type: 'auth', token: conn.token }));
+    ws.send(JSON.stringify({ type: 'auth', token: conn.token, client: detectClientKind() }));
     startHeartbeat(conn);
   };
 

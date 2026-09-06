@@ -22,6 +22,8 @@ import type {
 } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { collectProfileBroadcastTargetIds } from '../utils/userDeletion.js';
+import { touchUserActivity, parseClientKind } from '../telemetry/activity.js';
+import { utcDay } from '../telemetry/day.js';
 
 // ─── Heartbeat State ──────────────────────────────────────────────────────────
 const wsIsAlive: WeakMap<WebSocket, boolean> = new WeakMap();
@@ -1084,6 +1086,39 @@ class ConnectionManager {
 
 export const connectionManager = new ConnectionManager();
 
+// One warning per process is enough: the pong path runs every 30s per socket,
+// so a database that keeps refusing the write would otherwise flood the log.
+let activityWriteWarned = false;
+
+/**
+ * Day-coarse activity for the opt-in telemetry counts. `authMessage` is the
+ * parsed auth message on the auth path (its optional `client` field names the
+ * client kind) and null on a heartbeat pong, which touches the day only.
+ *
+ * A failed write is swallowed: this bookkeeping is optional, and it runs on the
+ * auth path (where a throw would look like a rejected token) and inside the
+ * 'pong' listener (where an uncaught throw would take the process down).
+ */
+export function recordConnectionActivity(
+  userId: string,
+  authMessage: Record<string, unknown> | null,
+  now: Date,
+): void {
+  try {
+    const db = getDb();
+    if (authMessage) {
+      touchUserActivity(db, userId, utcDay(now), parseClientKind(authMessage.client));
+    } else {
+      touchUserActivity(db, userId, utcDay(now));
+    }
+  } catch (err) {
+    if (!activityWriteWarned) {
+      activityWriteWarned = true;
+      console.warn(`[ws] could not record activity: ${(err as Error).message}`);
+    }
+  }
+}
+
 // ─── WebSocket Rate Limiter (Token Bucket) ─────────────────────────────────
 
 class WsRateLimiter {
@@ -1739,9 +1774,17 @@ export async function registerWebSocket(app: FastifyInstance): Promise<void> {
           // Add connection
           connectionManager.addConnection(userId, ws);
 
+          // Captured for the pong closure: `userId` is a mutable outer binding, so
+          // its narrowing to a string does not survive into the callback.
+          const activeUserId = userId;
+          recordConnectionActivity(activeUserId, parsed, new Date());
+
           // Mark alive for heartbeat detection; browsers auto-respond to ping frames (RFC 6455)
           wsIsAlive.set(ws, true);
-          ws.on('pong', () => { wsIsAlive.set(ws, true); });
+          ws.on('pong', () => {
+            wsIsAlive.set(ws, true);
+            recordConnectionActivity(activeUserId, null, new Date());
+          });
 
           // Build and send ready payload
           const readyData = buildReadyPayload(userId);

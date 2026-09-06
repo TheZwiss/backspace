@@ -1,6 +1,7 @@
 import { createClient } from './github.ts';
 import { createStore } from './store.ts';
 import { backfill } from './backfill.ts';
+import { createTelemetryFetcher } from './telemetry.ts';
 import {
   requiredEnv,
   assertHeaderSafeToken,
@@ -32,6 +33,13 @@ async function main(): Promise<void> {
   const slug = requiredEnv(process.env, 'GITHUB_REPOSITORY');
   const dataDir = requiredEnv(process.env, 'METRICS_DATA_DIR');
 
+  // Optional, exactly as in `cli-collect.ts`: without it the reconstruction
+  // covers everything except the telemetry series, and says so in the log.
+  const telemetryToken = process.env['TELEMETRY_EXPORT_TOKEN'] ?? '';
+  if (telemetryToken !== '') assertHeaderSafeToken(telemetryToken);
+  else console.log('telemetry: skipped, TELEMETRY_EXPORT_TOKEN is not set');
+  const telemetryEndpoint = process.env['TELEMETRY_ENDPOINT'] ?? 'https://hello.backspacechat.com';
+
   const { today } = deriveRunTimestamps(new Date());
 
   const result = await backfill({
@@ -39,6 +47,10 @@ async function main(): Promise<void> {
     store: createStore(dataDir),
     slug,
     today,
+    telemetry:
+      telemetryToken === ''
+        ? undefined
+        : createTelemetryFetcher(globalThis.fetch, telemetryEndpoint, telemetryToken),
   });
 
   console.log(formatBackfillSummary(result));
