@@ -20,10 +20,23 @@ async function call(req: Request, e: Env = env): Promise<Response> {
   return res;
 }
 
+/**
+ * Every ping built by `post()` gets its own source address.
+ *
+ * The rate-limit binding miniflare builds from `wrangler.toml` is the live one,
+ * 10 requests per 10 seconds. Without a `cf-connecting-ip` header the Worker
+ * keys every request as `unknown`, so the whole file shared one bucket and the
+ * suite sat exactly on the budget: the next ping test anyone added would have
+ * got a 429 from a limiter the test was not about. Addresses come from
+ * 203.0.113.0/24, the TEST-NET-3 documentation range.
+ */
+let nextAddress = 0;
+
 function post(body: string, cf: Record<string, unknown> = { country: 'DE' }): Request {
+  nextAddress += 1;
   return new Request('https://hello.test/v1/ping', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'cf-connecting-ip': `203.0.113.${nextAddress}` },
     body,
     cf,
   } as RequestInit);
@@ -111,13 +124,15 @@ describe('POST /v1/ping', () => {
         return { success: true };
       },
     } as unknown as RateLimit;
+    // The one test that asserts on the key pins its own, high enough that the
+    // per-call counter above never reaches it.
     const req = post(ping());
-    req.headers.set('cf-connecting-ip', '203.0.113.7');
+    req.headers.set('cf-connecting-ip', '203.0.113.200');
     const res = await call(req, { ...env, RATE_LIMITER: limiter });
     expect(res.status).toBe(204);
-    expect(keys).toEqual(['203.0.113.7']);
+    expect(keys).toEqual(['203.0.113.200']);
     const stored = await rows();
-    expect(JSON.stringify(stored)).not.toContain('203.0.113.7');
+    expect(JSON.stringify(stored)).not.toContain('203.0.113.200');
   });
 });
 
