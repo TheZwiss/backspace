@@ -12,7 +12,7 @@ RETIRED = "0"
 [[d1_databases]]
 binding = "DB"
 database_name = "backspace-telemetry"
-database_id = "REPLACE-AFTER-wrangler-d1-create"
+database_id = "55572adf-b982-499d-8695-89673dc9d220"
 migrations_dir = "migrations"
 
 [[ratelimits]]
