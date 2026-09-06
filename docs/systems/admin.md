@@ -17,6 +17,7 @@ Source files:
 - `packages/web/src/components/modals/instanceSettingsPanels/StreamingPanel.tsx` -- Streaming config UI
 - `packages/web/src/components/modals/instanceSettingsPanels/UsersPanel.tsx` -- User management UI
 - `packages/web/src/components/modals/instanceSettingsPanels/UpdatesPanel.tsx` -- Instance version and update guidance UI
+- `packages/web/src/components/modals/instanceSettingsPanels/TelemetryPanel.tsx` -- The daily hello: opt-in switch, state, masked id, live payload preview
 - `packages/server/src/routes/invites.ts` -- Admin invite-link CRUD endpoints
 - `packages/server/src/utils/inviteService.ts` -- Token generation, derived status, atomic redemption transaction
 - `packages/shared/src/types.ts` -- Shared type interfaces
@@ -538,6 +539,40 @@ from 1.0.5 onward, so an operator on 1.0.4 does not have it yet.
 Registered as the `updates` sub-tab in `InstancePanel.tsx`, and as
 `settings-instance-updates` in `MobileShell.tsx` / `MobileInstancePanel.tsx`.
 
+#### TelemetryPanel
+
+The permanent home of the opt-in daily report described in
+[telemetry.md](telemetry.md). It is the only place the setting can be changed
+after the one-time ask, and it always reads the home instance: there is no local
+copy of the state, so what the panel shows is what the server would send.
+
+Contents, top to bottom:
+
+- The switch, bound to `settingsStore.setTelemetryEnabled(next)`, which returns
+  the server's state and is the only thing the panel commits. There is no draft
+  and no save bar: a failed write leaves the switch where the server has it and
+  reports the reason through a toast.
+- The state line: `Never asked` while `enabled` is `null`, otherwise `Off` or
+  `On`.
+- The last reported day, formatted in the reader's language, or "no hello sent
+  yet". A bare `YYYY-MM-DD` day is built at local midnight before formatting, so
+  a reader west of UTC is not shown the day before.
+- The last failure, when `lastError` is set: its day and HTTP status, plus the
+  note that the next attempt is tomorrow. Absent when there is none.
+- The telemetry id, masked to its first block (`3f6c9e2a…`). The full id is what
+  ties an instance to its rows in the public archive, so the panel confirms
+  which one is in use without putting the whole value on screen. Absent while
+  the setting is off, because the server clears the id then.
+- The live payload, rendered by the shared `PayloadPreview` (`defaultOpen`
+  here, folded away in the ask) straight from `GET /api/admin/telemetry/preview`
+  with a Refresh button. It is refetched after every successful toggle, since
+  turning the setting on mints a new id and turning it off clears it.
+- A link to `docs/systems/telemetry.md` on GitHub.
+
+Strings live in the `telemetry` namespace under `panel.*`. Registered as the
+`telemetry` sub-tab in `InstancePanel.tsx` (labelled "Say hi"), and as
+`settings-instance-telemetry` in `MobileShell.tsx` / `MobileInstancePanel.tsx`.
+
 #### GeneralPanel
 
 Manages: instance name, discovery toggle, GIF API key, federation relay toggle/TTL.
@@ -696,3 +731,4 @@ Manages: user list with search/filter/sort/pagination, admin promotion/demotion,
 - **Federation relay:** [federation.md](federation.md) -- Relay toggle/TTL mechanics, peer management, outbox delivery
 - **Voice/streaming:** [voice.md](voice.md) -- Client-side enforcement of streaming limits
 - **Permissions:** [permissions.md](permissions.md) -- Admin flag is separate from RBAC; `isAdmin` is a user-level column, not a permission bit
+- **Telemetry:** [telemetry.md](telemetry.md) -- What the daily hello contains, the opt-in state model, and the admin routes behind TelemetryPanel
