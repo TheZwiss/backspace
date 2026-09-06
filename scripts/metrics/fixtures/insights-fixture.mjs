@@ -30,6 +30,9 @@
  *   high-nodims  above the mark, but the three dimension files are empty
  *   sparse       above the mark on the last row only, with every earlier
  *                gauge blank
+ *   dimensions-only  no dated series at all, only a referrer and a path
+ *                    snapshot, so the bundle is non-empty, collection_started
+ *                    is null and the range control has nothing to anchor to
  *
  * `--strip-telemetry` is a second pass, run after `cli-bundle.ts` rather than
  * before it. `buildDashboardData` always writes a `telemetry` key, so no set
@@ -55,7 +58,8 @@ import { createStore } from '../src/store.ts';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 
-const MODES = new Set(['none', 'low', 'threshold', 'high', 'high-other', 'high-nodims', 'sparse']);
+const MODES = new Set(['none', 'low', 'threshold', 'high', 'high-other', 'high-nodims', 'sparse',
+  'dimensions-only']);
 
 const [, , outDirArg, mode = 'high'] = process.argv;
 if (outDirArg === undefined) {
@@ -97,24 +101,31 @@ const DAYS = 40;
 const s = createStore(archive);
 
 // Traffic, so the bundle is not `empty` and the range control has an anchor.
-s.writeCsv('traffic/views.csv', ['date', 'count', 'uniques'],
-  Array.from({ length: DAYS }, (_, i) => ({ date: day(i), count: 40 + i, uniques: 10 + i })));
-s.writeCsv('traffic/clones.csv', ['date', 'count', 'uniques'],
-  Array.from({ length: DAYS }, (_, i) => ({ date: day(i), count: 5 + i, uniques: 3 })));
-s.writeCsv('stars.csv', ['date', 'total'],
-  Array.from({ length: DAYS }, (_, i) => ({ date: day(i), total: 60 + i })));
-s.writeCsv('forks.csv', ['date', 'total'],
-  Array.from({ length: DAYS }, (_, i) => ({ date: day(i), total: 4 })));
-s.writeCsv('contributors.csv', ['date', 'total'], [{ date: day(0), total: 2 }]);
-s.writeCsv('workflows.csv', ['date', 'runs'],
-  Array.from({ length: DAYS }, (_, i) => ({ date: day(i), runs: 12 })));
-s.writeCsv('repo.csv',
-  ['date', 'subscribers', 'open_issues', 'downloads_total', 'downloads_app', 'downloads_updates'],
-  Array.from({ length: DAYS }, (_, i) => ({
-    date: day(i), subscribers: 9, open_issues: 3,
-    downloads_total: 100 + i, downloads_app: 40 + i, downloads_updates: 60,
-  })));
-s.writeCsv('releases.csv', ['date', 'tag', 'name'], [{ date: day(10), tag: 'v1.1.2', name: '1.1.2' }]);
+// `dimensions-only` deliberately writes none of it: the bundle is then
+// non-empty on its dimension snapshots alone, `collection_started` is null,
+// and every renderer takes its "no dated measurement to anchor a window to"
+// branch. That state is reachable in production (an archive holding only
+// releases or only dimension snapshots) and no other mode reaches it.
+if (mode !== 'dimensions-only') {
+  s.writeCsv('traffic/views.csv', ['date', 'count', 'uniques'],
+    Array.from({ length: DAYS }, (_, i) => ({ date: day(i), count: 40 + i, uniques: 10 + i })));
+  s.writeCsv('traffic/clones.csv', ['date', 'count', 'uniques'],
+    Array.from({ length: DAYS }, (_, i) => ({ date: day(i), count: 5 + i, uniques: 3 })));
+  s.writeCsv('stars.csv', ['date', 'total'],
+    Array.from({ length: DAYS }, (_, i) => ({ date: day(i), total: 60 + i })));
+  s.writeCsv('forks.csv', ['date', 'total'],
+    Array.from({ length: DAYS }, (_, i) => ({ date: day(i), total: 4 })));
+  s.writeCsv('contributors.csv', ['date', 'total'], [{ date: day(0), total: 2 }]);
+  s.writeCsv('workflows.csv', ['date', 'runs'],
+    Array.from({ length: DAYS }, (_, i) => ({ date: day(i), runs: 12 })));
+  s.writeCsv('repo.csv',
+    ['date', 'subscribers', 'open_issues', 'downloads_total', 'downloads_app', 'downloads_updates'],
+    Array.from({ length: DAYS }, (_, i) => ({
+      date: day(i), subscribers: 9, open_issues: 3,
+      downloads_total: 100 + i, downloads_app: 40 + i, downloads_updates: 60,
+    })));
+  s.writeCsv('releases.csv', ['date', 'tag', 'name'], [{ date: day(10), tag: 'v1.1.2', name: '1.1.2' }]);
+}
 s.writeNdjson('traffic/referrers.ndjson',
   [{ snapshot_date: day(DAYS - 1), dimension: 'github.com', title: '', count: 30, uniques: 12 }]);
 s.writeNdjson('traffic/paths.ndjson',
@@ -131,7 +142,7 @@ const NETWORK = ['date', 'instances_1d', 'instances_7d', 'instances_30d', 'users
 /* The last row's `instances_7d`, which is the only figure the gate reads. */
 const TOP = { low: 4, threshold: 10 };
 
-if (mode !== 'none') {
+if (mode !== 'none' && mode !== 'dimensions-only') {
   const top = TOP[mode] ?? 14;
   const rows = Array.from({ length: 20 }, (_, i) => {
     const n = Math.max(1, top - (19 - i));

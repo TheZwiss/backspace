@@ -1,7 +1,9 @@
 /*
  * Loads a fixture copy of the insights page in headless Chrome and reports
  * what it finds: every console message, every page exception, every request
- * that failed, and the text of the telemetry section as it actually rendered.
+ * that failed, and then the page as it actually rendered: every slot with its
+ * figure blocks and its cards, each plot's rendered geometry, the rankings
+ * under each range button, and whether a drag on one chart rezoomed the rest.
  *
  * Companion to `insights-fixture.mjs`. Together they are what stands in for
  * the automated tests `site/insights/index.html` cannot have without a new
@@ -179,43 +181,133 @@ function onEvent(method, params) {
 /*
  * Read back out of the page. Runs in the page, returns plain data.
  *
- * `observe` reports the telemetry section as text plus the numbers the eye
- * cannot check reliably: each bar's rendered width, so "the widest bar
- * belongs to the top row" is measured rather than judged.
+ * Every slot, not only the telemetry one: after the facelift there are five,
+ * and a report that can only see one of them cannot tell whether a figure
+ * moved or vanished.
+ *
+ * The geometry is the part the eye cannot check. A compact plot and a hero
+ * plot differ by their height and by the room reserved above the plot area,
+ * and both are numbers uPlot writes into the DOM: `.u-over` is positioned at
+ * the top-left of the plot area, so its offset inside the chart root is the
+ * padding that was reserved, and its height is the plot height the profile
+ * asked for.
  */
 const OBSERVE = `(function () {
-  var slot = document.getElementById("telemetry");
-  if (slot === null) return { error: "no #telemetry slot" };
-  var out = { window: null, notes: [], cards: [], plots: 0 };
-  var win = slot.querySelector(".chart-window");
-  if (win !== null) out.window = win.textContent.replace(/\\s+/g, " ").trim();
-  slot.querySelectorAll(":scope > .slot-note").forEach(function (n) {
-    out.notes.push(n.textContent.replace(/\\s+/g, " ").trim());
-  });
-  out.plots = slot.querySelectorAll(".uplot").length;
-  slot.querySelectorAll(".chart-card").forEach(function (card) {
+  function text(node) {
+    return node === null ? null : node.textContent.replace(/\\s+/g, " ").trim();
+  }
+  function figureOf(scope) {
+    var value = scope.querySelector(".stat-value");
+    if (value === null) return null;
+    var chip = scope.querySelector(".stat-delta");
+    return {
+      label: text(scope.querySelector(".stat-label")),
+      value: text(value),
+      unmeasured: value.classList.contains("is-unmeasured"),
+      sub: text(scope.querySelector(".stat-sub")),
+      note: text(scope.querySelector(".stat-note")),
+      chip: chip === null ? null : text(chip),
+      chipTitle: chip === null ? null : chip.title
+    };
+  }
+  function plotOf(card) {
+    var root = card.querySelector(".uplot");
+    if (root === null) return null;
+    var over = root.querySelector(".u-over");
+    var rootBox = root.getBoundingClientRect();
+    var canvas = root.querySelector("canvas");
+    var legend = [];
+    root.querySelectorAll(".u-legend .u-series > th").forEach(function (th) {
+      legend.push(text(th));
+    });
+    return {
+      canvasWidth: canvas === null ? null : Math.round(canvas.getBoundingClientRect().width),
+      canvasHeight: canvas === null ? null : Math.round(canvas.getBoundingClientRect().height),
+      overTop: over === null ? null : Math.round(over.getBoundingClientRect().top - rootBox.top),
+      overHeight: over === null ? null : Math.round(over.getBoundingClientRect().height),
+      overWidth: over === null ? null : Math.round(over.getBoundingClientRect().width),
+      scrolls: (function () {
+        var box = card.querySelector(".chart-scroll");
+        return box === null ? null : box.scrollWidth > box.clientWidth + 1;
+      })(),
+      legend: legend
+    };
+  }
+  function cardOf(card) {
+    var hints = [];
+    card.querySelectorAll(".chart-hint").forEach(function (h) { hints.push(text(h)); });
     var entry = {
-      title: card.querySelector(".chart-title").textContent,
-      meta: card.querySelector(".chart-meta") === null ? null
-        : card.querySelector(".chart-meta").textContent.replace(/\\s+/g, " ").trim(),
-      note: card.querySelector(".slot-note") === null ? null
-        : card.querySelector(".slot-note").textContent.replace(/\\s+/g, " ").trim(),
-      hint: card.querySelector(".chart-hint") === null ? null
-        : card.querySelector(".chart-hint").textContent.replace(/\\s+/g, " ").trim(),
-      hasPlot: card.querySelector(".uplot") !== null,
+      title: text(card.querySelector(".chart-title")),
+      titleTag: card.querySelector(".chart-title") === null
+        ? null : card.querySelector(".chart-title").tagName,
+      compact: card.classList.contains("is-compact"),
+      meta: text(card.querySelector(".chart-meta")),
+      note: text(card.querySelector(".slot-note")),
+      hints: hints,
+      figure: figureOf(card),
+      plot: plotOf(card),
       rows: []
     };
     card.querySelectorAll(".rank-row").forEach(function (row) {
       var fill = row.querySelector(".rank-fill");
       entry.rows.push({
-        rank: row.querySelector(".rank-n").textContent,
-        name: row.querySelector(".rank-name").textContent,
-        num: row.querySelector(".rank-num").textContent,
+        rank: text(row.querySelector(".rank-n")),
+        name: text(row.querySelector(".rank-name")),
+        num: text(row.querySelector(".rank-num")),
         width: Math.round(fill.getBoundingClientRect().width),
         fill: getComputedStyle(fill).backgroundColor
       });
     });
-    out.cards.push(entry);
+    return entry;
+  }
+  var out = { slots: [], stats: [], hint: null, nav: [], sections: [] };
+  var hint = document.getElementById("chart-hint");
+  out.hint = hint === null ? null : {
+    text: text(hint),
+    /* Which element the hint's own wrapper follows, so "the hint sits under
+     * the sticky bar" is checked rather than assumed. */
+    after: (function () {
+      var prev = hint.parentNode === null ? null : hint.parentNode.previousElementSibling;
+      return prev === null ? null : (prev.id || prev.className || prev.tagName);
+    })()
+  };
+  document.querySelectorAll(".nav-link").forEach(function (a) {
+    out.nav.push(a.getAttribute("href") + " " + text(a));
+  });
+  document.querySelectorAll("section.panel").forEach(function (s) {
+    out.sections.push({
+      id: s.id,
+      heading: text(s.querySelector("h2")),
+      label: text(s.querySelector(".ch-label")),
+      copy: (function () {
+        var parts = [];
+        s.querySelectorAll(":scope > .wrap > .sec-copy").forEach(function (p) {
+          parts.push(text(p));
+        });
+        return parts;
+      })()
+    });
+  });
+  document.querySelectorAll(".slot").forEach(function (slot) {
+    var entry = {
+      id: slot.id,
+      window: text(slot.querySelector(".chart-window")),
+      windowNote: text(slot.querySelector(".window-note")),
+      notes: [],
+      plots: slot.querySelectorAll(".uplot").length,
+      figures: [],
+      cards: []
+    };
+    slot.querySelectorAll(":scope > .slot-note, :scope > .slot-note-detail").forEach(function (n) {
+      entry.notes.push(text(n));
+    });
+    slot.querySelectorAll(".stat, .lead-figure, .group-head").forEach(function (box) {
+      entry.figures.push(figureOf(box));
+    });
+    slot.querySelectorAll(".chart-card").forEach(function (card) {
+      entry.cards.push(cardOf(card));
+    });
+    out.slots.push(entry);
   });
   return out;
 })()`;
@@ -248,7 +340,7 @@ function clickRange(label) {
  * does. */
 const RANKING_DIGEST = `(function () {
   var out = [];
-  document.querySelectorAll("#telemetry .chart-card").forEach(function (card) {
+  document.querySelectorAll(".slot .chart-card").forEach(function (card) {
     var rows = [];
     card.querySelectorAll(".rank-row").forEach(function (row) {
       rows.push(row.querySelector(".rank-n").textContent + " " +
@@ -279,8 +371,8 @@ const CANVAS_HASHES = `(function () {
 })()`;
 
 /*
- * Drags across the first chart inside the telemetry slot, far enough to pass
- * uPlot's 6px drag threshold, so `cursor.drag.setScale` fires.
+ * Drags across the first chart on the page, far enough to pass uPlot's 6px
+ * drag threshold, so `cursor.drag.setScale` fires.
  *
  * `movementX` has to be set. While a drag is in progress uPlot discards any
  * move whose `movementX` and `movementY` are both zero, and a synthetic
@@ -289,11 +381,11 @@ const CANVAS_HASHES = `(function () {
  * reports "nothing moved" for a reason that has nothing to do with the page.
  * A frame is awaited between the events for the same care.
  */
-const DRAG_FIRST_TELEMETRY_CHART = `(async function () {
-  var over = document.querySelector("#telemetry .uplot .u-over");
-  if (over === null) return "no telemetry chart to drag";
+const DRAG_FIRST_CHART = `(async function () {
+  var over = document.querySelector(".slot .uplot .u-over");
+  if (over === null) return "no chart to drag";
   var box = over.getBoundingClientRect();
-  if (box.width < 60) return "telemetry chart is too narrow to drag across";
+  if (box.width < 60) return "the first chart is too narrow to drag across";
   var y = box.top + box.height / 2;
   var from = box.left + box.width * 0.30;
   var to = box.left + box.width * 0.70;
@@ -317,7 +409,7 @@ const DRAG_FIRST_TELEMETRY_CHART = `(async function () {
   fire(over, "mousemove", to);
   await frame();
   await frame();
-  var select = document.querySelector("#telemetry .uplot .u-select");
+  var select = document.querySelector(".slot .uplot .u-select");
   var width = select === null ? 0 : Math.round(select.getBoundingClientRect().width);
   fire(document, "mouseup", to);
   await frame();
@@ -416,13 +508,14 @@ async function main() {
     const drawn = Date.now();
     for (;;) {
       const ready = (await client.send('Runtime.evaluate', {
-        expression: '(function () { var s = document.getElementById("telemetry");'
-          + ' return s !== null && s.children.length > 0; })()',
+        expression: '(function () { var s = document.querySelectorAll(".slot");'
+          + ' for (var i = 0; i < s.length; i++) { if (s[i].children.length > 0) return true; }'
+          + ' return false; })()',
         returnByValue: true,
       })).result.value;
       if (ready === true) break;
       if (Date.now() - drawn > 20000) {
-        throw new Error('the telemetry slot was still empty 20s after load');
+        throw new Error('no slot on the page held anything 20s after load');
       }
       await new Promise((r) => setTimeout(r, 100));
     }
@@ -443,7 +536,7 @@ async function main() {
       ranges.push({
         label,
         outcome,
-        window: await evaluate('(document.querySelector("#telemetry .chart-window") || { textContent: "" })'
+        window: await evaluate('(document.querySelector(".slot .chart-window") || { textContent: "" })'
           + '.textContent.replace(/\\s+/g, " ").trim()'),
         rankings: await evaluate(RANKING_DIGEST),
       });
@@ -453,7 +546,7 @@ async function main() {
       expression: CANVAS_HASHES, returnByValue: true,
     })).result.value;
     dragResult = (await client.send('Runtime.evaluate', {
-      expression: DRAG_FIRST_TELEMETRY_CHART, returnByValue: true, awaitPromise: true,
+      expression: DRAG_FIRST_CHART, returnByValue: true, awaitPromise: true,
     })).result.value;
     await new Promise((r) => setTimeout(r, 700));
     after = (await client.send('Runtime.evaluate', {
@@ -466,7 +559,20 @@ async function main() {
     // the run would hang on a browser that is slow to die.
     server.closeAllConnections();
     server.close();
-    await rm(profile, { recursive: true, force: true });
+    /*
+     * Chrome can still be flushing its profile when it is killed, and the
+     * rmdir then fails with ENOTEMPTY. Thrown out of a `finally` that would
+     * discard the entire report the run just spent twenty seconds gathering,
+     * and the run reads as a hard failure of the page rather than of the
+     * cleanup. The directory is under the OS temp dir, so leaving one behind
+     * costs nothing worth a lost report. Reported on stderr so it can never
+     * appear in a captured report and read as a difference between two runs.
+     */
+    try {
+      await rm(profile, { recursive: true, force: true });
+    } catch (error) {
+      console.error(`could not remove the temporary Chrome profile ${profile}: ${error.message}`);
+    }
   }
 
   console.log('=== console and network ===');
@@ -475,7 +581,7 @@ async function main() {
   console.log(`failed or 4xx/5xx requests: ${failures.length}`);
   for (const f of failures) console.log(`  ${f}`);
 
-  console.log('\n=== telemetry section ===');
+  console.log('\n=== page ===');
   console.log(JSON.stringify(observed, null, 2));
 
   console.log('\n=== range sweep ===');
@@ -487,10 +593,10 @@ async function main() {
   console.log('  rankings seen: ' + JSON.stringify(first, null, 2));
 
   console.log('\n=== zoom sync ===');
-  console.log(`drag: ${dragResult}`);
+  console.log(`drag (first chart on the page): ${dragResult}`);
   for (const key of Object.keys(after ?? {})) {
     const moved = before?.[key] !== after[key];
-    console.log(`  ${moved ? 'redrew' : 'unchanged'}  ${key}`);
+    console.log(`  ${moved ? 'redrew' : 'unchanged'}  ${key}  ${before?.[key]} -> ${after[key]}`);
   }
 
   if (proveConsole) {
