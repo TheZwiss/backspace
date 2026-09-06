@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { parseExportNdjson, aggregateTelemetry, createTelemetryFetcher, type PingRow } from './telemetry.ts';
+import {
+  parseExportNdjson,
+  aggregateTelemetry,
+  createTelemetryFetcher,
+  publishableTelemetryDays,
+  type PingRow,
+} from './telemetry.ts';
 
 function row(instance: string, day: string, over: Partial<PingRow['body']> = {}, country = 'DE'): PingRow {
   return {
@@ -173,5 +179,34 @@ describe('createTelemetryFetcher', () => {
     const line = JSON.stringify({ instance: 'a', day: '2026-09-06', receivedAt: 'x', country: 'DE', schema: 1, body: '{}' });
     const fetchFn = (async () => new Response(line + '\n', { status: 200 })) as typeof fetch;
     await expect(createTelemetryFetcher(fetchFn, 'https://hello.test', 'tok')('2026-09-01', '2026-09-06')).resolves.toHaveLength(1);
+  });
+});
+
+describe('publishableTelemetryDays', () => {
+  it('excludes a candidate at or before the oldest ping in the fetched window', () => {
+    const pings = [row('a', '2026-09-04'), row('a', '2026-09-05')];
+    const days = publishableTelemetryDays(pings, ['2026-09-03', '2026-09-04', '2026-09-05']);
+    // 09-03 predates any evidence and 09-04 is the oldest ping itself, so
+    // eligibility (two distinct reporting days in the trailing thirty) cannot
+    // be met on either: their aggregate is all zeros by construction, not a
+    // measurement. Only 09-05, which has a second reporting day behind it, is
+    // a real measurement.
+    expect(days).toEqual(['2026-09-05']);
+  });
+
+  it('excludes every candidate when there are no pings at all', () => {
+    expect(publishableTelemetryDays([], ['2026-09-04', '2026-09-05'])).toEqual([]);
+  });
+
+  it('keeps every candidate strictly after the oldest ping', () => {
+    const pings = [row('a', '2026-08-01'), row('a', '2026-08-02')];
+    const days = publishableTelemetryDays(pings, ['2026-09-04', '2026-09-05']);
+    expect(days).toEqual(['2026-09-04', '2026-09-05']);
+  });
+
+  it('preserves candidate order rather than re-sorting', () => {
+    const pings = [row('a', '2026-08-01')];
+    const days = publishableTelemetryDays(pings, ['2026-09-05', '2026-09-04']);
+    expect(days).toEqual(['2026-09-05', '2026-09-04']);
   });
 });

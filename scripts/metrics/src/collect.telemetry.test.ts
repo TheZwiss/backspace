@@ -183,4 +183,48 @@ describe('collect with telemetry', () => {
     // The irreplaceable half of the run is unaffected.
     expect(result.written).toContain('stars.csv');
   });
+
+  // The receiver was not accepting pings yet on either candidate day, so the
+  // fetch resolves to an empty window rather than throwing. Writing an
+  // aggregate over zero rows would chart a measured empty fleet on a day
+  // nothing was measured — the same fabricated zero backfill's `oldestPing`
+  // rule forbids, and the daily path has to honour it too.
+  it('writes nothing when the telemetry fetch returns no pings at all', async () => {
+    const store = createStore(dir);
+    const result = await collect({
+      client: fakeClient(),
+      store,
+      ...base,
+      telemetry: async () => [],
+    });
+
+    expect(result.written).not.toContain('telemetry/network.csv');
+    expect(result.written).not.toContain('telemetry/versions.ndjson');
+    expect(result.written).not.toContain('telemetry/countries.ndjson');
+    expect(result.written).not.toContain('telemetry/clients.ndjson');
+    expect(store.readCsv('telemetry/network.csv')).toEqual([]);
+    expect(store.readNdjson('telemetry/versions.ndjson')).toEqual([]);
+  });
+
+  // A fleet that only started reporting the day before yesterday has exactly
+  // one reporting day behind it on that day, so it cannot be eligible and its
+  // aggregate is all zeros by construction, not by measurement. Yesterday, the
+  // day after, has a second reporting day behind it and is a real number.
+  it('writes no row for the oldest ping day but still writes the day after it', async () => {
+    const store = createStore(dir);
+    const oldest = '2026-09-04';
+    const next = '2026-09-05';
+    const telemetry = async (): Promise<PingRow[]> =>
+      ['a', 'b', 'c'].flatMap((id) => [ping(id, oldest), ping(id, next)]);
+
+    const result = await collect({ client: fakeClient(), store, ...base, telemetry });
+
+    expect(result.written).toEqual(expect.arrayContaining(['telemetry/network.csv']));
+    const network = store.readCsv('telemetry/network.csv');
+    expect(network.map((r) => r.date)).toEqual([next]);
+    expect(network[0]).toMatchObject({ instances_7d: '3' });
+    expect(store.readNdjson('telemetry/versions.ndjson')).toEqual([
+      { snapshot_date: next, dimension: '1.1.2', title: '', count: 3, uniques: 3 },
+    ]);
+  });
 });
