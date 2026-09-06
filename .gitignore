@@ -76,6 +76,7 @@ packages/web/src/**/*.js
 .cache/
 tmp/
 /io.github.TheZwiss.backspace.ci.yml
+/flatpak/node-sources.ci.json
 
 # Worktrees
 .worktrees/
