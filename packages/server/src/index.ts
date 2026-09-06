@@ -249,9 +249,9 @@ async function main(): Promise<void> {
     console.log('[startup] federation workers disabled via DISABLE_FEDERATION_WORKERS');
   } else {
     startFederationWorkers();
-    // The opt-in usage reporter. It shares the federation workers' guard: a
-    // two-instance harness runs two databases and would otherwise tick two
-    // reporters. It sends nothing unless an admin has switched it on.
+    // The opt-in usage reporter, behind the same guard as the federation
+    // workers so an integration harness starts no background timers. It sends
+    // nothing at all unless an admin has switched reporting on.
     startTelemetryReporter();
   }
 

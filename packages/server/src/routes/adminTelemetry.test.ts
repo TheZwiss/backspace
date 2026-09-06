@@ -57,6 +57,9 @@ function stateRow(): {
 let app: FastifyInstance;
 const AUTH = { authorization: 'Bearer token' };
 
+/** Sampled either side of a request, so a run across UTC midnight cannot flake. */
+const utcToday = (): string => new Date().toISOString().slice(0, 10);
+
 beforeEach(async () => {
   callerIsAdmin = true;
   sqlite = new Database(':memory:');
@@ -94,6 +97,7 @@ describe('admin telemetry routes', () => {
   });
 
   it('mints an id on the first enable and keeps it on a repeated save', async () => {
+    const before = utcToday();
     const first = await app.inject({
       method: 'PUT', url: '/api/admin/telemetry', headers: AUTH, payload: { enabled: true },
     });
@@ -101,7 +105,8 @@ describe('admin telemetry routes', () => {
     const body = first.json() as { enabled: boolean; id: string; lastDay: string; lastError: null };
     expect(body.enabled).toBe(true);
     expect(body.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
-    expect(body.lastDay).toBe(new Date().toISOString().slice(0, 10));
+    // Stamped with today so the reporter's first ping goes out tomorrow.
+    expect([before, utcToday()]).toContain(body.lastDay);
     expect(body.lastError).toBeNull();
 
     const again = await app.inject({
@@ -131,13 +136,13 @@ describe('admin telemetry routes', () => {
   });
 
   it('previews the real payload while off without writing anything', async () => {
+    const before = utcToday();
     const res = await app.inject({ method: 'GET', url: '/api/admin/telemetry/preview', headers: AUTH });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toMatchObject({
-      schema: 1,
-      instance: 'preview',
-      day: new Date().toISOString().slice(0, 10),
-    });
+    const payload = res.json() as { schema: number; instance: string; day: string };
+    expect(payload.schema).toBe(1);
+    expect(payload.instance).toBe('preview');
+    expect([before, utcToday()]).toContain(payload.day);
     expect(stateRow()).toEqual({ telemetry_enabled: null, telemetry_id: null, telemetry_last_day: null });
   });
 
