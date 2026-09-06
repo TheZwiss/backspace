@@ -248,14 +248,20 @@ const OBSERVE = `(function () {
       plot: plotOf(card),
       rows: []
     };
+    /* A rank row need not carry a bar. A ranking row does, and its width is
+     * the whole point of measuring it, but a dated list row is the same kind
+     * of row with a date where the bar would be. Reading the bar unguarded
+     * would throw, and an expression that throws takes the entire report down
+     * without saying so. */
     card.querySelectorAll(".rank-row").forEach(function (row) {
       var fill = row.querySelector(".rank-fill");
       entry.rows.push({
         rank: text(row.querySelector(".rank-n")),
         name: text(row.querySelector(".rank-name")),
         num: text(row.querySelector(".rank-num")),
-        width: Math.round(fill.getBoundingClientRect().width),
-        fill: getComputedStyle(fill).backgroundColor
+        sub: text(row.querySelector(".rank-sub")),
+        width: fill === null ? null : Math.round(fill.getBoundingClientRect().width),
+        fill: fill === null ? null : getComputedStyle(fill).backgroundColor
       });
     });
     return entry;
@@ -339,17 +345,38 @@ function clickRange(label) {
  * a snapshot rather than a window, so this must not move when the range
  * does. */
 const RANKING_DIGEST = `(function () {
+  function text(node) {
+    return node === null ? "" : node.textContent.replace(/\\s+/g, " ").trim();
+  }
   var out = [];
   document.querySelectorAll(".slot .chart-card").forEach(function (card) {
     var rows = [];
     card.querySelectorAll(".rank-row").forEach(function (row) {
-      rows.push(row.querySelector(".rank-n").textContent + " " +
-        row.querySelector(".rank-name").textContent + " " +
-        row.querySelector(".rank-num").textContent);
+      rows.push(text(row.querySelector(".rank-n")) + " " +
+        text(row.querySelector(".rank-name")) + " " +
+        text(row.querySelector(".rank-num")));
     });
-    if (rows.length > 0) out.push(card.querySelector(".chart-title").textContent + ": " + rows.join(" | "));
+    if (rows.length > 0) {
+      out.push(text(card.querySelector(".chart-title")) + ": " + rows.join(" | "));
+    }
   });
   return out;
+})()`;
+
+/*
+ * The archive coverage line, read once per range button.
+ *
+ * `OBSERVE` runs once, before the range sweep, so it can say what the
+ * coverage line reads at the range the page opened on and nothing more. The
+ * one thing that has to be true of this line is that it MOVES with the
+ * control: a coverage line that is identical at `30d` and at `all` means the
+ * section is not re-rendering on a range change, which is a silent failure of
+ * exactly the kind this script exists to catch. Null until the page has a
+ * `method-coverage` slot to read.
+ */
+const METHOD_COVERAGE = `(function () {
+  var slot = document.getElementById("method-coverage");
+  return slot === null ? null : slot.textContent.replace(/\\s+/g, " ").trim();
 })()`;
 
 /* A cheap stable digest of every chart canvas on the page, keyed by a path to
@@ -364,8 +391,9 @@ const CANVAS_HASHES = `(function () {
     for (var j = 0; j < url.length; j++) h = ((h * 33) ^ url.charCodeAt(j)) >>> 0;
     var card = root.closest(".chart-card");
     var section = root.closest(".slot");
+    var title = card === null ? null : card.querySelector(".chart-title");
     out[i + " " + (section === null ? "?" : section.id) + " / " +
-        (card === null ? "?" : card.querySelector(".chart-title").textContent)] = h;
+        (title === null ? "?" : title.textContent)] = h;
   });
   return out;
 })()`;
@@ -455,6 +483,39 @@ async function main() {
 
     client = connect(target.webSocketDebuggerUrl, onEvent);
     await client.ready;
+
+    /*
+     * One `Runtime.evaluate`, with an exception inside the page turned into a
+     * thrown error rather than an undefined result.
+     *
+     * This is the guard that matters most in the whole file. CDP reports an
+     * expression that threw in the command REPLY, as `exceptionDetails`, and
+     * NOT as a `Runtime.exceptionThrown` event. Reading `result.value` alone
+     * therefore yields `undefined` for a broken expression while the console
+     * stays clean, no request fails, and `--prove-console` still passes: the
+     * run reports a perfectly healthy page whose entire observation is
+     * missing. It is worse than a blank report, because a comparison of two
+     * undefined results reads as "identical" and prints as a pass.
+     *
+     * Every expression in this file walks the whole page now, so one
+     * unguarded selector against markup a later section introduces would
+     * empty the report that is the only evidence the page works. The
+     * individual null guards above are the first line; this is the one that
+     * cannot be forgotten when a new expression is added.
+     */
+    const evaluate = async (expression, awaitPromise) => {
+      const reply = await client.send('Runtime.evaluate', {
+        expression,
+        returnByValue: true,
+        awaitPromise: awaitPromise === true,
+      });
+      if (reply.exceptionDetails !== undefined) {
+        const detail = reply.exceptionDetails;
+        throw new Error('an expression threw inside the page, so its observation is missing: '
+          + (detail.exception?.description ?? detail.text));
+      }
+      return reply.result.value;
+    };
     await client.send('Runtime.enable');
     await client.send('Log.enable');
     await client.send('Network.enable');
@@ -507,12 +568,11 @@ async function main() {
      */
     const drawn = Date.now();
     for (;;) {
-      const ready = (await client.send('Runtime.evaluate', {
-        expression: '(function () { var s = document.querySelectorAll(".slot");'
-          + ' for (var i = 0; i < s.length; i++) { if (s[i].children.length > 0) return true; }'
-          + ' return false; })()',
-        returnByValue: true,
-      })).result.value;
+      const ready = await evaluate(
+        '(function () { var s = document.querySelectorAll(".slot");'
+        + ' for (var i = 0; i < s.length; i++) { if (s[i].children.length > 0) return true; }'
+        + ' return false; })()',
+      );
       if (ready === true) break;
       if (Date.now() - drawn > 20000) {
         throw new Error('no slot on the page held anything 20s after load');
@@ -521,14 +581,10 @@ async function main() {
     }
     await new Promise((r) => setTimeout(r, 600));
 
-    observed = (await client.send('Runtime.evaluate', {
-      expression: OBSERVE, returnByValue: true, awaitPromise: false,
-    })).result.value;
+    observed = await evaluate(OBSERVE);
 
     // The range sweep runs before the drag, because the drag rescales every
     // chart on the page and a rescaled chart is a worse place to start.
-    const evaluate = async (expression) =>
-      (await client.send('Runtime.evaluate', { expression, returnByValue: true })).result.value;
     const labels = await evaluate(RANGE_LABELS);
     for (const label of labels) {
       const outcome = await evaluate(clickRange(label));
@@ -539,19 +595,14 @@ async function main() {
         window: await evaluate('(document.querySelector(".slot .chart-window") || { textContent: "" })'
           + '.textContent.replace(/\\s+/g, " ").trim()'),
         rankings: await evaluate(RANKING_DIGEST),
+        coverage: await evaluate(METHOD_COVERAGE),
       });
     }
 
-    before = (await client.send('Runtime.evaluate', {
-      expression: CANVAS_HASHES, returnByValue: true,
-    })).result.value;
-    dragResult = (await client.send('Runtime.evaluate', {
-      expression: DRAG_FIRST_CHART, returnByValue: true, awaitPromise: true,
-    })).result.value;
+    before = await evaluate(CANVAS_HASHES);
+    dragResult = await evaluate(DRAG_FIRST_CHART, true);
     await new Promise((r) => setTimeout(r, 700));
-    after = (await client.send('Runtime.evaluate', {
-      expression: CANVAS_HASHES, returnByValue: true,
-    })).result.value;
+    after = await evaluate(CANVAS_HASHES);
   } finally {
     if (client !== null) client.close();
     child.kill();
@@ -589,6 +640,7 @@ async function main() {
   for (const r of ranges) {
     const same = JSON.stringify(r.rankings) === JSON.stringify(first);
     console.log(`  ${r.label} (${r.outcome}): rankings ${same ? 'identical to the first range' : 'CHANGED'}; ${r.window}`);
+    console.log(`    method coverage: ${r.coverage === null ? '(no method-coverage slot)' : r.coverage}`);
   }
   console.log('  rankings seen: ' + JSON.stringify(first, null, 2));
 
