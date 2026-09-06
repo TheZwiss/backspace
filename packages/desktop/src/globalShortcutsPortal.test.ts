@@ -87,7 +87,7 @@ describe('GlobalShortcuts portal lifecycle', () => {
     // Also recover when the backend did not send a signal while its settings were open.
     bus.shortcuts = [['pushToTalk', { trigger_description: new Variant('s', '') }]];
     await client.refresh();
-    expect(status).toHaveBeenLastCalledWith({ state: 'ready', shortcuts: {} });
+    expect(status).toHaveBeenLastCalledWith({ state: 'ready', shortcuts: { pushToTalk: '' } });
     expect(bus.call.mock.calls.filter(([m]) => m.member === 'BindShortcuts')).toHaveLength(1);
   });
   it('registers identity, handles early responses, and reports the actual assigned trigger', async () => {
@@ -116,6 +116,19 @@ describe('GlobalShortcuts portal lifecycle', () => {
     bus.signal(IFACE, 'Deactivated', [SESSION, 'pushToTalk']);
     bus.signal(IFACE, 'Deactivated', [SESSION, 'pushToTalk']);
     expect(action.mock.calls).toEqual([['pushToTalk', true], ['pushToTalk', false]]);
+  });
+  it('delivers catalogue actions without a trigger description', async () => {
+    const { bus, action, status, client } = setup();
+    bus.shortcuts = [['pushToTalk', { trigger_description: new Variant('s', '') }]];
+    await client.start();
+    expect(status).toHaveBeenLastCalledWith({ state: 'ready', shortcuts: { pushToTalk: '' } });
+    bus.signal(IFACE, 'Activated', [SESSION, 'pushToTalk']);
+    bus.signal(IFACE, 'Deactivated', [SESSION, 'pushToTalk']);
+    bus.signal(IFACE, 'Activated', [SESSION, 'toggleMute']);
+    bus.signal(IFACE, 'Activated', [SESSION, 'unknown']);
+    expect(action.mock.calls).toEqual([
+      ['pushToTalk', true], ['pushToTalk', false], ['toggleMute', true],
+    ]);
   });
   it.each(['stop', 'closed', 'error', 'eof', 'restart', 'removed'])('releases held PTT on %s', async (reason) => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});

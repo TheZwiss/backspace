@@ -128,7 +128,7 @@ contextBridge.exposeInMainWorld('backspace', {
     return () => { ipcRenderer.removeListener('keybind-portal-status', handler); };
   },
   syncKeybinds: (keybinds: Array<{ actionId: string; keys: number[]; mouseButton?: number }>) => {
-    ipcRenderer.send('keybinds-sync', keybinds);
+    return ipcRenderer.invoke('keybinds-sync', keybinds);
   },
   onKeybindAction: (callback: (action: { actionId: string; pressed: boolean }) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, action: { actionId: string; pressed: boolean }) => callback(action);

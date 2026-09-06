@@ -85,6 +85,7 @@ export class KeybindManager {
   private portalStatus: PortalKeybindStatus | null = isWayland() ? { state: 'idle', shortcuts: {} } : null;
 
   getPortalStatus(): PortalKeybindStatus | null { return this.portalStatus; }
+  isHookRunning(): boolean { return this.started; }
 
   retryPortal(): void {
     if (this.portalStatus && ['idle', 'unavailable'].includes(this.portalStatus.state)) this.startPortal();

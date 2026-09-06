@@ -143,7 +143,7 @@ interface BackspaceElectronAPI {
   getKeybindPortalStatus?: () => Promise<KeybindPortalStatus | null>;
   onKeybindPortalStatus?: (callback: (status: KeybindPortalStatus) => void) => () => void;
   retryKeybindPortal?: () => void;
-  syncKeybinds: (keybinds: Array<{ actionId: string; keys: number[]; mouseButton?: number }>) => void;
+  syncKeybinds: (keybinds: Array<{ actionId: string; keys: number[]; mouseButton?: number }>) => Promise<boolean>;
   onKeybindAction: (callback: (action: { actionId: string; pressed: boolean }) => void) => (() => void);
   onAccessibilityStatus: (callback: (status: { trusted: boolean }) => void) => (() => void);
   onKeybindHookError: (callback: (error: { message: string }) => void) => (() => void);

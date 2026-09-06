@@ -34,6 +34,7 @@ const sync = vi.fn();
 
 beforeEach(() => {
   vi.clearAllMocks();
+  sync.mockResolvedValue(true);
   useKeybindStore.setState({ keybinds: [binding] });
   window.backspace = {
     syncKeybinds: sync,
@@ -45,6 +46,23 @@ beforeEach(() => {
 afterEach(() => { cleanup(); delete window.backspace; });
 
 describe('global shortcut renderer bridge', () => {
+  it.each([true, false])('releases on desktop blur only if the native hook is unavailable (running=%s)', async running => {
+    sync.mockResolvedValue(running);
+    // Keep the native/web duplicate suppression independent of other tests.
+    const now = vi.spyOn(Date, 'now').mockReturnValue(running ? 10000 : 20000);
+    await act(async () => { renderHook(() => useKeybinds()); });
+    mock.voice.setMuted.mockClear();
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyV', key: 'v' }));
+      window.dispatchEvent(new Event('blur'));
+    });
+    expect(mock.voice.setMuted.mock.calls).toEqual(running ? [[false]] : [[false], [true]]);
+    if (running) {
+      act(() => actionListener({ actionId: 'pushToTalk', pressed: false }));
+      expect(mock.voice.setMuted).toHaveBeenLastCalledWith(true);
+    }
+    now.mockRestore();
+  });
   it('syncs an empty configuration after deleting the last binding and on unmount', () => {
     const { unmount } = renderHook(() => useKeybinds());
     expect(sync).toHaveBeenLastCalledWith([{ actionId: 'pushToTalk', keys: binding.keys, mouseButton: undefined }]);

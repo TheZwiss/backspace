@@ -653,6 +653,7 @@ export function useLiveKit() {
       if (gen !== _connectGeneration) return;
       const newRoom = new Room({ adaptiveStream: true, dynacast: true, publishDefaults: { videoCodec: 'h264', simulcast: true } });
       roomRef.current = newRoom;
+      let initialConnectPending = true;
 
       const guardedUpdate = () => { if (roomRef.current === newRoom) updateParticipants(); };
       newRoom.on(RoomEvent.ParticipantConnected, (participant) => {
@@ -809,7 +810,9 @@ export function useLiveKit() {
       });
       newRoom.on(RoomEvent.Disconnected, (reason?: DisconnectReason) => {
         if (roomRef.current !== newRoom) return;
-        _connectGeneration++;
+        // The SDK emits Disconnected before rejecting an initial connect.
+        // Keep that attempt current so its catch can report the failure.
+        if (!initialConnectPending) _connectGeneration++;
         AudioManager.getInstance().releaseInputStream();
         SpeakingDetector.getInstance().clear();
         setConnectionState(ConnectionState.Disconnected);
@@ -831,6 +834,7 @@ export function useLiveKit() {
       });
 
       await newRoom.connect(url, token, { autoSubscribe: false });
+      initialConnectPending = false;
       if (gen !== _connectGeneration) { destroyRoom(newRoom); return; }
       _activeRoom = newRoom;
       connectedChannelRef.current = storedId;
@@ -869,8 +873,8 @@ export function useLiveKit() {
       if (gen === _connectGeneration) {
         AudioManager.getInstance().releaseInputStream();
         setConnectionError('Failed to connect');
-        useVoiceStore.getState().setConnectionError('Failed to connect');
         useVoiceStore.getState().leaveVoice();
+        useVoiceStore.getState().setConnectionError('Failed to connect');
       }
     }
     finally { if (gen === _connectGeneration) setIsConnecting(false); }

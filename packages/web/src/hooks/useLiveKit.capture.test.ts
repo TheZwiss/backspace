@@ -50,6 +50,20 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 describe('voice capture teardown', () => {
+  it('reports initial connect failure after the SDK emits Disconnected', async () => {
+    mocks.connect.mockImplementationOnce(async function (this: Room) {
+      this.emit(RoomEvent.Disconnected, DisconnectReason.JOIN_FAILURE);
+      throw new Error('connection rejected');
+    });
+    useVoiceStore.setState({ currentVoiceChannelId: 'channel' });
+    const { result } = renderHook(() => useLiveKit());
+    await act(async () => { await result.current.connect('channel'); });
+    expect(result.current.connectionError).toBe('Failed to connect');
+    expect(useVoiceStore.getState().connectionError).toBe('Failed to connect');
+    expect(useVoiceStore.getState().currentVoiceChannelId).toBeNull();
+    expect(result.current.isConnecting).toBe(false);
+    expect(result.current.isConnected).toBe(false);
+  });
   it('clears connecting state and ignores a late token after leave', async () => {
     let finish!: (token: { token: string; url: string }) => void;
     mocks.token.mockReturnValueOnce(new Promise(r => { finish = r; }));

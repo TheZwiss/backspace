@@ -182,7 +182,7 @@ export class GlobalShortcutsPortal {
       if (message.member === 'ShortcutsChanged') {
         void this.refresh();
       }
-      else if (typeof id === 'string' && Object.hasOwn(this.shortcuts, id)) {
+      else if (typeof id === 'string' && this.requested.has(id)) {
         if (message.member === 'Activated' && !this.active.has(id)) {
           this.active.add(id);
           this.action(id, true);
@@ -197,7 +197,7 @@ export class GlobalShortcutsPortal {
     for (const entry of value) {
       if (!Array.isArray(entry) || typeof entry[0] !== 'string' || !this.requested.has(entry[0])) continue;
       const description: unknown = entry[1]?.trigger_description?.value;
-      if (typeof description === 'string' && description.length) next[entry[0]] = description;
+      next[entry[0]] = typeof description === 'string' ? description : '';
     }
     for (const id of this.active) {
       if (next[id] !== this.shortcuts[id]) {

@@ -87,7 +87,8 @@ function isInputElement(target: EventTarget | null): boolean {
 
 type WebCleanup = (() => void) | null;
 
-function setupWebFallback(keybindsRef: React.MutableRefObject<Keybind[]>, deduplicate: boolean): WebCleanup {
+function setupWebFallback(keybindsRef: React.MutableRefObject<Keybind[]>, deduplicate: boolean,
+  hookRunningRef: React.MutableRefObject<boolean>): WebCleanup {
   const pressedKeys = new Set<number>();
   const activeActions = new Set<string>();
   const dispatch = (id: string, pressed: boolean) => dispatchKeybindAction(id, pressed, deduplicate);
@@ -179,11 +180,18 @@ function setupWebFallback(keybindsRef: React.MutableRefObject<Keybind[]>, dedupl
     activeActions.clear();
     pressedKeys.clear();
   };
-  window.addEventListener('blur', releaseAll);
+  const onBlur = () => {
+    if (!hookRunningRef.current) releaseAll();
+    // Native keyup owns the release outside the window. Forget local state so
+    // it cannot suppress the next press after focus returns.
+    activeActions.clear();
+    pressedKeys.clear();
+  };
+  window.addEventListener('blur', onBlur);
 
   return () => {
     releaseAll();
-    window.removeEventListener('blur', releaseAll);
+    window.removeEventListener('blur', onBlur);
     window.removeEventListener('keydown', onKeyDown, true);
     window.removeEventListener('keyup', onKeyUp, true);
     window.removeEventListener('mousedown', onMouseDown, true);
@@ -202,6 +210,7 @@ export function useKeybinds(): void {
   const portalRef = useRef(portalStatus);
   portalRef.current = portalStatus;
   const keybindsRef = useRef(keybinds);
+  const hookRunningRef = useRef(false);
   keybindsRef.current = keybinds;
   const hasPtt = portalStatus
     ? Object.hasOwn(portalStatus.shortcuts, 'pushToTalk')
@@ -240,11 +249,17 @@ export function useKeybinds(): void {
     if (!api?.syncKeybinds) return;
 
     // Sync keybind config to main process — it registers OS-level hooks
-    api.syncKeybinds(keybinds.map((kb) => ({
+    let cancelled = false;
+    void api.syncKeybinds(keybinds.map((kb) => ({
       actionId: kb.actionId,
       keys: kb.keys,
       mouseButton: kb.mouseButton,
-    })));
+    }))).then((running) => {
+      if (!cancelled) hookRunningRef.current = running;
+    }).catch(() => {
+      if (!cancelled) hookRunningRef.current = false;
+    });
+    return () => { cancelled = true; };
 
   }, [keybinds]);
 
@@ -255,7 +270,7 @@ export function useKeybinds(): void {
   // system assignments are the only source, even when the portal is unavailable.
   useEffect(() => {
     if (portalStatus || keybinds.length === 0) return;
-    const cleanup = setupWebFallback(keybindsRef, isElectron() && !portalStatus);
+    const cleanup = setupWebFallback(keybindsRef, isElectron() && !portalStatus, hookRunningRef);
     return cleanup ?? undefined;
   }, [keybinds, portalStatus]);
 }
