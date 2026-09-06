@@ -92,7 +92,7 @@ No resting border — sunken `surface-input` background provides differentiation
 | Media | sharp (thumbnails), Cheerio (URL metadata), react-easy-crop |
 | Chat | react-markdown + remark-gfm, prism-react-renderer, emoji-mart |
 | i18n | i18next + react-i18next, `Intl.*` formatters, JSON catalogs per surface |
-| Desktop | Electron 40, electron-updater, uiohook-napi |
+| Desktop | Electron 43, electron-updater, uiohook-napi |
 | Testing | Vitest, @testing-library/react |
 
 **Do not introduce new dependencies without justification.**

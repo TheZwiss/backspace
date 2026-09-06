@@ -29,7 +29,7 @@ The desktop app wraps the Backspace web client in Electron with:
 - **Preload bridge** (`preload.ts`): Exposes `window.backspace` API via `contextBridge` with full sandbox isolation (`contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`)
 - **Renderer**: The standard web client, detecting Electron via `typeof window.backspace !== 'undefined'`
 
-The desktop package compiles to CommonJS (`module: "commonjs"`) targeting ES2022. Electron version: 40+.
+The desktop package compiles to CommonJS (`module: "commonjs"`) targeting ES2022. Electron version: 43.4+ to honor `restrictOwnAudio` in the custom screen-share handler (see [voice.md](voice.md#system-audio-loopback-shareaudio)).
 
 ---
 

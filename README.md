@@ -665,7 +665,7 @@ packages/
 | Frontend     | React 18, Vite 8, Tailwind CSS 3, Zustand 5 |
 | Voice/Video  | LiveKit |
 | Media        | sharp (thumbnails), Cheerio (embeds) |
-| Desktop      | Electron 40 |
+| Desktop      | Electron 43 |
 | Deployment   | Docker Compose + Caddy (auto-HTTPS) |
 
 Every subsystem has a dedicated specification under
