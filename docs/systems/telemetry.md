@@ -168,14 +168,14 @@ opening the database file on the host.
 
 | Column | Semantics |
 |---|---|
-| `last_active_day` | UTC day of the last authenticated WebSocket activity |
+| `last_active_day` | UTC day of the last authenticated WebSocket activity. Written on auth, and on the first heartbeat pong of each UTC day per connection. Two guards at two levels: the connection remembers the day it last recorded and skips the statement entirely for the rest of that day, and the statement itself is predicated on the stored value differing from today, so a connection with no memo still writes nothing new. The first is what keeps a few hundred long-lived desktop sockets from running an `UPDATE` every 30 seconds each |
 | `last_client` | `web`, `desktop` or `mobile`, from the `client` field of the WebSocket auth message. Anything missing or unrecognised stores `web` |
 
 `touchUserActivity` writes the row only when the stored day is not already
 today, so a user's row is touched at most once per day and the server never
-learns at what time anyone was online. The write happens on WebSocket auth and
-on every heartbeat pong: a desktop client left open for a week never
-re-authenticates, and without the pong path it would look inactive.
+learns at what time anyone was online. The pong path is there because a desktop
+client left open for a week never re-authenticates, and without it that user
+would look inactive from the second day on.
 
 `client` is sent to every origin the client connects to. A remote instance
 stores it on the replicated row, which has `home_instance` set and is therefore
@@ -302,9 +302,41 @@ Routes:
 | Route | Behaviour |
 |---|---|
 | `POST /v1/ping` | reads the body with `request.text()` and rejects anything over 4096 bytes after reading, whatever `Content-Length` claimed. Validates `schema`, `instance` as a version 4 UUID, `day` as a real calendar day within two days of the receiver's own UTC date, `build.version` (if present) as at most 32 characters of `[0-9A-Za-z.+-]`, and every known count as a non-negative integer no larger than 10^9. Known counts are rounded to two significant digits on arrival, unknown fields are kept. Upserts on `(instance, day)`, so a later ping for the same day replaces the earlier row. `204` on success, `400` on anything invalid, `429` when the rate limiter refuses the source address, all three without a body. `410` for every ping while the `RETIRED` variable is `"1"`, checked before the rate limiter so a retirement is never itself rate limited |
-| `GET /v1/export?from=&to=` | requires `Authorization: Bearer <EXPORT_TOKEN>`, compared with `crypto.subtle.timingSafeEqual`. Returns NDJSON, one `{ instance, day, receivedAt, country, schema, body }` per line, at most 31 days per call. `401` without the token, `400` for a bad range |
+| `GET /v1/export?from=&to=` | requires `Authorization: Bearer <EXPORT_TOKEN>`, compared with `crypto.subtle.timingSafeEqual`. Both ends must be real calendar days, not merely `YYYY-MM-DD` shaped, and the inclusive range is at most 31 days. Returns NDJSON, one `{ instance, day, receivedAt, country, schema, body }` per line, ordered by day then instance, at most 10,000 rows and at most 8 MiB. `401` without the token, `400` for a bad range |
 | `GET /` | a static plain HTML page saying what the endpoint is, what a row holds, how long it is kept and what Cloudflare sees, with links to this document and to the source. No scripts, no fonts, no third-party requests |
 | anything else | `404` |
+
+**The export is bounded at both ends, and says when a bound bit.** A range holds
+at most 31 days times the fleet, so `MAX_EXPORT_ROWS` (10,000) is roughly 320
+instances reporting every day for the whole window: far above any fleet in sight
+and far below a read that could hurt D1. It does not bound the response on its
+own, because a stored body may be up to 4096 bytes, so `MAX_EXPORT_BYTES`
+(8 MiB) stops the Worker assembling a body it cannot hold. Whichever bites
+first, the response carries `x-export-truncated: 1` and the NDJSON keeps its
+exact shape, so a collector that knows nothing about the header still parses
+what it gets. The rows are ordered by day then instance, so a truncated export
+always drops the same tail rather than an arbitrary slice, and re-requesting a
+narrower range recovers the rest. Both ends of the range are checked against the
+real calendar with the same `isCalendarDay` the ping route uses: `Date.parse`
+accepts `2026-02-30` and rolls it into March, which measured the 31-day span
+from a day that does not exist and could widen the window by up to three days.
+
+**The collector refuses a truncated export rather than publishing it.**
+`createTelemetryFetcher` in `scripts/metrics/src/telemetry.ts` reads
+`x-export-truncated` before it reads the body and throws when the header is
+present at all, on any value, rather than only on `1`. This is the one receiver
+answer whose body cannot betray it: a truncated export keeps the NDJSON shape
+exactly, so every line parses and every row is well formed, and the short window
+is indistinguishable from a genuinely smaller fleet. Aggregating it would
+publish an instance count, a user total and a version split covering only the
+instances that fit under the cap, which is a wrong number that looks like a
+measured one. The throw puts the day on the collector's existing telemetry-skip
+path: the partial rows are discarded unparsed, nothing under `telemetry/` is
+written, and the reason with the requested range reaches the run log. In
+`metrics.yml` the run still finishes green, because the traffic series it also
+collects are the irreplaceable ones and the next day's run refetches the same
+31-day window; in `backfill.yml`, which catches nothing, the dispatch exits
+non-zero. See docs/systems/metrics.md §3 for the collector side.
 
 A rate-limit binding keyed on the source address (10 requests per 10 seconds) is
 declared in `wrangler.toml`, so the limit is versioned with the code rather than
@@ -382,11 +414,12 @@ fleet volunteered, not a measurement of how many people run Backspace, and no
 page should present them as one.
 
 Everything collected is published from the first day it is collected, as static
-tables under `/insights/data/`. Those tables are the public surface today. The
-charted section of the insights page comes with the facelift of that page, in a
-later track, and it will stay hidden until the latest 7-day instance count
+tables under `/insights/data/`. The charted section on the insights page reads
+the same aggregates and stays hidden until the latest 7-day instance count
 reaches 10, because a chart of three instances says more about those three
-instances than about the project.
+instances than about the project. Below that mark the section prints the count
+and the threshold rather than nothing, so a reader can see how far off it is.
+See [metrics.md](metrics.md) section 10.8 for the gate and its three wordings.
 
 ---
 

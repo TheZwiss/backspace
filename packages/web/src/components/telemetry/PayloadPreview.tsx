@@ -10,6 +10,12 @@ interface PayloadPreviewProps {
    * settings section is a page about the ping, so there it opens straight away.
    */
   defaultOpen?: boolean;
+  /**
+   * The preview fetch failed. Without this the collapsed body sat on
+   * "Putting the message together" for the life of the modal, which reads as a
+   * request still in flight rather than one that already failed.
+   */
+  failed?: boolean;
 }
 
 /**
@@ -17,7 +23,7 @@ interface PayloadPreviewProps {
  * the response of the preview endpoint, so what the admin reads is what the
  * instance would send.
  */
-export function PayloadPreview({ preview, defaultOpen = false }: PayloadPreviewProps) {
+export function PayloadPreview({ preview, defaultOpen = false, failed = false }: PayloadPreviewProps) {
   const { t } = useTranslation('telemetry');
   const [open, setOpen] = useState(defaultOpen);
   const bodyId = useId();
@@ -36,7 +42,9 @@ export function PayloadPreview({ preview, defaultOpen = false }: PayloadPreviewP
       {open && (
         <div id={bodyId} className="mt-2">
           {preview === null ? (
-            <p className="text-xs text-txt-tertiary">{t('ask.previewLoading')}</p>
+            <p className="text-xs text-txt-tertiary">
+              {failed ? t('ask.previewError') : t('ask.previewLoading')}
+            </p>
           ) : (
             <pre className="bg-surface-input rounded-lg font-mono text-xs p-3 overflow-x-auto max-h-64 text-txt-secondary">
               {JSON.stringify(preview, null, 2)}

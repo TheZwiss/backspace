@@ -297,6 +297,17 @@ export function aggregateTelemetry(rows: readonly PingRow[], date: IsoDate): Tel
  * to upsert over the real row, every day, until somebody read a CI log. A
  * genuinely empty export has no lines to reject and still resolves to no rows,
  * which is what a day before the first instance opted in looks like.
+ *
+ * A truncated export throws as well, and it is the one failure here that the
+ * body cannot reveal. The receiver caps an answer at 10,000 rows and 8 MiB and
+ * announces the cut with `x-export-truncated` (see docs/systems/telemetry.md).
+ * The NDJSON keeps its exact shape either way, so every line parses, every row
+ * is well formed, and the only thing separating a short window from a small
+ * fleet is that header. Aggregating what arrived would publish an instance
+ * count, a user count and a version split for whichever instances fit inside
+ * the cap, indistinguishable from a real measurement and wrong in the one
+ * direction the archive cannot afford, since these are the numbers the whole
+ * feature exists to publish.
  */
 export function createTelemetryFetcher(fetchFn: typeof fetch, endpoint: string, token: string): TelemetryFetcher {
   return async (from, to) => {
@@ -305,6 +316,18 @@ export function createTelemetryFetcher(fetchFn: typeof fetch, endpoint: string, 
       headers: { authorization: `Bearer ${token}`, accept: 'application/x-ndjson' },
     });
     if (response.status !== 200) throw new Error(`telemetry export answered ${response.status}`);
+    // Checked on the header's presence rather than on the exact value `1`, and
+    // checked before the body is read at all. Fail closed: a receiver that
+    // one day announced the cut with a row count instead would otherwise read
+    // as a clean answer, and the failure that mistake causes is a published
+    // number that is quietly too small.
+    if (response.headers.get('x-export-truncated') !== null) {
+      throw new Error(
+        `telemetry export was truncated by the receiver (x-export-truncated) for ${from}..${to}, `
+        + 'so the window is incomplete and was not aggregated. Request a narrower range, or raise '
+        + 'the receiver\'s MAX_EXPORT_ROWS/MAX_EXPORT_BYTES if the fleet has outgrown them.',
+      );
+    }
     const { rows, skipped } = parseExportNdjson(await response.text());
     if (rows.length === 0 && skipped > 0) {
       throw new Error(`telemetry export: ${skipped} malformed row(s) and nothing parsed, the export format may have changed`);

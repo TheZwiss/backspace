@@ -7,6 +7,7 @@
     "previewToggleShow": "Nachricht anzeigen",
     "previewToggleHide": "Nachricht ausblenden",
     "previewLoading": "Nachricht wird zusammengestellt",
+    "previewError": "Die Nachricht konnte gerade nicht zusammengestellt werden. Es wurde nichts gesendet, und du kannst dich trotzdem so oder so entscheiden.",
     "p3": "Alles, was zurückkommt, wird als offene Daten auf der Insights-Seite des Projekts veröffentlicht. Diagramme erscheinen, sobald mindestens zehn Instanzen Hallo sagen. Es bleibt aus, bis du Ja sagst, und du kannst es jederzeit wieder ausschalten.",
     "yes": "Hallo sagen",
     "no": "Nein danke",

@@ -14,7 +14,7 @@ Source: `packages/server/src/ws/handler.ts`, `packages/server/src/ws/events.ts`
 4. Server responds with `ready` event containing full client state
 5. Server updates user status to `online`, broadcasts `presence_update` to friends + DM co-members + space co-members (via `collectProfileBroadcastTargetIds`); for native users, also queues a S2S `presence_update` relay to all active peers
 6. Heartbeat: server pings every 30s (RFC 6455 ping frames), dead connections detected after ~65s
-7. Activity: the auth message writes `users.last_client` (from `client`) and `users.last_active_day`; every heartbeat pong writes `users.last_active_day` alone, so a client left open for days keeps the day current. Both are day precision (UTC `YYYY-MM-DD`) and the write is skipped once the stored day already equals today, so a user's row is touched at most once per day
+7. Activity: the auth message writes `users.last_client` (from `client`) and `users.last_active_day`; the first heartbeat pong of each UTC day per connection writes `users.last_active_day` alone, so a client left open for days keeps the day current. Both are day precision (UTC `YYYY-MM-DD`) and the write is skipped once the stored day already equals today, so a user's row is touched at most once per day
 
 ---
 

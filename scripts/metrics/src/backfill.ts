@@ -453,9 +453,9 @@ export async function backfill(options: BackfillOptions): Promise<{ written: str
     mergedReleases as unknown as Array<Record<string, string | number>>,
   );
 
-  // The reconstructed range starts at the oldest day the export actually
-  // carries, not at the retention horizon, for the same reason the workflow
-  // fill starts at the oldest surviving run: below that day there is no
+  // The reconstructed range is bounded below by the oldest day the export
+  // actually carries, not by the retention horizon, for the same reason the
+  // workflow fill starts at the oldest surviving run: below that day there is no
   // evidence either way. The receiver keeps 90 days, but it has not existed
   // for 90 days on every dispatch, and an aggregate over a day it holds no
   // row for is an all-zero snapshot that reads on the chart as a measured
@@ -484,7 +484,13 @@ export async function backfill(options: BackfillOptions): Promise<{ written: str
     // nothing is known about.
     for (let offset = TELEMETRY_RETENTION_DAYS - 2; offset >= 1; offset -= 1) {
       const day = daysBefore(today, offset);
-      if (day < oldestPing) continue;
+      // `<=`, not `<`. Eligibility needs two distinct reporting days inside
+      // the trailing thirty, and on `oldestPing` itself there is exactly one
+      // by definition, so the aggregate is all zeros by construction. Writing
+      // it would state a measured empty fleet for the first day any evidence
+      // exists, which is the fabricated zero section 4.3 forbids, the same
+      // argument the loop's start offset already makes one day further out.
+      if (day <= oldestPing) continue;
       const aggregate = aggregateTelemetry(pings, day);
       network.push(aggregate.network);
       versions.push(...aggregate.versions);

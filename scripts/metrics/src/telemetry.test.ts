@@ -149,4 +149,29 @@ describe('createTelemetryFetcher', () => {
     const fetchFn = (async () => new Response('', { status: 200 })) as typeof fetch;
     await expect(createTelemetryFetcher(fetchFn, 'https://hello.test', 'tok')('2026-09-01', '2026-09-06')).resolves.toEqual([]);
   });
+  // The receiver caps its export at 10,000 rows and 8 MiB and announces the cut
+  // with `x-export-truncated`. A truncated body parses exactly like a complete
+  // one, so without this the collector would aggregate whichever instances
+  // happened to fit and publish a fleet smaller than the one that reported.
+  it('throws on a truncated export rather than aggregating a short fleet', async () => {
+    const line = JSON.stringify({ instance: 'a', day: '2026-09-06', receivedAt: 'x', country: 'DE', schema: 1, body: '{}' });
+    const fetchFn = (async () => new Response(line + '\n', { status: 200, headers: { 'x-export-truncated': '1' } })) as typeof fetch;
+    await expect(createTelemetryFetcher(fetchFn, 'https://hello.test', 'tok')('2026-09-01', '2026-09-06')).rejects.toThrow(/truncated/);
+  });
+  it('names the header and the narrower range in the message a maintainer reads', async () => {
+    const fetchFn = (async () => new Response('', { status: 200, headers: { 'x-export-truncated': '1' } })) as typeof fetch;
+    await expect(createTelemetryFetcher(fetchFn, 'https://hello.test', 'tok')('2026-09-01', '2026-09-06')).rejects.toThrow(/x-export-truncated/);
+    await expect(createTelemetryFetcher(fetchFn, 'https://hello.test', 'tok')('2026-09-01', '2026-09-06')).rejects.toThrow(/2026-09-01.*2026-09-06/);
+  });
+  // Fail closed on the header's presence, not on its exact value: a receiver
+  // that ever announced the cut differently would otherwise be read as clean.
+  it('rejects any value of the header, not only "1"', async () => {
+    const fetchFn = (async () => new Response('', { status: 200, headers: { 'x-export-truncated': 'yes' } })) as typeof fetch;
+    await expect(createTelemetryFetcher(fetchFn, 'https://hello.test', 'tok')('2026-09-01', '2026-09-06')).rejects.toThrow(/truncated/);
+  });
+  it('does not claim truncation when the header is absent', async () => {
+    const line = JSON.stringify({ instance: 'a', day: '2026-09-06', receivedAt: 'x', country: 'DE', schema: 1, body: '{}' });
+    const fetchFn = (async () => new Response(line + '\n', { status: 200 })) as typeof fetch;
+    await expect(createTelemetryFetcher(fetchFn, 'https://hello.test', 'tok')('2026-09-01', '2026-09-06')).resolves.toHaveLength(1);
+  });
 });

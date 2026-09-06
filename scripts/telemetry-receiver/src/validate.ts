@@ -74,8 +74,12 @@ export function normaliseCountry(value: unknown): string {
 /**
  * True only for a day that exists. `Date.parse` accepts `2026-02-30` and rolls it
  * over into March, so the parsed instant is compared back against the input.
+ *
+ * Exported because the export route needs the same check: its range ends go
+ * through the same `Date.parse` rollover, and a `from` of `2026-02-30` silently
+ * became March 2nd, moving the 31-day span with it.
  */
-function isCalendarDay(day: string): boolean {
+export function isCalendarDay(day: string): boolean {
   const t = Date.parse(`${day}T00:00:00Z`);
   return !Number.isNaN(t) && new Date(t).toISOString().slice(0, 10) === day;
 }
