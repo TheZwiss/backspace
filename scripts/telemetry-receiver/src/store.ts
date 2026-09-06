@@ -43,18 +43,29 @@ export async function upsertPing(db: D1Database, p: StoredPing): Promise<void> {
 }
 
 /**
- * Reads the rows whose `day` falls in the inclusive range `[from, to]`.
+ * Reads the rows whose `day` falls in the inclusive range `[from, to]`, at most
+ * `limit` of them.
  *
  * The order is by day and then by instance so two calls for the same range
  * return the same file, which keeps a re-run of the collector comparable with
- * the run before it.
+ * the run before it, and so a range that hits the limit always drops the same
+ * tail rather than an arbitrary slice.
+ *
+ * `limit` is required rather than defaulted. An unbounded read of this table is
+ * the defect this parameter exists to close, and a default would leave the
+ * unbounded call one omission away from being written again.
  */
-export async function exportRange(db: D1Database, from: string, to: string): Promise<StoredPing[]> {
+export async function exportRange(
+  db: D1Database,
+  from: string,
+  to: string,
+  limit: number,
+): Promise<StoredPing[]> {
   const { results } = await db
     .prepare(
-      'SELECT instance, day, received_at, country, schema, body FROM pings WHERE day >= ?1 AND day <= ?2 ORDER BY day, instance',
+      'SELECT instance, day, received_at, country, schema, body FROM pings WHERE day >= ?1 AND day <= ?2 ORDER BY day, instance LIMIT ?3',
     )
-    .bind(from, to)
+    .bind(from, to, limit)
     .all<PingRow>();
   return results.map((r) => ({
     instance: r.instance,
