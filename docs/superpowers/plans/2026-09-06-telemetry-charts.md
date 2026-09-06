@@ -388,6 +388,8 @@ Insert this whole `<script>` block immediately before `</body>`, after the ranke
 
 - [ ] **Step 8: Verify against fixtures**
 
+Superseded, see the appendix: the flag spelling below is not the one the fixture takes, `none` shows the "no instance has reported yet" wording rather than the pre-pings one, and above the threshold the section draws the charts rather than saying they are not built yet.
+
 Run the appendix recipe three times and confirm each observation:
 
 1. `--telemetry none` (no `telemetry/` files at all): the panel renders, and the note is the "built from a bundle made before the instance pings were collected" wording. Nothing in the console.

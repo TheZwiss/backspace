@@ -20,7 +20,7 @@ This redesign changes the ordering, the weighting and the amount of prose. It ch
 
 ## 2. What the page renders today
 
-Read from `site/insights/index.html` at commit `1c50f51e`. This is the inventory the redesign is checked against: every element of the current page appears below with its destination, and nothing on the page today is absent from it.
+Read from `site/insights/index.html` at commit `1c50f51e`, with row S6 and rows F15 to F19 refreshed against head once Track F drew the telemetry charts. This is the inventory the redesign is checked against: every element of the current page appears below with its destination, and nothing on the page today is absent from it.
 
 ### 2.1 Chrome, prose and page-level regions
 
