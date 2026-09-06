@@ -152,6 +152,12 @@ Signing is automatic and takes one comment:
 4. The bot records your signature against your GitHub username. You only sign
    once, and it covers all of your future contributions.
 
+A second bot comment appears on pull requests from forks: a short table of
+what the PR touches (workflows, install scripts, build files, dependency
+sources) so the maintainer can approve CI runs from anywhere. It looks at file
+paths and dependency sources only, never at the quality of the change, and
+needs nothing from you.
+
 ## Development setup
 
 Requirements: **Node.js 24 (LTS)** and **pnpm 10**. Run `nvm use` (reads
