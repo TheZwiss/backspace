@@ -168,14 +168,14 @@ opening the database file on the host.
 
 | Column | Semantics |
 |---|---|
-| `last_active_day` | UTC day of the last authenticated WebSocket activity |
+| `last_active_day` | UTC day of the last authenticated WebSocket activity. Written on auth, and on the first heartbeat pong of each UTC day per connection. Two guards at two levels: the connection remembers the day it last recorded and skips the statement entirely for the rest of that day, and the statement itself is predicated on the stored value differing from today, so a connection with no memo still writes nothing new. The first is what keeps a few hundred long-lived desktop sockets from running an `UPDATE` every 30 seconds each |
 | `last_client` | `web`, `desktop` or `mobile`, from the `client` field of the WebSocket auth message. Anything missing or unrecognised stores `web` |
 
 `touchUserActivity` writes the row only when the stored day is not already
 today, so a user's row is touched at most once per day and the server never
-learns at what time anyone was online. The write happens on WebSocket auth and
-on every heartbeat pong: a desktop client left open for a week never
-re-authenticates, and without the pong path it would look inactive.
+learns at what time anyone was online. The pong path is there because a desktop
+client left open for a week never re-authenticates, and without it that user
+would look inactive from the second day on.
 
 `client` is sent to every origin the client connects to. A remote instance
 stores it on the replicated row, which has `home_instance` set and is therefore
