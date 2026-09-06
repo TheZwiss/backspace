@@ -27,7 +27,8 @@ sizes are welcome: bug reports, fixes, features, documentation, and design.
   nobody will ask. What matters is that you can explain any line of it, that you
   have run it, and that it does not contain two solutions to the same problem
   sitting side by side. Code the author has not read is the only kind of
-  contribution that costs more to review than it did to write.
+  contribution that costs more to review than it did to write. If you work
+  with an agent, see [Working with AI agents](#working-with-ai-agents).
 
 ## Design before code
 
@@ -82,6 +83,51 @@ pauses while the design is discussed on the pull request itself. That works,
 and nobody is turned away for it, but it is the slow path: by then the
 discussion is about finished code, and changing the approach means redoing
 work that a proposal would have avoided.
+
+## Working with AI agents
+
+The quality bar is the same however the code was written: it does one thing,
+it is complete, it matches the surrounding code, it has been run, and the
+author can explain any line of it. Nothing in this section changes that bar.
+It describes how to reach it with an agent, because an agent used carelessly
+produces work that looks finished and is not, and that costs more to review
+than it did to write.
+
+**The repository is set up for agents.** `CLAUDE.md` at the root carries the
+rules and points to `docs/systems/`, where every subsystem is specified. Point
+your agent at it before anything else, whatever the agent is called. The specs
+are kept current by the same changes that alter the subsystems, so a change
+that touches one is expected to update it in the same pull request; an agent
+that has read the spec will do that on its own.
+
+**Find the optimal solution before writing code.** Plan first, with the agent
+doing the exploration: read the affected subsystems, lay out the options, and
+argue them against each other until one wins on its merits, not on being the
+first that worked. Write the plan down. For architectural changes, that plan
+is the design proposal above, and it is discussed before implementation. A
+planning workflow such as the superpowers plugin makes this the default rather
+than a discipline.
+
+**Execute the plan with tests leading.** Write the test, make it pass, move
+on. Review the work against the plan and the spec as you go rather than at the
+end; slop is what accumulates when generation runs ahead of review.
+
+**Test the result.** Run the automated tests, and run the thing by hand on the
+platforms it touches. A build that compiles is not a build that runs.
+
+**Have an agent review the pull request before you open it.** Adversarially:
+what is wrong, what is untested, where two solutions to one problem sit side
+by side. Every pull request here gets that review on arrival, and it usually
+finds something; doing it first turns a round trip of days into minutes. Fix
+what it finds; do not paste the report into the pull request. Then read the
+diff yourself. You own it.
+
+**Use a model that can carry the reasoning.** Good architecture and good code
+come from strong thinking models with room to think: Opus 5, Fable, or
+comparable. Weaker or faster models can produce the same output, but only if
+you know how to get it out of them, and the burden of knowing that is on you,
+not on the reviewer. If a task is worth a pull request, it is worth the
+strongest model you have.
 
 ## Contributor License Agreement (required)
 
@@ -174,6 +220,8 @@ and it is the part that breaks.
   installation, or the UI (see above).
 - If the change is architectural (see [Design before code](#design-before-code)),
   the pull request links the approved design proposal.
+- You reviewed the full diff after the last commit, with an agent if one wrote
+  it, and fixed what you found.
 
 ## Reporting bugs and requesting features
 
