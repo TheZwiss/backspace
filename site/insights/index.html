@@ -1782,88 +1782,27 @@ footer a:hover { color: var(--txt); }
 
 <script>
 /*
- * Section "header-stats" — spec §7's at-a-glance figures.
+ * Shared figure helpers.
  *
- * Registered through INSIGHTS.registerSection like every later section, so it
- * inherits the same guarantees: it is only ever called with a validated,
- * non-empty bundle, its slot is emptied before every call, and a throw would
- * be contained to this slot. It builds from scratch each call and holds no
- * listeners, timers or instances, so it registers no teardown.
+ * The at-a-glance section owned all of this. The facelift gives it four
+ * consumers instead of one, the lead figure row and each of the three groups'
+ * compact card heads, and the rule this surface exists to make enforceable is
+ * that A FIGURE IS COMPUTED ONCE PER RENDER AND RENDERED IN AS MANY PLACES AS
+ * NEEDED. The lead figure row and a group head printing different numbers for
+ * the same series is the failure this shape prevents, and it is a failure
+ * nothing on the page would otherwise catch: both numbers would look entirely
+ * ordinary on their own.
  *
- * One rule shapes the whole file: a figure is printed only when the archive
- * can support it, and a 30-day delta is printed only when THIS metric's own
- * history covers the 30 days the delta claims to describe.
- *
- * That last clause is the trap in this data, and it is live rather than
- * hypothetical. `collection_started` is the earliest date in ANY series — in
- * the current archive 2026-02-15, from a contributors series derived from
- * commit history — while `series.views.dates[0]` is 2026-08-18, the day the
- * collector first wrote a traffic row. Checking coverage against
- * `collection_started` would pass every metric permissively and print a
- * confident 30-day views delta computed from a fortnight of data. So every
- * coverage test below reads the metric's own dates, and every "since" label
- * names the metric's own first measured day rather than the archive's.
+ * Everything here is moved rather than rewritten. Every refusal sentence,
+ * every caption and every plural travels with the function that produced it,
+ * because a sentence written to be exactly true stops being true the moment
+ * it is paraphrased.
  */
 (function () {
   "use strict";
 
   var I = window.INSIGHTS;
   var DASH = I.DASH;
-
-  /*
-   * Spec §7's seven figures, in the order the section copy names them.
-   *
-   * `kind` decides what a 30-day delta can honestly mean for the metric:
-   *
-   *   point — a point-in-time total (stars, forks, watchers, contributors,
-   *           release downloads). Its delta is the difference between the
-   *           measurements at the two ends of the window, so a measurement
-   *           must exist at BOTH ends.
-   *   flow  — a per-day count (views, clones). Its delta is what accrued
-   *           inside the window, so every day of the window has to be
-   *           measured or the total is short by an unknown amount.
-   *   step  — a total recorded when it CHANGES rather than sampled daily
-   *           (contributors). Between two rows the total is unchanged rather
-   *           than unmeasured, so the age of its newest row says nothing
-   *           about freshness and the daily-sample staleness test must not be
-   *           applied to it. See stepDelta.
-   */
-  var CARDS = [
-    { label: "Stars", kind: "point", series: "stars", field: "total" },
-    { label: "Forks", kind: "point", series: "forks", field: "total" },
-    { label: "Watchers", kind: "point", series: "repo", field: "subscribers" },
-    { label: "Views", kind: "flow", series: "views", field: "count" },
-    /* GitHub counts every `actions/checkout` this repository runs as a clone,
-       so on a heavy CI day the figure measures the build pipeline rather than
-       anyone's interest. It cannot be split the way the download cards below
-       are — nothing in the API attributes a clone to Actions — so the card
-       states the confound instead of pretending the number is clean. */
-    { label: "Clones", kind: "flow", series: "clones", field: "count",
-      note: "includes this repo's own CI checkouts" },
-    { label: "Contributors", kind: "step", series: "contributors", field: "total" },
-    /* Deliberately NOT one "Release downloads" figure. GitHub counts an
-       electron-updater feed file (`latest.yml`) and a `.blockmap` in
-       `download_count` exactly like an installer, and every installed client
-       fetches the feed on every update check, so a combined total is
-       dominated by polling: when this split was introduced the feed files
-       outnumbered real installs about five to one. Two cards answer two
-       different questions instead of one number answering neither.
-       Both read null for rows the archive recorded before the split, which
-       renders as a dash rather than a zero. */
-    { label: "App downloads", kind: "point", series: "repo", field: "downloads_app" },
-    { label: "Update checks", kind: "point", series: "repo", field: "downloads_updates" }
-  ];
-
-  /* The series whose coverage inside the selected range is worth stating, and
-   * the column that decides whether one of their rows counts as measured. */
-  var COVERAGE = [
-    { label: "views", series: "views", field: "count" },
-    { label: "clones", series: "clones", field: "count" },
-    { label: "stars", series: "stars", field: "total" },
-    { label: "forks", series: "forks", field: "total" },
-    { label: "contributors", series: "contributors", field: "total", step: true },
-    { label: "repo snapshots", series: "repo", field: "subscribers" }
-  ];
 
   function el(tag, className, text) {
     var node = document.createElement(tag);
@@ -2231,13 +2170,176 @@ footer a:hover { color: var(--txt); }
     return body;
   }
 
+  /*
+   * The fixed 30-day windows every figure on this page is measured over, one
+   * per kind, and the reason they are computed once rather than per card.
+   *
+   * `point` and `step` windows open a full 30 days before the close, `flow`
+   * windows on the first of the 30 days: a sum counts the days it covers,
+   * where a point-in-time difference compares against the state before them.
+   * The two kinds genuinely need windows offset by one day from each other,
+   * and collapsing them would either drop a day from the sum or claim a
+   * comparison the archive cannot make.
+   *
+   * There are three keys for two distinct spans, and that is deliberate.
+   * `step` is `point`'s arithmetic under its own name, so that a later change
+   * to what one kind measures over cannot silently move the other. Aliasing
+   * the two would make exactly that divergence invisible, and a step series
+   * has its own reasons for the window it wants: see stepDelta, which reads a
+   * window's open as the last recorded change at or before it rather than as
+   * a measurement taken on that day.
+   *
+   * Null when the archive holds no dated row to anchor them to.
+   */
+  function windows(data) {
+    var endMs = I.archiveEndDay(data);
+    if (isNaN(endMs)) return null;
+    return {
+      point: { startMs: endMs - I.DELTA_DAYS * I.DAY_MS, endMs: endMs },
+      step: { startMs: endMs - I.DELTA_DAYS * I.DAY_MS, endMs: endMs },
+      flow: { startMs: endMs - (I.DELTA_DAYS - 1) * I.DAY_MS, endMs: endMs }
+    };
+  }
+
+  /*
+   * One figure, computed. `spec` is `{ label, kind, series, field, note }`
+   * with `kind` one of "flow", "point" or "step"; `wins` is `windows(data)`
+   * or null.
+   *
+   * The three `*Card` functions it dispatches to are the ones the at-a-glance
+   * section has always used, so a figure printed by a compact card head and
+   * the same figure printed by the lead row come out of one code path.
+   */
+  function figure(spec, data, wins) {
+    var step = I.resolutionStepDays();
+    var body;
+    if (spec.kind === "flow") {
+      body = flowCard(spec, data, wins === null ? null : wins.flow, step);
+    } else if (spec.kind === "step") {
+      body = stepCard(spec, data, wins === null ? null : wins.step);
+    } else {
+      body = pointCard(spec, data, wins === null ? null : wins.point, step);
+    }
+    body.label = spec.label;
+    body.note = spec.note === undefined ? null : spec.note;
+    return body;
+  }
+
+  window.INSIGHTS_FIGURES = {
+    figure: figure,
+    chip: deltaChip,
+    windows: windows,
+    rowsLabel: rowsLabel,
+    recordsLabel: recordsLabel,
+    newestMeasured: newestMeasured,
+    oldestMeasured: oldestMeasured,
+    countMeasured: countMeasured,
+    coverageGap: coverageGap,
+    unavailable: unavailable,
+    plural: plural
+  };
+})();
+</script>
+
+<script>
+/*
+ * Section "header-stats" — spec §7's at-a-glance figures.
+ *
+ * Registered through INSIGHTS.registerSection like every later section, so it
+ * inherits the same guarantees: it is only ever called with a validated,
+ * non-empty bundle, its slot is emptied before every call, and a throw would
+ * be contained to this slot. It builds from scratch each call and holds no
+ * listeners, timers or instances, so it registers no teardown.
+ *
+ * One rule shapes the whole file: a figure is printed only when the archive
+ * can support it, and a 30-day delta is printed only when THIS metric's own
+ * history covers the 30 days the delta claims to describe.
+ *
+ * That last clause is the trap in this data, and it is live rather than
+ * hypothetical. `collection_started` is the earliest date in ANY series — in
+ * the current archive 2026-02-15, from a contributors series derived from
+ * commit history — while `series.views.dates[0]` is 2026-08-18, the day the
+ * collector first wrote a traffic row. Checking coverage against
+ * `collection_started` would pass every metric permissively and print a
+ * confident 30-day views delta computed from a fortnight of data. So every
+ * coverage test below reads the metric's own dates, and every "since" label
+ * names the metric's own first measured day rather than the archive's.
+ */
+(function () {
+  "use strict";
+
+  var I = window.INSIGHTS;
+  var F = window.INSIGHTS_FIGURES;
+
+  /*
+   * Spec §7's seven figures, in the order the section copy names them.
+   *
+   * `kind` decides what a 30-day delta can honestly mean for the metric:
+   *
+   *   point — a point-in-time total (stars, forks, watchers, contributors,
+   *           release downloads). Its delta is the difference between the
+   *           measurements at the two ends of the window, so a measurement
+   *           must exist at BOTH ends.
+   *   flow  — a per-day count (views, clones). Its delta is what accrued
+   *           inside the window, so every day of the window has to be
+   *           measured or the total is short by an unknown amount.
+   *   step  — a total recorded when it CHANGES rather than sampled daily
+   *           (contributors). Between two rows the total is unchanged rather
+   *           than unmeasured, so the age of its newest row says nothing
+   *           about freshness and the daily-sample staleness test must not be
+   *           applied to it. See stepDelta.
+   */
+  var CARDS = [
+    { label: "Stars", kind: "point", series: "stars", field: "total" },
+    { label: "Forks", kind: "point", series: "forks", field: "total" },
+    { label: "Watchers", kind: "point", series: "repo", field: "subscribers" },
+    { label: "Views", kind: "flow", series: "views", field: "count" },
+    /* GitHub counts every `actions/checkout` this repository runs as a clone,
+       so on a heavy CI day the figure measures the build pipeline rather than
+       anyone's interest. It cannot be split the way the download cards below
+       are — nothing in the API attributes a clone to Actions — so the card
+       states the confound instead of pretending the number is clean. */
+    { label: "Clones", kind: "flow", series: "clones", field: "count",
+      note: "includes this repo's own CI checkouts" },
+    { label: "Contributors", kind: "step", series: "contributors", field: "total" },
+    /* Deliberately NOT one "Release downloads" figure. GitHub counts an
+       electron-updater feed file (`latest.yml`) and a `.blockmap` in
+       `download_count` exactly like an installer, and every installed client
+       fetches the feed on every update check, so a combined total is
+       dominated by polling: when this split was introduced the feed files
+       outnumbered real installs about five to one. Two cards answer two
+       different questions instead of one number answering neither.
+       Both read null for rows the archive recorded before the split, which
+       renders as a dash rather than a zero. */
+    { label: "App downloads", kind: "point", series: "repo", field: "downloads_app" },
+    { label: "Update checks", kind: "point", series: "repo", field: "downloads_updates" }
+  ];
+
+  /* The series whose coverage inside the selected range is worth stating, and
+   * the column that decides whether one of their rows counts as measured. */
+  var COVERAGE = [
+    { label: "views", series: "views", field: "count" },
+    { label: "clones", series: "clones", field: "count" },
+    { label: "stars", series: "stars", field: "total" },
+    { label: "forks", series: "forks", field: "total" },
+    { label: "contributors", series: "contributors", field: "total", step: true },
+    { label: "repo snapshots", series: "repo", field: "subscribers" }
+  ];
+
+  function el(tag, className, text) {
+    var node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+
   function buildCard(card, body) {
     var box = el("div", "stat");
     box.appendChild(el("p", "stat-label", card.label));
     box.appendChild(el("p", "stat-value" + (body.unmeasured ? " is-unmeasured" : ""), body.valueText));
     box.appendChild(el("p", "stat-sub", body.sub));
     if (card.note) box.appendChild(el("p", "stat-note", card.note));
-    box.appendChild(deltaChip(body.delta));
+    box.appendChild(F.chip(body.delta));
     return box;
   }
 
@@ -2267,38 +2369,29 @@ footer a:hover { color: var(--txt); }
     var spanDays = I.dayGap(win.endMs, win.startMs) + 1;
     note.appendChild(pair(win.title.toLowerCase(),
       I.formatDay(win.startMs) + " → " + I.formatDay(win.endMs) + " · " + spanDays + " " +
-      plural(spanDays, "day", "days") + I.resolutionSuffix()));
+      F.plural(spanDays, "day", "days") + I.resolutionSuffix()));
     for (var i = 0; i < COVERAGE.length; i++) {
       var entry = COVERAGE[i];
       var series = data.series[entry.series];
       var slice = I.rangeSlice(series, win);
-      var rows = countMeasured(series, entry.field, slice.start, slice.end);
-      note.appendChild(pair(entry.label, entry.step ? recordsLabel(rows) : rowsLabel(rows, step)));
+      var rows = F.countMeasured(series, entry.field, slice.start, slice.end);
+      note.appendChild(pair(entry.label, entry.step ? F.recordsLabel(rows) : F.rowsLabel(rows, step)));
     }
     return note;
   }
 
+  /* The delta window is fixed at 30 days and is NOT the selected range: the
+   * seven figures stay comparable to each other whatever the control shows.
+   * F.windows explains why the point and flow windows differ by one day. A
+   * flow total can still end up labelled wider than 30 days when the bundle
+   * is weekly; the chip says so when it does. */
   function render(slot, data, rangeKey) {
     var step = I.resolutionStepDays();
-    var endMs = I.archiveEndDay(data);
-    var hasAnchor = !isNaN(endMs);
-    /* The delta window is fixed at 30 days and is NOT the selected range: the
-     * seven figures stay comparable to each other whatever the control shows.
-     * `point` and `step` windows open a full 30 days before the close, `flow`
-     * windows on the first of the 30 days — see flowDelta for why they differ
-     * by one. A flow total can still end up labelled wider than 30 days when
-     * the bundle is weekly; the chip says so when it does. */
-    var pointWin = hasAnchor ? { startMs: endMs - I.DELTA_DAYS * I.DAY_MS, endMs: endMs } : null;
-    var flowWin = hasAnchor ? { startMs: endMs - (I.DELTA_DAYS - 1) * I.DAY_MS, endMs: endMs } : null;
+    var wins = F.windows(data);
 
     var grid = el("div", "stat-grid");
     for (var i = 0; i < CARDS.length; i++) {
-      var card = CARDS[i];
-      var body;
-      if (card.kind === "flow") body = flowCard(card, data, flowWin, step);
-      else if (card.kind === "step") body = stepCard(card, data, pointWin);
-      else body = pointCard(card, data, pointWin, step);
-      grid.appendChild(buildCard(card, body));
+      grid.appendChild(buildCard(CARDS[i], F.figure(CARDS[i], data, wins)));
     }
     slot.appendChild(grid);
     slot.appendChild(windowNote(data, rangeKey, step));

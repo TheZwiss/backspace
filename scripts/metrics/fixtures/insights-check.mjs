@@ -1,7 +1,9 @@
 /*
  * Loads a fixture copy of the insights page in headless Chrome and reports
  * what it finds: every console message, every page exception, every request
- * that failed, and the text of the telemetry section as it actually rendered.
+ * that failed, and then the page as it actually rendered: every slot with its
+ * figure blocks and its cards, each plot's rendered geometry, the rankings
+ * under each range button, and whether a drag on one chart rezoomed the rest.
  *
  * Companion to `insights-fixture.mjs`. Together they are what stands in for
  * the automated tests `site/insights/index.html` cannot have without a new
@@ -112,7 +114,7 @@ function connect(wsUrl, onEvent) {
       const entry = pending.get(message.id);
       pending.delete(message.id);
       if (entry === undefined) return;
-      if (message.error) entry.reject(new Error(`${message.method}: ${message.error.message}`));
+      if (message.error) entry.reject(new Error(`${entry.method}: ${message.error.message}`));
       else entry.resolve(message.result);
       return;
     }
@@ -179,43 +181,144 @@ function onEvent(method, params) {
 /*
  * Read back out of the page. Runs in the page, returns plain data.
  *
- * `observe` reports the telemetry section as text plus the numbers the eye
- * cannot check reliably: each bar's rendered width, so "the widest bar
- * belongs to the top row" is measured rather than judged.
+ * Every slot, not only the telemetry one: after the facelift there are five,
+ * and a report that can only see one of them cannot tell whether a figure
+ * moved or vanished.
+ *
+ * The geometry is the part the eye cannot check. A compact plot and a hero
+ * plot differ by their height and by the room reserved above the plot area,
+ * and both are numbers uPlot writes into the DOM: `.u-over` is positioned at
+ * the top-left of the plot area, so its offset inside the chart root is the
+ * padding that was reserved, and its height is the plot height the profile
+ * asked for.
  */
 const OBSERVE = `(function () {
-  var slot = document.getElementById("telemetry");
-  if (slot === null) return { error: "no #telemetry slot" };
-  var out = { window: null, notes: [], cards: [], plots: 0 };
-  var win = slot.querySelector(".chart-window");
-  if (win !== null) out.window = win.textContent.replace(/\\s+/g, " ").trim();
-  slot.querySelectorAll(":scope > .slot-note").forEach(function (n) {
-    out.notes.push(n.textContent.replace(/\\s+/g, " ").trim());
-  });
-  out.plots = slot.querySelectorAll(".uplot").length;
-  slot.querySelectorAll(".chart-card").forEach(function (card) {
+  function text(node) {
+    return node === null ? null : node.textContent.replace(/\\s+/g, " ").trim();
+  }
+  function figureOf(scope) {
+    var value = scope.querySelector(".stat-value");
+    if (value === null) return null;
+    var chip = scope.querySelector(".stat-delta");
+    return {
+      label: text(scope.querySelector(".stat-label")),
+      value: text(value),
+      unmeasured: value.classList.contains("is-unmeasured"),
+      sub: text(scope.querySelector(".stat-sub")),
+      note: text(scope.querySelector(".stat-note")),
+      chip: chip === null ? null : text(chip),
+      chipTitle: chip === null ? null : chip.title
+    };
+  }
+  function plotOf(card) {
+    var root = card.querySelector(".uplot");
+    if (root === null) return null;
+    var over = root.querySelector(".u-over");
+    var rootBox = root.getBoundingClientRect();
+    var canvas = root.querySelector("canvas");
+    var legend = [];
+    root.querySelectorAll(".u-legend .u-series > th").forEach(function (th) {
+      legend.push(text(th));
+    });
+    return {
+      canvasWidth: canvas === null ? null : Math.round(canvas.getBoundingClientRect().width),
+      canvasHeight: canvas === null ? null : Math.round(canvas.getBoundingClientRect().height),
+      overTop: over === null ? null : Math.round(over.getBoundingClientRect().top - rootBox.top),
+      overHeight: over === null ? null : Math.round(over.getBoundingClientRect().height),
+      overWidth: over === null ? null : Math.round(over.getBoundingClientRect().width),
+      scrolls: (function () {
+        var box = card.querySelector(".chart-scroll");
+        return box === null ? null : box.scrollWidth > box.clientWidth + 1;
+      })(),
+      legend: legend
+    };
+  }
+  function cardOf(card) {
+    var hints = [];
+    card.querySelectorAll(".chart-hint").forEach(function (h) { hints.push(text(h)); });
     var entry = {
-      title: card.querySelector(".chart-title").textContent,
-      meta: card.querySelector(".chart-meta") === null ? null
-        : card.querySelector(".chart-meta").textContent.replace(/\\s+/g, " ").trim(),
-      note: card.querySelector(".slot-note") === null ? null
-        : card.querySelector(".slot-note").textContent.replace(/\\s+/g, " ").trim(),
-      hint: card.querySelector(".chart-hint") === null ? null
-        : card.querySelector(".chart-hint").textContent.replace(/\\s+/g, " ").trim(),
-      hasPlot: card.querySelector(".uplot") !== null,
+      title: text(card.querySelector(".chart-title")),
+      titleTag: card.querySelector(".chart-title") === null
+        ? null : card.querySelector(".chart-title").tagName,
+      compact: card.classList.contains("is-compact"),
+      meta: text(card.querySelector(".chart-meta")),
+      note: text(card.querySelector(".slot-note")),
+      hints: hints,
+      figure: figureOf(card),
+      plot: plotOf(card),
       rows: []
     };
+    /* A rank row need not carry a bar. A ranking row does, and its width is
+     * the whole point of measuring it, but a dated list row is the same kind
+     * of row with a date where the bar would be. Reading the bar unguarded
+     * would throw, and an expression that throws takes the entire report down
+     * without saying so. */
     card.querySelectorAll(".rank-row").forEach(function (row) {
       var fill = row.querySelector(".rank-fill");
       entry.rows.push({
-        rank: row.querySelector(".rank-n").textContent,
-        name: row.querySelector(".rank-name").textContent,
-        num: row.querySelector(".rank-num").textContent,
-        width: Math.round(fill.getBoundingClientRect().width),
-        fill: getComputedStyle(fill).backgroundColor
+        rank: text(row.querySelector(".rank-n")),
+        name: text(row.querySelector(".rank-name")),
+        num: text(row.querySelector(".rank-num")),
+        sub: text(row.querySelector(".rank-sub")),
+        width: fill === null ? null : Math.round(fill.getBoundingClientRect().width),
+        fill: fill === null ? null : getComputedStyle(fill).backgroundColor
       });
     });
-    out.cards.push(entry);
+    return entry;
+  }
+  var out = { slots: [], hint: null, nav: [], sections: [] };
+  var hint = document.getElementById("chart-hint");
+  out.hint = hint === null ? null : {
+    text: text(hint),
+    /* Which element the hint's own wrapper follows, so "the hint sits under
+     * the sticky bar" is checked rather than assumed. */
+    after: (function () {
+      var prev = hint.parentNode === null ? null : hint.parentNode.previousElementSibling;
+      return prev === null ? null : (prev.id || prev.className || prev.tagName);
+    })()
+  };
+  document.querySelectorAll(".nav-link").forEach(function (a) {
+    out.nav.push(a.getAttribute("href") + " " + text(a));
+  });
+  document.querySelectorAll("section.panel").forEach(function (s) {
+    out.sections.push({
+      id: s.id,
+      heading: text(s.querySelector("h2")),
+      label: text(s.querySelector(".ch-label")),
+      copy: (function () {
+        var parts = [];
+        s.querySelectorAll(":scope > .wrap > .sec-copy").forEach(function (p) {
+          parts.push(text(p));
+        });
+        return parts;
+      })()
+    });
+  });
+  document.querySelectorAll(".slot").forEach(function (slot) {
+    var entry = {
+      id: slot.id,
+      window: text(slot.querySelector(".chart-window")),
+      windowNote: text(slot.querySelector(".window-note")),
+      notes: [],
+      plots: slot.querySelectorAll(".uplot").length,
+      figures: [],
+      cards: []
+    };
+    /* Any standing note in the slot, at any depth, EXCEPT one that belongs to
+     * a card: cardOf already reports those, and counting them twice would
+     * make a card's note read as a slot's. Depth matters because a slot's
+     * content can be wrapped in bands, and a note the report cannot see is,
+     * for review purposes, a note that does not exist. */
+    slot.querySelectorAll(".slot-note, .slot-note-detail").forEach(function (n) {
+      if (n.closest(".chart-card") === null) entry.notes.push(text(n));
+    });
+    slot.querySelectorAll(".stat, .lead-figure, .group-head").forEach(function (box) {
+      entry.figures.push(figureOf(box));
+    });
+    slot.querySelectorAll(".chart-card").forEach(function (card) {
+      entry.cards.push(cardOf(card));
+    });
+    out.slots.push(entry);
   });
   return out;
 })()`;
@@ -247,17 +350,38 @@ function clickRange(label) {
  * a snapshot rather than a window, so this must not move when the range
  * does. */
 const RANKING_DIGEST = `(function () {
+  function text(node) {
+    return node === null ? "" : node.textContent.replace(/\\s+/g, " ").trim();
+  }
   var out = [];
-  document.querySelectorAll("#telemetry .chart-card").forEach(function (card) {
+  document.querySelectorAll(".slot .chart-card").forEach(function (card) {
     var rows = [];
     card.querySelectorAll(".rank-row").forEach(function (row) {
-      rows.push(row.querySelector(".rank-n").textContent + " " +
-        row.querySelector(".rank-name").textContent + " " +
-        row.querySelector(".rank-num").textContent);
+      rows.push(text(row.querySelector(".rank-n")) + " " +
+        text(row.querySelector(".rank-name")) + " " +
+        text(row.querySelector(".rank-num")));
     });
-    if (rows.length > 0) out.push(card.querySelector(".chart-title").textContent + ": " + rows.join(" | "));
+    if (rows.length > 0) {
+      out.push(text(card.querySelector(".chart-title")) + ": " + rows.join(" | "));
+    }
   });
   return out;
+})()`;
+
+/*
+ * The archive coverage line, read once per range button.
+ *
+ * `OBSERVE` runs once, before the range sweep, so it can say what the
+ * coverage line reads at the range the page opened on and nothing more. The
+ * one thing that has to be true of this line is that it MOVES with the
+ * control: a coverage line that is identical at `30d` and at `all` means the
+ * section is not re-rendering on a range change, which is a silent failure of
+ * exactly the kind this script exists to catch. Null until the page has a
+ * `method-coverage` slot to read.
+ */
+const METHOD_COVERAGE = `(function () {
+  var slot = document.getElementById("method-coverage");
+  return slot === null ? null : slot.textContent.replace(/\\s+/g, " ").trim();
 })()`;
 
 /* A cheap stable digest of every chart canvas on the page, keyed by a path to
@@ -272,15 +396,16 @@ const CANVAS_HASHES = `(function () {
     for (var j = 0; j < url.length; j++) h = ((h * 33) ^ url.charCodeAt(j)) >>> 0;
     var card = root.closest(".chart-card");
     var section = root.closest(".slot");
+    var title = card === null ? null : card.querySelector(".chart-title");
     out[i + " " + (section === null ? "?" : section.id) + " / " +
-        (card === null ? "?" : card.querySelector(".chart-title").textContent)] = h;
+        (title === null ? "?" : title.textContent)] = h;
   });
   return out;
 })()`;
 
 /*
- * Drags across the first chart inside the telemetry slot, far enough to pass
- * uPlot's 6px drag threshold, so `cursor.drag.setScale` fires.
+ * Drags across the first chart on the page, far enough to pass uPlot's 6px
+ * drag threshold, so `cursor.drag.setScale` fires.
  *
  * `movementX` has to be set. While a drag is in progress uPlot discards any
  * move whose `movementX` and `movementY` are both zero, and a synthetic
@@ -289,11 +414,11 @@ const CANVAS_HASHES = `(function () {
  * reports "nothing moved" for a reason that has nothing to do with the page.
  * A frame is awaited between the events for the same care.
  */
-const DRAG_FIRST_TELEMETRY_CHART = `(async function () {
-  var over = document.querySelector("#telemetry .uplot .u-over");
-  if (over === null) return "no telemetry chart to drag";
+const DRAG_FIRST_CHART = `(async function () {
+  var over = document.querySelector(".slot .uplot .u-over");
+  if (over === null) return "no chart to drag";
   var box = over.getBoundingClientRect();
-  if (box.width < 60) return "telemetry chart is too narrow to drag across";
+  if (box.width < 60) return "the first chart is too narrow to drag across";
   var y = box.top + box.height / 2;
   var from = box.left + box.width * 0.30;
   var to = box.left + box.width * 0.70;
@@ -317,7 +442,7 @@ const DRAG_FIRST_TELEMETRY_CHART = `(async function () {
   fire(over, "mousemove", to);
   await frame();
   await frame();
-  var select = document.querySelector("#telemetry .uplot .u-select");
+  var select = document.querySelector(".slot .uplot .u-select");
   var width = select === null ? 0 : Math.round(select.getBoundingClientRect().width);
   fire(document, "mouseup", to);
   await frame();
@@ -363,6 +488,39 @@ async function main() {
 
     client = connect(target.webSocketDebuggerUrl, onEvent);
     await client.ready;
+
+    /*
+     * One `Runtime.evaluate`, with an exception inside the page turned into a
+     * thrown error rather than an undefined result.
+     *
+     * This is the guard that matters most in the whole file. CDP reports an
+     * expression that threw in the command REPLY, as `exceptionDetails`, and
+     * NOT as a `Runtime.exceptionThrown` event. Reading `result.value` alone
+     * therefore yields `undefined` for a broken expression while the console
+     * stays clean, no request fails, and `--prove-console` still passes: the
+     * run reports a perfectly healthy page whose entire observation is
+     * missing. It is worse than a blank report, because a comparison of two
+     * undefined results reads as "identical" and prints as a pass.
+     *
+     * Every expression in this file walks the whole page now, so one
+     * unguarded selector against markup a later section introduces would
+     * empty the report that is the only evidence the page works. The
+     * individual null guards above are the first line; this is the one that
+     * cannot be forgotten when a new expression is added.
+     */
+    const evaluate = async (expression, awaitPromise) => {
+      const reply = await client.send('Runtime.evaluate', {
+        expression,
+        returnByValue: true,
+        awaitPromise: awaitPromise === true,
+      });
+      if (reply.exceptionDetails !== undefined) {
+        const detail = reply.exceptionDetails;
+        throw new Error('an expression threw inside the page, so its observation is missing: '
+          + (detail.exception?.description ?? detail.text));
+      }
+      return reply.result.value;
+    };
     await client.send('Runtime.enable');
     await client.send('Log.enable');
     await client.send('Network.enable');
@@ -415,27 +573,23 @@ async function main() {
      */
     const drawn = Date.now();
     for (;;) {
-      const ready = (await client.send('Runtime.evaluate', {
-        expression: '(function () { var s = document.getElementById("telemetry");'
-          + ' return s !== null && s.children.length > 0; })()',
-        returnByValue: true,
-      })).result.value;
+      const ready = await evaluate(
+        '(function () { var s = document.querySelectorAll(".slot");'
+        + ' for (var i = 0; i < s.length; i++) { if (s[i].children.length > 0) return true; }'
+        + ' return false; })()',
+      );
       if (ready === true) break;
       if (Date.now() - drawn > 20000) {
-        throw new Error('the telemetry slot was still empty 20s after load');
+        throw new Error('no slot on the page held anything 20s after load');
       }
       await new Promise((r) => setTimeout(r, 100));
     }
     await new Promise((r) => setTimeout(r, 600));
 
-    observed = (await client.send('Runtime.evaluate', {
-      expression: OBSERVE, returnByValue: true, awaitPromise: false,
-    })).result.value;
+    observed = await evaluate(OBSERVE);
 
     // The range sweep runs before the drag, because the drag rescales every
     // chart on the page and a rescaled chart is a worse place to start.
-    const evaluate = async (expression) =>
-      (await client.send('Runtime.evaluate', { expression, returnByValue: true })).result.value;
     const labels = await evaluate(RANGE_LABELS);
     for (const label of labels) {
       const outcome = await evaluate(clickRange(label));
@@ -443,22 +597,18 @@ async function main() {
       ranges.push({
         label,
         outcome,
-        window: await evaluate('(document.querySelector("#telemetry .chart-window") || { textContent: "" })'
-          + '.textContent.replace(/\\s+/g, " ").trim()'),
+        window: await evaluate('(function () {'
+          + ' var w = document.querySelector(".slot .chart-window");'
+          + ' return w === null ? null : w.textContent.replace(/\\s+/g, " ").trim(); })()'),
         rankings: await evaluate(RANKING_DIGEST),
+        coverage: await evaluate(METHOD_COVERAGE),
       });
     }
 
-    before = (await client.send('Runtime.evaluate', {
-      expression: CANVAS_HASHES, returnByValue: true,
-    })).result.value;
-    dragResult = (await client.send('Runtime.evaluate', {
-      expression: DRAG_FIRST_TELEMETRY_CHART, returnByValue: true, awaitPromise: true,
-    })).result.value;
+    before = await evaluate(CANVAS_HASHES);
+    dragResult = await evaluate(DRAG_FIRST_CHART, true);
     await new Promise((r) => setTimeout(r, 700));
-    after = (await client.send('Runtime.evaluate', {
-      expression: CANVAS_HASHES, returnByValue: true,
-    })).result.value;
+    after = await evaluate(CANVAS_HASHES);
   } finally {
     if (client !== null) client.close();
     child.kill();
@@ -466,7 +616,20 @@ async function main() {
     // the run would hang on a browser that is slow to die.
     server.closeAllConnections();
     server.close();
-    await rm(profile, { recursive: true, force: true });
+    /*
+     * Chrome can still be flushing its profile when it is killed, and the
+     * rmdir then fails with ENOTEMPTY. Thrown out of a `finally` that would
+     * discard the entire report the run just spent twenty seconds gathering,
+     * and the run reads as a hard failure of the page rather than of the
+     * cleanup. The directory is under the OS temp dir, so leaving one behind
+     * costs nothing worth a lost report. Reported on stderr so it can never
+     * appear in a captured report and read as a difference between two runs.
+     */
+    try {
+      await rm(profile, { recursive: true, force: true });
+    } catch (error) {
+      console.error(`could not remove the temporary Chrome profile ${profile}: ${error.message}`);
+    }
   }
 
   console.log('=== console and network ===');
@@ -475,22 +638,52 @@ async function main() {
   console.log(`failed or 4xx/5xx requests: ${failures.length}`);
   for (const f of failures) console.log(`  ${f}`);
 
-  console.log('\n=== telemetry section ===');
+  console.log('\n=== page ===');
   console.log(JSON.stringify(observed, null, 2));
 
+  /*
+   * A verdict is only printed over a reading that was actually taken.
+   *
+   * "Rankings identical to the first range" is the PASS wording for this
+   * check, so printing it after a walk that matched nothing is the worst
+   * output this script can produce: four green lines over a comparison of two
+   * empty arrays, under a `console capture proof: PASS`, at exit 0. An
+   * expression that throws can no longer reach the report, but an expression
+   * whose selectors quietly stop matching returns an honest empty array, and
+   * Tasks 4 to 8 rebuild every card on the page, so a renamed `.rank-row` is
+   * not a hypothetical. The same reasoning covers a page that offered no
+   * range button and a page whose charts have no canvas: in both cases the
+   * loop below would print nothing at all and the heading alone would read as
+   * a section that passed.
+   */
   console.log('\n=== range sweep ===');
   const first = ranges[0]?.rankings;
-  for (const r of ranges) {
-    const same = JSON.stringify(r.rankings) === JSON.stringify(first);
-    console.log(`  ${r.label} (${r.outcome}): rankings ${same ? 'identical to the first range' : 'CHANGED'}; ${r.window}`);
+  const noRankings = !Array.isArray(first) || first.length === 0;
+  if (ranges.length === 0) {
+    console.log('  NOTHING SWEPT: the page offered no range button, so no range was exercised');
   }
-  console.log('  rankings seen: ' + JSON.stringify(first, null, 2));
+  for (const r of ranges) {
+    const verdict = noRankings
+      ? 'NO RANKING ROWS TO COMPARE'
+      : `rankings ${JSON.stringify(r.rankings) === JSON.stringify(first) ? 'identical to the first range' : 'CHANGED'}`;
+    console.log(`  ${r.label} (${r.outcome}): ${verdict}; ${r.window === null ? '(no chart-window)' : r.window}`);
+    console.log(`    method coverage: ${r.coverage === null ? '(no method-coverage slot)' : r.coverage}`);
+  }
+  if (ranges.length > 0 && noRankings) {
+    console.log('  NO RANKING ROWS FOUND ANYWHERE ON THE PAGE: the verdicts above compared nothing.');
+    console.log('  Either no card ranks anything, or the ranking walk stopped matching the markup.');
+  }
+  console.log('  rankings seen: ' + JSON.stringify(first ?? null, null, 2));
 
   console.log('\n=== zoom sync ===');
-  console.log(`drag: ${dragResult}`);
-  for (const key of Object.keys(after ?? {})) {
+  console.log(`drag (first chart on the page): ${dragResult}`);
+  const canvasKeys = Object.keys(after ?? {});
+  if (canvasKeys.length === 0) {
+    console.log('  NO CHART CANVAS FOUND ON THE PAGE: nothing was compared across the drag');
+  }
+  for (const key of canvasKeys) {
     const moved = before?.[key] !== after[key];
-    console.log(`  ${moved ? 'redrew' : 'unchanged'}  ${key}`);
+    console.log(`  ${moved ? 'redrew' : 'unchanged'}  ${key}  ${before?.[key]} -> ${after[key]}`);
   }
 
   if (proveConsole) {
