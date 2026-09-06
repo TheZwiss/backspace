@@ -6,6 +6,8 @@ body:
     attributes:
       value: |
         Open an issue before starting work on anything non-trivial, so we can agree on direction first.
+        If the change would set a convention other code has to follow, add a dependency, or change a
+        schema, protocol, or the desktop preload bridge, use the **Design proposal** template instead.
         Please check the README feature list and existing issues before filing.
   - type: textarea
     id: problem
