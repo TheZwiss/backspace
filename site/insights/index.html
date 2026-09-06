@@ -692,7 +692,10 @@ footer a:hover { color: var(--txt); }
         bound</strong> rather than a total. An instance that never opts in is invisible, counts
         arrive rounded to two significant digits, and an instance is counted only once it has
         reported on two separate days inside the last thirty. A ping carries no domain, no
-        instance or account name, no message content, no file names and no address.
+        instance or account name, no message content, no file names and no address. The
+        receiver does see the connecting address, as any server does, and turns it into a
+        two-letter country code before the ping is stored; the address itself is never
+        written down or published, which is where the country ranking below comes from.
       </p>
       <p class="sec-copy">
         Nothing is charted until at least ten instances have reported inside the same seven
@@ -5933,6 +5936,44 @@ footer a:hover { color: var(--txt); }
     }
   ];
 
+  /*
+   * The three rankings, each from the latest snapshot only.
+   *
+   * `unit` is what a row's `count` counts, and the three are not the same:
+   * a version's figure and a country's figure are counts of INSTANCES, and a
+   * client kind's is a count of PEOPLE. Printing "12" under all three with no
+   * unit is how a reader ends up citing the wrong number.
+   */
+  var RANKINGS = [
+    {
+      key: "versions",
+      title: "Server versions",
+      one: "instance",
+      many: "instances",
+      note: "Which release each reporting instance runs. A version string that is not shaped like a release is counted as " +
+        "\u201cother\u201d before anything is written, so the archive never names free text an instance chose."
+    },
+    {
+      key: "countries",
+      title: "Countries",
+      one: "instance",
+      many: "instances",
+      note: "A two-letter code the receiver derives from the connecting address at the edge. The address itself is neither stored nor published, and a code that cannot be resolved is recorded as ZZ."
+    },
+    {
+      key: "clients",
+      title: "Client kinds",
+      one: "user",
+      many: "users",
+      note: "How people reach their instance. This one counts users rather than instances, and the fold threshold still protects the instance: a kind is published only when at least three instances report it. A narrow browser window reports as mobile."
+    }
+  ];
+
+  /* A ranked row with no line of its own. Every bar here takes it, because on
+   * this page a palette colour means "this row has a line below it in this
+   * colour" and this section draws no per-dimension lines. */
+  var NEUTRAL = { token: "--txt4", fallback: "#5c5c68" };
+
   function el(tag, className, text) {
     var node = document.createElement(tag);
     if (className) node.className = className;
@@ -6086,6 +6127,74 @@ footer a:hover { color: var(--txt); }
     return C.mount(host, axis.xs, defs, { yRange: C.zeroBasedCounts });
   }
 
+  /* The snapshot date of a dimension series, printed as the page prints dates,
+   * or null when it has none or it cannot be placed on a calendar day. */
+  function snapshotDay(series) {
+    if (series.snapshots.length === 0) return null;
+    var ms = I.parseDay(series.snapshots[series.snapshots.length - 1]);
+    return isNaN(ms) ? null : I.formatDay(ms);
+  }
+
+  function rankedRow(row, rank, max, unit) {
+    var box = el("div", "rank-row");
+    box.appendChild(el("p", "rank-n", String(rank)));
+
+    var body = el("div", "rank-body");
+    var head = el("div", "rank-head");
+    var name = el("p", "rank-name", row.dimension);
+    /* Set whether or not the CSS ellipsis bites, so the full value stays
+     * reachable at every width. */
+    name.title = row.dimension;
+    head.appendChild(name);
+    head.appendChild(el("p", "rank-num", I.formatCount(row.count) + " " + unit));
+    body.appendChild(head);
+
+    var track = el("div", "rank-track");
+    var fill = el("div", "rank-fill");
+    var share = max > 0 ? (row.count / max) * 100 : 0;
+    if (!isFinite(share) || share < 0) share = 0;
+    if (share > 100) share = 100;
+    fill.style.width = share + "%";
+    fill.style.background = C.colour(NEUTRAL.token, NEUTRAL.fallback);
+    track.appendChild(fill);
+    body.appendChild(track);
+
+    box.appendChild(body);
+    return box;
+  }
+
+  function buildRanking(stack, spec, series) {
+    var day = snapshotDay(series);
+    var shell = cardHost(stack, spec.title, [
+      pair("snapshot", day === null
+        ? (series.snapshots.length === 0 ? "none recorded" : "recorded, but its date cannot be placed on a calendar day")
+        : "taken " + day),
+      pair("rows", I.formatCount(series.latest.length) + " listed"),
+      pair("folded", "values held by fewer than 3 instances are counted as other")
+    ]);
+
+    if (series.latest.length === 0) {
+      shell.appendChild(el("p", "slot-note",
+        "The latest snapshot carries no rows for this dimension, so there is nothing to rank."));
+      shell.appendChild(el("p", "chart-hint", spec.note));
+      return;
+    }
+
+    var max = 0;
+    var i;
+    for (i = 0; i < series.latest.length; i++) {
+      if (series.latest[i].count > max) max = series.latest[i].count;
+    }
+    var list = el("div", "ranked");
+    for (i = 0; i < series.latest.length; i++) {
+      var row = series.latest[i];
+      list.appendChild(rankedRow(row, i + 1, max,
+        row.count === 1 ? spec.one : spec.many));
+    }
+    shell.appendChild(list);
+    shell.appendChild(el("p", "chart-hint", spec.note));
+  }
+
   /* The newest snapshot date across the whole block, as the page prints dates,
    * or null when nothing is dated. Used to say WHEN the count below the
    * threshold was taken, so the reader is not left to assume it is current. */
@@ -6195,6 +6304,16 @@ footer a:hover { color: var(--txt); }
       throw error;
     }
     live = created;
+
+    /*
+     * Outside the try above on purpose. The rankings hold no uPlot instance
+     * and nothing to release, so a throw here is the shell's to report and
+     * there is nothing for this frame to clean up. Putting them inside would
+     * mean a ranking bug destroys two working charts.
+     */
+    for (var r = 0; r < RANKINGS.length; r++) {
+      buildRanking(stack, RANKINGS[r], block[RANKINGS[r].key]);
+    }
   }
 
   /*
