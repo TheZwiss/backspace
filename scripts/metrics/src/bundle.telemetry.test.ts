@@ -229,15 +229,41 @@ describe('telemetry block', () => {
   });
 
   it('keeps instances7d equal to the last published bucket when the last day measured it', () => {
+    // 15 days again, and for the same reason: the final bucket has to hold
+    // more than one day for this to say anything. A run ending on a Monday
+    // leaves that day alone in its bucket, where every way of picking a
+    // bucket's value agrees, so the assertion would hold against a
+    // first-of-bucket pick just as readily as against the last-measured one.
     const s = store();
-    const rows = Array.from({ length: 14 }, (_, i) =>
+    const rows = Array.from({ length: 15 }, (_, i) =>
       flatRow(new Date(Date.UTC(2026, 8, 1 + i)).toISOString().slice(0, 10), i),
     );
     s.writeCsv('telemetry/network.csv', NETWORK_HEADER, rows);
 
     const weekly = downsampleWeekly(buildDashboardData(s, '2026-09-15T00:00:00Z'));
 
-    expect(weekly.telemetry.instances7d).toBe(13);
-    expect(weekly.telemetry.network.instances_7d.at(-1)).toBe(13);
+    expect(weekly.telemetry.instances7d).toBe(14);
+    expect(weekly.telemetry.network.instances_7d.at(-1)).toBe(14);
+  });
+
+  it('keeps instances7d null when a blank last day is alone in its week bucket', () => {
+    // The other shape of the same answer. Here the archive ends on Monday
+    // 2026-09-14, so the blank final day is the only day in the final bucket
+    // and there is nothing older inside it to reach back to. Both paths
+    // answer null, but for a structural reason the mid-week case cannot
+    // reach, and the carried field has to hold in this shape too.
+    const s = store();
+    const rows = Array.from({ length: 14 }, (_, i) =>
+      flatRow(new Date(Date.UTC(2026, 8, 1 + i)).toISOString().slice(0, 10), 12),
+    );
+    rows[rows.length - 1] = { ...rows[rows.length - 1], instances_7d: '' };
+    s.writeCsv('telemetry/network.csv', NETWORK_HEADER, rows);
+
+    const daily = buildDashboardData(s, '2026-09-15T00:00:00Z');
+    const weekly = downsampleWeekly(daily);
+
+    expect(daily.telemetry.instances7d).toBeNull();
+    expect(weekly.telemetry.instances7d).toBeNull();
+    expect(weekly.telemetry.network.instances_7d.at(-1)).toBeNull();
   });
 });
