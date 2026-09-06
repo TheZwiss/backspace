@@ -1,0 +1,45 @@
+{
+  "ask": {
+    "title": "Hi, ich bin Jannis. Ich habe das hier gebaut.",
+    "p1": "Backspace trackt niemanden, mich eingeschlossen. Keine Zahlen, keine Dashboards, nichts. Ich sehe den Download-Zähler, und danach wird es still. Das hier zu bauen fühlt sich an, als würde man ins All rufen und nie etwas zurückhören.",
+    "p2": "Deshalb frage ich. Würde deine Instanz mir einmal am Tag ein kleines Hallo schicken? Nicht wer du bist, nicht was jemand geschrieben hat. Nur gerundete Zahlen: wie viele Leute hier sind, welche Version läuft, ob Sprache und Föderation an sind und aus welchem Land das Hallo kam. Keine Namen, keine Nachrichten, keine Adresse irgendeiner Art.",
+    "previewLead": "Das würde heute genau gesendet werden:",
+    "previewToggleShow": "Nachricht anzeigen",
+    "previewToggleHide": "Nachricht ausblenden",
+    "previewLoading": "Nachricht wird zusammengestellt",
+    "p3": "Alles, was zurückkommt, wird als offene Daten auf der Insights-Seite des Projekts veröffentlicht. Diagramme erscheinen, sobald mindestens zehn Instanzen Hallo sagen. Es bleibt aus, bis du Ja sagst, und du kannst es jederzeit wieder ausschalten.",
+    "yes": "Hallo sagen",
+    "no": "Nein danke",
+    "later": "Später entscheiden",
+    "footnote": "Der Empfänger läuft bei Cloudflare, das die Anfrage wie jeder Webhost sieht und daraus das Land ableitet. Sonst wird nichts über dich gespeichert. Du kannst das jederzeit in den Instanz-Einstellungen ändern.",
+    "saving": "Deine Wahl wird gespeichert",
+    "error": "Deine Wahl konnte nicht gespeichert werden. Es wurde nichts gesendet. Bitte versuch es noch einmal."
+  },
+  "yes": {
+    "title": "Signal empfangen.",
+    "body": "Das erste Hallo geht morgen zu einer zufälligen Minute raus, und danach jeden Tag. Danke. Es ist gerade deutlich weniger still hier draußen.",
+    "close": "Schließen"
+  },
+  "no": {
+    "title": "Verstanden.",
+    "body": "Es wird nichts gesendet. Ich treibe weiter, und falls du es dir anders überlegst, bin ich in den Instanz-Einstellungen nur einen Schalter entfernt.",
+    "close": "Schließen"
+  },
+  "panel": {
+    "title": "Jannis Hallo sagen",
+    "intro": "Ein optionaler täglicher Nutzungsbericht an den Maintainer: gerundete Zahlen und die Version, nichts über Personen. Aus, bis du es einschaltest.",
+    "toggle": "Täglich ein Hallo senden",
+    "status": {
+      "never": "Noch nie gefragt",
+      "off": "Aus",
+      "on": "An",
+      "lastDay": "Letztes Hallo gesendet am {{date}}",
+      "none": "Noch kein Hallo gesendet",
+      "error": "Der letzte Versuch am {{date}} schlug mit Status {{status}} fehl. Morgen wird es erneut versucht.",
+      "id": "Instanz-ID (zufällig, nicht deine Domain): {{id}}"
+    },
+    "previewTitle": "Was heute gesendet würde",
+    "learnMore": "Was gesendet wird und warum",
+    "refreshPreview": "Aktualisieren"
+  }
+}

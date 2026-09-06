@@ -8,6 +8,8 @@ const EASING = {
 } as const;
 
 const CROSS_FADE_MS = 200;
+/** How long the goodbye wave takes; the ask holds the farewell on screen for it. */
+export const FAREWELL_WAVE_MS = 1500;
 const BEAM_OPACITY = 0.6;
 
 // The arm's current rotation in degrees, read from its computed transform so
@@ -102,7 +104,7 @@ export function useSceneAnimation(svgRef: React.RefObject<SVGSVGElement | null>,
           { transform: rotate(-8), offset: 0.68 },
           { transform: rotate(ARM_REST_DEG), offset: 1 },
         ],
-        { duration: 1500, easing: EASING.gentle, fill: 'forwards' },
+        { duration: FAREWELL_WAVE_MS, easing: EASING.gentle, fill: 'forwards' },
       );
     }
 
