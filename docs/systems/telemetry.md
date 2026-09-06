@@ -382,11 +382,12 @@ fleet volunteered, not a measurement of how many people run Backspace, and no
 page should present them as one.
 
 Everything collected is published from the first day it is collected, as static
-tables under `/insights/data/`. Those tables are the public surface today. The
-charted section of the insights page comes with the facelift of that page, in a
-later track, and it will stay hidden until the latest 7-day instance count
+tables under `/insights/data/`. The charted section on the insights page reads
+the same aggregates and stays hidden until the latest 7-day instance count
 reaches 10, because a chart of three instances says more about those three
-instances than about the project.
+instances than about the project. Below that mark the section prints the count
+and the threshold rather than nothing, so a reader can see how far off it is.
+See [metrics.md](metrics.md) section 10.8 for the gate and its three wordings.
 
 ---
 

@@ -697,7 +697,7 @@ There is a third, per-chart case worth stating because it is the normal state of
 |---|---|---|
 | `unavailable` | the fetch failed: 404, non-2xx, timeout, unparseable JSON, or a payload `validateBundle` rejected | "The archive is not available here" — the bundle is generated at deploy time and is not committed, so when the archive or the deploy step is unavailable there are no figures, and inventing them would be worse |
 | `empty` | the bundle loaded and validated, and `empty` is `true` | "Collection has not produced any rows yet" — the archive holds no traffic, no growth snapshots, no releases; figures appear after the collector's first successful run |
-| `ok` | loaded, validated, non-empty | the five sections render |
+| `ok` | loaded, validated, non-empty | the six sections render |
 
 `empty` is true when all seven dated series, `releases`, and both dimension snapshot lists are empty — the state an archive is in immediately after the branch is bootstrapped, when it holds only `meta.json`. Note that `empty` and `collection_started` answer different questions: an archive holding only releases or only dimension snapshots is **not** empty yet has no dated series, so `collection_started` is `null` and the range control has nothing to anchor on.
 
@@ -733,16 +733,49 @@ Each card's caption states the span it drew, and the CI card's note says outrigh
 1. `SERIES_NAMES` in the page's range control is the list of dated series allowed to move the window. A series left out of it can hold a row outside every other series' history, and that row is measured, bundled, and then silently clipped out of every range including `all`. `workflows` was added to that list for exactly this reason; add any new dated series to it in the same commit.
 2. `validateBundle` must gain a `checkSeries` line for any new series. Without one the bundle validates, and the failure surfaces later and further away — as a section-wide error note, or a throw inside the range control that is outside any section's error boundary. `series.workflows` was missing from it until this rule was written down.
 
+### 10.8 The telemetry section and its publication threshold
+
+The sixth section, slot `telemetry`, draws the opt-in fleet figures. Two rules
+govern it and neither is negotiable from inside the section.
+
+**The `telemetry` block may be absent, and that is valid.** `validateBundle`
+checks it only when it is present (`checkTelemetry`). A bundle built before the
+key entered the contract must still load: rejecting it would answer an old
+artefact with "the archive is not available", which is a claim about the
+archive made because of a key the archive predates. Present and malformed is
+still rejected, for the reason every other series is checked -- the section
+indexes these arrays without re-checking them.
+
+**Nothing is charted until the latest `instances_7d` reaches 10** (spec section
+9). The gate reads `telemetry.instances7d`, which the bundler carries as its own
+field so the page compares rather than computes, and which is the last DAY's
+value rather than the last measured one. Below the mark the section prints the
+count and the threshold in a `slot-note-detail`, in one of three wordings: no
+block at all, a block whose latest day did not measure the column, and a real
+count below ten. They are three different statements and the page does not
+collapse them into one. Printing nothing would read as a broken collector, and
+the figures are public in `/insights/data/` from the first archived ping either
+way: the threshold governs drawing a line, not disclosing a figure.
+
+**`telemetry.network` is deliberately absent from `SERIES_NAMES`**, the list of
+dated series allowed to anchor the range window (section 10.7, trap 1). That
+list reads `data.series[name]` and telemetry is a sibling of `series`, not a
+member of it -- but the substantive reason is that it must not anchor: the
+collector writes the telemetry files only inside a run that also wrote the
+traffic series, so a telemetry date can never lie outside the traffic history
+and can never be clipped by a window the traffic anchored. Trap 1 does not
+apply here, and adding it would be the change that makes it apply.
+
 ---
 
 ## 11. Testing
 
-`scripts/metrics`'s `test` script is `tsc --noEmit && vitest run` — it runs through the existing root `pnpm -r test` step with no `ci.yml` change required, and covers both types and behavior in one script. All tests are fixture-driven and touch no network; filesystem tests use a per-test `mkdtempSync` directory, cleaned up in `afterEach`. As of this writing there are **369 tests across 15 files**, all passing:
+`scripts/metrics`'s `test` script is `tsc --noEmit && vitest run` — it runs through the existing root `pnpm -r test` step with no `ci.yml` change required, and covers both types and behavior in one script. All tests are fixture-driven and touch no network; filesystem tests use a per-test `mkdtempSync` directory, cleaned up in `afterEach`. As of this writing there are **370 tests across 15 files**, all passing:
 
 ```
 src/collect.telemetry.test.ts  3
 src/sitemap.test.ts            5
-src/bundle.telemetry.test.ts   6
+src/bundle.telemetry.test.ts   7
 src/vendor-check.test.ts       6
 src/no-runtime-deps.test.ts    9
 src/telemetry.test.ts         14
