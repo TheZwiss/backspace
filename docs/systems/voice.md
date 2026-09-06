@@ -282,7 +282,13 @@ ScreenShareConfig {
 
 ### System Audio Loopback (`shareAudio`)
 
-The "Share system audio" toggle in `ScreenSharePicker` adds an audio track to the screen-share publication. In the browser it maps to `getDisplayMedia({ audio: true })`. In Electron, the `setDisplayMediaRequestHandler` callback (`packages/desktop/src/main.ts`) returns `audio: 'loopback'` to opt into Chromium's system-audio loopback path.
+The "Share system audio" toggle in `ScreenSharePicker` adds an audio track to the screen-share publication. `startScreenShare` passes audio constraints including `restrictOwnAudio: true` through LiveKit to `getDisplayMedia`, or `audio: false` when disabled. In Electron, the `setDisplayMediaRequestHandler` callback (`packages/desktop/src/main.ts`) returns `audio: 'loopback'` to opt into Chromium's system-audio loopback path.
+
+Electron 43.4+ honors `restrictOwnAudio` in this custom-handler path and selects loopback excluding the app's own playback on macOS and Windows. Linux keeps its existing loopback path; this Electron fix does not add own-audio exclusion there. Older Electron versions ignored the constraint ([electron/electron#52427](https://github.com/electron/electron/issues/52427), fixed by [#52455](https://github.com/electron/electron/pull/52455), with the 43.4.0 backport in [#52533](https://github.com/electron/electron/pull/52533)). The existing stereo capture and disabled voice processing remain unchanged; both display and window selections use the same request.
+
+Own-audio exclusion applies to all audio played by Backspace, including remote voices, notification sounds, and in-app YouTube, Vimeo, or Spotify embeds. On macOS and Windows, viewers no longer hear those embeds through a system-audio share, unlike in Backspace 1.1.2; play the media in a separate application when its audio needs to be shared.
+
+**External audio routing.** A third-party audio router can replay call audio through a different process, outside Backspace's own-audio exclusion. If viewers still hear themselves, check this route as well as the capture settings. On macOS with SoundSource, add Backspace to **Settings → Audio → Excluded Applications** to bypass SoundSource processing of Backspace; see the [SoundSource manual](https://rogueamoeba.com/support/manuals/soundsource/?page=settings). Own-audio exclusion does not guarantee removal of copies replayed by external audio routers.
 
 | Platform | Mechanism | Notes |
 |----------|-----------|-------|
@@ -349,7 +355,7 @@ When neither native API is available the effect returns without throwing; the `v
 **Screen share audio (when enabled):**
 ```typescript
 {
-  restrictOwnAudio: true,    // Chrome 141+: exclude own tab audio
+  restrictOwnAudio: true,    // Own-playback exclusion where supported; Electron 43.4+
   echoCancellation: false,
   noiseSuppression: false,
   autoGainControl: false,
