@@ -242,6 +242,60 @@ describe('renderDataPage', () => {
     expect(section.slice(0, section.indexOf('</table>'))).not.toContain('not measured');
   });
 
+  it('does not claim the seven-day basis for the columns that do not have one', () => {
+    const html = renderDataPage(withTelemetry());
+    // The prose is wrapped in the source, so compare it with breaks flattened.
+    const flat = html.replace(/\s+/g, ' ');
+
+    // The snapshot rule governs most of the row, but three columns sit outside
+    // it: `instances_1d` and `users_active1d` are restricted to the date
+    // itself, and `instances_30d` reaches back thirty days. A blanket claim
+    // would have the page describe three of its own columns wrongly.
+    expect(flat).toContain('reported that day rather than over the week');
+    expect(flat).toContain('<em>instances reporting today</em>');
+    expect(flat).toContain('<em>active today</em>');
+    expect(flat).toContain('<em>within 30 days</em>');
+    // Tied to the headers the table actually renders, so renaming a column
+    // cannot leave the prose naming a column that no longer exists.
+    expect(flat).toContain('<th class="n">instances reporting today</th>');
+    expect(flat).toContain('<th class="n">active today</th>');
+    expect(flat).toContain('<th class="n">within 30 days</th>');
+  });
+
+  it('renders a measured zero in a telemetry ranking as 0', () => {
+    const withZero = withTelemetry();
+    withZero.telemetry.clients.latest = [
+      { dimension: 'mobile', title: '', count: 0, uniques: 0 },
+    ];
+
+    const html = renderDataPage(withZero);
+    // Scoped to the one table under test. Page-wide the assertions would be
+    // meaningless: another series carries a real `0` cell, and a null
+    // elsewhere on the page prints "not measured" whatever this table does.
+    const clients = html.slice(html.indexOf('<h3>Client kinds</h3>'));
+    const end = clients.indexOf('</table>');
+    // No closing tag means the helper rendered its empty state instead of the
+    // table under test. Fail on that, rather than let `slice(0, -1)` quietly
+    // trim one character and leave the assertions running against the page.
+    expect(end).toBeGreaterThan(-1);
+    const rows = clients.slice(0, end);
+
+    expect(rows).toContain('<tr><td>mobile</td><td class="n">0</td></tr>');
+    expect(rows).not.toContain('not measured');
+  });
+
+  it('escapes a dimension value in a telemetry ranking', () => {
+    const withMarkup = withTelemetry();
+    withMarkup.telemetry.versions.latest = [
+      { dimension: '<script>x</script>', title: '', count: 3, uniques: 3 },
+    ];
+
+    const html = renderDataPage(withMarkup);
+
+    expect(html).toContain('&lt;script&gt;x&lt;/script&gt;');
+    expect(html).not.toContain('<script>x</script>');
+  });
+
   it('omits the telemetry section entirely when no instance has reported', () => {
     const html = renderDataPage(data());
 

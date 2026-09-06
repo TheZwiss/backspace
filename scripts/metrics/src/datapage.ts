@@ -171,8 +171,13 @@ anything is written here, so no row can point at one instance. A ping carries no
 instance or account name, no message content, no file names and no IP address.</p>
 <p>Each row describes the fleet on its date, built from the most recent ping per instance in the
 seven days ending on that date, so a quiet instance keeps its last reported figures for up to a
-week. Every column is a reading taken on that day, not a daily total: rows are comparable to each
-other but must not be added together.</p>
+week. Three columns sit outside that window: <em>instances reporting today</em> and <em>active
+today</em> count only what reported that day rather than over the week, and <em>within 30 days</em>
+counts every instance seen in the thirty days ending on that date. An instance whose ping was late
+is absent from the first two and present in the rest; one silent for longer than a week, but seen
+inside the last thirty, is absent from all of them except <em>within 30 days</em>. Every column is
+a reading taken on that date, not a daily total: rows are comparable to each other but must not be
+added together.</p>
 ${seriesTable(telemetry.network.dates, [
   { label: 'instances reporting today', values: telemetry.network.instances_1d },
   { label: 'within 7 days', values: telemetry.network.instances_7d },
