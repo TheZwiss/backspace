@@ -12,6 +12,8 @@ interface HelloModalProps {
   /** Closes the ask. The caller decides whether that closing counts as a dismissal. */
   onDismiss: () => void;
   preview: TelemetryPayload | null;
+  /** The preview fetch failed, so the preview says so instead of waiting on a request that already ended. */
+  previewFailed?: boolean;
 }
 
 type Stage = 'ask' | 'saving' | 'yes' | 'no';
@@ -28,7 +30,7 @@ const BUTTON = 'flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors d
  * save leaves the admin on the ask with an explanation. Nothing closes on its
  * own: every state ends with the admin pressing something.
  */
-export function HelloModal({ open, onAnswer, onDismiss, preview }: HelloModalProps) {
+export function HelloModal({ open, onAnswer, onDismiss, preview, previewFailed = false }: HelloModalProps) {
   const { t } = useTranslation('telemetry');
   const [stage, setStage] = useState<Stage>('ask');
   const [failed, setFailed] = useState(false);
@@ -104,7 +106,7 @@ export function HelloModal({ open, onAnswer, onDismiss, preview }: HelloModalPro
               <p>{t('ask.p1')}</p>
               <p>{t('ask.p2')}</p>
               <p className="text-txt-primary">{t('ask.previewLead')}</p>
-              <PayloadPreview preview={preview} />
+              <PayloadPreview preview={preview} failed={previewFailed} />
               <p>{t('ask.p3')}</p>
               {failed && <p role="alert" className="text-accent-rose">{t('ask.error')}</p>}
               <div className="flex gap-3">

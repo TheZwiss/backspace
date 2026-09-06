@@ -6,7 +6,7 @@ import { TelemetryAsk } from './TelemetryAsk';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useAuthStore } from '../../stores/authStore';
 import { api } from '../../api/client';
-import { ASK_STORAGE_KEY } from '../../utils/telemetryAsk';
+import { ASK_MAX_DISMISSALS, ASK_STORAGE_KEY, recordDismissal } from '../../utils/telemetryAsk';
 
 vi.mock('./scene/HelloScene', () => ({ HelloScene: () => <div data-testid="scene" /> }));
 
@@ -89,6 +89,25 @@ describe('TelemetryAsk', () => {
     render(<TelemetryAsk />);
     await waitFor(() => expect(api.admin.telemetry.get).toHaveBeenCalled());
     expect(screen.queryByText(/Jannis/)).not.toBeInTheDocument();
+  });
+
+  it('does not fetch the status once this browser has spent its dismissals', () => {
+    for (let i = 0; i < ASK_MAX_DISMISSALS; i += 1) recordDismissal(localStorage, Date.now());
+
+    render(<TelemetryAsk />);
+
+    expect(api.admin.telemetry.get).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Jannis/)).not.toBeInTheDocument();
+  });
+
+  it('says so when the preview could not be fetched', async () => {
+    vi.spyOn(api.admin.telemetry, 'preview').mockRejectedValue(new Error('offline'));
+
+    render(<TelemetryAsk />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Show the message' }));
+
+    expect(await screen.findByText(/could not be put together/i)).toBeInTheDocument();
+    expect(screen.queryByText(/putting the message together/i)).not.toBeInTheDocument();
   });
 
   it('does not ask while snoozed', async () => {
