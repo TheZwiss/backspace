@@ -25,6 +25,8 @@ export class AudioManager {
   private voiceNoiseSuppression = true;
   private voiceAutoGainControl = true;
   private streamGeneration = 0;
+  // Separate from streamGeneration: only leaving capture invalidates pending work.
+  private inputReleaseGeneration = 0;
   private inputSwitchChain: Promise<MediaStream | null> = Promise.resolve(null);
   private rnnoiseNode: AudioWorkletNode | null = null;
   private stereoMerger: ChannelMergerNode | null = null;
@@ -229,12 +231,14 @@ export class AudioManager {
    * call short-circuits if the first already set the same device.
    */
   async setInputDevice(deviceId: string): Promise<MediaStream | null> {
-    const job = this.inputSwitchChain.then(() => this._setInputDeviceImpl(deviceId));
+    const generation = this.inputReleaseGeneration;
+    const job = this.inputSwitchChain.then(() => generation === this.inputReleaseGeneration
+      ? this._setInputDeviceImpl(deviceId, generation) : null);
     this.inputSwitchChain = job.catch(() => null);
     return job;
   }
 
-  private async _setInputDeviceImpl(deviceId: string): Promise<MediaStream | null> {
+  private async _setInputDeviceImpl(deviceId: string, generation: number): Promise<MediaStream | null> {
     if (!this.isInitialized) this.initContext();
 
     // Skip if already set and stream is active
@@ -287,6 +291,12 @@ export class AudioManager {
       };
 
       const newStream = await navigator.mediaDevices.getUserMedia(constraints);
+      // Permission prompts cannot be cancelled. Stop a late result immediately
+      // instead of reconnecting capture after the user has left the call.
+      if (generation !== this.inputReleaseGeneration) {
+        newStream.getTracks().forEach(track => track.stop());
+        return null;
+      }
       // Successful acquisition — clear any cached denial so next swap is
       // unimpeded. (Most commonly hit when the user grants permission via
       // the explicit `requestMicPermission` retry path, but also covers
@@ -312,6 +322,7 @@ export class AudioManager {
 
       return this.currentStream;
     } catch (err) {
+      if (generation !== this.inputReleaseGeneration) return null;
       console.error('[AudioManager] Failed to set input device:', err);
       // Cache permission denials so syncMic's racing call doesn't fire a
       // second `getUserMedia` while the user is still resolving the first
@@ -334,6 +345,39 @@ export class AudioManager {
    */
   clearInputDenial(): void {
     this.inputDenialError = null;
+  }
+
+  /**
+   * Releases the upstream `getUserMedia` capture stream and detaches it from the
+   * Web Audio graph. Call this when leaving voice — `Room.disconnect()` only
+   * stops the cloned destination-node track published to the room, never the raw mic
+   * capture this manager owns, so without this the browser tab / OS keeps the
+   * microphone flagged as in-use after the user has left the call.
+   *
+   * The AudioContext and the rest of the graph are left intact so sound effects
+   * (join/leave cues, notifications) keep working. The next `setInputDevice`
+   * call re-acquires a fresh stream and rebuilds `inputSource` — the bumped
+   * `streamGeneration` guarantees the mic effect republishes rather than
+   * short-circuiting on a stale generation match.
+   */
+  releaseInputStream(): void {
+    this.inputReleaseGeneration++;
+    if (this.inputSource) {
+      this.inputSource.disconnect();
+      this.inputSource = null;
+    }
+    if (this.currentStream) {
+      // Detach our `onended` handlers BEFORE stopping so the deliberate-release
+      // path never notifies upstream-loss subscribers (see `_setInputDeviceImpl`).
+      const tracks = this.currentStream.getTracks();
+      tracks.forEach(t => { t.onended = null; });
+      tracks.forEach(t => t.stop());
+      this.currentStream = null;
+    }
+    // Clear runtime device identity, not the user's persisted preference.
+    // The missing currentStream makes the next join acquire a fresh stream.
+    this.currentInputDeviceId = 'default';
+    this.streamGeneration++;
   }
 
   /**
