@@ -46,6 +46,27 @@ beforeEach(() => {
 afterEach(() => { cleanup(); delete window.backspace; });
 
 describe('global shortcut renderer bridge', () => {
+  it('supports an older preload returning void and releases local PTT on blur', async () => {
+    sync.mockReturnValue(undefined);
+    const now = vi.spyOn(Date, 'now').mockReturnValue(5000);
+    try {
+      // A synchronous effect error rejects act, reproducing the old .then crash.
+      await act(async () => { renderHook(() => useKeybinds()); });
+      expect(sync).toHaveBeenLastCalledWith([
+        { actionId: 'pushToTalk', keys: binding.keys, mouseButton: undefined },
+      ]);
+      mock.voice.setMuted.mockClear();
+      act(() => {
+        window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyV', key: 'v' }));
+        window.dispatchEvent(new Event('blur'));
+      });
+      expect(mock.voice.setMuted.mock.calls).toEqual([[false], [true]]);
+      act(() => useKeybindStore.setState({ keybinds: [] }));
+      expect(sync).toHaveBeenLastCalledWith([]);
+    } finally {
+      now.mockRestore();
+    }
+  });
   it.each([true, false])('releases on desktop blur only if the native hook is unavailable (running=%s)', async running => {
     sync.mockResolvedValue(running);
     // Keep the native/web duplicate suppression independent of other tests.

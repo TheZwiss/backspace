@@ -250,12 +250,14 @@ export function useKeybinds(): void {
 
     // Sync keybind config to main process — it registers OS-level hooks
     let cancelled = false;
-    void api.syncKeybinds(keybinds.map((kb) => ({
+    // The server can serve a newer renderer to an older installed shell,
+    // whose send-based preload returns void instead of a hook-status promise.
+    void Promise.resolve(api.syncKeybinds(keybinds.map((kb) => ({
       actionId: kb.actionId,
       keys: kb.keys,
       mouseButton: kb.mouseButton,
-    }))).then((running) => {
-      if (!cancelled) hookRunningRef.current = running;
+    })))).then((running) => {
+      if (!cancelled) hookRunningRef.current = running === true;
     }).catch(() => {
       if (!cancelled) hookRunningRef.current = false;
     });
