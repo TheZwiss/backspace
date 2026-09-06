@@ -766,16 +766,30 @@ traffic series, so a telemetry date can never lie outside the traffic history
 and can never be clipped by a window the traffic anchored. Trap 1 does not
 apply here, and adding it would be the change that makes it apply.
 
+**The two time-series cards do not go through `bind`.** `bind` resolves a
+card's declared columns out of `data.series[...]`, and `telemetry.network` is a
+sibling of `series` rather than a member of it. The section builds its
+`[{ series, field }]` array directly and hands it to `expand`, which takes that
+shape as its argument. Everything `bind` exists to prevent is still prevented:
+each card names its own columns in its own declaration and the lines are built
+from that same declaration in the same loop, so a card cannot be drawn from a
+column it does not name.
+
+Each card is expanded on its own columns, so its axis spans the days that card
+was measured on. In practice both cards share a history, since a network row
+carries every gauge or none, but the per-card expansion costs nothing and keeps
+the section on the same rule as Reach (section 10.7).
+
 ---
 
 ## 11. Testing
 
-`scripts/metrics`'s `test` script is `tsc --noEmit && vitest run` — it runs through the existing root `pnpm -r test` step with no `ci.yml` change required, and covers both types and behavior in one script. All tests are fixture-driven and touch no network; filesystem tests use a per-test `mkdtempSync` directory, cleaned up in `afterEach`. As of this writing there are **370 tests across 15 files**, all passing:
+`scripts/metrics`'s `test` script is `tsc --noEmit && vitest run` — it runs through the existing root `pnpm -r test` step with no `ci.yml` change required, and covers both types and behavior in one script. All tests are fixture-driven and touch no network; filesystem tests use a per-test `mkdtempSync` directory, cleaned up in `afterEach`. As of this writing there are **371 tests across 15 files**, all passing:
 
 ```
 src/collect.telemetry.test.ts  3
 src/sitemap.test.ts            5
-src/bundle.telemetry.test.ts   7
+src/bundle.telemetry.test.ts   8
 src/vendor-check.test.ts       6
 src/no-runtime-deps.test.ts    9
 src/telemetry.test.ts         14
