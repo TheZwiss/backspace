@@ -321,6 +321,23 @@ real calendar with the same `isCalendarDay` the ping route uses: `Date.parse`
 accepts `2026-02-30` and rolls it into March, which measured the 31-day span
 from a day that does not exist and could widen the window by up to three days.
 
+**The collector refuses a truncated export rather than publishing it.**
+`createTelemetryFetcher` in `scripts/metrics/src/telemetry.ts` reads
+`x-export-truncated` before it reads the body and throws when the header is
+present at all, on any value, rather than only on `1`. This is the one receiver
+answer whose body cannot betray it: a truncated export keeps the NDJSON shape
+exactly, so every line parses and every row is well formed, and the short window
+is indistinguishable from a genuinely smaller fleet. Aggregating it would
+publish an instance count, a user total and a version split covering only the
+instances that fit under the cap, which is a wrong number that looks like a
+measured one. The throw puts the day on the collector's existing telemetry-skip
+path: the partial rows are discarded unparsed, nothing under `telemetry/` is
+written, and the reason with the requested range reaches the run log. In
+`metrics.yml` the run still finishes green, because the traffic series it also
+collects are the irreplaceable ones and the next day's run refetches the same
+31-day window; in `backfill.yml`, which catches nothing, the dispatch exits
+non-zero. See docs/systems/metrics.md §3 for the collector side.
+
 A rate-limit binding keyed on the source address (10 requests per 10 seconds) is
 declared in `wrangler.toml`, so the limit is versioned with the code rather than
 living in a dashboard rule.

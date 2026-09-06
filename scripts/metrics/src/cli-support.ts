@@ -230,3 +230,50 @@ export function describeFailure(error: unknown): string {
 
   return parts.join('\n');
 }
+
+/**
+ * The receiver the collector talks to when nothing overrides it.
+ *
+ * One copy. It was written out in both `cli-collect.ts` and `cli-backfill.ts`,
+ * which is two places to change on a move and two chances to change one.
+ */
+export const DEFAULT_TELEMETRY_ENDPOINT = 'https://hello.backspacechat.com';
+
+/**
+ * The receiver base URL for this run.
+ *
+ * Blank and whitespace-only read as absent, which is not pedantry: a GitHub
+ * Actions `env:` entry interpolating an unset repository variable sets the
+ * EMPTY STRING rather than leaving the variable out, so `?? default` would hand
+ * `createTelemetryFetcher` an empty base URL on every repository that has not
+ * set `TELEMETRY_ENDPOINT`, which is every repository by default. Trimmed for
+ * the reason `requiredEnv` trims: the only realistic way whitespace reaches an
+ * Actions variable is a stray newline from a prior step.
+ */
+export function telemetryEndpoint(env: Readonly<Record<string, string | undefined>>): string {
+  const raw = env['TELEMETRY_ENDPOINT'];
+  const value = raw === undefined ? '' : raw.trim();
+  return value === '' ? DEFAULT_TELEMETRY_ENDPOINT : value;
+}
+
+/**
+ * The line to print when the telemetry export token is not set, or null when it
+ * is.
+ *
+ * Spec section 8 asks for a logged notice rather than a silent skip: without
+ * one, a secret rotated away stops the telemetry collection for as long as
+ * nobody happens to look at the archive, and every run stays green. The line
+ * names the variable so a reader can grep the log for it, and never repeats the
+ * value, because this text goes into a public CI log.
+ *
+ * Returned rather than printed so it can be tested at all. The `cli-*.ts`
+ * entrypoints have no test files by design; their testable cores live here.
+ */
+export function telemetrySkipNotice(
+  env: Readonly<Record<string, string | undefined>>,
+): string | null {
+  const raw = env['TELEMETRY_EXPORT_TOKEN'];
+  const value = raw === undefined ? '' : raw.trim();
+  if (value !== '') return null;
+  return 'telemetry: skipped, TELEMETRY_EXPORT_TOKEN is not set. The traffic series are unaffected.';
+}
