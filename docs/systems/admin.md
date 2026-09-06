@@ -570,7 +570,8 @@ Contents, top to bottom:
 - A link to `docs/systems/telemetry.md` on GitHub.
 
 Strings live in the `telemetry` namespace under `panel.*`. Registered as the
-`telemetry` sub-tab in `InstancePanel.tsx` (labelled "Say hi").
+`telemetry` sub-tab in `InstancePanel.tsx` (labelled "Say hi"), and as
+`settings-instance-telemetry` in `MobileShell.tsx` / `MobileInstancePanel.tsx`.
 
 #### GeneralPanel
 
