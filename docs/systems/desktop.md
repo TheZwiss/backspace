@@ -456,11 +456,18 @@ output on the Electron BaseApp and uses `zypak-wrapper` for Chromium sandbox
 integration.
 
 The published manifest remains pinned to a released commit. Pull-request CI
-uses `flatpak/prepare-ci-manifest.mjs` to generate an ignored manifest whose
-application source is `type: dir`, so both x86_64 and aarch64 jobs compile the
-actual checkout. On each `v*` tag, `release.yml` updates the source pin,
-AppStream release and screenshot tag, regenerates `node-sources.json`, validates
-the metadata, uploads those exact generated files, and builds their published
+generates `flatpak/node-sources.ci.json` from the checked-out `pnpm-lock.yaml`
+on each architecture, then uses `flatpak/prepare-ci-manifest.mjs` to generate
+an ignored manifest that swaps both the pinned application source for `type:
+dir` and the committed offline source list for that generated one, so both
+x86_64 and aarch64 jobs compile the actual checkout against its own
+dependencies. The committed `flatpak/node-sources.json` stays paired with the
+pinned release commit and is regenerated only by `release.yml`, so ordinary
+pull requests must not regenerate it from their working-tree lockfile, and a
+contributor changing dependencies needs no Flatpak installation on any
+platform. On each `v*` tag, `release.yml` updates the source pin, AppStream
+release and screenshot tag, regenerates `node-sources.json`, validates the
+metadata, uploads those exact generated files, and builds their published
 manifest natively on x86_64 and aarch64. Only after both builds pass does it
 open or update the dedicated Flatpak metadata pull request. This validation is
 part of the release workflow because pushes and pull requests created with its
