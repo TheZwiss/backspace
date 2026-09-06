@@ -86,5 +86,9 @@ export default {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    ({ addVariant }) => {
+      addVariant('desktop', 'html[data-viewport="desktop"] &');
+    },
+  ],
 };

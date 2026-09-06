@@ -411,7 +411,7 @@ export function ChannelSidebar() {
 
   // Floating bottom panel — shared between DM view and server view
   const floatingPanel = user ? (
-    <div ref={setFloatingPanelEl} data-pip-obstacle="bottom" className="fixed bottom-0 left-0 right-0 z-[105] p-2 md:right-auto md:w-[296px] md:bottom-[10px] md:left-[10px] md:p-0">
+    <div ref={setFloatingPanelEl} data-pip-obstacle="bottom" className="fixed bottom-0 left-0 right-0 z-[105] p-2 desktop:right-auto desktop:w-[296px] desktop:bottom-[10px] desktop:left-[10px] desktop:p-0">
       <div className="glass-bubble rounded-[14px]">
         {/* Voice controls (expands when connected) */}
         {(currentVoiceChannelId || activeDmCall) && <VoiceControls />}
@@ -436,7 +436,7 @@ export function ChannelSidebar() {
   if (!space) {
     return (
       <>
-      <div className="w-60 md:w-full bg-surface-channel flex flex-col flex-shrink-0 select-none md:pl-[72px] border-r border-border-hard">
+      <div className="w-60 desktop:w-full bg-surface-channel flex flex-col flex-shrink-0 select-none desktop:pl-[72px] border-r border-border-hard">
         <div className="h-14 px-[10px] flex items-center border-b border-border-hard z-10">
           <DmSearchBar />
         </div>
@@ -550,7 +550,7 @@ export function ChannelSidebar() {
 
   return (
     <>
-    <div className="w-60 md:w-full bg-surface-channel flex flex-col flex-shrink-0 select-none md:pl-[72px] border-r border-border-hard">
+    <div className="w-60 desktop:w-full bg-surface-channel flex flex-col flex-shrink-0 select-none desktop:pl-[72px] border-r border-border-hard">
       {/* Space header */}
       <div className="h-14 flex items-stretch border-b border-border-hard z-10 group/header">
         <button

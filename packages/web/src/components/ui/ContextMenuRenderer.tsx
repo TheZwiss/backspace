@@ -494,7 +494,7 @@ function MobileMenu({ items, close }: MobileMenuProps) {
       {/* Bottom sheet */}
       <div
         className="fixed bottom-0 left-0 right-0 z-[301] rounded-t-2xl glass-bubble animate-slide-up-sheet"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+        style={{ paddingBottom: 'var(--safe-bottom)' }}
       >
         <div className="w-10 h-1 bg-txt-tertiary/30 rounded-full mx-auto mt-2 mb-1" />
         {/* Back button for submenu */}

@@ -404,7 +404,7 @@ export function MobileVoiceFullScreen() {
       {/* Control bar */}
       <div
         className="glass-bubble mx-2 mb-2 rounded-2xl flex items-center justify-center gap-4 px-4 py-3 shrink-0"
-        style={{ marginBottom: 'calc(0.5rem + env(safe-area-inset-bottom))' }}
+        style={{ marginBottom: 'calc(0.5rem + var(--safe-bottom))' }}
       >
         {/* Mute */}
         <button

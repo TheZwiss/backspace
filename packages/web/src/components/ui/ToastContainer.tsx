@@ -36,7 +36,7 @@ function resolveMobileBottomOffset(
   // Voice fullscreen is on top: clear its control bar (mx-2 mb-2 round bar
   // with safe-area inset). Bottom nav + mini-bar are hidden in this mode.
   if (topScreen === 'voice-full') {
-    return 'calc(72px + 12px + env(safe-area-inset-bottom))';
+    return 'calc(72px + 12px + var(--safe-bottom))';
   }
 
   // Stack non-empty (some pushed screen other than voice-full): bottom nav is
@@ -44,17 +44,17 @@ function resolveMobileBottomOffset(
   if (hasStack) {
     if (inVoice) {
       // Mini-bar (~56px + mb-1) sits at bottom alone.
-      return 'calc(64px + 12px + env(safe-area-inset-bottom))';
+      return 'calc(64px + 12px + var(--safe-bottom))';
     }
-    return 'calc(12px + env(safe-area-inset-bottom))';
+    return 'calc(12px + var(--safe-bottom))';
   }
 
   // Root tab (no stack). Bottom nav is visible. Mini-bar may also be present
   // above it.
   if (inVoice) {
-    return 'calc(56px + 64px + 12px + env(safe-area-inset-bottom))';
+    return 'calc(56px + 64px + 12px + var(--safe-bottom))';
   }
-  return 'calc(56px + 12px + env(safe-area-inset-bottom))';
+  return 'calc(56px + 12px + var(--safe-bottom))';
 }
 
 export function ToastContainer() {

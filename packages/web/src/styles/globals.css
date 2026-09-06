@@ -21,6 +21,10 @@
 @layer base {
   :root {
     --interface-scale: 1;
+    --titlebar-inset: 0px;
+    --safe-bottom: calc(env(safe-area-inset-bottom, 0px) / var(--interface-scale));
+    --safe-top: calc(env(safe-area-inset-top, 0px) / var(--interface-scale));
+    --keyboard-inset: calc(env(keyboard-inset-height, 0px) / var(--interface-scale));
     --app-vh: calc(1vh / var(--interface-scale));
     --app-dvh: calc(1dvh / var(--interface-scale));
     --app-vw: calc(1vw / var(--interface-scale));
@@ -106,15 +110,13 @@
   /* Suppress native text selection and callout on mobile interactive elements.
      Our global useGlobalLongPress handler provides context menus instead.
      Text can still be copied via context menu "Copy Text" option. */
-  @media (max-width: 767px) {
-    * {
-      -webkit-touch-callout: none;
-    }
+  html[data-viewport="mobile"] * {
+    -webkit-touch-callout: none;
+  }
 
-    button, [role="button"], [data-context-menu] {
-      -webkit-user-select: none;
-      user-select: none;
-    }
+  html[data-viewport="mobile"] :is(button, [role="button"], [data-context-menu]) {
+    -webkit-user-select: none;
+    user-select: none;
   }
 
   /* Thin scrollbar */
@@ -258,7 +260,7 @@
      cascade — so they would otherwise override these rules.
      There is no legitimate reason to use a <16px font-size on a mobile
      input; the override is universally correct. */
-  @media (max-width: 767px) {
+  html[data-viewport="mobile"] :is(
     .input-standard,
     .input-search,
     .input-embedded,
@@ -274,9 +276,9 @@
     textarea,
     select,
     [contenteditable="true"],
-    [contenteditable="plaintext-only"] {
-      font-size: 16px !important;
-    }
+    [contenteditable="plaintext-only"]
+  ) {
+    font-size: 16px !important;
   }
 }
 
@@ -311,7 +313,7 @@
 }
 
 @layer utilities {
-  /* Space strip glass — in utilities layer so md:glass-strip wins over bg-surface-* */
+  /* Space strip glass — in utilities layer so desktop:glass-strip wins over bg-surface-* */
   .glass-strip {
     -webkit-backdrop-filter: blur(20px) saturate(120%);
     backdrop-filter: blur(20px) saturate(120%);

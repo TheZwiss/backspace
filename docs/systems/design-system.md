@@ -32,6 +32,18 @@ physical pixels using the shared `--titlebar-inset` (33px divided by the scale
 under Electron, zero in the browser). `App`, `SpaceSidebar` and `ImagePreview`
 must all use this property rather than separate fixed offsets.
 
+Safe-area and keyboard offsets use `--safe-top`, `--safe-bottom`, and
+`--keyboard-inset`, which divide the corresponding environment lengths by the
+scale. The viewport-token test rejects raw viewport units and environment
+functions outside these definitions in production source.
+
+`initializeInterfaceScale` updates `html[data-viewport="mobile|desktop"]` on
+resize and scale changes using the same 768-layout-pixel threshold as AppLayout.
+Use the `desktop:` Tailwind variant for app-shell responsiveness; raw media
+queries ignore root zoom. Auth pages without a JS layout branch may keep `md:`.
+When scale moves account settings into MobileShell, route reconstruction places
+the current channel below settings and remains idempotent in StrictMode.
+
 `ImageCropModal` cancels root zoom only on the cropper container with
 `zoom: calc(1 / var(--interface-scale, 1))`. react-easy-crop mixes visual DOM
 measurements and pointer deltas with CSS pixels, so this subtree must operate
@@ -43,6 +55,8 @@ DOM rectangles and pointer coordinates are visual pixels. Convert them with
 offsets. `computeFloatingPosition` accepts visual rectangles and dimensions and
 returns layout coordinates; its callers must not pre-convert them. Pure hit
 tests comparing two visual coordinates do not need conversion.
+For anchors created from layout constants, convert with `visualPixels` before
+calling `pointAnchor` so floating-position conversion does not shrink them twice.
 
 Changing scale dispatches `resize` to update floating surfaces and the effective
 mobile breakpoint. The account settings stay accessible when crossing that

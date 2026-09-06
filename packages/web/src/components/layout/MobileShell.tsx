@@ -1,9 +1,10 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import i18n from '../../i18n';
 import { useUIStore } from '../../stores/uiStore';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useLocation } from 'react-router-dom';
+import { useMobileRouteSync } from '../../hooks/useMobileRouteSync';
 import { MobileScreenStack } from './MobileScreenStack';
 import { MobileBottomNav } from './MobileBottomNav';
 import { useSwipeGesture } from '../../hooks/useSwipeGesture';
@@ -116,7 +117,6 @@ const screenMap: Record<string, (params?: Record<string, string>) => React.React
 export function MobileShell() {
   const mobileScreen = useUIStore((s) => s.mobileScreen);
   const popMobileScreen = useUIStore((s) => s.popMobileScreen);
-  const pushMobileScreen = useUIStore((s) => s.pushMobileScreen);
   const mobileStack = useUIStore((s) => s.mobileStack);
   const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
   const location = useLocation();
@@ -131,57 +131,7 @@ export function MobileShell() {
     enabled: mobileStack.length > 0,
   });
 
-  const initialRouteSync = useRef(true);
-  // Reconstruct mobile stack from URL on mount AND on subsequent pathname
-  // changes (deep link, refresh, programmatic navigate from SpaceInviteCard
-  // Join, joinByCode flows, etc.).
-  //
-  // Subscribes to `location.pathname` only — NOT to `mobileStack`. This is
-  // important because pushing an unrelated screen (e.g. settings) must not
-  // re-trigger this effect; otherwise we would re-push the channel-chat on
-  // top of every newly-pushed screen, since pathname is still `/channels/...`.
-  // We read the current stack imperatively via `useUIStore.getState()` for
-  // the idempotency guard.
-  //
-  // Idempotency guard: callers like MobileSpacesScreen call BOTH
-  // `pushMobileScreen('channel-chat', …)` AND `navigate('/channels/…')`.
-  // The pushMobileScreen call alone doesn't change pathname (history.pushState
-  // with no URL preserves it), but the navigate call does — and that pathname
-  // change re-runs this effect after the screen is already on top. The guard
-  // below catches that case by inspecting the topmost stack entry. We also
-  // guard against the popstate path: when the user navigates back, popstate
-  // pops both the browser history AND our stack; the resulting pathname change
-  // matches the new top entry, so we skip.
-  useEffect(() => {
-    const initial = initialRouteSync.current;
-    initialRouteSync.current = false;
-    // Scaling can move the open account settings from desktop into this shell.
-    if (initial && useUIStore.getState().mobileStack.at(-1)?.screen === 'settings-account') return;
-    const path = location.pathname;
-    const match = path.match(/^\/channels\/([^/]+)\/([^/]+)$/);
-    if (!match) return;
-    const spaceId = match[1] ?? '';
-    const channelId = match[2] ?? '';
-    const normalizedSpaceId = spaceId === '@me' ? '@me' : spaceId;
-
-    // Read current stack imperatively to avoid re-firing on stack changes.
-    const currentStack = useUIStore.getState().mobileStack;
-    const top = currentStack[currentStack.length - 1];
-    if (
-      top &&
-      top.screen === 'channel-chat' &&
-      top.params?.channelId === channelId &&
-      top.params?.spaceId === normalizedSpaceId
-    ) {
-      return;
-    }
-
-    // If the stack has channel-chat entries for OTHER channels, we still push
-    // — this preserves back-stack semantics for in-app navigation (e.g. tapping
-    // a SpaceInviteCard Join button while inside a chat should stack the new
-    // channel on top so back returns to the originating chat).
-    pushMobileScreen('channel-chat', { channelId, spaceId: normalizedSpaceId });
-  }, [location.pathname, pushMobileScreen]);
+  useMobileRouteSync(location.pathname);
 
   // Sync browser back button with mobile stack
   useEffect(() => {

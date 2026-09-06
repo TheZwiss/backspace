@@ -103,7 +103,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
 
   // ── iOS keyboard-aware Save/Cancel bar ─────────────────────────────────
   // `useVisualViewportInset` returns a CSS value that resolves to
-  // `env(safe-area-inset-bottom)` when no keyboard is open, or `<n>px` of
+  // `var(--safe-bottom)` when no keyboard is open, or `<n>px` of
   // occlusion when one is. We paste that straight into the bar's `bottom`
   // style so it rides above the soft keyboard on iOS PWA.
   const { value: bottomInset, keyboardOpen } = useVisualViewportInset();

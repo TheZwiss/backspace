@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { initializeInterfaceScale, layoutPixels } from './interfaceScale';
+import { initializeInterfaceScale, isMobileViewport, layoutPixels, visualPixels } from './interfaceScale';
 import { INTERFACE_SCALES, normalizeInterfaceScale, useInterfaceScaleStore } from '../stores/interfaceScaleStore';
-import { computeFloatingPosition } from '../hooks/useFloatingPosition';
+import { computeFloatingPosition, pointAnchor } from '../hooks/useFloatingPosition';
 import { InterfaceScaleSection } from '../components/modals/settingsPanels/InterfaceScaleSection';
 import { useUIStore } from '../stores/uiStore';
 
@@ -13,11 +13,39 @@ afterEach(() => {
   document.documentElement.style.removeProperty('--interface-scale');
   document.documentElement.style.removeProperty('--titlebar-inset');
   delete window.backspace;
+  delete document.documentElement.dataset.viewport;
   vi.restoreAllMocks();
   useUIStore.setState({ isMobile: false, activeModal: null, mobileStack: [] });
 });
 
 describe('interface scale', () => {
+  it.each([[700, 75, 'desktop'], [1366, 200, 'mobile'], [768, 100, 'desktop']])(
+    'shares the JS/CSS breakpoint at width %i and scale %i', (width, scale, expected) => {
+      vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(Number(width));
+      useInterfaceScaleStore.getState().setScale(Number(scale));
+      const stop = initializeInterfaceScale();
+      expect(document.documentElement.dataset.viewport).toBe(expected);
+      expect(isMobileViewport()).toBe(expected === 'mobile');
+      stop();
+    },
+  );
+  it('updates the viewport marker on window resize and removes the listener on cleanup', () => {
+    const width = vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(900);
+    const stop = initializeInterfaceScale();
+    width.mockReturnValue(600);
+    window.dispatchEvent(new Event('resize'));
+    expect(document.documentElement.dataset.viewport).toBe('mobile');
+    stop();
+    width.mockReturnValue(900);
+    window.dispatchEvent(new Event('resize'));
+    expect(document.documentElement.dataset.viewport).toBe('mobile');
+  });
+  it.each(INTERFACE_SCALES)('preserves layout constants passed as visual anchors at %i%%', scale => {
+    useInterfaceScaleStore.getState().setScale(scale);
+    expect(layoutPixels(visualPixels(100))).toBe(100);
+    const position = computeFloatingPosition(pointAnchor(visualPixels(100), visualPixels(100)), 50, 50, 'right', 8);
+    expect(position.left).toBe(108);
+  });
   it.each(INTERFACE_SCALES)('shares the unscaled native titlebar inset at %i%%', scale => {
     window.backspace = {} as BackspaceElectronAPI;
     useInterfaceScaleStore.getState().setScale(scale);

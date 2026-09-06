@@ -199,8 +199,8 @@ function MobileSheet({
           // on older iOS the 100dvh-based MobileShell layout already shrinks
           // the visual viewport when the keyboard is open, so bottom:0 lands
           // just above the keyboard naturally.
-          bottom: 'env(keyboard-inset-height, 0px)',
-          paddingBottom: 'env(safe-area-inset-bottom)',
+          bottom: 'var(--keyboard-inset)',
+          paddingBottom: 'var(--safe-bottom)',
           maxHeight: 'min(calc(60*var(--app-dvh)), calc(60*var(--app-vh)))',
           ...sheetStyle,
         }}

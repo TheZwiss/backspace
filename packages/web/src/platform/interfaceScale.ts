@@ -6,6 +6,15 @@ export function layoutPixels(value: number): number {
   return value / (useInterfaceScaleStore.getState().scale / 100);
 }
 
+/** Convert layout constants to the visual coordinates used by DOM anchors. */
+export function visualPixels(value: number): number {
+  return value * (useInterfaceScaleStore.getState().scale / 100);
+}
+
+export function isMobileViewport(): boolean {
+  return layoutPixels(window.innerWidth) < 768;
+}
+
 export function layoutRect<T extends { top: number; right: number; bottom: number; left: number; width: number; height: number }>(rect: T) {
   return {
     top: layoutPixels(rect.top), right: layoutPixels(rect.right),
@@ -16,6 +25,9 @@ export function layoutRect<T extends { top: number; right: number; bottom: numbe
 
 /** Apply before React mounts, so persisted scale also covers login and portals. */
 export function initializeInterfaceScale(): () => void {
+  const updateViewport = () => {
+    document.documentElement.dataset.viewport = isMobileViewport() ? 'mobile' : 'desktop';
+  };
   const apply = () => {
     const factor = useInterfaceScaleStore.getState().scale / 100;
     document.documentElement.style.zoom = String(factor);
@@ -27,6 +39,11 @@ export function initializeInterfaceScale(): () => void {
     // CSS zoom does not fire resize, but positioning and mobile-layout hooks need it.
     window.dispatchEvent(new Event('resize'));
   };
+  window.addEventListener('resize', updateViewport);
   apply();
-  return useInterfaceScaleStore.subscribe(apply);
+  const unsubscribe = useInterfaceScaleStore.subscribe(apply);
+  return () => {
+    unsubscribe();
+    window.removeEventListener('resize', updateViewport);
+  };
 }
