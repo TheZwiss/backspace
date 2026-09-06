@@ -139,6 +139,17 @@ function connect(wsUrl, onEvent) {
 const console_ = [];
 const failures = [];
 
+/*
+ * Frames Chrome has finished loading, and a hook the navigation waiter
+ * installs.
+ *
+ * Buffered rather than awaited directly because `Page.frameStoppedLoading`
+ * can arrive before the `Page.navigate` command's own reply hands back the
+ * frame id to match it against.
+ */
+const stoppedFrames = new Set();
+let onFrameStopped = null;
+
 function onEvent(method, params) {
   if (method === 'Runtime.consoleAPICalled') {
     const text = (params.args ?? [])
@@ -153,6 +164,9 @@ function onEvent(method, params) {
     });
   } else if (method === 'Log.entryAdded') {
     console_.push({ source: 'log.' + params.entry.level, text: params.entry.text });
+  } else if (method === 'Page.frameStoppedLoading') {
+    stoppedFrames.add(params.frameId);
+    if (onFrameStopped !== null) onFrameStopped();
   } else if (method === 'Network.loadingFailed') {
     failures.push(`${params.type} ${params.errorText}`);
   } else if (method === 'Network.responseReceived') {
@@ -362,24 +376,57 @@ async function main() {
     }
 
     const url = `http://127.0.0.1:${port}/insights/`;
-    const loaded = new Promise((resolve) => {
-      const started = Date.now();
-      const timer = setInterval(() => {
-        client.send('Runtime.evaluate', { expression: 'document.readyState', returnByValue: true })
-          .then((r) => {
-            if (r.result.value === 'complete' || Date.now() - started > 20000) {
-              clearInterval(timer);
-              resolve();
-            }
-          })
-          .catch(() => {});
-      }, 200);
+    /*
+     * Gate on the navigated frame reporting that it stopped loading, not on
+     * `document.readyState`. The browser starts on `about:blank`, which is
+     * already `complete`, so a poll started before the navigation lands reads
+     * the OLD document and answers immediately. Everything after it would then
+     * be measured against a blank page: no console messages, no failed
+     * requests, and a clean run reported for a page that was never loaded.
+     * That is the one failure this whole script exists to rule out.
+     */
+    stoppedFrames.clear();
+    const navigation = await client.send('Page.navigate', { url });
+    if (navigation.errorText !== undefined) {
+      throw new Error(`navigation to ${url} failed: ${navigation.errorText}`);
+    }
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        onFrameStopped = null;
+        reject(new Error(`${url} did not finish loading within 30s`));
+      }, 30000);
+      const check = () => {
+        if (!stoppedFrames.has(navigation.frameId)) return;
+        clearTimeout(timer);
+        onFrameStopped = null;
+        resolve();
+      };
+      onFrameStopped = check;
+      // The event may already have been buffered while `Page.navigate` was in
+      // flight, in which case no further one is coming.
+      check();
     });
-    await client.send('Page.navigate', { url });
-    await loaded;
-    // The page draws from `data.json`, so give the fetch and the first render
-    // room before reading anything back.
-    await new Promise((r) => setTimeout(r, 2500));
+
+    /*
+     * The page fetches `data.json` after load and renders from the reply, so
+     * the load event is not the end of the story. Wait for the section to
+     * actually hold something rather than sleeping a guessed interval, then
+     * give uPlot one short settle for its first paint.
+     */
+    const drawn = Date.now();
+    for (;;) {
+      const ready = (await client.send('Runtime.evaluate', {
+        expression: '(function () { var s = document.getElementById("telemetry");'
+          + ' return s !== null && s.children.length > 0; })()',
+        returnByValue: true,
+      })).result.value;
+      if (ready === true) break;
+      if (Date.now() - drawn > 20000) {
+        throw new Error('the telemetry slot was still empty 20s after load');
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    await new Promise((r) => setTimeout(r, 600));
 
     observed = (await client.send('Runtime.evaluate', {
       expression: OBSERVE, returnByValue: true, awaitPromise: false,

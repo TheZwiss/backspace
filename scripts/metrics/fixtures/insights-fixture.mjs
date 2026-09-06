@@ -22,6 +22,9 @@
  *                published promise turns on
  *   high         fourteen, above the mark, with all three dimension files
  *                populated
+ *   high-other   fourteen, with the three dimensions shaped to show what
+ *                `high` cannot: `other` ranked mid-list on one card and first
+ *                on another, and a dimension holding a single row
  *   high-nodims  above the mark, but the three dimension files are empty
  *   sparse       above the mark on the last row only, with every earlier
  *                gauge blank
@@ -43,7 +46,7 @@ import { createStore } from '../src/store.ts';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 
-const MODES = new Set(['none', 'low', 'threshold', 'high', 'high-nodims', 'sparse']);
+const MODES = new Set(['none', 'low', 'threshold', 'high', 'high-other', 'high-nodims', 'sparse']);
 
 const [, , outDirArg, mode = 'high'] = process.argv;
 if (outDirArg === undefined) {
@@ -123,8 +126,32 @@ if (mode !== 'none') {
   if (mode === 'sparse') rows[rows.length - 1].instances_7d = top;
   s.writeCsv('telemetry/network.csv', NETWORK, rows);
 
-  if (mode !== 'high-nodims') {
-    const snap = day(DAYS - 1);
+  const snap = day(DAYS - 1);
+  if (mode === 'high-nodims') {
+    s.writeNdjson('telemetry/versions.ndjson', []);
+    s.writeNdjson('telemetry/countries.ndjson', []);
+    s.writeNdjson('telemetry/clients.ndjson', []);
+  } else if (mode === 'high-other') {
+    // `high` gives `other` the lowest count, tied for last, so a run against
+    // it cannot tell "ranked where its count places it" from "pinned to the
+    // bottom". These counts can: `other` sits second among the versions and
+    // first among the client kinds. Countries holds a single row, and the
+    // client kinds are dominated by the folded remainder, so the two ranking
+    // shapes with no second example anywhere else are covered here too.
+    s.writeNdjson('telemetry/versions.ndjson', [
+      { snapshot_date: snap, dimension: '1.1.2', title: '', count: 8, uniques: 8 },
+      { snapshot_date: snap, dimension: 'other', title: '', count: 5, uniques: 5 },
+      { snapshot_date: snap, dimension: '1.1.0', title: '', count: 3, uniques: 3 },
+    ]);
+    s.writeNdjson('telemetry/countries.ndjson', [
+      { snapshot_date: snap, dimension: 'DE', title: '', count: 14, uniques: 14 },
+    ]);
+    s.writeNdjson('telemetry/clients.ndjson', [
+      { snapshot_date: snap, dimension: 'other', title: '', count: 97, uniques: 97 },
+      { snapshot_date: snap, dimension: 'web', title: '', count: 40, uniques: 40 },
+      { snapshot_date: snap, dimension: 'desktop', title: '', count: 1, uniques: 1 },
+    ]);
+  } else {
     s.writeNdjson('telemetry/versions.ndjson', [
       { snapshot_date: snap, dimension: '1.1.2', title: '', count: 8, uniques: 8 },
       { snapshot_date: snap, dimension: '1.1.0', title: '', count: 3, uniques: 3 },
@@ -140,10 +167,6 @@ if (mode !== 'none') {
       { snapshot_date: snap, dimension: 'desktop', title: '', count: 12, uniques: 12 },
       { snapshot_date: snap, dimension: 'mobile', title: '', count: 1, uniques: 1 },
     ]);
-  } else {
-    s.writeNdjson('telemetry/versions.ndjson', []);
-    s.writeNdjson('telemetry/countries.ndjson', []);
-    s.writeNdjson('telemetry/clients.ndjson', []);
   }
 }
 console.log(`fixture ready: mode ${mode}, archive ${archive}, site ${site}`);

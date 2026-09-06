@@ -2464,6 +2464,14 @@ The recipe lives in the repository rather than in a scratchpad, so an observatio
 - `scripts/metrics/fixtures/insights-fixture.mjs` writes a throwaway archive and a throwaway copy of the site.
 - `scripts/metrics/fixtures/insights-check.mjs` loads that copy in whatever Chrome the machine has and reports what it found.
 
+They live under `scripts/metrics/` rather than beside the page because `deploy-pages.yml` uploads the whole of `site/` as the Pages artifact, so a script under `site/insights/` would be published on the public site. That workflow's paths filter covers `scripts/metrics/**` as well, so it carries an explicit `!scripts/metrics/fixtures/**` exclusion: nothing here is read by `cli-bundle.ts` or shipped in the artifact, so editing it cannot change what is published and should not spend a production deploy.
+
+**Node 22.18 or newer.** Both commands run TypeScript through Node's own type
+stripping with no flag, which is what `scripts/metrics/package.json` declares
+(`engines: >=22.18`) and what `.nvmrc` pins (24). The repository root allows
+`>=20.0.0`, so a shell left on Node 20 fails the first command with
+`ERR_UNKNOWN_FILE_EXTENSION` and not with anything that names the real cause.
+
 ```bash
 SP=<scratchpad>
 node scripts/metrics/fixtures/insights-fixture.mjs "$SP/fx" high
@@ -2488,8 +2496,11 @@ python3 -m http.server 8765 --directory "$SP/fx/site"
 | `low` | four instances in the last seven days, below the mark |
 | `threshold` | exactly ten, the mark itself, which is the value the published promise turns on |
 | `high` | fourteen, above the mark, with all three dimension files populated |
+| `high-other` | fourteen, with the dimensions shaped so `other` ranks second on one card and first on another, one dimension holds a single row, and the folded remainder dominates a third |
 | `high-nodims` | above the mark, but the three dimension files are empty |
 | `sparse` | above the mark on the last row only, with every earlier gauge blank |
+
+`high-other` exists because `high` cannot show one of the things worth checking. `high` gives `other` a count of 3, tied for last, so a run against it cannot tell "ranked where its count places it" from "pinned to the bottom". `high-other` settles that, and carries the two ranking shapes that have no other example: a dimension with exactly one row, and a folded remainder larger than everything it was folded out of.
 
 Rerun both commands after switching modes. Nothing this writes is committed; `$SP/fx` is disposable.
 
