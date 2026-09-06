@@ -36,12 +36,14 @@ off a path the project may need later. For those, a short conversation before
 the code is the difference between a change that merges and one that gets
 reworked after it is finished. The point of this section is to protect your
 time, not to add a hurdle: the discussion is the same either way, and it is
-much cheaper before the implementation exists.
+much cheaper before the implementation exists. Backspace has one maintainer
+and the last call is his, but the discussion is not his alone: proposals are
+open threads, and other contributors' arguments shape the decision.
 
 A change is architectural, and needs a design proposal, if it does any of:
 
 - introduces a mechanism or convention that other code must comply with from
-  then on (a coordinate model, a new state layer, a required wrapper around a
+  then on (a global event bus, a new state layer, a required wrapper around a
   browser API, a naming or file-layout rule);
 - adds a framework-level dependency, a build tool, or a new runtime mode or
   platform layer (an ordinary library falls under the dependency rule below
@@ -62,10 +64,16 @@ How it works:
    A few paragraphs is the normal size. Prototyping to find out whether the
    idea works is fine and often helps the discussion; just do not polish
    before the approach is agreed, because it may change.
-2. A maintainer replies within a few days: with questions, with "approved to
-   implement", or, for the largest decisions, with a request to write it up as
-   an ADR in `docs/decisions/` so the reasoning outlives the pull request. A
-   proposal that sits unanswered for a week is a bug in the process; nudge it.
+2. The proposal is open for discussion by anyone. If you have worked on the
+   subsystems involved, weigh in; `git log` on the files a proposal would
+   touch shows who else has, and mentioning them is welcome. The maintainer
+   makes the final call, normally within a few days, and waits a little
+   longer while a discussion is active. The call is "approved to implement",
+   questions, or, for the largest decisions, a request to write it up as an
+   ADR in `docs/decisions/` so the reasoning outlives the pull request. A
+   proposal that several contributors have argued through usually gets a
+   faster decision than one nobody has looked at. One that sits with no
+   response at all for a week is a bug in the process; nudge it.
 3. Implement against the agreed design and link the proposal from the pull
    request.
 

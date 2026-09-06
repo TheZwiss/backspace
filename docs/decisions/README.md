@@ -60,7 +60,9 @@ against it. Name the primitives and where they live.
 ## Alternatives considered
 
 Each option that was seriously on the table, and what it would have broken
-or cost.
+or cost. Where another contributor argued for an option on the proposal,
+record their argument here and credit them; the losing case is part of the
+record, and the person who made it should see it kept.
 
 ## Consequences
 
