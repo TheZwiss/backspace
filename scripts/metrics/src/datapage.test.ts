@@ -32,8 +32,69 @@ function data(overrides: Partial<DashboardData> = {}): DashboardData {
       referrers: { snapshots: [], latest: [], trajectories: [] },
       paths: { snapshots: [], latest: [], trajectories: [] },
     },
+    // The live archive's state: no instance has reported yet, so the section
+    // must not render at all rather than render as a wall of empty tables.
+    telemetry: {
+      network: {
+        dates: [],
+        instances_1d: [],
+        instances_7d: [],
+        instances_30d: [],
+        users_registered: [],
+        users_active1d: [],
+        users_active7d: [],
+        users_active30d: [],
+        messages7d: [],
+        storage_mib: [],
+        voice_instances: [],
+        federation_instances: [],
+      },
+      versions: { snapshots: [], latest: [], trajectories: [] },
+      countries: { snapshots: [], latest: [], trajectories: [] },
+      clients: { snapshots: [], latest: [], trajectories: [] },
+      instances7d: null,
+    },
     ...overrides,
   };
+}
+
+/** A telemetry block with one measured day, for the rendered-section cases. */
+function withTelemetry(): DashboardData {
+  return data({
+    telemetry: {
+      network: {
+        dates: ['2026-09-05'],
+        instances_1d: [7],
+        instances_7d: [12],
+        instances_30d: [14],
+        users_registered: [230],
+        users_active1d: [31],
+        users_active7d: [88],
+        users_active30d: [140],
+        messages7d: [4200],
+        storage_mib: [3100],
+        voice_instances: [5],
+        // A measured zero, which must print as a zero and not as a gap.
+        federation_instances: [0],
+      },
+      versions: {
+        snapshots: ['2026-09-05'],
+        latest: [{ dimension: '1.1.2', title: '', count: 9, uniques: 9 }],
+        trajectories: [],
+      },
+      countries: {
+        snapshots: ['2026-09-05'],
+        latest: [{ dimension: 'DE', title: '', count: 6, uniques: 6 }],
+        trajectories: [],
+      },
+      clients: {
+        snapshots: ['2026-09-05'],
+        latest: [{ dimension: 'desktop', title: '', count: 8, uniques: 8 }],
+        trajectories: [],
+      },
+      instances7d: 12,
+    },
+  });
 }
 
 describe('escapeHtml', () => {
@@ -157,5 +218,34 @@ describe('renderDataPage', () => {
 
   it('says so plainly rather than printing an empty table for a series with no rows', () => {
     expect(renderDataPage(data())).toContain('No rows recorded yet.');
+  });
+
+  // The tables are public from the first ping, whatever the charts do: the
+  // chart threshold exists so a handful of instances are not drawn as a
+  // trend, not to keep the figures private.
+  it('publishes the telemetry tables, qualified as opt-in and as a lower bound', () => {
+    const html = renderDataPage(withTelemetry());
+
+    expect(html).toContain('Usage pings');
+    expect(html).toContain('opt-in');
+    expect(html).toContain('lower bound');
+    expect(html).toContain('two significant digits');
+    const section = html.slice(html.indexOf('<h2>Usage pings</h2>'));
+    expect(section).toContain('instances reporting today');
+    expect(section).toContain('registered users');
+    expect(section).toContain('2026-09-05');
+    expect(section).toContain('230');
+    expect(section).toContain('1.1.2');
+    expect(section).toContain('DE');
+    expect(section).toContain('desktop');
+    // A measured zero of federating instances, never rendered as a gap.
+    expect(section.slice(0, section.indexOf('</table>'))).not.toContain('not measured');
+  });
+
+  it('omits the telemetry section entirely when no instance has reported', () => {
+    const html = renderDataPage(data());
+
+    expect(html).not.toContain('Usage pings');
+    expect(html).not.toContain('instances reporting today');
   });
 });

@@ -784,6 +784,26 @@ function makeData(overrides: Partial<DashboardData> = {}): DashboardData {
       referrers: { snapshots: [], latest: [], trajectories: [] },
       paths: { snapshots: [], latest: [], trajectories: [] },
     },
+    telemetry: {
+      network: {
+        dates: [],
+        instances_1d: [],
+        instances_7d: [],
+        instances_30d: [],
+        users_registered: [],
+        users_active1d: [],
+        users_active7d: [],
+        users_active30d: [],
+        messages7d: [],
+        storage_mib: [],
+        voice_instances: [],
+        federation_instances: [],
+      },
+      versions: { snapshots: [], latest: [], trajectories: [] },
+      countries: { snapshots: [], latest: [], trajectories: [] },
+      clients: { snapshots: [], latest: [], trajectories: [] },
+      instances7d: null,
+    },
     ...overrides,
   };
 }
