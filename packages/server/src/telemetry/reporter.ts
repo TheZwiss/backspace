@@ -15,10 +15,18 @@ export interface ReporterDeps {
   log: { info(msg: string): void; debug(msg: string): void };
 }
 
-/** Minute of the UTC day this instance reports at, spread by hashing the id. */
+/**
+ * Minute of the UTC day this instance reports at, spread by hashing the id.
+ *
+ * The read is 32 bits wide rather than 16 because 65536 is not a multiple of
+ * 1440: a 16-bit read hands the first 736 minutes of the day one extra bucket
+ * each, so a fleet reporting on that slot would lean about two percent towards
+ * the hours before 12:16 UTC. Over 2^32 the same remainder is 256 values out
+ * of four billion, which is nothing.
+ */
 export function slotMinute(telemetryId: string): number {
   const digest = crypto.createHash('sha256').update(telemetryId).digest();
-  return digest.readUInt16BE(0) % 1440;
+  return digest.readUInt32BE(0) % 1440;
 }
 
 const TIMEOUT_MS = 10_000;
@@ -54,10 +62,15 @@ export async function reporterTick(deps: ReporterDeps): Promise<'sent' | 'skippe
   // until midnight, it is retried tomorrow.
   if (state.lastError?.day === today) return 'skipped';
 
-  const payload = buildTelemetryPayload(deps.sqlite, deps.context(today, telemetryId));
   let status = 0;
   let cause = '';
   try {
+    // The build is inside the try on purpose. It runs a dozen queries, and a
+    // database in an unexpected state would otherwise throw past the
+    // bookkeeping below: nothing recorded, and the minute timer retrying the
+    // same throw until midnight. A build that fails burns the day like a
+    // request that fails.
+    const payload = buildTelemetryPayload(deps.sqlite, deps.context(today, telemetryId));
     const response = await deps.fetch(pingUrl(deps.endpoint), {
       method: 'POST',
       headers: {
