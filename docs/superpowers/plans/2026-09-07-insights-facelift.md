@@ -2,13 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Rebuild `site/insights/index.html` around three figure groups (Reach, Adoption, Delivery), each with one hero chart, a band of compact cards and a band of detail cards, plus a lead figure row at the top and a `#method` section at the bottom that holds every paragraph of standing prose the group headers give up.
+**Goal:** Rebuild `site/insights/index.html` around four figure groups (Reach, Following, Adoption, Delivery), each with one hero chart and a band of compact cards under it, three of them with a band of detail cards as well, plus a lead figure row of four at the top and a `#method` section at the bottom that holds every paragraph of standing prose the group headers give up.
 
-**Architecture:** The page keeps its existing shape: one static HTML file, a shell IIFE that validates the bundle and drives a slot registry, a chart toolkit IIFE that owns the single `new uPlot(...)`, and one IIFE per registered section. The redesign adds two shared surfaces beside them (`INSIGHTS_FIGURES` for the figure and trend arithmetic that the at-a-glance section owns today, `INSIGHTS_GROUPS` for the band and card builders the three groups share), gives `INSIGHTS_CHARTS.mount` a size profile and a release-lane option, and replaces the six section renderers with five: the lead figure row, one per group, and the method coverage line. No series is added, no series is dropped, and the bundle contract is untouched.
+**Architecture:** The page keeps its existing shape: one static HTML file, a shell IIFE that validates the bundle and drives a slot registry, a chart toolkit IIFE that owns the single `new uPlot(...)`, and one IIFE per registered section. The redesign adds two shared surfaces beside them (`INSIGHTS_FIGURES` for the figure and trend arithmetic that the at-a-glance section owns today, `INSIGHTS_GROUPS` for the band and card builders the four groups share), gives `INSIGHTS_CHARTS.mount` a size profile and a release-lane option, and replaces the six section renderers with six of its own: the lead figure row, one per group, and the method coverage line. No series is added, no series is dropped, and the bundle contract is untouched.
 
 **Tech Stack:** Plain ES5-style browser JavaScript inline in one HTML file, inline CSS with Aether Drift tokens declared on `:root`, vendored uPlot 1.6.32, and the committed fixture harness under `scripts/metrics/fixtures/` (Node built-ins only, run under Node 22.18+).
 
-**Spec:** `docs/superpowers/specs/2026-09-06-insights-facelift-design.md`. Read it alongside this plan. Section 2 of the spec is the element inventory the finished page is checked against; section 16 lists six calls the owner may reverse, and every task that depends on one says so.
+**Spec:** `docs/superpowers/specs/2026-09-06-insights-facelift-design.md`. Read it alongside this plan. Section 2 of the spec is the element inventory the finished page is checked against; section 16 lists twelve calls the owner may reverse, and every task that depends on one says so.
 
 ---
 
@@ -20,7 +20,9 @@ Every task's requirements implicitly include this section.
 - **No network request** beyond the single relative, same-origin `fetch("data.json")` with its 15-second abort. Every colour, font and asset is inline, self-hosted or a system font.
 - **The published bundle stays under its 2 MB budget.** `BUNDLE_BUDGET_BYTES` is `2 * 1024 * 1024`. Nothing in this plan changes `bundle.ts`, `downsampleWeekly`, `serialiseWithinBudget`, the budget or the 80 percent warning.
 - **The telemetry publication threshold is not weakened.** Nothing telemetry is charted until `telemetry.instances7d` is a number and is at least 10. It is a public promise in the project's privacy copy. The gate stays one positively-expressed line (`cleared = block !== null && typeof block.instances7d === "number" && block.instances7d >= THRESHOLD`), it keeps reading the bundler's precomputed field rather than computing over a parallel array, and its three below-threshold wordings are not collapsed into one.
-- **Nothing is cut.** Every series on the charted page today keeps a place on the charted page, inside one of the three groups, at small size when it is not its group's headline. Nothing is removed from the `metrics-data` archive, from `data.json`, or from the static tables under `/insights/data/`. `scripts/metrics/src/datapage.ts` is not edited by this plan. Only prose is removed from the charted page, and spec section 7.3 says where each paragraph goes.
+- **Nothing is cut.** Every series on the charted page today keeps a place on the charted page, inside one of the four groups, at small size when it is not its group's headline. **No figure printed on the charted page today stops being printed either:** where a figure changes place, the task that moves it names the new place and asserts it. Nothing is removed from the `metrics-data` archive, from `data.json`, or from the static tables under `/insights/data/`. `scripts/metrics/src/datapage.ts` is not edited by this plan. Only prose is removed from the charted page, and spec section 7.3 says where each paragraph goes.
+- **One idiom per chip.** Every flow chip on the page prints a signed change, computed by `flowTrend` (spec section 4.3). A lead figure printing a change beside a card head printing a one-window total puts two quantities into one idiom with nothing but a `+` sign between them. The one-window 30-day total the chip used to carry is printed in the meta line of the card that draws the series, as a `30d total` pair. The at-a-glance grid keeps its `flowDelta` chips until Task 9 deletes it, so between Tasks 6 and 9 the two idioms are on screen together, which is deliberate: the new pair and the old chip must read the same number.
+- **One window statement.** No group renders a `.chart-window` line. `#method`'s coverage line states the selected range and the dates it resolves to once for the page, and each card states in its own meta line the span it actually drew. The three window lines the page renders today are deleted with the sections that render them.
 - **The page has no automated tests and cannot get any.** Page behaviour is verified through the committed fixture harness (the recipe below). Where a task leans on a bundler-side guarantee, that guarantee is pinned by a real test in `scripts/metrics`. No task in this plan turns out to need a new one; if a task's implementer finds it does, the test is written in that task and not deferred.
 - **The harness needs Node 22.18 or newer.** Both fixture commands run TypeScript through Node's own type stripping with no flag. The repository root allows `>=20.0.0`, so a shell left on Node 20 fails the first command with `ERR_UNKNOWN_FILE_EXTENSION` and names nothing useful.
 - **Copy rules for all text, comments and commit messages:** no em dashes, no buzzword register, plain sentences. The page is plain English and is not entering the i18n system. Copy that moves from one place to another moves verbatim, except that an em dash used as punctuation is replaced by the comma, colon or full stop the sentence needs. A string that stays exactly where it is keeps its punctuation; a sweep of untouched strings is not part of this plan. The `DASH` glyph the page prints for an unmeasured value is a glyph in a data cell, not punctuation, and is unchanged.
@@ -51,6 +53,10 @@ python3 -m http.server 8765 --directory "$SP/fx/site"
 
 Modes as of Task 1: `none`, `low`, `threshold`, `high`, `high-other`, `high-nodims`, `sparse`, plus the `--strip-telemetry` second pass. Task 1 adds `dimensions-only`; Task 4 adds `long` and `no-releases`.
 
+**A pass is read out of the report, not out of the exit status.** The harness deliberately does not exit non-zero on an empty reading, because `dimensions-only` legitimately renders no chart canvas at all and a non-zero exit there would teach every later task to ignore the exit code. It says so in words in the report instead. So every "what counts as a pass" list below is a list of things to read, and a green exit on its own proves only that the run completed.
+
+**Every path that talks to Chrome routes through one helper that throws when the reply carries an exception.** That is what stops an unguarded dereference inside an evaluated expression from coming back as a clean-looking empty report with a passing console proof. Do not add a raw evaluate call beside it in any task: a second path is a second way for a silent failure to get back in.
+
 ---
 
 ## File Structure
@@ -60,7 +66,7 @@ Modes as of Task 1: `none`, `low`, `threshold`, `high`, `high-other`, `high-nodi
 | `site/insights/index.html` | The whole page: tokens and CSS, the shell IIFE (validation, status, range control, slot registry), `INSIGHTS_FIGURES` (new), `INSIGHTS_CHARTS` (profile and release lane), `INSIGHTS_GROUPS` (new), and one IIFE per registered section. | 1 to 9 |
 | `scripts/metrics/fixtures/insights-check.mjs` | The verification instrument. Generalised in Task 1 from "read the telemetry slot" to "read every slot, every figure block and every plot's geometry". | 1 |
 | `scripts/metrics/fixtures/insights-fixture.mjs` | The throwaway archive. Gains three modes: `dimensions-only` (Task 1), `long` and `no-releases` (Task 4). | 1, 4 |
-| `docs/systems/metrics.md` | Section 10 describes this page: its sections and slots, its empty states, the per-card span rule, the telemetry section and the threshold, and section 11's harness description. | 1, 2, 4, 5, 6, 7, 8, 9 |
+| `docs/systems/metrics.md` | Section 10 describes this page: its sections and slots, its empty states, the per-card span rule, the telemetry section and the threshold, and section 11's harness description. | 1, 2, 3, 4, 5, 6, 7, 8, 9 |
 
 Nothing else is edited. `scripts/metrics/src/**` (except nothing), `.github/workflows/**`, `site/index.html` and `site/insights/vendor/**` are untouched.
 
@@ -68,7 +74,7 @@ Nothing else is edited. `scripts/metrics/src/**` (except nothing), `.github/work
 
 ## Ordering, and why it is a chain
 
-The page is one file and the three groups are assembled out of the five sections that exist today, so the tasks serialize. There is no parallel chain to draw.
+The page is one file and the four groups are assembled out of the six sections that exist today, so the tasks serialize. There is no parallel chain to draw.
 
 The ordering rule is: **no old section is deleted until the group that absorbs its content renders.** That is what keeps every intermediate commit a working, reviewable page rather than a half-restructured one. It has a visible cost between Tasks 4 and 6: the CI activity chart is drawn twice, once in the old Reach section and once as the Delivery hero. That duplication is deliberate and it is the plan's strongest verification tool, because the old card and the new one are on screen together and a figure that disagrees between them is a bug you can see without a diff.
 
@@ -76,8 +82,10 @@ The ordering rule is: **no old section is deleted until the group that absorbs i
 2. **Task 3** adds the `#method` section and the shared group CSS. It moves page-level prose but draws no figure. It exists before any group task because a group task rewrites its panel's paragraphs, and those paragraphs need somewhere to land in the same commit that removes them, or the inventory in spec section 2 is broken mid-chain.
 3. **Task 4** builds Delivery. It goes first among the groups because it is the smallest (three cards) and it exercises everything new at once: the compact profile, the hero profile, the release lane as a toolkit option, the per-card error wrapper, the `heading` presentation and the release trend. Everything after it reuses machinery this task proves.
 4. **Task 5** builds Adoption. Its detail band is the telemetry section moved wholesale, so it deletes `#instances` in the same commit and nothing is drawn twice.
-5. **Tasks 6, 7 and 8** dismantle Reach, Growth and the two dimension sections into the Reach group, one band at a time: the traffic cards, then the growth cards, then the ranked detail cards. Each deletes exactly the old section whose content it just rebuilt.
+5. **Task 6** rebuilds Reach's traffic cards and retires the old reach section. **Task 7** builds the fourth group, Following, out of the growth section and retires it in the same commit. **Task 8** moves the two ranked dimension cards into Reach's detail band and retires both dimension sections. Each deletes exactly the old section whose content it just rebuilt, which is what keeps the ordering rule intact through the middle of the chain.
 6. **Task 9** is the cutover: the lead figure row, the removal of the at-a-glance section, the nav rewrite, and the shell's last two edits.
+
+**Why Following is a group and not three more cards in Reach.** Page views, clones, referring sites and popular paths are traffic: people finding the project. Stars, forks and watchers are people who clicked a button to keep track of it. They are two questions, and they were together only because the dissolved growth section had nowhere else to go. Left together, Reach would hold seven of the page's twelve cards and it is the first group a reader meets, which is the bombardment concentrated in the worst place. Split, the counts are Reach 4, Following 3, Adoption 2 below the telemetry gate and 7 above it, and Delivery 3. Spec section 3.2 carries the reasoning and section 9 carries what it costs.
 
 **Which tasks touch the shared shell.** The shell is the first `<script>` block: `SLOT_IDS`, `validateBundle`, `evaluateFreshness`, the range control, `registerSection`, `renderSlots` and the `INSIGHTS` surface.
 
@@ -85,13 +93,13 @@ The ordering rule is: **no old section is deleted until the group that absorbs i
 |---|---|---|---|
 | 1 | no | no | at-a-glance, plus the new `INSIGHTS_FIGURES` surface |
 | 2 | no | yes (`mount` gains `releases`) | growth |
-| 3 | yes (`SLOT_IDS` gains `method-coverage`, `NOTE_SLOT_IDS` introduced) | no | at-a-glance loses its window note; new method section |
+| 3 | yes (`SLOT_IDS` gains `method-coverage`, `NOTE_SLOT_IDS` introduced, `renderSlots` restricted to it) | no | at-a-glance loses its window note; new method section |
 | 4 | yes (`SLOT_IDS` gains `delivery-body`) | yes (`profile`, `fittedCounts`, `measuredPositions`) | new delivery section, plus the new `INSIGHTS_GROUPS` surface |
 | 5 | yes (`SLOT_IDS` gains `adoption-body`, loses `telemetry`) | no | new adoption section, telemetry section retired |
-| 6 | yes (`SLOT_IDS` gains `reach-body`, loses `chart-reach`) | no | new reach section, old reach section retired |
-| 7 | yes (`SLOT_IDS` loses `chart-growth`) | no | reach section grows three cards, growth section retired |
+| 6 | yes (`SLOT_IDS` gains `reach-body`, loses `chart-reach`) | no | new reach section, old reach section retired; `INSIGHTS_FIGURES` gains `flowTrend` and exports `flowDelta` |
+| 7 | yes (`SLOT_IDS` gains `following-body`, loses `chart-growth`) | no | new following section, growth section retired |
 | 8 | yes (`SLOT_IDS` loses `ranked-referrers`, `ranked-paths`) | no | reach section grows two cards, dimension sections retired |
-| 9 | yes (`SLOT_IDS` gains `lead-figures`, loses `header-stats`; `renderSlots` restricted) | yes (`placeHint` retired) | new lead-figure section, at-a-glance retired |
+| 9 | yes (`SLOT_IDS` gains `lead-figures`, loses `header-stats`) | yes (`placeHint` retired) | new lead-figure section, at-a-glance retired |
 
 `validateBundle`, `evaluateFreshness`, `rangeWindow`, `rangeSlice`, `archiveStartDay`, `archiveEndDay`, `resolutionStepDays`, `resolutionSuffix`, `SERIES_NAMES`, the four ranges, the `all` default, the fetch timeout, `parseDay`, `formatDay`, `formatCount`, `formatInstant`, `dayGap`, `DASH` and `DELTA_DAYS` are not touched by any task in this plan. `SERIES_NAMES` in particular does not gain `telemetry.network`, for the reason `docs/systems/metrics.md` section 10.8 gives.
 
@@ -101,15 +109,16 @@ The ordering rule is: **no old section is deleted until the group that absorbs i
 
 Each of these was forced by something the page or CSS cannot do as written. They are small, and each is reversible on its own.
 
-1. **Slot ids for the three groups are `reach-body`, `adoption-body` and `delivery-body`, not `reach`, `adoption` and `delivery`.** Spec section 11.1 gives the bare names, but spec section 5.1 keeps `#reach` as the section anchor and section 5.2 puts `div.slot#<group>` inside `section#<group>`. Two elements with the same id is invalid HTML and `getElementById("reach")` would return the section, not the slot, so `renderSlots` would clear the whole panel including its static heading. The anchors stay `#reach`, `#adoption`, `#delivery`; the slots take the `-body` suffix. `lead-figures` and `method-coverage` collide with nothing and keep their spec names.
-2. **The band grids use `repeat(auto-fill, minmax(300px, 1fr))` and `repeat(auto-fill, minmax(420px, 1fr))`.** Spec section 5.4 writes `minmax(300px, minmax(0, 1fr))`, which is not valid CSS: `minmax()` does not nest, its second argument must be a track breadth. The overflow that nesting was reaching for is already handled: `.chart-card` carries `min-width: 0`, and the `.rank-*` truncation is unchanged. `auto-fill` rather than `auto-fit` because Adoption's series band holds exactly one compact card and Delivery's holds exactly one, and `auto-fit` collapses the empty tracks and stretches that single card to the full row, where it reads as a second hero.
+1. **Slot ids for the four groups are `reach-body`, `following-body`, `adoption-body` and `delivery-body`, not the bare group names.** Spec section 11.1 gives the bare names, but spec section 5.1 keeps `#reach` as the section anchor and section 5.2 puts `div.slot#<group>` inside `section#<group>`. Two elements with the same id is invalid HTML and `getElementById("reach")` would return the section, not the slot, so `renderSlots` would clear the whole panel including its static heading. The anchors stay `#reach`, `#following`, `#adoption`, `#delivery`; the slots take the `-body` suffix. `lead-figures` and `method-coverage` collide with nothing and keep their spec names.
+2. **The band grids use `repeat(auto-fill, minmax(300px, 1fr))` and `repeat(auto-fill, minmax(420px, 1fr))`.** Spec section 5.4 writes `minmax(300px, minmax(0, 1fr))`, which is not valid CSS: `minmax()` does not nest, its second argument must be a track breadth. The overflow that nesting was reaching for is already handled: `.chart-card` carries `min-width: 0`, and the `.rank-*` truncation is unchanged. `auto-fill` rather than `auto-fit` because three of the four series bands hold exactly one compact card after the split (Reach's clones, Adoption's update checks, Delivery's contributors), and `auto-fit` collapses the empty tracks and stretches that single card to the full row, where it reads as a second hero.
 3. **The resulting column counts match spec section 9.1 everywhere except within about 50px of the 1000px boundary**, where the intrinsic 300px and 420px minimums decide instead. Adding media queries to force the table exactly would be three breakpoints in service of a 50px window; the intrinsic rule is the one the layout actually wants.
-4. **A card carries an area fill if and only if its y axis starts at zero.** Spec section 6.4 gives the Adoption hero (App downloads) a fill, and spec section 3.1's growth rationale, which this page already ships, says a fill reads as area measured from zero and must not sit under a fitted axis. Both are satisfied by drawing App downloads on `zeroBasedCounts`: it is a cumulative counter of files fetched, its floor at zero is real, and the fill is one of the four things spec section 9 relies on to carry the hierarchy at one column. The cumulative series that keep a fitted axis (stars, forks, watchers, contributors) are all compact and carry no fill, so the rule holds across the page.
-5. **A card whose series has fewer than two measured positions on its axis states its reading instead of drawing a plot.** Spec section 3.5 says every card with a dated column is drawn as a compact plot, and does not address the one-point case. It is not hypothetical: `contributors.csv` holds one row in the live archive and one in the fixture, and uPlot handed a single point on a time scale invents an x range (measured against this archive: one point on 2026-09-01 produced an axis running to 2029-05-28). The growth section already refuses this case with `singlePointNote`; this plan generalises the refusal to a per-card rule so every compact card inherits it.
+4. **A card carries an area fill if and only if its y axis starts at zero, the heroes included.** Spec section 6.4 gives the Adoption hero (App downloads) a fill, and the growth rationale this page already ships, now spec section 3.2, says a fill reads as area measured from zero and must not sit under a fitted axis. Both are satisfied by drawing App downloads on `zeroBasedCounts`: it is a cumulative counter of files fetched and its floor at zero is real. Following's hero, Stars, is the case where the two rules collide: it is cumulative, it has to be fitted or the only movement the chart is for is flattened, and so it carries no fill. It is the one hero on the page without one, spec sections 3.2 and 9 say so, and Task 7 asserts it. Every compact card carries no fill either way, so the rule holds across the page with one stated consequence rather than one exception.
+5. **A card whose series has fewer than two measured positions on its axis states its reading instead of drawing a plot.** Spec section 3.6 says every card with a dated column is drawn as a compact plot, and spec section 8.2 now carries the row for the one-point case that this decision forced. It is not hypothetical: `contributors.csv` holds one row in the live archive and one in the fixture, and uPlot handed a single point on a time scale invents an x range (measured against this archive: one point on 2026-09-01 produced an axis running to 2029-05-28). The growth section already refuses this case with `singlePointNote`; this plan generalises the refusal to a per-card rule so every compact card inherits it.
 6. **The weekly bucket caution is not moved verbatim onto the Delivery hero.** Spec section 12.2 moves the release machinery across unchanged, but the growth section's `weeklyNote()` says a point "carries the last value measured in that week", which is true of a cumulative total and false of a summed workflow-run count. Moving it would publish a false sentence on a page whose whole claim is that it does not. The verbatim wording stays with stars and forks in Reach, where it is true, and Delivery's hero gets a short caution of its own about a bucket's Monday key against an exactly dated marker.
 7. **The per-card failure note reads "This card could not be rendered."** Spec section 11.3 asks for the existing wording verbatim; the existing wording says "section", which would be false inside a band. The other three claims of that note are verbatim.
-8. **`INSIGHTS_GROUPS` exists.** The spec describes a uniform card system across three groups but names no shared surface for it. Three copies of the compact-card builder is exactly the drift this file's own comments argue against, so the band and card builders live in one IIFE beside `INSIGHTS_FIGURES` and `INSIGHTS_CHARTS`.
+8. **`INSIGHTS_GROUPS` exists.** The spec describes a uniform card system across four groups but names no shared surface for it. Four copies of the compact-card builder is exactly the drift this file's own comments argue against, so the band and card builders live in one IIFE beside `INSIGHTS_FIGURES` and `INSIGHTS_CHARTS`.
 9. **`renderFigure`'s `"card"` mode is the compact card head**, per spec section 11.4's name. The at-a-glance section's own `.stat` box keeps its private builder until Task 9 deletes it, so the two presentations never have to be the same function.
+10. **`flowTrend` lands in Task 6, not Task 9.** Spec section 4.3 makes every flow chip a signed change, and the first flow chips a group prints are Reach's group head and its clones card head, both of which Task 6 builds. Landing the function later would put a `flowDelta` chip on the clones card for three commits and then change it, which is a state nobody reviews and a diff nobody wants. Task 9 consumes it and adds nothing to it.
 
 ---
 
@@ -217,13 +226,22 @@ const OBSERVE = `(function () {
       rows: []
     };
     card.querySelectorAll(".rank-row").forEach(function (row) {
+      /* A rank row without a bar is ordinary, not a fault: Task 4's release
+       * list is a dated list of releases and a date has no bar to draw. The
+       * guard is here rather than at the call site because an unguarded
+       * dereference here fails SILENTLY. Runtime.evaluate returns the
+       * exception in its command reply rather than raising it as
+       * Runtime.exceptionThrown, so the console capture stays clean, the
+       * report prints `undefined` for the whole page, and every "what counts
+       * as a pass" list in Tasks 4 through 9 loses the only evidence it has.
+       * Do not remove it. */
       var fill = row.querySelector(".rank-fill");
       entry.rows.push({
         rank: text(row.querySelector(".rank-n")),
         name: text(row.querySelector(".rank-name")),
         num: text(row.querySelector(".rank-num")),
-        width: Math.round(fill.getBoundingClientRect().width),
-        fill: getComputedStyle(fill).backgroundColor
+        width: fill === null ? null : Math.round(fill.getBoundingClientRect().width),
+        fill: fill === null ? null : getComputedStyle(fill).backgroundColor
       });
     });
     return entry;
@@ -291,6 +309,24 @@ Then change the two places that referenced the telemetry slot by name:
   ```
   and change its timeout message to `'no slot on the page held anything 20s after load'`.
 - `RANKING_DIGEST` and `DRAG_FIRST_TELEMETRY_CHART` select inside `#telemetry`. Replace `#telemetry ` with `.slot ` in both, and rename `DRAG_FIRST_TELEMETRY_CHART` to `DRAG_FIRST_CHART`, its two failure strings to `"no chart to drag"` and `"the first chart is too narrow to drag across"`, and the report heading from `drag:` to `drag (first chart on the page):`.
+- **A third `#telemetry` selector, in `main()`'s per-range sweep**, reads `#telemetry .chart-window` into the sweep's `window` column. Repoint it at `.slot .chart-window`. Once Task 5 deletes the telemetry slot the old selector would return `""` for every range, silently, for the rest of the plan, and it is one of only two pieces of per-range evidence the report carries.
+- **The report heading `=== telemetry section ===`** now prints the whole page. Rename it `=== page ===`. Step 1 updates the file's header comment; this line is the one it is easy to miss.
+
+Add one column to that same per-range sweep, so Task 3's coverage-line check is evidence in the report rather than something only a browser can see:
+
+```js
+        coverage: await evaluate('(document.querySelector("#method-coverage .window-note")'
+          + ' || { textContent: "" }).textContent.replace(/\\s+/g, " ").trim()'),
+```
+
+and print it beside the window and the ranking digest as `method-coverage`. The column is empty until Task 3 registers that slot, which is expected and is not a failure before then.
+
+**A note for whoever reads this task later.** Steps 1 and 2 are already implemented and merged; the text above is the record of what the harness does and why, not an instruction to redo it. Four things in it are load-bearing and easy to undo by accident, and none of them changes any pass list:
+
+- **The `.rank-fill` null guard**, for the reason its comment gives.
+- **The `.slot` selectors**, which are what let one report cover a page whose slot ids change in seven of the nine commits.
+- **The slot-note selection filter.** The harness selects `.slot-note` at any depth and then keeps only the nodes whose `closest(".chart-card")` is `null`. The filter is the whole point: Task 4 puts a failure note inside a card, and an unfiltered selection would report that card's note as one of its slot's notes and count it twice. It is output-neutral across all eight modes today, which is exactly why somebody would simplify it away. Task 3 restates it as a constraint.
+- **The single Chrome helper** that throws on an exception in the reply, described in the recipe above.
 
 Finally, print the canvas digest map rather than only the before/after verdict, so two runs on two commits can be compared:
 
@@ -590,17 +626,23 @@ Cut from the `chart-growth` IIFE and paste into the `INSIGHTS_CHARTS` IIFE, unch
   }
 ```
 
-`releaseNarrative` calls `plural` and `stepWord`; move both into the toolkit as well (the growth section keeps its own copies of `plural` and `steps` for its captions, which is not duplication worth chasing here: they are three-line pure functions and the growth section is deleted in Task 7).
+`releaseNarrative` calls `plural` and `stepWord`; **copy** both into the toolkit rather than moving them, and leave the growth section's own `plural`, `steps` **and `stepWord`** where they are. `stepWord` in particular is not optional: `singlePointNote` calls it three times (`index.html:4371`, `:4387`, `:4395`) and stays in the growth section until Task 7, so cutting it out here makes those three calls a `ReferenceError` under `"use strict"` on any bundle whose growth axis has fewer than two steps. That is a live failure of the growth slot on the commits of Tasks 2 through 6.
+
+The fixture cannot catch it, which is the reason to be explicit rather than careful: every mode except `dimensions-only` writes 40 star rows, and `dimensions-only` returns at the `win === null` branch before the one-point check, so **no fixture mode reaches `singlePointNote` at all**. Step 5's diff would pass on a broken page. The duplication costs three lines and is deleted with the block in Task 7.
 
 - [ ] **Step 3: Give `mount` the `releases` option**
 
-In `mount`, after the `padding` line and before `series`, add the lane wiring. The documentation block above `mount` gains one entry in its closed set:
+The lane wiring goes where the existing `if (opts.hooks !== undefined) config.hooks = opts.hooks;` line is (`index.html:3180`), **after** the `config` object literal closes. It is a run of statements that assign `config.padding` and `config.hooks`, so putting it inside the literal, between the `padding` and `series` keys, is a syntax error.
+
+The documentation block above `mount` gains one entry in its closed set:
 
 ```
  *   releases     `{ groups, outside, unreadable }` from `collectReleases`.
  *                Reserves the lane above the plot and paints the markers.
  *                Hero profile only: a compact plot has no room for a lane and
  *                a marker drawn into 150px of chart would sit on the series.
+ *                Sets the top padding, so passing `padding` alongside it is an
+ *                error and throws.
 ```
 
 and the code:
@@ -622,7 +664,17 @@ and the code:
       if (opts.profile === "compact") {
         throw new Error("release markers need the hero profile");
       }
-      config.padding = opts.padding !== undefined ? opts.padding : [LANE_CSS, null, null, null];
+      /*
+       * `releases` SETS the top padding, because reserving the lane is half of
+       * what the option does. A caller passing both holds two ideas about one
+       * number, so it throws rather than one of them silently winning: the
+       * failure mode of a silent winner is a lane painted into room that was
+       * never reserved, and no text observation of the page would show it.
+       */
+      if (opts.padding !== undefined) {
+        throw new Error("releases sets the top padding, so padding cannot be passed with it");
+      }
+      config.padding = [LANE_CSS, null, null, null];
       var painter = releasePainter(opts.releases.groups, colour(RELEASE_TOKEN, RELEASE_FALLBACK));
       hooks = { draw: [painter] };
       if (opts.hooks !== undefined) {
@@ -741,9 +793,15 @@ git commit -m "refactor(insights): make the release lane a chart toolkit option"
 
 **Interfaces:**
 - Consumes: `F.countMeasured`, `F.rowsLabel`, `F.recordsLabel`, `F.plural` (Task 1).
-- Produces: the CSS classes `.lead-row`, `.lead-figure`, `.group-head`, `.hero-band`, `.series-band`, `.detail-band`, `.chart-card.is-compact`, `h3.chart-title`, `.ch-txt4`; the `#method` panel with slot `method-coverage`; `NOTE_SLOT_IDS` in the shell.
+- Produces: the CSS classes `.lead-row`, `.lead-figure`, `.group-head`, `.hero-band`, `.series-band`, `.detail-band`, `.chart-card.is-compact`, `h3.chart-title`, `#method h3`, `.ch-txt4`; the `#method` panel with slot `method-coverage` and its five subheadings; `NOTE_SLOT_IDS` in the shell.
 
 This task moves prose and draws no figure. Spec section 7.3 is the table it implements.
+
+**A constraint on the harness contract, carried in from Task 1.** This is the task where a slot's notes become a checked thing: `NOTE_SLOT_IDS` decides which slots receive one, and Step 4's checks read them. The harness selects `.slot-note` at any depth and keeps only the nodes whose `closest(".chart-card")` is `null`.
+
+That filter is load-bearing rather than incidental. Task 4 introduces the per-card failure note, which is a `.slot-note slot-note-error` element **inside** a `.chart-card`, and an unfiltered selection would report it as one of the slot's own notes. A slot with five working cards and one failed one would then read as a slot carrying a note, which is the shape of "the whole group failed", and every note check from here to Task 9 would be reading the wrong thing.
+
+It is provably output-neutral across all eight fixture modes as the page stands today, which is precisely why somebody tidying the expression would delete it. Do not. Nothing in any task's pass list changes because of it.
 
 - [ ] **Step 1: Add the group styles**
 
@@ -762,7 +820,7 @@ Append to the `<style>` block, after the `/* ================= Ranked dimensions
  */
 .lead-row {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 18px;
   margin-top: 30px;
 }
@@ -782,11 +840,12 @@ Append to the `<style>` block, after the `/* ================= Ranked dimensions
 
 .hero-band { display: grid; gap: 22px; }
 /*
- * `auto-fill`, not `auto-fit`. Adoption's series band holds one compact card
- * and Delivery's holds one; `auto-fit` collapses the empty tracks and
- * stretches that single card across the whole row, where it reads as a second
- * hero. `auto-fill` keeps the empty tracks, so a lone compact card stays the
- * width of one column and stays compact.
+ * `auto-fill`, not `auto-fit`. Three of the four series bands hold exactly one
+ * compact card: Reach's clones, Adoption's update checks, Delivery's
+ * contributors. `auto-fit` collapses the empty tracks and stretches that
+ * single card across the whole row, where it reads as a second hero.
+ * `auto-fill` keeps the empty tracks, so a lone compact card stays the width
+ * of one column and stays compact.
  *
  * `align-items: start` keeps a taller card, such as a dimension card carrying
  * a movement chart, from stretching its neighbours to match.
@@ -822,12 +881,31 @@ h3.chart-title { font-size: 1.05rem; font-weight: 600; letter-spacing: -0.018em;
 /* #method is not a figure group, so its channel label takes no accent. */
 .ch-txt4::before { color: var(--txt4); }
 
+/*
+ * #method's own subheadings. They are not card titles, so they take neither
+ * the .chart-title class nor its size. They exist because one h2 over nine
+ * paragraphs is the bombardment moved rather than resolved, and because a
+ * crawler reading the served HTML loses the association between a caveat and
+ * the series it qualifies the moment every caveat sits under one generic
+ * heading.
+ */
+#method h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.014em;
+  color: var(--txt2);
+  margin: 26px 0 8px;
+}
+
 @media (max-width: 560px) {
   .lead-row { grid-template-columns: minmax(0, 1fr); }
 }
-@media (min-width: 561px) and (max-width: 759px) {
-  /* Three figures still fit across, at the heading size rather than the
-     summary size. */
+@media (min-width: 561px) and (max-width: 999px) {
+  /* Two columns rather than four. Four figures across a 950px viewport leave
+     under 220px each against a 3.2rem value, so the row goes two wide and two
+     deep, and the values take the heading size to stop a two-row block pushing
+     the range control off the first screen. */
+  .lead-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .lead-figure .stat-value { font-size: clamp(1.6rem, 4.4vw, 2rem); }
 }
 
@@ -860,6 +938,7 @@ Insert this panel after `#instances` and before `</main>`:
         data branch. The page reads a single bundle built from that archive at deploy time. Nothing
         is estimated, and nothing is fetched from anywhere but this site.
       </p>
+      <h3>Provenance and coverage</h3>
       <p class="provenance">
         <span><span class="k">archive history</span> <span class="v" id="pv-since">checking</span></span>
         <span><span class="k">bundle built</span> <span class="v" id="pv-generated">checking</span></span>
@@ -876,6 +955,8 @@ Insert this panel after `#instances` and before `</main>`:
     </div>
   </section>
 ```
+
+`#method` ends up with five `h3` subheadings, in this order: **Traffic**, **Cumulative counts**, **Referrers and paths**, **Opt-in pings**, **Provenance and coverage**. Every paragraph that arrives in a later task lands under the one that names its subject, and each of those tasks inserts its own heading at its final position, above the Provenance block. This task creates only the last of the five, because it is the only one whose content exists yet: an empty heading waiting for a later commit is worse than no heading. The archive-collection paragraph sits directly under the `h2` with no heading of its own, because it qualifies the whole page rather than one subject.
 
 In `.page-head`, replace the four-sentence `.lead` paragraph with the single sentence spec section 7.3 keeps at the top, and delete the `.provenance` block (it now lives in `#method`; there is exactly one copy and its four ids are unchanged, so `renderProvenance` needs no edit):
 
@@ -969,15 +1050,16 @@ and remove the `slot.appendChild(windowNote(...))` line from the at-a-glance ren
 - The report's `sections` block lists a `method` section with heading `How these numbers are made`, a `ch-label` of `method`, and a first `sec-copy` paragraph beginning `Every number on this page comes from one archive`. If the paragraph is missing, the move dropped it.
 - The `page-head`'s `.lead` now reads exactly `Every number on this page was measured, not estimated.`
 - The `method-coverage` slot's `windowNote` field carries the coverage line (at `high`: `all recorded history 2026-08-01 → 2026-09-09 · 40 days`, followed by six `label value` pairs for views, clones, stars, forks, contributors and repo snapshots). The `header-stats` slot's `windowNote` is now `null`. Both halves matter: a coverage line in neither slot means the move dropped it, and one in both means the old call was not removed.
-- Click each range button in the browser and confirm the coverage line's dates change. The report's range sweep already clicks all four; the `method-coverage` slot's `windowNote` must differ between `30d` and `all`. If it does not, the section is not re-rendering on a range change.
-- At `dimensions-only`, the `method-coverage` slot holds the coverage line reading `selected range no dated measurement to window`, and it holds **no** `slot-note`. `header-stats` and the five other slots hold their note. This is what proves `NOTE_SLOT_IDS` is in force. Force the unavailable state as well by deleting `"$SP/fx/site/insights/data.json"` and re-running the check: the `#status-region` notice appears, the six note slots carry `No data to show, the archive is unavailable.`, and `method-coverage` is empty.
+- The report's range sweep prints a `method-coverage` column for each of the four ranges (Task 1 added it, and this is the commit where it stops being empty). The `30d` row and the `all` row must differ. If they do not, the section is not re-rendering on a range change. **This check depends on Task 1's sweep column**; without it the only way to see the difference is by hand in a browser, and it would not be in the report a reviewer reads.
+- At `dimensions-only`, the `method-coverage` slot holds the coverage line reading `selected range no dated measurement to window`, and it holds **no** `slot-note`. It holds no note because the bundle is `ok`: `dimensions-only` yields `empty: false`, since the bundler counts dimension snapshots, so `renderSlots(null)` writes no note into any slot and this run proves only that the coverage line survives the null window. The proof that `NOTE_SLOT_IDS` is in force is the next bullet.
+- Force the unavailable state by deleting `"$SP/fx/site/insights/data.json"` and re-running the check: the `#status-region` notice appears, the six note slots carry `No data to show — the archive is unavailable.` (the page's own em dash; a string that stays where it is keeps its punctuation, and the risk here is an implementer "fixing" the page instead of this line), and `method-coverage` is empty.
 - The provenance strip renders its four values inside `#method` (`pv-since` reads `since 2026-08-01`, not the dash). A dash in all four means `renderProvenance` lost its elements in the move.
 - `console messages: 0`, `console capture proof: PASS`.
 - Grep the file for the reduced-transparency block: `grep -c "prefers-reduced-transparency" site/insights/index.html` returns 1. Then confirm by eye with Chrome's rendering emulation that the nav goes solid; the grep proves the rule exists, not that it applies.
 
 - [ ] **Step 5: Update `docs/systems/metrics.md`**
 
-- Section 10 opening: "Five sections, each registered against a slot" becomes "Six sections, each registered against a slot" and the list gains "**method coverage** (the archive coverage line, in `#method`)". This sentence is rewritten again in Tasks 5 to 9 as sections come and go; each task updates it to the truth at that commit.
+- Section 10 opening: "Five sections, each registered against a slot" becomes "Seven sections, each registered against a slot" and the list gains "**method coverage** (the archive coverage line, in `#method`)". Seven, not six: the doc's "Five" has always excluded the telemetry section, which is registered like the rest and is documented in section 10.8, so add it to the list here as well rather than carrying the undercount forward. This sentence is rewritten again in Tasks 4 to 9 as sections come and go; each task updates the count and the list to the truth at that commit.
 - Section 10.6: add to the paragraph after the status table: "`renderSlots` writes its note into the figure slots only. The method coverage line is metadata about the archive rather than a figure, and the status region above it has already stated the problem in full, so repeating the sentence there would be noise."
 
 - [ ] **Step 6: Commit**
@@ -1011,7 +1093,7 @@ Spec sections 3.3, 4.1, 4.3, 5.2, 5.3, 12.1 and 12.2. **This task depends on two
   on `window.INSIGHTS_FIGURES`:
 
   ```
-  F.releaseTrend(releases, wins, data) -> a delta object
+  F.releaseTrend(releases, wins)       -> a delta object
   F.renderFigure(fig, mode)            -> element; mode "card" | "heading"
   ```
 
@@ -1047,10 +1129,15 @@ In the `INSIGHTS_CHARTS` IIFE, replace `MIN_PLOT_WIDTH`, `WIDE_AT`, `HEIGHT_NARR
    * collapses into overlapping ticks, so a narrow viewport gets a full-width
    * plot that scrolls inside its own container rather than a squashed one
    * that fits. A hero needs 520 for that; a compact card, with its wider tick
-   * spacing and its shorter axis, needs 260, which is inside the 268px a
-   * 300px grid column leaves after the card's own padding. So a compact card
-   * never scrolls at any supported width, and the body never scrolls
-   * sideways at any width either way.
+   * spacing and its shorter axis, needs 240.
+   *
+   * 240 rather than 260, because 260 is not small enough. At or below 460px
+   * the page padding is 16px a side and a compact card's own padding is 16px
+   * a side, so the plot host is the viewport minus 64: a 320px phone leaves
+   * 256px, which clears 240 and does not clear 260. 240 is also inside the
+   * 268px a 300px grid column leaves after the card's padding, so the wide
+   * case is unaffected. A compact card therefore does not scroll at any width
+   * a phone presents, and the body never scrolls sideways at any width.
    *
    * `space` is the room left between day ticks. `dayTicks` widens its labels
    * from MM-DD to YYYY-MM-DD once the visible span crosses a calendar year,
@@ -1063,7 +1150,7 @@ In the `INSIGHTS_CHARTS` IIFE, replace `MIN_PLOT_WIDTH`, `WIDE_AT`, `HEIGHT_NARR
       space: 58, spaceWide: 96, width: 2
     },
     compact: {
-      minWidth: 260, height: 150, wideHeight: 150, wideAt: 700,
+      minWidth: 240, height: 150, wideHeight: 150, wideAt: 700,
       space: 96, spaceWide: 120, width: 1.5
     }
   };
@@ -1149,15 +1236,23 @@ Export `fittedCounts` and `measuredPositions` from `INSIGHTS_CHARTS`, and change
    * against the 30 before them.
    *
    * `releases.csv` is reconstructed from `published_at`, a permanent
-   * immutable timestamp, so unlike the daily series it needs no coverage
-   * test: a release either happened on a date or it did not, and the archive
-   * cannot have missed one by failing to run that day. What it does need is a
-   * REACH test. If the archive's own first measured day falls inside the
-   * older window, the older window is not a period this archive can speak
-   * about, and a count of zero there would be a claim that nothing shipped
-   * rather than a statement that nothing was recorded.
+   * immutable timestamp, and the collector pages the release list in full on
+   * every run, so the array holds every release this repository has ever
+   * published however young the archive is. Unlike the daily series it needs
+   * no coverage test: a release either happened on a date or it did not, and
+   * the archive cannot have missed one by failing to run that day.
+   *
+   * It needs no REACH test either, and an earlier draft of this page had one:
+   * it refused the comparison when the archive's own first measured day fell
+   * inside the older window. That test was wrong. `archiveStartDay` is the
+   * earliest date in any DATED SERIES, which the release list has nothing to
+   * do with, so recreating the data branch would have made this chip print a
+   * dash for sixty days with a reason that was false. Both window counts are
+   * measured whenever the array is non-empty, and zero releases in a window
+   * is a measured zero. The only thing the array cannot speak about is being
+   * empty, and `releasesCard` below handles that.
    */
-  function releaseTrend(releases, wins, data) {
+  function releaseTrend(releases, wins) {
     if (wins === null) {
       return unavailable("the archive holds no dated measurement to anchor a window to.");
     }
@@ -1165,11 +1260,6 @@ Export `fittedCounts` and `measuredPositions` from `INSIGHTS_CHARTS`, and change
     var recentStart = endMs - (I.DELTA_DAYS - 1) * I.DAY_MS;
     var priorEnd = endMs - I.DELTA_DAYS * I.DAY_MS;
     var priorStart = endMs - (2 * I.DELTA_DAYS - 1) * I.DAY_MS;
-    var startMs = I.archiveStartDay(data);
-    if (isNaN(startMs) || priorStart < startMs) {
-      return unavailable("the archive does not reach back far enough to compare the last " +
-        I.DELTA_DAYS + " days with the " + I.DELTA_DAYS + " before them.");
-    }
     var recent = 0;
     var prior = 0;
     for (var i = 0; i < releases.length; i++) {
@@ -1218,7 +1308,7 @@ Export `fittedCounts` and `measuredPositions` from `INSIGHTS_CHARTS`, and change
         : "latest " + (newest.release.tag !== "" ? newest.release.tag : "untagged release") +
           " on " + I.formatDay(newest.dayMs);
     }
-    body.delta = releaseTrend(data.releases, wins, data);
+    body.delta = releaseTrend(data.releases, wins);
     return body;
   }
 ```
@@ -1268,11 +1358,11 @@ A new `<script>` block after `INSIGHTS_CHARTS` and before the first chart sectio
  * Shared group scaffolding: the three bands, the two chart card kinds, and
  * the per-card error containment.
  *
- * It exists because three groups draw the same two kinds of card, and three
+ * It exists because four groups draw the same two kinds of card, and four
  * copies of the compact-card builder is exactly the drift this file argues
- * against everywhere else: two of them would stay in step and the third would
- * quietly stop applying the one-point rule, or stop stating its span, and
- * nothing on the page would show it.
+ * against everywhere else: three of them would stay in step and the fourth
+ * would quietly stop applying the one-point rule, or stop stating its span,
+ * and nothing on the page would show it.
  *
  * ─────────────────────────────────────────────────────────────────────────
  * PER-CARD ERROR CONTAINMENT
@@ -1728,7 +1818,12 @@ A new `<script>` block at the end of the body:
     title: "Contributors",
     figure: { label: "Contributors", kind: "step", series: "contributors", field: "total" },
     columns: { total: { series: "contributors", field: "total" } },
-    lines: [{ column: "total", label: "Contributors", token: "--peach", fallback: "#fca5a5" }],
+    /* --sky, not --peach. --peach #fca5a5 and this group's hero --rose #fda4af
+     * are three hex digits apart and this card sits directly under that hero,
+     * so a reader glancing down the group would read one series drawn twice.
+     * --sky repeats a colour used in Reach and in Adoption, which is a repeat
+     * across groups and allowed, and it separates the two Delivery cards. */
+    lines: [{ column: "total", label: "Contributors", token: "--sky", fallback: "#7dd3fc" }],
     yPolicy: "fitted",
     breakPhrase: "drawn as breaks, not as a fall to zero",
     notes: [
@@ -1907,16 +2002,19 @@ A new `<script>` block at the end of the body:
 </script>
 ```
 
-The lane is collected against the selected window rather than against the drawn axis. The growth section collected against the axis, which is the narrower of the two whenever the CI series is younger than the window. The window is the right span for the caption because the caption is a statement about what the archive holds for the range the reader asked for, and the painter itself refuses anything outside the live scale, so a release inside the window but outside the drawn axis is named in the caption and drawn nowhere, which is the honest pairing. Give the `collectReleases` call this comment:
+The lane is collected against **the drawn axis**, which is what the code above does and what `chartCard`'s `releasesFor` contract requires: the span the releases are sorted against has to be the span this card actually drew, or a release inside the range but outside the axis would be reported as marked while nothing was painted for it. Give the `collectReleases` call this comment:
 
 ```js
-      /* Collected against the selected window rather than against the drawn
-       * axis: the caption is a statement about what the archive holds for the
-       * span this group asked for, not a claim about what is on the canvas at
-       * the reader's current zoom. The painter declines anything outside the
-       * live scale, so a drag can leave the canvas with no marker while the
-       * caption still names every release it listed. Double-clicking restores
-       * the full span and every marker with it. */
+      /* Collected against the span this card drew, which chartCard hands in
+       * once `expand` has run, rather than against the window the range
+       * control asked for. The two differ whenever the CI series is younger
+       * than the window, and reporting a release as marked when no marker was
+       * painted for it is the one thing this caption must not do.
+       *
+       * The painter separately declines anything outside the live scale, so a
+       * drag can leave the canvas with no marker while the caption still names
+       * every release it listed. Double-clicking restores the full span and
+       * every marker with it. */
 ```
 
 - [ ] **Step 7: Add the `long` and `no-releases` fixture modes**
@@ -1926,10 +2024,11 @@ Two states this task's verification needs and no mode produces: an archive long 
 In `insights-fixture.mjs`, add `'long'` and `'no-releases'` to `MODES`, document them in the header comment:
 
 ```
- *   long         ninety days of traffic and three releases at different
- *                distances, so the thirty-against-thirty comparisons have
- *                both windows inside the archive and state a figure instead
- *                of refusing
+ *   long         ninety days of traffic and four releases at different
+ *                distances, two of them inside the last thirty days and one
+ *                in the thirty before, so the thirty-against-thirty
+ *                comparisons have both windows inside the archive and state a
+ *                signed figure that only the right arithmetic produces
  *   no-releases  as `high`, with no releases.csv at all
 ```
 
@@ -1937,16 +2036,22 @@ change `const DAYS = 40;` to `const DAYS = mode === 'long' ? 90 : 40;`, and repl
 
 ```js
   /*
-   * `long` writes three: one inside the last thirty days, one inside the
-   * thirty before them, and one before the archive begins. That gives the
-   * release trend a real signed difference to state, the lane a marker to
-   * draw, and the caption a release to report as outside the drawn span.
+   * `long` writes four: TWO inside the last thirty days, one inside the thirty
+   * before them, and one before the archive begins.
+   *
+   * Two and one, not one and one. With one in each window the trend is zero,
+   * and zero is also what a swapped window, an off-by-one at either boundary
+   * and a double-counted release all produce, so the fixture would state a
+   * figure that proves nothing. Two against one gives +1, which only the
+   * correct arithmetic produces. The release before the archive begins is
+   * there so the caption has one to report as outside the drawn span.
    */
   if (mode === 'long') {
     s.writeCsv('releases.csv', ['date', 'tag', 'name'], [
       { date: new Date(Date.UTC(2026, 6, 1)).toISOString().slice(0, 10), tag: 'v1.0.0', name: '1.0.0' },
       { date: day(DAYS - 45), tag: 'v1.1.0', name: '1.1.0' },
       { date: day(DAYS - 10), tag: 'v1.1.2', name: '1.1.2' },
+      { date: day(DAYS - 4), tag: 'v1.1.3', name: '1.1.3' },
     ]);
   } else if (mode !== 'no-releases') {
     s.writeCsv('releases.csv', ['date', 'tag', 'name'], [{ date: day(10), tag: 'v1.1.2', name: '1.1.2' }]);
@@ -1959,12 +2064,12 @@ change `const DAYS = 40;` to `const DAYS = mode === 'long' ? 90 : 40;`, and repl
 
 At `long`:
 
-- The `delivery-body` slot has one `figures` entry (the group head) with `label: "Releases shipped"`, `value: "3"`, `sub` beginning `latest v1.1.2 on`, and a `chip` reading `+1 · 30d` with a `chipTitle` containing `1 release shipped in the 30 days to`. If the chip reads the dash glyph, `releaseTrend` refused a comparison the archive can make and the reach test is wrong.
+- The `delivery-body` slot has one `figures` entry (the group head) with `label: "Releases shipped"`, `value: "4"`, `sub` beginning `latest v1.1.3 on`, and a `chip` reading `+1 · 30d` with a `chipTitle` containing `2 releases shipped in the 30 days to` and `against 1 in the 30 days before them`. Two in the recent window against one in the prior window is the only arrangement that produces `+1` here; a `0` means a boundary or a window is wrong, and the dash means `releaseTrend` refused a comparison the archive can make.
 - The slot holds three `cards`: `CI activity` (`compact: false`), `Contributors` (`compact: true`) and `Releases`.
-- `CI activity` reports `plot.overHeight` of 280 and `plot.overTop` of 34 or more. `overHeight` 150 means the hero took the compact profile; `overTop` under 34 means the release lane reserved no room.
+- `CI activity` reports `plot.canvasHeight` of 280 and `plot.overTop` of 34 or more. `canvasHeight` is the height the profile asked for; `overHeight` is the plot area, which is the canvas minus the reserved top padding and minus the x-axis strip, so it reads about 216 here and asserting 280 on it fails for the wrong reason. `canvasHeight` 150 means the hero took the compact profile; `overTop` under 34 means the release lane reserved no room.
 - `Contributors` reports **no plot** and a `note` beginning `One measurement is not a history.` The fixture writes one contributors row, so this is the one-point rule firing. A plot here means the rule is not applied and the axis runs to 2029.
-- The `Releases` card lists three rows, newest first: rank 1 is `v1.1.2`, rank 3 is `v1.0.0`.
-- The `CI activity` card's `meta` contains `releases marked v1.1.2` and `outside this span v1.0.0 (2026-07-01)`, and one of its `hints` begins `1 release recorded in the archive falls outside the span drawn here`.
+- The `Releases` card lists four rows, newest first: rank 1 is `v1.1.3`, rank 4 is `v1.0.0`. The card's rows carry no `.rank-fill`, so the report's `width` and `fill` fields are `null` for every one of them. A crashed report here rather than a `null` means Task 1's rank-row guard was undone.
+- The `CI activity` card's `meta` contains `releases marked v1.1.0 (2026-09-15)` and `outside this span v1.0.0 (2026-07-01)`, and one of its `hints` begins `1 release recorded in the archive falls outside the span drawn here`. Three releases fall inside the CI span, so the marked list may be truncated by `MAX_LISTED`; assert the first group and the outside group rather than all three names.
 - The old `chart-reach` slot still holds its own `CI activity` card. Compare the two cards' `meta` `span` and `measured` values: they must be identical. A difference means the group renderer expanded a different set of columns than the section it is duplicating.
 
 At `no-releases`:
@@ -1975,17 +2080,18 @@ At `no-releases`:
 
 At `high` (40 days, one release):
 
-- The group head's chip reads the dash glyph with a `chipTitle` containing `the archive does not reach back far enough to compare the last 30 days with the 30 before them`. This is the refusal path, and `long` is the same task's proof that it is not the only path.
+- The single release is dated `day(10)`, which is `2026-08-11`, and the recent window opens at `archiveEndDay - 29 days`, which is also `2026-08-11`. So the group head's chip reads `+1 · 30d` with a `chipTitle` containing `1 release shipped in the 30 days to 2026-09-09, against 0 in the 30 days before them`. This is the deliberate boundary case: the recent window is inclusive at its opening day, and a strict comparison at that edge would print `0` here. A 40-day archive states this comparison rather than refusing it, which is the point of dropping the reach test.
 
 At `dimensions-only`:
 
 - The `delivery-body` slot holds the note `The archive holds no dated measurement, so there is no time axis to draw the CI or contributor charts on, and no axis for a release to be marked against.`, plus a `Releases` card. The release card renders without a window; a slot holding only the note means `G.attach` was called before the detail band was filled.
+- This is the one mode where the release trend refuses. The group head's chip reads the dash glyph with a `chipTitle` containing `the archive holds no dated measurement to anchor a window to`. It is now the only refusal path `releaseTrend` has, which is why it is asserted here rather than left implicit.
 
 On every run: `console messages: 0`, `failed or 4xx/5xx requests: 0`, `console capture proof: PASS`. Then resize the browser window from 1440px to 380px and confirm the CI hero scrolls inside its own container below about 570px while the Contributors card never does, and that the body never scrolls sideways at any width.
 
 - [ ] **Step 9: Update `docs/systems/metrics.md`**
 
-- Section 10 opening: the section list gains "**delivery** (CI activity with the release markers, contributors, and a dated list of every release)". Say that Delivery's CI card is the same series the reach section draws and that the duplication is temporary; delete that clause in Task 6.
+- Section 10 opening: the count becomes "Eight sections" and the list gains "**delivery** (CI activity with the release markers, contributors, and a dated list of every release)". Say that Delivery's CI card is the same series the reach section draws and that the duplication is temporary; delete that clause in Task 6.
 - Section 10.6: add the per-card state introduced here, after the paragraph about a chart card with no measured step: "A card whose series carries exactly one measured step also states its reading instead of drawing: uPlot handed a single point on a time scale invents an x range of its own, measured here as an axis running two and a half years past the last recorded day. `contributors` is the live case rather than a hypothetical, because it records a row when its total changes and the archive holds one."
 - Section 10.7: add "The release lane sits on the Delivery hero rather than on the growth charts. The lane needs a release inside the chart's span, and the CI series is reconstructed from the Actions API back to the first release where the star history begins on the day the collector first ran, so on the current archive the markers draw here and would not draw there."
 - Section 11: add `long` and `no-releases` to the state list and to the mode table, with one line each on what they are for.
@@ -2036,7 +2142,13 @@ In the nav, replace `<a class="nav-link" href="#instances">Instances</a>` with `
 
 - [ ] **Step 2: Turn the telemetry section into the Adoption group**
 
-The telemetry IIFE keeps everything it has: `THRESHOLD`, `CARDS`, `RANKINGS`, `NEUTRAL`, `telemetryOf`, `stateNote`, `cardHost`, `columnsFor`, `chartMeta`, `releaseAll`, `buildCard`, `snapshotDay`, `rankedRow`, `buildRanking`, `latestDay`, `belowThresholdNote`, and the gate. Three things change.
+The telemetry IIFE keeps everything it has: `THRESHOLD`, `CARDS`, `RANKINGS`, `NEUTRAL`, `telemetryOf`, `stateNote`, `cardHost`, `columnsFor`, `chartMeta`, `releaseAll`, `buildCard`, `snapshotDay`, `rankedRow`, `buildRanking`, `latestDay`, `belowThresholdNote`, and the gate. Six things change.
+
+Three of the six are small and easy to lose:
+
+- **The IIFE declares only `var I` and `var C`** (`index.html:5894-5895`). The new `render` calls `F.windows`, `G.groupHead`, `G.band`, `G.keep`, `G.buildCardSafely`, `G.chartCard` and `G.attach`, and under `"use strict"` each of those is a `ReferenceError`. Add `var F = window.INSIGHTS_FIGURES;` and `var G = window.INSIGHTS_GROUPS;` beside them.
+- **`cardHost` builds `el("p", "chart-title", title)`** (`index.html:6032`). Change that one `p` to an `h3`. Spec section 10 makes every card title a heading so a screen reader gets a real outline, and `G.detailCard` and `G.chartCard` both emit `h3`, so leaving this one would give five of the page's twelve cards no heading element at all. The `h3.chart-title` rule Task 3 adds already carries the styling and `* { margin: 0 }` means no reset is needed. The harness records `titleTag`, so Step 3 asserts it.
+- **The band no longer appends its own `.chart-window` line.** `#method`'s coverage line states the selected range once for the page (spec section 2), and each card's meta line states the span it drew. Delete the line and whatever builds it; nothing else reads it.
 
 The header comment gains a paragraph:
 
@@ -2172,7 +2284,10 @@ Run at `high`, `threshold`, `low`, `none`, `high-nodims`, `high-other`, `sparse`
 
 **What counts as a pass, and what counts as a failure:**
 
-- At `high`, the `adoption-body` slot holds: one `figures` entry labelled `App downloads` with `value: "79"` and a `chip` of `+39 · 30d`; an `App downloads` hero card with `plot.overHeight` 280 and a legend of one entry; an `Update checks` compact card with `plot.overHeight` 150; then `Instances reporting`, `Active users on reporting instances`, `Server versions`, `Countries` and `Client kinds`. Seven cards, in that order. Fewer means a card was lost when the section became a band.
+- At `high`, the `adoption-body` slot holds: one `figures` entry labelled `App downloads` with `value: "79"` and a `chip` of `+30 · 30d`; an `App downloads` hero card with `plot.canvasHeight` 280 and a legend of one entry; an `Update checks` compact card with `plot.canvasHeight` 150; then `Instances reporting`, `Active users on reporting instances`, `Server versions`, `Countries` and `Client kinds`. Seven cards, in that order. Fewer means a card was lost when the section became a band.
+
+  The chip is `+30`, not `+39`. The fixture writes `downloads_app: 40 + i` over 40 days from `2026-08-01`, so `archiveEndDay` is `day(39)` and the point window opens at `day(9)`, where the value is 49: `pointDelta` returns `79 - 49 = 30`. `+39` would mean the window opened at `day(0)`.
+- Every one of the seven cards reports `titleTag: "H3"`. Five of them come from `cardHost`, which built a `<p>` before this task.
 - The `App downloads` figure printed in the group head equals the `App downloads` figure on the at-a-glance card in `header-stats`, value, sub-line and chip text alike. They come from one `pointCard` call each; a difference means `figure` is dispatching on the wrong kind.
 - At `threshold`, the two telemetry chart cards are drawn (the gate reads exactly 10 and passes). At `low`, they are absent and the band holds a `slot-note-detail` containing `4 instances reported inside the seven days ending` and `Charts appear here once that count reaches 10`. At `none`, the note contains `No instance has reported yet`. After `--strip-telemetry`, it contains `built from a bundle made before the instance pings were collected`. Four distinct wordings; any two collapsing into one is a failure.
 - At every below-threshold mode the `App downloads` hero and the `Update checks` card still render. A group-shaped hole where the hero should be is the failure this arrangement exists to prevent.
@@ -2182,7 +2297,7 @@ Run at `high`, `threshold`, `low`, `none`, `high-nodims`, `high-other`, `sparse`
 
 - [ ] **Step 4: Update `docs/systems/metrics.md`**
 
-- Section 10 opening: the section list loses "instances" and gains "**adoption** (app downloads, update checks, and the opt-in fleet figures behind their threshold)".
+- Section 10 opening: the count stays at "Eight sections". The list loses the **telemetry** entry Task 3 added to it and gains "**adoption** (app downloads, update checks, and the opt-in fleet figures behind their threshold)". There is no "instances" entry in that list to remove: the opening list is at a glance, reach, growth, referrers, paths, plus what Tasks 3 and 4 added, and the telemetry section is documented in section 10.8 rather than named there. The swap is telemetry out, adoption in.
 - Section 10.8: retitle the paragraph "The sixth section, slot `telemetry`" to "The Adoption group's detail band, in slot `adoption-body`". Keep every sentence about the gate, the three wordings, the `SERIES_NAMES` exclusion, the absence of `bind`, the per-card expansion and the rankings exactly as they are. Add: "The group always has a hero and a compact card whatever telemetry does, so the state note is an empty state inside a band rather than a group-shaped hole in the page."
 
 - [ ] **Step 5: Commit**
@@ -2196,7 +2311,7 @@ git commit -m "feat(insights): add the adoption group"
 
 ## Task 6: Reach, part one: the traffic cards
 
-Spec sections 3.1, 4.1, 5.3 and 7.3. This task also lands spec section 16's call 1 in full: the old reach section is deleted here, and with it the second copy of the CI activity chart.
+Spec sections 3.1, 4.1, 4.3, 5.3 and 7.3. This task also lands spec section 16's call 1 in full: the old reach section is deleted here, and with it the second copy of the CI activity chart. It lands spec section 16's call 9 as well: it builds the page's first two flow chips, so `flowTrend` and the `30d total` meta pair arrive with them.
 
 **Files:**
 - Modify: `site/insights/index.html` (the `#reach` panel rewritten, a new reach section IIFE, the old `chart-reach` IIFE deleted, `SLOT_IDS`)
@@ -2204,7 +2319,14 @@ Spec sections 3.1, 4.1, 5.3 and 7.3. This task also lands spec section 16's call
 
 **Interfaces:**
 - Consumes: everything Tasks 4 and 5 produced.
-- Produces: the `reach-body` slot and the reach group renderer, which Tasks 7 and 8 extend.
+- Produces: the `reach-body` slot and the reach group renderer, which Task 8 extends with its detail band. On `window.INSIGHTS_FIGURES`:
+
+  ```
+  F.flowDelta(spec, data, win, step)  -> the existing one-window total, newly exported
+                                         because a flow card's meta line prints it
+  ```
+
+  `flowTrend(series, field, wins, step)` is added in the same block and is deliberately **not** exported: `figure` is its only caller, and nothing outside it consumes the arithmetic.
 
 - [ ] **Step 1: Rewrite the `#reach` panel**
 
@@ -2230,9 +2352,110 @@ That sentence becomes the clones card's standing caveat, with a link to `#delive
 
 In `SLOT_IDS` and `NOTE_SLOT_IDS`, replace `"chart-reach"` with `"reach-body"`.
 
-- [ ] **Step 2: Write the reach section**
+- [ ] **Step 2: Add `flowTrend` to `INSIGHTS_FIGURES`, then write the reach section**
 
-A new `<script>` block, placed where the old `chart-reach` block was:
+First the arithmetic, because the section below is its first consumer. In the `INSIGHTS_FIGURES` IIFE:
+
+```js
+  /*
+   * The flow comparison: this 30 days against the 30 before them.
+   *
+   * `flowDelta` totals ONE window and refuses when it is not covered end to
+   * end. This compares two, and each has to pass that same test on its own
+   * measured rows, at the bundle's own step. A comparison against a window
+   * that is missing days is short by an unknown amount in the direction
+   * nobody can see.
+   *
+   * The two windows are inclusive and adjacent and never overlap:
+   *   recent = [E - 29d, E]     prior = [E - 59d, E - 30d]
+   *
+   * On a downsampled bundle this inherits the problem `flowDelta` already
+   * documents: a whole-week bucket cannot be split at the edge of a 30-day
+   * window. Each window is labelled with the span its buckets actually stand
+   * for, and if the two spans differ the comparison is refused rather than
+   * made across unequal widths, because a difference between a 28-day total
+   * and a 35-day one is not a change in anything.
+   */
+  function windowTotal(series, field, startMs, endMs, step) {
+    var days = [];
+    var sum = 0;
+    for (var i = 0; i < series.dates.length; i++) {
+      var ms = I.parseDay(series.dates[i]);
+      if (isNaN(ms) || ms < startMs || ms > endMs) continue;
+      if (series[field][i] === null) continue;
+      days.push(ms);
+      sum += series[field][i];
+    }
+    if (days.length === 0) return { ok: false, gap: null };
+    days.sort(function (a, b) { return a - b; });
+    var gap = coverageGap(days, { startMs: startMs, endMs: endMs }, step);
+    if (gap !== null) return { ok: false, gap: gap };
+    var spanEnd = days[days.length - 1] + (step - 1) * I.DAY_MS;
+    return {
+      ok: true, sum: sum, rows: days.length,
+      spanDays: I.dayGap(spanEnd, days[0]) + 1
+    };
+  }
+
+  function flowTrend(series, field, wins, step) {
+    if (wins === null) {
+      return unavailable("the archive holds no dated measurement to anchor a window to.");
+    }
+    if (oldestMeasured(series, field) === null) {
+      return unavailable("this metric has never been measured, so there is nothing to total.");
+    }
+    var endMs = wins.flow.endMs;
+    var recent = windowTotal(series, field, endMs - (I.DELTA_DAYS - 1) * I.DAY_MS, endMs, step);
+    if (!recent.ok) {
+      return unavailable(recent.gap === null
+        ? "no day inside the last " + I.DELTA_DAYS + " days carries a measurement."
+        : recent.gap);
+    }
+    var prior = windowTotal(series, field, endMs - (2 * I.DELTA_DAYS - 1) * I.DAY_MS,
+      endMs - I.DELTA_DAYS * I.DAY_MS, step);
+    if (!prior.ok) {
+      return unavailable("the " + I.DELTA_DAYS + " days before this window are not measured end " +
+        "to end, so there is nothing to compare this total with.");
+    }
+    if (recent.spanDays !== prior.spanDays) {
+      return unavailable("this bundle is bucketed by week, and the buckets that fall inside the " +
+        "two windows stand for " + recent.spanDays + " days and " + prior.spanDays +
+        " days. A difference between two totals of unequal width is not a change in anything.");
+    }
+    return {
+      available: true,
+      signed: true,
+      value: recent.sum - prior.sum,
+      windowDays: recent.spanDays,
+      headline: recent.spanDays === I.DELTA_DAYS
+        ? "Change over the " + I.DELTA_DAYS + " days to " + I.formatDay(endMs)
+        : "Change over " + recent.spanDays + " days" + I.resolutionSuffix(),
+      detail: I.formatCount(recent.sum) + " over " + rowsLabel(recent.rows, step) +
+        ", against " + I.formatCount(prior.sum) + " over " + rowsLabel(prior.rows, step) +
+        " in the " + recent.spanDays + " days before them."
+    };
+  }
+```
+
+A flow spec gains a `trend` flag so `figure` knows which of the two to use:
+
+```js
+    if (spec.kind === "flow") {
+      body = flowCard(spec, data, wins === null ? null : wins.flow, step);
+      /* Every flow chip on the page prints a signed change (spec section 4.3),
+       * so both of this page's flow specs set the flag. The flag exists rather
+       * than the branch being unconditional because `flowCard` is also what
+       * the at-a-glance grid calls, and that grid keeps its one-window chips
+       * until Task 9 deletes it. */
+      if (spec.trend === "compare") {
+        body.delta = flowTrend(data.series[spec.series], spec.field, wins, step);
+      }
+    }
+```
+
+Export `flowDelta` from `INSIGHTS_FIGURES`, beside the names already there. It is needed by the meta line below. **Do not export `flowTrend`:** `figure` is its only caller.
+
+Then the section itself. A new `<script>` block, placed where the old `chart-reach` block was:
 
 ```html
 <script>
@@ -2244,8 +2467,10 @@ A new `<script>` block, placed where the old `chart-reach` block was:
  * archive measures, and it is the one traffic series the CI clone confound
  * does not touch: a checkout loads no page.
  *
- * Tasks 7 and 8 add the growth cards and the ranked dimension cards to the
- * two bands this file already builds.
+ * Stars, forks and watchers are NOT here. They are people who chose to follow
+ * the repository rather than people finding it, which is a different question,
+ * and they have a group of their own: see #following. Task 8 adds the two
+ * ranked dimension cards to the detail band this file already builds.
  */
 (function () {
   "use strict";
@@ -2255,7 +2480,9 @@ A new `<script>` block, placed where the old `chart-reach` block was:
   var C = window.INSIGHTS_CHARTS;
   var G = window.INSIGHTS_GROUPS;
 
-  var LEAD = { label: "Page views", kind: "flow", series: "views", field: "count" };
+  var LEAD = {
+    label: "Page views", kind: "flow", series: "views", field: "count", trend: "compare"
+  };
 
   var live = [];
 
@@ -2279,15 +2506,46 @@ A new `<script>` block, placed where the old `chart-reach` block was:
     return downsampled ? label + " (weekly sum, upper bound)" : label;
   }
 
-  /* Only when the two columns disagree, which is the case worth naming: the
-   * count was recorded and the unique figure was not, or the reverse. */
-  function uniquesMeta(countColumn, uniquesColumn) {
+  /*
+   * A traffic card's own meta pairs, on top of the shared ones.
+   *
+   * The uniques count first, and only when the two columns disagree, which is
+   * the case worth naming: the count was recorded and the unique figure was
+   * not, or the reverse.
+   *
+   * Then the 30-day window total. It is here because the chip above no longer
+   * carries it. Every flow chip on this page prints a signed change, so that a
+   * lead figure's chip and a card head's chip in the same idiom cannot mean
+   * two different quantities, and the one-window total the chip used to print
+   * is a figure this page prints today. It keeps a place rather than
+   * disappearing, and this is the honest place for it: a mono meta line beside
+   * the span and the measured-step count, where a card's other measured facts
+   * already are.
+   *
+   * `flowDelta` is the page's existing one-window total, unchanged and called
+   * exactly as `flowCard` calls it, so this pair and the at-a-glance chip
+   * cannot disagree about the number while both are on the page. It refuses
+   * unless the window is covered end to end, and it labels itself with the
+   * span its rows actually stand for when the bundle is weekly, which is why
+   * the key is built from `windowDays` rather than hard-coded to 30. A refused
+   * total is not printed at all: it is not a figure, and the chip beside it
+   * already says the window is not covered.
+   */
+  function trafficMeta(seriesName, field, countColumn, uniquesColumn, ctx) {
     return function (axis, offsets, stepDays) {
+      var out = [];
       var counted = axis.measured[offsets[countColumn]];
       var uniqueCounted = axis.measured[offsets[uniquesColumn]];
-      if (uniqueCounted === counted) return [];
-      return [G.pair("uniques measured",
-        uniqueCounted + " of " + G.steps(axis.xs.length, stepDays))];
+      if (uniqueCounted !== counted) {
+        out.push(G.pair("uniques measured",
+          uniqueCounted + " of " + G.steps(axis.xs.length, stepDays)));
+      }
+      var total = F.flowDelta({ series: seriesName, field: field }, ctx.data,
+        ctx.wins === null ? null : ctx.wins.flow, ctx.step);
+      if (total.available) {
+        out.push(G.pair(total.windowDays + "d total", I.formatCount(total.value)));
+      }
+      return out;
     };
   }
 
@@ -2297,7 +2555,7 @@ A new `<script>` block, placed where the old `chart-reach` block was:
       "the " + label.toLowerCase() + " line as an upper bound rather than a count of people.";
   }
 
-  function heroSpec(downsampled) {
+  function heroSpec(ctx) {
     return {
       profile: "hero",
       title: "Page views",
@@ -2312,14 +2570,14 @@ A new `<script>` block, placed where the old `chart-reach` block was:
           fill: "rgba(125, 211, 252, 0.10)", width: 2
         },
         {
-          column: "uniques", label: uniquesLabel("Unique visitors", downsampled),
+          column: "uniques", label: uniquesLabel("Unique visitors", ctx.downsampled),
           token: "--lavender", fallback: "#c4b5fd", width: 1.5, dash: [5, 4]
         }
       ],
       yPolicy: "zero",
       breakPhrase: "drawn as breaks, not zeros",
-      metaExtra: uniquesMeta("count", "uniques"),
-      notes: downsampled ? [weeklyUniquesNote("Unique visitors")] : []
+      metaExtra: trafficMeta("views", "count", "count", "uniques", ctx),
+      notes: ctx.downsampled ? [weeklyUniquesNote("Unique visitors")] : []
     };
   }
 
@@ -2341,7 +2599,7 @@ A new `<script>` block, placed where the old `chart-reach` block was:
     return note;
   }
 
-  function clonesSpec(downsampled) {
+  function clonesSpec(ctx) {
     return {
       profile: "compact",
       title: "Repository clones",
@@ -2356,32 +2614,27 @@ A new `<script>` block, placed where the old `chart-reach` block was:
       lines: [
         { column: "count", label: "Clones", token: "--mint", fallback: "#86efac" },
         {
-          column: "uniques", label: uniquesLabel("Unique cloners", downsampled),
+          column: "uniques", label: uniquesLabel("Unique cloners", ctx.downsampled),
           token: "--amber", fallback: "#fcd34d", dash: [5, 4]
         }
       ],
       yPolicy: "zero",
       breakPhrase: "drawn as breaks, not zeros",
-      metaExtra: uniquesMeta("count", "uniques"),
+      metaExtra: trafficMeta("clones", "count", "count", "uniques", ctx),
       caveat: cloneCaveat(),
-      notes: downsampled ? [weeklyUniquesNote("Unique cloners")] : []
+      notes: ctx.downsampled ? [weeklyUniquesNote("Unique cloners")] : []
     };
   }
 
   /*
-   * The selected window, stated in the dates it resolves to. This is the
-   * range that was ASKED for; each card's own caption states the span it
-   * actually drew, and the two differ whenever a series is younger than the
-   * window, which is the live archive's current state and not a hypothetical.
+   * No window line. The old reach section printed one at the top of its slot
+   * and so did growth and telemetry, which is the same sentence three times on
+   * a page whose stated problem is too much text. #method's coverage line
+   * states the selected range and the dates it resolves to once for the whole
+   * page, and each card's own meta line states the span it actually drew,
+   * which is the number that differs from card to card. Nothing is lost: the
+   * range that was asked for is stated beside the control that asks for it.
    */
-  function windowLine(win) {
-    var note = el("p", "chart-window");
-    note.appendChild(G.pair("showing", win.title.toLowerCase()));
-    note.appendChild(G.pair("window",
-      I.formatDay(win.startMs) + " → " + I.formatDay(win.endMs) + I.resolutionSuffix()));
-    return note;
-  }
-
   function render(slot, data, rangeKey) {
     var ctx = {
       data: data,
@@ -2405,15 +2658,13 @@ A new `<script>` block, placed where the old `chart-reach` block was:
       return;
     }
 
-    slot.appendChild(windowLine(ctx.win));
-
     var created = [];
     try {
       G.keep(created, G.buildCardSafely(hero, function () {
-        return G.chartCard(hero, heroSpec(ctx.downsampled), ctx);
+        return G.chartCard(hero, heroSpec(ctx), ctx);
       }));
       G.keep(created, G.buildCardSafely(series, function () {
-        return G.chartCard(series, clonesSpec(ctx.downsampled), ctx);
+        return G.chartCard(series, clonesSpec(ctx), ctx);
       }));
     } catch (error) {
       for (var j = 0; j < created.length; j++) {
@@ -2457,12 +2708,15 @@ Delete the old `chart-reach` IIFE in full, including its `CHARTS` array, `metaLi
 
 **What counts as a pass, and what counts as a failure:**
 
-- The `reach-body` slot holds a group head labelled `Page views` whose `value` equals the `Views` value on the at-a-glance card, and whose `chip` and `chipTitle` match that card's exactly. They come from one `flowCard` call each. At `long` the value is the sum of `40 + i` over 90 days; the check is that the two printings agree, not the arithmetic.
-- The slot holds two cards: `Page views` with `compact: false`, `plot.overHeight` 280 and a two-entry legend, and `Repository clones` with `compact: true`, `plot.overHeight` 150 and a two-entry legend. A compact card reporting 220 or 280 means the profile did not reach `plotSize`.
+- The `reach-body` slot holds a group head labelled `Page views` whose `value` equals the `Views` value on the at-a-glance card in `header-stats`. They come from one `flowCard` call each. At `long` the value is the sum of `40 + i` over 90 days; the check is that the two printings agree, not the arithmetic.
+- The group head's **chip does not** match the at-a-glance card's, and that is the point of this task's chip change. At `long` the head reads `+900 · 30d` (views `40 + i`: `day(60)` to `day(89)` totals 3,435 against 2,535 for `day(30)` to `day(59)`) while the at-a-glance Views chip reads the one-window total `3,435 · 30d`. At `high` the head reads the dash glyph with a `chipTitle` containing `the 30 days before this window are not measured end to end`, because a 40-day archive cannot cover the prior window, while the at-a-glance chip still reads its one-window total. Both paths, on two modes.
+- **The `30d total` pair proves the total did not vanish.** At `high` the `Page views` card's `meta` contains `30d total 1,935` and that string is character for character the number in the at-a-glance Views chip; the `Repository clones` card's `meta` contains `30d total 885` against the at-a-glance Clones chip. Compare the pairs to the chips in the same report. This is the check that the constraint "no figure printed today stops being printed" is met, and it is only checkable while the at-a-glance grid is still on the page, which is until Task 9.
+- The slot holds two cards: `Page views` with `compact: false`, `plot.canvasHeight` 280 and a two-entry legend, and `Repository clones` with `compact: true`, `plot.canvasHeight` 150 and a two-entry legend. Assert `canvasHeight`, not `overHeight`: `overHeight` is the plot area, the canvas minus the top padding and the x-axis strip, so it reads about 216 and 112 here. A compact card reporting a `canvasHeight` of 220 or 280 means the profile did not reach `plotSize`.
+- **No slot on the page holds a `.chart-window` line any more except the ones the sections still to be dismantled render.** The `reach-body` slot's `window` field is `null`. It becomes `null` for every slot once Tasks 7 and 8 land, at which point the report's per-range `window` column is empty by design and the `method-coverage` column is what carries the per-range evidence.
 - The `Repository clones` card's `figure.note` reads `includes this repo's own CI checkouts` and the card carries a `stat-note` containing `GitHub counts this repository's own actions/checkout steps as clones`. The link in it points at `#delivery`; click it in the browser and confirm the Delivery panel's heading lands clear of the sticky bar.
 - **No slot on the page holds a `CI activity` card except `delivery-body`.** The report lists every slot; grep it. Two of them means the old section was not deleted.
 - The `chart-reach` slot is gone from the report entirely.
-- `#method` now carries four paragraphs: the archive paragraph, the two telemetry paragraphs from Task 5, and the two reach paragraphs from this task. Read them in the browser and check against spec section 7.3's table that no sentence was dropped in the move and that the clones sentence appears on the card rather than in `#method`.
+- `#method` now carries the archive paragraph directly under its `h2`, then a **Traffic** `h3` with this task's two reach paragraphs, then the **Opt-in pings** `h3` with Task 5's two telemetry paragraphs, then **Provenance and coverage**. Insert the Traffic heading above Opt-in pings, which is its final position. Read the paragraphs in the browser and check against spec section 7.3's table that no sentence was dropped in the move and that the clones sentence appears on the card rather than in `#method`.
 - At `dimensions-only`, the slot holds the no-time-axis note and no card.
 - `console messages: 0`, `console capture proof: PASS`.
 
@@ -2470,7 +2724,7 @@ Delete the old `chart-reach` IIFE in full, including its `CHARTS` array, `metaLi
 
 - Section 3.1, the clones caveat: the sentence naming where the CI confound is disclosed now names the Reach clones card and `#method` rather than the reach section copy.
 - Section 4.5: "Both series are plotted as separate stacked charts" becomes "The two are plotted in different groups, clones in Reach and workflow runs in Delivery, joined by the page-wide cursor and by a link in each direction." The rule that they are never combined into one corrected figure is unchanged and stays stated.
-- Section 10 opening: the section list loses "reach (views, clones, and this repository's own CI activity)" and gains "**reach** (page views as the hero, repository clones beside it; stars, forks, watchers and the ranked dimensions arrive in the next two changes)". Delete the temporary clause about the duplicated CI card added in Task 4.
+- Section 10 opening: the count stays at "Eight sections". The list loses "reach (views, clones, and this repository's own CI activity)" and gains "**reach** (page views as the hero, repository clones beside it; the ranked dimension cards arrive in Task 8)". Delete the temporary clause about the duplicated CI card added in Task 4.
 - Section 10.7: the Reach paragraph explaining why Reach isolates each card is still true and still the rule. Rewrite its first sentence to say the isolation now happens per card inside a group rather than per card inside a section, and note that the CI series that motivated it has moved to Delivery while the rule it forced stays.
 
 - [ ] **Step 5: Commit**
@@ -2482,30 +2736,105 @@ git commit -m "feat(insights): move the traffic charts into the reach group"
 
 ---
 
-## Task 7: Reach, part two: stars, forks and watchers
+## Task 7: The Following group
 
-Spec sections 3.1 and 3.5. **This task depends on spec section 16's call 5 (Watchers and Contributors gain a compact plot) for the Watchers card, and on call 2 for the fact that stars and forks no longer share an axis or carry the markers.**
+Spec sections 3.2, 4.1, 5.3, 6.4 and 9. **This task depends on four of the reversible calls in spec section 16: call 2 (the release markers move off the growth charts, so stars and forks no longer need one axis), call 5 (Watchers gains a compact plot), call 7 (Stars is Following's hero and is the one hero on the page with no area fill) and call 8 (the lead figure row carries four figures, and Following's is Stars). If call 7 is reversed the hero changes series; if call 8 is reversed this group's head disappears and the rest of the task stands.**
+
+This is the fourth group. It exists because Reach was answering two questions: page views, clones, referring sites and popular paths are traffic, people finding the project, while stars, forks and watchers are people who clicked a button to keep track of it. The two were together only because the dissolved growth section had nowhere else to go, and left together Reach would hold seven of the page's twelve cards while being the first group a reader meets.
 
 **Files:**
-- Modify: `site/insights/index.html` (the reach section IIFE, the `#growth` panel and the `chart-growth` IIFE deleted, `SLOT_IDS`)
+- Modify: `site/insights/index.html` (a new `#following` panel, a new following section IIFE, the `#growth` panel and the `chart-growth` IIFE deleted, the nav, `SLOT_IDS`)
 - Modify: `docs/systems/metrics.md` sections 10 opening and 10.7
 
 **Interfaces:**
-- Consumes: the reach section's `series` band (Task 6); `C.fittedCounts` and `C.measuredPositions` (Task 4).
-- Produces: nothing new.
+- Consumes: everything Tasks 4, 5 and 6 produced, and `C.fittedCounts` and `C.measuredPositions` (Task 4) in particular.
+- Produces: the `following-body` slot.
 
-- [ ] **Step 1: Add the three compact specs to the reach section**
+- [ ] **Step 1: Add the `#following` panel, the nav link and the slot**
 
-```js
+Insert between `#reach` and `#adoption`, so the page reads Reach, Following, Adoption, Delivery: one funnel from the outside in, a visitor finds the repository, some of them mark it, fewer run the software, and the last question is whether what they ran is still being worked on.
+
+```html
+  <section class="panel" id="following">
+    <div class="wrap">
+      <p class="ch-label ch-amber">following</p>
+      <h2>Following</h2>
+      <p class="sec-copy">
+        Stars, forks and watchers count people who clicked a button on GitHub rather than people
+        running the software, and each is a running total that this archive can only see from the
+        day it started recording.
+      </p>
+      <div class="slot" id="following-body"></div>
+    </div>
+  </section>
+```
+
+Add `<a class="nav-link" href="#following">Following</a>` after the `#reach` link, and `"following-body"` to both `SLOT_IDS` and `NOTE_SLOT_IDS`.
+
+The page declares one `.ch-*` rule per accent it uses. If there is no `.ch-amber`, add `.ch-amber::before { color: var(--amber); }` beside the others, so this group's channel label takes its hero's colour the way the other three do. Four groups, four distinct label accents: sky, amber, mint, rose.
+
+- [ ] **Step 2: Write the following section**
+
+A new `<script>` block placed where the old `chart-growth` block was, so it runs after the reach block and before the dimension block.
+
+```html
+<script>
+/*
+ * Group "following" -- who chose to follow it.
+ *
+ * Hero: stars. Of the three series here it is the one that actually moves.
+ * Forks and watchers change a handful of times a year on this repository,
+ * while the star count is the number a reader goes to a repository page to
+ * look for, and it is the widest of the three, so it is the one worth giving
+ * the full width to.
+ *
+ * ─────────────────────────────────────────────────────────────────────────
+ * THE ONE HERO ON THIS PAGE WITH NO AREA FILL
+ *
+ * A fill reads as area under the curve measured from zero, so a card that
+ * fits its axis to the values must not carry one. All three series here are
+ * cumulative counters and all three need a fitted axis: a star count moving 60
+ * to 64 over a month, drawn from zero, is a flat line at the top of an axis
+ * that is 94 percent empty, which hides the only thing the chart is for.
+ *
+ * The two rules cannot both hold on one card, so the fill is what gives way.
+ * That costs one of the four things the page relies on to carry the hero
+ * hierarchy at a single column, and the other three still apply here: the hero
+ * plot is 280px against 150, it sits on --chat against a lighter recessive
+ * panel, and the group's lead figure is a large number directly above it. It
+ * is a real loss and it is smaller than the loss of leaving seven of twelve
+ * cards in the group a reader meets first.
+ * ─────────────────────────────────────────────────────────────────────────
+ */
+(function () {
+  "use strict";
+
+  var I = window.INSIGHTS;
+  var F = window.INSIGHTS_FIGURES;
+  var C = window.INSIGHTS_CHARTS;
+  var G = window.INSIGHTS_GROUPS;
+
+  var LEAD = { label: "Stars", kind: "point", series: "stars", field: "total" };
+
+  /* Every live uPlot instance this group owns. Assigned only once a render
+   * has completed; a render that throws destroys what it built itself. */
+  var live = [];
+
+  function el(tag, className, text) {
+    var node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+
   /*
-   * The vertical axis on these three is fitted rather than pinned to zero.
-   * `zeroBasedCounts` is right for a per-day event count and wrong for a
-   * cumulative one: a count that moved 60 to 64 over a month would be a flat
-   * line at the top of an axis that is 94 percent empty, hiding the only
-   * thing the chart is for. A fitted baseline is the other half of the
-   * truncated-axis trade and must not be silent, so the card says so, and
-   * none of these carries an area fill, because a fill reads as area measured
-   * from zero and this axis does not start there.
+   * Verbatim from the growth section's `axisNote`, in the singular. That
+   * sentence said "the vertical axis on both charts is fitted", which
+   * described two series sharing one axis; there are three cards with an axis
+   * each now, so there is no "both charts" for it to refer to. The claim it
+   * makes is unchanged, and it is rendered inside each card rather than once
+   * per section, because a fitted baseline is the other half of the
+   * truncated-axis trade and must not be silent.
    */
   var FITTED_NOTE = "The vertical axis is fitted to the values drawn rather than pinned to a " +
     "zero baseline, so a move of a few is visible rather than flattened. Read the height of " +
@@ -2516,43 +2845,77 @@ Spec sections 3.1 and 3.5. **This task depends on spec section 16's call 5 (Watc
    * weekly bucket is keyed on the Monday that opens its week while a
    * cumulative field carries the LAST value measured in that week, so a point
    * sits up to six days earlier on the axis than the reading it shows.
+   *
+   * This is the sentence that could NOT travel to the Delivery hero, whose
+   * series is summed rather than carried. It stays here, where it is exact.
    */
   var WEEKLY_CUMULATIVE_NOTE = "This bundle is bucketed by week. A point is dated on the Monday " +
     "that opens its week but carries the last value measured in that week, so it sits up to " +
     "six days earlier on the axis than the reading it shows.";
 
-  function cumulativeSpec(title, figure, series, field, label, token, fallback, downsampled) {
+  function cumulativeSpec(profile, title, figure, series, field, label, token, fallback,
+    downsampled) {
     var notes = [FITTED_NOTE];
     if (downsampled) notes.push(WEEKLY_CUMULATIVE_NOTE);
+    var line = { column: "total", label: label, token: token, fallback: fallback };
+    /* A hero's stroke is 2px against the compact profile's 1.5. No `fill` on
+     * any of the three, hero included: see the header comment. */
+    if (profile === "hero") line.width = 2;
     return {
-      profile: "compact",
+      profile: profile,
       title: title,
       figure: figure,
       columns: { total: { series: series, field: field } },
-      lines: [{ column: "total", label: label, token: token, fallback: fallback }],
+      lines: [line],
       yPolicy: "fitted",
       breakPhrase: "drawn as breaks, not as a fall to zero",
       notes: notes
     };
   }
-```
 
-and in `render`, after the clones card and inside the same `try`:
+  function render(slot, data, rangeKey) {
+    var ctx = {
+      data: data,
+      win: I.rangeWindow(data, rangeKey),
+      wins: F.windows(data),
+      step: I.resolutionStepDays(),
+      downsampled: data.downsampled
+    };
 
-```js
-      /* Each on its own y axis. They shared one while a single set of release
-       * markers was painted across both and the markers made the comparison;
-       * the markers are on the Delivery hero now, and stars and forks differ
-       * by an order of magnitude in the live archive, so a shared axis would
-       * flatten the fork line onto the floor for no remaining gain. */
-      G.keep(created, G.buildCardSafely(series, function () {
-        return G.chartCard(series, cumulativeSpec("Stars",
-          { label: "Stars", kind: "point", series: "stars", field: "total" },
+    G.groupHead(slot, LEAD, ctx);
+
+    /* This is the one group with no detail band. Every card it holds needs a
+     * time axis, so on a bundle with no dated measurement there is nothing it
+     * can draw and the no-time-axis state is the whole group rather than part
+     * of it. The other three each hold at least one card that needs no window:
+     * a ranked list, a release list, a threshold note. */
+    if (ctx.win === null) {
+      slot.appendChild(el("p", "slot-note",
+        "The archive holds no dated measurement, so there is no time axis to draw the star, " +
+        "fork and watcher counts on."));
+      return;
+    }
+
+    var hero = G.band("hero");
+    var series = G.band("series");
+    var created = [];
+    try {
+      G.keep(created, G.buildCardSafely(hero, function () {
+        /* The hero carries no card-head figure: the group head directly above
+         * it prints the same series' figure, and printing it twice a hundred
+         * pixels apart is the duplication `INSIGHTS_FIGURES` exists to make
+         * unnecessary. Reach's and Adoption's heroes do the same. */
+        return G.chartCard(hero, cumulativeSpec("hero", "Stars", null,
           "stars", "total", "Stars", "--amber", "#fcd34d", ctx.downsampled), ctx);
       }));
 
+      /* Each on its own y axis. Stars and forks shared one while a single set
+       * of release markers was painted across both and the markers made the
+       * comparison; the markers are on the Delivery hero now, and the two
+       * differ by an order of magnitude in the live archive, so a shared axis
+       * would flatten the fork line onto the floor for no remaining gain. */
       G.keep(created, G.buildCardSafely(series, function () {
-        return G.chartCard(series, cumulativeSpec("Forks",
+        return G.chartCard(series, cumulativeSpec("compact", "Forks",
           { label: "Forks", kind: "point", series: "forks", field: "total" },
           "forks", "total", "Forks", "--coral", "#fb923c", ctx.downsampled), ctx);
       }));
@@ -2562,47 +2925,94 @@ and in `render`, after the clones card and inside the same `try`:
        * no series is added and no figure is derived that the page does not
        * already print. */
       G.keep(created, G.buildCardSafely(series, function () {
-        return G.chartCard(series, cumulativeSpec("Watchers",
+        return G.chartCard(series, cumulativeSpec("compact", "Watchers",
           { label: "Watchers", kind: "point", series: "repo", field: "subscribers" },
           "repo", "subscribers", "Watchers", "--lavender", "#c4b5fd", ctx.downsampled), ctx);
       }));
+    } catch (error) {
+      /* `live` is assigned only once every card is built, so a throw part-way
+       * leaves `created` referenced by nothing but this frame. Destroy what
+       * was built here, then let the shell render its failure note. */
+      for (var j = 0; j < created.length; j++) {
+        try {
+          created[j].destroy();
+        } catch (cleanupError) {
+          if (typeof console !== "undefined" && typeof console.error === "function") {
+            console.error("insights: releasing a following chart after a failed render also " +
+              "failed.", cleanupError);
+          }
+        }
+      }
+      throw error;
+    }
+    G.attach(slot, [hero, series]);
+    live = created;
+  }
+
+  function teardown() {
+    var pending = live;
+    live = [];
+    var failure = null;
+    for (var i = 0; i < pending.length; i++) {
+      try {
+        pending[i].destroy();
+      } catch (error) {
+        if (failure === null) failure = error;
+      }
+    }
+    if (failure !== null) throw failure;
+  }
+
+  I.registerSection("following-body", render, teardown);
+})();
+</script>
 ```
 
-- [ ] **Step 2: Delete the growth section**
+Two smaller edits go in this commit, because this is where they stop being true:
 
-Delete the `#growth` panel and the whole `chart-growth` IIFE, and remove `"chart-growth"` from `SLOT_IDS` and `NOTE_SLOT_IDS`. Move the panel's paragraph into `#method` verbatim, with its em dashes replaced. Before deleting, confirm that nothing outside the block still calls `fittedCounts` (it moved to the toolkit in Task 4), `collectReleases`, `releaseCaption`, `releaseNarrative`, `listGroups`, `listOutside` or `releaseLabel` (all moved to the toolkit in Task 2). `singlePointNote`, `readings`, `measuredPhrase`, `stepPhrase`, `latestReading`, `weeklyNote`, `axisNote` and the growth `metaLine` go with the block; their surviving content is the two notes added in Step 1 and the shared one-point rule from Task 4.
+- The `INSIGHTS_FIGURES` header comment says the surface has "four consumers instead of one, the lead figure row and each of the three groups' compact card heads". It is five and four now. Correct the count.
+- The `INSIGHTS_GROUPS` header comment's "four groups draw the same two kinds of card" is already correct as Task 4 wrote it; check it rather than changing it.
 
-Also remove the now-dead `<a class="nav-link" href="#growth">Growth</a>`.
+- [ ] **Step 3: Delete the growth section**
 
-- [ ] **Step 3: Run the recipe at `long`, `high` and `dimensions-only`**
+Delete the `#growth` panel and the whole `chart-growth` IIFE, remove `"chart-growth"` from `SLOT_IDS` and `NOTE_SLOT_IDS`, and remove the now-dead `<a class="nav-link" href="#growth">Growth</a>`.
+
+Move the panel's paragraph into `#method` under a new `<h3>Cumulative counts</h3>`, inserted between the **Traffic** heading Task 6 added and the **Opt-in pings** heading Task 5 added, which is its final position. Em dashes are replaced with the punctuation the sentences need; nothing else is reworded.
+
+Before deleting, confirm that nothing outside the block still calls `fittedCounts` (it moved to the toolkit in Task 4), `collectReleases`, `releaseCaption`, `releaseNarrative`, `listGroups`, `listOutside` or `releaseLabel` (all moved to the toolkit in Task 2). `singlePointNote`, `stepWord`, `plural`, `steps`, `readings`, `measuredPhrase`, `stepPhrase`, `latestReading`, `weeklyNote`, `axisNote` and the growth `metaLine` go with the block. `stepWord` in particular is the copy Task 2 deliberately left behind, and this is the commit that removes it. Their surviving content is the two notes in Step 2, the Delivery hero's own weekly caution from Task 4, and the shared one-point rule from Task 4.
+
+- [ ] **Step 4: Run the recipe at `long`, `high` and `dimensions-only`**
 
 **What counts as a pass, and what counts as a failure:**
 
-- The `reach-body` slot holds five cards in order: `Page views`, `Repository clones`, `Stars`, `Forks`, `Watchers`. The last three are `compact: true` with `plot.overHeight` 150.
-- Each of the three carries a `figure` whose `value`, `sub` and `chip` are identical to the same-named at-a-glance card in `header-stats`. Compare all three pairs. A mismatch on any one means `figure` dispatched a different kind than the at-a-glance `CARDS` entry declares.
-- The `Forks` card draws its own axis. In the fixture, forks is a constant 4 across the archive while stars climb: the two cards' plots must therefore differ, and the `Forks` plot must not be a flat line pinned to the top of a star-scaled axis. Read the two `.u-axis` label sets in the browser; the fork axis tops out near 5 and the star axis near 150.
+- The `following-body` slot holds a group head labelled `Stars` whose `value`, `sub`, `chip` and `chipTitle` are identical to the `Stars` card in `header-stats`. Both are `pointCard` calls on one spec shape; a difference means `figure` dispatched a different kind than the at-a-glance `CARDS` entry declares. This is a point figure, so its chip is unaffected by Task 6's flow-chip change.
+- The slot holds three cards in order: `Stars` with `compact: false` and `plot.canvasHeight` 280, `Forks` with `compact: true` and `plot.canvasHeight` 150, `Watchers` with `compact: true` and `plot.canvasHeight` 150. Assert `canvasHeight`, not `overHeight`, which is the plot area and reads about 216 and 112 here.
+- `Forks` and `Watchers` each carry a `figure` whose `value`, `sub` and `chip` match the same-named at-a-glance card exactly. Compare both pairs.
+- **No card in this group reports a `fill` on any line, the hero included.** Confirm by eye that the star chart has no shaded area under it. It is the only hero on the page without one and the only place a reviewer might "fix" it back; the header comment in Step 2 is the reason it stays.
+- Each of the three carries a hint containing `fitted to the values drawn rather than pinned to a zero baseline`.
+- The `Forks` card draws its own axis. In the fixture, forks is a constant 4 across the archive while stars climb, so the two cards' plots must differ and the fork line must not be a flat line pinned to the top of a star-scaled axis. Read the two `.u-axis` label sets in the browser: the fork axis tops out near 5 and the star axis near 100 at `high`, near 160 at `long`.
 - The `Watchers` card draws a plot. The fixture writes `subscribers: 9` on every one of its days, which is a flat line on a fitted axis with one whole unit of air either side, and it is a plot rather than a stated reason because there are far more than two measured positions.
-- Each of the three carries a hint containing `fitted to the values drawn rather than pinned to a zero baseline`, and none of them reports a `fill` on its line. Check in the browser that no compact card has a shaded area under its line.
-- The `chart-growth` slot is gone from the report, and no slot holds a card titled `Stars` other than `reach-body`.
-- The report's `nav` no longer lists `#growth`.
-- At `dimensions-only`, `reach-body` still holds only the no-time-axis note.
+- The `chart-growth` slot is gone from the report, and no slot other than `following-body` holds a card titled `Stars`, `Forks` or `Watchers`.
+- The report's `nav` lists `#following Following` and no longer lists `#growth`.
+- The `reach-body` slot still holds exactly two cards, `Page views` and `Repository clones`. Three would mean a growth card landed in the wrong group.
+- At `dimensions-only`, `following-body` holds the group head, the no-time-axis note, and no card at all. It is the one group that renders nothing else in that state, because it has no card that works without a window.
 - `console messages: 0`, `console capture proof: PASS`.
 
-- [ ] **Step 4: Update `docs/systems/metrics.md`**
+- [ ] **Step 5: Update `docs/systems/metrics.md`**
 
-- Section 10 opening: drop "growth" from the section list and update the Reach entry to name its five cards.
+- Section 10 opening: the count stays at "Eight sections". The list loses "growth" and gains "**following** (stars as the hero, with forks and watchers beside it)". Say that this group exists because reach was answering two questions, traffic and people who chose to follow the repository, and that its hero is the one chart on the page drawn on a fitted axis without an area fill.
 - Section 10.7: replace the paragraph explaining that stars and forks share an axis because one set of release markers is painted across both. They are now expanded per card like every other card in a group, they each get their own y axis, and the markers sit on the Delivery hero. Keep the rule itself unchanged: a chart's x axis spans the days that chart was measured on, and two charts share an axis only when they share a history.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add site/insights/index.html docs/systems/metrics.md
-git commit -m "feat(insights): move stars, forks and watchers into the reach group"
+git commit -m "feat(insights): add the following group"
 ```
 
 ---
 
-## Task 8: Reach, part three: the ranked dimension cards
+## Task 8: Reach, part two: the ranked dimension cards
 
 Spec sections 3.1 and 5.3. Nothing about the dimension renderer's behaviour changes: all three of its states, every conditional hint and the join on the dimension string are preserved.
 
@@ -2612,7 +3022,7 @@ Spec sections 3.1 and 5.3. Nothing about the dimension renderer's behaviour chan
 
 **Interfaces:**
 - Consumes: the reach section's `detail` band (Task 6).
-- Produces: `window.INSIGHTS_DIMENSIONS.build(band, spec, data, rangeKey)` returning the plot handle it mounted or null.
+- Produces: `window.INSIGHTS_DIMENSIONS.build(band, spec, data, rangeKey)` returning **the single plot handle it mounted, or null**, and `window.INSIGHTS_DIMENSIONS.SECTIONS`.
 
 - [ ] **Step 1: Turn the dimension IIFE into a card builder**
 
@@ -2621,7 +3031,11 @@ Keep every function in the block. Change only the wrapper: `makeRenderer(spec)` 
 - everything it appends to `slot` is appended to a single `.chart-card` it creates through `G.detailCard(band, spec.rankedTitle)` instead, so the ranked list, the movement chart and every stated reason live in one card rather than in a section;
 - the inner `chart-stack` it built is dropped: a detail card is the container now;
 - the `rankCard` it built is dropped for the same reason, and its children go straight into the detail card;
-- `live` becomes a local array the function returns rather than section state.
+- the block's `live` section state becomes a local variable, and `build` **returns the one plot handle it mounted, or null**. The section owns at most one instance, which is what the comment at `index.html:4671` already says, and the caller in Step 2 pushes that handle into the array whose members Reach's `teardown` calls `.destroy()` on. Returning an array instead would make that teardown throw `pending[i].destroy is not a function` on every re-render;
+- the movement chart's `mount` call (`index.html:5820`) gains `profile: "compact"` beside its `yRange` and `hooks`. Spec section 5.3 says the dimension cards' movement chart is drawn compact, and without the option it takes the hero default and Step 4's geometry check fails. It is compact because it sits inside a detail card and is a subordinate reading of the ranked list above it;
+- the two inner `<p class="chart-title">` captions, `Movement between snapshots` and `Change since the previous snapshot` (`index.html:5772` and `:5455`), **stay as they are**, `<p>` and class included. They are captions for the plot below them rather than titles of the card, so the card keeps exactly one heading and the page's outline stays one `h3` per card. The harness's `cardOf` reports the first `.chart-title` in document order, which is the card's own `<h3>`, so the report is unaffected.
+
+**Move the whole dimension `<script>` block above the reach block, where the old `chart-reach` block was.** The reach IIFE reads `var D = window.INSIGHTS_DIMENSIONS;` at IIFE scope (Step 2), and the dimension block sits at `index.html:4588`, after the growth block and therefore later in the document. Left where it is, `D` captures `undefined` and `D.SECTIONS` throws a `TypeError` on every reach render, taking the whole group to its slot note. The fault would not appear at load, because `registerSection` renders immediately only when the fetch has already resolved, so it surfaces at first render and looks like a data problem. After this task the block registers no sections and exports only `INSIGHTS_DIMENSIONS`, so its position is free, and moving it matches how `INSIGHTS_FIGURES` and `INSIGHTS_GROUPS` are already ordered.
 
 The `SECTIONS` array keeps both entries and gains nothing. Export:
 
@@ -2633,7 +3047,7 @@ The `slotId` field on each entry is now unused; delete it, and change `rankedTit
 
 - [ ] **Step 2: Call it from the reach section**
 
-In the reach section's `render`, inside the `try` and after the watchers card:
+In the reach section's `render`, after the clones card:
 
 ```js
       /* The two ranked dimension cards. They come from one snapshot and need
@@ -2649,7 +3063,11 @@ In the reach section's `render`, inside the `try` and after the watchers card:
       }
 ```
 
-with `var D = window.INSIGHTS_DIMENSIONS;` at the top. Move the same loop above the `if (ctx.win === null)` early return so the detail band is built in that state too, and change that branch to `G.attach(slot, [detail]); return;`.
+with `var D = window.INSIGHTS_DIMENSIONS;` at the top of the IIFE.
+
+**The loop goes above the `if (ctx.win === null)` early return**, so the detail band is built in that state too, and that branch becomes `G.attach(slot, [detail]); return;`. Move `var created = [];` above the early return with it. `var` hoists, so leaving the declaration where it is puts `created.push(built)` in front of an `undefined`, which is a `TypeError` outside the `try` and fails the whole Reach slot, in precisely the `dimensions-only` state the move exists to serve. The three band variables are already declared above the return; `created` is the one that is not.
+
+The loop runs outside the `try` on purpose. Each card carries its own containment through `G.buildCardSafely`, and the `try` below it exists to release plots built by the chart cards, which do not exist yet at this point in the render.
 
 - [ ] **Step 3: Delete the two panels**
 
@@ -2659,18 +3077,18 @@ Delete the `#referrers` and `#paths` panels and their nav links, remove `"ranked
 
 **What counts as a pass, and what counts as a failure:**
 
-- The `reach-body` slot holds seven cards: the five from Task 7 plus `Referring sites` and `Popular paths`, both with `compact: false` and a `rows` array. The `ranked-referrers` and `ranked-paths` slots are gone from the report.
+- The `reach-body` slot holds four cards: `Page views`, `Repository clones`, `Referring sites` and `Popular paths`, the last two with `compact: false` and a `rows` array. The `ranked-referrers` and `ranked-paths` slots are gone from the report. Four is the point of the split: with stars, forks and watchers in Following, the group a reader meets first holds four of the page's twelve cards rather than seven.
 - The `Referring sites` card's rows carry the same names, numbers, rendered bar widths and fill colours the `ranked-referrers` slot reported before this task. Capture the report before the change and diff those two card entries; a changed `width` or `fill` means the ranked list lost its join to the movement chart's colours.
 - The fixture writes exactly one referrer snapshot, so both cards take the "fewer than two differenceable snapshots" path and state their reason rather than drawing a movement chart. The card's `note` must contain that stated reason, and `plots` for the slot must not have increased. If a movement chart appears, the snapshot count is being read from the wrong place.
 - At `dimensions-only` the two cards render in full, with their ranked lists, while the rest of the group is the no-time-axis note. This is the state the detail band's unconditional build exists for; a slot holding only the note is a failure.
 - The report's `nav` no longer lists `#referrers` or `#paths`.
 - `console messages: 0`, `console capture proof: PASS`.
 
-To exercise the movement chart, hand-edit `"$SP/fx/archive/traffic/referrers.ndjson"` to hold the same dimension on three consecutive snapshot dates with different counts, re-run the bundle step and the check, and confirm the `Referring sites` card now reports a plot with `overHeight` 150 and a `movement` meta line. The movement chart is drawn at the compact profile because it sits inside a detail card and is a subordinate reading of the ranked list above it.
+To exercise the movement chart, hand-edit `"$SP/fx/archive/traffic/referrers.ndjson"` to hold the same dimension on three consecutive snapshot dates with different counts, re-run the bundle step and the check, and confirm the `Referring sites` card now reports a plot with `canvasHeight` 150 and a `movement` meta line. A `canvasHeight` of 220 or 280 means the `profile: "compact"` option from Step 1 did not reach the mount call. Assert `canvasHeight`, not `overHeight`, which is the plot area and reads about 112 here.
 
 - [ ] **Step 5: Update `docs/systems/metrics.md` section 10 opening**
 
-The section list loses "referrers" and "paths" and the Reach entry names all seven of its cards. State that the two dimension cards are detail cards inside Reach and that their three states, their conditional hints and their snapshot basis are unchanged.
+The count becomes "Six sections" and the section list loses "referrers" and "paths", leaving at a glance, method coverage, reach, following, adoption and delivery. The Reach entry names all four of its cards. State that the two dimension cards are detail cards inside Reach and that their three states, their conditional hints and their snapshot basis are unchanged.
 
 - [ ] **Step 6: Commit**
 
@@ -2691,105 +3109,15 @@ Spec sections 4, 5.1, 8.1, 10, 11.1 and 11.4. **This task lands spec section 16'
 
 **Interfaces:**
 - Consumes: everything.
-- Produces: `F.flowTrend(series, field, wins, data, step)`; `renderFigure`'s `"summary"` mode; the `lead-figures` slot.
+- Produces: `renderFigure`'s `"summary"` mode and the `lead-figures` slot. Nothing new on `INSIGHTS_FIGURES`.
 
-- [ ] **Step 1: Add `flowTrend`**
+- [ ] **Step 1: `flowTrend` is already in place**
 
-```js
-  /*
-   * The flow comparison: this 30 days against the 30 before them.
-   *
-   * `flowDelta` totals ONE window and refuses when it is not covered end to
-   * end. This compares two, and each has to pass that same test on its own
-   * measured rows, at the bundle's own step. A comparison against a window
-   * that is missing days is short by an unknown amount in the direction
-   * nobody can see.
-   *
-   * The two windows are inclusive and adjacent and never overlap:
-   *   recent = [E - 29d, E]     prior = [E - 59d, E - 30d]
-   *
-   * On a downsampled bundle this inherits the problem `flowDelta` already
-   * documents: a whole-week bucket cannot be split at the edge of a 30-day
-   * window. Each window is labelled with the span its buckets actually stand
-   * for, and if the two spans differ the comparison is refused rather than
-   * made across unequal widths, because a difference between a 28-day total
-   * and a 35-day one is not a change in anything.
-   */
-  function windowTotal(series, field, startMs, endMs, step) {
-    var days = [];
-    var sum = 0;
-    for (var i = 0; i < series.dates.length; i++) {
-      var ms = I.parseDay(series.dates[i]);
-      if (isNaN(ms) || ms < startMs || ms > endMs) continue;
-      if (series[field][i] === null) continue;
-      days.push(ms);
-      sum += series[field][i];
-    }
-    if (days.length === 0) return { ok: false, gap: null };
-    days.sort(function (a, b) { return a - b; });
-    var gap = coverageGap(days, { startMs: startMs, endMs: endMs }, step);
-    if (gap !== null) return { ok: false, gap: gap };
-    var spanEnd = days[days.length - 1] + (step - 1) * I.DAY_MS;
-    return {
-      ok: true, sum: sum, rows: days.length,
-      spanDays: I.dayGap(spanEnd, days[0]) + 1
-    };
-  }
+`flowTrend`, `windowTotal` and the `trend: "compare"` dispatch landed in Task 6, because Reach's group head and its clones card head are the page's first two flow chips and they needed it three commits before this one. This step adds nothing to `INSIGHTS_FIGURES`.
 
-  function flowTrend(series, field, wins, data, step) {
-    if (wins === null) {
-      return unavailable("the archive holds no dated measurement to anchor a window to.");
-    }
-    if (oldestMeasured(series, field) === null) {
-      return unavailable("this metric has never been measured, so there is nothing to total.");
-    }
-    var endMs = wins.flow.endMs;
-    var recent = windowTotal(series, field, endMs - (I.DELTA_DAYS - 1) * I.DAY_MS, endMs, step);
-    if (!recent.ok) {
-      return unavailable(recent.gap === null
-        ? "no day inside the last " + I.DELTA_DAYS + " days carries a measurement."
-        : recent.gap);
-    }
-    var prior = windowTotal(series, field, endMs - (2 * I.DELTA_DAYS - 1) * I.DAY_MS,
-      endMs - I.DELTA_DAYS * I.DAY_MS, step);
-    if (!prior.ok) {
-      return unavailable("the " + I.DELTA_DAYS + " days before this window are not measured end " +
-        "to end, so there is nothing to compare this total with.");
-    }
-    if (recent.spanDays !== prior.spanDays) {
-      return unavailable("this bundle is bucketed by week, and the buckets that fall inside the " +
-        "two windows stand for " + recent.spanDays + " days and " + prior.spanDays +
-        " days. A difference between two totals of unequal width is not a change in anything.");
-    }
-    return {
-      available: true,
-      signed: true,
-      value: recent.sum - prior.sum,
-      windowDays: recent.spanDays,
-      headline: recent.spanDays === I.DELTA_DAYS
-        ? "Change over the " + I.DELTA_DAYS + " days to " + I.formatDay(endMs)
-        : "Change over " + recent.spanDays + " days" + I.resolutionSuffix(),
-      detail: I.formatCount(recent.sum) + " over " + rowsLabel(recent.rows, step) +
-        ", against " + I.formatCount(prior.sum) + " over " + rowsLabel(prior.rows, step) +
-        " in the " + recent.spanDays + " days before them."
-    };
-  }
-```
+What it does is put the same spec object behind both printings. Reach's `LEAD` already carries `trend: "compare"`; the `FIGURES` array in Step 3 declares the same flag on its Page views entry, and Step 6 asserts that the row and the group head come out character for character identical. If they ever differ, one of the two specs was edited without the other, which is the failure this whole surface exists to prevent.
 
-The lead figure spec gains a `trend` flag so `figure` knows to use `flowTrend` for the summary row while the compact card heads keep `flowDelta`:
-
-```js
-    if (spec.kind === "flow") {
-      body = flowCard(spec, data, wins === null ? null : wins.flow, step);
-      /* The lead figure compares two 30-day windows; a compact card head
-       * totals one. Both are honest and they answer different questions, so
-       * the spec says which it wants rather than one being derived from the
-       * other. */
-      if (spec.trend === "compare") {
-        body.delta = flowTrend(data.series[spec.series], spec.field, wins, data, step);
-      }
-    }
-```
+Recheck while you are here: `flowTrend` takes `(series, field, wins, step)` and reads no `data`. If a fifth argument is still being threaded through, drop it.
 
 - [ ] **Step 2: Add the `"summary"` mode**
 
@@ -2810,9 +3138,13 @@ In `renderFigure`, the summary presentation is an anchor rather than a div:
     } else {
       box = el("div", "card-figure");
     }
-    /* ... the head, sub and note as before ... */
+    /* ... the head, sub and note exactly as Task 4 wrote them: the .card-head
+       div holding the .stat-value and the chip, then the .stat-sub, then the
+       .stat-note when there is one ... */
   }
 ```
+
+Note what is not in the elided part: `"card"` mode emits **no** `.stat-label`. A compact card's `<h3>` already names the series, and a label under it would print the name twice. Only `"summary"` and `"heading"` add one, which is why the two branches above append it and the `else` does not.
 
 `figure` copies `spec.anchor` onto the returned object beside `label`.
 
@@ -2853,11 +3185,17 @@ Delete the whole `#at-a-glance` panel and its IIFE. Add `"lead-figures"` to `SLO
   var I = window.INSIGHTS;
   var F = window.INSIGHTS_FIGURES;
 
+  /* In page order, so the row reads left to right in the order a reader will
+   * meet the groups below it. Three of the four are at-a-glance cards
+   * promoted rather than figures invented; Releases shipped is the only one
+   * new to the page, and it is a count of rows in an array the page already
+   * carries. */
   var FIGURES = [
     {
       label: "Page views", kind: "flow", series: "views", field: "count",
       trend: "compare", anchor: "#reach"
     },
+    { label: "Stars", kind: "point", series: "stars", field: "total", anchor: "#following" },
     {
       label: "App downloads", kind: "point", series: "repo", field: "downloads_app",
       anchor: "#adoption"
@@ -2877,7 +3215,7 @@ Delete the whole `#at-a-glance` panel and its IIFE. Add `"lead-figures"` to `SLO
 </script>
 ```
 
-The three group renderers' `LEAD` constants gain the matching `anchor` and, for Reach, `trend: "compare"`, so the row and the heads are the same three specs.
+The four group renderers' `LEAD` constants gain the matching `anchor`, so the row and the heads are the same four specs. Reach's already carries `trend: "compare"` from Task 6.
 
 - [ ] **Step 4: Pin the chart hint under the sticky bar and retire `placeHint`**
 
@@ -2902,6 +3240,7 @@ In `INSIGHTS_CHARTS`, delete `placeHint`, `lastHost`, `childOf`, `forgetHost` an
 
 ```html
     <a class="nav-link" href="#reach">Reach</a>
+    <a class="nav-link" href="#following">Following</a>
     <a class="nav-link" href="#adoption">Adoption</a>
     <a class="nav-link" href="#delivery">Delivery</a>
     <a class="nav-link" href="#method">Method</a>
@@ -2911,21 +3250,22 @@ In `INSIGHTS_CHARTS`, delete `placeHint`, `lastHost`, `childOf`, `forgetHost` an
 
 **What counts as a pass, and what counts as a failure:**
 
-- The `lead-figures` slot holds exactly three `figures`, labelled `Page views`, `App downloads` and `Releases shipped`, in that order.
-- Each of the three equals its group head, field for field: `value`, `sub`, `chip` and `chipTitle`. Compare `lead-figures` against `reach-body`, `adoption-body` and `delivery-body` in the same report. A single mismatched character is a failure, and it is the failure this whole surface exists to prevent.
+- The `lead-figures` slot holds exactly four `figures`, labelled `Page views`, `Stars`, `App downloads` and `Releases shipped`, in that order, which is the page order of the groups they link to.
+- Each of the four equals its group head, field for field: `value`, `sub`, `chip` and `chipTitle`. Compare `lead-figures` against `reach-body`, `following-body`, `adoption-body` and `delivery-body` in the same report. A single mismatched character is a failure, and it is the failure this whole surface exists to prevent.
 - At `long`, the `Page views` chip is a signed number with a `chipTitle` naming both totals and containing `against`. At `high` (40 days) it is the dash glyph with a `chipTitle` containing `the 30 days before this window are not measured end to end`. Both paths, on two modes, in one task.
 - At `no-releases`, the `Releases shipped` figure is the dash glyph with `sub: "The archive holds no release record."` and is still printed: a refused trend never suppresses a figure, and a missing figure never withholds a group. Confirm the Delivery group still renders its hero and its cards on that run.
-- The three figures are `<a>` elements. Tab through the page in the browser: focus order is nav, the three figures, the four range buttons, then the page. Each shows the 2px sky focus ring at 3px offset, and pressing Enter on each lands on the matching group heading clear of the sticky bar.
-- The `header-stats` slot is gone from the report, and `#at-a-glance` is gone from `sections`. Every one of its eight cards is accounted for: three as lead figures and five as compact card heads. Walk spec section 5.3's mapping table against the report and confirm all eight.
-- The report's `hint.after` names the controls bar. The hint text is present whenever the page holds more than one plot and reads the multi-chart wording. Drag across any chart and confirm every chart on the page rezooms; the report's zoom-sync block must show `redrew` for every entry, across all three groups.
-- The report's `nav` lists exactly four links: `#reach Reach`, `#adoption Adoption`, `#delivery Delivery`, `#method Method`.
-- With JavaScript disabled in the browser, the page still shows the `h1`, the three group headings with their captions, the `#method` heading and all its prose, the `BUILD:SUMMARY` figures, the `noscript` pointer and the footer. Nothing that was readable without JavaScript before this plan is missing.
+- The four figures are `<a>` elements. Tab through the page in the browser: focus order is nav, the four figures, the four range buttons, then the page. Each shows the 2px sky focus ring at 3px offset, and pressing Enter on each lands on the matching group heading clear of the sticky bar.
+- The `header-stats` slot is gone from the report, and `#at-a-glance` is gone from `sections`. Every one of its eight cards is accounted for: **three as lead figures** (Views, Stars, App downloads) **and five as compact card heads** (Forks, Watchers, Clones, Contributors, Update checks). Walk spec section 5.3's mapping table against the report and confirm all eight. The fourth lead figure, Releases shipped, was never one of the eight.
+- At 1440px the lead row is four columns; below 1000px it is two columns and two rows deep, with the values at the heading size. Check both, and check that the two-row block does not push the sticky range control below the fold at 900px.
+- The report's `hint.after` names the controls bar. The hint text is present whenever the page holds more than one plot and reads the multi-chart wording. Drag across any chart and confirm every chart on the page rezooms; the report's zoom-sync block must show `redrew` for every entry, across all four groups.
+- The report's `nav` lists exactly five links: `#reach Reach`, `#following Following`, `#adoption Adoption`, `#delivery Delivery`, `#method Method`. They hide at or below 900px, which is the page's existing rule and is not raised for the fifth link.
+- With JavaScript disabled in the browser, the page still shows the `h1`, the four group headings with their captions, the `#method` heading with its five subheadings and all its prose, the `BUILD:SUMMARY` figures, the `noscript` pointer and the footer. Nothing that was readable without JavaScript before this plan is missing.
 - `console messages: 0` and `console capture proof: PASS` on every mode.
 
 - [ ] **Step 7: Update `docs/systems/metrics.md`**
 
-- Section 10 opening: "Five sections, each registered against a slot and re-rendered on every range change" becomes the final shape: five registered sections, `lead-figures`, `reach-body`, `adoption-body`, `delivery-body` and `method-coverage`; the three groups and what each holds; the lead figure row and its fixed 30-day window; and the note that the at-a-glance grid's eight cards survive as three lead figures and five compact card heads.
-- Section 10.6: the per-group and per-card states from spec section 8.2, and the note that `renderSlots` writes into the three group slots only.
+- Section 10 opening: the count becomes the final shape: six registered sections, `lead-figures`, `reach-body`, `following-body`, `adoption-body`, `delivery-body` and `method-coverage`; the four groups and what each holds; the lead figure row, its four figures and its fixed 30-day window; and the note that the at-a-glance grid's eight cards survive as three lead figures and five compact card heads.
+- Section 10.6: the per-group and per-card states from spec section 8.2, and the note that `renderSlots` writes into the four group slots only.
 - Section 11: the harness paragraph gains the final mode list and a sentence that the check script reads every slot, so the eight-card mapping can be walked against one report.
 
 - [ ] **Step 8: Commit**
@@ -2942,9 +3282,10 @@ git commit -m "feat(insights): add the lead figure row and retire the at-a-glanc
 - [ ] `pnpm --filter @backspace/metrics test` passes with no change in the test count. Nothing in this plan edits `scripts/metrics/src/**`, so a change here means something was edited that should not have been.
 - [ ] `node scripts/metrics/fixtures/insights-check.mjs "$SP/fx/site" --prove-console` at each of `long`, `high`, `threshold`, `low`, `none`, `high-other`, `high-nodims`, `sparse`, `no-releases`, `dimensions-only`, and once more at `high` after the `--strip-telemetry` pass. Zero console messages and zero failed requests on all eleven.
 - [ ] Walk spec section 2's three inventory tables against one `long` report and one browser window. Every row's destination is where the table says it is. This is the check the owner will make, and it is the one that decides whether the change is finished.
-- [ ] The page at 1440px, 1000px, 900px, 760px, 560px and 380px: the body never scrolls sideways, the hero cards scroll inside their own containers below about 570px, no compact card scrolls at any width, and the hero is visibly taller than every card under it at every width.
+- [ ] The page at 1440px, 1000px, 984px, 910px, 900px, 760px, 560px and 380px: the body never scrolls sideways, the hero cards scroll inside their own containers below about 570px, no compact card scrolls at any width (240px minimum against a 320px viewport's 256px host), and the hero is visibly taller than every card under it at every width. The lead row is four columns at and above 1000px and two below it. The series band drops to two columns at 984px and the detail band to one at 910px, which are the intrinsic thresholds spec section 9.1 states rather than breakpoints anything declares.
+- [ ] Following's hero is the only chart on the page with a fitted axis and no area fill, and the other three heroes all carry one. Confirm by eye in one pass down the page.
 - [ ] Chrome's rendering panel with `prefers-reduced-motion: reduce` and `prefers-reduced-transparency: reduce`: no animation runs, anchor scrolling is instant, and the nav and range pill are solid.
-- [ ] `grep -c "—" site/insights/index.html` names only the arrow glyphs and the `DASH` constant, and no em dash inside a sentence this plan moved.
+- [ ] `grep -n "—" site/insights/index.html` and read the lines this plan touched. `grep -c` prints a count and names nothing, and the count is not zero and is not meant to be: the file's comments carry many em dashes and the copy rule leaves a string that stays where it is alone. The arrows in window and span lines are `→`, not `—`, so they do not appear in this grep at all. What must not appear is an em dash inside a sentence this plan moved or wrote.
 - [ ] `git diff --stat main...HEAD` names exactly four files: `site/insights/index.html`, `scripts/metrics/fixtures/insights-check.mjs`, `scripts/metrics/fixtures/insights-fixture.mjs`, `docs/systems/metrics.md`.
 - [ ] `git log --oneline main..HEAD` shows nine commits, none with an attribution trailer and none with a session link.
 
