@@ -242,19 +242,24 @@ describe('renderDataPage', () => {
     expect(section.slice(0, section.indexOf('</table>'))).not.toContain('not measured');
   });
 
-  it('does not claim the seven-day basis for the same-day columns', () => {
+  it('does not claim the seven-day basis for the columns that do not have one', () => {
     const html = renderDataPage(withTelemetry());
-
-    // The snapshot rule governs most of the row, but `instances_1d` and
-    // `users_active1d` are restricted to the day itself; a blanket claim would
-    // have the page describe two of its own columns wrongly.
-    expect(html).toContain('reported that day rather than over the week');
-    // Named with the column labels a reader sees, so the exception can be
-    // matched to the two columns it applies to and to no others. The prose is
-    // wrapped in the source, so compare it with its line breaks flattened.
+    // The prose is wrapped in the source, so compare it with breaks flattened.
     const flat = html.replace(/\s+/g, ' ');
+
+    // The snapshot rule governs most of the row, but three columns sit outside
+    // it: `instances_1d` and `users_active1d` are restricted to the date
+    // itself, and `instances_30d` reaches back thirty days. A blanket claim
+    // would have the page describe three of its own columns wrongly.
+    expect(flat).toContain('reported that day rather than over the week');
     expect(flat).toContain('<em>instances reporting today</em>');
     expect(flat).toContain('<em>active today</em>');
+    expect(flat).toContain('<em>within 30 days</em>');
+    // Tied to the headers the table actually renders, so renaming a column
+    // cannot leave the prose naming a column that no longer exists.
+    expect(flat).toContain('<th class="n">instances reporting today</th>');
+    expect(flat).toContain('<th class="n">active today</th>');
+    expect(flat).toContain('<th class="n">within 30 days</th>');
   });
 
   it('renders a measured zero in a telemetry ranking as 0', () => {
@@ -268,7 +273,12 @@ describe('renderDataPage', () => {
     // meaningless: another series carries a real `0` cell, and a null
     // elsewhere on the page prints "not measured" whatever this table does.
     const clients = html.slice(html.indexOf('<h3>Client kinds</h3>'));
-    const rows = clients.slice(0, clients.indexOf('</table>'));
+    const end = clients.indexOf('</table>');
+    // No closing tag means the helper rendered its empty state instead of the
+    // table under test. Fail on that, rather than let `slice(0, -1)` quietly
+    // trim one character and leave the assertions running against the page.
+    expect(end).toBeGreaterThan(-1);
+    const rows = clients.slice(0, end);
 
     expect(rows).toContain('<tr><td>mobile</td><td class="n">0</td></tr>');
     expect(rows).not.toContain('not measured');

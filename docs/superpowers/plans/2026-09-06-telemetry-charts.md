@@ -1120,6 +1120,15 @@ Run: `cd scripts/metrics && npx vitest run src/datapage.test.ts`
 
 Expected: the first test FAILS (the phrase is not there). The zero and escaping tests should PASS, since `telemetryDimensionTable` uses `toLocaleString` and `escapeHtml` already. If either FAILS, that is a real defect and is fixed in Step 3 along with the wording.
 
+Amended during implementation. The zero test above asserts page-wide, where neither
+assertion can do its job: `<td class="n">0</td>` already appears from `downloads_updates`
+in the base fixture, and `not measured` already appears from its `downloads_app: [null]`,
+so the test passes without the table under test rendering anything and fails whatever
+that table does. What shipped scopes both assertions to the Client kinds table and
+matches the whole row. The `const data = ...` locals were also renamed, since they shadow
+the file's own `data()` fixture, and the first test gained assertions tying its `<em>`
+labels to the `<th>` labels the table renders.
+
 - [ ] **Step 3: Correct the paragraph**
 
 In `scripts/metrics/src/datapage.ts`, replace
@@ -1136,11 +1145,21 @@ with
 ```ts
 <p>Each row describes the fleet on its date, built from the most recent ping per instance in the
 seven days ending on that date, so a quiet instance keeps its last reported figures for up to a
-week. Two columns are narrower than that: <em>instances reporting today</em> and <em>active
-today</em> count only what reported that day rather than over the week, so an instance whose ping
-was late is absent from those two and present in the rest. Every column is a reading taken on that
-date, not a daily total: rows are comparable to each other but must not be added together.</p>
+week. Three columns sit outside that window: <em>instances reporting today</em> and <em>active
+today</em> count only what reported that day rather than over the week, and <em>within 30 days</em>
+counts every instance seen in the thirty days ending on that date. An instance whose ping was late
+is absent from the first two and present in the rest; one silent for longer than a week, but seen
+inside the last thirty, is absent from all of them except <em>within 30 days</em>. Every column is
+a reading taken on that date, not a daily total: rows are comparable to each other but must not be
+added together.</p>
 ```
+
+Amended during implementation. The original replacement named only the two same-day
+columns and then claimed a late instance is "present in the rest", which asserts a
+seven-day basis for `within 30 days` as well. That column is
+`latestPerInstance(eligibleRows, from30, date)` over `[D-29, D]` (`telemetry.ts`), so
+the sentence would have introduced a third wrong caption while fixing two. The
+paragraph now names all three columns that sit outside the seven-day window.
 
 - [ ] **Step 4: Run the tests**
 
