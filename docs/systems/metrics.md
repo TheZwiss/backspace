@@ -824,7 +824,7 @@ snapshot date it drew.
 
 ## 11. Testing
 
-`scripts/metrics`'s `test` script is `tsc --noEmit && vitest run` — it runs through the existing root `pnpm -r test` step with no `ci.yml` change required, and covers both types and behavior in one script. All tests are fixture-driven and touch no network; filesystem tests use a per-test `mkdtempSync` directory, cleaned up in `afterEach`. As of this writing there are **392 tests across 15 files**, all passing:
+`scripts/metrics`'s `test` script is `tsc --noEmit && vitest run` — it runs through the existing root `pnpm -r test` step with no `ci.yml` change required, and covers both types and behavior in one script. All tests are fixture-driven and touch no network; filesystem tests use a per-test `mkdtempSync` directory, cleaned up in `afterEach`. As of this writing there are **396 tests across 15 files**, all passing:
 
 ```
 src/collect.telemetry.test.ts  4
@@ -833,11 +833,11 @@ src/vendor-check.test.ts       6
 src/no-runtime-deps.test.ts    9
 src/bundle.telemetry.test.ts  13
 src/telemetry.test.ts         18
-src/datapage.test.ts          19
+src/datapage.test.ts          21
 src/github.test.ts            21
 src/store.test.ts             23
-src/summary.test.ts           26
 src/backfill.test.ts          28
+src/summary.test.ts           28
 src/collect.test.ts           35
 src/cli-support.test.ts       41
 src/series.test.ts            55
