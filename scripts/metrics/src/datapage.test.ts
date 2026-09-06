@@ -242,6 +242,50 @@ describe('renderDataPage', () => {
     expect(section.slice(0, section.indexOf('</table>'))).not.toContain('not measured');
   });
 
+  it('does not claim the seven-day basis for the same-day columns', () => {
+    const html = renderDataPage(withTelemetry());
+
+    // The snapshot rule governs most of the row, but `instances_1d` and
+    // `users_active1d` are restricted to the day itself; a blanket claim would
+    // have the page describe two of its own columns wrongly.
+    expect(html).toContain('reported that day rather than over the week');
+    // Named with the column labels a reader sees, so the exception can be
+    // matched to the two columns it applies to and to no others. The prose is
+    // wrapped in the source, so compare it with its line breaks flattened.
+    const flat = html.replace(/\s+/g, ' ');
+    expect(flat).toContain('<em>instances reporting today</em>');
+    expect(flat).toContain('<em>active today</em>');
+  });
+
+  it('renders a measured zero in a telemetry ranking as 0', () => {
+    const withZero = withTelemetry();
+    withZero.telemetry.clients.latest = [
+      { dimension: 'mobile', title: '', count: 0, uniques: 0 },
+    ];
+
+    const html = renderDataPage(withZero);
+    // Scoped to the one table under test. Page-wide the assertions would be
+    // meaningless: another series carries a real `0` cell, and a null
+    // elsewhere on the page prints "not measured" whatever this table does.
+    const clients = html.slice(html.indexOf('<h3>Client kinds</h3>'));
+    const rows = clients.slice(0, clients.indexOf('</table>'));
+
+    expect(rows).toContain('<tr><td>mobile</td><td class="n">0</td></tr>');
+    expect(rows).not.toContain('not measured');
+  });
+
+  it('escapes a dimension value in a telemetry ranking', () => {
+    const withMarkup = withTelemetry();
+    withMarkup.telemetry.versions.latest = [
+      { dimension: '<script>x</script>', title: '', count: 3, uniques: 3 },
+    ];
+
+    const html = renderDataPage(withMarkup);
+
+    expect(html).toContain('&lt;script&gt;x&lt;/script&gt;');
+    expect(html).not.toContain('<script>x</script>');
+  });
+
   it('omits the telemetry section entirely when no instance has reported', () => {
     const html = renderDataPage(data());
 
