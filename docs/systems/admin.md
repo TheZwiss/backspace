@@ -334,6 +334,51 @@ effort went.
 
 ---
 
+### Telemetry
+
+Admin-only. The opt-in daily usage report, shown in Instance settings as the
+section "Say hi to Jannis".
+
+```
+GET /api/admin/telemetry          → TelemetryStatus
+PUT /api/admin/telemetry          { enabled: boolean } → TelemetryStatus
+GET /api/admin/telemetry/preview  → TelemetryPayload
+```
+
+```typescript
+interface TelemetryStatus {
+  enabled: boolean | null;   // null = this instance was never asked
+  id: string | null;         // the random telemetry id, null while off
+  lastDay: string | null;    // last UTC day successfully reported
+  lastError: { day: string; status: number } | null;
+}
+```
+
+**It is off until an admin turns it on**, and nothing is sent or fetched before
+that. The panel shows the toggle, the last reported day, the last error if there
+is one, the id masked, and the live preview: the exact document a ping would
+carry, built by the same function the reporter uses, so the panel can never show
+something the reporter would not send. While reporting is off the preview's
+`instance` is the literal string `preview` rather than a freshly minted id, and
+opening it writes nothing.
+
+`routes/adminTelemetry.ts` is the only writer of the four `instance_settings`
+telemetry columns. `PATCH /api/settings/instance` does not touch them, so the id
+lifecycle has exactly one owner. Enabling mints a fresh UUID and stamps today as
+the last reported day, which is what makes the first ping go out tomorrow;
+disabling clears the id, so a later re-enable is a new anonymous instance.
+Saving "on" while it is already on changes nothing at all.
+
+The first admin to sign in on an instance that was never asked sees a one-time
+modal. Dismissing it without answering snoozes it for 7 days in that browser and
+stops it for good after the second dismissal; any answer by any admin ends the
+ask for everyone, because the setting belongs to the instance.
+
+Full reference, including every field, the rounding rule, what is never sent and
+the 90-day retention at the receiver: [telemetry.md](telemetry.md).
+
+---
+
 ### User Management
 
 All admin-only.
@@ -696,3 +741,4 @@ Manages: user list with search/filter/sort/pagination, admin promotion/demotion,
 - **Federation relay:** [federation.md](federation.md) -- Relay toggle/TTL mechanics, peer management, outbox delivery
 - **Voice/streaming:** [voice.md](voice.md) -- Client-side enforcement of streaming limits
 - **Permissions:** [permissions.md](permissions.md) -- Admin flag is separate from RBAC; `isAdmin` is a user-level column, not a permission bit
+- **Telemetry:** [telemetry.md](telemetry.md) -- The opt-in daily usage report: payload, opt-in state model, reporter, receiver, retention
