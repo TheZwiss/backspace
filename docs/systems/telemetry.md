@@ -14,6 +14,7 @@ Source files:
 - `packages/server/src/routes/adminTelemetry.ts` - the three admin routes
 - `packages/server/src/ws/handler.ts` - the auth and pong paths that write activity
 - `scripts/telemetry-receiver/` - the Cloudflare Worker at `hello.backspacechat.com`
+- `.github/workflows/telemetry-receiver.yml` - the receiver's test job and its dispatch-only deploy
 - `scripts/metrics/src/telemetry.ts` - the collector step that turns pings into the public archive
 - Design spec: `docs/superpowers/specs/2026-09-06-instance-telemetry-design.md`
 
@@ -297,7 +298,7 @@ Routes:
 
 | Route | Behaviour |
 |---|---|
-| `POST /v1/ping` | reads the body with `request.text()` and rejects anything over 4096 bytes after reading, whatever `Content-Length` claimed. Validates `schema`, the UUID shape of `instance`, `day` as a real calendar day within two days of the receiver's own UTC date, and every known count as a non-negative integer no larger than 10^9. Known counts are rounded to two significant digits on arrival, unknown fields are kept. Upserts on `(instance, day)`, so a later ping for the same day replaces the earlier row. `204` on success, `400` on anything invalid, both without a body. `410` for every ping while the `RETIRED` variable is `"1"` |
+| `POST /v1/ping` | reads the body with `request.text()` and rejects anything over 4096 bytes after reading, whatever `Content-Length` claimed. Validates `schema`, the UUID shape of `instance`, `day` as a real calendar day within two days of the receiver's own UTC date, and every known count as a non-negative integer no larger than 10^9. Known counts are rounded to two significant digits on arrival, unknown fields are kept. Upserts on `(instance, day)`, so a later ping for the same day replaces the earlier row. `204` on success, `400` on anything invalid, `429` when the rate limiter refuses the source address, all three without a body. `410` for every ping while the `RETIRED` variable is `"1"`, checked before the rate limiter so a retirement is never itself rate limited |
 | `GET /v1/export?from=&to=` | requires `Authorization: Bearer <EXPORT_TOKEN>`, compared with `crypto.subtle.timingSafeEqual`. Returns NDJSON, one `{ instance, day, receivedAt, country, schema, body }` per line, at most 31 days per call. `401` without the token, `400` for a bad range |
 | `GET /` | a static plain HTML page saying what the endpoint is, what a row holds, how long it is kept and what Cloudflare sees, with links to this document and to the source. No scripts, no fonts, no third-party requests |
 | anything else | `404` |
@@ -314,6 +315,49 @@ all store as `ZZ`.
 needs with room to re-run a broken collection, and it is short enough that no
 lifetime profile accumulates against an id.
 
+### Deploying it
+
+`.github/workflows/telemetry-receiver.yml` has two jobs. `test` runs the
+typecheck and the Workers test suite on every push to `main` and every pull
+request that touches `scripts/telemetry-receiver/**` or the workflow file, and
+holds no secrets. `deploy` runs only when Jannis dispatches the workflow by hand
+from `main`. It applies the migration files committed under
+`scripts/telemetry-receiver/migrations` to the live database and only then
+publishes the Worker, so the schema is never behind the code that reads it, and
+it provisions nothing of its own. A merge never deploys the receiver.
+
+The deploy job creates nothing. Four things are set up once, by hand, and then
+stay put:
+
+1. `wrangler d1 create backspace-telemetry` from `scripts/telemetry-receiver`.
+   It prints a `database_id`, which replaces the
+   `REPLACE-AFTER-wrangler-d1-create` placeholder in `wrangler.toml`. That value
+   is not a secret and is committed.
+2. `wrangler secret put EXPORT_TOKEN`, a random string. It is the bearer token
+   `GET /v1/export` checks. Until it is set the Worker exports nothing, which is
+   the safe way round for a Worker deployed before its secret.
+3. The same token as the `TELEMETRY_EXPORT_TOKEN` repository secret, which is
+   what the metrics collector reads. Unset, the collector skips the telemetry
+   step and collects traffic normally, so the two can be wired up in either
+   order.
+4. `hello.backspacechat.com` attached to the Worker as a custom domain. The zone
+   is already on the same Cloudflare account. The binding is declared in
+   `wrangler.toml` under `routes`, and it is attached by the first deploy, which
+   is run by hand from a workstation: it is the deploy that takes over a
+   hostname and can ask for confirmation, and a step that may prompt does not
+   belong in a job with no terminal. Every deploy after that is the workflow.
+
+Two more secrets drive the deploy job itself: `CLOUDFLARE_API_TOKEN`, scoped to
+editing Workers and D1 on that account and nothing else, and
+`CLOUDFLARE_ACCOUNT_ID`. Both live on the `telemetry-receiver` GitHub
+environment rather than at repository level, so no other job can read them.
+
+**Retiring the service.** `RETIRED` is a plain `[vars]` entry in `wrangler.toml`,
+not a secret. Setting it to `"1"` and deploying makes every ping answer `410`,
+which instances read as "switch telemetry off and clear the id" rather than as a
+failure to retry. That is the shutdown path: flip the variable, deploy, and the
+fleet stops on its own within a day.
+
 ---
 
 ## 9. How the numbers become public
@@ -326,9 +370,11 @@ that replaces any dimension value held by fewer than three instances with
 `other`.
 
 Everything collected is published from the first day it is collected, as static
-tables under `/insights/data/`. The charted section of the insights page is
-hidden until the latest 7-day instance count reaches 10, because a chart of
-three instances says more about those three instances than about the project.
+tables under `/insights/data/`. Those tables are the public surface today. The
+charted section of the insights page comes with the facelift of that page, in a
+later track, and it will stay hidden until the latest 7-day instance count
+reaches 10, because a chart of three instances says more about those three
+instances than about the project.
 
 ---
 
