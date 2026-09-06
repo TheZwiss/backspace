@@ -5,6 +5,11 @@ import type { TelemetryPayload } from '@backspace/shared';
 interface PayloadPreviewProps {
   /** The payload the server would send today, or null while it is still being fetched. */
   preview: TelemetryPayload | null;
+  /**
+   * Start expanded. The ask keeps it folded away so the modal stays short; the
+   * settings section is a page about the ping, so there it opens straight away.
+   */
+  defaultOpen?: boolean;
 }
 
 /**
@@ -12,9 +17,9 @@ interface PayloadPreviewProps {
  * the response of the preview endpoint, so what the admin reads is what the
  * instance would send.
  */
-export function PayloadPreview({ preview }: PayloadPreviewProps) {
+export function PayloadPreview({ preview, defaultOpen = false }: PayloadPreviewProps) {
   const { t } = useTranslation('telemetry');
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const bodyId = useId();
 
   return (
