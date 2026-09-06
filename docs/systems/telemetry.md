@@ -302,9 +302,24 @@ Routes:
 | Route | Behaviour |
 |---|---|
 | `POST /v1/ping` | reads the body with `request.text()` and rejects anything over 4096 bytes after reading, whatever `Content-Length` claimed. Validates `schema`, `instance` as a version 4 UUID, `day` as a real calendar day within two days of the receiver's own UTC date, `build.version` (if present) as at most 32 characters of `[0-9A-Za-z.+-]`, and every known count as a non-negative integer no larger than 10^9. Known counts are rounded to two significant digits on arrival, unknown fields are kept. Upserts on `(instance, day)`, so a later ping for the same day replaces the earlier row. `204` on success, `400` on anything invalid, `429` when the rate limiter refuses the source address, all three without a body. `410` for every ping while the `RETIRED` variable is `"1"`, checked before the rate limiter so a retirement is never itself rate limited |
-| `GET /v1/export?from=&to=` | requires `Authorization: Bearer <EXPORT_TOKEN>`, compared with `crypto.subtle.timingSafeEqual`. Returns NDJSON, one `{ instance, day, receivedAt, country, schema, body }` per line, at most 31 days per call. `401` without the token, `400` for a bad range |
+| `GET /v1/export?from=&to=` | requires `Authorization: Bearer <EXPORT_TOKEN>`, compared with `crypto.subtle.timingSafeEqual`. Both ends must be real calendar days, not merely `YYYY-MM-DD` shaped, and the inclusive range is at most 31 days. Returns NDJSON, one `{ instance, day, receivedAt, country, schema, body }` per line, ordered by day then instance, at most 10,000 rows and at most 8 MiB. `401` without the token, `400` for a bad range |
 | `GET /` | a static plain HTML page saying what the endpoint is, what a row holds, how long it is kept and what Cloudflare sees, with links to this document and to the source. No scripts, no fonts, no third-party requests |
 | anything else | `404` |
+
+**The export is bounded at both ends, and says when a bound bit.** A range holds
+at most 31 days times the fleet, so `MAX_EXPORT_ROWS` (10,000) is roughly 320
+instances reporting every day for the whole window: far above any fleet in sight
+and far below a read that could hurt D1. It does not bound the response on its
+own, because a stored body may be up to 4096 bytes, so `MAX_EXPORT_BYTES`
+(8 MiB) stops the Worker assembling a body it cannot hold. Whichever bites
+first, the response carries `x-export-truncated: 1` and the NDJSON keeps its
+exact shape, so a collector that knows nothing about the header still parses
+what it gets. The rows are ordered by day then instance, so a truncated export
+always drops the same tail rather than an arbitrary slice, and re-requesting a
+narrower range recovers the rest. Both ends of the range are checked against the
+real calendar with the same `isCalendarDay` the ping route uses: `Date.parse`
+accepts `2026-02-30` and rolls it into March, which measured the 31-day span
+from a day that does not exist and could widen the window by up to three days.
 
 A rate-limit binding keyed on the source address (10 requests per 10 seconds) is
 declared in `wrangler.toml`, so the limit is versioned with the code rather than

@@ -198,6 +198,61 @@ describe('GET /v1/export', () => {
     expect((await call(new Request('https://hello.test/v1/export?from=2026-01-01&to=2026-01-31', h))).status).toBe(200);
     expect((await call(new Request('https://hello.test/v1/export?from=2026-01-01&to=2026-02-01', h))).status).toBe(400);
   });
+
+  it('rejects a range whose ends are not real calendar days', async () => {
+    const h = { headers: { authorization: 'Bearer test-export-token' } };
+    // `Date.parse` rolls 2026-02-30 into March, so the shape check passed and
+    // the 31-day span was measured from a day that does not exist, widening
+    // the window by up to three days.
+    expect((await call(new Request('https://hello.test/v1/export?from=2026-02-30&to=2026-03-05', h))).status).toBe(400);
+    expect((await call(new Request('https://hello.test/v1/export?from=2026-02-01&to=2026-02-30', h))).status).toBe(400);
+    expect((await call(new Request('https://hello.test/v1/export?from=2026-13-01&to=2026-13-02', h))).status).toBe(400);
+    // A real range still passes, including a leap day.
+    expect((await call(new Request('https://hello.test/v1/export?from=2028-02-28&to=2028-02-29', h))).status).toBe(200);
+  });
+
+  it('truncates at the row cap and says so, keeping the earliest rows', async () => {
+    const OVER = 10_001;
+    const stmt = env.DB.prepare(
+      'INSERT INTO pings (instance, day, received_at, country, schema, body) VALUES (?1, ?2, ?3, ?4, ?5, ?6)',
+    );
+    // One instance per row, spread over the range, so the day-then-instance
+    // ordering has something to order.
+    await env.DB.batch(
+      Array.from({ length: OVER }, (_, i) =>
+        stmt.bind(
+          `${String(i).padStart(8, '0')}-1b2c-4d5e-8f90-1234567890ab`,
+          `2026-01-${String((i % 31) + 1).padStart(2, '0')}`,
+          '2026-01-31T00:00:00.000Z',
+          'DE',
+          1,
+          '{"schema":1}',
+        ),
+      ),
+    );
+
+    const res = await call(new Request('https://hello.test/v1/export?from=2026-01-01&to=2026-01-31', {
+      headers: { authorization: 'Bearer test-export-token' },
+    }));
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('x-export-truncated')).toBe('1');
+    const lines = (await readText(res)).trim().split('\n');
+    expect(lines).toHaveLength(10_000);
+    // Ordered by day then instance, so the cap always drops the same tail.
+    const days = lines.map((l) => (JSON.parse(l) as { day: string }).day);
+    expect(days[0]).toBe('2026-01-01');
+    expect([...days]).toEqual([...days].sort());
+  });
+
+  it('does not claim truncation on a range that fits', async () => {
+    await call(post(ping()));
+    const d = today();
+    const res = await call(new Request(`https://hello.test/v1/export?from=${d}&to=${d}`, {
+      headers: { authorization: 'Bearer test-export-token' },
+    }));
+    expect(res.headers.get('x-export-truncated')).toBeNull();
+  });
 });
 
 describe('other routes', () => {
