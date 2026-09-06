@@ -800,26 +800,36 @@ was measured on. In practice both cards share a history, since a network row
 carries every gauge or none, but the per-card expansion costs nothing and keeps
 the section on the same rule as Reach (section 10.7).
 
+**The three rankings render `latest` only, with no trajectory chart.** They use
+the same `.rank-*` markup as the referrer and path sections, and every bar takes
+the neutral fill rather than a palette colour, because on this page a palette
+colour means "this row has a line below it in this colour" and this section
+draws no per-dimension lines. A ranking's `count` is not the same unit across
+the three: versions and countries count INSTANCES, clients counts PEOPLE, and
+each card names its own unit on every row. The rankings are a snapshot rather
+than a window, so the range control does not move them, and each card states the
+snapshot date it drew.
+
 ---
 
 ## 11. Testing
 
-`scripts/metrics`'s `test` script is `tsc --noEmit && vitest run` — it runs through the existing root `pnpm -r test` step with no `ci.yml` change required, and covers both types and behavior in one script. All tests are fixture-driven and touch no network; filesystem tests use a per-test `mkdtempSync` directory, cleaned up in `afterEach`. As of this writing there are **371 tests across 15 files**, all passing:
+`scripts/metrics`'s `test` script is `tsc --noEmit && vitest run` — it runs through the existing root `pnpm -r test` step with no `ci.yml` change required, and covers both types and behavior in one script. All tests are fixture-driven and touch no network; filesystem tests use a per-test `mkdtempSync` directory, cleaned up in `afterEach`. As of this writing there are **375 tests across 15 files**, all passing:
 
 ```
 src/collect.telemetry.test.ts  3
 src/sitemap.test.ts            5
-src/bundle.telemetry.test.ts   8
 src/vendor-check.test.ts       6
 src/no-runtime-deps.test.ts    9
+src/bundle.telemetry.test.ts  10
 src/telemetry.test.ts         14
 src/datapage.test.ts          16
 src/github.test.ts            21
 src/store.test.ts             23
-src/backfill.test.ts          26
 src/summary.test.ts           26
-src/collect.test.ts           35
+src/backfill.test.ts          28
 src/cli-support.test.ts       35
+src/collect.test.ts           35
 src/series.test.ts            55
 src/bundle.test.ts            89
 ```
@@ -828,7 +838,7 @@ src/bundle.test.ts            89
 
 `bundle.test.ts` is the largest of them because it carries the whole of §10.2's contract: the null-versus-zero rule at every read, the trajectory invariants, the two weekly aggregators, and the budget sequence. `vendor-check.test.ts` is not a unit test at all — it hashes the committed uPlot files against `vendor.json` (§10.4) and has its own `vendor:check` script for running it alone.
 
-**The dashboard page itself has no tests.** `site/insights/index.html` is not exercised by anything in CI; the contract in §10.2 and the page's own `validateBundle` are what stand in for them.
+**The dashboard page itself has no tests.** `site/insights/index.html` is not exercised by anything in CI; the contract in §10.2 and the page's own `validateBundle` are what stand in for them. What stands in for them by hand is the pair of scripts in `scripts/metrics/fixtures/`, neither of which adds a dependency: `insights-fixture.mjs` writes a throwaway archive in one of seven states (`none`, `low`, `threshold`, `high`, `high-other`, `high-nodims`, `sparse`) plus a copy of `site/` to serve, and `insights-check.mjs` loads that copy in whatever Chrome the machine has and reports the console, the failed requests, the rendered telemetry section, the rankings under each range button, and whether a drag on one chart rezoomed the rest. `threshold` is the state worth keeping: it produces exactly ten reporting instances, the value the published promise turns on. `high-other` is the second: `high` gives the folded `other` row the lowest count, so only `high-other` can show that `other` ranks where its count places it rather than at the bottom. Both scripts need Node 22.18 or newer for unflagged type stripping, which is below the root engine range of `>=20.0.0`. Run `insights-check.mjs` with `--prove-console` at least once per session: it plants a `console.warn` in the page before any page script and fails if it does not come back, because a capture that was never attached and a page that logged nothing are indistinguishable otherwise.
 
 `cli-record-failure.ts` has no dedicated `.test.ts` of its own, matching `cli-collect.ts`, `cli-backfill.ts` and `cli-bundle.ts` — all four are thin `process.env`/clock-reading wrappers with no branching logic of their own to unit-test. Its testable core, `recordFailure()`, is covered in `cli-support.test.ts` alongside the module's other shared helpers; `collect.ts`'s corresponding `series_last_date`-seeding logic is covered in `collect.test.ts`, and `cli-bundle.ts`'s core is `buildDashboardData`/`serialiseWithinBudget` in `bundle.test.ts`.
 

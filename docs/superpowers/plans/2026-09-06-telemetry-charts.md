@@ -2478,111 +2478,59 @@ Deferred minors left deferred, all cosmetic or test-internal, none changing a pu
 
 **Do not point `METRICS_OUTPUT_PATH` inside `site/insights/`.** `cli-bundle.ts` rewrites the `BUILD:SUMMARY` region of the `index.html` beside its output path, so pointing it at the real page would edit a committed file as a side effect of a test run. The recipe copies the page to a temp directory first.
 
-Save this as `<scratchpad>/fixture.mjs`:
+The recipe lives in the repository rather than in a scratchpad, so an observation can be reproduced without rebuilding the harness. Two scripts, both Node built-ins only, no dependency added:
 
-```js
-import { mkdirSync, rmSync, cpSync } from 'node:fs';
-import path from 'node:path';
-import { createStore } from './metrics-src/store.ts';
+- `scripts/metrics/fixtures/insights-fixture.mjs` writes a throwaway archive and a throwaway copy of the site.
+- `scripts/metrics/fixtures/insights-check.mjs` loads that copy in whatever Chrome the machine has and reports what it found.
 
-// Usage: node fixture.mjs <outDir> <none|low|high|sparse|high-nodims>
-const [, , outDir, mode = 'high'] = process.argv;
-const archive = path.join(outDir, 'archive');
-const site = path.join(outDir, 'site');
-rmSync(outDir, { recursive: true, force: true });
-mkdirSync(archive, { recursive: true });
-cpSync('site/insights', site, { recursive: true });
+They live under `scripts/metrics/` rather than beside the page because `deploy-pages.yml` uploads the whole of `site/` as the Pages artifact, so a script under `site/insights/` would be published on the public site. That workflow's paths filter covers `scripts/metrics/**` as well, so it carries an explicit `!scripts/metrics/fixtures/**` exclusion: nothing here is read by `cli-bundle.ts` or shipped in the artifact, so editing it cannot change what is published and should not spend a production deploy.
 
-const day = (i) => new Date(Date.UTC(2026, 7, 1 + i)).toISOString().slice(0, 10);
-const DAYS = 40;
-const s = createStore(archive);
-
-// Traffic, so the bundle is not `empty` and the range control has an anchor.
-s.writeCsv('traffic/views.csv', ['date', 'count', 'uniques'],
-  Array.from({ length: DAYS }, (_, i) => ({ date: day(i), count: 40 + i, uniques: 10 + i })));
-s.writeCsv('traffic/clones.csv', ['date', 'count', 'uniques'],
-  Array.from({ length: DAYS }, (_, i) => ({ date: day(i), count: 5 + i, uniques: 3 })));
-s.writeCsv('stars.csv', ['date', 'total'],
-  Array.from({ length: DAYS }, (_, i) => ({ date: day(i), total: 60 + i })));
-s.writeCsv('forks.csv', ['date', 'total'],
-  Array.from({ length: DAYS }, (_, i) => ({ date: day(i), total: 4 })));
-s.writeCsv('contributors.csv', ['date', 'total'], [{ date: day(0), total: 2 }]);
-s.writeCsv('workflows.csv', ['date', 'runs'],
-  Array.from({ length: DAYS }, (_, i) => ({ date: day(i), runs: 12 })));
-s.writeCsv('repo.csv',
-  ['date', 'subscribers', 'open_issues', 'downloads_total', 'downloads_app', 'downloads_updates'],
-  Array.from({ length: DAYS }, (_, i) => ({
-    date: day(i), subscribers: 9, open_issues: 3,
-    downloads_total: 100 + i, downloads_app: 40 + i, downloads_updates: 60,
-  })));
-s.writeCsv('releases.csv', ['date', 'tag', 'name'], [{ date: day(10), tag: 'v1.1.2', name: '1.1.2' }]);
-s.writeNdjson('traffic/referrers.ndjson',
-  [{ snapshot_date: day(DAYS - 1), dimension: 'github.com', title: '', count: 30, uniques: 12 }]);
-s.writeNdjson('traffic/paths.ndjson',
-  [{ snapshot_date: day(DAYS - 1), dimension: '/TheZwiss/backspace', title: 'backspace', count: 40, uniques: 15 }]);
-s.writeMeta({
-  last_run: '2026-09-09T15:19:00.000Z', last_success: '2026-09-09T15:19:00.000Z',
-  error: null, series_last_date: {},
-});
-
-const NETWORK = ['date', 'instances_1d', 'instances_7d', 'instances_30d', 'users_registered',
-  'users_active1d', 'users_active7d', 'users_active30d', 'messages7d', 'storage_mib',
-  'voice_instances', 'federation_instances'];
-
-if (mode !== 'none') {
-  const top = mode === 'low' ? 4 : 14;
-  const rows = Array.from({ length: 20 }, (_, i) => {
-    const n = Math.max(1, top - (19 - i));
-    const blank = mode === 'sparse';
-    const v = (x) => (blank ? '' : x);
-    return {
-      date: day(DAYS - 20 + i),
-      instances_1d: v(Math.max(1, n - 2)), instances_7d: blank ? '' : n, instances_30d: v(n + 2),
-      users_registered: v(n * 9), users_active1d: v(n * 2), users_active7d: v(n * 4),
-      users_active30d: v(n * 6), messages7d: v(n * 120), storage_mib: v(n * 40),
-      voice_instances: v(Math.floor(n / 2)), federation_instances: v(Math.floor(n / 3)),
-    };
-  });
-  // `sparse` still needs the threshold cleared, so its final row measures the gate.
-  if (mode === 'sparse') rows[rows.length - 1].instances_7d = top;
-  s.writeCsv('telemetry/network.csv', NETWORK, rows);
-
-  if (mode !== 'high-nodims') {
-    const snap = day(DAYS - 1);
-    s.writeNdjson('telemetry/versions.ndjson', [
-      { snapshot_date: snap, dimension: '1.1.2', title: '', count: 8, uniques: 8 },
-      { snapshot_date: snap, dimension: '1.1.0', title: '', count: 3, uniques: 3 },
-      { snapshot_date: snap, dimension: 'other', title: '', count: 3, uniques: 3 },
-    ]);
-    s.writeNdjson('telemetry/countries.ndjson', [
-      { snapshot_date: snap, dimension: 'DE', title: '', count: 7, uniques: 7 },
-      { snapshot_date: snap, dimension: 'US', title: '', count: 4, uniques: 4 },
-      { snapshot_date: snap, dimension: 'ZZ', title: '', count: 3, uniques: 3 },
-    ]);
-    s.writeNdjson('telemetry/clients.ndjson', [
-      { snapshot_date: snap, dimension: 'web', title: '', count: 40, uniques: 40 },
-      { snapshot_date: snap, dimension: 'desktop', title: '', count: 12, uniques: 12 },
-      { snapshot_date: snap, dimension: 'mobile', title: '', count: 1, uniques: 1 },
-    ]);
-  } else {
-    s.writeNdjson('telemetry/versions.ndjson', []);
-    s.writeNdjson('telemetry/countries.ndjson', []);
-    s.writeNdjson('telemetry/clients.ndjson', []);
-  }
-}
-console.log(`fixture ready: ${archive}`);
-```
-
-Run it:
+**Node 22.18 or newer.** Both commands run TypeScript through Node's own type
+stripping with no flag, which is what `scripts/metrics/package.json` declares
+(`engines: >=22.18`) and what `.nvmrc` pins (24). The repository root allows
+`>=20.0.0`, so a shell left on Node 20 fails the first command with
+`ERR_UNKNOWN_FILE_EXTENSION` and not with anything that names the real cause.
 
 ```bash
 SP=<scratchpad>
-ln -sfn "$PWD/scripts/metrics/src" "$SP/metrics-src"       # once, so the import resolves
-node "$SP/fixture.mjs" "$SP/fx" high
-METRICS_DATA_DIR="$SP/fx/archive" METRICS_OUTPUT_PATH="$SP/fx/site/data.json" \
+node scripts/metrics/fixtures/insights-fixture.mjs "$SP/fx" high
+METRICS_DATA_DIR="$SP/fx/archive" METRICS_OUTPUT_PATH="$SP/fx/site/insights/data.json" \
   node scripts/metrics/src/cli-bundle.ts
-python3 -m http.server 8765 --directory "$SP/fx/site"
-# then open http://localhost:8765/ and check the observations the task lists
+node scripts/metrics/fixtures/insights-check.mjs "$SP/fx/site" --prove-console
 ```
 
-Swap the last argument of `fixture.mjs` for `none`, `low`, `sparse` or `high-nodims` and rerun both commands to reach the other states. Nothing this writes is committed; `$SP/fx` is disposable.
+To look at it yourself instead, serve the same directory and open `/insights/`:
+
+```bash
+python3 -m http.server 8765 --directory "$SP/fx/site"
+```
+
+**The fixture copies `site/assets/` as well as `site/insights/`,** and lays them out the way the deployed site lays them out (`<outDir>/site/insights/` beside `<outDir>/site/assets/`). The page loads `../assets/logo.png` and `../assets/dm-sans.woff2`; a copy of `site/insights` alone answers both with a 404, which makes "nothing in the console" impossible to satisfy and hides a real failure behind two expected ones. Serve `<outDir>/site` and open `/insights/`, rather than serving the page directory itself, so `../assets/` resolves the way it resolves in production instead of relying on the browser clamping `..` at the document root.
+
+**Modes.** The second argument to `insights-fixture.mjs` is one of:
+
+| Mode | State |
+|---|---|
+| `none` | no telemetry files at all, as a bundle built before the pings existed |
+| `low` | four instances in the last seven days, below the mark |
+| `threshold` | exactly ten, the mark itself, which is the value the published promise turns on |
+| `high` | fourteen, above the mark, with all three dimension files populated |
+| `high-other` | fourteen, with the dimensions shaped so `other` ranks second on one card and first on another, one dimension holds a single row, and the folded remainder dominates a third |
+| `high-nodims` | above the mark, but the three dimension files are empty |
+| `sparse` | above the mark on the last row only, with every earlier gauge blank |
+
+`high-other` exists because `high` cannot show one of the things worth checking. `high` gives `other` a count of 3, tied for last, so a run against it cannot tell "ranked where its count places it" from "pinned to the bottom". `high-other` settles that, and carries the two ranking shapes that have no other example: a dimension with exactly one row, and a folded remainder larger than everything it was folded out of.
+
+Rerun both commands after switching modes. Nothing this writes is committed; `$SP/fx` is disposable.
+
+**Prove the console capture before trusting it.** `--prove-console` plants a `console.warn` in the page before any page script runs and exits non-zero if it does not come back. A capture that was never attached and a page that logged nothing look identical from outside, so a clean console reported without this proves nothing. Run it at least once per session.
+
+**What `insights-check.mjs` reports.**
+
+- every console message, page exception and browser log entry, in arrival order
+- every request that failed or answered 4xx/5xx
+- the rendered telemetry section: the window line, any state note, and per card the title, meta line, note, hint, whether it holds a plot, and each ranked row with its rendered bar width and resolved fill colour
+- the ranking rows under every range button, so "the rankings are a snapshot and the range control does not move them" is measured rather than argued
+- whether a synthetic drag across the first telemetry chart rezoomed every other chart on the page, by digesting each chart canvas before and after
+
+Two details in the drag are load-bearing and easy to get wrong. uPlot discards a move whose `movementX` and `movementY` are both zero, which is what a synthetic `MouseEvent` reports unless told otherwise, and it needs a frame between the events. Get either wrong and the run reports "nothing moved" for a reason that has nothing to do with the page.

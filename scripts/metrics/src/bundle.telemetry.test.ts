@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createStore, type Store } from './store.ts';
@@ -288,5 +288,44 @@ describe('telemetry block', () => {
     expect(daily.telemetry.instances7d).toBeNull();
     expect(weekly.telemetry.instances7d).toBeNull();
     expect(weekly.telemetry.network.instances_7d.at(-1)).toBeNull();
+  });
+
+  it('orders each telemetry ranking by count descending with the dimension as tie-break', () => {
+    // The page renders `latest` in array order and scales every bar against
+    // the first row's count. An unordered `latest` would put a short bar at
+    // the top and read as a ranking that is not one.
+    const s = store();
+    s.writeNdjson('telemetry/versions.ndjson', [
+      { snapshot_date: '2026-09-05', dimension: '1.1.0', title: '', count: 4, uniques: 4 },
+      { snapshot_date: '2026-09-05', dimension: 'other', title: '', count: 9, uniques: 9 },
+      { snapshot_date: '2026-09-05', dimension: '1.1.2', title: '', count: 4, uniques: 4 },
+    ]);
+
+    const latest = buildDashboardData(s, '2026-09-06T00:00:00Z').telemetry.versions.latest;
+
+    expect(latest.map((r) => r.dimension)).toEqual(['other', '1.1.0', '1.1.2']);
+  });
+
+  it('orders a hand-edited telemetry file the same way, from the bundler and not from the file', () => {
+    // The test above writes through `writeNdjson`, which sorts on the way to
+    // disk, so it holds even if the bundler never sorted at all. This one
+    // writes the lines itself, in an order no writer here would produce, and
+    // so measures the bundler's own ordering. A file can reach this state:
+    // the archive is a git branch a person can edit, and the reader is
+    // already written to tolerate rows a writer would not emit.
+    const s = store();
+    mkdirSync(path.join(dir, 'telemetry'), { recursive: true });
+    writeFileSync(
+      path.join(dir, 'telemetry', 'countries.ndjson'),
+      [
+        '{"snapshot_date":"2026-09-05","dimension":"US","title":"","count":4,"uniques":4}',
+        '{"snapshot_date":"2026-09-05","dimension":"ZZ","title":"","count":9,"uniques":9}',
+        '{"snapshot_date":"2026-09-05","dimension":"DE","title":"","count":4,"uniques":4}',
+      ].join('\n') + '\n',
+    );
+
+    const latest = buildDashboardData(s, '2026-09-06T00:00:00Z').telemetry.countries.latest;
+
+    expect(latest.map((r) => r.dimension)).toEqual(['ZZ', 'DE', 'US']);
   });
 });
