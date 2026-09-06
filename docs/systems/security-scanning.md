@@ -18,6 +18,7 @@ below.
 | `.github/workflows/scorecard.yml` | OpenSSF Scorecard (repo posture) | push main + weekly + on branch-protection change | Security tab + public badge |
 | `.github/workflows/dast.yml` | ZAP baseline against an ephemeral instance (spider + passive, unauthenticated) | push main + weekly + manual + PRs touching its own config | Job summary + artifact (advisory) |
 | `.github/workflows/docker-publish.yml` | Image scan (Trivy) + SBOM + provenance for the published container | tag push / manual | image scan (report-only) + SBOM + provenance |
+| `.github/workflows/telemetry-receiver.yml` | Typecheck + Workers test suite for `scripts/telemetry-receiver`, and its deploy to Cloudflare | PR + push main, both path-filtered to the package; deploy on manual dispatch only | job status; a published Worker |
 
 > **gitleaks findings** surface in the workflow's job log and PR summary — the
 > `gitleaks` job does not upload SARIF, so secret hits do **not** appear under
@@ -504,6 +505,42 @@ settings or process. They belong to the checklist below, not to remediation.
   (`.github/workflows/docker-publish.yml`), alongside a report-only Trivy scan
   of the amd64 image (the arm64 image ships unscanned; enforcement is turned
   on in a later plan).
+- `cloudflare/wrangler-action` is pinned at `9acf94ac` (v3.15.0), the head of
+  the v3 line, in `telemetry-receiver.yml`. It is used twice in the same job and
+  both uses carry the same pin. It is the only action in the repository that
+  carries a credential to a service outside GitHub, so it is the one whose pin
+  matters most: a moved tag there would run attacker code holding a live
+  Cloudflare API token.
+
+### The telemetry receiver workflow
+
+`telemetry-receiver.yml` is the only workflow that deploys to an account outside
+GitHub, and the only one whose tests do not run in Node. What guards it:
+
+- **Secrets are unreachable from a merge.** The `deploy` job requires
+  `github.event_name == 'workflow_dispatch'`, `github.ref == 'refs/heads/main'`
+  and `!github.event.repository.fork`, all three. `CLOUDFLARE_API_TOKEN` and
+  `CLOUDFLARE_ACCOUNT_ID` are scoped to the `telemetry-receiver` environment
+  rather than to the repository, so no other job can read them even by mistake.
+  The `test` job reads no secret at all, which is why it is safe to run on
+  pull requests from forks.
+- **The job creates nothing.** The D1 database, the `EXPORT_TOKEN` Worker secret
+  and the custom domain are provisioned by hand once. The job applies migrations
+  that are already in the repository and publishes the Worker. See
+  [telemetry.md](telemetry.md) section 8.
+- **The tests run inside Cloudflare's workerd**, started by
+  `@cloudflare/vitest-pool-workers`, not in Node. That is a second runtime,
+  pulled from npm as part of the install and executing the Worker for real
+  rather than a mock of it. `ci.yml`'s `pnpm -r test` runs this package too, so
+  the runtime is already exercised on both Node legs of the main pipeline; this
+  workflow adds the path-filtered check and the deploy.
+- **This workflow reads `.nvmrc` (24), not the `engines.node` floor of 20.**
+  `wrangler` and `miniflare` both declare `engines.node: ">=22.0.0"`. The suite
+  passes on Node 20 today, and `ci.yml`'s matrix keeps testing it there, but the
+  `deploy` job runs wrangler against the live account and should not be the
+  place a version below Cloudflare's declared floor first misbehaves.
+- **`permissions: contents: read`** at workflow level and nothing added at job
+  level. The `environment:` key needs no scope of its own.
 
 ## Maintainer checklist (one-time GitHub settings — NOT code)
 
@@ -577,6 +614,12 @@ rename.
       wants before assuming the next edit will clear it. `Code-Review` reflects
       commits reaching `main` without a reviewed pull request, which is inherent
       to a single-maintainer repository.
+- [ ] **Cloudflare deploy secrets.** `CLOUDFLARE_API_TOKEN` and
+      `CLOUDFLARE_ACCOUNT_ID` on the `telemetry-receiver` environment, plus a
+      branch policy on that environment allowing `main` only. The API token
+      should be scoped to editing Workers and D1 on that one account, not to an
+      account-wide edit. Until they exist a dispatched deploy fails at the
+      wrangler step; nothing else in the repository is affected.
 - [ ] **Manual image bumps:** Dependabot does not track `docker-compose.yml`
       `image:` pins — update `caddy` and `livekit/livekit-server` by hand when new
       releases ship. (Renovate, which parses compose, is an optional future

@@ -11,8 +11,9 @@ import { StreamingPanel } from '../instanceSettingsPanels/StreamingPanel';
 import { StoragePanel } from '../instanceSettingsPanels/StoragePanel';
 import { UsersPanel } from '../instanceSettingsPanels/UsersPanel';
 import { UpdatesPanel } from '../instanceSettingsPanels/UpdatesPanel';
+import { TelemetryPanel } from '../instanceSettingsPanels/TelemetryPanel';
 
-type SubTab = 'general' | 'registration' | 'federation' | 'streaming' | 'storage' | 'users' | 'updates';
+type SubTab = 'general' | 'registration' | 'federation' | 'streaming' | 'storage' | 'users' | 'updates' | 'telemetry';
 
 export function InstancePanel() {
   const { t } = useTranslation(['settings']);
@@ -30,6 +31,7 @@ export function InstancePanel() {
     { id: 'storage', label: t('settings:instance.tabs.storage') },
     { id: 'users', label: t('settings:instance.tabs.users') },
     { id: 'updates', label: t('settings:instance.tabs.updates') },
+    { id: 'telemetry', label: t('settings:instance.tabs.telemetry') },
   ], [approvalCount, t]);
 
   const handleNavigate = useCallback((id: string) => {
@@ -55,6 +57,7 @@ export function InstancePanel() {
       {subTab === 'storage' && <StoragePanel />}
       {subTab === 'users' && <UsersPanel />}
       {subTab === 'updates' && <UpdatesPanel />}
+      {subTab === 'telemetry' && <TelemetryPanel />}
     </div>
   );
 }

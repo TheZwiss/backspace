@@ -15,8 +15,13 @@ contextBridge.exposeInMainWorld('backspace', {
   },
 
   // Notifications & badge
-  showNotification: (title: string, body: string) => {
-    ipcRenderer.send('show-notification', { title, body });
+  showNotification: (title: string, body: string, options?: { channelId?: string; spaceId?: string; userId?: string }) => {
+    ipcRenderer.send('show-notification', { title, body, options });
+  },
+  onNotificationClick: (callback: (options: { channelId?: string; spaceId?: string; userId?: string }) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, options: { channelId?: string; spaceId?: string; userId?: string }) => callback(options);
+    ipcRenderer.on('notification-click', handler);
+    return () => { ipcRenderer.removeListener('notification-click', handler); };
   },
   setBadgeCount: (count: number) => {
     ipcRenderer.send('set-badge-count', count);

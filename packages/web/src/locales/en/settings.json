@@ -268,7 +268,8 @@
       "streaming": "Streaming",
       "storage": "Storage",
       "users": "Users",
-      "updates": "Updates"
+      "updates": "Updates",
+      "telemetry": "Say hi"
     }
   },
   "keybinds": {

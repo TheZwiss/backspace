@@ -408,7 +408,8 @@
       "streaming": "Streaming",
       "storage": "Speicher",
       "updates": "Updates",
-      "users": "Nutzer"
+      "users": "Nutzer",
+      "telemetry": "Hallo sagen"
     }
   }
 }

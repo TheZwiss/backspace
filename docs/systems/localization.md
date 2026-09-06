@@ -97,6 +97,7 @@ Rules:
 | `uploads` | Transfer indicator, upload errors, crop dialog |
 | `desktop` | Renderer-side desktop strings: update banner, recovery notices, keybind setup |
 | `mobile` | Mobile shell, bottom navigation, screen titles |
+| `telemetry` | The one-time "say hi" ask and the instance-settings section for the optional daily usage ping |
 | `errors` | Localized messages for every `ErrorCode` in `packages/shared` |
 
 One JSON file per namespace per language. `common` is the default

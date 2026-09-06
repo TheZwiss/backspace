@@ -20,6 +20,7 @@ import search from '../locales/en/search.json';
 import settings from '../locales/en/settings.json';
 import social from '../locales/en/social.json';
 import spaces from '../locales/en/spaces.json';
+import telemetry from '../locales/en/telemetry.json';
 import uploads from '../locales/en/uploads.json';
 import voice from '../locales/en/voice.json';
 
@@ -40,6 +41,7 @@ export const resources = {
     settings,
     social,
     spaces,
+    telemetry,
     uploads,
     voice,
   },

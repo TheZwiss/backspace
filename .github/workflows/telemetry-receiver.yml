@@ -1,0 +1,158 @@
+name: Telemetry receiver
+
+# Tests and deploys the Cloudflare Worker at scripts/telemetry-receiver, the
+# service instances that opted into telemetry post to. See
+# docs/systems/telemetry.md.
+#
+# The receiver is a workspace package, so ci.yml's `pnpm -r test` already runs
+# its suite on both Node legs. This file exists for what ci.yml cannot do: give
+# the package a fast, path-filtered check of its own, and give it a way to be
+# published. It is not part of `pnpm build` and it is not in the Docker image.
+#
+# Two jobs, deliberately split by trigger:
+#
+# - `test` runs on every push to main and every pull request that touches the
+#   package or this file. It holds no secrets, so it is safe on a fork.
+# - `deploy` runs only when Jannis dispatches it by hand from main. Nothing
+#   about a merge deploys the receiver. The D1 database, the EXPORT_TOKEN
+#   Worker secret and the hello.backspacechat.com custom domain are set up once
+#   by hand (docs/systems/telemetry.md section 8), and a live endpoint the whole
+#   opted-in fleet posts to should be republished when someone decides to, not
+#   as a side effect of an unrelated merge. This job creates nothing: it applies
+#   the migrations already in the repository and publishes the Worker.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/telemetry-receiver/**'
+      - '.github/workflows/telemetry-receiver.yml'
+  pull_request:
+    paths:
+      - 'scripts/telemetry-receiver/**'
+      - '.github/workflows/telemetry-receiver.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: telemetry-receiver-${{ github.ref }}
+  # A superseded pull-request run is worth cancelling. A dispatched deploy is
+  # not, and it shares this group with pushes to main: cancelling it between
+  # the migration step and the deploy step would leave the live database
+  # migrated and the Worker not, with no record of which half ran.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    name: Test the receiver
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: 10.34.3
+
+      # .nvmrc, which is 24, rather than the repository's `engines.node` floor
+      # of 20. The suite does pass on Node 20 today, measured: ci.yml's
+      # `pnpm -r test` picks this package up on both matrix legs and that is
+      # where the Node 20 coverage lives. But wrangler and miniflare, which the
+      # Workers pool starts, both declare `engines.node: ">=22.0.0"`, and the
+      # job below runs wrangler against the live account. Pinning the supported
+      # version here means a wrangler bump that starts using a Node 22 API
+      # breaks a pull request rather than a deploy.
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      # Filtered: this workflow never needs the server, web or desktop trees,
+      # and the desktop package's native postinstall rebuild is pure cost here.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --filter @backspace/telemetry-receiver
+
+      - name: Typecheck
+        run: pnpm --filter @backspace/telemetry-receiver typecheck
+
+      - name: Test
+        run: pnpm --filter @backspace/telemetry-receiver test
+
+  deploy:
+    name: Deploy to Cloudflare
+    needs: test
+    # Dispatch only, from the default branch only, never on a fork. The fork
+    # guard is not redundant with the secrets being absent there: without it a
+    # fork owner dispatching this workflow gets a run that reaches Cloudflare
+    # with an empty token and fails on their account rather than declining to
+    # start.
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && !github.event.repository.fork }}
+    runs-on: ubuntu-latest
+    # Scopes CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID to this one job and
+    # gives the deploy somewhere to hang an approval or a branch policy later.
+    # No extra `permissions:` is needed for it: the deployment record is
+    # written by the runner, not by GITHUB_TOKEN.
+    environment: telemetry-receiver
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: 10.34.3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      # Installs the wrangler the lockfile resolves for this package. Both steps
+      # below then find it already present and use it: wrangler-action falls
+      # back to installing its own default (3.90.0, a major behind) only when it
+      # cannot find one, and wrangler.toml here is a wrangler 4 config.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --filter @backspace/telemetry-receiver
+
+      # Applies the migration files under scripts/telemetry-receiver/migrations
+      # to the database `database_id` in wrangler.toml names, which was created
+      # by hand once. This step provisions nothing; it runs SQL files that are
+      # already in the repository, and D1 records which of them have run, so
+      # re-running it is a no-op. Before the deploy, so the schema is never
+      # behind the code that reads it.
+      #
+      # `packageManager` is set explicitly because wrangler-action infers it
+      # from a lockfile in workingDirectory, and in a pnpm workspace the
+      # lockfile lives at the root, so it would otherwise fall back to npm.
+      - name: Apply D1 migrations
+        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3.15.0
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: scripts/telemetry-receiver
+          packageManager: pnpm
+          command: d1 migrations apply DB --remote
+
+      - name: Deploy
+        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3.15.0
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: scripts/telemetry-receiver
+          packageManager: pnpm
+          command: deploy

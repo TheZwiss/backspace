@@ -1,6 +1,7 @@
 import { createClient } from './github.ts';
 import { createStore } from './store.ts';
 import { collect } from './collect.ts';
+import { createTelemetryFetcher } from './telemetry.ts';
 import {
   requiredEnv,
   assertHeaderSafeToken,
@@ -37,6 +38,16 @@ async function main(): Promise<void> {
   const actionsToken = process.env['METRICS_ACTIONS_TOKEN'] ?? '';
   if (actionsToken !== '') assertHeaderSafeToken(actionsToken);
 
+  // Optional like the actions token: without it the telemetry series are
+  // skipped, and the traffic collection is unaffected. The skip is logged
+  // rather than silent, so a run that quietly stopped collecting telemetry
+  // because the secret was rotated away is visible in the workflow log, which
+  // is what `metrics.yml` promises next to the secret.
+  const telemetryToken = process.env['TELEMETRY_EXPORT_TOKEN'] ?? '';
+  if (telemetryToken !== '') assertHeaderSafeToken(telemetryToken);
+  else console.log('telemetry: skipped, TELEMETRY_EXPORT_TOKEN is not set');
+  const telemetryEndpoint = process.env['TELEMETRY_ENDPOINT'] ?? 'https://hello.backspacechat.com';
+
   const { now, today } = deriveRunTimestamps(new Date());
 
   const result = await collect({
@@ -46,6 +57,10 @@ async function main(): Promise<void> {
     slug,
     today,
     now,
+    telemetry:
+      telemetryToken === ''
+        ? undefined
+        : createTelemetryFetcher(globalThis.fetch, telemetryEndpoint, telemetryToken),
   });
 
   for (const line of formatCollectSummary(result)) {

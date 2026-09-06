@@ -270,7 +270,8 @@
       "streaming": "Трансляции",
       "storage": "Хранилище",
       "users": "Пользователи",
-      "updates": "Обновления"
+      "updates": "Обновления",
+      "telemetry": "Привет"
     }
   },
   "keybinds": {
