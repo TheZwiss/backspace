@@ -25,12 +25,14 @@ import { exploreRoutes } from './routes/explore.js';
 import { searchRoutes } from './routes/search.js';
 import { adminRoutes } from './routes/admin.js';
 import { adminUpdateRoutes } from './routes/adminUpdates.js';
+import { adminTelemetryRoutes } from './routes/adminTelemetry.js';
 import { gifRoutes } from './routes/gif.js';
 import { federationRoutes } from './routes/federation.js';
 import { cspReportRoutes } from './routes/cspReport.js';
 import { buildCspHeaderValue, CSP_REPORT_GROUP, CSP_REPORT_PATH } from './utils/csp.js';
 import { startFederationWorkers, stopFederationWorkers } from './utils/federationWorker.js';
 import { startBackupWorker, stopBackupWorker } from './utils/backupWorker.js';
+import { startTelemetryReporter, stopTelemetryReporter } from './telemetry/reporter.js';
 import './utils/federationRollback.js'; // Side-effect: registers rollback callbacks for outbox terminal failures.
 import { registerCallRelayHooks } from './ws/events.js';
 import { resetStalePresenceOnBoot } from './utils/presenceBoot.js';
@@ -200,6 +202,7 @@ async function main(): Promise<void> {
   await app.register(searchRoutes);
   await app.register(adminRoutes);
   await app.register(adminUpdateRoutes);
+  await app.register(adminTelemetryRoutes);
   await app.register(gifRoutes);
   await app.register(federationRoutes);
   // Registered here rather than beside the hook above so it sits behind the
@@ -246,6 +249,10 @@ async function main(): Promise<void> {
     console.log('[startup] federation workers disabled via DISABLE_FEDERATION_WORKERS');
   } else {
     startFederationWorkers();
+    // The opt-in usage reporter, behind the same guard as the federation
+    // workers so an integration harness starts no background timers. It sends
+    // nothing at all unless an admin has switched reporting on.
+    startTelemetryReporter();
   }
 
   startBackupWorker();
@@ -253,6 +260,7 @@ async function main(): Promise<void> {
   const shutdown = async () => {
     console.log('Shutting down...');
     stopFederationWorkers();
+    stopTelemetryReporter();
     stopBackupWorker();
     await app.close();
     closeDatabase(); // checkpoints WAL — leaves a complete on-disk file

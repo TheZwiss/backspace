@@ -1,7 +1,7 @@
 # Database Schema Reference
 
 Source of truth: `packages/server/src/db/schema.ts` (Drizzle ORM)
-Migrations: drizzle-kit generates SQL from `schema.ts` (`pnpm db:generate` from `packages/server/`). On startup, `initDatabase()` runs `drizzle.migrate()` against `packages/server/drizzle/`, then `ensureDefaults()` (settings row, Snowflake worker ID, first-admin promotion). Migration history was squashed to a single baseline on 2026-04-24 (backlog #31 Phase 2).
+Migrations: drizzle-kit generates SQL from `schema.ts` (`pnpm db:generate` from `packages/server/`). On startup, `initDatabase()` runs `drizzle.migrate()` against `packages/server/drizzle/`, then `ensureDefaults()` (settings row, Snowflake worker ID, instance epoch, `installedAt` backfill, first-admin promotion). Migration history was squashed to a single baseline on 2026-04-24 (backlog #31 Phase 2).
 Engine: SQLite via `better-sqlite3`
 IDs: Snowflake text, permissions: bigint decimal strings
 
@@ -35,6 +35,8 @@ IDs: Snowflake text, permissions: bigint decimal strings
 | federationRegistryUpdatedAt | integer | 0 | LWW timestamp for federation registry sync |
 | federationHealPending | integer | 0 | Instance-epoch self-healing: set when a replicated identity is flagged for re-heal after a peer reset |
 | federationHomeOrphaned | integer | 0 | Instance-epoch self-healing: **1 = DETACHED / sovereign local account** (its home instance was reset/lost), not "frozen." **Set** to 1 by `quarantineOrphanedAccounts` on every real account from a reset home incarnation (flag-only detach — no rename, no login block). **Read** by: the login flow (self-heal path permanently disabled for detached rows; local-password login still works — `auth.md` §4), `users.ts` (unlocks local profile edit + local change-password), the S2S binding guards (`findFederatedUser` tier-2, `profile_update`, identity-delete all exclude detached rows — `federation.md`), and the `GET /api/federation/reset-events` admin surface. Cleared only by `tombstoneUser` (deletion). Detach spec §3/§4 |
+| lastActiveDay | text | | UTC day (`YYYY-MM-DD`) of the last authenticated WebSocket activity; written at most once per day. Used by telemetry to count active accounts. |
+| lastClient | text | | `'web'`, `'desktop'` or `'mobile'`, taken from the client's WebSocket auth message. |
 | createdAt | integer NOT NULL | | Epoch ms |
 
 ### spaces
@@ -386,6 +388,11 @@ The user INSERT, `usedCount` increment, and redemption row INSERT all run in a s
 | federationRelayEnabled | integer NOT NULL | 1 | |
 | federationRelayTtlDays | integer NOT NULL | 30 | |
 | autoAcceptPeering | integer NOT NULL | 1 | When 0, `peer/accept` rejects unsolicited requests with 403 |
+| telemetryEnabled | integer | | Opt-in usage pings. null = never asked, 0 = off, 1 = on. |
+| telemetryId | text | | Random UUID, minted on every off-to-on transition and cleared on every transition to off. Never the federation `instanceId`. |
+| telemetryLastDay | text | | Last UTC day (`YYYY-MM-DD`) successfully reported. |
+| telemetryLastError | text | | JSON `{ day, status }` of the last failed attempt, null after a success. |
+| installedAt | integer | | First-boot timestamp (epoch ms). Backfilled by `ensureDefaults` from the oldest local non-deleted account, or `Date.now()` on a fresh DB, so it is non-null after boot and never overwritten. |
 | updatedAt | integer NOT NULL | | |
 
 ---
