@@ -1,0 +1,20 @@
+{
+  "name": "@backspace/pr-triage",
+  "version": "1.1.2",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "author": "Jannis Braun",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "tsc --noEmit && vitest run"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0",
+    "vitest": "^4.1.11",
+    "@types/node": "^24.0.0"
+  }
+}
