@@ -5892,10 +5892,46 @@ footer a:hover { color: var(--txt); }
   /* Spec section 9. Ten instances inside the trailing seven days. */
   var THRESHOLD = 10;
 
-  /* Every uPlot instance this section has built, for teardown. Empty until
-   * Task 2 puts charts in it; the teardown is written now so the section owes
-   * one from its first render, as the shell's contract requires. */
+  /* Every uPlot instance this section has built, for teardown. */
   var live = [];
+
+  /*
+   * The two time-series cards, and the columns each one draws.
+   *
+   * Both cards are counts with a true floor at zero and all three lines in a
+   * card are the same kind of thing measured over three windows, so they share
+   * one y scale honestly. Colours come from the Aether Drift tokens, read at
+   * draw time, so the canvas stroke is the same resolved value the page uses
+   * everywhere else.
+   *
+   * Every column here is a GAUGE describing the fleet on its date, never a
+   * per-day event count. `users_active7d` and `messages7d` read like daily
+   * totals and are not: they are trailing-window figures the instances
+   * computed themselves. The card captions say so, because a reader who adds
+   * two of these rows together gets a number that means nothing.
+   */
+  var CARDS = [
+    {
+      title: "Instances reporting",
+      note: "Each line counts instances that sent a ping inside the window it names, ending on that date. " +
+        "An instance is counted only after it has reported on two separate days inside the last thirty, so a single visit to the endpoint never moves a line.",
+      lines: [
+        { field: "instances_1d", label: "Reported that day", token: "--sky", fallback: "#7dd3fc" },
+        { field: "instances_7d", label: "Within 7 days", token: "--lavender", fallback: "#c4b5fd" },
+        { field: "instances_30d", label: "Within 30 days", token: "--mint", fallback: "#86efac" }
+      ]
+    },
+    {
+      title: "Active users on reporting instances",
+      note: "People, not instances, and only the ones on instances that opted in. " +
+        "A user counts as active on a day their client held an authenticated connection, at day precision and no finer.",
+      lines: [
+        { field: "users_active1d", label: "Active that day", token: "--amber", fallback: "#fcd34d" },
+        { field: "users_active7d", label: "Active within 7 days", token: "--peach", fallback: "#fca5a5" },
+        { field: "users_active30d", label: "Active within 30 days", token: "--coral", fallback: "#fb923c" }
+      ]
+    }
+  ];
 
   function el(tag, className, text) {
     var node = document.createElement(tag);
@@ -5935,6 +5971,119 @@ footer a:hover { color: var(--txt); }
       box.appendChild(el("p", null, sentences[i]));
     }
     return box;
+  }
+
+  /*
+   * A card shell in the page's chart language: a title and a meta line, with
+   * the body left to the caller. Returned unfinished so a chart card and a
+   * ranked card can share the top of it.
+   *
+   * The card is appended to the stack BEFORE it is returned, because uPlot is
+   * given an explicit pixel size and that size is measured from a container
+   * that has to already be in the document.
+   */
+  function cardHost(stack, title, metaNodes) {
+    var card = el("div", "chart-card");
+    card.appendChild(el("p", "chart-title", title));
+    if (metaNodes.length > 0) {
+      var meta = el("p", "chart-meta");
+      for (var i = 0; i < metaNodes.length; i++) meta.appendChild(metaNodes[i]);
+      card.appendChild(meta);
+    }
+    stack.appendChild(card);
+    return card;
+  }
+
+  /* The columns one card draws, in the order its lines are declared. */
+  function columnsFor(network, card) {
+    var columns = [];
+    for (var i = 0; i < card.lines.length; i++) {
+      columns.push({ series: network, field: card.lines[i].field });
+    }
+    return columns;
+  }
+
+  /* How much of the window this card was actually measured on, stated on the
+   * card rather than only in the section copy. */
+  function chartMeta(axis) {
+    var measured = 0;
+    for (var i = 0; i < axis.measured.length; i++) {
+      if (axis.measured[i] > measured) measured = axis.measured[i];
+    }
+    var steps = axis.xs.length;
+    var unit = axis.stepDays === 7 ? "week" : "day";
+    return [
+      pair("span", I.formatDay(axis.startMs) + " to " + I.formatDay(axis.endMs)),
+      pair("measured", I.formatCount(measured) + " of " + I.formatCount(steps) + " " +
+        unit + (steps === 1 ? "" : "s")),
+      pair("reading", "a gauge on each date, never a total to add up")
+    ];
+  }
+
+  /*
+   * Release plots built by a render that is about to abandon the rest.
+   *
+   * `live` is assigned only once every card is built, so a render that leaves
+   * the build loop early leaves what it built referenced by nothing but its
+   * own frame: the shell's teardown would find the previous render's `live`
+   * and release nothing, and the uPlot instances would keep their window
+   * listeners and their place in the cursor-sync group after their DOM is
+   * gone. Both early exits below go through this.
+   */
+  function releaseAll(plots) {
+    for (var i = 0; i < plots.length; i++) {
+      try {
+        plots[i].destroy();
+      } catch (cleanupError) {
+        /* Whatever ended the render is the failure worth reporting, so a
+         * destroy that also fails is logged rather than allowed to replace
+         * it, and the remaining instances are still released. */
+        if (typeof console !== "undefined" && typeof console.error === "function") {
+          console.error("insights: releasing a telemetry chart after an abandoned render also failed.",
+            cleanupError);
+        }
+      }
+    }
+  }
+
+  /*
+   * One card. Returns the mounted plot, or null when the card had no measured
+   * step inside the window, in which case the card states that instead, for
+   * the reason the reach section does the same: uPlot answers an empty frame
+   * with an invented 0..1 axis, and a chart that looks broken is worse than a
+   * sentence that is true.
+   */
+  function buildCard(stack, card, axis) {
+    var shell = cardHost(stack, card.title, chartMeta(axis));
+
+    var drawable = false;
+    var i;
+    for (i = 0; i < axis.measured.length; i++) {
+      if (axis.measured[i] > 0) drawable = true;
+    }
+    if (!drawable) {
+      shell.appendChild(el("p", "slot-note",
+        "No ping falls inside this window, so there is no line to draw. An empty frame would look like a failure rather than an absence."));
+      shell.appendChild(el("p", "chart-hint", card.note));
+      return null;
+    }
+
+    var host = el("div", "chart-scroll");
+    shell.appendChild(host);
+    shell.appendChild(el("p", "chart-hint", card.note));
+
+    var defs = [];
+    for (i = 0; i < card.lines.length; i++) {
+      defs.push({
+        label: card.lines[i].label,
+        stroke: C.colour(card.lines[i].token, card.lines[i].fallback),
+        width: 2,
+        values: axis.values[i]
+      });
+    }
+    /* Stated rather than left to the default: every line here is a count of
+     * instances or of people, with a true floor at zero. */
+    return C.mount(host, axis.xs, defs, { yRange: C.zeroBasedCounts });
   }
 
   /* The newest snapshot date across the whole block, as the page prints dates,
@@ -5980,18 +6129,72 @@ footer a:hover { color: var(--txt); }
 
   function render(slot, data, rangeKey) {
     var block = telemetryOf(data);
-    if (block === null || typeof block.instances7d !== "number" || block.instances7d < THRESHOLD) {
+    /*
+     * The gate, stated as the condition that OPENS it rather than as the one
+     * that closes it. Written the other way round, as "below the threshold,
+     * return", the drawing path becomes whatever the negation happens to let
+     * through: a value that is neither a number nor below ten, such as a NaN
+     * reaching `instances7d`, passes on to the charts because `NaN < 10` is
+     * false. Here the only way to reach a chart is to be a number at or above
+     * the mark, so the fail-closed property is readable on this line alone and
+     * does not depend on what a validator upstream happens to reject.
+     */
+    var cleared = block !== null && typeof block.instances7d === "number" &&
+      block.instances7d >= THRESHOLD;
+    if (!cleared) {
       slot.appendChild(belowThresholdNote(block));
       return;
     }
-    /* The cleared-threshold branch. It states the count until the cards below
-     * it exist, and is replaced wholesale once they do. */
-    var day = latestDay(block);
-    slot.appendChild(stateNote([
-      I.formatCount(block.instances7d) + " instances reported inside the seven days ending " +
-        (day === null ? "on the archive's most recent day" : day) + ".",
-      "The charts for this section are not built yet."
-    ]));
+
+    var win = I.rangeWindow(data, rangeKey);
+    /* Reachable on a non-empty bundle: one holding only releases or only
+     * dimension snapshots has no dated series row to anchor a window to. */
+    if (win === null) {
+      slot.appendChild(el("p", "slot-note",
+        "The archive holds no dated measurement, so there is no time axis to draw these charts on."));
+      return;
+    }
+
+    var note = el("p", "chart-window");
+    note.appendChild(pair("showing", win.title.toLowerCase()));
+    note.appendChild(pair("window",
+      I.formatDay(win.startMs) + " \u2192 " + I.formatDay(win.endMs) + I.resolutionSuffix()));
+    slot.appendChild(note);
+
+    var stepDays = I.resolutionStepDays();
+    var stack = el("div", "chart-stack");
+    slot.appendChild(stack);
+
+    var created = [];
+    try {
+      for (var i = 0; i < CARDS.length; i++) {
+        var axis = C.expand(columnsFor(block.network, CARDS[i]), win, stepDays);
+        /* Before the `empty` branch: an overrun sets `empty` too, as a
+         * fail-safe, and the specific reason is the more useful of the two.
+         * An impossible date is a fault in the ARCHIVE, so it stops the
+         * section rather than being reported as a page bug. */
+        if (axis.overrun) {
+          /* Every card expands the same `block.network`, so today the first
+           * card is the one that overruns and nothing has been built yet.
+           * Released anyway: the day a card reads a different series, this
+           * return would otherwise strand whatever the loop already mounted. */
+          releaseAll(created);
+          slot.appendChild(el("p", "slot-note slot-note-detail",
+            "The telemetry series would run from " + I.formatDay(axis.startMs) + " to " +
+            I.formatDay(axis.endMs) + ", which needs " + I.formatCount(axis.overrunSteps) +
+            " points on the time axis. That is far longer than this archive can cover, so a date in the archive itself is wrong and no chart is drawn."));
+          return;
+        }
+        var plot = buildCard(stack, CARDS[i], axis);
+        if (plot !== null) created.push(plot);
+      }
+    } catch (error) {
+      /* Destroy what was built here, then let the shell render its failure
+       * note for this slot. */
+      releaseAll(created);
+      throw error;
+    }
+    live = created;
   }
 
   /*

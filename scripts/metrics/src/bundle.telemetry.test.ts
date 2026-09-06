@@ -203,4 +203,27 @@ describe('telemetry block', () => {
     expect(block.versions.latest).toEqual([]);
     expect(block.versions.snapshots).toEqual([]);
   });
+
+  it('keeps every network column aligned with its dates on both paths', () => {
+    // `expand` in the page walks `dates` and reads each column at the same
+    // index. A column one element short would shift a whole chart sideways
+    // with nothing on the page to show it, which is the failure the page's
+    // own validator exists to catch and this test exists to prevent.
+    const s = store();
+    const rows = Array.from({ length: 10 }, (_, i) =>
+      flatRow(new Date(Date.UTC(2026, 8, 1 + i)).toISOString().slice(0, 10), i),
+    );
+    s.writeCsv('telemetry/network.csv', NETWORK_HEADER, rows);
+
+    const daily = buildDashboardData(s, '2026-09-11T00:00:00Z').telemetry.network;
+    const weekly = downsampleWeekly(buildDashboardData(s, '2026-09-11T00:00:00Z')).telemetry.network;
+
+    for (const series of [daily, weekly]) {
+      for (const name of NETWORK_HEADER.slice(1)) {
+        expect((series as unknown as Record<string, unknown[]>)[name]).toHaveLength(
+          series.dates.length,
+        );
+      }
+    }
+  });
 });
