@@ -294,13 +294,6 @@ with the installed `@cloudflare/vitest-pool-workers` supports. A later date
 makes the test runtime refuse to start, so that pin moves only together with the
 dev dependency.
 
-The tests run inside that workerd rather than in Node, which is why this package
-has a workflow of its own and why the workspace root `.npmrc` hoists `@vitest/*`.
-The pool builds the sandbox's module registry by resolving from the package
-directory, and pnpm's strict layout keeps vitest's own sub-packages out of it, so
-without that hoist the runtime cannot start at all and every test file errors
-before it is read.
-
 Routes:
 
 | Route | Behaviour |
@@ -327,9 +320,11 @@ lifetime profile accumulates against an id.
 `.github/workflows/telemetry-receiver.yml` has two jobs. `test` runs the
 typecheck and the Workers test suite on every push to `main` and every pull
 request that touches `scripts/telemetry-receiver/**` or the workflow file, and
-holds no secrets. `deploy` applies the D1 migrations and publishes the Worker,
-and it runs only when Jannis dispatches the workflow by hand from `main`. A
-merge never deploys the receiver.
+holds no secrets. `deploy` runs only when Jannis dispatches the workflow by hand
+from `main`. It applies the migration files committed under
+`scripts/telemetry-receiver/migrations` to the live database and only then
+publishes the Worker, so the schema is never behind the code that reads it, and
+it provisions nothing of its own. A merge never deploys the receiver.
 
 The deploy job creates nothing. Four things are set up once, by hand, and then
 stay put:

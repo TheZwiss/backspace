@@ -78,13 +78,6 @@ jobs:
 
       # Filtered: this workflow never needs the server, web or desktop trees,
       # and the desktop package's native postinstall rebuild is pure cost here.
-      #
-      # The tests run inside workerd, and the pool builds that sandbox's module
-      # registry by resolving from the package directory. pnpm's strict layout
-      # hides vitest's own sub-packages from that lookup, which is why the
-      # workspace root .npmrc hoists `@vitest/*`. Without it the pool cannot
-      # start and every test file errors before it is read. Do not "simplify"
-      # that .npmrc away.
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --filter @backspace/telemetry-receiver
 

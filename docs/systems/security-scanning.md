@@ -531,12 +531,9 @@ GitHub, and the only one whose tests do not run in Node. What guards it:
 - **The tests run inside Cloudflare's workerd**, started by
   `@cloudflare/vitest-pool-workers`, not in Node. That is a second runtime,
   pulled from npm as part of the install and executing the Worker for real
-  rather than a mock of it. It is also why the workspace root `.npmrc` hoists
-  `@vitest/*`: the pool resolves the sandbox's modules from the package
-  directory, pnpm's strict layout hides vitest's own sub-packages there, and
-  without the hoist the runtime does not start. `ci.yml`'s `pnpm -r test` runs
-  this package too, so that hoist is load-bearing for the main pipeline and not
-  only for this workflow.
+  rather than a mock of it. `ci.yml`'s `pnpm -r test` runs this package too, so
+  the runtime is already exercised on both Node legs of the main pipeline; this
+  workflow adds the path-filtered check and the deploy.
 - **This workflow reads `.nvmrc` (24), not the `engines.node` floor of 20.**
   `wrangler` and `miniflare` both declare `engines.node: ">=22.0.0"`. The suite
   passes on Node 20 today, and `ci.yml`'s matrix keeps testing it there, but the
