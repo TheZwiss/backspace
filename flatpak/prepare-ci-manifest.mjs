@@ -13,10 +13,17 @@ if (matches.length !== 1) {
   throw new Error(`Expected one pinned Backspace source, found ${matches.length}`);
 }
 
-// CI must build the checked-out PR, not the last released commit. Keeping this
-// as a generated override avoids maintaining a second copy of the manifest.
+const publishedSources = /^      - flatpak\/node-sources\.json\r?$/gm;
+const sourceMatches = manifest.match(publishedSources) ?? [];
+if (sourceMatches.length !== 1) {
+  throw new Error(`Expected one published offline source list, found ${sourceMatches.length}`);
+}
+
+// CI must build the checked-out PR, not the last released commit.
+// Both the application source and its offline dependencies must come from the
+// checkout. The published pair remains pinned until release metadata updates it.
 const ciManifest = manifest.replace(
   pinnedSource,
   '      - type: dir\n        path: .',
-);
+).replace(publishedSources, '      - flatpak/node-sources.ci.json');
 writeFileSync(output, ciManifest);
