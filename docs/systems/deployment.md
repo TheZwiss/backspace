@@ -161,6 +161,13 @@ Caddy provisions and renews TLS certificates automatically for `DOMAIN`; the per
 - It polls `curl -fsS --resolve DOMAIN:443:127.0.0.1 https://DOMAIN/api/health` for ~30 s. Using `--resolve` connects to the **local** Caddy while presenting the real SNI/Host and performing full certificate verification, so a pass proves a valid public cert is installed *and* the app answers over TLS. This is deliberately **hairpin-safe**: many self-hosted boxes cannot reach their own public address (router NAT hairpin), so a plain external self-request would false-negative even when the site is fine for everyone else.
 - **Live** → the summary shows `HTTPS: Live`. **Not live yet** → `HTTPS: Not live yet` plus guidance (point DNS here, open/forward ports 80/443, watch `docker compose logs -f caddy`); Caddy keeps retrying and HTTPS comes up automatically once both are in place.
 
+**Telemetry environment.** Two variables, neither required. Full detail in [telemetry.md](telemetry.md).
+
+| Var | Default | Meaning |
+|-----|---------|---------|
+| `TELEMETRY` | _(unset)_ | Read by `install.sh` only, for unattended installs. `on` or `off` runs the same transition the admin route runs (`setTelemetryEnabled` in `packages/server/src/telemetry/state.ts`), written into the running container after the health check the same way the instance name is; `on` for an instance that is already on keeps its id and its last reported day. Any other value prints an error and changes nothing. Unset, the installer writes nothing and the admin panel asks after the first login. The running server never reads it. |
+| `TELEMETRY_ENDPOINT` | `https://hello.backspacechat.com` | Receiver base URL for the daily ping, read by the server and by the metrics collector. Point it at a local `wrangler dev` to test end to end. |
+
 ### Redeploy: `deploy.sh [pi|vm|all]`
 
 `./deploy.sh` is Heidi's redeploy helper for the two live instances — `nova.ddns.net` (Raspberry Pi) and `orbit.ddns.net` (VM). It does **not** build locally; it `rsync`s the working tree to the target (excluding `node_modules`, `.env`, `data/`, build output, and a list of local-only paths) and then runs `docker compose up -d --build` on the remote so the image is rebuilt in place. Targets:
