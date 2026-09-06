@@ -13,17 +13,121 @@ sizes are welcome: bug reports, fixes, features, documentation, and design.
 - **Open an issue first for anything non-trivial.** It saves you from building
   something that conflicts with planned direction. Small fixes can go straight
   to a pull request.
+- **Architectural changes need an approved design before any code.** See
+  [Design before code](#design-before-code) below for what counts and how it
+  works. Opening an issue is not the same as agreeing a design: wait for a
+  maintainer to say "approved to implement" before you branch.
 - **One logical change per pull request.** Keep diffs focused and reviewable.
 - **Keep pull requests small enough to review.** Review capacity is the
   bottleneck on this project, not authoring capacity. A change touching a
   hundred files waits longer than five changes touching twenty, and may be asked
-  to split. If something is genuinely large and indivisible, agree the shape on
-  an issue before writing it.
+  to split. If something is genuinely large and indivisible, it needs a design
+  proposal first (see below).
 - **You own your diff.** Use whatever tools you like, including AI assistants;
   nobody will ask. What matters is that you can explain any line of it, that you
   have run it, and that it does not contain two solutions to the same problem
   sitting side by side. Code the author has not read is the only kind of
-  contribution that costs more to review than it did to write.
+  contribution that costs more to review than it did to write. If you work
+  with an agent, see [Working with AI agents](#working-with-ai-agents).
+
+## Design before code
+
+Some changes set a rule that every later contributor has to follow, or close
+off a path the project may need later. For those, a short conversation before
+the code is the difference between a change that merges and one that gets
+reworked after it is finished. The point of this section is to protect your
+time, not to add a hurdle: the discussion is the same either way, and it is
+much cheaper before the implementation exists. Backspace has one maintainer
+and the last call is his, but the discussion is not his alone: proposals are
+open threads, and other contributors' arguments shape the decision.
+
+A change is architectural, and needs a design proposal, if it does any of:
+
+- introduces a mechanism or convention that other code must comply with from
+  then on (a global event bus, a new state layer, a required wrapper around a
+  browser API, a naming or file-layout rule);
+- adds a framework-level dependency, a build tool, or a new runtime mode or
+  platform layer (an ordinary library falls under the dependency rule below
+  and only needs a sentence in the issue);
+- changes the database schema, a REST or WebSocket contract, the federation
+  protocol, the permission model, or the preload bridge between the desktop
+  shell and the web client;
+- spans more than two subsystems in `docs/systems/` with one mechanism.
+
+When in doubt, ask on the issue. The answer "no proposal needed" takes a
+maintainer a minute; an unwanted rewrite takes days on both sides.
+
+How it works:
+
+1. Open an issue with the **Design proposal** template. State the problem, the
+   approach you intend to take, the alternatives you considered and why they
+   lost, and what other contributors will have to do differently afterwards.
+   A few paragraphs is the normal size. Prototyping to find out whether the
+   idea works is fine and often helps the discussion; just do not polish
+   before the approach is agreed, because it may change.
+2. The proposal is open for discussion by anyone. If you have worked on the
+   subsystems involved, weigh in; `git log` on the files a proposal would
+   touch shows who else has, and mentioning them is welcome. The maintainer
+   makes the final call, normally within a few days, and waits a little
+   longer while a discussion is active. The call is "approved to implement",
+   questions, or, for the largest decisions, a request to write it up as an
+   ADR in `docs/decisions/` so the reasoning outlives the pull request. A
+   proposal that several contributors have argued through usually gets a
+   faster decision than one nobody has looked at. One that sits with no
+   response at all for a week is a bug in the process; nudge it.
+3. Implement against the agreed design and link the proposal from the pull
+   request.
+
+If a pull request arrives with an architectural change and no proposal, review
+pauses while the design is discussed on the pull request itself. That works,
+and nobody is turned away for it, but it is the slow path: by then the
+discussion is about finished code, and changing the approach means redoing
+work that a proposal would have avoided.
+
+## Working with AI agents
+
+The quality bar is the same however the code was written: it does one thing,
+it is complete, it matches the surrounding code, it has been run, and the
+author can explain any line of it. Nothing in this section changes that bar.
+It describes how to reach it with an agent, because an agent used carelessly
+produces work that looks finished and is not, and that costs more to review
+than it did to write.
+
+**The repository is set up for agents.** `CLAUDE.md` at the root carries the
+rules and points to `docs/systems/`, where every subsystem is specified. Point
+your agent at it before anything else, whatever the agent is called. The specs
+are kept current by the same changes that alter the subsystems, so a change
+that touches one is expected to update it in the same pull request; an agent
+that has read the spec will do that on its own.
+
+**Find the optimal solution before writing code.** Plan first, with the agent
+doing the exploration: read the affected subsystems, lay out the options, and
+argue them against each other until one wins on its merits, not on being the
+first that worked. Write the plan down. For architectural changes, that plan
+is the design proposal above, and it is discussed before implementation. A
+planning workflow such as the superpowers plugin makes this the default rather
+than a discipline.
+
+**Execute the plan with tests leading.** Write the test, make it pass, move
+on. Review the work against the plan and the spec as you go rather than at the
+end; slop is what accumulates when generation runs ahead of review.
+
+**Test the result.** Run the automated tests, and run the thing by hand on the
+platforms it touches. A build that compiles is not a build that runs.
+
+**Have an agent review the pull request before you open it.** Adversarially:
+what is wrong, what is untested, where two solutions to one problem sit side
+by side. Every pull request here gets that review on arrival, and it usually
+finds something; doing it first turns a round trip of days into minutes. Fix
+what it finds; do not paste the report into the pull request. Then read the
+diff yourself. You own it.
+
+**Use a model that can carry the reasoning.** Good architecture and good code
+come from strong thinking models with room to think: Opus 5, Fable, or
+comparable. Weaker or faster models can produce the same output, but only if
+you know how to get it out of them, and the burden of knowing that is on you,
+not on the reviewer. If a task is worth a pull request, it is worth the
+strongest model you have.
 
 ## Contributor License Agreement (required)
 
@@ -114,6 +218,10 @@ and it is the part that breaks.
   design system.
 - You ran the thing you changed, and attached evidence if it affects packaging,
   installation, or the UI (see above).
+- If the change is architectural (see [Design before code](#design-before-code)),
+  the pull request links the approved design proposal.
+- You reviewed the full diff after the last commit, with an agent if one wrote
+  it, and fixed what you found.
 
 ## Reporting bugs and requesting features
 

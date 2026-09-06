@@ -48,8 +48,14 @@ because they are core desktop-client features. System-bus access is limited to
 UPower so Chromium can observe battery state. PipeWire screen capture goes
 through the desktop portals.
 Global keybind behavior is desktop-dependent: X11 supports the bundled native
-hook, which is rebuilt against the bundled Electron headers, while Wayland
-compositors may restrict global input observation. Activity detection follows
+hook, which is rebuilt against the bundled Electron headers. Wayland uses the
+GlobalShortcuts portal and requires a supporting desktop backend and user consent.
+The first visit to Keybinds registers all available actions; subsequent launches
+restore registration from the portal. Assign, change or remove shortcuts in the
+system settings under Backspace. The app displays a read-only list and allows
+retrying a denied/closed session. Browser/X11 local bindings are ignored on
+Wayland, including when its portal backend is unavailable. No extra Flatpak bus
+permission is required. Activity detection follows
 the same platform limits as global keybinds; it is not disabled merely because
 the app is packaged as Flatpak. Electron's current start-at-login integration
 does not work across the sandbox boundary, so the client hides that setting;
