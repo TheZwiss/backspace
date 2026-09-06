@@ -203,4 +203,41 @@ describe('telemetry block', () => {
     expect(block.versions.latest).toEqual([]);
     expect(block.versions.snapshots).toEqual([]);
   });
+
+  it('keeps instances7d null on the weekly path when the last day did not measure it', () => {
+    // The threshold is a claim about the trailing seven days. Recomputing it
+    // from the bucketed series reached back up to six days for a value when
+    // the final day was blank, which published charts off a bar that was last
+    // cleared the previous week.
+    //
+    // 15 days, so the archive ends on 2026-09-15 and the final week bucket
+    // holds a measured Monday as well as the blank final day. A run ending on
+    // the Monday itself puts that day alone in its bucket, where a recompute
+    // has nothing older to reach back to and cannot tell the two paths apart.
+    const s = store();
+    const rows = Array.from({ length: 15 }, (_, i) =>
+      flatRow(new Date(Date.UTC(2026, 8, 1 + i)).toISOString().slice(0, 10), 12),
+    );
+    rows[rows.length - 1] = { ...rows[rows.length - 1], instances_7d: '' };
+    s.writeCsv('telemetry/network.csv', NETWORK_HEADER, rows);
+
+    const daily = buildDashboardData(s, '2026-09-15T00:00:00Z');
+    const weekly = downsampleWeekly(daily);
+
+    expect(daily.telemetry.instances7d).toBeNull();
+    expect(weekly.telemetry.instances7d).toBeNull();
+  });
+
+  it('keeps instances7d equal to the last published bucket when the last day measured it', () => {
+    const s = store();
+    const rows = Array.from({ length: 14 }, (_, i) =>
+      flatRow(new Date(Date.UTC(2026, 8, 1 + i)).toISOString().slice(0, 10), i),
+    );
+    s.writeCsv('telemetry/network.csv', NETWORK_HEADER, rows);
+
+    const weekly = downsampleWeekly(buildDashboardData(s, '2026-09-15T00:00:00Z'));
+
+    expect(weekly.telemetry.instances7d).toBe(13);
+    expect(weekly.telemetry.network.instances_7d.at(-1)).toBe(13);
+  });
 });

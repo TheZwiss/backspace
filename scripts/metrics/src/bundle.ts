@@ -170,7 +170,8 @@ export interface TelemetryBlock {
    * The last DAY's value, not the last MEASURED one: the threshold is a claim
    * about the last seven days, and answering it from an older row would
    * publish charts on a bar that is no longer cleared. `downsampleWeekly`
-   * recomputes it from the bucketed series so the two can never disagree.
+   * carries it through unchanged; see `downsampleTelemetry` for why that is
+   * what keeps the daily and weekly bundles saying the same thing.
    */
   instances7d: number | null;
 }
@@ -956,10 +957,17 @@ function downsampleTelemetryNetwork(series: TelemetryNetworkSeries): TelemetryNe
  * are differences between CONSECUTIVE snapshots, and bucketing the snapshots
  * would redefine that quantity while leaving its name and its type alone.
  *
- * `instances7d` is RECOMPUTED from the bucketed series rather than carried
- * over. The two differ whenever the final partial week ends on a day that is
- * not the last measured one, and a threshold read off a figure that no longer
- * appears anywhere in the published series would be unverifiable from the
+ * `instances7d` is CARRIED THROUGH rather than recomputed, and the two are
+ * the same value in every case but one. `lastBucket` picks the measured value
+ * with the highest date in a bucket and the rows are date-sorted, so whenever
+ * the final day measured the column it is the final bucket's pick and the two
+ * agree. They diverge only when the final day did NOT measure it: the daily
+ * figure is null, and a recompute would reach back up to six days for a value.
+ * The threshold is a claim about the trailing seven days, so reaching back
+ * would publish charts off a bar last cleared the previous week. Carrying the
+ * daily figure keeps both properties the field is for: it is the last DAY's
+ * value, and when it is not null it is also the final element of the published
+ * bucketed series, so the threshold figure is always verifiable from the
  * bundle itself.
  */
 function downsampleTelemetry(block: TelemetryBlock): TelemetryBlock {
@@ -969,7 +977,7 @@ function downsampleTelemetry(block: TelemetryBlock): TelemetryBlock {
     versions: copyDimensionSeries(block.versions),
     countries: copyDimensionSeries(block.countries),
     clients: copyDimensionSeries(block.clients),
-    instances7d: latestInstances7d(network),
+    instances7d: block.instances7d,
   };
 }
 
