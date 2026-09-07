@@ -264,7 +264,6 @@ section.panel:last-of-type { padding-bottom: 96px; }
 .ch-label::before { content: "#"; font-size: 15px; font-weight: 600; }
 .ch-mint::before { color: var(--mint); }
 .ch-sky::before { color: var(--sky); }
-.ch-peach::before { color: var(--peach); }
 .ch-amber::before { color: var(--amber); }
 .ch-rose::before { color: var(--rose); }
 h2 {
@@ -421,7 +420,7 @@ h2 {
 
 /* ================= Ranked dimensions ================= */
 /*
- * The ranked list is the section's primary reading AND the movement chart's
+ * The ranked list is the card's primary reading AND the movement chart's
  * legend: a row drawn in a palette colour is one of the handful that carries
  * a line below, in that same colour. The join between the two structures is
  * therefore visible on the page rather than merely asserted in code.
@@ -673,8 +672,6 @@ footer a:hover { color: var(--txt); }
     <a class="brand" href="../"><img src="../assets/logo.png" alt="" width="26" height="26" /> Backspace <span class="brand-sub">insights</span></a>
     <a class="nav-link" href="#reach">Reach</a>
     <a class="nav-link" href="#following">Following</a>
-    <a class="nav-link" href="#referrers">Referrers</a>
-    <a class="nav-link" href="#paths">Paths</a>
     <a class="nav-link" href="#adoption">Adoption</a>
     <a class="nav-link" href="#delivery">Delivery</a>
     <a class="btn btn-primary btn-sm" href="https://github.com/TheZwiss/backspace">GitHub</a>
@@ -766,31 +763,6 @@ footer a:hover { color: var(--txt); }
     <p class="chart-hint" id="chart-hint"></p>
   </div>
 
-  <section class="panel" id="referrers">
-    <div class="wrap">
-      <p class="ch-label ch-peach">where-people-come-from</p>
-      <h2>Where people come from</h2>
-      <p class="sec-copy">
-        Referring sites, ranked. GitHub reports these only as a trailing 14-day aggregate, so
-        every figure here covers the two weeks up to its snapshot date — there is no daily
-        resolution to be had.
-      </p>
-      <div class="slot" id="ranked-referrers"></div>
-    </div>
-  </section>
-
-  <section class="panel" id="paths">
-    <div class="wrap">
-      <p class="ch-label ch-amber">what-they-look-at</p>
-      <h2>What they look at</h2>
-      <p class="sec-copy">
-        The most-visited paths in the repository, ranked on the same trailing 14-day basis as the
-        referrers above.
-      </p>
-      <div class="slot" id="ranked-paths"></div>
-    </div>
-  </section>
-
   <section class="panel" id="adoption">
     <div class="wrap">
       <p class="ch-label ch-mint">adoption</p>
@@ -870,6 +842,13 @@ footer a:hover { color: var(--txt); }
         holds and nothing else: when the history is too short to make a line, a card states its
         reading and its reasons instead of drawing one, and how a chart's axes are scaled is
         stated beside the chart itself.
+      </p>
+      <h3>Referrers and paths</h3>
+      <p class="sec-copy">
+        Referring sites and the most-visited paths in the repository, both ranked in the Reach
+        group. GitHub reports these only as a trailing 14-day aggregate, so every figure in those
+        two cards covers the two weeks up to its snapshot date, and there is no daily resolution
+        to be had.
       </p>
       <h3>Opt-in pings</h3>
       <p class="sec-copy">
@@ -986,8 +965,8 @@ footer a:hover { color: var(--txt); }
     resolution: document.getElementById("resolution")
   };
 
-  var SLOT_IDS = ["header-stats", "reach-body", "following-body", "ranked-referrers",
-    "ranked-paths", "adoption-body", "delivery-body", "method-coverage"];
+  var SLOT_IDS = ["header-stats", "reach-body", "following-body", "adoption-body",
+    "delivery-body", "method-coverage"];
 
   /*
    * The subset that receives the unavailable/empty note.
@@ -997,8 +976,8 @@ footer a:hover { color: var(--txt); }
    * looks for a figure: the coverage line is metadata about the archive, and
    * the status region above has already said what is wrong, once, in full.
    */
-  var NOTE_SLOT_IDS = ["header-stats", "reach-body", "following-body", "ranked-referrers",
-    "ranked-paths", "adoption-body", "delivery-body"];
+  var NOTE_SLOT_IDS = ["header-stats", "reach-body", "following-body", "adoption-body",
+    "delivery-body"];
 
   /* ---------------------------------------------------------------- helpers */
 
@@ -1465,12 +1444,12 @@ footer a:hover { color: var(--txt); }
    * `dimensions` through untouched — a referrer trajectory is a difference
    * between consecutive snapshots, and weekly bucketing would silently
    * redefine that into a different quantity with the same name — so the
-   * referrer and path sections keep their own daily snapshot dates whatever
+   * referrer and path cards keep their own daily snapshot dates whatever
    * this flag says. A note reading "every range is drawn in weekly buckets"
-   * over two sections measurably stepping by one day is the page asserting
+   * over two cards measurably stepping by one day is the page asserting
    * something about its own contents that is not true, which is the one thing
    * it exists not to do. So the claim is scoped to what it governs and the two
-   * dimensional sections state their resolution themselves, beside their own
+   * dimensional cards state their resolution themselves, beside their own
    * figures.
    *
    * The other statuses get their own line rather than a resolution claim: an
@@ -4325,13 +4304,14 @@ footer a:hover { color: var(--txt); }
  * ─────────────────────────────────────────────────────────────────────────
  * PER-CARD ERROR CONTAINMENT
  *
- * Today a throw in the referrers renderer fails only the referrers slot. With
- * one slot per group, the same throw would take out a whole group, which is a
- * regression in blast radius: five working cards would disappear because a
- * sixth could not be built. So every card is built through `buildCardSafely`,
- * which replaces that one card with the page's existing failure note and
- * continues. A throw in a group renderer OUTSIDE any card is still contained
- * to that group's slot by the shell, exactly as today.
+ * A throw in the referrers renderer used to fail only the referrers slot, back
+ * when it had a slot of its own. With one slot per group, the same throw would
+ * take out a whole group, which is a regression in blast radius: five working
+ * cards would disappear because a sixth could not be built. So every card is
+ * built through `buildCardSafely`, which replaces that one card with the
+ * page's existing failure note and continues. A throw in a group renderer
+ * OUTSIDE any card is still contained to that group's slot by the shell,
+ * exactly as it always was.
  * ─────────────────────────────────────────────────────────────────────────
  */
 (function () {
@@ -4672,486 +4652,15 @@ footer a:hover { color: var(--txt); }
 
 <script>
 /*
- * Group "reach" -- who is finding this.
+ * The two ranked dimension cards, referring sites and popular paths: spec §7's
+ * dimensional view, and the weakest data this archive holds.
  *
- * Hero: page views, with unique visitors as the second dashed line. Views is
- * the direct answer to the group's question, it is the widest funnel the
- * archive measures, and it is the one traffic series the CI clone confound
- * does not touch: a checkout loads no page.
- *
- * Stars, forks and watchers are NOT here. They are people who chose to follow
- * the repository rather than people finding it, which is a different question,
- * and they have a group of their own: see #following. Task 8 adds the two
- * ranked dimension cards to the detail band this file already builds.
- */
-(function () {
-  "use strict";
-
-  var I = window.INSIGHTS;
-  var F = window.INSIGHTS_FIGURES;
-  var G = window.INSIGHTS_GROUPS;
-
-  var LEAD = {
-    label: "Page views", kind: "flow", series: "views", field: "count", trend: "compare"
-  };
-
-  /* Every live uPlot instance this group owns. Assigned only once a render
-   * has completed; a render that throws destroys what it built itself. */
-  var live = [];
-
-  function el(tag, className, text) {
-    var node = document.createElement(tag);
-    if (className) node.className = className;
-    if (text !== undefined) node.textContent = text;
-    return node;
-  }
-
-  /*
-   * `downsampled` is wholesale: when it is true every range is weekly. A
-   * weekly bucket's `uniques` is the sum of its days' uniques, and a visitor
-   * who came back on three days is three daily uniques and one person, so the
-   * weekly figure over-counts and is an upper bound rather than a count of
-   * people. It is not recoverable from daily data, so the only honest move is
-   * to label it, and the label travels on the series itself where a reader
-   * hovering the line will see it.
-   */
-  function uniquesLabel(label, downsampled) {
-    return downsampled ? label + " (weekly sum, upper bound)" : label;
-  }
-
-  /*
-   * A traffic card's own meta pairs, on top of the shared ones.
-   *
-   * The uniques count first, and only when the two columns disagree, which is
-   * the case worth naming: the count was recorded and the unique figure was
-   * not, or the reverse.
-   *
-   * Then the 30-day window total. It is here because the chip above no longer
-   * carries it. Every flow chip on this page prints a signed change, so that a
-   * lead figure's chip and a card head's chip in the same idiom cannot mean
-   * two different quantities, and the one-window total the chip used to print
-   * is a figure this page prints today. It keeps a place rather than
-   * disappearing, and this is the honest place for it: a mono meta line beside
-   * the span and the measured-step count, where a card's other measured facts
-   * already are.
-   *
-   * `flowDelta` is the page's existing one-window total, unchanged and called
-   * exactly as `flowCard` calls it, so this pair and the at-a-glance chip
-   * cannot disagree about the number while both are on the page. It refuses
-   * unless the window is covered end to end, and it labels itself with the
-   * span its rows actually stand for when the bundle is weekly, which is why
-   * the key is built from `windowDays` rather than hard-coded to 30. A refused
-   * total is not printed at all: it is not a figure, and the chip beside it
-   * already says the window is not covered.
-   *
-   * `ctx.wins` null is the same archive state as `ctx.win` null, so this
-   * cannot be reached with no window today. The guard is here because
-   * `flowDelta` dereferences the window it is handed, and a caller that
-   * eventually reaches this line without one would take the whole group's
-   * render down rather than skip a meta pair.
-   */
-  function trafficMeta(seriesName, field, countColumn, uniquesColumn, ctx) {
-    return function (axis, offsets, stepDays) {
-      var out = [];
-      var counted = axis.measured[offsets[countColumn]];
-      var uniqueCounted = axis.measured[offsets[uniquesColumn]];
-      if (uniqueCounted !== counted) {
-        out.push(G.pair("uniques measured",
-          uniqueCounted + " of " + G.steps(axis.xs.length, stepDays)));
-      }
-      if (ctx.wins === null) return out;
-      var total = F.flowDelta(ctx.data.series[seriesName], field, ctx.wins.flow, ctx.step);
-      if (total.available) {
-        out.push(G.pair(total.windowDays + "d total", I.formatCount(total.value)));
-      }
-      return out;
-    };
-  }
-
-  function weeklyUniquesNote(label) {
-    return "This bundle is bucketed by week. A bucket's unique figure is the sum of its days' " +
-      "unique counts, so someone who came back on several days is counted more than once: read " +
-      "the " + label.toLowerCase() + " line as an upper bound rather than a count of people.";
-  }
-
-  function heroSpec(ctx) {
-    return {
-      profile: "hero",
-      title: "Page views",
-      figure: null,
-      columns: {
-        count: { series: "views", field: "count" },
-        uniques: { series: "views", field: "uniques" }
-      },
-      lines: [
-        {
-          column: "count", label: "Views", token: "--sky", fallback: "#7dd3fc",
-          fill: "rgba(125, 211, 252, 0.10)", width: 2
-        },
-        {
-          column: "uniques", label: uniquesLabel("Unique visitors", ctx.downsampled),
-          token: "--lavender", fallback: "#c4b5fd", width: 1.5, dash: [5, 4]
-        }
-      ],
-      yPolicy: "zero",
-      breakPhrase: "drawn as breaks, not zeros",
-      metaExtra: trafficMeta("views", "count", "count", "uniques", ctx),
-      notes: ctx.downsampled ? [weeklyUniquesNote("Unique visitors")] : []
-    };
-  }
-
-  /* The clone line's own caveat, and the link to the chart that explains most
-   * of its shape. The two series sit in different groups now, so each names
-   * the other; the page-wide cursor never depended on their adjacency,
-   * because it syncs on scale values rather than on pixels. */
-  function cloneCaveat() {
-    var note = el("p", "stat-note");
-    note.appendChild(document.createTextNode(
-      "GitHub counts this repository's own actions/checkout steps as clones, so this line " +
-      "measures the build pipeline as well as the audience. The "));
-    var link = el("a", null, "CI activity chart in Delivery");
-    link.href = "#delivery";
-    note.appendChild(link);
-    note.appendChild(document.createTextNode(
-      " is this repository's own workflow-run count, so the overlap can be read directly " +
-      "rather than taken on trust."));
-    return note;
-  }
-
-  function clonesSpec(ctx) {
-    return {
-      profile: "compact",
-      title: "Repository clones",
-      /* `trend: "compare"` for the same reason the group head carries it: this
-       * is a flow chip on the charted page, and spec section 4.3 gives every
-       * flow chip on the page one idiom, the signed change. The one-window
-       * total it used to print is the `30d total` pair in this card's own meta
-       * line below, and the at-a-glance Clones chip still prints that total
-       * until Task 9 deletes the grid, so the two can be read against each
-       * other while both are on screen. */
-      figure: {
-        label: "Clones", kind: "flow", series: "clones", field: "count",
-        trend: "compare", note: "includes this repo's own CI checkouts"
-      },
-      columns: {
-        count: { series: "clones", field: "count" },
-        uniques: { series: "clones", field: "uniques" }
-      },
-      lines: [
-        { column: "count", label: "Clones", token: "--mint", fallback: "#86efac" },
-        {
-          column: "uniques", label: uniquesLabel("Unique cloners", ctx.downsampled),
-          token: "--amber", fallback: "#fcd34d", dash: [5, 4]
-        }
-      ],
-      yPolicy: "zero",
-      breakPhrase: "drawn as breaks, not zeros",
-      metaExtra: trafficMeta("clones", "count", "count", "uniques", ctx),
-      caveat: cloneCaveat(),
-      notes: ctx.downsampled ? [weeklyUniquesNote("Unique cloners")] : []
-    };
-  }
-
-  /*
-   * No window line. The old reach section printed one at the top of its slot
-   * and so did growth and telemetry, which is the same sentence three times on
-   * a page whose stated problem is too much text. #method's coverage line
-   * states the selected range and the dates it resolves to once for the whole
-   * page, and each card's own meta line states the span it actually drew,
-   * which is the number that differs from card to card. Nothing is lost: the
-   * range that was asked for is stated beside the control that asks for it.
-   */
-  function render(slot, data, rangeKey) {
-    var ctx = {
-      data: data,
-      win: I.rangeWindow(data, rangeKey),
-      wins: F.windows(data),
-      step: I.resolutionStepDays(),
-      downsampled: data.downsampled
-    };
-
-    G.groupHead(slot, LEAD, ctx);
-
-    var hero = G.band("hero");
-    var series = G.band("series");
-    var detail = G.band("detail");
-    /* In the slot before a single card is built into them. Appending here
-     * rather than at the end of the render is the load-bearing part; see
-     * G.attach. The detail band is empty until Task 8 fills it, and an empty
-     * band is collapsed by CSS rather than left out here. */
-    G.attach(slot, [hero, series, detail]);
-
-    /* Reachable on a non-empty bundle: one holding only releases or only
-     * dimension snapshots has no dated series row to anchor a window to. Into
-     * the hero band, where the charts would have been. */
-    if (ctx.win === null) {
-      hero.appendChild(el("p", "slot-note",
-        "The archive holds no dated measurement, so there is no time axis to draw these charts " +
-        "on."));
-      return;
-    }
-
-    var created = [];
-    try {
-      G.keep(created, G.buildCardSafely(hero, function () {
-        return G.chartCard(hero, heroSpec(ctx), ctx);
-      }));
-      G.keep(created, G.buildCardSafely(series, function () {
-        return G.chartCard(series, clonesSpec(ctx), ctx);
-      }));
-    } catch (error) {
-      /* `live` is assigned only once every card is built, so a throw part-way
-       * leaves `created` referenced by nothing but this frame. Destroy what
-       * was built here, then let the shell render its failure note. */
-      for (var j = 0; j < created.length; j++) {
-        try {
-          created[j].destroy();
-        } catch (cleanupError) {
-          if (typeof console !== "undefined" && typeof console.error === "function") {
-            console.error("insights: releasing a reach chart after a failed render also failed.",
-              cleanupError);
-          }
-        }
-      }
-      throw error;
-    }
-    live = created;
-  }
-
-  /*
-   * Runs before the slot is emptied. Removing the nodes alone would leave
-   * every instance's window listeners, its resize observer and its membership
-   * of the page's cursor-sync group alive.
-   *
-   * `live` is cleared first so a destroy that throws cannot leave a
-   * half-destroyed instance behind to be destroyed twice; the first failure is
-   * re-thrown once the rest have been released, and the shell reports it.
-   */
-  function teardown() {
-    var pending = live;
-    live = [];
-    var failure = null;
-    for (var i = 0; i < pending.length; i++) {
-      try {
-        pending[i].destroy();
-      } catch (error) {
-        if (failure === null) failure = error;
-      }
-    }
-    if (failure !== null) throw failure;
-  }
-
-  I.registerSection("reach-body", render, teardown);
-})();
-</script>
-<script>
-/*
- * Group "following" -- who chose to follow it.
- *
- * Hero: stars. Of the three series here it is the one that actually moves.
- * Forks and watchers change a handful of times a year on this repository,
- * while the star count is the number a reader goes to a repository page to
- * look for, and it is the widest of the three, so it is the one worth giving
- * the full width to.
- *
- * ─────────────────────────────────────────────────────────────────────────
- * THE ONE HERO ON THIS PAGE WITH NO AREA FILL
- *
- * A fill reads as area under the curve measured from zero, so a card that
- * fits its axis to the values must not carry one. All three series here are
- * cumulative counters and all three need a fitted axis: a star count moving 60
- * to 64 over a month, drawn from zero, is a flat line at the top of an axis
- * that is 94 percent empty, which hides the only thing the chart is for.
- *
- * The two rules cannot both hold on one card, so the fill is what gives way.
- * That costs one of the four things the page relies on to carry the hero
- * hierarchy at a single column, and the other three still apply here: the hero
- * plot is 280px against 150, it sits on --chat against a lighter recessive
- * panel, and the group's lead figure is a large number directly above it. It
- * is a real loss and it is smaller than the loss of leaving seven of twelve
- * cards in the group a reader meets first.
- * ─────────────────────────────────────────────────────────────────────────
- */
-(function () {
-  "use strict";
-
-  var I = window.INSIGHTS;
-  var F = window.INSIGHTS_FIGURES;
-  var G = window.INSIGHTS_GROUPS;
-
-  var LEAD = { label: "Stars", kind: "point", series: "stars", field: "total" };
-
-  /* Every live uPlot instance this group owns. Assigned only once a render
-   * has completed; a render that throws destroys what it built itself. */
-  var live = [];
-
-  function el(tag, className, text) {
-    var node = document.createElement(tag);
-    if (className) node.className = className;
-    if (text !== undefined) node.textContent = text;
-    return node;
-  }
-
-  /*
-   * Verbatim from the growth section's `axisNote`, in the singular. That
-   * sentence said "the vertical axis on both charts is fitted", which
-   * described two series sharing one axis; there are three cards with an axis
-   * each now, so there is no "both charts" for it to refer to. The claim it
-   * makes is unchanged, and it is rendered inside each card rather than once
-   * per section, because a fitted baseline is the other half of the
-   * truncated-axis trade and must not be silent.
-   */
-  var FITTED_NOTE = "The vertical axis is fitted to the values drawn rather than pinned to a " +
-    "zero baseline, so a small move is visible rather than flattened. Read the height of " +
-    "the line against its own axis labels, not against the bottom of the frame.";
-
-  /*
-   * Verbatim from the growth section, where it was true and stays true: a
-   * weekly bucket is keyed on the Monday that opens its week while a
-   * cumulative field carries the LAST value measured in that week, so a point
-   * sits up to six days earlier on the axis than the reading it shows.
-   *
-   * This is the sentence that could NOT travel to the Delivery hero, whose
-   * series is summed rather than carried. It stays here, where it is exact.
-   */
-  var WEEKLY_CUMULATIVE_NOTE = "This bundle is bucketed by week. A point is dated on the Monday " +
-    "that opens its week but carries the last value measured in that week, so it sits up to " +
-    "six days earlier on the axis than the reading it shows.";
-
-  function cumulativeSpec(profile, title, figure, series, field, label, token, fallback,
-    downsampled) {
-    var notes = [FITTED_NOTE];
-    if (downsampled) notes.push(WEEKLY_CUMULATIVE_NOTE);
-    var line = { column: "total", label: label, token: token, fallback: fallback };
-    /* A hero's stroke is 2px against the compact profile's 1.5. No `fill` on
-     * any of the three, hero included: see the header comment. */
-    if (profile === "hero") line.width = 2;
-    return {
-      profile: profile,
-      title: title,
-      figure: figure,
-      columns: { total: { series: series, field: field } },
-      lines: [line],
-      yPolicy: "fitted",
-      breakPhrase: "drawn as breaks, not as a fall to zero",
-      notes: notes
-    };
-  }
-
-  function render(slot, data, rangeKey) {
-    var ctx = {
-      data: data,
-      win: I.rangeWindow(data, rangeKey),
-      wins: F.windows(data),
-      step: I.resolutionStepDays(),
-      downsampled: data.downsampled
-    };
-
-    G.groupHead(slot, LEAD, ctx);
-
-    var hero = G.band("hero");
-    var series = G.band("series");
-    /* In the slot before a single card is built into them. Appending here
-     * rather than at the end of the render is the load-bearing part; see
-     * G.attach. Two bands rather than three: this group has no detail band,
-     * because every card it holds is a chart. */
-    G.attach(slot, [hero, series]);
-
-    /* This is the one group with no detail band. Every card it holds needs a
-     * time axis, so on a bundle with no dated measurement there is nothing it
-     * can draw and the no-time-axis state is the whole group rather than part
-     * of it. The other three each hold at least one card that needs no window:
-     * a ranked list, a release list, a threshold note.
-     *
-     * Into the hero band, where the charts would have been, so it reads in the
-     * place the reader is already looking rather than under an empty one. */
-    if (ctx.win === null) {
-      hero.appendChild(el("p", "slot-note",
-        "The archive holds no dated measurement, so there is no time axis to draw the star, " +
-        "fork and watcher counts on."));
-      return;
-    }
-
-    var created = [];
-    try {
-      G.keep(created, G.buildCardSafely(hero, function () {
-        /* The hero carries no card-head figure: the group head directly above
-         * it prints the same series' figure, and printing it twice a hundred
-         * pixels apart is the duplication `INSIGHTS_FIGURES` exists to make
-         * unnecessary. Reach's and Adoption's heroes do the same. */
-        return G.chartCard(hero, cumulativeSpec("hero", "Stars", null,
-          "stars", "total", "Stars", "--amber", "#fcd34d", ctx.downsampled), ctx);
-      }));
-
-      /* Each on its own y axis. Stars and forks shared one x axis while a
-       * single set of release markers was painted across both and the markers
-       * made the comparison; the markers are on the Delivery hero now, and the
-       * two differ by an order of magnitude in the live archive, so a shared
-       * axis would flatten the fork line onto the floor for no remaining gain. */
-      G.keep(created, G.buildCardSafely(series, function () {
-        return G.chartCard(series, cumulativeSpec("compact", "Forks",
-          { label: "Forks", kind: "point", series: "forks", field: "total" },
-          "forks", "total", "Forks", "--coral", "#fb923c", ctx.downsampled), ctx);
-      }));
-
-      /* Watchers gains a plot it does not have today. It is the uniform
-       * application of the small-card rule rather than an addition of scope:
-       * no series is added and no figure is derived that the page does not
-       * already print. */
-      G.keep(created, G.buildCardSafely(series, function () {
-        return G.chartCard(series, cumulativeSpec("compact", "Watchers",
-          { label: "Watchers", kind: "point", series: "repo", field: "subscribers" },
-          "repo", "subscribers", "Watchers", "--lavender", "#c4b5fd", ctx.downsampled), ctx);
-      }));
-    } catch (error) {
-      /* `live` is assigned only once every card is built, so a throw part-way
-       * leaves `created` referenced by nothing but this frame. Destroy what
-       * was built here, then let the shell render its failure note. */
-      for (var j = 0; j < created.length; j++) {
-        try {
-          created[j].destroy();
-        } catch (cleanupError) {
-          if (typeof console !== "undefined" && typeof console.error === "function") {
-            console.error("insights: releasing a following chart after a failed render also " +
-              "failed.", cleanupError);
-          }
-        }
-      }
-      throw error;
-    }
-    live = created;
-  }
-
-  /*
-   * Runs before the slot is emptied. Removing the nodes alone would leave
-   * every instance's window listeners, its resize observer and its membership
-   * of the page's cursor-sync group alive.
-   *
-   * `live` is cleared first so a destroy that throws cannot leave a
-   * half-destroyed instance behind to be destroyed twice; the first failure is
-   * re-thrown once the rest have been released, and the shell reports it.
-   */
-  function teardown() {
-    var pending = live;
-    live = [];
-    var failure = null;
-    for (var i = 0; i < pending.length; i++) {
-      try {
-        pending[i].destroy();
-      } catch (error) {
-        if (failure === null) failure = error;
-      }
-    }
-    if (failure !== null) throw failure;
-  }
-
-  I.registerSection("following-body", render, teardown);
-})();
-</script>
-<script>
-/*
- * Sections "ranked-referrers" and "ranked-paths" — spec §7's dimensional view,
- * and the weakest data this archive holds.
+ * They are detail cards inside the Reach group rather than sections of their
+ * own. This block registers nothing and exports one builder, which the reach
+ * block calls once per entry in SECTIONS. It sits above that block for that
+ * reason: the reach IIFE reads `window.INSIGHTS_DIMENSIONS` at IIFE scope, so
+ * a block defined after it would leave that read holding `undefined` and take
+ * the whole group down at first render.
  *
  * ─────────────────────────────────────────────────────────────────────────
  * WHY THIS FILE IS MOSTLY CAVEATS
@@ -5166,8 +4675,8 @@ footer a:hover { color: var(--txt); }
  *
  * 1. A FIGURE HERE IS A FORTNIGHT, NOT A DAY. The ranked bars are one
  *    snapshot's fourteen-day totals. They are labelled as such in the card,
- *    in the meta line and in the section copy above, and they do NOT move
- *    with the range control — there is no finer history for a range to
+ *    in the meta line and under "Referrers and paths" in #method, and they do
+ *    NOT move with the range control — there is no finer history for a range to
  *    select from, and a control that appeared to window them would be
  *    promising a resolution that does not exist.
  *
@@ -5214,13 +4723,14 @@ footer a:hover { color: var(--txt); }
  * and a parallel value array — and a trajectory IS that shape once
  * `snapshots` is named as its dates. The gap machinery, the complete axis and
  * the null-never-zero rule therefore stay in one place for the whole page
- * instead of being copied into a fourth section that could drift from it.
+ * instead of being copied into a fourth card builder that could drift from it.
  */
 (function () {
   "use strict";
 
   var I = window.INSIGHTS;
   var C = window.INSIGHTS_CHARTS;
+  var G = window.INSIGHTS_GROUPS;
 
   /* GitHub's traffic API answers with at most ten rows per dimension, over a
    * trailing fortnight. Both numbers are named here so the copy below states
@@ -5274,18 +4784,16 @@ footer a:hover { color: var(--txt); }
 
   var SECTIONS = [
     {
-      slotId: "ranked-referrers",
       key: "referrers",
       one: "referring site",
       many: "referring sites",
-      rankedTitle: "Referring sites, ranked"
+      rankedTitle: "Referring sites"
     },
     {
-      slotId: "ranked-paths",
       key: "paths",
       one: "path",
       many: "paths",
-      rankedTitle: "Paths, ranked"
+      rankedTitle: "Popular paths"
     }
   ];
 
@@ -5564,10 +5072,10 @@ footer a:hover { color: var(--txt); }
     return note;
   }
 
-  /* The statement the whole section turns on, next to the figures it governs
-   * rather than only in the prose above them. */
+  /* The statement the whole card turns on, next to the figures it governs
+   * rather than only under "Referrers and paths" in #method. */
   /* `lines` is the set of lines the movement chart is ACTUALLY going to
-   * draw, which is empty whenever the section declines to draw one. Passing
+   * draw, which is empty whenever the card declines to draw one. Passing
    * the trajectories regardless would print "a row drawn in colour is one of
    * the five with a line below" directly above a paragraph explaining that
    * there is no chart below — a caption for something that is not there,
@@ -5590,7 +5098,7 @@ footer a:hover { color: var(--txt); }
      */
     if (lines.length > 0) {
       /* Two different things can sit below this list, and the sentence has to
-       * name the one actually there. With a single difference the section
+       * name the one actually there. With a single difference the card
        * shows signed bars, not a chart: they carry no time axis, so the range
        * control does not move them and there is no line to point at. */
       if (asChange) {
@@ -5673,7 +5181,7 @@ footer a:hover { color: var(--txt); }
   }
 
   /*
-   * The window this section draws: the shared one, with its END extended to
+   * The window this card draws: the shared one, with its END extended to
    * reach a snapshot that sits past it.
    *
    * `INSIGHTS.rangeWindow` anchors every window on the newest DATED SERIES
@@ -5689,15 +5197,15 @@ footer a:hover { color: var(--txt); }
    * snapshot. In the fixture that found this, the newest bucket key is
    * 2026-08-31 and the newest snapshot 2026-09-06: every snapshot in that
    * trailing partial week fell outside every window, "all" included. The
-   * section drew nothing, said "N of the M the archive holds" and offered
+   * card drew nothing, said "N of the M the archive holds" and offered
    * "a wider range takes in more" — which no range does. Dropping a reading
    * the archive holds because a DIFFERENT series was bucketed is the page
    * hiding data with no reason a reader could see.
    *
    * Only the end moves, and only as far as a snapshot that exists. The start
    * is left exactly as the range control set it: that is what the control
-   * means, and widening it would let this section show a span the reader did
-   * not ask for. `extendedFrom` is set when the end moved, so the section can
+   * means, and widening it would let this card show a span the reader did
+   * not ask for. `extendedFrom` is set when the end moved, so the card can
    * say so rather than quietly drawing a wider axis than the control implies.
    */
   function snapshotWindow(series, win) {
@@ -5914,8 +5422,9 @@ footer a:hover { color: var(--txt); }
   /*
    * A span so long it cannot be real is a fault in the ARCHIVE, and this page
    * must not report it as one of its own. Letting `expand` throw would reach
-   * the shell's generic section-failure note — "the fault is in this page's
-   * code" — and send whoever reads it to the wrong repository entirely.
+   * the generic per-card failure note `G.buildCardSafely` renders — "the fault
+   * is in this page's code" — and send whoever reads it to the wrong
+   * repository entirely.
    */
   function overrunNote(axis) {
     var detail = "The snapshot dates would run from " + I.formatDay(axis.startMs) + " to " +
@@ -5924,7 +5433,7 @@ footer a:hover { color: var(--txt); }
       "date in the archive itself is wrong. No chart is drawn, rather than one built around a " +
       "date that cannot be true.";
     if (typeof console !== "undefined" && typeof console.error === "function") {
-      console.error("insights: a ranked section declined to plot. " + detail);
+      console.error("insights: a ranked card declined to plot. " + detail);
     }
     var note = el("p", "slot-note slot-note-error");
     note.appendChild(el("strong", null, "This chart cannot be drawn from this archive."));
@@ -5963,7 +5472,7 @@ footer a:hover { color: var(--txt); }
    * inside it.
    *
    * A chart drawn anyway would be an empty frame, and an empty frame is
-   * indistinguishable from a section that failed to render. So the section
+   * indistinguishable from a card that failed to render. So the card
    * says what the archive holds, what a trajectory needs, and when the next
    * one arrives — and states any reading it does have rather than withholding
    * it. The ranked figures above are unaffected and are said to be, because
@@ -5978,7 +5487,8 @@ footer a:hover { color: var(--txt); }
    * nothing by construction, and every line's single value lands on the same
    * day. uPlot given that draws each series as one dot in one column — the
    * measured archive rendered as a 7-pixel smear against the right edge of a
-   * 1034-pixel canvas, which reads as a broken chart rather than as a thin one.
+   * canvas many times wider, 487 pixels in the detail band at a full-width
+   * window, which reads as a broken chart rather than as a thin one.
    */
   function measuredPositions(axis, lines) {
     var seen = {};
@@ -6013,8 +5523,13 @@ footer a:hover { color: var(--txt); }
    * difference as a trajectory. A ranked, signed comparison is what the data
    * actually supports, and it says outright that it is not the chart.
    */
-  function changeCard(spec, series, axis, lines) {
-    var card = el("div", "chart-card");
+  /* Appends into the card it is handed rather than building one of its own.
+   * The single difference belongs to the same detail card as the ranked list
+   * it is joined to by name, and a `.chart-card` nested inside a `.chart-card`
+   * would draw a second frame around it and report as a second card. Its
+   * caption stays a `<p class="chart-title">`: it names the plot area below
+   * it, not the card, which keeps one `<h3>` per card on the page's outline. */
+  function changeBlock(card, spec, series, axis, lines) {
     card.appendChild(el("p", "chart-title", "Change since the previous snapshot"));
 
     var total = series.snapshots.length;
@@ -6106,7 +5621,6 @@ footer a:hover { color: var(--txt); }
       spec.one + " absent from either snapshot carries no row here at all, because a difference " +
       "against a value GitHub never reported is not a number this page can honestly state."));
     card.appendChild(why);
-    return card;
   }
 
   function historyNote(spec, series, axis, win, lines, counts) {
@@ -6230,197 +5744,695 @@ footer a:hover { color: var(--txt); }
     return box;
   }
 
-  function makeRenderer(spec) {
-    /* Every live uPlot instance this section owns — at most one. Assigned
-     * only once a render has completed. */
-    var live = [];
+  /*
+   * Build one ranked dimension card into a group's detail band.
+   *
+   * Returns THE ONE uPlot instance it mounted, or null when it stated a
+   * reason instead of drawing one. A card owns at most one plot, and the
+   * caller pushes what comes back onto the list its own teardown calls
+   * `.destroy()` on, so this returns the handle itself rather than an array:
+   * an array would make that teardown throw on every re-render.
+   */
+  function build(band, spec, data, rangeKey) {
+    var series = data.dimensions[spec.key];
 
-    function render(slot, data, rangeKey) {
-      var series = data.dimensions[spec.key];
+    /* One card for all of it: the ranked list, the movement chart and
+     * whichever stated reason stands in for the chart. Created first, because
+     * `detailCard` appends it to the band and the caller has already put the
+     * band in the slot, so the chart host below is measured while it is in
+     * the document. A host measured detached reads a client width of zero and
+     * the plot is constructed at its profile's minimum width. */
+    var card = G.detailCard(band, spec.rankedTitle);
 
-      /* The ranked bars first, and unconditionally: they come from one
-       * snapshot and need neither a window nor a time axis, so they still
-       * stand on a bundle that has no dated series row to anchor one to. */
-      slot.appendChild(rankedMeta(series));
-      if (series.latest.length === 0) {
-        slot.appendChild(noRowsNote(spec, series));
-        return;
-      }
+    /* The ranked bars first, and unconditionally: they come from one
+     * snapshot and need neither a window nor a time axis, so they still
+     * stand on a bundle that has no dated series row to anchor one to. */
+    card.appendChild(rankedMeta(series));
+    if (series.latest.length === 0) {
+      card.appendChild(noRowsNote(spec, series));
+      return null;
+    }
 
-      var bound = buildLines(series);
-      var win = I.rangeWindow(data, rangeKey);
-      /* `win` is null on a non-empty bundle holding only dimension snapshots:
-       * there is no dated series row for the range control to anchor to. The
-       * bars need no window; only the chart does. */
-      /* The section's own window: the control's, with its end extended to a
-       * snapshot that sits past it. See snapshotWindow. */
-      var swin = win === null ? null : snapshotWindow(series, win);
-      var counts = swin === null ? null : snapshotsInWindow(series, swin);
-      /* One expansion for every line, so all of them share an axis and the
-       * cursor lands on the same day in each — and on the same day as the
-       * reach and following charts, which sit in the same sync group. */
-      var axis = swin === null ? null : C.expand(bound.columns, swin, SNAPSHOT_STEP_DAYS);
-      /*
-       * The lines that will actually be drawn, and whether a chart is drawn at
-       * all — both settled BEFORE the ranked card is built, because the ranked
-       * card's own caption describes the chart: it tells the reader that a
-       * coloured row is one with a line below it. Deciding afterwards would
-       * print that sentence above the paragraph explaining that there is no
-       * chart, and would colour bars whose lines carry nothing.
-       */
-      var drawnLines = (axis === null || axis.overrun || axis.empty)
-        ? []
-        : linesWithPoints(axis, bound.lines);
-      /*
-       * Positions that actually carry a point, not days on the axis. A
-       * movement LINE needs two of them; `axis.xs.length >= 2` only says the
-       * axis is two days wide, which two snapshots satisfy while still leaving
-       * every line a single dot in a single column. See measuredPositions.
-       */
-      var positions = (axis === null || axis.overrun || axis.empty)
-        ? 0
-        : measuredPositions(axis, drawnLines);
-      var drawing = axis !== null && !axis.overrun && !axis.empty &&
-        axis.xs.length >= 2 && drawnLines.length > 0 && positions >= 2;
-      /* Exactly one difference exists: real measurements, but not a
-       * trajectory. Shown as signed bars rather than drawn as a chart that
-       * cannot contain a line, and rather than withheld. */
-      var singleChange = !drawing && positions === 1 && drawnLines.length > 0;
-      if (!drawing && !singleChange) drawnLines = [];
-      var tally = drawing ? pointTally(axis, drawnLines, counts.differenceable) : null;
+    var bound = buildLines(series);
+    var win = I.rangeWindow(data, rangeKey);
+    /* `win` is null on a non-empty bundle holding only dimension snapshots:
+     * there is no dated series row for the range control to anchor to. The
+     * bars need no window; only the chart does. */
+    /* The card's own window: the control's, with its end extended to a
+     * snapshot that sits past it. See snapshotWindow. */
+    var swin = win === null ? null : snapshotWindow(series, win);
+    var counts = swin === null ? null : snapshotsInWindow(series, swin);
+    /* One expansion for every line, so all of them share an axis and the
+     * cursor lands on the same day in each — and on the same day as the
+     * reach and following charts, which sit in the same sync group. */
+    var axis = swin === null ? null : C.expand(bound.columns, swin, SNAPSHOT_STEP_DAYS);
+    /*
+     * The lines that will actually be drawn, and whether a chart is drawn at
+     * all — both settled BEFORE the ranked list is built, because the list's
+     * own caption describes the chart: it tells the reader that a coloured
+     * row is one with a line below it. Deciding afterwards would print that
+     * sentence above the paragraph explaining that there is no chart, and
+     * would colour bars whose lines carry nothing.
+     */
+    var drawnLines = (axis === null || axis.overrun || axis.empty)
+      ? []
+      : linesWithPoints(axis, bound.lines);
+    /*
+     * Positions that actually carry a point, not days on the axis. A
+     * movement LINE needs two of them; `axis.xs.length >= 2` only says the
+     * axis is two days wide, which two snapshots satisfy while still leaving
+     * every line a single dot in a single column. See measuredPositions.
+     */
+    var positions = (axis === null || axis.overrun || axis.empty)
+      ? 0
+      : measuredPositions(axis, drawnLines);
+    var drawing = axis !== null && !axis.overrun && !axis.empty &&
+      axis.xs.length >= 2 && drawnLines.length > 0 && positions >= 2;
+    /* Exactly one difference exists: real measurements, but not a
+     * trajectory. Shown as signed bars rather than drawn as a chart that
+     * cannot contain a line, and rather than withheld. */
+    var singleChange = !drawing && positions === 1 && drawnLines.length > 0;
+    if (!drawing && !singleChange) drawnLines = [];
+    var tally = drawing ? pointTally(axis, drawnLines, counts.differenceable) : null;
 
-      var stack = el("div", "chart-stack");
-      slot.appendChild(stack);
+    card.appendChild(rankedList(series, drawnLines));
+    card.appendChild(rankedHint(spec, drawnLines, series.latest.length, singleChange));
 
-      var rankCard = el("div", "chart-card");
-      rankCard.appendChild(el("p", "chart-title", spec.rankedTitle));
-      rankCard.appendChild(rankedList(series, drawnLines));
-      rankCard.appendChild(rankedHint(spec, drawnLines, series.latest.length, singleChange));
-      stack.appendChild(rankCard);
+    if (win === null) {
+      card.appendChild(el("p", "slot-note",
+        "The archive holds no dated series measurement for the range control to anchor a " +
+        "window to, so there is no time axis to draw the movement chart on. The ranked " +
+        "figures above do not need one."));
+      return null;
+    }
 
-      if (win === null) {
-        slot.appendChild(el("p", "slot-note",
-          "The archive holds no dated series measurement for the range control to anchor a " +
-          "window to, so there is no time axis to draw the movement chart on. The ranked " +
-          "figures above do not need one."));
-        return;
-      }
+    /* Before the `empty` branch: an overrun sets `empty` too, as a fail-safe
+     * for a caller that forgets this check, and the specific reason is the
+     * more useful of the two. */
+    if (axis.overrun) {
+      card.appendChild(overrunNote(axis));
+      return null;
+    }
 
-      /* Before the `empty` branch: an overrun sets `empty` too, as a fail-safe
-       * for a caller that forgets this check, and the specific reason is the
-       * more useful of the two. */
-      if (axis.overrun) {
-        slot.appendChild(overrunNote(axis));
-        return;
-      }
+    if (singleChange) {
+      changeBlock(card, spec, series, axis, drawnLines);
+      return null;
+    }
 
-      if (singleChange) {
-        stack.appendChild(changeCard(spec, series, axis, drawnLines));
-        return;
-      }
-
-      if (!drawing) {
-        slot.appendChild(historyNote(spec, series, axis.empty ? null : axis, swin,
-          bound.lines, counts));
-        if (counts.unreadable > 0) {
-          slot.appendChild(el("p", "chart-hint chart-caution", counts.unreadable + " " +
-            plural(counts.unreadable, "snapshot carries", "snapshots carry") +
-            " a date this page cannot place on a calendar day, so " +
-            plural(counts.unreadable, "it is", "they are") + " not counted above."));
-        }
-        return;
-      }
-
-      var card = el("div", "chart-card");
-      card.appendChild(el("p", "chart-title", "Movement between snapshots"));
-      card.appendChild(movementMeta(axis, drawnLines, counts, series.snapshots.length, tally,
-        data.downsampled));
-      var host = el("div", "chart-scroll");
-      card.appendChild(host);
-      card.appendChild(movementHint(spec));
-      if (swin.extendedFrom !== undefined) card.appendChild(extendedHint(swin));
-      if (axis.xs.length > counts.inside) {
-        card.appendChild(gapHint(axis.xs.length - counts.inside));
-      }
-      card.appendChild(axisHint());
-      if (bound.lines.length > drawnLines.length) {
-        card.appendChild(blankLinesHint(bound.lines.length - drawnLines.length,
-          bound.lines.length, spec));
-      }
-      if (bound.zeroFaults.length > 0) card.appendChild(zeroFaultHint(bound.zeroFaults));
-      if (bound.orphans > 0) card.appendChild(orphanHint(bound.orphans, spec));
-      if (bound.wrapped) card.appendChild(wrappedHint());
+    if (!drawing) {
+      card.appendChild(historyNote(spec, series, axis.empty ? null : axis, swin,
+        bound.lines, counts));
       if (counts.unreadable > 0) {
         card.appendChild(el("p", "chart-hint chart-caution", counts.unreadable + " " +
           plural(counts.unreadable, "snapshot carries", "snapshots carry") +
           " a date this page cannot place on a calendar day, so " +
-          plural(counts.unreadable, "it is", "they are") + " not drawn."));
+          plural(counts.unreadable, "it is", "they are") + " not counted above."));
       }
-      /* In the document before uPlot is constructed: the plot is given an
-       * explicit pixel size and that size is measured from this container. */
-      stack.appendChild(card);
+      return null;
+    }
 
-      var defs = [];
-      for (var i = 0; i < drawnLines.length; i++) {
-        var line = drawnLines[i];
-        defs.push({
-          label: shortLabel(line.label),
-          stroke: line.stroke,
-          width: 2,
-          /* Read by the offset this line recorded for itself, never by the
-           * loop counter. */
-          values: axis.values[line.offset]
-        });
-      }
+    /* A caption for the plot below it, not a second title for the card: it
+     * stays a `<p class="chart-title">` so the card keeps exactly one `<h3>`
+     * and the page's outline stays one heading per card. */
+    card.appendChild(el("p", "chart-title", "Movement between snapshots"));
+    card.appendChild(movementMeta(axis, drawnLines, counts, series.snapshots.length, tally,
+      data.downsampled));
+    /* In the document before uPlot is constructed, because the card it is
+     * appended to was put in the band, and the band in the slot, before this
+     * function was called: the plot is given an explicit pixel size and that
+     * size is measured from this container. */
+    var host = el("div", "chart-scroll");
+    card.appendChild(host);
+    card.appendChild(movementHint(spec));
+    if (swin.extendedFrom !== undefined) card.appendChild(extendedHint(swin));
+    if (axis.xs.length > counts.inside) {
+      card.appendChild(gapHint(axis.xs.length - counts.inside));
+    }
+    card.appendChild(axisHint());
+    if (bound.lines.length > drawnLines.length) {
+      card.appendChild(blankLinesHint(bound.lines.length - drawnLines.length,
+        bound.lines.length, spec));
+    }
+    if (bound.zeroFaults.length > 0) card.appendChild(zeroFaultHint(bound.zeroFaults));
+    if (bound.orphans > 0) card.appendChild(orphanHint(bound.orphans, spec));
+    if (bound.wrapped) card.appendChild(wrappedHint());
+    if (counts.unreadable > 0) {
+      card.appendChild(el("p", "chart-hint chart-caution", counts.unreadable + " " +
+        plural(counts.unreadable, "snapshot carries", "snapshots carry") +
+        " a date this page cannot place on a calendar day, so " +
+        plural(counts.unreadable, "it is", "they are") + " not drawn."));
+    }
 
-      /*
-       * Mounted last, and deliberately so. The one instance this section owns
-       * is created by the final statement and pushed straight into `live`, so
-       * there is no window in which a throw can leave a plot this section's
-       * teardown cannot reach, and a catch here would be unreachable code
-       * pretending to be a safeguard.
-       */
-      live.push(C.mount(host, axis.xs, defs, {
-        /* Not `zeroBasedCounts`: these are signed differences and its floor
-         * of zero would clip every fall. See `signedRange`. */
-        yRange: signedRange,
-        /* `drawAxes` rather than `draw`: uPlot fires it after the axes and
-         * grid and BEFORE the series, so the rule sits behind the lines
-         * instead of striking through them. */
-        hooks: { drawAxes: [zeroPainter(C.colour(NEUTRAL.token, NEUTRAL.fallback))] }
-      }));
+    var defs = [];
+    for (var i = 0; i < drawnLines.length; i++) {
+      var line = drawnLines[i];
+      defs.push({
+        label: shortLabel(line.label),
+        stroke: line.stroke,
+        width: 2,
+        /* Read by the offset this line recorded for itself, never by the
+         * loop counter. */
+        values: axis.values[line.offset]
+      });
     }
 
     /*
-     * Runs before the slot is emptied. Removing the nodes alone would leave
-     * the instance's window listeners, its resize observer and its membership
-     * of the page's cursor-sync group alive.
-     *
-     * `live` is emptied first so a destroy that throws cannot leave a
-     * half-destroyed instance behind to be destroyed twice; the first failure
-     * is re-thrown once the rest have been released, and the shell reports it.
+     * Mounted last, and deliberately so. The one instance this card owns is
+     * created by the final statement and handed straight back, so there is no
+     * window in which a throw can leave a plot the caller's teardown cannot
+     * reach, and a catch here would be unreachable code pretending to be a
+     * safeguard.
      */
-    function teardown() {
-      var pending = live;
-      live = [];
-      var failure = null;
-      for (var i = 0; i < pending.length; i++) {
-        try {
-          pending[i].destroy();
-        } catch (error) {
-          if (failure === null) failure = error;
-        }
+    return C.mount(host, axis.xs, defs, {
+      /* Compact, because this chart sits inside a detail card and is a
+       * subordinate reading of the ranked list above it. Without the option
+       * it would take the hero default and be drawn at the height the one
+       * chart a group leads with is drawn at. */
+      profile: "compact",
+      /* Not `zeroBasedCounts`: these are signed differences and its floor
+       * of zero would clip every fall. See `signedRange`. */
+      yRange: signedRange,
+      /* `drawAxes` rather than `draw`: uPlot fires it after the axes and
+       * grid and BEFORE the series, so the rule sits behind the lines
+       * instead of striking through them. */
+      hooks: { drawAxes: [zeroPainter(C.colour(NEUTRAL.token, NEUTRAL.fallback))] }
+    });
+  }
+
+  window.INSIGHTS_DIMENSIONS = { SECTIONS: SECTIONS, build: build };
+})();
+</script>
+
+<script>
+/*
+ * Group "reach" -- who is finding this.
+ *
+ * Hero: page views, with unique visitors as the second dashed line. Views is
+ * the direct answer to the group's question, it is the widest funnel the
+ * archive measures, and it is the one traffic series the CI clone confound
+ * does not touch: a checkout loads no page.
+ *
+ * Stars, forks and watchers are NOT here. They are people who chose to follow
+ * the repository rather than people finding it, which is a different question,
+ * and they have a group of their own: see #following.
+ *
+ * The detail band holds the two ranked dimension cards, referring sites and
+ * popular paths. They are built by the block above this one, which is why it
+ * sits above this one: `D` is read at IIFE scope.
+ */
+(function () {
+  "use strict";
+
+  var I = window.INSIGHTS;
+  var F = window.INSIGHTS_FIGURES;
+  var G = window.INSIGHTS_GROUPS;
+  var D = window.INSIGHTS_DIMENSIONS;
+
+  var LEAD = {
+    label: "Page views", kind: "flow", series: "views", field: "count", trend: "compare"
+  };
+
+  /* Every live uPlot instance this group owns. Assigned only once a render
+   * has completed; a render that throws destroys what it built itself. */
+  var live = [];
+
+  function el(tag, className, text) {
+    var node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+
+  /*
+   * `downsampled` is wholesale: when it is true every range is weekly. A
+   * weekly bucket's `uniques` is the sum of its days' uniques, and a visitor
+   * who came back on three days is three daily uniques and one person, so the
+   * weekly figure over-counts and is an upper bound rather than a count of
+   * people. It is not recoverable from daily data, so the only honest move is
+   * to label it, and the label travels on the series itself where a reader
+   * hovering the line will see it.
+   */
+  function uniquesLabel(label, downsampled) {
+    return downsampled ? label + " (weekly sum, upper bound)" : label;
+  }
+
+  /*
+   * A traffic card's own meta pairs, on top of the shared ones.
+   *
+   * The uniques count first, and only when the two columns disagree, which is
+   * the case worth naming: the count was recorded and the unique figure was
+   * not, or the reverse.
+   *
+   * Then the 30-day window total. It is here because the chip above no longer
+   * carries it. Every flow chip on this page prints a signed change, so that a
+   * lead figure's chip and a card head's chip in the same idiom cannot mean
+   * two different quantities, and the one-window total the chip used to print
+   * is a figure this page prints today. It keeps a place rather than
+   * disappearing, and this is the honest place for it: a mono meta line beside
+   * the span and the measured-step count, where a card's other measured facts
+   * already are.
+   *
+   * `flowDelta` is the page's existing one-window total, unchanged and called
+   * exactly as `flowCard` calls it, so this pair and the at-a-glance chip
+   * cannot disagree about the number while both are on the page. It refuses
+   * unless the window is covered end to end, and it labels itself with the
+   * span its rows actually stand for when the bundle is weekly, which is why
+   * the key is built from `windowDays` rather than hard-coded to 30. A refused
+   * total is not printed at all: it is not a figure, and the chip beside it
+   * already says the window is not covered.
+   *
+   * `ctx.wins` null is the same archive state as `ctx.win` null, so this
+   * cannot be reached with no window today. The guard is here because
+   * `flowDelta` dereferences the window it is handed, and a caller that
+   * eventually reaches this line without one would take the whole group's
+   * render down rather than skip a meta pair.
+   */
+  function trafficMeta(seriesName, field, countColumn, uniquesColumn, ctx) {
+    return function (axis, offsets, stepDays) {
+      var out = [];
+      var counted = axis.measured[offsets[countColumn]];
+      var uniqueCounted = axis.measured[offsets[uniquesColumn]];
+      if (uniqueCounted !== counted) {
+        out.push(G.pair("uniques measured",
+          uniqueCounted + " of " + G.steps(axis.xs.length, stepDays)));
       }
-      if (failure !== null) throw failure;
+      if (ctx.wins === null) return out;
+      var total = F.flowDelta(ctx.data.series[seriesName], field, ctx.wins.flow, ctx.step);
+      if (total.available) {
+        out.push(G.pair(total.windowDays + "d total", I.formatCount(total.value)));
+      }
+      return out;
+    };
+  }
+
+  function weeklyUniquesNote(label) {
+    return "This bundle is bucketed by week. A bucket's unique figure is the sum of its days' " +
+      "unique counts, so someone who came back on several days is counted more than once: read " +
+      "the " + label.toLowerCase() + " line as an upper bound rather than a count of people.";
+  }
+
+  function heroSpec(ctx) {
+    return {
+      profile: "hero",
+      title: "Page views",
+      figure: null,
+      columns: {
+        count: { series: "views", field: "count" },
+        uniques: { series: "views", field: "uniques" }
+      },
+      lines: [
+        {
+          column: "count", label: "Views", token: "--sky", fallback: "#7dd3fc",
+          fill: "rgba(125, 211, 252, 0.10)", width: 2
+        },
+        {
+          column: "uniques", label: uniquesLabel("Unique visitors", ctx.downsampled),
+          token: "--lavender", fallback: "#c4b5fd", width: 1.5, dash: [5, 4]
+        }
+      ],
+      yPolicy: "zero",
+      breakPhrase: "drawn as breaks, not zeros",
+      metaExtra: trafficMeta("views", "count", "count", "uniques", ctx),
+      notes: ctx.downsampled ? [weeklyUniquesNote("Unique visitors")] : []
+    };
+  }
+
+  /* The clone line's own caveat, and the link to the chart that explains most
+   * of its shape. The two series sit in different groups now, so each names
+   * the other; the page-wide cursor never depended on their adjacency,
+   * because it syncs on scale values rather than on pixels. */
+  function cloneCaveat() {
+    var note = el("p", "stat-note");
+    note.appendChild(document.createTextNode(
+      "GitHub counts this repository's own actions/checkout steps as clones, so this line " +
+      "measures the build pipeline as well as the audience. The "));
+    var link = el("a", null, "CI activity chart in Delivery");
+    link.href = "#delivery";
+    note.appendChild(link);
+    note.appendChild(document.createTextNode(
+      " is this repository's own workflow-run count, so the overlap can be read directly " +
+      "rather than taken on trust."));
+    return note;
+  }
+
+  function clonesSpec(ctx) {
+    return {
+      profile: "compact",
+      title: "Repository clones",
+      /* `trend: "compare"` for the same reason the group head carries it: this
+       * is a flow chip on the charted page, and spec section 4.3 gives every
+       * flow chip on the page one idiom, the signed change. The one-window
+       * total it used to print is the `30d total` pair in this card's own meta
+       * line below, and the at-a-glance Clones chip still prints that total
+       * until Task 9 deletes the grid, so the two can be read against each
+       * other while both are on screen. */
+      figure: {
+        label: "Clones", kind: "flow", series: "clones", field: "count",
+        trend: "compare", note: "includes this repo's own CI checkouts"
+      },
+      columns: {
+        count: { series: "clones", field: "count" },
+        uniques: { series: "clones", field: "uniques" }
+      },
+      lines: [
+        { column: "count", label: "Clones", token: "--mint", fallback: "#86efac" },
+        {
+          column: "uniques", label: uniquesLabel("Unique cloners", ctx.downsampled),
+          token: "--amber", fallback: "#fcd34d", dash: [5, 4]
+        }
+      ],
+      yPolicy: "zero",
+      breakPhrase: "drawn as breaks, not zeros",
+      metaExtra: trafficMeta("clones", "count", "count", "uniques", ctx),
+      caveat: cloneCaveat(),
+      notes: ctx.downsampled ? [weeklyUniquesNote("Unique cloners")] : []
+    };
+  }
+
+  /*
+   * No window line. The old reach section printed one at the top of its slot
+   * and so did growth and telemetry, which is the same sentence three times on
+   * a page whose stated problem is too much text. #method's coverage line
+   * states the selected range and the dates it resolves to once for the whole
+   * page, and each card's own meta line states the span it actually drew,
+   * which is the number that differs from card to card. Nothing is lost: the
+   * range that was asked for is stated beside the control that asks for it.
+   */
+  function render(slot, data, rangeKey) {
+    var ctx = {
+      data: data,
+      win: I.rangeWindow(data, rangeKey),
+      wins: F.windows(data),
+      step: I.resolutionStepDays(),
+      downsampled: data.downsampled
+    };
+
+    G.groupHead(slot, LEAD, ctx);
+
+    var hero = G.band("hero");
+    var series = G.band("series");
+    var detail = G.band("detail");
+    /* In the slot before a single card is built into them. Appending here
+     * rather than at the end of the render is the load-bearing part; see
+     * G.attach. A band that ends up holding no card is collapsed by CSS
+     * rather than left out here. */
+    G.attach(slot, [hero, series, detail]);
+
+    /* Declared above the early return below, not beside the `try`. `var`
+     * hoists the declaration and not the assignment, so a `created` declared
+     * further down is `undefined` at the loop that follows, and the first push
+     * onto it takes the whole slot down with
+     * "Cannot read properties of undefined (reading 'push')". That is not a
+     * theoretical ordering nicety: it fires on any bundle whose dimension
+     * cards draw a movement chart, which is every bundle with three snapshots
+     * of a dimension in it. */
+    var created = [];
+
+    /* The two ranked dimension cards. They come from one snapshot and need
+     * neither a window nor a time axis, so they are built whether or not the
+     * rest of the group could draw, and they are the reason the detail band is
+     * attached even on a bundle with no dated measurement at all.
+     *
+     * Outside the `try` on purpose. Each card carries its own containment
+     * through G.buildCardSafely, and the `try` below exists to release plots
+     * built by the chart cards, which do not exist yet at this point. */
+    for (var d = 0; d < D.SECTIONS.length; d++) {
+      var dimension = D.SECTIONS[d];
+      var built = G.buildCardSafely(detail, (function (spec) {
+        return function () { return D.build(detail, spec, data, rangeKey); };
+      })(dimension));
+      if (built !== null && built !== undefined) created.push(built);
     }
 
-    return { render: render, teardown: teardown };
+    /* Reachable on a non-empty bundle: one holding only releases or only
+     * dimension snapshots has no dated series row to anchor a window to. Into
+     * the hero band, where the charts would have been. The dimension cards
+     * above have already rendered in full, and `live` is assigned before the
+     * return so anything they mounted is still reachable from teardown. */
+    if (ctx.win === null) {
+      hero.appendChild(el("p", "slot-note",
+        "The archive holds no dated measurement, so there is no time axis to draw these charts " +
+        "on."));
+      live = created;
+      return;
+    }
+
+    try {
+      G.keep(created, G.buildCardSafely(hero, function () {
+        return G.chartCard(hero, heroSpec(ctx), ctx);
+      }));
+      G.keep(created, G.buildCardSafely(series, function () {
+        return G.chartCard(series, clonesSpec(ctx), ctx);
+      }));
+    } catch (error) {
+      /* On this path `live` is assigned only once every card is built, so a
+       * throw part-way leaves `created` referenced by nothing but this frame.
+       * It holds whatever the dimension cards mounted above as well, which is
+       * why those are released here too rather than left to a teardown that
+       * will never see them. Then let the shell render its failure note. */
+      for (var j = 0; j < created.length; j++) {
+        try {
+          created[j].destroy();
+        } catch (cleanupError) {
+          if (typeof console !== "undefined" && typeof console.error === "function") {
+            console.error("insights: releasing a reach chart after a failed render also failed.",
+              cleanupError);
+          }
+        }
+      }
+      throw error;
+    }
+    live = created;
   }
 
-  for (var s = 0; s < SECTIONS.length; s++) {
-    var renderer = makeRenderer(SECTIONS[s]);
-    I.registerSection(SECTIONS[s].slotId, renderer.render, renderer.teardown);
+  /*
+   * Runs before the slot is emptied. Removing the nodes alone would leave
+   * every instance's window listeners, its resize observer and its membership
+   * of the page's cursor-sync group alive.
+   *
+   * `live` is cleared first so a destroy that throws cannot leave a
+   * half-destroyed instance behind to be destroyed twice; the first failure is
+   * re-thrown once the rest have been released, and the shell reports it.
+   */
+  function teardown() {
+    var pending = live;
+    live = [];
+    var failure = null;
+    for (var i = 0; i < pending.length; i++) {
+      try {
+        pending[i].destroy();
+      } catch (error) {
+        if (failure === null) failure = error;
+      }
+    }
+    if (failure !== null) throw failure;
   }
+
+  I.registerSection("reach-body", render, teardown);
+})();
+</script>
+<script>
+/*
+ * Group "following" -- who chose to follow it.
+ *
+ * Hero: stars. Of the three series here it is the one that actually moves.
+ * Forks and watchers change a handful of times a year on this repository,
+ * while the star count is the number a reader goes to a repository page to
+ * look for, and it is the widest of the three, so it is the one worth giving
+ * the full width to.
+ *
+ * ─────────────────────────────────────────────────────────────────────────
+ * THE ONE HERO ON THIS PAGE WITH NO AREA FILL
+ *
+ * A fill reads as area under the curve measured from zero, so a card that
+ * fits its axis to the values must not carry one. All three series here are
+ * cumulative counters and all three need a fitted axis: a star count moving 60
+ * to 64 over a month, drawn from zero, is a flat line at the top of an axis
+ * that is 94 percent empty, which hides the only thing the chart is for.
+ *
+ * The two rules cannot both hold on one card, so the fill is what gives way.
+ * That costs one of the four things the page relies on to carry the hero
+ * hierarchy at a single column, and the other three still apply here: the hero
+ * plot is 280px against 150, it sits on --chat against a lighter recessive
+ * panel, and the group's lead figure is a large number directly above it. It
+ * is a real loss and it is smaller than the loss of leaving seven of twelve
+ * cards in the group a reader meets first.
+ * ─────────────────────────────────────────────────────────────────────────
+ */
+(function () {
+  "use strict";
+
+  var I = window.INSIGHTS;
+  var F = window.INSIGHTS_FIGURES;
+  var G = window.INSIGHTS_GROUPS;
+
+  var LEAD = { label: "Stars", kind: "point", series: "stars", field: "total" };
+
+  /* Every live uPlot instance this group owns. Assigned only once a render
+   * has completed; a render that throws destroys what it built itself. */
+  var live = [];
+
+  function el(tag, className, text) {
+    var node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+
+  /*
+   * Verbatim from the growth section's `axisNote`, in the singular. That
+   * sentence said "the vertical axis on both charts is fitted", which
+   * described two series sharing one axis; there are three cards with an axis
+   * each now, so there is no "both charts" for it to refer to. The claim it
+   * makes is unchanged, and it is rendered inside each card rather than once
+   * per section, because a fitted baseline is the other half of the
+   * truncated-axis trade and must not be silent.
+   */
+  var FITTED_NOTE = "The vertical axis is fitted to the values drawn rather than pinned to a " +
+    "zero baseline, so a small move is visible rather than flattened. Read the height of " +
+    "the line against its own axis labels, not against the bottom of the frame.";
+
+  /*
+   * Verbatim from the growth section, where it was true and stays true: a
+   * weekly bucket is keyed on the Monday that opens its week while a
+   * cumulative field carries the LAST value measured in that week, so a point
+   * sits up to six days earlier on the axis than the reading it shows.
+   *
+   * This is the sentence that could NOT travel to the Delivery hero, whose
+   * series is summed rather than carried. It stays here, where it is exact.
+   */
+  var WEEKLY_CUMULATIVE_NOTE = "This bundle is bucketed by week. A point is dated on the Monday " +
+    "that opens its week but carries the last value measured in that week, so it sits up to " +
+    "six days earlier on the axis than the reading it shows.";
+
+  function cumulativeSpec(profile, title, figure, series, field, label, token, fallback,
+    downsampled) {
+    var notes = [FITTED_NOTE];
+    if (downsampled) notes.push(WEEKLY_CUMULATIVE_NOTE);
+    var line = { column: "total", label: label, token: token, fallback: fallback };
+    /* A hero's stroke is 2px against the compact profile's 1.5. No `fill` on
+     * any of the three, hero included: see the header comment. */
+    if (profile === "hero") line.width = 2;
+    return {
+      profile: profile,
+      title: title,
+      figure: figure,
+      columns: { total: { series: series, field: field } },
+      lines: [line],
+      yPolicy: "fitted",
+      breakPhrase: "drawn as breaks, not as a fall to zero",
+      notes: notes
+    };
+  }
+
+  function render(slot, data, rangeKey) {
+    var ctx = {
+      data: data,
+      win: I.rangeWindow(data, rangeKey),
+      wins: F.windows(data),
+      step: I.resolutionStepDays(),
+      downsampled: data.downsampled
+    };
+
+    G.groupHead(slot, LEAD, ctx);
+
+    var hero = G.band("hero");
+    var series = G.band("series");
+    /* In the slot before a single card is built into them. Appending here
+     * rather than at the end of the render is the load-bearing part; see
+     * G.attach. Two bands rather than three: this group has no detail band,
+     * because every card it holds is a chart. */
+    G.attach(slot, [hero, series]);
+
+    /* This is the one group with no detail band. Every card it holds needs a
+     * time axis, so on a bundle with no dated measurement there is nothing it
+     * can draw and the no-time-axis state is the whole group rather than part
+     * of it. The other three each hold at least one card that needs no window:
+     * a ranked list, a release list, a threshold note.
+     *
+     * Into the hero band, where the charts would have been, so it reads in the
+     * place the reader is already looking rather than under an empty one. */
+    if (ctx.win === null) {
+      hero.appendChild(el("p", "slot-note",
+        "The archive holds no dated measurement, so there is no time axis to draw the star, " +
+        "fork and watcher counts on."));
+      return;
+    }
+
+    var created = [];
+    try {
+      G.keep(created, G.buildCardSafely(hero, function () {
+        /* The hero carries no card-head figure: the group head directly above
+         * it prints the same series' figure, and printing it twice a hundred
+         * pixels apart is the duplication `INSIGHTS_FIGURES` exists to make
+         * unnecessary. Reach's and Adoption's heroes do the same. */
+        return G.chartCard(hero, cumulativeSpec("hero", "Stars", null,
+          "stars", "total", "Stars", "--amber", "#fcd34d", ctx.downsampled), ctx);
+      }));
+
+      /* Each on its own y axis. Stars and forks shared one x axis while a
+       * single set of release markers was painted across both and the markers
+       * made the comparison; the markers are on the Delivery hero now, and the
+       * two differ by an order of magnitude in the live archive, so a shared
+       * axis would flatten the fork line onto the floor for no remaining gain. */
+      G.keep(created, G.buildCardSafely(series, function () {
+        return G.chartCard(series, cumulativeSpec("compact", "Forks",
+          { label: "Forks", kind: "point", series: "forks", field: "total" },
+          "forks", "total", "Forks", "--coral", "#fb923c", ctx.downsampled), ctx);
+      }));
+
+      /* Watchers gains a plot it does not have today. It is the uniform
+       * application of the small-card rule rather than an addition of scope:
+       * no series is added and no figure is derived that the page does not
+       * already print. */
+      G.keep(created, G.buildCardSafely(series, function () {
+        return G.chartCard(series, cumulativeSpec("compact", "Watchers",
+          { label: "Watchers", kind: "point", series: "repo", field: "subscribers" },
+          "repo", "subscribers", "Watchers", "--lavender", "#c4b5fd", ctx.downsampled), ctx);
+      }));
+    } catch (error) {
+      /* `live` is assigned only once every card is built, so a throw part-way
+       * leaves `created` referenced by nothing but this frame. Destroy what
+       * was built here, then let the shell render its failure note. */
+      for (var j = 0; j < created.length; j++) {
+        try {
+          created[j].destroy();
+        } catch (cleanupError) {
+          if (typeof console !== "undefined" && typeof console.error === "function") {
+            console.error("insights: releasing a following chart after a failed render also " +
+              "failed.", cleanupError);
+          }
+        }
+      }
+      throw error;
+    }
+    live = created;
+  }
+
+  /*
+   * Runs before the slot is emptied. Removing the nodes alone would leave
+   * every instance's window listeners, its resize observer and its membership
+   * of the page's cursor-sync group alive.
+   *
+   * `live` is cleared first so a destroy that throws cannot leave a
+   * half-destroyed instance behind to be destroyed twice; the first failure is
+   * re-thrown once the rest have been released, and the shell reports it.
+   */
+  function teardown() {
+    var pending = live;
+    live = [];
+    var failure = null;
+    for (var i = 0; i < pending.length; i++) {
+      try {
+        pending[i].destroy();
+      } catch (error) {
+        if (failure === null) failure = error;
+      }
+    }
+    if (failure !== null) throw failure;
+  }
+
+  I.registerSection("following-body", render, teardown);
 })();
 </script>
 
