@@ -229,6 +229,40 @@ const OBSERVE = `(function () {
     var value = typeof declared === "function" ? declared(instance, index) : declared;
     return value === null || value === undefined || value === "" ? "none" : String(value);
   }
+  /*
+   * How much of a series was plotted, and in how many unbroken runs.
+   *
+   * The one property that separates a line from a scatter of dots, and it
+   * was in nothing this walk collected. The page breaks a line at every
+   * null on purpose, so the run count is the whole shape of the drawing:
+   * one run is a continuous line, and a run per measured step is the same
+   * card rendered as loose points. A card that must not join across gaps
+   * and a card that must hold across them produce identical fills, y
+   * ranges, x ranges, canvas sizes and captions, so a step asserting either
+   * one was asserting something the report could not show — the same gap
+   * that let a card draw an axis to 2029 unnoticed, in the other direction.
+   *
+   * Read off the instance's own data rather than the values the page built,
+   * so it reports what was handed to the canvas.
+   */
+  function strokeOf(instance, index) {
+    var values = instance.data[index];
+    var label = instance.series[index].label;
+    if (values === undefined || values === null) return label + ": no data";
+    var drawn = 0;
+    var runs = 0;
+    var inRun = false;
+    for (var i = 0; i < values.length; i++) {
+      var present = values[i] !== null && values[i] !== undefined;
+      if (present) {
+        drawn += 1;
+        if (!inRun) runs += 1;
+      }
+      inRun = present;
+    }
+    return label + ": " + drawn + " of " + values.length + " in " +
+      runs + (runs === 1 ? " run" : " runs");
+  }
   function figureOf(scope) {
     var value = scope.querySelector(".stat-value");
     if (value === null) return null;
@@ -268,12 +302,15 @@ const OBSERVE = `(function () {
       if (syncPlots[p].root === root) { instance = syncPlots[p]; break; }
     }
     var fills = null;
+    var strokes = null;
     var yRange = null;
     var xRange = null;
     if (instance !== null) {
       fills = [];
+      strokes = [];
       for (var s = 1; s < instance.series.length; s++) {
         fills.push(instance.series[s].label + ": " + fillOf(instance, s));
+        strokes.push(strokeOf(instance, s));
       }
       var scale = instance.scales.y;
       yRange = scale === undefined || scale === null ? null : [scale.min, scale.max];
@@ -301,6 +338,7 @@ const OBSERVE = `(function () {
        * all, which is a broken reading rather than a plot with no fill and no
        * scales. */
       fills: fills,
+      strokes: strokes,
       yRange: yRange,
       xRange: xRange,
       canvasWidth: canvas === null ? null : Math.round(canvas.getBoundingClientRect().width),
@@ -837,12 +875,12 @@ async function main() {
 
   console.log('\n=== page ===');
   /*
-   * Said before the walk rather than left to be inferred from it. `fills` and
-   * `yRange` come off the live uPlot instances, and the only way to reach
-   * those is the page's own cursor-sync group. If the page ever stops
-   * registering its plots under that key, every card would report a null
-   * fill and a null y range, which reads exactly like a page that draws no
-   * fills. This line is the difference between the two.
+   * Said before the walk rather than left to be inferred from it. `fills`,
+   * `strokes`, `yRange` and `xRange` come off the live uPlot instances, and
+   * the only way to reach those is the page's own cursor-sync group. If the
+   * page ever stops registering its plots under that key, every card would
+   * report a null fill and a null y range, which reads exactly like a page
+   * that draws no fills. This line is the difference between the two.
    */
   if (observed !== null) {
     const roots = observed.chartRoots ?? 0;

@@ -2870,6 +2870,22 @@ footer a:hover { color: var(--txt); }
  * omission. An absent row and a null field are the same fact — "not measured"
  * — and the line must break across both, and plot a zero for neither. A
  * genuinely measured `0` is a different fact and plots as `0`.
+ *
+ * One shape is outside all of that, and it is a different fact rather than a
+ * relaxation of this one. A change-only series records a row when its value
+ * MOVES: `contributors.csv` is recomputed in full from the commit history on
+ * every run and rewritten wholesale, so its rows are the breakpoints of a step
+ * function and every date between two of them has a known value, the earlier
+ * row's. A step with no row there was not left unread. Breaking the line
+ * across it hides something the archive holds rather than declining to invent
+ * something it does not, which is how a card whose own caption says the total
+ * holds between rows came to draw four dots and no line at all. `holdForward`
+ * resolves those nulls in the data, before the plot is handed anything, and
+ * the line is drawn stepped: flat across the hold, vertical on the day a
+ * change was recorded. The figure layer has always read the series this way —
+ * see `stepDelta`, which is where its reasoning is argued — and this is the
+ * chart layer catching up to it. `spanGaps` stays false for every series on
+ * the page.
  * ─────────────────────────────────────────────────────────────────────────
  */
 (function () {
@@ -3555,6 +3571,40 @@ footer a:hover { color: var(--txt); }
   }
 
   /*
+   * Hold a change-only series' value forward across the steps it records no
+   * row for.
+   *
+   * Only ever for a series whose rows ARE its changes; the region preamble
+   * above argues why that is a different fact from a sampled series' missing
+   * day, and why doing this to a sampled one would be a fabrication. The rule
+   * for reaching for this is the same one the figure layer uses to pick
+   * `stepDelta` over `pointDelta`: does a row mean "read today", or does it
+   * mean "moved today".
+   *
+   * The fill runs forward only. Leading nulls stay null, because before the
+   * series' first row what the total stood at is genuinely unrecorded, and
+   * this page does not assume a cumulative count began at zero however certain
+   * that is — the same line `stepDelta` refuses to cross, for the same reason.
+   * On this page the leading run is always empty, since `expand` starts the
+   * axis at the first measured day; it is written for the property rather than
+   * for the current caller.
+   *
+   * Returns a NEW array. The caller's own values and the `measured` counts
+   * taken from them are untouched, so a card that holds its line still reports
+   * how many steps it actually recorded rather than how many it drew.
+   */
+  function holdForward(values) {
+    var out = new Array(values.length);
+    var held = null;
+    var i;
+    for (i = 0; i < values.length; i++) {
+      if (values[i] !== null && values[i] !== undefined) held = values[i];
+      out[i] = held;
+    }
+    return out;
+  }
+
+  /*
    * The live legend readout.
    *
    * uPlot calls this with `idx === null` when the cursor is off the plot, and
@@ -3602,6 +3652,26 @@ footer a:hover { color: var(--txt); }
     }
     window.addEventListener("resize", sync);
     return function () { window.removeEventListener("resize", sync); };
+  }
+
+  /*
+   * The path builder for a held line, built once on first use.
+   *
+   * `align: 1` is the whole meaning of the option: the value extends FORWARD
+   * from the x it was recorded at, which is what "the total held from the day
+   * it changed" says. Interpolating instead would draw a gradual climb across
+   * days the archive records no movement on, which is the fabrication the
+   * region preamble is about, arriving through the shape of the line rather
+   * than through a gap being closed.
+   *
+   * Lazy because this file is parsed as a script alongside the vendored
+   * library rather than after it, and a builder constructed at parse time
+   * would couple this section to that order for no gain.
+   */
+  var heldPath = null;
+  function heldPaths() {
+    if (heldPath === null) heldPath = uPlot.paths.stepped({ align: 1 });
+    return heldPath;
   }
 
   /* The lane keeps the colour it had on the growth charts it came from. It
@@ -4015,7 +4085,13 @@ footer a:hover { color: var(--txt); }
         /* The single most load-bearing option on this page. `true` would join
          * the line across every null, which is precisely the fabricated
          * continuity `expand` exists to make visible. Stated explicitly rather
-         * than left to the default so it cannot be changed by accident. */
+         * than left to the default so it cannot be changed by accident.
+         *
+         * A held series does not soften this and must not be implemented by
+         * relaxing it. Its nulls are already resolved in the data by
+         * `holdForward`, where the claim is a documented property of that one
+         * series and is visible to anything reading the values; `spanGaps`
+         * would instead make every gap on every series disappear silently. */
         spanGaps: false,
         /* Markers in the series' own colour, stroke and fill both. uPlot's
          * default point fill is an opaque white belonging to no Aether Drift
@@ -4031,6 +4107,7 @@ footer a:hover { color: var(--txt); }
       };
       if (def.fill !== undefined) entry.fill = def.fill;
       if (def.dash !== undefined) entry.dash = def.dash;
+      if (def.hold === true) entry.paths = heldPaths();
       series.push(entry);
       data.push(def.values);
     }
@@ -4208,6 +4285,7 @@ footer a:hover { color: var(--txt); }
     collectReleases: collectReleases,
     expand: expand,
     fittedCounts: fittedCounts,
+    holdForward: holdForward,
     isolate: isolate,
     measuredPositions: measuredPositions,
     listGroups: listGroups,
@@ -4349,7 +4427,12 @@ footer a:hover { color: var(--txt); }
     note.appendChild(pair("span", I.formatDay(axis.startMs) + " → " + I.formatDay(axis.endMs)));
     note.appendChild(pair("measured", counted + " of " + steps(total, stepDays)));
     if (missing > 0) {
-      note.appendChild(pair("unmeasured", steps(missing, stepDays) + ", " + spec.breakPhrase));
+      /* The label is the card's, because on a held card these steps are not
+       * unmeasured in any sense the reader would take from that word: nothing
+       * was missed on them. Defaulting keeps every sampled card's wording
+       * exactly as it was. */
+      note.appendChild(pair(spec.gapLabel === undefined ? "unmeasured" : spec.gapLabel,
+        steps(missing, stepDays) + ", " + spec.breakPhrase));
     }
     if (spec.metaExtra !== undefined) {
       var extra = spec.metaExtra(axis, offsets, stepDays);
@@ -4396,7 +4479,11 @@ footer a:hover { color: var(--txt); }
    *   columns      { <name>: { series, field } }, as `bind` takes
    *   lines        [{ column, label, token, fallback, fill?, dash?, width? }]
    *   yPolicy      "zero" | "fitted"
-   *   breakPhrase  what an unmeasured step is, in this series' own words
+   *   hold         true for a change-only series, whose rows are its changes:
+   *                the line is held forward across the steps between them and
+   *                drawn stepped rather than broken. See `holdForward`.
+   *   gapLabel     what to call a step with no row, default "unmeasured"
+   *   breakPhrase  what such a step is, in this series' own words
    *   metaExtra    optional (axis, offsets, stepDays) -> [pair, ...]
    *   notes        [string], rendered as .chart-hint under the plot
  *   cautions     [string], rendered as .chart-hint.chart-caution under them
@@ -4509,11 +4596,17 @@ footer a:hover { color: var(--txt); }
     var defs = [];
     for (var i = 0; i < spec.lines.length; i++) {
       var line = spec.lines[i];
+      var drawn = axis.values[own.offsets[line.column]];
       var def = {
         label: line.label,
         stroke: C.colour(line.token, line.fallback),
-        values: axis.values[own.offsets[line.column]]
+        /* `hold` is a property of the SERIES' contract rather than of one
+         * line's styling, so it sits on the spec and applies to every line the
+         * card draws. Applied here, after `axis` is built and read for the
+         * caption, so `measured` still counts recorded rows. */
+        values: spec.hold === true ? C.holdForward(drawn) : drawn
       };
+      if (spec.hold === true) def.hold = true;
       if (line.fill !== undefined) def.fill = line.fill;
       if (line.dash !== undefined) def.dash = line.dash;
       if (line.width !== undefined) def.width = line.width;
@@ -7215,11 +7308,18 @@ footer a:hover { color: var(--txt); }
      * across groups and allowed, and it separates the two Delivery cards. */
     lines: [{ column: "total", label: "Contributors", token: "--sky", fallback: "#7dd3fc" }],
     yPolicy: "fitted",
-    breakPhrase: "drawn as breaks, not as a fall to zero",
+    /* The one held card on the page. Its rows are its changes, not its
+     * readings, which the figure above it has always known — `kind: "step"`
+     * picks `stepDelta` — and which the line under it did not, so a series
+     * with six recorded changes across two hundred days drew six dots. */
+    hold: true,
+    gapLabel: "unchanged",
+    breakPhrase: "held at the last recorded total",
     notes: [
       "This series records a row when its total changes rather than sampling daily, so the " +
       "total holds between rows and the caption above says when it last changed rather than " +
-      "when it was last read.",
+      "when it was last read. The line is drawn the same way: flat while the total stood " +
+      "still, stepping on the day a change was recorded.",
       "The vertical axis is fitted to the values drawn rather than pinned to a zero baseline, " +
       "so a move of one contributor is visible rather than flattened. Read the height of the " +
       "line against its own axis labels, not against the bottom of the frame."
