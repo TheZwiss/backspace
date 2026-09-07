@@ -274,7 +274,7 @@ Every figure and every chip goes through `I.formatCount`: thousands separated by
 9. `#method`.
 10. Footer.
 
-The lead figure row sits above the range control on purpose. The figures do not move with the range (their window is fixed at 30 days by section 4.3), so putting them below a control that does not govern them would invite the reading that it does.
+The lead figure row sits above the range control on purpose. The figures do not move with the range, and neither half of one does: a figure's value is all-time, every measured day of its series, and the 30-day delta printed beside it is a fixed window ending on the archive's newest measured day (section 4.3). Putting them below a control that governs neither would invite the reading that it does.
 
 **Anchors.** `#reach` survives. `#at-a-glance`, `#growth`, `#referrers` and `#instances` do not. The sitemap lists three pages and no fragments, and the four disappearing ids have existed only since this page shipped, so nothing this repository publishes points at them. If an external link to one is found later, the fix is an empty `<span id="...">` alias on the group that absorbed it, not a restored section.
 

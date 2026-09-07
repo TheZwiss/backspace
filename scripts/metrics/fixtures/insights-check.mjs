@@ -929,14 +929,29 @@ async function main() {
     server.closeAllConnections();
     server.close();
     /*
-     * Chrome can still be flushing its profile when it is killed, and the
-     * rmdir then fails with ENOTEMPTY. Thrown out of a `finally` that would
-     * discard the entire report the run just spent twenty seconds gathering,
-     * and the run reads as a hard failure of the page rather than of the
-     * cleanup. The directory is under the OS temp dir, so leaving one behind
-     * costs nothing worth a lost report. Reported on stderr so it can never
-     * appear in a captured report and read as a difference between two runs.
+     * Wait for Chrome to actually exit before removing its profile.
+     *
+     * `kill` only sends the signal. Removing the directory while the process
+     * is still flushing does not fail — `rm` succeeds against what is there
+     * at that instant and Chrome then RECREATES the directory on its way out.
+     * So every run left a profile behind, and the catch below never fired,
+     * which is why an earlier version of this comment could describe an
+     * ENOTEMPTY failure and a stderr line that in practice never printed.
+     * Measured before this fix: seventeen runs, seventeen leaked profiles,
+     * no message.
+     *
+     * The wait is bounded, because a browser that never exits must not hold
+     * the report hostage. If it times out the profile is left behind and said
+     * so on stderr, which is the honest version of what the old comment
+     * claimed. stderr rather than stdout so it can never land in a captured
+     * report and read as a difference between two runs.
      */
+    if (child.exitCode === null && child.signalCode === null) {
+      await new Promise((resolve) => {
+        const done = setTimeout(resolve, 5000);
+        child.once('exit', () => { clearTimeout(done); resolve(); });
+      });
+    }
     try {
       await rm(profile, { recursive: true, force: true });
     } catch (error) {
