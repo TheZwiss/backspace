@@ -8,6 +8,7 @@ import type { InstanceInfoResponse } from '@backspace/shared';
 import { useUIStore } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
 import { AccountPanel } from './settingsPanels/AccountPanel';
+import { AppearancePanel } from './settingsPanels/AppearancePanel';
 import { VoicePanel } from './settingsPanels/VoicePanel';
 import { PrivacyPanel } from './settingsPanels/PrivacyPanel';
 import { ConnectionsPanel } from './settingsPanels/ConnectionsPanel';
@@ -17,7 +18,7 @@ import { KeybindsPanel } from './settingsPanels/KeybindsPanel';
 import { isElectron } from '../../platform/platform';
 import { SettingsSectionsProvider, useSettingsSectionsContext } from './SettingsSectionsContext';
 
-type SettingsTab = 'account' | 'voice' | 'privacy' | 'connections' | 'keybinds' | 'desktop' | 'instance';
+type SettingsTab = 'account' | 'appearance' | 'voice' | 'privacy' | 'connections' | 'keybinds' | 'desktop' | 'instance';
 
 function SidebarSubLinks() {
   const ctx = useSettingsSectionsContext();
@@ -138,6 +139,7 @@ export function UserSettingsModal() {
           <div className="glass-bubble rounded-lg p-2 flex-1 flex flex-col">
             <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('settings:nav.userSettings')}</div>
             <button onClick={() => handleTabClick('account')} className={tabClass('account')}>{t('settings:nav.tabs.account')}</button>
+            <button onClick={() => handleTabClick('appearance')} className={tabClass('appearance')}>{t('settings:nav.tabs.appearance')}</button>
             <button onClick={() => handleTabClick('voice')} className={tabClass('voice')}>{t('settings:nav.tabs.voice')}</button>
             <button onClick={() => handleTabClick('privacy')} className={tabClass('privacy')}>{t('settings:nav.tabs.privacy')}</button>
 
@@ -195,6 +197,7 @@ export function UserSettingsModal() {
             <div className="glass-bubble rounded-lg p-2 space-y-0.5">
               <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('settings:nav.userSettings')}</div>
               <button onClick={() => handleTabClick('account')} className={tabClass('account')}>{t('settings:nav.tabs.account')}</button>
+              <button onClick={() => handleTabClick('appearance')} className={tabClass('appearance')}>{t('settings:nav.tabs.appearance')}</button>
               <button onClick={() => handleTabClick('voice')} className={tabClass('voice')}>{t('settings:nav.tabs.voice')}</button>
               <button onClick={() => handleTabClick('privacy')} className={tabClass('privacy')}>{t('settings:nav.tabs.privacy')}</button>
 
@@ -247,6 +250,7 @@ export function UserSettingsModal() {
                 </button>
               )}
               {tab === 'account' && <AccountPanel />}
+              {tab === 'appearance' && <AppearancePanel />}
               {tab === 'voice' && <VoicePanel />}
               {tab === 'privacy' && <PrivacyPanel />}
               {tab === 'connections' && <ConnectionsPanel />}

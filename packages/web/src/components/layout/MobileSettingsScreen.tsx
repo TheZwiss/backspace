@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useUIStore } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
 import { AccountPanel } from '../modals/settingsPanels/AccountPanel';
+import { AppearancePanel } from '../modals/settingsPanels/AppearancePanel';
 import { VoicePanel } from '../modals/settingsPanels/VoicePanel';
 import { ConnectionsPanel } from '../modals/settingsPanels/ConnectionsPanel';
 import { PrivacyPanel } from '../modals/settingsPanels/PrivacyPanel';
@@ -18,6 +19,7 @@ interface MobileSettingsScreenProps {
 
 type PanelTitleKey =
   | 'settings:nav.tabs.account'
+  | 'settings:nav.tabs.appearance'
   | 'settings:nav.tabs.voice'
   | 'settings:nav.tabs.privacy'
   | 'settings:nav.tabs.connections'
@@ -26,6 +28,7 @@ type PanelTitleKey =
 
 const panelConfig: Record<string, { titleKey: PanelTitleKey; component: React.ReactNode }> = {
   account: { titleKey: 'settings:nav.tabs.account', component: <AccountPanel /> },
+  appearance: { titleKey: 'settings:nav.tabs.appearance', component: <AppearancePanel /> },
   voice: { titleKey: 'settings:nav.tabs.voice', component: <VoicePanel /> },
   privacy: { titleKey: 'settings:nav.tabs.privacy', component: <PrivacyPanel /> },
   connections: { titleKey: 'settings:nav.tabs.connections', component: <ConnectionsPanel /> },
@@ -37,6 +40,11 @@ const sectionIcons: Record<string, React.ReactNode> = {
   account: (
     <svg className="w-5 h-5 text-txt-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+    </svg>
+  ),
+  appearance: (
+    <svg className="w-5 h-5 text-txt-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4.098 19.902a3.75 3.75 0 005.304 0l6.401-6.402M6.75 21A3.75 3.75 0 013 17.25V4.125C3 3.504 3.504 3 4.125 3h5.25c.621 0 1.125.504 1.125 1.125v4.072M6.75 21a3.75 3.75 0 003.75-3.75V8.197M6.75 21h13.125c.621 0 1.125-.504 1.125-1.125v-5.25c0-.621-.504-1.125-1.125-1.125h-4.072M10.5 8.197l2.88-2.88c.438-.439 1.15-.439 1.59 0l3.712 3.713c.44.439.44 1.151 0 1.59l-2.879 2.879M6.75 17.25h.008v.008H6.75v-.008z" />
     </svg>
   ),
   voice: (
@@ -100,6 +108,7 @@ export function MobileSettingsScreen({ initialPanel }: MobileSettingsScreenProps
   // mobile feature (no global hooks, no recording flow on touch keyboards).
   const sections = [
     { id: 'account', label: t('settings:nav.tabs.account') },
+    { id: 'appearance', label: t('settings:nav.tabs.appearance') },
     { id: 'voice', label: t('settings:nav.tabs.voice') },
     { id: 'privacy', label: t('settings:nav.tabs.privacy') },
     { id: 'connections', label: t('settings:nav.tabs.connections') },

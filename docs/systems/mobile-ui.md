@@ -342,6 +342,7 @@ Event options: `touchstart` is `{ passive: true }`, `touchmove` is `{ passive: f
 | `friends` | `FriendsPage` (with `mobile` prop) | — |
 | `settings` | `MobileSettingsScreen` | — |
 | `settings-account` | `MobileSettingsScreen` | `initialPanel="account"` |
+| `settings-appearance` | `MobileSettingsScreen` | `initialPanel="appearance"` |
 | `settings-voice` | `MobileSettingsScreen` | `initialPanel="voice"` |
 | `settings-privacy` | `MobileSettingsScreen` | `initialPanel="privacy"` |
 | `settings-connections` | `MobileSettingsScreen` | `initialPanel="connections"` |

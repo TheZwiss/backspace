@@ -10,13 +10,13 @@ export function InterfaceScaleSection() {
     const wasMobile = useUIStore.getState().isMobile;
     setScale(value);
     const ui = useUIStore.getState();
-    // Keep settings reachable when scaling crosses the responsive breakpoint.
+    // Keep this panel reachable when scaling crosses the responsive breakpoint.
     if (ui.isMobile !== wasMobile) {
       if (ui.isMobile) {
         ui.closeModal();
-        ui.pushMobileScreen('settings-account');
+        ui.pushMobileScreen('settings-appearance');
       } else {
-        ui.openModal('userSettings', { tab: 'account' });
+        ui.openModal('userSettings', { tab: 'appearance' });
       }
     }
   };

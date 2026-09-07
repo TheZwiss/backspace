@@ -117,6 +117,7 @@
     "administration": "Verwaltung",
     "tabs": {
       "account": "Konto",
+      "appearance": "Darstellung",
       "voice": "Sprache & Video",
       "privacy": "Privatsphäre",
       "connections": "Verbindungen",
@@ -126,6 +127,9 @@
     },
     "logOut": "Abmelden",
     "backToMenu": "Zurück zum Einstellungsmenü"
+  },
+  "appearance": {
+    "title": "Darstellung"
   },
   "account": {
     "title": "Mein Konto",
@@ -138,9 +142,6 @@
       "reattaching": "Wird verknüpft…",
       "reattachFailed": "Verknüpfen fehlgeschlagen",
       "reattached": "Konto wieder mit {{username}} verknüpft"
-    },
-    "language": {
-      "sectionTitle": "Sprache"
     },
     "profile": {
       "sectionTitle": "Profil anpassen",

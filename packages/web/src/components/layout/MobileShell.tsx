@@ -58,6 +58,7 @@ const screenMap: Record<string, (params?: Record<string, string>) => React.React
   'friends': () => <FriendsPage mobile />,
   'settings': () => <MobileSettingsScreen />,
   'settings-account': () => <MobileSettingsScreen initialPanel="account" />,
+  'settings-appearance': () => <MobileSettingsScreen initialPanel="appearance" />,
   'settings-voice': () => <MobileSettingsScreen initialPanel="voice" />,
   'settings-privacy': () => <MobileSettingsScreen initialPanel="privacy" />,
   'settings-connections': () => <MobileSettingsScreen initialPanel="connections" />,

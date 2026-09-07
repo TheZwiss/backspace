@@ -117,6 +117,7 @@
     "administration": "Administration",
     "tabs": {
       "account": "Account",
+      "appearance": "Appearance",
       "voice": "Voice & Video",
       "privacy": "Privacy",
       "connections": "Connections",
@@ -126,6 +127,9 @@
     },
     "logOut": "Log Out",
     "backToMenu": "Back to settings menu"
+  },
+  "appearance": {
+    "title": "Appearance"
   },
   "account": {
     "title": "My Account",
@@ -138,9 +142,6 @@
       "reattaching": "Re-attaching…",
       "reattachFailed": "Re-attach failed",
       "reattached": "Account re-linked with {{username}}"
-    },
-    "language": {
-      "sectionTitle": "Language"
     },
     "profile": {
       "sectionTitle": "Profile Customization",
