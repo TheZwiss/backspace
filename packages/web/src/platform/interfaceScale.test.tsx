@@ -37,6 +37,7 @@ describe('interface scale', () => {
   it.each([
     [390, 50, 'mobile'], [430, 50, 'mobile'], [599, 50, 'mobile'],
     [600, 50, 'desktop'], [600, 100, 'mobile'],
+    [575, 75, 'mobile'], [576, 75, 'mobile'], [599, 75, 'mobile'], [600, 75, 'desktop'],
     [700, 75, 'desktop'], [1366, 200, 'mobile'], [768, 100, 'desktop'],
   ])(
     'shares the JS/CSS breakpoint at width %i and scale %i', (width, scale, expected) => {
