@@ -64,7 +64,7 @@
   <releases>
     <release version="1.2.1" date="2026-09-07">
       <description>
-        <p>Backspace 1.2.1 release.</p>
+        <p>Moves the language and interface scale settings out of Account into a new Appearance tab.</p>
       </description>
     </release>
     <release version="1.2.0" date="2026-09-07">
