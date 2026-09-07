@@ -386,15 +386,14 @@ h2 {
    already zeroed the heading's margins. Edit the size or weight here and every
    card title follows. */
 .chart-title { font-size: 1.05rem; font-weight: 600; letter-spacing: -0.018em; margin-bottom: 6px; }
-.chart-window, .chart-meta {
+.chart-meta {
   font-family: var(--mono); font-size: 12.5px; color: var(--txt4);
   line-height: 1.8;
   display: flex; flex-wrap: wrap; gap: 4px 20px;
+  margin-bottom: 14px;
 }
-.chart-window { margin-bottom: 22px; }
-.chart-meta { margin-bottom: 14px; }
-.chart-window .k, .chart-meta .k { color: var(--txt3); }
-.chart-window .v, .chart-meta .v { color: var(--txt2); overflow-wrap: anywhere; }
+.chart-meta .k { color: var(--txt3); }
+.chart-meta .v { color: var(--txt2); overflow-wrap: anywhere; }
 .chart-hint { font-size: 13.5px; color: var(--txt4); line-height: 1.6; margin-top: 12px; }
 .chart-hint:empty { display: none; }
 .chart-caution { color: var(--amber); }
@@ -856,18 +855,21 @@ footer a:hover { color: var(--txt); }
       <h3>Cumulative counts</h3>
       <p class="sec-copy">
         Stars, forks and watchers are <strong>cumulative point-in-time totals</strong>: a step
-        the archive did not measure, a day, or a whole week once the bundle is bucketed
-        by week, is a hole in the record and never a fall back to a lower count, and
-        wherever a line is drawn that hole is a break in it rather than a dip. A star count does
-        not return to zero, so it is the easiest gap on the page to misread as a collapse. A day on
-        which nobody starred is not such a gap and carries a row of its own: the total that day is
-        known, and it is the previous day's. History from before daily collection began is
-        <strong>reconstructed</strong> from GitHub's permanent per-star and per-fork timestamps,
-        which list only stars and forks that still exist, so a star since withdrawn is invisible
-        there and those earlier totals are a lower bound rather than what the counter read at the
-        time. The Following group is built from the rows the archive holds and nothing else: when
-        the history is too short to make a line, a card states its reading and its reasons instead
-        of drawing one, and how a chart's axes are scaled is stated beside the chart itself.
+        the archive did not measure is a hole in the record and never a fall back to a lower
+        count, whether that step is a day or a whole week once the bundle is bucketed by week,
+        and wherever a line is drawn that hole is a break in it rather than a dip. A star count
+        does not return to zero, so it is the easiest gap on the page to misread as a collapse. A
+        day on which nobody starred is not such a gap and carries a row of its own: the total that
+        day is known, and it is the previous day's. Star and fork history from before daily
+        collection began is <strong>reconstructed</strong> from GitHub's permanent per-star and
+        per-fork timestamps, which list only stars and forks that still exist, so a star since
+        withdrawn is invisible there and those earlier totals are a lower bound rather than what
+        the counter read at the time. The watcher count has no such record: GitHub publishes no
+        history of it at all, so that line begins on the day the collector first ran and cannot
+        be reconstructed any further back. The Following group is built from the rows the archive
+        holds and nothing else: when the history is too short to make a line, a card states its
+        reading and its reasons instead of drawing one, and how a chart's axes are scaled is
+        stated beside the chart itself.
       </p>
       <h3>Opt-in pings</h3>
       <p class="sec-copy">
@@ -5000,7 +5002,7 @@ footer a:hover { color: var(--txt); }
    * truncated-axis trade and must not be silent.
    */
   var FITTED_NOTE = "The vertical axis is fitted to the values drawn rather than pinned to a " +
-    "zero baseline, so a move of a few is visible rather than flattened. Read the height of " +
+    "zero baseline, so a small move is visible rather than flattened. Read the height of " +
     "the line against its own axis labels, not against the bottom of the frame.";
 
   /*
