@@ -591,7 +591,9 @@ h2 {
  * left empty.
  *
  * The Adoption group's fleet cards were spanned the same way, because they
- * were drawn at the hero profile and a hero plot has a 520px floor: in a
+ * were drawn at the hero profile and a hero plot has a 520px floor. Their
+ * plots take the compact profile now; the cards themselves are not
+ * `is-compact` and do not carry that card treatment. In a
  * 506px track it scrolled sideways inside its own card. They are compact
  * cards now, with a 240px floor, so they sit in the band's tracks beside the
  * rankings like every other detail card on the page and need no rule of
@@ -6711,9 +6713,14 @@ footer a:hover { color: var(--txt); }
    * is worse than a sentence that is true.
    *
    * Both refusals are the page-wide rule `docs/systems/metrics.md` states for
-   * every card, and they read the same exported `C.measuredPositions` the
-   * shared builder reads, so there is one definition of "enough to draw" on
-   * the page rather than one per builder. This card was built here and not
+   * every card, and this card and the shared builder both read the exported
+   * `C.measuredPositions`. One qualification, because the earlier wording here
+   * claimed more than is true: the dimensions block declares a private
+   * function of the same name and a different signature, taking a list of
+   * lines rather than one offset, and the movement charts decide through that
+   * one. Same rule, same threshold of two, two implementations. The duplicate
+   * name is the hazard rather than the duplicate rule, and renaming the
+   * private one is left as its own change so this commit stays a fix. This card was built here and not
    * through `G.chartCard` because `chartCard` resolves its columns through
    * `C.bind`, which knows the named repo and traffic series and not the
    * telemetry network block; the guard is shared even though the builder
