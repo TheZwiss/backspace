@@ -11,9 +11,9 @@ export function useMobileRouteSync(pathname: string): void {
     const matchesRoute = (entry: (typeof stack)[number] | undefined) =>
       entry?.screen === 'channel-chat' && entry.params?.spaceId === params.spaceId
       && entry.params?.channelId === params.channelId;
-    if (stack.at(-1)?.screen === 'settings-account') {
-      // InterfaceScaleSection currently hands off only account settings when
-      // scale crosses into mobile; extend this if it hands off other screens.
+    if (stack.at(-1)?.screen === 'settings-appearance') {
+      // InterfaceScaleSection currently hands off only the appearance panel
+      // when scale crosses into mobile; extend this if it hands off others.
       // Read the stack on every effect run, including StrictMode replay. The
       // existing settings history entry already has the channel URL beneath it.
       if (!stack.some(matchesRoute)) {

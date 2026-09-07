@@ -7,7 +7,7 @@ import { useMobileRouteSync } from './useMobileRouteSync';
 afterEach(() => { cleanup(); useUIStore.setState({ mobileStack: [] }); });
 const route = '/channels/space/channel';
 const chat = { screen: 'channel-chat', params: { spaceId: 'space', channelId: 'channel' } };
-const settings = { screen: 'settings-account' };
+const settings = { screen: 'settings-appearance' };
 
 describe('mobile route reconstruction', () => {
   it.each([false, true])('restores chat below settings and back returns to chat (StrictMode=%s)', strict => {

@@ -110,14 +110,14 @@ describe('interface scale', () => {
     expect(screen.getByRole('button')).toBeDisabled();
   });
 
-  it('keeps account settings open across the effective mobile breakpoint', () => {
+  it('keeps appearance settings open across the effective mobile breakpoint', () => {
     const resize = () => useUIStore.getState().setIsMobile(layoutPixels(window.innerWidth) < 768);
     window.addEventListener('resize', resize);
     const stop = initializeInterfaceScale();
     useUIStore.setState({ isMobile: false, activeModal: 'userSettings' });
     render(<InterfaceScaleSection />);
     fireEvent.change(screen.getByRole('combobox'), { target: { value: '250' } });
-    expect(useUIStore.getState().mobileStack.at(-1)?.screen).toBe('settings-account');
+    expect(useUIStore.getState().mobileStack.at(-1)?.screen).toBe('settings-appearance');
     fireEvent.click(screen.getByRole('button'));
     expect(useUIStore.getState().activeModal).toBe('userSettings');
     stop();

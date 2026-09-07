@@ -15,9 +15,20 @@ Font: DM Sans (primary) with system fallbacks
 - `prefers-reduced-transparency` → fall back to solid surfaces
 - NOT a Discord clone — Backspace has its own visual identity
 
+## Settings organization
+
+Settings tabs split on ownership. **Appearance** holds preferences that belong
+to this browser or app: language and interface scale today, themes and display
+density later. They are stored locally and they work on the login screen, before
+there is an account. **Account** holds what lives on the server and follows the
+user to any device or instance: profile, credentials, deletion. Avatar and
+banner colours look like appearance and are not, because other people see them.
+A new presentation preference goes in Appearance, not in Account or in Desktop
+(which is Electron-only and would hide it from the browser).
+
 ## Interface scale
 
-Account settings include a device-local interface scale: 75–250% in 25% steps,
+Appearance settings include a device-local interface scale: 75–250% in 25% steps,
 default/reset 100%. `interfaceScaleStore` persists the percentage under
 `backspace-interface-scale`; unsupported stored values fall back to 100%.
 `main.tsx` applies it before mounting React, including auth pages and portals.
@@ -41,8 +52,8 @@ functions outside these definitions in production source.
 resize and scale changes using the same 768-layout-pixel threshold as AppLayout.
 Use the `desktop:` Tailwind variant for app-shell responsiveness; raw media
 queries ignore root zoom. Auth pages without a JS layout branch may keep `md:`.
-When scale moves account settings into MobileShell, route reconstruction places
-the current channel below settings and remains idempotent in StrictMode.
+When scale moves the appearance panel into MobileShell, route reconstruction
+places the current channel below settings and remains idempotent in StrictMode.
 
 `ImageCropModal` cancels root zoom only on the cropper container with
 `zoom: calc(1 / var(--interface-scale, 1))`. react-easy-crop mixes visual DOM
