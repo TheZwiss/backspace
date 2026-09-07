@@ -10,6 +10,15 @@ export type SceneMood = 'idle' | 'happy' | 'farewell';
 export interface HelloSceneProps {
   mood: SceneMood;
   className?: string;
+  /**
+   * How the 3:2 composition sits in a container shaped differently. Left
+   * unset, the SVG default (`xMidYMid meet`) letterboxes, which is what the
+   * modal's own 3:2 slot wants. A banner wider than 3:2 passes
+   * `xMidYMid slice` so the void crops away instead of the ship shrinking into
+   * empty space; the ship spans y 106-246 of the 320-high viewBox, so any
+   * container down to 5:2 keeps all of it.
+   */
+  preserveAspectRatio?: string;
 }
 
 // Ids for gradients, filters, masks and clips, unique per mounted scene.
@@ -69,7 +78,7 @@ const STYLE = `
 .hs-root[data-mood=farewell] .hs-rest{opacity:1}
 }`;
 
-export function HelloScene({ mood, className }: HelloSceneProps) {
+export function HelloScene({ mood, className, preserveAspectRatio }: HelloSceneProps) {
   const ids = makeIds(useId().replace(/[^a-zA-Z0-9]/g, ''));
   const svgRef = useRef<SVGSVGElement>(null);
   useSceneAnimation(svgRef, mood);
@@ -78,6 +87,7 @@ export function HelloScene({ mood, className }: HelloSceneProps) {
     <svg
       ref={svgRef}
       viewBox="0 0 480 320"
+      preserveAspectRatio={preserveAspectRatio}
       width="100%"
       height="100%"
       aria-hidden="true"

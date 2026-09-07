@@ -264,6 +264,15 @@ The panel lives in Instance settings under "Say hi to Jannis", with the toggle,
 the last reported day, the last error if there is one, the masked id and the
 live preview. See [admin.md](admin.md).
 
+It also carries the ask's own artwork, banded above the switch so the picture
+and the control read as one object. The panel's three states are the scene's
+three moods: `happy` (beam lit) while reporting is on, `farewell` (the pilot's
+arm lowered) while it is off, and `idle` (still waving) before the first
+answer. Switching the hello off plays the beam back into the porthole rather
+than cutting it, which is a transition the modal never needed: it is answered
+once and closed, so before this the beam only ever arrived. Under
+`prefers-reduced-motion` the same change is a 200 ms cross-fade.
+
 ---
 
 ## 7. The ask
