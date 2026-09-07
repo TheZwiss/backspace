@@ -42,6 +42,10 @@
  *                series long enough to draw: it is the only mode whose
  *                compact card carries a plot, so it is the only one that
  *                exercises the compact size profile
+ *   release-edge as `long`, with the release dates chosen to pin the release
+ *                trend's own window edges: one dated exactly on the older
+ *                window's first day, one inside that window, and three inside
+ *                the recent one
  *
  * `--strip-telemetry` is a second pass, run after `cli-bundle.ts` rather than
  * before it. `buildDashboardData` always writes a `telemetry` key, so no set
@@ -68,7 +72,7 @@ import { createStore } from '../src/store.ts';
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 
 const MODES = new Set(['none', 'low', 'threshold', 'high', 'high-other', 'high-nodims', 'sparse',
-  'dimensions-only', 'long', 'no-releases']);
+  'dimensions-only', 'long', 'no-releases', 'release-edge']);
 
 const [, , outDirArg, mode = 'high'] = process.argv;
 if (outDirArg === undefined) {
@@ -106,7 +110,7 @@ cpSync(path.join(REPO_ROOT, 'site/insights'), path.join(site, 'insights'), { rec
 cpSync(path.join(REPO_ROOT, 'site/assets'), path.join(site, 'assets'), { recursive: true });
 
 const day = (i) => new Date(Date.UTC(2026, 7, 1 + i)).toISOString().slice(0, 10);
-const DAYS = mode === 'long' ? 90 : 40;
+const DAYS = (mode === 'long' || mode === 'release-edge') ? 90 : 40;
 const s = createStore(archive);
 
 // Traffic, so the bundle is not `empty` and the range control has an anchor.
@@ -167,6 +171,38 @@ if (mode !== 'dimensions-only') {
       { date: day(DAYS - 45), tag: 'v1.1.0', name: '1.1.0' },
       { date: day(DAYS - 10), tag: 'v1.1.2', name: '1.1.2' },
       { date: day(DAYS - 4), tag: 'v1.1.3', name: '1.1.3' },
+    ]);
+  } else if (mode === 'release-edge') {
+    /*
+     * The release trend's own window edges, which no other mode reaches.
+     *
+     * `releaseTrend` counts over two adjacent inclusive windows anchored on
+     * the archive's newest measured day E:
+     *   recent = [E - 29d, E]     prior = [E - 59d, E - 30d]
+     * with E = day(DAYS - 1) = day(89), so priorStart is day(30) exactly.
+     *
+     * The first row below sits ON that boundary. The rest are placed so that
+     * the resulting figure is +1 from three against two, and NOT the zero a
+     * one-against-one shape would give: zero is equally what a swapped
+     * window, an off-by-one at either edge and a double count all produce, so
+     * it would state a number that proves nothing. Three against two is
+     * produced by the correct arithmetic and by nothing else:
+     *
+     *   boundary dropped (priorStart read as exclusive)   3 against 1  -> +2
+     *   boundary counted in the recent window instead     4 against 1  -> +3
+     *   boundary counted in both windows                  4 against 2  -> +2
+     *   the two windows swapped                           2 against 3  -> -1
+     *
+     * `long` cannot carry this shape: it asserts the release lane's markers,
+     * its caption and its lead value, and a release moved onto a window edge
+     * there moves all of them.
+     */
+    s.writeCsv('releases.csv', ['date', 'tag', 'name'], [
+      { date: day(30), tag: 'v1.0.0', name: '1.0.0' },
+      { date: day(45), tag: 'v1.1.0', name: '1.1.0' },
+      { date: day(65), tag: 'v1.1.1', name: '1.1.1' },
+      { date: day(75), tag: 'v1.1.2', name: '1.1.2' },
+      { date: day(85), tag: 'v1.1.3', name: '1.1.3' },
     ]);
   } else if (mode !== 'no-releases') {
     s.writeCsv('releases.csv', ['date', 'tag', 'name'], [{ date: day(10), tag: 'v1.1.2', name: '1.1.2' }]);

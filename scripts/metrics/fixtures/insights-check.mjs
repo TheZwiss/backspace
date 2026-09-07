@@ -234,6 +234,16 @@ const OBSERVE = `(function () {
     if (value === null) return null;
     var chip = scope.querySelector(".stat-delta");
     return {
+      /* The element the figure is presented as, and where it points.
+       *
+       * Task 9's lead figures are links rather than divs, so that the three
+       * numbers at the top of the page are keyboard reachable and announced
+       * as the table of contents they are. Nothing else in this report can
+       * tell an anchor from a div: the label, value, sub and chip of a lead
+       * figure and of a div-shaped one are identical, so a step asserting
+       * the presentation was asserting something the walk never collected. */
+      tag: scope.tagName,
+      href: scope.getAttribute("href"),
       label: text(scope.querySelector(".stat-label")),
       value: text(value),
       unmeasured: value.classList.contains("is-unmeasured"),
@@ -288,6 +298,19 @@ const OBSERVE = `(function () {
   function cardOf(card) {
     var hints = [];
     card.querySelectorAll(".chart-hint").forEach(function (h) { hints.push(text(h)); });
+    /* The amber subset, separately.
+     *
+     * A caution carries .chart-hint too, so a note that lost its amber class
+     * and a note that never had one produce the same hints array: the page can
+     * silently downgrade "be careful reading this" to "here is some
+     * background" with nothing in the report changing. That happened three
+     * times while the four groups were built, once per group that routed an
+     * inherited caution through the shared note channel.
+     *
+     * No backtick anywhere in here: this comment lives inside the OBSERVE
+     * template literal. */
+    var cautions = [];
+    card.querySelectorAll(".chart-caution").forEach(function (h) { cautions.push(text(h)); });
     /* EVERY .chart-meta in the card, not only the first.
      *
      * A card can carry more than one: its own span line, and then a release
@@ -331,6 +354,7 @@ const OBSERVE = `(function () {
       statNotes: statNotes,
       links: links,
       hints: hints,
+      cautions: cautions,
       figure: figureOf(card),
       plot: plotOf(card),
       rows: []
@@ -416,7 +440,7 @@ const OBSERVE = `(function () {
     slot.querySelectorAll(".slot-note, .slot-note-detail").forEach(function (n) {
       if (n.closest(".chart-card") === null) entry.notes.push(text(n));
     });
-    slot.querySelectorAll(".stat, .lead-figure, .group-head").forEach(function (box) {
+    slot.querySelectorAll(".lead-figure, .group-head").forEach(function (box) {
       entry.figures.push(figureOf(box));
     });
     slot.querySelectorAll(".chart-card").forEach(function (card) {
