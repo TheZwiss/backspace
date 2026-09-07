@@ -1018,12 +1018,20 @@ async function main() {
    * once, so a divergence between them is invisible on the page by
    * construction and has to be caught here.
    *
-   * EVERY figure stated on both sides is listed below. An earlier version
-   * compared two of them and a comment beside it claimed there were only two,
-   * which is the same class of error as a check that measures nothing: the
-   * report looked complete while five duplicated figures went unread. Adding
-   * a figure to `buildSummary` that the page also draws means adding a row
-   * here.
+   * Every figure the paragraph states that the page also prints as a figure
+   * HEAD — a lead figure or a card head — is listed below, and the criterion
+   * is stated because an earlier version compared two of them under a comment
+   * claiming there were only two. That is the same class of error as a check
+   * that measures nothing: the report looked complete while five duplicated
+   * figures went unread. Adding a figure to `buildSummary` that the page also
+   * prints as a head means adding a row here.
+   *
+   * Three things the paragraph states are deliberately outside it, because
+   * the page prints no head for them and there is nothing to compare against:
+   * the busiest day for views, clones and CI (the matching cards show totals
+   * or, for CI activity, no figure at all), and the leading referrer and path
+   * (ranked rows, and both sides read the same array element rather than
+   * computing anything).
    *
    * Matched on the wording the paragraph uses, never on position: the
    * paragraph drops a clause whenever its measurement is missing, and every
