@@ -420,7 +420,7 @@ h2 {
 
 /* ================= Ranked dimensions ================= */
 /*
- * The ranked list is the section's primary reading AND the movement chart's
+ * The ranked list is the card's primary reading AND the movement chart's
  * legend: a row drawn in a palette colour is one of the handful that carries
  * a line below, in that same colour. The join between the two structures is
  * therefore visible on the page rather than merely asserted in code.
@@ -1444,12 +1444,12 @@ footer a:hover { color: var(--txt); }
    * `dimensions` through untouched — a referrer trajectory is a difference
    * between consecutive snapshots, and weekly bucketing would silently
    * redefine that into a different quantity with the same name — so the
-   * referrer and path sections keep their own daily snapshot dates whatever
+   * referrer and path cards keep their own daily snapshot dates whatever
    * this flag says. A note reading "every range is drawn in weekly buckets"
-   * over two sections measurably stepping by one day is the page asserting
+   * over two cards measurably stepping by one day is the page asserting
    * something about its own contents that is not true, which is the one thing
    * it exists not to do. So the claim is scoped to what it governs and the two
-   * dimensional sections state their resolution themselves, beside their own
+   * dimensional cards state their resolution themselves, beside their own
    * figures.
    *
    * The other statuses get their own line rather than a resolution claim: an
@@ -4304,13 +4304,14 @@ footer a:hover { color: var(--txt); }
  * ─────────────────────────────────────────────────────────────────────────
  * PER-CARD ERROR CONTAINMENT
  *
- * Today a throw in the referrers renderer fails only the referrers slot. With
- * one slot per group, the same throw would take out a whole group, which is a
- * regression in blast radius: five working cards would disappear because a
- * sixth could not be built. So every card is built through `buildCardSafely`,
- * which replaces that one card with the page's existing failure note and
- * continues. A throw in a group renderer OUTSIDE any card is still contained
- * to that group's slot by the shell, exactly as today.
+ * A throw in the referrers renderer used to fail only the referrers slot, back
+ * when it had a slot of its own. With one slot per group, the same throw would
+ * take out a whole group, which is a regression in blast radius: five working
+ * cards would disappear because a sixth could not be built. So every card is
+ * built through `buildCardSafely`, which replaces that one card with the
+ * page's existing failure note and continues. A throw in a group renderer
+ * OUTSIDE any card is still contained to that group's slot by the shell,
+ * exactly as it always was.
  * ─────────────────────────────────────────────────────────────────────────
  */
 (function () {
@@ -4722,7 +4723,7 @@ footer a:hover { color: var(--txt); }
  * and a parallel value array — and a trajectory IS that shape once
  * `snapshots` is named as its dates. The gap machinery, the complete axis and
  * the null-never-zero rule therefore stay in one place for the whole page
- * instead of being copied into a fourth section that could drift from it.
+ * instead of being copied into a fourth card builder that could drift from it.
  */
 (function () {
   "use strict";
@@ -5421,8 +5422,9 @@ footer a:hover { color: var(--txt); }
   /*
    * A span so long it cannot be real is a fault in the ARCHIVE, and this page
    * must not report it as one of its own. Letting `expand` throw would reach
-   * the shell's generic section-failure note — "the fault is in this page's
-   * code" — and send whoever reads it to the wrong repository entirely.
+   * the generic per-card failure note `G.buildCardSafely` renders — "the fault
+   * is in this page's code" — and send whoever reads it to the wrong
+   * repository entirely.
    */
   function overrunNote(axis) {
     var detail = "The snapshot dates would run from " + I.formatDay(axis.startMs) + " to " +
@@ -5431,7 +5433,7 @@ footer a:hover { color: var(--txt); }
       "date in the archive itself is wrong. No chart is drawn, rather than one built around a " +
       "date that cannot be true.";
     if (typeof console !== "undefined" && typeof console.error === "function") {
-      console.error("insights: a ranked section declined to plot. " + detail);
+      console.error("insights: a ranked card declined to plot. " + detail);
     }
     var note = el("p", "slot-note slot-note-error");
     note.appendChild(el("strong", null, "This chart cannot be drawn from this archive."));
@@ -5470,7 +5472,7 @@ footer a:hover { color: var(--txt); }
    * inside it.
    *
    * A chart drawn anyway would be an empty frame, and an empty frame is
-   * indistinguishable from a section that failed to render. So the section
+   * indistinguishable from a card that failed to render. So the card
    * says what the archive holds, what a trajectory needs, and when the next
    * one arrives — and states any reading it does have rather than withholding
    * it. The ranked figures above are unaffected and are said to be, because
@@ -5485,7 +5487,8 @@ footer a:hover { color: var(--txt); }
    * nothing by construction, and every line's single value lands on the same
    * day. uPlot given that draws each series as one dot in one column — the
    * measured archive rendered as a 7-pixel smear against the right edge of a
-   * 1034-pixel canvas, which reads as a broken chart rather than as a thin one.
+   * canvas many times wider, 487 pixels in the detail band at a full-width
+   * window, which reads as a broken chart rather than as a thin one.
    */
   function measuredPositions(axis, lines) {
     var seen = {};
