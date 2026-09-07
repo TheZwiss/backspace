@@ -183,7 +183,9 @@ function onEvent(method, params) {
  *
  * Every slot, not only the telemetry one: after the facelift there are five,
  * and a report that can only see one of them cannot tell whether a figure
- * moved or vanished.
+ * moved or vanished. The page head's lead sentence and the four provenance
+ * values come back too, so a task asserting either reads it out of the report
+ * rather than proving it out of band.
  *
  * The geometry is the part the eye cannot check. A compact plot and a hero
  * plot differ by their height and by the room reserved above the plot area,
@@ -236,12 +238,26 @@ const OBSERVE = `(function () {
   function cardOf(card) {
     var hints = [];
     card.querySelectorAll(".chart-hint").forEach(function (h) { hints.push(text(h)); });
+    /* EVERY .chart-meta in the card, not only the first.
+     *
+     * A card can carry more than one: its own span line, and then a release
+     * caption appended after it. querySelector returns the span line, so a
+     * report reading only that cannot see the caption at all, and a step
+     * asserting the caption would be asserting something this walk never
+     * collected. Proved by mutation during Task 2's review: changing the
+     * caption's "releases marked" literal left the report byte-identical.
+     *
+     * meta stays the first for every existing reader, and metas carries the
+     * whole list beside it. */
+    var metas = [];
+    card.querySelectorAll(".chart-meta").forEach(function (m) { metas.push(text(m)); });
     var entry = {
       title: text(card.querySelector(".chart-title")),
       titleTag: card.querySelector(".chart-title") === null
         ? null : card.querySelector(".chart-title").tagName,
       compact: card.classList.contains("is-compact"),
-      meta: text(card.querySelector(".chart-meta")),
+      meta: metas.length === 0 ? null : metas[0],
+      metas: metas,
       note: text(card.querySelector(".slot-note")),
       hints: hints,
       figure: figureOf(card),
@@ -266,7 +282,21 @@ const OBSERVE = `(function () {
     });
     return entry;
   }
-  var out = { slots: [], hint: null, nav: [], sections: [] };
+  var out = { slots: [], head: null, provenance: null, hint: null, nav: [], sections: [] };
+  /* The page's own headline claim, and the four provenance values under
+   * #method. Both are read here rather than proved out of band: Task 3 changed
+   * the lead sentence and had to establish it by grep, and read the provenance
+   * strip out of a throwaway DOM dump, so neither fact reached the report a
+   * reviewer actually reads. pv-since is the one of the four that moves with
+   * the archive rather than with the collector's clock. */
+  var head = document.querySelector(".page-head");
+  out.head = head === null ? null : { lead: text(head.querySelector(".lead")) };
+  out.provenance = {
+    since: text(document.getElementById("pv-since")),
+    generated: text(document.getElementById("pv-generated")),
+    lastRun: text(document.getElementById("pv-lastrun")),
+    lastSuccess: text(document.getElementById("pv-lastsuccess"))
+  };
   var hint = document.getElementById("chart-hint");
   out.hint = hint === null ? null : {
     text: text(hint),

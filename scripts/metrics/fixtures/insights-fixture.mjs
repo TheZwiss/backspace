@@ -33,6 +33,15 @@
  *   dimensions-only  no dated series at all, only a referrer and a path
  *                    snapshot, so the bundle is non-empty, collection_started
  *                    is null and the range control has nothing to anchor to
+ *   long         ninety days of traffic and four releases at different
+ *                distances, two of them inside the last thirty days and one
+ *                in the thirty before, so the thirty-against-thirty
+ *                comparisons have both windows inside the archive and state a
+ *                signed figure that only the right arithmetic produces
+ *   no-releases  as `high`, with no releases.csv at all, and a contributors
+ *                series long enough to draw: it is the only mode whose
+ *                compact card carries a plot, so it is the only one that
+ *                exercises the compact size profile
  *
  * `--strip-telemetry` is a second pass, run after `cli-bundle.ts` rather than
  * before it. `buildDashboardData` always writes a `telemetry` key, so no set
@@ -59,7 +68,7 @@ import { createStore } from '../src/store.ts';
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 
 const MODES = new Set(['none', 'low', 'threshold', 'high', 'high-other', 'high-nodims', 'sparse',
-  'dimensions-only']);
+  'dimensions-only', 'long', 'no-releases']);
 
 const [, , outDirArg, mode = 'high'] = process.argv;
 if (outDirArg === undefined) {
@@ -97,7 +106,7 @@ cpSync(path.join(REPO_ROOT, 'site/insights'), path.join(site, 'insights'), { rec
 cpSync(path.join(REPO_ROOT, 'site/assets'), path.join(site, 'assets'), { recursive: true });
 
 const day = (i) => new Date(Date.UTC(2026, 7, 1 + i)).toISOString().slice(0, 10);
-const DAYS = 40;
+const DAYS = mode === 'long' ? 90 : 40;
 const s = createStore(archive);
 
 // Traffic, so the bundle is not `empty` and the range control has an anchor.
@@ -115,7 +124,24 @@ if (mode !== 'dimensions-only') {
     Array.from({ length: DAYS }, (_, i) => ({ date: day(i), total: 60 + i })));
   s.writeCsv('forks.csv', ['date', 'total'],
     Array.from({ length: DAYS }, (_, i) => ({ date: day(i), total: 4 })));
-  s.writeCsv('contributors.csv', ['date', 'total'], [{ date: day(0), total: 2 }]);
+  /*
+   * One row everywhere except `no-releases`, because one row is what makes the
+   * one-point rule fire: a cumulative total read once has no direction and no
+   * rate, so the card states its reading instead of drawing a line. That is
+   * the live shape of this series and every asserted mode needs it.
+   *
+   * It also means the compact size profile is never drawn. `no-releases`
+   * therefore carries three rows instead, which is the smallest number that
+   * makes a line: no criterion for that mode mentions this card, so covering
+   * the compact profile there costs nothing, and leaving it uncovered would
+   * leave `PROFILES.compact` exercised by no committed state at all.
+   */
+  if (mode === 'no-releases') {
+    s.writeCsv('contributors.csv', ['date', 'total'],
+      [{ date: day(0), total: 2 }, { date: day(20), total: 3 }, { date: day(DAYS - 1), total: 4 }]);
+  } else {
+    s.writeCsv('contributors.csv', ['date', 'total'], [{ date: day(0), total: 2 }]);
+  }
   s.writeCsv('workflows.csv', ['date', 'runs'],
     Array.from({ length: DAYS }, (_, i) => ({ date: day(i), runs: 12 })));
   s.writeCsv('repo.csv',
@@ -124,7 +150,27 @@ if (mode !== 'dimensions-only') {
       date: day(i), subscribers: 9, open_issues: 3,
       downloads_total: 100 + i, downloads_app: 40 + i, downloads_updates: 60,
     })));
-  s.writeCsv('releases.csv', ['date', 'tag', 'name'], [{ date: day(10), tag: 'v1.1.2', name: '1.1.2' }]);
+  /*
+   * `long` writes four: TWO inside the last thirty days, one inside the thirty
+   * before them, and one before the archive begins.
+   *
+   * Two and one, not one and one. With one in each window the trend is zero,
+   * and zero is also what a swapped window, an off-by-one at either boundary
+   * and a double-counted release all produce, so the fixture would state a
+   * figure that proves nothing. Two against one gives +1, which only the
+   * correct arithmetic produces. The release before the archive begins is
+   * there so the caption has one to report as outside the drawn span.
+   */
+  if (mode === 'long') {
+    s.writeCsv('releases.csv', ['date', 'tag', 'name'], [
+      { date: new Date(Date.UTC(2026, 6, 1)).toISOString().slice(0, 10), tag: 'v1.0.0', name: '1.0.0' },
+      { date: day(DAYS - 45), tag: 'v1.1.0', name: '1.1.0' },
+      { date: day(DAYS - 10), tag: 'v1.1.2', name: '1.1.2' },
+      { date: day(DAYS - 4), tag: 'v1.1.3', name: '1.1.3' },
+    ]);
+  } else if (mode !== 'no-releases') {
+    s.writeCsv('releases.csv', ['date', 'tag', 'name'], [{ date: day(10), tag: 'v1.1.2', name: '1.1.2' }]);
+  }
 }
 s.writeNdjson('traffic/referrers.ndjson',
   [{ snapshot_date: day(DAYS - 1), dimension: 'github.com', title: '', count: 30, uniques: 12 }]);
