@@ -2865,11 +2865,11 @@ footer a:hover { color: var(--txt); }
  * measurements, and the uPlot lifecycle (create, resize, destroy). Sections
  * build their own DOM and their own captions; this file owns nothing visible.
  *
- * It exists rather than being inlined into the reach section because the
- * expansion below is the one piece of this page that is wrong by omission —
- * leave it out and the chart looks perfectly healthy while drawing a line
- * through days nobody measured. Duplicating it into the growth section would
- * be duplicating the thing most worth getting right once.
+ * It exists rather than being inlined into the group that first needed it
+ * because the expansion below is the one piece of this page that is wrong by
+ * omission: leave it out and the chart looks perfectly healthy while drawing
+ * a line through days nobody measured. Duplicating it into a second group
+ * would be duplicating the thing most worth getting right once.
  *
  * ─────────────────────────────────────────────────────────────────────────
  * THE DEFECT THIS FILE EXISTS TO PREVENT
@@ -3598,8 +3598,8 @@ footer a:hover { color: var(--txt); }
    * The y-scale policy for a cumulative counter, and the reason `mount` takes
    * one as an option at all.
    *
-   * `zeroBasedCounts` — right for the reach section's per-day event counts —
-   * would render a star count that moved 60 → 64 as a flat line pinned to the
+   * `zeroBasedCounts`, right for Reach's per-day event counts, would render a
+   * star count that moved 60 → 64 as a flat line pinned to the
    * top of an empty axis, hiding the only thing the chart is for. So this fits
    * the axis to the values and pads by an eighth of their span.
    *
@@ -4969,7 +4969,7 @@ footer a:hover { color: var(--txt); }
  *    reader is most likely to misread, and the captions name it in those words.
  *
  * 3. THE Y AXIS IS FITTED, AND SAYS SO. `zeroBasedCounts` is right for the
- *    per-day event counts in the reach section and wrong here: a count that
+ *    per-day event counts in Reach and wrong here: a count that
  *    moved 60 → 64 over a month would be a flat line at the top of an axis
  *    that is 94% empty. This section passes its own policy, and states in copy
  *    that the axis does not start at zero, because a fitted baseline is the
@@ -5914,8 +5914,8 @@ footer a:hover { color: var(--txt); }
    * The y-scale policy for a signed difference, and the reason `mount` takes
    * one as an option.
    *
-   * `zeroBasedCounts` — right for the reach section's per-day event counts —
-   * clamps its floor to zero, and a fall in a referrer's fortnight count is a
+   * `zeroBasedCounts`, right for Reach's per-day event counts, clamps its
+   * floor to zero, and a fall in a referrer's fortnight count is a
    * real, negative, measured quantity. Clipping it would drop the half of
    * this chart that says traffic went down.
    *
@@ -7020,9 +7020,10 @@ footer a:hover { color: var(--txt); }
   /*
    * One card. Returns the mounted plot, or null when the card had no measured
    * step inside the window, in which case the card states that instead, for
-   * the reason the reach section does the same: uPlot answers an empty frame
-   * with an invented 0..1 axis, and a chart that looks broken is worse than a
-   * sentence that is true.
+   * the reason every card built through `chartCard` does the same: uPlot
+   * answers an empty frame
+   * with an invented 0..1 axis, and a chart that looks broken is worse than
+   * a sentence that is true.
    */
   function buildCard(stack, card, axis) {
     var shell = cardHost(stack, card.title, chartMeta(axis));
@@ -7383,7 +7384,7 @@ footer a:hover { color: var(--txt); }
   }
 
   /*
-   * The CI card's standing note, verbatim from the reach section it comes
+   * The CI card's standing note, verbatim from the reach section it came
    * from, with the sentence about sitting below the clone chart replaced by
    * one that names where the clone chart now is. The two are in different
    * groups and the page-wide cursor is what joins them, which never depended

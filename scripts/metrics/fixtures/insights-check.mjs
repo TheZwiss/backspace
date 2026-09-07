@@ -435,6 +435,57 @@ const METHOD_COVERAGE = `(function () {
   return slot === null ? null : slot.textContent.replace(/\\s+/g, " ").trim();
 })()`;
 
+/*
+ * What every chart card on the page says it actually drew, read once per range
+ * button.
+ *
+ * This column used to read the first `.chart-window` line on the page. That
+ * reading is being deleted out from under it: spec section 7.3 removes the
+ * window line from every group, so after Task 6 the selector silently stopped
+ * matching Reach and started matching Growth, and Task 7 takes Growth with it.
+ * A column pointed at markup the plan is removing prints an ever more
+ * misleading value and then an empty one, under a heading that reads like a
+ * result. That is the failure this script exists to rule out.
+ *
+ * A card's own span line is the replacement, and it is the reading the page is
+ * moving TOWARDS rather than away from: every card built through `chartCard`
+ * emits a `.chart-meta` whose first pair is `span <first> -> <last>`, or
+ * `window <from> -> <to>` on the one branch where the card drew nothing and
+ * has no span of its own to state. Both are collected, under the key the page
+ * used, so the difference between "this is what I drew" and "I drew nothing
+ * across this window" stays visible.
+ *
+ * It moves with the range, which is the one property this column exists for,
+ * and it is keyed by slot id and card title, so it can never be read as
+ * belonging to a group it does not belong to the way the old single reading
+ * was. It goes empty only when the page draws no chart card at all, which is
+ * `dimensions-only` and is legitimate, and the report says so in words rather
+ * than printing a blank.
+ */
+const CARD_SPANS = `(function () {
+  function text(node) {
+    return node === null ? "" : node.textContent.replace(/\\s+/g, " ").trim();
+  }
+  var out = [];
+  document.querySelectorAll(".slot .chart-card").forEach(function (card) {
+    var meta = card.querySelector(".chart-meta");
+    if (meta === null) return;
+    var stated = null;
+    meta.querySelectorAll(":scope > span").forEach(function (pair) {
+      if (stated !== null) return;
+      var key = text(pair.querySelector(".k"));
+      if (key === "span" || key === "window") {
+        stated = key + " " + text(pair.querySelector(".v"));
+      }
+    });
+    if (stated === null) return;
+    var slot = card.closest(".slot");
+    out.push((slot === null ? "?" : slot.id) + " / " +
+      text(card.querySelector(".chart-title")) + ": " + stated);
+  });
+  return out;
+})()`;
+
 /* A cheap stable digest of every chart canvas on the page, keyed by a path to
  * its card. Used to see whether a drag on one chart redrew the others. */
 const CANVAS_HASHES = `(function () {
@@ -648,9 +699,7 @@ async function main() {
       ranges.push({
         label,
         outcome,
-        window: await evaluate('(function () {'
-          + ' var w = document.querySelector(".slot .chart-window");'
-          + ' return w === null ? null : w.textContent.replace(/\\s+/g, " ").trim(); })()'),
+        spans: await evaluate(CARD_SPANS),
         rankings: await evaluate(RANKING_DIGEST),
         coverage: await evaluate(METHOD_COVERAGE),
       });
@@ -717,8 +766,13 @@ async function main() {
     const verdict = noRankings
       ? 'NO RANKING ROWS TO COMPARE'
       : `rankings ${JSON.stringify(r.rankings) === JSON.stringify(first) ? 'identical to the first range' : 'CHANGED'}`;
-    console.log(`  ${r.label} (${r.outcome}): ${verdict}; ${r.window === null ? '(no chart-window)' : r.window}`);
+    console.log(`  ${r.label} (${r.outcome}): ${verdict}`);
     console.log(`    method coverage: ${r.coverage === null ? '(no method-coverage slot)' : r.coverage}`);
+    if (r.spans.length === 0) {
+      console.log('    card spans: NO CHART CARD ON THE PAGE STATED A SPAN, so this range'
+        + ' changed nothing this column can see');
+    }
+    for (const span of r.spans) console.log(`    card span: ${span}`);
   }
   if (ranges.length > 0 && noRankings) {
     console.log('  NO RANKING ROWS FOUND ANYWHERE ON THE PAGE: the verdicts above compared nothing.');
