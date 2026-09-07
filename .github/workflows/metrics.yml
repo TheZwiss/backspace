@@ -160,6 +160,13 @@ jobs:
           # Keeping the scope here rather than on METRICS_TOKEN leaves the
           # long-lived PAT no wider than the endpoints that force one.
           METRICS_ACTIONS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Optional. Unset until the receiver is live; the step logs a skip.
+          TELEMETRY_EXPORT_TOKEN: ${{ secrets.TELEMETRY_EXPORT_TOKEN }}
+          # Optional repository VARIABLE, not a secret: it is a hostname, it is
+          # already in the docs, and a secret here would be a secret nobody
+          # could read back to check. Unset, `vars` interpolates the empty
+          # string and the collector falls back to the default receiver.
+          TELEMETRY_ENDPOINT: ${{ vars.TELEMETRY_ENDPOINT }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           METRICS_DATA_DIR: ${{ github.workspace }}/.metrics-data
         run: node scripts/metrics/src/cli-collect.ts

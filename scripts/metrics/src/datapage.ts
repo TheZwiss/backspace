@@ -110,6 +110,105 @@ function dimensionTable(rows: readonly DimensionEntry[], first: string): string 
   );
 }
 
+/**
+ * A telemetry dimension as two columns: the value and how many of something
+ * reported it.
+ *
+ * Not `dimensionTable`, and the difference is about honesty rather than
+ * layout. That table's numeric columns are headed "views" and "unique
+ * visitors", which is what GitHub reports for a referrer and is not what
+ * these rows hold: a version's figure is a count of instances, a client
+ * kind's is a count of people. Its `title` column would also be empty in
+ * every row, since a ping carries no title, and its `uniques` column would
+ * repeat `count` verbatim. Three columns of noise around one real figure is
+ * how a reader ends up citing the wrong number.
+ */
+function telemetryDimensionTable(
+  rows: readonly DimensionEntry[],
+  first: string,
+  countLabel: string,
+): string {
+  return table(
+    [
+      { label: first, numeric: false },
+      { label: countLabel, numeric: true },
+    ],
+    rows.map(
+      (r) =>
+        `<tr><td>${escapeHtml(r.dimension)}</td>` +
+        `<td class="n">${r.count.toLocaleString('en-US')}</td></tr>`,
+    ),
+  );
+}
+
+/**
+ * The telemetry section, or the empty string when no instance has reported.
+ *
+ * Rendered from the first archived ping, well before the charts are: the
+ * dashboard withholds its telemetry charts until ten instances have reported
+ * in seven days, because a line drawn through three points reads as a trend
+ * it is not, but a table of three rows is just three rows and states its own
+ * size. Suppressing the figures until then would be withholding the data
+ * rather than declining to draw it.
+ *
+ * Returning the empty string rather than a "nothing yet" placeholder is the
+ * point of the guard: an archive with no telemetry at all is the normal state
+ * today, and a heading over four empty tables would read as a broken
+ * collector rather than as a feature nobody has switched on.
+ */
+function telemetrySection(telemetry: DashboardData['telemetry']): string {
+  if (telemetry.network.dates.length === 0) return '';
+  return `
+<h2>Usage pings</h2>
+<p>These pings are opt-in. A self-hosted instance can choose to send one small ping a day; most
+instances do not, and an instance that never opts in is invisible here, so every figure in this
+section is a <strong>lower bound</strong> on the real network rather than a total. Counts are
+rounded to two significant digits on the instance and again on arrival, so they are the right size
+but not exact. An instance is counted only once it has reported on two separate days within the
+last thirty, which keeps a single curious request to the endpoint out of the totals. A version,
+country or client kind held by fewer than three instances is folded into <code>other</code> before
+anything is written here, so no row can point at one instance. A ping carries no domain, no
+instance or account name, no message content, no file names and no IP address.</p>
+<p>Each row describes the fleet on its date, built from the most recent ping per instance in the
+seven days ending on that date, so a quiet instance keeps its last reported figures for up to a
+week. Three columns sit outside that window: <em>instances reporting today</em> and <em>active
+today</em> count only what reported that day rather than over the week, and <em>within 30 days</em>
+counts every instance seen in the thirty days ending on that date. An instance whose ping was late
+is absent from the first two and present in the rest; one silent for longer than a week, but seen
+inside the last thirty, is absent from all of them except <em>within 30 days</em>. Every column is
+a reading taken on that date, not a daily total: rows are comparable to each other but must not be
+added together.</p>
+${seriesTable(telemetry.network.dates, [
+  { label: 'instances reporting today', values: telemetry.network.instances_1d },
+  { label: 'within 7 days', values: telemetry.network.instances_7d },
+  { label: 'within 30 days', values: telemetry.network.instances_30d },
+  { label: 'registered users', values: telemetry.network.users_registered },
+  { label: 'active today', values: telemetry.network.users_active1d },
+  { label: 'active 7 days', values: telemetry.network.users_active7d },
+  { label: 'active 30 days', values: telemetry.network.users_active30d },
+  { label: 'messages last 7 days', values: telemetry.network.messages7d },
+  { label: 'storage MiB', values: telemetry.network.storage_mib },
+  { label: 'instances with voice', values: telemetry.network.voice_instances },
+  { label: 'instances federating', values: telemetry.network.federation_instances },
+])}
+
+<h3>Server versions</h3>
+<p>How many reporting instances run each release, at the latest snapshot.</p>
+${telemetryDimensionTable(telemetry.versions.latest, 'version', 'instances')}
+
+<h3>Countries</h3>
+<p>Where reporting instances are hosted, as a two-letter country code the receiver derives from the
+connecting address. The address itself is neither stored nor published; a code it cannot resolve is
+recorded as <code>ZZ</code>.</p>
+${telemetryDimensionTable(telemetry.countries.latest, 'country', 'instances')}
+
+<h3>Client kinds</h3>
+<p>How people reach their instance. This one counts users rather than instances: the fold threshold
+still protects the instance, so a kind is published only when at least three instances report it.</p>
+${telemetryDimensionTable(telemetry.clients.latest, 'client', 'users')}
+`;
+}
+
 function releaseTable(rows: readonly ReleaseEntry[]): string {
   return table(
     [
@@ -135,6 +234,7 @@ body { margin:0; padding:40px 24px 72px; background:var(--bg); color:var(--txt);
 main { max-width:1080px; margin:0 auto; }
 h1 { font-size:30px; letter-spacing:-.02em; margin:0 0 12px; }
 h2 { font-size:20px; letter-spacing:-.01em; margin:44px 0 6px; }
+h3 { font-size:16px; letter-spacing:-.01em; margin:30px 0 6px; color:var(--txt2); }
 p { color:var(--txt2); max-width:70ch; }
 a { color:var(--accent); }
 code, .d, .n, .na { font-family:var(--mono); font-size:13px; }
@@ -169,9 +269,17 @@ export function renderDataPage(data: DashboardData, options: DataPageOptions = {
       ? 'nothing recorded yet'
       : `${data.collection_started} to ${data.generated_at.slice(0, 10)}`;
 
+  // Gated on the archive itself, exactly as `telemetrySection` is: the page
+  // must not declare a variable it holds no measurement of, and the two must
+  // never disagree about whether this page carries usage pings.
+  const hasTelemetry = data.telemetry.network.dates.length > 0;
+
   // schema.org Dataset. This is what makes the archive discoverable as data
   // rather than as prose: it names the machine-readable distribution
   // explicitly, so a crawler does not have to guess that data.json exists.
+  // Its description, measurement technique and telemetry variables are kept
+  // word for word in step with the block `summary.ts` builds for the charted
+  // page; a crawler that reads both must not get two answers.
   const dataset = {
     '@context': 'https://schema.org',
     '@type': 'Dataset',
@@ -181,7 +289,12 @@ export function renderDataPage(data: DashboardData, options: DataPageOptions = {
       'contributors and releases. GitHub discards repository traffic data after 14 days; ' +
       'this archive records it once per day and retains it indefinitely. Every figure is ' +
       'measured, never estimated; a value that was not measured is recorded as absent ' +
-      'rather than as zero.',
+      'rather than as zero.' +
+      (hasTelemetry
+        ? ' It also carries opt-in usage pings from self-hosted Backspace instances: rounded ' +
+          'counts of instances, active users, versions, countries and client kinds, published ' +
+          'as a lower bound because an instance that never opts in is not counted.'
+        : ''),
     url: `${insights}data/`,
     license: 'https://www.gnu.org/licenses/agpl-3.0.html',
     isAccessibleForFree: true,
@@ -189,7 +302,13 @@ export function renderDataPage(data: DashboardData, options: DataPageOptions = {
     temporalCoverage: data.collection_started === null ? undefined : `${data.collection_started}/..`,
     dateModified: data.generated_at,
     measurementTechnique:
-      'GitHub REST API, collected once daily by a scheduled job and committed to a public git branch',
+      'GitHub REST API, collected once daily by a scheduled job and committed to a public ' +
+      'git branch' +
+      (hasTelemetry
+        ? '. The usage figures come from a daily ping sent by each self-hosted instance whose ' +
+          'operator opted in, received by a public endpoint and archived on the same branch; ' +
+          'they cover only those instances.'
+        : ''),
     variableMeasured: [
       'page views',
       'unique visitors',
@@ -204,6 +323,15 @@ export function renderDataPage(data: DashboardData, options: DataPageOptions = {
       'release asset downloads',
       'referring sites',
       'popular paths',
+      ...(hasTelemetry
+        ? [
+            'reporting instances',
+            'active users on reporting instances',
+            'server versions in use',
+            'countries instances report from',
+            'client kinds in use',
+          ]
+        : []),
     ],
     distribution: [
       {
@@ -221,7 +349,7 @@ export function renderDataPage(data: DashboardData, options: DataPageOptions = {
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Backspace repository data: every recorded figure</title>
-<meta name="description" content="The complete Backspace repository traffic and growth archive as plain tables: daily page views, clones, stars, forks, contributors, referrers and paths. Measured daily, never estimated, retained past GitHub's 14-day window." />
+<meta name="description" content="The complete Backspace repository traffic and growth archive as plain tables: daily page views, clones, stars, forks, contributors, referrers and paths${hasTelemetry ? ', plus opt-in usage pings from self-hosted instances' : ''}. Measured daily, never estimated, retained past GitHub's 14-day window." />
 <link rel="canonical" href="${escapeHtml(`${insights}data/`)}" />
 <style>${STYLE}</style>
 <script type="application/ld+json">
@@ -296,7 +424,7 @@ ${dimensionTable(data.dimensions.referrers.latest, 'referring site')}
 <h2>Popular paths</h2>
 <p>The most-visited paths in the repository, on the same trailing 14-day basis.</p>
 ${dimensionTable(data.dimensions.paths.latest, 'path')}
-
+${telemetrySection(data.telemetry)}
 <h2>Releases</h2>
 ${releaseTable(data.releases)}
 

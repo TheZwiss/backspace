@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { InstanceStreamingLimits, InstanceAdminSettings } from '@backspace/shared';
+import type { InstanceStreamingLimits, InstanceAdminSettings, TelemetryPayload, TelemetryStatus } from '@backspace/shared';
 import { api } from '../api/client';
 
 interface SettingsState {
@@ -7,11 +7,16 @@ interface SettingsState {
   instanceSettings: InstanceAdminSettings | null;
   isAdmin: boolean;
   gifEnabled: boolean;
+  telemetry: TelemetryStatus | null;
+  telemetryPreview: TelemetryPayload | null;
   fetchStreamingLimits: () => Promise<void>;
   updateStreamingLimits: (limits: Partial<InstanceStreamingLimits>) => Promise<void>;
   fetchInstanceSettings: () => Promise<void>;
   updateInstanceSettings: (data: Partial<InstanceAdminSettings>) => Promise<void>;
   fetchGifEnabled: () => Promise<void>;
+  fetchTelemetry: () => Promise<void>;
+  fetchTelemetryPreview: () => Promise<void>;
+  setTelemetryEnabled: (enabled: boolean) => Promise<void>;
   setIsAdmin: (isAdmin: boolean) => void;
 }
 
@@ -37,6 +42,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   instanceSettings: null,
   isAdmin: false,
   gifEnabled: false,
+  telemetry: null,
+  telemetryPreview: null,
 
   fetchStreamingLimits: async () => {
     try {
@@ -82,6 +89,23 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     } catch {
       set({ gifEnabled: false });
     }
+  },
+
+  // Telemetry errors propagate to the caller, which shows them. The store does
+  // not swallow them, the same as updateInstanceSettings.
+  fetchTelemetry: async () => {
+    const telemetry = await api.admin.telemetry.get();
+    set({ telemetry });
+  },
+
+  fetchTelemetryPreview: async () => {
+    const telemetryPreview = await api.admin.telemetry.preview();
+    set({ telemetryPreview });
+  },
+
+  setTelemetryEnabled: async (enabled: boolean) => {
+    const telemetry = await api.admin.telemetry.set(enabled);
+    set({ telemetry });
   },
 
   setIsAdmin: (isAdmin: boolean) => set({ isAdmin }),

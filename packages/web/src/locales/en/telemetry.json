@@ -1,0 +1,46 @@
+{
+  "ask": {
+    "title": "Hi. It's Jannis. I built this.",
+    "p1": "Backspace tracks nobody, and that includes me. No numbers, no dashboards, nothing. I can see the download counter, and then it goes quiet. Building this feels like shouting into space and never hearing anything back.",
+    "p2": "So this is me asking. Once a day, would your instance send me a tiny hello? Not who you are, not what anyone said. Just rounded counts: how many people are here, which version runs, whether voice and federation are on, and which country the hello came from. No names, no messages, no address of any kind.",
+    "previewLead": "Here is exactly what it would say today:",
+    "previewToggleShow": "Show the message",
+    "previewToggleHide": "Hide the message",
+    "previewLoading": "Putting the message together",
+    "previewError": "The message could not be put together just now. Nothing has been sent, and you can still decide either way.",
+    "p3": "Everything that comes back is published as open data on the project's insights page, and charts appear once at least ten instances say hi. It stays off until you say yes, and you can turn it off again whenever you like.",
+    "yes": "Say hi",
+    "no": "No thanks",
+    "later": "Decide later",
+    "footnote": "The receiver runs on Cloudflare, which sees the request like any web host and derives the country from it. Nothing else about you is stored. You can change this any time under Instance settings.",
+    "saving": "Saving your choice",
+    "error": "Your choice could not be saved. Nothing was sent. Please try again."
+  },
+  "yes": {
+    "title": "Signal acquired.",
+    "body": "The first hello goes out tomorrow at a random minute, and every day after. Thank you. It is a lot less quiet out here now.",
+    "close": "Close"
+  },
+  "no": {
+    "title": "Understood.",
+    "body": "Nothing will be sent. I'll drift on, and if you ever change your mind, I'm one toggle away in Instance settings.",
+    "close": "Close"
+  },
+  "panel": {
+    "title": "Say hi to Jannis",
+    "intro": "An optional daily usage report to the maintainer: rounded counts and the version, nothing about people. Off until you switch it on.",
+    "toggle": "Send a daily hello",
+    "status": {
+      "never": "Never asked",
+      "off": "Off",
+      "on": "On",
+      "lastDay": "Last hello sent on {{date}}",
+      "none": "No hello sent yet",
+      "error": "The last attempt on {{date}} failed with status {{status}}. It will try again tomorrow.",
+      "id": "Instance id (random, not your domain): {{id}}"
+    },
+    "previewTitle": "What would be sent today",
+    "learnMore": "What is sent and why",
+    "refreshPreview": "Refresh"
+  }
+}

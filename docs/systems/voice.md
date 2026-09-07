@@ -282,7 +282,13 @@ ScreenShareConfig {
 
 ### System Audio Loopback (`shareAudio`)
 
-The "Share system audio" toggle in `ScreenSharePicker` adds an audio track to the screen-share publication. In the browser it maps to `getDisplayMedia({ audio: true })`. In Electron, the `setDisplayMediaRequestHandler` callback (`packages/desktop/src/main.ts`) returns `audio: 'loopback'` to opt into Chromium's system-audio loopback path.
+The "Share system audio" toggle in `ScreenSharePicker` adds an audio track to the screen-share publication. `startScreenShare` passes audio constraints including `restrictOwnAudio: true` through LiveKit to `getDisplayMedia`, or `audio: false` when disabled. In Electron, the `setDisplayMediaRequestHandler` callback (`packages/desktop/src/main.ts`) returns `audio: 'loopback'` to opt into Chromium's system-audio loopback path.
+
+Electron 43.4+ honors `restrictOwnAudio` in this custom-handler path and selects loopback excluding the app's own playback on macOS and Windows. Linux keeps its existing loopback path; this Electron fix does not add own-audio exclusion there. Older Electron versions ignored the constraint ([electron/electron#52427](https://github.com/electron/electron/issues/52427), fixed by [#52455](https://github.com/electron/electron/pull/52455), with the 43.4.0 backport in [#52533](https://github.com/electron/electron/pull/52533)). The existing stereo capture and disabled voice processing remain unchanged; both display and window selections use the same request.
+
+Own-audio exclusion applies to all audio played by Backspace, including remote voices, notification sounds, and in-app YouTube, Vimeo, or Spotify embeds. On macOS and Windows, viewers no longer hear those embeds through a system-audio share, unlike in Backspace 1.1.2; play the media in a separate application when its audio needs to be shared.
+
+**External audio routing.** A third-party audio router can replay call audio through a different process, outside Backspace's own-audio exclusion. If viewers still hear themselves, check this route as well as the capture settings. On macOS with SoundSource, add Backspace to **Settings → Audio → Excluded Applications** to bypass SoundSource processing of Backspace; see the [SoundSource manual](https://rogueamoeba.com/support/manuals/soundsource/?page=settings). Own-audio exclusion does not guarantee removal of copies replayed by external audio routers.
 
 | Platform | Mechanism | Notes |
 |----------|-----------|-------|
@@ -349,7 +355,7 @@ When neither native API is available the effect returns without throwing; the `v
 **Screen share audio (when enabled):**
 ```typescript
 {
-  restrictOwnAudio: true,    // Chrome 141+: exclude own tab audio
+  restrictOwnAudio: true,    // Own-playback exclusion where supported; Electron 43.4+
   echoCancellation: false,
   noiseSuppression: false,
   autoGainControl: false,
@@ -360,6 +366,18 @@ When neither native API is available the effect returns without throwing; the `v
 **Persistence:** `voiceStore` with Zustand localStorage. Keys: `echoCancellation`, `autoGainControl`, `rnnoiseEnabled`, `screenShareConfig`.
 
 **Camera preset:** 1280x720, 2Mbps, 30fps, H.264
+
+### Capture lifecycle on leave — `AudioManager.releaseInputStream()`
+
+The published mic track is a *clone* of `AudioManager`'s `MediaStreamAudioDestinationNode` output, so `Room.disconnect()` stops that clone but never the upstream `getUserMedia` capture (`AudioManager.currentStream`) that feeds the Web Audio graph. Without an explicit release, the browser tab and OS keep the microphone flagged in-use after the user leaves the call.
+
+`AudioManager.releaseInputStream()` closes that gap: it disconnects `inputSource`, detaches each capture track's `onended` handler and `.stop()`s it, nulls `currentStream`, resets `currentInputDeviceId` to `'default'`, and bumps `streamGeneration` so the next join re-acquires instead of short-circuiting. The `AudioContext` and master bus are left intact so sound effects keep working.
+
+`useLiveKit` calls it on explicit leave, a terminal `RoomEvent.Disconnected` from the current room (including an unspecified reason), a failed connection, and hook unmount. Leave and unmount release even before a room exists, covering the pre-arm/token-fetch interval. Explicit leave releases **before** awaiting SDK teardown, and late teardown cannot clear a newer connection's state.
+
+Channel switches detach the old room reference before calling `room.disconnect()` and deliberately **keep capture warm** for the immediate rejoin. Old room events are ignored; releasing there would defeat the `joinVoiceChannel` mic pre-arm and risk the iOS gesture-window hang. Temporary reconnecting events do not release capture.
+
+A separate input-release generation invalidates acquisitions queued or in flight before leave. Queued jobs are skipped; a late `getUserMedia` result is stopped immediately rather than attached to the graph. A stale denial is not cached for the next call. The browser permission prompt itself cannot be cancelled. New requests after release remain valid and reuse the existing serialized acquisition chain. The mic synchronization effect checks room identity and cleanup after awaits so an abandoned effect cannot reacquire or republish after leaving.
 
 ---
 

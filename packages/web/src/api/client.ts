@@ -75,6 +75,8 @@ import type {
   AttachProofResponse,
   ReattachRequest,
   ReattachResponse,
+  TelemetryPayload,
+  TelemetryStatus,
 } from '@backspace/shared';
 import { getApiForOrigin, getOwnerInstanceForDm } from '../utils/crossStoreResolvers';
 
@@ -367,6 +369,11 @@ export class BackspaceApiClient {
     resetUserPassword: (userId: string) => Promise<AdminResetPasswordResponse>;
     deleteUser: (userId: string) => Promise<{ success: boolean }>;
     updateStatus: (refresh?: boolean) => Promise<InstanceUpdateStatus>;
+    telemetry: {
+      get: () => Promise<TelemetryStatus>;
+      set: (enabled: boolean) => Promise<TelemetryStatus>;
+      preview: () => Promise<TelemetryPayload>;
+    };
   };
 
   constructor(baseUrl: string, getToken: () => string | null, onUnauthorized?: () => void) {
@@ -865,6 +872,11 @@ export class BackspaceApiClient {
           'GET',
           `/admin/instance/update-status${refresh ? '?refresh=true' : ''}`,
         ),
+      telemetry: {
+        get: () => request<TelemetryStatus>('GET', '/admin/telemetry'),
+        set: (enabled) => request<TelemetryStatus>('PUT', '/admin/telemetry', { enabled }),
+        preview: () => request<TelemetryPayload>('GET', '/admin/telemetry/preview'),
+      },
     };
   }
 }

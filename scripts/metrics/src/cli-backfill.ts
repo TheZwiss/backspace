@@ -1,12 +1,15 @@
 import { createClient } from './github.ts';
 import { createStore } from './store.ts';
 import { backfill } from './backfill.ts';
+import { createTelemetryFetcher } from './telemetry.ts';
 import {
   requiredEnv,
   assertHeaderSafeToken,
   deriveRunTimestamps,
   formatBackfillSummary,
   describeFailure,
+  telemetryEndpoint,
+  telemetrySkipNotice,
 } from './cli-support.ts';
 
 /**
@@ -32,6 +35,15 @@ async function main(): Promise<void> {
   const slug = requiredEnv(process.env, 'GITHUB_REPOSITORY');
   const dataDir = requiredEnv(process.env, 'METRICS_DATA_DIR');
 
+  // Optional, exactly as in `cli-collect.ts`: without it the reconstruction
+  // covers everything except the telemetry series, and says so in the log.
+  const telemetryToken = (process.env['TELEMETRY_EXPORT_TOKEN'] ?? '').trim();
+  if (telemetryToken !== '') assertHeaderSafeToken(telemetryToken);
+  const notice = telemetrySkipNotice(process.env);
+  // stderr, not stdout, for the reason given in `cli-collect.ts`.
+  if (notice !== null) console.warn(notice);
+  const endpoint = telemetryEndpoint(process.env);
+
   const { today } = deriveRunTimestamps(new Date());
 
   const result = await backfill({
@@ -39,6 +51,10 @@ async function main(): Promise<void> {
     store: createStore(dataDir),
     slug,
     today,
+    telemetry:
+      telemetryToken === ''
+        ? undefined
+        : createTelemetryFetcher(globalThis.fetch, endpoint, telemetryToken),
   });
 
   console.log(formatBackfillSummary(result));

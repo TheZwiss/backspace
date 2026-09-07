@@ -32,8 +32,69 @@ function data(overrides: Partial<DashboardData> = {}): DashboardData {
       referrers: { snapshots: [], latest: [], trajectories: [] },
       paths: { snapshots: [], latest: [], trajectories: [] },
     },
+    // The live archive's state: no instance has reported yet, so the section
+    // must not render at all rather than render as a wall of empty tables.
+    telemetry: {
+      network: {
+        dates: [],
+        instances_1d: [],
+        instances_7d: [],
+        instances_30d: [],
+        users_registered: [],
+        users_active1d: [],
+        users_active7d: [],
+        users_active30d: [],
+        messages7d: [],
+        storage_mib: [],
+        voice_instances: [],
+        federation_instances: [],
+      },
+      versions: { snapshots: [], latest: [], trajectories: [] },
+      countries: { snapshots: [], latest: [], trajectories: [] },
+      clients: { snapshots: [], latest: [], trajectories: [] },
+      instances7d: null,
+    },
     ...overrides,
   };
+}
+
+/** A telemetry block with one measured day, for the rendered-section cases. */
+function withTelemetry(): DashboardData {
+  return data({
+    telemetry: {
+      network: {
+        dates: ['2026-09-05'],
+        instances_1d: [7],
+        instances_7d: [12],
+        instances_30d: [14],
+        users_registered: [230],
+        users_active1d: [31],
+        users_active7d: [88],
+        users_active30d: [140],
+        messages7d: [4200],
+        storage_mib: [3100],
+        voice_instances: [5],
+        // A measured zero, which must print as a zero and not as a gap.
+        federation_instances: [0],
+      },
+      versions: {
+        snapshots: ['2026-09-05'],
+        latest: [{ dimension: '1.1.2', title: '', count: 9, uniques: 9 }],
+        trajectories: [],
+      },
+      countries: {
+        snapshots: ['2026-09-05'],
+        latest: [{ dimension: 'DE', title: '', count: 6, uniques: 6 }],
+        trajectories: [],
+      },
+      clients: {
+        snapshots: ['2026-09-05'],
+        latest: [{ dimension: 'desktop', title: '', count: 8, uniques: 8 }],
+        trajectories: [],
+      },
+      instances7d: 12,
+    },
+  });
 }
 
 describe('escapeHtml', () => {
@@ -157,5 +218,104 @@ describe('renderDataPage', () => {
 
   it('says so plainly rather than printing an empty table for a series with no rows', () => {
     expect(renderDataPage(data())).toContain('No rows recorded yet.');
+  });
+
+  // The tables are public from the first ping, whatever the charts do: the
+  // chart threshold exists so a handful of instances are not drawn as a
+  // trend, not to keep the figures private.
+  it('publishes the telemetry tables, qualified as opt-in and as a lower bound', () => {
+    const html = renderDataPage(withTelemetry());
+
+    expect(html).toContain('Usage pings');
+    expect(html).toContain('opt-in');
+    expect(html).toContain('lower bound');
+    expect(html).toContain('two significant digits');
+    const section = html.slice(html.indexOf('<h2>Usage pings</h2>'));
+    expect(section).toContain('instances reporting today');
+    expect(section).toContain('registered users');
+    expect(section).toContain('2026-09-05');
+    expect(section).toContain('230');
+    expect(section).toContain('1.1.2');
+    expect(section).toContain('DE');
+    expect(section).toContain('desktop');
+    // A measured zero of federating instances, never rendered as a gap.
+    expect(section.slice(0, section.indexOf('</table>'))).not.toContain('not measured');
+  });
+
+  it('does not claim the seven-day basis for the columns that do not have one', () => {
+    const html = renderDataPage(withTelemetry());
+    // The prose is wrapped in the source, so compare it with breaks flattened.
+    const flat = html.replace(/\s+/g, ' ');
+
+    // The snapshot rule governs most of the row, but three columns sit outside
+    // it: `instances_1d` and `users_active1d` are restricted to the date
+    // itself, and `instances_30d` reaches back thirty days. A blanket claim
+    // would have the page describe three of its own columns wrongly.
+    expect(flat).toContain('reported that day rather than over the week');
+    expect(flat).toContain('<em>instances reporting today</em>');
+    expect(flat).toContain('<em>active today</em>');
+    expect(flat).toContain('<em>within 30 days</em>');
+    // Tied to the headers the table actually renders, so renaming a column
+    // cannot leave the prose naming a column that no longer exists.
+    expect(flat).toContain('<th class="n">instances reporting today</th>');
+    expect(flat).toContain('<th class="n">active today</th>');
+    expect(flat).toContain('<th class="n">within 30 days</th>');
+  });
+
+  it('renders a measured zero in a telemetry ranking as 0', () => {
+    const withZero = withTelemetry();
+    withZero.telemetry.clients.latest = [
+      { dimension: 'mobile', title: '', count: 0, uniques: 0 },
+    ];
+
+    const html = renderDataPage(withZero);
+    // Scoped to the one table under test. Page-wide the assertions would be
+    // meaningless: another series carries a real `0` cell, and a null
+    // elsewhere on the page prints "not measured" whatever this table does.
+    const clients = html.slice(html.indexOf('<h3>Client kinds</h3>'));
+    const end = clients.indexOf('</table>');
+    // No closing tag means the helper rendered its empty state instead of the
+    // table under test. Fail on that, rather than let `slice(0, -1)` quietly
+    // trim one character and leave the assertions running against the page.
+    expect(end).toBeGreaterThan(-1);
+    const rows = clients.slice(0, end);
+
+    expect(rows).toContain('<tr><td>mobile</td><td class="n">0</td></tr>');
+    expect(rows).not.toContain('not measured');
+  });
+
+  it('escapes a dimension value in a telemetry ranking', () => {
+    const withMarkup = withTelemetry();
+    withMarkup.telemetry.versions.latest = [
+      { dimension: '<script>x</script>', title: '', count: 3, uniques: 3 },
+    ];
+
+    const html = renderDataPage(withMarkup);
+
+    expect(html).toContain('&lt;script&gt;x&lt;/script&gt;');
+    expect(html).not.toContain('<script>x</script>');
+  });
+
+  it('names the usage pings in the page description and the Dataset once they exist', () => {
+    const html = renderDataPage(withTelemetry());
+
+    expect(html).toContain('opt-in usage pings');
+    expect(html).toContain('"reporting instances"');
+    expect(html).toContain('opted in');
+  });
+
+  it('leaves the description and the Dataset to the GitHub data while no ping exists', () => {
+    const html = renderDataPage(data());
+
+    expect(html).not.toContain('opt-in usage pings');
+    expect(html).not.toContain('"reporting instances"');
+    expect(html).not.toContain('opted in');
+  });
+
+  it('omits the telemetry section entirely when no instance has reported', () => {
+    const html = renderDataPage(data());
+
+    expect(html).not.toContain('Usage pings');
+    expect(html).not.toContain('instances reporting today');
   });
 });

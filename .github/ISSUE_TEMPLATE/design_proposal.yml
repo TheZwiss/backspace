@@ -1,0 +1,72 @@
+name: Design proposal
+description: Propose the approach for an architectural change before writing it. Required for changes that set a convention, add a dependency, or alter a schema, protocol, or the preload bridge.
+labels: ["design"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For changes that other code will have to live with: a convention, a framework-level
+        dependency, a schema or protocol change, the desktop preload bridge. See "Design before code"
+        in CONTRIBUTING.md. A few paragraphs is the normal size. This is an open thread: anyone who
+        has worked on the affected area is welcome to weigh in, and mentioning them helps. The
+        maintainer makes the final call, normally within a few days. Prototyping in the meantime is
+        fine, polishing is premature.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What is wrong or missing today, and who it affects. Link the issue if one exists.
+    validations:
+      required: true
+  - type: textarea
+    id: approach
+    attributes:
+      label: Proposed approach
+      description: The mechanism you intend to use and where it lives in the tree. Name the primitives (functions, tokens, tables, events) other code will call.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: The other ways this could be done, and what each one would break or cost. This is the field that saves the most review time.
+    validations:
+      required: true
+  - type: textarea
+    id: obligations
+    attributes:
+      label: What other contributors must do differently afterwards
+      description: The rule this change creates. Every new component must call X; every migration must Y; nobody may Z. If the answer is "nothing", this may not need a proposal.
+    validations:
+      required: true
+  - type: checkboxes
+    id: surfaces
+    attributes:
+      label: Surfaces affected
+      options:
+        - label: Web client
+        - label: Desktop shell (Electron, preload bridge)
+        - label: Mobile layout or PWA
+        - label: Server, database schema, or REST API
+        - label: WebSocket protocol
+        - label: Federation protocol
+        - label: Permissions
+        - label: Build, packaging, or CI
+  - type: textarea
+    id: verification
+    attributes:
+      label: How it will be verified
+      description: What tests, which platforms and browsers run by hand, and what will not be tested.
+  - type: textarea
+    id: reversibility
+    attributes:
+      label: Reversibility
+      description: If this turns out wrong in a year, what does undoing it involve?
+  - type: dropdown
+    id: federation-impact
+    attributes:
+      label: Federation compatibility
+      options:
+        - Not applicable, local to one instance and one client
+        - Yes, and the proposal above covers peered instances
+        - Not sure

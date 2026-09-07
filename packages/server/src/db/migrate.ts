@@ -39,6 +39,19 @@ export function ensureDefaults(db: Database.Database): void {
     console.log('[defaults] Generated instance epoch');
   }
 
+  // 2c. Ensure installed_at is set. Existing databases get the oldest local
+  // account's creation time, a fresh one gets now. Never overwritten.
+  const installedRow = db.prepare('SELECT installed_at FROM instance_settings WHERE id = 1').get() as
+    { installed_at: number | null } | undefined;
+  if (!installedRow || installedRow.installed_at === null) {
+    const oldest = db.prepare(
+      'SELECT created_at FROM users WHERE home_instance IS NULL AND (is_deleted IS NULL OR is_deleted = 0) ORDER BY created_at ASC LIMIT 1',
+    ).get() as { created_at: number } | undefined;
+    const installedAt = oldest?.created_at ?? Date.now();
+    db.prepare('UPDATE instance_settings SET installed_at = ? WHERE id = 1').run(installedAt);
+    console.log('[defaults] Recorded installed_at');
+  }
+
   // 3. Ensure at least one admin exists (promote earliest registered user)
   const anyAdmin = db.prepare('SELECT id FROM users WHERE is_admin = 1 LIMIT 1').get();
   if (!anyAdmin) {

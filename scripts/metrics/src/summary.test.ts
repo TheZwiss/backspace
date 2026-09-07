@@ -44,8 +44,39 @@ function data(overrides: Partial<DashboardData> = {}): DashboardData {
         trajectories: [],
       },
     },
+    // The live archive's state before the first ping: present, and empty. The
+    // block is not optional on `DashboardData`, and leaving it off the fixture
+    // would only work because of the cast below.
+    telemetry: {
+      network: {
+        dates: [],
+        instances_1d: [],
+        instances_7d: [],
+        instances_30d: [],
+        users_registered: [],
+        users_active1d: [],
+        users_active7d: [],
+        users_active30d: [],
+        messages7d: [],
+        storage_mib: [],
+        voice_instances: [],
+        federation_instances: [],
+      },
+      versions: { snapshots: [], latest: [], trajectories: [] },
+      countries: { snapshots: [], latest: [], trajectories: [] },
+      clients: { snapshots: [], latest: [], trajectories: [] },
+      instances7d: null,
+    },
     ...overrides,
   } as DashboardData;
+}
+
+/** The same bundle once one ping has been archived. */
+function dataWithTelemetry(): DashboardData {
+  const d = data();
+  d.telemetry.network.dates = ['2026-09-05'];
+  d.telemetry.network.instances_7d = [12];
+  return d;
 }
 
 const empty = (): DashboardData =>
@@ -277,6 +308,27 @@ describe('renderDatasetJsonLd', () => {
   it('omits temporalCoverage entirely for an empty archive', () => {
     const parsed = buildDatasetJsonLd(buildSummary(empty()), 'https://example.com');
     expect(parsed['temporalCoverage']).toBeUndefined();
+  });
+
+  it('declares the telemetry variables once the archive holds a ping', () => {
+    const json = buildDatasetJsonLd(buildSummary(dataWithTelemetry()), 'https://x.test');
+    const names = (json['variableMeasured'] as Array<{ name: string }>).map((v) => v.name);
+
+    expect(names).toContain('reporting instances');
+    expect(names).toContain('active users on reporting instances');
+    expect(names).toContain('server versions in use');
+    expect(String(json['description'])).toContain('opt-in');
+    expect(String(json['measurementTechnique'])).toContain('opted in');
+  });
+
+  it('declares no telemetry variables while the archive holds no ping', () => {
+    const json = buildDatasetJsonLd(buildSummary(data()), 'https://x.test');
+    const names = (json['variableMeasured'] as Array<{ name: string }>).map((v) => v.name);
+
+    // A variable the archive has never measured is a claimed measurement.
+    expect(names).not.toContain('reporting instances');
+    expect(String(json['description'])).not.toContain('opt-in');
+    expect(String(json['measurementTechnique'])).not.toContain('opted in');
   });
 
   it('escapes a closing script tag so the block cannot be broken out of', () => {

@@ -1,0 +1,95 @@
+name: PR triage
+
+# Posts one comment on every fork pull request saying whether approving its
+# CI runs is routine or needs the maintainer to read specific files first,
+# plus a summary of the dependency changes for the merge review. The point is
+# the moment before the "Approve and run" click, which often happens on a
+# phone: the comment is there before the click, because this workflow runs
+# on `pull_request_target`, which the first-time-contributor approval gate
+# does not hold back.
+#
+# `pull_request_target` runs with a write token in the context of this
+# repository, so the rules from cla.yml apply here too and are the whole
+# reason this job is safe:
+#   - it never checks out or executes anything from the pull request. The
+#     checkout below is the base branch (the default for this event); the
+#     script reads PR file contents over the API as text and parses them.
+#   - nothing from the event payload is interpolated into a `run:` line.
+#     The script reads the PR number from GITHUB_EVENT_PATH itself.
+#   - egress is blocked except for the GitHub API and the hosts setup-node
+#     needs, so even a bug in the parser cannot exfiltrate the token.
+# See docs/systems/security-scanning.md, "Fork PR triage".
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+  # Re-run on demand from the Actions tab (or the mobile app) for any PR,
+  # fork or not, e.g. to test a change to the bot or to triage a PR opened
+  # before the bot existed.
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: 'Pull request number'
+        required: true
+        type: number
+
+permissions: {}
+
+# `opened` and the first `synchronize` can arrive seconds apart; without
+# this the two runs race between "list comments" and "create comment" and
+# the PR ends up with two triage comments.
+concurrency:
+  group: pr-triage-${{ github.event.pull_request.number || inputs.pr }}
+  cancel-in-progress: true
+
+jobs:
+  triage:
+    name: Triage fork PR
+    # Maintainer and Dependabot PRs come from this repository and get no
+    # comment. A deleted fork leaves `head.repo` null, which still passes.
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            nodejs.org:443
+
+      # The base branch, not the PR. `pull_request_target` checks out the
+      # base by default; `ref` is left unset on purpose so nobody can point
+      # this at the PR head later without a diff that says so.
+      - name: Checkout the base branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          # The bot is TypeScript executed directly by Node's type stripping,
+          # with no build step and no dependencies, like scripts/metrics.
+          node-version: 24
+          # Nothing here installs anything. Left at its default, setup-node
+          # detects the repo's pnpm from package.json and fails trying to
+          # invoke it.
+          package-manager-cache: false
+
+      - name: Triage
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          # Empty on pull_request_target; the script then reads the number
+          # from the event payload. A `number` input cannot carry anything
+          # but digits, and the script validates it again.
+          PR_NUMBER: ${{ inputs.pr }}
+        run: node scripts/pr-triage/src/cli.ts

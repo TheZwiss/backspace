@@ -293,6 +293,34 @@ the endpoint return `checkEnabled: false, reason: 'disabled'` without opening a
 socket. Every network failure is soft: `state: 'unknown'` with a `reason`, never a
 5xx, so the panel always reports the running version.
 
+## Admin: Telemetry (`routes/adminTelemetry.ts`) - admin required
+```
+GET    /admin/telemetry              → TelemetryStatus
+PUT    /admin/telemetry              { enabled: boolean } → TelemetryStatus
+GET    /admin/telemetry/preview      → TelemetryPayload
+```
+
+The opt-in daily usage report. `TelemetryStatus` is `{ enabled: boolean | null,
+id: string | null, lastDay: string | null, lastError: { day, status } | null }`,
+where `enabled: null` means the instance was never asked. All three routes are
+home-origin only.
+
+`PUT` requires `enabled` to be a boolean and returns 400 `validation_failed` for
+anything else (`"yes"`, `1`, a missing field). It is the only writer of the four
+`instance_settings` telemetry columns; the general settings PATCH never touches
+them. Enabling mints a fresh `telemetry_id` and stamps today as the last
+reported day so the first ping goes out tomorrow; disabling clears the id.
+Enabling an instance that is already on changes nothing, so a repeated save
+never rotates the id.
+
+`GET /preview` returns the exact payload a ping would carry right now, built by
+the same function the reporter uses. While reporting is off there is no id and
+none is minted to render a preview: `instance` is the literal string `preview`.
+The route writes nothing in either state.
+
+See [telemetry.md](telemetry.md) for the field semantics, the rounding rule and
+what is never sent.
+
 ## Admin: Invite Management (`routes/invites.ts`) — admin required
 
 All endpoints sit behind `[authenticate, requireAdmin]`. Mutating endpoints wrap their read-modify-write in a SQLite transaction with an in-txn re-fetch + status re-derive; any state mismatch returns 409. Service layer: `packages/server/src/utils/inviteService.ts` (`InviteValidationError` → 400, `InviteNotFoundError` → 404, `InviteStateConflictError` → 409).

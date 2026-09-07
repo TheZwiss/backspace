@@ -254,7 +254,7 @@ export async function startScreenShare(room: Room): Promise<boolean> {
     // For native mode: omit resolution constraint to capture at display's full native resolution
     const captureOptions: any = {
       audio: config.shareAudio ? {
-        // Chrome 141+: exclude this tab's own audio from system audio capture
+        // Request own-playback exclusion where supported; custom Electron picker needs 43.4+
         // @ts-ignore — restrictOwnAudio is not yet in all TS type definitions
         restrictOwnAudio: true,
         echoCancellation: false,

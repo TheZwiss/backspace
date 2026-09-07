@@ -7,6 +7,7 @@ import {
   utcDayStart,
   MS_PER_DAY,
 } from './series.ts';
+import { aggregateTelemetry, publishableTelemetryDays, type PingRow, type TelemetryFetcher } from './telemetry.ts';
 import type { GitHubClient } from './github.ts';
 import type { Meta, Store } from './store.ts';
 import type {
@@ -99,6 +100,41 @@ interface WorkflowRunResponse {
  */
 const WORKFLOW_WINDOW_DAYS = 14;
 
+/**
+ * How many days of raw telemetry rows each collection pulls from the receiver.
+ *
+ * Not a freshness window: it is the exact input `aggregateTelemetry` needs.
+ * The run writes the snapshots for `today - 2` and `today - 1`, and the older
+ * of those looks back thirty days to decide which instances count, so the
+ * oldest row it can read is `today - 31`. One day shorter and the earlier
+ * snapshot would silently drop the instances whose second reporting day sits
+ * on that boundary; longer would only cost bandwidth.
+ */
+const TELEMETRY_FETCH_DAYS = 31;
+
+/**
+ * Telemetry columns, in the order they are written.
+ *
+ * Exported so `backfill.ts` and the tests name the same header rather than
+ * keeping copies that can drift. Every column is a gauge describing the fleet on
+ * `date`, never a running total: see `NetworkPoint` in `types.ts` and section
+ * 3.1 of docs/systems/metrics.md.
+ */
+export const NETWORK_HEADER = [
+  'date',
+  'instances_1d',
+  'instances_7d',
+  'instances_30d',
+  'users_registered',
+  'users_active1d',
+  'users_active7d',
+  'users_active30d',
+  'messages7d',
+  'storage_mib',
+  'voice_instances',
+  'federation_instances',
+] as const;
+
 /** The UTC date `days` days before `date`, as `YYYY-MM-DD`. */
 function daysBefore(date: IsoDate, days: number): IsoDate {
   return new Date(utcDayStart(date) - days * MS_PER_DAY).toISOString().slice(0, 10);
@@ -132,6 +168,13 @@ export interface CollectOptions {
   today: IsoDate;
   /** Run timestamp, ISO 8601. Injected for deterministic tests. */
   now: string;
+  /**
+   * Fetches raw telemetry rows for a day range from the receiver. Optional:
+   * absent when TELEMETRY_EXPORT_TOKEN is unset, and a failure here is a
+   * skipped series, never a failed run. The traffic archive must not depend on
+   * a second service being up.
+   */
+  telemetry?: TelemetryFetcher;
 }
 
 /** Converts an ISO timestamp to its UTC calendar date. */
@@ -260,6 +303,34 @@ export async function collect(options: CollectOptions): Promise<CollectResult> {
     );
   } catch {
     skipped.push('workflows.csv');
+  }
+
+  // Optional in the strongest sense in this function: the receiver is a
+  // separate service on a separate domain, and the traffic archive is the
+  // irreplaceable series (GitHub deletes its window after 14 days, the
+  // receiver keeps 90). So every failure the fetcher can raise, a non-2xx
+  // answer and a 200 whose every line was rejected alike, lands here as a
+  // skip with the reason in the run log, and the day's telemetry rows are
+  // simply not written.
+  //
+  // `telemetryRows` stays `null` on that path, and the write phase below is
+  // gated on it being non-null, which is the load-bearing half: catching the
+  // error and writing anyway would upsert a well-formed all-zero snapshot
+  // over the real row, every day, until somebody read a CI log. A skipped day
+  // is recoverable, because the next run refetches a 31-day window and the
+  // merge overwrites; a zeroed day is not.
+  let telemetryRows: PingRow[] | null = null;
+  if (options.telemetry) {
+    const to = daysBefore(today, 1);
+    const from = daysBefore(today, TELEMETRY_FETCH_DAYS);
+    try {
+      telemetryRows = await options.telemetry(from, to);
+    } catch (error) {
+      // Not `(error as Error).message`: a rejection that is not an `Error`
+      // would render as `telemetry (undefined)`, which says nothing at all in
+      // the one log line this failure gets.
+      skipped.push(`telemetry (${error instanceof Error ? error.message : String(error)})`);
+    }
   }
 
   // `downloads_total` is folded into `repo.csv` alongside the required
@@ -415,6 +486,50 @@ export async function collect(options: CollectOptions): Promise<CollectResult> {
       uniques: item.uniques,
     })),
   );
+
+  // Two days, not one. The receiver accepts a ping for a day for as long as
+  // that day is open, and a ping that failed on the instance is retried the
+  // next day, so yesterday's snapshot is still settling when this run reads
+  // it. Rewriting the day before yesterday as well lets a late arrival
+  // correct it, exactly as `workflows.csv` re-counts its window; the merge is
+  // `'overwrite'`, so a settled day writes an identical row and costs no
+  // diff. Nothing older is rewritten: past two days the churn buys corrections
+  // that no longer arrive.
+  //
+  // Not every candidate day is necessarily publishable, though: a day at or
+  // before the oldest ping this fetch actually returned (or every day, when
+  // the fetch returned nothing at all) is structurally unmeasured rather than
+  // measured-empty, per `publishableTelemetryDays`. When that leaves nothing
+  // to write, none of the four files are touched at all, and this still gets
+  // a line in `skipped` even though the fetch itself succeeded: a wiped
+  // receiver or a fleet that stopped reporting would otherwise be a green,
+  // silent run forever, with nothing in the log to say telemetry published
+  // nothing. The reason distinguishes the two ways that can happen, since an
+  // operator needs to know whether the receiver answered at all.
+  if (telemetryRows !== null) {
+    // Copied to a `const` so the narrowing survives into the callback below,
+    // which it would not for a `let`.
+    const rows = telemetryRows;
+    const candidates = [daysBefore(today, 2), daysBefore(today, 1)];
+    const days = publishableTelemetryDays(rows, candidates);
+    if (days.length > 0) {
+      const aggregates = days.map((day) => aggregateTelemetry(rows, day));
+      writeCsvSeries(
+        'telemetry/network.csv',
+        NETWORK_HEADER,
+        aggregates.map((a) => a.network),
+      );
+      writeDimensional('telemetry/versions.ndjson', aggregates.flatMap((a) => a.versions));
+      writeDimensional('telemetry/countries.ndjson', aggregates.flatMap((a) => a.countries));
+      writeDimensional('telemetry/clients.ndjson', aggregates.flatMap((a) => a.clients));
+    } else {
+      skipped.push(
+        rows.length === 0
+          ? 'telemetry (no pings in the fetched window)'
+          : 'telemetry (every candidate day is at or before the oldest ping)',
+      );
+    }
+  }
 
   // Stars and forks come from the repo object's counters rather than by listing
   // stargazers. That is a point-in-time measurement, so it correctly reflects

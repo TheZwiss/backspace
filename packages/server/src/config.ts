@@ -164,6 +164,10 @@ export const config = {
      */
     installChannel: envOptional('BACKSPACE_INSTALL_CHANNEL'),
   },
+  telemetry: {
+    /** Receiver base URL for the opt-in daily ping. Tests and a future move override it. */
+    endpoint: envOptional('TELEMETRY_ENDPOINT') ?? 'https://hello.backspacechat.com',
+  },
   backup: {
     dir: envOptional('BACKUP_DIR') ?? resolve(dirname(env('DB_PATH', resolve(__dirname, '../../../data/backspace.db'))), 'backups'),
     intervalHours: envInt('BACKUP_INTERVAL_HOURS', 24),
