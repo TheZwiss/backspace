@@ -550,7 +550,7 @@ export function VideoSection() {
               // per iOS HIG. Desktop: original hover-reveal compact pill.
               className="absolute top-2 right-2 rounded-md bg-black/60 hover:bg-black/75 text-white/90 transition-colors focus-visible:opacity-100
                          min-h-[44px] min-w-[44px] px-3 py-2 text-xs flex items-center justify-center
-                         md:min-h-0 md:min-w-0 md:text-[11px] md:px-2 md:py-1 md:opacity-0 md:group-hover:opacity-100"
+                         desktop:min-h-0 desktop:min-w-0 desktop:text-[11px] desktop:px-2 desktop:py-1 desktop:opacity-0 desktop:group-hover:opacity-100"
             >
               {t('voice.video.preview.stop')}
             </button>

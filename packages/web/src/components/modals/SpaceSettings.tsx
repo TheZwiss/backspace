@@ -307,7 +307,7 @@ export function SpaceSettingsModal() {
     <Modal isOpen={isOpen} onClose={closeModal} size="settings" mobileStyle="fullscreen">
       <div className="flex h-full">
         {/* Desktop Sidebar */}
-        <div className="hidden md:flex w-52 flex-shrink-0 flex-col p-4 gap-3">
+        <div className="hidden desktop:flex w-52 flex-shrink-0 flex-col p-4 gap-3">
           {/* Space card */}
           <div className="glass-bubble rounded-lg p-3 flex items-center gap-3">
             <Avatar
