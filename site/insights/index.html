@@ -381,6 +381,11 @@ h2 {
   background: var(--chat);
   padding: 18px 18px 16px;
 }
+/* From Task 4 this class is carried by an <h3>, so a screen reader gets a real
+   outline of the page. It needs no element-qualified twin: an author rule beats
+   the user-agent heading style whatever its specificity, and the reset above has
+   already zeroed the heading's margins. Edit the size or weight here and every
+   card title follows. */
 .chart-title { font-size: 1.05rem; font-weight: 600; letter-spacing: -0.018em; margin-bottom: 6px; }
 .chart-window, .chart-meta {
   font-family: var(--mono); font-size: 12.5px; color: var(--txt4);
@@ -504,13 +509,15 @@ h2 {
 
 /* ================= Groups: lead figures, bands, card kinds ================= */
 /*
- * Three groups, each with one hero chart and two bands of smaller cards under
- * it. The hierarchy has to survive a single column, so it is carried by four
- * things that do not depend on the grid: a hero plot is taller than any
- * compact one, a hero's primary line carries an area fill and no compact line
- * does, a hero card sits on --chat while a compact card sits on a lighter
- * recessive panel, and the group's lead figure is a large number directly
- * above the hero at every width.
+ * Four groups, each with one hero chart and a band of smaller cards under it,
+ * three of them with a band of detail cards as well. The hierarchy has to
+ * survive a single column, so it is carried by four things that do not depend
+ * on the grid: a hero plot is taller than any compact one, a hero's primary
+ * line carries an area fill and no compact line does, except Following's hero,
+ * which is a cumulative counter on a fitted axis and so carries none, a hero
+ * card sits on --chat while a compact card sits on a lighter recessive panel,
+ * and the group's lead figure is a large number directly above the hero at
+ * every width.
  */
 .lead-row {
   display: grid;
@@ -558,6 +565,12 @@ h2 {
   align-items: start;
   margin-top: 22px;
 }
+/* `:empty` does not match an element that contains a whitespace text node, so
+   this collapses a band only while every band is built with createElement and
+   appendChild, which produce no text nodes. A band written into static markup
+   as `<div class="series-band">` on its own line keeps its top margin and
+   leaves a visible gap. Every band on this page is script-built; a task that
+   writes one into the markup owns collapsing it another way. */
 .series-band:empty, .detail-band:empty, .hero-band:empty { display: none; margin-top: 0; }
 
 /* A compact card is deliberately lighter than a hero card, so the weighting
@@ -566,9 +579,6 @@ h2 {
 .chart-card.is-compact .chart-title { font-size: 0.92rem; color: var(--txt2); }
 .chart-card.is-compact .stat-value { font-size: 1.35rem; font-weight: 620; }
 .chart-card.is-compact .chart-meta { margin-bottom: 10px; }
-/* Card titles are headings now, so a screen reader gets a real outline of the
-   page. The styling is the one .chart-title always had. */
-h3.chart-title { font-size: 1.05rem; font-weight: 600; letter-spacing: -0.018em; margin-bottom: 6px; }
 .card-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
 .card-head .stat-delta { margin-top: 0; }
 
@@ -576,14 +586,19 @@ h3.chart-title { font-size: 1.05rem; font-weight: 600; letter-spacing: -0.018em;
 .ch-txt4::before { color: var(--txt4); }
 
 /*
- * #method's own subheadings. They are not card titles, so they take neither
- * the .chart-title class nor its size. They exist because one h2 over nine
- * paragraphs is the bombardment moved rather than resolved, and because a
+ * The method panel's own subheadings. They are not card titles, so they take
+ * neither the .chart-title class nor its size. They exist because one h2 over
+ * nine paragraphs is the bombardment moved rather than resolved, and because a
  * crawler reading the served HTML loses the association between a caveat and
  * the series it qualifies the moment every caveat sits under one generic
  * heading.
+ *
+ * Rooted on a class rather than on #method, so it stays at the specificity the
+ * rest of this block sits at and sets no ceiling a later rule has to clear. It
+ * is a descendant selector rather than a class on each heading because the four
+ * headings Tasks 4 to 8 add would each have to remember to carry one.
  */
-#method h3 {
+.method-panel h3 {
   font-size: 1rem;
   font-weight: 600;
   letter-spacing: -0.014em;
@@ -812,7 +827,7 @@ footer a:hover { color: var(--txt); }
     </div>
   </section>
 
-  <section class="panel" id="method">
+  <section class="panel method-panel" id="method">
     <div class="wrap">
       <p class="ch-label ch-txt4">method</p>
       <h2>How these numbers are made</h2>
