@@ -48,20 +48,25 @@
 
   <screenshots>
     <screenshot type="default">
-      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.2.0/docs/screenshots/chat.webp</image>
+      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.2.1/docs/screenshots/chat.webp</image>
       <caption>Text channels with replies, reactions, and typing indicators</caption>
     </screenshot>
     <screenshot>
-      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.2.0/docs/screenshots/voice-video-grid.webp</image>
+      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.2.1/docs/screenshots/voice-video-grid.webp</image>
       <caption>Voice and video calls with screen sharing</caption>
     </screenshot>
     <screenshot>
-      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.2.0/docs/screenshots/user-discovery.webp</image>
+      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.2.1/docs/screenshots/user-discovery.webp</image>
       <caption>Discover users across federated instances</caption>
     </screenshot>
   </screenshots>
 
   <releases>
+    <release version="1.2.1" date="2026-09-07">
+      <description>
+        <p>Backspace 1.2.1 release.</p>
+      </description>
+    </release>
     <release version="1.2.0" date="2026-09-07">
       <description>
         <p>Adds an interface scale from 75% to 250%, opt-in instance telemetry, and voice shortcuts on Wayland. A system-audio screen share no longer plays viewers their own voice back.</p>
