@@ -269,6 +269,7 @@ const OBSERVE = `(function () {
     }
     var fills = null;
     var yRange = null;
+    var xRange = null;
     if (instance !== null) {
       fills = [];
       for (var s = 1; s < instance.series.length; s++) {
@@ -276,13 +277,32 @@ const OBSERVE = `(function () {
       }
       var scale = instance.scales.y;
       yRange = scale === undefined || scale === null ? null : [scale.min, scale.max];
+      /*
+       * The span the plot actually DREW, as days, beside the span the card
+       * says it drew in its meta line.
+       *
+       * The two can disagree, and the disagreement is invisible in every
+       * other reading this walk collects. Handed a single point on a time
+       * scale uPlot invents an x range of its own: a card whose meta line
+       * says one measured day rendered an axis running to 2029-05-01, and
+       * the canvas width, the canvas height, the y range, the legend and
+       * the note were all exactly what a correct card produces. Without
+       * this field a step asserting that a card refuses to plot a lone
+       * point is asserting something the report cannot show.
+       */
+      var xscale = instance.scales.x;
+      xRange = xscale === undefined || xscale === null ? null : [
+        new Date(xscale.min * 1000).toISOString().slice(0, 10),
+        new Date(xscale.max * 1000).toISOString().slice(0, 10)
+      ];
     }
     return {
-      /* Null for both means this plot was not found in the sync group at all,
-       * which is a broken reading rather than a plot with no fill and no y
-       * scale. */
+      /* Null for all three means this plot was not found in the sync group at
+       * all, which is a broken reading rather than a plot with no fill and no
+       * scales. */
       fills: fills,
       yRange: yRange,
+      xRange: xRange,
       canvasWidth: canvas === null ? null : Math.round(canvas.getBoundingClientRect().width),
       canvasHeight: canvas === null ? null : Math.round(canvas.getBoundingClientRect().height),
       overTop: over === null ? null : Math.round(over.getBoundingClientRect().top - rootBox.top),
