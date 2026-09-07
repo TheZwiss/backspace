@@ -76,12 +76,12 @@ export function HelloModal({ open, onAnswer, onDismiss, preview, previewFailed =
         aria-modal="true"
         aria-labelledby={headingId}
         tabIndex={-1}
-        className="flex flex-col md:flex-row gap-6 outline-none"
+        className="flex flex-col desktop:flex-row gap-6 outline-none"
       >
-        <div className="md:w-1/2 md:flex-shrink-0 self-center w-full aspect-[3/2] rounded-2xl overflow-hidden bg-surface-base">
+        <div className="desktop:w-1/2 desktop:flex-shrink-0 self-center w-full aspect-[3/2] rounded-2xl overflow-hidden bg-surface-base">
           <HelloScene mood={mood} />
         </div>
-        <div className="md:w-1/2 min-w-0 space-y-4 text-sm text-txt-secondary leading-relaxed">
+        <div className="desktop:w-1/2 min-w-0 space-y-4 text-sm text-txt-secondary leading-relaxed">
           {stage === 'yes' && (
             <>
               <h2 id={headingId} className="text-lg font-semibold text-txt-primary">{t('yes.title')}</h2>
