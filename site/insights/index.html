@@ -263,7 +263,6 @@ section.panel:last-of-type { padding-bottom: 96px; }
 }
 .ch-label::before { content: "#"; font-size: 15px; font-weight: 600; }
 .ch-mint::before { color: var(--mint); }
-.ch-lavender::before { color: var(--lavender); }
 .ch-sky::before { color: var(--sky); }
 .ch-peach::before { color: var(--peach); }
 .ch-amber::before { color: var(--amber); }
@@ -387,15 +386,14 @@ h2 {
    already zeroed the heading's margins. Edit the size or weight here and every
    card title follows. */
 .chart-title { font-size: 1.05rem; font-weight: 600; letter-spacing: -0.018em; margin-bottom: 6px; }
-.chart-window, .chart-meta {
+.chart-meta {
   font-family: var(--mono); font-size: 12.5px; color: var(--txt4);
   line-height: 1.8;
   display: flex; flex-wrap: wrap; gap: 4px 20px;
+  margin-bottom: 14px;
 }
-.chart-window { margin-bottom: 22px; }
-.chart-meta { margin-bottom: 14px; }
-.chart-window .k, .chart-meta .k { color: var(--txt3); }
-.chart-window .v, .chart-meta .v { color: var(--txt2); overflow-wrap: anywhere; }
+.chart-meta .k { color: var(--txt3); }
+.chart-meta .v { color: var(--txt2); overflow-wrap: anywhere; }
 .chart-hint { font-size: 13.5px; color: var(--txt4); line-height: 1.6; margin-top: 12px; }
 .chart-hint:empty { display: none; }
 .chart-caution { color: var(--amber); }
@@ -674,7 +672,7 @@ footer a:hover { color: var(--txt); }
   <div class="wrap nav-in">
     <a class="brand" href="../"><img src="../assets/logo.png" alt="" width="26" height="26" /> Backspace <span class="brand-sub">insights</span></a>
     <a class="nav-link" href="#reach">Reach</a>
-    <a class="nav-link" href="#growth">Growth</a>
+    <a class="nav-link" href="#following">Following</a>
     <a class="nav-link" href="#referrers">Referrers</a>
     <a class="nav-link" href="#paths">Paths</a>
     <a class="nav-link" href="#adoption">Adoption</a>
@@ -751,27 +749,16 @@ footer a:hover { color: var(--txt); }
     </div>
   </section>
 
-  <section class="panel" id="growth">
+  <section class="panel" id="following">
     <div class="wrap">
-      <p class="ch-label ch-lavender">growth</p>
-      <h2>Growth</h2>
+      <p class="ch-label ch-amber">following</p>
+      <h2>Following</h2>
       <p class="sec-copy">
-        Star and fork history with release tags marked on the time axis, so a jump can be read
-        against what shipped. Both are <strong>cumulative point-in-time totals</strong>: a step
-        the archive did not measure &mdash; a day, or a whole week once the bundle is bucketed
-        by week &mdash; is a hole in the record and never a fall back to a lower count, and
-        wherever a line is drawn that hole is a break in it rather than a dip. A star count does
-        not return to zero, so it is the easiest gap on the page to misread as a collapse. A day on
-        which nobody starred is not such a gap and carries a row of its own: the total that day is
-        known, and it is the previous day's. History from before daily collection began is
-        <strong>reconstructed</strong> from GitHub's permanent per-star and per-fork timestamps,
-        which list only stars and forks that still exist, so a star since withdrawn is invisible
-        there and those earlier totals are a lower bound rather than what the counter read at the
-        time. What follows is built from the rows the archive holds and nothing else: when the history is
-        too short to make a line, this section states the readings and its reasons instead of
-        drawing one, and how a chart's axes are scaled is stated beside the chart itself.
+        Stars, forks and watchers count people who clicked a button on GitHub rather than people
+        running the software, and each is a running total that this archive can only see from the
+        day it started recording.
       </p>
-      <div class="slot" id="chart-growth"></div>
+      <div class="slot" id="following-body"></div>
     </div>
   </section>
 
@@ -864,6 +851,25 @@ footer a:hover { color: var(--txt); }
         span. The two are plotted separately and never combined: no fixed number of clones
         follows from a run, and subtracting an estimate would put a model on a page whose
         whole claim is that every figure on it was measured.
+      </p>
+      <h3>Cumulative counts</h3>
+      <p class="sec-copy">
+        Stars, forks and watchers are <strong>cumulative point-in-time totals</strong>: a step
+        the archive did not measure is a hole in the record and never a fall back to a lower
+        count, whether that step is a day or a whole week once the bundle is bucketed by week,
+        and wherever a line is drawn that hole is a break in it rather than a dip. A star count
+        does not return to zero, so it is the easiest gap on the page to misread as a collapse. A
+        day on which nobody starred is not such a gap and carries a row of its own: the total that
+        day is known, and it is the previous day's. Star and fork history from before daily
+        collection began is <strong>reconstructed</strong> from GitHub's permanent per-star and
+        per-fork timestamps, which list only stars and forks that still exist, so a star since
+        withdrawn is invisible there and those earlier totals are a lower bound rather than what
+        the counter read at the time. The watcher count has no such record: GitHub publishes no
+        history of it at all, so that line begins on the day the collector first ran and cannot
+        be reconstructed any further back. The Following group is built from the rows the archive
+        holds and nothing else: when the history is too short to make a line, a card states its
+        reading and its reasons instead of drawing one, and how a chart's axes are scaled is
+        stated beside the chart itself.
       </p>
       <h3>Opt-in pings</h3>
       <p class="sec-copy">
@@ -980,7 +986,7 @@ footer a:hover { color: var(--txt); }
     resolution: document.getElementById("resolution")
   };
 
-  var SLOT_IDS = ["header-stats", "reach-body", "chart-growth", "ranked-referrers",
+  var SLOT_IDS = ["header-stats", "reach-body", "following-body", "ranked-referrers",
     "ranked-paths", "adoption-body", "delivery-body", "method-coverage"];
 
   /*
@@ -991,7 +997,7 @@ footer a:hover { color: var(--txt); }
    * looks for a figure: the coverage line is metadata about the archive, and
    * the status region above has already said what is wrong, once, in full.
    */
-  var NOTE_SLOT_IDS = ["header-stats", "reach-body", "chart-growth", "ranked-referrers",
+  var NOTE_SLOT_IDS = ["header-stats", "reach-body", "following-body", "ranked-referrers",
     "ranked-paths", "adoption-body", "delivery-body"];
 
   /* ---------------------------------------------------------------- helpers */
@@ -1993,8 +1999,8 @@ footer a:hover { color: var(--txt); }
 /*
  * Shared figure helpers.
  *
- * The at-a-glance section owned all of this. The facelift gives it four
- * consumers instead of one, the lead figure row and each of the three groups'
+ * The at-a-glance section owned all of this. The facelift gives it five
+ * consumers instead of one, the lead figure row and each of the four groups'
  * compact card heads, and the rule this surface exists to make enforceable is
  * that A FIGURE IS COMPUTED ONCE PER RENDER AND RENDERED IN AS MANY PLACES AS
  * NEEDED. The lead figure row and a group head printing different numbers for
@@ -2918,12 +2924,11 @@ footer a:hover { color: var(--txt); }
     return span;
   }
 
-  /* Copied here rather than moved. The growth section still calls its own
-   * `plural` and `stepWord` from the captions that stayed there, and
-   * `singlePointNote` calls `stepWord` three times, so cutting either one out
-   * of that section would be a ReferenceError on any bundle whose growth axis
-   * is a single step wide. Both copies go when the last of those captions
-   * moves here. */
+  /* Copied here while the growth section still called its own `plural` and
+   * `stepWord` from the captions that had stayed there. Those captions went
+   * with that section, so these are no longer copies of anything: they are
+   * this file's own, used by `releaseCaption` and `releaseNarrative` below,
+   * and they stay whether or not a section keeps a `plural` of its own. */
   function plural(count, singular, pluralWord) {
     return count === 1 ? singular : pluralWord;
   }
@@ -2952,9 +2957,9 @@ footer a:hover { color: var(--txt); }
    * moves the cursor on every chart, and a drag zooms all of them. That group
    * is this file's property, not any one section's, and the hint was
    * previously appended by the reach section — which made it vanish whenever
-   * reach declined to draw, even with the growth charts rendering perfectly
-   * beside it, and would have printed it twice once a second section started
-   * appending one of its own.
+   * reach declined to draw, even with the other chart sections rendering
+   * perfectly beside it, and would have printed it twice once a second
+   * section started appending one of its own.
    *
    * So `mount` counts the live plots and this fills a single page-level
    * element from that count. The wording is chosen from the count too: with
@@ -3695,8 +3700,10 @@ footer a:hover { color: var(--txt); }
     return function () { window.removeEventListener("resize", sync); };
   }
 
-  /* The release markers take the growth section's own channel colour, so the
-   * lane, the labels and the section's "#growth" heading are one thing. */
+  /* The lane keeps the colour it had on the growth charts it came from. It
+   * is the lane's own rather than any group's: the markers are painted over
+   * the Delivery hero now, whose channel colour is rose, and a marker in the
+   * host group's colour would read as one more series on the chart. */
   var RELEASE_TOKEN = "--lavender";
   var RELEASE_FALLBACK = "#c4b5fd";
 
@@ -4939,86 +4946,42 @@ footer a:hover { color: var(--txt); }
 </script>
 <script>
 /*
- * Section "chart-growth" — spec §7's growth view, and the only place on this
- * page where two different kinds of record are drawn together: a MEASURED
- * SERIES (stars, forks, sampled once a day) and a DATED EVENT (a release).
+ * Group "following" -- who chose to follow it.
  *
- * The release markers are the point of the section. A star count that climbs
- * through July is a fact about the archive; the same climb with `v1.0.0`
- * marked on the day it shipped is a reading of it, and it is only available
- * because the collector writes release dates and star history into one
- * archive.
+ * Hero: stars. Of the three series here it is the one that actually moves.
+ * Forks and watchers change a handful of times a year on this repository,
+ * while the star count is the number a reader goes to a repository page to
+ * look for, and it is the widest of the three, so it is the one worth giving
+ * the full width to.
  *
- * Being the point, they are also the thing most able to lie. Three rules keep
- * them honest, and each is enforced below rather than left to the eye:
+ * ─────────────────────────────────────────────────────────────────────────
+ * THE ONE HERO ON THIS PAGE WITH NO AREA FILL
  *
- * 1. THE AXIS IS DRAWN FROM THE MEASURED ROWS, NEVER FROM THE RELEASES. A
- *    release outside the span the series cover is not marked, and the axis is
- *    NOT stretched back to reach it. Stretching it would draw weeks or months
- *    of empty axis in front of the data and imply the archive covered a period
- *    it never measured — which is exactly the live archive's state today: the
- *    only release, v1.0.0, shipped on 2026-07-03 and the star series begins on
- *    2026-09-01. So nothing is marked, and the caption says which release was
- *    left off and why. A centrepiece that silently draws nothing looks broken;
- *    one that says what it left out and on what grounds does not.
+ * A fill reads as area under the curve measured from zero, so a card that
+ * fits its axis to the values must not carry one. All three series here are
+ * cumulative counters and all three need a fitted axis: a star count moving 60
+ * to 64 over a month, drawn from zero, is a flat line at the top of an axis
+ * that is 94 percent empty, which hides the only thing the chart is for.
  *
- * 2. A CUMULATIVE BREAK IS NOT A COLLAPSE. Stars and forks are point-in-time
- *    totals, so an unmeasured step is drawn as a break by the shared `expand`
- *    — never as a zero. A cumulative counter falling to zero would be a
- *    catastrophe rather than a quiet day, so this is the break on the page a
- *    reader is most likely to misread, and the captions name it in those words.
- *
- * 3. THE Y AXIS IS FITTED, AND SAYS SO. `zeroBasedCounts` is right for the
- *    per-day event counts in Reach and wrong here: a count that
- *    moved 60 → 64 over a month would be a flat line at the top of an axis
- *    that is 94% empty. This section passes its own policy, and states in copy
- *    that the axis does not start at zero, because a fitted baseline is the
- *    other half of the truncated-axis trade and must not be silent.
- *
- * The section holds uPlot instances, so it registers a teardown. The Task 5
- * contract shapes the rest: the slot is emptied before every render so nothing
- * is cached across calls; teardown runs before that clearing, so it still has
- * its instances; and teardown is SKIPPED after a failed render, so a render
- * that throws destroys what it built in its own catch.
+ * The two rules cannot both hold on one card, so the fill is what gives way.
+ * That costs one of the four things the page relies on to carry the hero
+ * hierarchy at a single column, and the other three still apply here: the hero
+ * plot is 280px against 150, it sits on --chat against a lighter recessive
+ * panel, and the group's lead figure is a large number directly above it. It
+ * is a real loss and it is smaller than the loss of leaving seven of twelve
+ * cards in the group a reader meets first.
+ * ─────────────────────────────────────────────────────────────────────────
  */
 (function () {
   "use strict";
 
   var I = window.INSIGHTS;
-  var C = window.INSIGHTS_CHARTS;
+  var F = window.INSIGHTS_FIGURES;
+  var G = window.INSIGHTS_GROUPS;
 
-  /*
-   * One chart per series rather than two lines on one plot. Stars and forks
-   * differ by an order of magnitude in the live archive (64 against 5), so a
-   * shared axis would flatten the fork line onto the floor — and `mount`
-   * deliberately offers no second y scale, because two scales invite a reader
-   * to compare two lines that are not comparable. Two plots on ONE shared time
-   * axis is the honest version of the same comparison: the synced cursor lands
-   * on the same day in both, and neither series distorts the other's shape.
-   *
-   * No area fill, unlike the reach charts. A fill reads as area-under-the-curve
-   * measured from zero, and this axis does not start at zero.
-   *
-   * `columns` is what each card DRAWS, and it is the only declaration of it:
-   * `INSIGHTS_CHARTS.bind` builds the `expand` columns out of these and hands
-   * each card back the offset of the column it named, so the heading, the
-   * colour and the data move together. See `bind` for what a second literal
-   * here would have cost.
-   */
-  var CHARTS = [
-    {
-      columns: { total: { series: "stars", field: "total" } },
-      title: "Stars", label: "Stars",
-      token: "--amber", fallback: "#fcd34d"
-    },
-    {
-      columns: { total: { series: "forks", field: "total" } },
-      title: "Forks", label: "Forks",
-      token: "--mint", fallback: "#86efac"
-    }
-  ];
+  var LEAD = { label: "Stars", kind: "point", series: "stars", field: "total" };
 
-  /* Every live uPlot instance this section owns. Assigned only once a render
+  /* Every live uPlot instance this group owns. Assigned only once a render
    * has completed; a render that throws destroys what it built itself. */
   var live = [];
 
@@ -5029,387 +4992,128 @@ footer a:hover { color: var(--txt); }
     return node;
   }
 
-  function pair(key, value, accent) {
-    var span = el("span");
-    span.appendChild(el("span", "k", key));
-    span.appendChild(document.createTextNode(" "));
-    span.appendChild(el("span", accent ? "v rel" : "v", value));
-    return span;
-  }
-
-  function plural(count, singular, pluralWord) {
-    return count === 1 ? singular : pluralWord;
-  }
-
-  /* One step of the axis is a day in a daily bundle and a week in a
-   * downsampled one, and both spellings appear in these captions. */
-  function steps(count, stepDays) {
-    return count + " " + (stepDays === 1
-      ? plural(count, "day", "days")
-      : plural(count, "weekly bucket", "weekly buckets"));
-  }
-
-  function stepWord(stepDays) {
-    return stepDays === 1 ? "day" : "week";
-  }
-
   /*
-   * What one chart actually drew: the span of its axis, how much of it carries
-   * a measurement, and where the series stands now. The unmeasured count is
-   * stated together with what the page does about it, because on a cumulative
-   * total a break is the single most misreadable mark on this page.
+   * Verbatim from the growth section's `axisNote`, in the singular. That
+   * sentence said "the vertical axis on both charts is fitted", which
+   * described two series sharing one axis; there are three cards with an axis
+   * each now, so there is no "both charts" for it to refer to. The claim it
+   * makes is unchanged, and it is rendered inside each card rather than once
+   * per section, because a fitted baseline is the other half of the
+   * truncated-axis trade and must not be silent.
    */
-  function metaLine(axis, offset) {
-    var stepDays = axis.stepDays;
-    var total = axis.xs.length;
-    var counted = axis.measured[offset];
-    var missing = total - counted;
-
-    var note = el("p", "chart-meta");
-    note.appendChild(pair("span", I.formatDay(axis.startMs) + " → " + I.formatDay(axis.endMs)));
-    note.appendChild(pair("measured", counted + " of " + steps(total, stepDays)));
-    if (missing > 0) {
-      note.appendChild(pair("unmeasured", steps(missing, stepDays) +
-        " — drawn as breaks, not as a fall to zero"));
-    }
-    var latest = latestReading(axis, offset);
-    if (latest !== null) {
-      note.appendChild(pair("latest", I.formatCount(latest.value) + " on " +
-        I.formatDay(latest.dayMs)));
-    }
-    if (axis.offGrid > 0) {
-      note.appendChild(pair("off-step",
-        axis.offGrid + " " + plural(axis.offGrid, "row does", "rows do") +
-        " not fall on the bundle's own resolution; " +
-        plural(axis.offGrid, "it is", "they are") + " plotted where " +
-        plural(axis.offGrid, "it is", "they are") + " dated"));
-    }
-    return note;
-  }
-
-  /* The newest step on the drawn axis that carries a value, or null when the
-   * whole column is unmeasured inside this span. */
-  function latestReading(axis, offset) {
-    var column = axis.values[offset];
-    for (var i = column.length - 1; i >= 0; i--) {
-      if (column[i] === null || column[i] === undefined) continue;
-      return { value: column[i], dayMs: axis.xs[i] * 1000 };
-    }
-    return null;
-  }
-
-  /* The vertical axis is fitted rather than pinned to zero, which is the right
-   * choice for a cumulative counter and a claim a reader is owed. */
-  function axisNote() {
-    return "The vertical axis on both charts is fitted to the values drawn rather than pinned " +
-      "to a zero baseline, so a move of a few stars is visible rather than flattened. Read the " +
-      "height of a line against its own axis labels, not against the bottom of the frame.";
-  }
+  var FITTED_NOTE = "The vertical axis is fitted to the values drawn rather than pinned to a " +
+    "zero baseline, so a small move is visible rather than flattened. Read the height of " +
+    "the line against its own axis labels, not against the bottom of the frame.";
 
   /*
-   * A weekly bundle dates each bucket on the Monday that opens its week, but a
-   * cumulative field carries the LAST value measured in that week
-   * (`bundle.ts`: `lastBucket`). So every point on a weekly stars chart sits up
-   * to six days earlier on the axis than the reading it shows — and a release
-   * marker, which is dated exactly, can appear to fall after a rise that in
-   * fact preceded it. That is precisely the misreading this section exists to
-   * enable in the other direction, so it is stated wherever it applies.
-   */
-  function weeklyNote() {
-    return "This bundle is bucketed by week. A point is dated on the Monday that opens its " +
-      "week but carries the last value measured in that week, so it sits up to six days " +
-      "earlier on the axis than the reading it shows. Release markers are dated exactly, so " +
-      "a marker can appear a few days to the right of the rise it caused. Read a marker " +
-      "against the week it lands in, not against the point beside it.";
-  }
-
-  /*
-   * The selected window, stated in the dates it resolves to. This is the range
-   * that was ASKED for; each chart's own caption states the span it actually
-   * drew, and the two differ whenever a series is younger than the window —
-   * which is the live archive's current state, not a hypothetical.
-   */
-  function windowLine(win) {
-    var note = el("p", "chart-window");
-    note.appendChild(pair("showing", win.title.toLowerCase()));
-    note.appendChild(pair("window",
-      I.formatDay(win.startMs) + " → " + I.formatDay(win.endMs) + I.resolutionSuffix()));
-    return note;
-  }
-
-  /*
-   * A span so long it cannot be real is a fault in the ARCHIVE, and this page
-   * must not report it as one of its own. Letting `expand` throw would reach
-   * the shell's generic section-failure note — "the fault is in this page's
-   * code" — and send whoever reads it to the wrong repository entirely.
-   */
-  function overrunNote(axis) {
-    var detail = "The star and fork series would run from " + I.formatDay(axis.startMs) +
-      " to " + I.formatDay(axis.endMs) + ", which needs " + I.formatCount(axis.overrunSteps) +
-      " points on the time axis — far longer than this archive can really cover. A date in " +
-      "the archive itself is wrong. No chart is drawn, rather than one built around a date " +
-      "that cannot be true.";
-    if (typeof console !== "undefined" && typeof console.error === "function") {
-      console.error("insights: chart-growth declined to plot. " + detail);
-    }
-    var note = el("p", "slot-note slot-note-error");
-    note.appendChild(el("strong", null, "These charts cannot be drawn from this archive."));
-    note.appendChild(document.createTextNode(" " + detail));
-    return note;
-  }
-
-  /*
-   * When the readings below were taken, said in terms the bundle can support.
+   * Verbatim from the growth section, where it was true and stays true: a
+   * weekly bucket is keyed on the Monday that opens its week while a
+   * cumulative field carries the LAST value measured in that week, so a point
+   * sits up to six days earlier on the axis than the reading it shows.
    *
-   * A daily bundle dates a row on the day it was read, so the date IS the
-   * measurement date. A weekly bundle keys each bucket on the Monday that
-   * opens the week while a cumulative field carries the LAST value measured
-   * inside it (`bundle.ts`: point-in-time totals take the week's last measured
-   * value), so the key can sit up to six days before the reading it carries.
-   * Printing "measured <Monday>" there would state a date on which nothing was
-   * read — a measurement this page did not make — which is the one thing this
-   * section exists to refuse. So the weekly spelling names the week, and the
-   * paragraph below it says why the day cannot be named.
+   * This is the sentence that could NOT travel to the Delivery hero, whose
+   * series is summed rather than carried. It stays here, where it is exact.
    */
-  function measuredPhrase(axis, downsampled) {
-    return downsampled
-      ? "measured in the week beginning " + I.formatDay(axis.startMs)
-      : "measured " + I.formatDay(axis.startMs);
-  }
+  var WEEKLY_CUMULATIVE_NOTE = "This bundle is bucketed by week. A point is dated on the Monday " +
+    "that opens its week but carries the last value measured in that week, so it sits up to " +
+    "six days earlier on the axis than the reading it shows.";
 
-  /* The same distinction as a subject rather than a predicate: a bucket key is
-   * a week, and naming it as though it were the day itself would be the same
-   * misstatement in a different place in the sentence. */
-  function stepPhrase(axis, downsampled) {
-    return downsampled
-      ? "the week beginning " + I.formatDay(axis.startMs)
-      : I.formatDay(axis.startMs);
-  }
-
-  /* Every card's reading at a single step, for the one-point case below. Read
-   * through the same binding the charts use, so the labels here name the
-   * columns these figures came out of. */
-  function readings(cards, axis) {
-    var parts = [];
-    for (var i = 0; i < cards.length; i++) {
-      var value = axis.values[cards[i].offsets.total][0];
-      parts.push(cards[i].spec.label + ": " +
-        (value === null || value === undefined ? "not measured" : I.formatCount(value)));
-    }
-    return parts.join("  ·  ");
-  }
-
-  /*
-   * THE ONE-POINT CASE, AND THIS SECTION'S X-RANGE POLICY.
-   *
-   * The live archive holds exactly one star row and one fork row, both dated
-   * 2026-09-01, so the shared axis is a single step wide. Handed a single
-   * point, uPlot picks an x range of its own: measured in a browser against
-   * this archive, the single point on 2026-09-01 produces an axis running to
-   * 2029-05-28 — one dot adrift on two and a half years of time nothing was
-   * ever recorded across. (Two or more points need no such policy: uPlot's
-   * time scale then resolves to exactly the data's own extent, which is why
-   * the caption below can name a release as "outside the span drawn here" and
-   * be describing the same span the painter tests against.)
-   *
-   * There is no honest x range to pick instead. Any span invented around the
-   * point is a span the archive did not measure, and pinning the scale to
-   * [point, point] leaves a chart of zero width. A cumulative counter read
-   * once is a reading, not a history: it has no direction, no rate, and
-   * nothing for a release marker to be read against.
-   *
-   * So the section declines to draw and states the readings, the reason, and
-   * what the archive holds by way of releases. Saying "one measurement is not
-   * a history" is a true sentence; a chart of it would not be a true picture.
-   * This resolves itself with the second day of collection.
-   */
-  function singlePointNote(cards, axis, win, collected, total, downsampled) {
-    var box = el("div", "slot-note slot-note-detail");
-
-    var first = el("p");
-    first.appendChild(el("strong", null, "One measurement is not a history."));
-    first.appendChild(document.createTextNode(
-      " The axis these two series share is a single step wide: " +
-      stepPhrase(axis, downsampled) + " is the only " + stepWord(axis.stepDays) + " inside " +
-      win.title.toLowerCase() + " that either of them carries a row for. A cumulative total " +
-      "read once has no direction and no rate, and a line needs two points to have either. " +
-      "Drawn anyway it would be a single dot on an axis the plotting library stretches years " +
-      "past the last day anything was recorded — a span this archive never measured. The " +
-      "readings are stated instead."));
-    box.appendChild(first);
-
-    box.appendChild(el("p", null, readings(cards, axis) + "  ·  " + measuredPhrase(axis, downsampled)));
-
-    if (total === 0) {
-      box.appendChild(el("p", null,
-        "No release is recorded in the archive either, so there is nothing yet to mark against " +
-        "this reading."));
-    } else if (collected.groups.length > 0) {
-      box.appendChild(el("p", null,
-        C.listGroups(collected.groups) + " — recorded on the one " + stepWord(axis.stepDays) +
-        " measured here. Release markers are drawn on the time axis once the star and fork " +
-        "history spans more than a single point."));
-    } else {
-      var count = collected.outside.length;
-      box.appendChild(el("p", null,
-        "The archive records " + count + " " + plural(count, "release", "releases") + " — " +
-        C.listOutside(collected.outside) + " — " + plural(count, "which falls", "all of which fall") +
-        " outside the one " + stepWord(axis.stepDays) + " measured here. " +
-        plural(count, "It is", "They are") + " not marked, and the axis is not stretched back " +
-        "to reach " + plural(count, "it", "them") + ": that would draw months of time nothing " +
-        "was recorded across. Release markers appear here once the star and fork history " +
-        "covers the day a release shipped."));
-    }
-
-    if (downsampled) {
-      /* The weekly caution below the charts never reaches this path — it is
-       * appended after the early return that renders this box — and the
-       * hazard it discloses is sharper here, because this box states a single
-       * date and nothing else on the page qualifies it. */
-      box.appendChild(el("p", null,
-        "This bundle is bucketed by week rather than by day. The figures above are the last " +
-        "values measured in the week beginning " + I.formatDay(axis.startMs) + "; the day they " +
-        "were actually read on is up to six days later and is not preserved in a bucketed " +
-        "bundle, so it cannot be stated here."));
-    }
-
-    if (collected.unreadable > 0) {
-      box.appendChild(el("p", null,
-        collected.unreadable + " further " + plural(collected.unreadable, "release", "releases") +
-        " " + plural(collected.unreadable, "carries", "carry") + " a date this page cannot " +
-        "place on a calendar day, so " + plural(collected.unreadable, "it is", "they are") +
-        " not counted above."));
-    }
-
-    return box;
-  }
-
-  /* One card. Returns the mounted chart, or null when this series has no
-   * measurement anywhere on the shared axis — a plot whose every point is a
-   * break is an empty frame, and the words are more use than the frame. */
-  function buildChart(stack, spec, axis, offset, collected) {
-    var card = el("div", "chart-card");
-    card.appendChild(el("p", "chart-title", spec.title));
-    card.appendChild(metaLine(axis, offset));
-    stack.appendChild(card);
-
-    if (axis.measured[offset] === 0) {
-      card.appendChild(el("p", "chart-hint",
-        "No " + spec.label.toLowerCase() + " measurement falls inside this span, so every step " +
-        "of the axis would be a break. Nothing is drawn rather than an empty frame."));
-      return null;
-    }
-
-    var host = el("div", "chart-scroll");
-    /* In the document before uPlot is constructed: the plot is given an
-     * explicit pixel size and that size is measured from this container. */
-    card.appendChild(host);
-
-    return C.mount(host, axis.xs, [{
-      label: spec.label,
-      stroke: C.colour(spec.token, spec.fallback),
-      width: 2,
-      values: axis.values[offset]
-    }], {
-      /* Not `zeroBasedCounts`: see C.fittedCounts. */
-      yRange: C.fittedCounts,
-      /* The lane, its padding reservation and its painter, all from the
-       * toolkit. */
-      releases: collected
-      /*
-       * No `syncFilters`. These charts join the page's cursor-sync group in
-       * full — shared cursor AND shared zoom — because reading a star curve
-       * against the traffic that produced it is the entire point of putting
-       * them on one page, and a zoom that moved one section's axis while
-       * leaving the other's alone would silently break the comparison the
-       * markers exist to support.
-       */
-    });
+  function cumulativeSpec(profile, title, figure, series, field, label, token, fallback,
+    downsampled) {
+    var notes = [FITTED_NOTE];
+    if (downsampled) notes.push(WEEKLY_CUMULATIVE_NOTE);
+    var line = { column: "total", label: label, token: token, fallback: fallback };
+    /* A hero's stroke is 2px against the compact profile's 1.5. No `fill` on
+     * any of the three, hero included: see the header comment. */
+    if (profile === "hero") line.width = 2;
+    return {
+      profile: profile,
+      title: title,
+      figure: figure,
+      columns: { total: { series: series, field: field } },
+      lines: [line],
+      yPolicy: "fitted",
+      breakPhrase: "drawn as breaks, not as a fall to zero",
+      notes: notes
+    };
   }
 
   function render(slot, data, rangeKey) {
-    var win = I.rangeWindow(data, rangeKey);
-    /* Reachable on a non-empty bundle: one holding only releases or only
-     * dimension snapshots has no dated series row to anchor a window to. */
-    if (win === null) {
-      slot.appendChild(el("p", "slot-note",
-        "The archive holds no dated measurement, so there is no time axis to draw these " +
-        "charts on, and no axis for a release to be marked against."));
+    var ctx = {
+      data: data,
+      win: I.rangeWindow(data, rangeKey),
+      wins: F.windows(data),
+      step: I.resolutionStepDays(),
+      downsampled: data.downsampled
+    };
+
+    G.groupHead(slot, LEAD, ctx);
+
+    var hero = G.band("hero");
+    var series = G.band("series");
+    /* In the slot before a single card is built into them. Appending here
+     * rather than at the end of the render is the load-bearing part; see
+     * G.attach. Two bands rather than three: this group has no detail band,
+     * because every card it holds is a chart. */
+    G.attach(slot, [hero, series]);
+
+    /* This is the one group with no detail band. Every card it holds needs a
+     * time axis, so on a bundle with no dated measurement there is nothing it
+     * can draw and the no-time-axis state is the whole group rather than part
+     * of it. The other three each hold at least one card that needs no window:
+     * a ranked list, a release list, a threshold note.
+     *
+     * Into the hero band, where the charts would have been, so it reads in the
+     * place the reader is already looking rather than under an empty one. */
+    if (ctx.win === null) {
+      hero.appendChild(el("p", "slot-note",
+        "The archive holds no dated measurement, so there is no time axis to draw the star, " +
+        "fork and watcher counts on."));
       return;
     }
-
-    slot.appendChild(windowLine(win));
-
-    var stepDays = I.resolutionStepDays();
-    /* One expansion for both charts, so both get the identical x axis, the
-     * synced cursor lands on the same day in each, and one set of release
-     * markers is correct for both. The columns come from the cards that read
-     * them rather than from a literal of their own, so a card cannot be drawn
-     * from a column it does not name; see `bind`. */
-    var bound = C.bind("chart-growth", data, CHARTS);
-    var axis = C.expand(bound.columns, win, stepDays);
-
-    /* Before the `empty` branch: an overrun sets `empty` too, as a fail-safe
-     * for a caller that forgets this check, and the specific reason is the
-     * more useful of the two. */
-    if (axis.overrun) {
-      slot.appendChild(overrunNote(axis));
-      return;
-    }
-
-    if (axis.empty) {
-      slot.appendChild(el("p", "slot-note",
-        "Neither stars nor forks carry a row inside " + win.title.toLowerCase() + " (" +
-        I.formatDay(win.startMs) + " to " + I.formatDay(win.endMs) +
-        "), so there is nothing to plot for this range."));
-      return;
-    }
-
-    var total = data.releases.length;
-    var collected = C.collectReleases(data.releases, axis.startMs, axis.endMs);
-
-    if (axis.xs.length < 2) {
-      slot.appendChild(singlePointNote(bound.cards, axis, win, collected, total,
-        data.downsampled));
-      return;
-    }
-
-    slot.appendChild(C.releaseCaption(collected, total));
-    slot.appendChild(el("p", "chart-hint", axisNote()));
-    if (data.downsampled) {
-      slot.appendChild(el("p", "chart-hint chart-caution", weeklyNote()));
-    }
-    var narrative = C.releaseNarrative(collected, total, stepDays);
-    if (narrative !== null) {
-      slot.appendChild(el("p", "chart-hint", narrative));
-    }
-
-    var stack = el("div", "chart-stack");
-    slot.appendChild(stack);
 
     var created = [];
     try {
-      for (var i = 0; i < bound.cards.length; i++) {
-        var chart = buildChart(stack, bound.cards[i].spec, axis,
-          bound.cards[i].offsets.total, collected);
-        if (chart !== null) created.push(chart);
-      }
+      G.keep(created, G.buildCardSafely(hero, function () {
+        /* The hero carries no card-head figure: the group head directly above
+         * it prints the same series' figure, and printing it twice a hundred
+         * pixels apart is the duplication `INSIGHTS_FIGURES` exists to make
+         * unnecessary. Reach's and Adoption's heroes do the same. */
+        return G.chartCard(hero, cumulativeSpec("hero", "Stars", null,
+          "stars", "total", "Stars", "--amber", "#fcd34d", ctx.downsampled), ctx);
+      }));
+
+      /* Each on its own y axis. Stars and forks shared one x axis while a
+       * single set of release markers was painted across both and the markers
+       * made the comparison; the markers are on the Delivery hero now, and the
+       * two differ by an order of magnitude in the live archive, so a shared
+       * axis would flatten the fork line onto the floor for no remaining gain. */
+      G.keep(created, G.buildCardSafely(series, function () {
+        return G.chartCard(series, cumulativeSpec("compact", "Forks",
+          { label: "Forks", kind: "point", series: "forks", field: "total" },
+          "forks", "total", "Forks", "--coral", "#fb923c", ctx.downsampled), ctx);
+      }));
+
+      /* Watchers gains a plot it does not have today. It is the uniform
+       * application of the small-card rule rather than an addition of scope:
+       * no series is added and no figure is derived that the page does not
+       * already print. */
+      G.keep(created, G.buildCardSafely(series, function () {
+        return G.chartCard(series, cumulativeSpec("compact", "Watchers",
+          { label: "Watchers", kind: "point", series: "repo", field: "subscribers" },
+          "repo", "subscribers", "Watchers", "--lavender", "#c4b5fd", ctx.downsampled), ctx);
+      }));
     } catch (error) {
-      /* `live` is assigned only once every chart is built, so a throw part-way
-       * leaves `created` referenced by nothing but this frame: the shell's
-       * teardown would find the previous render's (already empty) `live` and
-       * release nothing. Destroy what was built here, then let the shell
-       * render its honest failure note for this slot. */
+      /* `live` is assigned only once every card is built, so a throw part-way
+       * leaves `created` referenced by nothing but this frame. Destroy what
+       * was built here, then let the shell render its failure note. */
       for (var j = 0; j < created.length; j++) {
         try {
           created[j].destroy();
         } catch (cleanupError) {
-          /* The render failure is the one worth reporting, so a destroy that
-           * also fails is logged rather than allowed to replace it — and the
-           * remaining instances still get released. */
           if (typeof console !== "undefined" && typeof console.error === "function") {
-            console.error("insights: releasing a growth chart after a failed render also failed.",
-              cleanupError);
+            console.error("insights: releasing a following chart after a failed render also " +
+              "failed.", cleanupError);
           }
         }
       }
@@ -5441,7 +5145,7 @@ footer a:hover { color: var(--txt); }
     if (failure !== null) throw failure;
   }
 
-  I.registerSection("chart-growth", render, teardown);
+  I.registerSection("following-body", render, teardown);
 })();
 </script>
 <script>
@@ -5481,8 +5185,8 @@ footer a:hover { color: var(--txt); }
  *    Plotting that as zero would draw a cliff that never happened. It is
  *    drawn as a break, through the same `spanGaps: false` machinery the rest
  *    of the page uses, and the captions say what a break means here — which
- *    is a different sentence from the one the reach and growth sections use,
- *    because the reason is different.
+ *    is a different sentence from the one the reach and following groups
+ *    use, because the reason is different.
  * ─────────────────────────────────────────────────────────────────────────
  *
  * TWO STRUCTURES, JOINED ON A STRING.
@@ -6122,7 +5826,7 @@ footer a:hover { color: var(--txt); }
   }
 
   /* What a point is, and what a break is — a different sentence from the one
-   * the reach and growth sections use, because the reason is different. */
+   * the reach and following groups use, because the reason is different. */
   function movementHint(spec) {
     return el("p", "chart-hint",
       "Each point is the CHANGE in a " + spec.one + "'s " + AGGREGATE_DAYS + "-day count " +
@@ -6554,7 +6258,7 @@ footer a:hover { color: var(--txt); }
       var counts = swin === null ? null : snapshotsInWindow(series, swin);
       /* One expansion for every line, so all of them share an axis and the
        * cursor lands on the same day in each — and on the same day as the
-       * reach and growth charts, which sit in the same sync group. */
+       * reach and following charts, which sit in the same sync group. */
       var axis = swin === null ? null : C.expand(bound.columns, swin, SNAPSHOT_STEP_DAYS);
       /*
        * The lines that will actually be drawn, and whether a chart is drawn at
@@ -7355,7 +7059,7 @@ footer a:hover { color: var(--txt); }
  * all. The lane needs a release inside the chart's span, and this series is
  * reconstructed from the Actions API back to the first release, where the
  * star history begins on the day the collector first ran. On the live archive
- * the markers do not draw on the growth charts at all.
+ * the markers do not reach that star history at all.
  *
  * The group's lead figure is Releases shipped rather than the hero's own
  * series, which is the one place this page's rule is not uniform. The hero is
@@ -7426,7 +7130,7 @@ footer a:hover { color: var(--txt); }
    * a marker lands inside the bucket that covers its week rather than at a
    * point of its own.
    *
-   * Deliberately NOT the growth section's wording, which says a point
+   * Deliberately NOT the Following group's wording, which says a point
    * "carries the last value measured in that week". That is true of a
    * cumulative total and false of a summed count, and moving it here would
    * publish a false sentence on a page whose whole claim is that it does not.

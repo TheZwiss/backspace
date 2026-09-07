@@ -198,6 +198,37 @@ const OBSERVE = `(function () {
   function text(node) {
     return node === null ? null : node.textContent.replace(/\\s+/g, " ").trim();
   }
+  /*
+   * Every live uPlot instance on the page, so a card's y scale and its
+   * series' fills can be read rather than guessed at.
+   *
+   * Neither is in the DOM. uPlot paints its axis ticks and its area fills
+   * onto the canvas, so a card drawn on a fitted axis and the same card
+   * drawn on another card's axis produce byte-identical reports, and so do a
+   * filled line and an unfilled one. Both are properties this plan asserts:
+   * a group whose cards each need an axis of their own, and the one hero on
+   * the page that carries no fill. Asserting either from the report meant
+   * widening the report to carry it.
+   *
+   * The instances are reachable because every plot on this page joins one
+   * cursor-sync group, and uPlot's sync registry keeps a live array of the
+   * plots registered under a key. The key is the page's own, so a page that
+   * renamed it would leave this list empty: that is reported in words below
+   * rather than passed off as "no fill anywhere".
+   */
+  var syncPlots = [];
+  if (typeof uPlot !== "undefined" && typeof uPlot.sync === "function") {
+    syncPlots = uPlot.sync("insights-time").plots;
+  }
+  /* A series' fill after uPlot has initialised it is a function returning the
+   * declared value, or null when none was declared. Both forms are handled,
+   * because which one a version normalises to is uPlot's business and not a
+   * fact this report should depend on. */
+  function fillOf(instance, index) {
+    var declared = instance.series[index].fill;
+    var value = typeof declared === "function" ? declared(instance, index) : declared;
+    return value === null || value === undefined || value === "" ? "none" : String(value);
+  }
   function figureOf(scope) {
     var value = scope.querySelector(".stat-value");
     if (value === null) return null;
@@ -222,7 +253,26 @@ const OBSERVE = `(function () {
     root.querySelectorAll(".u-legend .u-series > th").forEach(function (th) {
       legend.push(text(th));
     });
+    var instance = null;
+    for (var p = 0; p < syncPlots.length; p++) {
+      if (syncPlots[p].root === root) { instance = syncPlots[p]; break; }
+    }
+    var fills = null;
+    var yRange = null;
+    if (instance !== null) {
+      fills = [];
+      for (var s = 1; s < instance.series.length; s++) {
+        fills.push(instance.series[s].label + ": " + fillOf(instance, s));
+      }
+      var scale = instance.scales.y;
+      yRange = scale === undefined || scale === null ? null : [scale.min, scale.max];
+    }
     return {
+      /* Null for both means this plot was not found in the sync group at all,
+       * which is a broken reading rather than a plot with no fill and no y
+       * scale. */
+      fills: fills,
+      yRange: yRange,
       canvasWidth: canvas === null ? null : Math.round(canvas.getBoundingClientRect().width),
       canvasHeight: canvas === null ? null : Math.round(canvas.getBoundingClientRect().height),
       overTop: over === null ? null : Math.round(over.getBoundingClientRect().top - rootBox.top),
@@ -303,7 +353,10 @@ const OBSERVE = `(function () {
     });
     return entry;
   }
-  var out = { slots: [], head: null, provenance: null, hint: null, nav: [], sections: [] };
+  var out = {
+    slots: [], syncPlots: syncPlots.length, chartRoots: document.querySelectorAll(".uplot").length,
+    head: null, provenance: null, hint: null, nav: [], sections: []
+  };
   /* The page's own headline claim, and the four provenance values under
    * #method. Both are read here rather than proved out of band: Task 3 changed
    * the lead sentence and had to establish it by grep, and read the provenance
@@ -739,6 +792,26 @@ async function main() {
   for (const f of failures) console.log(`  ${f}`);
 
   console.log('\n=== page ===');
+  /*
+   * Said before the walk rather than left to be inferred from it. `fills` and
+   * `yRange` come off the live uPlot instances, and the only way to reach
+   * those is the page's own cursor-sync group. If the page ever stops
+   * registering its plots under that key, every card would report a null
+   * fill and a null y range, which reads exactly like a page that draws no
+   * fills. This line is the difference between the two.
+   */
+  if (observed !== null) {
+    const roots = observed.chartRoots ?? 0;
+    const synced = observed.syncPlots ?? 0;
+    if (roots > 0 && synced === 0) {
+      console.log(`  NO PLOT REACHED: ${roots} chart roots are on the page and none of them is in`
+        + ' the cursor-sync group, so every fill and y range below is null for that reason and'
+        + ' not because the page declared none');
+    } else {
+      console.log(`  ${synced} live plot(s) in the cursor-sync group, ${roots} chart root(s)`
+        + ' in the document');
+    }
+  }
   console.log(JSON.stringify(observed, null, 2));
 
   /*
