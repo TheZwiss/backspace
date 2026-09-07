@@ -108,6 +108,14 @@ body {
 img { max-width: 100%; height: auto; display: block; }
 a { color: var(--sky); text-decoration: none; }
 a:hover { text-decoration: underline; }
+/* The `border-radius` here rounds the OUTLINE, not the element, and 4px was
+   written for an inline text link. It has specificity (0,1,1) and so beats a
+   class, which means a focused element carrying a radius of its own has its
+   corners snapped to 4px for as long as it holds focus. Harmless on a link in
+   a sentence; visible on a panel. `.lead-figure` is the first panel-sized
+   element on this page to take keyboard focus, so it restates its own radius
+   below. `.btn` has the same 12px-to-4px snap and is left alone: it predates
+   this page's redesign and changing it is not this change's business. */
 a:focus-visible, button:focus-visible {
   outline: 2px solid var(--sky);
   outline-offset: 3px;
@@ -302,20 +310,10 @@ h2 {
 /* Wide content (charts, tables) scrolls inside its own container, never the body. */
 .scroll-x { overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; max-width: 100%; }
 
-/* ================= Header stats ================= */
-.stat-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(184px, 1fr));
-  gap: 14px;
-}
-.stat {
-  display: flex; flex-direction: column; gap: 5px;
-  min-width: 0;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--chat);
-  padding: 16px 18px 15px;
-}
+/* ================= The figure idiom ================= */
+/* The figure idiom, shared by the lead row, the four group heads and every
+   compact card head. The boxes they sit in differ (.lead-figure, .group-head,
+   .card-figure); the label, value, sub, note and chip below do not. */
 .stat-label {
   font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.07em;
   text-transform: uppercase; font-weight: 500; color: var(--txt3);
@@ -396,9 +394,10 @@ h2 {
 .chart-hint { font-size: 13.5px; color: var(--txt4); line-height: 1.6; margin-top: 12px; }
 .chart-hint:empty { display: none; }
 .chart-caution { color: var(--amber); }
-/* The page-level interaction hint. It describes the shared cursor group, which
-   the chart toolkit owns, so the toolkit is what fills it — from zero, one or
-   both chart sections. Empty until at least one plot exists. */
+/* The page-level interaction hint, in its one fixed place directly under the
+   sticky range control. It describes the shared cursor group, which the chart
+   toolkit owns, so the toolkit is what fills it, from the count of plots any
+   group drew. Empty until at least one plot exists. */
 #chart-hint { margin-top: 30px; }
 /* The release markers' own colour, so the caption naming a release and the
    marker drawn for it are visibly the same thing. */
@@ -532,6 +531,9 @@ h2 {
   color: var(--txt);
 }
 .lead-figure:hover { text-decoration: none; border-color: rgba(255, 255, 255, 0.14); }
+/* Against the shared focus rule's 4px, which would otherwise snap this card's
+   corners while it holds focus. See the comment on that rule. */
+.lead-figure:focus-visible { border-radius: 14px; }
 .lead-figure .stat-value { font-size: clamp(2.2rem, 6vw, 3.2rem); }
 .group-head { margin-bottom: 22px; }
 .group-head .stat-value { font-size: clamp(1.6rem, 4.4vw, 2rem); }
@@ -674,6 +676,7 @@ footer a:hover { color: var(--txt); }
     <a class="nav-link" href="#following">Following</a>
     <a class="nav-link" href="#adoption">Adoption</a>
     <a class="nav-link" href="#delivery">Delivery</a>
+    <a class="nav-link" href="#method">Method</a>
     <a class="btn btn-primary btn-sm" href="https://github.com/TheZwiss/backspace">GitHub</a>
   </div>
 </header>
@@ -711,6 +714,13 @@ footer a:hover { color: var(--txt); }
     <!-- /BUILD:SUMMARY -->
     <div class="status-region" id="status-region" role="status" aria-live="polite"></div>
 
+    <!-- Above the range control, not below it. The four figures do not move
+         with the range: their window is a fixed 30 days ending on the
+         archive's newest measured day, and a row of numbers sitting under a
+         control that does not govern them would invite the reading that it
+         does. -->
+    <div class="slot lead-row" id="lead-figures"></div>
+
   </div>
 
   <div class="controls">
@@ -720,19 +730,9 @@ footer a:hover { color: var(--txt); }
     </div>
   </div>
 
-  <section class="panel" id="at-a-glance">
-    <div class="wrap">
-      <p class="ch-label ch-mint">at-a-glance</p>
-      <h2>At a glance</h2>
-      <p class="sec-copy">
-        Stars, forks, watchers, views and clones since collection began, contributors and total
-        release downloads — each with a 30-day delta. A delta appears only when the archive
-        covers the window it describes; otherwise it reads as a dash, and a figure that could
-        only be assembled from a different span is labelled with the span it actually covers.
-      </p>
-  <div class="slot" id="header-stats"></div>
-    </div>
-  </section>
+  <div class="wrap">
+    <p class="chart-hint" id="chart-hint"></p>
+  </div>
 
   <section class="panel" id="reach">
     <div class="wrap">
@@ -758,10 +758,6 @@ footer a:hover { color: var(--txt); }
       <div class="slot" id="following-body"></div>
     </div>
   </section>
-
-  <div class="wrap">
-    <p class="chart-hint" id="chart-hint"></p>
-  </div>
 
   <section class="panel" id="adoption">
     <div class="wrap">
@@ -872,6 +868,12 @@ footer a:hover { color: var(--txt); }
         <a href="data/">plain tables</a>.
       </p>
       <h3>Provenance and coverage</h3>
+      <p class="sec-copy">
+        Every figure on this page carries a 30-day change beside it, and the change is shown only
+        when the archive covers the window it describes. Otherwise it reads as a dash and says
+        why, and a figure that could only be assembled from a different span is labelled with the
+        span it actually covers.
+      </p>
       <p class="provenance">
         <span><span class="k">archive history</span> <span class="v" id="pv-since">checking</span></span>
         <span><span class="k">bundle built</span> <span class="v" id="pv-generated">checking</span></span>
@@ -927,9 +929,10 @@ footer a:hover { color: var(--txt); }
   var FETCH_TIMEOUT_MS = 15000;
   var DASH = "—";
   var DAY_MS = 24 * 60 * 60 * 1000;
-  /* Spec 7: every header figure carries a 30-day delta, whatever range is
+  /* Every figure on this page carries a 30-day delta, whatever range is
    * selected. The range control governs the window the charts draw, not the
-   * width of the delta, which is fixed so the seven figures stay comparable. */
+   * width of the delta, which is fixed so the lead row, the four group heads
+   * and every card head stay comparable to each other. */
   var DELTA_DAYS = 30;
 
   var RANGES = [
@@ -965,18 +968,19 @@ footer a:hover { color: var(--txt); }
     resolution: document.getElementById("resolution")
   };
 
-  var SLOT_IDS = ["header-stats", "reach-body", "following-body", "adoption-body",
+  var SLOT_IDS = ["lead-figures", "reach-body", "following-body", "adoption-body",
     "delivery-body", "method-coverage"];
 
   /*
    * The subset that receives the unavailable/empty note.
    *
    * The same sentence printed in every slot is noise, and neither the method
-   * coverage line nor (from Task 9) the lead figure row is a place a reader
-   * looks for a figure: the coverage line is metadata about the archive, and
-   * the status region above has already said what is wrong, once, in full.
+   * coverage line nor the lead figure row is a place a reader looks for a
+   * figure: the coverage line is metadata about the archive, the lead row is
+   * a table of contents rather than a panel, and the status region above has
+   * already said what is wrong, once, in full.
    */
-  var NOTE_SLOT_IDS = ["header-stats", "reach-body", "following-body", "adoption-body",
+  var NOTE_SLOT_IDS = ["reach-body", "following-body", "adoption-body",
     "delivery-body"];
 
   /* ---------------------------------------------------------------- helpers */
@@ -1978,12 +1982,13 @@ footer a:hover { color: var(--txt); }
 /*
  * Shared figure helpers.
  *
- * The at-a-glance section owned all of this. The facelift gives it five
- * consumers instead of one, the lead figure row and each of the four groups'
- * compact card heads, and the rule this surface exists to make enforceable is
- * that A FIGURE IS COMPUTED ONCE PER RENDER AND RENDERED IN AS MANY PLACES AS
- * NEEDED. The lead figure row and a group head printing different numbers for
- * the same series is the failure this shape prevents, and it is a failure
+ * The at-a-glance section owned all of this before the page had groups. It has
+ * three presentations now, the lead figure row, a group's own headline above
+ * its hero, and a compact card's head, and the rule this surface exists to
+ * make enforceable is that A FIGURE IS COMPUTED ONCE PER RENDER AND RENDERED
+ * IN AS MANY PLACES AS NEEDED. The lead figure row and a group head printing
+ * different numbers for the same series is the failure this shape prevents,
+ * and it is a failure
  * nothing on the page would otherwise catch: both numbers would look entirely
  * ordinary on their own.
  *
@@ -2573,8 +2578,9 @@ footer a:hover { color: var(--txt); }
    * or null.
    *
    * The three `*Card` functions it dispatches to are the ones the at-a-glance
-   * section has always used, so a figure printed by a compact card head and
-   * the same figure printed by the lead row come out of one code path.
+   * section used before this page had groups, so a figure printed by a
+   * compact card head and the same figure printed by the lead row come out of
+   * one code path.
    */
   function figure(spec, data, wins) {
     var step = I.resolutionStepDays();
@@ -2584,10 +2590,14 @@ footer a:hover { color: var(--txt); }
     } else if (spec.kind === "flow") {
       body = flowCard(spec, data, wins === null ? null : wins.flow, step);
       /* Every flow chip on the page prints a signed change (spec section 4.3),
-       * so both of this page's flow specs set the flag. The flag exists rather
-       * than the branch being unconditional because `flowCard` is also what
-       * the at-a-glance grid calls, and that grid keeps its one-window chips
-       * until Task 9 deletes it. */
+       * so all three of this page's flow specs set the flag: Reach's group
+       * head, its clones card head, and the Page views figure in the lead row.
+       * Nothing leaves it unset any more, because the at-a-glance grid was the
+       * last caller that wanted `flowCard`'s own one-window total inside a
+       * chip. The flag stays rather than the branch going unconditional
+       * because that total is still a figure this page prints, through
+       * `flowDelta`, in a traffic card's meta line: two quantities, and a spec
+       * that says which one it means. */
       if (spec.trend === "compare") {
         body.delta = flowTrend(data.series[spec.series], spec.field, wins, step);
       }
@@ -2598,20 +2608,41 @@ footer a:hover { color: var(--txt); }
     }
     body.label = spec.label;
     body.note = spec.note === undefined ? null : spec.note;
+    /* Carried on the computed figure rather than read from the spec at
+     * presentation time, so the lead row's link target travels with the
+     * number it belongs to. A group head's spec carries none, and "summary"
+     * is the only mode that reads it. */
+    body.anchor = spec.anchor === undefined ? null : spec.anchor;
     return body;
   }
 
   /*
    * One figure, presented. The same computed figure is rendered in as many
-   * places as it is needed, and the two printings cannot disagree about a
+   * places as it is needed, and the three printings cannot disagree about a
    * value, a trend or a refusal reason, because there is only one of each.
    *
+   *   "summary"  one of the four figures in the lead row at the top
    *   "card"     the head of a compact chart card
    *   "heading"  the group's own headline, above its hero
+   *
+   * Only "summary" and "heading" print a `.stat-label`. A compact card's
+   * `<h3>` already names its series, so a label under it would print the
+   * name twice.
    */
   function renderFigure(fig, mode) {
-    var box = el("div", mode === "heading" ? "group-head" : "card-figure");
-    if (mode === "heading") box.appendChild(el("p", "stat-label", fig.label));
+    var box;
+    if (mode === "summary") {
+      /* A real link, so it is keyboard reachable and announced as one. The
+       * four figures are the page's table of contents. */
+      box = el("a", "lead-figure");
+      box.href = fig.anchor;
+      box.appendChild(el("p", "stat-label", fig.label));
+    } else if (mode === "heading") {
+      box = el("div", "group-head");
+      box.appendChild(el("p", "stat-label", fig.label));
+    } else {
+      box = el("div", "card-figure");
+    }
     var head = el("div", "card-head");
     head.appendChild(el("p", "stat-value" + (fig.unmeasured ? " is-unmeasured" : ""),
       fig.valueText));
@@ -2626,8 +2657,8 @@ footer a:hover { color: var(--txt); }
    * `flowTrend` is deliberately NOT exported: `figure` is its only caller, and
    * nothing outside this block consumes the arithmetic. `flowDelta` is,
    * because a traffic card's meta line prints the one-window total the chip
-   * above it no longer carries, and it has to be the same number the
-   * at-a-glance chip prints rather than a second implementation of it.
+   * above it no longer carries, and it has to be `flowCard`'s own arithmetic
+   * rather than a second implementation of it.
    */
   window.INSIGHTS_FIGURES = {
     figure: figure,
@@ -2650,27 +2681,21 @@ footer a:hover { color: var(--txt); }
 
 <script>
 /*
- * Section "header-stats" — spec §7's at-a-glance figures.
+ * Section "lead-figures" -- one figure per group, at the top of the page.
  *
- * Registered through INSIGHTS.registerSection like every later section, so it
- * inherits the same guarantees: it is only ever called with a validated,
- * non-empty bundle, its slot is emptied before every call, and a throw would
- * be contained to this slot. It builds from scratch each call and holds no
- * listeners, timers or instances, so it registers no teardown.
+ * They are the page's table of contents: four numbers, each a link to the
+ * group it heads, each repeated as that group's own headline. Both printings
+ * come out of one `INSIGHTS_FIGURES.figure` call per figure per render, which
+ * is the whole reason that surface exists: the row and a group head printing
+ * different numbers for the same series is a failure nothing else on this
+ * page would catch.
  *
- * One rule shapes the whole file: a figure is printed only when the archive
- * can support it, and a 30-day delta is printed only when THIS metric's own
- * history covers the 30 days the delta claims to describe.
+ * No curation. Each figure is printed at whatever value it holds, however
+ * small, and at full precision: 72 is 72 and 12,480 is 12,480.
  *
- * That last clause is the trap in this data, and it is live rather than
- * hypothetical. `collection_started` is the earliest date in ANY series — in
- * the current archive 2026-02-15, from a contributors series derived from
- * commit history — while `series.views.dates[0]` is 2026-08-18, the day the
- * collector first wrote a traffic row. Checking coverage against
- * `collection_started` would pass every metric permissively and print a
- * confident 30-day views delta computed from a fortnight of data. So every
- * coverage test below reads the metric's own dates, and every "since" label
- * names the metric's own first measured day rather than the archive's.
+ * The window is a fixed 30 days ending on the archive's newest measured day,
+ * deliberately not the selected range, so the four stay comparable to each
+ * other whatever the control shows.
  */
 (function () {
   "use strict";
@@ -2678,83 +2703,32 @@ footer a:hover { color: var(--txt); }
   var I = window.INSIGHTS;
   var F = window.INSIGHTS_FIGURES;
 
-  /*
-   * Spec §7's seven figures, in the order the section copy names them.
-   *
-   * `kind` decides what a 30-day delta can honestly mean for the metric:
-   *
-   *   point — a point-in-time total (stars, forks, watchers, contributors,
-   *           release downloads). Its delta is the difference between the
-   *           measurements at the two ends of the window, so a measurement
-   *           must exist at BOTH ends.
-   *   flow  — a per-day count (views, clones). Its delta is what accrued
-   *           inside the window, so every day of the window has to be
-   *           measured or the total is short by an unknown amount.
-   *   step  — a total recorded when it CHANGES rather than sampled daily
-   *           (contributors). Between two rows the total is unchanged rather
-   *           than unmeasured, so the age of its newest row says nothing
-   *           about freshness and the daily-sample staleness test must not be
-   *           applied to it. See stepDelta.
-   */
-  var CARDS = [
-    { label: "Stars", kind: "point", series: "stars", field: "total" },
-    { label: "Forks", kind: "point", series: "forks", field: "total" },
-    { label: "Watchers", kind: "point", series: "repo", field: "subscribers" },
-    { label: "Views", kind: "flow", series: "views", field: "count" },
-    /* GitHub counts every `actions/checkout` this repository runs as a clone,
-       so on a heavy CI day the figure measures the build pipeline rather than
-       anyone's interest. It cannot be split the way the download cards below
-       are — nothing in the API attributes a clone to Actions — so the card
-       states the confound instead of pretending the number is clean. */
-    { label: "Clones", kind: "flow", series: "clones", field: "count",
-      note: "includes this repo's own CI checkouts" },
-    { label: "Contributors", kind: "step", series: "contributors", field: "total" },
-    /* Deliberately NOT one "Release downloads" figure. GitHub counts an
-       electron-updater feed file (`latest.yml`) and a `.blockmap` in
-       `download_count` exactly like an installer, and every installed client
-       fetches the feed on every update check, so a combined total is
-       dominated by polling: when this split was introduced the feed files
-       outnumbered real installs about five to one. Two cards answer two
-       different questions instead of one number answering neither.
-       Both read null for rows the archive recorded before the split, which
-       renders as a dash rather than a zero. */
-    { label: "App downloads", kind: "point", series: "repo", field: "downloads_app" },
-    { label: "Update checks", kind: "point", series: "repo", field: "downloads_updates" }
+  /* In page order, so the row reads left to right in the order a reader will
+   * meet the groups below it. Three of the four are at-a-glance cards
+   * promoted rather than figures invented; Releases shipped is the only one
+   * new to the page, and it is a count of rows in an array the page already
+   * carries. */
+  var FIGURES = [
+    {
+      label: "Page views", kind: "flow", series: "views", field: "count",
+      trend: "compare", anchor: "#reach"
+    },
+    { label: "Stars", kind: "point", series: "stars", field: "total", anchor: "#following" },
+    {
+      label: "App downloads", kind: "point", series: "repo", field: "downloads_app",
+      anchor: "#adoption"
+    },
+    { label: "Releases shipped", kind: "releases", anchor: "#delivery" }
   ];
 
-  function el(tag, className, text) {
-    var node = document.createElement(tag);
-    if (className) node.className = className;
-    if (text !== undefined) node.textContent = text;
-    return node;
-  }
-
-  function buildCard(card, body) {
-    var box = el("div", "stat");
-    box.appendChild(el("p", "stat-label", card.label));
-    box.appendChild(el("p", "stat-value" + (body.unmeasured ? " is-unmeasured" : ""), body.valueText));
-    box.appendChild(el("p", "stat-sub", body.sub));
-    if (card.note) box.appendChild(el("p", "stat-note", card.note));
-    box.appendChild(F.chip(body.delta));
-    return box;
-  }
-
-  /* The delta window is fixed at 30 days and is NOT the selected range: the
-   * seven figures stay comparable to each other whatever the control shows.
-   * F.windows explains why the point and flow windows differ by one day. A
-   * flow total can still end up labelled wider than 30 days when the bundle
-   * is weekly; the chip says so when it does. */
-  function render(slot, data, rangeKey) {
+  function render(slot, data) {
     var wins = F.windows(data);
-
-    var grid = el("div", "stat-grid");
-    for (var i = 0; i < CARDS.length; i++) {
-      grid.appendChild(buildCard(CARDS[i], F.figure(CARDS[i], data, wins)));
+    for (var i = 0; i < FIGURES.length; i++) {
+      slot.appendChild(F.renderFigure(F.figure(FIGURES[i], data, wins), "summary"));
     }
-    slot.appendChild(grid);
   }
 
-  I.registerSection("header-stats", render);
+  I.registerSection("lead-figures", render);
 })();
 </script>
 
@@ -2767,7 +2741,7 @@ footer a:hover { color: var(--txt); }
  * archive rather than any one group, and because every card already states
  * the same thing for its own series in its meta line. A reader who never
  * scrolls this far has not missed a number; what this line adds is saying in
- * one place what is otherwise spread across seven cards.
+ * one place what is otherwise spread across every card on the page.
  *
  * It is also the only part of #method that reads the selected range, which is
  * why it is a registered section and not static markup.
@@ -2807,10 +2781,11 @@ footer a:hover { color: var(--txt); }
   /*
    * The selected range, stated in the dates it actually resolves to and in how
    * much of it each series measured. This is what consumes the shared range
-   * state: the figures above are the fixed set spec §7 names, so the range
-   * cannot honestly move them, but what the archive holds inside the selected
-   * window is a real answer that changes with the control — and it is the same
-   * window, from the same INSIGHTS.rangeWindow, that the later charts draw.
+   * state: every figure above is measured over the same fixed 30 days, so the
+   * range cannot honestly move one, but what the archive holds inside the
+   * selected window is a real answer that changes with the control, and it is
+   * the same window, from the same INSIGHTS.rangeWindow, that every chart on
+   * the page draws.
    */
   function windowNote(data, rangeKey, step) {
     var note = el("p", "window-note");
@@ -2929,34 +2904,29 @@ footer a:hover { color: var(--txt); }
   var SYNC_KEY = "insights-time";
 
   /*
-   * The page's one interaction hint, and why it lives here rather than in a
-   * chart section.
+   * The page's one interaction hint, directly under the sticky range control,
+   * and why it lives here rather than in a group.
    *
    * The sentence describes the cursor-sync group above: hovering any chart
    * moves the cursor on every chart, and a drag zooms all of them. That group
-   * is this file's property, not any one section's, and the hint was
-   * previously appended by the reach section — which made it vanish whenever
-   * reach declined to draw, even with the other chart sections rendering
-   * perfectly beside it, and would have printed it twice once a second
-   * section started appending one of its own.
+   * is this file's property, not any one group's, and the hint was previously
+   * appended by the reach section, which made it vanish whenever reach
+   * declined to draw, even with the other charts rendering perfectly beside
+   * it, and would have printed it twice once a second group started appending
+   * one of its own. So `mount` counts the live plots and this fills a single
+   * page-level element from that count.
    *
-   * So `mount` counts the live plots and this fills a single page-level
-   * element from that count. The wording is chosen from the count too: with
-   * exactly one plot on the page there is no "every chart" to speak of, and a
+   * It used to move as well: it was appended by whichever section drew last,
+   * because a hint sitting under a section that drew nothing would read as a
+   * caption for something that is not there. Under the sticky bar it is page
+   * chrome rather than a caption, so it has one fixed place and needs no
+   * bookkeeping. The count is still what chooses the wording: with exactly
+   * one plot on the page there is no "every chart" to speak of, and a
    * sentence about charts moving together would be describing something the
    * reader cannot see happening.
-   *
-   * `mount` also keeps the containers it drew into, because the count alone
-   * cannot say WHERE the charts are. A page-level element has one fixed place
-   * in the document, and a section that declines to draw still occupies its
-   * own place in that order — so the sentence could sit directly beneath a
-   * section holding no chart, reading as a caption for something that is not
-   * there. `placeHint` moves it under whichever section drew last instead.
    */
   var HINT_ID = "chart-hint";
   var livePlots = 0;
-  /* The container of every live plot, in mount order. */
-  var liveHosts = [];
 
   /* The toolkit's own console channel. The shell's `reportFailure` is private
    * to the shell, and a failure inside `mount` needs saying somewhere a
@@ -2968,79 +2938,15 @@ footer a:hover { color: var(--txt); }
     }
   }
 
-  function forgetHost(host) {
-    for (var i = 0; i < liveHosts.length; i++) {
-      if (liveHosts[i] === host) {
-        liveHosts.splice(i, 1);
-        return;
-      }
-    }
-  }
-
-  /*
-   * The live host that sits last in the document.
-   *
-   * Mount order is document order while the sections render top to bottom,
-   * but nothing enforces that, and a hint placed after a chart that is not the
-   * last one on the page would be the same misplacement in a subtler form. So
-   * the order is read from the document rather than assumed from the array.
-   */
-  function lastHost() {
-    var last = null;
-    for (var i = 0; i < liveHosts.length; i++) {
-      if (last === null) {
-        last = liveHosts[i];
-      } else if ((last.compareDocumentPosition(liveHosts[i]) &
-        Node.DOCUMENT_POSITION_FOLLOWING) !== 0) {
-        last = liveHosts[i];
-      }
-    }
-    return last;
-  }
-
-  /* The ancestor of `node` that is a direct child of `container`, or null when
-   * `node` is not inside `container` at all — which is what a host detached
-   * from the document returns, and the reason `placeHint` can leave the hint
-   * where it is rather than throwing on one. */
-  function childOf(container, node) {
-    var current = node;
-    while (current !== null && current.parentNode !== container) current = current.parentNode;
-    return current;
-  }
-
-  /*
-   * Put the hint directly after the section that drew the last chart.
-   *
-   * The whole element moves — the `.wrap` the hint sits in, not the paragraph
-   * — so the page's own centred column is preserved wherever it lands. It is
-   * moved rather than duplicated: there is one hint, and it says one thing
-   * about one cursor-sync group.
-   */
-  function placeHint(node) {
-    var wrapper = node.parentNode;
-    if (wrapper === null) return;
-    var container = wrapper.parentNode;
-    if (container === null) return;
-    var host = lastHost();
-    if (host === null) return;
-    var anchor = childOf(container, host);
-    /* Nothing to do when the last chart is not a sibling of the hint, and
-     * nothing to do when it already sits where it belongs. */
-    if (anchor === null || anchor === wrapper) return;
-    if (anchor.nextSibling === wrapper) return;
-    container.insertBefore(wrapper, anchor.nextSibling);
-  }
-
   function syncHint() {
     var node = document.getElementById(HINT_ID);
     if (node === null) return;
     if (livePlots === 0) {
-      /* Left where it stands: `.chart-hint:empty` gives it no height, so there
-       * is nothing on the page to be misplaced. */
+      /* `.chart-hint:empty` gives it no height, so a page that drew nothing
+       * carries no gap under its range control. */
       node.textContent = "";
       return;
     }
-    placeHint(node);
     node.textContent = livePlots > 1
       ? "Hovering any chart moves the cursor to that day on every chart on this page whose " +
         "span covers it. Drag sideways across any of them to put them all on that span; " +
@@ -3154,9 +3060,9 @@ footer a:hover { color: var(--txt); }
    * thins the ticks out rather than repeating a date across them. The archive
    * has one point per day; the axis says so.
    *
-   * Lives here rather than in a chart section because all four sections draw
-   * on this one axis, and a fix applied in one of them would leave the other
-   * three printing the same duplicated dates.
+   * Lives here rather than in a group because every card on this page draws on
+   * this one axis, and a fix applied in one group would leave the rest
+   * printing the same duplicated dates.
    */
   var DAY_S = 86400;
   var MONTH_S = DAY_S * 30;
@@ -3749,10 +3655,10 @@ footer a:hover { color: var(--txt); }
    * The painter below additionally declines anything outside the LIVE scale,
    * so a drag zoom can leave the canvas with no marker on it while the
    * caption still names every release it listed. That is deliberate, and it is
-   * not the caption going stale: the caption is a statement about the span
-   * this section drew out of the archive — the span each card's `span` line
-   * names — and not a claim about what is on the canvas at the reader's
-   * current zoom. Double-clicking restores the full span and every listed
+   * not the caption going stale: the caption is a statement about the span the
+   * card drew out of the archive, the span its own `span` line names, and not a
+   * claim about what is on the canvas at the reader's current zoom.
+   * Double-clicking restores the full span and every listed
    * marker with it. A caption recomputed from a `setScale` hook would be
    * making the narrower claim, and would then have to say which of the two
    * spans it meant; this one says the wider thing and says it once.
@@ -4219,12 +4125,10 @@ footer a:hover { color: var(--txt); }
       detach = trackSize(plot, host, profile);
       livePlots += 1;
       counted = true;
-      liveHosts.push(host);
       syncHint();
     } catch (error) {
       if (counted) {
         livePlots -= 1;
-        forgetHost(host);
       }
       if (detach !== null) {
         try {
@@ -4259,7 +4163,6 @@ footer a:hover { color: var(--txt); }
         if (released) return;
         released = true;
         livePlots -= 1;
-        forgetHost(host);
         syncHint();
         detach();
         plot.destroy();
@@ -4467,6 +4370,7 @@ footer a:hover { color: var(--txt); }
    *   breakPhrase  what an unmeasured step is, in this series' own words
    *   metaExtra    optional (axis, offsets, stepDays) -> [pair, ...]
    *   notes        [string], rendered as .chart-hint under the plot
+ *   cautions     [string], rendered as .chart-hint.chart-caution under them
    *   caveat       optional node appended to the card head
    *   releasesFor  optional (axis) -> the collected releases for a hero lane
    *
@@ -4601,10 +4505,36 @@ footer a:hover { color: var(--txt); }
     };
   }
 
+  /*
+   * A card's standing prose, in two channels.
+   *
+   * `notes` are explanations: what the line is, how to read the axis. A
+   * `caution` is the amber channel, and it is for the narrower case where
+   * the chart as drawn can be read as saying something it does not say. The
+   * page has carried that distinction in `.chart-caution` since before this
+   * facelift, and the four groups lost it one at a time: three sentences
+   * that were amber in the sections they came from went through `notes` and
+   * came out as plain hints, because the shared builder had only the one
+   * channel. Both channels exist here now, so a group that means "be careful
+   * reading this" cannot quietly print "here is some background" instead.
+   *
+   * Cautions come after notes, nearest the reader's exit from the card.
+   */
+  function caution(text) {
+    return el("p", "chart-hint chart-caution", text);
+  }
+
   function appendNotes(card, spec) {
-    if (spec.notes === undefined) return;
-    for (var i = 0; i < spec.notes.length; i++) {
-      card.appendChild(el("p", "chart-hint", spec.notes[i]));
+    var i;
+    if (spec.notes !== undefined) {
+      for (i = 0; i < spec.notes.length; i++) {
+        card.appendChild(el("p", "chart-hint", spec.notes[i]));
+      }
+    }
+    if (spec.cautions !== undefined) {
+      for (i = 0; i < spec.cautions.length; i++) {
+        card.appendChild(caution(spec.cautions[i]));
+      }
     }
   }
 
@@ -4640,6 +4570,7 @@ footer a:hover { color: var(--txt); }
     attach: attach,
     band: band,
     buildCardSafely: buildCardSafely,
+    caution: caution,
     chartCard: chartCard,
     detailCard: detailCard,
     groupHead: groupHead,
@@ -5949,7 +5880,8 @@ footer a:hover { color: var(--txt); }
   var D = window.INSIGHTS_DIMENSIONS;
 
   var LEAD = {
-    label: "Page views", kind: "flow", series: "views", field: "count", trend: "compare"
+    label: "Page views", kind: "flow", series: "views", field: "count", trend: "compare",
+    anchor: "#reach"
   };
 
   /* Every live uPlot instance this group owns. Assigned only once a render
@@ -5993,8 +5925,8 @@ footer a:hover { color: var(--txt); }
    * already are.
    *
    * `flowDelta` is the page's existing one-window total, unchanged and called
-   * exactly as `flowCard` calls it, so this pair and the at-a-glance chip
-   * cannot disagree about the number while both are on the page. It refuses
+   * exactly as `flowCard` calls it, so this pair states the same arithmetic the
+   * figure head above it was computed from rather than a second one. It refuses
    * unless the window is covered end to end, and it labels itself with the
    * span its rows actually stand for when the bundle is weekly, which is why
    * the key is built from `windowDays` rather than hard-coded to 30. A refused
@@ -6053,7 +5985,8 @@ footer a:hover { color: var(--txt); }
       yPolicy: "zero",
       breakPhrase: "drawn as breaks, not zeros",
       metaExtra: trafficMeta("views", "count", "count", "uniques", ctx),
-      notes: ctx.downsampled ? [weeklyUniquesNote("Unique visitors")] : []
+      notes: [],
+      cautions: ctx.downsampled ? [weeklyUniquesNote("Unique visitors")] : []
     };
   }
 
@@ -6083,9 +6016,7 @@ footer a:hover { color: var(--txt); }
        * is a flow chip on the charted page, and spec section 4.3 gives every
        * flow chip on the page one idiom, the signed change. The one-window
        * total it used to print is the `30d total` pair in this card's own meta
-       * line below, and the at-a-glance Clones chip still prints that total
-       * until Task 9 deletes the grid, so the two can be read against each
-       * other while both are on screen. */
+       * line below, so nothing stopped being printed when the idiom changed. */
       figure: {
         label: "Clones", kind: "flow", series: "clones", field: "count",
         trend: "compare", note: "includes this repo's own CI checkouts"
@@ -6105,7 +6036,8 @@ footer a:hover { color: var(--txt); }
       breakPhrase: "drawn as breaks, not zeros",
       metaExtra: trafficMeta("clones", "count", "count", "uniques", ctx),
       caveat: cloneCaveat(),
-      notes: ctx.downsampled ? [weeklyUniquesNote("Unique cloners")] : []
+      notes: [],
+      cautions: ctx.downsampled ? [weeklyUniquesNote("Unique cloners")] : []
     };
   }
 
@@ -6266,7 +6198,9 @@ footer a:hover { color: var(--txt); }
   var F = window.INSIGHTS_FIGURES;
   var G = window.INSIGHTS_GROUPS;
 
-  var LEAD = { label: "Stars", kind: "point", series: "stars", field: "total" };
+  var LEAD = {
+    label: "Stars", kind: "point", series: "stars", field: "total", anchor: "#following"
+  };
 
   /* Every live uPlot instance this group owns. Assigned only once a render
    * has completed; a render that throws destroys what it built itself. */
@@ -6308,7 +6242,10 @@ footer a:hover { color: var(--txt); }
   function cumulativeSpec(profile, title, figure, series, field, label, token, fallback,
     downsampled) {
     var notes = [FITTED_NOTE];
-    if (downsampled) notes.push(WEEKLY_CUMULATIVE_NOTE);
+    /* The amber channel, as it was in the growth section this sentence comes
+     * from: a point sitting up to six days left of the reading it shows is a
+     * way to misread the chart, not background about it. */
+    var cautions = downsampled ? [WEEKLY_CUMULATIVE_NOTE] : [];
     var line = { column: "total", label: label, token: token, fallback: fallback };
     /* A hero's stroke is 2px against the compact profile's 1.5. No `fill` on
      * any of the three, hero included: see the header comment. */
@@ -6321,7 +6258,8 @@ footer a:hover { color: var(--txt); }
       lines: [line],
       yPolicy: "fitted",
       breakPhrase: "drawn as breaks, not as a fall to zero",
-      notes: notes
+      notes: notes,
+      cautions: cautions
     };
   }
 
@@ -6565,7 +6503,8 @@ footer a:hover { color: var(--txt); }
   var NEUTRAL = { token: "--txt4", fallback: "#5c5c68" };
 
   var LEAD = {
-    label: "App downloads", kind: "point", series: "repo", field: "downloads_app"
+    label: "App downloads", kind: "point", series: "repo", field: "downloads_app",
+    anchor: "#adoption"
   };
 
   /*
@@ -6578,7 +6517,8 @@ footer a:hover { color: var(--txt); }
    * where it would not be on the star chart.
    *
    * Rows the archive recorded before the download split are null and break
-   * the line, as they do on the at-a-glance card today.
+   * the line rather than falling to zero, and the App downloads figure in the
+   * lead row reads the same column.
    */
   var HERO = {
     profile: "hero",
@@ -7086,7 +7026,7 @@ footer a:hover { color: var(--txt); }
   var C = window.INSIGHTS_CHARTS;
   var G = window.INSIGHTS_GROUPS;
 
-  var LEAD = { label: "Releases shipped", kind: "releases" };
+  var LEAD = { label: "Releases shipped", kind: "releases", anchor: "#delivery" };
 
   /* Every live uPlot instance this group owns. Assigned only once a render
    * has completed; a render that throws destroys what it built itself. */
@@ -7328,7 +7268,16 @@ footer a:hover { color: var(--txt); }
         var narrative = C.releaseNarrative(built.releases, data.releases.length, ctx.step);
         if (narrative !== null) built.card.appendChild(el("p", "chart-hint", narrative));
         if (data.downsampled) {
-          built.card.appendChild(el("p", "chart-hint chart-caution", weeklyNote()));
+          /* The one caution on the page that cannot travel on a card spec's
+           * `cautions` array. That array is printed by `appendNotes`, which
+           * also runs on the two branches that state a reading instead of
+           * drawing a plot, and this sentence is about where a release marker
+           * sits against a weekly bucket. On a card with no chart there is no
+           * marker and no bucket, and the branch below says exactly that, so
+           * the sentence would contradict the one under it. It is appended
+           * here, inside the guard that already establishes markers were
+           * painted, through the same builder the channel uses. */
+          built.card.appendChild(G.caution(weeklyNote()));
         }
         built.card.appendChild(cloneLink());
       } else if (built !== null) {
