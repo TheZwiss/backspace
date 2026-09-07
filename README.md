@@ -729,7 +729,7 @@ version, whether voice and federation are on) and the country the request came
 from. No names, no message content, no addresses of any kind. It stays off until
 an admin says yes, in Instance settings or with `TELEMETRY=on` at install time,
 and can be turned off again at any time. Everything that comes back is published
-as open data on the [insights page](https://thezwiss.github.io/backspace/insights/).
+as open data on the [insights page](https://backspacechat.com/insights/).
 What is sent, how it is stored and for how long is documented in
 [`docs/systems/telemetry.md`](docs/systems/telemetry.md).
 

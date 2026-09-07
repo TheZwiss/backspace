@@ -189,7 +189,7 @@ describe('renderDataPage', () => {
   it('links relatively when no site URL is configured', () => {
     const html = renderDataPage(data());
     expect(html).toContain('href="../data.json"');
-    expect(html).not.toContain('https://thezwiss.github.io');
+    expect(html).not.toContain('https://backspacechat.com');
   });
 
   it('links absolutely when a site URL is configured, tolerating a trailing slash', () => {

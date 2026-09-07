@@ -6,12 +6,13 @@
  * than no `lastmod` at all: a crawler that has been told a page is unchanged
  * has been given a reason not to come back.
  *
- * This exists because nothing else announces these pages. `robots.txt` has to
- * live at the domain root — `thezwiss.github.io/robots.txt`, a different
- * repository from this one — so a sitemap served from this project's own path
- * is the only discovery signal this repository can publish for itself. It is
- * still worth publishing without the robots.txt reference: a sitemap at a
- * known URL can be submitted to a search console directly.
+ * `robots.txt` is only honoured at a domain root. The site now serves at the
+ * root of its own domain, so `site/robots.txt` declares this sitemap by URL
+ * and the two are published together. That was not always true: as a project
+ * page under `thezwiss.github.io/backspace/` this file was the only discovery
+ * signal the repository could publish for itself, which is why it is written
+ * whether or not anything references it. A sitemap at a known URL can also be
+ * submitted to a search console directly.
  */
 
 export interface SitemapEntry {
