@@ -25,6 +25,7 @@ Cross-references:
 - Surface/glass tiers, animations, input classes: see `docs/systems/design-system.md`
 - Voice call state machine, LiveKit integration: see `docs/systems/voice.md`
 - Desktop three-column layout (AppLayout): see `docs/systems/design-system.md`
+- Interface scale, the coordinate model, `layoutPixels` / `visualPixels`: see `docs/systems/design-system.md`
 
 ---
 
@@ -817,7 +818,7 @@ const { sheetStyle, handleProps, isDragging, isClosing, hasInteracted } = useDra
 
 The mobile bottom offset is computed via `resolveMobileBottomOffset(hasStack, topScreen, inVoice)` and added to `var(--safe-bottom)`:
 
-| Mobile State | Bottom Offset (above `safe-area-inset-bottom`) | Rationale |
+| Mobile State | Bottom Offset (above `var(--safe-bottom)`) | Rationale |
 |---|---|---|
 | `topScreen === 'voice-full'` | `72px + 12px` | Clears `MobileVoiceFullScreen` control bar (5 round buttons in `glass-bubble` with `mb-2`); bottom nav + mini-bar hidden in this mode |
 | Stack non-empty + in voice | `64px + 12px` | Clears `MobileVoiceMiniBar` (sits above the stacked screen since the bottom nav is hidden when stack non-empty) |
