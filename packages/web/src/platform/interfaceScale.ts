@@ -11,9 +11,16 @@ export function visualPixels(value: number): number {
   return value * (useInterfaceScaleStore.getState().scale / 100);
 }
 
+/** Below this many layout pixels the app shell is MobileShell, not AppLayout. */
+export const MOBILE_LAYOUT_BREAKPOINT = 768;
+
+/** Physically narrow viewports stay mobile at any scale. Phones are 390-430px. */
+export const NARROW_VIEWPORT_BREAKPOINT = 600;
+
 export function isMobileViewport(): boolean {
   // Zooming out must not turn a physically narrow phone into the desktop shell.
-  return window.innerWidth < 600 || layoutPixels(window.innerWidth) < 768;
+  return window.innerWidth < NARROW_VIEWPORT_BREAKPOINT
+    || layoutPixels(window.innerWidth) < MOBILE_LAYOUT_BREAKPOINT;
 }
 
 export function layoutRect<T extends { top: number; right: number; bottom: number; left: number; width: number; height: number }>(rect: T) {

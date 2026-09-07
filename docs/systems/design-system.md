@@ -59,6 +59,13 @@ resize and scale changes using the same predicate as AppLayout: mobile below
 The narrow-viewport guard keeps 390–430px phones in MobileShell even at 50%,
 when their effective layout width is 780–860px. Wider windows retain the scaled
 768px breakpoint; 600px is the first width eligible for desktop at 50%.
+
+The guard also decides the outcome at 75%, not only at the new floor: it applies
+at any scale at or below 78.125%, so a 576–599px window renders MobileShell where
+the scaled breakpoint alone would have kept the desktop grid. That is intended.
+A physically narrow viewport is mobile regardless of scale; gating the guard on
+scale would reintroduce the scale-driven shell flip it exists to prevent.
+
 Use the `desktop:` Tailwind variant for app-shell responsiveness; raw media
 queries ignore root zoom. Auth pages without a JS layout branch may keep `md:`.
 When scale moves the appearance panel into MobileShell, route reconstruction
