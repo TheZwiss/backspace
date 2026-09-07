@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { isMobileViewport } from '../../platform/interfaceScale';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import i18n from '../../i18n';
@@ -268,7 +269,7 @@ export function AppLayout() {
 
   // Responsive detection
   useEffect(() => {
-    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    const checkMobile = () => setIsMobile(isMobileViewport());
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
@@ -346,14 +347,14 @@ export function AppLayout() {
     return (
       <div className="h-full flex bg-surface-base" role="status" aria-label={t('app.loading')}>
         {/* Space strip */}
-        <div className="w-[72px] hidden md:flex flex-col items-center gap-3 pt-4 bg-surface-base flex-shrink-0">
+        <div className="w-[72px] hidden desktop:flex flex-col items-center gap-3 pt-4 bg-surface-base flex-shrink-0">
           {Array.from({ length: 5 }, (_, i) => (
             <div key={i} className="skeleton skeleton-circle w-12 h-12" style={{ animationDelay: `${i * 0.1}s` }} />
           ))}
         </div>
 
         {/* Sidebar */}
-        <div className="w-60 hidden md:flex bg-surface-channel flex-shrink-0 flex-col pt-4 px-2">
+        <div className="w-60 hidden desktop:flex bg-surface-channel flex-shrink-0 flex-col pt-4 px-2">
           {/* Header bar */}
           <div className="skeleton skeleton-bar w-[60%] h-4 mb-6 ml-2" />
           {/* Channel items */}
@@ -432,9 +433,9 @@ export function AppLayout() {
 
   // ── Desktop layout ──
   return (
-    <div className="h-full flex flex-col md:grid md:grid-cols-[312px_1fr] md:grid-rows-[minmax(0,1fr)] bg-surface-base overflow-hidden">
+    <div className="h-full flex flex-col desktop:grid desktop:grid-cols-[312px_1fr] desktop:grid-rows-[minmax(0,1fr)] bg-surface-base overflow-hidden">
       {/* Space sidebar - always visible on desktop */}
-      <div className={`fixed inset-y-0 left-0 z-40 flex w-[312px] transition-transform duration-200 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} md:static md:z-auto md:w-auto md:transform-none`}>
+      <div className={`fixed inset-y-0 left-0 z-40 flex w-[312px] transition-transform duration-200 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full desktop:translate-x-0'} desktop:static desktop:z-auto desktop:w-auto desktop:transform-none`}>
         <SpaceSidebar />
         <ChannelSidebar />
       </div>

@@ -1,3 +1,4 @@
+import { layoutRect, layoutPixels } from '../../platform/interfaceScale';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Trans, useTranslation } from 'react-i18next';
@@ -668,8 +669,8 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
         const PICKER_HEIGHT = 400;
         const PICKER_WIDTH = 360;
         const MARGIN = 8;
-        const btnRect = reactionPickerBtnRef.current!.getBoundingClientRect();
-        const spaceBelow = window.innerHeight - btnRect.bottom;
+        const btnRect = layoutRect(reactionPickerBtnRef.current!.getBoundingClientRect());
+        const spaceBelow = layoutPixels(window.innerHeight) - btnRect.bottom;
         const spaceAbove = btnRect.top;
         const flipAbove = spaceBelow < (PICKER_HEIGHT + MARGIN) && spaceAbove > spaceBelow;
         const top = flipAbove
@@ -677,7 +678,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
           : btnRect.bottom + MARGIN;
         const left = Math.min(
           Math.max(MARGIN, btnRect.left),
-          window.innerWidth - PICKER_WIDTH - MARGIN,
+          layoutPixels(window.innerWidth) - PICKER_WIDTH - MARGIN,
         );
         return createPortal(
           <div

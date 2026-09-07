@@ -92,8 +92,8 @@ export function MobileBottomNav() {
     <nav
       className="glass-bubble flex items-center justify-around shrink-0"
       style={{
-        paddingBottom: 'env(safe-area-inset-bottom)',
-        height: 'calc(56px + env(safe-area-inset-bottom))',
+        paddingBottom: 'var(--safe-bottom)',
+        height: 'calc(56px + var(--safe-bottom))',
       }}
     >
       {tabs.map((tab) => (

@@ -152,7 +152,7 @@ export function ExplorePage() {
 
             {/* Unjoined spaces grid */}
             {hasUnjoined && (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 desktop:grid-cols-[repeat(auto-fit,minmax(min(100%,280px),1fr))] gap-4">
                 {unjoinedSpaces.map((space) => (
                   <SpaceCard
                     key={`${space.id}:${space._instanceOrigin}`}
@@ -188,7 +188,7 @@ export function ExplorePage() {
                 </button>
 
                 {!joinedCollapsed && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 desktop:grid-cols-[repeat(auto-fit,minmax(min(100%,280px),1fr))] gap-4">
                     {joinedSpaces.map((space) => (
                       <SpaceCard
                         key={`${space.id}:${space._instanceOrigin}`}

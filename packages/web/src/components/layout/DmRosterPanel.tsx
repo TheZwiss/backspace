@@ -10,6 +10,7 @@ import { isSelf, parseFederatedUsername } from '../../utils/identity';
 import { api } from '../../api/client';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { DmMemberRow, type DmMemberRowAction } from './DmMemberRow';
+import { visualPixels } from '../../platform/interfaceScale';
 import { pointAnchor } from '../../hooks/useFloatingPosition';
 
 /**
@@ -96,7 +97,7 @@ export function DmRosterPanel() {
       // MemberSidebar pattern). This branch only fires on the unlikely
       // fallback path where the row couldn't compute its bounding rect —
       // in that case, anchor to the top-left of the roster column.
-      openUserProfile(member, pointAnchor(100, 100));
+      openUserProfile(member, pointAnchor(visualPixels(100), visualPixels(100)));
       return;
     }
     if (action === 'kick') {
@@ -186,7 +187,7 @@ export function DmRosterPanel() {
   return (
     <div
       data-dm-roster-panel
-      className="w-60 bg-surface-members flex-shrink-0 overflow-y-auto select-none no-scrollbar hidden md:block border-l border-border-hard"
+      className="w-60 bg-surface-members flex-shrink-0 overflow-y-auto select-none no-scrollbar hidden desktop:block border-l border-border-hard"
     >
       <div className="p-3">
         <h3

@@ -15,6 +15,53 @@ Font: DM Sans (primary) with system fallbacks
 - `prefers-reduced-transparency` → fall back to solid surfaces
 - NOT a Discord clone — Backspace has its own visual identity
 
+## Interface scale
+
+Account settings include a device-local interface scale: 75–250% in 25% steps,
+default/reset 100%. `interfaceScaleStore` persists the percentage under
+`backspace-interface-scale`; unsupported stored values fall back to 100%.
+`main.tsx` applies it before mounting React, including auth pages and portals.
+English, German, and Russian labels live in the `settings` namespace.
+
+The web and Electron clients share root CSS `zoom`. This is independent of the
+browser's own zoom controls. CSS viewport units do **not** compensate for CSS
+zoom, so viewport-constrained surfaces use `--app-vh`, `--app-dvh`, and `--app-vw`
+(one viewport unit divided by `--interface-scale`). Tailwind's `h-screen` and
+`min-h-screen` use the same units. Keep Electron's title-bar reservation in
+physical pixels using the shared `--titlebar-inset` (33px divided by the scale
+under Electron, zero in the browser). `App`, `SpaceSidebar` and `ImagePreview`
+must all use this property rather than separate fixed offsets.
+
+Safe-area and keyboard offsets use `--safe-top`, `--safe-bottom`, and
+`--keyboard-inset`, which divide the corresponding environment lengths by the
+scale. The viewport-token test rejects raw viewport units and environment
+functions outside these definitions in production source.
+
+`initializeInterfaceScale` updates `html[data-viewport="mobile|desktop"]` on
+resize and scale changes using the same 768-layout-pixel threshold as AppLayout.
+Use the `desktop:` Tailwind variant for app-shell responsiveness; raw media
+queries ignore root zoom. Auth pages without a JS layout branch may keep `md:`.
+When scale moves account settings into MobileShell, route reconstruction places
+the current channel below settings and remains idempotent in StrictMode.
+
+`ImageCropModal` cancels root zoom only on the cropper container with
+`zoom: calc(1 / var(--interface-scale, 1))`. react-easy-crop mixes visual DOM
+measurements and pointer deltas with CSS pixels, so this subtree must operate
+at effective 100%. The surrounding dialog controls retain the interface scale.
+Validate both dragging and the exported crop pixels when changing this boundary.
+
+DOM rectangles and pointer coordinates are visual pixels. Convert them with
+`layoutPixels` / `layoutRect` before assigning CSS positions, sizes, or drag
+offsets. `computeFloatingPosition` accepts visual rectangles and dimensions and
+returns layout coordinates; its callers must not pre-convert them. Pure hit
+tests comparing two visual coordinates do not need conversion.
+For anchors created from layout constants, convert with `visualPixels` before
+calling `pointAnchor` so floating-position conversion does not shrink them twice.
+
+Changing scale dispatches `resize` to update floating surfaces and the effective
+mobile breakpoint. The account settings stay accessible when crossing that
+breakpoint. Native browser zoom and pinch gestures retain their normal behavior.
+
 ---
 
 ## Color Palette

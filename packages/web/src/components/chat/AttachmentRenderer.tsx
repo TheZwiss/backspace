@@ -316,7 +316,7 @@ export function AttachmentRenderer({ attachment }: AttachmentRendererProps) {
           tray: true,
         });
       }}
-      className="mt-1 max-w-full sm:max-w-[400px] flex items-center gap-3 p-4 bg-surface-channel/50 rounded-lg border border-border-hard hover:bg-interactive-hover transition-all group/att text-left w-full min-w-0"
+      className="mt-1 max-w-full desktop:max-w-[400px] flex items-center gap-3 p-4 bg-surface-channel/50 rounded-lg border border-border-hard hover:bg-interactive-hover transition-all group/att text-left w-full min-w-0"
     >
       <div className="p-2 bg-surface-base rounded text-txt-tertiary group-hover/att:text-txt-primary transition-colors flex-shrink-0">
         <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">

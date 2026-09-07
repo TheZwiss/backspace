@@ -171,7 +171,7 @@ export function ConnectionInfoPopover({ open, onClose, anchorRef }: ConnectionIn
         <span className="text-[14px] font-bold text-txt-primary">{t('voice:connectionInfo.title')}</span>
       </div>
 
-      <div className="px-3 py-2 max-h-[calc(100vh-32px)] overflow-y-auto scrollbar-thin">
+      <div className="px-3 py-2 max-h-[calc(calc(100*var(--app-vh))-32px)] overflow-y-auto scrollbar-thin">
         {!room ? (
           <div className="text-[12px] text-txt-tertiary py-2 text-center">{t('voice:connectionInfo.notConnected')}</div>
         ) : !stats ? (

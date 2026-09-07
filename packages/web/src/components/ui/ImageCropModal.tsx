@@ -95,7 +95,11 @@ export function ImageCropModal({
         </div>
 
         {/* Crop area */}
-        <div className="relative h-[350px] mx-4 mt-3 rounded-lg overflow-hidden bg-surface-base">
+        {/* react-easy-crop mixes DOM rect/client coordinates with CSS pixels.
+            Keep only its interactive canvas at effective 100%; dialog controls
+            still use the selected interface scale. */}
+        <div className="relative h-[350px] mx-4 mt-3 rounded-lg overflow-hidden bg-surface-base"
+          style={{ zoom: 'calc(1 / var(--interface-scale, 1))' }}>
           <Cropper
             image={imageSrc}
             crop={crop}

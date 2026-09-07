@@ -5,6 +5,10 @@ import { App } from './App';
 import { startPendingMessageOrchestrator } from './stores/pendingMessageRehydrate';
 import i18n, { initI18n } from './i18n';
 import './styles/globals.css';
+import { initializeInterfaceScale } from './platform/interfaceScale';
+
+const stopInterfaceScale = initializeInterfaceScale();
+if (import.meta.hot) import.meta.hot.dispose(stopInterfaceScale);
 
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
@@ -36,7 +40,7 @@ class ErrorBoundary extends React.Component<
     if (this.state.hasError) {
       return (
         <div style={{
-          height: '100vh',
+          height: 'calc(100*var(--app-vh))',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',

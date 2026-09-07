@@ -179,9 +179,9 @@ function MobileMention({
       <div
         className="fixed left-0 right-0 z-[301] rounded-t-2xl glass-modal animate-slide-up-sheet flex flex-col"
         style={{
-          bottom: 'env(keyboard-inset-height, 0px)',
-          paddingBottom: 'env(safe-area-inset-bottom)',
-          maxHeight: 'min(50dvh, 50vh)',
+          bottom: 'var(--keyboard-inset)',
+          paddingBottom: 'var(--safe-bottom)',
+          maxHeight: 'min(calc(50*var(--app-dvh)), calc(50*var(--app-vh)))',
         }}
       >
         {/* Drag handle */}

@@ -14,7 +14,7 @@ export function ImagePreview() {
 
   // Fixed positioning escapes App's 32px title bar and 1px divider. Keep the
   // preview below that native-control area without changing browser layout.
-  const topInsetClass = isElectron() ? 'top-[33px]' : 'top-0';
+  const topInsetClass = isElectron() ? 'top-[var(--titlebar-inset)]' : 'top-0';
 
   return (
     <div
@@ -60,7 +60,7 @@ export function ImagePreview() {
       <img
         src={imageUrl}
         alt={t('chat:preview.alt')}
-        className="max-w-[90vw] max-h-[90vh] object-contain rounded shadow-elevation-high"
+        className="max-w-[calc(90*var(--app-vw))] max-h-[calc(90*var(--app-vh))] object-contain rounded shadow-elevation-high"
         onClick={(e) => e.stopPropagation()}
       />
     </div>

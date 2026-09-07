@@ -30,6 +30,12 @@ function injectedStyles(): string {
 }
 
 describe('ImageCropModal', () => {
+  it('isolates the cropper from root zoom without unscaling the dialog controls', () => {
+    const { container } = renderModal();
+    const cropper = container.querySelector('.reactEasyCrop_Container')!;
+    expect((cropper.parentElement as HTMLElement).style.zoom).toBe('calc(1 / var(--interface-scale, 1))');
+    expect(container.querySelector('input[type="range"]')?.closest('[style*="zoom"]')).toBeNull();
+  });
   it('renders nothing while closed', () => {
     const { container } = render(
       <ImageCropModal

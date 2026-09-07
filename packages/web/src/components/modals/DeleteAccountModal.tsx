@@ -188,7 +188,7 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center animate-fade-in">
       <div className="absolute inset-0 bg-surface-overlay" onClick={step !== 'complete' ? onClose : undefined} />
-      <div className="relative max-w-lg w-full mx-4 max-h-[calc(100vh-2rem)] flex flex-col bg-surface-elevated rounded-lg shadow-xl animate-slide-up overflow-hidden">
+      <div className="relative max-w-lg w-full mx-4 max-h-[calc(calc(100*var(--app-vh))-2rem)] flex flex-col bg-surface-elevated rounded-lg shadow-xl animate-slide-up overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 flex-shrink-0">
           <h2 className="text-lg font-bold text-txt-primary">{t('settings:account.deletion.title')}</h2>

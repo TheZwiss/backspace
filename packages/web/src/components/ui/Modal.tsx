@@ -38,7 +38,7 @@ export function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-md',
     return (
       <div className="fixed inset-0 z-[200] flex flex-col bg-surface-base animate-fade-in">
         {(title || size === 'settings') && (
-          <div className="flex items-center justify-between px-4 pt-4 flex-shrink-0" style={{ paddingTop: 'calc(16px + env(safe-area-inset-top))' }}>
+          <div className="flex items-center justify-between px-4 pt-4 flex-shrink-0" style={{ paddingTop: 'calc(16px + var(--safe-top))' }}>
             {title ? <h2 className="text-xl font-bold text-txt-primary">{title}</h2> : <div />}
             <button
               onClick={onClose}
@@ -51,7 +51,7 @@ export function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-md',
             </button>
           </div>
         )}
-        <div className={`${size === 'settings' ? '' : 'p-4 overflow-y-auto scrollbar-thin'} flex-1 min-h-0`} style={size === 'settings' ? undefined : { paddingBottom: 'calc(16px + env(safe-area-inset-bottom))' }}>
+        <div className={`${size === 'settings' ? '' : 'p-4 overflow-y-auto scrollbar-thin'} flex-1 min-h-0`} style={size === 'settings' ? undefined : { paddingBottom: 'calc(16px + var(--safe-bottom))' }}>
           {children}
         </div>
       </div>
@@ -66,7 +66,7 @@ export function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-md',
           className="absolute inset-0 bg-black/50"
           onClick={onClose}
         />
-        <div className="relative w-full max-h-[85vh] flex flex-col glass-modal rounded-t-2xl animate-slide-up" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+        <div className="relative w-full max-h-[calc(85*var(--app-vh))] flex flex-col glass-modal rounded-t-2xl animate-slide-up" style={{ paddingBottom: 'var(--safe-bottom)' }}>
           {title && (
             <div className="flex items-center justify-between px-4 pt-4 flex-shrink-0">
               <h2 className="text-xl font-bold text-txt-primary">{title}</h2>
@@ -97,7 +97,7 @@ export function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-md',
           className="absolute inset-0 bg-black/50"
           onClick={onClose}
         />
-        <div className="relative w-[90vw] max-w-6xl h-[85vh] flex flex-col glass-modal rounded-xl animate-slide-up overflow-hidden">
+        <div className="relative w-[calc(90*var(--app-vw))] max-w-6xl h-[calc(85*var(--app-vh))] flex flex-col glass-modal rounded-xl animate-slide-up overflow-hidden">
           {/* Floating close button */}
           <button
             onClick={onClose}
@@ -121,7 +121,7 @@ export function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-md',
         className="absolute inset-0 bg-black/50"
         onClick={onClose}
       />
-      <div className={`relative ${maxWidth} w-full mx-4 max-h-[calc(100vh-2rem)] flex flex-col glass-modal rounded-lg animate-slide-up`}>
+      <div className={`relative ${maxWidth} w-full mx-4 max-h-[calc(calc(100*var(--app-vh))-2rem)] flex flex-col glass-modal rounded-lg animate-slide-up`}>
         {title && (
           <div className="flex items-center justify-between px-4 pt-4 flex-shrink-0">
             <h2 className="text-xl font-bold text-txt-primary">{title}</h2>

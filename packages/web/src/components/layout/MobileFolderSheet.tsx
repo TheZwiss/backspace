@@ -98,10 +98,10 @@ export function MobileFolderSheet({ folder, onClose, onSelectSpace, onUpdateFold
     <>
       <div className="fixed inset-0 z-[300] bg-black/50" onClick={onClose} />
       <div
-        className={`fixed bottom-0 left-0 right-0 z-[301] rounded-t-2xl glass-modal max-h-[60vh] flex flex-col ${
+        className={`fixed bottom-0 left-0 right-0 z-[301] rounded-t-2xl glass-modal max-h-[calc(60*var(--app-vh))] flex flex-col ${
           hasInteracted ? '' : 'animate-slide-up-sheet'
         }`}
-        style={{ paddingBottom: 'env(safe-area-inset-bottom)', ...dragStyle }}
+        style={{ paddingBottom: 'var(--safe-bottom)', ...dragStyle }}
       >
         {/* Drag handle + folder header — both belong to the drag-to-close
             region. The folder-header row keeps its right-click → context menu

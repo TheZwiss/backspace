@@ -18,7 +18,7 @@ vi.mock('../../audio/AudioManager', () => ({
 // `bottom` style must resolve.
 vi.mock('../../hooks/useVisualViewportInset', () => ({
   useVisualViewportInset: () => ({
-    value: 'env(safe-area-inset-bottom)',
+    value: 'var(--safe-bottom)',
     keyboardOpen: false,
     height: 800,
     offsetTop: 0,

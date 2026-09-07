@@ -83,6 +83,15 @@ Close does **not** quit the app. The `close` event is intercepted; the window is
 
 Instance URL management functions: `loadInstanceUrl()`, `saveInstanceUrl()`, `clearInstanceUrl()` — all operate on `{userData}/instance-url.json`.
 
+### Interface Scale
+
+The account settings' interface-scale control is shared with the web client
+(75–250%, saved locally). It uses root CSS zoom; the native title bar is not
+scaled. `--titlebar-inset` is the single 33 px reservation (32 px drag region
+plus 1 px divider), divided by interface scale. `App`, `SpaceSidebar` and
+`ImagePreview` share it so fixed overlays and normal layout continue matching
+the native controls at every scale. See `design-system.md` → Interface scale.
+
 ### Focus Tracking
 
 Window `focus`/`blur` events send `window-focus-changed` (boolean) to the renderer via IPC. The web client uses this for notification suppression (no desktop notifications when the window is focused).

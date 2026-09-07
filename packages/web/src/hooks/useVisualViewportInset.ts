@@ -1,3 +1,4 @@
+import { layoutPixels } from '../platform/interfaceScale';
 import { useEffect, useState } from 'react';
 
 /**
@@ -8,11 +9,11 @@ import { useEffect, useState } from 'react';
  *
  * Why this hook exists
  * --------------------
- * On iOS Safari (and PWA), `env(safe-area-inset-bottom)` is defined relative
+ * On iOS Safari (and PWA), `var(--safe-bottom)` is defined relative
  * to the **layout** viewport, not the **visual** viewport. When the soft
  * keyboard slides up, the layout viewport stays the same height and the home-
  * indicator inset still reports ~34 px — so a composer pinned to
- * `bottom: env(safe-area-inset-bottom) + 6px` ends up `~40px` above the
+ * `bottom: var(--safe-bottom) + 6px` ends up `~40px` above the
  * layout-bottom, which on iPhone 14 Pro is `300+ px` above the keyboard top.
  *
  * `window.visualViewport` reports the live size of the visible region. When
@@ -56,7 +57,7 @@ import { useEffect, useState } from 'react';
  *   home indicator vs flush with the keyboard).
  */
 export interface VisualViewportInset {
-  /** CSS string for `bottom`: either `env(safe-area-inset-bottom)` or `<n>px`. */
+  /** CSS string for `bottom`: either `var(--safe-bottom)` or `<n>px`. */
   value: string;
   /** True if the soft keyboard is occluding the bottom of the layout viewport. */
   keyboardOpen: boolean;
@@ -85,7 +86,7 @@ export interface VisualViewportInset {
 }
 
 const FALLBACK: VisualViewportInset = {
-  value: 'env(safe-area-inset-bottom)',
+  value: 'var(--safe-bottom)',
   keyboardOpen: false,
   textInputFocused: false,
   height: null,
@@ -116,18 +117,18 @@ export function useVisualViewportInset(): VisualViewportInset {
       const next: VisualViewportInset =
         occlusion > 1
           ? {
-              value: `${Math.round(occlusion)}px`,
+              value: `${Math.round(layoutPixels(occlusion))}px`,
               keyboardOpen: true,
               textInputFocused: textInputFocusedRef.current,
-              height: vv.height,
-              offsetTop: vv.offsetTop,
+              height: layoutPixels(vv.height),
+              offsetTop: layoutPixels(vv.offsetTop),
             }
           : {
-              value: 'env(safe-area-inset-bottom)',
+              value: 'var(--safe-bottom)',
               keyboardOpen: false,
               textInputFocused: textInputFocusedRef.current,
-              height: vv.height,
-              offsetTop: vv.offsetTop,
+              height: layoutPixels(vv.height),
+              offsetTop: layoutPixels(vv.offsetTop),
             };
 
       // Functional update + shallow compare so identical re-measurements
@@ -230,6 +231,7 @@ export function useVisualViewportInset(): VisualViewportInset {
 
     measure();
     vv.addEventListener('resize', update);
+    window.addEventListener('resize', update);
     vv.addEventListener('scroll', update);
     window.addEventListener('focusin', onFocusChange, true);
     window.addEventListener('focusout', onFocusChange, true);
@@ -237,6 +239,7 @@ export function useVisualViewportInset(): VisualViewportInset {
       if (raf) cancelAnimationFrame(raf);
       if (pollTimer) clearInterval(pollTimer);
       vv.removeEventListener('resize', update);
+      window.removeEventListener('resize', update);
       vv.removeEventListener('scroll', update);
       window.removeEventListener('focusin', onFocusChange, true);
       window.removeEventListener('focusout', onFocusChange, true);

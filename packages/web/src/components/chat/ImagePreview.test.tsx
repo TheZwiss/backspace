@@ -30,7 +30,7 @@ describe('ImagePreview', () => {
     const { container } = render(<ImagePreview />);
 
     expect(container.firstElementChild).toHaveClass('top-0');
-    expect(container.firstElementChild).not.toHaveClass('top-[33px]');
+    expect(container.firstElementChild).not.toHaveClass('top-[var(--titlebar-inset)]');
   });
 
   it('stays below the native window controls in Electron', () => {
@@ -38,7 +38,7 @@ describe('ImagePreview', () => {
 
     const { container } = render(<ImagePreview />);
 
-    expect(container.firstElementChild).toHaveClass('top-[33px]');
+    expect(container.firstElementChild).toHaveClass('top-[var(--titlebar-inset)]');
     expect(container.firstElementChild).not.toHaveClass('top-0');
   });
 });

@@ -648,7 +648,7 @@ function AddFriendTab({
             <p className="text-txt-tertiary text-sm">{emptyLabel}</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 desktop:grid-cols-[repeat(auto-fit,minmax(min(100%,280px),1fr))] gap-4">
             {isSearchMode
               ? enrichedSearchResults.map((user) => (
                   <UserDiscoverCard

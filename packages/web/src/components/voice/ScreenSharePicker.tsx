@@ -114,7 +114,7 @@ export function ScreenSharePicker() {
       />
 
       {/* Modal card */}
-      <div className="relative w-full max-w-3xl mx-4 glass-modal rounded-lg animate-slide-up flex flex-col max-h-[calc(100vh-4rem)]">
+      <div className="relative w-full max-w-3xl mx-4 glass-modal rounded-lg animate-slide-up flex flex-col max-h-[calc(calc(100*var(--app-vh))-4rem)]">
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0">
           <h2 className="text-lg font-bold text-txt-primary">{t('voice:screenPicker.title')}</h2>

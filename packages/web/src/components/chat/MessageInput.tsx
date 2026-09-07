@@ -1,3 +1,4 @@
+import { layoutRect } from '../../platform/interfaceScale';
 import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useChatStore } from '../../stores/chatStore';
@@ -629,8 +630,8 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
   // top edge with a 12 px breathing gap regardless of bubble height.
   //
   // Vertical positioning differs only in the `bottom` value:
-  // - Desktop: `bottom: 12px` (the historical `md:bottom-3` constant).
-  // - Mobile, keyboard closed: `bottom: env(safe-area-inset-bottom) + 6px`
+  // - Desktop: `bottom: 12px` (the historical `desktop:bottom-3` constant).
+  // - Mobile, keyboard closed: `bottom: var(--safe-bottom) + 6px`
   //   so the bubble clears the iOS home indicator with a small breathing gap.
   // - Mobile, keyboard open: `bottom: 0`. `MobileShell` shrinks its container
   //   to `visualViewport.height` (see `MobileShell.tsx`), so the chat region's
@@ -646,7 +647,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
   //
   // The horizontal inset is symmetric: `left-2 right-2` on mobile (matches
   // `MobileVoiceMiniBar`'s `mx-2` and the `MobileBottomNav` spacing tier);
-  // `md:left-3 md:right-3` on desktop (the historical 12 px inset).
+  // `desktop:left-3 desktop:right-3` on desktop (the historical 12 px inset).
   //
   // `z-[110]` keeps the bubble above any in-chat overlays (mention popover,
   // staged-attachment tiles) but below modals (`z-[300]+`).
@@ -669,12 +670,12 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
           ? '0px'
           : textInputFocused
             ? '4px'
-            : 'calc(env(safe-area-inset-bottom) + 6px)',
+            : 'calc(var(--safe-bottom) + 6px)',
       }
     : undefined;
   const composerClass =
     'absolute left-2 right-2 z-[110] glass-bubble rounded-[14px]' +
-    ' md:left-3 md:right-3 md:bottom-3';
+    ' desktop:left-3 desktop:right-3 desktop:bottom-3';
 
   // Dynamic message-list bottom padding ("composer clearance"):
   //
@@ -721,10 +722,10 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
       // We measure the bubble's visual height (including replyTo banner +
       // staged-attachment tiles + textarea autosize) plus the distance from
       // the parent's bottom edge to the bubble's bottom edge (which folds
-      // in `env(safe-area-inset-bottom) + 6` on mobile or `12 px` on
+      // in `var(--safe-bottom) + 6` on mobile or `12 px` on
       // desktop, whichever the composer's `bottom` resolves to).
-      const composerRect = el.getBoundingClientRect();
-      const parentRect = target.getBoundingClientRect();
+      const composerRect = layoutRect(el.getBoundingClientRect());
+      const parentRect = layoutRect(target.getBoundingClientRect());
       const bottomOffset = Math.max(0, parentRect.bottom - composerRect.bottom);
       const clearance = Math.round(composerRect.height + bottomOffset + 12);
       target.style.setProperty('--composer-clearance', `${clearance}px`);
@@ -916,12 +917,12 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
           </div>
         )}
 
-        <div className="flex items-center gap-1 md:gap-0 pl-2 md:pl-[10px] pr-2 md:pr-1">
+        <div className="flex items-center gap-1 desktop:gap-0 pl-2 desktop:pl-[10px] pr-2 desktop:pr-1">
           {/* File attach button */}
           {canAttachFiles && (
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="w-10 h-10 md:w-[34px] md:h-[34px] flex items-center justify-center rounded-[6px] text-txt-tertiary hover:text-txt-secondary transition-colors flex-shrink-0"
+              className="w-10 h-10 desktop:w-[34px] desktop:h-[34px] flex items-center justify-center rounded-[6px] text-txt-tertiary hover:text-txt-secondary transition-colors flex-shrink-0"
               title={t('chat:composer.attachFile')}
               aria-label={t('chat:composer.attachFile')}
             >
@@ -957,7 +958,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
                 ? t('chat:composer.placeholder.dm', { name: channelName.slice(1) })
                 : t('chat:composer.placeholder.channel', { name: channelName }))
             }
-            className="input-embedded flex-1 py-[10px] px-1 resize-none text-[15px] leading-[1.375rem] max-h-[50vh] scrollbar-thin"
+            className="input-embedded flex-1 py-[10px] px-1 resize-none text-[15px] leading-[1.375rem] max-h-[calc(50*var(--app-vh))] scrollbar-thin"
             rows={1}
           />
 
@@ -994,7 +995,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
           {gifEnabled && (
             <button
               onClick={() => togglePopover('gif')}
-              className={`w-10 h-10 md:w-[34px] md:h-[34px] flex items-center justify-center rounded-[6px] transition-colors flex-shrink-0 ${
+              className={`w-10 h-10 desktop:w-[34px] desktop:h-[34px] flex items-center justify-center rounded-[6px] transition-colors flex-shrink-0 ${
                 activePopover === 'gif' ? 'text-accent-primary' : 'text-txt-tertiary hover:text-txt-secondary'
               }`}
               title={t('chat:composer.gif')}
@@ -1009,7 +1010,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
           {/* Emoji button */}
           <button
             onClick={() => togglePopover('emoji')}
-            className={`w-10 h-10 md:w-[34px] md:h-[34px] flex items-center justify-center rounded-[6px] transition-colors flex-shrink-0 ${
+            className={`w-10 h-10 desktop:w-[34px] desktop:h-[34px] flex items-center justify-center rounded-[6px] transition-colors flex-shrink-0 ${
               activePopover === 'emoji' ? 'text-accent-primary' : 'text-txt-tertiary hover:text-txt-secondary'
             }`}
             title={t('chat:composer.emoji')}
@@ -1025,7 +1026,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
             <button
               onClick={() => void handleSubmit()}
               disabled={anyUnshippable}
-              className="w-10 h-10 md:w-[34px] md:h-[34px] flex items-center justify-center rounded-[6px] bg-accent-primary hover:bg-accent-primary-hover text-white transition-all duration-150 flex-shrink-0 disabled:opacity-50"
+              className="w-10 h-10 desktop:w-[34px] desktop:h-[34px] flex items-center justify-center rounded-[6px] bg-accent-primary hover:bg-accent-primary-hover text-white transition-all duration-150 flex-shrink-0 disabled:opacity-50"
               aria-label={t('chat:composer.sendMessage')}
               title={t('chat:composer.send')}
             >
