@@ -1,0 +1,16 @@
+# Crawling is welcome. Everything served from this domain is public by
+# intent: an open-source project, its landing page, and a public archive of
+# its own repository traffic.
+#
+# The empty Disallow is not redundant. The original robots.txt convention
+# defines only Disallow; Allow is a later extension, and a group carrying no
+# Disallow line at all is not a well-formed record to a strict parser. The
+# two lines together say the same thing to every parser ever written.
+User-agent: *
+Allow: /
+Disallow:
+
+# Generated on every deploy from the traffic archive, so the lastmod dates it
+# carries describe when the data changed rather than when the site was
+# rebuilt.
+Sitemap: https://backspacechat.com/sitemap.xml
