@@ -251,6 +251,25 @@ const OBSERVE = `(function () {
      * whole list beside it. */
     var metas = [];
     card.querySelectorAll(".chart-meta").forEach(function (m) { metas.push(text(m)); });
+    /* EVERY .stat-note in the card, and every link in it.
+     *
+     * figureOf reads only the first .stat-note, which is the figure head's own
+     * note, so a standing caveat rendered in the same idiom below the head was
+     * invisible to this walk: a card carrying one and a card carrying none
+     * produced the same report. The Reach clones card is the first to carry
+     * one, and its whole job is to name a confound and point at the chart that
+     * measures it, so the link target is collected beside the text rather than
+     * clicked for by hand.
+     *
+     * No backtick anywhere in here: this comment lives inside the OBSERVE
+     * template literal, so one would end the string and take the file's syntax
+     * with it. */
+    var statNotes = [];
+    card.querySelectorAll(".stat-note").forEach(function (n) { statNotes.push(text(n)); });
+    var links = [];
+    card.querySelectorAll("a[href]").forEach(function (a) {
+      links.push(a.getAttribute("href") + " " + text(a));
+    });
     var entry = {
       title: text(card.querySelector(".chart-title")),
       titleTag: card.querySelector(".chart-title") === null
@@ -259,6 +278,8 @@ const OBSERVE = `(function () {
       meta: metas.length === 0 ? null : metas[0],
       metas: metas,
       note: text(card.querySelector(".slot-note")),
+      statNotes: statNotes,
+      links: links,
       hints: hints,
       figure: figureOf(card),
       plot: plotOf(card),
