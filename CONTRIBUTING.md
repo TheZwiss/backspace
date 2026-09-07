@@ -26,7 +26,7 @@ sizes are welcome: bug reports, fixes, features, documentation, and design.
 - **You own your diff.** Use whatever tools you like, including AI assistants;
   nobody will ask. What matters is that you have run it, and that it does not
   contain two solutions to the same problem sitting side by side. Code the
-  author has not read is the only kind of contribution that costs more to
+  author has not verified is the only kind of contribution that costs more to
   review than it did to write. If you work with an agent, see
   [Working with AI agents](#working-with-ai-agents).
 
