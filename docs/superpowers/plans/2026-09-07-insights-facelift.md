@@ -551,7 +551,7 @@ diff "$SP/before-dimonly.txt" "$SP/after-dimonly.txt"
 - The Clones entry carries `note: "includes this repo's own CI checkouts"`. If it is `null`, `buildCard` stopped reading `card.note`.
 - Every entry's `chipTitle` is a full sentence, not empty. An empty `chipTitle` means `deltaChip`'s explanation was dropped when the function moved. The Views entry's `chipTitle` begins `Total over the 30 days to`; the Contributors entry's begins `Change over the 30 days to` and its body contains `This series records a row when its total changes rather than sampling daily`.
 - In `after-dimonly.txt` the `header-stats` slot still has eight `figures` entries, every `chip` reads the dash glyph, and every `chipTitle` contains `the archive holds no dated measurement to anchor a window to`. The `windowNote` reads `selected range no dated measurement to window`. If any of those is missing, the null-window path was lost in the move. This is the case the `dimensions-only` mode was added for.
-- `console messages: 0` and `failed or 4xx/5xx requests: 0` on both runs, and `console capture proof: PASS` on both.
+- `console messages: 1` (the planted probe and nothing else) and `failed or 4xx/5xx requests: 0` on both runs, and `console capture proof: PASS` on both.
 
 - [ ] **Step 7: Update `docs/systems/metrics.md` section 11**
 
@@ -767,7 +767,7 @@ diff "$SP/before-t2.txt" "$SP/after-t2.txt"
 
 - The diff is empty apart from canvas digest values. The growth slot's caption line still reads `releases marked v1.1.2 (2026-08-11)`; if it now reads `none, no release falls inside the span drawn here`, `collectReleases` lost its span arguments in the move.
 - Both growth cards still report `overTop` around 34. A drop to around 8 means the padding reservation did not survive: the lane is unpainted and the markers are drawn over the plot's top edge, which no text observation would show.
-- `console messages: 0`, `console capture proof: PASS`.
+- `console messages: 1` (the planted probe and nothing else), `console capture proof: PASS`.
 - Open the page in a browser (`python3 -m http.server 8765 --directory "$SP/fx/site"`) and confirm by eye that the dashed marker line and the `v1.1.2` label are drawn above both growth charts. This is the one thing in this task that only an eye can confirm; the `overTop` number proves the room was reserved, not that anything was drawn into it.
 
 - [ ] **Step 6: Update `docs/systems/metrics.md` section 10.7**
@@ -1054,7 +1054,7 @@ and remove the `slot.appendChild(windowNote(...))` line from the at-a-glance ren
 - At `dimensions-only`, the `method-coverage` slot holds the coverage line reading `selected range no dated measurement to window`, and it holds **no** `slot-note`. It holds no note because the bundle is `ok`: `dimensions-only` yields `empty: false`, since the bundler counts dimension snapshots, so `renderSlots(null)` writes no note into any slot and this run proves only that the coverage line survives the null window. The proof that `NOTE_SLOT_IDS` is in force is the next bullet.
 - Force the unavailable state by deleting `"$SP/fx/site/insights/data.json"` and re-running the check: the `#status-region` notice appears, the six note slots carry `No data to show — the archive is unavailable.` (the page's own em dash; a string that stays where it is keeps its punctuation, and the risk here is an implementer "fixing" the page instead of this line), and `method-coverage` is empty.
 - The provenance strip renders its four values inside `#method` (`pv-since` reads `since 2026-08-01`, not the dash). A dash in all four means `renderProvenance` lost its elements in the move.
-- `console messages: 0`, `console capture proof: PASS`.
+- `console messages: 1` (the planted probe and nothing else), `console capture proof: PASS`.
 - Grep the file for the reduced-transparency block: `grep -c "prefers-reduced-transparency" site/insights/index.html` returns 1. Then confirm by eye with Chrome's rendering emulation that the nav goes solid; the grep proves the rule exists, not that it applies.
 
 - [ ] **Step 5: Update `docs/systems/metrics.md`**
@@ -1078,7 +1078,14 @@ Spec sections 3.3, 4.1, 4.3, 5.2, 5.3, 12.1 and 12.2. **This task depends on two
 **Files:**
 - Modify: `site/insights/index.html` (the `INSIGHTS_CHARTS` IIFE, the `INSIGHTS_FIGURES` IIFE, a new `INSIGHTS_GROUPS` IIFE, a new `#delivery` panel, a new delivery section IIFE, the nav, `SLOT_IDS`)
 - Modify: `scripts/metrics/fixtures/insights-fixture.mjs` (two new modes)
+- Modify: `scripts/metrics/fixtures/insights-check.mjs` (the card capture reads every `.chart-meta`, see the note below)
 - Modify: `docs/systems/metrics.md` sections 10 opening, 10.6 and 10.7
+
+**Before Step 8, widen the card capture.** Task 1's `cardOf` reads `meta: text(card.querySelector(".chart-meta"))`, which is the *first* `.chart-meta` in the card. This task appends the release caption after the card's own meta line, so `querySelector` returns the span line and Step 8's assertion on the caption cannot pass as written. Task 2's reviewer proved the gap by mutation: replacing the caption's `"releases marked"` literal left the report byte-identical, so the harness cannot see that string at all today.
+
+Change the capture to collect every `.chart-meta` in the card, keeping `meta` as the first for the existing readers and adding the full list beside it, and assert Step 8's caption against the list. Keep the `closest(".chart-card") === null` filter that separates slot-level notes from card-level ones; it is load-bearing, not incidental. Re-run the eight-mode A/B afterwards: the page must still be byte-identical, since widening a reading changes the report and not the page.
+
+**The one em-dash string, converted here.** `releaseCaption` in the toolkit prints `none — no release falls inside the span drawn here` when a span holds no release. Task 2 correctly kept that verbatim, because Task 2 changed no rendered output and a string that stays where it is keeps its punctuation. This task is where it renders in a second place, so the copy rule applies: it becomes `none, no release falls inside the span drawn here`. One occurrence, in the toolkit, and it changes the growth caption too, which is expected and is not a regression. After this change the only em dashes left in strings the page renders are the ones no task in this plan moves.
 
 **Interfaces:**
 - Consumes: `F.figure`, `F.chip`, `F.windows`, `F.plural` (Task 1); `C.collectReleases`, `C.releaseCaption`, `C.releaseNarrative`, `C.listOutside`, `mount`'s `releases` option (Task 2); the band and card CSS (Task 3).
@@ -2069,7 +2076,7 @@ At `long`:
 - `CI activity` reports `plot.canvasHeight` of 280 and `plot.overTop` of 34 or more. `canvasHeight` is the height the profile asked for; `overHeight` is the plot area, which is the canvas minus the reserved top padding and minus the x-axis strip, so it reads about 216 here and asserting 280 on it fails for the wrong reason. `canvasHeight` 150 means the hero took the compact profile; `overTop` under 34 means the release lane reserved no room.
 - `Contributors` reports **no plot** and a `note` beginning `One measurement is not a history.` The fixture writes one contributors row, so this is the one-point rule firing. A plot here means the rule is not applied and the axis runs to 2029.
 - The `Releases` card lists four rows, newest first: rank 1 is `v1.1.3`, rank 4 is `v1.0.0`. The card's rows carry no `.rank-fill`, so the report's `width` and `fill` fields are `null` for every one of them. A crashed report here rather than a `null` means Task 1's rank-row guard was undone.
-- The `CI activity` card's `meta` contains `releases marked v1.1.0 (2026-09-15)` and `outside this span v1.0.0 (2026-07-01)`, and one of its `hints` begins `1 release recorded in the archive falls outside the span drawn here`. Three releases fall inside the CI span, so the marked list may be truncated by `MAX_LISTED`; assert the first group and the outside group rather than all three names.
+- The `CI activity` card's `metas` list contains `releases marked v1.1.0 (2026-09-15)` and `outside this span v1.0.0 (2026-07-01)`, and one of its `hints` begins `1 release recorded in the archive falls outside the span drawn here`. Assert against the list rather than `meta`, which holds the card's own span line and not the caption. Three releases fall inside the CI span, so the marked list may be truncated by `MAX_LISTED`; assert the first group and the outside group rather than all three names.
 - The old `chart-reach` slot still holds its own `CI activity` card. Compare the two cards' `meta` `span` and `measured` values: they must be identical. A difference means the group renderer expanded a different set of columns than the section it is duplicating.
 
 At `no-releases`:
@@ -2087,7 +2094,7 @@ At `dimensions-only`:
 - The `delivery-body` slot holds the note `The archive holds no dated measurement, so there is no time axis to draw the CI or contributor charts on, and no axis for a release to be marked against.`, plus a `Releases` card. The release card renders without a window; a slot holding only the note means `G.attach` was called before the detail band was filled.
 - This is the one mode where the release trend refuses. The group head's chip reads the dash glyph with a `chipTitle` containing `the archive holds no dated measurement to anchor a window to`. It is now the only refusal path `releaseTrend` has, which is why it is asserted here rather than left implicit.
 
-On every run: `console messages: 0`, `failed or 4xx/5xx requests: 0`, `console capture proof: PASS`. Then resize the browser window from 1440px to 380px and confirm the CI hero scrolls inside its own container below about 570px while the Contributors card never does, and that the body never scrolls sideways at any width.
+On every run: `console messages: 1` (the planted probe and nothing else), `failed or 4xx/5xx requests: 0`, `console capture proof: PASS`. Then resize the browser window from 1440px to 380px and confirm the CI hero scrolls inside its own container below about 570px while the Contributors card never does, and that the body never scrolls sideways at any width.
 
 - [ ] **Step 9: Update `docs/systems/metrics.md`**
 
@@ -2293,7 +2300,7 @@ Run at `high`, `threshold`, `low`, `none`, `high-nodims`, `high-other`, `sparse`
 - At every below-threshold mode the `App downloads` hero and the `Update checks` card still render. A group-shaped hole where the hero should be is the failure this arrangement exists to prevent.
 - At `dimensions-only`, the slot holds the no-time-axis note and the telemetry band's own state note, and no chart card.
 - The report's range sweep still shows `rankings identical to the first range` for all four ranges. The rankings are a snapshot, not a window, and a range that moved them means the band is reading the range where it should not.
-- `console messages: 0` and `console capture proof: PASS` on every run.
+- `console messages: 1` (the planted probe and nothing else) and `console capture proof: PASS` on every run.
 
 - [ ] **Step 4: Update `docs/systems/metrics.md`**
 
@@ -2718,7 +2725,7 @@ Delete the old `chart-reach` IIFE in full, including its `CHARTS` array, `metaLi
 - The `chart-reach` slot is gone from the report entirely.
 - `#method` now carries the archive paragraph directly under its `h2`, then a **Traffic** `h3` with this task's two reach paragraphs, then the **Opt-in pings** `h3` with Task 5's two telemetry paragraphs, then **Provenance and coverage**. Insert the Traffic heading above Opt-in pings, which is its final position. Read the paragraphs in the browser and check against spec section 7.3's table that no sentence was dropped in the move and that the clones sentence appears on the card rather than in `#method`.
 - At `dimensions-only`, the slot holds the no-time-axis note and no card.
-- `console messages: 0`, `console capture proof: PASS`.
+- `console messages: 1` (the planted probe and nothing else), `console capture proof: PASS`.
 
 - [ ] **Step 4: Update `docs/systems/metrics.md`**
 
@@ -2996,7 +3003,7 @@ Before deleting, confirm that nothing outside the block still calls `fittedCount
 - The report's `nav` lists `#following Following` and no longer lists `#growth`.
 - The `reach-body` slot still holds exactly two cards, `Page views` and `Repository clones`. Three would mean a growth card landed in the wrong group.
 - At `dimensions-only`, `following-body` holds the group head, the no-time-axis note, and no card at all. It is the one group that renders nothing else in that state, because it has no card that works without a window.
-- `console messages: 0`, `console capture proof: PASS`.
+- `console messages: 1` (the planted probe and nothing else), `console capture proof: PASS`.
 
 - [ ] **Step 5: Update `docs/systems/metrics.md`**
 
@@ -3082,7 +3089,7 @@ Delete the `#referrers` and `#paths` panels and their nav links, remove `"ranked
 - The fixture writes exactly one referrer snapshot, so both cards take the "fewer than two differenceable snapshots" path and state their reason rather than drawing a movement chart. The card's `note` must contain that stated reason, and `plots` for the slot must not have increased. If a movement chart appears, the snapshot count is being read from the wrong place.
 - At `dimensions-only` the two cards render in full, with their ranked lists, while the rest of the group is the no-time-axis note. This is the state the detail band's unconditional build exists for; a slot holding only the note is a failure.
 - The report's `nav` no longer lists `#referrers` or `#paths`.
-- `console messages: 0`, `console capture proof: PASS`.
+- `console messages: 1` (the planted probe and nothing else), `console capture proof: PASS`.
 
 To exercise the movement chart, hand-edit `"$SP/fx/archive/traffic/referrers.ndjson"` to hold the same dimension on three consecutive snapshot dates with different counts, re-run the bundle step and the check, and confirm the `Referring sites` card now reports a plot with `canvasHeight` 150 and a `movement` meta line. A `canvasHeight` of 220 or 280 means the `profile: "compact"` option from Step 1 did not reach the mount call. Assert `canvasHeight`, not `overHeight`, which is the plot area and reads about 112 here.
 
@@ -3260,7 +3267,7 @@ In `INSIGHTS_CHARTS`, delete `placeHint`, `lastHost`, `childOf`, `forgetHost` an
 - The report's `hint.after` names the controls bar. The hint text is present whenever the page holds more than one plot and reads the multi-chart wording. Drag across any chart and confirm every chart on the page rezooms; the report's zoom-sync block must show `redrew` for every entry, across all four groups.
 - The report's `nav` lists exactly five links: `#reach Reach`, `#following Following`, `#adoption Adoption`, `#delivery Delivery`, `#method Method`. They hide at or below 900px, which is the page's existing rule and is not raised for the fifth link.
 - With JavaScript disabled in the browser, the page still shows the `h1`, the four group headings with their captions, the `#method` heading with its five subheadings and all its prose, the `BUILD:SUMMARY` figures, the `noscript` pointer and the footer. Nothing that was readable without JavaScript before this plan is missing.
-- `console messages: 0` and `console capture proof: PASS` on every mode.
+- `console messages: 1` (the planted probe and nothing else) and `console capture proof: PASS` on every mode.
 
 - [ ] **Step 7: Update `docs/systems/metrics.md`**
 
