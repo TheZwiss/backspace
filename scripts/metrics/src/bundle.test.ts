@@ -292,6 +292,29 @@ describe('buildDashboardData — absent vs. corrupt files', () => {
     expect(build().empty).toBe(false);
   });
 
+  it('leaves collection_started null for an archive holding only dimension snapshots', () => {
+    // Non-empty and yet with no time axis at all. The insights page has a
+    // branch for exactly this in every renderer that windows anything, and
+    // the `dimensions-only` fixture mode is what drives those branches, so
+    // the state has to keep being reachable: `empty` false says the page
+    // renders rather than showing its empty notice, and a null
+    // `collection_started` says there is no dated measurement to anchor a
+    // window to. Dimension snapshots are excluded from `collection_started`
+    // deliberately (they are a snapshot of a rolling 14-day window, not a
+    // measured timeline), and that exclusion is what produces the pairing.
+    const store = createStore(dir);
+    store.writeNdjson('traffic/referrers.ndjson', [
+      dimensionRow('2026-09-01', 'news.ycombinator.com', 118),
+    ]);
+    store.writeNdjson('traffic/paths.ndjson', [dimensionRow('2026-09-01', '/TheZwiss/backspace', 40)]);
+    writeMeta();
+
+    const data = build();
+
+    expect(data.empty).toBe(false);
+    expect(data.collection_started).toBeNull();
+  });
+
   it('propagates a parse error from a corrupt file rather than returning an empty series', () => {
     // A row with fewer fields than its own header can only be truncation.
     writeRaw('traffic/views.csv', 'date,count,uniques\n2026-09-01,40\n');

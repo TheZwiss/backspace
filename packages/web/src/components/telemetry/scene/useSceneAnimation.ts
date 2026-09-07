@@ -9,6 +9,10 @@ const EASING = {
 
 const CROSS_FADE_MS = 200;
 const BEAM_OPACITY = 0.6;
+// Slower than the 900 ms arrival: light withdrawing reads as deliberate, light
+// arriving reads as eager. The cabin settles a little after the beam is home.
+const RETRACT_MS = 620;
+const SETTLE_MS = 680;
 
 // The arm's current rotation in degrees, read from its computed transform so
 // the choreography starts where the ambient wave left it instead of snapping.
@@ -106,10 +110,72 @@ export function useSceneAnimation(svgRef: React.RefObject<SVGSVGElement | null>,
       );
     }
 
+    /**
+     * The way back out of `happy`. The modal never needed one: it is answered
+     * once and closed, so the beam only ever arrives. A settings panel
+     * switches the hello off as often as on, and that is the transition an
+     * admin actually watches, so the light is drawn back into the porthole
+     * rather than cut.
+     *
+     * Nothing here fills forwards, and nothing needs to: every track ends on
+     * the value the stylesheet already holds for a scene that is not happy, so
+     * each element is handed back exactly where CSS picks it up.
+     *
+     * The cabin holds its brightness through the first third rather than
+     * taking a `delay`. A delayed track sits at its underlying value until it
+     * starts, and that value is the dark one, so a delay would blink the
+     * window off and on again before dimming it.
+     */
+    function retract(): void {
+      play(
+        part('ray'),
+        [
+          { transform: 'scaleX(1)', opacity: BEAM_OPACITY },
+          { opacity: BEAM_OPACITY, offset: 0.45 },
+          { transform: 'scaleX(0)', opacity: 0 },
+        ],
+        { duration: RETRACT_MS, easing: EASING.gentle },
+      );
+      play(
+        part('lit'),
+        [
+          { opacity: 1, offset: 0 },
+          { opacity: 1, offset: 0.38 },
+          { opacity: 0, offset: 1 },
+        ],
+        { duration: SETTLE_MS, easing: EASING.gentle },
+      );
+      play(
+        part('glow'),
+        [
+          { opacity: 0.85, transform: 'scale(1.2)', offset: 0 },
+          { opacity: 0.85, transform: 'scale(1.2)', offset: 0.38 },
+          { opacity: 0.4, transform: 'scale(1)', offset: 1 },
+        ],
+        { duration: SETTLE_MS, easing: EASING.gentle },
+      );
+    }
+
     // Reduced motion: the stylesheet already shows the still frame for this
     // mood; the parts that changed fade to it over 200 ms.
-    function crossFade(): void {
+    function crossFade(leavingHappy: boolean): void {
       const fade = { duration: CROSS_FADE_MS, easing: EASING.gentle };
+      if (leavingHappy) {
+        // The beam's width is pinned across both frames. The still frame for
+        // any scene that is not happy puts the ray at scaleX(0), so letting
+        // the transform track its own way there would collapse the beam to
+        // nothing in the first frame and leave the opacity nothing to fade.
+        play(
+          part('ray'),
+          [
+            { transform: 'scaleX(1)', opacity: BEAM_OPACITY },
+            { transform: 'scaleX(1)', opacity: 0 },
+          ],
+          fade,
+        );
+        play(part('lit'), [{ opacity: 1 }, { opacity: 0 }], fade);
+        play(part('glow'), [{ opacity: 0.85 }, { opacity: 0.4 }], fade);
+      }
       if (mood === 'happy') {
         play(part('lit'), [{ opacity: 0 }, { opacity: 1 }], fade);
         play(part('ray'), [{ opacity: 0 }, { opacity: BEAM_OPACITY }], fade);
@@ -120,12 +186,17 @@ export function useSceneAnimation(svgRef: React.RefObject<SVGSVGElement | null>,
       }
     }
 
+    // Leaving `happy` is its own step rather than an alternative to the new
+    // mood's choreography: switching the hello off plays the beam home AND
+    // lowers the pilot's arm, and the two touch different parts of the scene.
+    const leavingHappy = previous === 'happy' && mood !== 'happy';
+
     if (mq?.matches) {
-      if (previous !== null && previous !== mood) crossFade();
-    } else if (mood === 'happy') {
-      happy();
-    } else if (mood === 'farewell') {
-      farewell();
+      if (previous !== null && previous !== mood) crossFade(leavingHappy);
+    } else {
+      if (leavingHappy) retract();
+      if (mood === 'happy') happy();
+      else if (mood === 'farewell') farewell();
     }
 
     function onMotionChange(event: MediaQueryListEvent): void {
