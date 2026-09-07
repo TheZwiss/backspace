@@ -13,14 +13,29 @@ import type { DashboardData } from './bundle.ts';
  * to "look at this page". This module puts the headline measurements into the
  * served HTML so the shared URL answers on its own.
  *
- * It is deliberately NOT a second implementation of the at-a-glance cards.
- * Those cards are range-dependent and carry 30-day deltas with their own
- * reasons for declining to state one; duplicating that logic in a second
- * language would create two sets of rules that drift apart, and the drift
- * would be invisible until the two disagreed in public. What is generated
- * here is a summary built from rules simple enough to be obviously correct:
- * the latest measured value of each counter with the date it was measured,
- * the peak day of each traffic series, and the leading referrer and path.
+ * IT IS A SECOND IMPLEMENTATION, and pretending otherwise is how this file
+ * came to carry a false rationale for three rounds of review. Eight of the
+ * figures it states are also computed by the page in its own JavaScript:
+ * page views, clones, stars, forks, watchers, contributors, app downloads and
+ * the release count. The page has one surface, INSIGHTS_FIGURES, whose whole
+ * purpose is that the lead row and a group head cannot print different
+ * numbers for the same series; nothing here can join it, because this
+ * paragraph is written at deploy time by the bundler and the page is not.
+ *
+ * An earlier version of this comment claimed the opposite on the grounds that
+ * the page's cards are "range-dependent and carry 30-day deltas". They are
+ * not range-dependent: a figure's VALUE is all-time and the 30-day delta
+ * beside it is a fixed window ending on the archive's newest measured day, so
+ * the range control moves neither. The deltas are the one thing genuinely not
+ * duplicated here, and they are left out for the reason the totals are not: a
+ * window baked into a served page goes stale the moment the window moves,
+ * with nothing on the page able to tell.
+ *
+ * The duplication is therefore checked rather than denied. `insights-check.mjs`
+ * reads all eight figures out of the built paragraph, reads the same figure
+ * off the rendered page, and prints MATCH, DIVERGED or ONE-SIDED for each.
+ * Adding a figure here that the page also prints as a head means adding it
+ * there.
  *
  * The absent-versus-zero rule governs here as everywhere else. A figure with
  * no measurement behind it is OMITTED FROM THE SENTENCE rather than printed
@@ -55,6 +70,31 @@ export interface SummaryFacts {
   clonesPeak: PeakDay | null;
   viewsDays: number;
   clonesDays: number;
+  /**
+   * Every measured view and clone the archive holds, summed.
+   *
+   * THE SAME NUMBER the page's own figures show, and a divergence is a bug.
+   * `flowCard` on the page sums every measured value of the series exactly as
+   * `sumMeasured` does here. An earlier version of this comment said these
+   * were archive totals against a rolling 30-day window on the page, and that
+   * a reader finding them unequal had found the design; the page has no
+   * rolling window in a figure's value, only in the delta beside it, so that
+   * sentence would have excused the one divergence most worth catching.
+   *
+   * Null only for an archive with no measured day at all, which is the same
+   * condition that drops the peak clause.
+   */
+  viewsTotal: number | null;
+  clonesTotal: number | null;
+  /**
+   * Installers and archives only, never the updater feed. GitHub counts an
+   * electron-updater feed request as an asset download, so the collector
+   * splits the two (§4.6) and this is the half that means "someone took the
+   * app".
+   */
+  downloadsApp: DatedValue | null;
+  /** How many releases the archive records, the Delivery group's lead figure. */
+  releasesShipped: number;
   /**
    * The heaviest day of this repository's own CI, which is what the clone
    * caveat points at. Stated so a reader that quotes the clone peak has the
@@ -125,6 +165,24 @@ function countMeasured(values: ReadonlyArray<number | null>): number {
   return n;
 }
 
+/**
+ * Every measured value summed, or null when nothing was measured.
+ *
+ * Null rather than 0 for the empty case, because 0 here would be a total
+ * across no measurements offered as a total of no traffic — the one
+ * substitution this whole package exists to refuse.
+ */
+function sumMeasured(values: ReadonlyArray<number | null>): number | null {
+  let total = 0;
+  let any = false;
+  for (const value of values) {
+    if (value === null || value === undefined) continue;
+    total += value;
+    any = true;
+  }
+  return any ? total : null;
+}
+
 /** The latest date across every dated series, or null when nothing is dated. */
 function latestDate(data: DashboardData): string | null {
   const candidates: string[] = [];
@@ -189,6 +247,10 @@ export function buildSummary(data: DashboardData): SummaryFacts {
     clonesPeak: peakDay(clones.dates, clones.count, clones.uniques),
     viewsDays: countMeasured(views.count),
     clonesDays: countMeasured(clones.count),
+    viewsTotal: sumMeasured(views.count),
+    clonesTotal: sumMeasured(clones.count),
+    downloadsApp: newestMeasured(repo.dates, repo.downloads_app),
+    releasesShipped: data.releases.length,
     workflowsPeak: peakDay(workflows.dates, workflows.runs),
     topReferrer: referrer === undefined ? null : labelled(referrer),
     topPath: path === undefined ? null : labelled(path),
@@ -251,15 +313,26 @@ export function renderSummaryHtml(facts: SummaryFacts): string {
       facts.viewsPeak.uniques === null
         ? ''
         : ` from ${count(facts.viewsPeak.uniques, 'unique visitor')}`;
+    // The total leads and the peak qualifies it, rather than the peak standing
+    // alone: a busiest day quoted with no total behind it is the one figure on
+    // this page most easily mistaken for the whole of the traffic.
+    //
+    // `viewsTotal` cannot be null inside this branch: a non-null peak means at
+    // least one measured value, which is exactly the condition under which
+    // `sumMeasured` returns a number. The `?? 0` is for the type, not for a
+    // state the archive can be in.
     sentences.push(
-      `Busiest day for page views: ${count(facts.viewsPeak.value, 'view')}${uniques} on ` +
-        `${escapeHtml(facts.viewsPeak.date)}, across ${count(facts.viewsDays, 'measured day')}.`,
+      `Page views: ${num(facts.viewsTotal ?? 0)} across ` +
+        `${count(facts.viewsDays, 'measured day')}, busiest ` +
+        `${num(facts.viewsPeak.value)}${uniques} on ${escapeHtml(facts.viewsPeak.date)}.`,
     );
   }
   if (facts.clonesPeak !== null) {
+    // Same reasoning as the views clause above for the `?? 0`.
     sentences.push(
-      `Busiest day for clones: ${count(facts.clonesPeak.value, 'clone')} on ` +
-        `${escapeHtml(facts.clonesPeak.date)}, across ${count(facts.clonesDays, 'measured day')}. ` +
+      `Clones: ${num(facts.clonesTotal ?? 0)} across ` +
+        `${count(facts.clonesDays, 'measured day')}, busiest ` +
+        `${num(facts.clonesPeak.value)} on ${escapeHtml(facts.clonesPeak.date)}. ` +
         'Clone counts include this repository\u2019s own CI checkouts, which on a heavy build ' +
         'day outnumber human clones.',
     );
@@ -289,7 +362,26 @@ export function renderSummaryHtml(facts: SummaryFacts): string {
         `${count(facts.topPath.count, 'view')}.`,
     );
   }
-  if (facts.latestRelease !== null) {
+  // Installers and archives only. Naming the exclusion in the same sentence,
+  // because "downloads" unqualified is exactly the figure an updater feed
+  // inflates, and a crawler quoting this has no chart caption to read.
+  if (facts.downloadsApp !== null) {
+    sentences.push(
+      `App downloads: ${count(facts.downloadsApp.value, 'download')} of installers and ` +
+        `archives, measured ` +
+        `${escapeHtml(facts.downloadsApp.date)}. Update-checking traffic is counted separately ` +
+        'and is not in that figure.',
+    );
+  }
+
+  // One sentence for both, since the count is only meaningful next to what the
+  // newest of them is.
+  if (facts.releasesShipped > 0 && facts.latestRelease !== null) {
+    sentences.push(
+      `Releases shipped: ${num(facts.releasesShipped)}, latest ` +
+        `${escapeHtml(facts.latestRelease.tag)} on ${escapeHtml(facts.latestRelease.date)}.`,
+    );
+  } else if (facts.latestRelease !== null) {
     sentences.push(
       `Latest release: ${escapeHtml(facts.latestRelease.tag)}, published ` +
         `${escapeHtml(facts.latestRelease.date)}.`,
@@ -345,12 +437,20 @@ export function buildDatasetJsonLd(
   add('forks', 'forks', facts.forks);
   add('watchers', 'watchers', facts.watchers);
   add('contributors', 'contributors', facts.contributors);
+  // Valued, because it is a point-in-time counter with a date. `page views`
+  // and `repository clones` stay bare below despite `viewsTotal`/`clonesTotal`
+  // existing: those are sums across a span, and every valued entry here states
+  // a `measurementTechnique` of "Measured <date>", which a span does not have.
+  add('app downloads', 'downloads', facts.downloadsApp);
   for (const name of [
     'page views',
     'unique visitors',
     'repository clones',
     'unique cloners',
     'open issues',
+    'update checks',
+    // Still a column in `data.json` even though no card shows it any more, and
+    // this block describes the dataset rather than the page.
     'release asset downloads',
     'referring sites',
     'popular paths',
