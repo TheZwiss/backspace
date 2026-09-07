@@ -142,6 +142,47 @@ describe('buildSummary', () => {
     expect(buildSummary(data()).from).toBe('2026-08-18');
   });
 
+  // The archive total is what the SERVED page states, so it is read by
+  // whatever fetches the page without running its JavaScript. A total that
+  // silently included the unmeasured days as zeroes would be the one figure on
+  // the page that is an estimate.
+  it('sums only the measured days', () => {
+    const d = data();
+    d.series.views = { dates: ['a', 'b', 'c'], count: [7, null, 5], uniques: [1, null, 1] };
+    const f = buildSummary(d);
+    expect(f.viewsTotal).toBe(12);
+    expect(f.viewsDays).toBe(2);
+  });
+
+  // Zero views across two measured days and no measurement at all are
+  // different facts, and only the second one loses its clause.
+  it('reports a measured zero total as 0 and an unmeasured one as null', () => {
+    const measuredZero = data();
+    measuredZero.series.clones = { dates: ['a', 'b'], count: [0, 0], uniques: [0, 0] };
+    expect(buildSummary(measuredZero).clonesTotal).toBe(0);
+
+    const unmeasured = data();
+    unmeasured.series.clones = { dates: ['a', 'b'], count: [null, null], uniques: [null, null] };
+    expect(buildSummary(unmeasured).clonesTotal).toBeNull();
+  });
+
+  it('takes app downloads from the newest measured row and counts the releases', () => {
+    const d = data();
+    d.series.repo.dates = ['2026-08-18', '2026-08-19'];
+    d.series.repo.subscribers = [7, 7];
+    d.series.repo.open_issues = [18, 18];
+    d.series.repo.downloads_total = [1802, 1900];
+    d.series.repo.downloads_app = [340, 412];
+    d.series.repo.downloads_updates = [0, 0];
+    d.releases = [
+      { date: '2026-07-03', tag: 'v1.0.0', name: 'Backspace 1.0.0' },
+      { date: '2026-08-01', tag: 'v1.1.0', name: 'Backspace 1.1.0' },
+    ];
+    const f = buildSummary(d);
+    expect(f.downloadsApp).toEqual({ value: 412, date: '2026-08-19' });
+    expect(f.releasesShipped).toBe(2);
+  });
+
   it('reports nulls throughout for an empty archive rather than zeroes', () => {
     const f = buildSummary(empty());
     expect(f.stars).toBeNull();
@@ -150,6 +191,10 @@ describe('buildSummary', () => {
     expect(f.topPath).toBeNull();
     expect(f.to).toBeNull();
     expect(f.viewsDays).toBe(0);
+    expect(f.viewsTotal).toBeNull();
+    expect(f.clonesTotal).toBeNull();
+    expect(f.downloadsApp).toBeNull();
+    expect(f.releasesShipped).toBe(0);
   });
 });
 
@@ -160,7 +205,7 @@ describe('renderSummaryHtml', () => {
     expect(html).toContain('5 forks');
     expect(html).toContain('7 watchers');
     expect(html).toContain('measured 2026-08-19');
-    expect(html).toContain('174 views');
+    expect(html).toContain('249 views across 2 measured days, busiest 174');
     expect(html).toContain('Google');
     expect(html).toContain('v1.0.0');
     expect(html).toContain('2026-08-18 to 2026-08-19');
@@ -186,8 +231,37 @@ describe('renderSummaryHtml', () => {
   // has to travel in the same sentence or the number arrives stripped of it.
   it('never states the clone peak without saying CI checkouts are counted in it', () => {
     const html = renderSummaryHtml(buildSummary(data()));
-    expect(html).toContain('Busiest day for clones: 10 clones on 2026-08-18');
+    expect(html).toContain('18 clones across 2 measured days, busiest 10 on 2026-08-18');
     expect(html).toContain('own CI checkouts');
+  });
+
+  // Every figure the page's lead row shows has to be in this paragraph, because
+  // the row is drawn by JavaScript and this paragraph is not: a fetcher that
+  // runs none sees only what is written here. `downloads_app` is blank in the
+  // base fixture, which is the pre-split archive state, so the clause is
+  // absent exactly as an unmeasured figure should be.
+  it('states app downloads and names what is excluded from them', () => {
+    const d = data();
+    d.series.repo.downloads_app = [412];
+    const html = renderSummaryHtml(buildSummary(d));
+    expect(html).toContain('412 downloads of installers and archives');
+    expect(html).toContain('Update-checking traffic is counted separately');
+  });
+
+  it('omits app downloads entirely when the split was never measured', () => {
+    const html = renderSummaryHtml(buildSummary(data()));
+    expect(html).not.toContain('App downloads');
+  });
+
+  it('states how many releases shipped alongside the newest one', () => {
+    const d = data();
+    d.releases = [
+      { date: '2026-07-03', tag: 'v1.0.0', name: 'Backspace 1.0.0' },
+      { date: '2026-08-01', tag: 'v1.1.0', name: 'Backspace 1.1.0' },
+    ];
+    expect(renderSummaryHtml(buildSummary(d))).toContain(
+      'Releases shipped: 2, latest v1.1.0 on 2026-08-01',
+    );
   });
 
   it('states the CI peak so the clone caveat has its number in the same text', () => {

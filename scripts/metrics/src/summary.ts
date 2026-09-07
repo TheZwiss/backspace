@@ -56,6 +56,31 @@ export interface SummaryFacts {
   viewsDays: number;
   clonesDays: number;
   /**
+   * Every measured view and clone the archive holds, summed.
+   *
+   * These are archive totals, deliberately NOT the rolling 30-day window the
+   * page's lead figures show. A served page is read whenever a crawler
+   * happens to fetch it, so a windowed figure baked into it goes stale
+   * silently, while a total over measured days stays exactly true of the
+   * archive it was built from. The two are different figures and are labelled
+   * as different figures; a later reader finding them unequal has found the
+   * design rather than a bug.
+   *
+   * Null only for an archive with no measured day at all, which is the same
+   * condition that drops the peak clause.
+   */
+  viewsTotal: number | null;
+  clonesTotal: number | null;
+  /**
+   * Installers and archives only, never the updater feed. GitHub counts an
+   * electron-updater feed request as an asset download, so the collector
+   * splits the two (§4.6) and this is the half that means "someone took the
+   * app".
+   */
+  downloadsApp: DatedValue | null;
+  /** How many releases the archive records, the Delivery group's lead figure. */
+  releasesShipped: number;
+  /**
    * The heaviest day of this repository's own CI, which is what the clone
    * caveat points at. Stated so a reader that quotes the clone peak has the
    * number that explains it in the same paragraph rather than in a chart.
@@ -125,6 +150,24 @@ function countMeasured(values: ReadonlyArray<number | null>): number {
   return n;
 }
 
+/**
+ * Every measured value summed, or null when nothing was measured.
+ *
+ * Null rather than 0 for the empty case, because 0 here would be a total
+ * across no measurements offered as a total of no traffic — the one
+ * substitution this whole package exists to refuse.
+ */
+function sumMeasured(values: ReadonlyArray<number | null>): number | null {
+  let total = 0;
+  let any = false;
+  for (const value of values) {
+    if (value === null || value === undefined) continue;
+    total += value;
+    any = true;
+  }
+  return any ? total : null;
+}
+
 /** The latest date across every dated series, or null when nothing is dated. */
 function latestDate(data: DashboardData): string | null {
   const candidates: string[] = [];
@@ -189,6 +232,10 @@ export function buildSummary(data: DashboardData): SummaryFacts {
     clonesPeak: peakDay(clones.dates, clones.count, clones.uniques),
     viewsDays: countMeasured(views.count),
     clonesDays: countMeasured(clones.count),
+    viewsTotal: sumMeasured(views.count),
+    clonesTotal: sumMeasured(clones.count),
+    downloadsApp: newestMeasured(repo.dates, repo.downloads_app),
+    releasesShipped: data.releases.length,
     workflowsPeak: peakDay(workflows.dates, workflows.runs),
     topReferrer: referrer === undefined ? null : labelled(referrer),
     topPath: path === undefined ? null : labelled(path),
@@ -251,15 +298,36 @@ export function renderSummaryHtml(facts: SummaryFacts): string {
       facts.viewsPeak.uniques === null
         ? ''
         : ` from ${count(facts.viewsPeak.uniques, 'unique visitor')}`;
-    sentences.push(
-      `Busiest day for page views: ${count(facts.viewsPeak.value, 'view')}${uniques} on ` +
-        `${escapeHtml(facts.viewsPeak.date)}, across ${count(facts.viewsDays, 'measured day')}.`,
-    );
+    // The total leads and the peak qualifies it, rather than the peak standing
+    // alone: a busiest day quoted with no total behind it is the one figure on
+    // this page most easily mistaken for the whole of the traffic.
+    const total =
+      facts.viewsTotal === null
+        ? ''
+        : `${count(facts.viewsTotal, 'view')} across ` +
+          `${count(facts.viewsDays, 'measured day')}, busiest `;
+    const opener = total === '' ? 'Busiest day for page views: ' : 'Page views: ';
+    const tail =
+      total === ''
+        ? `${count(facts.viewsPeak.value, 'view')}${uniques} on ` +
+          `${escapeHtml(facts.viewsPeak.date)}, across ${count(facts.viewsDays, 'measured day')}.`
+        : `${num(facts.viewsPeak.value)}${uniques} on ${escapeHtml(facts.viewsPeak.date)}.`;
+    sentences.push(`${opener}${total}${tail}`);
   }
   if (facts.clonesPeak !== null) {
+    const total =
+      facts.clonesTotal === null
+        ? ''
+        : `${count(facts.clonesTotal, 'clone')} across ` +
+          `${count(facts.clonesDays, 'measured day')}, busiest `;
+    const opener = total === '' ? 'Busiest day for clones: ' : 'Clones: ';
+    const tail =
+      total === ''
+        ? `${count(facts.clonesPeak.value, 'clone')} on ` +
+          `${escapeHtml(facts.clonesPeak.date)}, across ${count(facts.clonesDays, 'measured day')}.`
+        : `${num(facts.clonesPeak.value)} on ${escapeHtml(facts.clonesPeak.date)}.`;
     sentences.push(
-      `Busiest day for clones: ${count(facts.clonesPeak.value, 'clone')} on ` +
-        `${escapeHtml(facts.clonesPeak.date)}, across ${count(facts.clonesDays, 'measured day')}. ` +
+      `${opener}${total}${tail} ` +
         'Clone counts include this repository\u2019s own CI checkouts, which on a heavy build ' +
         'day outnumber human clones.',
     );
@@ -289,7 +357,26 @@ export function renderSummaryHtml(facts: SummaryFacts): string {
         `${count(facts.topPath.count, 'view')}.`,
     );
   }
-  if (facts.latestRelease !== null) {
+  // Installers and archives only. Naming the exclusion in the same sentence,
+  // because "downloads" unqualified is exactly the figure an updater feed
+  // inflates, and a crawler quoting this has no chart caption to read.
+  if (facts.downloadsApp !== null) {
+    sentences.push(
+      `App downloads: ${count(facts.downloadsApp.value, 'download')} of installers and ` +
+        `archives, measured ` +
+        `${escapeHtml(facts.downloadsApp.date)}. Update-checking traffic is counted separately ` +
+        'and is not in that figure.',
+    );
+  }
+
+  // One sentence for both, since the count is only meaningful next to what the
+  // newest of them is.
+  if (facts.releasesShipped > 0 && facts.latestRelease !== null) {
+    sentences.push(
+      `Releases shipped: ${num(facts.releasesShipped)}, latest ` +
+        `${escapeHtml(facts.latestRelease.tag)} on ${escapeHtml(facts.latestRelease.date)}.`,
+    );
+  } else if (facts.latestRelease !== null) {
     sentences.push(
       `Latest release: ${escapeHtml(facts.latestRelease.tag)}, published ` +
         `${escapeHtml(facts.latestRelease.date)}.`,
@@ -345,13 +432,14 @@ export function buildDatasetJsonLd(
   add('forks', 'forks', facts.forks);
   add('watchers', 'watchers', facts.watchers);
   add('contributors', 'contributors', facts.contributors);
+  add('app downloads', 'downloads', facts.downloadsApp);
   for (const name of [
     'page views',
     'unique visitors',
     'repository clones',
     'unique cloners',
     'open issues',
-    'release asset downloads',
+    'update checks',
     'referring sites',
     'popular paths',
   ]) {

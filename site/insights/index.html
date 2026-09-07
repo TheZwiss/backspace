@@ -690,6 +690,36 @@ footer a:hover { color: var(--txt); }
   <div class="wrap page-head">
     <h1>Insights</h1>
     <p class="lead">Every number on this page was measured, not estimated.</p>
+
+    <div class="status-region" id="status-region" role="status" aria-live="polite"></div>
+
+    <!-- Above the range control, not below it. The four figures do not move
+         with the range: their window is a fixed 30 days ending on the
+         archive's newest measured day, and a row of numbers sitting under a
+         control that does not govern them would invite the reading that it
+         does.
+
+         Directly under the title, with the two signpost paragraphs below it
+         rather than above. They point at the plain tables and at data.json,
+         which is worth saying and is not what this page is; three lines of it
+         between the title and the page's four headline numbers spent the top
+         of the first screen on a redirection.
+
+         This is a reading-order change and nothing else. It moves the row up
+         by 88 measured pixels and moves the range control by none: reordering
+         a stack does not shorten it, and the control sits at the same 872px
+         it did before. That was worth measuring rather than assuming, and the
+         measurement is in the "first screen" section of
+         `scripts/metrics/fixtures/insights-check.mjs`, which reports where
+         each landmark lands at 1440x900 and 1280x720. What that says about
+         the control: on screen at 900 with little to spare, below at 720,
+         sticky at `top: 60px` in both, so the first scroll pins it and it
+         stays for the rest of the page. Recovering the height instead would
+         mean shrinking the four headline figures to surface a secondary
+         control the reader meets on their first scroll anyway, which is the
+         wrong way round. -->
+    <div class="slot lead-row" id="lead-figures"></div>
+
     <p class="sec-copy raw-data">
       Prefer the numbers to the charts? The same archive is published as
       <a href="data/">plain tables</a> and as one machine-readable file,
@@ -708,7 +738,28 @@ footer a:hover { color: var(--txt); }
          served page states its headline measurements without running any
          JavaScript. What is committed here is the pre-build fallback: it names
          where the numbers live rather than guessing at them, because a stale
-         figure baked into source would outlive whatever made it true. -->
+         figure baked into source would outlive whatever made it true.
+
+         Below the lead row rather than above it. It was above while it was the
+         only place the headline figures appeared at all, and moving it then
+         would have buried them. It now carries every figure the row carries,
+         so the ordering question is only which one a reader meets first, and
+         a dense paragraph is the wrong thing to put between a page's title
+         and its four headline numbers. Nothing is lost on the other side:
+         a fetcher reads the document, not the first screen, and this
+         paragraph is still the first prose after the intro copy.
+
+         It must stay directly under the two signpost paragraphs above it.
+         `renderSummaryHtml` deliberately ends without linking the plain
+         tables or data.json, on the grounds that the paragraph above already
+         carries both links and repeating them a few lines later reads as a
+         page that has lost track of what it has said. Anything inserted
+         between the two makes that omission wrong rather than considered.
+
+         The two state DIFFERENT figures for traffic and are meant to. The row
+         shows a rolling 30-day window; this paragraph states totals across
+         every measured day, because a windowed figure baked into a served
+         page goes stale the moment the window moves and a total does not. -->
     <!-- BUILD:SUMMARY -->
     <p class="sec-copy static-figures">
       The headline measurements are written into this page at deploy time. If you are reading this
@@ -716,14 +767,6 @@ footer a:hover { color: var(--txt); }
       the <a href="data/">plain tables</a> and in <a href="data.json"><code>data.json</code></a>.
     </p>
     <!-- /BUILD:SUMMARY -->
-    <div class="status-region" id="status-region" role="status" aria-live="polite"></div>
-
-    <!-- Above the range control, not below it. The four figures do not move
-         with the range: their window is a fixed 30 days ending on the
-         archive's newest measured day, and a row of numbers sitting under a
-         control that does not govern them would invite the reading that it
-         does. -->
-    <div class="slot lead-row" id="lead-figures"></div>
 
   </div>
 

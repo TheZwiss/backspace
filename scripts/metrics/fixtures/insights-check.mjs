@@ -687,6 +687,46 @@ const DRAG_FIRST_CHART = `(async function () {
     ", selection " + width + "px wide at mouseup";
 })()`;
 
+/*
+ * Where the page's landmarks sit against a real viewport.
+ *
+ * The walk above runs in a 1440x2400 window on purpose, so that nothing is
+ * clipped and every card lays out at its natural size. That window also makes
+ * one whole class of defect unobservable: a laptop is 900 tall, not 2400, and
+ * nothing in the report could say whether a reader lands with the range
+ * control on screen or below it. The answer was argued from the CSS for a
+ * while and belongs in a measurement.
+ *
+ * Run last, with the viewport overridden, because resizing re-lays out every
+ * plot on the page and a re-laid-out plot is a worse thing to hash or drag.
+ */
+/*
+ * The viewports the first screen is measured at.
+ *
+ * 1440x900 is the common laptop and the one the layout was argued about;
+ * 1280x720 is the short end of what a desktop reader turns up with. Both are
+ * CSS pixels, which is what the layout is written in.
+ */
+const FOLD_VIEWPORTS = [[1440, 900], [1280, 720]];
+
+const FOLD = `(function () {
+  var height = window.innerHeight;
+  function mark(name, node) {
+    if (node === null) return { name: name, top: null, visible: null };
+    var top = Math.round(node.getBoundingClientRect().top + window.scrollY);
+    return { name: name, top: top, visible: top < height };
+  }
+  return {
+    viewport: [window.innerWidth, height],
+    marks: [
+      mark("lead row", document.getElementById("lead-figures")),
+      mark("built summary", document.querySelector(".static-figures")),
+      mark("range control", document.getElementById("rangectl")),
+      mark("first group", document.getElementById("reach"))
+    ]
+  };
+})()`;
+
 async function main() {
   const chrome = CHROME_CANDIDATES.find((c) => existsSync(c));
   if (chrome === undefined) {
@@ -715,6 +755,7 @@ async function main() {
   let before = null;
   let after = null;
   const ranges = [];
+  const folds = [];
   try {
     const target = await poll(async () => {
       const list = await fetch(`http://127.0.0.1:${debugPort}/json/list`).then((r) => r.json());
@@ -844,6 +885,17 @@ async function main() {
     dragResult = await evaluate(DRAG_FIRST_CHART, true);
     await new Promise((r) => setTimeout(r, 700));
     after = await evaluate(CANVAS_HASHES);
+
+    for (const [width, height] of FOLD_VIEWPORTS) {
+      await client.send('Emulation.setDeviceMetricsOverride', {
+        width, height, deviceScaleFactor: 1, mobile: false,
+      });
+      // The page's own resize handling is throttled through a ResizeObserver,
+      // so a reading taken immediately measures the previous layout.
+      await new Promise((r) => setTimeout(r, 500));
+      folds.push(await evaluate(FOLD));
+    }
+    await client.send('Emulation.clearDeviceMetricsOverride');
   } finally {
     if (client !== null) client.close();
     child.kill();
@@ -934,6 +986,22 @@ async function main() {
     console.log('  Either no card ranks anything, or the ranking walk stopped matching the markup.');
   }
   console.log('  rankings seen: ' + JSON.stringify(first ?? null, null, 2));
+
+  console.log('\n=== first screen ===');
+  if (folds.length === 0) {
+    console.log('  not measured: the run ended before the viewport sweep');
+  }
+  for (const fold of folds) {
+    console.log(`  ${fold.viewport[0]}x${fold.viewport[1]}`);
+    for (const m of fold.marks) {
+      if (m.top === null) {
+        console.log(`    ${m.name}: not on the page`);
+        continue;
+      }
+      console.log(`    ${m.name}: ${m.top}px from the top of the document, `
+        + `${m.visible ? 'on the first screen' : 'BELOW THE FOLD'}`);
+    }
+  }
 
   console.log('\n=== zoom sync ===');
   console.log(`drag (first chart on the page): ${dragResult}`);
