@@ -64,7 +64,7 @@
   <releases>
     <release version="1.2.0" date="2026-09-07">
       <description>
-        <p>Backspace 1.2.0 release.</p>
+        <p>Adds an interface scale from 75% to 250%, opt-in instance telemetry, and voice shortcuts on Wayland. A system-audio screen share no longer plays viewers their own voice back.</p>
       </description>
     </release>
     <release version="1.1.2" date="2026-09-04">
