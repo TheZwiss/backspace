@@ -32,6 +32,12 @@ network access; the subsequent compilation runs offline. The generated manifest
 uses the current directory and `flatpak/node-sources.ci.json`; both generated
 files are ignored by Git.
 
+`prepare-ci-manifest.mjs` checks that the generated source list exists before
+writing or replacing the CI manifest. If it is missing, the error includes the
+generator command below. Source paths are resolved relative to the output
+manifest's directory, not the current working directory; when using a custom
+output directory, generate its `flatpak/node-sources.ci.json` there.
+
 ```sh
 flatpak run --filesystem="$PWD" --command=flatpak-node-generator \
   org.flatpak.Builder \

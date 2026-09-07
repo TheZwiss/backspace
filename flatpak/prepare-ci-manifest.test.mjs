@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync, existsSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,15 +9,41 @@ import { test } from 'node:test';
 const script = fileURLToPath(new URL('./prepare-ci-manifest.mjs', import.meta.url));
 const published = readFileSync(new URL('../io.github.TheZwiss.backspace.yml', import.meta.url), 'utf8');
 
-function prepare(t, manifest) {
+function prepare(t, manifest, { generated = true, existingOutput = false } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'backspace-flatpak-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const input = join(dir, 'published.yml');
-  const output = join(dir, 'ci.yml');
+  const outputDir = join(dir, 'output');
+  const cwd = join(dir, 'cwd');
+  mkdirSync(join(outputDir, 'flatpak'), { recursive: true });
+  mkdirSync(cwd);
+  const output = join(outputDir, 'ci.yml');
+  const sources = join(outputDir, 'flatpak', 'node-sources.ci.json');
+  if (generated) writeFileSync(sources, '[]\n');
+  // Decoys must not satisfy the check: paths belong to the output manifest.
+  for (const base of [dir, cwd]) {
+    mkdirSync(join(base, 'flatpak'));
+    writeFileSync(join(base, 'flatpak', 'node-sources.ci.json'), '[]\n');
+  }
+  if (existingOutput) writeFileSync(output, 'existing manifest\n');
   writeFileSync(input, manifest);
-  const result = spawnSync(process.execPath, [script, input, output], { encoding: 'utf8' });
+  const result = spawnSync(process.execPath, [script, input, output], { encoding: 'utf8', cwd });
   assert.equal(readFileSync(input, 'utf8'), manifest, 'published manifest stays unchanged');
-  return { ...result, output };
+  return { ...result, output, sources };
+}
+
+for (const existingOutput of [false, true]) {
+  test(`rejects missing generated sources without ${existingOutput ? 'overwriting' : 'creating'} the output`, t => {
+    const result = prepare(t, published, { generated: false, existingOutput });
+    assert.notEqual(result.status, 0);
+    assert.ok(result.stderr.includes(result.sources));
+    assert.match(result.stderr, /flatpak-node-generator/);
+    assert.match(result.stderr, /--electron-node-headers/);
+    assert.match(result.stderr, /org\.freedesktop\.Sdk\.Extension\.node24\/\/25\.08/);
+    assert.match(result.stderr, /pnpm-lock\.yaml/);
+    if (existingOutput) assert.equal(readFileSync(result.output, 'utf8'), 'existing manifest\n');
+    else assert.equal(existsSync(result.output), false);
+  });
 }
 
 for (const newline of ['\n', '\r\n']) {

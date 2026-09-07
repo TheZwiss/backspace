@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-import { readFileSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 
 const input = resolve(process.argv[2] ?? 'io.github.TheZwiss.backspace.yml');
 const output = resolve(process.argv[3] ?? 'io.github.TheZwiss.backspace.ci.yml');
@@ -17,6 +17,16 @@ const publishedSources = /^      - flatpak\/node-sources\.json\r?$/gm;
 const sourceMatches = manifest.match(publishedSources) ?? [];
 if (sourceMatches.length !== 1) {
   throw new Error(`Expected one published offline source list, found ${sourceMatches.length}`);
+}
+
+const generatedSources = resolve(dirname(output), 'flatpak/node-sources.ci.json');
+if (!existsSync(generatedSources)) {
+  throw new Error(`Missing generated CI source list: ${generatedSources}\n`
+    + 'Run the generator from the checkout root first (see flatpak/README.md):\n'
+    + 'flatpak run --filesystem="$PWD" --command=flatpak-node-generator org.flatpak.Builder '
+    + '--electron-node-headers --node-sdk-extension org.freedesktop.Sdk.Extension.node24//25.08 '
+    + '-o "$PWD/flatpak/node-sources.ci.json" pnpm "$PWD/pnpm-lock.yaml"\n'
+    + 'For a custom output manifest directory, adjust -o to the missing path above.');
 }
 
 // CI must build the checked-out PR, not the last released commit.
