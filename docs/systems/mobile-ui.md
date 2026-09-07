@@ -33,16 +33,46 @@ Cross-references:
 Detection is in `AppLayout.tsx`:
 
 ```ts
-const checkMobile = () => setIsMobile(window.innerWidth < 768);
+const checkMobile = () => setIsMobile(isMobileViewport());
 // Called on mount + resize listener
 ```
 
 | Breakpoint | Value | Layout |
 |------------|-------|--------|
-| Desktop | `>= 768px` | AppLayout three-column grid (sidebar + chat + member list) |
-| Mobile | `< 768px` | MobileShell (tab bar + screen stack) |
+| Desktop | `>= 768` layout px | AppLayout three-column grid (sidebar + chat + member list) |
+| Mobile | `< 768` layout px | MobileShell (tab bar + screen stack) |
 
 `AppLayout` conditionally renders `<MobileShell />` when `isMobile === true`. Modals render globally in both modes.
+
+### One breakpoint, in layout pixels
+
+The threshold is **layout** pixels, not `window.innerWidth`. The interface-scale
+setting applies CSS `zoom` to the root element, so `innerWidth` reports visual
+pixels while CSS lengths are layout pixels; at 200% a 1280 px window is a 640 px
+layout viewport and belongs in MobileShell. `isMobileViewport()` in
+`platform/interfaceScale.ts` divides by the scale factor, and layout code that
+needs the breakpoint should call it rather than compare `innerWidth` itself.
+(`PictureInPicture` inlines the same `layoutPixels(innerWidth) < 768` test
+because it already measures a layout viewport; `platform/clientKind.ts`
+deliberately keeps raw `innerWidth`, since telemetry classifies the physical
+device rather than the scaled layout.)
+
+CSS media queries do not see root zoom, so `md:` and friends would disagree with
+`isMobile` at any scale other than 100%. Instead, `initializeInterfaceScale()`
+maintains `html[data-viewport="mobile|desktop"]` from the same
+`isMobileViewport()` call, on resize and on scale change, and a `desktop:`
+Tailwind variant resolves to `html[data-viewport="desktop"] &`.
+
+- **Use `desktop:`** for anything inside the app shell.
+- **Do not use `sm:`/`md:`/`lg:`/`xl:`/`2xl:`.** `platform/viewportTokens.test.ts`
+  fails the build on them outside `components/auth/`, which has no JS layout
+  branch to disagree with.
+- **Do not use raw `vh`/`vw`/`dvh`/`dvw` or `env()`.** Use `--app-vh`,
+  `--app-dvh`, `--app-vw`, `--safe-top`, `--safe-bottom` and `--keyboard-inset`,
+  which divide by `--interface-scale`. The same test enforces this.
+
+See `design-system.md` for the coordinate model and the `layoutPixels` /
+`visualPixels` conversion rules.
 
 ### Desktop-to-Mobile Transition (`uiStore:setIsMobile`)
 
@@ -58,7 +88,7 @@ The `setIsMobile` function is a no-op if the value hasn't changed (`prev === isM
 ## Architecture Overview
 
 ```
-MobileShell (100dvh flex column)
+MobileShell (calc(100*var(--app-dvh)) flex column)
   +-- MobileScreenStack (flex-1, relative, overflow-hidden)
   |     +-- Root screen (spaces | dms | you) — always rendered, visibility-hidden when covered
   |     +-- Stacked screens (absolute inset-0, bg-surface-base, z-10)
@@ -260,7 +290,7 @@ The Spaces tab prefers `useSpaceStore.getState().currentSpaceId` — the canonic
 ### Styling
 
 - Container: `glass-bubble` surface tier
-- Height: `calc(56px + env(safe-area-inset-bottom))`
+- Height: `calc(56px + var(--safe-bottom))`
 - Active tab: `text-accent-primary`; Inactive: `text-txt-secondary`
 
 ---
@@ -541,7 +571,7 @@ The unmount cleanup clears `focusedParticipantId` so re-entering the call screen
 
 The chevron is gated on `isCameraOn && cameraDevices.length > 1` so single-camera phones / desktops never see it. On iOS Safari the videoinput list is populated only after the OS-level camera permission has been granted at least once in the current session — that grant happens when the user first turns on the camera via `handleCameraAction` (which calls `getUserMedia`), so by the time the chevron is eligible to show, labels and device IDs are available. Before grant, `enumerateDevices()` returns one entry with empty `deviceId` and no label; the gate (`length > 1`) keeps the chevron hidden, so the user sees no broken-state UI.
 
-**Voice tile text-selection suppression.** `VoiceUser` and `StreamTile` outer containers carry `data-context-menu` attribute. The global `@media (max-width: 767px)` rule in `globals.css` applies `user-select: none` (and inheriting `-webkit-touch-callout: none` via the `*` rule) to every `[data-context-menu]` element, which also inherits to children. Without this, iOS Safari's long-press handler synthesizes the context menu correctly via `useGlobalLongPress`, but the OS *also* triggers native text selection during the 500 ms hold, leaving the entire page's text highlighted in the background after the menu opens. The `data-context-menu` opt-in is the established convention used by `Message.tsx`, `MobileDmsScreen.tsx`, `MobileFolderSheet.tsx`, and `MobileSpacesScreen.tsx`.
+**Voice tile text-selection suppression.** `VoiceUser` and `StreamTile` outer containers carry `data-context-menu` attribute. The global `html[data-viewport="mobile"]` rule in `globals.css` applies `user-select: none` (and inheriting `-webkit-touch-callout: none` via the `*` rule) to every `[data-context-menu]` element, which also inherits to children. Without this, iOS Safari's long-press handler synthesizes the context menu correctly via `useGlobalLongPress`, but the OS *also* triggers native text selection during the 500 ms hold, leaving the entire page's text highlighted in the background after the menu opens. The `data-context-menu` opt-in is the established convention used by `Message.tsx`, `MobileDmsScreen.tsx`, `MobileFolderSheet.tsx`, and `MobileSpacesScreen.tsx`.
 
 **Disconnect:** Same logic as mini-bar (handles DM calls and space voice, calls `disconnectFn`, pops screen).
 
@@ -618,13 +648,13 @@ Several mobile components respect the iOS safe area inset:
 
 | Component | CSS |
 |-----------|-----|
-| MobileBottomNav | `paddingBottom: env(safe-area-inset-bottom)`, height includes inset |
-| MobileVoiceFullScreen control bar | `marginBottom: calc(0.5rem + env(safe-area-inset-bottom))` |
-| MobileFolderSheet | `paddingBottom: env(safe-area-inset-bottom)` |
-| MobileSpacesScreen add sheet | `paddingBottom: env(safe-area-inset-bottom)` |
-| MessageInput | `bottom: calc(env(safe-area-inset-bottom) + 6px)` (keyboard closed) / `0px` (keyboard open) — see "Floating Composer" below |
+| MobileBottomNav | `paddingBottom: var(--safe-bottom)`, height includes inset |
+| MobileVoiceFullScreen control bar | `marginBottom: calc(0.5rem + var(--safe-bottom))` |
+| MobileFolderSheet | `paddingBottom: var(--safe-bottom)` |
+| MobileSpacesScreen add sheet | `paddingBottom: var(--safe-bottom)` |
+| MessageInput | `bottom: calc(var(--safe-bottom) + 6px)` (keyboard closed) / `0px` (keyboard open) — see "Floating Composer" below |
 
-The root `MobileShell` normally uses `height: 100dvh` (dynamic viewport height) to account for mobile browser chrome. **When the iOS soft keyboard is open** (detected via `useVisualViewportInset().keyboardOpen`), the shell switches to `height: ${visualViewport.height}px` so the visible region of the shell is exactly the area above the keyboard. This is the load-bearing mechanism for the floating composer landing flush against the keyboard top — see "Floating Composer" below.
+The root `MobileShell` normally uses `height: calc(100 * var(--app-dvh))` (dynamic viewport height, scale-adjusted) to account for mobile browser chrome. **When the iOS soft keyboard is open** (detected via `useVisualViewportInset().keyboardOpen`), the shell switches to `height: ${visualViewport.height}px` so the visible region of the shell is exactly the area above the keyboard. This is the load-bearing mechanism for the floating composer landing flush against the keyboard top — see "Floating Composer" below.
 
 ---
 
@@ -647,7 +677,7 @@ The chat composer (`MessageInput.tsx`) is a `glass-bubble` floating overlay on *
 │  ┌────────────────────────────────────────┐  │
 │  │ <MessageInput />                       │  │  ← `position: absolute`
 │  │  glass-bubble, translucent             │  │     `left-2 right-2 z-[110]`
-│  │  bottom = 0 (kbd open) / safe+6 (kbd   │  │     (mobile) / `md:left-3 md:right-3 md:bottom-3` (desktop)
+│  │  bottom = 0 (kbd open) / safe+6 (kbd   │  │     (mobile) / `desktop:left-3 desktop:right-3 desktop:bottom-3`
 │  │  closed). Writes --composer-clearance  │  │
 │  │  on its parent via ResizeObserver.     │  │
 │  └────────────────────────────────────────┘  │
@@ -664,17 +694,17 @@ The MessageList content's `paddingBottom` is **dynamic**, driven by a CSS variab
 --composer-clearance = composer.height + composer.bottom-offset + 12 px
 ```
 
-Where `bottom-offset` is the gap between the wrapper's bottom edge and the composer's bottom edge (i.e. the resolved value of the composer's `bottom` style — `12 px` on desktop, `env(safe-area-inset-bottom) + 6` ≈ `40 px` on iPhone with keyboard closed, `0` on mobile with keyboard open). The `+12 px` constant is the desired breathing-room gap between the last message's bottom edge and the composer's top edge.
+Where `bottom-offset` is the gap between the wrapper's bottom edge and the composer's bottom edge (i.e. the resolved value of the composer's `bottom` style — `12 px` on desktop, `var(--safe-bottom) + 6` ≈ `40 px` on iPhone with keyboard closed, `0` on mobile with keyboard open). The `+12 px` constant is the desired breathing-room gap between the last message's bottom edge and the composer's top edge.
 
 `MessageList` reads `var(--composer-clearance, 80px)` as `paddingBottom`. The `80px` fallback covers the brief mount window before the first measurement, plus any future surface that mounts a `MessageList` without a sibling `MessageInput`.
 
-**Why dynamic?** The previous static `pb-20` (80 px) was sized for the desktop case (composer ≈ 50 px tall + 12 px bottom = 62 px, leaving 18 px of gap). On iPhone with the keyboard closed, the composer's bottom-offset is `env(safe-area-inset-bottom) + 6` ≈ 40 px, so `composer-height + bottom-offset` ≈ `44 + 40` = `84 px` — already exceeding the 80 px `pb-20`, with **negative** breathing room. The composer also grows when the user replies to a message (banner adds 36 px) or stages attachments (tile row adds 184 px), so any static value is wrong for some configurations. The ResizeObserver-driven CSS variable is the only correct model.
+**Why dynamic?** The previous static `pb-20` (80 px) was sized for the desktop case (composer ≈ 50 px tall + 12 px bottom = 62 px, leaving 18 px of gap). On iPhone with the keyboard closed, the composer's bottom-offset is `var(--safe-bottom) + 6` ≈ 40 px, so `composer-height + bottom-offset` ≈ `44 + 40` = `84 px` — already exceeding the 80 px `pb-20`, with **negative** breathing room. The composer also grows when the user replies to a message (banner adds 36 px) or stages attachments (tile row adds 184 px), so any static value is wrong for some configurations. The ResizeObserver-driven CSS variable is the only correct model.
 
 The variable is scoped to the chat region's wrapper rather than `:root` so future multi-pane layouts (e.g. side-by-side DM list + chat, voice chat side-panel) don't cross-talk; a wrapper-scoped variable inherits naturally to its `MessageList` descendant.
 
 ### `useVisualViewportInset()` — keyboard-aware geometry
 
-iOS Safari's `env(safe-area-inset-bottom)` is defined relative to the **layout** viewport (full screen), not the **visual** viewport (the visible region above the soft keyboard). When the iOS soft keyboard slides up, the layout viewport stays the same height and `safe-area-inset-bottom` still reports ~34 px (the home-indicator inset). A composer pinned to `bottom: env(safe-area-inset-bottom) + 6 px` therefore ends up `~40 px` above the layout-bottom, which on iPhone 14 Pro is `300+ px` above the keyboard — there is a huge empty gap between the composer and the keyboard top.
+iOS Safari's `env(safe-area-inset-bottom)` is defined relative to the **layout** viewport (full screen), not the **visual** viewport (the visible region above the soft keyboard). When the iOS soft keyboard slides up, the layout viewport stays the same height and `safe-area-inset-bottom` still reports ~34 px (the home-indicator inset). A composer pinned to `bottom: var(--safe-bottom) + 6 px` (which wraps that same `env()` value, divided by the interface scale) therefore ends up `~40 px` above the layout-bottom, which on iPhone 14 Pro is `300+ px` above the keyboard — there is a huge empty gap between the composer and the keyboard top.
 
 The hook subscribes to `window.visualViewport.resize` / `scroll` and computes:
 
@@ -683,19 +713,19 @@ keyboardOcclusion = window.innerHeight - (visualViewport.offsetTop + visualViewp
 ```
 
 It returns `{ value, keyboardOpen, height, offsetTop }`:
-- `value` — `'<n>px'` when the keyboard is open (the occlusion), or the literal `'env(safe-area-inset-bottom)'` string when it is not. Provided for legacy / fallback use.
+- `value` — `'<n>px'` when the keyboard is open (the occlusion), or the literal `'var(--safe-bottom)'` string when it is not. Provided for legacy / fallback use.
 - `keyboardOpen` — `true` when `keyboardOcclusion > 1`.
-- `textInputFocused` — `true` while a text-entry element holds focus. Required for iOS PWA standalone where iOS itself shrinks the layout viewport for the keyboard, so `vv.height === innerHeight` and `keyboardOpen` stays `false` even though the keyboard IS up. Consumers OR `keyboardOpen || textInputFocused` to detect "keyboard probably open". The state-equality check inside the hook MUST include this field — historically it was missing, so on iOS PWA the hook silently dropped focus changes; the composer's `bottom` style stayed pinned to `env(safe-area-inset-bottom) + 6px` while the keyboard was open, the `--composer-clearance` ResizeObserver effect's deps fired stale values, and on close the last message overlapped the composer's top edge by ~4 px.
+- `textInputFocused` — `true` while a text-entry element holds focus. Required for iOS PWA standalone where iOS itself shrinks the layout viewport for the keyboard, so `vv.height === innerHeight` and `keyboardOpen` stays `false` even though the keyboard IS up. Consumers OR `keyboardOpen || textInputFocused` to detect "keyboard probably open". The state-equality check inside the hook MUST include this field — historically it was missing, so on iOS PWA the hook silently dropped focus changes; the composer's `bottom` style stayed pinned to `var(--safe-bottom) + 6px` while the keyboard was open, the `--composer-clearance` ResizeObserver effect's deps fired stale values, and on close the last message overlapped the composer's top edge by ~4 px.
 - `height` — live `visualViewport.height` in pixels (or `null` if `visualViewport` is unavailable).
 - `offsetTop` — live `visualViewport.offsetTop` in pixels.
 
 #### iOS PWA standalone — the load-bearing mechanism
 
-`MobileShell` consumes `{ keyboardOpen, height }` and sets its own `style.height` to `${vv.height}px` whenever the keyboard is open. The chat region's `bottom` edge is therefore exactly the keyboard's top edge, and `<MessageInput style={{ bottom: 0 }}>` lands flush. **This is the primary mechanism, not the inset arithmetic** — sizing the container is far more robust than arithmetic on a `bottom` value, because the math depends on `vv.resize` events firing reliably (which they do not in iOS standalone PWA on several iOS versions). The composer's `bottom` is a simple binary toggle: `0` when keyboard open, `env(safe-area-inset-bottom) + 6 px` when closed.
+`MobileShell` consumes `{ keyboardOpen, height }` and sets its own `style.height` to `${vv.height}px` whenever the keyboard is open. The chat region's `bottom` edge is therefore exactly the keyboard's top edge, and `<MessageInput style={{ bottom: 0 }}>` lands flush. **This is the primary mechanism, not the inset arithmetic** — sizing the container is far more robust than arithmetic on a `bottom` value, because the math depends on `vv.resize` events firing reliably (which they do not in iOS standalone PWA on several iOS versions). The composer's `bottom` is a simple binary toggle: `0` when keyboard open, `var(--safe-bottom) + 6 px` when closed.
 
 To cover the case where `vv.resize` fails to fire on iOS PWA (a long-standing standalone-mode bug), the hook **also** listens to `focusin` / `focusout` on `window` for any text-entry element and **polls** `vv.height` at 32 ms intervals for up to 600 ms after the focus change. Polling exits early once the height is stable for two consecutive ticks. This catches the case where iOS silently updates `vv.height` without dispatching a `resize` event — the polling just re-reads the value and re-derives `keyboardOpen`, which then triggers the shell-height update.
 
-When the keyboard is closed, `MobileShell` reverts to `height: 100dvh` so the shell again extends through the home-indicator safe area, and the composer reverts to `bottom: env(safe-area-inset-bottom) + 6 px` so it sits 6 px above the home indicator.
+When the keyboard is closed, `MobileShell` reverts to `height: calc(100 * var(--app-dvh))` so the shell again extends through the home-indicator safe area, and the composer reverts to `bottom: var(--safe-bottom) + 6 px` so it sits 6 px above the home indicator.
 
 #### Viewport meta hint
 
@@ -705,8 +735,8 @@ When the keyboard is closed, `MobileShell` reverts to `height: 100dvh` so the sh
 
 The component declares one `composerClass` shared by both modes. Differences:
 
-- Mobile inline `style={{ bottom: keyboardOpen ? '0px' : 'calc(env(safe-area-inset-bottom) + 6px)' }}` — applied only when `useUIStore.isMobile === true`. The hook is safe to call on desktop (no-ops), but the `style` is only emitted on mobile so desktop's CSS-driven `md:bottom-3` (12 px) constant is unaffected by the inline override.
-- Tailwind: `absolute left-2 right-2 z-[110] glass-bubble rounded-[14px] md:left-3 md:right-3 md:bottom-3`. The `left-2/right-2` 8 px inset is mobile; `md:left-3/right-3/bottom-3` overrides to 12 px on desktop. `bottom` is intentionally NOT in the Tailwind class on mobile — the inline `style.bottom` provides the dynamic value.
+- Mobile inline `style={{ bottom: keyboardOpen ? '0px' : 'calc(var(--safe-bottom) + 6px)' }}` — applied only when `useUIStore.isMobile === true`. The hook is safe to call on desktop (no-ops), but the `style` is only emitted on mobile so desktop's CSS-driven `desktop:bottom-3` (12 px) constant is unaffected by the inline override.
+- Tailwind: `absolute left-2 right-2 z-[110] glass-bubble rounded-[14px] desktop:left-3 desktop:right-3 desktop:bottom-3`. The `left-2/right-2` 8 px inset is mobile; `desktop:left-3/right-3/bottom-3` overrides to 12 px on desktop. `bottom` is intentionally NOT in the Tailwind class on mobile — the inline `style.bottom` provides the dynamic value.
 
 `TypingIndicator` is rendered inside `MessageInput` (anchored `absolute bottom-full` to the bubble) so it appears just above the composer. Mobile chat screens must NOT render an additional `TypingIndicator` themselves.
 
@@ -785,7 +815,7 @@ const { sheetStyle, handleProps, isDragging, isClosing, hasInteracted } = useDra
 
 `packages/web/src/components/ui/ToastContainer.tsx` is a single shared component. On desktop it renders at `bottom-6 right-6` (anchored bottom-right). On mobile the container is repositioned to clear the bottom chrome and center horizontally so toasts don't get cropped against narrow viewports or hidden behind voice/nav controls.
 
-The mobile bottom offset is computed via `resolveMobileBottomOffset(hasStack, topScreen, inVoice)` and added to `env(safe-area-inset-bottom)`:
+The mobile bottom offset is computed via `resolveMobileBottomOffset(hasStack, topScreen, inVoice)` and added to `var(--safe-bottom)`:
 
 | Mobile State | Bottom Offset (above `safe-area-inset-bottom`) | Rationale |
 |---|---|---|
