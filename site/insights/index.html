@@ -2443,6 +2443,38 @@ footer a:hover { color: var(--txt); }
 
   var I = window.INSIGHTS;
 
+  /* The toolkit's DOM helpers, for the captions below. Each chart section
+   * keeps its own copy of these two; they are a few lines each, and a section
+   * reaching across for them would buy nothing. */
+  function el(tag, className, text) {
+    var node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+
+  function pair(key, value, accent) {
+    var span = el("span");
+    span.appendChild(el("span", "k", key));
+    span.appendChild(document.createTextNode(" "));
+    span.appendChild(el("span", accent ? "v rel" : "v", value));
+    return span;
+  }
+
+  /* Copied here rather than moved. The growth section still calls its own
+   * `plural` and `stepWord` from the captions that stayed there, and
+   * `singlePointNote` calls `stepWord` three times, so cutting either one out
+   * of that section would be a ReferenceError on any bundle whose growth axis
+   * is a single step wide. Both copies go when the last of those captions
+   * moves here. */
+  function plural(count, singular, pluralWord) {
+    return count === 1 ? singular : pluralWord;
+  }
+
+  function stepWord(stepDays) {
+    return stepDays === 1 ? "day" : "week";
+  }
+
   /*
    * ONE cursor-sync key for the whole page.
    *
@@ -3138,6 +3170,325 @@ footer a:hover { color: var(--txt); }
     return function () { window.removeEventListener("resize", sync); };
   }
 
+  /* The release markers take the growth section's own channel colour, so the
+   * lane, the labels and the section's "#growth" heading are one thing. */
+  var RELEASE_TOKEN = "--lavender";
+  var RELEASE_FALLBACK = "#c4b5fd";
+
+  /* Verbatim from the page's own `--mono` declaration. A canvas font must be a
+   * literal stack, and every family in it is a system font — nothing here is
+   * fetched from anywhere. */
+  var MONO_STACK = 'ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, ' +
+    '"Liberation Mono", monospace';
+
+  /*
+   * The release lane sits ABOVE the plot, reserved through `mount`'s `padding`
+   * option, and the marker line runs from the lane straight down through the
+   * plot area.
+   *
+   * Above rather than below because the space below the plot already holds the
+   * day-axis tick labels: a lane there would either overprint them or need the
+   * marker line to stop at the axis and resume underneath it, drawn as two
+   * pieces of what a reader has to read as one. Above, the line is continuous
+   * and the labels have the gutter to themselves.
+   *
+   * Two label rows, because two releases days apart would otherwise print on
+   * top of each other. A third row would eat the plot; a marker that fits in
+   * neither row keeps its line and its dot and loses only its text, and the
+   * caption above the charts names what shipped in the span regardless.
+   */
+  var LANE_CSS = 34;
+  var LANE_ROWS = 2;
+  var ROW_CSS = 13;
+  var LABEL_PX = 11;
+  var LABEL_GAP_CSS = 7;
+
+  /*
+   * How many release dates a caption spells out before it starts counting the
+   * rest. A repository with two hundred tags would otherwise turn this line
+   * into a wall nobody reads; past the cap the caption still states the exact
+   * number it did not name, so the count is never approximate even when the
+   * list is.
+   */
+  var MAX_LISTED = 8;
+
+  /* A release's own name for itself, preferring the tag. The bundle validator
+   * accepts an empty string for both fields, so an unnamed release still gets
+   * a marker and a caption entry rather than a blank one. */
+  function releaseLabel(release) {
+    if (release.tag !== "") return release.tag;
+    if (release.name !== "") return release.name;
+    return "untagged release";
+  }
+
+  /*
+   * Sort the archive's releases into the ones this chart can mark and the ones
+   * it cannot, and group the markable ones by day.
+   *
+   * The grouping is what keeps several releases on one date legible: they
+   * share one line, one dot and one label, and the caption spells out which
+   * tags are behind it. Two releases on the same day are one event on a time
+   * axis, and drawing two coincident lines with two labels fighting for the
+   * same pixel column would be drawing the same x twice.
+   *
+   * The span tested against is the span the SERIES cover, not the range the
+   * control asked for and not the scale uPlot ends up drawing. A release
+   * outside it is reported as unmarked in the caption.
+   *
+   * The painter below additionally declines anything outside the LIVE scale,
+   * so a drag zoom can leave the canvas with no marker on it while the
+   * caption still names every release it listed. That is deliberate, and it is
+   * not the caption going stale: the caption is a statement about the span
+   * this section drew out of the archive — the span each card's `span` line
+   * names — and not a claim about what is on the canvas at the reader's
+   * current zoom. Double-clicking restores the full span and every listed
+   * marker with it. A caption recomputed from a `setScale` hook would be
+   * making the narrower claim, and would then have to say which of the two
+   * spans it meant; this one says the wider thing and says it once.
+   */
+  function collectReleases(releases, startMs, endMs) {
+    var groups = [];
+    var index = {};
+    var outside = [];
+    var unreadable = 0;
+    var i;
+
+    for (i = 0; i < releases.length; i++) {
+      var release = releases[i];
+      var ms = I.parseDay(release.date);
+      /* The bundle contract only promises a non-empty string here. A date this
+       * page cannot place on a UTC day is not silently dropped: it is counted,
+       * and the caption says so. */
+      if (isNaN(ms)) {
+        unreadable++;
+        continue;
+      }
+      if (ms < startMs || ms > endMs) {
+        outside.push({ dayMs: ms, release: release });
+        continue;
+      }
+      var group = index[ms];
+      if (group === undefined) {
+        group = { dayMs: ms, entries: [], label: "" };
+        index[ms] = group;
+        groups.push(group);
+      }
+      group.entries.push(release);
+    }
+
+    function byDay(a, b) { return a.dayMs - b.dayMs; }
+    groups.sort(byDay);
+    outside.sort(byDay);
+
+    for (i = 0; i < groups.length; i++) {
+      var entries = groups[i].entries;
+      groups[i].label = entries.length === 1
+        ? releaseLabel(entries[0])
+        : releaseLabel(entries[0]) + " +" + (entries.length - 1);
+    }
+
+    return { groups: groups, outside: outside, unreadable: unreadable };
+  }
+
+  /* "v1.0.0 (2026-07-03)", several of them, truncated once a caption would
+   * turn into a list nobody reads. The count is always exact even when the
+   * names are not all printed. */
+  function listGroups(groups) {
+    var parts = [];
+    for (var i = 0; i < groups.length && i < MAX_LISTED; i++) {
+      var entries = groups[i].entries;
+      var names = [];
+      for (var j = 0; j < entries.length; j++) names.push(releaseLabel(entries[j]));
+      parts.push(names.join(", ") + " (" + I.formatDay(groups[i].dayMs) + ")");
+    }
+    if (groups.length > MAX_LISTED) {
+      parts.push("and " + (groups.length - MAX_LISTED) + " more");
+    }
+    return parts.join(" · ");
+  }
+
+  function listOutside(outside) {
+    var parts = [];
+    for (var i = 0; i < outside.length && i < MAX_LISTED; i++) {
+      parts.push(releaseLabel(outside[i].release) + " (" + I.formatDay(outside[i].dayMs) + ")");
+    }
+    if (outside.length > MAX_LISTED) {
+      parts.push("and " + (outside.length - MAX_LISTED) + " more");
+    }
+    return parts.join(" · ");
+  }
+
+  /*
+   * The device-pixel ratio uPlot is drawing at.
+   *
+   * `u.bbox` and `valToPos(…, true)` are both in canvas pixels, so a line
+   * width or a font size written in CSS pixels would come out a half or a
+   * third of its intended size on a retina display — legible enough in a
+   * screenshot to pass a glance, and wrong. uPlot keeps the ratio it is using
+   * on its constructor; the fallbacks cover a build that does not.
+   */
+  function pixelRatio() {
+    var uplot = window.uPlot;
+    if (uplot && typeof uplot.pxRatio === "number" && isFinite(uplot.pxRatio) &&
+      uplot.pxRatio > 0) {
+      return uplot.pxRatio;
+    }
+    var ratio = window.devicePixelRatio;
+    return (typeof ratio === "number" && isFinite(ratio) && ratio > 0) ? ratio : 1;
+  }
+
+  /*
+   * Paint the release lane. Installed through `mount`'s `hooks` option as a
+   * `draw` hook, which uPlot fires after the axes and the series, with no clip
+   * region in force — so it can reach the padding reserved above the plot.
+   *
+   * It runs on every redraw, which is what makes the markers follow a zoom and
+   * a resize instead of drifting away from the axis they annotate.
+   */
+  function releasePainter(groups, stroke) {
+    return function (u) {
+      if (groups.length === 0) return;
+      var scale = u.scales.x;
+      if (!scale || typeof scale.min !== "number" || typeof scale.max !== "number") return;
+
+      var ctx = u.ctx;
+      var ratio = pixelRatio();
+      var canvasWidth = ctx.canvas.width;
+      var plotBottom = u.bbox.top + u.bbox.height;
+      var laneBottom = u.bbox.top - 5 * ratio;
+
+      var rows = [];
+      var baselines = [];
+      var row;
+      for (row = 0; row < LANE_ROWS; row++) {
+        rows.push([]);
+        baselines.push(laneBottom - (4 + row * ROW_CSS) * ratio);
+      }
+
+      ctx.save();
+      ctx.font = Math.round(LABEL_PX * ratio) + "px " + MONO_STACK;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "alphabetic";
+
+      for (var i = 0; i < groups.length; i++) {
+        var group = groups[i];
+        var ts = group.dayMs / 1000;
+        /* The live scale, not the data span: a drag zoom narrows it, and a
+         * marker outside what is drawn must not be painted onto the edge of
+         * the plot as though it were inside. */
+        if (ts < scale.min || ts > scale.max) continue;
+        var x = u.valToPos(ts, "x", true);
+        if (typeof x !== "number" || !isFinite(x)) continue;
+
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = Math.max(1, Math.round(ratio));
+        /* Dashed, and thinner than either series, so the annotation reads as
+         * chrome over the measurement rather than as a third reading of it. */
+        ctx.setLineDash([4 * ratio, 4 * ratio]);
+        ctx.beginPath();
+        ctx.moveTo(x, laneBottom);
+        ctx.lineTo(x, plotBottom);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.fillStyle = stroke;
+        ctx.beginPath();
+        ctx.arc(x, laneBottom, 2.5 * ratio, 0, Math.PI * 2);
+        ctx.fill();
+
+        var text = group.label;
+        var half = ctx.measureText(text).width / 2;
+        var margin = 2 * ratio;
+        var centre = x;
+        /* A label centred on a marker at the very edge of the plot would hang
+         * half off the canvas. Nudged inwards it no longer sits exactly over
+         * its line, which is why the line and dot are drawn at the true
+         * position first. */
+        if (centre - half < margin) centre = half + margin;
+        if (centre + half > canvasWidth - margin) centre = canvasWidth - margin - half;
+
+        var from = centre - half - LABEL_GAP_CSS * ratio;
+        var to = centre + half + LABEL_GAP_CSS * ratio;
+        var placed = -1;
+        for (row = 0; row < rows.length && placed < 0; row++) {
+          var free = true;
+          for (var s = 0; s < rows[row].length; s++) {
+            if (from < rows[row][s][1] && to > rows[row][s][0]) {
+              free = false;
+              break;
+            }
+          }
+          if (free) placed = row;
+        }
+        /* Out of rows at this width. The line and the dot stay, so the reader
+         * can still see that something shipped there, and the caption above
+         * names the releases in this span — up to its own cap, past which it
+         * states exactly how many it did not name. A label dropped here is a
+         * lost convenience, not a lost fact. */
+        if (placed < 0) continue;
+        rows[placed].push([from, to]);
+        ctx.fillText(text, centre, baselines[placed]);
+      }
+
+      ctx.restore();
+    };
+  }
+
+  /*
+   * The release caption, stated once for the section because both charts share
+   * one axis and therefore one set of markers.
+   *
+   * It names what is marked and what is not, so the reader never has to work
+   * out from an empty lane whether the archive has no releases, or has some
+   * that fall elsewhere, or carries one this page could not read.
+   */
+  function releaseCaption(collected, total) {
+    var note = el("p", "chart-meta");
+    if (total === 0) {
+      note.appendChild(pair("releases", "none recorded in the archive"));
+      return note;
+    }
+    note.appendChild(pair("releases marked",
+      collected.groups.length === 0
+        ? "none — no release falls inside the span drawn here"
+        : listGroups(collected.groups),
+      collected.groups.length > 0));
+    if (collected.outside.length > 0) {
+      note.appendChild(pair("outside this span", listOutside(collected.outside)));
+    }
+    if (collected.unreadable > 0) {
+      note.appendChild(pair("unreadable date",
+        collected.unreadable + " " + plural(collected.unreadable, "release", "releases") +
+        " " + plural(collected.unreadable, "carries", "carry") +
+        " a date this page cannot place on a calendar day"));
+    }
+    return note;
+  }
+
+  /*
+   * Why a release the archive holds is not on the chart. This is the sentence
+   * that stops the centrepiece looking broken: the live archive's only release
+   * shipped two months before the star series begins, so the lane is empty,
+   * and an empty lane with no explanation is indistinguishable from a feature
+   * that failed to render.
+   */
+  function releaseNarrative(collected, total, stepDays) {
+    if (total === 0) {
+      return "No release is recorded in the archive, so there is nothing to mark on the time " +
+        "axis. Markers appear here as soon as the collector records one.";
+    }
+    if (collected.outside.length === 0) {
+      return null;
+    }
+    var count = collected.outside.length;
+    return count + " " + plural(count, "release", "releases") + " recorded in the archive " +
+      plural(count, "falls", "fall") + " outside the span drawn here (" +
+      listOutside(collected.outside) + ") and " + plural(count, "is", "are") + " not marked. " +
+      "The axis is built from the " + stepWord(stepDays) + "s the archive actually measured; " +
+      "stretching it back to reach a release would add axis where nothing was recorded, and " +
+      "imply a history the collector never took.";
+  }
+
   /*
    * Build one plot inside `host`, which must already be in the document —
    * uPlot is given an explicit pixel size, and that size is measured from the
@@ -3163,6 +3514,12 @@ footer a:hover { color: var(--txt); }
    *                plot so the highest point marker is not clipped, and leaves
    *                every other side to uPlot, which already reserves what the
    *                axis labels need.
+   *   releases     `{ groups, outside, unreadable }` from `collectReleases`.
+   *                Reserves the lane above the plot and paints the markers.
+   *                Hero profile only: a compact plot has no room for a lane and
+   *                a marker drawn into 150px of chart would sit on the series.
+   *                Sets the top padding, so passing `padding` alongside it is an
+   *                error and throws.
    *
    * It is a CLOSED set of named extension points rather than a merge into the
    * uPlot options, because what it must not be able to reach is exactly what
@@ -3270,7 +3627,44 @@ footer a:hover { color: var(--txt); }
       ],
       series: series
     };
-    if (opts.hooks !== undefined) config.hooks = opts.hooks;
+    /*
+     * The release lane. It reserves `LANE_CSS` above the plot through the
+     * same `padding` the caller could pass itself, and installs its painter
+     * as a `draw` hook, which uPlot fires after the axes and the series with
+     * no clip region in force, so the painter can reach the reserved lane.
+     *
+     * Refused on a compact plot rather than silently ignored: a caller asking
+     * for markers on a 150px card has made a mistake, and a card that quietly
+     * drops half of what it declared is the failure this file's `bind` exists
+     * to prevent, in another place.
+     */
+    var hooks = opts.hooks;
+    if (opts.releases !== undefined) {
+      if (opts.profile === "compact") {
+        throw new Error("release markers need the hero profile");
+      }
+      /*
+       * `releases` SETS the top padding, because reserving the lane is half of
+       * what the option does. A caller passing both holds two ideas about one
+       * number, so it throws rather than one of them silently winning: the
+       * failure mode of a silent winner is a lane painted into room that was
+       * never reserved, and no text observation of the page would show it.
+       */
+      if (opts.padding !== undefined) {
+        throw new Error("releases sets the top padding, so padding cannot be passed with it");
+      }
+      config.padding = [LANE_CSS, null, null, null];
+      var painter = releasePainter(opts.releases.groups, colour(RELEASE_TOKEN, RELEASE_FALLBACK));
+      hooks = { draw: [painter] };
+      if (opts.hooks !== undefined) {
+        for (var key in opts.hooks) {
+          if (!Object.prototype.hasOwnProperty.call(opts.hooks, key)) continue;
+          if (key === "draw") hooks.draw = hooks.draw.concat(opts.hooks.draw);
+          else hooks[key] = opts.hooks[key];
+        }
+      }
+    }
+    if (hooks !== undefined) config.hooks = hooks;
     if (opts.plugins !== undefined) config.plugins = opts.plugins;
 
     var plot = new window.uPlot(config, data, host);
@@ -3351,9 +3745,16 @@ footer a:hover { color: var(--txt); }
     SYNC_KEY: SYNC_KEY,
     bind: bind,
     colour: colour,
+    collectReleases: collectReleases,
     expand: expand,
     isolate: isolate,
+    listGroups: listGroups,
+    listOutside: listOutside,
     mount: mount,
+    pixelRatio: pixelRatio,
+    releaseCaption: releaseCaption,
+    releaseLabel: releaseLabel,
+    releaseNarrative: releaseNarrative,
     zeroBasedCounts: zeroBasedCounts
   };
 })();
@@ -3900,48 +4301,6 @@ footer a:hover { color: var(--txt); }
     }
   ];
 
-  /* The release markers take the growth section's own channel colour, so the
-   * lane, the labels and the section's "#growth" heading are one thing. */
-  var RELEASE_TOKEN = "--lavender";
-  var RELEASE_FALLBACK = "#c4b5fd";
-
-  /* Verbatim from the page's own `--mono` declaration. A canvas font must be a
-   * literal stack, and every family in it is a system font — nothing here is
-   * fetched from anywhere. */
-  var MONO_STACK = 'ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, ' +
-    '"Liberation Mono", monospace';
-
-  /*
-   * The release lane sits ABOVE the plot, reserved through `mount`'s `padding`
-   * option, and the marker line runs from the lane straight down through the
-   * plot area.
-   *
-   * Above rather than below because the space below the plot already holds the
-   * day-axis tick labels: a lane there would either overprint them or need the
-   * marker line to stop at the axis and resume underneath it, drawn as two
-   * pieces of what a reader has to read as one. Above, the line is continuous
-   * and the labels have the gutter to themselves.
-   *
-   * Two label rows, because two releases days apart would otherwise print on
-   * top of each other. A third row would eat the plot; a marker that fits in
-   * neither row keeps its line and its dot and loses only its text, and the
-   * caption above the charts names what shipped in the span regardless.
-   */
-  var LANE_CSS = 34;
-  var LANE_ROWS = 2;
-  var ROW_CSS = 13;
-  var LABEL_PX = 11;
-  var LABEL_GAP_CSS = 7;
-
-  /*
-   * How many release dates a caption spells out before it starts counting the
-   * rest. A repository with two hundred tags would otherwise turn this line
-   * into a wall nobody reads; past the cap the caption still states the exact
-   * number it did not name, so the count is never approximate even when the
-   * list is.
-   */
-  var MAX_LISTED = 8;
-
   /* Every live uPlot instance this section owns. Assigned only once a render
    * has completed; a render that throws destroys what it built itself. */
   var live = [];
@@ -4007,228 +4366,6 @@ footer a:hover { color: var(--txt); }
     return [low < 0 ? 0 : low, max + padding];
   }
 
-  /* A release's own name for itself, preferring the tag. The bundle validator
-   * accepts an empty string for both fields, so an unnamed release still gets
-   * a marker and a caption entry rather than a blank one. */
-  function releaseLabel(release) {
-    if (release.tag !== "") return release.tag;
-    if (release.name !== "") return release.name;
-    return "untagged release";
-  }
-
-  /*
-   * Sort the archive's releases into the ones this chart can mark and the ones
-   * it cannot, and group the markable ones by day.
-   *
-   * The grouping is what keeps several releases on one date legible: they
-   * share one line, one dot and one label, and the caption spells out which
-   * tags are behind it. Two releases on the same day are one event on a time
-   * axis, and drawing two coincident lines with two labels fighting for the
-   * same pixel column would be drawing the same x twice.
-   *
-   * The span tested against is the span the SERIES cover, not the range the
-   * control asked for and not the scale uPlot ends up drawing. A release
-   * outside it is reported as unmarked in the caption.
-   *
-   * The painter below additionally declines anything outside the LIVE scale,
-   * so a drag zoom can leave the canvas with no marker on it while the
-   * caption still names every release it listed. That is deliberate, and it is
-   * not the caption going stale: the caption is a statement about the span
-   * this section drew out of the archive — the span each card's `span` line
-   * names — and not a claim about what is on the canvas at the reader's
-   * current zoom. Double-clicking restores the full span and every listed
-   * marker with it. A caption recomputed from a `setScale` hook would be
-   * making the narrower claim, and would then have to say which of the two
-   * spans it meant; this one says the wider thing and says it once.
-   */
-  function collectReleases(releases, startMs, endMs) {
-    var groups = [];
-    var index = {};
-    var outside = [];
-    var unreadable = 0;
-    var i;
-
-    for (i = 0; i < releases.length; i++) {
-      var release = releases[i];
-      var ms = I.parseDay(release.date);
-      /* The bundle contract only promises a non-empty string here. A date this
-       * page cannot place on a UTC day is not silently dropped: it is counted,
-       * and the caption says so. */
-      if (isNaN(ms)) {
-        unreadable++;
-        continue;
-      }
-      if (ms < startMs || ms > endMs) {
-        outside.push({ dayMs: ms, release: release });
-        continue;
-      }
-      var group = index[ms];
-      if (group === undefined) {
-        group = { dayMs: ms, entries: [], label: "" };
-        index[ms] = group;
-        groups.push(group);
-      }
-      group.entries.push(release);
-    }
-
-    function byDay(a, b) { return a.dayMs - b.dayMs; }
-    groups.sort(byDay);
-    outside.sort(byDay);
-
-    for (i = 0; i < groups.length; i++) {
-      var entries = groups[i].entries;
-      groups[i].label = entries.length === 1
-        ? releaseLabel(entries[0])
-        : releaseLabel(entries[0]) + " +" + (entries.length - 1);
-    }
-
-    return { groups: groups, outside: outside, unreadable: unreadable };
-  }
-
-  /* "v1.0.0 (2026-07-03)", several of them, truncated once a caption would
-   * turn into a list nobody reads. The count is always exact even when the
-   * names are not all printed. */
-  function listGroups(groups) {
-    var parts = [];
-    for (var i = 0; i < groups.length && i < MAX_LISTED; i++) {
-      var entries = groups[i].entries;
-      var names = [];
-      for (var j = 0; j < entries.length; j++) names.push(releaseLabel(entries[j]));
-      parts.push(names.join(", ") + " (" + I.formatDay(groups[i].dayMs) + ")");
-    }
-    if (groups.length > MAX_LISTED) {
-      parts.push("and " + (groups.length - MAX_LISTED) + " more");
-    }
-    return parts.join(" · ");
-  }
-
-  function listOutside(outside) {
-    var parts = [];
-    for (var i = 0; i < outside.length && i < MAX_LISTED; i++) {
-      parts.push(releaseLabel(outside[i].release) + " (" + I.formatDay(outside[i].dayMs) + ")");
-    }
-    if (outside.length > MAX_LISTED) {
-      parts.push("and " + (outside.length - MAX_LISTED) + " more");
-    }
-    return parts.join(" · ");
-  }
-
-  /*
-   * The device-pixel ratio uPlot is drawing at.
-   *
-   * `u.bbox` and `valToPos(…, true)` are both in canvas pixels, so a line
-   * width or a font size written in CSS pixels would come out a half or a
-   * third of its intended size on a retina display — legible enough in a
-   * screenshot to pass a glance, and wrong. uPlot keeps the ratio it is using
-   * on its constructor; the fallbacks cover a build that does not.
-   */
-  function pixelRatio() {
-    var uplot = window.uPlot;
-    if (uplot && typeof uplot.pxRatio === "number" && isFinite(uplot.pxRatio) &&
-      uplot.pxRatio > 0) {
-      return uplot.pxRatio;
-    }
-    var ratio = window.devicePixelRatio;
-    return (typeof ratio === "number" && isFinite(ratio) && ratio > 0) ? ratio : 1;
-  }
-
-  /*
-   * Paint the release lane. Installed through `mount`'s `hooks` option as a
-   * `draw` hook, which uPlot fires after the axes and the series, with no clip
-   * region in force — so it can reach the padding reserved above the plot.
-   *
-   * It runs on every redraw, which is what makes the markers follow a zoom and
-   * a resize instead of drifting away from the axis they annotate.
-   */
-  function releasePainter(groups, stroke) {
-    return function (u) {
-      if (groups.length === 0) return;
-      var scale = u.scales.x;
-      if (!scale || typeof scale.min !== "number" || typeof scale.max !== "number") return;
-
-      var ctx = u.ctx;
-      var ratio = pixelRatio();
-      var canvasWidth = ctx.canvas.width;
-      var plotBottom = u.bbox.top + u.bbox.height;
-      var laneBottom = u.bbox.top - 5 * ratio;
-
-      var rows = [];
-      var baselines = [];
-      var row;
-      for (row = 0; row < LANE_ROWS; row++) {
-        rows.push([]);
-        baselines.push(laneBottom - (4 + row * ROW_CSS) * ratio);
-      }
-
-      ctx.save();
-      ctx.font = Math.round(LABEL_PX * ratio) + "px " + MONO_STACK;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "alphabetic";
-
-      for (var i = 0; i < groups.length; i++) {
-        var group = groups[i];
-        var ts = group.dayMs / 1000;
-        /* The live scale, not the data span: a drag zoom narrows it, and a
-         * marker outside what is drawn must not be painted onto the edge of
-         * the plot as though it were inside. */
-        if (ts < scale.min || ts > scale.max) continue;
-        var x = u.valToPos(ts, "x", true);
-        if (typeof x !== "number" || !isFinite(x)) continue;
-
-        ctx.strokeStyle = stroke;
-        ctx.lineWidth = Math.max(1, Math.round(ratio));
-        /* Dashed, and thinner than either series, so the annotation reads as
-         * chrome over the measurement rather than as a third reading of it. */
-        ctx.setLineDash([4 * ratio, 4 * ratio]);
-        ctx.beginPath();
-        ctx.moveTo(x, laneBottom);
-        ctx.lineTo(x, plotBottom);
-        ctx.stroke();
-        ctx.setLineDash([]);
-
-        ctx.fillStyle = stroke;
-        ctx.beginPath();
-        ctx.arc(x, laneBottom, 2.5 * ratio, 0, Math.PI * 2);
-        ctx.fill();
-
-        var text = group.label;
-        var half = ctx.measureText(text).width / 2;
-        var margin = 2 * ratio;
-        var centre = x;
-        /* A label centred on a marker at the very edge of the plot would hang
-         * half off the canvas. Nudged inwards it no longer sits exactly over
-         * its line, which is why the line and dot are drawn at the true
-         * position first. */
-        if (centre - half < margin) centre = half + margin;
-        if (centre + half > canvasWidth - margin) centre = canvasWidth - margin - half;
-
-        var from = centre - half - LABEL_GAP_CSS * ratio;
-        var to = centre + half + LABEL_GAP_CSS * ratio;
-        var placed = -1;
-        for (row = 0; row < rows.length && placed < 0; row++) {
-          var free = true;
-          for (var s = 0; s < rows[row].length; s++) {
-            if (from < rows[row][s][1] && to > rows[row][s][0]) {
-              free = false;
-              break;
-            }
-          }
-          if (free) placed = row;
-        }
-        /* Out of rows at this width. The line and the dot stay, so the reader
-         * can still see that something shipped there, and the caption above
-         * names the releases in this span — up to its own cap, past which it
-         * states exactly how many it did not name. A label dropped here is a
-         * lost convenience, not a lost fact. */
-        if (placed < 0) continue;
-        rows[placed].push([from, to]);
-        ctx.fillText(text, centre, baselines[placed]);
-      }
-
-      ctx.restore();
-    };
-  }
-
   /*
    * What one chart actually drew: the span of its axis, how much of it carries
    * a measurement, and where the series stands now. The unmeasured count is
@@ -4272,61 +4409,6 @@ footer a:hover { color: var(--txt); }
       return { value: column[i], dayMs: axis.xs[i] * 1000 };
     }
     return null;
-  }
-
-  /*
-   * The release caption, stated once for the section because both charts share
-   * one axis and therefore one set of markers.
-   *
-   * It names what is marked and what is not, so the reader never has to work
-   * out from an empty lane whether the archive has no releases, or has some
-   * that fall elsewhere, or carries one this page could not read.
-   */
-  function releaseLine(collected, total) {
-    var note = el("p", "chart-meta");
-    if (total === 0) {
-      note.appendChild(pair("releases", "none recorded in the archive"));
-      return note;
-    }
-    note.appendChild(pair("releases marked",
-      collected.groups.length === 0
-        ? "none — no release falls inside the span drawn here"
-        : listGroups(collected.groups),
-      collected.groups.length > 0));
-    if (collected.outside.length > 0) {
-      note.appendChild(pair("outside this span", listOutside(collected.outside)));
-    }
-    if (collected.unreadable > 0) {
-      note.appendChild(pair("unreadable date",
-        collected.unreadable + " " + plural(collected.unreadable, "release", "releases") +
-        " " + plural(collected.unreadable, "carries", "carry") +
-        " a date this page cannot place on a calendar day"));
-    }
-    return note;
-  }
-
-  /*
-   * Why a release the archive holds is not on the chart. This is the sentence
-   * that stops the centrepiece looking broken: the live archive's only release
-   * shipped two months before the star series begins, so the lane is empty,
-   * and an empty lane with no explanation is indistinguishable from a feature
-   * that failed to render.
-   */
-  function releaseNarrative(collected, total, stepDays) {
-    if (total === 0) {
-      return "No release is recorded in the archive, so there is nothing to mark on the time " +
-        "axis. Markers appear here as soon as the collector records one.";
-    }
-    if (collected.outside.length === 0) {
-      return null;
-    }
-    var count = collected.outside.length;
-    return count + " " + plural(count, "release", "releases") + " recorded in the archive " +
-      plural(count, "falls", "fall") + " outside the span drawn here (" +
-      listOutside(collected.outside) + ") and " + plural(count, "is", "are") + " not marked. " +
-      "The axis is built from the " + stepWord(stepDays) + "s the archive actually measured; " +
-      "stretching it back to reach a release would add axis where nothing was recorded, and " +
-      "imply a history the collector never took.";
   }
 
   /* The vertical axis is fitted rather than pinned to zero, which is the right
@@ -4477,14 +4559,14 @@ footer a:hover { color: var(--txt); }
         "this reading."));
     } else if (collected.groups.length > 0) {
       box.appendChild(el("p", null,
-        listGroups(collected.groups) + " — recorded on the one " + stepWord(axis.stepDays) +
+        C.listGroups(collected.groups) + " — recorded on the one " + stepWord(axis.stepDays) +
         " measured here. Release markers are drawn on the time axis once the star and fork " +
         "history spans more than a single point."));
     } else {
       var count = collected.outside.length;
       box.appendChild(el("p", null,
         "The archive records " + count + " " + plural(count, "release", "releases") + " — " +
-        listOutside(collected.outside) + " — " + plural(count, "which falls", "all of which fall") +
+        C.listOutside(collected.outside) + " — " + plural(count, "which falls", "all of which fall") +
         " outside the one " + stepWord(axis.stepDays) + " measured here. " +
         plural(count, "It is", "They are") + " not marked, and the axis is not stretched back " +
         "to reach " + plural(count, "it", "them") + ": that would draw months of time nothing " +
@@ -4518,7 +4600,7 @@ footer a:hover { color: var(--txt); }
   /* One card. Returns the mounted chart, or null when this series has no
    * measurement anywhere on the shared axis — a plot whose every point is a
    * break is an empty frame, and the words are more use than the frame. */
-  function buildChart(stack, spec, axis, offset, painter) {
+  function buildChart(stack, spec, axis, offset, collected) {
     var card = el("div", "chart-card");
     card.appendChild(el("p", "chart-title", spec.title));
     card.appendChild(metaLine(axis, offset));
@@ -4544,11 +4626,9 @@ footer a:hover { color: var(--txt); }
     }], {
       /* Not `zeroBasedCounts`: see fittedCounts. */
       yRange: fittedCounts,
-      /* Room above the plot for the release lane. */
-      padding: [LANE_CSS, null, null, null],
-      /* The release annotations. `draw` fires after the axes and series, with
-       * no clip in force, so the painter can reach the reserved lane. */
-      hooks: { draw: [painter] }
+      /* The lane, its padding reservation and its painter, all from the
+       * toolkit. */
+      releases: collected
       /*
        * No `syncFilters`. These charts join the page's cursor-sync group in
        * full — shared cursor AND shared zoom — because reading a star curve
@@ -4599,7 +4679,7 @@ footer a:hover { color: var(--txt); }
     }
 
     var total = data.releases.length;
-    var collected = collectReleases(data.releases, axis.startMs, axis.endMs);
+    var collected = C.collectReleases(data.releases, axis.startMs, axis.endMs);
 
     if (axis.xs.length < 2) {
       slot.appendChild(singlePointNote(bound.cards, axis, win, collected, total,
@@ -4607,12 +4687,12 @@ footer a:hover { color: var(--txt); }
       return;
     }
 
-    slot.appendChild(releaseLine(collected, total));
+    slot.appendChild(C.releaseCaption(collected, total));
     slot.appendChild(el("p", "chart-hint", axisNote()));
     if (data.downsampled) {
       slot.appendChild(el("p", "chart-hint chart-caution", weeklyNote()));
     }
-    var narrative = releaseNarrative(collected, total, stepDays);
+    var narrative = C.releaseNarrative(collected, total, stepDays);
     if (narrative !== null) {
       slot.appendChild(el("p", "chart-hint", narrative));
     }
@@ -4620,12 +4700,11 @@ footer a:hover { color: var(--txt); }
     var stack = el("div", "chart-stack");
     slot.appendChild(stack);
 
-    var painter = releasePainter(collected.groups, C.colour(RELEASE_TOKEN, RELEASE_FALLBACK));
     var created = [];
     try {
       for (var i = 0; i < bound.cards.length; i++) {
         var chart = buildChart(stack, bound.cards[i].spec, axis,
-          bound.cards[i].offsets.total, painter);
+          bound.cards[i].offsets.total, collected);
         if (chart !== null) created.push(chart);
       }
     } catch (error) {
