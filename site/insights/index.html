@@ -26,7 +26,7 @@
   "variableMeasured": [
     "page views", "unique visitors", "repository clones", "unique cloners",
     "stars", "forks", "contributors", "watchers", "open issues",
-    "release asset downloads", "referring sites", "popular paths",
+    "app downloads", "update checks", "referring sites", "popular paths",
     "reporting instances", "active users on reporting instances",
     "server versions in use", "countries instances report from", "client kinds in use"
   ],
@@ -705,19 +705,26 @@ footer a:hover { color: var(--txt); }
          between the title and the page's four headline numbers spent the top
          of the first screen on a redirection.
 
-         This is a reading-order change and nothing else. It moves the row up
-         by 88 measured pixels and moves the range control by none: reordering
-         a stack does not shorten it, and the control sits at the same 872px
-         it did before. That was worth measuring rather than assuming, and the
-         measurement is in the "first screen" section of
-         `scripts/metrics/fixtures/insights-check.mjs`, which reports where
-         each landmark lands at 1440x900 and 1280x720. What that says about
-         the control: on screen at 900 with little to spare, below at 720,
-         sticky at `top: 60px` in both, so the first scroll pins it and it
-         stays for the rest of the page. Recovering the height instead would
-         mean shrinking the four headline figures to surface a secondary
-         control the reader meets on their first scroll anyway, which is the
-         wrong way round. -->
+         This is a reading-order change. Reordering a stack does not shorten
+         it, so it does not by itself move the range control; the control's
+         position does move whenever the copy above it changes length, which
+         is most of the commits that touch this region.
+
+         NO PIXEL VALUES IN THIS COMMENT. Two have been written here and both
+         were false within a commit or two of being written, each time because
+         the number was true of a narrower step than the sentence holding it.
+         The "first screen" section of
+         `scripts/metrics/fixtures/insights-check.mjs` measures where the lead
+         row, the built summary, the range control and the first group land at
+         1440x900 and 1280x720, and it is right by construction because it
+         runs against the page in front of it. Read it there.
+
+         What does not change with the copy: the control is `position: sticky`
+         at `top: 60px`, so wherever it starts, the first scroll pins it and it
+         stays for the rest of the page. That is why the four headline figures
+         are not shrunk to lift it onto the first screen — it would trade the
+         page's headline for a secondary control the reader meets on their
+         first scroll anyway. -->
     <div class="slot lead-row" id="lead-figures"></div>
 
     <p class="sec-copy raw-data">
@@ -729,7 +736,8 @@ footer a:hover { color: var(--txt); }
     <noscript>
       <p class="sec-copy raw-data">
         Every figure here is drawn in the browser from <code>data.json</code>, so without JavaScript
-        the charts cannot render. <a href="data/">The same archive as plain tables</a> needs none.
+        the charts cannot render. <a href="data/">The same archive as plain tables</a> needs none,
+        and neither does <a href="data.json"><code>data.json</code></a> itself.
       </p>
     </noscript>
 
@@ -747,7 +755,7 @@ footer a:hover { color: var(--txt); }
          a dense paragraph is the wrong thing to put between a page's title
          and its four headline numbers. Nothing is lost on the other side:
          a fetcher reads the document, not the first screen, and this
-         paragraph is still the first prose after the intro copy.
+         paragraph still sits above every group on the page.
 
          It must stay directly under the two signpost paragraphs above it.
          `renderSummaryHtml` deliberately ends without linking the plain
@@ -756,10 +764,26 @@ footer a:hover { color: var(--txt); }
          page that has lost track of what it has said. Anything inserted
          between the two makes that omission wrong rather than considered.
 
-         The two state DIFFERENT figures for traffic and are meant to. The row
-         shows a rolling 30-day window; this paragraph states totals across
-         every measured day, because a windowed figure baked into a served
-         page goes stale the moment the window moves and a total does not. -->
+         THE TRAFFIC FIGURES HERE AND IN THE ROW ARE THE SAME NUMBER, and a
+         divergence between them is a bug rather than a design. An earlier
+         version of this comment argued the opposite, on the belief that the
+         row's views figure was a rolling 30-day window. It is not: `flowCard`
+         sums every measured value in the series, and the 30 days govern only
+         the delta chip beside it. So `renderSummaryHtml` computing the same
+         total in TypeScript is a SECOND implementation of one figure, the
+         only one on this page outside `INSIGHTS_FIGURES`, which exists
+         precisely so that the row and the group heads cannot disagree.
+
+         The harness asserts the equality rather than leaving it to be
+         believed: `insights-check.mjs` reads the views and clones totals out
+         of the built paragraph and compares them to the lead row's own
+         values. A future change to either summation has to keep them equal or
+         the report says so.
+
+         What the row carries and this paragraph does not is the 30-day delta
+         chip. A window baked into a served page goes stale the moment the
+         window moves and nothing on the page can tell, so the chip stays
+         client-side and the static text states only the totals. -->
     <!-- BUILD:SUMMARY -->
     <p class="sec-copy static-figures">
       The headline measurements are written into this page at deploy time. If you are reading this
@@ -4522,11 +4546,14 @@ footer a:hover { color: var(--txt); }
    *   columns      { <name>: { series, field } }, as `bind` takes
    *   lines        [{ column, label, token, fallback, fill?, dash?, width? }]
    *   yPolicy      "zero" | "fitted"
-   *   hold         true for a change-only series, whose rows are its changes:
-   *                the line is held forward across the steps between them and
-   *                drawn stepped rather than broken. See `holdForward`.
    *   gapLabel     what to call a step with no row, default "unmeasured"
    *   breakPhrase  what such a step is, in this series' own words
+   *
+   * A line additionally takes `hold: true` when its series is change-only,
+   * meaning its rows are its changes: the line is then held forward across the
+   * steps between them and drawn stepped rather than broken. See
+   * `holdForward`. `gapLabel` and `breakPhrase` stay on the card because they
+   * caption it, and the caption speaks for `lines[0]`.
    *   metaExtra    optional (axis, offsets, stepDays) -> [pair, ...]
    *   notes        [string], rendered as .chart-hint under the plot
  *   cautions     [string], rendered as .chart-hint.chart-caution under them
@@ -4643,13 +4670,15 @@ footer a:hover { color: var(--txt); }
       var def = {
         label: line.label,
         stroke: C.colour(line.token, line.fallback),
-        /* `hold` is a property of the SERIES' contract rather than of one
-         * line's styling, so it sits on the spec and applies to every line the
-         * card draws. Applied here, after `axis` is built and read for the
-         * caption, so `measured` still counts recorded rows. */
-        values: spec.hold === true ? C.holdForward(drawn) : drawn
+        /* Per LINE, beside `fill`, `dash` and `width`, and not per card.
+         * Holding is a property of the series a line draws from, and a card's
+         * `lines` may draw columns from different series, so a card-level flag
+         * would hold a sampled line the moment a second column joined a held
+         * card. Applied here, after `axis` is built and read for the caption,
+         * so `measured` still counts recorded rows rather than drawn ones. */
+        values: line.hold === true ? C.holdForward(drawn) : drawn
       };
-      if (spec.hold === true) def.hold = true;
+      if (line.hold === true) def.hold = true;
       if (line.fill !== undefined) def.fill = line.fill;
       if (line.dash !== undefined) def.dash = line.dash;
       if (line.width !== undefined) def.width = line.width;
@@ -7349,13 +7378,15 @@ footer a:hover { color: var(--txt); }
      * so a reader glancing down the group would read one series drawn twice.
      * --sky repeats a colour used in Reach and in Adoption, which is a repeat
      * across groups and allowed, and it separates the two Delivery cards. */
-    lines: [{ column: "total", label: "Contributors", token: "--sky", fallback: "#7dd3fc" }],
-    yPolicy: "fitted",
-    /* The one held card on the page. Its rows are its changes, not its
+    /* The one held line on the page. Its rows are its changes, not its
      * readings, which the figure above it has always known — `kind: "step"`
-     * picks `stepDelta` — and which the line under it did not, so a series
-     * with six recorded changes across two hundred days drew six dots. */
-    hold: true,
+     * picks `stepDelta` — and which the line itself did not, so a series with
+     * six recorded changes across two hundred days drew six dots. */
+    lines: [{
+      column: "total", label: "Contributors", token: "--sky", fallback: "#7dd3fc",
+      hold: true
+    }],
+    yPolicy: "fitted",
     gapLabel: "unchanged",
     breakPhrase: "held at the last recorded total",
     notes: [

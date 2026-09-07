@@ -122,8 +122,27 @@ const s = createStore(archive);
 if (mode !== 'dimensions-only') {
   s.writeCsv('traffic/views.csv', ['date', 'count', 'uniques'],
     Array.from({ length: DAYS }, (_, i) => ({ date: day(i), count: 40 + i, uniques: 10 + i })));
+  /*
+   * `high-nodims` alone carries a hole in this series, days 12 and 13, and it
+   * is the only committed state in which any chart on the page draws a broken
+   * line.
+   *
+   * Every other mode writes every series densely, which made the report's
+   * per-series stroke reading unfalsifiable: with no gap anywhere, a page
+   * that joined its lines across every null would produce a byte-identical
+   * report to one that broke across them correctly. The rule the whole
+   * subsystem turns on is that an unmeasured day is a break, and until this
+   * hole existed nothing committed could tell whether the page still obeyed
+   * it. Two days rather than one so the gap survives a weekly bucketing.
+   *
+   * `high-nodims` because it is the mode with the fewest other claims resting
+   * on it: it exists to empty the three dimension files, and no assertion
+   * about it reads the clones series' coverage.
+   */
+  var CLONES_HOLE = mode === 'high-nodims' ? [12, 13] : [];
   s.writeCsv('traffic/clones.csv', ['date', 'count', 'uniques'],
-    Array.from({ length: DAYS }, (_, i) => ({ date: day(i), count: 5 + i, uniques: 3 })));
+    Array.from({ length: DAYS }, (_, i) => ({ date: day(i), count: 5 + i, uniques: 3 }))
+      .filter((_, i) => !CLONES_HOLE.includes(i)));
   s.writeCsv('stars.csv', ['date', 'total'],
     Array.from({ length: DAYS }, (_, i) => ({ date: day(i), total: 60 + i })));
   s.writeCsv('forks.csv', ['date', 'total'],

@@ -301,33 +301,23 @@ export function renderSummaryHtml(facts: SummaryFacts): string {
     // The total leads and the peak qualifies it, rather than the peak standing
     // alone: a busiest day quoted with no total behind it is the one figure on
     // this page most easily mistaken for the whole of the traffic.
-    const total =
-      facts.viewsTotal === null
-        ? ''
-        : `${count(facts.viewsTotal, 'view')} across ` +
-          `${count(facts.viewsDays, 'measured day')}, busiest `;
-    const opener = total === '' ? 'Busiest day for page views: ' : 'Page views: ';
-    const tail =
-      total === ''
-        ? `${count(facts.viewsPeak.value, 'view')}${uniques} on ` +
-          `${escapeHtml(facts.viewsPeak.date)}, across ${count(facts.viewsDays, 'measured day')}.`
-        : `${num(facts.viewsPeak.value)}${uniques} on ${escapeHtml(facts.viewsPeak.date)}.`;
-    sentences.push(`${opener}${total}${tail}`);
+    //
+    // `viewsTotal` cannot be null inside this branch: a non-null peak means at
+    // least one measured value, which is exactly the condition under which
+    // `sumMeasured` returns a number. The `?? 0` is for the type, not for a
+    // state the archive can be in.
+    sentences.push(
+      `Page views: ${num(facts.viewsTotal ?? 0)} across ` +
+        `${count(facts.viewsDays, 'measured day')}, busiest ` +
+        `${num(facts.viewsPeak.value)}${uniques} on ${escapeHtml(facts.viewsPeak.date)}.`,
+    );
   }
   if (facts.clonesPeak !== null) {
-    const total =
-      facts.clonesTotal === null
-        ? ''
-        : `${count(facts.clonesTotal, 'clone')} across ` +
-          `${count(facts.clonesDays, 'measured day')}, busiest `;
-    const opener = total === '' ? 'Busiest day for clones: ' : 'Clones: ';
-    const tail =
-      total === ''
-        ? `${count(facts.clonesPeak.value, 'clone')} on ` +
-          `${escapeHtml(facts.clonesPeak.date)}, across ${count(facts.clonesDays, 'measured day')}.`
-        : `${num(facts.clonesPeak.value)} on ${escapeHtml(facts.clonesPeak.date)}.`;
+    // Same reasoning as the views clause above for the `?? 0`.
     sentences.push(
-      `${opener}${total}${tail} ` +
+      `Clones: ${num(facts.clonesTotal ?? 0)} across ` +
+        `${count(facts.clonesDays, 'measured day')}, busiest ` +
+        `${num(facts.clonesPeak.value)} on ${escapeHtml(facts.clonesPeak.date)}. ` +
         'Clone counts include this repository\u2019s own CI checkouts, which on a heavy build ' +
         'day outnumber human clones.',
     );
@@ -432,6 +422,10 @@ export function buildDatasetJsonLd(
   add('forks', 'forks', facts.forks);
   add('watchers', 'watchers', facts.watchers);
   add('contributors', 'contributors', facts.contributors);
+  // Valued, because it is a point-in-time counter with a date. `page views`
+  // and `repository clones` stay bare below despite `viewsTotal`/`clonesTotal`
+  // existing: those are sums across a span, and every valued entry here states
+  // a `measurementTechnique` of "Measured <date>", which a span does not have.
   add('app downloads', 'downloads', facts.downloadsApp);
   for (const name of [
     'page views',
@@ -440,6 +434,9 @@ export function buildDatasetJsonLd(
     'unique cloners',
     'open issues',
     'update checks',
+    // Still a column in `data.json` even though no card shows it any more, and
+    // this block describes the dataset rather than the page.
+    'release asset downloads',
     'referring sites',
     'popular paths',
   ]) {

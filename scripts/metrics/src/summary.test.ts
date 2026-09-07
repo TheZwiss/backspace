@@ -205,7 +205,7 @@ describe('renderSummaryHtml', () => {
     expect(html).toContain('5 forks');
     expect(html).toContain('7 watchers');
     expect(html).toContain('measured 2026-08-19');
-    expect(html).toContain('249 views across 2 measured days, busiest 174');
+    expect(html).toContain('Page views: 249 across 2 measured days, busiest 174');
     expect(html).toContain('Google');
     expect(html).toContain('v1.0.0');
     expect(html).toContain('2026-08-18 to 2026-08-19');
@@ -231,7 +231,7 @@ describe('renderSummaryHtml', () => {
   // has to travel in the same sentence or the number arrives stripped of it.
   it('never states the clone peak without saying CI checkouts are counted in it', () => {
     const html = renderSummaryHtml(buildSummary(data()));
-    expect(html).toContain('18 clones across 2 measured days, busiest 10 on 2026-08-18');
+    expect(html).toContain('Clones: 18 across 2 measured days, busiest 10 on 2026-08-18');
     expect(html).toContain('own CI checkouts');
   });
 

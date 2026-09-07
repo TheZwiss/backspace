@@ -447,6 +447,23 @@ const OBSERVE = `(function () {
    * the archive rather than with the collector's clock. */
   var head = document.querySelector(".page-head");
   out.head = head === null ? null : { lead: text(head.querySelector(".lead")) };
+  /*
+   * The paragraph the bundler writes into the served page.
+   *
+   * It is the only place on this page a headline figure is computed by
+   * something other than the page's own figure surface: renderSummaryHtml
+   * sums the traffic series in TypeScript, the lead row sums the same series
+   * in the page's JavaScript, and the two are supposed to be the same number.
+   * Two implementations of one figure in two languages is exactly the shape
+   * INSIGHTS_FIGURES exists to prevent for the row and the group heads, so
+   * the one case that cannot be collapsed gets checked instead.
+   *
+   * No backticks anywhere in this string: it is the body of a template
+   * literal, and one backtick in a comment ends the expression mid-way and
+   * fails the whole script at parse time.
+   */
+  var summary = document.querySelector(".static-figures");
+  out.staticFigures = summary === null ? null : text(summary);
   out.provenance = {
     since: text(document.getElementById("pv-since")),
     generated: text(document.getElementById("pv-generated")),
@@ -886,16 +903,22 @@ async function main() {
     await new Promise((r) => setTimeout(r, 700));
     after = await evaluate(CANVAS_HASHES);
 
-    for (const [width, height] of FOLD_VIEWPORTS) {
-      await client.send('Emulation.setDeviceMetricsOverride', {
-        width, height, deviceScaleFactor: 1, mobile: false,
-      });
-      // The page's own resize handling is throttled through a ResizeObserver,
-      // so a reading taken immediately measures the previous layout.
-      await new Promise((r) => setTimeout(r, 500));
-      folds.push(await evaluate(FOLD));
+    try {
+      for (const [width, height] of FOLD_VIEWPORTS) {
+        await client.send('Emulation.setDeviceMetricsOverride', {
+          width, height, deviceScaleFactor: 1, mobile: false,
+        });
+        // The page's own resize handling is throttled through a ResizeObserver,
+        // so a reading taken immediately measures the previous layout.
+        await new Promise((r) => setTimeout(r, 500));
+        folds.push(await evaluate(FOLD));
+      }
+    } finally {
+      // However this block ends. The override outlives the loop otherwise, and
+      // anything added after it would be measuring a 1280x720 page while
+      // reporting as though it were the walk's own window.
+      await client.send('Emulation.clearDeviceMetricsOverride');
     }
-    await client.send('Emulation.clearDeviceMetricsOverride');
   } finally {
     if (client !== null) client.close();
     child.kill();
@@ -939,8 +962,8 @@ async function main() {
     const synced = observed.syncPlots ?? 0;
     if (roots > 0 && synced === 0) {
       console.log(`  NO PLOT REACHED: ${roots} chart roots are on the page and none of them is in`
-        + ' the cursor-sync group, so every fill and y range below is null for that reason and'
-        + ' not because the page declared none');
+        + ' the cursor-sync group, so every fill, stroke, y range and drawn span below is null'
+        + ' for that reason and not because the page declared none');
     } else {
       console.log(`  ${synced} live plot(s) in the cursor-sync group, ${roots} chart root(s)`
         + ' in the document');
@@ -986,6 +1009,55 @@ async function main() {
     console.log('  Either no card ranks anything, or the ranking walk stopped matching the markup.');
   }
   console.log('  rankings seen: ' + JSON.stringify(first ?? null, null, 2));
+
+  console.log('\n=== served figures against the lead row ===');
+  /*
+   * `renderSummaryHtml` restates figures the page also computes for itself.
+   * A reader without JavaScript sees only the first; a reader with it sees
+   * only the second; nobody sees both at once, so a divergence between them
+   * is invisible on the page by construction and has to be caught here.
+   *
+   * Matched on the label the paragraph uses, not on position, because the
+   * paragraph drops a clause whenever its measurement is missing and every
+   * clause after it shifts up.
+   */
+  const servedFigure = (label) => {
+    const text = observed?.staticFigures ?? null;
+    if (text === null) return null;
+    const m = new RegExp(`${label}: ([0-9,]+)`).exec(text);
+    return m === null ? null : m[1];
+  };
+  /*
+   * A figure with no measurement behind it renders as the page's dash, which
+   * is a non-empty string and would otherwise be reported as "the page draws
+   * one". Only a printed number counts as a value on either side.
+   */
+  const numeric = (value) =>
+    typeof value === 'string' && /^[0-9,]+$/.test(value) ? value : null;
+  const leadFigure = (label) => {
+    for (const slot of observed?.slots ?? []) {
+      for (const fig of slot.figures ?? []) if (fig.label === label) return numeric(fig.value);
+      for (const card of slot.cards ?? []) {
+        if (card.title === label && card.figure !== null) return numeric(card.figure.value);
+      }
+    }
+    return null;
+  };
+  for (const [servedLabel, drawnLabel] of [
+    ['Page views', 'Page views'],
+    ['Clones', 'Repository clones'],
+  ]) {
+    const served = servedFigure(servedLabel);
+    const drawn = leadFigure(drawnLabel);
+    if (served === null || drawn === null) {
+      console.log(`  ${servedLabel}: not compared, the served paragraph states `
+        + `${served === null ? 'no' : 'a'} value and the page draws `
+        + `${drawn === null ? 'none' : 'one'}`);
+      continue;
+    }
+    console.log(`  ${servedLabel}: served ${served}, drawn ${drawn}`
+      + (served === drawn ? ' — MATCH' : ' — DIVERGED, one of the two summations is wrong'));
+  }
 
   console.log('\n=== first screen ===');
   if (folds.length === 0) {
