@@ -38,7 +38,10 @@
  *                in the thirty before, so the thirty-against-thirty
  *                comparisons have both windows inside the archive and state a
  *                signed figure that only the right arithmetic produces
- *   no-releases  as `high`, with no releases.csv at all
+ *   no-releases  as `high`, with no releases.csv at all, and a contributors
+ *                series long enough to draw: it is the only mode whose
+ *                compact card carries a plot, so it is the only one that
+ *                exercises the compact size profile
  *
  * `--strip-telemetry` is a second pass, run after `cli-bundle.ts` rather than
  * before it. `buildDashboardData` always writes a `telemetry` key, so no set
@@ -121,7 +124,24 @@ if (mode !== 'dimensions-only') {
     Array.from({ length: DAYS }, (_, i) => ({ date: day(i), total: 60 + i })));
   s.writeCsv('forks.csv', ['date', 'total'],
     Array.from({ length: DAYS }, (_, i) => ({ date: day(i), total: 4 })));
-  s.writeCsv('contributors.csv', ['date', 'total'], [{ date: day(0), total: 2 }]);
+  /*
+   * One row everywhere except `no-releases`, because one row is what makes the
+   * one-point rule fire: a cumulative total read once has no direction and no
+   * rate, so the card states its reading instead of drawing a line. That is
+   * the live shape of this series and every asserted mode needs it.
+   *
+   * It also means the compact size profile is never drawn. `no-releases`
+   * therefore carries three rows instead, which is the smallest number that
+   * makes a line: no criterion for that mode mentions this card, so covering
+   * the compact profile there costs nothing, and leaving it uncovered would
+   * leave `PROFILES.compact` exercised by no committed state at all.
+   */
+  if (mode === 'no-releases') {
+    s.writeCsv('contributors.csv', ['date', 'total'],
+      [{ date: day(0), total: 2 }, { date: day(20), total: 3 }, { date: day(DAYS - 1), total: 4 }]);
+  } else {
+    s.writeCsv('contributors.csv', ['date', 'total'], [{ date: day(0), total: 2 }]);
+  }
   s.writeCsv('workflows.csv', ['date', 'runs'],
     Array.from({ length: DAYS }, (_, i) => ({ date: day(i), runs: 12 })));
   s.writeCsv('repo.csv',

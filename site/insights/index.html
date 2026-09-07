@@ -4235,11 +4235,32 @@ footer a:hover { color: var(--txt); }
     return el("div", kind + "-band");
   }
 
-  /* A band with no cards is not rendered at all, and leaves no gap. */
+  /*
+   * Put a group's bands into its slot, in reading order, BEFORE anything is
+   * built into them.
+   *
+   * Before rather than after, because a plot is handed an explicit pixel size
+   * and that size is measured from its container: `plotSize` reads
+   * `host.clientWidth`, and a host inside a band still detached from the
+   * document reads 0. Every group card was therefore constructed at its
+   * profile's minimum width and only reached its real width when the resize
+   * observer caught up. Instrumented on this page before it was fixed:
+   * `clientWidth=0 inDoc=false` for every group plot, against
+   * `clientWidth=1034 inDoc=true` for every section that appends its container
+   * first. That made the observer the thing that made the page correct rather
+   * than the thing that keeps it correct, and `trackSize` falls back to a
+   * window resize listener where `ResizeObserver` is missing, which would have
+   * left every group chart at 520 or 240 pixels until the visitor happened to
+   * resize the window.
+   *
+   * A band that ends up holding no card is collapsed by CSS rather than by
+   * being left out here: `.hero-band:empty`, `.series-band:empty` and
+   * `.detail-band:empty` set `display: none` and drop the top margin, and
+   * `:empty` matches because every band on this page is built with
+   * createElement and carries no whitespace text node.
+   */
   function attach(slot, bands) {
-    for (var i = 0; i < bands.length; i++) {
-      if (bands[i].firstChild !== null) slot.appendChild(bands[i]);
-    }
+    for (var i = 0; i < bands.length; i++) slot.appendChild(bands[i]);
   }
 
   function buildCardSafely(target, build) {
@@ -4350,11 +4371,16 @@ footer a:hover { color: var(--txt); }
    * window in instead would let a release inside the range but outside the
    * drawn axis be reported as marked while nothing was painted for it.
    *
-   * Returns `{ card, axis, offsets, plot, releases }`. `plot` is null when the
-   * card states a reason instead of drawing one, and `releases` is whatever
-   * `releasesFor` returned, so the caller can caption the lane from the same
-   * object the painter was given rather than from a second collection that
-   * could disagree with it.
+   * Returns `{ card, axis, offsets, plot, releases }`. `plot` is `mount`'s
+   * handle, `{ plot, destroy }`, and NOT the uPlot instance: the instance is
+   * `built.plot.plot`, and `built.plot.setScale(...)` is `undefined` with no
+   * error. `keep` and `destroy` are all a caller has needed so far. `plot` is
+   * null when the card states a reason instead of drawing one, and `releases`
+   * is whatever `releasesFor` returned, so the caller can caption the lane
+   * from the same object the painter was given rather than from a second
+   * collection that could disagree with it. `releases` is also null on every
+   * path that drew no chart, so a caption is never built for markers that were
+   * not painted.
    */
   function chartCard(target, spec, ctx) {
     var card = el("div", "chart-card" + (spec.profile === "compact" ? " is-compact" : ""));
@@ -4363,11 +4389,26 @@ footer a:hover { color: var(--txt); }
       card.appendChild(F.renderFigure(F.figure(spec.figure, ctx.data, ctx.wins), "card"));
     }
     if (spec.caveat !== undefined && spec.caveat !== null) card.appendChild(spec.caveat);
-    target.appendChild(card);
 
     var bound = C.bind(spec.title, ctx.data, [{ title: spec.title, columns: spec.columns }]);
     var own = C.isolate(bound, bound.cards[0]);
     var axis = C.expand(own.columns, ctx.win, ctx.step);
+
+    /*
+     * Into the document here, after the three pure calls above and before
+     * anything that needs a laid-out container.
+     *
+     * `bind` is the one documented throw the per-card containment exists for:
+     * it fires when a card declares a series the bundle does not carry.
+     * Appending before it left the failed card on the page carrying its title
+     * and a fully populated figure head, value, sub and trend chip, with the
+     * sentence saying it could not be rendered in a sibling grid cell. A card
+     * that looks like it worked and simply did not draw is worse than no card.
+     * `isolate` and `expand` are pure too, so nothing between the head and
+     * this line touches the DOM, and no uPlot instance exists at any point
+     * before it.
+     */
+    target.appendChild(card);
 
     /* Before the `empty` branch: an overrun sets `empty` too, as a fail-safe
      * for a caller that forgets this check, and the specific reason is the
@@ -4379,15 +4420,6 @@ footer a:hover { color: var(--txt); }
 
     card.appendChild(metaLine(axis, own.offsets, spec, ctx.win, ctx.step));
 
-    /* Collected here, against the span this card drew, so the caption the
-     * caller builds and the markers the painter draws are sorted by the same
-     * rule. An empty axis has no span to sort against, so the two branches
-     * below return a null collection and the caller says the archive holds
-     * releases the chart could not place. */
-    var releases = spec.releasesFor === undefined || axis.empty
-      ? null
-      : spec.releasesFor(axis);
-
     var primary = own.offsets[spec.lines[0].column];
     var positions = C.measuredPositions(axis, primary);
     if (positions === 0) {
@@ -4396,7 +4428,7 @@ footer a:hover { color: var(--txt); }
         "so there is no line to draw. An empty frame would look like a failure rather than an " +
         "absence."));
       appendNotes(card, spec);
-      return { card: card, axis: axis, offsets: own.offsets, plot: null, releases: releases };
+      return { card: card, axis: axis, offsets: own.offsets, plot: null, releases: null };
     }
     if (positions < 2) {
       card.appendChild(el("p", "slot-note",
@@ -4406,8 +4438,31 @@ footer a:hover { color: var(--txt); }
         "the last day anything was recorded, a span this archive never measured. The reading " +
         "is stated above."));
       appendNotes(card, spec);
-      return { card: card, axis: axis, offsets: own.offsets, plot: null, releases: releases };
+      return { card: card, axis: axis, offsets: own.offsets, plot: null, releases: null };
     }
+
+    /*
+     * Collected here, against the span this card drew, so the caption the
+     * caller builds and the markers the painter draws are sorted by the same
+     * rule.
+     *
+     * AFTER the two branches above, not before them, and this is the whole
+     * point of the placement. Both of those branches draw no canvas at all, so
+     * there is nothing for a marker to sit on, and handing them a collection
+     * let the caller print "releases marked v1.1.3 (2026-10-26)" over a card
+     * with no chart in it. That is the one thing `releasesFor` is documented
+     * not to do, and it is reachable: a `30d` range, or a young archive, in
+     * which the series holds a single measured step. Both branches return
+     * `releases: null`, which is what the caller keys on to say instead that
+     * this card drew no chart for a marker to sit on.
+     *
+     * `axis.empty` cannot be true here, because `measuredPositions` answers 0
+     * for an empty axis and the first branch has already returned. It is kept
+     * as a fail-safe, the same way the `overrun` check above is.
+     */
+    var releases = spec.releasesFor === undefined || axis.empty
+      ? null
+      : spec.releasesFor(axis);
 
     var host = el("div", "chart-scroll");
     card.appendChild(host);
@@ -7448,22 +7503,28 @@ footer a:hover { color: var(--txt); }
 
     G.groupHead(slot, LEAD, ctx);
 
+    var hero = G.band("hero");
+    var series = G.band("series");
     var detail = G.band("detail");
+    /* In the slot before a single card is built into them. Appending here
+     * rather than at the end of the render is the load-bearing part; see
+     * G.attach. */
+    G.attach(slot, [hero, series, detail]);
+
     G.buildCardSafely(detail, function () { releaseList(detail, data); });
 
     /* Reachable on a non-empty bundle: one holding only releases or only
      * dimension snapshots has no dated series row to anchor a window to. The
-     * release list needs no window and still renders. */
+     * release list needs no window and has already rendered above. */
     if (ctx.win === null) {
-      slot.appendChild(el("p", "slot-note",
+      /* Into the hero band, where the charts would have been, so it reads
+       * above the release list rather than under it. */
+      hero.appendChild(el("p", "slot-note",
         "The archive holds no dated measurement, so there is no time axis to draw the CI or " +
         "contributor charts on, and no axis for a release to be marked against."));
-      G.attach(slot, [detail]);
       return;
     }
 
-    var hero = G.band("hero");
-    var series = G.band("series");
     var created = [];
     try {
       var spec = heroSpec(data);
@@ -7487,7 +7548,7 @@ footer a:hover { color: var(--txt); }
          * already said why it drew nothing; this says what that cost. */
         built.card.appendChild(el("p", "chart-hint", data.releases.length === 0
           ? "No release is recorded in the archive, so there is nothing to mark on the time axis."
-          : "No release is marked, because this card drew no axis for a marker to sit on. Every " +
+          : "No release is marked, because this card drew no chart for a marker to sit on. Every " +
             "release the archive holds is listed below."));
         built.card.appendChild(cloneLink());
       }
@@ -7511,7 +7572,6 @@ footer a:hover { color: var(--txt); }
       }
       throw error;
     }
-    G.attach(slot, [hero, series, detail]);
     live = created;
   }
 
