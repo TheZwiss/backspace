@@ -510,7 +510,7 @@ One case worth naming explicitly: `error` can be non-null while `last_success` i
 
 `site/insights/index.html` is the public read side of the archive, published by GitHub Pages at `https://thezwiss.github.io/backspace/insights/`. It is **one HTML file** with its CSS and JavaScript inline, plus two vendored uPlot files next to it (§10.4). No framework, no bundler, no build step, no network request of any kind except the single relative, same-origin `fetch("data.json")` — which is aborted at 15 seconds.
 
-Eight sections, each registered against a slot and re-rendered on every range change: **at a glance** (eight cards — stars, forks, watchers, views, clones, contributors, app downloads, update checks; the clones card carries a standing note that CI checkouts are counted in it), **reach** (views, clones, and this repository's own CI activity), **growth** (stars and forks, annotated with release markers), **referrers**, **paths**, **instances** (the opt-in telemetry figures, behind the publication threshold of §10.8), **delivery** (CI activity with the release markers, contributors, and a dated list of every release), and **method coverage** (the archive coverage line, in `#method`). Delivery's CI card draws the same series the reach section draws, and that duplication is temporary. The range control offers `30d`, `90d`, `1y` and `all`, defaulting to `all` — the only one that cannot imply a window wider than what was actually measured.
+Eight sections, each registered against a slot and re-rendered on every range change: **at a glance** (eight cards — stars, forks, watchers, views, clones, contributors, app downloads, update checks; the clones card carries a standing note that CI checkouts are counted in it), **reach** (views, clones, and this repository's own CI activity), **growth** (stars and forks, annotated with release markers), **referrers**, **paths**, **adoption** (app downloads, update checks, and the opt-in fleet figures behind their threshold), **delivery** (CI activity with the release markers, contributors, and a dated list of every release), and **method coverage** (the archive coverage line, in `#method`). Delivery's CI card draws the same series the reach section draws, and that duplication is temporary. The range control offers `30d`, `90d`, `1y` and `all`, defaulting to `all` — the only one that cannot imply a window wider than what was actually measured.
 
 The page has **no automated tests**. It is the untested side of a contract whose other side is heavily tested, which is why §10.2 is written as a contract rather than as a description, and why the page validates the payload strictly before rendering a single figure.
 
@@ -769,10 +769,11 @@ Each card's caption states the span it drew, and the CI card's note says outrigh
 1. `SERIES_NAMES` in the page's range control is the list of dated series allowed to move the window. A series left out of it can hold a row outside every other series' history, and that row is measured, bundled, and then silently clipped out of every range including `all`. `workflows` was added to that list for exactly this reason; add any new dated series to it in the same commit.
 2. `validateBundle` must gain a `checkSeries` line for any new series. Without one the bundle validates, and the failure surfaces later and further away — as a section-wide error note, or a throw inside the range control that is outside any section's error boundary. `series.workflows` was missing from it until this rule was written down.
 
-### 10.8 The telemetry section and its publication threshold
+### 10.8 The telemetry band and its publication threshold
 
-The sixth section, slot `telemetry`, draws the opt-in fleet figures. Two rules
-govern it and neither is negotiable from inside the section.
+The Adoption group's detail band, in slot `adoption-body`, draws the opt-in
+fleet figures. Two rules govern it and neither is negotiable from inside the
+band.
 
 **The `telemetry` block may be absent, and that is valid.** `validateBundle`
 checks it only when it is present (`checkTelemetry`). A bundle built before the
@@ -791,7 +792,9 @@ block at all, a block whose latest day did not measure the column, and a real
 count below ten. They are three different statements and the page does not
 collapse them into one. Printing nothing would read as a broken collector, and
 the figures are public in `/insights/data/` from the first archived ping either
-way: the threshold governs drawing a line, not disclosing a figure.
+way: the threshold governs drawing a line, not disclosing a figure. The group
+always has a hero and a compact card whatever telemetry does, so the state note
+is an empty state inside a band rather than a group-shaped hole in the page.
 
 **`telemetry.network` is deliberately absent from `SERIES_NAMES`**, the list of
 dated series allowed to anchor the range window (section 10.7, trap 1). That

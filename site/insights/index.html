@@ -587,6 +587,17 @@ h2 {
    writes one into the markup owns collapsing it another way. */
 .series-band:empty, .detail-band:empty, .hero-band:empty { display: none; margin-top: 0; }
 
+/*
+ * The Adoption group's fleet figures arrive as one `.chart-stack` rather than
+ * as separate cards, and its state note is a statement about the whole band.
+ * Left as ordinary grid items both sit in the first track and leave the rest
+ * of the row empty, and the stack takes its charts down with it: measured at
+ * the 1120px wrap, the two fleet charts fell from a 1034px canvas 280px high
+ * to a 520px canvas 220px high scrolling inside a 506px column. Spanning
+ * every track keeps them the width they are drawn at today.
+ */
+.detail-band > .chart-stack, .detail-band > .slot-note { grid-column: 1 / -1; }
+
 /* A compact card is deliberately lighter than a hero card, so the weighting
    survives at one column where the grid no longer carries it. */
 .chart-card.is-compact { background: rgba(255, 255, 255, 0.02); padding: 16px 16px 14px; }
@@ -666,7 +677,7 @@ footer a:hover { color: var(--txt); }
     <a class="nav-link" href="#growth">Growth</a>
     <a class="nav-link" href="#referrers">Referrers</a>
     <a class="nav-link" href="#paths">Paths</a>
-    <a class="nav-link" href="#instances">Instances</a>
+    <a class="nav-link" href="#adoption">Adoption</a>
     <a class="nav-link" href="#delivery">Delivery</a>
     <a class="btn btn-primary btn-sm" href="https://github.com/TheZwiss/backspace">GitHub</a>
   </div>
@@ -815,30 +826,16 @@ footer a:hover { color: var(--txt); }
     </div>
   </section>
 
-  <section class="panel" id="instances">
+  <section class="panel" id="adoption">
     <div class="wrap">
-      <p class="ch-label ch-rose">opt-in-numbers</p>
-      <h2>Opt-in numbers, lower bound</h2>
+      <p class="ch-label ch-mint">adoption</p>
+      <h2>Adoption</h2>
       <p class="sec-copy">
-        Everything above measures this repository on GitHub. This section measures something
-        else: the Backspace instances people actually run. A self-hosted instance can choose
-        to send one small ping a day, and most do not, so <strong>every figure here is a lower
-        bound</strong> rather than a total. An instance that never opts in is invisible, counts
-        arrive rounded to two significant digits, and an instance is counted only once it has
-        reported on two separate days inside the last thirty. A ping carries no domain, no
-        instance or account name, no message content, no file names and no address. The
-        receiver does see the connecting address, as any server does, and turns it into a
-        two-letter country code before the ping is stored; the address itself is never
-        written down or published, which is where the country ranking below comes from.
+        Downloads count files fetched from the release page rather than installs anyone kept, and
+        the opt-in figures below are a floor: an instance that never switched the ping on is
+        invisible here.
       </p>
-      <p class="sec-copy">
-        Nothing is charted until at least ten instances have reported inside the same seven
-        days. Three points plotted as a line claim a shape the data does not have, so below that
-        mark this section states the count instead of drawing it. The figures themselves are
-        public from the first archived ping either way, in the
-        <a href="data/">plain tables</a>.
-      </p>
-      <div class="slot" id="telemetry"></div>
+      <div class="slot" id="adoption-body"></div>
     </div>
   </section>
 
@@ -862,6 +859,27 @@ footer a:hover { color: var(--txt); }
         traffic, stars, forks, contributors and releases once a day and commits them to a public
         data branch. The page reads a single bundle built from that archive at deploy time. Nothing
         is estimated, and nothing is fetched from anywhere but this site.
+      </p>
+      <h3>Opt-in pings</h3>
+      <p class="sec-copy">
+        Most of this page measures this repository on GitHub. The opt-in figures in the
+        Adoption group measure something else: the Backspace instances people actually run.
+        A self-hosted instance can choose to send one small ping a day, and most do not, so
+        <strong>every figure here is a lower bound</strong> rather than a total. An instance
+        that never opts in is invisible, counts arrive rounded to two significant digits, and
+        an instance is counted only once it has reported on two separate days inside the last
+        thirty. A ping carries no domain, no instance or account name, no message content, no
+        file names and no address. The receiver does see the connecting address, as any server
+        does, and turns it into a two-letter country code before the ping is stored; the
+        address itself is never written down or published, which is where the country ranking
+        in Adoption comes from.
+      </p>
+      <p class="sec-copy">
+        Nothing is charted until at least ten instances have reported inside the same seven
+        days. Three points plotted as a line claim a shape the data does not have, so below that
+        mark the Adoption group states the count instead of drawing it. The figures themselves are
+        public from the first archived ping either way, in the
+        <a href="data/">plain tables</a>.
       </p>
       <h3>Provenance and coverage</h3>
       <p class="provenance">
@@ -958,7 +976,7 @@ footer a:hover { color: var(--txt); }
   };
 
   var SLOT_IDS = ["header-stats", "chart-reach", "chart-growth", "ranked-referrers",
-    "ranked-paths", "telemetry", "delivery-body", "method-coverage"];
+    "ranked-paths", "adoption-body", "delivery-body", "method-coverage"];
 
   /*
    * The subset that receives the unavailable/empty note.
@@ -969,7 +987,7 @@ footer a:hover { color: var(--txt); }
    * the status region above has already said what is wrong, once, in full.
    */
   var NOTE_SLOT_IDS = ["header-stats", "chart-reach", "chart-growth", "ranked-referrers",
-    "ranked-paths", "telemetry", "delivery-body"];
+    "ranked-paths", "adoption-body", "delivery-body"];
 
   /* ---------------------------------------------------------------- helpers */
 
@@ -6790,13 +6808,15 @@ footer a:hover { color: var(--txt); }
 
 <script>
 /*
- * Section "telemetry" -- spec section 9's opt-in fleet figures.
+ * Group "adoption" -- app downloads, update checks, and spec section 9's
+ * opt-in fleet figures.
  *
  * Registered like every other section, so it inherits the same guarantees: it
  * is called only with a validated, non-empty bundle, its slot is emptied
  * before every call, and a throw is contained to this slot.
  *
- * Two things make it different from the four sections above it.
+ * Two things make the fleet figures different from every other series on
+ * this page.
  *
  * 1. THE BLOCK MAY NOT BE THERE. `telemetry` entered the bundle contract long
  *    after the page shipped, and `validateBundle` accepts a bundle without it
@@ -6810,16 +6830,25 @@ footer a:hover { color: var(--txt); }
  *    rather than the last measured one -- a threshold answered from an older
  *    row would publish charts on a bar that is no longer cleared.
  *
- * Below the gate the section prints the count and the mark. Printing nothing
+ * Below the gate the band prints the count and the mark. Printing nothing
  * would read as a broken collector, and the figures are public in the data
  * tables regardless: the threshold governs drawing a line, not disclosing a
  * number.
+ *
+ * It is now the detail band of the Adoption group rather than a section of
+ * its own. The group always has a hero and a compact card whatever telemetry
+ * does, so the threshold's state note is an empty state INSIDE a band and
+ * never a group-shaped hole in the page. The gate itself, its three wordings
+ * and the rule that the figures are public in the plain tables from the first
+ * archived ping are unchanged.
  */
 (function () {
   "use strict";
 
   var I = window.INSIGHTS;
+  var F = window.INSIGHTS_FIGURES;
   var C = window.INSIGHTS_CHARTS;
+  var G = window.INSIGHTS_GROUPS;
 
   /* Spec section 9. Ten instances inside the trailing seven days. */
   var THRESHOLD = 10;
@@ -6902,8 +6931,60 @@ footer a:hover { color: var(--txt); }
 
   /* A ranked row with no line of its own. Every bar here takes it, because on
    * this page a palette colour means "this row has a line below it in this
-   * colour" and this section draws no per-dimension lines. */
+   * colour" and this band draws no per-dimension lines. */
   var NEUTRAL = { token: "--txt4", fallback: "#5c5c68" };
+
+  var LEAD = {
+    label: "App downloads", kind: "point", series: "repo", field: "downloads_app"
+  };
+
+  /*
+   * The hero: installers and archives only, never the updater feed.
+   *
+   * It is drawn on a zero baseline and carries an area fill, and those two go
+   * together: a fill reads as area under the curve measured from zero, so a
+   * card that fits its axis to the values must not carry one. This is a count
+   * of files fetched with a true floor at zero, so the fill is honest here
+   * where it would not be on the star chart.
+   *
+   * Rows the archive recorded before the download split are null and break
+   * the line, as they do on the at-a-glance card today.
+   */
+  var HERO = {
+    profile: "hero",
+    title: "App downloads",
+    figure: null,
+    columns: { downloads: { series: "repo", field: "downloads_app" } },
+    lines: [{
+      column: "downloads", label: "App downloads",
+      token: "--mint", fallback: "#86efac",
+      fill: "rgba(134, 239, 172, 0.10)", width: 2
+    }],
+    yPolicy: "zero",
+    breakPhrase: "drawn as breaks, not as a fall to zero",
+    notes: [
+      "Installers and archives only. GitHub counts an electron-updater feed file and a " +
+      "blockmap in the same download counter as an installer, and every installed client " +
+      "fetches the feed on every update check, so a combined total is dominated by polling. " +
+      "The two are counted separately here and in the card beside this one.",
+      "A row the archive recorded before the two were counted separately carries no value for " +
+      "either, so the line breaks across it rather than falling to zero."
+    ]
+  };
+
+  var UPDATES = {
+    profile: "compact",
+    title: "Update checks",
+    figure: { label: "Update checks", kind: "point", series: "repo", field: "downloads_updates" },
+    columns: { updates: { series: "repo", field: "downloads_updates" } },
+    lines: [{ column: "updates", label: "Update checks", token: "--sky", fallback: "#7dd3fc" }],
+    yPolicy: "zero",
+    breakPhrase: "drawn as breaks, not as a fall to zero",
+    notes: [
+      "This counts update polling rather than installs: an electron-updater feed file and a " +
+      "blockmap, fetched by every installed client on every update check."
+    ]
+  };
 
   function el(tag, className, text) {
     var node = document.createElement(tag);
@@ -6956,7 +7037,11 @@ footer a:hover { color: var(--txt); }
    */
   function cardHost(stack, title, metaNodes) {
     var card = el("div", "chart-card");
-    card.appendChild(el("p", "chart-title", title));
+    /* An h3, not a p. Spec section 10 makes every card title a heading so a
+     * screen reader gets a real outline of the page, and G.detailCard and
+     * G.chartCard both emit one. The h3.chart-title rule carries the same
+     * styling the p had. */
+    card.appendChild(el("h3", "chart-title", title));
     if (metaNodes.length > 0) {
       var meta = el("p", "chart-meta");
       for (var i = 0; i < metaNodes.length; i++) meta.appendChild(metaNodes[i]);
@@ -7167,7 +7252,26 @@ footer a:hover { color: var(--txt); }
     ]);
   }
 
-  function render(slot, data, rangeKey) {
+  /* One fleet card, contained. A throw inside one of these is the card's own
+   * failure and not the group's, so it is reported in place of that card and
+   * the rest of the band still builds. */
+  function safeCard(stack, card, axis) {
+    return G.buildCardSafely(stack, function () {
+      return buildCard(stack, card, axis);
+    });
+  }
+
+  function safeRanking(stack, spec, series) {
+    G.buildCardSafely(stack, function () {
+      buildRanking(stack, spec, series);
+    });
+  }
+
+  /*
+   * The Adoption group's detail band: the opt-in fleet figures, or the reason
+   * there are none. Returns the plots it mounted, for the caller to hold.
+   */
+  function buildTelemetryBand(band, data, ctx) {
     var block = telemetryOf(data);
     /*
      * The gate, stated as the condition that OPENS it rather than as the one
@@ -7182,28 +7286,25 @@ footer a:hover { color: var(--txt); }
     var cleared = block !== null && typeof block.instances7d === "number" &&
       block.instances7d >= THRESHOLD;
     if (!cleared) {
-      slot.appendChild(belowThresholdNote(block));
-      return;
+      band.appendChild(belowThresholdNote(block));
+      return [];
     }
 
-    var win = I.rangeWindow(data, rangeKey);
+    /* The window the group already resolved, rather than a second call to
+     * `rangeWindow`: two answers to one question is one more thing that can
+     * disagree. */
+    var win = ctx.win;
     /* Reachable on a non-empty bundle: one holding only releases or only
      * dimension snapshots has no dated series row to anchor a window to. */
     if (win === null) {
-      slot.appendChild(el("p", "slot-note",
+      band.appendChild(el("p", "slot-note",
         "The archive holds no dated measurement, so there is no time axis to draw these charts on."));
-      return;
+      return [];
     }
-
-    var note = el("p", "chart-window");
-    note.appendChild(pair("showing", win.title.toLowerCase()));
-    note.appendChild(pair("window",
-      I.formatDay(win.startMs) + " \u2192 " + I.formatDay(win.endMs) + I.resolutionSuffix()));
-    slot.appendChild(note);
 
     var stepDays = I.resolutionStepDays();
     var stack = el("div", "chart-stack");
-    slot.appendChild(stack);
+    band.appendChild(stack);
 
     var created = [];
     try {
@@ -7212,39 +7313,85 @@ footer a:hover { color: var(--txt); }
         /* Before the `empty` branch: an overrun sets `empty` too, as a
          * fail-safe, and the specific reason is the more useful of the two.
          * An impossible date is a fault in the ARCHIVE, so it stops the
-         * section rather than being reported as a page bug. */
+         * band rather than being reported as a page bug. */
         if (axis.overrun) {
           /* Every card expands the same `block.network`, so today the first
            * card is the one that overruns and nothing has been built yet.
            * Released anyway: the day a card reads a different series, this
            * return would otherwise strand whatever the loop already mounted. */
           releaseAll(created);
-          slot.appendChild(el("p", "slot-note slot-note-detail",
+          band.appendChild(el("p", "slot-note slot-note-detail",
             "The telemetry series would run from " + I.formatDay(axis.startMs) + " to " +
             I.formatDay(axis.endMs) + ", which needs " + I.formatCount(axis.overrunSteps) +
             " points on the time axis. That is far longer than this archive can cover, so a date in the archive itself is wrong and no chart is drawn."));
-          return;
+          return [];
         }
-        var plot = buildCard(stack, CARDS[i], axis);
+        var plot = safeCard(stack, CARDS[i], axis);
         if (plot !== null) created.push(plot);
       }
     } catch (error) {
-      /* Destroy what was built here, then let the shell render its failure
-       * note for this slot. */
+      /* Destroy what was built here, then let the caller contain the throw. */
       releaseAll(created);
       throw error;
     }
-    live = created;
 
     /*
      * Outside the try above on purpose. The rankings hold no uPlot instance
-     * and nothing to release, so a throw here is the shell's to report and
-     * there is nothing for this frame to clean up. Putting them inside would
-     * mean a ranking bug destroys two working charts.
+     * and nothing to release, and each is contained on its own, so a bug in
+     * one ranking replaces that ranking and leaves the two charts above it
+     * mounted and held.
      */
     for (var r = 0; r < RANKINGS.length; r++) {
-      buildRanking(stack, RANKINGS[r], block[RANKINGS[r].key]);
+      safeRanking(stack, RANKINGS[r], block[RANKINGS[r].key]);
     }
+    return created;
+  }
+
+  function render(slot, data, rangeKey) {
+    var ctx = {
+      data: data,
+      win: I.rangeWindow(data, rangeKey),
+      wins: F.windows(data),
+      step: I.resolutionStepDays(),
+      downsampled: data.downsampled
+    };
+
+    G.groupHead(slot, LEAD, ctx);
+
+    var hero = G.band("hero");
+    var series = G.band("series");
+    var detail = G.band("detail");
+    /* In the slot before a single card is built into them. Appending here
+     * rather than at the end of the render is the load-bearing part; see
+     * G.attach. */
+    G.attach(slot, [hero, series, detail]);
+    var created = [];
+
+    try {
+      if (ctx.win !== null) {
+        G.keep(created, G.buildCardSafely(hero, function () {
+          return G.chartCard(hero, HERO, ctx);
+        }));
+        G.keep(created, G.buildCardSafely(series, function () {
+          return G.chartCard(series, UPDATES, ctx);
+        }));
+      }
+      /* The telemetry band, whatever the two cards above did. It is the only
+       * part of this group that can be absent from the bundle entirely. */
+      created = created.concat(buildTelemetryBand(detail, data, ctx));
+    } catch (error) {
+      releaseAll(created);
+      throw error;
+    }
+
+    if (ctx.win === null) {
+      /* Into the hero band, where the two download charts would have been, so
+       * it reads above the fleet figures rather than under them. */
+      hero.appendChild(el("p", "slot-note",
+        "The archive holds no dated measurement, so there is no time axis to draw the download " +
+        "charts on."));
+    }
+    live = created;
   }
 
   /*
@@ -7267,7 +7414,7 @@ footer a:hover { color: var(--txt); }
     if (failure !== null) throw failure;
   }
 
-  I.registerSection("telemetry", render, teardown);
+  I.registerSection("adoption-body", render, teardown);
 })();
 </script>
 <script>
