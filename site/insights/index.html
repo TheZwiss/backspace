@@ -369,7 +369,6 @@ h2 {
 .u-legend .u-series { padding-right: 18px; }
 
 /* ================= Charts ================= */
-.chart-stack { display: grid; gap: 22px; }
 .chart-card {
   min-width: 0;
   border: 1px solid var(--line);
@@ -587,15 +586,18 @@ h2 {
 .series-band:empty, .detail-band:empty, .hero-band:empty { display: none; margin-top: 0; }
 
 /*
- * The Adoption group's fleet figures arrive as one `.chart-stack` rather than
- * as separate cards, and its state note is a statement about the whole band.
- * Left as ordinary grid items both sit in the first track and leave the rest
- * of the row empty, and the stack takes its charts down with it: measured at
- * the 1120px wrap, the two fleet charts fell from a 1034px canvas 280px high
- * to a 520px canvas 220px high scrolling inside a 506px column. Spanning
- * every track keeps them the width they are drawn at today.
+ * A note in a detail band is a statement about the whole band, so it takes
+ * every track rather than sitting in the first one with the rest of the row
+ * left empty.
+ *
+ * The Adoption group's fleet cards were spanned the same way, because they
+ * were drawn at the hero profile and a hero plot has a 520px floor: in a
+ * 506px track it scrolled sideways inside its own card. They are compact
+ * cards now, with a 240px floor, so they sit in the band's tracks beside the
+ * rankings like every other detail card on the page and need no rule of
+ * their own.
  */
-.detail-band > .chart-stack, .detail-band > .slot-note { grid-column: 1 / -1; }
+.detail-band > .slot-note { grid-column: 1 / -1; }
 
 /* A compact card is deliberately lighter than a hero card, so the weighting
    survives at one column where the grid no longer carries it. */
@@ -778,6 +780,7 @@ footer a:hover { color: var(--txt); }
       <h2>Delivery</h2>
       <p class="sec-copy">
         Workflow runs measure this project's own automation, not the quality of what it ships.
+        Releases are marked on the same time axis, so a jump can be read against what shipped.
       </p>
       <div class="slot" id="delivery-body"></div>
     </div>
@@ -869,10 +872,11 @@ footer a:hover { color: var(--txt); }
       </p>
       <h3>Provenance and coverage</h3>
       <p class="sec-copy">
-        Every figure on this page carries a 30-day change beside it, and the change is shown only
-        when the archive covers the window it describes. Otherwise it reads as a dash and says
-        why, and a figure that could only be assembled from a different span is labelled with the
-        span it actually covers.
+        This page prints a figure in three places: the four in the row at the top, the one that
+        heads each group, and the one on each of the smaller cards. Each of those carries a
+        30-day change beside it, and the change is shown only when the archive covers the window
+        it describes. Otherwise it reads as a dash and says why, and a figure that could only be
+        assembled from a different span is labelled with the span it actually covers.
       </p>
       <p class="provenance">
         <span><span class="k">archive history</span> <span class="v" id="pv-since">checking</span></span>
@@ -929,10 +933,12 @@ footer a:hover { color: var(--txt); }
   var FETCH_TIMEOUT_MS = 15000;
   var DASH = "—";
   var DAY_MS = 24 * 60 * 60 * 1000;
-  /* Every figure on this page carries a 30-day delta, whatever range is
-   * selected. The range control governs the window the charts draw, not the
-   * width of the delta, which is fixed so the lead row, the four group heads
-   * and every card head stay comparable to each other. */
+  /* Every figure this page prints carries a 30-day delta, whatever range is
+   * selected: the four in the lead row, the four group heads and the head of
+   * each compact card. A ranked row, a release row and a fleet chart print no
+   * figure and so carry none. The range control governs the window the charts
+   * draw, not the width of the delta, which is fixed so the three kinds of
+   * figure stay comparable to each other. */
   var DELTA_DAYS = 30;
 
   var RANGES = [
@@ -2659,6 +2665,17 @@ footer a:hover { color: var(--txt); }
    * because a traffic card's meta line prints the one-window total the chip
    * above it no longer carries, and it has to be `flowCard`'s own arithmetic
    * rather than a second implementation of it.
+   *
+   * Several of the names below have no caller outside this block as the page
+   * stands. They are kept deliberately: this surface is the page's one
+   * definition of the figure arithmetic, spec section 11.4 and the plan name
+   * it as an interface rather than as whatever the first consumer happened to
+   * need, and a figure added later must reuse the arithmetic rather than
+   * reimplement it. The failure this surface exists to prevent is two places
+   * printing different numbers for the same series, and a name deleted for
+   * being unread today is how the second implementation gets written
+   * tomorrow. The same reasoning covers the two release list helpers on
+   * INSIGHTS_CHARTS.
    */
   window.INSIGHTS_FIGURES = {
     figure: figure,
@@ -3852,12 +3869,14 @@ footer a:hover { color: var(--txt); }
   }
 
   /*
-   * The release caption, stated once for the section because both charts share
-   * one axis and therefore one set of markers.
+   * The release caption, appended to the one card that draws the marker lane.
    *
    * It names what is marked and what is not, so the reader never has to work
    * out from an empty lane whether the archive has no releases, or has some
-   * that fall elsewhere, or carries one this page could not read.
+   * that fall elsewhere, or carries one this page could not read. It is built
+   * against the span that card actually drew, so a caller must not print it
+   * over a card that drew no chart: `chartCard` returns a null `releases` for
+   * exactly that case and the caller keys on it.
    */
   function releaseCaption(collected, total) {
     var note = el("p", "chart-meta");
@@ -4170,6 +4189,14 @@ footer a:hover { color: var(--txt); }
     };
   }
 
+  /*
+   * Not every name below has a caller outside this block, and that is not an
+   * oversight. `SYNC_KEY` is exported for a section this page does not have
+   * yet, and the two release list helpers belong to `releaseCaption` and
+   * `releaseNarrative`, which are consumed: a caller that formats a release
+   * list any other way is the drift this file argues against everywhere else.
+   * `INSIGHTS_FIGURES` carries the same note for the same reason.
+   */
   window.INSIGHTS_CHARTS = {
     /* Exported so a later chart section joins THIS cursor group rather than
      * declaring a key of its own. */
@@ -4443,9 +4470,9 @@ footer a:hover { color: var(--txt); }
       card.appendChild(el("p", "slot-note",
         "One measurement is not a history. This series carries a value at exactly one step " +
         "inside this window, and a line needs two points to have a direction or a rate. Drawn " +
-        "anyway it would be a single dot on an axis the plotting library stretches years past " +
-        "the last day anything was recorded, a span this archive never measured. The reading " +
-        "is stated above."));
+        "anyway it would be a single dot, and where the window holds nothing else the plotting " +
+        "library stretches the axis years past the last day anything was recorded, across a " +
+        "span this archive never measured. The reading is stated above."));
       appendNotes(card, spec);
       return { card: card, axis: axis, offsets: own.offsets, plot: null, releases: null };
     }
@@ -4555,6 +4582,34 @@ footer a:hover { color: var(--txt); }
     return built;
   }
 
+  /*
+   * Destroy every plot in a list, and report the first failure once the rest
+   * have been released.
+   *
+   * The four groups each held a byte-identical copy of this loop, written
+   * four times by four tasks, and their comments had already drifted apart
+   * from each other while the code had not. A section's own teardown clears
+   * its `live` reference BEFORE calling this, so a destroy that throws cannot
+   * leave a half-released instance behind to be destroyed a second time on
+   * the next render; that ordering is the caller's, because the reference
+   * being cleared is the caller's.
+   *
+   * Destroying is not optional and not deferrable: an instance that only
+   * loses its DOM keeps its window listeners, its resize observer and its
+   * place in the page's cursor-sync group, on every range change, forever.
+   */
+  function release(pending) {
+    var failure = null;
+    for (var i = 0; i < pending.length; i++) {
+      try {
+        pending[i].destroy();
+      } catch (error) {
+        if (failure === null) failure = error;
+      }
+    }
+    if (failure !== null) throw failure;
+  }
+
   function detailCard(target, title) {
     var card = el("div", "chart-card");
     card.appendChild(el("h3", "chart-title", title));
@@ -4576,6 +4631,7 @@ footer a:hover { color: var(--txt); }
     groupHead: groupHead,
     keep: keep,
     pair: pair,
+    release: release,
     steps: steps
   };
 })();
@@ -4787,22 +4843,6 @@ footer a:hover { color: var(--txt); }
 
   function shortLabel(text) {
     return text.length > LEGEND_MAX ? text.slice(0, LEGEND_MAX - 1) + "…" : text;
-  }
-
-  /*
-   * The device-pixel ratio uPlot is drawing at, for the zero rule below.
-   * `u.bbox` and `valToPos(…, true)` are in canvas pixels, so a line width
-   * written in CSS pixels comes out a third of its intended size on a retina
-   * display — thin enough to pass a glance and still be wrong.
-   */
-  function pixelRatio() {
-    var uplot = window.uPlot;
-    if (uplot && typeof uplot.pxRatio === "number" && isFinite(uplot.pxRatio) &&
-      uplot.pxRatio > 0) {
-      return uplot.pxRatio;
-    }
-    var ratio = window.devicePixelRatio;
-    return (typeof ratio === "number" && isFinite(ratio) && ratio > 0) ? ratio : 1;
   }
 
   /* ---------------------------------------------------------- the join */
@@ -5102,7 +5142,15 @@ footer a:hover { color: var(--txt); }
       var ctx = u.ctx;
       ctx.save();
       ctx.strokeStyle = stroke;
-      ctx.lineWidth = Math.max(1, Math.round(pixelRatio()));
+      /*
+       * The device-pixel ratio uPlot is drawing at, read from the toolkit
+       * rather than worked out again here: `u.bbox` and `valToPos(..., true)`
+       * are in canvas pixels, so a line width written in CSS pixels comes out
+       * a third of its intended size on a retina display, thin enough to pass
+       * a glance and still be wrong. This block held a byte-identical second
+       * copy of that function while `C.pixelRatio` sat exported and unread.
+       */
+      ctx.lineWidth = Math.max(1, Math.round(C.pixelRatio()));
       ctx.beginPath();
       ctx.moveTo(u.bbox.left, y);
       ctx.lineTo(u.bbox.left + u.bbox.width, y);
@@ -6138,26 +6186,17 @@ footer a:hover { color: var(--txt); }
   }
 
   /*
-   * Runs before the slot is emptied. Removing the nodes alone would leave
-   * every instance's window listeners, its resize observer and its membership
-   * of the page's cursor-sync group alive.
-   *
-   * `live` is cleared first so a destroy that throws cannot leave a
-   * half-destroyed instance behind to be destroyed twice; the first failure is
-   * re-thrown once the rest have been released, and the shell reports it.
+   * Runs before the slot is emptied, including after a render that threw, so
+   * it must be safe on a partial build. `live` is cleared before the plots
+   * are released, so a destroy that throws cannot leave a half-released
+   * instance behind to be destroyed a second time on the next render.
+   * `G.release` re-throws the first failure once the rest are down, and the
+   * shell reports it.
    */
   function teardown() {
     var pending = live;
     live = [];
-    var failure = null;
-    for (var i = 0; i < pending.length; i++) {
-      try {
-        pending[i].destroy();
-      } catch (error) {
-        if (failure === null) failure = error;
-      }
-    }
-    if (failure !== null) throw failure;
+    G.release(pending);
   }
 
   I.registerSection("reach-body", render, teardown);
@@ -6348,26 +6387,17 @@ footer a:hover { color: var(--txt); }
   }
 
   /*
-   * Runs before the slot is emptied. Removing the nodes alone would leave
-   * every instance's window listeners, its resize observer and its membership
-   * of the page's cursor-sync group alive.
-   *
-   * `live` is cleared first so a destroy that throws cannot leave a
-   * half-destroyed instance behind to be destroyed twice; the first failure is
-   * re-thrown once the rest have been released, and the shell reports it.
+   * Runs before the slot is emptied, including after a render that threw, so
+   * it must be safe on a partial build. `live` is cleared before the plots
+   * are released, so a destroy that throws cannot leave a half-released
+   * instance behind to be destroyed a second time on the next render.
+   * `G.release` re-throws the first failure once the rest are down, and the
+   * shell reports it.
    */
   function teardown() {
     var pending = live;
     live = [];
-    var failure = null;
-    for (var i = 0; i < pending.length; i++) {
-      try {
-        pending[i].destroy();
-      } catch (error) {
-        if (failure === null) failure = error;
-      }
-    }
-    if (failure !== null) throw failure;
+    G.release(pending);
   }
 
   I.registerSection("following-body", render, teardown);
@@ -6601,11 +6631,11 @@ footer a:hover { color: var(--txt); }
    * the body left to the caller. Returned unfinished so a chart card and a
    * ranked card can share the top of it.
    *
-   * The card is appended to the stack BEFORE it is returned, because uPlot is
+   * The card is appended to the band BEFORE it is returned, because uPlot is
    * given an explicit pixel size and that size is measured from a container
    * that has to already be in the document.
    */
-  function cardHost(stack, title, metaNodes) {
+  function cardHost(band, title, metaNodes) {
     var card = el("div", "chart-card");
     /* An h3, not a p. Spec section 10 makes every card title a heading so a
      * screen reader gets a real outline of the page, and G.detailCard and
@@ -6617,7 +6647,7 @@ footer a:hover { color: var(--txt); }
       for (var i = 0; i < metaNodes.length; i++) meta.appendChild(metaNodes[i]);
       card.appendChild(meta);
     }
-    stack.appendChild(card);
+    band.appendChild(card);
     return card;
   }
 
@@ -6640,7 +6670,7 @@ footer a:hover { color: var(--txt); }
     var steps = axis.xs.length;
     var unit = axis.stepDays === 7 ? "week" : "day";
     return [
-      pair("span", I.formatDay(axis.startMs) + " to " + I.formatDay(axis.endMs)),
+      pair("span", I.formatDay(axis.startMs) + " → " + I.formatDay(axis.endMs)),
       pair("measured", I.formatCount(measured) + " of " + I.formatCount(steps) + " " +
         unit + (steps === 1 ? "" : "s")),
       pair("reading", "a gauge on each date, never a total to add up")
@@ -6674,24 +6704,50 @@ footer a:hover { color: var(--txt); }
   }
 
   /*
-   * One card. Returns the mounted plot, or null when the card had no measured
-   * step inside the window, in which case the card states that instead, for
-   * the reason every card built through `chartCard` does the same: uPlot
-   * answers an empty frame
-   * with an invented 0..1 axis, and a chart that looks broken is worse than
-   * a sentence that is true.
+   * One card. Returns the mounted plot, or null when the window holds too
+   * little for a line, in which case the card states that instead, for the
+   * reason every card built through `chartCard` does the same: uPlot answers
+   * an empty frame with an invented 0..1 axis, and a chart that looks broken
+   * is worse than a sentence that is true.
+   *
+   * Both refusals are the page-wide rule `docs/systems/metrics.md` states for
+   * every card, and they read the same exported `C.measuredPositions` the
+   * shared builder reads, so there is one definition of "enough to draw" on
+   * the page rather than one per builder. This card was built here and not
+   * through `G.chartCard` because `chartCard` resolves its columns through
+   * `C.bind`, which knows the named repo and traffic series and not the
+   * telemetry network block; the guard is shared even though the builder
+   * cannot be.
+   *
+   * Positions are counted across all three lines rather than off the first,
+   * as `chartCard` does with its primary line. There the first line is the
+   * card's subject and the rest are context; here the three are peers, the
+   * same quantity over three windows, so a line any one of them can carry is
+   * a line worth drawing.
    */
-  function buildCard(stack, card, axis) {
-    var shell = cardHost(stack, card.title, chartMeta(axis));
+  function buildCard(band, card, axis) {
+    var shell = cardHost(band, card.title, chartMeta(axis));
 
-    var drawable = false;
+    var positions = 0;
     var i;
-    for (i = 0; i < axis.measured.length; i++) {
-      if (axis.measured[i] > 0) drawable = true;
+    for (i = 0; i < card.lines.length; i++) {
+      var n = C.measuredPositions(axis, i);
+      if (n > positions) positions = n;
     }
-    if (!drawable) {
+    if (positions === 0) {
       shell.appendChild(el("p", "slot-note",
         "No ping falls inside this window, so there is no line to draw. An empty frame would look like a failure rather than an absence."));
+      shell.appendChild(el("p", "chart-hint", card.note));
+      return null;
+    }
+    if (positions < 2) {
+      shell.appendChild(el("p", "slot-note",
+        "One measurement is not a history. No line on this card carries a value at more than " +
+        "one step inside this window, and a line needs two points to have a direction or a " +
+        "rate. Drawn anyway it would be a single dot, and where the window holds nothing else " +
+        "the plotting library stretches the axis years past the last day anything was " +
+        "recorded, across a span this archive never measured. The span this card covers and " +
+        "the count it measured are stated above."));
       shell.appendChild(el("p", "chart-hint", card.note));
       return null;
     }
@@ -6709,9 +6765,20 @@ footer a:hover { color: var(--txt); }
         values: axis.values[i]
       });
     }
-    /* Stated rather than left to the default: every line here is a count of
-     * instances or of people, with a true floor at zero. */
-    return C.mount(host, axis.xs, defs, { yRange: C.zeroBasedCounts });
+    /*
+     * The compact profile, and the zero floor stated rather than left to the
+     * default: every line here is a count of instances or of people, with a
+     * true floor at zero.
+     *
+     * Compact because these are detail cards under a hero, and at the hero
+     * profile they were not: 280 pixels of plot on a full-width panel, the
+     * same height, width and surface as the App downloads hero above them,
+     * which left the group's two most detailed charts reading as its
+     * headline and the hero reading as a preamble. Every other group carries
+     * its hierarchy in the plot height, 280 against 150, and this is the one
+     * that did not.
+     */
+    return C.mount(host, axis.xs, defs, { profile: "compact", yRange: C.zeroBasedCounts });
   }
 
   /* The snapshot date of a dimension series, printed as the page prints dates,
@@ -6750,9 +6817,9 @@ footer a:hover { color: var(--txt); }
     return box;
   }
 
-  function buildRanking(stack, spec, series) {
+  function buildRanking(band, spec, series) {
     var day = snapshotDay(series);
-    var shell = cardHost(stack, spec.title, [
+    var shell = cardHost(band, spec.title, [
       pair("snapshot", day === null
         ? (series.snapshots.length === 0 ? "none recorded" : "recorded, but its date cannot be placed on a calendar day")
         : "taken " + day),
@@ -6826,15 +6893,15 @@ footer a:hover { color: var(--txt); }
   /* One fleet card, contained. A throw inside one of these is the card's own
    * failure and not the group's, so it is reported in place of that card and
    * the rest of the band still builds. */
-  function safeCard(stack, card, axis) {
-    return G.buildCardSafely(stack, function () {
-      return buildCard(stack, card, axis);
+  function safeCard(band, card, axis) {
+    return G.buildCardSafely(band, function () {
+      return buildCard(band, card, axis);
     });
   }
 
-  function safeRanking(stack, spec, series) {
-    G.buildCardSafely(stack, function () {
-      buildRanking(stack, spec, series);
+  function safeRanking(band, spec, series) {
+    G.buildCardSafely(band, function () {
+      buildRanking(band, spec, series);
     });
   }
 
@@ -6875,8 +6942,6 @@ footer a:hover { color: var(--txt); }
     }
 
     var stepDays = I.resolutionStepDays();
-    var stack = el("div", "chart-stack");
-    band.appendChild(stack);
 
     var created = [];
     try {
@@ -6898,7 +6963,7 @@ footer a:hover { color: var(--txt); }
             " points on the time axis. That is far longer than this archive can cover, so a date in the archive itself is wrong and no chart is drawn."));
           return [];
         }
-        var plot = safeCard(stack, CARDS[i], axis);
+        var plot = safeCard(band, CARDS[i], axis);
         if (plot !== null) created.push(plot);
       }
       /*
@@ -6918,7 +6983,7 @@ footer a:hover { color: var(--txt); }
        * containment itself could not hold, and that ends the whole render.
        */
       for (var r = 0; r < RANKINGS.length; r++) {
-        safeRanking(stack, RANKINGS[r], block[RANKINGS[r].key]);
+        safeRanking(band, RANKINGS[r], block[RANKINGS[r].key]);
       }
     } catch (error) {
       /* Destroy what was built here, then let the caller contain the throw. */
@@ -6977,22 +7042,16 @@ footer a:hover { color: var(--txt); }
 
   /*
    * Runs before the slot is emptied, including after a render that threw, so
-   * it must be safe on a partial build. `live` is cleared first so a destroy
-   * that throws cannot leave a half-released instance to be destroyed twice;
-   * the first failure is re-thrown once the rest are released.
+   * it must be safe on a partial build. `live` is cleared before the plots
+   * are released, so a destroy that throws cannot leave a half-released
+   * instance behind to be destroyed a second time on the next render.
+   * `G.release` re-throws the first failure once the rest are down, and the
+   * shell reports it.
    */
   function teardown() {
     var pending = live;
     live = [];
-    var failure = null;
-    for (var i = 0; i < pending.length; i++) {
-      try {
-        pending[i].destroy();
-      } catch (error) {
-        if (failure === null) failure = error;
-      }
-    }
-    if (failure !== null) throw failure;
+    G.release(pending);
   }
 
   I.registerSection("adoption-body", render, teardown);
@@ -7313,26 +7372,17 @@ footer a:hover { color: var(--txt); }
   }
 
   /*
-   * Runs before the slot is emptied. Removing the nodes alone would leave
-   * every instance's window listeners, its resize observer and its membership
-   * of the page's cursor-sync group alive.
-   *
-   * `live` is cleared first so a destroy that throws cannot leave a
-   * half-destroyed instance behind to be destroyed twice; the first failure
-   * is re-thrown once the rest have been released.
+   * Runs before the slot is emptied, including after a render that threw, so
+   * it must be safe on a partial build. `live` is cleared before the plots
+   * are released, so a destroy that throws cannot leave a half-released
+   * instance behind to be destroyed a second time on the next render.
+   * `G.release` re-throws the first failure once the rest are down, and the
+   * shell reports it.
    */
   function teardown() {
     var pending = live;
     live = [];
-    var failure = null;
-    for (var i = 0; i < pending.length; i++) {
-      try {
-        pending[i].destroy();
-      } catch (error) {
-        if (failure === null) failure = error;
-      }
-    }
-    if (failure !== null) throw failure;
+    G.release(pending);
   }
 
   I.registerSection("delivery-body", render, teardown);
