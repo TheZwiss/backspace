@@ -811,11 +811,13 @@ Append to the `<style>` block, after the `/* ================= Ranked dimensions
 ```css
 /* ================= Groups: lead figures, bands, card kinds ================= */
 /*
- * Three groups, each with one hero chart and two bands of smaller cards under
- * it. The hierarchy has to survive a single column, so it is carried by four
+ * Four groups, each with one hero chart and a band of smaller cards under it,
+ * three of them with a band of detail cards as well. The hierarchy has to
+ * survive a single column, so it is carried by four
  * things that do not depend on the grid: a hero plot is taller than any
  * compact one, a hero's primary line carries an area fill and no compact line
- * does, a hero card sits on --chat while a compact card sits on a lighter
+ * does, except Following's hero, which is a cumulative counter on a fitted
+ * axis and so carries none, a hero card sits on --chat while a compact card sits on a lighter
  * recessive panel, and the group's lead figure is a large number directly
  * above the hero at every width.
  */
