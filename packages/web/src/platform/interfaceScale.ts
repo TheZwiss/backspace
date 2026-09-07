@@ -12,7 +12,8 @@ export function visualPixels(value: number): number {
 }
 
 export function isMobileViewport(): boolean {
-  return layoutPixels(window.innerWidth) < 768;
+  // Zooming out must not turn a physically narrow phone into the desktop shell.
+  return window.innerWidth < 600 || layoutPixels(window.innerWidth) < 768;
 }
 
 export function layoutRect<T extends { top: number; right: number; bottom: number; left: number; width: number; height: number }>(rect: T) {

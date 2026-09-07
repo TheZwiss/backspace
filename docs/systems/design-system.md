@@ -28,11 +28,16 @@ A new presentation preference goes in Appearance, not in Account or in Desktop
 
 ## Interface scale
 
-Appearance settings include a device-local interface scale: 75–250% in 25% steps,
+Appearance settings include a device-local interface scale: 50–250% in 25% steps,
 default/reset 100%. `interfaceScaleStore` persists the percentage under
 `backspace-interface-scale`; unsupported stored values fall back to 100%.
 `main.tsx` applies it before mounting React, including auth pages and portals.
 English, German, and Russian labels live in the `settings` namespace.
+
+50% is an opt-in density setting, not a recommended reading size: common 10–11px
+labels render at only 5–5.5px. The former 75% floor kept those labels at
+7.5–8.25px; the lower floor accommodates users who want more content on screen,
+but going lower would further compromise legibility. Default/reset remains 100%.
 
 The web and Electron clients share root CSS `zoom`. This is independent of the
 browser's own zoom controls. CSS viewport units do **not** compensate for CSS
@@ -49,7 +54,11 @@ scale. The viewport-token test rejects raw viewport units and environment
 functions outside these definitions in production source.
 
 `initializeInterfaceScale` updates `html[data-viewport="mobile|desktop"]` on
-resize and scale changes using the same 768-layout-pixel threshold as AppLayout.
+resize and scale changes using the same predicate as AppLayout: mobile below
+768 layout pixels **or** below 600 unscaled viewport pixels (`window.innerWidth`).
+The narrow-viewport guard keeps 390–430px phones in MobileShell even at 50%,
+when their effective layout width is 780–860px. Wider windows retain the scaled
+768px breakpoint; 600px is the first width eligible for desktop at 50%.
 Use the `desktop:` Tailwind variant for app-shell responsiveness; raw media
 queries ignore root zoom. Auth pages without a JS layout branch may keep `md:`.
 When scale moves the appearance panel into MobileShell, route reconstruction

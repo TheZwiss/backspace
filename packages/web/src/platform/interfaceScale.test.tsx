@@ -19,7 +19,11 @@ afterEach(() => {
 });
 
 describe('interface scale', () => {
-  it.each([[700, 75, 'desktop'], [1366, 200, 'mobile'], [768, 100, 'desktop']])(
+  it.each([
+    [390, 50, 'mobile'], [430, 50, 'mobile'], [599, 50, 'mobile'],
+    [600, 50, 'desktop'], [600, 100, 'mobile'],
+    [700, 75, 'desktop'], [1366, 200, 'mobile'], [768, 100, 'desktop'],
+  ])(
     'shares the JS/CSS breakpoint at width %i and scale %i', (width, scale, expected) => {
       vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(Number(width));
       useInterfaceScaleStore.getState().setScale(Number(scale));
@@ -69,7 +73,7 @@ describe('interface scale', () => {
     expect(useInterfaceScaleStore.getState().scale).toBe(scale);
   });
 
-  it.each([0, -1, 74, 99, 251, Infinity, NaN, '200', null])('rejects invalid stored value %s', value => {
+  it.each([0, -1, 49, 51, 67, 74, 99, 251, Infinity, NaN, '50', '200', null])('rejects invalid stored value %s', value => {
     expect(normalizeInterfaceScale(value)).toBe(100);
   });
 
@@ -100,7 +104,8 @@ describe('interface scale', () => {
     expect(pos.top * 2.5 + 250).toBeLessThanOrEqual(window.innerHeight);
   });
 
-  it('offers all eight scales and resets immediately', () => {
+  it('offers all nine scales and resets immediately', () => {
+    expect(INTERFACE_SCALES).toEqual([50, 75, 100, 125, 150, 175, 200, 225, 250]);
     render(<InterfaceScaleSection />);
     expect(screen.getAllByRole('option').map(option => option.getAttribute('value'))).toEqual(INTERFACE_SCALES.map(String));
     fireEvent.change(screen.getByRole('combobox'), { target: { value: '250' } });
@@ -111,7 +116,7 @@ describe('interface scale', () => {
   });
 
   it('keeps appearance settings open across the effective mobile breakpoint', () => {
-    const resize = () => useUIStore.getState().setIsMobile(layoutPixels(window.innerWidth) < 768);
+    const resize = () => useUIStore.getState().setIsMobile(isMobileViewport());
     window.addEventListener('resize', resize);
     const stop = initializeInterfaceScale();
     useUIStore.setState({ isMobile: false, activeModal: 'userSettings' });
@@ -120,6 +125,27 @@ describe('interface scale', () => {
     expect(useUIStore.getState().mobileStack.at(-1)?.screen).toBe('settings-appearance');
     fireEvent.click(screen.getByRole('button'));
     expect(useUIStore.getState().activeModal).toBe('userSettings');
+    stop();
+    window.removeEventListener('resize', resize);
+  });
+
+  it.each([390, 430])('keeps phone appearance settings mobile when halving scale and resetting (%ipx)', width => {
+    vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(width);
+    const resize = () => useUIStore.getState().setIsMobile(isMobileViewport());
+    window.addEventListener('resize', resize);
+    const stop = initializeInterfaceScale();
+    useUIStore.getState().pushMobileScreen('settings-appearance');
+    render(<InterfaceScaleSection />);
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: '50' } });
+    expect(useInterfaceScaleStore.getState().scale).toBe(50);
+    expect(document.documentElement.dataset.viewport).toBe('mobile');
+    expect(useUIStore.getState().isMobile).toBe(true);
+    expect(useUIStore.getState().activeModal).toBeNull();
+    expect(useUIStore.getState().mobileStack.at(-1)?.screen).toBe('settings-appearance');
+    fireEvent.click(screen.getByRole('button'));
+    expect(useInterfaceScaleStore.getState().scale).toBe(100);
+    expect(document.documentElement.dataset.viewport).toBe('mobile');
+    expect(useUIStore.getState().mobileStack.at(-1)?.screen).toBe('settings-appearance');
     stop();
     window.removeEventListener('resize', resize);
   });
