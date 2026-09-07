@@ -6,6 +6,7 @@ import { useFormatters, type Formatters } from '../../../i18n/formatters';
 import { describeError } from '../../../i18n/errors';
 import { Toggle } from '../../ui/Toggle';
 import { PayloadPreview } from '../../telemetry/PayloadPreview';
+import { HelloScene, type SceneMood } from '../../telemetry/scene/HelloScene';
 
 /** What the ping contains and why, in the repository the instance runs. */
 const DOC_URL = 'https://github.com/TheZwiss/backspace/blob/main/docs/systems/telemetry.md';
@@ -30,6 +31,21 @@ function formatDay(day: string, f: Formatters): string {
 function maskId(id: string): string {
   const [first] = id.split('-');
   return `${first ?? id}…`;
+}
+
+/**
+ * The panel's three states are the scene's three moods, so the artwork from
+ * the ask carries straight over instead of being spent once and thrown away.
+ *
+ * `happy` is the beam lit, `farewell` is the pilot's arm lowered, and `idle`
+ * is the pilot still waving because nobody has answered yet. That last one is
+ * only reachable before the first answer: once an admin has said either word,
+ * `enabled` is never null again.
+ */
+function moodFor(enabled: boolean | null): SceneMood {
+  if (enabled === true) return 'happy';
+  if (enabled === false) return 'farewell';
+  return 'idle';
 }
 
 /**
@@ -137,9 +153,22 @@ export function TelemetryPanel() {
         <div className="text-xs text-txt-tertiary mt-1">{t('telemetry:panel.intro')}</div>
       </div>
 
-      {/* The switch, with the server's state under it */}
-      <div className="rounded-lg bg-white/[0.02] p-3.5">
-        <div className="flex items-center justify-between gap-4">
+      {/*
+        The scene and the switch are one object rather than two stacked ones.
+        Flipping the switch changes the picture immediately above it, which is
+        what makes the beam retracting read as a consequence of the click; the
+        same artwork sitting elsewhere on the panel would just be decoration.
+
+        5:2 with `slice`: the composition is 3:2, so a banner this wide crops
+        the void away at top and bottom and keeps the whole ship. The scene is
+        aria-hidden and carries no text, so nothing here is the only copy of
+        anything - statusLabel below still says the state in words.
+      */}
+      <div className="rounded-lg bg-white/[0.02] overflow-hidden">
+        <div className="aspect-[5/2] bg-surface-base">
+          <HelloScene mood={moodFor(telemetry.enabled)} preserveAspectRatio="xMidYMid slice" />
+        </div>
+        <div className="flex items-center justify-between gap-4 p-3.5">
           <div>
             <div className="text-sm font-medium text-txt-primary">{t('telemetry:panel.toggle')}</div>
             <div className="text-xs text-txt-tertiary mt-0.5">{statusLabel}</div>

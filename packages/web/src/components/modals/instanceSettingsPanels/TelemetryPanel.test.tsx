@@ -7,6 +7,12 @@ import { api } from '../../../api/client';
 
 const off = { enabled: false, id: null, lastDay: null, lastError: null };
 const on = { enabled: true, id: '3f6c9e2a-1b2c-4d5e-8f90-1234567890ab', lastDay: '2026-09-06', lastError: null };
+const never = { enabled: null, id: null, lastDay: null, lastError: null };
+
+/** The mood the scene stands in, which is this panel's state as a picture. */
+function moodOf(container: HTMLElement): string | null {
+  return container.querySelector('svg[data-mood]')?.getAttribute('data-mood') ?? null;
+}
 
 beforeEach(() => {
   useSettingsStore.setState({ telemetry: null, telemetryPreview: null });
@@ -55,11 +61,12 @@ describe('TelemetryPanel', () => {
   it('keeps the toggle on the server state when saving fails', async () => {
     vi.spyOn(api.admin.telemetry, 'get').mockResolvedValue(off);
     vi.spyOn(api.admin.telemetry, 'set').mockRejectedValue(new Error('Nope'));
-    render(<TelemetryPanel />);
+    const { container } = render(<TelemetryPanel />);
     await screen.findByText('Off');
     await userEvent.click(screen.getByRole('switch'));
     await waitFor(() => expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'false'));
     expect(screen.getByText('Off')).toBeInTheDocument();
+    expect(moodOf(container), 'the scene lit up for a save the server refused').toBe('farewell');
   });
 
   it('refetches the preview on demand', async () => {
@@ -71,6 +78,41 @@ describe('TelemetryPanel', () => {
     const onMount = preview.mock.calls.length;
     await userEvent.click(screen.getByRole('button', { name: 'Refresh' }));
     await waitFor(() => expect(preview.mock.calls.length).toBe(onMount + 1));
+  });
+
+  it('says the state twice, once in words and once in the scene', async () => {
+    const get = vi.spyOn(api.admin.telemetry, 'get').mockResolvedValue(on);
+
+    const lit = render(<TelemetryPanel />);
+    await screen.findByText('On');
+    expect(moodOf(lit.container)).toBe('happy');
+    lit.unmount();
+
+    useSettingsStore.setState({ telemetry: null, telemetryPreview: null });
+    get.mockResolvedValue(off);
+    const dark = render(<TelemetryPanel />);
+    await screen.findByText('Off');
+    expect(moodOf(dark.container)).toBe('farewell');
+    dark.unmount();
+
+    useSettingsStore.setState({ telemetry: null, telemetryPreview: null });
+    get.mockResolvedValue(never);
+    const waiting = render(<TelemetryPanel />);
+    await screen.findByText('Never asked');
+    expect(moodOf(waiting.container)).toBe('idle');
+  });
+
+  it('lights the beam when the switch goes on', async () => {
+    vi.spyOn(api.admin.telemetry, 'get').mockResolvedValue(off);
+    vi.spyOn(api.admin.telemetry, 'set').mockResolvedValue(on);
+    const { container } = render(<TelemetryPanel />);
+    await screen.findByText('Off');
+    expect(moodOf(container)).toBe('farewell');
+
+    await userEvent.click(screen.getByRole('switch'));
+
+    await waitFor(() => expect(screen.getByText('On')).toBeInTheDocument());
+    expect(moodOf(container)).toBe('happy');
   });
 
   it('links to the document that says what is sent', async () => {

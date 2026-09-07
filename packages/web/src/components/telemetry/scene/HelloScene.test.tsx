@@ -101,6 +101,53 @@ describe('HelloScene', () => {
     expect(animate).not.toHaveBeenCalled();
   });
 
+  // Leaving happy is the transition the modal never made: it is answered once
+  // and closed. What these assert is that a track exists at all - without one
+  // the beam is not faded, it is cancelled, and cancelling a forwards-filled
+  // animation drops the element onto its base value in a single frame.
+  it('draws the beam back into the porthole when the scene leaves happy', () => {
+    const { rerender } = render(<HelloScene mood="happy" />);
+    animate.mockClear();
+    rerender(<HelloScene mood="farewell" />);
+
+    const tracks = animate.mock.calls.map(([frames]) => frames as Keyframe[]);
+    const beam = tracks.find((f) => f[0]?.transform === 'scaleX(1)' && f.at(-1)?.transform === 'scaleX(0)');
+    expect(beam, 'nothing takes the beam from full width back to the porthole').toBeDefined();
+
+    // A track that starts dark would blink the cabin off and on before dimming
+    // it, because a delayed or dark-first track sits at the base value first.
+    const cabin = tracks.filter((f) => f[0]?.opacity === 1 && f.at(-1)?.opacity === 0);
+    expect(cabin.length, 'the lit window does not fade down from lit').toBeGreaterThan(0);
+  });
+
+  it('keeps the farewell wave when it leaves happy, alongside the retract', () => {
+    const { rerender } = render(<HelloScene mood="happy" />);
+    animate.mockClear();
+    rerender(<HelloScene mood="farewell" />);
+
+    const tracks = animate.mock.calls.map(([frames]) => frames as Keyframe[]);
+    const arm = tracks.find((f) => String(f.at(-1)?.transform).startsWith('rotate('));
+    expect(arm, 'the arm never lowers, so the retract replaced the farewell').toBeDefined();
+  });
+
+  it('fades the beam out under reduced motion rather than collapsing it', () => {
+    installMatchMedia(true);
+    const { rerender } = render(<HelloScene mood="happy" />);
+    animate.mockClear();
+    rerender(<HelloScene mood="farewell" />);
+
+    const tracks = animate.mock.calls.map(([frames]) => frames as Keyframe[]);
+    const beam = tracks.find((f) => f.length > 0 && f.every((k) => k.transform === 'scaleX(1)'));
+    expect(beam, 'the beam collapses to no width before its opacity can fade').toBeDefined();
+    expect(beam?.at(-1)?.opacity).toBe(0);
+  });
+
+  it('leaves the aspect ratio to the SVG default until a caller asks for one', () => {
+    expect(renderScene('idle').getAttribute('preserveAspectRatio')).toBeNull();
+    const { container } = render(<HelloScene mood="idle" preserveAspectRatio="xMidYMid slice" />);
+    expect(container.querySelector('svg')?.getAttribute('preserveAspectRatio')).toBe('xMidYMid slice');
+  });
+
   it('uses only palette colours, nothing pure black or white', () => {
     const svg = renderScene('happy');
     const markup = svg.outerHTML;
