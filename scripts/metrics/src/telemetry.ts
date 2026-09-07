@@ -282,6 +282,38 @@ export function aggregateTelemetry(rows: readonly PingRow[], date: IsoDate): Tel
 }
 
 /**
+ * Which of `candidates` may have a telemetry aggregate published for them,
+ * given the raw pings a fetch actually returned.
+ *
+ * `aggregateTelemetry` only counts an instance once it has reported on two
+ * distinct days inside the trailing thirty. On the oldest day any ping in
+ * `pings` carries, and on every day before it, no instance can possibly have
+ * a second reporting day behind it yet, so the aggregate for that day is all
+ * zeros by construction: the structural absence of evidence, not a
+ * measurement of an empty fleet. Publishing it would chart a measured empty
+ * fleet on a day nothing was measured (docs/systems/metrics.md section 4.3).
+ * `pings` empty, a fetch that reached the receiver and got nothing back,
+ * excludes every candidate for the identical reason: there is no oldest ping
+ * to be strictly after.
+ *
+ * Both the daily collector and the one-shot backfill reconstruction call
+ * `aggregateTelemetry` over rows pulled from the same receiver and are bound
+ * by the same eligibility rule, so this is the one place that states it;
+ * neither caller should restate the reasoning inline.
+ */
+export function publishableTelemetryDays(
+  pings: readonly PingRow[],
+  candidates: readonly IsoDate[],
+): IsoDate[] {
+  const oldestPing = pings.reduce<IsoDate | null>(
+    (oldest, ping) => (oldest === null || ping.day < oldest ? ping.day : oldest),
+    null,
+  );
+  if (oldestPing === null) return [];
+  return candidates.filter((day) => day > oldestPing);
+}
+
+/**
  * Binds a fetch implementation, the receiver endpoint and the export token
  * into a fetcher for the collector to call.
  *

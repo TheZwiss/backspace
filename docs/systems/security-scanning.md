@@ -321,7 +321,7 @@ cannot be worked one at a time.
 
 ### What is left open, and why
 
-Thirteen OSV findings remain after the dependency pass. Every one needs a major
+Twelve OSV findings remain after the dependency pass and the Electron 43 upgrade. Every one needs a major
 upgrade that is a separate decision with its own compatibility work, so none of them
 is dismissed:
 
@@ -331,7 +331,6 @@ is dismissed:
 | `@fastify/static` 7.0.4 | 2 | server image | 10.x |
 | `find-my-way` 8.2.2 | 1 | server image | 9.7.0 |
 | `react-router` 6.30.6 | 2 | web bundle | 7.18.0 |
-| `electron` 40.10.6 | 1 | desktop app | 41.10.3 (no fix in the 40 line) |
 | `lodash` 4.17.23 | 2 | build-time (`electron-builder` to `@malept/flatpak-bundler`) | 4.18.0 |
 | `esbuild` 0.18.20 | 1 | build-time (`drizzle-kit` to `@esbuild-kit/core-utils`) | 0.25.0 |
 

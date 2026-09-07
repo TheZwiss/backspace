@@ -183,4 +183,99 @@ describe('collect with telemetry', () => {
     // The irreplaceable half of the run is unaffected.
     expect(result.written).toContain('stars.csv');
   });
+
+  // The receiver was not accepting pings yet on either candidate day, so the
+  // fetch resolves to an empty window rather than throwing. Writing an
+  // aggregate over zero rows would chart a measured empty fleet on a day
+  // nothing was measured — the same fabricated zero backfill's `oldestPing`
+  // rule forbids, and the daily path has to honour it too.
+  it('writes nothing when the telemetry fetch returns no pings at all, and says so in skipped', async () => {
+    const store = createStore(dir);
+    const result = await collect({
+      client: fakeClient(),
+      store,
+      ...base,
+      telemetry: async () => [],
+    });
+
+    expect(result.written).not.toContain('telemetry/network.csv');
+    expect(result.written).not.toContain('telemetry/versions.ndjson');
+    expect(result.written).not.toContain('telemetry/countries.ndjson');
+    expect(result.written).not.toContain('telemetry/clients.ndjson');
+    expect(store.readCsv('telemetry/network.csv')).toEqual([]);
+    expect(store.readNdjson('telemetry/versions.ndjson')).toEqual([]);
+    // A wiped receiver or a fleet that stopped reporting must not read as a
+    // clean, quiet run: the fetch succeeded, so this is not the `telemetry
+    // (<error>)` skip a thrown fetch produces, but it still has to land in
+    // `skipped` or a green run with an empty summary hides it indefinitely.
+    expect(result.skipped.some((s) => s.startsWith('telemetry') && s.includes('no pings'))).toBe(true);
+  });
+
+  // A fleet that only started reporting the day before yesterday has exactly
+  // one reporting day behind it on that day, so it cannot be eligible and its
+  // aggregate is all zeros by construction, not by measurement. Yesterday, the
+  // day after, has a second reporting day behind it and is a real number.
+  it('writes no row for the oldest ping day but still writes the day after it', async () => {
+    const store = createStore(dir);
+    const oldest = '2026-09-04';
+    const next = '2026-09-05';
+    const telemetry = async (): Promise<PingRow[]> =>
+      ['a', 'b', 'c'].flatMap((id) => [ping(id, oldest), ping(id, next)]);
+
+    const result = await collect({ client: fakeClient(), store, ...base, telemetry });
+
+    expect(result.written).toEqual(expect.arrayContaining(['telemetry/network.csv']));
+    const network = store.readCsv('telemetry/network.csv');
+    expect(network.map((r) => r.date)).toEqual([next]);
+    expect(network[0]).toMatchObject({ instances_7d: '3' });
+    expect(store.readNdjson('telemetry/versions.ndjson')).toEqual([
+      { snapshot_date: next, dimension: '1.1.2', title: '', count: 3, uniques: 3 },
+    ]);
+  });
+
+  // A fleet whose only ping so far landed on the newer of the two candidate
+  // days (the receiver only just started accepting pings, and only yesterday
+  // has one) has pings, but neither candidate survives `publishableTelemetryDays`:
+  // the day before yesterday predates the first ping, and yesterday IS the
+  // first ping, with no second reporting day behind it yet. This has to read
+  // differently in the log than a fetch that returned nothing at all.
+  it('records a distinct skip reason when pings exist but every candidate day is at or before the oldest', async () => {
+    const store = createStore(dir);
+    const telemetry = async (): Promise<PingRow[]> => [ping('a', '2026-09-05')];
+
+    const result = await collect({ client: fakeClient(), store, ...base, telemetry });
+
+    expect(result.written).not.toContain('telemetry/network.csv');
+    expect(store.readCsv('telemetry/network.csv')).toEqual([]);
+    const telemetrySkips = result.skipped.filter((s) => s.startsWith('telemetry'));
+    expect(telemetrySkips).toHaveLength(1);
+    expect(telemetrySkips[0]).not.toMatch(/no pings/);
+    expect(telemetrySkips[0]).toMatch(/oldest/);
+  });
+
+  // The property this whole fix protects: a fleet that genuinely stopped
+  // reporting (one instance, one ping, never a second day) is a real zero and
+  // must still be published, not folded into the "nothing measured yet" skip
+  // path above. Losing this would make a fleet that went silent look, on the
+  // chart, identical to a fleet that was never measured — the exact confusion
+  // this fix exists to end, just inverted.
+  it('still publishes a genuine all-zero aggregate when the fleet has pings but none are eligible', async () => {
+    const store = createStore(dir);
+    const telemetry = async (): Promise<PingRow[]> => [ping('a', '2026-09-03')];
+
+    const result = await collect({ client: fakeClient(), store, ...base, telemetry });
+
+    expect(result.written).toEqual(expect.arrayContaining(['telemetry/network.csv']));
+    expect(result.skipped.some((s) => s.startsWith('telemetry'))).toBe(false);
+    const network = store.readCsv('telemetry/network.csv');
+    expect(network.map((r) => r.date)).toEqual(['2026-09-04', '2026-09-05']);
+    for (const row of network) {
+      expect(row).toMatchObject({
+        instances_1d: '0',
+        instances_7d: '0',
+        instances_30d: '0',
+        users_registered: '0',
+      });
+    }
+  });
 });

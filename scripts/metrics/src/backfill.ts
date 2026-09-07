@@ -9,7 +9,7 @@ import {
   MS_PER_DAY,
 } from './series.ts';
 import { NETWORK_HEADER } from './collect.ts';
-import { aggregateTelemetry, type PingRow, type TelemetryFetcher } from './telemetry.ts';
+import { aggregateTelemetry, publishableTelemetryDays, type PingRow, type TelemetryFetcher } from './telemetry.ts';
 import type { GitHubClient } from './github.ts';
 import type { Store } from './store.ts';
 import type { CountPoint, DimensionRow, IsoDate, NetworkPoint, ReleaseRow } from './types.ts';
@@ -302,6 +302,15 @@ export async function backfill(options: BackfillOptions): Promise<{ written: str
   // this job is dispatched by hand with no deadline, and the receiver is a
   // single worker that the daily collector otherwise only ever asks for 31
   // days at a time.
+  //
+  // `daysBefore(today, TELEMETRY_RETENTION_DAYS - 1)` is the oldest `from`
+  // this loop ever sends, and nothing here re-checks that the rows a chunk
+  // answers with actually stay inside `[from, to]`. That is deliberate, not
+  // an oversight: the receiver's `exportRange` (scripts/telemetry-receiver/
+  // src/store.ts) reads `WHERE day >= ?1 AND day <= ?2` straight from these
+  // same two parameters, so a row outside the requested range is a receiver
+  // defect, not something a second local clamp here could catch any more
+  // reliably. `pings` is trusted as exactly what was asked for.
   const fetchTelemetry = options.telemetry;
   const pings: PingRow[] = [];
   if (fetchTelemetry !== undefined) {
@@ -460,7 +469,7 @@ export async function backfill(options: BackfillOptions): Promise<{ written: str
   // for 90 days on every dispatch, and an aggregate over a day it holds no
   // row for is an all-zero snapshot that reads on the chart as a measured
   // empty fleet. Section 4.3 forbids exactly that. An empty export therefore
-  // writes nothing at all rather than 88 zero rows.
+  // writes nothing at all rather than 89 zero rows.
   //
   // Inside the range the earliest days are still computed over a short
   // history: the snapshot rule looks back thirty days to decide which
@@ -468,29 +477,22 @@ export async function backfill(options: BackfillOptions): Promise<{ written: str
   // thirty behind it, so its instance counts are a lower bound. That is
   // inherent to a 90-day retention and cannot be fetched around; the merge is
   // if-absent, so any day the collector measured keeps its own row.
-  const oldestPing = pings.reduce<IsoDate | null>(
-    (oldest, ping) => (oldest === null || ping.day < oldest ? ping.day : oldest),
-    null,
-  );
-  if (oldestPing !== null) {
+  //
+  // Where exactly that lower bound falls, and why an empty export excludes
+  // every candidate the same way, is `publishableTelemetryDays`'s reasoning
+  // (telemetry.ts) — the daily collector is bound by the identical
+  // eligibility rule, so it lives there once rather than twice.
+  const candidates: IsoDate[] = [];
+  for (let offset = TELEMETRY_RETENTION_DAYS - 1; offset >= 1; offset -= 1) {
+    candidates.push(daysBefore(today, offset));
+  }
+  const publishableDays = publishableTelemetryDays(pings, candidates);
+  if (publishableDays.length > 0) {
     const network: NetworkPoint[] = [];
     const versions: DimensionRow[] = [];
     const countries: DimensionRow[] = [];
     const clients: DimensionRow[] = [];
-    // Starts one day inside the fetched window, at `today - 88` rather than
-    // `today - 89`: no instance can have reported on two distinct days by the
-    // oldest day the export can possibly hold, so that day's snapshot is empty
-    // by construction and writing it would state a fleet of zero for a day
-    // nothing is known about.
-    for (let offset = TELEMETRY_RETENTION_DAYS - 2; offset >= 1; offset -= 1) {
-      const day = daysBefore(today, offset);
-      // `<=`, not `<`. Eligibility needs two distinct reporting days inside
-      // the trailing thirty, and on `oldestPing` itself there is exactly one
-      // by definition, so the aggregate is all zeros by construction. Writing
-      // it would state a measured empty fleet for the first day any evidence
-      // exists, which is the fabricated zero section 4.3 forbids, the same
-      // argument the loop's start offset already makes one day further out.
-      if (day <= oldestPing) continue;
+    for (const day of publishableDays) {
       const aggregate = aggregateTelemetry(pings, day);
       network.push(aggregate.network);
       versions.push(...aggregate.versions);
