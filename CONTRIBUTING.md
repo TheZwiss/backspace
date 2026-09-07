@@ -24,11 +24,11 @@ sizes are welcome: bug reports, fixes, features, documentation, and design.
   to split. If something is genuinely large and indivisible, it needs a design
   proposal first (see below).
 - **You own your diff.** Use whatever tools you like, including AI assistants;
-  nobody will ask. What matters is that you can explain any line of it, that you
-  have run it, and that it does not contain two solutions to the same problem
-  sitting side by side. Code the author has not read is the only kind of
-  contribution that costs more to review than it did to write. If you work
-  with an agent, see [Working with AI agents](#working-with-ai-agents).
+  nobody will ask. What matters is that you have run it, and that it does not
+  contain two solutions to the same problem sitting side by side. Code the
+  author has not verified is the only kind of contribution that costs more to
+  review than it did to write. If you work with an agent, see
+  [Working with AI agents](#working-with-ai-agents).
 
 ## Design before code
 
@@ -87,11 +87,10 @@ work that a proposal would have avoided.
 ## Working with AI agents
 
 The quality bar is the same however the code was written: it does one thing,
-it is complete, it matches the surrounding code, it has been run, and the
-author can explain any line of it. Nothing in this section changes that bar.
-It describes how to reach it with an agent, because an agent used carelessly
-produces work that looks finished and is not, and that costs more to review
-than it did to write.
+it is complete, it matches the surrounding code, and it has been run. Nothing
+in this section changes that bar. It describes how to reach it with an agent,
+because an agent used carelessly produces work that looks finished and is not,
+and that costs more to review than it did to write.
 
 **The repository is set up for agents.** `CLAUDE.md` at the root carries the
 rules and points to `docs/systems/`, where every subsystem is specified. Point
