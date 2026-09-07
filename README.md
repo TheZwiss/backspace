@@ -29,7 +29,8 @@ commercial license is available if the AGPL doesn't fit your use. See
 [License](#license) for the details.
 
 > **Project status** <a name="project-status"></a>
-> Backspace 1.0. Stable, self-hostable, and actively developed.
+> Backspace 1.x. Stable, self-hostable, and actively developed. The release
+> badge above tracks the current version.
 
 ## What makes Backspace different
 

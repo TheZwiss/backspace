@@ -171,7 +171,7 @@ No authentication. Returns:
 ```typescript
 {
   name: string;        // instanceSettings.instanceName ?? 'Backspace'
-  version: string;     // Hardcoded '1.0.0' in instance.ts
+  version: string;     // config.version, read from packages/server/package.json
   registrationOpen: boolean;  // DB setting overrides env if non-null
   federatedRegistrationOpen: boolean;  // NOT NULL DEFAULT 1; gates federated-account creation
   sourceCodeUrl: string;      // AGPL § 13; config.sourceCodeUrl (env BACKSPACE_SOURCE_URL)
