@@ -865,7 +865,7 @@ footer a:hover { color: var(--txt); }
         Most of this page measures this repository on GitHub. The opt-in figures in the
         Adoption group measure something else: the Backspace instances people actually run.
         A self-hosted instance can choose to send one small ping a day, and most do not, so
-        <strong>every figure here is a lower bound</strong> rather than a total. An instance
+        <strong>every one of those figures is a lower bound</strong> rather than a total. An instance
         that never opts in is invisible, counts arrive rounded to two significant digits, and
         an instance is counted only once it has reported on two separate days inside the last
         thirty. A ping carries no domain, no instance or account name, no message content, no
@@ -1207,7 +1207,7 @@ footer a:hover { color: var(--txt); }
    * made because of a key the archive predates.
    *
    * PRESENT AND MALFORMED IS NOT VALID, for the reason every other series is
-   * checked here: the telemetry section indexes these arrays without
+   * checked here: the telemetry band indexes these arrays without
    * re-checking them, and a ragged column would shift a whole chart sideways
    * with nothing on the page to show it.
    */
@@ -6966,7 +6966,7 @@ footer a:hover { color: var(--txt); }
       "Installers and archives only. GitHub counts an electron-updater feed file and a " +
       "blockmap in the same download counter as an installer, and every installed client " +
       "fetches the feed on every update check, so a combined total is dominated by polling. " +
-      "The two are counted separately here and in the card beside this one.",
+      "The two are counted separately here and in the card below this one.",
       "A row the archive recorded before the two were counted separately carries no value for " +
       "either, so the line breaks across it rather than falling to zero."
     ]
@@ -7298,7 +7298,8 @@ footer a:hover { color: var(--txt); }
      * dimension snapshots has no dated series row to anchor a window to. */
     if (win === null) {
       band.appendChild(el("p", "slot-note",
-        "The archive holds no dated measurement, so there is no time axis to draw these charts on."));
+        "The archive holds no dated measurement, so there is no time axis to draw the instance or " +
+        "active-user charts on."));
       return [];
     }
 
@@ -7329,20 +7330,29 @@ footer a:hover { color: var(--txt); }
         var plot = safeCard(stack, CARDS[i], axis);
         if (plot !== null) created.push(plot);
       }
+      /*
+       * INSIDE the try, unlike the section this band comes from.
+       *
+       * There the rankings sat outside it, so that a bug in one ranking could
+       * not destroy two working charts, and that was safe because `live` had
+       * already been assigned by the time the loop ran. Here `created` is held
+       * by this frame alone until the function returns, and the caller's
+       * `created` does not yet contain these plots, so a throw escaping this
+       * loop would detach two mounted charts with no `destroy()` and leak
+       * their listeners and their place in the cursor-sync group on every
+       * later range change.
+       *
+       * Nothing is lost by releasing them: each ranking is contained by
+       * `G.buildCardSafely`, so the only throw that can reach here is one the
+       * containment itself could not hold, and that ends the whole render.
+       */
+      for (var r = 0; r < RANKINGS.length; r++) {
+        safeRanking(stack, RANKINGS[r], block[RANKINGS[r].key]);
+      }
     } catch (error) {
       /* Destroy what was built here, then let the caller contain the throw. */
       releaseAll(created);
       throw error;
-    }
-
-    /*
-     * Outside the try above on purpose. The rankings hold no uPlot instance
-     * and nothing to release, and each is contained on its own, so a bug in
-     * one ranking replaces that ranking and leaves the two charts above it
-     * mounted and held.
-     */
-    for (var r = 0; r < RANKINGS.length; r++) {
-      safeRanking(stack, RANKINGS[r], block[RANKINGS[r].key]);
     }
     return created;
   }
