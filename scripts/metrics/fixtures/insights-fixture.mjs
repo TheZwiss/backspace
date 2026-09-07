@@ -42,10 +42,10 @@
  *                series long enough to draw: it is the only mode whose
  *                compact card carries a plot, so it is the only one that
  *                exercises the compact size profile
- *   release-edge as `long`, with the release dates chosen to pin the release
- *                trend's own window edges: one dated exactly on the older
- *                window's first day, one inside that window, and three inside
- *                the recent one
+ *   release-edge as `long`, with the release dates chosen to pin both of the
+ *                release trend's window edges: one dated exactly on the older
+ *                window's first day, one inside that window, one dated exactly
+ *                on the recent window's first day, and three inside it
  *
  * `--strip-telemetry` is a second pass, run after `cli-bundle.ts` rather than
  * before it. `buildDashboardData` always writes a `telemetry` key, so no set
@@ -174,24 +174,37 @@ if (mode !== 'dimensions-only') {
     ]);
   } else if (mode === 'release-edge') {
     /*
-     * The release trend's own window edges, which no other mode reaches.
+     * BOTH of the release trend's window edges, which no other mode reaches.
      *
      * `releaseTrend` counts over two adjacent inclusive windows anchored on
      * the archive's newest measured day E:
      *   recent = [E - 29d, E]     prior = [E - 59d, E - 30d]
-     * with E = day(DAYS - 1) = day(89), so priorStart is day(30) exactly.
+     * with E = day(DAYS - 1) = day(89), so priorStart is day(30) and
+     * recentStart is day(60), exactly.
      *
-     * The first row below sits ON that boundary. The rest are placed so that
-     * the resulting figure is +1 from three against two, and NOT the zero a
-     * one-against-one shape would give: zero is equally what a swapped
-     * window, an off-by-one at either edge and a double count all produce, so
-     * it would state a number that proves nothing. Three against two is
-     * produced by the correct arithmetic and by nothing else:
+     * Two of the rows below sit ON a boundary: day(30) on the outer edge of
+     * the prior window, day(60) on the inner edge between the two. The outer
+     * edge alone was not enough. An off-by-one at the inner boundary reads
+     * identically in `long` and in the first draft of this mode, because in
+     * both the nearest releases to it were fifteen days away on either side,
+     * so a mode claiming to pin "the window edges" pinned one of them.
      *
-     *   boundary dropped (priorStart read as exclusive)   3 against 1  -> +2
-     *   boundary counted in the recent window instead     4 against 1  -> +3
-     *   boundary counted in both windows                  4 against 2  -> +2
-     *   the two windows swapped                           2 against 3  -> -1
+     * The rest are placed so the figure is +2 from four against two, and NOT
+     * the zero a one-against-one shape would give: zero is equally what a
+     * swapped window, an off-by-one at either edge and a double count all
+     * produce, so it would state a number that proves nothing. Four against
+     * two is produced by the correct arithmetic and by nothing else, on the
+     * pair the assertion reads, the chip and its title:
+     *
+     *   correct                                           4 against 2  -> +2
+     *   priorStart read as exclusive                      4 against 1  -> +3
+     *   recentStart read as exclusive                     3 against 2  -> +1
+     *   the day(30) release counted in recent instead     5 against 1  -> +4
+     *   the day(30) release counted in both windows       5 against 2  -> +3
+     *   the two windows swapped                           2 against 4  -> -2
+     *
+     * The two rows reading +3 differ in their totals, which the chipTitle
+     * states, so the assertion separates them where the chip alone would not.
      *
      * `long` cannot carry this shape: it asserts the release lane's markers,
      * its caption and its lead value, and a release moved onto a window edge
@@ -200,9 +213,10 @@ if (mode !== 'dimensions-only') {
     s.writeCsv('releases.csv', ['date', 'tag', 'name'], [
       { date: day(30), tag: 'v1.0.0', name: '1.0.0' },
       { date: day(45), tag: 'v1.1.0', name: '1.1.0' },
-      { date: day(65), tag: 'v1.1.1', name: '1.1.1' },
-      { date: day(75), tag: 'v1.1.2', name: '1.1.2' },
-      { date: day(85), tag: 'v1.1.3', name: '1.1.3' },
+      { date: day(60), tag: 'v1.1.1', name: '1.1.1' },
+      { date: day(65), tag: 'v1.1.2', name: '1.1.2' },
+      { date: day(75), tag: 'v1.1.3', name: '1.1.3' },
+      { date: day(85), tag: 'v1.1.4', name: '1.1.4' },
     ]);
   } else if (mode !== 'no-releases') {
     s.writeCsv('releases.csv', ['date', 'tag', 'name'], [{ date: day(10), tag: 'v1.1.2', name: '1.1.2' }]);

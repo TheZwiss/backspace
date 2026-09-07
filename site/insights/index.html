@@ -108,6 +108,14 @@ body {
 img { max-width: 100%; height: auto; display: block; }
 a { color: var(--sky); text-decoration: none; }
 a:hover { text-decoration: underline; }
+/* The `border-radius` here rounds the OUTLINE, not the element, and 4px was
+   written for an inline text link. It has specificity (0,1,1) and so beats a
+   class, which means a focused element carrying a radius of its own has its
+   corners snapped to 4px for as long as it holds focus. Harmless on a link in
+   a sentence; visible on a panel. `.lead-figure` is the first panel-sized
+   element on this page to take keyboard focus, so it restates its own radius
+   below. `.btn` has the same 12px-to-4px snap and is left alone: it predates
+   this page's redesign and changing it is not this change's business. */
 a:focus-visible, button:focus-visible {
   outline: 2px solid var(--sky);
   outline-offset: 3px;
@@ -523,6 +531,9 @@ h2 {
   color: var(--txt);
 }
 .lead-figure:hover { text-decoration: none; border-color: rgba(255, 255, 255, 0.14); }
+/* Against the shared focus rule's 4px, which would otherwise snap this card's
+   corners while it holds focus. See the comment on that rule. */
+.lead-figure:focus-visible { border-radius: 14px; }
 .lead-figure .stat-value { font-size: clamp(2.2rem, 6vw, 3.2rem); }
 .group-head { margin-bottom: 22px; }
 .group-head .stat-value { font-size: clamp(1.6rem, 4.4vw, 2rem); }
@@ -857,6 +868,12 @@ footer a:hover { color: var(--txt); }
         <a href="data/">plain tables</a>.
       </p>
       <h3>Provenance and coverage</h3>
+      <p class="sec-copy">
+        Every figure on this page carries a 30-day change beside it, and the change is shown only
+        when the archive covers the window it describes. Otherwise it reads as a dash and says
+        why, and a figure that could only be assembled from a different span is labelled with the
+        span it actually covers.
+      </p>
       <p class="provenance">
         <span><span class="k">archive history</span> <span class="v" id="pv-since">checking</span></span>
         <span><span class="k">bundle built</span> <span class="v" id="pv-generated">checking</span></span>
@@ -1969,8 +1986,9 @@ footer a:hover { color: var(--txt); }
  * three presentations now, the lead figure row, a group's own headline above
  * its hero, and a compact card's head, and the rule this surface exists to
  * make enforceable is that A FIGURE IS COMPUTED ONCE PER RENDER AND RENDERED
- * IN AS MANY PLACES AS NEEDED. The lead figure row and a group head printing different numbers for
- * the same series is the failure this shape prevents, and it is a failure
+ * IN AS MANY PLACES AS NEEDED. The lead figure row and a group head printing
+ * different numbers for the same series is the failure this shape prevents,
+ * and it is a failure
  * nothing on the page would otherwise catch: both numbers would look entirely
  * ordinary on their own.
  *
@@ -3637,10 +3655,10 @@ footer a:hover { color: var(--txt); }
    * The painter below additionally declines anything outside the LIVE scale,
    * so a drag zoom can leave the canvas with no marker on it while the
    * caption still names every release it listed. That is deliberate, and it is
-   * not the caption going stale: the caption is a statement about the span
-   * the card drew out of the archive, the span its own `span` line names,
-   * and not a claim about what is on the canvas at the reader's
-   * current zoom. Double-clicking restores the full span and every listed
+   * not the caption going stale: the caption is a statement about the span the
+   * card drew out of the archive, the span its own `span` line names, and not a
+   * claim about what is on the canvas at the reader's current zoom.
+   * Double-clicking restores the full span and every listed
    * marker with it. A caption recomputed from a `setScale` hook would be
    * making the narrower claim, and would then have to say which of the two
    * spans it meant; this one says the wider thing and says it once.
@@ -5907,9 +5925,8 @@ footer a:hover { color: var(--txt); }
    * already are.
    *
    * `flowDelta` is the page's existing one-window total, unchanged and called
-   * exactly as `flowCard` calls it, so this pair states the same arithmetic
-   * the figure head above it was computed from rather than a second one. It
-   * refuses
+   * exactly as `flowCard` calls it, so this pair states the same arithmetic the
+   * figure head above it was computed from rather than a second one. It refuses
    * unless the window is covered end to end, and it labels itself with the
    * span its rows actually stand for when the bundle is weekly, which is why
    * the key is built from `windowDays` rather than hard-coded to 30. A refused
