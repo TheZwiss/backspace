@@ -451,12 +451,14 @@ const OBSERVE = `(function () {
    * The paragraph the bundler writes into the served page.
    *
    * It is the only place on this page a headline figure is computed by
-   * something other than the page's own figure surface: renderSummaryHtml
-   * sums the traffic series in TypeScript, the lead row sums the same series
-   * in the page's JavaScript, and the two are supposed to be the same number.
-   * Two implementations of one figure in two languages is exactly the shape
-   * INSIGHTS_FIGURES exists to prevent for the row and the group heads, so
-   * the one case that cannot be collapsed gets checked instead.
+   * something other than the page's own figure surface, and it is eight
+   * figures rather than one: renderSummaryHtml computes page views, clones,
+   * stars, forks, watchers, contributors, app downloads and the release count
+   * in TypeScript, and the page computes every one of them again in its own
+   * JavaScript. Two implementations in two languages is exactly the shape
+   * INSIGHTS_FIGURES exists to prevent for the row and the group heads, and
+   * these cannot be collapsed into it, because this paragraph is written at
+   * deploy time by the bundler and the page is not. So they are checked.
    *
    * No backticks anywhere in this string: it is the body of a template
    * literal, and one backtick in a comment ends the expression mid-way and
@@ -1079,6 +1081,19 @@ async function main() {
     }
     return null;
   };
+  /*
+   * Said before the rows, for the same reason the plot walk says how many
+   * live plots it reached. If this selector ever stops matching, every row
+   * below reports the served side as stating nothing, and the section reads
+   * like a page whose paragraph was never built rather than like a check that
+   * lost the element it reads. That is the failure this branch produced five
+   * times.
+   */
+  if ((observed?.staticFigures ?? null) === null) {
+    console.log('  NO SERVED PARAGRAPH: nothing on the page matched .static-figures, so the'
+      + ' served side of every row below is empty for that reason and not because the'
+      + ' bundler wrote no figure');
+  }
   for (const [pattern, drawnLabel] of PAIRED_FIGURES) {
     const served = servedFigure(pattern);
     const drawn = drawnFigure(drawnLabel);

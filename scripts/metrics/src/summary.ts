@@ -13,14 +13,29 @@ import type { DashboardData } from './bundle.ts';
  * to "look at this page". This module puts the headline measurements into the
  * served HTML so the shared URL answers on its own.
  *
- * It is deliberately NOT a second implementation of the at-a-glance cards.
- * Those cards are range-dependent and carry 30-day deltas with their own
- * reasons for declining to state one; duplicating that logic in a second
- * language would create two sets of rules that drift apart, and the drift
- * would be invisible until the two disagreed in public. What is generated
- * here is a summary built from rules simple enough to be obviously correct:
- * the latest measured value of each counter with the date it was measured,
- * the peak day of each traffic series, and the leading referrer and path.
+ * IT IS A SECOND IMPLEMENTATION, and pretending otherwise is how this file
+ * came to carry a false rationale for three rounds of review. Eight of the
+ * figures it states are also computed by the page in its own JavaScript:
+ * page views, clones, stars, forks, watchers, contributors, app downloads and
+ * the release count. The page has one surface, INSIGHTS_FIGURES, whose whole
+ * purpose is that the lead row and a group head cannot print different
+ * numbers for the same series; nothing here can join it, because this
+ * paragraph is written at deploy time by the bundler and the page is not.
+ *
+ * An earlier version of this comment claimed the opposite on the grounds that
+ * the page's cards are "range-dependent and carry 30-day deltas". They are
+ * not range-dependent: a figure's VALUE is all-time and the 30-day delta
+ * beside it is a fixed window ending on the archive's newest measured day, so
+ * the range control moves neither. The deltas are the one thing genuinely not
+ * duplicated here, and they are left out for the reason the totals are not: a
+ * window baked into a served page goes stale the moment the window moves,
+ * with nothing on the page able to tell.
+ *
+ * The duplication is therefore checked rather than denied. `insights-check.mjs`
+ * reads all eight figures out of the built paragraph, reads the same figure
+ * off the rendered page, and prints MATCH, DIVERGED or ONE-SIDED for each.
+ * Adding a figure here that the page also prints as a head means adding it
+ * there.
  *
  * The absent-versus-zero rule governs here as everywhere else. A figure with
  * no measurement behind it is OMITTED FROM THE SENTENCE rather than printed
@@ -58,13 +73,13 @@ export interface SummaryFacts {
   /**
    * Every measured view and clone the archive holds, summed.
    *
-   * These are archive totals, deliberately NOT the rolling 30-day window the
-   * page's lead figures show. A served page is read whenever a crawler
-   * happens to fetch it, so a windowed figure baked into it goes stale
-   * silently, while a total over measured days stays exactly true of the
-   * archive it was built from. The two are different figures and are labelled
-   * as different figures; a later reader finding them unequal has found the
-   * design rather than a bug.
+   * THE SAME NUMBER the page's own figures show, and a divergence is a bug.
+   * `flowCard` on the page sums every measured value of the series exactly as
+   * `sumMeasured` does here. An earlier version of this comment said these
+   * were archive totals against a rolling 30-day window on the page, and that
+   * a reader finding them unequal had found the design; the page has no
+   * rolling window in a figure's value, only in the delta beside it, so that
+   * sentence would have excused the one divergence most worth catching.
    *
    * Null only for an archive with no measured day at all, which is the same
    * condition that drops the peak clause.
