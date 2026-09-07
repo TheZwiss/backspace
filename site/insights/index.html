@@ -2443,9 +2443,11 @@ footer a:hover { color: var(--txt); }
 
   var I = window.INSIGHTS;
 
-  /* The toolkit's DOM helpers, for the captions below. Each chart section
-   * keeps its own copy of these two; they are a few lines each, and a section
-   * reaching across for them would buy nothing. */
+  /* The toolkit's DOM builders. `releaseCaption` below returns a paragraph of
+   * elements rather than a string, and this file had no way to build one, so
+   * these two belong here for good: they stay whether or not any section keeps
+   * a copy of its own, and deleting them as duplication would break the
+   * caption. */
   function el(tag, className, text) {
     var node = document.createElement(tag);
     if (className) node.className = className;
@@ -3503,8 +3505,11 @@ footer a:hover { color: var(--txt); }
    *
    *   yRange       (u, min, max) -> [min, max]. The y-scale policy.
    *                Default `zeroBasedCounts`.
-   *   hooks        A uPlot hooks object. Drawing over the plot — release
-   *                annotations on the time axis — belongs here.
+   *   hooks        A uPlot hooks object, each key an array of functions.
+   *                Drawing over the plot belongs here. Passed alongside
+   *                `releases`, the lane's painter runs first and these are
+   *                merged over it, key by key; a key set to `undefined` is
+   *                skipped rather than installed.
    *   plugins      A uPlot plugins array.
    *   syncFilters  `{ pub?, sub? }` for `cursor.sync.filters`: how a chart
    *                opts out of part of the shared group without leaving it,
@@ -3659,8 +3664,18 @@ footer a:hover { color: var(--txt); }
       if (opts.hooks !== undefined) {
         for (var key in opts.hooks) {
           if (!Object.prototype.hasOwnProperty.call(opts.hooks, key)) continue;
-          if (key === "draw") hooks.draw = hooks.draw.concat(opts.hooks.draw);
-          else hooks[key] = opts.hooks[key];
+          var extra = opts.hooks[key];
+          /* A key present and set to nothing is a caller building its hooks
+           * conditionally, not a caller asking for an empty hook. Concatenating
+           * it would put `undefined` into the draw list, and uPlot calls that
+           * list one entry at a time deep inside a redraw, so the throw would
+           * name a line of the vendored library rather than this mistake. */
+          if (extra === undefined || extra === null) continue;
+          /* `concat` takes either shape: uPlot's own is an array of functions,
+           * and a caller who passes a lone function gets it appended as one
+           * entry rather than an error. */
+          if (key === "draw") hooks.draw = hooks.draw.concat(extra);
+          else hooks[key] = extra;
         }
       }
     }
