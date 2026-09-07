@@ -33,6 +33,12 @@
  *   dimensions-only  no dated series at all, only a referrer and a path
  *                    snapshot, so the bundle is non-empty, collection_started
  *                    is null and the range control has nothing to anchor to
+ *   long         ninety days of traffic and four releases at different
+ *                distances, two of them inside the last thirty days and one
+ *                in the thirty before, so the thirty-against-thirty
+ *                comparisons have both windows inside the archive and state a
+ *                signed figure that only the right arithmetic produces
+ *   no-releases  as `high`, with no releases.csv at all
  *
  * `--strip-telemetry` is a second pass, run after `cli-bundle.ts` rather than
  * before it. `buildDashboardData` always writes a `telemetry` key, so no set
@@ -59,7 +65,7 @@ import { createStore } from '../src/store.ts';
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 
 const MODES = new Set(['none', 'low', 'threshold', 'high', 'high-other', 'high-nodims', 'sparse',
-  'dimensions-only']);
+  'dimensions-only', 'long', 'no-releases']);
 
 const [, , outDirArg, mode = 'high'] = process.argv;
 if (outDirArg === undefined) {
@@ -97,7 +103,7 @@ cpSync(path.join(REPO_ROOT, 'site/insights'), path.join(site, 'insights'), { rec
 cpSync(path.join(REPO_ROOT, 'site/assets'), path.join(site, 'assets'), { recursive: true });
 
 const day = (i) => new Date(Date.UTC(2026, 7, 1 + i)).toISOString().slice(0, 10);
-const DAYS = 40;
+const DAYS = mode === 'long' ? 90 : 40;
 const s = createStore(archive);
 
 // Traffic, so the bundle is not `empty` and the range control has an anchor.
@@ -124,7 +130,27 @@ if (mode !== 'dimensions-only') {
       date: day(i), subscribers: 9, open_issues: 3,
       downloads_total: 100 + i, downloads_app: 40 + i, downloads_updates: 60,
     })));
-  s.writeCsv('releases.csv', ['date', 'tag', 'name'], [{ date: day(10), tag: 'v1.1.2', name: '1.1.2' }]);
+  /*
+   * `long` writes four: TWO inside the last thirty days, one inside the thirty
+   * before them, and one before the archive begins.
+   *
+   * Two and one, not one and one. With one in each window the trend is zero,
+   * and zero is also what a swapped window, an off-by-one at either boundary
+   * and a double-counted release all produce, so the fixture would state a
+   * figure that proves nothing. Two against one gives +1, which only the
+   * correct arithmetic produces. The release before the archive begins is
+   * there so the caption has one to report as outside the drawn span.
+   */
+  if (mode === 'long') {
+    s.writeCsv('releases.csv', ['date', 'tag', 'name'], [
+      { date: new Date(Date.UTC(2026, 6, 1)).toISOString().slice(0, 10), tag: 'v1.0.0', name: '1.0.0' },
+      { date: day(DAYS - 45), tag: 'v1.1.0', name: '1.1.0' },
+      { date: day(DAYS - 10), tag: 'v1.1.2', name: '1.1.2' },
+      { date: day(DAYS - 4), tag: 'v1.1.3', name: '1.1.3' },
+    ]);
+  } else if (mode !== 'no-releases') {
+    s.writeCsv('releases.csv', ['date', 'tag', 'name'], [{ date: day(10), tag: 'v1.1.2', name: '1.1.2' }]);
+  }
 }
 s.writeNdjson('traffic/referrers.ndjson',
   [{ snapshot_date: day(DAYS - 1), dimension: 'github.com', title: '', count: 30, uniques: 12 }]);

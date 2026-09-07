@@ -551,16 +551,30 @@ h2 {
  * `align-items: start` keeps a taller card, such as a dimension card carrying
  * a movement chart, from stretching its neighbours to match.
  */
+/*
+ * `min(300px, 100%)` rather than a bare `300px`, and the same for the detail
+ * band's 420px. A `minmax()` minimum is a hard floor: a track told it may not
+ * go below 420px does not, so on a viewport narrower than that the card sits
+ * wider than the page and the BODY scrolls sideways, which is the one kind of
+ * horizontal scroll this page must not have. Measured at 380px with the
+ * Delivery group's release list, the first card either band ever held: the
+ * document ran to 436px against a 380px viewport, all of it the detail card's
+ * 420px floor. `min()` keeps the floor wherever there is room for it and
+ * collapses to the container's own width where there is not, so the wide case
+ * is unchanged and the narrow one fits. A chart that is genuinely too wide for
+ * the viewport still scrolls, inside its own `.chart-scroll`, which is where a
+ * sideways scroll belongs.
+ */
 .series-band {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
   gap: 18px;
   align-items: start;
   margin-top: 22px;
 }
 .detail-band {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(420px, 100%), 1fr));
   gap: 22px;
   align-items: start;
   margin-top: 22px;
@@ -653,6 +667,7 @@ footer a:hover { color: var(--txt); }
     <a class="nav-link" href="#referrers">Referrers</a>
     <a class="nav-link" href="#paths">Paths</a>
     <a class="nav-link" href="#instances">Instances</a>
+    <a class="nav-link" href="#delivery">Delivery</a>
     <a class="btn btn-primary btn-sm" href="https://github.com/TheZwiss/backspace">GitHub</a>
   </div>
 </header>
@@ -827,6 +842,17 @@ footer a:hover { color: var(--txt); }
     </div>
   </section>
 
+  <section class="panel" id="delivery">
+    <div class="wrap">
+      <p class="ch-label ch-rose">delivery</p>
+      <h2>Delivery</h2>
+      <p class="sec-copy">
+        Workflow runs measure this project's own automation, not the quality of what it ships.
+      </p>
+      <div class="slot" id="delivery-body"></div>
+    </div>
+  </section>
+
   <section class="panel method-panel" id="method">
     <div class="wrap">
       <p class="ch-label ch-txt4">method</p>
@@ -932,7 +958,7 @@ footer a:hover { color: var(--txt); }
   };
 
   var SLOT_IDS = ["header-stats", "chart-reach", "chart-growth", "ranked-referrers",
-    "ranked-paths", "telemetry", "method-coverage"];
+    "ranked-paths", "telemetry", "delivery-body", "method-coverage"];
 
   /*
    * The subset that receives the unavailable/empty note.
@@ -943,7 +969,7 @@ footer a:hover { color: var(--txt); }
    * the status region above has already said what is wrong, once, in full.
    */
   var NOTE_SLOT_IDS = ["header-stats", "chart-reach", "chart-growth", "ranked-referrers",
-    "ranked-paths", "telemetry"];
+    "ranked-paths", "telemetry", "delivery-body"];
 
   /* ---------------------------------------------------------------- helpers */
 
@@ -2331,6 +2357,99 @@ footer a:hover { color: var(--txt); }
   }
 
   /*
+   * The release comparison: how many releases shipped in the last 30 days
+   * against the 30 before them.
+   *
+   * `releases.csv` is reconstructed from `published_at`, a permanent
+   * immutable timestamp, and the collector pages the release list in full on
+   * every run, so the array holds every release this repository has ever
+   * published however young the archive is. Unlike the daily series it needs
+   * no coverage test: a release either happened on a date or it did not, and
+   * the archive cannot have missed one by failing to run that day.
+   *
+   * It needs no REACH test either, and an earlier draft of this page had one:
+   * it refused the comparison when the archive's own first measured day fell
+   * inside the older window. That test was wrong. `archiveStartDay` is the
+   * earliest date in any DATED SERIES, which the release list has nothing to
+   * do with, so recreating the data branch would have made this chip print a
+   * dash for sixty days with a reason that was false. Both window counts are
+   * measured whenever the array is non-empty, and zero releases in a window
+   * is a measured zero.
+   *
+   * An EMPTY array is the one thing it cannot speak about, so it refuses
+   * rather than counting. The bundle produces the same empty array whether the
+   * archive holds no releases or holds no release file at all, so "0 shipped
+   * in the last 30 days, against 0 before them" would be exactly the claim
+   * `releasesCard` prints a dash rather than make, restated as a trend. The
+   * window test comes first: a bundle carrying neither a dated row nor a
+   * release has two true reasons to refuse, and the missing time axis is the
+   * one that also explains why nothing else in this group drew.
+   */
+  function releaseTrend(releases, wins) {
+    if (wins === null) {
+      return unavailable("the archive holds no dated measurement to anchor a window to.");
+    }
+    if (releases.length === 0) {
+      return unavailable("the archive holds no release record, and an empty release list is not " +
+        "the same as a measured zero.");
+    }
+    var endMs = wins.flow.endMs;
+    var recentStart = endMs - (I.DELTA_DAYS - 1) * I.DAY_MS;
+    var priorEnd = endMs - I.DELTA_DAYS * I.DAY_MS;
+    var priorStart = endMs - (2 * I.DELTA_DAYS - 1) * I.DAY_MS;
+    var recent = 0;
+    var prior = 0;
+    for (var i = 0; i < releases.length; i++) {
+      var ms = I.parseDay(releases[i].date);
+      if (isNaN(ms)) continue;
+      if (ms >= recentStart && ms <= endMs) recent++;
+      else if (ms >= priorStart && ms <= priorEnd) prior++;
+    }
+    return {
+      available: true,
+      signed: true,
+      value: recent - prior,
+      windowDays: I.DELTA_DAYS,
+      headline: "Change over the " + I.DELTA_DAYS + " days to " + I.formatDay(endMs),
+      detail: recent + " " + plural(recent, "release", "releases") + " shipped in the " +
+        I.DELTA_DAYS + " days to " + I.formatDay(endMs) + ", against " + prior + " in the " +
+        I.DELTA_DAYS + " days before them."
+    };
+  }
+
+  /*
+   * The releases figure: a count of rows in an array rather than a reading of
+   * a nullable column, which is the one place this page's null-versus-zero
+   * rule needs stating in a different form.
+   *
+   * An empty `releases[]` is NOT a measured zero. The bundle produces the
+   * same empty array whether the archive holds no releases or holds no
+   * release file at all, so the two cannot be told apart from here, and "0
+   * releases shipped" would be a claim the page cannot support. It prints the
+   * dash and says what it does not know.
+   */
+  function releasesCard(data, wins) {
+    var body = { valueText: DASH, unmeasured: true, sub: "The archive holds no release record." };
+    var total = data.releases.length;
+    if (total > 0) {
+      var newest = null;
+      for (var i = 0; i < total; i++) {
+        var ms = I.parseDay(data.releases[i].date);
+        if (isNaN(ms)) continue;
+        if (newest === null || ms > newest.dayMs) newest = { dayMs: ms, release: data.releases[i] };
+      }
+      body.valueText = I.formatCount(total);
+      body.unmeasured = false;
+      body.sub = newest === null
+        ? "No release in the archive carries a date this page can place on a calendar day."
+        : "latest " + (newest.release.tag !== "" ? newest.release.tag : "untagged release") +
+          " on " + I.formatDay(newest.dayMs);
+    }
+    body.delta = releaseTrend(data.releases, wins);
+    return body;
+  }
+
+  /*
    * The fixed 30-day windows every figure on this page is measured over, one
    * per kind, and the reason they are computed once rather than per card.
    *
@@ -2373,7 +2492,9 @@ footer a:hover { color: var(--txt); }
   function figure(spec, data, wins) {
     var step = I.resolutionStepDays();
     var body;
-    if (spec.kind === "flow") {
+    if (spec.kind === "releases") {
+      body = releasesCard(data, wins);
+    } else if (spec.kind === "flow") {
       body = flowCard(spec, data, wins === null ? null : wins.flow, step);
     } else if (spec.kind === "step") {
       body = stepCard(spec, data, wins === null ? null : wins.step);
@@ -2385,8 +2506,31 @@ footer a:hover { color: var(--txt); }
     return body;
   }
 
+  /*
+   * One figure, presented. The same computed figure is rendered in as many
+   * places as it is needed, and the two printings cannot disagree about a
+   * value, a trend or a refusal reason, because there is only one of each.
+   *
+   *   "card"     the head of a compact chart card
+   *   "heading"  the group's own headline, above its hero
+   */
+  function renderFigure(fig, mode) {
+    var box = el("div", mode === "heading" ? "group-head" : "card-figure");
+    if (mode === "heading") box.appendChild(el("p", "stat-label", fig.label));
+    var head = el("div", "card-head");
+    head.appendChild(el("p", "stat-value" + (fig.unmeasured ? " is-unmeasured" : ""),
+      fig.valueText));
+    head.appendChild(deltaChip(fig.delta));
+    box.appendChild(head);
+    box.appendChild(el("p", "stat-sub", fig.sub));
+    if (fig.note !== null) box.appendChild(el("p", "stat-note", fig.note));
+    return box;
+  }
+
   window.INSIGHTS_FIGURES = {
     figure: figure,
+    renderFigure: renderFigure,
+    releaseTrend: releaseTrend,
     chip: deltaChip,
     windows: windows,
     rowsLabel: rowsLabel,
@@ -2804,17 +2948,62 @@ footer a:hover { color: var(--txt); }
   }
 
   /*
-   * The narrowest a plot may be drawn. Below roughly this width the day axis
-   * collapses into overlapping ticks and the series become unreadable, so a
-   * narrow viewport gets a full-width plot that scrolls inside its own
-   * container instead of a squashed one that fits.
+   * The two sizes a plot is drawn at.
+   *
+   * `minWidth` is the narrowest a plot may be drawn: below it the day axis
+   * collapses into overlapping ticks, so a narrow viewport gets a full-width
+   * plot that scrolls inside its own container rather than a squashed one
+   * that fits. A hero needs 520 for that; a compact card, with its wider tick
+   * spacing and its shorter axis, needs 240.
+   *
+   * 240 rather than 260, because 260 is not small enough. At or below 460px
+   * the page padding is 16px a side and a compact card's own padding is 16px
+   * a side, so the plot host is the viewport minus 64, less the card's 1px
+   * border either side: a 320px phone leaves 254px, measured, which clears
+   * 240 and does not clear 260. 240 is also inside the 268px a 300px grid
+   * column leaves after the card's padding, so the wide case is unaffected. A
+   * compact card therefore does not scroll at any width a phone presents, and
+   * the body never scrolls sideways at any width.
+   *
+   * `space` is the room left between day ticks. `dayTicks` widens its labels
+   * from MM-DD to YYYY-MM-DD once the visible span crosses a calendar year,
+   * and spacing sized for the short form leaves the long one overlapping its
+   * neighbour, so both numbers are per profile.
    */
-  var MIN_PLOT_WIDTH = 520;
-  var WIDE_AT = 700;
+  var PROFILES = {
+    hero: {
+      minWidth: 520, height: 220, wideHeight: 280, wideAt: 700,
+      space: 58, spaceWide: 96, width: 2
+    },
+    compact: {
+      minWidth: 240, height: 150, wideHeight: 150, wideAt: 700,
+      space: 96, spaceWide: 120, width: 1.5
+    }
+  };
+
+  function profileOf(name) {
+    return name === "compact" ? PROFILES.compact : PROFILES.hero;
+  }
+
+  function plotSize(host, profile) {
+    var available = host.clientWidth;
+    if (typeof available !== "number" || !isFinite(available) || available < 1) {
+      available = profile.minWidth;
+    }
+    var width = Math.max(profile.minWidth, Math.round(available));
+    return { width: width, height: width < profile.wideAt ? profile.height : profile.wideHeight };
+  }
+
+  function daySpaceFor(profile) {
+    return function (u, axisIdx, scaleMin, scaleMax) {
+      var first = new Date(scaleMin * 1000).getUTCFullYear();
+      var last = new Date(scaleMax * 1000).getUTCFullYear();
+      return first === last ? profile.space : profile.spaceWide;
+    };
+  }
+
   /* An upper bound on how many steps an axis may be built out of; see `expand`. */
   var MAX_AXIS_STEPS = 20000;
-  var HEIGHT_NARROW = 220;
-  var HEIGHT_WIDE = 280;
 
   /* The page's own type stack, so canvas text matches the DOM around it. Every
    * family here is either self-hosted or a system font; nothing is fetched. */
@@ -3199,15 +3388,6 @@ footer a:hover { color: var(--txt); }
     };
   }
 
-  function plotSize(host) {
-    var available = host.clientWidth;
-    if (typeof available !== "number" || !isFinite(available) || available < 1) {
-      available = MIN_PLOT_WIDTH;
-    }
-    var width = Math.max(MIN_PLOT_WIDTH, Math.round(available));
-    return { width: width, height: width < WIDE_AT ? HEIGHT_NARROW : HEIGHT_WIDE };
-  }
-
   /*
    * uPlot hides per-point markers once the points are closer together than
    * `points.space`, which is right for a dense line and wrong for an isolated
@@ -3266,25 +3446,6 @@ footer a:hover { color: var(--txt); }
     return labels;
   }
 
-  /*
-   * How much room to leave between day ticks. `dayTicks` widens its labels
-   * from `MM-DD` to `YYYY-MM-DD` once the visible span crosses a calendar
-   * year, and a fixed spacing sized for the short form leaves the long one
-   * overlapping its neighbour.
-   *
-   * The two decisions are deliberately keyed on the same thing so they cannot
-   * disagree in the direction that matters: the splits always lie inside the
-   * scale range, so a split set spanning two years implies a scale range
-   * spanning two years, and the wide labels always get the wide spacing. The
-   * reverse — wide spacing under short labels, for a range that crosses New
-   * Year within a few days — only costs a tick.
-   */
-  function daySpace(u, axisIdx, scaleMin, scaleMax) {
-    var first = new Date(scaleMin * 1000).getUTCFullYear();
-    var last = new Date(scaleMax * 1000).getUTCFullYear();
-    return first === last ? 58 : 96;
-  }
-
   /* Counts are whole. A split that is not an integer gets no label rather than
    * a rounded one, which would print two gridlines with the same number. */
   function countTicks(u, splits) {
@@ -3313,6 +3474,57 @@ footer a:hover { color: var(--txt); }
     var top = max;
     if (typeof top !== "number" || !isFinite(top) || top <= 0) return [0, 1];
     return [0, top * 1.08];
+  }
+
+  /*
+   * The y-scale policy for a cumulative counter, and the reason `mount` takes
+   * one as an option at all.
+   *
+   * `zeroBasedCounts` — right for the reach section's per-day event counts —
+   * would render a star count that moved 60 → 64 as a flat line pinned to the
+   * top of an empty axis, hiding the only thing the chart is for. So this fits
+   * the axis to the values and pads by an eighth of their span.
+   *
+   * The floor is clamped at zero rather than allowed below it: a count of
+   * stars cannot be negative, and an axis offering the reading is offering a
+   * quantity the archive cannot hold. A flat or single-valued series gets one
+   * whole unit of air either side — one is the smallest step this data can
+   * actually move by, so it is the honest amount of room to leave for a
+   * movement that has not happened.
+   */
+  function fittedCounts(u, min, max) {
+    if (typeof min !== "number" || !isFinite(min) ||
+      typeof max !== "number" || !isFinite(max)) {
+      return [0, 1];
+    }
+    var span = max - min;
+    if (span <= 0) {
+      return [min - 1 < 0 ? 0 : min - 1, max + 1];
+    }
+    var padding = span * 0.12;
+    var low = min - padding;
+    return [low < 0 ? 0 : low, max + padding];
+  }
+
+  /*
+   * How many steps of one column carry a value.
+   *
+   * Not `axis.xs.length`, which is how wide the axis is, and not
+   * `axis.measured[offset]` alone at the call sites that need to reason about
+   * whether a LINE can be drawn: uPlot handed a single point on a time scale
+   * invents an x range of its own. Measured in a browser against this
+   * archive, one point on 2026-09-01 produced an axis running to 2029-05-28,
+   * one dot adrift on two and a half years nothing was ever recorded across.
+   *
+   * So a card with fewer than two of these states its reading instead of
+   * drawing a line. A cumulative total read once is a reading, not a history:
+   * it has no direction and no rate, and a line needs two points to have
+   * either. `contributors` is the live case, not a hypothetical: it records a
+   * row when its total changes, and the archive holds one.
+   */
+  function measuredPositions(axis, offset) {
+    if (axis.empty) return 0;
+    return axis.measured[offset];
   }
 
   /*
@@ -3348,10 +3560,10 @@ footer a:hover { color: var(--txt); }
    *
    * Returns the detach function; a caller that drops it leaks a live observer.
    */
-  function trackSize(u, host) {
-    var applied = plotSize(host);
+  function trackSize(u, host, profile) {
+    var applied = plotSize(host, profile);
     function sync() {
-      var next = plotSize(host);
+      var next = plotSize(host, profile);
       if (next.width === applied.width && next.height === applied.height) return;
       applied = next;
       u.setSize(next);
@@ -3645,7 +3857,7 @@ footer a:hover { color: var(--txt); }
     }
     note.appendChild(pair("releases marked",
       collected.groups.length === 0
-        ? "none — no release falls inside the span drawn here"
+        ? "none, no release falls inside the span drawn here"
         : listGroups(collected.groups),
       collected.groups.length > 0));
     if (collected.outside.length > 0) {
@@ -3696,6 +3908,9 @@ footer a:hover { color: var(--txt); }
    *
    * `settings` is optional and is the ONLY way a caller varies the plot:
    *
+   *   profile      "hero" (the default) or "compact". Decides the minimum plot
+   *                width, the height, the tick spacing and the default stroke
+   *                width. Every existing call site is unchanged by the default.
    *   yRange       (u, min, max) -> [min, max]. The y-scale policy.
    *                Default `zeroBasedCounts`.
    *   hooks        A uPlot hooks object, each key an array of functions.
@@ -3737,7 +3952,8 @@ footer a:hover { color: var(--txt); }
    */
   function mount(host, xs, defs, settings) {
     var opts = settings || {};
-    var size = plotSize(host);
+    var profile = profileOf(opts.profile);
+    var size = plotSize(host, profile);
     var axisStroke = colour("--txt4", "#5c5c68");
 
     /* A fresh object per axis, nested `grid`/`ticks` included. uPlot keeps
@@ -3764,7 +3980,7 @@ footer a:hover { color: var(--txt); }
         label: def.label,
         scale: "y",
         stroke: def.stroke,
-        width: typeof def.width === "number" ? def.width : 2,
+        width: typeof def.width === "number" ? def.width : profile.width,
         /* The single most load-bearing option on this page. `true` would join
          * the line across every null, which is precisely the fabricated
          * continuity `expand` exists to make visible. Stated explicitly rather
@@ -3820,7 +4036,7 @@ footer a:hover { color: var(--txt); }
          * and the spacing decides how many of them fit. Both are needed —
          * `space` alone cannot exclude a sub-day increment without also
          * excluding the one-day increment at spans where a day is narrow. */
-        axis({ incrs: DAY_INCRS, space: daySpace, values: dayTicks }),
+        axis({ incrs: DAY_INCRS, space: daySpaceFor(profile), values: dayTicks }),
         axis({ size: 56, incrs: COUNT_INCRS, values: countTicks })
       ],
       series: series
@@ -3896,7 +4112,7 @@ footer a:hover { color: var(--txt); }
     var detach = null;
     var counted = false;
     try {
-      detach = trackSize(plot, host);
+      detach = trackSize(plot, host, profile);
       livePlots += 1;
       counted = true;
       liveHosts.push(host);
@@ -3955,7 +4171,9 @@ footer a:hover { color: var(--txt); }
     colour: colour,
     collectReleases: collectReleases,
     expand: expand,
+    fittedCounts: fittedCounts,
     isolate: isolate,
+    measuredPositions: measuredPositions,
     listGroups: listGroups,
     listOutside: listOutside,
     mount: mount,
@@ -3964,6 +4182,310 @@ footer a:hover { color: var(--txt); }
     releaseLabel: releaseLabel,
     releaseNarrative: releaseNarrative,
     zeroBasedCounts: zeroBasedCounts
+  };
+})();
+</script>
+
+<script>
+/*
+ * Shared group scaffolding: the three bands, the two chart card kinds, and
+ * the per-card error containment.
+ *
+ * It exists because four groups draw the same two kinds of card, and four
+ * copies of the compact-card builder is exactly the drift this file argues
+ * against everywhere else: three of them would stay in step and the fourth
+ * would quietly stop applying the one-point rule, or stop stating its span,
+ * and nothing on the page would show it.
+ *
+ * ─────────────────────────────────────────────────────────────────────────
+ * PER-CARD ERROR CONTAINMENT
+ *
+ * Today a throw in the referrers renderer fails only the referrers slot. With
+ * one slot per group, the same throw would take out a whole group, which is a
+ * regression in blast radius: five working cards would disappear because a
+ * sixth could not be built. So every card is built through `buildCardSafely`,
+ * which replaces that one card with the page's existing failure note and
+ * continues. A throw in a group renderer OUTSIDE any card is still contained
+ * to that group's slot by the shell, exactly as today.
+ * ─────────────────────────────────────────────────────────────────────────
+ */
+(function () {
+  "use strict";
+
+  var I = window.INSIGHTS;
+  var F = window.INSIGHTS_FIGURES;
+  var C = window.INSIGHTS_CHARTS;
+
+  function el(tag, className, text) {
+    var node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+
+  function pair(key, value) {
+    var span = el("span");
+    span.appendChild(el("span", "k", key));
+    span.appendChild(document.createTextNode(" "));
+    span.appendChild(el("span", "v", value));
+    return span;
+  }
+
+  function band(kind) {
+    return el("div", kind + "-band");
+  }
+
+  /* A band with no cards is not rendered at all, and leaves no gap. */
+  function attach(slot, bands) {
+    for (var i = 0; i < bands.length; i++) {
+      if (bands[i].firstChild !== null) slot.appendChild(bands[i]);
+    }
+  }
+
+  function buildCardSafely(target, build) {
+    try {
+      return build();
+    } catch (error) {
+      var note = el("p", "slot-note slot-note-error");
+      note.appendChild(el("strong", null, "This card could not be rendered."));
+      note.appendChild(document.createTextNode(
+        " The rest of the page is unaffected, and the underlying data is unchanged: the fault " +
+        "is in this page's code. Details are in the browser console."));
+      target.appendChild(note);
+      if (typeof console !== "undefined" && typeof console.error === "function") {
+        console.error("insights: a card failed to build.", error);
+      }
+      return null;
+    }
+  }
+
+  function steps(count, stepDays) {
+    return count + " " + (stepDays === 1
+      ? F.plural(count, "day", "days")
+      : F.plural(count, "weekly bucket", "weekly buckets"));
+  }
+
+  /*
+   * What this card actually drew: the span of its axis, and how much of it
+   * carries a measurement. The unmeasured count is stated in the same breath
+   * as what the page does with it, because a break in a line is the one thing
+   * on this page a reader is most likely to read as a fall to zero, and the
+   * right words for that differ by series: a traffic line's break is not a
+   * zero, and a cumulative line's break is not a fall to zero.
+   */
+  function metaLine(axis, offsets, spec, win, stepDays) {
+    var note = el("p", "chart-meta");
+    var total = axis.xs.length;
+
+    /* A card with no measured row has no span of its own to state: `expand`
+     * found no first or last day for it, and printing the window as one would
+     * claim an axis this card never drew. */
+    if (total === 0) {
+      note.appendChild(pair("window", I.formatDay(win.startMs) + " → " + I.formatDay(win.endMs)));
+      note.appendChild(pair("measured", "nothing in this window"));
+      return note;
+    }
+
+    var counted = axis.measured[offsets[spec.lines[0].column]];
+    var missing = total - counted;
+    note.appendChild(pair("span", I.formatDay(axis.startMs) + " → " + I.formatDay(axis.endMs)));
+    note.appendChild(pair("measured", counted + " of " + steps(total, stepDays)));
+    if (missing > 0) {
+      note.appendChild(pair("unmeasured", steps(missing, stepDays) + ", " + spec.breakPhrase));
+    }
+    if (spec.metaExtra !== undefined) {
+      var extra = spec.metaExtra(axis, offsets, stepDays);
+      for (var i = 0; i < extra.length; i++) note.appendChild(extra[i]);
+    }
+    if (axis.offGrid > 0) {
+      note.appendChild(pair("off-step",
+        axis.offGrid + " " + F.plural(axis.offGrid, "row does", "rows do") +
+        " not fall on the bundle's own resolution; " +
+        F.plural(axis.offGrid, "it is", "they are") + " plotted where " +
+        F.plural(axis.offGrid, "it is", "they are") + " dated"));
+    }
+    return note;
+  }
+
+  /*
+   * A span so long it cannot be real is a fault in the ARCHIVE, and this page
+   * must not report it as one of its own. The shell's generic failure note
+   * says "the fault is in this page's code", which would send whoever reads
+   * it to the wrong repository entirely.
+   */
+  function overrunNote(card, spec, axis) {
+    var detail = "The " + spec.title + " series would run from " + I.formatDay(axis.startMs) +
+      " to " + I.formatDay(axis.endMs) + ", which needs " + I.formatCount(axis.overrunSteps) +
+      " points on the time axis, far longer than this archive can really cover. A date in the " +
+      "archive itself is wrong. No chart is drawn, rather than one built around a date that " +
+      "cannot be true.";
+    if (typeof console !== "undefined" && typeof console.error === "function") {
+      console.error("insights: " + spec.title + " declined to plot. " + detail);
+    }
+    var note = el("p", "slot-note slot-note-error");
+    note.appendChild(el("strong", null, "This chart cannot be drawn from this archive."));
+    note.appendChild(document.createTextNode(" " + detail));
+    card.appendChild(note);
+  }
+
+  /*
+   * One chart card, hero or compact.
+   *
+   * `spec` is:
+   *   profile      "hero" | "compact"
+   *   title        the <h3>
+   *   figure       a figure spec for the card head, or null
+   *   columns      { <name>: { series, field } }, as `bind` takes
+   *   lines        [{ column, label, token, fallback, fill?, dash?, width? }]
+   *   yPolicy      "zero" | "fitted"
+   *   breakPhrase  what an unmeasured step is, in this series' own words
+   *   metaExtra    optional (axis, offsets, stepDays) -> [pair, ...]
+   *   notes        [string], rendered as .chart-hint under the plot
+   *   caveat       optional node appended to the card head
+   *   releasesFor  optional (axis) -> the collected releases for a hero lane
+   *
+   * `releasesFor` is a callback rather than a value because the span the
+   * releases are sorted against has to be the span this card actually drew,
+   * and that is only known once `expand` has run. Handing the caller's own
+   * window in instead would let a release inside the range but outside the
+   * drawn axis be reported as marked while nothing was painted for it.
+   *
+   * Returns `{ card, axis, offsets, plot, releases }`. `plot` is null when the
+   * card states a reason instead of drawing one, and `releases` is whatever
+   * `releasesFor` returned, so the caller can caption the lane from the same
+   * object the painter was given rather than from a second collection that
+   * could disagree with it.
+   */
+  function chartCard(target, spec, ctx) {
+    var card = el("div", "chart-card" + (spec.profile === "compact" ? " is-compact" : ""));
+    card.appendChild(el("h3", "chart-title", spec.title));
+    if (spec.figure !== null && spec.figure !== undefined) {
+      card.appendChild(F.renderFigure(F.figure(spec.figure, ctx.data, ctx.wins), "card"));
+    }
+    if (spec.caveat !== undefined && spec.caveat !== null) card.appendChild(spec.caveat);
+    target.appendChild(card);
+
+    var bound = C.bind(spec.title, ctx.data, [{ title: spec.title, columns: spec.columns }]);
+    var own = C.isolate(bound, bound.cards[0]);
+    var axis = C.expand(own.columns, ctx.win, ctx.step);
+
+    /* Before the `empty` branch: an overrun sets `empty` too, as a fail-safe
+     * for a caller that forgets this check, and the specific reason is the
+     * more useful of the two. */
+    if (axis.overrun) {
+      overrunNote(card, spec, axis);
+      return { card: card, axis: axis, offsets: own.offsets, plot: null, releases: null };
+    }
+
+    card.appendChild(metaLine(axis, own.offsets, spec, ctx.win, ctx.step));
+
+    /* Collected here, against the span this card drew, so the caption the
+     * caller builds and the markers the painter draws are sorted by the same
+     * rule. An empty axis has no span to sort against, so the two branches
+     * below return a null collection and the caller says the archive holds
+     * releases the chart could not place. */
+    var releases = spec.releasesFor === undefined || axis.empty
+      ? null
+      : spec.releasesFor(axis);
+
+    var primary = own.offsets[spec.lines[0].column];
+    var positions = C.measuredPositions(axis, primary);
+    if (positions === 0) {
+      card.appendChild(el("p", "slot-note",
+        "No measurement of " + spec.lines[0].label.toLowerCase() + " falls inside this window, " +
+        "so there is no line to draw. An empty frame would look like a failure rather than an " +
+        "absence."));
+      appendNotes(card, spec);
+      return { card: card, axis: axis, offsets: own.offsets, plot: null, releases: releases };
+    }
+    if (positions < 2) {
+      card.appendChild(el("p", "slot-note",
+        "One measurement is not a history. This series carries a value at exactly one step " +
+        "inside this window, and a line needs two points to have a direction or a rate. Drawn " +
+        "anyway it would be a single dot on an axis the plotting library stretches years past " +
+        "the last day anything was recorded, a span this archive never measured. The reading " +
+        "is stated above."));
+      appendNotes(card, spec);
+      return { card: card, axis: axis, offsets: own.offsets, plot: null, releases: releases };
+    }
+
+    var host = el("div", "chart-scroll");
+    card.appendChild(host);
+    appendNotes(card, spec);
+
+    var defs = [];
+    for (var i = 0; i < spec.lines.length; i++) {
+      var line = spec.lines[i];
+      var def = {
+        label: line.label,
+        stroke: C.colour(line.token, line.fallback),
+        values: axis.values[own.offsets[line.column]]
+      };
+      if (line.fill !== undefined) def.fill = line.fill;
+      if (line.dash !== undefined) def.dash = line.dash;
+      if (line.width !== undefined) def.width = line.width;
+      defs.push(def);
+    }
+
+    var settings = {
+      profile: spec.profile,
+      yRange: spec.yPolicy === "fitted" ? C.fittedCounts : C.zeroBasedCounts
+    };
+    if (releases !== null) settings.releases = releases;
+    return {
+      card: card,
+      axis: axis,
+      offsets: own.offsets,
+      plot: C.mount(host, axis.xs, defs, settings),
+      releases: releases
+    };
+  }
+
+  function appendNotes(card, spec) {
+    if (spec.notes === undefined) return;
+    for (var i = 0; i < spec.notes.length; i++) {
+      card.appendChild(el("p", "chart-hint", spec.notes[i]));
+    }
+  }
+
+  /*
+   * Push a card's plot onto the caller's live list, if it built one, and hand
+   * the card back so the caller can caption it.
+   *
+   * A card that stated a reason instead of drawing has no instance to
+   * release, and a card whose build threw has already been replaced by its
+   * failure note and returned null. Both are ordinary, so both are handled
+   * here rather than at four call sites that could each forget one.
+   */
+  function keep(created, built) {
+    if (built !== null && built !== undefined &&
+      built.plot !== null && built.plot !== undefined) {
+      created.push(built.plot);
+    }
+    return built;
+  }
+
+  function detailCard(target, title) {
+    var card = el("div", "chart-card");
+    card.appendChild(el("h3", "chart-title", title));
+    target.appendChild(card);
+    return card;
+  }
+
+  function groupHead(slot, figureSpec, ctx) {
+    slot.appendChild(F.renderFigure(F.figure(figureSpec, ctx.data, ctx.wins), "heading"));
+  }
+
+  window.INSIGHTS_GROUPS = {
+    attach: attach,
+    band: band,
+    buildCardSafely: buildCardSafely,
+    chartCard: chartCard,
+    detailCard: detailCard,
+    groupHead: groupHead,
+    keep: keep,
+    pair: pair,
+    steps: steps
   };
 })();
 </script>
@@ -4545,36 +5067,6 @@ footer a:hover { color: var(--txt); }
   }
 
   /*
-   * The y-scale policy for a cumulative counter, and the reason `mount` takes
-   * one as an option at all.
-   *
-   * `zeroBasedCounts` — right for the reach section's per-day event counts —
-   * would render a star count that moved 60 → 64 as a flat line pinned to the
-   * top of an empty axis, hiding the only thing the chart is for. So this fits
-   * the axis to the values and pads by an eighth of their span.
-   *
-   * The floor is clamped at zero rather than allowed below it: a count of
-   * stars cannot be negative, and an axis offering the reading is offering a
-   * quantity the archive cannot hold. A flat or single-valued series gets one
-   * whole unit of air either side — one is the smallest step this data can
-   * actually move by, so it is the honest amount of room to leave for a
-   * movement that has not happened.
-   */
-  function fittedCounts(u, min, max) {
-    if (typeof min !== "number" || !isFinite(min) ||
-      typeof max !== "number" || !isFinite(max)) {
-      return [0, 1];
-    }
-    var span = max - min;
-    if (span <= 0) {
-      return [min - 1 < 0 ? 0 : min - 1, max + 1];
-    }
-    var padding = span * 0.12;
-    var low = min - padding;
-    return [low < 0 ? 0 : low, max + padding];
-  }
-
-  /*
    * What one chart actually drew: the span of its axis, how much of it carries
    * a measurement, and where the series stands now. The unmeasured count is
    * stated together with what the page does about it, because on a cumulative
@@ -4832,8 +5324,8 @@ footer a:hover { color: var(--txt); }
       width: 2,
       values: axis.values[offset]
     }], {
-      /* Not `zeroBasedCounts`: see fittedCounts. */
-      yRange: fittedCounts,
+      /* Not `zeroBasedCounts`: see C.fittedCounts. */
+      yRange: C.fittedCounts,
       /* The lane, its padding reservation and its painter, all from the
        * toolkit. */
       releases: collected
@@ -6721,6 +7213,332 @@ footer a:hover { color: var(--txt); }
   }
 
   I.registerSection("telemetry", render, teardown);
+})();
+</script>
+<script>
+/*
+ * Group "delivery" -- is it being maintained.
+ *
+ * Hero: CI activity, the daily workflow-run count, with the release markers
+ * painted on it. Workflow runs are the only series in this group with a daily
+ * shape, and annotating them with the releases that shipped is the direct
+ * answer to the group's question.
+ *
+ * Moving the markers here is also the arrangement most likely to draw them at
+ * all. The lane needs a release inside the chart's span, and this series is
+ * reconstructed from the Actions API back to the first release, where the
+ * star history begins on the day the collector first ran. On the live archive
+ * the markers do not draw on the growth charts at all.
+ *
+ * The group's lead figure is Releases shipped rather than the hero's own
+ * series, which is the one place this page's rule is not uniform. The hero is
+ * annotated with the releases that figure counts, so the two are the same
+ * subject, but it is worth knowing that they are not the same series.
+ */
+(function () {
+  "use strict";
+
+  var I = window.INSIGHTS;
+  var F = window.INSIGHTS_FIGURES;
+  var C = window.INSIGHTS_CHARTS;
+  var G = window.INSIGHTS_GROUPS;
+
+  var LEAD = { label: "Releases shipped", kind: "releases" };
+
+  /* Every live uPlot instance this group owns. Assigned only once a render
+   * has completed; a render that throws destroys what it built itself. */
+  var live = [];
+
+  function el(tag, className, text) {
+    var node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+
+  /*
+   * The CI card's standing note, verbatim from the reach section it comes
+   * from, with the sentence about sitting below the clone chart replaced by
+   * one that names where the clone chart now is. The two are in different
+   * groups and the page-wide cursor is what joins them, which never depended
+   * on adjacency: it syncs on scale values rather than pixels.
+   */
+  function ciNote() {
+    return "A zero here sits on the axis rather than breaking the line, unlike the traffic " +
+      "charts in Reach. The Actions API is asked for a date range and answers it completely, " +
+      "so a day with no runs is a measurement; the traffic endpoints omit a day they recorded " +
+      "nothing for, so an absent day there is genuinely unmeasured. A break in this line means " +
+      "the collector did not run, or ran before this series existed. That same difference is " +
+      "why this chart's span reaches further back than the traffic charts: each chart is drawn " +
+      "across its own measured days, so peaks cannot be compared by their position across " +
+      "charts. Hovering lands on the same day in every chart whose span covers it, and " +
+      "dragging sideways across one puts them all on the same span.";
+  }
+
+  /* A link back to the clone chart, which this series is the explanation for.
+   * The clone line counts this repository's own checkouts, and the two are
+   * now in different groups, so each names the other. */
+  function cloneLink() {
+    var note = el("p", "chart-hint");
+    note.appendChild(document.createTextNode(
+      "GitHub counts every actions/checkout this repository runs as a clone, so this count is " +
+      "most of the shape of the "));
+    var link = el("a", null, "repository clones chart in Reach");
+    link.href = "#reach";
+    note.appendChild(link);
+    note.appendChild(document.createTextNode(
+      ". The two are plotted separately and never combined: no fixed number of clones follows " +
+      "from a run, and subtracting an estimate would put a model on a page whose whole claim " +
+      "is that every figure on it was measured."));
+    return note;
+  }
+
+  /*
+   * A weekly bundle keys each bucket on the Monday that opens its week and
+   * sums the week's runs into it, while a release marker is dated exactly. So
+   * a marker lands inside the bucket that covers its week rather than at a
+   * point of its own.
+   *
+   * Deliberately NOT the growth section's wording, which says a point
+   * "carries the last value measured in that week". That is true of a
+   * cumulative total and false of a summed count, and moving it here would
+   * publish a false sentence on a page whose whole claim is that it does not.
+   */
+  function weeklyNote() {
+    return "This bundle is bucketed by week. A point is dated on the Monday that opens its " +
+      "week and carries that whole week's runs, while a release marker is dated exactly, so a " +
+      "marker sits somewhere inside the bucket that covers it rather than on a point of its " +
+      "own.";
+  }
+
+  /* A factory rather than a constant, because the lane needs the bundle's own
+   * release list and the spec is built once per render. */
+  function heroSpec(data) {
+    return {
+      profile: "hero",
+      title: "CI activity",
+      figure: null,
+      columns: { runs: { series: "workflows", field: "runs" } },
+      lines: [{
+        column: "runs", label: "Workflow runs",
+        token: "--rose", fallback: "#fda4af",
+        fill: "rgba(253, 164, 175, 0.10)", width: 2
+      }],
+      yPolicy: "zero",
+      breakPhrase: "drawn as breaks, not zeros",
+      notes: [ciNote()],
+      /*
+       * Sorted against the span this card actually drew, which `chartCard`
+       * hands in once `expand` has run.
+       *
+       * That span is deliberately not the range the control asked for. A
+       * release outside the days the CI series was measured on cannot be
+       * marked, the axis is never stretched back to reach it, and the caption
+       * below says which release was left off and on what grounds. A
+       * centrepiece that silently draws nothing looks broken; one that says
+       * what it left out does not.
+       */
+      releasesFor: function (axis) {
+        /* Collected against the span this card drew, which chartCard hands in
+         * once `expand` has run, rather than against the window the range
+         * control asked for. The two differ whenever the CI series is younger
+         * than the window, and reporting a release as marked when no marker was
+         * painted for it is the one thing this caption must not do.
+         *
+         * The painter separately declines anything outside the live scale, so a
+         * drag can leave the canvas with no marker while the caption still names
+         * every release it listed. Double-clicking restores the full span and
+         * every marker with it. */
+        return C.collectReleases(data.releases, axis.startMs, axis.endMs);
+      }
+    };
+  }
+
+  var CONTRIBUTORS = {
+    profile: "compact",
+    title: "Contributors",
+    figure: { label: "Contributors", kind: "step", series: "contributors", field: "total" },
+    columns: { total: { series: "contributors", field: "total" } },
+    /* --sky, not --peach. --peach #fca5a5 and this group's hero --rose #fda4af
+     * are three hex digits apart and this card sits directly under that hero,
+     * so a reader glancing down the group would read one series drawn twice.
+     * --sky repeats a colour used in Reach and in Adoption, which is a repeat
+     * across groups and allowed, and it separates the two Delivery cards. */
+    lines: [{ column: "total", label: "Contributors", token: "--sky", fallback: "#7dd3fc" }],
+    yPolicy: "fitted",
+    breakPhrase: "drawn as breaks, not as a fall to zero",
+    notes: [
+      "This series records a row when its total changes rather than sampling daily, so the " +
+      "total holds between rows and the caption above says when it last changed rather than " +
+      "when it was last read.",
+      "The vertical axis is fitted to the values drawn rather than pinned to a zero baseline, " +
+      "so a move of one contributor is visible rather than flattened. Read the height of the " +
+      "line against its own axis labels, not against the bottom of the frame."
+    ]
+  };
+
+  /*
+   * Every release the archive holds, newest first, as text.
+   *
+   * The lane can only mark the releases that fall inside the span the CI
+   * series was measured on. This card is the rest of the answer: the same
+   * rows the lane draws from, stated so a release the axis could not reach is
+   * still on the page rather than only in the caption that says it was left
+   * off.
+   */
+  function releaseList(band, data) {
+    var card = G.detailCard(band, "Releases");
+    var total = data.releases.length;
+    if (total === 0) {
+      card.appendChild(el("p", "slot-note",
+        "The archive holds no release record, so there is nothing to list. Entries appear here " +
+        "as soon as the collector records one."));
+      return;
+    }
+    var rows = [];
+    var unreadable = 0;
+    var i;
+    for (i = 0; i < total; i++) {
+      var ms = I.parseDay(data.releases[i].date);
+      if (isNaN(ms)) {
+        unreadable++;
+        continue;
+      }
+      rows.push({ dayMs: ms, release: data.releases[i] });
+    }
+    rows.sort(function (a, b) { return b.dayMs - a.dayMs; });
+
+    var list = el("div", "ranked");
+    for (i = 0; i < rows.length; i++) {
+      var row = el("div", "rank-row");
+      row.appendChild(el("p", "rank-n", String(i + 1)));
+      var body = el("div", "rank-body");
+      var head = el("div", "rank-head");
+      var name = el("p", "rank-name", C.releaseLabel(rows[i].release));
+      name.title = C.releaseLabel(rows[i].release);
+      head.appendChild(name);
+      head.appendChild(el("p", "rank-num", I.formatDay(rows[i].dayMs)));
+      body.appendChild(head);
+      if (rows[i].release.name !== "" && rows[i].release.name !== rows[i].release.tag) {
+        var sub = el("p", "rank-sub", rows[i].release.name);
+        sub.title = rows[i].release.name;
+        body.appendChild(sub);
+      }
+      row.appendChild(body);
+      list.appendChild(row);
+    }
+    card.appendChild(list);
+    if (unreadable > 0) {
+      card.appendChild(el("p", "chart-hint chart-caution", unreadable + " " +
+        F.plural(unreadable, "release", "releases") + " " +
+        F.plural(unreadable, "carries", "carry") +
+        " a date this page cannot place on a calendar day, so " +
+        F.plural(unreadable, "it is", "they are") + " not listed above."));
+    }
+  }
+
+  function render(slot, data, rangeKey) {
+    var ctx = {
+      data: data,
+      win: I.rangeWindow(data, rangeKey),
+      wins: F.windows(data),
+      step: I.resolutionStepDays(),
+      downsampled: data.downsampled
+    };
+
+    G.groupHead(slot, LEAD, ctx);
+
+    var detail = G.band("detail");
+    G.buildCardSafely(detail, function () { releaseList(detail, data); });
+
+    /* Reachable on a non-empty bundle: one holding only releases or only
+     * dimension snapshots has no dated series row to anchor a window to. The
+     * release list needs no window and still renders. */
+    if (ctx.win === null) {
+      slot.appendChild(el("p", "slot-note",
+        "The archive holds no dated measurement, so there is no time axis to draw the CI or " +
+        "contributor charts on, and no axis for a release to be marked against."));
+      G.attach(slot, [detail]);
+      return;
+    }
+
+    var hero = G.band("hero");
+    var series = G.band("series");
+    var created = [];
+    try {
+      var spec = heroSpec(data);
+      var built = G.keep(created, G.buildCardSafely(hero, function () {
+        return G.chartCard(hero, spec, ctx);
+      }));
+      /* The lane's own caption: what was marked, what fell outside the drawn
+       * span, and any release carrying a date this page cannot read. Built
+       * from the same collection the painter was handed, so the two cannot
+       * describe different sets of releases. */
+      if (built !== null && built.releases !== null) {
+        built.card.appendChild(C.releaseCaption(built.releases, data.releases.length));
+        var narrative = C.releaseNarrative(built.releases, data.releases.length, ctx.step);
+        if (narrative !== null) built.card.appendChild(el("p", "chart-hint", narrative));
+        if (data.downsampled) {
+          built.card.appendChild(el("p", "chart-hint chart-caution", weeklyNote()));
+        }
+        built.card.appendChild(cloneLink());
+      } else if (built !== null) {
+        /* No axis to sort against, so no marker can be placed. The card has
+         * already said why it drew nothing; this says what that cost. */
+        built.card.appendChild(el("p", "chart-hint", data.releases.length === 0
+          ? "No release is recorded in the archive, so there is nothing to mark on the time axis."
+          : "No release is marked, because this card drew no axis for a marker to sit on. Every " +
+            "release the archive holds is listed below."));
+        built.card.appendChild(cloneLink());
+      }
+
+      G.keep(created, G.buildCardSafely(series, function () {
+        return G.chartCard(series, CONTRIBUTORS, ctx);
+      }));
+    } catch (error) {
+      /* `live` is assigned only once every card is built, so a throw part-way
+       * leaves `created` referenced by nothing but this frame. Destroy what
+       * was built here, then let the shell render its failure note. */
+      for (var j = 0; j < created.length; j++) {
+        try {
+          created[j].destroy();
+        } catch (cleanupError) {
+          if (typeof console !== "undefined" && typeof console.error === "function") {
+            console.error("insights: releasing a delivery chart after a failed render also failed.",
+              cleanupError);
+          }
+        }
+      }
+      throw error;
+    }
+    G.attach(slot, [hero, series, detail]);
+    live = created;
+  }
+
+  /*
+   * Runs before the slot is emptied. Removing the nodes alone would leave
+   * every instance's window listeners, its resize observer and its membership
+   * of the page's cursor-sync group alive.
+   *
+   * `live` is cleared first so a destroy that throws cannot leave a
+   * half-destroyed instance behind to be destroyed twice; the first failure
+   * is re-thrown once the rest have been released.
+   */
+  function teardown() {
+    var pending = live;
+    live = [];
+    var failure = null;
+    for (var i = 0; i < pending.length; i++) {
+      try {
+        pending[i].destroy();
+      } catch (error) {
+        if (failure === null) failure = error;
+      }
+    }
+    if (failure !== null) throw failure;
+  }
+
+  I.registerSection("delivery-body", render, teardown);
 })();
 </script>
 </body>
