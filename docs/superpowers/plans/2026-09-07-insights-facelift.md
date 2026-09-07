@@ -69,7 +69,7 @@ Modes as of Task 1: `none`, `low`, `threshold`, `high`, `high-other`, `high-nodi
 | `scripts/metrics/fixtures/insights-fixture.mjs` | The throwaway archive. Gains three modes: `dimensions-only` (Task 1), `long` and `no-releases` (Task 4). | 1, 4 |
 | `docs/systems/metrics.md` | Section 10 describes this page: its sections and slots, its empty states, the per-card span rule, the telemetry section and the threshold, and section 11's harness description. | 1, 2, 3, 4, 5, 6, 7, 8, 9 |
 
-Nothing else is edited. `scripts/metrics/src/**` (except nothing), `.github/workflows/**`, `site/index.html` and `site/insights/vendor/**` are untouched.
+Nothing else is edited, with one exception the Global Constraints already allow: a task may add a test under `scripts/metrics/src/` to pin a bundler-side guarantee it leans on, written in that task rather than deferred. Task 1 added one, in `bundle.test.ts`. `.github/workflows/**`, `site/index.html` and `site/insights/vendor/**` are untouched, and no production file under `scripts/metrics/src/` is edited by this plan.
 
 ---
 
@@ -3298,7 +3298,18 @@ git commit -m "feat(insights): add the lead figure row and retire the at-a-glanc
 - [ ] Following's hero is the only chart on the page with a fitted axis and no area fill, and the other three heroes all carry one. Confirm by eye in one pass down the page.
 - [ ] Chrome's rendering panel with `prefers-reduced-motion: reduce` and `prefers-reduced-transparency: reduce`: no animation runs, anchor scrolling is instant, and the nav and range pill are solid.
 - [ ] `grep -n "—" site/insights/index.html` and read the lines this plan touched. `grep -c` prints a count and names nothing, and the count is not zero and is not meant to be: the file's comments carry many em dashes and the copy rule leaves a string that stays where it is alone. The arrows in window and span lines are `→`, not `—`, so they do not appear in this grep at all. What must not appear is an em dash inside a sentence this plan moved or wrote.
-- [ ] `git diff --stat main...HEAD` names exactly four files: `site/insights/index.html`, `scripts/metrics/fixtures/insights-check.mjs`, `scripts/metrics/fixtures/insights-fixture.mjs`, `docs/systems/metrics.md`.
+- [ ] `git diff --stat main...HEAD` names these files and no others. Four are the ones this plan sets out to change:
+  - `site/insights/index.html`
+  - `scripts/metrics/fixtures/insights-check.mjs`
+  - `scripts/metrics/fixtures/insights-fixture.mjs`
+  - `docs/systems/metrics.md`
+
+  Three more are expected and are not scope creep:
+  - `scripts/metrics/src/bundle.test.ts`, one test Task 1 added. The Global Constraints allow a task to pin a bundler-side guarantee it leans on, and require the test to be written in that task rather than deferred.
+  - `docs/superpowers/plans/2026-09-07-insights-facelift.md`, this plan, which the branch introduces and amends as reviews land.
+  - `docs/superpowers/specs/2026-09-06-insights-facelift-design.md`, amended once when the design moved from three groups to four.
+
+  Anything outside those seven is scope creep and has to be justified or reverted. The original wording of this check said four files full stop, which was wrong from the first commit: the plan document is itself part of the branch.
 - [ ] `git log --oneline main..HEAD` shows nine commits, none with an attribution trailer and none with a session link.
 
 ---
