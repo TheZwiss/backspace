@@ -26,7 +26,8 @@
   "variableMeasured": [
     "page views", "unique visitors", "repository clones", "unique cloners",
     "stars", "forks", "contributors", "watchers", "open issues",
-    "app downloads", "update checks", "referring sites", "popular paths",
+    "app downloads", "update checks", "release asset downloads",
+    "referring sites", "popular paths",
     "reporting instances", "active users on reporting instances",
     "server versions in use", "countries instances report from", "client kinds in use"
   ],
@@ -694,10 +695,12 @@ footer a:hover { color: var(--txt); }
     <div class="status-region" id="status-region" role="status" aria-live="polite"></div>
 
     <!-- Above the range control, not below it. The four figures do not move
-         with the range: their window is a fixed 30 days ending on the
-         archive's newest measured day, and a row of numbers sitting under a
-         control that does not govern them would invite the reading that it
-         does.
+         with the range, and a row of numbers sitting under a control that
+         does not govern them would invite the reading that it does. Neither
+         half of a figure moves, for two different reasons: the VALUE is
+         all-time, every measured day of the series, and the 30-day DELTA
+         beside it is a fixed window ending on the archive's newest measured
+         day. Only the charts below answer to the control.
 
          Directly under the title, with the two signpost paragraphs below it
          rather than above. They point at the plain tables and at data.json,
@@ -770,15 +773,19 @@ footer a:hover { color: var(--txt); }
          row's views figure was a rolling 30-day window. It is not: `flowCard`
          sums every measured value in the series, and the 30 days govern only
          the delta chip beside it. So `renderSummaryHtml` computing the same
-         total in TypeScript is a SECOND implementation of one figure, the
-         only one on this page outside `INSIGHTS_FIGURES`, which exists
-         precisely so that the row and the group heads cannot disagree.
+         total in TypeScript is a SECOND implementation of it. So are the
+         other seven figures that paragraph states and this page also draws:
+         stars, forks, watchers, contributors, clones, app downloads and the
+         release count. `INSIGHTS_FIGURES` exists so that the row and the
+         group heads cannot disagree, and every one of these sits outside it,
+         in another language, by necessity — the paragraph is written at
+         deploy time by the bundler and the page is not.
 
          The harness asserts the equality rather than leaving it to be
-         believed: `insights-check.mjs` reads the views and clones totals out
-         of the built paragraph and compares them to the lead row's own
-         values. A future change to either summation has to keep them equal or
-         the report says so.
+         believed: `insights-check.mjs` reads each of those eight figures out
+         of the built paragraph, reads the same figure off the rendered page,
+         and prints MATCH, DIVERGED or ONE-SIDED. A figure added to
+         `buildSummary` that the page also draws belongs in that list.
 
          What the row carries and this paragraph does not is the 30-day delta
          chip. A window baked into a served page goes stale the moment the
@@ -2617,8 +2624,15 @@ footer a:hover { color: var(--txt); }
   }
 
   /*
-   * The fixed 30-day windows every figure on this page is measured over, one
+   * The fixed 30-day windows every DELTA on this page is measured over, one
    * per kind, and the reason they are computed once rather than per card.
+   *
+   * Deltas only. A figure's value is all-time — `flowCard` sums every measured
+   * day, `pointCard` takes the newest measured row, `releasesCard` counts the
+   * array — and these windows govern the chip printed beside it. Earlier
+   * wording here said "every figure", which is the misreading that put a false
+   * rationale into three comments and a subsystem doc before a review caught
+   * it.
    *
    * `point` and `step` windows open a full 30 days before the close, `flow`
    * windows on the first of the 30 days: a sum counts the days it covers,
@@ -2779,7 +2793,8 @@ footer a:hover { color: var(--txt); }
  * No curation. Each figure is printed at whatever value it holds, however
  * small, and at full precision: 72 is 72 and 12,480 is 12,480.
  *
- * The window is a fixed 30 days ending on the archive's newest measured day,
+ * Each value is all-time: every measured day of its series. The 30-day chip
+ * beside it is a fixed window ending on the archive's newest measured day,
  * deliberately not the selected range, so the four stay comparable to each
  * other whatever the control shows.
  */
@@ -2867,9 +2882,10 @@ footer a:hover { color: var(--txt); }
   /*
    * The selected range, stated in the dates it actually resolves to and in how
    * much of it each series measured. This is what consumes the shared range
-   * state: every figure above is measured over the same fixed 30 days, so the
-   * range cannot honestly move one, but what the archive holds inside the
-   * selected window is a real answer that changes with the control, and it is
+   * state: the figures above are all-time values with deltas over the same
+   * fixed 30 days, and the range moves neither, but what the archive holds
+   * inside the selected window is a real answer that changes with the
+   * control, and it is
    * the same window, from the same INSIGHTS.rangeWindow, that every chart on
    * the page draws.
    */

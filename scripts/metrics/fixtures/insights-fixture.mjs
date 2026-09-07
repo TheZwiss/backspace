@@ -27,7 +27,10 @@
  *   high-other   fourteen, with the three dimensions shaped to show what
  *                `high` cannot: `other` ranked mid-list on one card and first
  *                on another, and a dimension holding a single row
- *   high-nodims  above the mark, but the three dimension files are empty
+ *   high-nodims  above the mark, but the three dimension files are empty,
+ *                and the only mode with a hole in a traffic series: days 12
+ *                and 13 are missing from clones.csv, so exactly one chart on
+ *                the page draws a broken line
  *   sparse       above the mark on the last row only, with every earlier
  *                gauge blank
  *   dimensions-only  no dated series at all, only a referrer and a path

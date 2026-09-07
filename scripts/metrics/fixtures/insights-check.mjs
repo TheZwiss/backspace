@@ -1010,31 +1010,59 @@ async function main() {
   }
   console.log('  rankings seen: ' + JSON.stringify(first ?? null, null, 2));
 
-  console.log('\n=== served figures against the lead row ===');
+  console.log('\n=== served figures against the drawn ones ===');
   /*
-   * `renderSummaryHtml` restates figures the page also computes for itself.
-   * A reader without JavaScript sees only the first; a reader with it sees
-   * only the second; nobody sees both at once, so a divergence between them
-   * is invisible on the page by construction and has to be caught here.
+   * `renderSummaryHtml` restates, in TypeScript, figures the page also
+   * computes for itself in JavaScript. A reader without JavaScript sees only
+   * the first; a reader with it sees only the second; nobody sees both at
+   * once, so a divergence between them is invisible on the page by
+   * construction and has to be caught here.
    *
-   * Matched on the label the paragraph uses, not on position, because the
-   * paragraph drops a clause whenever its measurement is missing and every
-   * clause after it shifts up.
+   * EVERY figure stated on both sides is listed below. An earlier version
+   * compared two of them and a comment beside it claimed there were only two,
+   * which is the same class of error as a check that measures nothing: the
+   * report looked complete while five duplicated figures went unread. Adding
+   * a figure to `buildSummary` that the page also draws means adding a row
+   * here.
+   *
+   * Matched on the wording the paragraph uses, never on position: the
+   * paragraph drops a clause whenever its measurement is missing, and every
+   * clause after it shifts up. The nouns take an optional plural because the
+   * paragraph says "1 watcher" and "7 watchers".
    */
-  const servedFigure = (label) => {
+  /*
+   * A grouped number, and NOT `[0-9,]+`, which was the first version of this
+   * and swallowed the comma that follows "Releases shipped: 1," in the
+   * paragraph. It captured `1,` against a drawn `1` and reported DIVERGED on
+   * a page where nothing had diverged. Cheap to laugh at, except that the
+   * same greed on a clause ending in a number would have gone the other way
+   * and matched something true by accident.
+   */
+  const NUM = '([0-9]{1,3}(?:,[0-9]{3})*)';
+  const PAIRED_FIGURES = [
+    [new RegExp(`Page views: ${NUM}`), 'Page views'],
+    [new RegExp(`Clones: ${NUM}`), 'Repository clones'],
+    [new RegExp(`${NUM} stars?\\b`), 'Stars'],
+    [new RegExp(`${NUM} forks?\\b`), 'Forks'],
+    [new RegExp(`${NUM} watchers?\\b`), 'Watchers'],
+    [new RegExp(`${NUM} contributors?\\b`), 'Contributors'],
+    [new RegExp(`App downloads: ${NUM}`), 'App downloads'],
+    [new RegExp(`Releases shipped: ${NUM}`), 'Releases shipped'],
+  ];
+  const servedFigure = (pattern) => {
     const text = observed?.staticFigures ?? null;
     if (text === null) return null;
-    const m = new RegExp(`${label}: ([0-9,]+)`).exec(text);
+    const m = pattern.exec(text);
     return m === null ? null : m[1];
   };
   /*
    * A figure with no measurement behind it renders as the page's dash, which
-   * is a non-empty string and would otherwise be reported as "the page draws
-   * one". Only a printed number counts as a value on either side.
+   * is a non-empty string and would otherwise be reported as a drawn value.
+   * Only a printed number counts on either side.
    */
   const numeric = (value) =>
     typeof value === 'string' && /^[0-9,]+$/.test(value) ? value : null;
-  const leadFigure = (label) => {
+  const drawnFigure = (label) => {
     for (const slot of observed?.slots ?? []) {
       for (const fig of slot.figures ?? []) if (fig.label === label) return numeric(fig.value);
       for (const card of slot.cards ?? []) {
@@ -1043,20 +1071,27 @@ async function main() {
     }
     return null;
   };
-  for (const [servedLabel, drawnLabel] of [
-    ['Page views', 'Page views'],
-    ['Clones', 'Repository clones'],
-  ]) {
-    const served = servedFigure(servedLabel);
-    const drawn = leadFigure(drawnLabel);
-    if (served === null || drawn === null) {
-      console.log(`  ${servedLabel}: not compared, the served paragraph states `
-        + `${served === null ? 'no' : 'a'} value and the page draws `
-        + `${drawn === null ? 'none' : 'one'}`);
-      continue;
+  for (const [pattern, drawnLabel] of PAIRED_FIGURES) {
+    const served = servedFigure(pattern);
+    const drawn = drawnFigure(drawnLabel);
+    /*
+     * Three outcomes, not two. Neither side stating a value is an archive
+     * with nothing to state, which is fine. ONE side stating one is already a
+     * divergence — the two disagree about whether the figure is measurable —
+     * and it is also what a renamed card title looks like, which would
+     * otherwise retire a comparison silently while the report stayed green.
+     */
+    if (served === null && drawn === null) {
+      console.log(`  ${drawnLabel}: not compared, neither side states a value`);
+    } else if (served === null || drawn === null) {
+      console.log(`  ${drawnLabel}: ONE-SIDED, the served paragraph states `
+        + `${served ?? 'nothing'} and the page draws ${drawn ?? 'nothing'}`
+        + ' — either they disagree about what was measured, or this comparison'
+        + ' has lost the element it reads');
+    } else {
+      console.log(`  ${drawnLabel}: served ${served}, drawn ${drawn}`
+        + (served === drawn ? ' — MATCH' : ' — DIVERGED, one of the two is wrong'));
     }
-    console.log(`  ${servedLabel}: served ${served}, drawn ${drawn}`
-      + (served === drawn ? ' — MATCH' : ' — DIVERGED, one of the two summations is wrong'));
   }
 
   console.log('\n=== first screen ===');
