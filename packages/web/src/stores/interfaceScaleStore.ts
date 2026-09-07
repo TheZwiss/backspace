@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-export const INTERFACE_SCALES = [75, 100, 125, 150, 175, 200, 225, 250] as const;
+export const INTERFACE_SCALES = [50, 75, 100, 125, 150, 175, 200, 225, 250] as const;
 
 export function normalizeInterfaceScale(value: unknown): number {
   return typeof value === 'number' && INTERFACE_SCALES.some(scale => scale === value) ? value : 100;

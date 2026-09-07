@@ -40,21 +40,23 @@ const checkMobile = () => setIsMobile(isMobileViewport());
 
 | Breakpoint | Value | Layout |
 |------------|-------|--------|
-| Desktop | `>= 768` layout px | AppLayout three-column grid (sidebar + chat + member list) |
-| Mobile | `< 768` layout px | MobileShell (tab bar + screen stack) |
+| Desktop | `>= 768` layout px **and** `innerWidth >= 600` | AppLayout three-column grid (sidebar + chat + member list) |
+| Mobile | `< 768` layout px **or** `innerWidth < 600` | MobileShell (tab bar + screen stack) |
 
 `AppLayout` conditionally renders `<MobileShell />` when `isMobile === true`. Modals render globally in both modes.
 
-### One breakpoint, in layout pixels
+### One shared predicate, with a narrow-viewport guard
 
-The threshold is **layout** pixels, not `window.innerWidth`. The interface-scale
+The main threshold is in **layout** pixels. The interface-scale
 setting applies CSS `zoom` to the root element, so `innerWidth` reports visual
 pixels while CSS lengths are layout pixels; at 200% a 1280 px window is a 640 px
 layout viewport and belongs in MobileShell. `isMobileViewport()` in
 `platform/interfaceScale.ts` divides by the scale factor, and layout code that
 needs the breakpoint should call it rather than compare `innerWidth` itself.
-(`PictureInPicture` inlines the same `layoutPixels(innerWidth) < 768` test
-because it already measures a layout viewport; `platform/clientKind.ts`
+It also keeps `window.innerWidth < 600` mobile regardless of scale: at 50%, a
+390px phone has 780 layout pixels but must not switch into the desktop shell.
+(`PictureInPicture` uses `layoutPixels(innerWidth) < 768` for its own obstacle
+geometry, not for choosing the app shell; `platform/clientKind.ts`
 deliberately keeps raw `innerWidth`, since telemetry classifies the physical
 device rather than the scaled layout.)
 

@@ -1,4 +1,4 @@
-import { layoutRect, layoutPixels } from '../../platform/interfaceScale';
+import { layoutRect, layoutPixels, MOBILE_LAYOUT_BREAKPOINT } from '../../platform/interfaceScale';
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useVoiceStore } from '../../stores/voiceStore';
@@ -43,7 +43,7 @@ function getPipBounds(pipX: number): {
   const minY = PIP_MARGIN;
   let maxY = vh - PIP_HEIGHT - PIP_MARGIN;
 
-  if (vw < 768) return { minX, maxX, minY, maxY };
+  if (vw < MOBILE_LAYOUT_BREAKPOINT) return { minX, maxX, minY, maxY };
 
   const obstacles = document.querySelectorAll<HTMLElement>('[data-pip-obstacle]');
   for (const el of obstacles) {
