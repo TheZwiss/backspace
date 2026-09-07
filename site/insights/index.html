@@ -502,6 +502,120 @@ h2 {
   .rank-name { flex-basis: 100%; }
 }
 
+/* ================= Groups: lead figures, bands, card kinds ================= */
+/*
+ * Three groups, each with one hero chart and two bands of smaller cards under
+ * it. The hierarchy has to survive a single column, so it is carried by four
+ * things that do not depend on the grid: a hero plot is taller than any
+ * compact one, a hero's primary line carries an area fill and no compact line
+ * does, a hero card sits on --chat while a compact card sits on a lighter
+ * recessive panel, and the group's lead figure is a large number directly
+ * above the hero at every width.
+ */
+.lead-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 30px;
+}
+.lead-figure {
+  display: flex; flex-direction: column; gap: 5px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--chat);
+  padding: 18px 20px 17px;
+  color: var(--txt);
+}
+.lead-figure:hover { text-decoration: none; border-color: rgba(255, 255, 255, 0.14); }
+.lead-figure .stat-value { font-size: clamp(2.2rem, 6vw, 3.2rem); }
+.group-head { margin-bottom: 22px; }
+.group-head .stat-value { font-size: clamp(1.6rem, 4.4vw, 2rem); }
+
+.hero-band { display: grid; gap: 22px; }
+/*
+ * `auto-fill`, not `auto-fit`. Three of the four series bands hold exactly one
+ * compact card: Reach's clones, Adoption's update checks, Delivery's
+ * contributors. `auto-fit` collapses the empty tracks and stretches that
+ * single card across the whole row, where it reads as a second hero.
+ * `auto-fill` keeps the empty tracks, so a lone compact card stays the width
+ * of one column and stays compact.
+ *
+ * `align-items: start` keeps a taller card, such as a dimension card carrying
+ * a movement chart, from stretching its neighbours to match.
+ */
+.series-band {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 18px;
+  align-items: start;
+  margin-top: 22px;
+}
+.detail-band {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+  gap: 22px;
+  align-items: start;
+  margin-top: 22px;
+}
+.series-band:empty, .detail-band:empty, .hero-band:empty { display: none; margin-top: 0; }
+
+/* A compact card is deliberately lighter than a hero card, so the weighting
+   survives at one column where the grid no longer carries it. */
+.chart-card.is-compact { background: rgba(255, 255, 255, 0.02); padding: 16px 16px 14px; }
+.chart-card.is-compact .chart-title { font-size: 0.92rem; color: var(--txt2); }
+.chart-card.is-compact .stat-value { font-size: 1.35rem; font-weight: 620; }
+.chart-card.is-compact .chart-meta { margin-bottom: 10px; }
+/* Card titles are headings now, so a screen reader gets a real outline of the
+   page. The styling is the one .chart-title always had. */
+h3.chart-title { font-size: 1.05rem; font-weight: 600; letter-spacing: -0.018em; margin-bottom: 6px; }
+.card-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.card-head .stat-delta { margin-top: 0; }
+
+/* #method is not a figure group, so its channel label takes no accent. */
+.ch-txt4::before { color: var(--txt4); }
+
+/*
+ * #method's own subheadings. They are not card titles, so they take neither
+ * the .chart-title class nor its size. They exist because one h2 over nine
+ * paragraphs is the bombardment moved rather than resolved, and because a
+ * crawler reading the served HTML loses the association between a caveat and
+ * the series it qualifies the moment every caveat sits under one generic
+ * heading.
+ */
+#method h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.014em;
+  color: var(--txt2);
+  margin: 26px 0 8px;
+}
+
+@media (max-width: 560px) {
+  .lead-row { grid-template-columns: minmax(0, 1fr); }
+}
+@media (min-width: 561px) and (max-width: 999px) {
+  /* Two columns rather than four. Four figures across a 950px viewport leave
+     under 220px each against a 3.2rem value, so the row goes two wide and two
+     deep, and the values take the heading size to stop a two-row block pushing
+     the range control off the first screen. */
+  .lead-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .lead-figure .stat-value { font-size: clamp(1.6rem, 4.4vw, 2rem); }
+}
+
+/*
+ * The design system asks for a solid fallback wherever a glass surface is
+ * used, and this page has never had one. Its two glass surfaces are the nav
+ * strip and the range pill; both fall back to --channel with no blur.
+ */
+@media (prefers-reduced-transparency: reduce) {
+  .nav, .rangectl {
+    background: var(--channel);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
 /* ================= Footer ================= */
 footer { border-top: 1px solid var(--line); padding: 34px 0 44px; }
 .foot-in { display: flex; flex-wrap: wrap; gap: 18px 28px; align-items: center; justify-content: space-between; color: var(--txt3); font-size: 13.5px; }
@@ -532,12 +646,7 @@ footer a:hover { color: var(--txt); }
 
   <div class="wrap page-head">
     <h1>Insights</h1>
-    <p class="lead">
-      Every number on this page comes from one archive: a scheduled job records the repository's
-      traffic, stars, forks, contributors and releases once a day and commits them to a public
-      data branch. The page reads a single bundle built from that archive at deploy time. Nothing
-      is estimated, and nothing is fetched from anywhere but this site.
-    </p>
+    <p class="lead">Every number on this page was measured, not estimated.</p>
     <p class="sec-copy raw-data">
       Prefer the numbers to the charts? The same archive is published as
       <a href="data/">plain tables</a> and as one machine-readable file,
@@ -564,13 +673,6 @@ footer a:hover { color: var(--txt); }
       the <a href="data/">plain tables</a> and in <a href="data.json"><code>data.json</code></a>.
     </p>
     <!-- /BUILD:SUMMARY -->
-    <p class="provenance">
-      <span><span class="k">archive history</span> <span class="v" id="pv-since">checking</span></span>
-      <span><span class="k">bundle built</span> <span class="v" id="pv-generated">checking</span></span>
-      <span><span class="k">collector last ran</span> <span class="v" id="pv-lastrun">checking</span></span>
-      <span><span class="k">last successful run</span> <span class="v" id="pv-lastsuccess">checking</span></span>
-    </p>
-
     <div class="status-region" id="status-region" role="status" aria-live="polite"></div>
 
   </div>
@@ -710,6 +812,33 @@ footer a:hover { color: var(--txt); }
     </div>
   </section>
 
+  <section class="panel" id="method">
+    <div class="wrap">
+      <p class="ch-label ch-txt4">method</p>
+      <h2>How these numbers are made</h2>
+      <p class="sec-copy">
+        Every number on this page comes from one archive: a scheduled job records the repository's
+        traffic, stars, forks, contributors and releases once a day and commits them to a public
+        data branch. The page reads a single bundle built from that archive at deploy time. Nothing
+        is estimated, and nothing is fetched from anywhere but this site.
+      </p>
+      <h3>Provenance and coverage</h3>
+      <p class="provenance">
+        <span><span class="k">archive history</span> <span class="v" id="pv-since">checking</span></span>
+        <span><span class="k">bundle built</span> <span class="v" id="pv-generated">checking</span></span>
+        <span><span class="k">collector last ran</span> <span class="v" id="pv-lastrun">checking</span></span>
+        <span><span class="k">last successful run</span> <span class="v" id="pv-lastsuccess">checking</span></span>
+      </p>
+      <div class="slot" id="method-coverage"></div>
+      <p class="sec-copy raw-data">
+        Prefer the numbers to the charts? The same archive is published as
+        <a href="data/">plain tables</a> and as one machine-readable file,
+        <a href="data.json"><code>data.json</code></a>. Both are built from this page's own bundle, so
+        they cannot disagree with what is drawn here.
+      </p>
+    </div>
+  </section>
+
 </main>
 
 <footer>
@@ -787,7 +916,19 @@ footer a:hover { color: var(--txt); }
     resolution: document.getElementById("resolution")
   };
 
-  var SLOT_IDS = ["header-stats", "chart-reach", "chart-growth", "ranked-referrers", "ranked-paths", "telemetry"];
+  var SLOT_IDS = ["header-stats", "chart-reach", "chart-growth", "ranked-referrers",
+    "ranked-paths", "telemetry", "method-coverage"];
+
+  /*
+   * The subset that receives the unavailable/empty note.
+   *
+   * The same sentence printed in every slot is noise, and neither the method
+   * coverage line nor (from Task 9) the lead figure row is a place a reader
+   * looks for a figure: the coverage line is metadata about the archive, and
+   * the status region above has already said what is wrong, once, in full.
+   */
+  var NOTE_SLOT_IDS = ["header-stats", "chart-reach", "chart-growth", "ranked-referrers",
+    "ranked-paths", "telemetry"];
 
   /* ---------------------------------------------------------------- helpers */
 
@@ -1232,8 +1373,12 @@ footer a:hover { color: var(--txt); }
       var slot = slotElement(SLOT_IDS[i]);
       if (slot === null) continue;
       clear(slot);
-      if (noteText !== null) {
-        slot.appendChild(element("p", "slot-note", noteText));
+      if (noteText === null) continue;
+      for (var n = 0; n < NOTE_SLOT_IDS.length; n++) {
+        if (NOTE_SLOT_IDS[n] === SLOT_IDS[i]) {
+          slot.appendChild(element("p", "slot-note", noteText));
+          break;
+        }
       }
     }
   }
@@ -2315,6 +2460,62 @@ footer a:hover { color: var(--txt); }
     { label: "Update checks", kind: "point", series: "repo", field: "downloads_updates" }
   ];
 
+  function el(tag, className, text) {
+    var node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+
+  function buildCard(card, body) {
+    var box = el("div", "stat");
+    box.appendChild(el("p", "stat-label", card.label));
+    box.appendChild(el("p", "stat-value" + (body.unmeasured ? " is-unmeasured" : ""), body.valueText));
+    box.appendChild(el("p", "stat-sub", body.sub));
+    if (card.note) box.appendChild(el("p", "stat-note", card.note));
+    box.appendChild(F.chip(body.delta));
+    return box;
+  }
+
+  /* The delta window is fixed at 30 days and is NOT the selected range: the
+   * seven figures stay comparable to each other whatever the control shows.
+   * F.windows explains why the point and flow windows differ by one day. A
+   * flow total can still end up labelled wider than 30 days when the bundle
+   * is weekly; the chip says so when it does. */
+  function render(slot, data, rangeKey) {
+    var wins = F.windows(data);
+
+    var grid = el("div", "stat-grid");
+    for (var i = 0; i < CARDS.length; i++) {
+      grid.appendChild(buildCard(CARDS[i], F.figure(CARDS[i], data, wins)));
+    }
+    slot.appendChild(grid);
+  }
+
+  I.registerSection("header-stats", render);
+})();
+</script>
+
+<script>
+/*
+ * Section "method-coverage" -- the archive coverage line.
+ *
+ * It states how much of the selected range each series actually measured. It
+ * sits in #method rather than beside a figure because it describes the
+ * archive rather than any one group, and because every card already states
+ * the same thing for its own series in its meta line. A reader who never
+ * scrolls this far has not missed a number; what this line adds is saying in
+ * one place what is otherwise spread across seven cards.
+ *
+ * It is also the only part of #method that reads the selected range, which is
+ * why it is a registered section and not static markup.
+ */
+(function () {
+  "use strict";
+
+  var I = window.INSIGHTS;
+  var F = window.INSIGHTS_FIGURES;
+
   /* The series whose coverage inside the selected range is worth stating, and
    * the column that decides whether one of their rows counts as measured. */
   var COVERAGE = [
@@ -2331,16 +2532,6 @@ footer a:hover { color: var(--txt); }
     if (className) node.className = className;
     if (text !== undefined) node.textContent = text;
     return node;
-  }
-
-  function buildCard(card, body) {
-    var box = el("div", "stat");
-    box.appendChild(el("p", "stat-label", card.label));
-    box.appendChild(el("p", "stat-value" + (body.unmeasured ? " is-unmeasured" : ""), body.valueText));
-    box.appendChild(el("p", "stat-sub", body.sub));
-    if (card.note) box.appendChild(el("p", "stat-note", card.note));
-    box.appendChild(F.chip(body.delta));
-    return box;
   }
 
   function pair(key, value) {
@@ -2380,24 +2571,11 @@ footer a:hover { color: var(--txt); }
     return note;
   }
 
-  /* The delta window is fixed at 30 days and is NOT the selected range: the
-   * seven figures stay comparable to each other whatever the control shows.
-   * F.windows explains why the point and flow windows differ by one day. A
-   * flow total can still end up labelled wider than 30 days when the bundle
-   * is weekly; the chip says so when it does. */
   function render(slot, data, rangeKey) {
-    var step = I.resolutionStepDays();
-    var wins = F.windows(data);
-
-    var grid = el("div", "stat-grid");
-    for (var i = 0; i < CARDS.length; i++) {
-      grid.appendChild(buildCard(CARDS[i], F.figure(CARDS[i], data, wins)));
-    }
-    slot.appendChild(grid);
-    slot.appendChild(windowNote(data, rangeKey, step));
+    slot.appendChild(windowNote(data, rangeKey, I.resolutionStepDays()));
   }
 
-  I.registerSection("header-stats", render);
+  I.registerSection("method-coverage", render);
 })();
 </script>
 
