@@ -334,6 +334,32 @@ is dismissed:
 | `lodash` 4.17.23 | 2 | build-time (`electron-builder` to `@malept/flatpak-bundler`) | 4.18.0 |
 | `esbuild` 0.18.20 | 1 | build-time (`drizzle-kit` to `@esbuild-kit/core-utils`) | 0.25.0 |
 
+### Fixed by override rather than deferred: sharp
+
+`GHSA-rgj7-g3m4-5g8c` (HIGH, published 2026-09-08) reports sharp bundling a
+libheif with two critical RCEs. It is worth writing down because the shape is
+unusual and the response looks, at a glance, like the wrong one.
+
+The advisory is fixed in sharp 0.35.4, and both manifests that ask for sharp
+directly already asked for `^0.35.4`. The finding came from a *second* copy:
+`wrangler` and `miniflare`, devDependencies of the telemetry receiver, pin
+`sharp` at exactly `0.35.2`, so the lockfile carried both versions and the
+scanner saw the old one.
+
+That made it a candidate for the `osv-scanner.toml` backlog on the usual
+grounds, since it is build-time only and never enters the server image or the
+desktop app. It was fixed instead, with `"sharp@^0.35": "^0.35.4"` in
+`pnpm.overrides`. Deferring is for findings whose fix is a major upgrade and a
+compatibility decision; this one is a patch bump inside a single minor whose
+entire content is the bundled libheif going to 1.23.2, so there was nothing to
+decide. Forcing a dependency off an exact pin is the assertive part, and it is
+justified here by the change being that narrow.
+
+Verified rather than assumed: `require('sharp').versions` reports
+`libheif 1.23.2` after the override, and the receiver's 34 tests pass with
+miniflare running against the forced version. The override is removable the day
+miniflare moves off `0.35.2`, and removing it then is the goal.
+
 ## Dismissal register
 
 `.trivyignore` and `.github/codeql/codeql-config.yml` are the machine-readable half
