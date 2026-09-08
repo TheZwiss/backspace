@@ -25,10 +25,16 @@ interface MobileStackEntry {
   params?: Record<string, string>;
 }
 
+export interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
+
 interface Toast {
   id: string;
   message: string;
   type: 'info' | 'warning' | 'success';
+  action?: ToastAction;
 }
 
 interface UIState {
@@ -58,7 +64,7 @@ interface UIState {
   closeImagePreview: () => void;
   openUserProfile: (user: User, anchor: AnchorRect, placement?: Placement) => void;
   closeUserProfile: () => void;
-  addToast: (message: string, type?: 'info' | 'warning' | 'success', duration?: number) => void;
+  addToast: (message: string, type?: 'info' | 'warning' | 'success', duration?: number, action?: ToastAction) => void;
   removeToast: (id: string) => void;
   lastChannelPerSpace: Record<string, string>;
   setLastChannel: (spaceId: string, channelId: string) => void;
@@ -141,12 +147,18 @@ export const useUIStore = create<UIState>()(
         userProfilePopout: { user: null, anchor: null, placement: 'right' }
       }),
 
-      addToast: (message, type = 'info', duration = 5000) => {
+      addToast: (message, type = 'info', duration = 5000, action) => {
         const id = Date.now().toString(36) + Math.random().toString(36).slice(2);
-        set((state) => ({ toasts: [...state.toasts, { id, message, type }] }));
-        setTimeout(() => {
-          set((state) => ({ toasts: state.toasts.filter(t => t.id !== id) }));
-        }, duration);
+        set((state) => ({ toasts: [...state.toasts, { id, message, type, action }] }));
+        // A duration of 0 means the toast stays until the viewer dismisses it.
+        // An actionable toast that vanishes on a timer is worse than none: the
+        // action is the whole point, and five seconds is not enough to notice a
+        // toast, read it, and decide to click it.
+        if (duration > 0) {
+          setTimeout(() => {
+            set((state) => ({ toasts: state.toasts.filter(t => t.id !== id) }));
+          }, duration);
+        }
       },
       removeToast: (id) => set((state) => ({ toasts: state.toasts.filter(t => t.id !== id) })),
 

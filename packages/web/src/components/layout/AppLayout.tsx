@@ -30,6 +30,7 @@ import { NotificationController } from '../NotificationController';
 import { UserProfilePopout } from '../ui/UserProfilePopout';
 import { ToastContainer } from '../ui/ToastContainer';
 import { UpdateToast } from '../ui/UpdateToast';
+import { InstanceUpdateToast } from '../ui/InstanceUpdateToast';
 import { ContextMenuRenderer } from '../ui/ContextMenuRenderer';
 import { useAuth } from '../../hooks/useAuth';
 import { useDelayedLoading } from '../../hooks/useDelayedLoading';
@@ -425,6 +426,7 @@ export function AppLayout() {
         <GlobalAudioRenderer />
         <NotificationController />
         <UpdateToast />
+        <InstanceUpdateToast />
         <ToastContainer />
         <ContextMenuRenderer />
       </>
@@ -485,6 +487,7 @@ export function AppLayout() {
       )}
 
       {/* Federation toasts */}
+      <InstanceUpdateToast />
       <ToastContainer />
       <ContextMenuRenderer />
     </div>
