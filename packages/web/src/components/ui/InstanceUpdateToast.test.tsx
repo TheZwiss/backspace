@@ -1,3 +1,4 @@
+import React from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render } from '@testing-library/react';
 import type { InstanceUpdateStatus } from '@backspace/shared';
@@ -73,5 +74,41 @@ describe('InstanceUpdateToast', () => {
     render(<InstanceUpdateToast />);
     useUIStore.getState().toasts[0]?.action?.onClick();
     expect(useUIStore.getState().mobileStack.at(-1)?.screen).toBe('settings-instance-updates');
+  });
+
+  it('routes by viewport at click time, not at toast-creation time', () => {
+    // The toast is sticky (duration 0) and can survive a resize across the
+    // mobile breakpoint, which mounts a different shell than the one active
+    // when the toast was raised. The action must read `isMobile` fresh
+    // rather than closing over the value captured when the toast was made.
+    // (activeModal reset explicitly: a prior test in this file leaves it
+    // set to 'userSettings' and the shared beforeEach does not touch it.)
+    useUIStore.setState({ activeModal: null });
+    useSettingsStore.setState({ updateStatus: available });
+    render(<InstanceUpdateToast />);
+    expect(useUIStore.getState().toasts).toHaveLength(1);
+
+    // Resize to mobile after the toast has already been raised on desktop.
+    useUIStore.setState({ isMobile: true });
+
+    useUIStore.getState().toasts[0]?.action?.onClick();
+    expect(useUIStore.getState().mobileStack.at(-1)?.screen).toBe('settings-instance-updates');
+    expect(useUIStore.getState().activeModal).not.toBe('userSettings');
+  });
+
+  it('does not double-toast under StrictMode when a version is already pending unacknowledged at mount', () => {
+    // React.StrictMode double-invokes a mount effect against the same render
+    // (no re-render happens in between), so a guard that reads the value
+    // closed over at render time cannot see the first invocation's write.
+    // The guard must re-read the store live so the second invocation
+    // observes the first invocation's `markUpdateToastShown()`.
+    useSettingsStore.setState({ updateStatus: available });
+    render(
+      <React.StrictMode>
+        <InstanceUpdateToast />
+      </React.StrictMode>,
+    );
+    expect(useUIStore.getState().toasts).toHaveLength(1);
+    expect(useSettingsStore.getState().updateAck.toastShownFor).toBe('1.3.0');
   });
 });

@@ -28,11 +28,18 @@ export function InstanceUpdateToast() {
   const markUpdateToastShown = useSettingsStore((s) => s.markUpdateToastShown);
 
   useEffect(() => {
-    if (!shouldToastUpdate(status, ack, isAdmin)) return;
-    const version = pendingUpdateVersion(status);
+    // Guard on LIVE store state, not the `status`/`ack`/`isAdmin` closed over
+    // from this render. React.StrictMode double-invokes mount effects on the
+    // same render without a re-render in between, so both invocations would
+    // otherwise see the identical (pre-toast) `ack` and both pass the guard.
+    // Reading fresh here means the first invocation's synchronous
+    // `markUpdateToastShown()` write is visible to the second.
+    const { updateStatus: liveStatus, updateAck: liveAck, isAdmin: liveIsAdmin } = useSettingsStore.getState();
+    if (!shouldToastUpdate(liveStatus, liveAck, liveIsAdmin)) return;
+    const version = pendingUpdateVersion(liveStatus);
     if (version === null) return;
 
-    const { addToast, isMobile, openModal, pushMobileScreen } = useUIStore.getState();
+    const { addToast, openModal, pushMobileScreen } = useUIStore.getState();
 
     // Recorded before the toast is raised, so a re-render triggered by the
     // toast landing in the store cannot raise a second one.
@@ -45,7 +52,12 @@ export function InstanceUpdateToast() {
       {
         label: t('admin:updates.badge.toastAction'),
         onClick: () => {
-          if (isMobile) {
+          // Read `isMobile` fresh at click time rather than closing over it
+          // above: the toast is sticky (duration 0) and can outlive a resize
+          // across the mobile breakpoint, which mounts a different shell
+          // (`MobileShell` vs. `UserSettingsModal`) than the one active when
+          // the toast was created.
+          if (useUIStore.getState().isMobile) {
             // The mobile Updates screen is reachable directly; the desktop modal
             // has no sub-tab deep link, so it opens on Instance and the dot on
             // the Updates sub-tab carries the last hop.
