@@ -16,6 +16,7 @@ import { DesktopPanel } from './settingsPanels/DesktopPanel';
 import { InstancePanel } from './settingsPanels/InstancePanel';
 import { KeybindsPanel } from './settingsPanels/KeybindsPanel';
 import { isElectron } from '../../platform/platform';
+import { useInstanceUpdateBadge } from '../../hooks/useInstanceUpdateBadge';
 import { SettingsSectionsProvider, useSettingsSectionsContext } from './SettingsSectionsContext';
 
 type SettingsTab = 'account' | 'appearance' | 'voice' | 'privacy' | 'connections' | 'keybinds' | 'desktop' | 'instance';
@@ -30,14 +31,22 @@ function SidebarSubLinks() {
         <button
           key={section.id}
           onClick={() => ctx.scrollToSection(section.id)}
-          className={`w-full text-left pl-6 py-1 text-xs rounded-md transition-colors ${
+          className={`w-full flex items-center gap-1.5 text-left pl-6 pr-2 py-1 text-xs rounded-md transition-colors ${
             ctx.activeSection === section.id
               ? 'text-txt-primary'
               : 'text-txt-tertiary hover:text-txt-secondary'
           }`}
           aria-current={ctx.activeSection === section.id ? 'true' : undefined}
         >
-          {section.label}
+          <span className="flex-1 min-w-0 truncate">{section.label}</span>
+          {section.badgeCount !== undefined && section.badgeCount > 0 && (
+            <span className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-accent-amber/15 text-accent-amber">
+              {section.badgeCount}
+            </span>
+          )}
+          {section.badgeDot === true && (
+            <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-accent-amber" />
+          )}
         </button>
       ))}
     </div>
@@ -62,6 +71,7 @@ export function UserSettingsModal() {
   const isAdmin = useAuthStore((s) => s.user?.isAdmin);
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
+  const updateBadge = useInstanceUpdateBadge();
 
   const [tab, setTab] = useState<SettingsTab>('account');
   const [mobileView, setMobileView] = useState<'tabs' | 'content'>('tabs');
@@ -153,7 +163,13 @@ export function UserSettingsModal() {
               <>
                 <div className="border-t border-white/[0.04] my-2 mx-2" />
                 <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('settings:nav.administration')}</div>
-                <button onClick={() => handleTabClick('instance')} className={tabClass('instance')}>{t('settings:nav.tabs.instance')}</button>
+                <button
+                  onClick={() => handleTabClick('instance')}
+                  className={`${tabClass('instance')} flex items-center gap-1.5`}
+                >
+                  <span className="flex-1 min-w-0 truncate">{t('settings:nav.tabs.instance')}</span>
+                  {updateBadge && <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-accent-amber" />}
+                </button>
                 {tab === 'instance' && <SidebarSubLinks />}
               </>
             )}

@@ -3,7 +3,10 @@ import React, { createContext, useContext, useState, useCallback, useRef, useMem
 export interface SettingsSection {
   id: string;
   label: string;
+  /** A count worth showing, e.g. pending federation approvals. */
   badgeCount?: number;
+  /** A boolean "something is waiting here", e.g. an available instance update. */
+  badgeDot?: boolean;
 }
 
 interface SettingsSectionsContextValue {

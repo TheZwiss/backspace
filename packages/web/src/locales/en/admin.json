@@ -295,6 +295,11 @@
   },
   "updates": {
     "title": "Updates",
+    "badge": {
+      "settingsAriaLabel": "Settings, instance update available",
+      "toast": "Backspace {{version}} is available for this instance",
+      "toastAction": "View"
+    },
     "description": "What this instance is running, and how to move it forward.",
     "loading": "Loading update status…",
     "loadFailed": "Could not load the update status.",

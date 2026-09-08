@@ -295,6 +295,11 @@
   },
   "updates": {
     "title": "Updates",
+    "badge": {
+      "settingsAriaLabel": "Einstellungen, Instanz-Update verfügbar",
+      "toast": "Backspace {{version}} ist für diese Instanz verfügbar",
+      "toastAction": "Ansehen"
+    },
     "description": "Was auf dieser Instanz läuft und wie es weitergeht.",
     "loading": "Update-Status wird geladen…",
     "loadFailed": "Der Update-Status konnte nicht geladen werden.",

@@ -284,11 +284,18 @@ interface InstanceUpdateStatus {
 }
 ```
 
-**There is no background poller.** The GitHub lookup happens only while a
-signed-in admin has the Updates panel open and the six-hour cache is cold. An
-instance whose admin never opens that panel never contacts github.com. For a
-self-hosted, privacy-positioned product that is a promise worth keeping, and it
-is why the check lives on a request path rather than on a timer.
+**There is no background poller on the server.** The GitHub lookup runs only
+when a signed-in admin's client asks for the update status: once when their home
+WebSocket reports an admin session, on a six-hourly refresh while that session
+lives, and on an explicit "Check again". An instance nobody administers never
+contacts github.com, and the request still carries nothing that identifies the
+instance. The trigger moved off the Updates panel when the update dot was added,
+because a dot that only appears after you open the panel tells you nothing.
+
+The six-hour success cache bounds a healthy instance to roughly four outbound
+requests a day. Failures are cached for a tenth of that, so an instance with
+blocked or rate-limited egress can attempt around forty a day; the fix, if it
+ever matters, is a longer failure TTL rather than a narrower trigger.
 
 `releaseCheck.ts` details:
 
@@ -584,6 +591,22 @@ from 1.0.5 onward, so an operator on 1.0.4 does not have it yet.
 
 Registered as the `updates` sub-tab in `InstancePanel.tsx`, and as
 `settings-instance-updates` in `MobileShell.tsx` / `MobileInstancePanel.tsx`.
+
+**It always reads the home instance.** `api.admin.updateStatus()` goes through
+the origin-relative client, so a client with remote instances connected still
+reports only the instance that served it — the same rule the telemetry panel
+follows. An operator running two instances gets no signal here that the second
+one is behind; they see it when they sign in to that instance.
+
+**The dot.** When a release is available, an amber dot appears on the settings
+gear, on the Instance nav item, on the Updates sub-tab, and through the mobile
+chain (bottom-nav "You" tab, the You-screen gear, the Instance row, the Updates
+row). It is derived by `useInstanceUpdateBadge()` from the status the store
+holds, and is cleared for that version when the admin opens this panel. An admin
+is also toasted once per version, with an action that opens this panel. Both
+acknowledgements live in `localStorage` per user id
+(`packages/web/src/utils/updateAck.ts`), so they are per browser: a release
+re-arms both, and clearing site data brings them back.
 
 #### TelemetryPanel
 

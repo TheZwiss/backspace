@@ -1,8 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { UpdatesPanel } from './UpdatesPanel';
 import { api } from '../../../api/client';
+import { useSettingsStore } from '../../../stores/settingsStore';
+import { EMPTY_ACK } from '../../../utils/updateAck';
 import type { InstanceUpdateStatus } from '@backspace/shared';
 
 function status(over: Partial<InstanceUpdateStatus> = {}): InstanceUpdateStatus {
@@ -32,6 +34,20 @@ let updateStatus: ReturnType<typeof vi.fn>;
 beforeEach(() => {
   updateStatus = vi.fn();
   vi.spyOn(api.admin, 'updateStatus').mockImplementation(updateStatus as never);
+  useSettingsStore.setState({
+    isAdmin: true,
+    updateStatus: null,
+    updateStatusLoading: false,
+    updateStatusError: '',
+    updateAck: EMPTY_ACK,
+    updateAckUserId: 'admin-user',
+  });
+  useSettingsStore.getState().stopUpdateStatusRefresh();
+  localStorage.clear();
+});
+
+afterEach(() => {
+  useSettingsStore.getState().stopUpdateStatusRefresh();
 });
 
 describe('UpdatesPanel, what is running', () => {
@@ -166,6 +182,58 @@ describe('UpdatesPanel, the lookup could not be made', () => {
   });
 });
 
+describe('UpdatesPanel, a stale store error must not eclipse a good status', () => {
+  // Production does not reset `updateStatusError` on remount: it is store
+  // state, not component state. This beforeEach's own reset to '' is exactly
+  // what production does not do, so these tests set it deliberately.
+
+  it('renders the status view with the error inline, not the blocking error page', async () => {
+    useSettingsStore.setState({
+      updateStatus: status(),
+      updateStatusError: 'Network error',
+    });
+
+    render(<UpdatesPanel />);
+
+    // The status view rendered...
+    expect(await screen.findByText('Backspace 1.0.3')).toBeInTheDocument();
+    // ...with the stale error surfaced inline...
+    expect(screen.getByText('Network error')).toBeInTheDocument();
+    // ...instead of the full-page error branch, which offers "Try again"
+    // rather than the status view's "Check again".
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Check again' })).toBeInTheDocument();
+    // A non-null status at mount must not trigger the mount-fetch effect.
+    expect(updateStatus).not.toHaveBeenCalled();
+  });
+
+  it('keeps a prior successful status on screen after a later refresh fails', async () => {
+    updateStatus.mockResolvedValueOnce(status());
+    const { unmount } = render(<UpdatesPanel />);
+    expect(await screen.findByText('Backspace 1.0.3')).toBeInTheDocument();
+    expect(screen.queryByText('Network error')).not.toBeInTheDocument();
+
+    updateStatus.mockRejectedValueOnce(new Error('Network error'));
+    await userEvent.click(screen.getByRole('button', { name: 'Check again' }));
+
+    await waitFor(() => expect(screen.getByText('Network error')).toBeInTheDocument());
+    // Still the status view, not replaced by the blocking error page.
+    expect(screen.getByText('Backspace 1.0.3')).toBeInTheDocument();
+    expect(screen.getByText('You are on the latest release.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
+
+    // Reopen the panel (a remount, as a modal close/reopen would produce):
+    // the stale error must still not block the status that is still valid,
+    // and the store carries updateStatusError forward exactly as production
+    // leaves it (nothing resets it between the failed check above and here).
+    unmount();
+    render(<UpdatesPanel />);
+    expect(await screen.findByText('Backspace 1.0.3')).toBeInTheDocument();
+    expect(screen.getByText('Network error')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
+  });
+});
+
 describe('UpdatesPanel, re-checking', () => {
   it('looks up on mount without forcing a refresh', async () => {
     updateStatus.mockResolvedValue(status());
@@ -193,5 +261,23 @@ describe('UpdatesPanel, no trigger', () => {
     for (const label of labels) {
       expect(label).not.toMatch(/^(Update now|Install|Apply|Restart)$/i);
     }
+  });
+
+  it('marks the available version seen when the panel renders it', async () => {
+    vi.spyOn(api.admin, 'updateStatus').mockResolvedValue({
+      current: { version: '1.2.1', commit: null },
+      latest: { version: '1.3.0', url: 'https://example.invalid', publishedAt: '' },
+      state: 'update-available',
+      checkedAt: 1,
+      checkEnabled: true,
+      reason: null,
+      channel: 'prebuilt',
+    });
+
+    render(<UpdatesPanel />);
+
+    await waitFor(() => {
+      expect(useSettingsStore.getState().updateAck.seenVersion).toBe('1.3.0');
+    });
   });
 });

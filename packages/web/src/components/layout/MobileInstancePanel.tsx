@@ -6,6 +6,7 @@ import { MobileScreenHeader } from './MobileScreenHeader';
 import { TransferIndicator } from './TransferIndicator';
 import { api } from '../../api/client';
 import { onFederationPeersChanged } from '../../hooks/useWebSocket';
+import { useInstanceUpdateBadge } from '../../hooks/useInstanceUpdateBadge';
 
 type SectionId = 'general' | 'registration' | 'federation' | 'streaming' | 'storage' | 'users' | 'updates' | 'telemetry';
 
@@ -149,6 +150,7 @@ export function MobileInstancePanel() {
   }, [fetchInstanceSettings, fetchStreamingLimits]);
 
   const approvalCount = useFederationApprovalCount(true);
+  const updateBadge = useInstanceUpdateBadge();
 
   return (
     <div className="flex flex-col h-full bg-surface-base">
@@ -156,6 +158,7 @@ export function MobileInstancePanel() {
       <div className="flex-1 overflow-y-auto">
         {sections.map((section) => {
           const badge = section.id === 'federation' && approvalCount > 0 ? approvalCount : null;
+          const dot = section.id === 'updates' && updateBadge;
           return (
             <button
               key={section.id}
@@ -169,6 +172,7 @@ export function MobileInstancePanel() {
                   {badge > 99 ? '99+' : badge}
                 </span>
               )}
+              {dot && <span className="w-1.5 h-1.5 rounded-full bg-accent-amber" />}
               <svg className="w-4 h-4 text-txt-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
               </svg>

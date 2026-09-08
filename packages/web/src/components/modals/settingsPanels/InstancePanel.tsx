@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { useSettingsSections } from '../../../hooks/useSettingsSections';
+import { useInstanceUpdateBadge } from '../../../hooks/useInstanceUpdateBadge';
 import type { SettingsSection } from '../SettingsSectionsContext';
 import { SettingsTabBar } from '../SettingsTabBar';
 import { GeneralPanel } from '../instanceSettingsPanels/GeneralPanel';
@@ -22,6 +23,7 @@ export function InstancePanel() {
 
   const [subTab, setSubTab] = useState<SubTab>('general');
   const [approvalCount, setApprovalCount] = useState(0);
+  const updateBadge = useInstanceUpdateBadge();
 
   const sections = useMemo<SettingsSection[]>(() => [
     { id: 'general', label: t('settings:instance.tabs.general') },
@@ -30,9 +32,9 @@ export function InstancePanel() {
     { id: 'streaming', label: t('settings:instance.tabs.streaming') },
     { id: 'storage', label: t('settings:instance.tabs.storage') },
     { id: 'users', label: t('settings:instance.tabs.users') },
-    { id: 'updates', label: t('settings:instance.tabs.updates') },
+    { id: 'updates', label: t('settings:instance.tabs.updates'), badgeDot: updateBadge },
     { id: 'telemetry', label: t('settings:instance.tabs.telemetry') },
-  ], [approvalCount, t]);
+  ], [approvalCount, updateBadge, t]);
 
   const handleNavigate = useCallback((id: string) => {
     setSubTab(id as SubTab);
