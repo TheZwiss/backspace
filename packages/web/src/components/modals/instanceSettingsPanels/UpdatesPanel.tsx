@@ -1,9 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
 import { useFormatters, type Formatters } from '../../../i18n/formatters';
-import { describeError } from '../../../i18n/errors';
-import { api } from '../../../api/client';
 import { useUIStore } from '../../../stores/uiStore';
+import { useSettingsStore } from '../../../stores/settingsStore';
 import type { InstanceUpdateStatus } from '@backspace/shared';
 
 /**
@@ -67,31 +66,41 @@ function CommandBlock({ command }: { command: string }) {
 export function UpdatesPanel() {
   const { t } = useTranslation(['admin', 'common']);
   const f = useFormatters();
-  const [status, setStatus] = useState<InstanceUpdateStatus | null>(null);
-  const [loading, setLoading] = useState(true);
+  const status = useSettingsStore((s) => s.updateStatus);
+  const loading = useSettingsStore((s) => s.updateStatusLoading);
+  const loadError = useSettingsStore((s) => s.updateStatusError);
+  const fetchUpdateStatus = useSettingsStore((s) => s.fetchUpdateStatus);
+  const markUpdateSeen = useSettingsStore((s) => s.markUpdateSeen);
   const [checking, setChecking] = useState(false);
-  const [loadError, setLoadError] = useState('');
   const [showManual, setShowManual] = useState(false);
 
   const load = useCallback(async (refresh: boolean) => {
     if (refresh) setChecking(true);
-    setLoadError('');
     try {
-      setStatus(await api.admin.updateStatus(refresh));
-    } catch (err) {
-      setLoadError(describeError(err));
+      await fetchUpdateStatus(refresh);
     } finally {
-      setLoading(false);
       setChecking(false);
     }
-  }, []);
+  }, [fetchUpdateStatus]);
 
   // The status is owned by settingsStore, which fetches it when an admin's home
   // WebSocket reports the session. This mount only covers the cases that fetch
   // could not: an admin promoted mid-session, or a sign-in fetch that failed.
-  useEffect(() => { void load(false); }, [load]);
+  useEffect(() => {
+    if (status === null) void load(false);
+  }, [status, load]);
 
-  if (loading) return <div className="text-sm text-txt-tertiary">{t('admin:updates.loading')}</div>;
+  // Opening this panel is the acknowledgement that clears the dot everywhere
+  // else. Keyed on the version so a later release re-arms it.
+  useEffect(() => { markUpdateSeen(); }, [status, markUpdateSeen]);
+
+  // Guarded on the absence of an error, not on `loading`. The store starts
+  // `updateStatusLoading: false`, so keying the loading view on it would render
+  // the error branch for one frame on every mount that precedes the sign-in
+  // fetch.
+  if (status === null && loadError === '') {
+    return <div className="text-sm text-txt-tertiary">{t('admin:updates.loading')}</div>;
+  }
 
   if (loadError || status === null) {
     return (

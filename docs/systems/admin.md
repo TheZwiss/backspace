@@ -592,6 +592,22 @@ from 1.0.5 onward, so an operator on 1.0.4 does not have it yet.
 Registered as the `updates` sub-tab in `InstancePanel.tsx`, and as
 `settings-instance-updates` in `MobileShell.tsx` / `MobileInstancePanel.tsx`.
 
+**It always reads the home instance.** `api.admin.updateStatus()` goes through
+the origin-relative client, so a client with remote instances connected still
+reports only the instance that served it — the same rule the telemetry panel
+follows. An operator running two instances gets no signal here that the second
+one is behind; they see it when they sign in to that instance.
+
+**The dot.** When a release is available, an amber dot appears on the settings
+gear, on the Instance nav item, on the Updates sub-tab, and through the mobile
+chain (bottom-nav "You" tab, the You-screen gear, the Instance row, the Updates
+row). It is derived by `useInstanceUpdateBadge()` from the status the store
+holds, and is cleared for that version when the admin opens this panel. An admin
+is also toasted once per version, with an action that opens this panel. Both
+acknowledgements live in `localStorage` per user id
+(`packages/web/src/utils/updateAck.ts`), so they are per browser: a release
+re-arms both, and clearing site data brings them back.
+
 #### TelemetryPanel
 
 The permanent home of the opt-in daily report described in

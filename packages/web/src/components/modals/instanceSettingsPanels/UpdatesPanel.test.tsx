@@ -1,8 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { UpdatesPanel } from './UpdatesPanel';
 import { api } from '../../../api/client';
+import { useSettingsStore } from '../../../stores/settingsStore';
+import { EMPTY_ACK } from '../../../utils/updateAck';
 import type { InstanceUpdateStatus } from '@backspace/shared';
 
 function status(over: Partial<InstanceUpdateStatus> = {}): InstanceUpdateStatus {
@@ -32,6 +34,20 @@ let updateStatus: ReturnType<typeof vi.fn>;
 beforeEach(() => {
   updateStatus = vi.fn();
   vi.spyOn(api.admin, 'updateStatus').mockImplementation(updateStatus as never);
+  useSettingsStore.setState({
+    isAdmin: true,
+    updateStatus: null,
+    updateStatusLoading: false,
+    updateStatusError: '',
+    updateAck: EMPTY_ACK,
+    updateAckUserId: 'admin-user',
+  });
+  useSettingsStore.getState().stopUpdateStatusRefresh();
+  localStorage.clear();
+});
+
+afterEach(() => {
+  useSettingsStore.getState().stopUpdateStatusRefresh();
 });
 
 describe('UpdatesPanel, what is running', () => {
@@ -193,5 +209,23 @@ describe('UpdatesPanel, no trigger', () => {
     for (const label of labels) {
       expect(label).not.toMatch(/^(Update now|Install|Apply|Restart)$/i);
     }
+  });
+
+  it('marks the available version seen when the panel renders it', async () => {
+    vi.spyOn(api.admin, 'updateStatus').mockResolvedValue({
+      current: { version: '1.2.1', commit: null },
+      latest: { version: '1.3.0', url: 'https://example.invalid', publishedAt: '' },
+      state: 'update-available',
+      checkedAt: 1,
+      checkEnabled: true,
+      reason: null,
+      channel: 'prebuilt',
+    });
+
+    render(<UpdatesPanel />);
+
+    await waitFor(() => {
+      expect(useSettingsStore.getState().updateAck.seenVersion).toBe('1.3.0');
+    });
   });
 });
