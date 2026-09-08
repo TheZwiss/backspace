@@ -62,18 +62,25 @@ export function renderSitemap(siteUrl: string, entries: readonly SitemapEntry[])
 }
 
 /**
- * The three published pages.
+ * The four published pages.
  *
  * `lastmod` on the two data pages is the date the archive was last collected,
  * not the date this ran: they are rebuilt on every deploy, but their CONTENT
  * only changes when a collection adds a row, and `lastmod` describes content.
- * The landing page carries none — nothing in this pipeline knows when it last
- * changed, and inventing a date for it would be the same lie in miniature.
+ * The two landing pages carry none — nothing in this pipeline knows when they
+ * last changed, and inventing a date would be the same lie in miniature.
+ *
+ * `ru/` is the Russian translation of the landing page, not a separate
+ * document: the two declare each other with `hreflang`, and a sitemap that
+ * listed only one of them would leave the pair discoverable from one side
+ * only. It takes a lower priority than the root because the root is also the
+ * `x-default`.
  */
 export function siteEntries(archiveDate: string | null): SitemapEntry[] {
   const dated = archiveDate === null ? {} : { lastmod: archiveDate };
   return [
     { path: '', changefreq: 'weekly', priority: '1.0' },
+    { path: 'ru/', changefreq: 'weekly', priority: '0.9' },
     { path: 'insights/', ...dated, changefreq: 'daily', priority: '0.8' },
     { path: 'insights/data/', ...dated, changefreq: 'daily', priority: '0.7' },
   ];
