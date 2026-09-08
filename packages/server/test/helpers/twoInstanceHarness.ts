@@ -35,6 +35,21 @@ export interface TwoInstanceHarness {
   cleanup: () => Promise<void>;
 }
 
+/**
+ * Ask the kernel for a free port by binding one and letting go of it.
+ *
+ * This is inherently time-of-check-to-time-of-use: the socket is closed before
+ * the spawned instance binds, so anything on the box can take the port in
+ * between — most realistically one of the other vitest workers running this
+ * same dance, since the federation suites boot several instances each in
+ * parallel. The loser's `tsx` exits EADDRINUSE during boot, which surfaces as
+ * "exited during boot (code=1)" and reads like a server crash.
+ *
+ * The window cannot be closed from here (the port is handed to a child process
+ * through the environment, so the listening socket cannot be passed along), so
+ * `spawnInstance` retries instead. Callers that need a SPECIFIC port pass one
+ * and opt out of that retry — see its `port` option.
+ */
 async function allocateEphemeralPort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const srv = createServer();
@@ -58,6 +73,31 @@ async function allocateEphemeralPort(): Promise<number> {
 // declaring failure — a healthy boot still returns as soon as it is ready — so a
 // genuine hang is still caught well inside the 90-180s hook timeouts.
 const READY_TIMEOUT_MS = 60_000;
+
+/**
+ * How many extra ports a harness-allocated instance may try before giving up.
+ *
+ * Each retry costs one lost boot, and a collision is already rare — this is
+ * sized to absorb an unlucky burst on a loaded runner, not to paper over a port
+ * that is permanently occupied. A genuine boot failure is not retried at all.
+ */
+const PORT_COLLISION_RETRIES = 4;
+
+/**
+ * True when a spawned instance died because something else owned its port.
+ *
+ * Read from the log rather than the exit code: the child exits 1 for every
+ * fatal boot error, so the code alone cannot tell a lost port race from a real
+ * failure, and retrying a real failure would turn one clear error into five.
+ */
+export async function exitedOnPortCollision(logPath: string): Promise<boolean> {
+  try {
+    return /EADDRINUSE/.test(await readFile(logPath, 'utf8'));
+  } catch {
+    // No log to read means no evidence of a collision; treat it as a real failure.
+    return false;
+  }
+}
 
 async function waitForReady(origin: string, proc: ChildProcess, logPath: string, timeoutMs = READY_TIMEOUT_MS): Promise<void> {
   const deadline = Date.now() + timeoutMs;
@@ -98,9 +138,17 @@ async function waitForReady(origin: string, proc: ChildProcess, logPath: string,
   }
 }
 
-export async function spawnInstance(opts: {
+export interface SpawnInstanceOptions {
   domain: string;
-  port: number;
+  /**
+   * Bind this exact port instead of letting the harness allocate one.
+   *
+   * Supplying a port also opts out of collision retry: a caller that names a
+   * port needs THAT port — `simulateReset` respawns an instance at the origin
+   * its peers already address — and quietly moving to a different one would
+   * break the contract it is relying on rather than fix anything.
+   */
+  port?: number;
   dbPath: string;
   storagePath: string;
   jwtSecret: string;
@@ -130,13 +178,41 @@ export async function spawnInstance(opts: {
    * federated call-start path offline. Default: LiveKit blanked (voice off).
    */
   livekit?: { url: string; apiKey: string; apiSecret: string };
-}): Promise<SpawnedInstance> {
-  const origin = `http://127.0.0.1:${opts.port}`;
+}
+
+/**
+ * Boot one instance, retrying on a lost port race.
+ *
+ * With an explicit `port` this is a single attempt, exactly as before. Without
+ * one, a boot that died on EADDRINUSE is re-attempted on a freshly allocated
+ * port; every other boot failure propagates on the first try.
+ */
+export async function spawnInstance(opts: SpawnInstanceOptions): Promise<SpawnedInstance> {
+  if (opts.port !== undefined) return spawnOnPort(opts.port, opts);
+
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= PORT_COLLISION_RETRIES; attempt++) {
+    const port = await allocateEphemeralPort();
+    try {
+      return await spawnOnPort(port, opts);
+    } catch (err) {
+      if (!(await exitedOnPortCollision(opts.logPath))) throw err;
+      lastError = err;
+    }
+  }
+  throw new Error(
+    `Instance ${opts.domain} lost the port race ${PORT_COLLISION_RETRIES + 1} times in a row. ` +
+    `Last failure: ${lastError instanceof Error ? lastError.message : String(lastError)}`,
+  );
+}
+
+async function spawnOnPort(port: number, opts: SpawnInstanceOptions): Promise<SpawnedInstance> {
+  const origin = `http://127.0.0.1:${port}`;
   const env: Record<string, string> = {
     ...process.env,
     NODE_ENV: 'test',
     ENABLE_TEST_ROUTES: '1',
-    PORT: String(opts.port),
+    PORT: String(port),
     HOST: '127.0.0.1',
     DOMAIN: opts.domain,
     DB_PATH: opts.dbPath,
@@ -175,10 +251,18 @@ export async function spawnInstance(opts: {
   const logStream = createWriteStream(opts.logPath);
   proc.stdout!.pipe(logStream);
   proc.stderr!.pipe(logStream);
-  await waitForReady(origin, proc, opts.logPath);
+  try {
+    await waitForReady(origin, proc, opts.logPath);
+  } catch (err) {
+    // Never leave a half-booted child behind: a survivor holds its port and
+    // makes the next allocation likelier to collide, and on CI it outlives the
+    // suite.
+    if (proc.exitCode === null && proc.signalCode === null) proc.kill('SIGKILL');
+    throw err;
+  }
   return {
     proc,
-    port: opts.port,
+    port,
     origin,
     domain: opts.domain,
     dbPath: opts.dbPath,
@@ -242,10 +326,8 @@ export async function bootHomePlusRemotes(
   const runDir = path.resolve(__dirname, `../../../../tests/.tmp/${runId}`);
   await mkdir(`${runDir}/home-uploads`, { recursive: true });
 
-  const homePort = await allocateEphemeralPort();
   const home = await spawnInstance({
     domain: 'home.test.local',
-    port: homePort,
     dbPath: `${runDir}/home.db`,
     storagePath: `${runDir}/home-uploads`,
     jwtSecret: crypto.randomBytes(32).toString('hex'),
@@ -259,10 +341,8 @@ export async function bootHomePlusRemotes(
   const remotes: SpawnedInstance[] = [];
   for (let i = 0; i < remoteCount; i++) {
     await mkdir(`${runDir}/remote${i}-uploads`, { recursive: true });
-    const port = await allocateEphemeralPort();
     const r = await spawnInstance({
       domain: `remote${i}.test.local`,
-      port,
       dbPath: `${runDir}/remote${i}.db`,
       storagePath: `${runDir}/remote${i}-uploads`,
       jwtSecret: crypto.randomBytes(32).toString('hex'),
