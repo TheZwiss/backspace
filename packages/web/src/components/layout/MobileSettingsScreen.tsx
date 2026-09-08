@@ -12,6 +12,7 @@ import { DesktopPanel } from '../modals/settingsPanels/DesktopPanel';
 import { MobileScreenHeader } from './MobileScreenHeader';
 import { TransferIndicator } from './TransferIndicator';
 import { isElectron } from '../../platform/platform';
+import { useInstanceUpdateBadge } from '../../hooks/useInstanceUpdateBadge';
 
 interface MobileSettingsScreenProps {
   initialPanel?: string;
@@ -83,6 +84,7 @@ export function MobileSettingsScreen({ initialPanel }: MobileSettingsScreenProps
   const { t } = useTranslation(['mobile', 'settings', 'common']);
   const pushMobileScreen = useUIStore((s) => s.pushMobileScreen);
   const isAdmin = useAuthStore((s) => s.user?.isAdmin);
+  const updateBadge = useInstanceUpdateBadge();
 
   // If initialPanel is set, render that panel directly
   if (initialPanel) {
@@ -118,7 +120,7 @@ export function MobileSettingsScreen({ initialPanel }: MobileSettingsScreenProps
           { id: 'desktop', label: t('settings:nav.tabs.desktop') },
         ]
       : []),
-    ...(isAdmin ? [{ id: 'instance', label: t('settings:nav.tabs.instance') }] : []),
+    ...(isAdmin ? [{ id: 'instance', label: t('settings:nav.tabs.instance'), dot: updateBadge }] : []),
   ];
 
   return (
@@ -133,6 +135,7 @@ export function MobileSettingsScreen({ initialPanel }: MobileSettingsScreenProps
           >
             {sectionIcons[section.id]}
             <span className="text-sm text-txt-primary flex-1">{section.label}</span>
+            {section.dot && <span className="w-1.5 h-1.5 rounded-full bg-accent-amber" />}
             <svg className="w-4 h-4 text-txt-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
             </svg>

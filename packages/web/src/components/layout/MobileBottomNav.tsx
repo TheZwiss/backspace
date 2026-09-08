@@ -5,6 +5,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { useSocialStore } from '../../stores/socialStore';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useNavigate } from 'react-router-dom';
+import { useInstanceUpdateBadge } from '../../hooks/useInstanceUpdateBadge';
 
 export function MobileBottomNav() {
   const mobileScreen = useUIStore((s) => s.mobileScreen);
@@ -19,6 +20,7 @@ export function MobileBottomNav() {
   const readStates = useChatStore((s) => s.readStates);
   const requests = useSocialStore((s) => s.requests);
   const authUser = useAuthStore((s) => s.user);
+  const updateBadge = useInstanceUpdateBadge();
 
   // Hide when any screen is pushed (chat, settings, friends, etc.)
   if (mobileStack.length > 0) return null;
@@ -84,7 +86,7 @@ export function MobileBottomNav() {
           <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
         </svg>
       ),
-      badge: pendingIncoming.length > 0 ? ('dot' as const) : null,
+      badge: (pendingIncoming.length > 0 || updateBadge) ? ('dot' as const) : null,
     },
   ];
 
