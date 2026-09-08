@@ -64,7 +64,7 @@
   <releases>
     <release version="1.2.2" date="2026-09-09">
       <description>
-        <p>Backspace 1.2.2 release.</p>
+        <p>Adds a 50% step to the interface scale and keeps narrow windows on the mobile layout at any scale. Instance admins are now told in the app when a newer Backspace release is out.</p>
       </description>
     </release>
     <release version="1.2.1" date="2026-09-07">
