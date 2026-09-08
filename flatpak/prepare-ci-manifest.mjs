@@ -13,20 +13,22 @@ if (matches.length !== 1) {
   throw new Error(`Expected one pinned Backspace source, found ${matches.length}`);
 }
 
+const ciSourceList = 'flatpak/node-sources.ci.json';
 const publishedSources = /^      - flatpak\/node-sources\.json\r?$/gm;
 const sourceMatches = manifest.match(publishedSources) ?? [];
 if (sourceMatches.length !== 1) {
   throw new Error(`Expected one published offline source list, found ${sourceMatches.length}`);
 }
 
-const generatedSources = resolve(dirname(output), 'flatpak/node-sources.ci.json');
+const generatedSources = resolve(dirname(output), ciSourceList);
 if (!existsSync(generatedSources)) {
   throw new Error(`Missing generated CI source list: ${generatedSources}\n`
     + 'Run the generator from the checkout root first (see flatpak/README.md):\n'
     + 'flatpak run --filesystem="$PWD" --command=flatpak-node-generator org.flatpak.Builder '
     + '--electron-node-headers --node-sdk-extension org.freedesktop.Sdk.Extension.node24//25.08 '
-    + '-o "$PWD/flatpak/node-sources.ci.json" pnpm "$PWD/pnpm-lock.yaml"\n'
-    + 'For a custom output manifest directory, adjust -o to the missing path above.');
+    + `-o "$PWD/${ciSourceList}" pnpm "$PWD/pnpm-lock.yaml"\n`
+    + 'Write the CI manifest at the checkout root: its application source and its '
+    + 'offline source list both resolve relative to the manifest directory.');
 }
 
 // CI must build the checked-out PR, not the last released commit.
@@ -35,5 +37,5 @@ if (!existsSync(generatedSources)) {
 const ciManifest = manifest.replace(
   pinnedSource,
   '      - type: dir\n        path: .',
-).replace(publishedSources, '      - flatpak/node-sources.ci.json');
+).replace(publishedSources, `      - ${ciSourceList}`);
 writeFileSync(output, ciManifest);

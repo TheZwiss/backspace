@@ -34,9 +34,9 @@ files are ignored by Git.
 
 `prepare-ci-manifest.mjs` checks that the generated source list exists before
 writing or replacing the CI manifest. If it is missing, the error includes the
-generator command below. Source paths are resolved relative to the output
-manifest's directory, not the current working directory; when using a custom
-output directory, generate its `flatpak/node-sources.ci.json` there.
+generator command below. Source paths resolve relative to the output manifest's
+directory, not the current working directory, and the generated manifest builds
+`.` as its application source, so write the CI manifest at the checkout root.
 
 ```sh
 flatpak run --filesystem="$PWD" --command=flatpak-node-generator \
