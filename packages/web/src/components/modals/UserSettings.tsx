@@ -30,14 +30,22 @@ function SidebarSubLinks() {
         <button
           key={section.id}
           onClick={() => ctx.scrollToSection(section.id)}
-          className={`w-full text-left pl-6 py-1 text-xs rounded-md transition-colors ${
+          className={`w-full flex items-center gap-1.5 text-left pl-6 pr-2 py-1 text-xs rounded-md transition-colors ${
             ctx.activeSection === section.id
               ? 'text-txt-primary'
               : 'text-txt-tertiary hover:text-txt-secondary'
           }`}
           aria-current={ctx.activeSection === section.id ? 'true' : undefined}
         >
-          {section.label}
+          <span className="flex-1 min-w-0 truncate">{section.label}</span>
+          {section.badgeCount !== undefined && section.badgeCount > 0 && (
+            <span className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-accent-amber/15 text-accent-amber">
+              {section.badgeCount}
+            </span>
+          )}
+          {section.badgeDot === true && (
+            <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-accent-amber" />
+          )}
         </button>
       ))}
     </div>

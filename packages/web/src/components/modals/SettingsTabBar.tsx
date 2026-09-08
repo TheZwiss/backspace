@@ -27,6 +27,9 @@ export function SettingsTabBar() {
               {s.badgeCount}
             </span>
           )}
+          {s.badgeDot === true && (
+            <span className="ml-1.5 inline-block w-1.5 h-1.5 rounded-full bg-accent-amber align-middle" />
+          )}
           {ctx.activeSection === s.id && (
             <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent-primary rounded-full" />
           )}

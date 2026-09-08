@@ -182,6 +182,19 @@ When introducing a new input or contenteditable surface, no extra work is needed
 
 ---
 
+## Unread and attention indicators
+
+| Colour | Meaning | Used by |
+|--------|---------|---------|
+| `accent-rose` / `bg-notification` | Someone is waiting on you: unread messages, mentions, pending friend requests | channel unread dots, mobile bottom-nav badges |
+| `accent-amber` | Informational, no one is blocked: an available instance update, pending federation approvals | settings tab and sidebar badges |
+
+A settings section carries a count (`SettingsSection.badgeCount`) when the number
+matters, or a dot (`SettingsSection.badgeDot`) when only the existence does. Both
+render in `SettingsTabBar` and in the desktop sidebar sub-links.
+
+---
+
 ## Layout
 
 3-column grid: 312px channel sidebar | main content | 240px members sidebar
