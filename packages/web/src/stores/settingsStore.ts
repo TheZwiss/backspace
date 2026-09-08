@@ -1,6 +1,8 @@
 import { create } from 'zustand';
-import type { InstanceStreamingLimits, InstanceAdminSettings, TelemetryPayload, TelemetryStatus } from '@backspace/shared';
+import type { InstanceStreamingLimits, InstanceAdminSettings, TelemetryPayload, TelemetryStatus, InstanceUpdateStatus } from '@backspace/shared';
 import { api } from '../api/client';
+import { describeError } from '../i18n/errors';
+import { EMPTY_ACK, readUpdateAck, writeUpdateAck, pendingUpdateVersion, type UpdateAck } from '../utils/updateAck';
 
 interface SettingsState {
   streamingLimits: InstanceStreamingLimits | null;
@@ -18,6 +20,16 @@ interface SettingsState {
   fetchTelemetryPreview: () => Promise<void>;
   setTelemetryEnabled: (enabled: boolean) => Promise<void>;
   setIsAdmin: (isAdmin: boolean) => void;
+  updateStatus: InstanceUpdateStatus | null;
+  updateStatusLoading: boolean;
+  updateStatusError: string;
+  updateAck: UpdateAck;
+  updateAckUserId: string | null;
+  fetchUpdateStatus: (refresh?: boolean) => Promise<void>;
+  markUpdateSeen: () => void;
+  markUpdateToastShown: () => void;
+  setUpdateAckUser: (userId: string | null) => void;
+  stopUpdateStatusRefresh: () => void;
 }
 
 const DEFAULT_LIMITS: InstanceStreamingLimits = {
@@ -36,6 +48,20 @@ const DEFAULT_LIMITS: InstanceStreamingLimits = {
 export function getStreamingLimits(): InstanceStreamingLimits {
   return useSettingsStore.getState().streamingLimits ?? DEFAULT_LIMITS;
 }
+
+/**
+ * How often a live session re-asks for the update status.
+ *
+ * Matched to the server's own six-hour success cache, so a refresh that lands
+ * inside the window costs nothing outbound. Without this, the admin the feature
+ * exists for — the one who never opens settings and never reloads a long-lived
+ * desktop window — would learn about a release only on their next sign-in.
+ */
+export const UPDATE_STATUS_REFRESH_MS = 6 * 60 * 60 * 1000;
+
+let updateStatusTimer: ReturnType<typeof setTimeout> | null = null;
+/** Coalesces concurrent callers (WS ready and a panel mount) into one request. */
+let updateStatusInFlight: Promise<void> | null = null;
 
 export const useSettingsStore = create<SettingsState>((set) => ({
   streamingLimits: null,
@@ -109,4 +135,93 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   },
 
   setIsAdmin: (isAdmin: boolean) => set({ isAdmin }),
+
+  updateStatus: null,
+  updateStatusLoading: false,
+  updateStatusError: '',
+  updateAck: EMPTY_ACK,
+  updateAckUserId: null,
+
+  /**
+   * Records whose acknowledgements to read and write, handed over by the
+   * WebSocket `ready` handler. It lives here rather than being read from
+   * `authStore` because importing that store into this one drags the audio
+   * pipeline into every test that touches settings.
+   */
+  setUpdateAckUser: (userId) => {
+    set({ updateAckUserId: userId, updateAck: readUpdateAck(localStorage, userId) });
+  },
+
+  /**
+   * Asks the home instance whether a newer release exists.
+   *
+   * Admin-gated on the client as well as the server, so a non-admin session
+   * never issues a request that could only 403. The reschedule happens on every
+   * completed call, including an explicit panel refresh, which keeps exactly one
+   * timer alive regardless of how many callers there are.
+   */
+  fetchUpdateStatus: async (refresh = false) => {
+    // Deliberately NOT gated on `isAdmin` here. That flag is set only by the
+    // WebSocket `ready` handler, so a panel rendered before `ready` lands (or
+    // during a reconnect) would be permanently stuck on an empty error state
+    // with a "Try again" button that also did nothing. Both call sites are
+    // admin-only by construction: the `ready` handler checks the flag it just
+    // received, and UpdatesPanel only renders inside the admin-gated Instance
+    // settings tab.
+    //
+    // An explicit refresh never joins an in-flight cached fetch: doing so would
+    // silently downgrade a "Check again" click to whatever the earlier call
+    // asked for.
+    if (!refresh && updateStatusInFlight !== null) return updateStatusInFlight;
+
+    set({ updateStatusLoading: true, updateStatusError: '' });
+
+    updateStatusInFlight = (async () => {
+      try {
+        const result = await api.admin.updateStatus(refresh);
+        set({
+          updateStatus: result,
+          updateAck: readUpdateAck(localStorage, useSettingsStore.getState().updateAckUserId),
+          updateStatusError: '',
+        });
+      } catch (err) {
+        set({ updateStatusError: describeError(err) });
+      } finally {
+        set({ updateStatusLoading: false });
+        updateStatusInFlight = null;
+        if (updateStatusTimer !== null) clearTimeout(updateStatusTimer);
+        updateStatusTimer = setTimeout(() => {
+          void useSettingsStore.getState().fetchUpdateStatus();
+        }, UPDATE_STATUS_REFRESH_MS);
+      }
+    })();
+
+    return updateStatusInFlight;
+  },
+
+  markUpdateSeen: () => {
+    const version = pendingUpdateVersion(useSettingsStore.getState().updateStatus);
+    if (version === null) return;
+    const userId = useSettingsStore.getState().updateAckUserId;
+    const next: UpdateAck = { ...useSettingsStore.getState().updateAck, seenVersion: version };
+    writeUpdateAck(localStorage, userId, next);
+    set({ updateAck: next });
+  },
+
+  markUpdateToastShown: () => {
+    const version = pendingUpdateVersion(useSettingsStore.getState().updateStatus);
+    if (version === null) return;
+    const userId = useSettingsStore.getState().updateAckUserId;
+    const next: UpdateAck = { ...useSettingsStore.getState().updateAck, toastShownFor: version };
+    writeUpdateAck(localStorage, userId, next);
+    set({ updateAck: next });
+  },
+
+  /** Called on logout, and by tests, so a dead session leaves no timer behind. */
+  stopUpdateStatusRefresh: () => {
+    if (updateStatusTimer !== null) {
+      clearTimeout(updateStatusTimer);
+      updateStatusTimer = null;
+    }
+  },
 }));
