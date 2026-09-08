@@ -67,7 +67,6 @@ export function UpdatesPanel() {
   const { t } = useTranslation(['admin', 'common']);
   const f = useFormatters();
   const status = useSettingsStore((s) => s.updateStatus);
-  const loading = useSettingsStore((s) => s.updateStatusLoading);
   const loadError = useSettingsStore((s) => s.updateStatusError);
   const fetchUpdateStatus = useSettingsStore((s) => s.fetchUpdateStatus);
   const markUpdateSeen = useSettingsStore((s) => s.markUpdateSeen);
@@ -102,7 +101,13 @@ export function UpdatesPanel() {
     return <div className="text-sm text-txt-tertiary">{t('admin:updates.loading')}</div>;
   }
 
-  if (loadError || status === null) {
+  // Only blocks when there is no status to fall back on. Once a status has
+  // ever loaded, a later failed refresh (the "Check again" button, or the
+  // six-hour timer) must not discard it in favour of a full-page error —
+  // see the inline banner rendered below instead. `loadError` is guaranteed
+  // non-empty here: the `status === null && loadError === ''` case above
+  // already returned.
+  if (status === null) {
     return (
       <div className="space-y-4">
         <h2 className="text-lg font-semibold text-txt-primary">{t('admin:updates.title')}</h2>
@@ -144,6 +149,15 @@ export function UpdatesPanel() {
           {t('admin:updates.description')}
         </div>
       </div>
+
+      {/* A refresh (the timer, or "Check again") failed, but a prior status is
+          still on hand: keep showing it and surface the failure inline rather
+          than discarding a perfectly good view for an error page. */}
+      {loadError !== '' && (
+        <div className="rounded-lg bg-accent-rose/10 border border-accent-rose/20 p-3.5 text-sm text-txt-secondary">
+          {loadError}
+        </div>
+      )}
 
       {/* What is running now */}
       <div>

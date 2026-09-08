@@ -486,7 +486,9 @@ export function AppLayout() {
         </>
       )}
 
-      {/* Federation toasts */}
+      {/* Federation toasts render through ToastContainer below (raised by the
+          useFederationToasts() hook above); this also mounts the instance
+          update toast. */}
       <InstanceUpdateToast />
       <ToastContainer />
       <ContextMenuRenderer />

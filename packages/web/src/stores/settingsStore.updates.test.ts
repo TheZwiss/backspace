@@ -142,3 +142,39 @@ describe('settingsStore update status', () => {
     expect(useSettingsStore.getState().updateAck).toEqual(EMPTY_ACK);
   });
 });
+
+describe('resetUpdateState (what authStore.logout calls)', () => {
+  it('stops the refresh timer and clears admin/update state, leaving no leak for the next session', async () => {
+    vi.useFakeTimers();
+    const spy = vi.spyOn(api.admin, 'updateStatus').mockResolvedValue(status());
+
+    localStorage.setItem(ackStorageKey('u1'), JSON.stringify({ seenVersion: '1.2.9', toastShownFor: null }));
+    useSettingsStore.getState().setUpdateAckUser('u1');
+    useSettingsStore.setState({ isAdmin: true });
+    await useSettingsStore.getState().fetchUpdateStatus();
+
+    // Sanity check: the admin session state is actually established before
+    // the reset, so clearing it below is a meaningful assertion.
+    expect(useSettingsStore.getState().isAdmin).toBe(true);
+    expect(useSettingsStore.getState().updateStatus).not.toBeNull();
+    expect(useSettingsStore.getState().updateAck.seenVersion).toBe('1.2.9');
+    expect(useSettingsStore.getState().updateAckUserId).toBe('u1');
+
+    useSettingsStore.getState().resetUpdateState();
+
+    expect(useSettingsStore.getState().isAdmin).toBe(false);
+    expect(useSettingsStore.getState().updateStatus).toBeNull();
+    expect(useSettingsStore.getState().updateStatusLoading).toBe(false);
+    expect(useSettingsStore.getState().updateStatusError).toBe('');
+    expect(useSettingsStore.getState().updateAck).toEqual(EMPTY_ACK);
+    expect(useSettingsStore.getState().updateAckUserId).toBeNull();
+
+    // The six-hour timer scheduled by the fetch above must be dead: without
+    // this, a tab that ever hosted an admin session keeps hitting the
+    // update-status endpoint forever, 403'ing as a non-admin or triggering
+    // handleUnauthorized's top-level navigation once the token is gone.
+    spy.mockClear();
+    await vi.advanceTimersByTimeAsync(UPDATE_STATUS_REFRESH_MS * 3);
+    expect(spy).not.toHaveBeenCalled();
+  });
+});

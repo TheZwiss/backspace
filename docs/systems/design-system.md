@@ -193,6 +193,13 @@ A settings section carries a count (`SettingsSection.badgeCount`) when the numbe
 matters, or a dot (`SettingsSection.badgeDot`) when only the existence does. Both
 render in `SettingsTabBar` and in the desktop sidebar sub-links.
 
+Exception: the mobile bottom-nav "You" tab (`MobileBottomNav.tsx`) ORs the
+update dot into its existing rose dot rather than showing a separate amber
+one. That tab already means "something of yours needs attention" for incoming
+friend/DM activity, and splitting one dot into two colours by cause would read
+worse than a single dot with mixed causes — this is a deliberate exception to
+the amber-means-update rule above, not a bug.
+
 ---
 
 ## Layout

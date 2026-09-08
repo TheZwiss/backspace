@@ -30,6 +30,7 @@ interface SettingsState {
   markUpdateToastShown: () => void;
   setUpdateAckUser: (userId: string | null) => void;
   stopUpdateStatusRefresh: () => void;
+  resetUpdateState: () => void;
 }
 
 const DEFAULT_LIMITS: InstanceStreamingLimits = {
@@ -217,11 +218,43 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     set({ updateAck: next });
   },
 
-  /** Called on logout, and by tests, so a dead session leaves no timer behind. */
+  /**
+   * Called by `resetUpdateState` (itself called on logout, from `authStore`'s
+   * `resetUserStores`) and directly by tests, so a dead session leaves no
+   * timer behind.
+   */
   stopUpdateStatusRefresh: () => {
     if (updateStatusTimer !== null) {
       clearTimeout(updateStatusTimer);
       updateStatusTimer = null;
     }
+  },
+
+  /**
+   * Clears everything about instance-update state on logout.
+   *
+   * `isAdmin` and `updateStatus` are permission-scoped, not instance-scoped:
+   * unlike `streamingLimits` or `instanceSettings`, which describe the
+   * instance itself and stay valid for whoever signs in next, these describe
+   * the PREVIOUS user's admin status. Left in place, a non-admin signing in
+   * on the same tab would render an admin-only update dot until the next
+   * WebSocket `ready` overwrites it, and the six-hour refresh timer would
+   * keep hitting `/api/admin/instance/update-status` for the life of the tab
+   * with no admin session behind it.
+   *
+   * Deliberately does not import `authStore` to know when to run — see the
+   * comment on `setUpdateAckUser` above. `authStore.resetUserStores()` calls
+   * this instead, keeping the import direction one-way.
+   */
+  resetUpdateState: () => {
+    useSettingsStore.getState().stopUpdateStatusRefresh();
+    set({
+      isAdmin: false,
+      updateStatus: null,
+      updateStatusLoading: false,
+      updateStatusError: '',
+      updateAck: EMPTY_ACK,
+      updateAckUserId: null,
+    });
   },
 }));

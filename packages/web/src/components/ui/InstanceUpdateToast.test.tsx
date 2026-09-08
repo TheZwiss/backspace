@@ -24,7 +24,7 @@ const available: InstanceUpdateStatus = {
 describe('InstanceUpdateToast', () => {
   beforeEach(() => {
     useSettingsStore.setState({ isAdmin: true, updateStatus: null, updateAck: EMPTY_ACK });
-    useUIStore.setState({ toasts: [], isMobile: false });
+    useUIStore.setState({ toasts: [], isMobile: false, mobileStack: [] });
   });
 
   it('renders nothing and raises no toast without an update', () => {
