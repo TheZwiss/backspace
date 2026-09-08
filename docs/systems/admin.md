@@ -365,9 +365,10 @@ opening it writes nothing.
 
 `routes/adminTelemetry.ts` is the only writer of the four `instance_settings`
 telemetry columns. `PATCH /api/settings/instance` does not touch them, so the id
-lifecycle has exactly one owner. Enabling mints a fresh UUID and stamps today as
-the last reported day, which is what makes the first ping go out tomorrow;
-disabling clears the id, so a later re-enable is a new anonymous instance.
+lifecycle has exactly one owner. The first enable mints a UUID that is kept for
+the life of the install; every enable stamps today as the last reported day,
+which is what makes the first ping go out tomorrow. Disabling keeps the id and
+clears the bookkeeping, so a later re-enable reports as the same instance.
 Saving "on" while it is already on changes nothing at all.
 
 The first admin to sign in on an instance that was never asked sees a one-time
@@ -606,12 +607,13 @@ Contents, top to bottom:
   note that the next attempt is tomorrow. Absent when there is none.
 - The telemetry id, masked to its first block (`3f6c9e2a…`). The full id is what
   ties an instance to its rows in the public archive, so the panel confirms
-  which one is in use without putting the whole value on screen. Absent while
-  the setting is off, because the server clears the id then.
+  which one is in use without putting the whole value on screen. Hidden while
+  the setting is off: the server keeps the id for a later re-enable, but an id
+  on screen next to "Off" would read as if something were still being sent.
 - The live payload, rendered by the shared `PayloadPreview` (`defaultOpen`
   here, folded away in the ask) straight from `GET /api/admin/telemetry/preview`
   with a Refresh button. It is refetched after every successful toggle, since
-  turning the setting on mints a new id and turning it off clears it.
+  the first switch-on mints the id the payload carries.
 - A link to `docs/systems/telemetry.md` on GitHub.
 
 Strings live in the `telemetry` namespace under `panel.*`. Registered as the

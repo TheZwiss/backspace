@@ -116,14 +116,18 @@ describe('admin telemetry routes', () => {
     expect(stateRow().telemetry_id).toBe(body.id);
   });
 
-  it('clears the id when switched off', async () => {
-    await app.inject({ method: 'PUT', url: '/api/admin/telemetry', headers: AUTH, payload: { enabled: true } });
+  it('keeps the id when switched off and reuses it when switched on again', async () => {
+    const on = await app.inject({ method: 'PUT', url: '/api/admin/telemetry', headers: AUTH, payload: { enabled: true } });
+    const id = (on.json() as { id: string }).id;
     const res = await app.inject({
       method: 'PUT', url: '/api/admin/telemetry', headers: AUTH, payload: { enabled: false },
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ enabled: false, id: null, lastDay: null, lastError: null });
-    expect(stateRow()).toMatchObject({ telemetry_enabled: 0, telemetry_id: null });
+    expect(res.json()).toEqual({ enabled: false, id, lastDay: null, lastError: null });
+    expect(stateRow()).toMatchObject({ telemetry_enabled: 0, telemetry_id: id, telemetry_last_day: null });
+
+    const back = await app.inject({ method: 'PUT', url: '/api/admin/telemetry', headers: AUTH, payload: { enabled: true } });
+    expect(back.json()).toMatchObject({ enabled: true, id });
   });
 
   it('rejects a body without a boolean', async () => {

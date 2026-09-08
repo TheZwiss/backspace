@@ -101,7 +101,7 @@ describe('reporterTick', () => {
   it('turns itself off on 410', async () => {
     setTelemetryEnabled(db, true, '2026-09-06');
     expect(await reporterTick(deps('2026-09-08T23:59:59Z', 410))).toBe('retired');
-    expect(readTelemetryState(db)).toMatchObject({ enabled: false, id: null });
+    expect(readTelemetryState(db)).toMatchObject({ enabled: false, lastDay: null, lastError: null });
     expect(log.info).toHaveBeenCalledTimes(1);
   });
 
@@ -134,18 +134,26 @@ describe('reporterTick', () => {
       return new Response(null, { status: 204 });
     });
     expect(await reporterTick(d)).toBe('skipped');
-    expect(readTelemetryState(db)).toEqual({ enabled: false, id: null, lastDay: null, lastError: null });
+    expect(readTelemetryState(db)).toMatchObject({ enabled: false, lastDay: null, lastError: null });
+    expect(readTelemetryState(db).id).not.toBeNull();
   });
 
-  it('records nothing when telemetry is re-enabled under a new id while the ping is in flight', async () => {
-    setTelemetryEnabled(db, true, '2026-09-06');
+  it('records the outcome when telemetry is switched off and on again while the ping is in flight', async () => {
+    // The id survives the round trip, so the row the ping came from is still
+    // the current row and its bookkeeping applies.
+    const id = setTelemetryEnabled(db, true, '2026-09-06').id;
     const d = deps('2026-09-08T23:59:59Z');
     (d.fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async () => {
       setTelemetryEnabled(db, false, '2026-09-08');
       setTelemetryEnabled(db, true, '2026-09-08');
       return new Response(null, { status: 503 });
     });
-    expect(await reporterTick(d)).toBe('skipped');
-    expect(readTelemetryState(db)).toMatchObject({ enabled: true, lastDay: '2026-09-08', lastError: null });
+    expect(await reporterTick(d)).toBe('failed');
+    expect(readTelemetryState(db)).toMatchObject({
+      enabled: true,
+      id,
+      lastDay: '2026-09-08',
+      lastError: { day: '2026-09-08', status: 503 },
+    });
   });
 });

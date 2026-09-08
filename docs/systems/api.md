@@ -308,10 +308,11 @@ home-origin only.
 `PUT` requires `enabled` to be a boolean and returns 400 `validation_failed` for
 anything else (`"yes"`, `1`, a missing field). It is the only writer of the four
 `instance_settings` telemetry columns; the general settings PATCH never touches
-them. Enabling mints a fresh `telemetry_id` and stamps today as the last
-reported day so the first ping goes out tomorrow; disabling clears the id.
-Enabling an instance that is already on changes nothing, so a repeated save
-never rotates the id.
+them. Enabling mints a `telemetry_id` if the instance never had one and stamps
+today as the last reported day so the first ping goes out tomorrow; disabling
+keeps the id and clears the last day and the last error, so a later re-enable
+reports under the same id. Enabling an instance that is already on changes
+nothing. The id is never rotated.
 
 `GET /preview` returns the exact payload a ping would carry right now, built by
 the same function the reporter uses. While reporting is off there is no id and

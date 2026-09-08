@@ -38,16 +38,19 @@ export function readTelemetryState(sqlite: Database.Database): TelemetryStatus {
 }
 
 /**
- * The single on/off transition. An off-to-on transition mints a fresh id and
- * stamps today as the last reported day so the first ping goes out tomorrow at
- * the slot, never within the minute. Turning off clears the id: a later
- * re-enable is a new anonymous instance as far as the receiver can tell.
+ * The single on/off transition. The id is minted once, the first time the
+ * instance is switched on, and kept for the life of the install: switching off
+ * stops the pings and clears the bookkeeping, switching on again reuses the
+ * same id. A stable id is what Home Assistant and Grafana do, and it keeps a
+ * re-enabled instance from looking like a new one to the receiver, restarting
+ * its two-days-in-thirty qualification and moving its slot minute.
  *
- * Enabling an instance that is already on changes nothing. Rotating the id
- * there would make one instance look like two to the receiver and reset its
- * two-days-in-thirty qualification, and restamping the last day would skip
- * that day's ping. A repeated admin save and a re-run of install.sh with
- * TELEMETRY=on both take this path.
+ * Switching on stamps today as the last reported day so the first ping goes
+ * out tomorrow at the slot, never within the minute.
+ *
+ * Enabling an instance that is already on changes nothing. Restamping the
+ * last day there would skip that day's ping. A repeated admin save and a
+ * re-run of install.sh with TELEMETRY=on both take this path.
  */
 export function setTelemetryEnabled(
   sqlite: Database.Database,
@@ -58,11 +61,11 @@ export function setTelemetryEnabled(
   if (enabled && current.enabled === true) return current;
   if (enabled) {
     sqlite.prepare(
-      'UPDATE instance_settings SET telemetry_enabled = 1, telemetry_id = ?, telemetry_last_day = ?, telemetry_last_error = NULL, updated_at = ? WHERE id = 1',
+      'UPDATE instance_settings SET telemetry_enabled = 1, telemetry_id = COALESCE(telemetry_id, ?), telemetry_last_day = ?, telemetry_last_error = NULL, updated_at = ? WHERE id = 1',
     ).run(crypto.randomUUID(), today, Date.now());
   } else {
     sqlite.prepare(
-      'UPDATE instance_settings SET telemetry_enabled = 0, telemetry_id = NULL, telemetry_last_day = NULL, telemetry_last_error = NULL, updated_at = ? WHERE id = 1',
+      'UPDATE instance_settings SET telemetry_enabled = 0, telemetry_last_day = NULL, telemetry_last_error = NULL, updated_at = ? WHERE id = 1',
     ).run(Date.now());
   }
   return readTelemetryState(sqlite);

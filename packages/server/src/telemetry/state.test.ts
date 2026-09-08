@@ -43,11 +43,20 @@ describe('telemetry state', () => {
     expect(s.lastError).toBeNull();
   });
 
-  it('clears the id on disable and mints a new one on re-enable', () => {
+  it('keeps the id across disable and re-enable', () => {
     const first = setTelemetryEnabled(db, true, '2026-09-06').id;
-    expect(setTelemetryEnabled(db, false, '2026-09-06')).toMatchObject({ enabled: false, id: null });
-    const second = setTelemetryEnabled(db, true, '2026-09-07').id;
-    expect(second).not.toBe(first);
+    expect(setTelemetryEnabled(db, false, '2026-09-06')).toMatchObject({ enabled: false, id: first });
+    const second = setTelemetryEnabled(db, true, '2026-09-07');
+    expect(second.id).toBe(first);
+    expect(second.lastDay).toBe('2026-09-07');
+  });
+
+  it('mints an id only when there is none', () => {
+    db.prepare('UPDATE instance_settings SET telemetry_enabled = 0, telemetry_id = NULL WHERE id = 1').run();
+    const first = setTelemetryEnabled(db, true, '2026-09-06').id;
+    expect(first).toMatch(/^[0-9a-f-]{36}$/);
+    expect(setTelemetryEnabled(db, false, '2026-09-06').id).toBe(first);
+    expect(setTelemetryEnabled(db, true, '2026-09-07').id).toBe(first);
   });
 
   it('keeps the id and last day when enable is called while already enabled', () => {
@@ -67,9 +76,10 @@ describe('telemetry state', () => {
   it('clears the last day and the last error on disable', () => {
     setTelemetryEnabled(db, true, '2026-09-06');
     recordTelemetryFailure(db, '2026-09-07', 503);
+    const id = readTelemetryState(db).id;
     expect(setTelemetryEnabled(db, false, '2026-09-07')).toEqual({
       enabled: false,
-      id: null,
+      id,
       lastDay: null,
       lastError: null,
     });
