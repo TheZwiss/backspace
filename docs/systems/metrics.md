@@ -239,6 +239,44 @@ Four properties this depends on:
 
 **`robots.txt` is published from this repository, at `site/robots.txt`.** It is only honoured at a domain root, and since the site moved to `backspacechat.com` (a GitHub Pages custom domain, `site/CNAME`) the site *is* that root, so the file ships in the Pages artifact like any other asset. It is committed rather than generated: the one URL it carries, the sitemap, is fixed. Before the move this site was a project page at `thezwiss.github.io/backspace/` and could not publish one at all; the root belonged to a separate `thezwiss.github.io` user-pages repository, which still exists and still carries a `robots.txt` for that domain (its sitemap line now points here). A fork that enables Pages inherits `site/CNAME` naming a domain it does not own; GitHub refuses a custom domain already claimed by another repository, so the fork has to delete that file or set its own.
 
+### The IndexNow key
+
+`site/` carries one IndexNow verification key, as a `.txt` file whose name is
+the key itself. It is a public file by design and belongs in the repository: the protocol proves control of a domain
+by asking the submitter to host the key at a URL only that domain's owner can
+write to, so the key is evidence of control rather than a secret, and it is
+worthless to anyone who cannot publish under this domain.
+
+It exists because Yandex runs about 70% of Russian search and a Yandex
+Webmaster account could not be created (registration fails from this region,
+which is a known and common outcome, not a configuration error). IndexNow is
+the account-free route to the same outcome: `GET https://yandex.com/indexnow`
+with the key and a URL asks Yandex to look at that page now, rather than
+waiting for it to arrive on its own. One key reaches every participating
+engine, so the same submission also notifies Bing.
+
+The file name must match the key exactly, and its only content is the key
+itself with no trailing newline and no markup. It is not listed in
+`sitemap.xml`; it is not a page.
+
+**No workflow pings this endpoint, deliberately.** The deploy runs daily
+whenever a collection lands, and IndexNow is for telling an engine that
+content actually changed. A daily ping of four unchanged URLs is the kind of
+thing that gets a submitter throttled. Submit by hand when a page genuinely
+changes:
+
+```
+# KEY is the name of the key file in site/, without the .txt
+curl "https://yandex.com/indexnow?url=https://backspacechat.com/ru/&key=$KEY"
+```
+
+The key is deliberately not written out here. Repeating it in prose would give
+it a second home to drift from, and a high-entropy string next to `key=` is
+indistinguishable from a leaked credential to a secret scanner, which is what
+the first draft of this section proved by failing `gitleaks`. The file name in
+`site/` is the single source of truth.
+
+
 **The download split.** `downloads_total` sums every release asset. That number is dominated by update machinery rather than by installs: electron-updater fetches `latest.yml` / `latest-mac.yml` / `latest-linux.yml` on every update check from every installed client, and `.blockmap` files during a differential update, and GitHub counts all of them in `download_count` exactly like an installer. When the split was added on 2026-09-02 the feed files had 1,519 downloads against 323 for every real installer and archive combined, so the single figure overstated installs by roughly 5.7x.
 
 `downloads_app` counts installers and archives; `downloads_updates` counts anything matching `*.yml`, `*.yaml` or `*.blockmap` (`isUpdateArtifact` in `collect.ts`). For any row carrying all three, `downloads_app + downloads_updates === downloads_total`.
