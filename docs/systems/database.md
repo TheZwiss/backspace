@@ -389,7 +389,7 @@ The user INSERT, `usedCount` increment, and redemption row INSERT all run in a s
 | federationRelayTtlDays | integer NOT NULL | 30 | |
 | autoAcceptPeering | integer NOT NULL | 1 | When 0, `peer/accept` rejects unsolicited requests with 403 |
 | telemetryEnabled | integer | | Opt-in usage pings. null = never asked, 0 = off, 1 = on. |
-| telemetryId | text | | Random UUID, minted on every off-to-on transition and cleared on every transition to off. Never the federation `instanceId`. |
+| telemetryId | text | | Random UUID, minted on the first off-to-on transition and kept for the life of the install, through off. Never the federation `instanceId`. |
 | telemetryLastDay | text | | Last UTC day (`YYYY-MM-DD`) successfully reported. |
 | telemetryLastError | text | | JSON `{ day, status }` of the last failed attempt, null after a success. |
 | installedAt | integer | | First-boot timestamp (epoch ms). Backfilled by `ensureDefaults` from the oldest local non-deleted account, or `Date.now()` on a fresh DB, so it is non-null after boot and never overwritten. |

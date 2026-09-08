@@ -1494,6 +1494,6 @@ export interface TelemetryStatus {
   enabled: boolean | null;
   lastDay: string | null;
   lastError: { day: string; status: number } | null;
-  /** The random telemetry id, or null while off. */
+  /** The random telemetry id, minted on the first enable and kept through off; null until then. */
   id: string | null;
 }

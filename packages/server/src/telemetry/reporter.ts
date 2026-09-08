@@ -42,9 +42,15 @@ function pingUrl(endpoint: string): string {
  * made the request.
  *
  * The state is read at the start and again after the request resolves: an
- * admin can switch reporting off, or off and on again, while a ping is in
- * flight, and the bookkeeping fields belong to whichever id is current. A row
- * that changed underneath the request keeps what the transition left it.
+ * admin can switch reporting off while a ping is in flight, and a row that
+ * was switched off keeps what the transition left it. The id survives an
+ * off-and-on round trip, so a ping that comes back to a re-enabled row still
+ * belongs to it and is recorded; the id comparison below only fires for a
+ * database edited or restored by hand. If that round trip crosses midnight
+ * the success overwrites the re-enable's stamp with the ping's own day, so one
+ * ping goes out at the next slot rather than the one after. Do not "fix" that
+ * by comparing the last day: it would skip a day for an instance that was on
+ * the whole time bar a second.
  *
  * Neither the payload nor the receiver's answer is ever logged.
  */

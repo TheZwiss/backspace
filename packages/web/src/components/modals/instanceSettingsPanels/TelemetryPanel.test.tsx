@@ -29,6 +29,14 @@ describe('TelemetryPanel', () => {
     expect(screen.getByText(/Last hello sent on/)).toBeInTheDocument();
   });
 
+  it('hides the id while off even though the server keeps it', async () => {
+    vi.spyOn(api.admin.telemetry, 'get').mockResolvedValue({ ...off, id: on.id });
+    render(<TelemetryPanel />);
+    expect(await screen.findByText('Off')).toBeInTheDocument();
+    expect(screen.queryByText(/3f6c9e2a/)).not.toBeInTheDocument();
+    expect(await screen.findByText(/"instance": "preview"/)).toBeInTheDocument();
+  });
+
   it('toggles through the API', async () => {
     vi.spyOn(api.admin.telemetry, 'get').mockResolvedValue(off);
     const set = vi.spyOn(api.admin.telemetry, 'set').mockResolvedValue(on);

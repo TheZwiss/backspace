@@ -137,19 +137,27 @@ Transitions, all through `setTelemetryEnabled(sqlite, enabled, today)`:
 
 | From | To | What happens |
 |---|---|---|
-| `null` or off | on | a fresh `crypto.randomUUID()` is minted, `telemetry_last_day` is set to today, the last error is cleared |
+| `null` or off | on | a `crypto.randomUUID()` is minted if the row has no id yet, `telemetry_last_day` is set to today, the last error is cleared |
 | on | on | nothing at all |
-| any | off | the id, the last day and the last error are cleared |
+| any | off | the last day and the last error are cleared; the id is kept |
 
-The on-to-on case matters. Rotating the id on a repeated save would make one
-instance look like two to the receiver and reset its two-days-in-thirty
-qualification, and restamping the last day would skip that day's ping. A second
-click in the admin panel and a re-run of `install.sh` with `TELEMETRY=on` both
-take that path and both change nothing.
+The id is minted once and kept for the life of the install, through any number
+of off-and-on cycles. This is what Home Assistant and Grafana do. Rotating it
+would make one instance look like two to the receiver, restart its
+two-days-in-thirty qualification, leave an orphaned short-lived row behind, and
+move its slot minute. Until 2026-09-08 switching off cleared the id and
+switching on minted a new one, so an instance that toggled before then left
+the old id's rows behind in the receiver. An old id that was on for a single
+day never qualifies; one that was on for longer stays eligible for up to 30
+days after the switch and is counted twice in the network series for that
+window. The 90-day retention removes the rows either way.
+
+The on-to-on case matters too. Restamping the last day on a repeated save would
+skip that day's ping. A second click in the admin panel and a re-run of
+`install.sh` with `TELEMETRY=on` both take that path and both change nothing.
 
 Setting the last day to today on the way in is what makes the first ping go out
-tomorrow rather than within the minute. Turning off and on again mints a new id,
-so as far as the receiver can tell that is a new anonymous instance.
+tomorrow rather than within the minute.
 
 **Backup restore is a known limit.** A database restored onto two machines
 carries the same `telemetry_id`. The receiver upserts both onto one row per day,
@@ -216,15 +224,15 @@ backspace-server/<version>`, with a 10 second `AbortSignal.timeout`. Outcomes:
 | Result | What the instance does |
 |---|---|
 | 2xx | `telemetry_last_day = day`, the last error is cleared |
-| 410 | reporting is switched off and the id is cleared, with one info-level log line saying the service was retired |
+| 410 | reporting is switched off through the same transition as the admin panel (the id is kept), with one info-level log line saying the service was retired |
 | any other status | `telemetry_last_error = { day, status }`, a debug log line, retry tomorrow and never sooner |
 | a thrown request (network failure, timeout) | the same as any other status, recorded as status `0` |
 
 Neither the payload nor the receiver's answer is ever logged. The state is read
-again after the request resolves: an admin can switch reporting off, or off and
-on again, while a ping is in flight, and the bookkeeping fields belong to
-whichever id is current. A row that changed underneath the request keeps what
-the transition left it.
+again after the request resolves: an admin can switch reporting off while a
+ping is in flight, and a row that was switched off keeps what the transition
+left it. The id survives an off-and-on round trip, so a ping that comes back
+to a re-enabled row still belongs to it and its outcome is recorded.
 
 `TELEMETRY_ENDPOINT` overrides the receiver base URL, default
 `https://hello.backspacechat.com`. It exists for tests, for pointing an instance
@@ -255,10 +263,11 @@ instance is already on.
 
 `GET /preview` builds the real payload with the same `buildTelemetryPayload` the
 reporter uses, so the modal and the settings panel can never show a document
-different from the one that would be sent. While reporting is off there is no
-id, and minting one to render a preview would opt the instance in by opening a
-dialog: the literal string `preview` stands in as `instance` instead. The route
-writes nothing in either state.
+different from the one that would be sent. While reporting is off the literal
+string `preview` stands in as `instance`: an instance that was never on has no
+id, and minting one to render a preview would opt it in by opening a dialog; an
+instance that was on keeps its id but does not show it next to "Off". The
+route writes nothing in either state.
 
 The panel lives in Instance settings under "Say hi to Jannis", with the toggle,
 the last reported day, the last error if there is one, the masked id and the

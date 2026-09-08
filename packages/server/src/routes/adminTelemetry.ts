@@ -45,9 +45,11 @@ export async function adminTelemetryRoutes(app: FastifyInstance): Promise<void> 
   // right now, built by the same function the reporter uses so the modal and
   // the settings panel can never show something the reporter would not send.
   //
-  // While reporting is off there is no id, and minting one here would opt the
-  // instance in by opening a preview. The literal "preview" stands in instead;
-  // nothing is written either way.
+  // While reporting is off the literal "preview" stands in for the id. An
+  // instance that has never been on has no id, and minting one here would opt
+  // it in by opening a preview; an instance that was on keeps its id for a
+  // later re-enable, but showing it next to "Off" would read as if something
+  // were still being sent. Nothing is written either way.
   app.get(
     '/api/admin/telemetry/preview',
     { preHandler: [authenticate, requireAdmin] },
@@ -55,7 +57,8 @@ export async function adminTelemetryRoutes(app: FastifyInstance): Promise<void> 
       const sqlite = getRawDb();
       const state = readTelemetryState(sqlite);
       const today = utcDay(new Date());
-      return buildTelemetryPayload(sqlite, payloadContextFromConfig(config, today, state.id ?? 'preview'));
+      const instance = state.enabled === true && state.id !== null ? state.id : 'preview';
+      return buildTelemetryPayload(sqlite, payloadContextFromConfig(config, today, instance));
     },
   );
 }

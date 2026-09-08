@@ -1,7 +1,7 @@
 # Instance telemetry ("Say hi to Jannis") design
 
 Date: 2026-09-06
-Status: approved in conversation, revised after review, implemented on branch feat/instance-telemetry, 2026-09-06
+Status: approved in conversation, revised after review, implemented on branch feat/instance-telemetry, 2026-09-06. Superseded in one point on 2026-09-08: the id is no longer cleared on off or re-minted on re-enable, see `docs/systems/telemetry.md` "Opt-in state".
 
 ## 1. Purpose
 

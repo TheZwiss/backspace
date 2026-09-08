@@ -103,8 +103,8 @@ export function TelemetryPanel() {
     setSaving(true);
     try {
       await setTelemetryEnabled(next);
-      // Turning it on mints a new id and turning it off clears it, so the
-      // payload on screen would otherwise name an id that no longer applies.
+      // The preview carries the real id while on and the placeholder while
+      // off, so the payload on screen would otherwise name the wrong one.
       await loadPreview();
     } catch (err) {
       // The store only keeps what the server returned, so the switch stays
@@ -193,7 +193,7 @@ export function TelemetryPanel() {
             })}
           </div>
         )}
-        {telemetry.id !== null && (
+        {telemetry.enabled === true && telemetry.id !== null && (
           <div className="text-xs text-txt-tertiary">
             {t('telemetry:panel.status.id', { id: maskId(telemetry.id) })}
           </div>
