@@ -8,7 +8,7 @@
 
 **Tech Stack:** React 18, Zustand 5, TypeScript strict, Tailwind 3, i18next, Vitest + @testing-library/react.
 
-**Spec:** `/private/tmp/claude-501/-Users-jbraun-backspace-public/5422ded3-2069-4358-84fb-0611dafbef36/scratchpad/update-badge-design.md` (revised after code review). Copy it into the worktree if the scratchpad is gone; the plan restates every decision it depends on.
+**Spec:** none separate. The design was settled in review on the pull request that carried this work (#166) and folded into this document, which restates every decision it depends on. Unlike the other plans here, there is no `docs/superpowers/specs/` file to read alongside it.
 
 ## Global Constraints
 
