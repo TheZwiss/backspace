@@ -6,10 +6,18 @@ import { config } from '../config.js';
  * Three properties matter more than the feature itself:
  *
  *  1. **No background poller.** Nothing in the server calls this on a timer.
- *     It runs only while a signed-in admin has the Updates panel open and the
- *     cache is cold. An instance whose admin never opens that panel never
- *     contacts github.com. For a self-hosted product that is a promise worth
- *     keeping, not a detail.
+ *     It runs when a signed-in admin's client asks for the update status — on
+ *     their sign-in, on a six-hourly refresh while their session lives, and on
+ *     an explicit "Check again" — and only when the cache is cold. An instance
+ *     nobody administers never contacts github.com. The lookup still carries
+ *     nothing that identifies the instance, so this is a change to when the
+ *     request is made, not to what it reveals.
+ *
+ *     Note on cost: the six-hour success cache bounds a healthy instance to
+ *     roughly four outbound requests a day. A FAILED lookup is cached for a
+ *     tenth of that, so an instance with blocked or rate-limited egress can
+ *     attempt around forty a day. If that ever matters, lengthen the failure
+ *     TTL rather than narrowing the trigger.
  *  2. **Nothing identifying leaves the box.** The User-Agent is the bare word
  *     "Backspace" (GitHub requires one). No instance id, no domain, not even
  *     the running version, which would otherwise turn GitHub's logs into a

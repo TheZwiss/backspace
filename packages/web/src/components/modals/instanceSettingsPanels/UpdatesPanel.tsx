@@ -86,9 +86,9 @@ export function UpdatesPanel() {
     }
   }, []);
 
-  // The lookup happens here, when an admin opens the panel, and nowhere else.
-  // There is no background poller on the server, so an instance whose admin
-  // never opens this never contacts github.com at all.
+  // The status is owned by settingsStore, which fetches it when an admin's home
+  // WebSocket reports the session. This mount only covers the cases that fetch
+  // could not: an admin promoted mid-session, or a sign-in fetch that failed.
   useEffect(() => { void load(false); }, [load]);
 
   if (loading) return <div className="text-sm text-txt-tertiary">{t('admin:updates.loading')}</div>;
