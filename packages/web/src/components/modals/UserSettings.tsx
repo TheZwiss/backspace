@@ -16,6 +16,7 @@ import { DesktopPanel } from './settingsPanels/DesktopPanel';
 import { InstancePanel } from './settingsPanels/InstancePanel';
 import { KeybindsPanel } from './settingsPanels/KeybindsPanel';
 import { isElectron } from '../../platform/platform';
+import { useInstanceUpdateBadge } from '../../hooks/useInstanceUpdateBadge';
 import { SettingsSectionsProvider, useSettingsSectionsContext } from './SettingsSectionsContext';
 
 type SettingsTab = 'account' | 'appearance' | 'voice' | 'privacy' | 'connections' | 'keybinds' | 'desktop' | 'instance';
@@ -70,6 +71,7 @@ export function UserSettingsModal() {
   const isAdmin = useAuthStore((s) => s.user?.isAdmin);
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
+  const updateBadge = useInstanceUpdateBadge();
 
   const [tab, setTab] = useState<SettingsTab>('account');
   const [mobileView, setMobileView] = useState<'tabs' | 'content'>('tabs');
@@ -161,7 +163,13 @@ export function UserSettingsModal() {
               <>
                 <div className="border-t border-white/[0.04] my-2 mx-2" />
                 <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('settings:nav.administration')}</div>
-                <button onClick={() => handleTabClick('instance')} className={tabClass('instance')}>{t('settings:nav.tabs.instance')}</button>
+                <button
+                  onClick={() => handleTabClick('instance')}
+                  className={`${tabClass('instance')} flex items-center gap-1.5`}
+                >
+                  <span className="flex-1 min-w-0 truncate">{t('settings:nav.tabs.instance')}</span>
+                  {updateBadge && <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-accent-amber" />}
+                </button>
                 {tab === 'instance' && <SidebarSubLinks />}
               </>
             )}
