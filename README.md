@@ -14,6 +14,8 @@
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/TheZwiss/backspace/badge)](https://scorecard.dev/viewer/?uri=github.com/TheZwiss/backspace)
 [![Security policy](https://img.shields.io/badge/security-policy-blue.svg)](SECURITY.md)
 
+**English** · [Русский](README.ru.md)
+
 </div>
 
 ---

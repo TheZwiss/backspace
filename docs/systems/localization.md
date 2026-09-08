@@ -415,6 +415,47 @@ configured yet; when one is, it points at `packages/web/src/locales` and
 
 ---
 
+## The landing page
+
+`site/` is outside i18next entirely, and deliberately. It is a static marketing
+page served by GitHub Pages with no bundler and no runtime: a translation there
+is a second HTML file, not a catalog. `site/index.html` is English,
+`site/ru/index.html` is Russian, and the two are an `hreflang` pair that each
+declare both plus an `x-default` pointing at the root. Both appear in
+`sitemap.xml` (`docs/systems/metrics.md` §3).
+
+What the two pages share is in `site/assets/`: `site.css` and `site.js`, linked
+by both, because neither says anything about language. The five strings the
+script would otherwise hardcode travel on `data-` attributes of the elements
+they belong to, and number formatting reads `document.documentElement.lang`
+rather than branching on a locale, so the Russian page groups thousands with a
+space without the script knowing which page it is on.
+
+Terminology on the Russian page follows `packages/web/src/locales/ru/` rather
+than being invented for the marketing copy: пространство, канал, демонстрация
+экрана, пиринг, личные сообщения. A reader who installs from that page and then
+opens the app should meet the same words twice. When a product noun changes in
+the app catalogs, the landing page is the second place to change it.
+
+**The design font does not cover Cyrillic, and there is no version of it that
+does.** Google Fonts publishes DM Sans with exactly two subsets, `latin` and
+`latin-ext`; there is no Cyrillic cut to vendor. Left alone, a Russian page sets
+its Latin words and all its digits in DM Sans and everything else in the OS
+fallback, which is two typefaces inside one sentence and, in the stat tiles, a
+number in one face directly above its label in another. So `site.css` gives
+`:root:lang(ru)` a platform UI stack and drops DM Sans from that page entirely:
+within-page consistency is what a reader perceives, since nobody holds the two
+translations side by side. The selector is on the language, so any later
+Cyrillic-script translation inherits the same treatment. **This applies to the
+app as well** — `packages/web/tailwind.config.js` names the same font, and the
+Russian UI has the same split — and it is not fixed there.
+
+Two things the page does not inherit from this document. It has no plural
+machinery, so a label under a stat tile is a bare nominative plural read as a
+column heading, not as a phrase agreeing with the number above it. And English
+house style forbids the em dash; Russian grammar requires тире where the copula
+is omitted, so the Russian page uses it and the English page does not.
+
 ## Adding a language
 
 1. Create `packages/web/src/locales/<lng>/` with every namespace file.
@@ -423,5 +464,11 @@ configured yet; when one is, it points at `packages/web/src/locales` and
    window's inline catalog.
 4. Run `pnpm typecheck`; the check script confirms parity.
 
-Nothing else. If a fourth step turns out to be needed, the fix is to remove
+Nothing else. If a fifth step turns out to be needed, the fix is to remove
 the need, not to document the step.
+
+The landing page is **not** part of this list. Shipping the app in a language
+does not oblige anyone to translate `site/`, and a `site/<lng>/` page can be
+added or dropped without touching a catalog. If a third one is ever added, that
+is the point to weigh generating the pages from a template against copying the
+markup a second time.

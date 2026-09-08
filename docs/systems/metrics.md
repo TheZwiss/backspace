@@ -70,7 +70,10 @@ scripts/metrics/                     @backspace/metrics (pnpm workspace package)
     *.test.ts           vitest, no network, no filesystem outside a per-test tmpdir
 
 site/                                the GitHub Pages site
-  index.html         landing page (unrelated to metrics)
+  index.html         landing page, English (unrelated to metrics)
+  ru/index.html      the same landing page in Russian; the two are an hreflang pair
+  assets/site.css    the landing pages' stylesheet, shared by both
+  assets/site.js     the landing pages' script, shared by both
   insights/
     index.html       the dashboard: one file, inline CSS and JS, no build step
     vendor/uplot.min.js, vendor/uplot.min.css   uPlot 1.6.32, committed verbatim
@@ -90,6 +93,8 @@ branch: metrics-data (orphan, ruleset-protected — see §8)
 ```
 
 The collector is plain TypeScript executed directly by Node's native type stripping — no build step, no transpiler, no `dist/`. `pnpm-workspace.yaml` lists `scripts/metrics` explicitly (not `scripts/*`), so unrelated future scripts under `scripts/` are not swept into the workspace by accident. The dashboard follows the same rule for the same reason: `site/insights/index.html` is one file with its CSS and JS inline, and its only dependency is committed next to it.
+
+The two landing pages are the one exception, and they are an exception because there are two of them. They shared 542 lines of CSS and 198 of JavaScript that say nothing about language, so those live in `site/assets/` and both pages link them; only markup, which genuinely differs per language, is duplicated. The five strings the script used to hardcode reach it through `data-` attributes on the elements they belong to (`#nums` carries `data-src` and the three stat-card labels, `#nums-note` the two note texts, `#typing-who` its suffix), and the number formatting reads `document.documentElement.lang`, so `1,234` on one page is `1 234` on the other with no branch in the code. A third language is more markup and no more plumbing; if one is ever added, that is the moment to consider generating the pages from a template rather than the moment to copy the JavaScript again.
 
 ### The collection workflows
 
@@ -228,7 +233,9 @@ Four properties this depends on:
 
 ### The sitemap
 
-`cli-bundle.ts` writes `site/sitemap.xml` (gitignored, `sitemap.ts`) listing the three published pages, with `lastmod` on the two generated ones taken from the archive's newest date rather than from the clock: they are rebuilt every deploy, but their *content* only changes when a collection adds a row, and `lastmod` describes content. The landing page carries no `lastmod` — nothing in this pipeline knows when it last changed.
+`cli-bundle.ts` writes `site/sitemap.xml` (gitignored, `sitemap.ts`) listing the four published pages, with `lastmod` on the two generated ones taken from the archive's newest date rather than from the clock: they are rebuilt every deploy, but their *content* only changes when a collection adds a row, and `lastmod` describes content. Neither landing page carries a `lastmod` — nothing in this pipeline knows when either last changed.
+
+`ru/` is listed beside the root rather than left out. It is a translation of the landing page, not a separate document: the two declare each other with `hreflang` and the root is also the `x-default`, which is why `ru/` takes the lower priority of the pair. A sitemap that listed only one of them would leave the pair discoverable from one side only.
 
 **`robots.txt` is published from this repository, at `site/robots.txt`.** It is only honoured at a domain root, and since the site moved to `backspacechat.com` (a GitHub Pages custom domain, `site/CNAME`) the site *is* that root, so the file ships in the Pages artifact like any other asset. It is committed rather than generated: the one URL it carries, the sitemap, is fixed. Before the move this site was a project page at `thezwiss.github.io/backspace/` and could not publish one at all; the root belonged to a separate `thezwiss.github.io` user-pages repository, which still exists and still carries a `robots.txt` for that domain (its sitemap line now points here). A fork that enables Pages inherits `site/CNAME` naming a domain it does not own; GitHub refuses a custom domain already claimed by another repository, so the fork has to delete that file or set its own.
 

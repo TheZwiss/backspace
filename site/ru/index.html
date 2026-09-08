@@ -1,0 +1,490 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Backspace — аналог Discord на своём сервере, открытый код</title>
+<meta name="description" content="Backspace — аналог Discord с открытым исходным кодом, который вы держите на собственном сервере: голос и видео, демонстрация экрана до 4K при 120 кадрах в секунду, федерация между серверами. Лицензия AGPL-3.0. Разворачивается в Docker, работает на Raspberry Pi." />
+<link rel="canonical" href="https://backspacechat.com/ru/" />
+<link rel="alternate" hreflang="en" href="https://backspacechat.com/" />
+<link rel="alternate" hreflang="ru" href="https://backspacechat.com/ru/" />
+<link rel="alternate" hreflang="x-default" href="https://backspacechat.com/" />
+<link rel="icon" type="image/png" href="../assets/logo.png" />
+<link rel="apple-touch-icon" href="../assets/logo.png" />
+
+<!-- Open Graph / social preview -->
+<meta property="og:type" content="website" />
+<meta property="og:title" content="Backspace — аналог Discord на своём сервере, открытый код" />
+<meta property="og:description" content="Замена Discord, которую вы полностью держите у себя: голос, видео в высоком качестве, демонстрация экрана до 4K при 120 кадрах в секунду и федерация между серверами. AGPL-3.0." />
+<meta property="og:url" content="https://backspacechat.com/ru/" />
+<meta property="og:image" content="https://backspacechat.com/social-preview.png" />
+<meta property="og:locale" content="ru_RU" />
+<meta property="og:locale:alternate" content="en_US" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Backspace: аналог Discord на своём сервере" />
+<meta name="twitter:description" content="Голос, видео в высоком качестве, демонстрация экрана до 4K при 120 кадрах в секунду и федерация. Свой сервер, открытый код." />
+<meta name="twitter:image" content="https://backspacechat.com/social-preview.png" />
+
+<!-- Structured data: software -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Backspace",
+  "applicationCategory": "CommunicationApplication",
+  "operatingSystem": "Linux, Windows, macOS, Web",
+  "inLanguage": "ru",
+  "description": "Аналог Discord с открытым исходным кодом, который размещается на собственном сервере: подробные настройки голоса и видео, демонстрация экрана до 4K при 120 кадрах в секунду и федерация между серверами.",
+  "license": "https://www.gnu.org/licenses/agpl-3.0.html",
+  "url": "https://backspacechat.com/ru/",
+  "codeRepository": "https://github.com/TheZwiss/backspace",
+  "programmingLanguage": "TypeScript",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+}
+</script>
+<!-- Structured data: FAQ -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "inLanguage": "ru",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Backspace — это аналог Discord на своём сервере?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Да. Всё устроено привычно по Discord: пространства, каналы, роли, голос, видео, демонстрация экрана, личные сообщения и друзья. Всё это работает целиком на вашем сервере, поэтому данные принадлежат вам и правила устанавливаете вы." }
+    },
+    {
+      "@type": "Question",
+      "name": "Есть ли демонстрация экрана и видео высокого качества?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Да. Демонстрация экрана поддерживает до 4K при 120 кадрах в секунду, в пределах, заданных администратором. Кодек, битрейт и разрешение выбираются для каждой трансляции, есть шумоподавление RNNoise и сведения о соединении в реальном времени. Голос и видео работают на LiveKit, включать их не обязательно." }
+    },
+    {
+      "@type": "Question",
+      "name": "Что здесь означает федерация?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Независимые серверы Backspace можно связать друг с другом, чтобы пользователи с разных серверов могли дружить, переписываться и звонить друг другу, при этом каждый сервер остаётся в собственности того, кто его держит. Запросы между серверами подписываются HMAC. Это связь Backspace с Backspace, а не Matrix и не ActivityPub." }
+    },
+    {
+      "@type": "Question",
+      "name": "Можно ли запустить его на Raspberry Pi?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Да. Установщик скачивает готовый образ сразу под несколько архитектур, amd64 и arm64, поэтому на слабых и ARM-машинах ничего не нужно собирать локально." }
+    },
+    {
+      "@type": "Question",
+      "name": "Он действительно с открытым исходным кодом?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Да, под лицензией GNU AGPL-3.0, есть и коммерческая лицензия для случаев, когда AGPL не подходит. Каждая выпущенная версия остаётся доступной под AGPL." }
+    }
+  ]
+}
+</script>
+
+<link rel="stylesheet" href="../assets/site.css" />
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap nav-in">
+    <a class="brand" href="#top"><img src="../assets/logo.png" alt="" width="26" height="26" /> Backspace</a>
+    <a class="nav-link" href="#voice">Голос</a>
+    <a class="nav-link" href="#federation">Федерация</a>
+    <a class="nav-link" href="#install">Установка</a>
+    <a class="nav-link" href="#compare">Сравнение</a>
+    <a class="nav-link" href="#faq">Вопросы</a>
+    <a class="nav-link" href="../insights/">Статистика</a>
+    <a class="nav-link" href="../" hreflang="en" lang="en">English</a>
+    <a class="btn btn-primary btn-sm" href="https://github.com/TheZwiss/backspace">GitHub</a>
+  </div>
+</header>
+
+<main id="top">
+
+<!-- ============ Hero ============ -->
+<section class="hero">
+  <div class="wrap">
+    <div class="hero-head">
+      <span class="hero-tag">открытый код, AGPL-3.0 · <b>ваше железо, ваши правила</b></span>
+      <h1>Групповой чат, который живёт на вашем железе.</h1>
+      <p class="hero-sub">
+        Backspace — аналог Discord с открытым исходным кодом, который вы держите у себя: пространства,
+        роли, голос и видео, демонстрация экрана до 4K при 120 кадрах в секунду и федерация между
+        серверами, каждый из которых остаётся у своего владельца.
+      </p>
+      <div class="cta">
+        <a class="btn btn-primary" href="https://github.com/TheZwiss/backspace">Забрать с GitHub</a>
+        <a class="btn btn-glass" href="#compare">Сравнение с другими</a>
+      </div>
+      <p class="hero-note">один интерактивный установщик · HTTPS настроится сам · работает на Raspberry Pi</p>
+    </div>
+
+    <!-- The living window: a hand-built replica of the real client -->
+    <figure class="win" id="win" aria-label="Воссозданное окно приложения Backspace: переписка в пространстве на собственном сервере и подключённый голосовой канал.">
+      <div class="strip" aria-hidden="true">
+        <span class="tile logo"><img src="../assets/logo.png" alt="" /></span>
+        <span class="sep"></span>
+        <span class="tile active" style="background:linear-gradient(135deg,var(--mint),var(--sky))">ч</span>
+        <span class="tile" style="background:linear-gradient(135deg,var(--peach),var(--rose))">к</span>
+        <span class="tile" style="background:linear-gradient(135deg,var(--lavender),var(--sky))">с</span>
+        <span class="tile add">+</span>
+      </div>
+
+      <div class="side">
+        <div class="side-head">чердак
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+        </div>
+        <div class="side-scroll">
+          <div class="cat">текстовые</div>
+          <div class="chan on"><span class="h">#</span> общий</div>
+          <div class="chan"><span class="h">#</span> свой-сервер</div>
+          <div class="chan"><span class="h">#</span> 3d-печать</div>
+          <div class="cat">голосовые</div>
+          <div class="chan">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/></svg>
+            гостиная
+          </div>
+          <div class="vu speaking" id="vu-mara"><span class="dot av-mara" data-i="m"></span> mara</div>
+          <div class="vu" id="vu-felix"><span class="dot av-felix" data-i="f"></span> felix</div>
+          <div class="vu" id="vu-jonas" hidden><span class="dot av-jonas" data-i="j"></span> jonas</div>
+        </div>
+        <div class="voice-pill">
+          <div class="vt">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="19.5" r="1"/></svg>
+            Голос подключён
+          </div>
+          <div class="vc2">гостиная · 34 мс</div>
+        </div>
+        <div class="user-bar">
+          <span class="dot av-mara"><i></i></span>
+          <span><span class="un">mara</span><br /><span class="uh">@mara</span></span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
+        </div>
+      </div>
+
+      <div class="chatcol">
+        <div class="chat-head">
+          <span class="h">#</span><b>общий</b>
+          <span class="topic">сервер теперь живёт в шкафу</span>
+        </div>
+        <div class="msgs" id="msgs">
+          <div class="msg" data-step="1">
+            <span class="dot av-mara" data-i="m"></span>
+            <div><div class="mh"><b>mara</b><time>21:04</time></div>
+            <p>вчера вечером переехали с discord. теперь всё крутится на малинке у меня в шкафу</p></div>
+          </div>
+          <div class="msg" data-step="2">
+            <span class="dot av-jonas" data-i="j"></span>
+            <div><div class="mh"><b>jonas</b><time>21:04</time></div>
+            <p>намучился с настройкой?</p></div>
+          </div>
+          <div class="msg" data-step="3">
+            <span class="dot av-mara" data-i="m"></span>
+            <div><div class="mh"><b>mara</b><time>21:05</time></div>
+            <p>один установщик. caddy сам получил сертификаты, первый аккаунт стал админом. на этом всё</p></div>
+          </div>
+          <div class="msg" data-step="4">
+            <span class="dot av-felix" data-i="f"></span>
+            <div><div class="mh"><b>felix</b><time>21:05</time></div>
+            <p>заходи в гостиную, покажу базу в factorio</p></div>
+          </div>
+          <div class="msg" data-step="5">
+            <span class="dot av-jonas" data-i="j"></span>
+            <div><div class="mh"><b>jonas</b><time>21:06</time></div>
+            <p>слушай, картинка неприлично чёткая. это что, 1440p?</p></div>
+          </div>
+          <div class="msg" data-step="6">
+            <span class="dot av-felix" data-i="f"></span>
+            <div><div class="mh"><b>felix</b><time>21:06</time></div>
+            <p>4k. открой сведения о соединении, если не веришь</p></div>
+          </div>
+          <div class="typing" id="typing" aria-hidden="true">
+            <span class="tb"><i></i><i></i><i></i></span>
+            <span id="typing-who" data-suffix=" печатает">mara печатает</span>
+          </div>
+        </div>
+        <div class="composer" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg>
+          <span class="ph">Написать в #общий</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 9h.01M15 9h.01"/></svg>
+        </div>
+      </div>
+
+      <div class="mems" aria-hidden="true">
+        <div class="cat">владелец · 1</div>
+        <div class="mem"><span class="dot av-mara" data-i="m"><i></i></span> mara</div>
+        <div class="cat">в сети · 2</div>
+        <div class="mem"><span class="dot av-felix" data-i="f"><i></i></span> felix</div>
+        <div class="mem"><span class="dot av-jonas" data-i="j"><i></i></span> jonas</div>
+      </div>
+    </figure>
+  </div>
+</section>
+
+<!-- ============ Voice ============ -->
+<section id="voice">
+  <div class="wrap split">
+    <div class="reveal">
+      <div class="ch-label ch-mint">голос-и-демонстрация-экрана</div>
+      <h2>Пульт управления, а не одна кнопка «выключить микрофон».</h2>
+      <p class="sec-copy">
+        Большинство мессенджеров дают вам один ползунок громкости и кодек, который вы никогда не
+        увидите. Backspace отдаёт вам весь тракт. Когда трансляция начинает подтормаживать,
+        сведения о соединении показывают, что именно происходит на линии, и вы устраняете
+        неполадку, а не гадаете о ней.
+      </p>
+      <dl class="spec">
+        <div class="spec-row"><dt>кодек</dt><dd>VP9 или аппаратный H.264, выбирается для каждой трансляции</dd></div>
+        <div class="spec-row"><dt>разрешение</dt><dd>до 4K при 120 кадрах в секунду, в пределах, заданных администратором</dd></div>
+        <div class="spec-row"><dt>битрейт</dt><dd>задайте вручную или в любой момент верните автоматический</dd></div>
+        <div class="spec-row"><dt>громкость</dt><dd>от 0 до 200%, отдельно для каждого человека и каждой демонстрации экрана</dd></div>
+        <div class="spec-row"><dt>шум</dt><dd>шумоподавление RNNoise убирает стук клавиатуры</dd></div>
+        <div class="spec-row"><dt>соединение</dt><dd>битрейт, кодек, пинг, потери пакетов и джиттер в реальном времени</dd></div>
+      </dl>
+      <p class="foot-note">голос и видео работают на LiveKit и подключаются по желанию. всё остальное работает без них.</p>
+    </div>
+    <div class="reveal">
+      <div class="voice-media">
+        <img class="shot" src="../assets/voice-grid.webp" alt="Голосовой канал Backspace: сетка из девяти плиток с камерами и демонстрациями экрана, рядом список каналов и список участников." width="1584" height="930" loading="lazy" />
+        <img class="panel" src="../assets/stream-settings.webp" alt="Панель настроек трансляции: предустановки разрешения от 540p до 4K, включая исходное, частота кадров от 30 до 120, режим содержимого, выбор кодека между VP9 и аппаратным H.264, ползунок битрейта и переключатель системного звука." width="524" height="1062" loading="lazy" />
+      </div>
+      <p class="media-cap">настоящие скриншоты: звонок на девять человек и панель настроек трансляции.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ Federation ============ -->
+<section id="federation" class="fed">
+  <div class="wrap">
+    <div class="reveal" style="max-width:66ch">
+      <div class="ch-label ch-lavender">федерация</div>
+      <h2>Независимые серверы, общий разговор.</h2>
+      <p class="sec-copy">
+        Свяжите два сервера Backspace, и их пользователи смогут дружить, переписываться и звонить
+        друг другу, а каждый сервер останется собственностью того, кто его держит. Запросы между
+        серверами <strong>подписываются HMAC</strong>, секреты меняются по расписанию, которое задаёте вы,
+        а пиринг можно отозвать в любой момент. Здесь нет ни каталога, ни центрального узла: два
+        администратора договариваются, и их серверы жмут друг другу руки.
+      </p>
+    </div>
+    <div class="fed-grid">
+      <div class="reveal">
+        <div class="fed-diagram" role="img" aria-label="Схема: два сервера Backspace, closet.mara.dev и rack.jonas.net, обмениваются запросами с подписью HMAC напрямую друг с другом.">
+          <div class="node">
+            <div class="nh"><i></i>closet.mara.dev</div>
+            <div class="no">принадлежит mara и работает у неё</div>
+            <div class="nu" aria-hidden="true">
+              <span class="av-mara"></span><span class="av-felix"></span>
+            </div>
+          </div>
+          <div class="wire" aria-hidden="true">
+            <span class="lbl">подпись HMAC</span>
+            <span class="pk"></span>
+            <span class="pk back"></span>
+          </div>
+          <div class="node">
+            <div class="nh"><i></i>rack.jonas.net</div>
+            <div class="no">принадлежит jonas и работает у него</div>
+            <div class="nu" aria-hidden="true">
+              <span class="av-jonas"></span><span style="background:linear-gradient(135deg,var(--amber),var(--coral))"></span>
+            </div>
+          </div>
+        </div>
+        <p class="sec-copy" style="margin-top:34px">
+          Честные ограничения: это связь Backspace с Backspace, а не Matrix и не ActivityPub, и она
+          ещё молодая. Если вам нужен зрелый открытый стандарт федерации уже сегодня, Matrix подойдёт
+          лучше, и в <a href="https://github.com/TheZwiss/backspace/blob/main/docs/comparison.md">нашем сравнении</a>
+          так и написано.
+        </p>
+      </div>
+      <div class="reveal">
+        <img class="fed-shot" src="../assets/federation-peer.webp" alt="Список связанных серверов в панели администратора: два активных пиринга, один раскрыт и показывает проверки доступности, время последнего ответа и синхронизации, расписание смены секрета и кнопки для смены общего секрета или отзыва пиринга." width="1220" height="678" loading="lazy" />
+        <p class="media-cap">из панели администратора: доступность серверов проверяется, секреты меняются по расписанию, отзыв пиринга в один клик.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ Platform ============ -->
+<section id="platform">
+  <div class="wrap plat-grid">
+    <div class="reveal">
+      <div class="ch-label ch-sky">всё-остальное</div>
+      <h2>Всё, чего вы ждёте, и сделано как следует.</h2>
+      <div class="chan-list">
+        <div class="chan-row"><span class="cn">роли-и-права</span><span class="cd">побитовые права с переопределением для категорий и отдельных каналов</span></div>
+        <div class="chan-row"><span class="cn">личные-сообщения</span><span class="cd">личные сообщения и групповые звонки до 10 человек</span></div>
+        <div class="chan-row"><span class="cn">модерация</span><span class="cd">баны с причиной и журналом, ограничения голоса, которые не сбрасываются</span></div>
+        <div class="chan-row"><span class="cn">поиск</span><span class="cd">полнотекстовый по всему, с фильтрами from: has: before: и after:</span></div>
+        <div class="chan-row"><span class="cn">компьютер-и-телефон</span><span class="cd">приложение на Electron, плюс устанавливаемое PWA на телефонах</span></div>
+        <div class="chan-row"><span class="cn">файлы-и-превью</span><span class="cd">загрузки с миниатюрами, превью ссылок, поиск GIF</span></div>
+      </div>
+    </div>
+    <div class="reveal">
+      <img class="plat-shot" src="../assets/spaces.webp" alt="Экран каталога пространств: сетка открытых пространств и тех, в которых вы уже состоите с пастельными карточками-баннерами, рядом список личных сообщений и список тех, кто сейчас активен." width="1584" height="930" loading="lazy" />
+      <p class="media-cap">каталог пространств: открытые, по запросу и закрытые.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ Install ============ -->
+<section id="install" class="inst">
+  <div class="wrap inst-grid">
+    <div class="reveal">
+      <div class="term" id="term">
+        <div class="term-bar" aria-hidden="true"><i></i><i></i><i></i><span>mara@closet:~</span></div>
+        <div class="term-body">
+          <div class="tl cmd" data-t="1"><span class="pr">$ </span><span class="tt" data-text="git clone https://github.com/TheZwiss/backspace"></span></div>
+          <div class="tl cmd" data-t="2"><span class="pr">$ </span><span class="tt" data-text="cd backspace &amp;&amp; ./install.sh"></span></div>
+          <div class="tl" data-t="3">  домен, порты, голос: <span class="dim">установщик спрашивает, вы отвечаете</span></div>
+          <div class="tl" data-t="4">  HTTPS через Caddy: <span class="dim">сертификаты приходят сами</span></div>
+          <div class="tl" data-t="5">  готовый образ: <span class="dim">amd64 и arm64, без локальной сборки</span></div>
+          <div class="tl ok" data-t="6">✓ поднялось. первый зарегистрированный аккаунт становится администратором.</div>
+        </div>
+      </div>
+    </div>
+    <div class="reveal">
+      <div class="ch-label ch-amber">установка</div>
+      <h2>Один установщик, и дальше он ваш.</h2>
+      <p class="sec-copy">
+        Интерактивный установщик проводит вас через Docker Compose, а Caddy сам берёт на себя
+        HTTPS — просить дважды не придётся. Здесь нет паролей по умолчанию, о которых потом забывают:
+        администратором становится первый зарегистрированный аккаунт.
+      </p>
+      <ul class="inst-facts">
+        <li>работает на Raspberry Pi: готовый образ собран под amd64 и arm64</li>
+        <li>ваши данные — это файлы SQLite на вашем собственном диске, с автоматическим резервным копированием</li>
+        <li>AGPL-3.0, с коммерческой двойной лицензией там, где AGPL не подходит</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ Honest scope ============ -->
+<section id="scope" class="honest">
+  <div class="wrap reveal">
+    <div class="ch-label ch-peach">прежде-чем-ставить-звезду</div>
+    <h2>Прочитайте это, прежде чем ставить звезду.</h2>
+    <p class="sec-copy">
+      Backspace ещё молод, и инструменты стоит выбирать с открытыми глазами. Три вещи, которых он сегодня не даёт:
+    </p>
+    <ul class="honest-list">
+      <li><b>Никакой экосистемы Discord.</b> Здесь нет магазина ботов и армии интеграций. Вы получаете платформу, а не толпу.</li>
+      <li><b>На телефоне это PWA.</b> Оно ставится на домашний экран и работает хорошо, но нативные приложения для iOS и Android пока в планах.</li>
+      <li><b>Федерация молодая.</b> Она связывает Backspace с Backspace. Если нужен зрелый открытый стандарт, охватывающий много экосистем, лучше взять Matrix.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="numbers" class="numbers">
+  <div class="wrap reveal">
+    <div class="ch-label ch-sky">в-цифрах</div>
+    <h2>И вот как это выглядит.</h2>
+    <p class="sec-copy">
+      GitHub удаляет данные о трафике репозитория через четырнадцать дней. Вместо этого
+      задача по расписанию раз в день записывает их в публичную ветку с данными, так что история
+      сохраняется, а не теряется. Каждая цифра ниже прочитана прямо из этого архива. Никаких оценок
+      на глаз.
+    </p>
+    <div class="nums" id="nums" hidden
+         data-src="../insights/data.json"
+         data-stars="звёзды" data-views="просмотры страниц" data-clones="клонирования"
+         data-asof="на " data-since="с "></div>
+    <p class="nums-note" id="nums-note" hidden
+       data-note="Цифры записываются раз в день и хранятся после того, как GitHub их удаляет."
+       data-note-error="Не удалось прочитать актуальные цифры. Сам архив по-прежнему доступен."></p>
+    <a class="btn btn-glass" href="../insights/">Открыть весь архив</a>
+    <p class="sec-copy">
+      Для графиков нужен браузер. Если вы предпочитаете просто читать числа или хотите, чтобы их
+      читало что-то другое, тот же архив опубликован в виде
+      <a href="../insights/data/">простых таблиц</a> и в виде одного файла,
+      <a href="../insights/data.json">data.json</a>.
+    </p>
+  </div>
+</section>
+
+<!-- ============ Compare ============ -->
+<section id="compare">
+  <div class="wrap reveal">
+    <div class="ch-label ch-coral">на-фоне-других</div>
+    <h2>Честная картина.</h2>
+    <p class="sec-copy">
+      Полный разбор, включая то, где каждый из них оказывается лучшим выбором, лежит в
+      <a href="https://github.com/TheZwiss/backspace/blob/main/docs/comparison.md">документе со сравнением</a>.
+    </p>
+    <div class="table-wrap" tabindex="0">
+      <table>
+        <thead>
+          <tr><th>Возможность</th><th class="bs">Backspace</th><th>Discord</th><th>Revolt</th><th>Matrix</th><th>Mumble</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Можно поднять у себя</td><td class="yes bs">Да</td><td class="no">Нет</td><td class="yes">Да</td><td class="yes">Да</td><td class="yes">Да</td></tr>
+          <tr><td>Открытый исходный код</td><td class="yes bs">AGPL-3.0</td><td class="no">Нет</td><td class="yes">Да</td><td class="yes">Да</td><td class="yes">Да</td></tr>
+          <tr><td>Интерфейс в духе Discord</td><td class="yes bs">Да</td><td class="yes">Да</td><td class="yes">Да</td><td class="no">Другой</td><td class="no">Нет</td></tr>
+          <tr><td>Видео и демонстрация экрана</td><td class="yes bs">До 4K/120 к/с</td><td class="yes">Да</td><td class="no">Ограниченно</td><td class="yes">Да</td><td class="no">Нет</td></tr>
+          <tr><td>Настройки медиа для каждой трансляции</td><td class="yes bs">Да</td><td class="no">Нет</td><td class="no">Нет</td><td class="no">Частично</td><td class="no">Только звук</td></tr>
+          <tr><td>Федерация</td><td class="yes bs">Между серверами</td><td class="no">Нет</td><td class="no">Нет</td><td class="yes">Да, открытый стандарт</td><td class="no">Нет</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FAQ ============ -->
+<section id="faq">
+  <div class="wrap reveal">
+    <div class="ch-label ch-lavender">вопросы</div>
+    <h2>Вопросы, которые задают на самом деле.</h2>
+    <div class="faq">
+      <details open>
+        <summary>Backspace — это аналог Discord на своём сервере?</summary>
+        <p>Да. Всё устроено привычно по Discord: пространства, каналы, роли, голос, видео, демонстрация экрана, личные сообщения и друзья. Всё это работает целиком на вашем сервере, поэтому данные принадлежат вам и правила устанавливаете вы.</p>
+      </details>
+      <details>
+        <summary>Есть ли демонстрация экрана и видео высокого качества?</summary>
+        <p>Да. Демонстрация экрана поддерживает до 4K при 120 кадрах в секунду, в пределах, заданных администратором. Кодек, битрейт и разрешение выбираются для каждой трансляции, есть шумоподавление RNNoise и сведения о соединении в реальном времени. Голос и видео работают на LiveKit, включать их не обязательно.</p>
+      </details>
+      <details>
+        <summary>Что здесь означает федерация?</summary>
+        <p>Независимые серверы Backspace можно связать друг с другом, чтобы пользователи с разных серверов могли дружить, переписываться и звонить друг другу, при этом каждый сервер остаётся в собственности того, кто его держит. Запросы между серверами подписываются HMAC. Это связь Backspace с Backspace, а не Matrix и не ActivityPub.</p>
+      </details>
+      <details>
+        <summary>Можно ли запустить его на Raspberry Pi?</summary>
+        <p>Да. Установщик скачивает готовый образ сразу под несколько архитектур, amd64 и arm64, поэтому на слабых и ARM-машинах ничего не нужно собирать локально.</p>
+      </details>
+      <details>
+        <summary>Он действительно с открытым исходным кодом?</summary>
+        <p>Да, под лицензией GNU AGPL-3.0, есть и коммерческая лицензия для случаев, когда AGPL не подходит. Каждая выпущенная версия остаётся доступной под AGPL.</p>
+      </details>
+    </div>
+  </div>
+</section>
+
+<!-- ============ End CTA ============ -->
+<section class="endcta">
+  <div class="wrap reveal">
+    <h2>Следующее место, где вы зависаете, может быть вашим.</h2>
+    <p class="sec-copy">Склонируйте репозиторий, запустите установщик, и администратор здесь вы.</p>
+    <div class="cta">
+      <a class="btn btn-primary" href="https://github.com/TheZwiss/backspace">Забрать с GitHub</a>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap foot-in">
+    <span>Backspace — свободное программное обеспечение под <a href="https://github.com/TheZwiss/backspace/blob/main/LICENSE">GNU AGPL-3.0</a>, с возможностью коммерческой двойной лицензии.</span>
+    <span class="fl">
+      <a href="https://github.com/TheZwiss/backspace">GitHub</a>
+      <a href="https://github.com/TheZwiss/backspace/blob/main/docs/comparison.md">Сравнение</a>
+      <a href="https://github.com/TheZwiss/backspace/blob/main/CONTRIBUTING.md">Участие</a>
+      <a href="../insights/">Статистика</a>
+      <a href="../insights/data/">Данные</a>
+      <a href="../" hreflang="en" lang="en">English</a>
+    </span>
+  </div>
+</footer>
+
+<script src="../assets/site.js" defer></script>
+
+</body>
+</html>
