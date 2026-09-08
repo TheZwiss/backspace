@@ -159,4 +159,12 @@ describe('admin telemetry routes', () => {
     expect(res.statusCode).toBe(200);
     expect((res.json() as { instance: string }).instance).toBe(id);
   });
+
+  it('previews under the placeholder again once switched off, although the id is kept', async () => {
+    await app.inject({ method: 'PUT', url: '/api/admin/telemetry', headers: AUTH, payload: { enabled: true } });
+    await app.inject({ method: 'PUT', url: '/api/admin/telemetry', headers: AUTH, payload: { enabled: false } });
+    expect(stateRow().telemetry_id).not.toBeNull();
+    const res = await app.inject({ method: 'GET', url: '/api/admin/telemetry/preview', headers: AUTH });
+    expect((res.json() as { instance: string }).instance).toBe('preview');
+  });
 });

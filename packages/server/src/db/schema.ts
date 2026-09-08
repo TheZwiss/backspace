@@ -335,7 +335,7 @@ export const instanceSettings = sqliteTable('instance_settings', {
   autoAcceptPeering: integer('auto_accept_peering').notNull().default(1),
   /** null = never asked, 0 = off, 1 = on. */
   telemetryEnabled: integer('telemetry_enabled'),
-  /** Random UUID, minted on every off-to-on transition, cleared on off. Never the federation instance_id. */
+  /** Random UUID, minted on the first off-to-on transition and kept through off. Never the federation instance_id. */
   telemetryId: text('telemetry_id'),
   /** Last UTC day successfully reported. */
   telemetryLastDay: text('telemetry_last_day'),

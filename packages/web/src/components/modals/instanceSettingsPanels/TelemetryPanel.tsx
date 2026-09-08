@@ -103,8 +103,8 @@ export function TelemetryPanel() {
     setSaving(true);
     try {
       await setTelemetryEnabled(next);
-      // The first switch-on mints the id, so the payload on screen would
-      // otherwise still show the placeholder for an instance that now has one.
+      // The preview carries the real id while on and the placeholder while
+      // off, so the payload on screen would otherwise name the wrong one.
       await loadPreview();
     } catch (err) {
       // The store only keeps what the server returned, so the switch stays

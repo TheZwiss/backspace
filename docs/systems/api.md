@@ -315,9 +315,10 @@ reports under the same id. Enabling an instance that is already on changes
 nothing. The id is never rotated.
 
 `GET /preview` returns the exact payload a ping would carry right now, built by
-the same function the reporter uses. While reporting is off there is no id and
-none is minted to render a preview: `instance` is the literal string `preview`.
-The route writes nothing in either state.
+the same function the reporter uses. While reporting is off `instance` is the
+literal string `preview`: an instance that was never on has no id and none is
+minted to render a preview, and one that was on keeps its id but does not show
+it next to "Off". The route writes nothing in either state.
 
 See [telemetry.md](telemetry.md) for the field semantics, the rounding rule and
 what is never sent.

@@ -349,7 +349,7 @@ GET /api/admin/telemetry/preview  → TelemetryPayload
 ```typescript
 interface TelemetryStatus {
   enabled: boolean | null;   // null = this instance was never asked
-  id: string | null;         // the random telemetry id, null while off
+  id: string | null;         // the random telemetry id, kept through off; null until the first enable
   lastDay: string | null;    // last UTC day successfully reported
   lastError: { day: string; status: number } | null;
 }

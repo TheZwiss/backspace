@@ -34,6 +34,7 @@ describe('TelemetryPanel', () => {
     render(<TelemetryPanel />);
     expect(await screen.findByText('Off')).toBeInTheDocument();
     expect(screen.queryByText(/3f6c9e2a/)).not.toBeInTheDocument();
+    expect(await screen.findByText(/"instance": "preview"/)).toBeInTheDocument();
   });
 
   it('toggles through the API', async () => {
