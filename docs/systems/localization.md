@@ -437,6 +437,19 @@ than being invented for the marketing copy: пространство, канал
 opens the app should meet the same words twice. When a product noun changes in
 the app catalogs, the landing page is the second place to change it.
 
+**The design font does not cover Cyrillic, and there is no version of it that
+does.** Google Fonts publishes DM Sans with exactly two subsets, `latin` and
+`latin-ext`; there is no Cyrillic cut to vendor. Left alone, a Russian page sets
+its Latin words and all its digits in DM Sans and everything else in the OS
+fallback, which is two typefaces inside one sentence and, in the stat tiles, a
+number in one face directly above its label in another. So `site.css` gives
+`:root:lang(ru)` a platform UI stack and drops DM Sans from that page entirely:
+within-page consistency is what a reader perceives, since nobody holds the two
+translations side by side. The selector is on the language, so any later
+Cyrillic-script translation inherits the same treatment. **This applies to the
+app as well** — `packages/web/tailwind.config.js` names the same font, and the
+Russian UI has the same split — and it is not fixed there.
+
 Two things the page does not inherit from this document. It has no plural
 machinery, so a label under a stat tile is a bare nominative plural read as a
 column heading, not as a phrase agreeing with the number above it. And English

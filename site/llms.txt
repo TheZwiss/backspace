@@ -30,6 +30,7 @@
 - Repository insights, charted (traffic, growth, and referral figures, collected daily): https://backspacechat.com/insights/
 - The same archive as plain HTML tables, no JavaScript required: https://backspacechat.com/insights/data/
 - The same archive as one machine-readable JSON file: https://backspacechat.com/insights/data.json
+- This page in Russian (same content, translated): https://backspacechat.com/ru/
 - Sitemap: https://backspacechat.com/sitemap.xml
 
 ## Repository metrics archive

@@ -51,15 +51,27 @@
       if (!series || !Array.isArray(series.dates) || !series.dates.length) return null;
       return first ? series.dates[0] : series.dates[series.dates.length - 1];
     }
+    /* The strings below live on the markup, so they can be missing in a way
+       they could not when this script was inline in the page: a stale cached
+       copy of either file, or a new translation that dropped an attribute
+       while copying the markup. `coverage` is concatenated, so a bare
+       `undefined` would be printed under a card rather than swallowed. Read
+       every one through here and treat absent as "leave it out". */
+    function attr(el, name) {
+      var v = el.dataset[name];
+      return typeof v === "string" && v !== "" ? v : null;
+    }
     function card(value, label, coverage) {
       var el = document.createElement("div");
       el.className = "num";
       var b = document.createElement("b");
       b.textContent = value.toLocaleString(document.documentElement.lang || "en");
-      var s = document.createElement("span");
-      s.textContent = label;
       el.appendChild(b);
-      el.appendChild(s);
+      if (label) {
+        var s = document.createElement("span");
+        s.textContent = label;
+        el.appendChild(s);
+      }
       if (coverage) {
         var i = document.createElement("i");
         i.textContent = coverage;
@@ -68,7 +80,9 @@
       return el;
     }
 
-    fetch(host.dataset.src, { cache: "no-cache" })
+    var src = attr(host, "src");
+    if (src === null) return;
+    fetch(src, { cache: "no-cache" })
       .then(function (r) {
         if (!r.ok) throw new Error("HTTP " + r.status);
         return r.json();
@@ -83,25 +97,31 @@
         var viewsFrom = edgeDate(d.series.views, true);
         var clonesFrom = edgeDate(d.series.clones, true);
         if (stars !== null) {
-          cards.push(card(stars, host.dataset.stars, starsOn ? host.dataset.asof + starsOn : null));
+          cards.push(card(stars, attr(host, "stars"), starsOn && attr(host, "asof") ? attr(host, "asof") + starsOn : null));
         }
         if (views !== null) {
-          cards.push(card(views, host.dataset.views, viewsFrom ? host.dataset.since + viewsFrom : null));
+          cards.push(card(views, attr(host, "views"), viewsFrom && attr(host, "since") ? attr(host, "since") + viewsFrom : null));
         }
         if (clones !== null) {
-          cards.push(card(clones, host.dataset.clones, clonesFrom ? host.dataset.since + clonesFrom : null));
+          cards.push(card(clones, attr(host, "clones"), clonesFrom && attr(host, "since") ? attr(host, "since") + clonesFrom : null));
         }
         if (!cards.length) throw new Error("nothing measured yet");
         for (var i = 0; i < cards.length; i++) host.appendChild(cards[i]);
         host.hidden = false;
-        note.textContent = note.dataset.note;
-        note.hidden = false;
+        var text = attr(note, "note");
+        if (text !== null) {
+          note.textContent = text;
+          note.hidden = false;
+        }
       })
       .catch(function () {
         /* No figures rather than invented ones. The link below still reaches
            the archive, which states its own condition when it cannot load. */
-        note.textContent = note.dataset.noteError;
-        note.hidden = false;
+        var text = attr(note, "noteError");
+        if (text !== null) {
+          note.textContent = text;
+          note.hidden = false;
+        }
       });
   })();
 
@@ -115,7 +135,11 @@
   var typing = document.getElementById("typing");
   var typingWho = document.getElementById("typing-who");
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
-  function showTyping(who) { typingWho.textContent = who + typingWho.dataset.suffix; typing.classList.add("on"); }
+  function showTyping(who) {
+    var suffix = typingWho.dataset.suffix;
+    typingWho.textContent = who + (typeof suffix === "string" ? suffix : "");
+    typing.classList.add("on");
+  }
   function hideTyping() { typing.classList.remove("on"); }
   function showMsg(step) {
     var el = document.querySelector('.msg[data-step="' + step + '"]');
