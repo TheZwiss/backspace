@@ -8,7 +8,6 @@ import { isDmChannel, getChannelOrigin, getApiForOrigin } from '../../stores/spa
 import { Avatar } from '../ui/Avatar';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import type { MessageWithUser, DmMessageWithUser, User } from '@backspace/shared';
-import './SearchPopover.css';
 
 type AnyMessage = MessageWithUser | DmMessageWithUser;
 
@@ -316,23 +315,17 @@ export function SearchPopover({ open, onClose, anchorRef, channelId, isDm, onJum
         )}
 
         {!isSearching && results.length === 0 && (query || fromFilter || hasFilter || beforeFilter || afterFilter) && (
-          <div className="search-scan search-scan--quiet flex flex-col items-center justify-center py-8 px-4 text-center">
-            <span className="search-scan__ground" aria-hidden="true" />
-            <span className="search-scan__grid" aria-hidden="true" />
-            <span className="search-scan__sweep" aria-hidden="true" />
-            <svg width="40" height="40" viewBox="0 0 24 24" fill="currentColor" className="search-scan__copy text-txt-tertiary/50 mb-2">
+          <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary/50 mb-2">
               <path d="M21.707 20.293l-5.395-5.395A7.457 7.457 0 0018 10.5 7.5 7.5 0 1010.5 18c1.575 0 3.027-.486 4.228-1.31l5.476 5.476a.997.997 0 001.414 0l.089-.089a1 1 0 000-1.414l.001-.37zM10.5 16a5.5 5.5 0 110-11 5.5 5.5 0 010 11z" />
             </svg>
-            <span className="search-scan__copy text-txt-tertiary text-[13px]">{t('search:results.empty')}</span>
+            <span className="text-txt-tertiary text-[13px]">{t('search:results.empty')}</span>
           </div>
         )}
 
         {!query && !fromFilter && !hasFilter && !beforeFilter && !afterFilter && results.length === 0 && (
-          <div className="search-scan flex flex-col items-center justify-center py-10 px-4 text-center">
-            <span className="search-scan__ground" aria-hidden="true" />
-            <span className="search-scan__grid" aria-hidden="true" />
-            <span className="search-scan__sweep" aria-hidden="true" />
-            <span className="search-scan__copy text-txt-tertiary text-[13px]">{t('search:results.hint')}</span>
+          <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
+            <span className="text-txt-tertiary text-[13px]">{t('search:results.hint')}</span>
           </div>
         )}
 

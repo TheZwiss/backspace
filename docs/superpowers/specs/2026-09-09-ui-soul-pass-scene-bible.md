@@ -1,6 +1,6 @@
 # UI soul pass: scene bible
 
-Status: rows approved 2026-09-09. All twelve rows are built locally (batches 0 to 3, 2026-09-09) and wait for Jannis's test of the whole pass. Nothing is pushed until it is good.
+Status: first pass built 2026-09-09 and rejected on the populated instance 2026-09-10 (see section 12). Second pass under the darkness rule in progress, local only. Nothing is pushed until it is good.
 
 This is the document that lets many independent agents produce one product.
 It is not a token list; Aether Drift already has tokens. It says what each
@@ -89,77 +89,74 @@ New entries, with the token they come from:
 properties. Batch 0 lifts them into this file so the derelict vocabulary is
 reusable (dead beacons, expired connections) without a second definition.
 
-## 4. The light rule
+## 4. The darkness rule
 
-**One key light, above and to the left, outside the frame, warm white.**
-Everything in every scene obeys it. It picks out the top-left of a rim, the
-top-left of a hull, the top-left crescent of a world, the upper edge of a
-seat back. What it does not reach falls to the object's own hue turned
-toward lavender, never toward black. A green thing in shadow is
-`hullShade`, not olive.
+This section replaces the light rule that shipped in the first pass. That
+rule ("one key light, shade every layer toward it, rim and gloss on
+everything") was extracted from a 42px button and produced rendered 3D
+illustration at panel scale: bevels, lit lips, glossy fills, grain, rooms
+with furniture. Jannis's verdict on 2026-09-10: "you forcibly tried to make
+and shade everything 3d and ruined the liquid glass calm aether drift
+aesthetic". The buttons looked like Windows Vista. He was right.
 
-Inside a room the key comes through the window, still upper left. There is
-no fill light. Depth is done with falloff and with atmosphere caught in the
-glass, not with a second light.
+**Depth comes from darkness and distance, never from shading.**
 
-**Emitters** are the only things allowed to be brighter than the key:
-cabin and console lights (amber, `window` / `windowLit`), signals (mint),
-hails (peach to coral). An emitter blooms outward from itself with one
-shared blur, the way the craft's plume and porthole do. Nothing else glows.
-
-The derelict is the exception that proves it: no local light at all, only
-starlight from the same upper left, so everything there is matte and the
-depth comes from texture.
+- **Space is the darkest thing on screen.** A scene's void sits at or below
+  `--bg-base` (11 11 16) and is always darker than the chrome around it. The
+  channel header, the sidebars and the modal glass must never be darker than
+  the space next to them. No nebula wash, no grain overlay, no gloss sheet,
+  no vignette that lifts the black. If a layer adds light to the void, it is
+  wrong.
+- **Stars are small, crisp points at distance.** One to two pixels, sharp,
+  in `star` or `dust`, with a rare very slow twinkle on a few. No blurred
+  "far field", no bloom, no four-point sparkles, no coloured haze around
+  them. Sparse. A star field that reads as a texture is too dense.
+- **Objects are flat, clean vector shapes**, the way the telemetry hello
+  scene draws the ship: one fill per face, a soft edge where a lit side
+  meets a shaded side, no form-shadow passes, no specular strokes, no rims,
+  no bevels, no grain. If a shape needs more than two fills to read, it is
+  too detailed for this world.
+- **Light is atmosphere, not a lamp.** A planet may carry one thin, clean
+  atmosphere line on its lit limb. A cabin may glow softly. That is the
+  whole allowance. Nothing else emits, and nothing casts a shadow.
+- **Vastness is composition.** Objects are small in a large dark frame, far
+  apart, with empty space between them that is allowed to stay empty. No
+  rooms, no walls, no windows, no furniture, no consoles, no instruments.
+  The subject is still specific (a ship on its way, a world, a friend who
+  is not here yet), but it floats in the open.
+- **No plotted lines.** Dotted courses, dashed headings, orbit rings and
+  scanner sweeps read as 2000s dashboards. The journey is implied by where
+  the ship is pointed.
 
 ## 5. Motion budget
 
-Slow and expensive, never busy. The measure is `HiButton`: several infinite
-animations, all long period, all transform or opacity, and it still reads as
-still.
+Soothing and calm. Motion that is noticed is too much.
 
-At rest, per screen:
+- At rest, per screen: at most two infinite animations, twelve-second
+  periods or longer, transform and opacity only, and every travel distance
+  small (a few pixels of drift, a slow bob, a star's opacity easing between
+  two values). No blur, backdrop-filter or gradient animation. No sheens,
+  no sweeps, no pulses.
+- Hover changes one thing softly (a plume a little longer, a glow a little
+  warmer) over half a second or more. Press does nothing theatrical.
+- `prefers-reduced-motion: reduce` freezes into the best frame and strips
+  nothing.
+- Raspberry Pi and mobile: no `backdrop-filter` in a scene, no live SVG
+  filters, at most one rasterised data-URI image.
 
-- **Scene tier**: at most one scene visible per screen, with at most three
-  infinite animations, every period six seconds or longer, transform and
-  opacity only. No animated blur, no animated `backdrop-filter`, no animated
-  gradients. Motion that is a story beat (a wave, a ping, a sheen) spends
-  most of its cycle not happening.
-- **Material tier**: nothing moves at rest. The sheen crosses only on hover
-  and only once per few seconds.
-- **Reduced motion** freezes every scene into a still frame chosen because
-  it is the best frame, and strips nothing. `SilenceButton`'s block is the
-  model: the ping caught a third of the way across, already fading.
-- **Raspberry Pi and mobile**: a scene may use at most two `backdrop-filter`
-  layers and at most two SVG filters. Everything else is gradients and
-  masks. If a workbench screenshot takes longer than a second to settle on
-  the Pi, the scene is over budget.
+## 6. Materials
 
-On interaction the budget doubles for the duration of the interaction and
-returns to rest afterwards.
+There is no material tier. The batch 0 chrome (glossy buttons with lit
+lips and rims, modal gloss and rim pseudo-elements, lit toasts) is reverted
+to the original Aether Drift surfaces: flat `accent-primary` buttons, the
+plain `.glass-modal` border, the flat 50% modal backdrop, the coloured
+left border on toasts. Aether Drift's glass is felt, not seen; a scene may
+sit behind glass but never wears it.
 
-## 6. The two tiers
-
-**Material tier.** Cheap, reusable, extracted from `HiButton` into
-`globals.css` (edited by the lead only, never by an agent). Five layers,
-each a class that can be stacked on any floating surface:
-
-| Class | What it is | Extracted from |
-|---|---|---|
-| `.mat-rim` | The hairline that turns hue: warm white where the key lands, mint along the top, near nothing lower right, lavender coming back. A masked gradient border, so the hue can turn. | `.hi-button__rim` |
-| `.mat-gloss` | The resting specular: one sheet of glass over the surface, caught at the top-left corner. | `.hi-button__gloss` |
-| `.mat-aura` | The light the surface throws onto what is around it. Hover and focus only. | `.hi-button__aura` |
-| `.mat-scrim` | A photographic vignette that seats a scene in its frame by taking light away, and a soft well under a label. | `.hi-button__scrim` |
-| `.mat-sheen` | The travelling specular. Parked off-frame, crosses once on hover. | `.hi-button__sheen` |
-
-All five read one `--lift` channel (0 at rest, 1 on hover and focus) and one
-`--push` channel, so a host sets two numbers and every layer moves together.
-Modals, popovers, toasts, and the primary call to action get material and
-nothing else. Material never contains a subject.
-
-**Scene tier.** Bespoke and expensive: a component with a co-located CSS
-file, one subject, layered like the reference (void, depth, subject, scrim,
-gloss, rim, label), one agent, four or more iterations. Roughly one scene
-per screen. A scene may use the material classes for its frame.
+A scene is one component with a co-located stylesheet and one subject. It
+reads no store, handles no click and owns no string. Its whole vocabulary
+is: a dark void, sparse crisp stars, at most two or three flat objects,
+one soft glow, one or two very slow motions.
 
 ## 7. Where everything lives: the inventory
 
@@ -302,3 +299,21 @@ commented the way a design system is: what each layer is and why.
 
 Done means `pnpm typecheck` passes and the final screenshot is something
 the agent would defend as an art piece.
+
+## 12. Second pass, 2026-09-10
+
+The first build was rejected on the populated instance. The cause was
+section 4's original light rule, and it is replaced above. What each row
+becomes in the second pass, with Jannis's words where they exist:
+
+| Row | Verdict on the first pass | Second pass |
+|---|---|---|
+| 0, 4, 5, 9, 11 (material, buttons, modal chrome, toasts, confirms) | "cheap ass vista knockoffs. revert that" | Reverted to the original surfaces. The `cta-primary`, `cta-danger` and `cta-warning` classes stay as names and now paint exactly the original flat buttons. |
+| 1 (voice) | "washed out and cheap looking", brighter than the header above it; wanted "deep dark space with a rocket ship on its way, soothing calm movements, stars that actually look like beautiful clear stars in the distance" | Same composition (ship left, world low right, on its way), re-rendered flat and dark under section 4. Beacon, orbit ring, course line, glass, grain and nebula removed. |
+| 2 (auth) | not commented, same fault in milder form | Keep the world and the stars, flat and dark. The drawn station with panels, lamps, masts and gantry goes; at most a faint arc of a few lights, or nothing. |
+| 3 (crew) | "claustrophobic and not like vast endless awe inducing space" | The room, window, bulkhead, shaft, console and berth go. Nori alone in open space, small in a large dark frame, over a sparse star field. |
+| 6 (call) | not commented, drawn instruments | Instrument strip, grain, bevelled buttons and console lights go. A dark panel, the caller's avatar, one soft ring that eases out very slowly, flat accept and decline. |
+| 7 (welcome hero) | "the green line is so 2000s and the forcibly 3d logo is so windows vista" | Reverted to the plain header. The `WelcomeHero` extraction stays as structure with no decoration. |
+| 8 (explore) | not commented, drawn objects | Card banner material reverted to the plain gradient. The empty state becomes Nori in open space like row 3, with no chart, rose or scanner. |
+| 10 (search) | not commented, a sweep and a grid | Reverted to the plain hint. |
+| 12 (Nori) | "the shading of the nori screen is a bit weird" (about the scene) | The relight stays unless Jannis says otherwise: it is flat-shaded, no bevel, and the character reads the same. |
