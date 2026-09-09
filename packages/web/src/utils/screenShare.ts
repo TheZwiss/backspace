@@ -314,21 +314,23 @@ export async function stageScreenCapture(): Promise<MediaStream> {
 export type CapturedSurfaceKind = 'monitor' | 'window' | 'browser';
 
 /**
- * What the picker actually handed us. `MediaTrackSettings.displaySurface` is
- * the standard answer (Chromium, Safari); Firefox does not report it, so the
- * kind is unknown there and the preview is the ground truth.
+ * What kind of surface the picker handed us, from the standard
+ * `MediaTrackSettings.displaySurface` (Chromium and Safari report it; Firefox
+ * does not, so the answer is null there).
+ *
+ * Deliberately does NOT return `track.label`. Browser labels are not a
+ * trustworthy name for the captured surface: Chromium gives raw ids
+ * ("window:1234:0"), and Firefox on a Wayland portal session reports
+ * "Primary Monitor" even when the user picked a window. A wrong name is worse
+ * than none, and the live preview already shows exactly what will be shared.
+ * Where we picked the source ourselves (the Electron tile grid) we know its
+ * real name and use that instead.
  */
-export function describeStagedCapture(stream: MediaStream): { kind: CapturedSurfaceKind | null; label: string | null } {
+export function describeStagedCapture(stream: MediaStream): CapturedSurfaceKind | null {
   const track = stream.getVideoTracks()[0];
-  if (!track) return { kind: null, label: null };
+  if (!track) return null;
   const surface = (track.getSettings() as MediaTrackSettings & { displaySurface?: string }).displaySurface;
-  const kind: CapturedSurfaceKind | null =
-    surface === 'monitor' || surface === 'window' || surface === 'browser' ? surface : null;
-  // Chromium labels are raw ids ("screen:0:0", "window:1234:0", "web-contents-media-stream://…");
-  // Firefox and Safari give a human name. Only surface the latter.
-  const raw = track.label?.trim() ?? '';
-  const label = raw && !/^(screen|window|web-contents|monitor)[:\-]/i.test(raw) && !/^[a-z-]+:\/\//i.test(raw) ? raw : null;
-  return { kind, label };
+  return surface === 'monitor' || surface === 'window' || surface === 'browser' ? surface : null;
 }
 
 /**

@@ -86,7 +86,7 @@ export function ScreenShareSetup() {
 
   // Staged capture (all platforms)
   const [staged, setStaged] = useState<MediaStream | null>(null);
-  const [stagedInfo, setStagedInfo] = useState<{ kind: CapturedSurfaceKind | null; label: string | null }>({ kind: null, label: null });
+  const [stagedKindFromTrack, setStagedKindFromTrack] = useState<CapturedSurfaceKind | null>(null);
   const [stagedShareAudio, setStagedShareAudio] = useState<boolean>(config.shareAudio);
   const [staging, setStaging] = useState(false);
   const [starting, setStarting] = useState(false);
@@ -120,7 +120,7 @@ export function ScreenShareSetup() {
     if (stagedRef.current && stagedRef.current !== next) stopStagedCapture(stagedRef.current);
     stagedRef.current = next;
     setStaged(next);
-    if (!next) setStagedInfo({ kind: null, label: null });
+    if (!next) setStagedKindFromTrack(null);
   }, []);
 
   /**
@@ -144,7 +144,7 @@ export function ScreenShareSetup() {
         return;
       }
       replaceStaged(stream);
-      setStagedInfo(describeStagedCapture(stream));
+      setStagedKindFromTrack(describeStagedCapture(stream));
       setStagedShareAudio(shareAudioAtStage);
     } catch (err) {
       if (generation !== stageGenerationRef.current) return;
@@ -377,10 +377,11 @@ export function ScreenShareSetup() {
       : null;
   const stageNow = () => void stage();
   const stagedSource = sources.find((s) => s.id === selectedId) ?? null;
-  const stagedName = stagedSource?.name ?? stagedInfo.label;
+  // Only a source we picked ourselves has a name we can trust; see describeStagedCapture.
+  const stagedName = stagedSource?.name ?? null;
   // What the picker handed us: the standard track setting where reported, else the tile we clicked
   const stagedKind: CapturedSurfaceKind | null =
-    stagedInfo.kind ?? (stagedSource ? (stagedSource.isScreen ? 'monitor' : 'window') : null);
+    stagedKindFromTrack ?? (stagedSource ? (stagedSource.isScreen ? 'monitor' : 'window') : null);
   const readyLabel = stagedKind
     ? `${t('voice:screenPicker.stageReady')} · ${t(`voice:screenPicker.kind.${stagedKind}`)}`
     : t('voice:screenPicker.stageReady');
