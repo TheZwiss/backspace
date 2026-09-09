@@ -63,7 +63,7 @@ export function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-md',
     return (
       <div className="fixed inset-0 z-[200] flex items-end justify-center animate-fade-in">
         <div
-          className="absolute inset-0 bg-black/50"
+          className="absolute inset-0 modal-scrim"
           onClick={onClose}
         />
         <div className="relative w-full max-h-[calc(85*var(--app-vh))] flex flex-col glass-modal rounded-t-2xl animate-slide-up" style={{ paddingBottom: 'var(--safe-bottom)' }}>
@@ -94,7 +94,7 @@ export function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-md',
     return (
       <div className="fixed inset-0 z-[200] flex items-center justify-center animate-fade-in">
         <div
-          className="absolute inset-0 bg-black/50"
+          className="absolute inset-0 modal-scrim"
           onClick={onClose}
         />
         <div className="relative w-[calc(90*var(--app-vw))] max-w-6xl h-[calc(85*var(--app-vh))] flex flex-col glass-modal rounded-xl animate-slide-up overflow-hidden">
@@ -118,7 +118,7 @@ export function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-md',
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center animate-fade-in">
       <div
-        className="absolute inset-0 bg-black/50"
+        className="absolute inset-0 modal-scrim"
         onClick={onClose}
       />
       <div className={`relative ${maxWidth} w-full mx-4 max-h-[calc(calc(100*var(--app-vh))-2rem)] flex flex-col glass-modal rounded-lg animate-slide-up`}>

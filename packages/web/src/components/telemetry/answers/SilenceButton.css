@@ -28,12 +28,12 @@
 .silence-button {
   /* Cold local palette, derived from Aether Drift tokens and pulled toward
      indigo and slate so the hull reads dead against the modal's warm glass. */
-  --sil-lit: 35 37 49; /* the starlit face, upper left */
-  --sil-body: 24 25 34; /* the hull's own colour */
-  --sil-far: 17 18 25; /* the unlit end. Deliberately above --bg-base: if it
+  --sil-lit: var(--derelict-lit); /* the starlit face, upper left */
+  --sil-body: var(--derelict-body); /* the hull's own colour */
+  --sil-far: var(--derelict-far); /* the unlit end. Deliberately above --bg-base: if it
                            matched the void the break would have no silhouette. */
-  --sil-rime: 199 210 254; /* frost and starlight: --accent-lavender toward sky */
-  --sil-signal: 140 152 186; /* the carrier's slate */
+  --sil-rime: var(--derelict-rime); /* frost and starlight: --accent-lavender toward sky */
+  --sil-signal: var(--derelict-signal); /* the carrier's slate */
   /* How much of the outboard end the break eats. Shared by the mask and the
      label's optical centring so they can never drift apart. */
   --sil-break: 22px;

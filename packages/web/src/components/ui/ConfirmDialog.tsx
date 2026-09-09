@@ -53,7 +53,7 @@ export function ConfirmDialog({
   return ReactDOM.createPortal(
     <div className="fixed inset-0 z-[10000] flex items-center justify-center animate-fade-in">
       <div
-        className="absolute inset-0 bg-black/50"
+        className="absolute inset-0 modal-scrim"
         onClick={() => { if (!loading) onClose(); }}
       />
       <div className="relative max-w-[440px] w-full mx-4 glass-modal rounded-xl animate-slide-up">

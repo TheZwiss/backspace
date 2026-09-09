@@ -617,7 +617,7 @@ function AddFriendTab({
             <button
               onClick={handleDirectAdd}
               disabled={directAddLoading}
-              className="px-3 py-1.5 rounded-md bg-accent-primary hover:bg-accent-primary-hover text-white text-sm font-medium transition-colors disabled:opacity-50 flex-shrink-0"
+              className="cta-primary px-3 py-1.5 rounded-md text-sm disabled:opacity-50 flex-shrink-0"
             >
               {directAddLoading ? t('social:request.sending') : t('social:add.sendRequest')}
             </button>

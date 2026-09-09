@@ -428,7 +428,7 @@ export function MainContent() {
             </div>
             <button
               onClick={() => joinVoiceChannel(currentChannelId, useVoiceStore.getState().connectFn ?? undefined)}
-              className="relative z-10 px-8 py-3 bg-accent-primary hover:bg-accent-primary-hover text-white font-semibold rounded-full transition-all text-[15px] shadow-[0_4px_20px_rgba(124,108,246,0.3)]"
+              className="cta-primary relative z-10 px-8 py-3 rounded-full text-[15px]"
             >
               {t('spaces:main.voice.join')}
             </button>

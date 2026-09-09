@@ -136,7 +136,7 @@ breakpoint. Native browser zoom and pinch gestures retain their normal behavior.
 
 **Rule:** If it floats above the content plane, it's glass. Never use `bg-surface-elevated` for floating/overlay elements.
 
-**Modal backdrops:** `bg-black/50` — light enough for glass blur to show through.
+**Modal backdrops:** `.modal-scrim` — a radial vignette from 42% black at the centre to 66% at the corners, so the dialog sits in a pool of light and the app's edges fall away. Same average darkness as the flat 50% it replaced, still light enough for glass blur to show through. Every backdrop that sits behind a `.glass-modal` uses it (`Modal`, `ConfirmDialog`, `UserProfileModal`, `TransferOwnershipModal`, `IncomingCallModal`, `MobileFolderSheet`).
 
 **Portal target — `usePortalContainer()`:** Every overlay (context menu, tooltip, popover, modal, screen-share picker) MUST portal through `usePortalContainer()` (`packages/web/src/hooks/usePortalContainer.ts`) instead of hard-coding `document.body`. The hook returns `document.fullscreenElement ?? document.body` and re-renders subscribers on `fullscreenchange`. Without this, anything portaled while an element (e.g. the voice container in fullscreen mode) is in the browser's Fullscreen API top-layer is rendered outside that layer and is invisible. Components mounted at App root that render with `fixed inset-0` (not just portals) must also portal through this hook for the same reason.
 
@@ -158,6 +158,37 @@ breakpoint. Native browser zoom and pinch gestures retain their normal behavior.
 **Vendor prefix order is load-bearing.** In `globals.css`, write `-webkit-backdrop-filter` **first** and the unprefixed `backdrop-filter` **last**. Vite 8 minifies CSS with Lightning CSS, which folds a prefixed and an unprefixed declaration of the same property into one and keeps whichever came last. With the unprefixed line first, the build ships only `-webkit-backdrop-filter`, which Firefox does not implement, so every glass surface loses its blur there with nothing in the console. The same order applies to any other property written in both forms.
 
 ---
+
+## Material Tier
+
+The reusable half of the UI soul pass (spec: `docs/superpowers/specs/2026-09-09-ui-soul-pass-scene-bible.md`), extracted from the telemetry answer buttons into `globals.css`. A surface that floats gets material; a surface with a subject gets a bespoke scene and may use material for its frame. Material never contains a subject. Only the design lead edits these classes; scene agents own their component and its co-located CSS.
+
+**The light rule.** One key light, above and to the left, outside the frame, warm white. Every layer obeys it: the rim is brightest top-left, the gloss is caught top-left, and whatever the key does not reach falls toward lavender, never toward black.
+
+**Two channels** drive every layer, set on the host and read by the layers: `--lift` (0 at rest, 1 on hover and keyboard focus) and `--push` (0 at rest, 1 while pressed). A press always lifts too. The design workbench forces them with `.is-hover`, `.is-focus` and `.is-active` on an ancestor, so every state rule in these classes and in every scene stylesheet is written twice (`:hover` and `.is-hover &`).
+
+| Class | Layer | Notes |
+|---|---|---|
+| `.mat-host` | The host | `position: relative; isolation: isolate`, owns `--lift`/`--push`, `--mat-rim-strength` (1 for a control, lower for a panel) and `--mat-aura-a/-b` (the aura's two colours, primary and mint by default) |
+| `.mat-aura` | Light thrown onto the surroundings | Outside the box, blurred, `z-index: -1`; almost nothing at rest, present on lift, flares on push |
+| `.mat-scrim` | Vignette and label well | Photographic: only takes light away |
+| `.mat-gloss` | Resting specular | One sheet of glass caught at the top-left corner |
+| `.mat-sheen` | Travelling specular | Parked off-frame; on lift crosses once per five seconds (`matSheen`). The host must clip it |
+| `.mat-rim` | The hairline that turns hue | Masked gradient border: warm white top-left, mint along the top, near nothing lower right, lavender coming back |
+
+Layers are absolutely positioned children of the host, back to front: aura, (host background), scrim, gloss, sheen, rim, then the label at `position: relative`.
+
+**Modal chrome.** `.glass-modal` carries the rim (`::before`) and the gloss (`::after`) at a third of a control's strength, at `z-index: 1` with `pointer-events: none`, so every modal inherits the material without markup. `.glass-modal` is now `position: relative`. Content that must sit above the chrome raises itself (the settings close button is `z-10`).
+
+**Primary call to action, `.cta-primary`.** The one button style that carries material without extra markup: the lavender fill lit from the top-left and falling to `--accent-primary-active` on the lower right, a lit top lip and a dark bottom lip, `::before` as the aura (a hover event, near zero at rest), `::after` as the rim. Focus adds a two-stop ring that owes nothing to the fill. Disabled desaturates and puts the aura out; `disabled:opacity-50` at the call site composes with it. The class owns colour, light and state; sizing, radius and layout stay with the call site as utilities. Do not add `bg-accent-primary`, `text-white`, `shadow-*` or `transition-colors` beside it: utilities win the cascade and undo the material. Swapped in batch 0: login, register, join page, join space, create space, create channel, explore join, the empty voice channel's Join Voice, and the friends direct-add button.
+
+**Lit toast, `.toast-lit`.** A toast is lit from the left in its own colour rather than bordered by it: a soft hard edge, a spill of the colour into the glass, and the rim warmed by it at the top-left. `--toast-rgb` carries the colour's channels; `.toast-lit--info` (sky), `.toast-lit--success` (mint) and `.toast-lit--warning` (amber) set it. Composes with `.glass-pill`.
+
+**Reduced motion.** Material holds still: no transitions, the sheen parked over the top-left shoulder at the strength of a highlight, everything else at its resting frame. Nothing is stripped.
+
+**Tokens.** The derelict's cold palette from the telemetry "no" answer is now shared: `--derelict-lit`, `--derelict-body`, `--derelict-far`, `--derelict-rime`, `--derelict-signal` in `globals.css`, mirrored as hex in `components/telemetry/scene/palette.ts` together with the room and station colours (`deck`, `bulkhead`, `console`, `seat`, `signal`, `hail`, `warn`, `dust`) that scenes paint with. Nothing in that palette is pure black or white; a test enforces it.
+
+**Design workbench.** Every material and scene ships with a dev page under `packages/web/src/dev/` plus an HTML entry beside `index.html`, built on `dev/workbench.tsx` (`WorkbenchPage`, `Section`, `Slot`, `StateRow`, `Surround`, `mountWorkbench`). A page renders the component at its real size inside its real surround, again at 3x, and in rest, hover, focus, pressed and disabled states. `dev-material.html` is the material tier's page. The i18n literal-string rule skips `src/dev/`; never use `100vh` there, the repo enforces `--app-vh`.
 
 ## Input Tiers
 

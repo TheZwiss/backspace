@@ -374,7 +374,7 @@ function SpaceCard({
           <button
             onClick={handlePublicJoin}
             disabled={joining}
-            className="w-full py-2 bg-accent-primary hover:bg-accent-primary-hover text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
+            className="cta-primary w-full py-2 text-sm rounded disabled:opacity-50"
           >
             {joining ? (
               <span className="flex items-center justify-center gap-2">

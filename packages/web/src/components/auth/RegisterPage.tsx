@@ -584,7 +584,7 @@ export function RegisterPage() {
                 disabled={continueDisabled}
                 // py-3 on mobile yields ≥44 px tap target (Apple HIG); py-2.5 keeps the
                 // tighter desktop look from before.
-                className="w-full py-3 md:py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="cta-primary w-full py-3 md:py-2.5 rounded disabled:opacity-50"
               >
                 {t('common:actions.continue')}
               </button>
@@ -714,7 +714,7 @@ export function RegisterPage() {
               type="button"
               onClick={() => handleRegister(false)}
               disabled={isDisabled}
-              className="w-full py-3 md:py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="cta-primary w-full py-3 md:py-2.5 rounded disabled:opacity-50"
             >
               {retryAfter > 0
                 ? t('auth:register.rateLimited.retryIn', { seconds: retryAfter })

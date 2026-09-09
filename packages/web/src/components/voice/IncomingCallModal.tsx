@@ -80,7 +80,7 @@ export function IncomingCallModal() {
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/50" />
+      <div className="absolute inset-0 modal-scrim" />
 
       {/* Call card */}
       <div className="relative glass-modal call-refraction rounded-lg w-[340px] overflow-hidden animate-fade-in animate-slide-up">

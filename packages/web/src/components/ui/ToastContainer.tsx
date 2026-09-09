@@ -2,10 +2,11 @@ import React from 'react';
 import { useUIStore } from '../../stores/uiStore';
 import { useVoiceStore } from '../../stores/voiceStore';
 
-const borderColors = {
-  info: 'border-l-accent-sky',
-  warning: 'border-l-accent-amber',
-  success: 'border-l-accent-mint',
+// The toast's colour lights it from the left (see .toast-lit in globals.css).
+const litClass = {
+  info: 'toast-lit--info',
+  warning: 'toast-lit--warning',
+  success: 'toast-lit--success',
 } as const;
 
 /**
@@ -95,7 +96,7 @@ export function ToastContainer() {
       {toasts.map((toast) => (
         <div
           key={toast.id}
-          className={`glass-pill border-l-2 ${borderColors[toast.type]} rounded-[10px] px-4 py-2.5 max-w-[320px] animate-slide-up pointer-events-auto cursor-pointer flex items-center gap-3`}
+          className={`glass-pill toast-lit ${litClass[toast.type]} rounded-[10px] px-4 py-2.5 max-w-[320px] animate-slide-up pointer-events-auto cursor-pointer flex items-center gap-3`}
           onClick={() => removeToast(toast.id)}
         >
           <span className="flex-1 text-sm text-txt-primary leading-snug">{toast.message}</span>
