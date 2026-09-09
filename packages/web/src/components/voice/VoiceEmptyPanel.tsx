@@ -2,7 +2,6 @@ import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { SceneIds } from '../telemetry/scene/HelloScene';
 import { SCENE_PALETTE as P } from '../telemetry/scene/palette';
-import { Pilot } from '../telemetry/scene/Pilot';
 import { PORT, Ship } from '../telemetry/scene/Ship';
 import './VoiceEmptyPanel.css';
 
@@ -91,17 +90,68 @@ function Stars() {
   );
 }
 
+/* ── NORI ──
+ * The mascot, seen through the porthole. The hello scene's pilot is a
+ * silhouette with two lit eyes, which at panel size reads as a skull; Nori is
+ * the idle face from Mascot.tsx drawn flat, at the proportions the porthole
+ * needs: the eyes about a third of the way down and wide apart, the smile
+ * small and centred, the blush outboard. The body is one mint disc lit at its
+ * upper left; the eyes are solid dark dots, each with one catchlight, because
+ * at five pixels an eye is a dot or it is nothing. Clipped by the porthole, so
+ * the cabin's amber stays around the face.
+ */
+// The mascot's idle `from`: mint lifted one step toward star, the lit face.
+const NORI_LIT = '#9cefb7';
+const NORI = {
+  cx: PORT.cx,
+  // Seated low in the window so the cabin's amber shows above and beside
+  // the head: Nori is inside the ship, not pasted on the glass.
+  cy: PORT.cy + 11,
+  r: 21,
+  eyeDx: 6.8,
+  eyeDy: -5.5,
+  eyeR: 4,
+  catchR: 1.35,
+  blushDx: 12,
+  blushDy: 1.5,
+} as const;
+
+function Nori({ clip, body }: { clip: string; body: string }) {
+  const eyeY = NORI.cy + NORI.eyeDy;
+  const blushY = NORI.cy + NORI.blushDy;
+  return (
+    <g clipPath={`url(#${clip})`}>
+      <circle cx={NORI.cx} cy={NORI.cy} r={NORI.r} fill={`url(#${body})`} />
+      <ellipse cx={NORI.cx - NORI.blushDx} cy={blushY} rx="3.8" ry="1.9" fill={P.nebulaB} opacity="0.4" />
+      <ellipse cx={NORI.cx + NORI.blushDx} cy={blushY} rx="3.8" ry="1.9" fill={P.nebulaB} opacity="0.4" />
+      <circle cx={NORI.cx - NORI.eyeDx} cy={eyeY} r={NORI.eyeR} fill={P.pilot} />
+      <circle cx={NORI.cx + NORI.eyeDx} cy={eyeY} r={NORI.eyeR} fill={P.pilot} />
+      <circle cx={NORI.cx - NORI.eyeDx - 1.4} cy={eyeY - 1.5} r={NORI.catchR} fill={P.star} opacity="0.92" />
+      <circle cx={NORI.cx + NORI.eyeDx - 1.4} cy={eyeY - 1.5} r={NORI.catchR} fill={P.star} opacity="0.92" />
+      <path
+        d={`M${NORI.cx - 3.2} ${NORI.cy + 2.5} Q${NORI.cx} ${NORI.cy + 5.8} ${NORI.cx + 3.2} ${NORI.cy + 2.5}`}
+        stroke={P.pilot}
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        fill="none"
+      />
+    </g>
+  );
+}
+
 /* ── THE CRAFT ──
- * The hello scene's ship and pilot, drawn from their own parts at their own
- * coordinates, plus what a ship under way has that a ship holding station
- * does not: a plume. Two soft fills, no filter. The cabin's warmth is one
- * radial in the same SVG so it rides the bob with the hull. Nothing else
- * emits and nothing is shaded further than the scene already shades it.
+ * The hello scene's ship, drawn from its own parts at its own coordinates,
+ * with Nori in the porthole, plus what a ship under way has that a ship
+ * holding station does not: a plume. Two soft fills, no filter. The cabin's
+ * warmth is one radial in the same SVG so it rides the bob with the hull.
+ * Nothing else emits and nothing is shaded further than the scene already
+ * shades it.
  */
 function Craft({ ids, uid }: { ids: SceneIds; uid: string }) {
   const warmth = `ve-warmth-${uid}`;
   const plumeSoft = `ve-plume-soft-${uid}`;
   const plumeCore = `ve-plume-core-${uid}`;
+  const noriBody = `ve-nori-${uid}`;
   return (
     <svg className="voice-empty__craft-art" viewBox="100 96 240 160" aria-hidden="true" focusable="false">
       <defs>
@@ -120,6 +170,15 @@ function Craft({ ids, uid }: { ids: SceneIds; uid: string }) {
           <stop offset="0.6" stopColor={P.windowLit} stopOpacity="0.45" />
           <stop offset="1" stopColor={P.windowLit} stopOpacity="0" />
         </radialGradient>
+        {/* Nori's body: the lit mint upper left, the hull's mint everywhere else. */}
+        <radialGradient id={noriBody} cx="0.36" cy="0.3" r="0.8">
+          <stop offset="0" stopColor={NORI_LIT} />
+          <stop offset="0.55" stopColor={P.hull} />
+          <stop offset="1" stopColor={P.hull} />
+        </radialGradient>
+        <clipPath id={ids.clip}>
+          <circle cx={PORT.cx} cy={PORT.cy} r={PORT.r} />
+        </clipPath>
       </defs>
 
       {/* The cabin's warmth: the one light the void is allowed. */}
@@ -132,7 +191,7 @@ function Craft({ ids, uid }: { ids: SceneIds; uid: string }) {
       </g>
 
       <Ship ids={ids} />
-      <Pilot ids={ids} />
+      <Nori clip={ids.clip} body={noriBody} />
     </svg>
   );
 }

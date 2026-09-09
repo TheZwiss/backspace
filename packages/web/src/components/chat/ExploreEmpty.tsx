@@ -19,15 +19,12 @@ const SKY = { bare: 6, searched: 7 } as const;
 /**
  * The explore page with nothing to show (scene bible row 8, second pass):
  * Nori alone in open space, the same treatment as every crew state. The copy
- * arrives translated from the page; this owns the picture.
- *
- * Fills the page's content column when the column has a height, and holds a
- * 256px minimum when it does not, so the space is the column rather than a
- * band across it.
+ * arrives translated from the page; this owns the picture. A fixed-height
+ * block, since it sits above the joined-spaces list on that page.
  */
 export function ExploreEmpty({ searched, children }: ExploreEmptyProps) {
   return (
-    <div className={`explore-empty ${searched ? 'explore-empty--searched' : 'explore-empty--bare'} relative flex flex-col items-center justify-center overflow-hidden`}>
+    <div className={`explore-empty ${searched ? 'explore-empty--searched' : 'explore-empty--bare'} relative flex flex-col items-center justify-center h-64 overflow-hidden`}>
       <OpenSpace sky={searched ? SKY.searched : SKY.bare} density="field" className="explore-empty__space" />
       <div className="explore-empty__stage w-32 h-32 mb-4">
         <Mascot state="lonely" className="w-full h-full" />

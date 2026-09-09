@@ -11,8 +11,8 @@
  *   __stars        one deterministic field of 1px and 2px points, in pixels
  *   __world        a flat disc, base lifted a step toward lavender, with one
  *                  thin atmosphere line on its lit limb
- *   __craft        the hello scene's ship and pilot, a soft plume, and the
- *                  cabin's warmth; the whole thing bobs
+ *   __craft        the hello scene's ship with Nori in the porthole, a soft
+ *                  plume, and the cabin's warmth; the whole thing bobs
  *   __content      title, copy, Join; above everything, needing no scrim
  *
  * LIGHT: the cabin, softly, and the world's atmosphere. Nothing else emits,
@@ -136,14 +136,6 @@
    the window is the only warm thing in the frame. */
 .voice-empty .hs-lit {
   opacity: 0.3;
-}
-/* The pilot's arm rests. The scene's waving pose is for a greeting; this
-   pilot is flying. */
-.voice-empty .hs-arm {
-  opacity: 0;
-}
-.voice-empty .hs-rest {
-  opacity: 1;
 }
 
 /* ── CONTENT ── title, copy and the one button. Above every scene layer,

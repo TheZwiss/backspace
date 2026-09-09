@@ -1,27 +1,17 @@
 /* ── EXPLORE, NOTHING TO SHOW ──
  * Scene bible row 8, second pass. The same open space as the crew states
- * (`OpenSpace` in CrewEmptyState.tsx owns the void and the stars and their
- * one animation); this file only places it and seats Nori and the copy.
+ * (`OpenSpace` in CrewEmptyState.tsx owns the stars and their one animation,
+ * and paints no background; the page's --bg-chat is the sky); this file only
+ * seats Nori and the copy.
  *
  * Structure, back to front:
- *   .explore-empty         the host: a flex column the height of the page's
- *                          content column, 256px at least
- *     __space              open space, covering the host exactly
+ *   (the page's surface)   --bg-chat; nothing is painted over it
+ *   .explore-empty         the host: a fixed 256px block (h-64 in the markup)
+ *     __space              the stars, covering the host's box exactly
  *     __stage              Nori at 128px
- *     __copy               the caller's line, full contrast, on the dark
+ *     __copy               the caller's line, full contrast
  *
  * No animation, filter or image of its own. */
-
-.explore-empty {
-  min-height: 16rem;
-  height: 100%;
-}
-
-.explore-empty__space {
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
 
 .explore-empty__stage {
   position: relative;
@@ -33,7 +23,9 @@
   max-width: 100%;
   margin: 0;
   padding: 0 16px;
-  font-weight: 500;
+  /* The quiet grey these lines have always had: the copy is a caption under
+     Nori, not a heading, and a brighter tone fights the panel around it. */
+  font-weight: 400;
   line-height: 1.45;
-  color: rgb(var(--text-primary));
+  color: rgb(var(--text-tertiary));
 }

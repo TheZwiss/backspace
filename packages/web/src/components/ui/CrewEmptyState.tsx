@@ -77,10 +77,11 @@ const TONE: Record<Star['tone'], string> = { star: P.star, dust: P.dust };
 function pickStar(next: () => number): Pick<Star, 'r' | 'a' | 'tone'> {
   const roll = next();
   // Most of the sky is small and clear; a few points are bright. Every star
-  // is bright enough to be seen on the void, and nothing blooms.
-  if (roll < 0.5) return { r: 0.7, a: 0.5 + next() * 0.2, tone: next() < 0.4 ? 'dust' : 'star' };
-  if (roll < 0.85) return { r: 0.9, a: 0.62 + next() * 0.22, tone: next() < 0.25 ? 'dust' : 'star' };
-  return { r: 1.1, a: 0.88 + next() * 0.12, tone: 'star' };
+  // is bright enough to read as a one-pixel point on --bg-chat, and nothing
+  // blooms.
+  if (roll < 0.5) return { r: 0.7, a: 0.62 + next() * 0.18, tone: next() < 0.4 ? 'dust' : 'star' };
+  if (roll < 0.85) return { r: 0.9, a: 0.74 + next() * 0.18, tone: next() < 0.25 ? 'dust' : 'star' };
+  return { r: 1.1, a: 0.94 + next() * 0.06, tone: 'star' };
 }
 
 /**
@@ -150,8 +151,9 @@ function skyFor(seed: number, density: 'field' | 'few'): Sky {
   if (cached) return cached;
   const next = mulberry32(97 + seed * 31);
   const offset = { x: Math.round(next() * TILE.w), y: Math.round(next() * TILE.h) };
+  // A small frame holds six stars at most: five still, one that breathes.
   const still = density === 'few' ? scatterPercent(next, 5) : [];
-  const twinkle = scatterPercent(next, density === 'few' ? 2 : 7).map<Twinkler>((star) => ({
+  const twinkle = scatterPercent(next, density === 'few' ? 1 : 7).map<Twinkler>((star) => ({
     ...star,
     r: 1,
     a: 0.8 + next() * 0.15,
@@ -179,10 +181,12 @@ interface OpenSpaceProps {
 }
 
 /**
- * Open space: the darkest thing on screen, with a sparse field of crisp
- * distant stars across all of it. Two layers, void and stars, in one inline
- * SVG that the host positions absolutely behind its content. Sized by CSS,
- * so the same sky fills any frame without scaling a single star.
+ * Open space: a sparse field of crisp distant stars over the surface the host
+ * already has. It paints no background of its own; the page's surface is the
+ * sky (--bg-chat in a column, --bg-channel in a sidebar). One layer, the
+ * stars, in one inline SVG that the host positions absolutely behind its
+ * content and never lets past its own box. Sized by CSS, so the same sky
+ * fills any frame without scaling a single star.
  *
  * The twinkle group is the one infinite animation this layer spends: a few
  * bright points easing between two opacities over fourteen seconds or more,
@@ -208,7 +212,6 @@ export function OpenSpace({ sky, density, className }: OpenSpaceProps) {
           </pattern>
         </defs>
       )}
-      <rect className="open-space__void" width="100%" height="100%" />
       {density === 'field' && <rect width="100%" height="100%" fill={`url(#${patternId})`} />}
       {patch.still.map((star, i) => <Point key={i} star={star} unit="%" />)}
       <g className="open-space__twinkle">
