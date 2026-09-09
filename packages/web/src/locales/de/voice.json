@@ -72,8 +72,19 @@
     "noWindowsMatch": "Keine Fenster passen zu deiner Suche",
     "noScreens": "Keine Bildschirme verfügbar",
     "noWindows": "Keine Fenster verfügbar",
-    "shareSystemAudio": "Systemaudio teilen",
-    "echoWarning": "Zuschauer hören eventuell ein Echo der Stimmen. Für echofreies Audio Chrome verwenden"
+    "loadingSources": "Bildschirme und Fenster werden gesucht …",
+    "chooseTitle": "Wähle, was du teilen möchtest",
+    "chooseHint": "Dein Browser fragt dich, welchen Bildschirm, welches Fenster oder welchen Tab du teilen möchtest.",
+    "choose": "Bildschirm wählen",
+    "chooseAgain": "Anderen Bildschirm wählen",
+    "preview": "Vorschau",
+    "audioNeedsRepick": "Die Systemaudio-Einstellung gilt, sobald du den Bildschirm erneut wählst.",
+    "cancelled": "Es wurde kein Bildschirm gewählt.",
+    "unsupported": "Dieser Browser kann den Bildschirm nicht teilen.",
+    "captureFailed": "Der Bildschirm konnte nicht aufgenommen werden.",
+    "startFailed": "Der Stream konnte nicht gestartet werden.",
+    "audioCaptureFailed": "Die Aufnahme mit Systemaudio konnte nicht gestartet werden. Schalte Systemaudio aus, wenn dein System es nicht unterstützt.",
+    "start": "Stream starten"
   },
   "streamSettings": {
     "title": "Stream-Einstellungen",

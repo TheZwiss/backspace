@@ -27,8 +27,8 @@ import {
   CAMERA_OVERDRIVE,
   buildScreenShareOptions,
   applyOverdrive,
-  startScreenShare,
-  stopScreenShare,
+  republishScreenShare,
+  getPublishedScreenShareCodec,
   handleScreenShareUnpublished,
   resolveNativeOverdrive,
 } from '../utils/screenShare';
@@ -37,7 +37,6 @@ import { getMediaStreamTrack } from '../utils/livekitInternals';
 import { deactivate as deactivateHwOverdrive } from '../utils/hwOverdrive';
 
 let _activeRoom: Room | null = null;
-let _publishedScreenShareCodec: 'vp9' | 'h264' | null = null;
 
 export function getActiveRoom(): Room | null {
   return _activeRoom;
@@ -914,16 +913,6 @@ export function useLiveKit() {
     useVoiceStore.getState().toggleMic();
   }, []);
 
-  const toggleScreenShare = useCallback(async () => {
-    if (!roomRef.current) return;
-    if (!useVoiceStore.getState().isScreenSharing) {
-      await startScreenShare(roomRef.current);
-    } else {
-      await stopScreenShare(roomRef.current);
-    }
-    updateParticipants();
-  }, [updateParticipants]);
-
   useEffect(() => {
     updateParticipants();
   }, [voiceUserStates, isMuted, isDeafened, spaceMutedUserIds, spaceDeafenedUserIds, permissionMutedUserIds, updateParticipants]);
@@ -934,24 +923,16 @@ export function useLiveKit() {
       if (isScreenSharing) {
         const opts = buildScreenShareOptions(screenShareConfig);
 
-        // Codec changed mid-stream — must restart (codec is baked into SDP negotiation)
-        if (_publishedScreenShareCodec && _publishedScreenShareCodec !== opts.publish.videoCodec) {
-          _publishedScreenShareCodec = null;
-          // Preserve hwOverdrive across restart — stopScreenShare() resets it,
-          // but the user's intent (the pill they just clicked) must survive.
-          const preserveHwOverdrive = useVoiceStore.getState().hwOverdrive;
-          await stopScreenShare(room);
-          if (preserveHwOverdrive) useVoiceStore.setState({ hwOverdrive: true });
-          setTimeout(() => startScreenShare(room).catch(() => {}), 200);
+        // Codec changed mid-stream — the codec is baked into SDP negotiation,
+        // so republish the same track under the new options (no re-capture).
+        const publishedCodec = getPublishedScreenShareCodec();
+        if (publishedCodec && publishedCodec !== opts.publish.videoCodec) {
+          await republishScreenShare(room);
           return;
         }
 
         const screenPub = room.localParticipant.getTrackPublications().find(p => p.source === Track.Source.ScreenShare);
         if (screenPub?.videoTrack) {
-          // Track the published codec for mid-stream change detection
-          if (!_publishedScreenShareCodec) {
-            _publishedScreenShareCodec = opts.publish.videoCodec;
-          }
           const mediaTrack = getMediaStreamTrack(screenPub.videoTrack);
           if (mediaTrack) {
             if (opts.capture.width > 0 && opts.capture.height > 0) {
@@ -967,9 +948,6 @@ export function useLiveKit() {
           resolveNativeOverdrive(mediaTrack ?? null, screenShareConfig, opts);
           await applyOverdrive(room, Track.Source.ScreenShare, opts.overdrive);
         }
-      } else {
-        // Screen share stopped — clear published codec tracker
-        _publishedScreenShareCodec = null;
       }
       if (isCameraOn) { await applyOverdrive(room, Track.Source.Camera, CAMERA_OVERDRIVE); }
     };
@@ -990,5 +968,5 @@ export function useLiveKit() {
   }, []);
 
 
-  return { room, isConnected, isConnecting, connectionState, connectedChannelId, connectionError, connect, disconnect, toggleMic, toggleScreenShare };
+  return { room, isConnected, isConnecting, connectionState, connectedChannelId, connectionError, connect, disconnect, toggleMic };
 }

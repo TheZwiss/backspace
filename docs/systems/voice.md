@@ -280,22 +280,45 @@ ScreenShareConfig {
 - `allowCustomBitrate` toggle
 - `bitrateMatrixOverrides` (JSON sparse overrides)
 
+### Start flow — `ScreenShareSetup` (stage, then publish)
+
+Every screen share starts from one screen, `ScreenShareSetup` (mounted once in `App.tsx`, opened through `screenShareSetupStore`). The control-bar button, the keybind, the mobile call screen and "Change stream" on the local tile all open it; nothing calls capture directly.
+
+The pipeline in `utils/screenShare.ts` is **stage → publish**:
+
+| Step | Function | What happens |
+|------|----------|--------------|
+| Stage | `stageScreenCapture()` | `getDisplayMedia()` with constraints built from `screenShareConfig`. Returns a live but **unpublished** `MediaStream`, previewed in the setup screen. Browsers open their native prompt here, so it must run inside a click. |
+| Tune | `applyStagedCaptureConfig(stream)` | Re-applies resolution/frame rate/content hint to the staged track when the config changes. Local only, no SFU renegotiation — the reason quality can be adjusted after picking. |
+| Publish | `publishScreenShare(room, stream)` | `publishTrack()` for the video track (source `ScreenShare`; codec, `screenShareEncoding`, VP8 simulcast backup) and the audio track if present (source `ScreenShareAudio`). Sets `isScreenSharing`, schedules the overdrive passes and the hardware-encoder probe. |
+| Cancel | `stopStagedCapture(stream)` | Stops the staged tracks. Closing the setup screen never sends a frame. |
+
+Source picking differs by platform, the rest of the screen is identical (quality panel on the right, summary + Cancel/Start in the footer):
+
+- **Electron, current desktop:** the renderer lists sources up front via `getScreenSources()` (IPC `get-screen-sources`). Clicking a tile sends `preselectScreenSource(id, shareAudio)` (IPC `screen-share-preselect`) and then calls `getDisplayMedia()`; the main process's display-media handler answers from the preselection without prompting. A lone screen is auto-staged. Double-click on the staged tile starts.
+- **Electron, older desktop (no `getScreenSources`):** the "Choose" card calls `getDisplayMedia()`; the main process pushes its source list (`onScreenShareSources`) and the grid appears inline; a tile click answers the in-flight request with `selectScreenSource(id)`. Kept because the desktop app loads whatever web client its instance serves, so version skew in both directions is real.
+- **Browser:** the "Choose" card calls `getDisplayMedia()` and the browser's prompt does the picking. Chrome and Firefox show their "sharing" banner from this moment even though nothing is published until Start.
+
+A `shareAudio` change after staging cannot be applied to the held stream (audio is decided at capture); the screen shows a note and the user re-picks. Codec changes while live go through `republishScreenShare(room)`: the same `MediaStreamTrack` is unpublished and published again under the new options, so no re-capture and no second prompt. `handleScreenShareUnpublished` ignores the unpublish that this swap emits.
+
+`StreamQualityControls` is the shared quality panel (resolution, frame rate, content mode, codec, bitrate, system audio, plus the admin-limit clamp effect); `ScreenShareSetup` and `ScreenShareSettingsPopover` both render it.
+
 ### Control-bar entry point (`VoiceControlBar`, `VoiceControls`)
 
-The screen-share button is the **only** control-bar entry to screen-share settings; there is no separate "video quality" button. Its behaviour depends on `voiceStore.isScreenSharing`:
+The screen-share button is the **only** control-bar entry to screen sharing and its settings; there is no separate "video quality" button. Its behaviour depends on `voiceStore.isScreenSharing`:
 
 | State | Click |
 |-------|-------|
-| Not sharing | `handleScreenShareAction()` → `startScreenShare(room)` → the browser/Electron source picker |
+| Not sharing | `handleScreenShareAction()` → `openScreenShareSetup()` → the setup screen above |
 | Sharing | Toggles `ScreenShareSettingsPopover` anchored to the button, rendered with `onStopSharing` |
 
-`ScreenShareSettingsPopover` takes an optional `onStopSharing` callback. When present it appends a full-width `bg-accent-rose` "Stop Sharing" button below the stats footer; the control bars pass it (they have no other stop control), while the local `StreamTile` context menu omits it because it already carries its own "Stop Streaming" item. Quality changes made from the popover apply mid-stream through the `screenShareConfig` effect in `useLiveKit` (constraints + overdrive re-applied; a codec change restarts the publication).
+`ScreenShareSettingsPopover` takes an optional `onStopSharing` callback. When present it appends a full-width `bg-accent-rose` "Stop Sharing" button below the stats footer; the control bars pass it (they have no other stop control), while the local `StreamTile` context menu omits it because it already carries its own "Stop Streaming" item. Quality changes made from the popover apply mid-stream through the `screenShareConfig` effect in `useLiveKit` (constraints + overdrive re-applied; a codec change republishes).
 
 Both control bars close the menu whenever `isScreenSharing` drops to `false`, so a share ended elsewhere (the OS "Stop sharing" bar, `handleScreenShareUnpublished`, the keybind) never leaves a stale popover anchored to the button. The popover's click-outside listener ignores `mousedown` on its own anchor; the anchor's click handler is the sole owner of the open/close toggle (`ConnectionInfoPopover` follows the same contract).
 
 ### System Audio Loopback (`shareAudio`)
 
-The "Share system audio" toggle in `ScreenSharePicker` adds an audio track to the screen-share publication. `startScreenShare` passes audio constraints including `restrictOwnAudio: true` through LiveKit to `getDisplayMedia`, or `audio: false` when disabled. In Electron, the `setDisplayMediaRequestHandler` callback (`packages/desktop/src/main.ts`) returns `audio: 'loopback'` to opt into Chromium's system-audio loopback path.
+The "System audio" toggle in the quality panel adds an audio track to the screen-share publication. `stageScreenCapture` passes audio constraints including `restrictOwnAudio: true` through LiveKit to `getDisplayMedia`, or `audio: false` when disabled. In Electron, the `setDisplayMediaRequestHandler` callback (`packages/desktop/src/main.ts`) returns `audio: 'loopback'` to opt into Chromium's system-audio loopback path.
 
 Electron 43.4+ honors `restrictOwnAudio` in this custom-handler path and selects loopback excluding the app's own playback on macOS and Windows. Linux keeps its existing loopback path; this Electron fix does not add own-audio exclusion there. Older Electron versions ignored the constraint ([electron/electron#52427](https://github.com/electron/electron/issues/52427), fixed by [#52455](https://github.com/electron/electron/pull/52455), with the 43.4.0 backport in [#52533](https://github.com/electron/electron/pull/52533)). The existing stereo capture and disabled voice processing remain unchanged; both display and window selections use the same request.
 
@@ -310,7 +333,7 @@ Own-audio exclusion applies to all audio played by Backspace, including remote v
 | Electron / macOS 13+ | CoreAudio Tap (Catap) | Requires `NSAudioCaptureUsageDescription` (set by `electron-builder.yml#mac.extendInfo`) |
 | Electron / Linux | PulseAudio loopback | **Requires** the `PulseaudioLoopbackForScreenShare` Chromium feature flag — enabled at startup in `main.ts` for Linux. Works on PulseAudio and on PipeWire systems with the `pipewire-pulse` compat layer. PipeWire-only systems without pulse compat will fail. |
 
-**Failure handling.** When loopback is not supported, Chromium rejects the entire `getDisplayMedia` request — the source-picker selection has already been consumed, so silently retrying without audio would re-prompt the picker. `startScreenShare` (`utils/screenShare.ts`) instead surfaces a warning toast directing the user to disable "Share system audio" if their system does not support loopback. We do **not** auto-mutate the user's `shareAudio` preference.
+**Failure handling.** When loopback is not supported, Chromium rejects the entire `getDisplayMedia` request — the source-picker selection has already been consumed, so silently retrying without audio would re-prompt the picker. `stageScreenCapture` (`utils/screenShare.ts`) instead surfaces a warning toast directing the user to turn off system audio if their system does not support loopback. We do **not** auto-mutate the user's `shareAudio` preference.
 
 ---
 
@@ -327,7 +350,7 @@ See `docs/systems/mobile-ui.md` → "MobileVoiceFullScreen" for the auto-focus s
 - Screen-share: `StreamTile` lazily subscribes via `setStreamSubscription` only after the user taps "Watch Stream" (or auto-focus does so on mobile, which currently still requires the user to tap the in-tile "Watch Stream" CTA — auto-focus only sets the focused publisher; it does not auto-subscribe to bandwidth-heavy screen-share tracks).
 - Mute / deafen / speaking-ring overlays, watch/unwatch controls, local mute, volume sliders — identical between mobile and desktop.
 
-**Screen-share button wiring on mobile.** `MobileVoiceFullScreen`'s screen-share button calls `handleScreenShareAction()` from `utils/voiceActions`, **not** `voiceStore.toggleScreenShare`. The store action only flips the `isScreenSharing` boolean and never calls `getDisplayMedia`. The canonical `handleScreenShareAction` is shared with desktop's `VoiceControlBar` and the keybind manager; it calls `startScreenShare(room)` / `stopScreenShare(room)` and broadcasts voice status to peers. iOS Safari does not support `getDisplayMedia` (the call rejects); this is a platform limitation. Android Chrome supports it and works.
+**Screen-share button wiring on mobile.** `MobileVoiceFullScreen`'s screen-share button calls `handleScreenShareAction()` from `utils/voiceActions`, **not** `voiceStore.toggleScreenShare`. The store action only flips the `isScreenSharing` boolean and never captures anything. The canonical `handleScreenShareAction` is shared with desktop's `VoiceControlBar` and the keybind manager; idle it opens `ScreenShareSetup`, live it calls `stopScreenShare(room)` and broadcasts voice status to peers. iOS Safari does not support `getDisplayMedia` (the call rejects); this is a platform limitation. Android Chrome supports it and works.
 
 ---
 
@@ -343,7 +366,7 @@ The fullscreen toggle in `VoiceControlBar` flips the `voiceFullscreen` flag in `
 
 When neither native API is available the effect returns without throwing; the `voiceFullscreen` flag still applies `h-screen` to `voiceContainerRef`, which acts as the in-page maximize fallback (chat panel hides, header fades, control bar stays). The exit path mirrors this with `document.exitFullscreen()` → `document.webkitExitFullscreen()` → no-op. Both paths are wrapped in try/catch so a Promise rejection (e.g. user cancels via Esc mid-transition) does not surface as an unhandled error. The `fullscreenchange` listener is registered for both `fullscreenchange` and `webkitfullscreenchange`. Before this fallback, calling the missing API directly threw `TypeError: requestFullscreen is not a function` on iPhone Safari, which surfaced as a full-screen error overlay when an iPhone user crossed the 768 px desktop breakpoint in landscape mode.
 
-**Overlay portals:** While fullscreen is active the browser's Fullscreen API renders only descendants of `voiceContainerRef`. Every overlay reachable during a call (context menus on `StreamTile`/`VoiceUser`/`VoiceChannel`, tooltips on the control bar, `ConnectionInfoPopover`, `ScreenShareSettingsPopover`, `ConfirmDialog` invoked from voice context-menu actions, and `ScreenSharePicker`) portals through `usePortalContainer()` so it lands inside the fullscreen element. Adding new overlays that can be opened from inside the call must follow the same contract — see `docs/systems/design-system.md` Surface Material Tiers.
+**Overlay portals:** While fullscreen is active the browser's Fullscreen API renders only descendants of `voiceContainerRef`. Every overlay reachable during a call (context menus on `StreamTile`/`VoiceUser`/`VoiceChannel`, tooltips on the control bar, `ConnectionInfoPopover`, `ScreenShareSettingsPopover`, `ConfirmDialog` invoked from voice context-menu actions, and `ScreenShareSetup`) portals through `usePortalContainer()` so it lands inside the fullscreen element. Adding new overlays that can be opened from inside the call must follow the same contract — see `docs/systems/design-system.md` Surface Material Tiers.
 
 ---
 

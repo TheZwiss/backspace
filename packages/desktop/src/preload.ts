@@ -97,6 +97,10 @@ contextBridge.exposeInMainWorld('backspace', {
   selectScreenSource: (sourceId: string | null, shareAudio?: boolean) => {
     ipcRenderer.send('screen-share-selected', sourceId, shareAudio ?? true);
   },
+  getScreenSources: () => ipcRenderer.invoke('get-screen-sources'),
+  preselectScreenSource: (sourceId: string, shareAudio?: boolean) => {
+    ipcRenderer.send('screen-share-preselect', sourceId, shareAudio ?? true);
+  },
 
   // Instance URL management
   getInstanceUrl: () => ipcRenderer.invoke('get-instance-url'),

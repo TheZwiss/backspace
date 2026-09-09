@@ -120,6 +120,13 @@ interface BackspaceElectronAPI {
   // Screen share picker coordination
   onScreenShareSources: (callback: (sources: ElectronScreenSource[]) => void) => void;
   selectScreenSource: (sourceId: string | null, shareAudio?: boolean) => void;
+  /**
+   * Optional: desktop builds before the setup-screen flow lack these two. The
+   * web client feature-detects them and falls back to the prompted flow
+   * (getDisplayMedia → onScreenShareSources → selectScreenSource).
+   */
+  getScreenSources?: () => Promise<ElectronScreenSource[]>;
+  preselectScreenSource?: (sourceId: string, shareAudio?: boolean) => void;
 
   // Instance URL management
   getInstanceUrl: () => Promise<string | null>;

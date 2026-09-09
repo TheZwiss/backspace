@@ -659,16 +659,23 @@ Hidden menu bar (frameless window), but an Edit menu is still registered so keyb
 
 ## Screen Share Integration
 
-The main process intercepts `getDisplayMedia()` via `session.defaultSession.setDisplayMediaRequestHandler()`.
+The main process intercepts `getDisplayMedia()` via `session.defaultSession.setDisplayMediaRequestHandler()`. Two IPC flows answer it; the renderer's `ScreenShareSetup` (see `voice.md`, "Start flow") decides which by feature-detecting the preload API.
 
-### Flow
+### Preselected flow (current web client)
 
-1. Handler invoked by Chromium when renderer calls `navigator.mediaDevices.getDisplayMedia()`
-2. Main process enumerates sources via `desktopCapturer.getSources({ types: ['screen', 'window'], thumbnailSize: { width: 320, height: 180 }, fetchWindowIcons: true })`
-3. Sources serialized (id, name, thumbnail data URL, app icon data URL, isScreen flag) and sent to renderer via `screen-share-sources` IPC
-4. Renderer shows custom picker UI, user selects a source
-5. Renderer sends `screen-share-selected` IPC with `sourceId` (or `null` to cancel) and `shareAudio` flag
-6. Main process calls `callback({ video: selectedSource, audio: 'loopback' })` (audio only if `shareAudio` is true)
+1. Setup screen opens → renderer calls `getScreenSources()` (`ipcMain.handle('get-screen-sources')`) → main enumerates via `desktopCapturer.getSources({ types: ['screen', 'window'], thumbnailSize: { width: 320, height: 180 }, fetchWindowIcons: true })`, caches the result in `lastScreenSources`, returns the serialized list (id, name, thumbnail data URL, app icon data URL, isScreen flag)
+2. User clicks a tile → renderer sends `screen-share-preselect` with `sourceId` + `shareAudio` → main stores `pendingScreenSelection` (30 s TTL)
+3. Renderer calls `getDisplayMedia()` → handler takes the pending selection (one-shot), resolves the id against the cache (re-enumerating if missing) and calls `callback({ video: source, audio: 'loopback' })` (audio only when `shareAudio`). No prompt round-trip.
+4. The stream is previewed in the setup screen and published on "Start stream".
+
+### Prompted flow (older web clients, or nothing preselected)
+
+1. Handler invoked with no pending selection → main enumerates sources and sends them via `screen-share-sources` IPC
+2. Renderer shows the grid, user selects a source
+3. Renderer sends `screen-share-selected` with `sourceId` (or `null` to cancel) and `shareAudio`
+4. Main calls `callback({ video: selectedSource, audio: 'loopback' })`
+
+The prompted flow stays because the desktop app loads whatever web client its instance serves: an older instance still calls `getDisplayMedia()` first, and a newer instance on an older desktop build lacks `getScreenSources` and falls back to this path (`preselectScreenSource` / `getScreenSources` are optional in `electron.d.ts` for that reason).
 
 No sources (0 results) typically means Screen Recording permission not granted on macOS.
 

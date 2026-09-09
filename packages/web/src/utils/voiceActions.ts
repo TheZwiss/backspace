@@ -5,7 +5,8 @@ import { getActiveRoom } from '../hooks/useLiveKit';
 import { wsSend } from '../hooks/useWebSocket';
 import { getChannelOrigin } from '../stores/spaceStore';
 import { broadcastVoiceStatus, broadcastDeafenViaLiveKit } from './voice';
-import { CAMERA_PRESET, startScreenShare, stopScreenShare } from './screenShare';
+import { CAMERA_PRESET, stopScreenShare } from './screenShare';
+import { openScreenShareSetup } from '../stores/screenShareSetupStore';
 
 /**
  * One-shot flag used to distinguish user-initiated camera-off from unexpected
@@ -97,24 +98,23 @@ export async function handleCameraAction(): Promise<void> {
 }
 
 /**
- * Toggle screen share. Requires LiveKit room.
- * Note: startScreenShare/stopScreenShare manage voiceStore.isScreenSharing internally.
- * Do NOT call toggleScreenShare() here — it would double-flip the state.
+ * Screen-share button/keybind action. Idle → opens the setup screen (source +
+ * quality, then "Start stream"); live → stops the share. Starting never happens
+ * here: every share is staged and published from ScreenShareSetup.
+ * Note: stopScreenShare manages voiceStore.isScreenSharing internally.
  */
 export async function handleScreenShareAction(): Promise<void> {
   const room = getActiveRoom();
   if (!room) return;
-  const isScreenSharing = useVoiceStore.getState().isScreenSharing;
+  if (!useVoiceStore.getState().isScreenSharing) {
+    openScreenShareSetup();
+    return;
+  }
   try {
-    if (!isScreenSharing) {
-      const started = await startScreenShare(room);
-      if (started) broadcastVoiceStatus();
-    } else {
-      await stopScreenShare(room);
-      broadcastVoiceStatus();
-    }
+    await stopScreenShare(room);
+    broadcastVoiceStatus();
   } catch (err) {
-    console.error('[voiceActions] Failed to toggle screen share:', err);
+    console.error('[voiceActions] Failed to stop screen share:', err);
   }
 }
 
