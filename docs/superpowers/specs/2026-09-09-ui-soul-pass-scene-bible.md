@@ -132,11 +132,20 @@ aesthetic". The buttons looked like Windows Vista. He was right.
 
 Soothing and calm. Motion that is noticed is too much.
 
-- At rest, per screen: at most two infinite animations, twelve-second
-  periods or longer, transform and opacity only, and every travel distance
-  small (a few pixels of drift, a slow bob, a star's opacity easing between
-  two values). No blur, backdrop-filter or gradient animation. No sheens,
-  no sweeps, no pulses.
+- At rest, per screen: at most three animation definitions, transform and
+  opacity only, and every travel distance small (a few pixels of drift, a
+  slow roll, a star's opacity easing between two values). No blur,
+  backdrop-filter or gradient animation. No sheens, no sweeps, no pulses.
+- Amended 2026-09-10, after the twelve-second floor read as "frozen and
+  dead" on the voice channel: a sky is allowed to breathe. Stars twinkle on
+  four- to nine-second periods, out of phase, never to zero; a Sternschnuppe
+  falls once a minute or so; a moored craft drifts a few pixels on a
+  nine-second loop. Slower than that is still, not calm.
+- Every animation runs on the compositor. A CSS animation on an element
+  inside an inline SVG runs on the main thread and repaints the whole SVG
+  every frame; the shared sky (`telemetry/scene/StarField`) draws its still
+  stars in one SVG painted once and its breathing stars as spans, one layer
+  each, for that reason. Scenes take their stars from it.
 - Hover changes one thing softly (a plume a little longer, a glow a little
   warmer) over half a second or more. Press does nothing theatrical.
 - `prefers-reduced-motion: reduce` freezes into the best frame and strips
@@ -352,14 +361,21 @@ solid ground):
   "a bubble must only be as large as it needs to be to hold its contents,
   not artificially stretch itself to match the whole screen real estate."
   So `FriendsPanel` is a transparent scroll region, each friend or request
-  row is its own `.glass-bubble` sized to its content (`friends-row`), the
-  section count is its own small `.glass-pill` (`friends-count`), and the
-  empty states are bare: Nori and the line sit directly on the living
-  backdrop, part of the scene. The crew states draw no stars of their own.
+  row is its own bubble sized to its content (`friends-row`), the section
+  count is its own small pill (`friends-count`), and the empty states are
+  bare: Nori and the line sit directly on the living backdrop, part of the
+  scene. The crew states draw no stars of their own, and the hero size is
+  positioned over the tab's box rather than in its flow, so an empty tab
+  has nothing to scroll.
 - Nori's mood cross-fades on tab change (a 300ms arrival in
   `CrewEmptyState`).
 
-Cost rule: glass re-blurs whatever moves behind it, so the backdrop's motion
-is opacity twinkle and two rare events; nothing drifts continuously behind
-the panel. `prefers-reduced-transparency` gets solid panels as the design
-system already promises.
+Cost rule: glass re-blurs whatever moves behind it, once per frosted
+element per frame, for as long as anything behind it moves. The first build
+frosted every row, and a long friends list over the breathing sky lagged and
+heated the laptop (measured: four times the GPU time per frame, and dropped
+frames while scrolling). So only the header's pills are `.glass-bubble`; the
+rows and the count are the same fill and edge without the blur, which over a
+near-black sky of points reads the same. Nothing drifts continuously behind
+the rows except the breath. `prefers-reduced-transparency` gets solid rows
+and pills as the design system already promises.

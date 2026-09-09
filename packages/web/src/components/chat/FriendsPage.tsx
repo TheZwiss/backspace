@@ -186,7 +186,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
     switch (activeTab) {
       case 'online':
         return (
-          <div className="flex-1 overflow-y-auto p-4">
+          <div className="relative flex-1 overflow-y-auto p-4">
             <h2 className="friends-count text-xs font-bold text-txt-tertiary mb-4 tracking-wider px-2">
               {t('social:sections.online', { n: onlineFriends.length })}
             </h2>
@@ -203,7 +203,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
         );
       case 'all':
         return (
-          <div className="flex-1 overflow-y-auto p-4">
+          <div className="relative flex-1 overflow-y-auto p-4">
             <h2 className="friends-count text-xs font-bold text-txt-tertiary mb-4 tracking-wider px-2">
               {t('social:sections.all', { n: friends.length })}
             </h2>
@@ -220,7 +220,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
         );
       case 'pending':
         return (
-          <div className="flex-1 overflow-y-auto p-4">
+          <div className="relative flex-1 overflow-y-auto p-4">
             <h2 className="friends-count text-xs font-bold text-txt-tertiary mb-4 tracking-wider px-2">
               {t('social:sections.pending', { n: pendingIncoming.length + pendingOutgoing.length })}
             </h2>
@@ -294,7 +294,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
         };
 
         return (
-          <div className="flex-1 overflow-y-auto p-4">
+          <div className="relative flex-1 overflow-y-auto p-4">
             {activeFriends.length === 0 && idleFriends.length === 0 && offlineActivityFriends.length === 0 ? (
               <CrewEmptyState variant="noActivity" size="hero">{t('social:empty.activity')}</CrewEmptyState>
             ) : (

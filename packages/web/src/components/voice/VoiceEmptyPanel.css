@@ -8,19 +8,23 @@
  *
  * Structure, back to front:
  *   .voice-empty   the void itself: below --bg-base, darker than any chrome
- *   __stars        one deterministic field of 1px and 2px points, in pixels
+ *   .star-field    the shared sky (telemetry/scene/StarField): one field of
+ *                  1px and 2px points, one in five breathing, and three
+ *                  Sternschnuppen high in the frame
  *   __world        a flat disc, base lifted a step toward lavender, with one
  *                  thin atmosphere line on its lit limb
  *   __craft        the hello scene's ship with Nori in the porthole, a soft
- *                  plume, and the cabin's warmth; the whole thing bobs
+ *                  plume, and the cabin's warmth; the whole thing drifts
  *   __content      title, copy, Join; above everything, needing no scrim
  *
  * LIGHT: the cabin, softly, and the world's atmosphere. Nothing else emits,
  * nothing casts a shadow, nothing lifts the black.
  *
- * MOTION at rest: two infinite loops, transform and opacity only, both
- * longer than twelve seconds: the ship's bob and the twinkle group. Hover on
- * Join lengthens the plume over 600ms. Reduced motion freezes the best frame.
+ * MOTION at rest: the ship's drift (transform, a nine-second loop of a few
+ * pixels and a fraction of a degree, the way a moored craft rides), the sky's
+ * breath (opacity, 4 to 9s, out of phase) and the sky's streaks. Every
+ * animation runs on the compositor. Hover on Join lengthens the plume over
+ * 600ms. Reduced motion freezes the best frame.
  *
  * FILTERS: none. No backdrop-filter, no SVG filter, no blur anywhere.
  */
@@ -55,20 +59,6 @@
   pointer-events: none;
 }
 
-/* ── STARS ── fixed pixel size, anchored top-left, cropped by the panel. The
-   points are crisp-edged pixels, the dots are round; neither is blurred. */
-.voice-empty__stars {
-  position: absolute;
-  top: 0;
-  left: 0;
-}
-/* The few that breathe: opacity eased between two values, slowly, each on
-   its own phase. Their resting opacity is on fill-opacity, so the loop
-   multiplies it and a dim star stays a dim star. */
-.voice-empty__star--tw {
-  animation: voiceTwinkle 16s ease-in-out infinite alternate;
-}
-
 /* ── WORLD ── the destination. Its centre sits below and to the right of the
    panel so only its upper-left arc shows and it reads as far larger than the
    frame. Night side: the void lifted one step toward lavender, never black,
@@ -96,7 +86,7 @@
 }
 
 /* ── CRAFT ── the porthole is at 65% / 50% of the SVG box, which is where
-   --ship-x / --ship-y point. The box bobs; the art inside it is pitched
+   --ship-x / --ship-y point. The box drifts; the art inside it is pitched
    toward the lower right, the way it is going. */
 .voice-empty__craft {
   position: absolute;
@@ -104,7 +94,7 @@
   height: var(--craft-h);
   left: calc(var(--ship-x) - var(--craft-w) * 0.65);
   top: calc(var(--ship-y) - var(--craft-h) * 0.5);
-  animation: voiceBob 14s ease-in-out infinite;
+  animation: voiceDrift 9s ease-in-out infinite;
 }
 .voice-empty__craft-art {
   display: block;
@@ -174,16 +164,12 @@
 }
 
 /* ── MOTION ──
- * The bob: a few pixels, slowly, the ship never travelling. */
-@keyframes voiceBob {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-5px); }
-}
-/* The twinkle: a star's opacity easing between two values. Never all the
-   way out, never a flash. */
-@keyframes voiceTwinkle {
-  from { opacity: 0.25; }
-  to { opacity: 1; }
+ * The drift: a slow loop of a few pixels with a slight roll, the ship never
+ * travelling. Three stations so it is not a metronome. */
+@keyframes voiceDrift {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  36% { transform: translate(4px, -7px) rotate(0.8deg); }
+  70% { transform: translate(-3px, -3px) rotate(-0.6deg); }
 }
 
 /* ── STILL FRAME ──

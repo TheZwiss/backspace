@@ -54,8 +54,14 @@
 
 /* ── THE CREW STATES ── */
 
-.crew-empty {
+.crew-empty--compact {
   position: relative;
+}
+/* The hero covers the host's box instead of sitting in its flow: centred in
+   the whole column, and never a reason for the column to scroll. */
+.crew-empty--hero {
+  position: absolute;
+  inset: 0;
 }
 
 /* ── STAGE ── Nori's box, sized by the host's utilities (128px hero, 80px

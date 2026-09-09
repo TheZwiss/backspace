@@ -231,15 +231,17 @@ export function OpenSpace({ sky, density, className }: OpenSpaceProps) {
  * small in a large dark frame. The caller owns the copy and the strings; this
  * owns the picture. Owned by the UI soul pass (scene bible row 3).
  *
- * Layout never moves for the scene: space is an absolutely positioned layer
- * behind a flex column that centres a stage box the exact size of Nori and
- * the line of copy under it.
+ * Layout never moves for the scene: a flex column centres a stage box the
+ * exact size of Nori and the line of copy under it. The hero size is
+ * absolutely positioned over the host's whole box (the host is `relative`),
+ * so it adds nothing to the host's scroll height and a tab with nothing in
+ * it has nothing to scroll; the compact size sits in the list's flow.
  */
 export function CrewEmptyState({ variant, size, children }: CrewEmptyStateProps) {
   const hero = size === 'hero';
   const beat = BEATS[variant];
   return (
-    <div className={`crew-empty crew-empty--${variant} crew-empty--${size} flex flex-col items-center ${hero ? 'justify-center h-full' : 'py-6'}`}>
+    <div className={`crew-empty crew-empty--${variant} crew-empty--${size} flex flex-col items-center ${hero ? 'justify-center' : 'py-6'}`}>
       {/* No sky of its own: the friends page draws the living backdrop behind
           the whole column (HomeSpace), and a sidebar row is a list. This is
           Nori and the line, on whatever surface the caller gives it. */}

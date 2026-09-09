@@ -54,7 +54,7 @@ function Header({ active, onSelect }: { active: string; onSelect: (id: string) =
 
 function Rows() {
   return (
-    <div className="flex-1 overflow-y-auto p-4">
+    <div className="relative flex-1 overflow-y-auto p-4">
       <h2 className="friends-count text-xs font-bold text-txt-tertiary mb-4 tracking-wider px-2">ONLINE — {ROWS.length}</h2>
       {ROWS.map((row, i) => (
         <div key={row.name} className="friends-row flex items-center justify-between px-3 h-[62px] rounded-[8px] hover:bg-interactive-hover group transition-colors mx-2">
@@ -86,11 +86,9 @@ function Workbench() {
           <Column width={1000} height={760}>
             <Header active={active} onSelect={setActive} />
             <FriendsPanel>
-              <div className="flex-1 overflow-y-auto p-4">
+              <div className="relative flex-1 overflow-y-auto p-4">
                 <h2 className="friends-count text-xs font-bold text-txt-tertiary mb-4 tracking-wider px-2">ONLINE — 0</h2>
-                <div style={{ height: 'calc(100% - 32px)' }}>
-                  <CrewEmptyState variant="nobodyOnline" size="hero">No one's online right now.</CrewEmptyState>
-                </div>
+                <CrewEmptyState variant="nobodyOnline" size="hero">No one's online right now.</CrewEmptyState>
               </div>
             </FriendsPanel>
           </Column>
@@ -106,11 +104,9 @@ function Workbench() {
         <Column width={600} height={560}>
           <Header active="pending" onSelect={() => undefined} />
           <FriendsPanel>
-            <div className="flex-1 overflow-y-auto p-4">
+            <div className="relative flex-1 overflow-y-auto p-4">
               <h2 className="friends-count text-xs font-bold text-txt-tertiary mb-4 tracking-wider px-2">PENDING — 0</h2>
-              <div style={{ height: 'calc(100% - 32px)' }}>
-                <CrewEmptyState variant="noPending" size="hero">No pending requests — Nori is napping.</CrewEmptyState>
-              </div>
+              <CrewEmptyState variant="noPending" size="hero">No pending requests — Nori is napping.</CrewEmptyState>
             </div>
           </FriendsPanel>
         </Column>

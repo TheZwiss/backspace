@@ -24,9 +24,9 @@ function FriendsColumn({ width, height, label, children }: { width: number; heig
       <div className="h-14 px-5 flex items-center border-b border-border-hard flex-shrink-0">
         <span className="font-bold text-[15px] text-txt-primary">Friends</span>
       </div>
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="relative flex-1 overflow-y-auto p-4">
         <h2 className="text-xs font-bold text-txt-tertiary mb-4 tracking-wider px-2">{label}</h2>
-        <div style={{ height: 'calc(100% - 32px)' }}>{children}</div>
+        {children}
       </div>
     </div>
   );

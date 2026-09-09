@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { SceneIds } from '../telemetry/scene/HelloScene';
 import { SCENE_PALETTE as P } from '../telemetry/scene/palette';
 import { PORT, Ship } from '../telemetry/scene/Ship';
+import { StarField, scatterStars, type StarFieldSpec, type Streak } from '../telemetry/scene/StarField';
 import './VoiceEmptyPanel.css';
 
 interface VoiceEmptyPanelProps {
@@ -11,84 +12,31 @@ interface VoiceEmptyPanelProps {
 }
 
 /* ── STARS ──
- * A deterministic field in panel pixels, not viewBox units: the SVG has no
- * viewBox, so a 1px star is one CSS pixel at every panel size and the density
- * is the same per square pixel whether the panel is 560 or 1320 wide. The
- * field is drawn once at the largest size the app gives the panel and the
- * panel's overflow crops it; a smaller panel simply sees the top-left of the
- * same sky. Roughly one star per 12,000 square pixels: sparse enough that each
- * one is a point you could name, never a texture.
+ * The shared sky (telemetry/scene/StarField), drawn once at the largest size
+ * the app gives the panel; the panel's overflow crops it, and a smaller panel
+ * simply sees the top left of the same sky. Roughly one star per 12,000
+ * square pixels: sparse enough that each one is a point you could name,
+ * never a texture. One in five breathes.
  */
-const FIELD = { w: 1400, h: 920 } as const;
-const STAR_COUNT = Math.round((FIELD.w * FIELD.h) / 12000);
+const FIELD: StarFieldSpec = {
+  seed: 2026,
+  width: 1400,
+  height: 920,
+  perStar: 12000,
+  bright: 0.22,
+  dust: 0.28,
+  twinkleEvery: 5,
+};
+const STARS = scatterStars(FIELD);
 
-interface Star {
-  x: number;
-  y: number;
-  /** 1 or 2: the only two sizes a distant star has. */
-  size: 1 | 2;
-  /** Resting opacity; distance, in the only way a flat point can show it. */
-  a: number;
-  dust: boolean;
-  /** Phase offset in seconds for the few that twinkle; undefined for the rest. */
-  twinkle?: number;
-}
-
-function mulberry32(seed: number): () => number {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-function scatter(seed: number): Star[] {
-  const next = mulberry32(seed);
-  const stars: Star[] = [];
-  for (let i = 0; i < STAR_COUNT; i += 1) {
-    const x = Math.floor(next() * FIELD.w);
-    const y = Math.floor(next() * FIELD.h);
-    const size: 1 | 2 = next() < 0.22 ? 2 : 1;
-    // The large ones are the clear ones: they live in the brighter half.
-    const a = Math.round((size === 2 ? 0.6 + next() * 0.4 : 0.3 + next() * 0.6) * 100) / 100;
-    const dust = next() < 0.28;
-    // One star in eleven breathes, each on its own phase of the shared loop.
-    const twinkle = i % 11 === 4 ? Math.round(next() * 18 * 10) / 10 : undefined;
-    stars.push(twinkle === undefined ? { x, y, size, a, dust } : { x, y, size, a, dust, twinkle });
-  }
-  return stars;
-}
-
-const STARS = scatter(2026);
-
-/* A 1px star is a crisp-edged pixel: a true point. A 2px star is a round dot
- * centred on a pixel, because a 2px square at 2x is a visible square and a
- * square is not a star. */
-function StarPoint({ star }: { star: Star }) {
-  const fill = star.dust ? P.dust : P.star;
-  const twinkle = star.twinkle === undefined ? undefined : { animationDelay: `-${star.twinkle}s` };
-  const className = twinkle === undefined ? undefined : 'voice-empty__star--tw';
-  // Resting opacity goes on fill-opacity for the twinklers so the loop's
-  // opacity multiplies it instead of replacing it.
-  const rest = twinkle === undefined ? { opacity: star.a } : { fillOpacity: star.a };
-  if (star.size === 1) {
-    return <rect className={className} x={star.x} y={star.y} width={1} height={1} fill={fill} shapeRendering="crispEdges" style={twinkle} {...rest} />;
-  }
-  return <circle className={className} cx={star.x + 0.5} cy={star.y + 0.5} r={1} fill={fill} style={twinkle} {...rest} />;
-}
-
-function Stars() {
-  return (
-    <svg className="voice-empty__stars" width={FIELD.w} height={FIELD.h} aria-hidden="true" focusable="false">
-      {STARS.map((s, i) => (
-        <StarPoint key={i} star={s} />
-      ))}
-    </svg>
-  );
-}
+/* ── STERNSCHNUPPEN ── three, high in the frame and clear of the craft,
+ * on periods that share no factor: one every half minute or so between
+ * them, each gone in under a second. */
+const STREAKS: ReadonlyArray<Streak> = [
+  { left: '48cqw', top: '4px', period: 41, delay: 9 },
+  { left: '72cqw', top: '10px', period: 59, delay: 33 },
+  { left: '34cqw', top: '2px', period: 73, delay: 50 },
+];
 
 /* ── NORI ──
  * The mascot, seen through the porthole. The hello scene's pilot is a
@@ -227,7 +175,7 @@ export function VoiceEmptyPanel({ channelName, onJoin }: VoiceEmptyPanelProps) {
   return (
     <div className="voice-empty flex-1 flex flex-col items-center justify-center relative">
       <div className="voice-empty__scene" aria-hidden="true">
-        <Stars />
+        <StarField stars={STARS} width={FIELD.width} height={FIELD.height} streaks={STREAKS} />
         <div className="voice-empty__world" />
         <div className="voice-empty__craft">
           <Craft ids={ids} uid={uid} />
