@@ -20,6 +20,11 @@ export function InstancePanel() {
   const { t } = useTranslation(['settings']);
   const fetchInstanceSettings = useSettingsStore((s) => s.fetchInstanceSettings);
   const fetchStreamingLimits = useSettingsStore((s) => s.fetchStreamingLimits);
+  const fetchTelemetry = useSettingsStore((s) => s.fetchTelemetry);
+  // Read here rather than in the telemetry panel alone: the invitation has to
+  // be decided before that tab is ever opened, because it is what invites the
+  // admin to open it.
+  const telemetry = useSettingsStore((s) => s.telemetry);
 
   const [subTab, setSubTab] = useState<SubTab>('general');
   const [approvalCount, setApprovalCount] = useState(0);
@@ -33,8 +38,15 @@ export function InstancePanel() {
     { id: 'storage', label: t('settings:instance.tabs.storage') },
     { id: 'users', label: t('settings:instance.tabs.users') },
     { id: 'updates', label: t('settings:instance.tabs.updates'), badgeDot: updateBadge },
-    { id: 'telemetry', label: t('settings:instance.tabs.telemetry') },
-  ], [approvalCount, updateBadge, t]);
+    {
+      id: 'telemetry',
+      label: t('settings:instance.tabs.telemetry'),
+      // Whenever the hello is not being sent, whether that is because nobody
+      // has answered yet or because someone said no. `telemetry` is null while
+      // the status is still loading, and an unknown state invites nothing.
+      invite: telemetry !== null && telemetry.enabled !== true,
+    },
+  ], [approvalCount, updateBadge, telemetry, t]);
 
   const handleNavigate = useCallback((id: string) => {
     setSubTab(id as SubTab);
@@ -46,7 +58,9 @@ export function InstancePanel() {
   useEffect(() => {
     fetchInstanceSettings();
     fetchStreamingLimits();
-  }, [fetchInstanceSettings, fetchStreamingLimits]);
+    // Failure leaves `telemetry` null, which shows the plain entry.
+    void fetchTelemetry().catch(() => undefined);
+  }, [fetchInstanceSettings, fetchStreamingLimits, fetchTelemetry]);
 
   return (
     <div className="space-y-4">

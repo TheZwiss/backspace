@@ -7,6 +7,14 @@ export interface SettingsSection {
   badgeCount?: number;
   /** A boolean "something is waiting here", e.g. an available instance update. */
   badgeDot?: boolean;
+  /**
+   * Render this section's entry as the hello button rather than as a text
+   * link. Set while the instance is not sending the daily hello, and cleared
+   * the moment it is, so the invitation is only ever offering something that
+   * is not already happening. The entry still navigates — it does not answer
+   * anything on the way.
+   */
+  invite?: boolean;
 }
 
 interface SettingsSectionsContextValue {

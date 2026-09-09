@@ -18,16 +18,23 @@ import { KeybindsPanel } from './settingsPanels/KeybindsPanel';
 import { isElectron } from '../../platform/platform';
 import { useInstanceUpdateBadge } from '../../hooks/useInstanceUpdateBadge';
 import { SettingsSectionsProvider, useSettingsSectionsContext } from './SettingsSectionsContext';
+import { HiButton } from '../telemetry/answers/HiButton';
 
 type SettingsTab = 'account' | 'appearance' | 'voice' | 'privacy' | 'connections' | 'keybinds' | 'desktop' | 'instance';
 
-function SidebarSubLinks() {
+export function SidebarSubLinks() {
   const ctx = useSettingsSectionsContext();
   if (!ctx || ctx.sections.length === 0) return null;
 
   return (
     <div className="overflow-hidden">
       {ctx.sections.map((section) => (
+        section.invite === true ? (
+          // Same invitation as the tab strip, sized for the narrow column.
+          <div key={section.id} className="flex px-2 py-1.5">
+            <HiButton onClick={() => ctx.scrollToSection(section.id)}>{section.label}</HiButton>
+          </div>
+        ) : (
         <button
           key={section.id}
           onClick={() => ctx.scrollToSection(section.id)}
@@ -48,6 +55,7 @@ function SidebarSubLinks() {
             <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-accent-amber" />
           )}
         </button>
+        )
       ))}
     </div>
   );

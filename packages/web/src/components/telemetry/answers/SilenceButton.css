@@ -1,0 +1,673 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   Radio silence — the "no" answer in the telemetry ask.
+
+   A derelict hull plate adrift in vacuum. There is no local light source here:
+   the only illumination is distant starlight arriving from the upper left, so
+   every surface is matte and all the depth comes from texture — grain, oxide,
+   pitting, rime — rather than gloss. The palette runs cold and desaturated
+   (indigo, slate, dust) deliberately against the app's warm dark.
+
+   The outboard end is genuinely torn away: the plate's own silhouette is cut by
+   a mask, so this is never a rounded rectangle with a graphic on it.
+
+   Layer order, back to front:
+     drift    the slow tumble, and the shadow the torn shape casts
+     plate    the hull: body gradient, starlight graze, pitting, panel seam
+     oxide    low-frequency turbulence — patina, the thing that kills flat fill
+     rime     frost crystals where the starlit edge stays coldest
+     grain    high-frequency turbulence — the matte tooth of the metal
+     array    the solar cells that survived, thinning toward the break
+     carrier  the transmitter's flat line
+     blip     the last transmission, decaying into that line
+     ping     one pulse that crosses and dies before the far edge
+     motes    dust travelling with the wreck
+     label    Radio silence — always the most legible thing on the plate
+     tear     starlight caught on the ragged break
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.silence-button {
+  /* Cold local palette, derived from Aether Drift tokens and pulled toward
+     indigo and slate so the hull reads dead against the modal's warm glass. */
+  --sil-lit: 35 37 49; /* the starlit face, upper left */
+  --sil-body: 24 25 34; /* the hull's own colour */
+  --sil-far: 17 18 25; /* the unlit end. Deliberately above --bg-base: if it
+                           matched the void the break would have no silhouette. */
+  --sil-rime: 199 210 254; /* frost and starlight: --accent-lavender toward sky */
+  --sil-signal: 140 152 186; /* the carrier's slate */
+  /* How much of the outboard end the break eats. Shared by the mask and the
+     label's optical centring so they can never drift apart. */
+  --sil-break: 22px;
+
+  /* Sizing contract: shares a flex row with the launch answer, never pushes it. */
+  flex: 1 1 0%;
+  min-width: 0;
+  min-height: 42px;
+  position: relative;
+  padding: 0;
+  border: 0;
+  background: none;
+  /* The tilt spills past the box on purpose — nothing here may be clipped. */
+  overflow: visible;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  isolation: isolate;
+}
+
+/* ── Drift ──────────────────────────────────────────────────────────────────
+   The tumble. Rotation only, on its own element, so the tilt costs no layout.
+   The drop shadow lives here as a filter rather than a box-shadow so it takes
+   the torn silhouette instead of the button's rectangle. It is wide and weak:
+   in vacuum there is nothing nearby to cast onto. */
+.silence-button__drift {
+  position: absolute;
+  inset: 0;
+  display: block;
+  border-radius: 8px;
+  transform: rotate(-2deg);
+  transform-origin: 62% 150%; /* pivot off-body: a wreck tumbles around nothing */
+  animation: silence-tumble 29s ease-in-out infinite alternate;
+  filter: drop-shadow(0 7px 16px rgb(0 0 0 / 0.5));
+  will-change: transform;
+  transition: filter 420ms ease;
+}
+
+@keyframes silence-tumble {
+  from {
+    transform: rotate(-1.45deg);
+  }
+  to {
+    transform: rotate(-2.5deg);
+  }
+}
+
+/* ── Plate ──────────────────────────────────────────────────────────────────
+   The hull. Background layers, front to back:
+     1-5  micrometeorite pits: a starlit upper rim over a dark floor, each
+     6    a panel seam, fading out before both ends
+     7    the starlight graze — narrow, from the upper-left corner only
+     8    the body gradient: lit face → hull → the side that never sees light
+   The mask is the break: everything inboard of --sil-break is kept whole, and
+   the last 22px are replaced by a ragged fringe. Because a mask also clips
+   box-shadows, the outer shadow and the focus ring live on .drift instead. */
+.silence-button__plate {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-origin: border-box;
+  background-repeat: no-repeat;
+  background-image:
+    radial-gradient(1.6px 1.6px at 21% 30%, rgb(var(--sil-rime) / 0.14), transparent 60%),
+    radial-gradient(2px 2px at 21.4% 31.8%, rgb(0 0 0 / 0.8), transparent 62%),
+    radial-gradient(1.4px 1.4px at 62% 66%, rgb(var(--sil-rime) / 0.11), transparent 60%),
+    radial-gradient(1.8px 1.8px at 62.3% 67.6%, rgb(0 0 0 / 0.75), transparent 62%),
+    radial-gradient(1.2px 1.2px at 41% 17%, rgb(0 0 0 / 0.6), transparent 60%),
+    linear-gradient(
+      90deg,
+      transparent 0%,
+      rgb(var(--sil-rime) / 0.05) 22%,
+      rgb(var(--sil-rime) / 0.025) 66%,
+      transparent 88%
+    ),
+    radial-gradient(90% 150% at 2% -45%, rgb(var(--sil-rime) / 0.075), transparent 58%),
+    linear-gradient(150deg, rgb(var(--sil-lit)) 0%, rgb(var(--sil-body)) 44%, rgb(var(--sil-far)) 100%);
+  background-size:
+    100% 100%,
+    100% 100%,
+    100% 100%,
+    100% 100%,
+    100% 100%,
+    100% 1px,
+    100% 100%,
+    100% 100%;
+  background-position:
+    0 0,
+    0 0,
+    0 0,
+    0 0,
+    0 0,
+    0 27%,
+    0 0,
+    0 0;
+  /* The break. Layer one is the ragged fringe pinned to the outboard end;
+     layer two is the intact hull inboard of it. Default compositing unions them. */
+  -webkit-mask-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 42' preserveAspectRatio='none'%3E%3Cpath d='M0 0 H12 L5 6 L13 10.5 L2.5 17 L10.5 22 L4 28 L12.5 32 L2 38.5 L7 42 H0 Z' fill='%23fff'/%3E%3C/svg%3E"),
+    linear-gradient(#000 0 0);
+  -webkit-mask-size:
+    var(--sil-break) 100%,
+    calc(100% - var(--sil-break) + 1px) 100%;
+  -webkit-mask-position:
+    right center,
+    left center;
+  -webkit-mask-repeat: no-repeat;
+  mask-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 42' preserveAspectRatio='none'%3E%3Cpath d='M0 0 H12 L5 6 L13 10.5 L2.5 17 L10.5 22 L4 28 L12.5 32 L2 38.5 L7 42 H0 Z' fill='%23fff'/%3E%3C/svg%3E"),
+    linear-gradient(#000 0 0);
+  mask-size:
+    var(--sil-break) 100%,
+    calc(100% - var(--sil-break) + 1px) 100%;
+  mask-position:
+    right center,
+    left center;
+  mask-repeat: no-repeat;
+  box-shadow:
+    /* the rim starlight actually catches, top-left only */
+    inset 1px 1px 0 rgb(var(--sil-rime) / 0.07),
+    /* the body falling away into the shaded side */ inset -14px -14px 22px rgb(0 0 0 / 0.6),
+    inset 0 -1px 0 rgb(0 0 0 / 0.45);
+  transition:
+    box-shadow 420ms ease,
+    filter 520ms ease,
+    transform 420ms ease;
+}
+
+/* A hairline outline that is brightest where the starlight lands and gone by
+   the far corner. One uniform border would flatten the whole piece. */
+.silence-button__plate::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    142deg,
+    rgb(var(--sil-rime) / 0.28) 0%,
+    rgb(var(--sil-rime) / 0.08) 24%,
+    rgb(var(--sil-signal) / 0.03) 56%,
+    transparent 100%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  transition: opacity 420ms ease;
+}
+
+/* ── Oxide ──────────────────────────────────────────────────────────────────
+   Low-frequency turbulence blown up large and tinted cold: the mottled patina
+   of a surface irradiated for a very long time. This is the layer that stops
+   the hull reading as a single flat fill. */
+.silence-button__oxide {
+  position: absolute;
+  inset: -20%;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='o'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.016' numOctaves='4' seed='7'/%3E%3CfeColorMatrix values='0 0 0 0 0.6 0 0 0 0 0.64 0 0 0 0 0.8 0 0 0 1.2 -0.4'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23o)'/%3E%3C/svg%3E");
+  background-size: 320px 320px;
+  opacity: 0.4;
+  mix-blend-mode: soft-light;
+  pointer-events: none;
+  transition: opacity 520ms ease;
+}
+
+/* ── Rime ───────────────────────────────────────────────────────────────────
+   Frost. A cold bloom on the starlit corner, but broken up by its own noise
+   mask so it crystallises instead of glowing — vacuum frost is crusty, and a
+   smooth bloom here would read as gloss. */
+.silence-button__rime {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(58% 90% at 10% -22%, rgb(var(--sil-rime) / 0.4), transparent 62%);
+  /* Two masks: crystals from noise, intersected with a band that keeps the
+     frost pinned to the top edge where a tumbling plate stays coldest. */
+  -webkit-mask-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='70' height='70'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.7' numOctaves='2' seed='11'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 2.2 -1.05'/%3E%3C/filter%3E%3Crect width='70' height='70' filter='url(%23f)'/%3E%3C/svg%3E"),
+    linear-gradient(180deg, #000 0%, rgb(0 0 0 / 0.35) 46%, transparent 78%);
+  -webkit-mask-size: 70px 70px, 100% 100%;
+  -webkit-mask-composite: source-in;
+  mask-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='70' height='70'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.7' numOctaves='2' seed='11'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 2.2 -1.05'/%3E%3C/filter%3E%3Crect width='70' height='70' filter='url(%23f)'/%3E%3C/svg%3E"),
+    linear-gradient(180deg, #000 0%, rgb(0 0 0 / 0.35) 46%, transparent 78%);
+  mask-size: 70px 70px, 100% 100%;
+  mask-composite: intersect;
+  pointer-events: none;
+  transition: opacity 520ms ease;
+}
+
+/* ── Grain ──────────────────────────────────────────────────────────────────
+   High-frequency turbulence at 1:1: the matte tooth of the metal. Faint on
+   purpose; its job is to make every layer under it read as a surface. */
+.silence-button__grain {
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' seed='3'/%3E%3CfeColorMatrix values='0 0 0 0 0.8 0 0 0 0 0.82 0 0 0 0 0.9 0 0 0 0.55 0'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23g)'/%3E%3C/svg%3E");
+  background-size: 120px 120px;
+  opacity: 0.11;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+
+/* ── Array ──────────────────────────────────────────────────────────────────
+   What is left of the solar cells on the outboard end. Two hairline rhythms at
+   different intervals so the cells never read as an even barcode, masked so
+   they only exist near the break and fade out before the label. Percentage
+   width, so 150px and 280px buttons keep the same reading. */
+.silence-button__array {
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: 52%;
+  max-width: 132px;
+  /* Hand-placed cell divisions and one horizontal bus bar. An even repeat here
+     reads as a barcode; irregular spacing reads as a thing that was built. */
+  background-image:
+    linear-gradient(90deg, transparent 15.6%, rgb(var(--sil-rime) / 0.05) 15.6% 16.2%, transparent 16.2%),
+    linear-gradient(90deg, transparent 33%, rgb(var(--sil-rime) / 0.035) 33% 33.6%, transparent 33.6%),
+    linear-gradient(90deg, transparent 46.5%, rgb(var(--sil-rime) / 0.055) 46.5% 47.1%, transparent 47.1%),
+    linear-gradient(90deg, transparent 62%, rgb(var(--sil-rime) / 0.03) 62% 62.6%, transparent 62.6%),
+    linear-gradient(90deg, transparent 74.5%, rgb(var(--sil-rime) / 0.045) 74.5% 75.1%, transparent 75.1%),
+    linear-gradient(180deg, transparent 39%, rgb(var(--sil-rime) / 0.04) 39% 39.5%, transparent 39.5%);
+  -webkit-mask-image:
+    linear-gradient(90deg, transparent 0%, #000 46%, #000 86%, rgb(0 0 0 / 0.3) 100%),
+    linear-gradient(180deg, transparent 0%, #000 22%, #000 76%, transparent 100%);
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(90deg, transparent 0%, #000 46%, #000 86%, rgb(0 0 0 / 0.3) 100%),
+    linear-gradient(180deg, transparent 0%, #000 22%, #000 76%, transparent 100%);
+  mask-composite: intersect;
+  pointer-events: none;
+  transition: opacity 520ms ease;
+}
+
+/* ── Carrier ────────────────────────────────────────────────────────────────
+   The transmitter's line. Dead flat, fading into nothing at both ends so it
+   never terminates in a hard stop. Sits below the label's baseline. */
+.silence-button__carrier {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 79%;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgb(var(--sil-signal) / 0.14) 16%,
+    rgb(var(--sil-signal) / 0.18) 48%,
+    rgb(var(--sil-signal) / 0.06) 80%,
+    transparent 94%
+  );
+  pointer-events: none;
+  transition: opacity 620ms ease;
+}
+
+/* ── Blip ───────────────────────────────────────────────────────────────────
+   The last transmission, frozen where it died: one spike, a few decaying
+   rebounds, then the flat carrier forever. Fixed size, anchored inboard. */
+.silence-button__blip {
+  position: absolute;
+  left: 7px;
+  top: calc(79% - 7px);
+  width: 46px;
+  height: 14px;
+  opacity: 0.82;
+  overflow: visible;
+  pointer-events: none;
+  transition: opacity 620ms ease;
+}
+
+/* ── Ping ───────────────────────────────────────────────────────────────────
+   One pulse leaves the transmitter, crosses, and fades out well before the far
+   edge — the only real event in the piece. It happens for roughly four seconds
+   out of eighteen; the other fourteen are the point. */
+.silence-button__ping {
+  position: absolute;
+  top: calc(79% - 1px);
+  left: 0;
+  width: 36px;
+  height: 3px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, rgb(var(--sil-rime) / 0.8), transparent);
+  filter: blur(1px);
+  opacity: 0;
+  pointer-events: none;
+  animation: silence-ping 18s cubic-bezier(0.2, 0.55, 0.35, 1) infinite;
+}
+
+@keyframes silence-ping {
+  0% {
+    transform: translateX(-16px);
+    opacity: 0;
+  }
+  3% {
+    opacity: 0.5;
+  }
+  13% {
+    opacity: 0.26;
+  }
+  23% {
+    transform: translateX(min(58%, 104px));
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(min(58%, 104px));
+    opacity: 0;
+  }
+}
+
+/* ── Motes ──────────────────────────────────────────────────────────────────
+   Dust the wreck brought with it. Four grains, four periods, none a multiple of
+   another, all far too slow to read as animation — you only notice they moved
+   if you look twice. */
+.silence-button__motes {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  transition: opacity 620ms ease;
+}
+
+.silence-button__motes i {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  border-radius: 50%;
+  background: rgb(var(--sil-rime) / 0.5);
+  box-shadow: 0 0 3px rgb(var(--sil-rime) / 0.28);
+}
+
+.silence-button__motes i:nth-child(1) {
+  left: 14%;
+  top: 58%;
+  animation: silence-mote-a 47s linear infinite;
+}
+.silence-button__motes i:nth-child(2) {
+  left: 38%;
+  top: 24%;
+  opacity: 0.6;
+  animation: silence-mote-b 61s linear infinite;
+}
+.silence-button__motes i:nth-child(3) {
+  left: 69%;
+  top: 70%;
+  opacity: 0.45;
+  animation: silence-mote-a 53s linear infinite reverse;
+}
+.silence-button__motes i:nth-child(4) {
+  left: 55%;
+  top: 44%;
+  opacity: 0.3;
+  animation: silence-mote-b 71s linear infinite reverse;
+}
+
+@keyframes silence-mote-a {
+  0% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(9px, -5px);
+  }
+  100% {
+    transform: translate(0, 0);
+  }
+}
+
+@keyframes silence-mote-b {
+  0% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(-7px, 6px);
+  }
+  100% {
+    transform: translate(0, 0);
+  }
+}
+
+/* ── Tear ───────────────────────────────────────────────────────────────────
+   The starlight rim on the break. Fixed width, matched to --sil-break, so the
+   stroke lands exactly on the mask's edge at any button width. */
+.silence-button__tear {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: var(--sil-break);
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+  transition: opacity 420ms ease;
+}
+
+/* ── Debris ─────────────────────────────────────────────────────────────────
+   Three fragments that left the hull and never went anywhere. They live
+   outboard of the break — outside the plate's mask, in the gap before the live
+   answer — so the break reads as something that happened rather than a shape.
+   Each is a facetted chip, lit on one side only, drifting on its own period. */
+.silence-button__debris {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  transition: opacity 620ms ease;
+}
+
+.silence-button__debris i {
+  position: absolute;
+  background: linear-gradient(148deg, rgb(var(--sil-lit)) 0%, rgb(var(--sil-far)) 78%);
+  box-shadow: inset 0.5px 0.5px 0 rgb(var(--sil-rime) / 0.22);
+}
+
+.silence-button__debris i:nth-child(1) {
+  right: 3px;
+  top: 22%;
+  width: 4px;
+  height: 3px;
+  clip-path: polygon(0% 22%, 62% 0%, 100% 55%, 44% 100%);
+  opacity: 0.85;
+  animation: silence-debris-a 63s ease-in-out infinite;
+}
+
+.silence-button__debris i:nth-child(2) {
+  right: 12px;
+  top: 63%;
+  width: 3px;
+  height: 2px;
+  clip-path: polygon(0% 0%, 100% 30%, 70% 100%);
+  opacity: 0.6;
+  animation: silence-debris-b 81s ease-in-out infinite;
+}
+
+.silence-button__debris i:nth-child(3) {
+  right: 6px;
+  top: 84%;
+  width: 2px;
+  height: 2px;
+  clip-path: polygon(10% 0%, 100% 40%, 55% 100%, 0% 62%);
+  opacity: 0.45;
+  animation: silence-debris-a 97s ease-in-out infinite reverse;
+}
+
+@keyframes silence-debris-a {
+  0% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  50% {
+    transform: translate(2px, -3px) rotate(24deg);
+  }
+  100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+}
+
+@keyframes silence-debris-b {
+  0% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  50% {
+    transform: translate(-2px, 3px) rotate(-30deg);
+  }
+  100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+}
+
+/* ── Label ──────────────────────────────────────────────────────────────────
+   The one thing here that is not weathered. Optically centred on the surviving
+   hull rather than on the button box, since the outboard end is missing. */
+.silence-button__label {
+  position: relative;
+  z-index: 2;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.015em;
+  color: rgb(var(--text-primary) / 0.9);
+  text-shadow: 0 1px 3px rgb(0 0 0 / 0.85);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-left: 10px;
+  padding-right: calc(10px + var(--sil-break));
+  transition: color 380ms ease;
+}
+
+/* ── Hover ──────────────────────────────────────────────────────────────────
+   Approaching it makes it quieter, not louder: the tumble stops, the dust
+   settles, the ping never leaves. Only the label comes up, so the affordance
+   stays obvious while everything around it goes still. */
+.silence-button:hover:not(:disabled) .silence-button__drift,
+.is-hover .silence-button:not(:disabled) .silence-button__drift {
+  animation-play-state: paused;
+  filter: drop-shadow(0 9px 22px rgb(0 0 0 / 0.6));
+}
+
+.silence-button:hover:not(:disabled) .silence-button__ping,
+.is-hover .silence-button:not(:disabled) .silence-button__ping {
+  animation-play-state: paused;
+  opacity: 0;
+}
+
+.silence-button:hover:not(:disabled) .silence-button__motes,
+.is-hover .silence-button:not(:disabled) .silence-button__motes {
+  opacity: 0.45;
+}
+
+.silence-button:hover:not(:disabled) .silence-button__motes i,
+.is-hover .silence-button:not(:disabled) .silence-button__motes i,
+.silence-button:hover:not(:disabled) .silence-button__debris i,
+.is-hover .silence-button:not(:disabled) .silence-button__debris i {
+  animation-play-state: paused;
+}
+
+.silence-button:hover:not(:disabled) .silence-button__carrier,
+.is-hover .silence-button:not(:disabled) .silence-button__carrier {
+  opacity: 0.25;
+}
+
+.silence-button:hover:not(:disabled) .silence-button__array,
+.is-hover .silence-button:not(:disabled) .silence-button__array,
+.silence-button:hover:not(:disabled) .silence-button__blip,
+.is-hover .silence-button:not(:disabled) .silence-button__blip,
+.silence-button:hover:not(:disabled) .silence-button__rime,
+.is-hover .silence-button:not(:disabled) .silence-button__rime {
+  opacity: 0.4;
+}
+
+.silence-button:hover:not(:disabled) .silence-button__debris,
+.is-hover .silence-button:not(:disabled) .silence-button__debris {
+  opacity: 0.55;
+}
+
+.silence-button:hover:not(:disabled) .silence-button__plate,
+.is-hover .silence-button:not(:disabled) .silence-button__plate {
+  filter: brightness(0.74) saturate(0.72);
+}
+
+.silence-button:hover:not(:disabled) .silence-button__label,
+.is-hover .silence-button:not(:disabled) .silence-button__label {
+  color: rgb(var(--text-primary));
+}
+
+/* ── Focus ──────────────────────────────────────────────────────────────────
+   A cold beacon. The ring sits on .drift, not on the plate, because the plate's
+   mask would clip a shadow away; that also means the ring tilts with the hull
+   and reads as something aimed at the wreck rather than a browser default. */
+.silence-button:focus-visible {
+  outline: none;
+}
+
+.silence-button:focus-visible .silence-button__drift,
+.is-focus .silence-button .silence-button__drift {
+  box-shadow:
+    0 0 0 1.5px rgb(var(--bg-base)),
+    0 0 0 3px rgb(var(--accent-sky) / 0.5);
+  filter: drop-shadow(0 0 10px rgb(var(--accent-sky) / 0.16)) drop-shadow(0 7px 16px rgb(0 0 0 / 0.5));
+}
+
+.silence-button:focus-visible .silence-button__label,
+.is-focus .silence-button .silence-button__label {
+  color: rgb(var(--text-primary));
+}
+
+/* ── Press ──────────────────────────────────────────────────────────────────
+   The last of it. Whatever was still moving stops, the signal goes out, and the
+   plate settles a hair further into the dark. */
+.silence-button:active:not(:disabled) .silence-button__plate {
+  transform: translateY(0.5px) scale(0.994);
+  filter: brightness(0.74) saturate(0.65);
+}
+
+.silence-button:active:not(:disabled) .silence-button__carrier,
+.silence-button:active:not(:disabled) .silence-button__blip {
+  opacity: 0.12;
+}
+
+/* ── Disabled ───────────────────────────────────────────────────────────────
+   Used while the answer is saving. The whole object recedes together — one
+   opacity and one desaturation on the tumble wrapper rather than a filter per
+   layer, so nothing (the fracture rim especially) stays bright while the hull
+   goes dark. Nothing moves. The label keeps enough alpha to still be read. */
+.silence-button:disabled {
+  cursor: default;
+}
+
+.silence-button:disabled .silence-button__drift {
+  animation: none;
+  transform: rotate(-2deg);
+  opacity: 0.62;
+  filter: grayscale(0.85) drop-shadow(0 4px 10px rgb(0 0 0 / 0.35));
+}
+
+.silence-button:disabled .silence-button__ping,
+.silence-button:disabled .silence-button__motes i,
+.silence-button:disabled .silence-button__debris i {
+  animation: none;
+}
+
+.silence-button:disabled .silence-button__ping {
+  opacity: 0;
+}
+
+.silence-button:disabled .silence-button__label {
+  color: rgb(var(--text-primary) / 0.72);
+}
+
+/* ── Reduced motion ─────────────────────────────────────────────────────────
+   Frozen mid-story rather than switched off: the tumble holds at its tilt, the
+   dust holds where it drifted to, and the ping is caught a third of the way
+   across, already fading. The still frame is the piece. */
+@media (prefers-reduced-motion: reduce) {
+  .silence-button__drift {
+    animation: none;
+    transform: rotate(-2deg);
+  }
+
+  .silence-button__motes i,
+  .silence-button__debris i {
+    animation: none;
+  }
+
+  .silence-button__ping {
+    animation: none;
+    opacity: 0.32;
+    transform: translateX(32%);
+  }
+
+  .silence-button:hover:not(:disabled) .silence-button__ping,
+  .is-hover .silence-button:not(:disabled) .silence-button__ping {
+    opacity: 0;
+  }
+}

@@ -1,0 +1,516 @@
+/* ── THE SENDING ANSWER ──
+ * A porthole onto the run the instance is being asked to make. The craft holds
+ * station on the left, a new world comes up on the right, the label sits
+ * between them, and the whole thing is behind one sheet of glass.
+ *
+ * Structure, back to front:
+ *   __aura    outside the box   the light the scene throws onto the modal
+ *   __pane    the clipping frame everything else lives in
+ *     __void      deep space: nebula wash over a warm dark floor
+ *     __stars     two parallax layers, far (soft) and near (sharp)
+ *     __world     the destination, lit by the same key as everything else
+ *     __course    the plotted heading running from the ship to the world
+ *     __craft     flight path (state) wrapping __craft-drift (idle motion)
+ *     __scrim     the well the label sits in, and the vignette
+ *     __gloss     the resting specular on the glass
+ *     __sheen     the travelling specular, hover only
+ *     __rim       the hairline, brightest where the key hits it
+ *   __label   always on top, always full contrast
+ *
+ * LIGHT: one key, above and to the left, outside the frame. It picks out the
+ * top-left of the rim, the top-left of the hull, and the top-left crescent of
+ * the world. Everything it does not reach falls to lavender, never to black.
+ * The porthole, the beacon and the plume are the only emitters, and they bloom
+ * outward from themselves.
+ */
+
+.hi-button {
+  /* --lift is the single state channel: 0 at rest, 1 on hover and focus. Every
+     layer reads it, so one hover rule moves the whole scene together. */
+  --lift: 0;
+  /* --push is the press channel, so a press can flare without cancelling hover. */
+  --push: 0;
+  --radius: 12px;
+
+  position: relative;
+  isolation: isolate;
+  flex: 1 1 0%;
+  min-width: 0;
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  cursor: pointer;
+  /* Decoration spills; layout does not. Everything past the edge is an
+     absolutely positioned layer, so the flex row never feels it. */
+  overflow: visible;
+  transform: translateY(calc(var(--push) * 1px)) scale(calc(1 - var(--push) * 0.012));
+  transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ── AURA ── the scene's light landing on the modal glass around it. Sits
+   outside the pane so the pane can keep clipping the starfield. */
+.hi-button__aura {
+  position: absolute;
+  inset: -12px -16px;
+  border-radius: 22px;
+  background:
+    radial-gradient(46% 120% at 26% 60%, rgb(var(--accent-mint) / 0.34), transparent 68%),
+    radial-gradient(46% 120% at 82% 76%, rgb(var(--accent-sky) / 0.22), transparent 70%);
+  filter: blur(9px);
+  opacity: calc(0.2 + 0.62 * var(--lift) + 0.5 * var(--push));
+  transform: scale(calc(0.96 + 0.04 * var(--lift) + 0.03 * var(--push)));
+  transition: opacity 420ms ease, transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: none;
+}
+
+/* ── PANE ── the porthole itself: the clip, the cast shadow, and the bounce
+   light the world throws back up into the glass from below. */
+.hi-button__pane {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow:
+    /* the button's own weight on the modal */
+    0 10px 22px -12px rgb(0 0 0 / 0.85),
+    0 2px 6px -3px rgb(0 0 0 / 0.6),
+    /* the thickness of the sheet: a lit top lip, a dark bottom one */
+    inset 0 1px 0 rgb(255 255 255 / 0.07),
+    inset 0 -1px 0 rgb(0 0 0 / 0.4),
+    /* and the world's atmosphere caught in the bottom of the glass */
+    inset 0 -14px 22px -16px rgb(var(--accent-sky) / 0.55);
+  pointer-events: none;
+}
+
+/* ── VOID ── never flat: a lavender wash top-left, a mint one bottom-left where
+   the plume lives, over a floor that falls from elevated to base diagonally. */
+.hi-button__void {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(80% 150% at 6% -30%, rgb(var(--accent-lavender) / 0.16), transparent 62%),
+    radial-gradient(58% 150% at 16% 128%, rgb(var(--accent-mint) / 0.2), transparent 68%),
+    radial-gradient(38% 90% at 4% -10%, rgb(var(--accent-peach) / 0.07), transparent 70%),
+    linear-gradient(152deg, rgb(var(--bg-elevated)) 0%, rgb(var(--bg-chat)) 48%, rgb(var(--bg-base)) 100%);
+}
+
+/* ── STARS ── two tiles at different densities and speeds. The parallax is the
+   only thing that makes the void read as deep rather than as a gradient. */
+.hi-button__stars {
+  position: absolute;
+  inset: -20%;
+  background-repeat: repeat;
+  transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.hi-button__stars--far {
+  background-image:
+    radial-gradient(1px 1px at 11px 8px, rgb(var(--text-primary) / 0.42), transparent),
+    radial-gradient(1px 1px at 46px 27px, rgb(var(--text-primary) / 0.3), transparent),
+    radial-gradient(1px 1px at 73px 13px, rgb(var(--accent-sky) / 0.34), transparent),
+    radial-gradient(1px 1px at 29px 40px, rgb(var(--text-primary) / 0.24), transparent),
+    radial-gradient(1px 1px at 88px 46px, rgb(var(--text-primary) / 0.3), transparent),
+    radial-gradient(1px 1px at 62px 55px, rgb(var(--accent-lavender) / 0.34), transparent);
+  background-size: 104px 66px;
+  /* out of focus, because it is further away — the cheapest honest depth cue
+     there is, and it makes the near layer read as sharp by comparison */
+  filter: blur(0.35px);
+  animation: hiDriftFar 74s linear infinite, hiTwinkle 13s ease-in-out infinite alternate;
+  transform: translateX(calc(var(--push) * -2px));
+}
+.hi-button__stars--near {
+  background-image:
+    radial-gradient(1.6px 1.6px at 24px 15px, rgb(var(--text-primary) / 0.9), transparent),
+    radial-gradient(3px 3px at 24px 15px, rgb(var(--text-primary) / 0.18), transparent),
+    radial-gradient(1.3px 1.3px at 108px 44px, rgb(var(--text-primary) / 0.7), transparent),
+    radial-gradient(1.7px 1.7px at 150px 22px, rgb(var(--accent-amber) / 0.75), transparent),
+    radial-gradient(3.4px 3.4px at 150px 22px, rgb(var(--accent-amber) / 0.16), transparent),
+    radial-gradient(1.2px 1.2px at 66px 58px, rgb(var(--accent-sky) / 0.62), transparent);
+  background-size: 176px 72px;
+  animation: hiDriftNear 38s linear infinite;
+  transform: translateX(calc(var(--push) * -6px));
+}
+
+/* ── WORLD ── the system being explored. Mostly its own night side, cut off by
+   the bottom-right corner so it reads as far bigger than the frame; the key
+   only catches the limb it wraps around. Keeping it dark is what lets the label
+   cross it, and what makes the light on the edge worth looking at. */
+.hi-button__world {
+  position: absolute;
+  right: -20px;
+  bottom: -40px;
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  background:
+    /* two offset washes instead of a pattern: cloud, not corduroy */
+    radial-gradient(60% 44% at 68% 34%, rgb(var(--accent-lavender) / 0.1), transparent 70%),
+    radial-gradient(50% 30% at 26% 62%, rgb(var(--accent-mint) / 0.07), transparent 72%),
+    radial-gradient(circle at 30% 18%, rgb(var(--accent-sky) / 0.3), rgb(var(--accent-lavender) / 0.1) 40%, rgb(var(--bg-base) / 0.97) 70%);
+  box-shadow: inset -6px -8px 22px -6px rgb(0 0 0 / 0.7);
+  opacity: calc(0.9 + 0.1 * var(--lift));
+  transition: opacity 420ms ease;
+}
+/* The limb: one bright arc where the key grazes the edge, gone by the terminator. */
+.hi-button__world::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 244deg,
+    transparent 0deg,
+    rgb(var(--accent-mint) / 0.5) 34deg,
+    rgb(var(--accent-sky) / 0.75) 74deg,
+    rgb(var(--accent-lavender) / 0.35) 120deg,
+    transparent 170deg
+  );
+  -webkit-mask: radial-gradient(closest-side, transparent 86%, #000 95%, #000 100%);
+  mask: radial-gradient(closest-side, transparent 86%, #000 95%, #000 100%);
+  filter: blur(0.7px);
+}
+/* Atmosphere: the same light again, one step out and out of focus. */
+.hi-button__world::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 244deg,
+    transparent 0deg,
+    rgb(var(--accent-sky) / 0.5) 60deg,
+    rgb(var(--accent-lavender) / 0.22) 130deg,
+    transparent 190deg
+  );
+  -webkit-mask: radial-gradient(closest-side, transparent 78%, #000 92%, transparent 100%);
+  mask: radial-gradient(closest-side, transparent 78%, #000 92%, transparent 100%);
+  filter: blur(2px);
+}
+
+/* ── CRAFT ── two nested transforms on purpose: the outer one is state (the
+   ship answering hover and press), the inner one is idle life (the bob). They
+   would fight over one `transform` if they shared an element. */
+.hi-button__craft {
+  position: absolute;
+  /* Sized so the hull spans 26px of the button and the plume fades out exactly
+     at the left edge — the trail leaves the porthole rather than being cut. */
+  left: 0.4px;
+  top: calc(50% - 13px);
+  width: 43.3px;
+  height: 26px;
+  transform: translate(calc(var(--lift) * 5px + var(--push) * 13px), calc(var(--lift) * -1.5px))
+             rotate(calc(var(--lift) * -4deg + var(--push) * -2deg));
+  transition: transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.hi-button__craft-drift {
+  display: block;
+  width: 100%;
+  height: 100%;
+  animation: hiBob 7.5s ease-in-out infinite alternate;
+}
+.hi-button__craft-art {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+/* The plume answers the throttle. State and idle motion are deliberately on
+   two nodes: a keyframe that animates opacity would otherwise overwrite the
+   state opacity on the same element, and the throttle would stop working. */
+.hi-button__plume {
+  transform-origin: 11.5px 12px;
+  transform: scaleX(calc(1 + var(--lift) * 0.45 + var(--push) * 1.1));
+  opacity: calc(0.66 + 0.34 * var(--lift));
+  transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1), opacity 420ms ease;
+}
+.hi-button__plume-burn {
+  animation: hiThrottle 2.6s ease-in-out infinite alternate;
+}
+/* The cabin coming up is the ship noticing you — the lift raises the light,
+   the keyframe breathes it, and the two multiply. */
+.hi-button__cabin-lift {
+  opacity: calc(0.34 + 0.66 * var(--lift));
+  transition: opacity 480ms ease;
+}
+.hi-button__cabin {
+  animation: hiCabin 6s ease-in-out infinite alternate;
+}
+.hi-button__beacon {
+  animation: hiBeacon 4.2s ease-in-out infinite;
+}
+/* The wave: three beats, then a long rest. It is the button's one literal
+   gesture, so it has to be rare enough to feel meant. */
+.hi-button__wave {
+  transform-origin: 26.4px 13.5px;
+  animation: hiWave 9s ease-in-out infinite;
+}
+
+/* ── COURSE ── the plotted heading. It runs under the scrim on purpose: the
+   line is meant to pass behind the label and come out the other side, not to
+   compete with it. On hover the dashes creep along the path — a heading being
+   walked, not a stripe sliding by. */
+.hi-button__course {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.hi-button__course-line {
+  stroke-opacity: calc(0.16 + 0.26 * var(--lift) + 0.3 * var(--push));
+  transition: stroke-opacity 420ms ease;
+}
+
+/* ── SCRIM ── a soft well of the base colour under the label. The label needs a
+   dark ground to sit on; painting one here, out of focus and shaped, is what a
+   hard text-shadow was faking. */
+.hi-button__scrim {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(46% 78% at 50% 52%, rgb(var(--bg-base) / 0.72), rgb(var(--bg-base) / 0.3) 62%, transparent 82%),
+    /* and a vignette, so the scene is seated in the frame rather than pasted
+       into it. Photographic, not decorative: it only takes light away. */
+    radial-gradient(130% 150% at 50% 45%, transparent 44%, rgb(var(--bg-base) / 0.5) 100%);
+}
+
+/* ── GLOSS ── the resting specular. One sheet of glass over the whole scene,
+   caught by the key at the top-left corner. */
+.hi-button__gloss {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(168deg, rgb(255 255 255 / 0.12) 0%, rgb(255 255 255 / 0.03) 26%, transparent 50%),
+    radial-gradient(140% 90% at -6% -20%, rgb(255 255 255 / 0.09), transparent 58%),
+    /* the world's atmosphere spilling back into the glass */
+    radial-gradient(70% 120% at 92% 118%, rgb(var(--accent-sky) / 0.16), transparent 62%);
+}
+
+/* ── SHEEN ── the travelling specular. Parked off-frame at rest; on hover it
+   crosses once every few seconds and spends most of the cycle gone, so it
+   registers as expensive rather than as a loop. */
+.hi-button__sheen {
+  position: absolute;
+  inset: -40% -30%;
+  background: linear-gradient(
+    104deg,
+    transparent 40%,
+    rgb(255 255 255 / 0.07) 46%,
+    rgb(255 255 255 / 0.16) 50%,
+    rgb(255 255 255 / 0.07) 54%,
+    transparent 60%
+  );
+  transform: translateX(-130%);
+  opacity: 0;
+}
+
+/* ── RIM ── one hairline, not one colour: warm white where the key lands, mint
+   along the top edge, nearly nothing on the shaded lower right, lavender as it
+   comes back up. Drawn as a masked gradient border so the hue can turn. */
+.hi-button__rim {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    146deg,
+    rgb(var(--text-primary) / calc(0.36 + 0.26 * var(--lift))) 0%,
+    rgb(var(--accent-mint) / calc(0.24 + 0.3 * var(--lift))) 26%,
+    rgb(255 255 255 / calc(0.1 + 0.05 * var(--lift))) 58%,
+    rgb(var(--accent-lavender) / calc(0.22 + 0.26 * var(--lift))) 100%
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  transition: background 420ms ease;
+}
+
+/* ── LABEL ── never negotiable. It sits above every layer and carries its own
+   dark halo, so it stays legible over a star, over the plume, over the world. */
+.hi-button__label {
+  position: relative;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: rgb(var(--text-primary));
+  text-shadow: 0 1px 3px rgb(var(--bg-base) / 0.75);
+  transform: translateX(calc(var(--push) * -2px));
+  transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── HOVER ── the whole scene lifts by one channel. Written twice so the design
+   workbench can force it with a class. */
+.hi-button:hover:not(:disabled),
+.is-hover .hi-button:not(:disabled) {
+  --lift: 1;
+}
+.hi-button:hover:not(:disabled) .hi-button__sheen,
+.is-hover .hi-button:not(:disabled) .hi-button__sheen {
+  animation: hiSheen 5s cubic-bezier(0.5, 0, 0.3, 1) infinite;
+}
+.hi-button:hover:not(:disabled) .hi-button__course-line,
+.is-hover .hi-button:not(:disabled) .hi-button__course-line {
+  animation: hiCourse 6s linear infinite;
+}
+
+/* ── PRESS ── the launch. Throttle up, the ship surges toward the world, the
+   aura flares and the button takes a step back under the finger. */
+.hi-button:active:not(:disabled) {
+  --push: 1;
+}
+
+/* ── FOCUS ── the same lift as hover, plus a ring that owes nothing to the
+   scene: two stops, so it survives on any surface behind the modal. */
+.hi-button:focus-visible,
+.is-focus .hi-button {
+  --lift: 1;
+  outline: none;
+  box-shadow:
+    0 0 0 2px rgb(var(--bg-chat)),
+    0 0 0 4px rgb(var(--accent-primary));
+}
+
+/* ── DISABLED ── power down: the light goes out of the cabin, the plume stops,
+   the colour drains, and the whole thing sits flat and inert while it saves. */
+.hi-button:disabled {
+  cursor: default;
+  transform: none;
+}
+.hi-button:disabled .hi-button__pane {
+  filter: saturate(0.3) brightness(0.72);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.04);
+}
+.hi-button:disabled .hi-button__aura {
+  opacity: 0;
+}
+.hi-button:disabled .hi-button__label {
+  color: rgb(var(--text-secondary));
+  /* the label may carry an emoji, which no colour property can reach */
+  filter: saturate(0.35);
+}
+.hi-button:disabled .hi-button__plume-burn,
+.hi-button:disabled .hi-button__cabin,
+.hi-button:disabled .hi-button__beacon,
+.hi-button:disabled .hi-button__stars,
+.hi-button:disabled .hi-button__wave,
+.hi-button:disabled .hi-button__craft-drift,
+.hi-button:disabled .hi-button__course-line {
+  animation: none;
+}
+.hi-button:disabled .hi-button__plume,
+.hi-button:disabled .hi-button__cabin,
+.hi-button:disabled .hi-button__beacon {
+  opacity: 0.15;
+}
+
+/* ── MOTION ──
+ * Star drift: the tile scrolls by exactly its own width, so the loop has no
+ * seam at any button width. Far layer half the speed of the near one.
+ */
+@keyframes hiDriftFar {
+  from { background-position: 0 0; }
+  to { background-position: -104px 0; }
+}
+@keyframes hiDriftNear {
+  from { background-position: 0 0; }
+  to { background-position: -176px 0; }
+}
+/* The far field breathes. Slow enough that it is only ever noticed as air. */
+@keyframes hiTwinkle {
+  from { opacity: 0.62; }
+  to { opacity: 0.92; }
+}
+/* Station-keeping: the ship is never quite still, and never travels. */
+@keyframes hiBob {
+  from { transform: translateY(-0.9px) rotate(-0.7deg); }
+  to { transform: translateY(0.9px) rotate(0.6deg); }
+}
+/* Idle throttle, felt in the plume rather than seen. */
+@keyframes hiThrottle {
+  from { opacity: 0.76; }
+  to { opacity: 1; }
+}
+/* The cabin light, at the pace of somebody moving about inside it. */
+@keyframes hiCabin {
+  from { opacity: 0.3; }
+  to { opacity: 0.62; }
+}
+/* Beacon: one slow pulse over a light that never goes out. Taken to zero, the
+   mast spends most of the cycle as a bare stick with nothing on the end of it. */
+@keyframes hiBeacon {
+  0%, 60% { opacity: 0.5; }
+  74% { opacity: 1; }
+  100% { opacity: 0.5; }
+}
+/* The heading creeps forward by exactly one dash period, so it never jumps. */
+@keyframes hiCourse {
+  from { stroke-dashoffset: 0; }
+  to { stroke-dashoffset: -8; }
+}
+@keyframes hiWave {
+  0%, 72% { transform: rotate(0deg); }
+  77% { transform: rotate(-26deg); }
+  82% { transform: rotate(10deg); }
+  87% { transform: rotate(-22deg); }
+  92%, 100% { transform: rotate(0deg); }
+}
+/* One pass of the key across the glass, then four seconds of nothing. */
+@keyframes hiSheen {
+  0% { transform: translateX(-130%); opacity: 0; }
+  6% { opacity: 1; }
+  30% { transform: translateX(130%); opacity: 1; }
+  36%, 100% { transform: translateX(130%); opacity: 0; }
+}
+
+/* ── STILL FRAME ──
+ * Reduced motion keeps the whole composition and freezes it at the moment it
+ * looks best: cabin lit, beacon on, plume at cruising length, one specular
+ * caught across the glass. Nothing moves; nothing is missing either.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .hi-button,
+  .hi-button * {
+    animation: none !important;
+    transition: none !important;
+  }
+  .hi-button__craft-drift {
+    transform: translateY(-0.6px) rotate(-0.6deg);
+  }
+  .hi-button__cabin {
+    opacity: 0.5;
+  }
+  .hi-button__cabin-lift {
+    opacity: 0.9;
+  }
+  .hi-button__wave {
+    transform: rotate(-20deg);
+  }
+  .hi-button__beacon {
+    opacity: 0.9;
+  }
+  .hi-button__plume {
+    opacity: 0.9;
+  }
+  .hi-button__stars--far {
+    opacity: 0.8;
+  }
+  .hi-button__course-line {
+    stroke-dashoffset: -4;
+  }
+  /* The specular is parked where the key would put it — over the top-left
+     shoulder of the glass — and at the strength of a highlight rather than of
+     a wipe. Parked mid-frame it reads as a smudge across the label. */
+  .hi-button__sheen {
+    transform: translateX(-46%);
+    opacity: 0.5;
+  }
+}

@@ -6,6 +6,7 @@ import { useFormatters, type Formatters } from '../../../i18n/formatters';
 import { describeError } from '../../../i18n/errors';
 import { Toggle } from '../../ui/Toggle';
 import { PayloadPreview } from '../../telemetry/PayloadPreview';
+import { HiButton } from '../../telemetry/answers/HiButton';
 import { HelloScene, type SceneMood } from '../../telemetry/scene/HelloScene';
 
 /** What the ping contains and why, in the repository the instance runs. */
@@ -173,12 +174,27 @@ export function TelemetryPanel() {
             <div className="text-sm font-medium text-txt-primary">{t('telemetry:panel.toggle')}</div>
             <div className="text-xs text-txt-tertiary mt-0.5">{statusLabel}</div>
           </div>
-          <Toggle
-            enabled={telemetry.enabled === true}
-            onChange={(next) => void handleToggle(next)}
-            disabled={saving}
-            ariaLabel={t('telemetry:panel.toggle')}
-          />
+          {/*
+            Off and never-answered both get the invitation rather than a
+            switch: the panel is where an admin arrives to say yes, and the
+            hello button says what pressing it does far better than a toggle
+            in its off position. Turning it back off is a different act with a
+            different weight, so once it is on the switch is what is there.
+          */}
+          {telemetry.enabled === true ? (
+            <Toggle
+              enabled
+              onChange={(next) => void handleToggle(next)}
+              disabled={saving}
+              ariaLabel={t('telemetry:panel.toggle')}
+            />
+          ) : (
+            <div className="flex w-40 shrink-0">
+              <HiButton disabled={saving} onClick={() => void handleToggle(true)}>
+                {t('telemetry:ask.yes')}
+              </HiButton>
+            </div>
+          )}
         </div>
       </div>
 

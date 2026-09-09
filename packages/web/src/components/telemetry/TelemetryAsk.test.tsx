@@ -134,7 +134,7 @@ describe('TelemetryAsk', () => {
     render(<TelemetryAsk />);
     expect(await screen.findByText("Hi. It's Jannis. I built this.")).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Say hi' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Hiii 👋' }));
     expect(set).toHaveBeenCalledWith(true);
     await userEvent.click(await screen.findByRole('button', { name: 'Close' }));
 
