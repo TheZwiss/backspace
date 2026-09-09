@@ -13,6 +13,8 @@ import { useUIStore } from '../../stores/uiStore';
 import { useFederationStore } from '../../stores/federationStore';
 import { Avatar } from '../ui/Avatar';
 import { MemberListToggleButton } from '../layout/MemberListToggleButton';
+import { FriendsHeader, FriendsPanel } from './FriendsGlass';
+import { HomeSpace } from './HomeSpace';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { getAvatarGradient } from '../../utils/gradients';
 import { api } from '../../api/client';
@@ -332,7 +334,8 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
   const popMobileScreen = useUIStore((s) => s.popMobileScreen);
 
   return (
-    <div className="flex-1 flex flex-col bg-surface-chat h-full">
+    <div className="flex-1 flex flex-col bg-surface-chat h-full relative">
+      {!mobile && <HomeSpace />}
       {/* Header */}
       {mobile ? (
         <div className="h-12 px-3 flex items-center gap-2 border-b border-border-soft flex-shrink-0 z-10 bg-surface-base">
@@ -344,38 +347,18 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
           <span className="font-semibold text-sm text-txt-primary">{t('common:labels.friends')}</span>
         </div>
       ) : (
-        <div className="h-14 px-4 flex items-center border-b border-border-hard flex-shrink-0 z-10 bg-surface-chat">
-          <div className="flex items-center gap-2 mr-4">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary">
-              <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
-            </svg>
-            <span className="font-bold text-txt-primary">{t('common:labels.friends')}</span>
-          </div>
-          <div className="w-[1px] h-6 bg-surface-elevated mx-2" />
-          <div className="flex items-center gap-4 ml-2">
-            <TabButton active={activeTab === 'online'} onClick={() => setActiveTab('online')}>{t('common:states.online')}</TabButton>
-            <TabButton active={activeTab === 'all'} onClick={() => setActiveTab('all')}>{t('social:tabs.all')}</TabButton>
-            <TabButton active={activeTab === 'pending'} onClick={() => setActiveTab('pending')}>
-              {t('social:tabs.pending')}
-              {(pendingIncoming.length > 0) && (
-                <span className="ml-2 px-1.5 py-0.5 bg-accent-rose text-white text-[10px] rounded-full leading-none">
-                  {pendingIncoming.length}
-                </span>
-              )}
-            </TabButton>
-            <button
-              onClick={() => setActiveTab('add')}
-              className={`px-2 py-0.5 rounded text-[14px] font-medium transition-all ${
-                activeTab === 'add' ? 'text-status-online bg-transparent' : 'bg-status-online text-[#13131a] hover:bg-status-online/90'
-              }`}
-            >
-              {t('social:tabs.add')}
-            </button>
-          </div>
-          <div className="ml-auto flex items-center gap-1">
-            <MemberListToggleButton />
-          </div>
-        </div>
+        <FriendsHeader
+          title={t('common:labels.friends')}
+          tabs={[
+            { id: 'online', label: t('common:states.online'), active: activeTab === 'online', onSelect: () => setActiveTab('online') },
+            { id: 'all', label: t('social:tabs.all'), active: activeTab === 'all', onSelect: () => setActiveTab('all') },
+            { id: 'pending', label: t('social:tabs.pending'), active: activeTab === 'pending', badge: pendingIncoming.length, onSelect: () => setActiveTab('pending') },
+          ]}
+          addLabel={t('social:tabs.add')}
+          addActive={activeTab === 'add'}
+          onAdd={() => setActiveTab('add')}
+          trailing={<MemberListToggleButton />}
+        />
       )}
 
       {/* Mobile tab bar */}
@@ -402,7 +385,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
         </div>
       )}
 
-      {renderTabContent()}
+      {mobile ? renderTabContent() : <FriendsPanel>{renderTabContent()}</FriendsPanel>}
 
       <ConfirmDialog
         isOpen={pendingUnfriend !== null}
@@ -891,18 +874,6 @@ function UserDiscoverCard({
 
 // ─── Shared Components ──────────────────────────────────────────────────────
 
-function TabButton({ children, active, onClick }: { children: React.ReactNode, active: boolean, onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`px-2 py-0.5 rounded-[4px] text-[16px] font-medium transition-colors ${
-        active ? 'bg-interactive-selected text-white' : 'text-txt-tertiary hover:bg-interactive-hover hover:text-txt-secondary'
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
 
 function FriendItem({ friend, onRemove, onDm }: { friend: TaggedFriend, onRemove: () => void, onDm: () => void }) {
   const { t } = useTranslation(['social', 'common']);

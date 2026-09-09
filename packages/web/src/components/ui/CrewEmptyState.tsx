@@ -240,10 +240,9 @@ export function CrewEmptyState({ variant, size, children }: CrewEmptyStateProps)
   const beat = BEATS[variant];
   return (
     <div className={`crew-empty crew-empty--${variant} crew-empty--${size} flex flex-col items-center ${hero ? 'justify-center h-full' : 'py-6'}`}>
-      {/* Only a page column is a sky. A sidebar row is a list, and stars in a
-          list read as a box cut out of it; the compact size is Nori and the
-          line, as it always was. */}
-      {hero && <OpenSpace sky={beat.sky} density="field" className="crew-empty__space" />}
+      {/* No sky of its own: the friends page draws the living backdrop behind
+          the whole column (HomeSpace), and a sidebar row is a list. This is
+          Nori and the line, on whatever surface the caller gives it. */}
       <div className={`crew-empty__stage ${hero ? 'w-32 h-32 mb-4' : 'w-20 h-20 mb-2'}`}>
         <Mascot state={beat.mood} className="w-full h-full" />
       </div>

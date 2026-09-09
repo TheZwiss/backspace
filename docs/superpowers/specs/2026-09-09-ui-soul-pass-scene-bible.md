@@ -317,3 +317,46 @@ becomes in the second pass, with Jannis's words where they exist:
 | 8 (explore) | not commented, drawn objects | Card banner material reverted to the plain gradient. The empty state becomes Nori in open space like row 3, with no chart, rose or scanner. |
 | 10 (search) | not commented, a sweep and a grid | Reverted to the plain hint. |
 | 12 (Nori) | "the shading of the nori screen is a bit weird" (about the scene) | The relight stays unless Jannis says otherwise: it is flat-shaded, no bevel, and the character reads the same. |
+
+## 13. The home backdrop, 2026-09-10
+
+Jannis's direction after the second pass: the friends page's sky changed
+between Online, All and Pending, which read as "jumpy and glitchy", and stars
+alone with "the absence of a planet or the spaceship or anything other spacy"
+read as "random dots on background". His proposal, agreed: **make the space
+the backdrop and persistent**, with life in it, and lay the page's controls
+and content over it in glass, so "the transparency makes the life still shine
+through but it feels alive in the background."
+
+This is Aether Drift's own rule applied to a page: content on matte panels,
+persistent controls on glass. Three components, the friends page only for
+now (the explore page next if it works; never chat, whose list needs a
+solid ground):
+
+- **`chat/HomeSpace`**, the living backdrop, behind the friends main column
+  only (not the DM sidebar, not the Active Now list). Under section 4: the
+  void at or below `--bg-base`; one sky, the same on every tab, with a soft
+  density band (more points along one diagonal, no colour, no gradient) and
+  two star scales with the twinkle on the small ones; the same flat dark
+  world with its one atmosphere line that the voice channel and the login
+  page have, low right and mostly off-frame. Rare life, none of it near the
+  panel: the ship far and small crossing the top once every two to four
+  minutes over about twenty seconds; a Sternschnuppe every 45 to 90 seconds,
+  under a second. Frozen under reduced motion. No `backdrop-filter` in the
+  scene itself.
+- **`chat/FriendsGlass`**: `FriendsHeader` replaces the top bar with glass
+  pills on `.glass-bubble`: the title with its icon in one pill, Online, All
+  and Pending as one segmented pill with the active tab lifted, Add Friend
+  as its own mint pill, the member-list toggle in a small pill at the right.
+  `FriendsPanel` is one glass panel at modal opacity (82%, `.glass-modal`'s
+  weight) holding the section label and the rows, so names sit on glass
+  with the sky as a faint presence, never as texture behind text. Empty
+  states are the same panel with Nori and the line inside it; the crew
+  states draw no stars of their own here.
+- Nori's mood cross-fades on tab change (a 300ms arrival in
+  `CrewEmptyState`).
+
+Cost rule: glass re-blurs whatever moves behind it, so the backdrop's motion
+is opacity twinkle and two rare events; nothing drifts continuously behind
+the panel. `prefers-reduced-transparency` gets solid panels as the design
+system already promises.

@@ -79,8 +79,24 @@
   color: rgb(var(--text-tertiary));
 }
 
+/* ── ARRIVAL ── the state mounts when a tab changes; Nori and the line fade
+   in over a third of a second, so a mood change reads as a change and not a
+   swap. Transform-free, so the layout under it never moves. */
+.crew-empty__stage,
+.crew-empty__copy {
+  animation: crewArrive 300ms ease-out both;
+}
+@keyframes crewArrive {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 /* ── REDUCED MOTION ── the best frame is every star at rest. */
 @media (prefers-reduced-motion: reduce) {
+  .crew-empty__stage,
+  .crew-empty__copy {
+    animation: none;
+  }
   .open-space__twinkle circle {
     animation: none;
   }
