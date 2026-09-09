@@ -159,40 +159,31 @@ breakpoint. Native browser zoom and pinch gestures retain their normal behavior.
 
 ---
 
-## Material Tier
+## Button and backdrop classes
 
-The reusable half of the UI soul pass (spec: `docs/superpowers/specs/2026-09-09-ui-soul-pass-scene-bible.md`), extracted from the telemetry answer buttons into `globals.css`. A surface that floats gets material; a surface with a subject gets a bespoke scene and may use material for its frame. Material never contains a subject. Only the design lead edits these classes; scene agents own their component and its co-located CSS.
+Three classes in `globals.css` carry the flat Aether Drift button surfaces so
+colour and states are written once: `.cta-primary` (accent primary),
+`.cta-danger` (rose) and `.cta-warning` (amber), each with a softer fill on
+hover, a two-stop focus ring and a not-allowed cursor when disabled. Sizing,
+radius and layout stay at the call site as utilities; `disabled:opacity-50`
+composes. Do not add `bg-accent-primary`, `text-white` or `transition-colors`
+beside them. `.modal-scrim` is the flat 50% black backdrop every dialog uses.
 
-**The light rule.** One key light, above and to the left, outside the frame, warm white. Every layer obeys it: the rim is brightest top-left, the gloss is caught top-left, and whatever the key does not reach falls toward lavender, never toward black.
+A first version of these classes shipped gloss, lit lips, rims and auras, and
+put rims and gloss on `.glass-modal` and a lit edge on toasts. It was rejected
+as forced 3D against this design system's flat calm glass and reverted on
+2026-09-10; the scene bible (`docs/superpowers/specs/2026-09-09-ui-soul-pass-scene-bible.md`,
+sections 4 and 12) records why. Glass is felt, not seen; nothing wears it.
 
-**Two channels** drive every layer, set on the host and read by the layers: `--lift` (0 at rest, 1 on hover and keyboard focus) and `--push` (0 at rest, 1 while pressed). A press always lifts too. The design workbench forces them with `.is-hover`, `.is-focus` and `.is-active` on an ancestor, so every state rule in these classes and in every scene stylesheet is written twice (`:hover` and `.is-hover &`).
-
-| Class | Layer | Notes |
-|---|---|---|
-| `.mat-host` | The host | `position: relative; isolation: isolate`, owns `--lift`/`--push`, `--mat-rim-strength` (1 for a control, lower for a panel) and `--mat-aura-a/-b` (the aura's two colours, primary and mint by default) |
-| `.mat-aura` | Light thrown onto the surroundings | Outside the box, blurred, `z-index: -1`; almost nothing at rest, present on lift, flares on push |
-| `.mat-scrim` | Vignette and label well | Photographic: only takes light away |
-| `.mat-gloss` | Resting specular | One sheet of glass caught at the top-left corner |
-| `.mat-sheen` | Travelling specular | Parked off-frame; on lift crosses once per five seconds (`matSheen`). The host must clip it |
-| `.mat-rim` | The hairline that turns hue | Masked gradient border: warm white top-left, mint along the top, near nothing lower right, lavender coming back |
-
-Layers are absolutely positioned children of the host, back to front: aura, (host background), scrim, gloss, sheen, rim, then the label at `position: relative`.
-
-**Modal chrome.** `.glass-modal` carries the rim (`::before`) and the gloss (`::after`) at a third of a control's strength, at `z-index: 1` with `pointer-events: none`, so every modal inherits the material without markup. `.glass-modal` is now `position: relative`. Content that must sit above the chrome raises itself (the settings close button is `z-10`).
-
-**Primary call to action, `.cta-primary`.** The one button style that carries material without extra markup: the lavender fill lit from the top-left and falling to `--accent-primary-active` on the lower right, a lit top lip and a dark bottom lip, `::before` as the aura (a hover event, near zero at rest), `::after` as the rim. Focus adds a two-stop ring that owes nothing to the fill. Disabled desaturates and puts the aura out; `disabled:opacity-50` at the call site composes with it. The class owns colour, light and state; sizing, radius and layout stay with the call site as utilities. Do not add `bg-accent-primary`, `text-white`, `shadow-*` or `transition-colors` beside it: utilities win the cascade and undo the material. Swapped in batch 0: login, register, join page, join space, create space, create channel, explore join, the empty voice channel's Join Voice, and the friends direct-add button.
-
-**Lit toast, `.toast-lit`.** A toast is lit from the left in its own colour rather than bordered by it: a soft hard edge, a spill of the colour into the glass, and the rim warmed by it at the top-left. `--toast-rgb` carries the colour's channels; `.toast-lit--info` (sky), `.toast-lit--success` (mint) and `.toast-lit--warning` (amber) set it. Composes with `.glass-pill`.
-
-**Reduced motion.** Material holds still: no transitions, the sheen parked over the top-left shoulder at the strength of a highlight, everything else at its resting frame. Nothing is stripped.
-
-**Tokens.** The derelict's cold palette from the telemetry "no" answer is now shared: `--derelict-lit`, `--derelict-body`, `--derelict-far`, `--derelict-rime`, `--derelict-signal` in `globals.css`, mirrored as hex in `components/telemetry/scene/palette.ts` together with the room and station colours (`deck`, `bulkhead`, `console`, `seat`, `signal`, `hail`, `warn`, `dust`) that scenes paint with. Nothing in that palette is pure black or white; a test enforces it.
-
-**Design workbench.** Every material and scene ships with a dev page under `packages/web/src/dev/` plus an HTML entry beside `index.html`, built on `dev/workbench.tsx` (`WorkbenchPage`, `Section`, `Slot`, `StateRow`, `Surround`, `mountWorkbench`). A page renders the component at its real size inside its real surround, again at 3x, and in rest, hover, focus, pressed and disabled states. `dev-material.html` is the material tier's page. The i18n literal-string rule skips `src/dev/`; never use `100vh` there, the repo enforces `--app-vh`.
+**Design workbench.** A scene ships with a dev page under `packages/web/src/dev/`
+plus an HTML entry beside `index.html`, built on `dev/workbench.tsx` and
+`dev/harness.tsx` (`WorkbenchPage`, `Section`, `Slot`, `Surround`,
+`mountScenePage`, and `?state=hover|focus|active` to force a state). The i18n
+literal-string rule skips `src/dev/`; never use `100vh` there.
 
 ## Scenes
 
-The bespoke half of the soul pass. Each scene is one component with a co-located stylesheet, one subject from the scene bible, and its own workbench page. A scene reads no store and handles no click unless the table says otherwise; the caller passes the copy in, already translated, so no scene owns a string. Every scene obeys the light rule (one key, upper left, shade toward lavender), keeps to the motion budget at rest (at most three infinite animations, six-second periods or longer, transform and opacity only), holds a still frame under `prefers-reduced-motion`, and paints only with `SCENE_PALETTE` in SVG and `rgb(var(--token) / a)` in CSS.
+The bespoke half of the soul pass. Each scene is one component with a co-located stylesheet, one subject from the scene bible, and its own workbench page. A scene reads no store and handles no click unless the table says otherwise; the caller passes the copy in, already translated, so no scene owns a string. Every scene obeys the bible's darkness rule (section 4: the void darker than the chrome, sparse crisp stars, flat vector shapes, no shading, gloss, rims, grain or plotted lines), keeps to the motion budget at rest (at most two very slow animations, transform and opacity only), holds a still frame under `prefers-reduced-motion`, and paints only with `SCENE_PALETTE` in SVG and `rgb(var(--token) / a)` in CSS. The table below is refreshed when the second pass lands.
 
 | Scene | Component | Subject | Workbench | Notes |
 |---|---|---|---|---|
