@@ -296,10 +296,17 @@ stays away for 7 days. After the second dismissal it stays away for good in that
 browser. The settings section remains either way, so nothing is unreachable.
 
 Any answer by any admin ends the ask for everyone, because the setting belongs
-to the instance rather than to the person answering. Both buttons are the same
-size and weight, "no" saves first and costs nothing, and the preview shown in
-the modal is the real payload from the preview route. Copy lives under the
-`telemetry` namespace, see [localization.md](localization.md).
+to the instance rather than to the person answering. "No" saves first and costs
+nothing, and the preview shown in the modal is the real payload from the preview
+route.
+
+The two answers are illustrated rather than plain, each its own component under
+`components/telemetry/answers/`: "Hiii 👋" is a launch, "Radio silence" a
+derelict. They share the row's height and flex basis so the pair still lines up,
+and both keep a full-contrast label, a visible focus ring and an unreduced hit
+area. Neither is disguised as navigation: pressing either answers the question
+it asks, and no button says "Continue" or "OK". Copy lives under the `telemetry`
+namespace, see [localization.md](localization.md).
 
 ---
 

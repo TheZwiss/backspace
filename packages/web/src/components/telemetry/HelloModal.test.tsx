@@ -30,9 +30,16 @@ describe('HelloModal', () => {
     render(<HelloModal open onAnswer={vi.fn().mockResolvedValue(undefined)} onDismiss={vi.fn()} preview={preview} />);
 
     expect(screen.getByText("Hi. It's Jannis. I built this.")).toBeInTheDocument();
-    const yes = screen.getByRole('button', { name: 'Say hi' });
-    const no = screen.getByRole('button', { name: 'No thanks' });
-    expect(yes.className).toBe(no.className);
+    const yes = screen.getByRole('button', { name: 'Hiii 👋' });
+    const no = screen.getByRole('button', { name: 'Radio silence' });
+    // The two answers are illustrated differently on purpose. What has to hold
+    // is that both are real, reachable answers: same row, both enabled, both
+    // labelled by their own text rather than by an ornament.
+    expect(yes.tagName).toBe('BUTTON');
+    expect(no.tagName).toBe('BUTTON');
+    expect(yes).toBeEnabled();
+    expect(no).toBeEnabled();
+    expect(yes.parentElement).toBe(no.parentElement);
 
     await userEvent.click(screen.getByRole('button', { name: 'Show the message' }));
     expect(screen.getByText(/"instance": "preview"/)).toBeInTheDocument();
@@ -44,7 +51,7 @@ describe('HelloModal', () => {
     const onAnswer = vi.fn(() => new Promise<void>((r) => { resolve = r; }));
     render(<HelloModal open onAnswer={onAnswer} onDismiss={vi.fn()} preview={preview} />);
 
-    await userEvent.click(screen.getByRole('button', { name: 'Say hi' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Hiii 👋' }));
     expect(onAnswer).toHaveBeenCalledWith(true);
     expect(screen.getByTestId('scene')).toHaveAttribute('data-mood', 'idle');
 
@@ -56,7 +63,7 @@ describe('HelloModal', () => {
   it('shows the farewell after no, with a close button', async () => {
     render(<HelloModal open onAnswer={vi.fn().mockResolvedValue(undefined)} onDismiss={vi.fn()} preview={preview} />);
 
-    await userEvent.click(screen.getByRole('button', { name: 'No thanks' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Radio silence' }));
     expect(await screen.findByText('Understood.')).toBeInTheDocument();
     expect(screen.getByTestId('scene')).toHaveAttribute('data-mood', 'farewell');
     expect(screen.getByRole('button', { name: 'Close' })).toBeEnabled();
@@ -67,7 +74,7 @@ describe('HelloModal', () => {
     const onDismiss = vi.fn();
     render(<HelloModal open onAnswer={vi.fn().mockResolvedValue(undefined)} onDismiss={onDismiss} preview={preview} />);
 
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'No thanks' })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Radio silence' })); });
     expect(screen.getByText('Understood.')).toBeInTheDocument();
 
     act(() => { vi.advanceTimersByTime(10_000); });
@@ -82,9 +89,9 @@ describe('HelloModal', () => {
   it('shows an error and stays on the ask when saving fails', async () => {
     render(<HelloModal open onAnswer={vi.fn().mockRejectedValue(new Error('x'))} onDismiss={vi.fn()} preview={preview} />);
 
-    await userEvent.click(screen.getByRole('button', { name: 'Say hi' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Hiii 👋' }));
     expect(await screen.findByText(/could not be saved/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Say hi' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Hiii 👋' })).toBeEnabled();
     expect(screen.getByTestId('scene')).toHaveAttribute('data-mood', 'idle');
   });
 
@@ -94,7 +101,7 @@ describe('HelloModal', () => {
     const onDismiss = vi.fn();
     render(<HelloModal open onAnswer={onAnswer} onDismiss={onDismiss} preview={preview} />);
 
-    await userEvent.click(screen.getByRole('button', { name: 'Say hi' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Hiii 👋' }));
     await userEvent.keyboard('{Escape}');
     expect(onDismiss).not.toHaveBeenCalled();
 
