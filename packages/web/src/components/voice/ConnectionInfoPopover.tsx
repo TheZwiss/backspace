@@ -149,13 +149,17 @@ export function ConnectionInfoPopover({ open, onClose, anchorRef }: ConnectionIn
   useEffect(() => {
     if (!open) return;
     const handleClick = (e: MouseEvent) => {
-      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      // The anchor owns its own toggle: closing here on its mousedown would
+      // make the following click re-open the popover instead of closing it.
+      if (anchorRef.current?.contains(target)) return;
+      if (popoverRef.current && !popoverRef.current.contains(target)) {
         onClose();
       }
     };
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
-  }, [open, onClose]);
+  }, [open, onClose, anchorRef]);
 
   if (!open) return null;
 

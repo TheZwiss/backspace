@@ -280,6 +280,19 @@ ScreenShareConfig {
 - `allowCustomBitrate` toggle
 - `bitrateMatrixOverrides` (JSON sparse overrides)
 
+### Control-bar entry point (`VoiceControlBar`, `VoiceControls`)
+
+The screen-share button is the **only** control-bar entry to screen-share settings; there is no separate "video quality" button. Its behaviour depends on `voiceStore.isScreenSharing`:
+
+| State | Click |
+|-------|-------|
+| Not sharing | `handleScreenShareAction()` → `startScreenShare(room)` → the browser/Electron source picker |
+| Sharing | Toggles `ScreenShareSettingsPopover` anchored to the button, rendered with `onStopSharing` |
+
+`ScreenShareSettingsPopover` takes an optional `onStopSharing` callback. When present it appends a full-width `bg-accent-rose` "Stop Sharing" button below the stats footer; the control bars pass it (they have no other stop control), while the local `StreamTile` context menu omits it because it already carries its own "Stop Streaming" item. Quality changes made from the popover apply mid-stream through the `screenShareConfig` effect in `useLiveKit` (constraints + overdrive re-applied; a codec change restarts the publication).
+
+Both control bars close the menu whenever `isScreenSharing` drops to `false`, so a share ended elsewhere (the OS "Stop sharing" bar, `handleScreenShareUnpublished`, the keybind) never leaves a stale popover anchored to the button. The popover's click-outside listener ignores `mousedown` on its own anchor; the anchor's click handler is the sole owner of the open/close toggle (`ConnectionInfoPopover` follows the same contract).
+
 ### System Audio Loopback (`shareAudio`)
 
 The "Share system audio" toggle in `ScreenSharePicker` adds an audio track to the screen-share publication. `startScreenShare` passes audio constraints including `restrictOwnAudio: true` through LiveKit to `getDisplayMedia`, or `audio: false` when disabled. In Electron, the `setDisplayMediaRequestHandler` callback (`packages/desktop/src/main.ts`) returns `audio: 'loopback'` to opt into Chromium's system-audio loopback path.
