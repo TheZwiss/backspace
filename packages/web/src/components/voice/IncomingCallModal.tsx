@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useSpaceStore, getChannelOrigin } from '../../stores/spaceStore';
@@ -10,100 +10,14 @@ import type { User } from '@backspace/shared';
 import { SCENE_PALETTE as P } from '../telemetry/scene/palette';
 import './IncomingCallModal.css';
 
-/**
- * The instrument band along the top of the comm panel. One uneven run of slot
- * indicators across the whole bezel, anchored by a level readout at the
- * centre, over a recessed bezel with a rail hairline lit only where the key
- * reaches it. The slots are wide and low, and the run starts well inboard of
- * the corner, so no three of them can ever read as a window's traffic lights.
- * Two sets of slots sit on the same spots: the standby set in `console` (sky)
- * and the hail set in `hail` (peach toward coral) whose opacity the stylesheet
- * animates. Every colour is a palette entry; every slot blooms with its own
- * gradient, so no filter is needed.
- */
-function ConsoleStrip({ uid }: { uid: string }) {
-  const bezel = `hail-bezel-${uid}`;
-  const rail = `hail-rail-${uid}`;
-  const standby = `hail-standby-${uid}`;
-  const warm = `hail-warm-${uid}`;
-  // x, width, and whether the slot warms with the hail. Widths in two sizes,
-  // gaps that never repeat, and two slots that stay on standby so the warming
-  // reads as some of the board, not the whole row.
-  const slots: ReadonlyArray<readonly [number, number, boolean]> = [
-    [58, 8, true],
-    [78, 14, true],
-    [104, 8, false],
-    [124, 8, true],
-    [200, 14, true],
-    [226, 8, true],
-    [246, 8, false],
-    [280, 14, true],
-  ];
-  const drawSlots = (fill: string, gradient: string, className?: string) => (
-    <g className={className}>
-      {slots.map(([x, w, warms]) =>
-        className && !warms ? null : (
-          <g key={x}>
-            <ellipse cx={x + w / 2} cy={13} rx={w * 1.1} ry={7} fill={`url(#${gradient})`} />
-            <rect x={x} y={11.5} width={w} height={3} rx={1.5} fill={fill} />
-            {/* the key on the upper edge of the dome */}
-            <rect x={x + 1.5} y={11.9} width={w * 0.45} height={0.8} rx={0.4} fill={P.star} opacity="0.7" />
-          </g>
-        ),
-      )}
-    </g>
-  );
-  return (
-    <svg className="hail__console" viewBox="0 0 340 26" preserveAspectRatio="xMinYMin meet" aria-hidden="true" focusable="false">
-      <defs>
-        {/* The bezel: recessed, so it shades from the top lip down into the deck. */}
-        <linearGradient id={bezel} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor={P.void} stopOpacity="0.55" />
-          <stop offset="1" stopColor={P.void} stopOpacity="0" />
-        </linearGradient>
-        {/* The rail: a hairline that is lit from the left, where the key is. */}
-        <linearGradient id={rail} x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0" stopColor={P.star} stopOpacity="0.28" />
-          <stop offset="0.3" stopColor={P.dust} stopOpacity="0.14" />
-          <stop offset="0.75" stopColor={P.dust} stopOpacity="0.05" />
-          <stop offset="1" stopColor={P.seat} stopOpacity="0.12" />
-        </linearGradient>
-        {/* Bloom for each set: the slot's own colour, falling to nothing. */}
-        <radialGradient id={standby}>
-          <stop offset="0" stopColor={P.console} stopOpacity="0.55" />
-          <stop offset="0.4" stopColor={P.console} stopOpacity="0.16" />
-          <stop offset="1" stopColor={P.console} stopOpacity="0" />
-        </radialGradient>
-        <radialGradient id={warm}>
-          <stop offset="0" stopColor={P.hail} stopOpacity="0.65" />
-          <stop offset="0.4" stopColor={P.hail} stopOpacity="0.2" />
-          <stop offset="1" stopColor={P.hail} stopOpacity="0" />
-        </radialGradient>
-      </defs>
-      <rect x="0" y="0" width="340" height="26" fill={`url(#${bezel})`} />
-      <rect x="0" y="25" width="340" height="1" fill={`url(#${rail})`} />
-      {/* The level readout, centred over the source: five ticks at different
-          heights, the shape of a signal that has just started arriving. */}
-      <g fill={P.console} opacity="0.55">
-        <rect x="160" y="15" width="1.5" height="4" rx="0.5" />
-        <rect x="164" y="13" width="1.5" height="6" rx="0.5" />
-        <rect x="168" y="10" width="1.5" height="9" rx="0.5" />
-        <rect x="172" y="12" width="1.5" height="7" rx="0.5" />
-        <rect x="176" y="16" width="1.5" height="3" rx="0.5" />
-      </g>
-      {drawSlots(P.console, standby)}
-      {drawSlots(P.hail, warm, 'hail__console-warm')}
-    </svg>
-  );
-}
+/** The palette's hail colour, handed to the stylesheet as one custom property. */
+const HAIL_STYLE = { '--hail': P.hail } as React.CSSProperties;
 
 export function IncomingCallModal() {
   const { t } = useTranslation(['voice', 'common']);
   const incomingCall = useVoiceStore((s) => s.incomingCall);
   const setIncomingCall = useVoiceStore((s) => s.setIncomingCall);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // React's ids carry colons, which are not safe inside url(#…) references.
-  const uid = useId().replace(/:/g, '');
 
   // Auto-dismiss after 30 seconds
   useEffect(() => {
@@ -173,21 +87,13 @@ export function IncomingCallModal() {
       {/* Backdrop */}
       <div className="absolute inset-0 modal-scrim" />
 
-      {/* The comm panel. Every layer is described in IncomingCallModal.css. */}
-      <div className="hail glass-modal rounded-xl w-[340px] max-w-[calc(100%-32px)] animate-fade-in animate-slide-up">
-        <div className="hail__deck" aria-hidden="true" />
-        <div className="hail__grain" aria-hidden="true" />
-        <ConsoleStrip uid={uid} />
-        <div className="hail__signal" aria-hidden="true">
-          <span className="hail__bloom" />
-          <span className="hail__ring hail__ring--a" />
-          <span className="hail__ring hail__ring--b" />
-        </div>
-        <div className="hail__scrim" aria-hidden="true" />
+      {/* The panel. Every layer is described in IncomingCallModal.css. */}
+      <div className="hail glass-modal rounded-xl w-[340px] max-w-[calc(100%-32px)] animate-fade-in animate-slide-up" style={HAIL_STYLE}>
+        {/* The ring: leaves the avatar, fades before the edge. */}
+        <span className="hail__ring" aria-hidden="true" />
 
         <div className="hail__body">
-          {/* The source: the caller, in the port. */}
-          <div className="hail__port">
+          <div className="hail__source">
             <Avatar
               src={callerMember?.avatar}
               avatarColor={callerMember?.avatarColor}

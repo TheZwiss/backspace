@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, type CSSProperties } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 import './AuthBackdrop.css';
 
 export type AuthBackdropVariant = 'login' | 'register' | 'join' | 'invalid';
@@ -8,86 +8,65 @@ interface AuthBackdropProps {
 }
 
 /**
- * One running light on the station's rim. `angle` is degrees from the crest
- * of the arc (negative is left, the side the key light comes from); the frame
- * shows roughly -22 to +22. `size` is the lamp's diameter in px. `kind` picks
- * the lamp: `run` is a warm running light, `cold` a sky standby light on an
- * instrument, `dim` a running light seen through more structure.
+ * One near star. `x` and `y` are percentages of the frame, `r` the radius in
+ * CSS pixels (so a star is one to two pixels wide on every screen, never
+ * scaled with the frame), `tone` picks `star` or `dust` from the scene
+ * palette, and `twinkle` marks the few whose opacity eases very slowly.
  */
-interface Lamp {
-  angle: number;
-  size: number;
-  kind: 'run' | 'cold' | 'dim';
+interface NearStar {
+  x: number;
+  y: number;
+  r: number;
+  tone: 'star' | 'dust';
+  twinkle: boolean;
 }
 
 /**
- * Hand-placed, in clusters, because an even repeat reads as a barcode and a
- * built thing has its lights where the docking bays, the airlocks and the
- * antennae are. Two pairs (-19.5/-18.6 and 6.4/7.6) read as the two lamps a
- * bay door carries.
+ * Deterministic scatter, the same generator the telemetry hello scene uses,
+ * so the sky is identical on every render and two screenshots differ only
+ * by what changed on purpose.
  */
-const LAMPS: readonly Lamp[] = [
-  { angle: -21.2, size: 3, kind: 'dim' },
-  { angle: -19.5, size: 3.5, kind: 'run' },
-  { angle: -18.6, size: 2.5, kind: 'run' },
-  { angle: -12.4, size: 3, kind: 'run' },
-  { angle: -10.9, size: 2, kind: 'cold' },
-  { angle: -5.3, size: 3.5, kind: 'run' },
-  { angle: -1.6, size: 2.5, kind: 'dim' },
-  { angle: 1.9, size: 3, kind: 'run' },
-  { angle: 6.4, size: 3, kind: 'run' },
-  { angle: 7.6, size: 3, kind: 'run' },
-  { angle: 11.8, size: 2, kind: 'cold' },
-  { angle: 17.3, size: 3.5, kind: 'run' },
-  { angle: 21.4, size: 2.5, kind: 'dim' },
-];
-
-/** Windows in the hull below the rim: the station's own cabin light, dimmer than any lamp. */
-const PORTS: readonly { angle: number; depth: number; width: number }[] = [
-  { angle: -16.8, depth: 1.6, width: 5 },
-  { angle: -15.9, depth: 1.6, width: 3 },
-  { angle: -8.1, depth: 2.3, width: 4 },
-  { angle: -3.4, depth: 1.5, width: 6 },
-  { angle: 4.2, depth: 2.6, width: 3 },
-  { angle: 9.9, depth: 1.7, width: 5 },
-  { angle: 14.6, depth: 2.4, width: 4 },
-  { angle: 19.8, depth: 1.5, width: 3 },
-];
-
-/** The skyline above the rim: antenna masts and one gantry, silhouettes with the key down one side. */
-const STRUCTURES: readonly { angle: number; height: number; kind: 'mast' | 'gantry' }[] = [
-  { angle: -7.3, height: 11, kind: 'mast' },
-  { angle: 9.7, height: 14, kind: 'gantry' },
-  { angle: 19.1, height: 8, kind: 'mast' },
-];
-
-/** The beacon you followed sits on a mast at this angle; the berth being prepared is at this one. */
-const BEACON_ANGLE = -14;
-const BERTH_ANGLE = 15.4;
-
-/**
- * A point on the rim of the station, as percentages of the station's own
- * square box. The station is a circle whose width is a fixed multiple of the
- * frame's width, so a given angle always lands at the same fraction of the
- * frame's width, and the lamps keep their spacing from a phone to a 2560 wide
- * monitor. `depth` is how far inside the rim, in percent of the radius.
- */
-function onRim(angle: number, depth = 0): CSSProperties {
-  const rad = (angle * Math.PI) / 180;
-  const r = 50 - depth / 2;
-  return {
-    left: `${(50 + r * Math.sin(rad)).toFixed(3)}%`,
-    top: `${(50 - r * Math.cos(rad)).toFixed(3)}%`,
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
+
+function scatter(seed: number, count: number): NearStar[] {
+  const next = mulberry32(seed);
+  const stars: NearStar[] = [];
+  for (let i = 0; i < count; i += 1) {
+    const x = 2 + next() * 96;
+    const y = 2 + next() * 96;
+    const r = 0.6 + next() * 0.5;
+    stars.push({
+      x: Math.round(x * 10) / 10,
+      y: Math.round(y * 10) / 10,
+      r: Math.round(r * 100) / 100,
+      tone: i % 5 === 3 ? 'dust' : 'star',
+      twinkle: i % 3 === 0,
+    });
+  }
+  return stars;
+}
+
+/** The near field: sparse, every one placed once, at most two pixels across. */
+const NEAR_STARS: readonly NearStar[] = scatter(41, 26);
 
 /**
  * What lies behind the card on every screen you reach before you are inside
  * the app: login, register, an invite, and an invite that has gone dark.
- * Owned by the UI soul pass (scene bible row 2).
+ * Owned by the UI soul pass (scene bible row 2, second pass).
  *
- * The scene is docking: the last minute of a slow approach to a station,
- * seen from the craft arriving. The card in front is the airlock window.
+ * The scene is arriving: deep dark space, a large world low right and mostly
+ * off-frame, and sparse crisp stars. The card in front is the airlock window.
+ * Login, register and join share the scene as it is; an invite that has gone
+ * dark gets it colder and dimmer.
  *
  * Placement: the component is the first child of the page's scrolling shell
  * (`relative h-full overflow-y-auto`). The root is a zero-height sticky box,
@@ -108,6 +87,7 @@ export function AuthBackdrop({ variant }: AuthBackdropProps) {
     const shell = root?.parentElement;
     if (!root || !frame || !shell) return undefined;
     const measure = () => {
+      frame.style.setProperty('--scene-w', `${shell.clientWidth}px`);
       frame.style.setProperty('--scene-h', `${shell.clientHeight}px`);
     };
     measure();
@@ -121,40 +101,20 @@ export function AuthBackdrop({ variant }: AuthBackdropProps) {
     <div ref={rootRef} className={`auth-backdrop auth-backdrop--${variant}`} aria-hidden="true">
       <div ref={frameRef} className="auth-backdrop__frame">
         <div className="auth-backdrop__void" />
-        <div className="auth-backdrop__stars auth-backdrop__stars--far" />
-        <div className="auth-backdrop__stars auth-backdrop__stars--near" />
+        <div className="auth-backdrop__far" />
+        <svg className="auth-backdrop__near" width="100%" height="100%" focusable="false">
+          {NEAR_STARS.map((star, index) => (
+            <circle
+              key={index}
+              cx={`${star.x}%`}
+              cy={`${star.y}%`}
+              r={star.r}
+              className={`auth-backdrop__star auth-backdrop__star--${star.tone}${star.twinkle ? ' auth-backdrop__star--twinkle' : ''}`}
+              style={star.twinkle ? { animationDelay: `-${((index * 2.9) % 16).toFixed(1)}s` } : undefined}
+            />
+          ))}
+        </svg>
         <div className="auth-backdrop__world" />
-        <div className="auth-backdrop__approach">
-          <div className="auth-backdrop__station">
-            {PORTS.map((port) => (
-              <span
-                key={port.angle}
-                className="auth-backdrop__port"
-                style={{ ...onRim(port.angle, port.depth), width: port.width }}
-              />
-            ))}
-            {LAMPS.map((lamp) => (
-              <span
-                key={lamp.angle}
-                className={`auth-backdrop__lamp auth-backdrop__lamp--${lamp.kind}`}
-                style={{ ...onRim(lamp.angle), width: lamp.size, height: lamp.size }}
-              />
-            ))}
-            {STRUCTURES.map((item) => (
-              <span
-                key={item.angle}
-                className={`auth-backdrop__struct auth-backdrop__struct--${item.kind}`}
-                style={{ ...onRim(item.angle), '--struct-h': `${item.height}px` } as CSSProperties}
-              />
-            ))}
-            <span className="auth-backdrop__mast" style={onRim(BEACON_ANGLE)}>
-              <span className="auth-backdrop__beacon" />
-            </span>
-            <span className="auth-backdrop__berth" style={onRim(BERTH_ANGLE)} />
-          </div>
-        </div>
-        <div className="auth-backdrop__dust" />
-        <div className="auth-backdrop__scrim" />
       </div>
     </div>
   );

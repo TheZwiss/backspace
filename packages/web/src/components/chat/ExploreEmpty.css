@@ -1,173 +1,39 @@
-/* ── THE CHARTS ──
- * The explore page with nothing plotted. Scene bible row 8.
- *
- * A star chart on the chart table with nothing plotted on it yet: the
- * graticule is drawn, the reference stars are marked, the rose is ready, and
- * there is no course because there is nowhere to go. Nori sits at the table
- * on the left. The searched state is the same chart after the scanner went
- * out over it and came back with nothing: one arc, parked, dim.
+/* ── EXPLORE, NOTHING TO SHOW ──
+ * Scene bible row 8, second pass. The same open space as the crew states
+ * (`OpenSpace` in CrewEmptyState.tsx owns the void and the stars and their
+ * one animation); this file only places it and seats Nori and the copy.
  *
  * Structure, back to front:
- *   __void    the sheet itself, lit from the upper left, falling to lavender
- *   __sheet   the chart: graticule, rhumb lines, stars, scanner, rose (SVG)
- *   __pool    the key landing on the table where Nori sits
- *   __nori    the crew, lonely, at the table
- *   __scrim   the well under the copy, and the vignette that seats the sheet
- *   __copy    the caller's line, always full contrast
+ *   .explore-empty         the host: a flex column the height of the page's
+ *                          content column, 256px at least
+ *     __space              open space, covering the host exactly
+ *     __stage              Nori at 128px
+ *     __copy               the caller's line, full contrast, on the dark
  *
- * LIGHT: one key, above and to the left, outside the frame. It lands on the
- * upper-left of the sheet, on the north-west arc of the rose's ring, and on
- * the left face of every point of the rose. What it does not reach falls to
- * lavender (`seat`), never to black. The rose is a console instrument on
- * standby and is the only thing drawn in `console`; the stars are `star`;
- * the graticule is `dust` at low alpha.
- *
- * MOTION, at rest: Nori's own hook, plus one star that breathes over nine
- * seconds. Nothing else moves. No backdrop-filter, no SVG filter: the bloom
- * under the bright star and the fade of the sheet are gradients and a mask.
- */
+ * No animation, filter or image of its own. */
+
 .explore-empty {
-  position: relative;
-  isolation: isolate;
-  /* The narrow layout is a container query on the block, not a media query:
-     the app scales with CSS zoom, and a media query would fire at the wrong
-     widths. The height is fixed by the caller's h-64, so inline-size
-     containment costs nothing. */
-  container-type: inline-size;
-  /* The block is the page's own dark; the layers only add light to it. */
-  background: rgb(var(--bg-chat));
+  min-height: 16rem;
+  height: 100%;
 }
 
-/* ── VOID ── the sheet. Not flat: the key lands upper left as a warm wash,
-   the lower right turns toward lavender, and a breath of the rose's standby
-   light sits where the rose is. Every wash fades to nothing well inside the
-   block, so the scene never has an edge against the page around it. */
-.explore-empty__void {
-  position: absolute;
+.explore-empty__space {
   inset: 0;
-  background:
-    /* the key: warm, wide, landing on the upper-left of the sheet */
-    radial-gradient(75% 130% at 6% -14%, rgb(var(--text-primary) / 0.11), rgb(var(--text-primary) / 0.03) 45%, transparent 66%),
-    /* the fall: the sheet turning away from the key goes to lavender */
-    radial-gradient(70% 120% at 104% 112%, rgb(var(--accent-lavender) / 0.13), transparent 62%),
-    /* the rose's standby light, on the sheet around it */
-    radial-gradient(22% 60% at calc(100% - 110px) 50%, rgb(var(--accent-sky) / 0.07), transparent 70%),
-    /* and a slow diagonal so the two corners meet in the middle instead of at a seam */
-    linear-gradient(160deg, rgb(var(--bg-elevated) / 0.35) 0%, transparent 45%, rgb(var(--accent-lavender) / 0.03) 100%);
-  pointer-events: none;
-}
-
-/* ── SHEET ── the chart, one unit per pixel, pinned to the right edge so the
-   rose always sits 110px in from the edge whatever the block's width. A
-   narrower block shows less of the left of the sheet; the mask inside the SVG
-   has already faded that side to nothing. */
-.explore-empty__sheet {
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 1400px;
-  height: 256px;
-  pointer-events: none;
-}
-
-/* The one star that breathes: opacity only, nine seconds a cycle, and never
-   all the way out. A reference star does not blink; it swims a little. */
-.explore-empty__star--pulse {
-  animation: exploreStarBreath 9s ease-in-out infinite alternate;
-}
-
-/* ── POOL ── the key landing on the table where Nori sits: a soft ellipse of
-   warm light on the sheet, brightest just up and left of the body, which is
-   what makes the table a surface and Nori something sitting on it. */
-.explore-empty__pool {
-  position: absolute;
-  left: clamp(20px, 6%, 84px);
-  top: 66px;
-  width: 128px;
-  height: 128px;
-  background: radial-gradient(60% 40% at 44% 82%, rgb(var(--text-primary) / 0.07), transparent 100%);
-  transform: scale(2.2, 1.6) translateY(6px);
-  pointer-events: none;
-}
-
-/* ── NORI ── at the chart table, lower left, turned a little toward the copy.
-   The mascot draws its own cast shadow in its own shade colour, so the table
-   surface needs no extra ground under it. */
-.explore-empty__nori {
-  position: absolute;
-  left: clamp(20px, 6%, 84px);
-  top: 66px;
-  width: 128px;
-  height: 128px;
-  pointer-events: none;
-}
-.explore-empty__nori-art {
   width: 100%;
   height: 100%;
 }
 
-/* ── SCRIM ── photographic, not decorative. A well of the page's own dark
-   under the copy, so the graticule passes behind the line rather than through
-   it; and a vignette that takes light away at the corners, which is what
-   seats the sheet in the block instead of pasting it there. */
-.explore-empty__scrim {
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(min(46%, 300px) 62% at 50% 50%, rgb(var(--bg-chat) / 0.9), rgb(var(--bg-chat) / 0.5) 55%, transparent 80%),
-    radial-gradient(120% 140% at 50% 45%, transparent 48%, rgb(var(--bg-base) / 0.55) 100%);
-  pointer-events: none;
+.explore-empty__stage {
+  position: relative;
+  flex: none;
 }
 
-/* ── COPY ── never negotiable: full contrast, above every layer, with its own
-   dark halo so it stays legible over a rhumb line or the scanner's arc. */
 .explore-empty__copy {
   position: relative;
-  z-index: 1;
-  max-width: min(42%, 380px);
+  max-width: 100%;
   margin: 0;
-  color: rgb(var(--text-primary));
+  padding: 0 16px;
   font-weight: 500;
   line-height: 1.45;
-  text-shadow: 0 1px 3px rgb(var(--bg-base) / 0.8);
-  text-wrap: balance;
-}
-
-/* ── NARROW ── under 520px of block the table is too short for three things
-   in a row: Nori moves to the lower-left corner and shrinks, the copy takes
-   the middle, and the rose stays where it is on the right, partly behind the
-   well. Measured on the block, so it survives the interface scale. */
-@container (max-width: 519px) {
-  .explore-empty__nori,
-  .explore-empty__pool {
-    left: 10px;
-    top: auto;
-    bottom: 10px;
-    width: 88px;
-    height: 88px;
-  }
-  .explore-empty__copy {
-    max-width: 60%;
-    transform: translateY(-16px);
-  }
-  .explore-empty__scrim {
-    background:
-      radial-gradient(60% 56% at 50% 44%, rgb(var(--bg-chat) / 0.9), rgb(var(--bg-chat) / 0.5) 55%, transparent 80%),
-      radial-gradient(120% 140% at 50% 45%, transparent 48%, rgb(var(--bg-base) / 0.55) 100%);
-  }
-}
-
-/* ── MOTION ── */
-@keyframes exploreStarBreath {
-  from { opacity: 0.55; }
-  to { opacity: 1; }
-}
-
-/* ── STILL FRAME ── the star caught near its brightest. Nori's hook handles
-   its own stillness. Nothing is stripped. */
-@media (prefers-reduced-motion: reduce) {
-  .explore-empty__star--pulse {
-    animation: none;
-    opacity: 0.9;
-  }
+  color: rgb(var(--text-primary));
 }

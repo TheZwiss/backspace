@@ -187,14 +187,13 @@ The bespoke half of the soul pass. Each scene is one component with a co-located
 
 | Scene | Component | Subject | Workbench | Notes |
 |---|---|---|---|---|
-| The rendezvous | `voice/VoiceEmptyPanel` | The empty voice channel as a meeting place with nobody moored yet: the craft left, a world low right, a beacon in orbit, a course through Join Voice | `dev-voice-empty.html` | Extracted from `MainContent`; desktop only. Uses container units, `:has()` and `hypot()` |
-| Docking | `auth/AuthBackdrop` | The approach to a station behind the login, register, invite and invalid-invite cards; four beats, the last in the derelict palette | `dev-auth-backdrop.html` | Sticky zero-height root sized to the scroll port by a ResizeObserver, so the scene stays still while the card scrolls and never paints under the desktop title bar |
-| The hail | `voice/IncomingCallModal` | A comm panel waking up: the avatar as the signal source, rings that die inside the panel, an instrument strip warming to the hail colour | `dev-incoming-call.html` | Behaviour untouched; the old `call-*` keyframes are no longer used by this surface |
-| The crew quarters | `ui/CrewEmptyState` | Every "no one is here" state as one room in six beats, with Nori as the crew | `dev-crew-empty.html` | Replaces the seven bare `Mascot` sites in FriendsPage, ChannelSidebar, MobileDmsScreen, MobileSpacesScreen |
-| The charts | `chat/ExploreEmpty`, `chat/ExploreCardBanner` | A star chart with nothing plotted; and the card banner given grain, vignette, rim and specular so a gradient stops reading as a placeholder | `dev-explore.html` | Narrow layout is a container query |
-| Scanning | `chat/SearchPopover` | One scanner sweep across the empty results area on open, then parked | `dev-search.html` | One finite animation; behaviour and strings untouched |
-| First light | `chat/WelcomeHero` | The figure in a porthole, a plotted course under the title, at the top of every conversation's history | `dev-welcome-hero.html` | Rendered height is part of the message-list scroll contract and equals the old header's to the pixel; see `message-list.md` |
-| Nori | `ui/Mascot` | The mascot, same silhouette and moods, relit under the key light | `dev-mascot.html` | The animation hook changed only in timings, now at or above the six-second floor |
+| The ship on its way | `voice/VoiceEmptyPanel` | The empty voice channel: a near-black void darker than the header, the hello scene's flat craft top left with a soft plume, a flat dark world mostly off-frame low right with one thin atmosphere line, sparse crisp stars | `dev-voice-empty.html` | Extracted from `MainContent`; desktop only. Two slow animations at rest, no filters |
+| Arriving | `auth/AuthBackdrop` | Behind the login, register and invite cards: the void, the stars, the world with its atmosphere line; the invalid-invite variant darker and colder | `dev-auth-backdrop.html` | Sticky zero-height root sized to the scroll port by a ResizeObserver, so the scene stays still while the card scrolls and never paints under the desktop title bar. One twinkle at rest |
+| A hail, calmly | `voice/IncomingCallModal` | The plain modal glass, the caller's avatar, one thin ring in the hail colour that eases out slowly, flat accept and decline | `dev-incoming-call.html` | Behaviour untouched; one animation while ringing |
+| Nori in open space | `ui/CrewEmptyState`, `chat/ExploreEmpty` | Every "no one is here" state and the empty explore page: the whole column as void, a sparse deterministic sky, Nori small at the centre, the copy plain on the dark | `dev-crew-empty.html`, `dev-explore.html` | `OpenSpace` is exported from CrewEmptyState and shared; one twinkle at rest plus Nori's hook. Replaces the seven bare `Mascot` sites |
+| Nori | `ui/Mascot` | The mascot, same silhouette and moods, relit flat under one soft light | `dev-mascot.html` | The animation hook changed only in timings, now at or above the six-second floor |
+
+Structure-only extractions that carry no scene: `chat/WelcomeHero` (the plain welcome header, rendered from `MessageList`; its height is part of the scroll contract, see `message-list.md`) and `chat/ExploreCardBanner` (the plain card banner). The first pass gave both a scene and the search popover a scanner; all three were rejected and reverted, see the bible's section 12.
 
 ## Input Tiers
 

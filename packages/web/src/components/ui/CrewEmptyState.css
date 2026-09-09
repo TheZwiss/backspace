@@ -1,203 +1,105 @@
-/* ── THE CREW QUARTERS ──
- * Every "no one is here" state (scene bible row 3): the inside of the ship
- * where the people are, when they are not. Nori is the crew; this file is the
- * room Nori is in. Six beats, one room, drawn sparse: a window onto the void,
- * the shaft of light that comes through it, the deck it lands on, one rib of
- * the hull, and at most one instrument.
+/* ── OPEN SPACE ──
+ * The shared layer behind every "no one is here" state (scene bible row 3,
+ * second pass) and the explore page with nothing to show (row 8). Nori alone
+ * in open space: a large dark frame, a sparse field of crisp distant stars,
+ * nothing built.
  *
  * Structure, back to front:
- *   .crew-empty            the host: centres the stage and the copy, isolates z
- *     __air                hero only: the room's atmosphere across the whole
- *                          column, so a 1000px-wide friends page is lit rather
- *                          than furnished
- *     __stage              a box exactly Nori's size; everything else hangs
- *                          off it, so the room is anchored to Nori and never
- *                          to the column
- *       __room             the inline SVG, absolutely positioned and spilling
- *                          past the stage on every side, bounded by
- *                          construction (320px hero, 200px compact) so it fits
- *                          the narrowest column without ever needing a clip
- *       __nori             the mascot, above the room
- *     __copy               the caller's line, always on top, full contrast,
- *                          seated in a well of the base colour
+ *   .open-space            one inline SVG, absolutely positioned by the host
+ *     __void               a rect of --bg-base, the darkest thing on screen
+ *     (tile / points)      the star field: 1-2px points on the pixel grid
+ *     __twinkle            the handful that breathe
+ *   .crew-empty__stage     Nori, at the size the call site gives
+ *   .crew-empty__copy      the caller's line, full contrast, on the dark
  *
- * LIGHT: one key, above and to the left, outside the frame, coming through
- * the window. It picks out the top-left of every rim and the left end of
- * every upward face; what it does not reach falls to lavender (`seat`), never
- * to black. The only emitters are the stars in the window and the console's
- * standby light, and each beat lets one of them breathe.
+ * DARKNESS: depth comes from darkness and distance, never from shading. The
+ * void is always darker than the chrome around it (--bg-chat columns,
+ * --bg-channel sidebars). Nothing adds light to it: no wash, grain, gloss,
+ * vignette, glow or scrim.
  *
- * MOTION: Nori's own hook runs the body. This file adds at most one infinite
- * animation per beat, six seconds or longer, transform and opacity only:
- *   nobodyOnline  crewTwinkle   the brighter stars breathe
- *   noFriends     crewStandby   the hailing desk's standby light
- *   noPending     crewStandby   the screen's idle glow
- *   noActivity    crewCruise    stars going by the window
- *   noDms         crewTwinkle   the brighter stars breathe
- *   noSpaces      nothing
- * One SVG filter (the blur shared by the shaft of light) and no backdrop
- * filters, so the scene costs the same on a Raspberry Pi as on a desktop.
- */
+ * MOTION: Nori's own hook runs the body. This file adds one infinite
+ * animation, the twinkle: opacity only, fourteen seconds or longer per star,
+ * every star on its own period and phase. Reduced motion holds each star at
+ * its resting brightness.
+ *
+ * FILTERS: none. No backdrop-filter, no SVG filter, no raster image. */
+
+.open-space {
+  position: absolute;
+  display: block;
+  pointer-events: none;
+}
+
+.open-space__void {
+  fill: rgb(var(--bg-base));
+}
+
+/* ── TWINKLE ── the bright few ease between full and a third, alternating,
+   so the eye catches one now and then and never a blink. */
+.open-space__twinkle circle {
+  animation: openSpaceTwinkle 16s ease-in-out infinite alternate;
+}
+
+@keyframes openSpaceTwinkle {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.35;
+  }
+}
+
+/* ── THE CREW STATES ── */
 
 .crew-empty {
   position: relative;
-  isolation: isolate;
-  min-width: 0;
 }
 
-/* ── AIR ── the room across the whole column, hero only. Two things and no
-   vignette: the key spilling out of the window up and to the left of Nori,
-   and the floor. The floor is a band that starts at the height where Nori's
-   drawing touches the deck (`--crew-floor`, set per beat below, measured from
-   the column's centre for a one-line caption) and falls away beneath, so the
-   quarters have a deck and a wall rather than a disc. Both fade out before
-   the column's edges, so the component's box is never visible as a box; a
-   vignette here would draw exactly that rectangle. */
-.crew-empty__air {
-  --crew-floor: 29px;
-  position: absolute;
+/* Hero: the friends page column. The void spills to the column's left, right
+   and bottom edges (the call site's 16px padding) and up to the section label
+   above the state, which stays on the lighter chrome where a label belongs.
+   The right edge stops exactly at the padding edge, so a scroll container
+   never grows a horizontal scrollbar for it. An SVG is a replaced element and
+   takes no size from its offsets, so the size is written out. */
+.crew-empty--hero .crew-empty__space {
+  top: -8px;
+  left: -16px;
+  width: calc(100% + 32px);
+  height: calc(100% + 24px);
+}
+
+/* Compact: the sidebar row. The void covers the row exactly; the row's
+   height is the call site's, so the sidebar never grows for the scene. */
+.crew-empty--compact .crew-empty__space {
   inset: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(380px 320px at calc(50% - 90px) calc(50% - 100px), rgb(var(--text-primary) / 0.05), transparent 70%),
-    radial-gradient(260px 200px at calc(50% - 60px) calc(50% - 60px), rgb(var(--accent-amber) / 0.03), transparent 70%),
-    linear-gradient(
-      to bottom,
-      transparent calc(50% + var(--crew-floor) - 14px),
-      rgb(var(--bg-elevated) / 0.34) calc(50% + var(--crew-floor) + 2px),
-      rgb(var(--bg-channel) / 0.4) calc(50% + var(--crew-floor) + 40px),
-      rgb(var(--accent-lavender) / 0.03) calc(50% + var(--crew-floor) + 150px),
-      transparent calc(50% + var(--crew-floor) + 240px)
-    );
-  -webkit-mask: linear-gradient(to right, transparent, rgb(0 0 0) 22%, rgb(0 0 0) 78%, transparent);
-  mask: linear-gradient(to right, transparent, rgb(0 0 0) 22%, rgb(0 0 0) 78%, transparent);
-}
-/* Where each mood's Nori stands: idle 0.865, lonely 0.835, sleeping 0.727 of
-   the 128px stage, minus half of the stage-plus-caption block. */
-.crew-empty--noFriends .crew-empty__air {
-  --crew-floor: 25px;
-}
-.crew-empty--noPending .crew-empty__air,
-.crew-empty--noActivity .crew-empty__air {
-  --crew-floor: 11px;
+  width: 100%;
+  height: 100%;
+  border-radius: 6px;
+  overflow: hidden;
 }
 
-/* ── STAGE ── Nori's box. Sized by the host's utilities (128px hero, 80px
-   compact); the room hangs off it by absolute position, so the flex column
-   that centres it never feels the room. */
+/* ── STAGE ── Nori's box, sized by the host's utilities (128px hero, 80px
+   compact) and centred by the flex column. */
 .crew-empty__stage {
   position: relative;
   flex: none;
 }
 
-.crew-empty__nori {
-  position: relative;
-  z-index: 1;
-}
-
-/* ── ROOM ── the SVG. Hero: 320 x 256, with the 128px stage at (96, 72), so
-   the room spills 96px left and right, 72px up and 56px down. Compact: the
-   hatch, 200 x 106 around the 80px stage at (60, 22), spilling 60px to each
-   side, 22px up and 4px down: inside the 24px the host pads the row with, so
-   the sidebar row keeps its height. */
-.crew-empty__room {
-  position: absolute;
-  display: block;
-  overflow: visible;
-  pointer-events: none;
-}
-.crew-empty--hero .crew-empty__room {
-  left: -96px;
-  top: -72px;
-  width: 320px;
-  height: 256px;
-}
-.crew-empty--compact .crew-empty__room {
-  left: -60px;
-  top: -22px;
-  width: 200px;
-  height: 106px;
-}
-
-/* ── COPY ── the caller's line. Full contrast, never moves, and sits in a
-   soft well of the base colour so it reads over the deck and the pool of
-   light without a hard text-shadow. The well is a pseudo-element, so the
-   line stays one text node for anyone finding it by its text. */
+/* ── COPY ── the caller's line: under Nori, centred, full contrast. It sits
+   on the dark itself; there is no scrim, well or shadow under it. */
 .crew-empty__copy {
   position: relative;
-  z-index: 2;
   max-width: 100%;
-  padding: 0 12px;
+  margin: 0;
+  padding: 0 16px;
   font-weight: 500;
   line-height: 1.45;
-  color: rgb(var(--text-primary) / 0.86);
-  text-shadow: 0 1px 2px rgb(var(--bg-base) / 0.6);
-}
-.crew-empty__copy::before {
-  content: '';
-  position: absolute;
-  inset: -10px -22px;
-  z-index: -1;
-  border-radius: 999px;
-  background: radial-gradient(60% 90% at 50% 50%, rgb(var(--bg-base) / 0.55), rgb(var(--bg-base) / 0.2) 60%, transparent 85%);
-}
-.crew-empty--compact .crew-empty__copy {
-  color: rgb(var(--text-primary) / 0.78);
+  color: rgb(var(--text-primary));
 }
 
-/* ── STARS ── the brighter third of the sky breathes; the rest hold still so
-   the window never reads as a blinking thing. Only twinkle beats run it. */
-.crew-empty--nobodyOnline .crew-empty__star--bright,
-.crew-empty--noDms .crew-empty__star--bright {
-  animation: crewTwinkle 9s ease-in-out infinite alternate;
-}
-
-/* ── CRUISE ── the sky slides by exactly one window, then repeats from the
-   second copy: no seam, no jump. Slow enough to be noticed only as travel. */
-.crew-empty__sky--cruise {
-  animation: crewCruise 48s linear infinite;
-}
-
-/* ── STANDBY ── the console's light, alive. The core and the bloom share the
-   group, so they breathe together; nothing else in the room is brighter than
-   the key. `--dim` is a light that is on but not being watched. */
-.crew-empty__standby--breathing {
-  animation: crewStandby 7s ease-in-out infinite;
-}
-.crew-empty__standby--dim {
-  opacity: 0.45;
-}
-
-/* ── MOTION ── */
-@keyframes crewTwinkle {
-  from { opacity: 0.55; }
-  to { opacity: 1; }
-}
-@keyframes crewCruise {
-  from { transform: translateX(0); }
-  to { transform: translateX(var(--crew-drift)); }
-}
-/* One slow swell over a light that never goes out. */
-@keyframes crewStandby {
-  0%, 100% { opacity: 0.5; }
-  50% { opacity: 1; }
-}
-
-/* ── STILL FRAME ──
- * Reduced motion keeps every layer and holds it at the moment it looks best:
- * the standby light at its brightest, the stars up, the cruise sky caught a
- * third of the way past the window. Nothing moves; nothing is missing.
- */
+/* ── REDUCED MOTION ── the best frame is every star at rest. */
 @media (prefers-reduced-motion: reduce) {
-  .crew-empty__star--bright,
-  .crew-empty__sky--cruise,
-  .crew-empty__standby--breathing {
+  .open-space__twinkle circle {
     animation: none;
-  }
-  .crew-empty__standby--breathing {
-    opacity: 0.9;
-  }
-  .crew-empty__sky--cruise {
-    transform: translateX(calc(var(--crew-drift) * 0.33));
   }
 }
