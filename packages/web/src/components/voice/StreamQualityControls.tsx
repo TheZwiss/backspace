@@ -126,6 +126,8 @@ export function StreamQualityControls() {
   }, [limits, config, setConfig]);
 
   const result = buildScreenShareOptions(config);
+  // What Auto resolves to right now, in kbps; also the slider's starting point when switching to Custom
+  const autoKbps = Math.round(result.publish.videoEncoding.maxBitrate / 1000);
 
   return (
     <div className="flex flex-col gap-3">
@@ -215,49 +217,56 @@ export function StreamQualityControls() {
         )}
       </div>
 
-      {/* Bitrate */}
+      {/* Bitrate — Auto | Custom pills like every other row; the slider only exists in Custom */}
       <div>
-        <div className="flex items-center justify-between mb-1.5">
-          <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider">
-            {t('voice:streamSettings.bitrate')}
-          </div>
-          {limits?.allowCustomBitrate !== false && config.customBitrateKbps != null && (
-            <button
-              onClick={() => setConfig({ customBitrateKbps: null })}
-              className="text-[11px] text-accent-primary hover:text-accent-lavender font-medium transition-colors"
-            >
-              {t('voice:streamSettings.resetToAuto')}
-            </button>
-          )}
+        <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-1.5">
+          {t('voice:streamSettings.bitrate')}
         </div>
         {limits?.allowCustomBitrate !== false ? (
-          <div className="flex items-center gap-2">
-            <input
-              type="range"
-              min={BITRATE_MIN}
-              max={BITRATE_MAX}
-              step={BITRATE_STEP}
-              value={config.customBitrateKbps ?? Math.round(result.publish.videoEncoding.maxBitrate / 1000)}
-              onChange={(e) => setConfig({ customBitrateKbps: Number(e.target.value) })}
-              className="flex-1 min-w-0 h-1.5 accent-accent-primary cursor-pointer appearance-none bg-interactive-muted rounded-full
-                [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5
-                [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md
-                [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:border-0
-                [&::-moz-range-thumb]:w-3.5 [&::-moz-range-thumb]:h-3.5 [&::-moz-range-thumb]:rounded-full
-                [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:cursor-pointer"
-            />
-            <span className={`text-[12px] font-medium min-w-[64px] flex-shrink-0 text-right ${
-              config.customBitrateKbps != null ? 'text-txt-primary' : 'text-txt-tertiary'
-            }`}>
-              {config.customBitrateKbps != null
-                ? formatKbps(config.customBitrateKbps)
-                : t('voice:streamSettings.auto')}
-            </span>
-          </div>
+          <>
+            <div className="flex gap-1.5">
+              <button
+                onClick={() => setConfig({ customBitrateKbps: null })}
+                className={`${pillBase} ${config.customBitrateKbps == null ? pillSelected : pillUnselected}`}
+              >
+                {t('voice:streamSettings.auto')}
+              </button>
+              <button
+                onClick={() => {
+                  // Start the slider where Auto currently sits so switching changes nothing yet
+                  if (config.customBitrateKbps == null) setConfig({ customBitrateKbps: autoKbps });
+                }}
+                className={`${pillBase} ${config.customBitrateKbps != null ? pillSelected : pillUnselected}`}
+              >
+                {t('voice:streamSettings.custom')}
+              </button>
+            </div>
+            {config.customBitrateKbps != null && (
+              <div className="flex items-center gap-2 mt-2">
+                <input
+                  type="range"
+                  min={BITRATE_MIN}
+                  max={BITRATE_MAX}
+                  step={BITRATE_STEP}
+                  value={config.customBitrateKbps}
+                  onChange={(e) => setConfig({ customBitrateKbps: Number(e.target.value) })}
+                  className="flex-1 min-w-0 h-1.5 accent-accent-primary cursor-pointer appearance-none bg-interactive-muted rounded-full
+                    [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5
+                    [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md
+                    [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:border-0
+                    [&::-moz-range-thumb]:w-3.5 [&::-moz-range-thumb]:h-3.5 [&::-moz-range-thumb]:rounded-full
+                    [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:cursor-pointer"
+                />
+                <span className="text-[12px] font-medium text-txt-primary min-w-[64px] flex-shrink-0 text-right">
+                  {formatKbps(config.customBitrateKbps)}
+                </span>
+              </div>
+            )}
+          </>
         ) : (
           <div>
             <div className="text-[12px] text-txt-secondary font-medium">
-              {formatKbps(Math.round(result.publish.videoEncoding.maxBitrate / 1000))}
+              {formatKbps(autoKbps)}
             </div>
             <div className="text-[10px] text-txt-tertiary mt-0.5">
               {t('voice:streamSettings.customBitrateDisabled')}

@@ -102,7 +102,7 @@
     },
     "hardwareNote": "GPU hardware encoder · resets when stream ends",
     "bitrate": "Bitrate",
-    "resetToAuto": "Reset to Auto",
+    "custom": "Custom",
     "auto": "Auto",
     "customBitrateDisabled": "Custom bitrate disabled by administrator",
     "systemAudio": "System Audio",
