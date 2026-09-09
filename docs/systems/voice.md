@@ -293,7 +293,9 @@ The pipeline in `utils/screenShare.ts` is **stage → publish**:
 | Publish | `publishScreenShare(room, stream)` | `publishTrack()` for the video track (source `ScreenShare`; codec, `screenShareEncoding`, VP8 simulcast backup) and the audio track if present (source `ScreenShareAudio`). Sets `isScreenSharing`, schedules the overdrive passes and the hardware-encoder probe. |
 | Cancel | `stopStagedCapture(stream)` | Stops the staged tracks. Closing the setup screen never sends a frame. |
 
-The quality panel is a **drawer**: the source area keeps the card's full width, and a slim edge tab on the right (sliders icon + chevron) slides the panel in over it with a scrim; the tab travels with the drawer so it doubles as the close handle, the footer summary line opens it too, and Escape closes the drawer before it closes the screen. It starts collapsed on every open.
+The card is a fixed, near-viewport `glass-modal` surface (viewport width minus 6 rem, capped at `max-w-6xl`, 88 % of the app-scaled height) so the layout never jumps with its content. Below the header sits a segmented control: **Screens / Windows** in the app (with a window search field on the Windows tab), **Screens / Windows / Tabs** in browsers, where the choice is only a hint passed to `getDisplayMedia()` as `displaySurface` (`monitor` / `window` / `browser`) so Chromium's picker opens on that tab; other browsers ignore it. The source area is a **stage**: the app's thumbnail grid, or in browsers and system-picker mode an empty stage (monitor illustration, "Choose …" button) that becomes the full-size live preview once staged.
+
+The quality panel is a **drawer**: the stage keeps the card's full width, and a settings tab (sliders icon + chevron) hanging off the card's outer right edge slides the panel in over the stage with a scrim; on phones the tab sits on the stage edge instead. The footer summary line opens the drawer too, and Escape closes the drawer before it closes the screen. It starts collapsed on every open.
 
 Source picking differs by platform, the rest of the screen is identical (drawer, summary + Cancel/Start in the footer):
 

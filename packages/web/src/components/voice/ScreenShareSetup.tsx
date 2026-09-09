@@ -13,6 +13,7 @@ import {
   stopStagedCapture,
   publishScreenShare,
   isScreenCaptureSupported,
+  type PreferredDisplaySurface,
 } from '../../utils/screenShare';
 import { StreamQualityControls, StreamSummary } from './StreamQualityControls';
 
@@ -40,11 +41,15 @@ import { StreamQualityControls, StreamSummary } from './StreamQualityControls';
  *     own prompt does the picking. Must happen inside the click (transient
  *     activation), which is why the choice is a button and not automatic.
  *
- * The quality panel is a drawer that slides in over the source area from the
- * right (toggle on the card's edge), so the picker keeps the full width.
+ * The card is a fixed, near-viewport glass surface so the layout never jumps
+ * with its content. The quality panel is a drawer that slides in over the
+ * source area from the right; its toggle hangs off the card's outer edge so
+ * the stage inside keeps the full width.
  */
 
-type Tab = 'screens' | 'windows';
+type Tab = 'screens' | 'windows' | 'tabs';
+
+const SURFACE_FOR_TAB: Record<Tab, PreferredDisplaySurface> = { screens: 'monitor', windows: 'window', tabs: 'browser' };
 type SetupError = 'cancelled' | 'unsupported' | 'captureFailed' | 'startFailed' | null;
 
 function errorKey(err: unknown): SetupError {
@@ -102,14 +107,14 @@ export function ScreenShareSetup() {
   }, []);
 
   /** Capture via getDisplayMedia and hold the result as the staged preview. */
-  const stage = useCallback(async () => {
+  const stage = useCallback(async (surface?: PreferredDisplaySurface) => {
     setError(null);
     setStaging(true);
     const shareAudioAtStage = useVoiceStore.getState().screenShareConfig.shareAudio;
     // System picker: no tile carries the audio preference, so send it ahead of the request
     api?.setScreenShareAudioPreference?.(shareAudioAtStage);
     try {
-      const stream = await stageScreenCapture();
+      const stream = await stageScreenCapture(surface);
       replaceStaged(stream);
       setStagedShareAudio(shareAudioAtStage);
     } catch (err) {
@@ -286,7 +291,7 @@ export function ScreenShareSetup() {
   if (!isOpen) return null;
 
   const showGrid = electron && (canListSources || promptInFlightRef.current || sources.length > 0);
-  const activeSources = activeTab === 'screens' ? screens : windows;
+  const activeSources = activeTab === 'windows' ? windows : screens;
   const supported = isScreenCaptureSupported();
   const audioNeedsRepick = !!staged && stagedShareAudio !== config.shareAudio;
   const canStart = !!staged && !staging && !starting;
@@ -295,32 +300,36 @@ export function ScreenShareSetup() {
     : systemPicker
       ? t('voice:screenPicker.chooseHintSystem')
       : null;
-
-  const previewBlock = (
-    <div className="relative rounded-lg overflow-hidden bg-black/60 aspect-video ring-1 ring-white/[0.06]">
-      <video ref={previewRef} autoPlay muted playsInline className="w-full h-full object-contain" />
-      <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded bg-black/60 text-[10px] font-bold uppercase tracking-wide text-white/80">
-        {t('voice:screenPicker.preview')}
-      </div>
-    </div>
-  );
+  // Browser: the segmented control steers which tab the browser's own picker opens on
+  const surfaceTabs = !electron;
+  const browserSurface = SURFACE_FOR_TAB[activeTab];
+  const chooseLabel = !surfaceTabs || activeTab === 'screens'
+    ? t('voice:screenPicker.choose')
+    : activeTab === 'windows'
+      ? t('voice:screenPicker.chooseWindow')
+      : t('voice:screenPicker.chooseTab');
+  const stageNow = () => void stage(surfaceTabs ? browserSurface : undefined);
+  const stagedName = sources.find((s) => s.id === selectedId)?.name ?? null;
 
   return createPortal(
     <div className="fixed inset-0 z-[200] flex items-center justify-center animate-fade-in">
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/50" onClick={handleClose} />
 
-      {/* Modal card */}
+      {/* Card — fixed to the viewport so the layout never jumps with its content */}
       <div
         data-testid="screen-share-setup"
-        className="relative w-full max-w-4xl mx-4 glass-modal rounded-lg animate-slide-up flex flex-col max-h-[calc(calc(100*var(--app-vh))-4rem)]"
+        className="relative w-[calc(calc(100*var(--app-vw))-6rem)] max-w-6xl h-[calc(88*var(--app-vh))] glass-modal rounded-xl animate-slide-up flex flex-col"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0">
-          <h2 className="text-lg font-bold text-txt-primary">{t('voice:screenPicker.title')}</h2>
+        <div className="flex items-start justify-between gap-4 px-6 pt-5 pb-3 flex-shrink-0">
+          <div className="min-w-0">
+            <h2 className="text-xl font-bold text-txt-primary leading-tight">{t('voice:screenPicker.title')}</h2>
+            <p className="text-[13px] text-txt-tertiary mt-0.5">{t('voice:screenPicker.subtitle')}</p>
+          </div>
           <button
             onClick={handleClose}
-            className="text-txt-tertiary hover:text-txt-primary transition-colors p-1"
+            className="text-txt-tertiary hover:text-txt-primary transition-colors p-1 -mr-1 flex-shrink-0"
             aria-label={t('common:actions.close')}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
@@ -329,50 +338,58 @@ export function ScreenShareSetup() {
           </button>
         </div>
 
+        {/* Toolbar — what kind of surface, plus window search in the app */}
+        {(showGrid || surfaceTabs) && (
+          <div className="flex items-center justify-between gap-3 px-6 pb-3 flex-shrink-0">
+            <div className="flex items-center gap-1 p-1 rounded-full bg-white/[0.04] ring-1 ring-white/[0.06]">
+              <TabButton
+                active={activeTab === 'screens'}
+                onClick={() => setActiveTab('screens')}
+                label={t('voice:screenPicker.tabs.screens')}
+                count={showGrid ? screens.length : null}
+              />
+              <TabButton
+                active={activeTab === 'windows'}
+                onClick={() => setActiveTab('windows')}
+                label={t('voice:screenPicker.tabs.windows')}
+                count={showGrid ? windows.length : null}
+              />
+              {surfaceTabs && (
+                <TabButton
+                  active={activeTab === 'tabs'}
+                  onClick={() => setActiveTab('tabs')}
+                  label={t('voice:screenPicker.tabs.browserTabs')}
+                  count={null}
+                />
+              )}
+            </div>
+            {showGrid && activeTab === 'windows' && (
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={t('voice:screenPicker.searchWindows')}
+                className="input-search w-64 max-w-[45%]"
+                autoFocus
+              />
+            )}
+          </div>
+        )}
+
         {/* Body: full-width source area; the quality drawer slides in over it */}
         <div className="relative flex-1 min-h-0 overflow-hidden flex">
           {/* Source area */}
-          <div className="flex-1 min-w-0 min-h-0 flex flex-col pr-9">
+          <div className="flex-1 min-w-0 min-h-0 flex flex-col px-6 pb-4">
             {showGrid ? (
               <>
-                {/* Tabs */}
-                <div className="flex gap-1 px-5 pb-3 flex-shrink-0">
-                  <TabButton
-                    active={activeTab === 'screens'}
-                    onClick={() => setActiveTab('screens')}
-                    label={t('voice:screenPicker.tabs.screens')}
-                    count={screens.length}
-                  />
-                  <TabButton
-                    active={activeTab === 'windows'}
-                    onClick={() => setActiveTab('windows')}
-                    label={t('voice:screenPicker.tabs.windows')}
-                    count={windows.length}
-                  />
-                </div>
-
-                {/* Search (windows tab only) */}
-                {activeTab === 'windows' && (
-                  <div className="px-5 pb-3 flex-shrink-0">
-                    <input
-                      type="text"
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                      placeholder={t('voice:screenPicker.searchWindows')}
-                      className="input-search w-full"
-                      autoFocus
-                    />
-                  </div>
-                )}
-
                 {/* Source grid */}
-                <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin px-5 py-2">
+                <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin rounded-xl bg-black/20 ring-1 ring-white/[0.06] p-3">
                   {loadingSources && sources.length === 0 ? (
-                    <div className="text-center py-12 text-txt-tertiary text-sm">
+                    <div className="h-full flex items-center justify-center text-txt-tertiary text-sm">
                       {t('voice:screenPicker.loadingSources')}
                     </div>
                   ) : activeSources.length === 0 ? (
-                    <div className="text-center py-12 text-txt-tertiary text-sm">
+                    <div className="h-full flex items-center justify-center text-txt-tertiary text-sm">
                       {activeTab === 'windows' && search.trim()
                         ? t('voice:screenPicker.noWindowsMatch')
                         : activeTab === 'screens'
@@ -394,54 +411,84 @@ export function ScreenShareSetup() {
                   )}
                 </div>
 
-                {/* Staged preview strip */}
-                {staged && (
-                  <div className="px-5 pb-3 pt-2 flex-shrink-0 flex items-start gap-3 border-t border-border-hard">
-                    <div className="w-40 flex-shrink-0 mt-2">{previewBlock}</div>
-                    <div className="min-w-0 pt-3">
-                      <div className="text-[13px] font-semibold text-txt-primary truncate">
-                        {sources.find((s) => s.id === selectedId)?.name ?? t('voice:screenPicker.preview')}
+                {/* Staged strip — live preview of the chosen tile */}
+                <div className={`flex-shrink-0 overflow-hidden transition-all duration-300 ${staged ? 'max-h-40 mt-3 opacity-100' : 'max-h-0 mt-0 opacity-0'}`}>
+                  <div className="flex items-center gap-4 rounded-xl glass px-3 py-3">
+                    <div className="w-44 flex-shrink-0">
+                      <div className="relative rounded-lg overflow-hidden bg-black/60 aspect-video ring-1 ring-white/[0.08]">
+                        <video ref={previewRef} autoPlay muted playsInline className="w-full h-full object-contain" />
+                      </div>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[11px] font-semibold uppercase tracking-wider text-accent-mint">{t('voice:screenPicker.stageReady')}</div>
+                      <div className="text-[14px] font-semibold text-txt-primary truncate mt-0.5">
+                        {stagedName ?? t('voice:screenPicker.preview')}
                       </div>
                       {audioNeedsRepick && (
                         <div className="text-[11px] text-accent-amber/80 mt-1">{t('voice:screenPicker.audioNeedsRepick')}</div>
                       )}
                     </div>
                   </div>
-                )}
+                </div>
               </>
             ) : (
-              /* Browser, system picker, or older desktop before its prompt: choose card / preview */
-              <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin px-5 pb-3 flex flex-col">
+              /* Browser, system picker, or older desktop before its prompt: the stage */
+              <div className="relative flex-1 min-h-0 rounded-xl overflow-hidden bg-surface-base ring-1 ring-white/[0.06]">
+                {/* Ambient glow so the empty stage reads as a screen, not a form field */}
+                <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(ellipse_at_50%_40%,rgba(255,255,255,0.05),transparent_60%)]" />
+                <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(ellipse_at_50%_110%,rgba(140,130,255,0.12),transparent_55%)]" />
+
                 {staged ? (
-                  <div className="flex-1 flex flex-col justify-center gap-3">
-                    {previewBlock}
-                    {audioNeedsRepick && (
-                      <div className="text-[11px] text-accent-amber/80">{t('voice:screenPicker.audioNeedsRepick')}</div>
-                    )}
-                    <button
-                      onClick={() => void stage()}
-                      disabled={staging}
-                      className="self-start px-3 py-1.5 rounded-full bg-surface-elevated text-txt-secondary hover:bg-interactive-hover hover:text-txt-primary text-[13px] font-medium transition-colors disabled:opacity-40"
-                    >
-                      {t('voice:screenPicker.chooseAgain')}
-                    </button>
-                  </div>
+                  <>
+                    <video ref={previewRef} autoPlay muted playsInline className="absolute inset-0 w-full h-full object-contain bg-black/70" />
+                    <div className="absolute top-3 left-3 px-2 py-0.5 rounded-md bg-black/60 text-[10px] font-bold uppercase tracking-wide text-white/80">
+                      {t('voice:screenPicker.preview')}
+                    </div>
+                    <div className="absolute inset-x-0 bottom-0 px-4 py-3 flex items-center justify-between gap-3 bg-gradient-to-t from-black/70 via-black/30 to-transparent">
+                      <div className="min-w-0">
+                        <div className="text-[11px] font-semibold uppercase tracking-wider text-accent-mint truncate">{t('voice:screenPicker.stageReady')}</div>
+                        {audioNeedsRepick && (
+                          <div className="text-[11px] text-accent-amber/90 mt-0.5">{t('voice:screenPicker.audioNeedsRepick')}</div>
+                        )}
+                      </div>
+                      <button
+                        onClick={stageNow}
+                        disabled={staging}
+                        className="flex-shrink-0 px-3 py-1.5 rounded-full glass text-txt-primary hover:bg-white/[0.08] text-[13px] font-medium transition-colors disabled:opacity-40"
+                      >
+                        {t('voice:screenPicker.chooseAgain')}
+                      </button>
+                    </div>
+                  </>
                 ) : (
-                  <div className="flex-1 min-h-[220px] rounded-lg border-2 border-dashed border-white/[0.08] bg-white/[0.02] flex flex-col items-center justify-center text-center gap-3 px-6 py-8">
-                    <svg width="40" height="40" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary">
-                      <path d="M20 18C21.1 18 22 17.1 22 16V6C22 4.9 21.1 4 20 4H4C2.9 4 2 4.9 2 6V16C2 17.1 2.9 18 4 18H0V20H24V18H20ZM4 6H20V16H4V6Z" />
-                      <path d="M15 11L11 14V12H9V10H11V8L15 11Z" />
+                  <div className="relative h-full flex flex-col items-center justify-center text-center gap-4 px-6">
+                    {/* Monitor illustration */}
+                    <svg width="112" height="88" viewBox="0 0 112 88" fill="none" aria-hidden="true" className="drop-shadow-[0_8px_24px_rgba(140,130,255,0.25)]">
+                      <rect x="4" y="4" width="104" height="66" rx="8" stroke="rgba(255,255,255,0.22)" strokeWidth="2" fill="rgba(255,255,255,0.03)" />
+                      <rect x="10" y="10" width="92" height="54" rx="4" fill="url(#ss-stage-screen)" />
+                      <path d="M46 78h20M56 70v8" stroke="rgba(255,255,255,0.22)" strokeWidth="2" strokeLinecap="round" />
+                      <path d="M40 84h32" stroke="rgba(255,255,255,0.16)" strokeWidth="2" strokeLinecap="round" />
+                      <path d="M62 37l-10-6.5v13L62 37z" fill="rgba(255,255,255,0.55)" />
+                      <defs>
+                        <linearGradient id="ss-stage-screen" x1="10" y1="10" x2="102" y2="64" gradientUnits="userSpaceOnUse">
+                          <stop stopColor="rgba(140,130,255,0.35)" />
+                          <stop offset="1" stopColor="rgba(140,130,255,0.08)" />
+                        </linearGradient>
+                      </defs>
                     </svg>
-                    <div className="text-[15px] font-semibold text-txt-primary">{t('voice:screenPicker.chooseTitle')}</div>
-                    {chooseHint && (
-                      <div className="text-[13px] text-txt-tertiary max-w-sm">{chooseHint}</div>
-                    )}
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase tracking-wider text-txt-tertiary">{t('voice:screenPicker.stageIdle')}</div>
+                      <div className="text-[17px] font-bold text-txt-primary mt-1">{t('voice:screenPicker.chooseTitle')}</div>
+                      {chooseHint && (
+                        <div className="text-[13px] text-txt-tertiary max-w-md mt-1">{chooseHint}</div>
+                      )}
+                    </div>
                     <button
-                      onClick={() => void stage()}
+                      onClick={stageNow}
                       disabled={staging || !supported || (electron && pickerMode === null)}
-                      className="mt-1 px-4 py-2 rounded-full bg-accent-primary hover:bg-accent-primary-hover text-white text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                      className="px-5 py-2.5 rounded-full bg-accent-primary hover:bg-accent-primary-hover text-white text-sm font-semibold transition-colors shadow-lg shadow-accent-primary/20 disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
                     >
-                      {t('voice:screenPicker.choose')}
+                      {chooseLabel}
                     </button>
                     {!supported && (
                       <div className="text-[12px] text-txt-danger">{t('voice:screenPicker.unsupported')}</div>
@@ -453,66 +500,41 @@ export function ScreenShareSetup() {
           </div>
 
           {/* Drawer scrim — click outside the drawer closes it */}
-          {settingsOpen && (
-            <div className="absolute inset-0 z-10 bg-black/30 animate-fade-in" onClick={() => setSettingsOpen(false)} />
-          )}
+          <div
+            className={`absolute inset-0 z-10 bg-black/40 transition-opacity duration-300 ${settingsOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+            onClick={() => setSettingsOpen(false)}
+          />
 
           {/* Quality drawer: slides in from the right, over the source area */}
           <div
+            id="stream-settings-drawer-panel"
             data-testid="stream-settings-drawer"
-            className={`absolute inset-y-0 right-0 z-20 flex items-stretch transition-transform duration-300 ease-out ${
-              settingsOpen ? 'translate-x-0' : 'translate-x-[calc(100%-2.25rem)]'
+            aria-hidden={!settingsOpen}
+            className={`absolute inset-y-0 right-0 z-20 w-[calc(calc(100*var(--app-vw))-5rem)] desktop:w-[340px] glass border-l border-border-hard flex flex-col min-h-0 shadow-2xl transition-transform duration-300 ease-out ${
+              settingsOpen ? 'translate-x-0' : 'translate-x-full'
             }`}
           >
-            {/* Edge tab — stays attached to the drawer so it doubles as the close handle */}
-            <button
-              onClick={() => setSettingsOpen((open) => !open)}
-              aria-expanded={settingsOpen}
-              aria-controls="stream-settings-drawer-panel"
-              aria-label={t('voice:streamSettings.title')}
-              title={t('voice:streamSettings.title')}
-              className={`self-center w-9 h-28 -mr-px rounded-l-lg flex flex-col items-center justify-center gap-2 transition-colors ${
-                settingsOpen
-                  ? 'glass text-txt-primary'
-                  : 'bg-surface-elevated/90 text-txt-secondary hover:bg-interactive-hover hover:text-txt-primary ring-1 ring-white/[0.06]'
-              }`}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z" />
-              </svg>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className={`transition-transform duration-300 ${settingsOpen ? 'rotate-180' : ''}`}>
-                <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
-              </svg>
-            </button>
-
-            {/* Panel */}
-            <div
-              id="stream-settings-drawer-panel"
-              aria-hidden={!settingsOpen}
-              className="w-[calc(calc(100*var(--app-vw))-5rem)] desktop:w-[320px] glass rounded-l-lg flex flex-col min-h-0 shadow-2xl"
-            >
-              <div className="flex items-center justify-between px-4 pt-3 pb-2 border-b border-border-hard flex-shrink-0">
-                <span className="text-[14px] font-bold text-txt-primary">{t('voice:streamSettings.title')}</span>
-                <button
-                  onClick={() => setSettingsOpen(false)}
-                  className="text-txt-tertiary hover:text-txt-primary transition-colors p-1"
-                  aria-label={t('common:actions.close')}
-                  tabIndex={settingsOpen ? 0 : -1}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M18.4 4L12 10.4L5.6 4L4 5.6L10.4 12L4 18.4L5.6 20L12 13.6L18.4 20L20 18.4L13.6 12L20 5.6L18.4 4Z" />
-                  </svg>
-                </button>
-              </div>
-              <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin px-4 py-3">
-                <StreamQualityControls />
-              </div>
+            <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-border-hard flex-shrink-0">
+              <span className="text-[15px] font-bold text-txt-primary">{t('voice:streamSettings.title')}</span>
+              <button
+                onClick={() => setSettingsOpen(false)}
+                className="text-txt-tertiary hover:text-txt-primary transition-colors p-1 -mr-1"
+                aria-label={t('common:actions.close')}
+                tabIndex={settingsOpen ? 0 : -1}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M18.4 4L12 10.4L5.6 4L4 5.6L10.4 12L4 18.4L5.6 20L12 13.6L18.4 20L20 18.4L13.6 12L20 5.6L18.4 4Z" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin px-5 py-4">
+              <StreamQualityControls />
             </div>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="flex-shrink-0 flex items-center justify-between gap-3 px-5 pt-3 pb-4 border-t border-border-hard">
+        <div className="flex-shrink-0 flex items-center justify-between gap-3 px-6 pt-3 pb-4 border-t border-border-hard">
           <div className="min-w-0 flex flex-col">
             <button
               onClick={() => setSettingsOpen(true)}
@@ -537,12 +559,31 @@ export function ScreenShareSetup() {
             <button
               onClick={() => void handleStart()}
               disabled={!canStart}
-              className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary-hover text-white text-sm font-medium rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="px-4 py-1.5 bg-accent-primary hover:bg-accent-primary-hover text-white text-sm font-semibold rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {t('voice:screenPicker.start')}
             </button>
           </div>
         </div>
+
+        {/* Settings tab — hangs off the card's outer edge on desktop, sits on the stage edge on phones */}
+        <button
+          onClick={() => setSettingsOpen((open) => !open)}
+          aria-expanded={settingsOpen}
+          aria-controls="stream-settings-drawer-panel"
+          aria-label={t('voice:streamSettings.title')}
+          title={t('voice:streamSettings.title')}
+          className={`absolute top-1/2 -translate-y-1/2 right-0 desktop:translate-x-full z-30 w-10 h-28 flex flex-col items-center justify-center gap-2.5 rounded-l-xl desktop:rounded-l-none desktop:rounded-r-xl glass transition-colors ${
+            settingsOpen ? 'text-txt-primary' : 'text-txt-secondary hover:text-txt-primary'
+          }`}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z" />
+          </svg>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className={`transition-transform duration-300 ${settingsOpen ? 'rotate-180' : ''}`}>
+            <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
+          </svg>
+        </button>
       </div>
     </div>,
     portalContainer,
@@ -557,19 +598,19 @@ function TabButton({ active, onClick, label, count }: {
   active: boolean;
   onClick: () => void;
   label: string;
-  count: number;
+  count: number | null;
 }) {
   return (
     <button
       onClick={onClick}
-      className={`px-3 py-1.5 text-sm font-medium rounded-full transition-colors ${
+      className={`px-3.5 py-1.5 text-sm font-medium rounded-full transition-colors ${
         active
-          ? 'bg-accent-primary text-white'
-          : 'bg-white/[0.06] text-txt-secondary hover:text-txt-primary hover:bg-white/[0.1]'
+          ? 'bg-accent-primary text-white shadow-sm'
+          : 'text-txt-secondary hover:text-txt-primary hover:bg-white/[0.06]'
       }`}
     >
       {label}
-      {count > 0 && (
+      {count !== null && count > 0 && (
         <span className={`ml-1.5 text-xs ${active ? 'text-white/70' : 'text-txt-tertiary'}`}>
           {count}
         </span>
@@ -588,10 +629,10 @@ function SourceCard({ source, selected, onClick, onDoubleClick }: {
     <button
       onClick={onClick}
       onDoubleClick={onDoubleClick}
-      className={`group flex flex-col rounded-lg overflow-hidden transition-all text-left border-2 ${
+      className={`group flex flex-col rounded-lg overflow-hidden transition-all text-left ring-2 ${
         selected
-          ? 'border-accent-primary bg-accent-primary/10'
-          : 'border-white/[0.06] hover:border-border-soft bg-surface-base hover:bg-white/[0.04] hover:brightness-110'
+          ? 'ring-accent-primary bg-accent-primary/10'
+          : 'ring-transparent hover:ring-white/20 bg-surface-elevated/60 hover:bg-surface-elevated'
       }`}
     >
       {/* Thumbnail */}
@@ -602,6 +643,13 @@ function SourceCard({ source, selected, onClick, onDoubleClick }: {
           className="w-full h-full object-contain"
           draggable={false}
         />
+        {selected && (
+          <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-accent-primary flex items-center justify-center">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="white">
+              <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
+            </svg>
+          </div>
+        )}
       </div>
 
       {/* Label */}

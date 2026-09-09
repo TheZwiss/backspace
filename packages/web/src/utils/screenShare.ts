@@ -238,8 +238,16 @@ export async function applyOverdrive(
 // Capture constraints — the one place that turns config into getDisplayMedia input
 // ---------------------------------------------------------------------------
 
-function buildCaptureConstraints(config: ScreenShareConfig, opts: ScreenShareBuildResult): DisplayMediaStreamOptions {
+/** Which kind of surface the browser picker should open on. A hint: Chromium honours it, others ignore it. */
+export type PreferredDisplaySurface = 'monitor' | 'window' | 'browser';
+
+function buildCaptureConstraints(
+  config: ScreenShareConfig,
+  opts: ScreenShareBuildResult,
+  surface?: PreferredDisplaySurface,
+): DisplayMediaStreamOptions {
   const video: MediaTrackConstraints = { frameRate: { ideal: opts.capture.frameRate } };
+  if (surface) video.displaySurface = surface;
   // Native mode: no resolution constraint so the display captures at full size
   if (opts.capture.width > 0 && opts.capture.height > 0) {
     video.width = { ideal: opts.capture.width };
@@ -274,14 +282,14 @@ export function isScreenCaptureSupported(): boolean {
 }
 
 /** Must run inside a user gesture in browsers (getDisplayMedia requires transient activation). */
-export async function stageScreenCapture(): Promise<MediaStream> {
+export async function stageScreenCapture(surface?: PreferredDisplaySurface): Promise<MediaStream> {
   const config = useVoiceStore.getState().screenShareConfig;
   const opts = buildScreenShareOptions(config);
   if (!isScreenCaptureSupported()) {
     throw new DOMException('getDisplayMedia is not available', 'NotSupportedError');
   }
   try {
-    const stream = await navigator.mediaDevices.getDisplayMedia(buildCaptureConstraints(config, opts));
+    const stream = await navigator.mediaDevices.getDisplayMedia(buildCaptureConstraints(config, opts, surface));
     const video = stream.getVideoTracks()[0];
     if (video) video.contentHint = opts.contentHint;
     return stream;

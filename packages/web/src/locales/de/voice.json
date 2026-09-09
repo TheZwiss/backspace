@@ -66,7 +66,8 @@
     "title": "Bildschirm teilen",
     "tabs": {
       "screens": "Bildschirme",
-      "windows": "Fenster"
+      "windows": "Fenster",
+      "browserTabs": "Browser-Tabs"
     },
     "searchWindows": "Fenster suchen…",
     "noWindowsMatch": "Keine Fenster passen zu deiner Suche",
@@ -85,7 +86,12 @@
     "captureFailed": "Der Bildschirm konnte nicht aufgenommen werden.",
     "startFailed": "Der Stream konnte nicht gestartet werden.",
     "audioCaptureFailed": "Die Aufnahme mit Systemaudio konnte nicht gestartet werden. Schalte Systemaudio aus, wenn dein System es nicht unterstützt.",
-    "start": "Stream starten"
+    "start": "Stream starten",
+    "subtitle": "Wähle, was du teilst, stelle die Qualität ein und starte.",
+    "chooseWindow": "Fenster wählen",
+    "chooseTab": "Tab wählen",
+    "stageIdle": "Noch nichts ausgewählt",
+    "stageReady": "Bereit zum Start"
   },
   "streamSettings": {
     "title": "Stream-Einstellungen",
