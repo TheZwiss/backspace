@@ -3,6 +3,7 @@ import { useVoiceStore } from '../stores/voiceStore';
 import type { ScreenShareConfig } from '../stores/voiceStore';
 import { getStreamingLimits } from '../stores/settingsStore';
 import { getPublisherPC, getMediaStreamTrack } from './livekitInternals';
+import { broadcastVoiceStatus } from './voice';
 import { activate as activateHwOverdrive, deactivate as deactivateHwOverdrive } from './hwOverdrive';
 import { useUIStore } from '../stores/uiStore';
 import { openScreenShareSetup } from '../stores/screenShareSetupStore';
@@ -273,6 +274,16 @@ export function isScreenCaptureSupported(): boolean {
   return typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getDisplayMedia;
 }
 
+/**
+ * The user dismissed the picker rather than hitting a real failure. Both names
+ * occur in the wild: Chromium raises NotAllowedError, Firefox and the Wayland
+ * portal raise AbortError. Shared so a cancellation never also reports a fault.
+ */
+export function isCaptureCancellation(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  return err.name === 'NotAllowedError' || err.name === 'AbortError';
+}
+
 /** Must run inside a user gesture in browsers (getDisplayMedia requires transient activation). */
 export async function stageScreenCapture(): Promise<MediaStream> {
   const config = useVoiceStore.getState().screenShareConfig;
@@ -289,7 +300,7 @@ export async function stageScreenCapture(): Promise<MediaStream> {
     // Loopback unsupported (Linux without pulse, macOS without Catap) makes
     // the whole getDisplayMedia call reject. No auto-retry: the picker
     // selection was consumed, retrying would re-prompt it.
-    if (config.shareAudio && err instanceof Error && err.name !== 'NotAllowedError') {
+    if (config.shareAudio && !isCaptureCancellation(err)) {
       useUIStore.getState().addToast(
         i18n.t('voice:screenPicker.audioCaptureFailed'),
         'warning',
@@ -370,6 +381,7 @@ export async function publishScreenShare(room: Room, stream: MediaStream): Promi
   if (hwOverdrive) activateHwOverdrive();
   else deactivateHwOverdrive();
 
+  let videoPublished = false;
   try {
     videoTrack.contentHint = opts.contentHint;
     await room.localParticipant.publishTrack(videoTrack, {
@@ -385,6 +397,7 @@ export async function publishScreenShare(room: Room, stream: MediaStream): Promi
         backupCodecPolicy: opts.publish.backupCodecPolicy,
       } : {}),
     });
+    videoPublished = true;
     if (audioTrack) {
       await room.localParticipant.publishTrack(audioTrack, { source: Track.Source.ScreenShareAudio });
     }
@@ -396,6 +409,17 @@ export async function publishScreenShare(room: Room, stream: MediaStream): Promi
     return true;
   } catch (err) {
     console.error('[ScreenShare] Failed to publish screen share:', err);
+    // A failure after the video went out (a rejected loopback track, a
+    // negotiation error) would otherwise leave a publication whose track we
+    // are about to stop: remote peers see a dead screen share, and no stop
+    // path can clear it because they are all gated on isScreenSharing.
+    if (videoPublished) {
+      try {
+        await room.localParticipant.unpublishTrack(videoTrack, false);
+      } catch (unpublishErr) {
+        console.error('[ScreenShare] Failed to roll back the video publication:', unpublishErr);
+      }
+    }
     if (hwOverdrive) deactivateHwOverdrive();
     stopStagedCapture(stream);
     return false;
@@ -539,6 +563,10 @@ export async function stopScreenShare(room: Room): Promise<void> {
   deactivateHwOverdrive();
   _publishedScreenShareCodec = null;
   useVoiceStore.setState({ isScreenSharing: false, hwOverdrive: false });
+  // `voice_status` is what carries isScreenSharing to people who are not in the
+  // LiveKit room (channel lists, join sheets). Every stop path funnels through
+  // here or through handleScreenShareUnpublished, so both must broadcast.
+  broadcastVoiceStatus();
 }
 
 // ---------------------------------------------------------------------------
@@ -559,4 +587,8 @@ export function handleScreenShareUnpublished(): void {
   deactivateHwOverdrive();
   _publishedScreenShareCodec = null;
   useVoiceStore.setState({ isScreenSharing: false, hwOverdrive: false });
+  // `voice_status` is what carries isScreenSharing to people who are not in the
+  // LiveKit room (channel lists, join sheets). Every stop path funnels through
+  // here or through handleScreenShareUnpublished, so both must broadcast.
+  broadcastVoiceStatus();
 }

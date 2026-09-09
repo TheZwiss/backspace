@@ -47,12 +47,14 @@ describe('handleScreenShareAction', () => {
     expect(broadcastVoiceStatus).not.toHaveBeenCalled();
   });
 
-  it('stops the share and broadcasts when live', async () => {
+  it('delegates the stop when live, leaving the broadcast to stopScreenShare', async () => {
     useVoiceStore.setState({ isScreenSharing: true });
     await handleScreenShareAction();
     expect(stopScreenShare).toHaveBeenCalledWith(room);
-    expect(broadcastVoiceStatus).toHaveBeenCalled();
     expect(useScreenShareSetupStore.getState().isOpen).toBe(false);
+    // stopScreenShare owns the voice_status broadcast so that every stop path
+    // gets it, not just this one; see screenShare.stopPaths.test.ts.
+    expect(broadcastVoiceStatus).not.toHaveBeenCalled();
   });
 
   it('does nothing without a room', async () => {

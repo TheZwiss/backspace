@@ -111,7 +111,9 @@ export function StreamQualityControls() {
         patch.height = numericRes.length > 0 ? Math.max(...numericRes) : 1080;
       }
     }
-    if (!limits.allowedFramerates.includes(config.fps)) {
+    // reduce() without a seed throws on an empty allowlist, which an instance
+    // can configure; leave fps untouched rather than crashing the panel.
+    if (!limits.allowedFramerates.includes(config.fps) && limits.allowedFramerates.length > 0) {
       const f = config.fps;
       const closest = limits.allowedFramerates.reduce((a, b) =>
         Math.abs(b - f) < Math.abs(a - f) ? b : a

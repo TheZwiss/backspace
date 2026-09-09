@@ -178,6 +178,10 @@ export function VoiceControls() {
           <button
             ref={shareBtnRef}
             onClick={handleScreenShare}
+            // Idle the button starts a share; live it toggles a menu, so it
+            // only claims a popup in the state where it actually opens one.
+            aria-haspopup={isScreenSharing ? 'dialog' : undefined}
+            aria-expanded={isScreenSharing ? showShareMenu : undefined}
             className={`${btnBase} ${
               isScreenSharing
                 ? 'bg-surface-base text-status-online hover:bg-surface-channel'

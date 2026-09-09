@@ -308,6 +308,8 @@ Source picking differs by platform, the rest of the screen is identical (drawer,
 
 A `shareAudio` change after staging cannot be applied to the held stream (audio is decided at capture); the screen shows a note and the user re-picks. Codec changes while live go through `republishScreenShare(room)`: the same `MediaStreamTrack` is unpublished and published again under the new options, so no re-capture and no second prompt. `handleScreenShareUnpublished` ignores the unpublish that this swap emits.
 
+**Who broadcasts the stop.** `voice_status` is what carries `isScreenSharing` to clients that are not in the LiveKit room (`MobileSpacesScreen`, `MobileVoiceJoinSheet` read `wsStatus?.isScreenSharing`), so every stop has to emit it or a stale "sharing" indicator stays up. `stopScreenShare()` and `handleScreenShareUnpublished()` each call `broadcastVoiceStatus()` themselves rather than leaving it to their callers, which covers all four routes: the control-bar button, the stream-tile "Stop Streaming" item, `changeScreenShare()`, and the OS/browser stop bar arriving via `RoomEvent.LocalTrackUnpublished`. Callers must not repeat it. Pinned by `utils/screenShare.stopPaths.test.ts`.
+
 `StreamQualityControls` is the shared quality panel (resolution, frame rate, content mode, codec, bitrate, system audio, plus the admin-limit clamp effect); `ScreenShareSetup` and `ScreenShareSettingsPopover` both render it.
 
 ### Control-bar entry point (`VoiceControlBar`, `VoiceControls`)
@@ -357,7 +359,7 @@ See `docs/systems/mobile-ui.md` → "MobileVoiceFullScreen" for the auto-focus s
 - Screen-share: `StreamTile` lazily subscribes via `setStreamSubscription` only after the user taps "Watch Stream" (or auto-focus does so on mobile, which currently still requires the user to tap the in-tile "Watch Stream" CTA — auto-focus only sets the focused publisher; it does not auto-subscribe to bandwidth-heavy screen-share tracks).
 - Mute / deafen / speaking-ring overlays, watch/unwatch controls, local mute, volume sliders — identical between mobile and desktop.
 
-**Screen-share button wiring on mobile.** `MobileVoiceFullScreen`'s screen-share button calls `handleScreenShareAction()` from `utils/voiceActions`, **not** `voiceStore.toggleScreenShare`. The store action only flips the `isScreenSharing` boolean and never captures anything. The canonical `handleScreenShareAction` is shared with desktop's `VoiceControlBar` and the keybind manager; idle it opens `ScreenShareSetup`, live it calls `stopScreenShare(room)` and broadcasts voice status to peers. iOS Safari does not support `getDisplayMedia` (the call rejects); this is a platform limitation. Android Chrome supports it and works.
+**Screen-share button wiring on mobile.** `MobileVoiceFullScreen`'s screen-share button calls `handleScreenShareAction()` from `utils/voiceActions`, **not** `voiceStore.toggleScreenShare`. The store action only flips the `isScreenSharing` boolean and never captures anything. The canonical `handleScreenShareAction` is shared with desktop's `VoiceControlBar` and the keybind manager; idle it opens `ScreenShareSetup`, live it calls `stopScreenShare(room)`, which broadcasts the new voice status itself. iOS Safari does not support `getDisplayMedia` (the call rejects); this is a platform limitation. Android Chrome supports it and works.
 
 ---
 

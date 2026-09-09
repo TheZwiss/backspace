@@ -769,14 +769,16 @@ function registerIpcHandlers(): void {
   // right before it calls getDisplayMedia(); the handler answers from that.
   ipcMain.handle('get-screen-sources', async () => serializeScreenSources(await enumerateScreenSources()));
   ipcMain.handle('get-screen-share-picker-mode', () => screenSharePickerMode());
-  ipcMain.on('screen-share-preselect', (_event, sourceId: string, shareAudio?: boolean) => {
+  ipcMain.on('screen-share-preselect', (event, sourceId: string, shareAudio?: boolean) => {
+    if (event.sender !== mainWindow?.webContents) return;
     if (typeof sourceId !== 'string' || !sourceId) return;
-    pendingScreenSelection = { sourceId, shareAudio: shareAudio ?? true, at: Date.now() };
+    pendingScreenSelection = { sourceId, shareAudio: shareAudio === true, at: Date.now() };
   });
   // System-picker sessions have no tile to preselect; the renderer only tells
   // us whether loopback audio should ride along with whatever the portal returns.
-  ipcMain.on('screen-share-audio-preference', (_event, shareAudio?: boolean) => {
-    lastSystemPickerShareAudio = shareAudio ?? true;
+  ipcMain.on('screen-share-audio-preference', (event, shareAudio?: boolean) => {
+    if (event.sender !== mainWindow?.webContents) return;
+    lastSystemPickerShareAudio = shareAudio === true;
   });
 
   // Auto-launch settings
@@ -1268,7 +1270,10 @@ if (!gotTheLock) {
         // portal dialog and this is the only source it returned. Answer
         // directly instead of showing a one-tile grid.
         if (screenSharePickerMode() === 'system' && sources.length === 1) {
-          const shareAudio = lastSystemPickerShareAudio ?? true;
+          // Default off: this branch answers without consulting the renderer, so
+          // a web client too old to send a preference must not have its audio
+          // captured against the setting it thinks is in force.
+          const shareAudio = lastSystemPickerShareAudio ?? false;
           console.log('[Main:ScreenShare] System picker returned one source:', sources[0]!.id, 'audio:', shareAudio);
           callback({ video: sources[0]!, ...(shareAudio ? { audio: 'loopback' } : {}) });
           return;
@@ -1311,6 +1316,11 @@ if (!gotTheLock) {
         console.error('[Main:ScreenShare] Handler error:', err);
         // @ts-ignore — deny the request without crashing
         callback();
+      } finally {
+        // The cache exists only to resolve a preselected id within one request.
+        // Holding it pins a full-size NativeImage thumbnail per source for the
+        // life of the process, so drop it as soon as the request is answered.
+        lastScreenSources = [];
       }
     });
 

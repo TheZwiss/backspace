@@ -13,6 +13,7 @@ import {
   stopStagedCapture,
   publishScreenShare,
   isScreenCaptureSupported,
+  isCaptureCancellation,
   describeStagedCapture,
   type CapturedSurfaceKind,
 } from '../../utils/screenShare';
@@ -52,11 +53,8 @@ type Tab = 'screens' | 'windows';
 type SetupError = 'cancelled' | 'unsupported' | 'captureFailed' | 'startFailed' | null;
 
 function errorKey(err: unknown): SetupError {
-  if (err instanceof DOMException || (err instanceof Error && 'name' in err)) {
-    const name = (err as { name: string }).name;
-    if (name === 'NotAllowedError' || name === 'AbortError') return 'cancelled';
-    if (name === 'NotSupportedError') return 'unsupported';
-  }
+  if (isCaptureCancellation(err)) return 'cancelled';
+  if (err instanceof Error && err.name === 'NotSupportedError') return 'unsupported';
   return 'captureFailed';
 }
 
