@@ -1,0 +1,218 @@
+/* ── HOME SPACE ──
+ * The living backdrop of the friends page. Scene bible section 13, under the
+ * darkness rule (section 4): depth comes from darkness and distance, never
+ * from shading. The page's glass header and panel lie over this; the sky is a
+ * faint presence through the panel and a clear one in the top band and at the
+ * column's edges. It is the same world the empty voice channel and the login
+ * page look out on, seen from home.
+ *
+ * Structure, back to front:
+ *   .home-space   the void itself: below --bg-base, darker than any chrome
+ *   __stars       one deterministic field of 1px and 2px points, in pixels,
+ *                 denser along one gentle diagonal; the small ones breathe
+ *   __craft       the voice channel's ship with Nori in the porthole, far and
+ *                 small, crossing low from the left edge once every three
+ *                 minutes and arriving behind the world's limb
+ *   __world       a flat disc, base lifted a step toward lavender, with one
+ *                 thin atmosphere line on its lit limb; low right, mostly off;
+ *                 above the craft, so the disc occludes the arrival
+ *   __streak      three shooting stars, each a 1x24px line that falls once a
+ *                 minute or so and is gone in under a second
+ *
+ * LIGHT: the world's atmosphere, the cabin's window and a plume. Nothing else
+ * emits, nothing casts a shadow, nothing lifts the black.
+ *
+ * MOTION at rest: the twinkle group (opacity, 14 to 22s, out of phase), the
+ * crossing (transform, 180s period, 20s on screen, low, ending behind the
+ * world) and three streaks
+ * (transform and opacity, 53, 67 and 83s periods, under a second on screen).
+ * Nothing drifts continuously behind the panel; only the twinkle is
+ * continuous. Reduced motion stops everything: stars at rest, the ship parked
+ * off-frame, the streaks invisible.
+ *
+ * FILTERS: none. No backdrop-filter, no SVG filter, no blur, no data URI.
+ */
+
+.home-space {
+  /* The craft's box is 240 x 160 units and the hull spans 210 of those, so
+     the hull is about 87% of this width: 4 to 6% of the column. */
+  --craft-w: clamp(34px, 5.6cqw, 78px);
+  --craft-h: calc(var(--craft-w) * 160 / 240);
+  /* The crossing: low in the frame, below the empty state's copy line
+     (about 79cqh at the shipping size) and below any row, from the left
+     edge toward the world, rising very slightly as it goes. */
+  --craft-y: calc(88cqh - var(--craft-h) / 2);
+  --craft-rise: -4cqh;
+  /* The world's centre and size, in column coordinates. Height-driven with a
+     width cap so a narrow column keeps the same corner arc. The centre is
+     far enough right that the lit crown sits in the column's right margin,
+     beside the panel, where it can be seen. */
+  --world-x: 97cqw;
+  --world-y: 130cqh;
+  --world-d: clamp(460px, min(108cqh, 96cqw), 1100px);
+  /* The scene palette's `star` (telemetry/scene/palette.ts) as channels:
+     --text-primary warmed two steps, so a streak is never #ffffff. */
+  --scene-star: 243 237 228;
+
+  container-type: size;
+  overflow: hidden;
+  isolation: isolate;
+  /* The void. --bg-base dropped toward black without reaching it, so the
+     space is always darker than the header and the panel and keeps the
+     token's warm hue. Nothing is painted over this. */
+  background: color-mix(in srgb, rgb(var(--bg-base)) 72%, black);
+}
+
+/* ── STARS ── fixed pixel size, anchored top-left, cropped by the column. The
+   points are crisp-edged pixels, the dots are round; neither is blurred. */
+.home-space__stars {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+/* The small ones that breathe: opacity eased between two values, each on its
+   own period (set inline, 14 to 22s) and phase. Their resting opacity is on
+   fill-opacity, so the loop multiplies it and a dim star stays a dim star. */
+.home-space__star--tw {
+  animation: homeTwinkle 17s ease-in-out infinite alternate;
+}
+
+/* ── WORLD ── the same world as the voice channel's and the login page's.
+   Its centre sits below and to the right of the column so only its upper-left
+   arc shows and it reads as far larger than the frame. Night side: the void
+   lifted one step toward lavender, never black, never grey, so the disc
+   silhouettes against the void without shading. */
+.home-space__world {
+  position: absolute;
+  width: var(--world-d);
+  height: var(--world-d);
+  left: calc(var(--world-x) - var(--world-d) / 2);
+  top: calc(var(--world-y) - var(--world-d) / 2);
+  border-radius: 50%;
+  background: color-mix(in srgb, rgb(var(--bg-base)) 95%, rgb(var(--accent-lavender)));
+}
+/* The atmosphere: one thin clean line on the lit limb, in the colour of
+   "ready". The light is above, so the line is brightest at the crown of the
+   disc and thins down the left side, gone well before the arc leaves the
+   frame at the bottom: the same mask the login page uses, and the whole
+   allowance. */
+.home-space__world::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 50%;
+  border: 1.5px solid rgb(var(--accent-sky) / 0.5);
+  -webkit-mask: linear-gradient(170deg, rgb(0 0 0 / 1) 3%, rgb(0 0 0 / 0.5) 10%, transparent 20%);
+  mask: linear-gradient(170deg, rgb(0 0 0 / 1) 3%, rgb(0 0 0 / 0.5) 10%, transparent 20%);
+}
+
+/* ── STREAKS ── a Sternschnuppe: one pixel wide, 24 long, bright at the
+   head and gone at the tail, no blur. It falls toward the lower right about
+   a hundred pixels in well under a second, then waits most of a minute
+   off-stage at opacity zero. Three of them at three places, on three periods
+   that share no factor, so the sky's timing feels irregular. They start in
+   the top band; what falls behind the panel is faintly seen through it. */
+.home-space__streak {
+  position: absolute;
+  width: 1px;
+  height: 24px;
+  background: linear-gradient(to bottom, transparent, rgb(var(--scene-star)));
+  opacity: 0;
+  transform: rotate(-55deg);
+  transform-origin: 50% 100%;
+  animation: homeStreak linear infinite;
+}
+.home-space__streak--a {
+  left: 56cqw;
+  top: 2px;
+  animation-duration: 53s;
+  animation-delay: -20s;
+}
+.home-space__streak--b {
+  left: 20cqw;
+  top: 8px;
+  animation-duration: 67s;
+  animation-delay: -51s;
+}
+.home-space__streak--c {
+  left: 81cqw;
+  top: 12px;
+  animation-duration: 83s;
+  animation-delay: -6s;
+}
+
+/* ── CRAFT ── parked off the left edge, and carried low across the frame by
+   the crossing, which ends behind the world's limb: the ship arrives where
+   it was heading rather than leaving the frame. It sits under the world in
+   stacking order so the disc occludes it. The art is pitched a touch
+   nose-up to agree with the crossing's slight rise, and the whole thing a
+   shade less than opaque: it is far. */
+.home-space__craft {
+  position: absolute;
+  width: var(--craft-w);
+  height: var(--craft-h);
+  left: calc(-1 * var(--craft-w) - 24px);
+  top: var(--craft-y);
+  opacity: 0.92;
+  /* 180s period; the first crossing comes forty seconds after arrival, and
+     then one every three minutes. */
+  animation: homeCrossing 180s linear infinite;
+  animation-delay: -140s;
+}
+.home-space__craft-art {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  rotate: -3deg;
+}
+/* The scene's Ship draws a blurred halo behind the porthole through an SVG
+   filter. There are no filters here, so that halo is off. */
+.home-space .hs-glow {
+  display: none;
+}
+/* The cabin: lit, because at this distance the window is the only warm
+   point in the frame. */
+.home-space .hs-lit {
+  opacity: 0.3;
+}
+
+/* ── MOTION ──
+ * The twinkle: a star's opacity easing between two values. Never all the
+ * way out, never a flash. */
+@keyframes homeTwinkle {
+  from { opacity: 0.25; }
+  to { opacity: 1; }
+}
+/* The crossing: twenty seconds from off the left edge to behind the world,
+   then a hundred and sixty parked back where it started. The end point puts
+   the craft's left edge at 90cqw, past the limb at this height on every
+   column from 600 to 2400 wide, so both ends are hidden and the return is
+   never seen. */
+@keyframes homeCrossing {
+  0% { transform: translate(0, 0); }
+  11.111% { transform: translate(calc(90cqw + var(--craft-w) + 24px), var(--craft-rise)); }
+  11.112%, 100% { transform: translate(0, 0); }
+}
+/* The streak: one percent of its period on screen. Translation is in the
+   column's frame; the line's rotation rides along unchanged. */
+@keyframes homeStreak {
+  0% { transform: translate(0, 0) rotate(-55deg); opacity: 0; }
+  0.15% { opacity: 0.85; }
+  0.8% { opacity: 0.85; }
+  1% { transform: translate(98px, 69px) rotate(-55deg); opacity: 0; }
+  100% { transform: translate(98px, 69px) rotate(-55deg); opacity: 0; }
+}
+
+/* ── STILL FRAME ──
+ * Reduced motion stops everything: the stars at their resting opacity, the
+ * streaks at zero, the ship parked off the left edge where it started. The
+ * sky and the world stay. */
+@media (prefers-reduced-motion: reduce) {
+  .home-space *,
+  .home-space *::before,
+  .home-space *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
