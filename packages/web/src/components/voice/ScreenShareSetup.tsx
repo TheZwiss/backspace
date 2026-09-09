@@ -93,10 +93,28 @@ export function ScreenShareSetup() {
   const [error, setError] = useState<SetupError>(null);
   const stagedRef = useRef<MediaStream | null>(null);
   const previewRef = useRef<HTMLVideoElement>(null);
+  const drawerRef = useRef<HTMLDivElement>(null);
 
-  // Older-desktop prompted flow bookkeeping
+  // Older-desktop prompted flow bookkeeping. The ref is the source of truth for
+  // synchronous decisions inside callbacks; the state mirror is what render reads.
   const promptInFlightRef = useRef(false);
+  const [promptInFlight, setPromptInFlight] = useState(false);
   const pendingPromptIdRef = useRef<string | null>(null);
+
+  /**
+   * Bumped by every pick. A capture whose generation is stale by the time
+   * getDisplayMedia() resolves belongs to nobody — the screen was closed, or a
+   * newer source was picked — so it is stopped instead of being adopted. Without
+   * it, cancelling mid-prompt leaks a live OS capture (this component is mounted
+   * once in App.tsx and never unmounts, so no cleanup ever runs), and two quick
+   * picks can leave the preview showing one surface while the labels name another.
+   */
+  const stageGenerationRef = useRef(0);
+
+  const markPromptInFlight = useCallback((value: boolean) => {
+    promptInFlightRef.current = value;
+    setPromptInFlight(value);
+  }, []);
 
   const replaceStaged = useCallback((next: MediaStream | null) => {
     if (stagedRef.current && stagedRef.current !== next) stopStagedCapture(stagedRef.current);
@@ -105,8 +123,13 @@ export function ScreenShareSetup() {
     if (!next) setStagedInfo({ kind: null, label: null });
   }, []);
 
-  /** Capture via getDisplayMedia and hold the result as the staged preview. */
-  const stage = useCallback(async () => {
+  /**
+   * Capture via getDisplayMedia and hold the result as the staged preview.
+   * `claimed` reuses a generation already taken by stageSource; a direct call
+   * (the "Choose screen" button) takes a fresh one.
+   */
+  const stage = useCallback(async (claimed?: number) => {
+    const generation = claimed ?? ++stageGenerationRef.current;
     setError(null);
     setStaging(true);
     const shareAudioAtStage = useVoiceStore.getState().screenShareConfig.shareAudio;
@@ -114,22 +137,34 @@ export function ScreenShareSetup() {
     api?.setScreenShareAudioPreference?.(shareAudioAtStage);
     try {
       const stream = await stageScreenCapture();
+      if (generation !== stageGenerationRef.current) {
+        // Superseded while the picker was open: never adopt it, and never
+        // leave the OS capturing for a stream nothing will publish.
+        stopStagedCapture(stream);
+        return;
+      }
       replaceStaged(stream);
       setStagedInfo(describeStagedCapture(stream));
       setStagedShareAudio(shareAudioAtStage);
     } catch (err) {
+      if (generation !== stageGenerationRef.current) return;
       replaceStaged(null);
       setSelectedId(null);
       setError(errorKey(err));
     } finally {
-      promptInFlightRef.current = false;
-      setStaging(false);
+      // Only the newest attempt owns these flags; an older one finishing later
+      // must not clear the spinner out from under the capture still running.
+      if (generation === stageGenerationRef.current) {
+        markPromptInFlight(false);
+        setStaging(false);
+      }
     }
-  }, [api, replaceStaged]);
+  }, [api, replaceStaged, markPromptInFlight]);
 
   /** Electron: a tile was clicked. Resolve an in-flight prompt, or preselect and stage. */
-  const stageSource = useCallback((sourceId: string) => {
+  const stageSource = useCallback(async (sourceId: string) => {
     if (!api) return;
+    const generation = ++stageGenerationRef.current;
     setSelectedId(sourceId);
     const shareAudio = useVoiceStore.getState().screenShareConfig.shareAudio;
     if (promptInFlightRef.current) {
@@ -137,12 +172,23 @@ export function ScreenShareSetup() {
       return;
     }
     if (api.preselectScreenSource) {
-      api.preselectScreenSource(sourceId, shareAudio);
+      // Awaited: the preselection and getDisplayMedia() travel different IPC
+      // pipes with no ordering guarantee between them. If the display-media
+      // handler wins the race it finds no preselection, degrades to the
+      // prompted flow, and the preselection then sits armed for its whole TTL
+      // ready to hijack the next share. The round trip is free next to a dialog.
+      try {
+        await api.preselectScreenSource(sourceId, shareAudio);
+      } catch (err) {
+        console.error('[ScreenShareSetup] preselectScreenSource failed:', err);
+      }
+      // A newer tile was clicked while the preselection was in flight
+      if (generation !== stageGenerationRef.current) return;
     } else {
       // Older desktop: the main process will push sources; answer with this id when it does.
       pendingPromptIdRef.current = sourceId;
     }
-    void stage();
+    void stage(generation);
   }, [api, stage]);
 
   // Ask the desktop who picks, once per open
@@ -179,11 +225,11 @@ export function ScreenShareSetup() {
         api.selectScreenSource(pendingId, useVoiceStore.getState().screenShareConfig.shareAudio);
         return;
       }
-      promptInFlightRef.current = true;
+      markPromptInFlight(true);
       setSources(incoming);
     });
     // Preload registers listeners without a remover; register once for the app lifetime.
-  }, [api]);
+  }, [api, markPromptInFlight]);
 
   // Reset per open
   useEffect(() => {
@@ -195,13 +241,22 @@ export function ScreenShareSetup() {
     setStarting(false);
     setSettingsOpen(false);
     setSources([]);
-  }, [isOpen]);
+    // Abandon anything still in flight from the previous open, and drop a
+    // capture staged back then: reopening must never offer a stale surface as
+    // "ready to go live", nor let Start publish it instead of a fresh pick.
+    stageGenerationRef.current++;
+    replaceStaged(null);
+    setStagedShareAudio(useVoiceStore.getState().screenShareConfig.shareAudio);
+    setStaging(false);
+    markPromptInFlight(false);
+    pendingPromptIdRef.current = null;
+  }, [isOpen, replaceStaged, markPromptInFlight]);
 
   // Auto-stage the only screen so the common case needs a single click on Start
   useEffect(() => {
     if (!isOpen || !canListSources || staged || staging || selectedId) return;
     const screens = sources.filter((s) => s.isScreen);
-    if (screens.length === 1 && activeTab === 'screens') stageSource(screens[0]!.id);
+    if (screens.length === 1 && activeTab === 'screens') void stageSource(screens[0]!.id);
   }, [isOpen, canListSources, sources, staged, staging, selectedId, activeTab, stageSource]);
 
   // Preview element ↔ staged stream
@@ -228,15 +283,35 @@ export function ScreenShareSetup() {
     void applyStagedCaptureConfig(staged);
   }, [staged, config.height, config.fps, config.mode]);
 
+  // The closed drawer is off-canvas but still in the DOM, so its buttons,
+  // sliders and toggle would stay in the tab order: tabbing through the setup
+  // screen would move focus into an aria-hidden subtree, which browsers refuse
+  // ("Blocked aria-hidden on an element because its descendant retained
+  // focus") and screen readers announce from nowhere. `inert` removes the whole
+  // subtree from focus and the accessibility tree at once. React 18 has no
+  // `inert` prop, so it is set as a DOM property.
+  // `isOpen` is a dependency because the whole card is unmounted while closed:
+  // reopening builds a new drawer element, and without it the effect would not
+  // re-run (settingsOpen is false both before and after) so the fresh element
+  // would stay focusable.
+  useEffect(() => {
+    const el = drawerRef.current;
+    if (el) el.inert = !settingsOpen;
+  }, [settingsOpen, isOpen]);
+
   const handleClose = useCallback(() => {
+    // Abandon any capture still being picked. Without this the promise resolves
+    // onto a closed screen and the OS keeps capturing forever.
+    stageGenerationRef.current++;
+    setStaging(false);
     if (promptInFlightRef.current && api) {
       api.selectScreenSource(null);
-      promptInFlightRef.current = false;
     }
+    markPromptInFlight(false);
     pendingPromptIdRef.current = null;
     replaceStaged(null);
     close();
-  }, [api, replaceStaged, close]);
+  }, [api, replaceStaged, close, markPromptInFlight]);
 
   // Already live (started elsewhere while open): the setup no longer applies
   useEffect(() => {
@@ -290,7 +365,7 @@ export function ScreenShareSetup() {
 
   if (!isOpen) return null;
 
-  const showGrid = electron && (canListSources || promptInFlightRef.current || sources.length > 0);
+  const showGrid = electron && (canListSources || promptInFlight || sources.length > 0);
   const activeSources = activeTab === 'windows' ? windows : screens;
   const supported = isScreenCaptureSupported();
   const audioNeedsRepick = !!staged && stagedShareAudio !== config.shareAudio;
@@ -394,7 +469,7 @@ export function ScreenShareSetup() {
                           key={source.id}
                           source={source}
                           selected={selectedId === source.id}
-                          onClick={() => stageSource(source.id)}
+                          onClick={() => void stageSource(source.id)}
                           onDoubleClick={() => { if (stagedRef.current && selectedId === source.id) void handleStart(); }}
                         />
                       ))}
@@ -501,6 +576,7 @@ export function ScreenShareSetup() {
 
           {/* Quality drawer: slides in from the right, over the source area */}
           <div
+            ref={drawerRef}
             id="stream-settings-drawer-panel"
             data-testid="stream-settings-drawer"
             aria-hidden={!settingsOpen}
@@ -514,7 +590,6 @@ export function ScreenShareSetup() {
                 onClick={() => setSettingsOpen(false)}
                 className="text-txt-tertiary hover:text-txt-primary transition-colors p-1 -mr-1"
                 aria-label={t('common:actions.close')}
-                tabIndex={settingsOpen ? 0 : -1}
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M18.4 4L12 10.4L5.6 4L4 5.6L10.4 12L4 18.4L5.6 20L12 13.6L18.4 20L20 18.4L13.6 12L20 5.6L18.4 4Z" />
