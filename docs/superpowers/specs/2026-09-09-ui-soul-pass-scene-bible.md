@@ -1,6 +1,6 @@
 # UI soul pass: scene bible
 
-Status: rows approved 2026-09-09. Batch 0 (rows 0, 4, 5, 9, 11) is built; scene batches follow.
+Status: rows approved 2026-09-09. Batch 0 (rows 0, 4, 5, 9, 11) is built locally; scene batches follow. Nothing is pushed until the whole pass is tested.
 
 This is the document that lets many independent agents produce one product.
 It is not a token list; Aether Drift already has tokens. It says what each
