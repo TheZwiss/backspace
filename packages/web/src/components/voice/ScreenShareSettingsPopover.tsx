@@ -262,14 +262,14 @@ export function ScreenShareSettingsPopover({ open, onClose, anchorRef, onStopSha
                 step={BITRATE_STEP}
                 value={config.customBitrateKbps ?? Math.round(result.publish.videoEncoding.maxBitrate / 1000)}
                 onChange={(e) => setConfig({ customBitrateKbps: Number(e.target.value) })}
-                className="flex-1 h-1.5 accent-accent-primary cursor-pointer appearance-none bg-interactive-muted rounded-full
+                className="flex-1 min-w-0 h-1.5 accent-accent-primary cursor-pointer appearance-none bg-interactive-muted rounded-full
                   [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5
                   [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md
                   [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:border-0
                   [&::-moz-range-thumb]:w-3.5 [&::-moz-range-thumb]:h-3.5 [&::-moz-range-thumb]:rounded-full
                   [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:cursor-pointer"
               />
-              <span className={`text-[12px] font-medium min-w-[64px] text-right ${
+              <span className={`text-[12px] font-medium min-w-[64px] flex-shrink-0 text-right ${
                 config.customBitrateKbps != null ? 'text-txt-primary' : 'text-txt-tertiary'
               }`}>
                 {config.customBitrateKbps != null

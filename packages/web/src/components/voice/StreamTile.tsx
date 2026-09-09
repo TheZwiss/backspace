@@ -83,9 +83,9 @@ function StreamVolumeItem({ userId }: { userId: string }) {
           max="200"
           value={streamVolume}
           onChange={(e) => setStreamVolume(userId, parseInt(e.target.value))}
-          className="flex-1 accent-accent-primary h-1"
+          className="flex-1 min-w-0 accent-accent-primary h-1"
         />
-        <span className="text-xs text-txt-secondary min-w-[32px] text-right">
+        <span className="text-xs text-txt-secondary min-w-[32px] flex-shrink-0 text-right">
           {f.formatPercent(streamVolume)}
         </span>
       </div>
@@ -138,9 +138,9 @@ function StreamAttenuationItem() {
               max="100"
               value={streamAttenuationStrength}
               onChange={(e) => setAttenuationStrength(parseInt(e.target.value))}
-              className="flex-1 accent-accent-primary h-1"
+              className="flex-1 min-w-0 accent-accent-primary h-1"
             />
-            <span className="text-xs text-txt-secondary min-w-[32px] text-right">
+            <span className="text-xs text-txt-secondary min-w-[32px] flex-shrink-0 text-right">
               {f.formatPercent(streamAttenuationStrength)}
             </span>
           </div>
