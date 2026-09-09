@@ -66,8 +66,7 @@
     "title": "Share Your Screen",
     "tabs": {
       "screens": "Screens",
-      "windows": "Windows",
-      "browserTabs": "Tabs"
+      "windows": "Windows"
     },
     "searchWindows": "Search windows...",
     "noWindowsMatch": "No windows match your search",
@@ -88,10 +87,13 @@
     "audioCaptureFailed": "Could not start the capture with system audio. Turn off system audio if your system does not support it.",
     "start": "Start stream",
     "subtitle": "Pick what to share, tune the quality, then start.",
-    "chooseWindow": "Choose a window",
-    "chooseTab": "Choose a tab",
     "stageIdle": "Nothing selected yet",
-    "stageReady": "Ready to go live"
+    "stageReady": "Ready to go live",
+    "kind": {
+      "monitor": "Screen",
+      "window": "Window",
+      "browser": "Browser tab"
+    }
   },
   "streamSettings": {
     "title": "Stream Settings",

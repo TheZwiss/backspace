@@ -13,7 +13,8 @@ import {
   stopStagedCapture,
   publishScreenShare,
   isScreenCaptureSupported,
-  type PreferredDisplaySurface,
+  describeStagedCapture,
+  type CapturedSurfaceKind,
 } from '../../utils/screenShare';
 import { StreamQualityControls, StreamSummary } from './StreamQualityControls';
 
@@ -43,13 +44,11 @@ import { StreamQualityControls, StreamSummary } from './StreamQualityControls';
  *
  * The card is a fixed, near-viewport glass surface so the layout never jumps
  * with its content. The quality panel is a drawer that slides in over the
- * source area from the right; its toggle hangs off the card's outer edge so
- * the stage inside keeps the full width.
+ * stage from the right, opened from the "Stream settings" button in the
+ * footer's action pill (next to Cancel / Start) or the footer summary.
  */
 
-type Tab = 'screens' | 'windows' | 'tabs';
-
-const SURFACE_FOR_TAB: Record<Tab, PreferredDisplaySurface> = { screens: 'monitor', windows: 'window', tabs: 'browser' };
+type Tab = 'screens' | 'windows';
 type SetupError = 'cancelled' | 'unsupported' | 'captureFailed' | 'startFailed' | null;
 
 function errorKey(err: unknown): SetupError {
@@ -89,6 +88,7 @@ export function ScreenShareSetup() {
 
   // Staged capture (all platforms)
   const [staged, setStaged] = useState<MediaStream | null>(null);
+  const [stagedInfo, setStagedInfo] = useState<{ kind: CapturedSurfaceKind | null; label: string | null }>({ kind: null, label: null });
   const [stagedShareAudio, setStagedShareAudio] = useState<boolean>(config.shareAudio);
   const [staging, setStaging] = useState(false);
   const [starting, setStarting] = useState(false);
@@ -104,18 +104,20 @@ export function ScreenShareSetup() {
     if (stagedRef.current && stagedRef.current !== next) stopStagedCapture(stagedRef.current);
     stagedRef.current = next;
     setStaged(next);
+    if (!next) setStagedInfo({ kind: null, label: null });
   }, []);
 
   /** Capture via getDisplayMedia and hold the result as the staged preview. */
-  const stage = useCallback(async (surface?: PreferredDisplaySurface) => {
+  const stage = useCallback(async () => {
     setError(null);
     setStaging(true);
     const shareAudioAtStage = useVoiceStore.getState().screenShareConfig.shareAudio;
     // System picker: no tile carries the audio preference, so send it ahead of the request
     api?.setScreenShareAudioPreference?.(shareAudioAtStage);
     try {
-      const stream = await stageScreenCapture(surface);
+      const stream = await stageScreenCapture();
       replaceStaged(stream);
+      setStagedInfo(describeStagedCapture(stream));
       setStagedShareAudio(shareAudioAtStage);
     } catch (err) {
       replaceStaged(null);
@@ -300,16 +302,15 @@ export function ScreenShareSetup() {
     : systemPicker
       ? t('voice:screenPicker.chooseHintSystem')
       : null;
-  // Browser: the segmented control steers which tab the browser's own picker opens on
-  const surfaceTabs = !electron;
-  const browserSurface = SURFACE_FOR_TAB[activeTab];
-  const chooseLabel = !surfaceTabs || activeTab === 'screens'
-    ? t('voice:screenPicker.choose')
-    : activeTab === 'windows'
-      ? t('voice:screenPicker.chooseWindow')
-      : t('voice:screenPicker.chooseTab');
-  const stageNow = () => void stage(surfaceTabs ? browserSurface : undefined);
-  const stagedName = sources.find((s) => s.id === selectedId)?.name ?? null;
+  const stageNow = () => void stage();
+  const stagedSource = sources.find((s) => s.id === selectedId) ?? null;
+  const stagedName = stagedSource?.name ?? stagedInfo.label;
+  // What the picker handed us: the standard track setting where reported, else the tile we clicked
+  const stagedKind: CapturedSurfaceKind | null =
+    stagedInfo.kind ?? (stagedSource ? (stagedSource.isScreen ? 'monitor' : 'window') : null);
+  const readyLabel = stagedKind
+    ? `${t('voice:screenPicker.stageReady')} · ${t(`voice:screenPicker.kind.${stagedKind}`)}`
+    : t('voice:screenPicker.stageReady');
 
   return createPortal(
     <div className="fixed inset-0 z-[200] flex items-center justify-center animate-fade-in">
@@ -338,30 +339,22 @@ export function ScreenShareSetup() {
           </button>
         </div>
 
-        {/* Toolbar — what kind of surface, plus window search in the app */}
-        {(showGrid || surfaceTabs) && (
+        {/* Toolbar — Screens / Windows plus window search; only where the app lists sources */}
+        {showGrid && (
           <div className="flex items-center justify-between gap-3 px-6 pb-3 flex-shrink-0">
             <div className="flex items-center gap-1 p-1 rounded-full bg-white/[0.04] ring-1 ring-white/[0.06]">
               <TabButton
                 active={activeTab === 'screens'}
                 onClick={() => setActiveTab('screens')}
                 label={t('voice:screenPicker.tabs.screens')}
-                count={showGrid ? screens.length : null}
+                count={screens.length}
               />
               <TabButton
                 active={activeTab === 'windows'}
                 onClick={() => setActiveTab('windows')}
                 label={t('voice:screenPicker.tabs.windows')}
-                count={showGrid ? windows.length : null}
+                count={windows.length}
               />
-              {surfaceTabs && (
-                <TabButton
-                  active={activeTab === 'tabs'}
-                  onClick={() => setActiveTab('tabs')}
-                  label={t('voice:screenPicker.tabs.browserTabs')}
-                  count={null}
-                />
-              )}
             </div>
             {showGrid && activeTab === 'windows' && (
               <input
@@ -420,7 +413,7 @@ export function ScreenShareSetup() {
                       </div>
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="text-[11px] font-semibold uppercase tracking-wider text-accent-mint">{t('voice:screenPicker.stageReady')}</div>
+                      <div className="text-[11px] font-semibold uppercase tracking-wider text-accent-mint truncate">{readyLabel}</div>
                       <div className="text-[14px] font-semibold text-txt-primary truncate mt-0.5">
                         {stagedName ?? t('voice:screenPicker.preview')}
                       </div>
@@ -444,9 +437,12 @@ export function ScreenShareSetup() {
                     <div className="absolute top-3 left-3 px-2 py-0.5 rounded-md bg-black/60 text-[10px] font-bold uppercase tracking-wide text-white/80">
                       {t('voice:screenPicker.preview')}
                     </div>
-                    <div className="absolute inset-x-0 bottom-0 px-4 py-3 flex items-center justify-between gap-3 bg-gradient-to-t from-black/70 via-black/30 to-transparent">
+                    <div className="absolute inset-x-0 bottom-0 px-4 py-3 flex flex-col items-start gap-2 desktop:flex-row desktop:items-center desktop:justify-between desktop:gap-3 bg-gradient-to-t from-black/70 via-black/30 to-transparent">
                       <div className="min-w-0">
-                        <div className="text-[11px] font-semibold uppercase tracking-wider text-accent-mint truncate">{t('voice:screenPicker.stageReady')}</div>
+                        <div className="text-[11px] font-semibold uppercase tracking-wider text-accent-mint truncate">{readyLabel}</div>
+                        {stagedName && (
+                          <div className="text-[13px] font-semibold text-white truncate mt-0.5">{stagedName}</div>
+                        )}
                         {audioNeedsRepick && (
                           <div className="text-[11px] text-accent-amber/90 mt-0.5">{t('voice:screenPicker.audioNeedsRepick')}</div>
                         )}
@@ -488,7 +484,7 @@ export function ScreenShareSetup() {
                       disabled={staging || !supported || (electron && pickerMode === null)}
                       className="px-5 py-2.5 rounded-full bg-accent-primary hover:bg-accent-primary-hover text-white text-sm font-semibold transition-colors shadow-lg shadow-accent-primary/20 disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
                     >
-                      {chooseLabel}
+                      {t('voice:screenPicker.choose')}
                     </button>
                     {!supported && (
                       <div className="text-[12px] text-txt-danger">{t('voice:screenPicker.unsupported')}</div>
@@ -549,7 +545,25 @@ export function ScreenShareSetup() {
               </span>
             )}
           </div>
-          <div className="glass-bubble rounded-full px-3 py-2 flex items-center gap-3 flex-shrink-0">
+          <div className="glass-bubble rounded-full px-2 py-2 flex items-center gap-1 flex-shrink-0">
+            <button
+              onClick={() => setSettingsOpen((open) => !open)}
+              aria-expanded={settingsOpen}
+              aria-controls="stream-settings-drawer-panel"
+              aria-label={t('voice:streamSettings.title')}
+              title={t('voice:streamSettings.title')}
+              className={`flex items-center gap-2 pl-3 pr-3.5 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                settingsOpen
+                  ? 'bg-white/[0.1] text-txt-primary'
+                  : 'text-txt-secondary hover:text-txt-primary hover:bg-white/[0.06]'
+              }`}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0">
+                <path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z" />
+              </svg>
+              <span className="hidden desktop:inline">{t('voice:streamSettings.title')}</span>
+            </button>
+            <div className="w-px h-5 bg-white/10 mx-1" />
             <button
               onClick={handleClose}
               className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
@@ -566,24 +580,6 @@ export function ScreenShareSetup() {
           </div>
         </div>
 
-        {/* Settings tab — hangs off the card's outer edge on desktop, sits on the stage edge on phones */}
-        <button
-          onClick={() => setSettingsOpen((open) => !open)}
-          aria-expanded={settingsOpen}
-          aria-controls="stream-settings-drawer-panel"
-          aria-label={t('voice:streamSettings.title')}
-          title={t('voice:streamSettings.title')}
-          className={`absolute top-1/2 -translate-y-1/2 right-0 desktop:translate-x-full z-30 w-10 h-28 flex flex-col items-center justify-center gap-2.5 rounded-l-xl desktop:rounded-l-none desktop:rounded-r-xl glass transition-colors ${
-            settingsOpen ? 'text-txt-primary' : 'text-txt-secondary hover:text-txt-primary'
-          }`}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z" />
-          </svg>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className={`transition-transform duration-300 ${settingsOpen ? 'rotate-180' : ''}`}>
-            <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
-          </svg>
-        </button>
       </div>
     </div>,
     portalContainer,

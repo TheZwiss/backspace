@@ -238,16 +238,8 @@ export async function applyOverdrive(
 // Capture constraints — the one place that turns config into getDisplayMedia input
 // ---------------------------------------------------------------------------
 
-/** Which kind of surface the browser picker should open on. A hint: Chromium honours it, others ignore it. */
-export type PreferredDisplaySurface = 'monitor' | 'window' | 'browser';
-
-function buildCaptureConstraints(
-  config: ScreenShareConfig,
-  opts: ScreenShareBuildResult,
-  surface?: PreferredDisplaySurface,
-): DisplayMediaStreamOptions {
+function buildCaptureConstraints(config: ScreenShareConfig, opts: ScreenShareBuildResult): DisplayMediaStreamOptions {
   const video: MediaTrackConstraints = { frameRate: { ideal: opts.capture.frameRate } };
-  if (surface) video.displaySurface = surface;
   // Native mode: no resolution constraint so the display captures at full size
   if (opts.capture.width > 0 && opts.capture.height > 0) {
     video.width = { ideal: opts.capture.width };
@@ -282,14 +274,14 @@ export function isScreenCaptureSupported(): boolean {
 }
 
 /** Must run inside a user gesture in browsers (getDisplayMedia requires transient activation). */
-export async function stageScreenCapture(surface?: PreferredDisplaySurface): Promise<MediaStream> {
+export async function stageScreenCapture(): Promise<MediaStream> {
   const config = useVoiceStore.getState().screenShareConfig;
   const opts = buildScreenShareOptions(config);
   if (!isScreenCaptureSupported()) {
     throw new DOMException('getDisplayMedia is not available', 'NotSupportedError');
   }
   try {
-    const stream = await navigator.mediaDevices.getDisplayMedia(buildCaptureConstraints(config, opts, surface));
+    const stream = await navigator.mediaDevices.getDisplayMedia(buildCaptureConstraints(config, opts));
     const video = stream.getVideoTracks()[0];
     if (video) video.contentHint = opts.contentHint;
     return stream;
@@ -306,6 +298,26 @@ export async function stageScreenCapture(surface?: PreferredDisplaySurface): Pro
     }
     throw err;
   }
+}
+
+export type CapturedSurfaceKind = 'monitor' | 'window' | 'browser';
+
+/**
+ * What the picker actually handed us. `MediaTrackSettings.displaySurface` is
+ * the standard answer (Chromium, Safari); Firefox does not report it, so the
+ * kind is unknown there and the preview is the ground truth.
+ */
+export function describeStagedCapture(stream: MediaStream): { kind: CapturedSurfaceKind | null; label: string | null } {
+  const track = stream.getVideoTracks()[0];
+  if (!track) return { kind: null, label: null };
+  const surface = (track.getSettings() as MediaTrackSettings & { displaySurface?: string }).displaySurface;
+  const kind: CapturedSurfaceKind | null =
+    surface === 'monitor' || surface === 'window' || surface === 'browser' ? surface : null;
+  // Chromium labels are raw ids ("screen:0:0", "window:1234:0", "web-contents-media-stream://…");
+  // Firefox and Safari give a human name. Only surface the latter.
+  const raw = track.label?.trim() ?? '';
+  const label = raw && !/^(screen|window|web-contents|monitor)[:\-]/i.test(raw) && !/^[a-z-]+:\/\//i.test(raw) ? raw : null;
+  return { kind, label };
 }
 
 /**
