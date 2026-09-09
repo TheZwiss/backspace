@@ -1,0 +1,187 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   Scanning — the search popover's resting state (scene bible row 10).
+
+   Nothing has been typed, so the instrument is idle: a scanner that swept the
+   channel once when the panel opened and now holds near the far edge, dim, on
+   standby. It is a story beat, not a loop. One pass, then stillness.
+
+   The popover itself stays `.glass`; every layer here lives inside the empty
+   results area and never touches the input, the filters or a result row.
+   The key light is the app's: above and to the left, outside the frame, warm
+   white. The sweep is the only emitter.
+
+   Layer order, back to front:
+     ground   the scrim: a well taken out of the glass under the copy, the
+              key light grazing the upper-left so the area is not one flat
+              tone, and the rail the scanner runs on
+     grid     a hairline scan grid in dust, two periods so it never reads as
+              graph paper, fading toward the lower right where the key does
+              not reach
+     sweep    one band of console light that crosses once and parks
+     copy     the hint, always the most legible thing on the surface
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.search-scan {
+  /* Where the band ends its pass, as a fraction of the area's width from the
+     left. Parked short of the edge so the trail is still in frame. */
+  --scan-park: -8%;
+  /* Resting strength of the parked band. The "no results" state halves it. */
+  --scan-rest: 0.34;
+  /* How far the pass travels and how long it takes. Fast enough to be an
+     event, slow enough to leave an afterimage. */
+  --scan-run: 2600ms;
+
+  position: relative;
+  isolation: isolate;
+  /* The band is wider than the area while it travels; nothing may spill. */
+  overflow: hidden;
+  /* The results column scrolls; the scan area must not add a horizontal bar. */
+  contain: paint;
+}
+
+/* ── Ground ─────────────────────────────────────────────────────────────────
+   Photographic, not decorative: it only takes light away, except for the key
+   graze at the top-left, which is what stops the area reading as a flat
+   rectangle cut out of the glass. The well sits under the copy so the text is
+   seated in something, not floating. */
+.search-scan__ground {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    /* the rail the scanner runs on: one hairline in dust near the foot, fading
+       at both ends so it is a track and not a border */
+    linear-gradient(90deg, transparent 6%, rgb(var(--derelict-rime) / 0.11) 40%, rgb(var(--derelict-rime) / 0.11) 64%, transparent 96%)
+      0 calc(100% - 15px) / 100% 1px no-repeat,
+    /* the well under the copy */
+    radial-gradient(58% 72% at 50% 56%, rgb(var(--bg-base) / 0.6), rgb(var(--bg-base) / 0.2) 60%, transparent 100%),
+    /* the key light grazing in from the upper left, warm white */
+    linear-gradient(155deg, rgb(var(--text-primary) / 0.06) 0%, rgb(var(--accent-amber) / 0.02) 22%, transparent 48%),
+    /* everything the key does not reach falls toward lavender, not black */
+    linear-gradient(335deg, rgb(var(--accent-lavender) / 0.045) 0%, transparent 50%);
+}
+
+/* ── Grid ───────────────────────────────────────────────────────────────────
+   The scanner's own graticule. Two vertical periods that share no factor
+   (23px and 61px) and one horizontal period (14px), so the eye never finds a
+   regular beat. Dust at low alpha; the mask takes it away under the copy and
+   toward the lower right, so it exists only where the key can find it. */
+.search-scan__grid {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background-image:
+    repeating-linear-gradient(90deg, rgb(var(--derelict-rime) / 0.07) 0 1px, transparent 1px 61px),
+    repeating-linear-gradient(90deg, rgb(var(--derelict-rime) / 0.028) 0 1px, transparent 1px 23px),
+    repeating-linear-gradient(0deg, rgb(var(--derelict-rime) / 0.016) 0 1px, transparent 1px 14px);
+  background-position: 9px 0, 4px 0, 0 3px;
+  -webkit-mask-image:
+    radial-gradient(64% 84% at 50% 56%, transparent 24%, rgb(0 0 0 / 0.55) 60%, rgb(0 0 0) 100%),
+    linear-gradient(150deg, rgb(0 0 0) 10%, rgb(0 0 0 / 0.5) 55%, transparent 100%),
+    linear-gradient(180deg, transparent 0, rgb(0 0 0) 10px, rgb(0 0 0) calc(100% - 10px), transparent 100%);
+  mask-image:
+    radial-gradient(64% 84% at 50% 56%, transparent 24%, rgb(0 0 0 / 0.55) 60%, rgb(0 0 0) 100%),
+    linear-gradient(150deg, rgb(0 0 0) 10%, rgb(0 0 0 / 0.5) 55%, transparent 100%),
+    linear-gradient(180deg, transparent 0, rgb(0 0 0) 10px, rgb(0 0 0) calc(100% - 10px), transparent 100%),
+    linear-gradient(90deg, transparent 0, rgb(0 0 0) 26px, rgb(0 0 0) calc(100% - 10px), transparent 100%);
+  -webkit-mask-composite: source-in, source-in, source-in;
+  mask-composite: intersect;
+}
+
+/* ── Sweep ──────────────────────────────────────────────────────────────────
+   One band of console light, the width of the whole area so that a transform
+   in its own percentages is a transform in the area's. The band occupies the
+   right-most 120px: a leading edge a few pixels wide and a trail that decays
+   behind it the way phosphor does, most of its length almost nothing. At
+   translateX(-100%) it is fully off the left edge; at 0 its edge is on the
+   right edge. Its bloom is a second element with one static blur, never an
+   animated one. */
+.search-scan__sweep {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  transform: translateX(var(--scan-park));
+  opacity: var(--scan-rest);
+  animation: search-scan-pass var(--scan-run) cubic-bezier(0.22, 0.61, 0.36, 1) 1 forwards;
+}
+
+/* the edge and its trail */
+.search-scan__sweep::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent calc(100% - 120px),
+    rgb(var(--accent-sky) / 0.02) calc(100% - 80px),
+    rgb(var(--accent-sky) / 0.06) calc(100% - 40px),
+    rgb(var(--accent-sky) / 0.14) calc(100% - 14px),
+    rgb(var(--accent-sky) / 0.3) calc(100% - 4px),
+    rgb(var(--accent-sky) / 0.85) calc(100% - 2px),
+    rgb(var(--text-primary) / 0.7) calc(100% - 1px),
+    transparent 100%
+  );
+  /* The band stands inside the field, never touching the frame: it lifts off
+     the top wall, is brightest just below it where the key lands, thins toward
+     the foot and lets go before the floor. A stripe would be a divider. */
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, rgb(0 0 0) 9px, rgb(0 0 0 / 0.75) 55%, rgb(0 0 0 / 0.3) calc(100% - 6px), transparent 100%);
+  mask-image: linear-gradient(180deg, transparent 0, rgb(0 0 0) 9px, rgb(0 0 0 / 0.75) 55%, rgb(0 0 0 / 0.3) calc(100% - 6px), transparent 100%);
+}
+
+/* the bloom: the edge's own light caught in the glass around it */
+.search-scan__sweep::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  bottom: 4px;
+  right: -6px;
+  width: 22px;
+  background: linear-gradient(90deg, transparent, rgb(var(--accent-sky) / 0.28) 50%, transparent);
+  filter: blur(7px);
+}
+
+@keyframes search-scan-pass {
+  0% {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  70% {
+    opacity: 0.85;
+  }
+  100% {
+    transform: translateX(var(--scan-park));
+    opacity: var(--scan-rest);
+  }
+}
+
+/* ── Copy ───────────────────────────────────────────────────────────────────
+   Above every layer, at the contrast it always had. */
+.search-scan__copy {
+  position: relative;
+  z-index: 3;
+}
+
+/* ── Quiet variant ──────────────────────────────────────────────────────────
+   "No results found" has already scanned; it shares the parked band at half
+   strength and does not run the pass again. */
+.search-scan--quiet {
+  --scan-rest: 0.17;
+}
+
+.search-scan--quiet .search-scan__sweep {
+  animation: none;
+}
+
+/* ── Reduced motion ─────────────────────────────────────────────────────────
+   The parked frame, immediately. The scan has already happened. */
+@media (prefers-reduced-motion: reduce) {
+  .search-scan__sweep {
+    animation: none;
+  }
+}

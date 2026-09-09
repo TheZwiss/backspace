@@ -11,7 +11,7 @@ import { VoiceChannel } from '../voice/VoiceChannel';
 import { VoiceControls } from '../voice/VoiceControls';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { ProfileAvatar } from '../ui/ProfileAvatar';
-import { Mascot } from '../ui/Mascot';
+import { CrewEmptyState } from '../ui/CrewEmptyState';
 import { wsSend } from '../../hooks/useWebSocket';
 import { AudioManager } from '../../audio/AudioManager';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
@@ -510,10 +510,7 @@ export function ChannelSidebar() {
               />
             ))}
             {dmChannels.length === 0 && (
-              <div className="flex flex-col items-center py-6 opacity-80">
-                <Mascot state="sleeping" className="w-20 h-20 mb-2" />
-                <p className="text-[13px] text-txt-tertiary">{t('spaces:sidebar.dmList.empty')}</p>
-              </div>
+              <CrewEmptyState variant="noDms" size="compact">{t('spaces:sidebar.dmList.empty')}</CrewEmptyState>
             )}
           </div>
         </div>

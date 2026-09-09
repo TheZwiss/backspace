@@ -16,7 +16,7 @@ import { MemberListToggleButton } from '../layout/MemberListToggleButton';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { getAvatarGradient } from '../../utils/gradients';
 import { api } from '../../api/client';
-import { Mascot } from '../ui/Mascot';
+import { CrewEmptyState } from '../ui/CrewEmptyState';
 import { useActivityStore } from '../../stores/activityStore';
 import { ActivityCard, hasRichActivity, getActivityAccentClass } from '../ui/ActivityCard';
 import { getPrimaryActivity } from '@backspace/shared/src/activities.js';
@@ -189,10 +189,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
               {t('social:sections.online', { n: onlineFriends.length })}
             </h2>
             {onlineFriends.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full opacity-80">
-                <Mascot state="idle" className="w-32 h-32 mb-4" />
-                <p className="text-txt-tertiary text-sm">{t('social:empty.online')}</p>
-              </div>
+              <CrewEmptyState variant="nobodyOnline" size="hero">{t('social:empty.online')}</CrewEmptyState>
             ) : (
               <>
                 {onlineFriends.map(friend => (
@@ -209,10 +206,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
               {t('social:sections.all', { n: friends.length })}
             </h2>
             {friends.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full opacity-80">
-                <Mascot state="lonely" className="w-32 h-32 mb-4" />
-                <p className="text-txt-tertiary text-sm">{t('social:empty.all')}</p>
-              </div>
+              <CrewEmptyState variant="noFriends" size="hero">{t('social:empty.all')}</CrewEmptyState>
             ) : (
               <>
                 {friends.map(friend => (
@@ -229,10 +223,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
               {t('social:sections.pending', { n: pendingIncoming.length + pendingOutgoing.length })}
             </h2>
             {[...pendingIncoming, ...pendingOutgoing].length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full opacity-80">
-                <Mascot state="sleeping" className="w-32 h-32 mb-4" />
-                <p className="text-txt-tertiary text-sm">{t('social:empty.pending')}</p>
-              </div>
+              <CrewEmptyState variant="noPending" size="hero">{t('social:empty.pending')}</CrewEmptyState>
             ) : (
               <>
                 {pendingIncoming.map(req => (
@@ -303,12 +294,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
         return (
           <div className="flex-1 overflow-y-auto p-4">
             {activeFriends.length === 0 && idleFriends.length === 0 && offlineActivityFriends.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 text-center">
-                <Mascot state="sleeping" className="w-[100px] h-[100px]" />
-                <div className="text-sm text-txt-tertiary mt-4 max-w-[240px]">
-                  {t('social:empty.activity')}
-                </div>
-              </div>
+              <CrewEmptyState variant="noActivity" size="hero">{t('social:empty.activity')}</CrewEmptyState>
             ) : (
               <>
                 {activeFriends.length > 0 && (
