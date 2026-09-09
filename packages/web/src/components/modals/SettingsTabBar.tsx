@@ -1,4 +1,5 @@
 import { useSettingsSectionsContext } from './SettingsSectionsContext';
+import { HiButton } from '../telemetry/answers/HiButton';
 
 /**
  * Reusable tab bar for settings panels in tab mode.
@@ -12,6 +13,13 @@ export function SettingsTabBar() {
   return (
     <div className="flex gap-4 border-b border-white/[0.06] -mt-2 mb-4">
       {ctx.sections.map((s) => (
+        s.invite === true ? (
+          // The invitation wears the answer button's material so it reads as
+          // an offer rather than as one more tab, but it only navigates here.
+          <div key={s.id} className="flex w-36 items-center pb-1.5 self-center">
+            <HiButton onClick={() => ctx.scrollToSection(s.id)}>{s.label}</HiButton>
+          </div>
+        ) : (
         <button
           key={s.id}
           onClick={() => ctx.scrollToSection(s.id)}
@@ -34,6 +42,7 @@ export function SettingsTabBar() {
             <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent-primary rounded-full" />
           )}
         </button>
+        )
       ))}
     </div>
   );
