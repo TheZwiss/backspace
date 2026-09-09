@@ -31,9 +31,17 @@ import { StreamQualityControls, StreamSummary } from './StreamQualityControls';
  *     getDisplayMedia(); the main process pushes its source list back
  *     (`onScreenShareSources`) and the grid appears inline; clicking a tile
  *     answers that in-flight request (`selectScreenSource`).
+ *   - Electron on a system-picker platform (Wayland): same "Choose" card,
+ *     but the OS screencast portal does the picking. Listing sources up front
+ *     would open the portal on every open, so nothing is enumerated until the
+ *     click; the main process answers the request with the portal's single
+ *     result.
  *   - Browser: the "Choose" card calls getDisplayMedia() and the browser's
  *     own prompt does the picking. Must happen inside the click (transient
  *     activation), which is why the choice is a button and not automatic.
+ *
+ * The quality panel is a drawer that slides in over the source area from the
+ * right (toggle on the card's edge), so the picker keeps the full width.
  */
 
 type Tab = 'screens' | 'windows';
@@ -58,7 +66,11 @@ export function ScreenShareSetup() {
 
   const api = getElectronAPI();
   const electron = isElectron();
-  const canListSources = electron && typeof api?.getScreenSources === 'function';
+
+  // Who picks: null until the desktop answered (or immediately 'app' where it can't be asked)
+  const [pickerMode, setPickerMode] = useState<'app' | 'system' | null>(null);
+  const canListSources = electron && pickerMode === 'app' && typeof api?.getScreenSources === 'function';
+  const systemPicker = electron && pickerMode === 'system';
 
   // Electron source grid
   const [sources, setSources] = useState<ElectronScreenSource[]>([]);
@@ -66,6 +78,9 @@ export function ScreenShareSetup() {
   const [activeTab, setActiveTab] = useState<Tab>('screens');
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // Quality drawer
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Staged capture (all platforms)
   const [staged, setStaged] = useState<MediaStream | null>(null);
@@ -91,6 +106,8 @@ export function ScreenShareSetup() {
     setError(null);
     setStaging(true);
     const shareAudioAtStage = useVoiceStore.getState().screenShareConfig.shareAudio;
+    // System picker: no tile carries the audio preference, so send it ahead of the request
+    api?.setScreenShareAudioPreference?.(shareAudioAtStage);
     try {
       const stream = await stageScreenCapture();
       replaceStaged(stream);
@@ -103,7 +120,7 @@ export function ScreenShareSetup() {
       promptInFlightRef.current = false;
       setStaging(false);
     }
-  }, [replaceStaged]);
+  }, [api, replaceStaged]);
 
   /** Electron: a tile was clicked. Resolve an in-flight prompt, or preselect and stage. */
   const stageSource = useCallback((sourceId: string) => {
@@ -122,6 +139,18 @@ export function ScreenShareSetup() {
     }
     void stage();
   }, [api, stage]);
+
+  // Ask the desktop who picks, once per open
+  useEffect(() => {
+    if (!isOpen) return;
+    if (!electron) { setPickerMode('app'); return; }
+    if (!api?.getScreenSharePickerMode) { setPickerMode('app'); return; }
+    let cancelled = false;
+    api.getScreenSharePickerMode()
+      .then((mode) => { if (!cancelled) setPickerMode(mode); })
+      .catch(() => { if (!cancelled) setPickerMode('app'); });
+    return () => { cancelled = true; };
+  }, [isOpen, electron, api]);
 
   // Electron: list sources up front when we can
   useEffect(() => {
@@ -159,6 +188,8 @@ export function ScreenShareSetup() {
     setSelectedId(null);
     setError(null);
     setStarting(false);
+    setSettingsOpen(false);
+    setSources([]);
   }, [isOpen]);
 
   // Auto-stage the only screen so the common case needs a single click on Start
@@ -207,13 +238,17 @@ export function ScreenShareSetup() {
     if (isOpen && isScreenSharing && !starting) handleClose();
   }, [isOpen, isScreenSharing, starting, handleClose]);
 
-  // Escape closes; also release the capture on unmount
+  // Escape closes the drawer first, then the screen; also release the capture on unmount
   useEffect(() => {
     if (!isOpen) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') handleClose(); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (settingsOpen) setSettingsOpen(false);
+      else handleClose();
+    };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [isOpen, handleClose]);
+  }, [isOpen, settingsOpen, handleClose]);
   useEffect(() => () => stopStagedCapture(stagedRef.current), []);
 
   const handleStart = useCallback(async () => {
@@ -255,6 +290,11 @@ export function ScreenShareSetup() {
   const supported = isScreenCaptureSupported();
   const audioNeedsRepick = !!staged && stagedShareAudio !== config.shareAudio;
   const canStart = !!staged && !staging && !starting;
+  const chooseHint = !electron
+    ? t('voice:screenPicker.chooseHint')
+    : systemPicker
+      ? t('voice:screenPicker.chooseHintSystem')
+      : null;
 
   const previewBlock = (
     <div className="relative rounded-lg overflow-hidden bg-black/60 aspect-video ring-1 ring-white/[0.06]">
@@ -289,10 +329,10 @@ export function ScreenShareSetup() {
           </button>
         </div>
 
-        {/* Body: source area + quality panel */}
-        <div className="flex-1 min-h-0 overflow-y-auto desktop:overflow-visible flex flex-col desktop:flex-row">
+        {/* Body: full-width source area; the quality drawer slides in over it */}
+        <div className="relative flex-1 min-h-0 overflow-hidden flex">
           {/* Source area */}
-          <div className="flex-shrink-0 desktop:flex-shrink desktop:flex-1 min-w-0 desktop:min-h-0 flex flex-col">
+          <div className="flex-1 min-w-0 min-h-0 flex flex-col pr-9">
             {showGrid ? (
               <>
                 {/* Tabs */}
@@ -326,7 +366,7 @@ export function ScreenShareSetup() {
                 )}
 
                 {/* Source grid */}
-                <div className="desktop:flex-1 desktop:min-h-0 desktop:overflow-y-auto scrollbar-thin px-5 py-2">
+                <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin px-5 py-2">
                   {loadingSources && sources.length === 0 ? (
                     <div className="text-center py-12 text-txt-tertiary text-sm">
                       {t('voice:screenPicker.loadingSources')}
@@ -340,7 +380,7 @@ export function ScreenShareSetup() {
                           : t('voice:screenPicker.noWindows')}
                     </div>
                   ) : (
-                    <div className={`grid gap-3 ${activeTab === 'screens' ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                    <div className={`grid gap-3 ${activeTab === 'screens' ? 'grid-cols-2 desktop:grid-cols-3' : 'grid-cols-2 desktop:grid-cols-4'}`}>
                       {activeSources.map((source) => (
                         <SourceCard
                           key={source.id}
@@ -356,9 +396,9 @@ export function ScreenShareSetup() {
 
                 {/* Staged preview strip */}
                 {staged && (
-                  <div className="px-5 pb-3 pt-2 flex-shrink-0 flex items-start gap-3">
-                    <div className="w-40 flex-shrink-0">{previewBlock}</div>
-                    <div className="min-w-0 pt-1">
+                  <div className="px-5 pb-3 pt-2 flex-shrink-0 flex items-start gap-3 border-t border-border-hard">
+                    <div className="w-40 flex-shrink-0 mt-2">{previewBlock}</div>
+                    <div className="min-w-0 pt-3">
                       <div className="text-[13px] font-semibold text-txt-primary truncate">
                         {sources.find((s) => s.id === selectedId)?.name ?? t('voice:screenPicker.preview')}
                       </div>
@@ -370,8 +410,8 @@ export function ScreenShareSetup() {
                 )}
               </>
             ) : (
-              /* Browser (or older desktop before its prompt): choose card / preview */
-              <div className="desktop:flex-1 desktop:min-h-0 desktop:overflow-y-auto scrollbar-thin px-5 pb-3 flex flex-col">
+              /* Browser, system picker, or older desktop before its prompt: choose card / preview */
+              <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin px-5 pb-3 flex flex-col">
                 {staged ? (
                   <div className="flex-1 flex flex-col justify-center gap-3">
                     {previewBlock}
@@ -393,12 +433,12 @@ export function ScreenShareSetup() {
                       <path d="M15 11L11 14V12H9V10H11V8L15 11Z" />
                     </svg>
                     <div className="text-[15px] font-semibold text-txt-primary">{t('voice:screenPicker.chooseTitle')}</div>
-                    {!electron && (
-                      <div className="text-[13px] text-txt-tertiary max-w-sm">{t('voice:screenPicker.chooseHint')}</div>
+                    {chooseHint && (
+                      <div className="text-[13px] text-txt-tertiary max-w-sm">{chooseHint}</div>
                     )}
                     <button
                       onClick={() => void stage()}
-                      disabled={staging || !supported}
+                      disabled={staging || !supported || (electron && pickerMode === null)}
                       className="mt-1 px-4 py-2 rounded-full bg-accent-primary hover:bg-accent-primary-hover text-white text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       {t('voice:screenPicker.choose')}
@@ -412,17 +452,75 @@ export function ScreenShareSetup() {
             )}
           </div>
 
-          {/* Quality panel */}
-          <div className="desktop:w-[280px] desktop:flex-shrink-0 desktop:border-l border-t desktop:border-t-0 border-border-hard desktop:overflow-y-auto scrollbar-thin px-5 py-3">
-            <div className="text-[14px] font-bold text-txt-primary mb-3">{t('voice:streamSettings.title')}</div>
-            <StreamQualityControls />
+          {/* Drawer scrim — click outside the drawer closes it */}
+          {settingsOpen && (
+            <div className="absolute inset-0 z-10 bg-black/30 animate-fade-in" onClick={() => setSettingsOpen(false)} />
+          )}
+
+          {/* Quality drawer: slides in from the right, over the source area */}
+          <div
+            data-testid="stream-settings-drawer"
+            className={`absolute inset-y-0 right-0 z-20 flex items-stretch transition-transform duration-300 ease-out ${
+              settingsOpen ? 'translate-x-0' : 'translate-x-[calc(100%-2.25rem)]'
+            }`}
+          >
+            {/* Edge tab — stays attached to the drawer so it doubles as the close handle */}
+            <button
+              onClick={() => setSettingsOpen((open) => !open)}
+              aria-expanded={settingsOpen}
+              aria-controls="stream-settings-drawer-panel"
+              aria-label={t('voice:streamSettings.title')}
+              title={t('voice:streamSettings.title')}
+              className={`self-center w-9 h-28 -mr-px rounded-l-lg flex flex-col items-center justify-center gap-2 transition-colors ${
+                settingsOpen
+                  ? 'glass text-txt-primary'
+                  : 'bg-surface-elevated/90 text-txt-secondary hover:bg-interactive-hover hover:text-txt-primary ring-1 ring-white/[0.06]'
+              }`}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z" />
+              </svg>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className={`transition-transform duration-300 ${settingsOpen ? 'rotate-180' : ''}`}>
+                <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
+              </svg>
+            </button>
+
+            {/* Panel */}
+            <div
+              id="stream-settings-drawer-panel"
+              aria-hidden={!settingsOpen}
+              className="w-[calc(calc(100*var(--app-vw))-5rem)] desktop:w-[320px] glass rounded-l-lg flex flex-col min-h-0 shadow-2xl"
+            >
+              <div className="flex items-center justify-between px-4 pt-3 pb-2 border-b border-border-hard flex-shrink-0">
+                <span className="text-[14px] font-bold text-txt-primary">{t('voice:streamSettings.title')}</span>
+                <button
+                  onClick={() => setSettingsOpen(false)}
+                  className="text-txt-tertiary hover:text-txt-primary transition-colors p-1"
+                  aria-label={t('common:actions.close')}
+                  tabIndex={settingsOpen ? 0 : -1}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M18.4 4L12 10.4L5.6 4L4 5.6L10.4 12L4 18.4L5.6 20L12 13.6L18.4 20L20 18.4L13.6 12L20 5.6L18.4 4Z" />
+                  </svg>
+                </button>
+              </div>
+              <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin px-4 py-3">
+                <StreamQualityControls />
+              </div>
+            </div>
           </div>
         </div>
 
         {/* Footer */}
         <div className="flex-shrink-0 flex items-center justify-between gap-3 px-5 pt-3 pb-4 border-t border-border-hard">
           <div className="min-w-0 flex flex-col">
-            <StreamSummary className="truncate" />
+            <button
+              onClick={() => setSettingsOpen(true)}
+              className="text-left hover:text-txt-secondary transition-colors truncate"
+              title={t('voice:streamSettings.title')}
+            >
+              <StreamSummary />
+            </button>
             {error && (
               <span className="text-[12px] text-txt-danger truncate" role="alert">
                 {t(`voice:screenPicker.${error}`)}

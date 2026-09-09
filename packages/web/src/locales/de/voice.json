@@ -75,6 +75,7 @@
     "loadingSources": "Bildschirme und Fenster werden gesucht …",
     "chooseTitle": "Wähle, was du teilen möchtest",
     "chooseHint": "Dein Browser fragt dich, welchen Bildschirm, welches Fenster oder welchen Tab du teilen möchtest.",
+    "chooseHintSystem": "Dein System fragt dich, welchen Bildschirm oder welches Fenster du teilen möchtest.",
     "choose": "Bildschirm wählen",
     "chooseAgain": "Anderen Bildschirm wählen",
     "preview": "Vorschau",

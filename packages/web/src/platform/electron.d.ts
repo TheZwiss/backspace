@@ -127,6 +127,14 @@ interface BackspaceElectronAPI {
    */
   getScreenSources?: () => Promise<ElectronScreenSource[]>;
   preselectScreenSource?: (sourceId: string, shareAudio?: boolean) => void;
+  /**
+   * 'system' when the OS picks the source (Wayland screencast portal): the
+   * renderer shows a "choose" card that triggers the portal on click instead
+   * of listing sources, which would prompt on every open. 'app' elsewhere.
+   */
+  getScreenSharePickerMode?: () => Promise<'app' | 'system'>;
+  /** System-picker captures carry no preselection; this tells main whether to add loopback audio. */
+  setScreenShareAudioPreference?: (shareAudio: boolean) => void;
 
   // Instance URL management
   getInstanceUrl: () => Promise<string | null>;

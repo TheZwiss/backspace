@@ -668,6 +668,17 @@ The main process intercepts `getDisplayMedia()` via `session.defaultSession.setD
 3. Renderer calls `getDisplayMedia()` → handler takes the pending selection (one-shot), resolves the id against the cache (re-enumerating if missing) and calls `callback({ video: source, audio: 'loopback' })` (audio only when `shareAudio`). No prompt round-trip.
 4. The stream is previewed in the setup screen and published on "Start stream".
 
+### System-picker flow (Wayland)
+
+`get-screen-share-picker-mode` returns `'system'` on Linux when `XDG_SESSION_TYPE=wayland` (or `WAYLAND_DISPLAY` is set and the session is not X11), `'app'` everywhere else. Under Wayland, `desktopCapturer.getSources()` itself opens the compositor's screencast portal and returns only what the user chose there, so:
+
+1. The renderer never enumerates up front (that would prompt on every open); it shows a "Choose" card and sends `screen-share-audio-preference` with the loopback choice
+2. The card's click calls `getDisplayMedia()` → handler enumerates → portal dialog → one source back
+3. Handler sees `'system'` mode and exactly one source and calls `callback({ video: source, audio: 'loopback'? })` directly, no `screen-share-sources` round trip
+4. Zero sources means the portal was cancelled → request denied → renderer shows "No screen was chosen"
+
+There is no persistent grant: the portal asks per share by design, and one screen or window per share is inherent. The AppImage packaging is unrelated.
+
 ### Prompted flow (older web clients, or nothing preselected)
 
 1. Handler invoked with no pending selection → main enumerates sources and sends them via `screen-share-sources` IPC

@@ -75,6 +75,7 @@
     "loadingSources": "Looking for screens and windows…",
     "chooseTitle": "Choose what to share",
     "chooseHint": "Your browser will ask which screen, window or tab to share.",
+    "chooseHintSystem": "Your system will ask which screen or window to share.",
     "choose": "Choose screen",
     "chooseAgain": "Choose a different screen",
     "preview": "Preview",

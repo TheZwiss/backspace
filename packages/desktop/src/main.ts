@@ -555,6 +555,8 @@ interface PendingScreenSelection {
 const PENDING_SCREEN_SELECTION_TTL_MS = 30_000;
 
 let pendingScreenSelection: PendingScreenSelection | null = null;
+/** Loopback preference for system-picker captures (no preselection carries it there). */
+let lastSystemPickerShareAudio: boolean | null = null;
 /** Last enumeration, so a preselected id resolves to its DesktopCapturerSource without a second scan. */
 let lastScreenSources: Electron.DesktopCapturerSource[] = [];
 
@@ -576,6 +578,23 @@ function serializeScreenSources(sources: Electron.DesktopCapturerSource[]): Seri
     appIconDataUrl: source.appIcon && !source.appIcon.isEmpty() ? source.appIcon.toDataURL() : null,
     isScreen: source.id.startsWith('screen:'),
   }));
+}
+
+/**
+ * Who picks the source. On a Wayland session the compositor's screencast
+ * portal does: `desktopCapturer.getSources()` opens the portal dialog and
+ * returns only what the user chose there, so an in-app grid is pointless and
+ * listing sources up front would prompt the user on every open. The renderer
+ * then shows a "choose" card that triggers the portal on click, like a browser.
+ * X11, macOS and Windows list everything without a prompt.
+ */
+type ScreenSharePickerMode = 'app' | 'system';
+
+function screenSharePickerMode(): ScreenSharePickerMode {
+  if (process.platform !== 'linux') return 'app';
+  const sessionType = (process.env.XDG_SESSION_TYPE ?? '').toLowerCase();
+  if (sessionType === 'wayland' || (!!process.env.WAYLAND_DISPLAY && sessionType !== 'x11')) return 'system';
+  return 'app';
 }
 
 /** One-shot: returns and clears the pending preselection, or null when absent or stale. */
@@ -749,9 +768,15 @@ function registerIpcHandlers(): void {
   // Setup-screen flow: the renderer lists sources up front, and preselects one
   // right before it calls getDisplayMedia(); the handler answers from that.
   ipcMain.handle('get-screen-sources', async () => serializeScreenSources(await enumerateScreenSources()));
+  ipcMain.handle('get-screen-share-picker-mode', () => screenSharePickerMode());
   ipcMain.on('screen-share-preselect', (_event, sourceId: string, shareAudio?: boolean) => {
     if (typeof sourceId !== 'string' || !sourceId) return;
     pendingScreenSelection = { sourceId, shareAudio: shareAudio ?? true, at: Date.now() };
+  });
+  // System-picker sessions have no tile to preselect; the renderer only tells
+  // us whether loopback audio should ride along with whatever the portal returns.
+  ipcMain.on('screen-share-audio-preference', (_event, shareAudio?: boolean) => {
+    lastSystemPickerShareAudio = shareAudio ?? true;
   });
 
   // Auto-launch settings
@@ -1233,9 +1258,19 @@ if (!gotTheLock) {
         console.log('[Main:ScreenShare] Got', sources.length, 'sources');
 
         if (sources.length === 0) {
-          console.warn('[Main:ScreenShare] No sources — Screen Recording permission may not be granted');
+          console.warn('[Main:ScreenShare] No sources — Screen Recording permission may not be granted, or the system picker was cancelled');
           // @ts-ignore — Electron throws if we pass {} when video was requested; pass nothing to deny
           callback();
+          return;
+        }
+
+        // System picker (Wayland portal): the user already chose in the
+        // portal dialog and this is the only source it returned. Answer
+        // directly instead of showing a one-tile grid.
+        if (screenSharePickerMode() === 'system' && sources.length === 1) {
+          const shareAudio = lastSystemPickerShareAudio ?? true;
+          console.log('[Main:ScreenShare] System picker returned one source:', sources[0]!.id, 'audio:', shareAudio);
+          callback({ video: sources[0]!, ...(shareAudio ? { audio: 'loopback' } : {}) });
           return;
         }
 
