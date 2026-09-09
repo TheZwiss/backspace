@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { AuthBackdrop } from './auth/AuthBackdrop';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Trans, useTranslation } from 'react-i18next';
 import { useAuthStore } from '../stores/authStore';
@@ -207,7 +208,7 @@ export function JoinPage() {
   if (isLoadingPreview) {
     return (
       <div className="h-full overflow-y-auto flex flex-col items-center bg-surface-base relative">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(124,108,246,0.06)_0%,transparent_50%)]" />
+        <AuthBackdrop variant="join" />
         <div className="my-auto flex-shrink-0 text-center relative z-10">
           <svg className="animate-spin w-10 h-10 text-accent-primary mx-auto mb-4" viewBox="0 0 24 24" fill="none">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -223,7 +224,7 @@ export function JoinPage() {
   if (previewError || !preview) {
     return (
       <div className="h-full overflow-y-auto flex flex-col items-center bg-surface-base relative">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(124,108,246,0.06)_0%,transparent_50%)]" />
+        <AuthBackdrop variant="invalid" />
         <div className="my-auto flex-shrink-0 w-full max-w-[480px] bg-surface-elevated rounded-md p-8 shadow-elevation-high relative z-10 text-center">
           <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-accent-rose/10 flex items-center justify-center">
             <svg className="w-8 h-8 text-accent-rose" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -257,7 +258,7 @@ export function JoinPage() {
   // Main invite page
   return (
     <div className="h-full overflow-y-auto flex flex-col items-center bg-surface-base relative">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(124,108,246,0.06)_0%,transparent_50%)]" />
+      <AuthBackdrop variant="join" />
       <div className="my-auto flex-shrink-0 w-full max-w-[480px] bg-surface-elevated rounded-md p-8 shadow-elevation-high relative z-10">
         {/* Space preview */}
         <div className="text-center mb-6">

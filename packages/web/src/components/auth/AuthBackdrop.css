@@ -1,0 +1,625 @@
+/* ── DOCKING ──
+ * The approach to the station behind the login, register and invite cards.
+ * Scene bible row 2. Seen from the craft you are arriving in: one large soft
+ * world low right, mostly on its night side, the key catching its limb; the
+ * station's rim strung with running lights along the bottom of the frame,
+ * close enough to hide the world's lower limb; deep space behind. The card
+ * is the airlock window, and the scene is the last minute before the door.
+ *
+ * Structure, back to front:
+ *   .auth-backdrop        zero-height sticky root: costs no layout, stays put
+ *     __frame             the window, sized to the scroll port
+ *       __void            deep space: warm dark floor, the key's spill, grain
+ *       __stars--far      the far field, static, tiny and dim
+ *       __stars--near     the near field, larger and sharper, drifting
+ *       __world           the world: night side, limb, atmosphere
+ *       __approach        the slow creep of the whole station toward us
+ *         __station       the rim of the station: hull, rim light, seam
+ *           __port        windows in the hull, the station's own cabin light
+ *           __lamp        running lights on the rim, the emitters
+ *           __struct      the skyline: antenna masts and one gantry
+ *           __mast        the beacon's mast, and __beacon on top of it
+ *           __berth       the one light that is still coming on
+ *       __dust            motes: only in the derelict beat
+ *       __scrim           the vignette, taking light away where the card is
+ *
+ * LIGHT: one key, above and to the left, outside the frame, warm white. It
+ * grazes the world's upper-left limb and the left of the station's rim, and
+ * whatever it does not reach falls to lavender, never to black. Only the
+ * lamps, the beacon and the world's atmosphere emit, and each blooms outward
+ * from itself with a box-shadow rather than a filter: this is full-viewport
+ * on a Raspberry Pi. No backdrop-filter, no live SVG filter anywhere here.
+ *
+ * MOTION at rest, every variant: three infinite animations, all transform or
+ * opacity, all six seconds or longer. The near field drifts, the station
+ * creeps closer, and one beat belongs to the variant.
+ */
+
+.auth-backdrop {
+  /* The four beats share one scene and differ in these channels. */
+  --limb-a: var(--accent-mint);
+  --limb-b: var(--accent-sky);
+  --limb-c: var(--accent-lavender);
+  --limb-strength: 1;
+  --atmo-strength: 1;
+  --spill-warmth: 1;
+  --lamp-on: 1;
+  --grain: 0.035;
+  /* The key's spill into the void: colour and weight of the warm-white
+     wash from the top-left, and the hue the shaded right turns toward. */
+  --spill: var(--text-primary);
+  --spill-a: 0.16;
+  --warm-a: 0.09;
+  --turn: var(--accent-lavender);
+  /* The scroll port's height. The component measures it; until then, the
+     app's viewport token less the desktop title bar. */
+  --scene-h: calc(100 * var(--app-vh) - var(--titlebar-inset, 0px));
+
+  position: sticky;
+  top: 0;
+  z-index: 0;
+  width: 100%;
+  height: 0;
+  flex: none;
+  align-self: stretch;
+  overflow: visible;
+  pointer-events: none;
+}
+
+/* ── FRAME ── the window itself, the scroll port's height. Everything inside
+   is clipped here, never by the root. */
+.auth-backdrop__frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: var(--scene-h);
+  overflow: hidden;
+  contain: strict;
+  isolation: isolate;
+}
+
+/* ── VOID ── never flat. The floor falls from chat-dark upper left to base-dark
+   lower right, the way the key falls off. On top of it: the key's own spill
+   coming in from outside the top-left corner, warm white through the thin
+   dust between us and the station; a lavender turn on the shaded right; and
+   grain, so nothing this large bands. */
+.auth-backdrop__void {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(75% 90% at -8% -12%, rgb(var(--spill) / calc(var(--spill-a) * var(--spill-warmth))), transparent 60%),
+    radial-gradient(50% 60% at 0% -6%, rgb(var(--accent-peach) / calc(var(--warm-a) * var(--spill-warmth))), transparent 64%),
+    radial-gradient(70% 80% at 100% 30%, rgb(var(--turn) / 0.07), transparent 66%),
+    linear-gradient(158deg, rgb(var(--bg-chat)) 0%, rgb(var(--bg-chat)) 30%, rgb(var(--bg-base)) 100%);
+}
+/* The grain: one noise tile, rasterised once, composited plainly at a
+   weight of a few percent. Plain compositing on purpose: a blend mode on a
+   layer this size shows the rasteriser's tile seams on a machine without a
+   GPU, and the grain is here to hide banding, not to add lines. The tile is
+   lavender-grey speckle at half alpha, so at this weight it neither lifts nor
+   drops the floor, it only breaks it up. */
+.auth-backdrop__void::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='5' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.62 0 0 0 0 0.6 0 0 0 0 0.72 0 0 0 1.4 -0.5'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23g)'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
+  opacity: var(--grain);
+}
+
+/* ── STARS ── two fields at different densities. The tiles are large so a
+   full monitor never shows the repeat, and the two periods share no factor,
+   so their overlap never lines up either. The far field is static, tiny and
+   dim; the near one is larger, sharper and drifts, and that difference is the
+   whole depth cue. No blur: out-of-focus is faked with size and alpha. */
+.auth-backdrop__stars {
+  position: absolute;
+  inset: -12% 0 0 0;
+  background-repeat: repeat;
+}
+.auth-backdrop__stars--far {
+  background-image:
+    radial-gradient(1px 1px at 23px 41px, rgb(var(--text-primary) / 0.48), transparent),
+    radial-gradient(1px 1px at 87px 12px, rgb(var(--text-primary) / 0.36), transparent),
+    radial-gradient(1px 1px at 141px 66px, rgb(var(--accent-sky) / 0.44), transparent),
+    radial-gradient(1px 1px at 196px 29px, rgb(var(--text-primary) / 0.40), transparent),
+    radial-gradient(1px 1px at 251px 98px, rgb(var(--text-primary) / 0.32), transparent),
+    radial-gradient(1px 1px at 302px 47px, rgb(var(--accent-lavender) / 0.44), transparent),
+    radial-gradient(1px 1px at 58px 131px, rgb(var(--text-primary) / 0.38), transparent),
+    radial-gradient(1px 1px at 173px 152px, rgb(var(--text-primary) / 0.34), transparent),
+    radial-gradient(1px 1px at 331px 187px, rgb(var(--text-primary) / 0.42), transparent),
+    radial-gradient(1px 1px at 112px 214px, rgb(var(--accent-peach) / 0.38), transparent),
+    radial-gradient(1px 1px at 268px 243px, rgb(var(--text-primary) / 0.34), transparent),
+    radial-gradient(1px 1px at 19px 262px, rgb(var(--text-primary) / 0.30), transparent),
+    radial-gradient(1px 1px at 222px 179px, rgb(var(--text-primary) / 0.44), transparent);
+  background-size: 347px 283px;
+}
+.auth-backdrop__stars--near {
+  background-image:
+    radial-gradient(1.6px 1.6px at 61px 44px, rgb(var(--text-primary) / 0.85), transparent),
+    radial-gradient(4px 4px at 61px 44px, rgb(var(--text-primary) / 0.12), transparent),
+    radial-gradient(1.3px 1.3px at 214px 121px, rgb(var(--text-primary) / 0.62), transparent),
+    radial-gradient(1.8px 1.8px at 388px 66px, rgb(var(--accent-amber) / 0.72), transparent),
+    radial-gradient(4.5px 4.5px at 388px 66px, rgb(var(--accent-amber) / 0.12), transparent),
+    radial-gradient(1.2px 1.2px at 302px 233px, rgb(var(--accent-sky) / 0.6), transparent),
+    radial-gradient(1.4px 1.4px at 117px 297px, rgb(var(--text-primary) / 0.55), transparent),
+    radial-gradient(1.7px 1.7px at 481px 318px, rgb(var(--text-primary) / 0.7), transparent),
+    radial-gradient(4px 4px at 481px 318px, rgb(var(--accent-lavender) / 0.12), transparent),
+    radial-gradient(1.1px 1.1px at 512px 172px, rgb(var(--text-primary) / 0.45), transparent),
+    radial-gradient(1.5px 1.5px at 33px 356px, rgb(var(--text-primary) / 0.66), transparent),
+    radial-gradient(1.2px 1.2px at 268px 19px, rgb(var(--accent-lavender) / 0.6), transparent),
+    radial-gradient(1.4px 1.4px at 441px 214px, rgb(var(--text-primary) / 0.58), transparent);
+  background-size: 563px 401px;
+  animation: authDrift 160s linear infinite;
+}
+
+/* ── WORLD ── mostly its own night side, sized from the frame's height and
+   cut off by the bottom-right corner so it reads as far bigger than the
+   window. Back to front in the background stack: the body, base-dark turning
+   lavender on the far side rather than black; the key's light coming in from
+   the upper-left limb and giving out well before the centre, which is what
+   makes it a crescent; and weather, a low noise tile that only ever darkens,
+   masked by its own alpha so the lit side keeps its light. */
+.auth-backdrop__world {
+  --world-d: min(calc(var(--scene-h) * 0.92), 170%);
+  position: absolute;
+  right: calc(var(--world-d) * -0.36);
+  bottom: calc(var(--world-d) * -0.5);
+  width: var(--world-d);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260'%3E%3Cfilter id='w' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.009' numOctaves='4' seed='9' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.05 0 0 0 0 0.045 0 0 0 0 0.07 0 0 0 1.1 -0.35'/%3E%3C/filter%3E%3Crect width='260' height='260' filter='url(%23w)'/%3E%3C/svg%3E"),
+    radial-gradient(circle at 12% 10%,
+      rgb(var(--text-primary) / calc(0.22 * var(--limb-strength))) 0%,
+      rgb(var(--limb-b) / calc(0.3 * var(--limb-strength))) 12%,
+      rgb(var(--limb-a) / calc(0.14 * var(--limb-strength))) 26%,
+      rgb(var(--limb-c) / calc(0.08 * var(--limb-strength))) 40%,
+      transparent 56%),
+    radial-gradient(circle at 78% 82%, rgb(var(--accent-lavender) / 0.09), transparent 60%),
+    radial-gradient(circle at 30% 26%, rgb(var(--bg-channel)) 0%, rgb(var(--bg-chat)) 40%, rgb(var(--bg-base)) 100%);
+  background-size: 520px 520px, 100% 100%, 100% 100%, 100% 100%;
+}
+/* The limb: where the key grazes the edge itself, a hairline's worth of warm
+   white turning mint then sky along the upper-left arc, gone by the
+   terminator. Conic under a thin ring mask, no blur. */
+.auth-backdrop__world::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 208deg,
+    transparent 0deg,
+    rgb(var(--limb-a) / calc(0.45 * var(--limb-strength))) 26deg,
+    rgb(var(--text-primary) / calc(0.55 * var(--limb-strength))) 48deg,
+    rgb(var(--limb-b) / calc(0.6 * var(--limb-strength))) 74deg,
+    rgb(var(--limb-c) / calc(0.3 * var(--limb-strength))) 118deg,
+    transparent 168deg
+  );
+  -webkit-mask: radial-gradient(closest-side, transparent 97.2%, rgb(0 0 0 / 0.5) 98.6%, rgb(0 0 0 / 1) 99.5%, rgb(0 0 0 / 1) 100%);
+  mask: radial-gradient(closest-side, transparent 97.2%, rgb(0 0 0 / 0.5) 98.6%, rgb(0 0 0 / 1) 99.5%, rgb(0 0 0 / 1) 100%);
+}
+/* Atmosphere: the same light one step out and out of focus, the one thing on
+   the world that emits. It lives outside the disc: a tight bright ring on the
+   edge and a wide dim one beyond it, masked to the lit side. */
+.auth-backdrop__world::after {
+  content: '';
+  position: absolute;
+  inset: -9%;
+  border-radius: 50%;
+  background:
+    radial-gradient(closest-side,
+      transparent 83%,
+      rgb(var(--limb-b) / calc(0.36 * var(--atmo-strength))) 84.6%,
+      rgb(var(--limb-b) / calc(0.18 * var(--atmo-strength))) 87.5%,
+      rgb(var(--limb-c) / calc(0.07 * var(--atmo-strength))) 93%,
+      transparent 100%);
+  -webkit-mask: linear-gradient(135deg, rgb(0 0 0 / 1) 26%, rgb(0 0 0 / 0.55) 42%, transparent 58%);
+  mask: linear-gradient(135deg, rgb(0 0 0 / 1) 26%, rgb(0 0 0 / 0.55) 42%, transparent 58%);
+}
+
+/* ── APPROACH ── the whole station creeps toward us: one transform on the
+   wrapper, so every lamp and window rides with the hull. Forty seconds each
+   way; seen only if you stay. The wrapper is a band along the bottom, not
+   the frame: it is the composited layer the animation runs on, and the rim
+   circle inside it is far larger than any screen. --rise is how far above
+   the bottom edge the crest of the rim sits; --headroom is for the mast and
+   the blooms above it. */
+.auth-backdrop__approach {
+  --rise: clamp(60px, 14%, 168px);
+  --headroom: 48px;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: calc(var(--rise) + var(--headroom));
+  overflow: hidden;
+  transform-origin: 50% 100%;
+  animation: authApproach 42s ease-in-out infinite alternate;
+}
+
+/* ── STATION ── the rim of a ring far bigger than the window. Its width is a
+   fixed multiple of the frame's width, so the visible arc always spans the
+   same 45 degrees of it, and the lamps (placed by angle in the component)
+   keep their spacing at every width. The hull is matte: base-dark, warmed to
+   bulkhead where the key reaches the top edge, and the rim is a hairline that
+   turns hue like the material rim does. */
+.auth-backdrop__station {
+  position: absolute;
+  left: -80%;
+  top: var(--headroom);
+  width: 260%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  /* Colours of the hull, so the derelict can swap the whole thing cold. */
+  --hull-far: var(--bg-base);
+  --hull-mid: var(--bg-chat);
+  --hull-near: var(--bg-channel);
+  --hull-lip: var(--bg-elevated);
+  --hull-seam: var(--text-primary);
+  background:
+    /* the lip: a groove just under the rim, so the edge has a thickness */
+    radial-gradient(closest-side, transparent 99.3%, rgb(var(--hull-far) / 0.85) 99.4%, rgb(var(--hull-far) / 0.85) 99.52%, transparent 99.62%),
+    /* the seam: a second hairline further in, where a deck joins the rim */
+    radial-gradient(closest-side, transparent 97.5%, rgb(var(--derelict-signal) / 0.16) 97.62%, rgb(var(--derelict-signal) / 0.16) 97.72%, transparent 97.84%),
+    /* panel joins: hand-placed, uneven, the key catching each edge and
+       catching less of it toward the right; two are doubled where a bay door
+       meets the hull. Radial from the centre, so they cross the rim square. */
+    conic-gradient(from 0deg,
+      transparent 339.1deg, rgb(var(--hull-seam) / 0.11) 339.1deg 339.17deg, transparent 339.17deg,
+      transparent 343.6deg, rgb(var(--hull-seam) / 0.1) 343.6deg 343.67deg, transparent 343.67deg,
+      transparent 344.05deg, rgb(var(--hull-seam) / 0.08) 344.05deg 344.11deg, transparent 344.11deg,
+      transparent 351.3deg, rgb(var(--hull-seam) / 0.09) 351.3deg 351.37deg, transparent 351.37deg,
+      transparent 355.9deg, rgb(var(--hull-seam) / 0.07) 355.9deg 355.96deg, transparent 355.96deg,
+      transparent 2.7deg, rgb(var(--hull-seam) / 0.06) 2.7deg 2.77deg, transparent 2.77deg,
+      transparent 7.0deg, rgb(var(--hull-seam) / 0.055) 7.0deg 7.07deg, transparent 7.07deg,
+      transparent 7.45deg, rgb(var(--hull-seam) / 0.045) 7.45deg 7.51deg, transparent 7.51deg,
+      transparent 13.8deg, rgb(var(--hull-seam) / 0.045) 13.8deg 13.87deg, transparent 13.87deg,
+      transparent 18.1deg, rgb(var(--hull-seam) / 0.035) 18.1deg 18.16deg, transparent 18.16deg,
+      transparent 18.16deg),
+    /* the hull falling away below the rim: lit at the lip, base by the deck */
+    radial-gradient(closest-side, rgb(var(--hull-far)) 0%, rgb(var(--hull-far)) 92%, rgb(var(--hull-mid)) 96%, rgb(var(--hull-near)) 99.1%, rgb(var(--hull-lip)) 100%);
+}
+/* Where the key lands: the left half of the visible rim is lit from the top
+   edge in, and the light gives out toward the right. */
+.auth-backdrop__station::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 332deg,
+    transparent 0deg,
+    rgb(var(--text-primary) / 0.22) 20deg,
+    rgb(var(--accent-mint) / 0.12) 34deg,
+    rgb(var(--accent-lavender) / 0.08) 48deg,
+    transparent 60deg
+  );
+  -webkit-mask: radial-gradient(closest-side, transparent 98.3%, rgb(0 0 0 / 1) 99.4%, rgb(0 0 0 / 1) 100%);
+  mask: radial-gradient(closest-side, transparent 98.3%, rgb(0 0 0 / 1) 99.4%, rgb(0 0 0 / 1) 100%);
+}
+/* The hairline itself, warm white where the key lands, lavender coming back. */
+.auth-backdrop__station::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  padding: 1px;
+  background: conic-gradient(
+    from 330deg,
+    rgb(var(--accent-lavender) / 0.1) 0deg,
+    rgb(var(--text-primary) / 0.45) 22deg,
+    rgb(var(--accent-mint) / 0.28) 36deg,
+    rgb(var(--accent-lavender) / 0.16) 52deg,
+    rgb(var(--accent-lavender) / 0.08) 62deg,
+    transparent 70deg
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+}
+
+/* ── PORTS ── windows in the hull below the rim. Not emitters that matter:
+   the station's own cabin light, a step dimmer than the lamps, there to give
+   the hull scale. */
+.auth-backdrop__port {
+  position: absolute;
+  height: 2px;
+  transform: translate(-50%, -50%);
+  border-radius: 1px;
+  background: rgb(var(--accent-amber) / calc(0.55 * var(--lamp-on)));
+  box-shadow: 0 0 4px rgb(var(--accent-amber) / calc(0.35 * var(--lamp-on)));
+}
+
+/* ── LAMPS ── the running lights, the scene's emitters. Each is a dot and its
+   bloom: a tight halo and a wide dim one, both box-shadows. Centred on the rim
+   by a translate so the component only places the point. */
+.auth-backdrop__lamp {
+  --lamp-rgb: var(--accent-amber);
+  --lamp-strength: 1;
+  position: absolute;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: rgb(var(--lamp-rgb) / calc(var(--lamp-strength) * var(--lamp-on)));
+  box-shadow:
+    0 0 0 0.5px rgb(var(--text-primary) / calc(0.25 * var(--lamp-strength) * var(--lamp-on))),
+    0 0 6px 1px rgb(var(--lamp-rgb) / calc(0.55 * var(--lamp-strength) * var(--lamp-on))),
+    0 0 22px 5px rgb(var(--lamp-rgb) / calc(0.16 * var(--lamp-strength) * var(--lamp-on)));
+}
+.auth-backdrop__lamp--cold {
+  --lamp-rgb: var(--accent-sky);
+  --lamp-strength: 0.8;
+}
+.auth-backdrop__lamp--dim {
+  --lamp-strength: 0.55;
+}
+
+/* ── SKYLINE ── what rises above the rim: antenna masts and one gantry, thin
+   enough to be silhouettes, each lit down its length from the top where the
+   key reaches it. The beacon's mast is one of them. */
+.auth-backdrop__mast,
+.auth-backdrop__struct {
+  --struct-lit: var(--text-primary);
+  --struct-shade: var(--accent-lavender);
+  position: absolute;
+  width: 1px;
+  height: var(--struct-h, 18px);
+  margin-top: calc(-1 * var(--struct-h, 18px));
+  background: linear-gradient(180deg, rgb(var(--struct-lit) / 0.32), rgb(var(--struct-shade) / 0.1));
+}
+/* The gantry: a post with a boom across its top, the boom lit on its top face. */
+.auth-backdrop__struct--gantry::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -3px;
+  width: 9px;
+  height: 1px;
+  background: linear-gradient(90deg, rgb(var(--struct-lit) / 0.34), rgb(var(--struct-shade) / 0.12));
+}
+.auth-backdrop__struct--gantry::after {
+  content: '';
+  position: absolute;
+  top: 1px;
+  left: 5px;
+  width: 1px;
+  height: 4px;
+  background: rgb(var(--struct-shade) / 0.16);
+}
+.auth-backdrop__mast {
+  --struct-h: 26px;
+}
+.auth-backdrop__beacon {
+  /* The core and its bloom are two tokens so the hail can be peach toward
+     coral, the palette's `hail`, without a literal. */
+  --beacon-core: var(--accent-amber);
+  --beacon-glow: var(--accent-amber);
+  --beacon-size: 4px;
+  position: absolute;
+  top: 0;
+  left: 0.5px;
+  width: var(--beacon-size);
+  height: var(--beacon-size);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: rgb(var(--beacon-core) / var(--lamp-on));
+  box-shadow:
+    0 0 0 0.5px rgb(var(--text-primary) / calc(0.3 * var(--lamp-on))),
+    0 0 8px 2px rgb(var(--beacon-glow) / calc(0.6 * var(--lamp-on))),
+    0 0 30px 8px rgb(var(--beacon-glow) / calc(0.2 * var(--lamp-on)));
+}
+
+/* ── BERTH ── the running light that is still coming on. Present on every
+   variant so the rim reads the same, lit only on register. */
+.auth-backdrop__berth {
+  position: absolute;
+  width: 3.5px;
+  height: 3.5px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: rgb(var(--accent-amber));
+  box-shadow:
+    0 0 0 0.5px rgb(var(--text-primary) / 0.28),
+    0 0 6px 1px rgb(var(--accent-amber) / 0.55),
+    0 0 22px 5px rgb(var(--accent-amber) / 0.16);
+  opacity: 0;
+}
+
+/* ── DUST ── motes in the starlight. Only the derelict has them; the living
+   station keeps its approach clean. One tiled layer, drifting, so the whole
+   cloud costs a single animation. */
+.auth-backdrop__dust {
+  position: absolute;
+  inset: -10% 0 0 -10%;
+  background-image:
+    radial-gradient(1px 1px at 31px 57px, rgb(var(--derelict-rime) / 0.4), transparent),
+    radial-gradient(1.5px 1.5px at 148px 22px, rgb(var(--derelict-rime) / 0.28), transparent),
+    radial-gradient(1px 1px at 96px 171px, rgb(var(--derelict-rime) / 0.34), transparent),
+    radial-gradient(1px 1px at 233px 118px, rgb(var(--derelict-rime) / 0.22), transparent),
+    radial-gradient(1.3px 1.3px at 201px 246px, rgb(var(--derelict-rime) / 0.3), transparent),
+    radial-gradient(1px 1px at 64px 289px, rgb(var(--derelict-rime) / 0.2), transparent);
+  background-size: 271px 313px;
+  opacity: 0;
+}
+
+/* ── SCRIM ── photographic: it only takes light away. A well of base-dark
+   where the card sits, so the form always has a quiet ground, and a vignette
+   at the frame's edges that seats the scene in the window. */
+.auth-backdrop__scrim {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(38% 52% at 50% 46%, rgb(var(--bg-base) / 0.5), rgb(var(--bg-base) / 0.22) 60%, transparent 100%),
+    radial-gradient(150% 130% at 50% 44%, transparent 58%, rgb(var(--bg-base) / 0.32) 100%);
+}
+
+/* ── LOGIN ── coming home. Every lamp on, the world familiar and the atmosphere
+   breathing: the warmest of the four. */
+.auth-backdrop--login {
+  --spill-warmth: 1.25;
+}
+.auth-backdrop--login .auth-backdrop__world::after {
+  animation: authBreathe 14s ease-in-out infinite alternate;
+}
+
+/* ── REGISTER ── a berth being prepared. Same station, same world, and one
+   more running light coming on: a rare event that spends most of its cycle
+   not happening. */
+.auth-backdrop--register .auth-backdrop__berth {
+  animation: authBerth 18s linear infinite;
+}
+
+/* ── JOIN ── an invite followed. The beacon on the mast is the hail you came
+   for, in the hail colour rather than amber, and it blinks a welcome. */
+.auth-backdrop--join .auth-backdrop__beacon {
+  --beacon-core: var(--accent-peach);
+  --beacon-glow: var(--accent-coral);
+  --beacon-size: 5px;
+  /* The hail throws its colour onto the hull under it even between blinks. */
+  box-shadow:
+    0 0 0 0.5px rgb(var(--text-primary) / 0.35),
+    0 0 10px 3px rgb(var(--accent-coral) / 0.65),
+    0 0 44px 12px rgb(var(--accent-coral) / 0.24),
+    0 26px 60px 14px rgb(var(--accent-coral) / 0.1);
+  animation: authHail 6.5s ease-in-out infinite;
+}
+
+/* ── INVALID ── the beacon you followed has gone dark. The derelict
+   vocabulary: no local light at all, only starlight from the upper left. The
+   lamps are out and cold, the ports dark, the world's atmosphere gone and its
+   limb only starlit, dust in the frame, the grain up so every surface is
+   matte. Melancholy, not broken. */
+.auth-backdrop--invalid {
+  --limb-a: var(--derelict-rime);
+  --limb-b: var(--derelict-rime);
+  --limb-c: var(--derelict-signal);
+  --limb-strength: 0.55;
+  --atmo-strength: 0.16;
+  --spill-warmth: 1;
+  --spill: var(--derelict-rime);
+  --spill-a: 0.09;
+  --warm-a: 0;
+  --turn: var(--derelict-signal);
+  --lamp-on: 0;
+  --grain: 0.09;
+}
+/* A dead lamp is still a lamp: a cold bead of glass catching the starlight. */
+.auth-backdrop--invalid .auth-backdrop__lamp,
+.auth-backdrop--invalid .auth-backdrop__beacon {
+  background: rgb(var(--derelict-signal) / 0.35);
+  box-shadow: inset 0.5px 0.5px 0 rgb(var(--derelict-rime) / 0.4);
+}
+.auth-backdrop--invalid .auth-backdrop__beacon {
+  background: rgb(var(--accent-rose) / 0.22);
+  box-shadow: inset 0.5px 0.5px 0 rgb(var(--derelict-rime) / 0.45);
+}
+.auth-backdrop--invalid .auth-backdrop__port {
+  background: rgb(var(--derelict-signal) / 0.14);
+  box-shadow: none;
+}
+.auth-backdrop--invalid .auth-backdrop__mast,
+.auth-backdrop--invalid .auth-backdrop__struct {
+  --struct-lit: var(--derelict-rime);
+  --struct-shade: var(--derelict-signal);
+}
+.auth-backdrop--invalid .auth-backdrop__station {
+  --hull-far: var(--derelict-far);
+  --hull-mid: var(--derelict-far);
+  --hull-near: var(--derelict-body);
+  --hull-lip: var(--derelict-lit);
+  --hull-seam: var(--derelict-rime);
+}
+.auth-backdrop--invalid .auth-backdrop__station::before {
+  background: conic-gradient(
+    from 332deg,
+    transparent 0deg,
+    rgb(var(--derelict-rime) / 0.16) 20deg,
+    rgb(var(--derelict-rime) / 0.08) 36deg,
+    transparent 60deg
+  );
+}
+.auth-backdrop--invalid .auth-backdrop__station::after {
+  background: conic-gradient(
+    from 330deg,
+    rgb(var(--derelict-signal) / 0.06) 0deg,
+    rgb(var(--derelict-rime) / 0.36) 22deg,
+    rgb(var(--derelict-rime) / 0.14) 40deg,
+    rgb(var(--derelict-signal) / 0.06) 60deg,
+    transparent 70deg
+  );
+}
+.auth-backdrop--invalid .auth-backdrop__dust {
+  opacity: 1;
+  animation: authDust 90s linear infinite;
+}
+
+/* ── MOTION ──
+ * The near field scrolls by exactly one tile, so the loop has no seam. */
+@keyframes authDrift {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-563px, 0, 0); }
+}
+/* The approach: the station comes on by a hair and settles back. */
+@keyframes authApproach {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to { transform: translate3d(0, -5px, 0) scale(1.006); }
+}
+/* The world's atmosphere breathes, at the pace of weather. */
+@keyframes authBreathe {
+  from { opacity: 0.78; }
+  to { opacity: 1; }
+}
+/* The berth light: dark for eleven seconds, a flicker as the contact closes,
+   on for five, then the cycle takes it away again. */
+@keyframes authBerth {
+  0%, 60% { opacity: 0; }
+  61.5% { opacity: 0.7; }
+  62.5% { opacity: 0.15; }
+  64% { opacity: 1; }
+  65% { opacity: 0.4; }
+  66.5%, 92% { opacity: 1; }
+  100% { opacity: 0; }
+}
+/* The hail: a double blink, then four seconds of the beacon simply lit. */
+@keyframes authHail {
+  0%, 62% { opacity: 0.55; }
+  66% { opacity: 1; }
+  70% { opacity: 0.5; }
+  74% { opacity: 1; }
+  80%, 100% { opacity: 0.55; }
+}
+/* Dust: one tile diagonally, so the cloud never jumps. */
+@keyframes authDust {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(271px, -313px, 0); }
+}
+
+/* ── STILL FRAME ──
+ * Reduced motion keeps everything and freezes it where it looks best: the
+ * station a hair closer, the berth lit, the beacon on, the atmosphere full,
+ * the dust half way across. Nothing is stripped. */
+@media (prefers-reduced-motion: reduce) {
+  .auth-backdrop *,
+  .auth-backdrop *::before,
+  .auth-backdrop *::after {
+    animation: none !important;
+  }
+  .auth-backdrop__approach {
+    transform: translate3d(0, -2.5px, 0) scale(1.003);
+  }
+  .auth-backdrop__world::after {
+    opacity: 0.95;
+  }
+  .auth-backdrop--register .auth-backdrop__berth {
+    opacity: 1;
+  }
+  .auth-backdrop--join .auth-backdrop__beacon {
+    opacity: 1;
+  }
+  .auth-backdrop--invalid .auth-backdrop__dust {
+    transform: translate3d(135px, -156px, 0);
+  }
+}

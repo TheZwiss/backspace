@@ -86,6 +86,11 @@ function Workbench() {
         <StateRow width={128} height={30} render={(d) => <Cta disabled={d} className="px-3 py-1.5 text-sm rounded-full">Create Space</Cta>} />
       </Section>
 
+      <Section title="Destructive and warning confirms: the derelict's cold rim">
+        <StateRow width={190} height={40} render={(d) => <button type="button" disabled={d} className="cta-danger flex-1 py-2.5 text-sm rounded-lg">Delete Space</button>} />
+        <StateRow width={190} height={40} render={(d) => <button type="button" disabled={d} className="cta-warning flex-1 py-2.5 text-sm rounded-lg">Leave Group</button>} />
+      </Section>
+
       <Section title="Primary call to action at 3x">
         <div style={{ display: 'flex', gap: 48 }}>
           <Slot caption="rest" width={176} height={44} scale={3}><Cta disabled={false} className="w-full py-2.5 rounded">Log In</Cta></Slot>

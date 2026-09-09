@@ -1,0 +1,463 @@
+/* ── THE HAIL ──
+ * The ship's comm panel lighting up because someone specific wants you. The
+ * caller's avatar is the signal source: rings leave it slowly and die before
+ * the panel's edge, and most of every cycle nothing is happening. The panel
+ * itself comes up from standby: its console lights, sky at rest, warm to the
+ * hail colour while the call rings. Accept is the live signal, in mint;
+ * decline is the same material with the light left off.
+ *
+ * Structure, back to front (all inside one .glass-modal, which brings its own
+ * rim as ::before and its gloss as ::after at z-index 1):
+ *   __deck     the panel's interior: the key landing top-left, the hail's own
+ *              warmth pooled under the source, the lower right falling to base
+ *   __grain    the matte tooth of the panel, so the glass reads as a surface
+ *   __console  the instrument band along the top edge: bezel, rail, slots
+ *   __signal   the source's bloom and the two rings that leave it
+ *   __scrim    the vignette that seats the scene, and the well under the name
+ *   __body     the port (bezel + avatar), the caller, the two answers
+ *
+ * LIGHT: one key, above and to the left, outside the frame, warm white. It
+ * lands on the top-left of every rim and every bezel; whatever it does not
+ * reach turns toward lavender, never black. Three things emit: the source,
+ * the console lights, and the accept button. Nothing else glows.
+ *
+ * MOTION at rest: three infinite animations (ring a, ring b, the console
+ * warming), transform and opacity only. Nothing else moves until hover.
+ */
+
+.hail {
+  /* Geometry every layer shares, so the rings are always centred on the
+     avatar no matter how the body is padded. */
+  --hail-console: 26px;
+  --hail-pad-top: 34px;
+  --hail-avatar: 80px;
+  --hail-source-y: calc(var(--hail-console) + var(--hail-pad-top) + var(--hail-avatar) / 2);
+
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+/* ── DECK ── the interior of the panel. Never flat: the key comes in over the
+   top-left corner as a lavender wash, the hail pools its own warmth where the
+   source sits, and the lower right falls away toward base. Painted at low
+   alpha so the glass keeps showing the room behind it. */
+.hail__deck {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    radial-gradient(90% 60% at 4% -8%, rgb(var(--accent-lavender) / 0.22), transparent 60%),
+    radial-gradient(50% 40% at 0% 0%, rgb(var(--text-primary) / 0.05), transparent 60%),
+    radial-gradient(70% 34% at 50% calc(var(--hail-source-y) + 8px), rgb(var(--accent-peach) / 0.1), transparent 70%),
+    radial-gradient(60% 40% at 100% 110%, rgb(var(--accent-primary) / 0.12), transparent 66%),
+    linear-gradient(152deg, transparent 38%, rgb(var(--bg-base) / 0.42) 100%);
+  pointer-events: none;
+}
+
+/* ── GRAIN ── high-frequency turbulence at 1:1, barely there. Its only job is
+   to make every gradient under it read as a matte panel rather than a fill. */
+.hail__grain {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' seed='5'/%3E%3CfeColorMatrix values='0 0 0 0 0.86 0 0 0 0 0.84 0 0 0 0 0.92 0 0 0 0.5 0'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23g)'/%3E%3C/svg%3E");
+  background-size: 120px 120px;
+  opacity: 0.07;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+
+/* ── CONSOLE ── the instrument band along the top edge. The band is recessed
+   (a shade of base at the top, a rail hairline at the bottom lit only where
+   the key reaches it) and carries one uneven run of slot indicators across
+   its whole width, anchored by a level readout at the centre. Slots, not
+   dots, and nothing near the corner: three round lights beside the top-left
+   corner of a rounded panel are a window's traffic lights before they are
+   anything else. The standby slots are sky. Over them sits a second set in
+   the hail colour whose opacity is the warming: it comes up over four seconds,
+   holds, and falls back, at the pace of someone waiting for you to answer. */
+.hail__console {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: var(--hail-console);
+  overflow: visible;
+  pointer-events: none;
+}
+.hail__console-warm {
+  animation: hailWarm 8s ease-in-out infinite;
+}
+
+/* ── SIGNAL ── the source's bloom and the rings. Anchored to the avatar's
+   centre, behind the scrim, so a ring passing behind the caller's name is
+   already dimmed by the well before the name has to fight it. */
+.hail__signal {
+  position: absolute;
+  left: 50%;
+  top: var(--hail-source-y);
+  width: var(--hail-avatar);
+  height: var(--hail-avatar);
+  margin: calc(var(--hail-avatar) / -2) 0 0 calc(var(--hail-avatar) / -2);
+  pointer-events: none;
+}
+/* Bloom: the hail landing on the panel around the source. Static: an emitter
+   blooms outward from itself with one soft falloff, and does not breathe. */
+.hail__bloom {
+  position: absolute;
+  inset: -34px;
+  border-radius: 50%;
+  background:
+    radial-gradient(closest-side, rgb(var(--accent-peach) / 0.34), rgb(var(--accent-coral) / 0.12) 48%, transparent 100%);
+}
+/* Rings: a hairline of peach with a coral bloom, born at the bezel and gone by
+   2.2x, which is well inside the panel. Each is visible for a little over a
+   quarter of its six-second cycle; the rest is silence. The second leaves
+   seven tenths of a second after the first: two rings, then a long pause, is
+   the cadence of a phone ringing. */
+.hail__ring {
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 1.5px solid rgb(var(--accent-peach) / 0.9);
+  box-shadow:
+    0 0 10px rgb(var(--accent-coral) / 0.45),
+    inset 0 0 6px rgb(var(--accent-peach) / 0.35);
+  opacity: 0;
+  transform: scale(1);
+  transform-origin: 50% 50%;
+  animation: hailRing 6s cubic-bezier(0.2, 0.6, 0.35, 1) infinite;
+}
+.hail__ring--b {
+  animation-delay: 0.7s;
+}
+
+/* ── SCRIM ── photographic: it only takes light away. A vignette so the panel
+   is seated in its frame rather than pasted into it, and a soft well of base
+   under the caller block, which is where the rings pass on their way out. */
+.hail__scrim {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    radial-gradient(52% 18% at 50% calc(var(--hail-source-y) + 74px), rgb(var(--bg-base) / 0.5), transparent 100%),
+    /* the vignette is centred on the key, not on the panel: the lit corner
+       stays open and it is the far corner that falls away */
+    radial-gradient(150% 140% at 18% 10%, transparent 40%, rgb(var(--bg-base) / 0.58) 100%);
+  pointer-events: none;
+}
+
+/* ── BODY ── above the chrome. */
+.hail__body {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: calc(var(--hail-console) + var(--hail-pad-top)) 32px 32px;
+}
+
+/* ── PORT ── the bezel the avatar sits in: an instrument, not a floating disc.
+   A masked gradient ring (warm white where the key lands, the hail colour
+   along the top, lavender coming back on the shaded side) and the weight of
+   the bezel on the panel below it. */
+.hail__port {
+  position: relative;
+  width: var(--hail-avatar);
+  height: var(--hail-avatar);
+  border-radius: 50%;
+  box-shadow:
+    0 10px 24px -10px rgb(var(--bg-base) / 0.95),
+    0 2px 6px -2px rgb(var(--bg-base) / 0.7);
+}
+.hail__port::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  padding: 2px;
+  background: linear-gradient(
+    146deg,
+    rgb(var(--text-primary) / 0.7) 0%,
+    rgb(var(--accent-peach) / 0.55) 30%,
+    rgb(var(--text-primary) / 0.08) 60%,
+    rgb(var(--accent-lavender) / 0.4) 100%
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+}
+/* The key on the avatar's own top-left, and its lower right turning away. The
+   avatar is user content, so this stays a sheet of glass over it, not a tint. */
+.hail__port::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background:
+    radial-gradient(70% 70% at 28% 22%, rgb(var(--text-primary) / 0.22), transparent 60%),
+    radial-gradient(90% 90% at 78% 86%, rgb(var(--accent-lavender) / 0.22), transparent 62%);
+  pointer-events: none;
+}
+
+/* ── CALLER ── the name is the most legible thing on the panel, always. */
+.hail__caller {
+  text-align: center;
+}
+.hail__name {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: rgb(var(--text-primary));
+  text-shadow: 0 1px 3px rgb(var(--bg-base) / 0.7);
+  overflow-wrap: anywhere;
+}
+.hail__status {
+  margin-top: 5px;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  color: rgb(var(--text-secondary));
+}
+
+/* ── ANSWERS ── */
+.hail__answers {
+  display: flex;
+  align-items: center;
+  gap: 30px;
+  margin-top: 6px;
+}
+
+/* Shared by both answers: a round 56px control, its own stacking context, the
+   two material channels, and a focus ring that owes nothing to the fill. */
+.hail__accept,
+.hail__decline {
+  --lift: 0;
+  --push: 0;
+  position: relative;
+  isolation: isolate;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transform: translateY(calc(var(--push) * 1px)) scale(calc(1 - var(--push) * 0.015));
+  transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 260ms ease, color 260ms ease, filter 260ms ease;
+}
+.hail__accept svg,
+.hail__decline svg {
+  position: relative;
+  display: block;
+  transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.hail__accept:hover:not(:disabled),
+.is-hover .hail__accept:not(:disabled),
+.hail__decline:hover:not(:disabled),
+.is-hover .hail__decline:not(:disabled) {
+  --lift: 1;
+}
+.hail__accept:active:not(:disabled),
+.is-active .hail__accept:not(:disabled),
+.hail__decline:active:not(:disabled),
+.is-active .hail__decline:not(:disabled) {
+  --lift: 1;
+  --push: 1;
+}
+.hail__accept:focus-visible,
+.is-focus .hail__accept,
+.hail__decline:focus-visible,
+.is-focus .hail__decline {
+  --lift: 1;
+  outline: none;
+}
+
+/* ── ACCEPT ── the material call to action in the signal colour. Same layers
+   as .cta-primary, in mint: the body lit from the top-left and turning toward
+   lavender on the lower right (never toward a darker green, which goes olive),
+   the gloss caught on the top of the sheet, a lit top lip and a dark bottom
+   lip. It is an emitter, so its aura is faintly on at rest and comes up on
+   hover. The glyph is dark because the surface is the light. */
+.hail__accept {
+  color: rgb(var(--bg-channel));
+  background:
+    /* the gloss: the key on the top of the sheet, a thin cap, not a wash */
+    linear-gradient(168deg, rgb(var(--text-primary) / 0.16) 0%, rgb(var(--text-primary) / 0.03) 26%, transparent 46%),
+    /* the key catching the lit corner */
+    radial-gradient(110% 90% at 8% 4%, rgb(var(--text-primary) / 0.2), transparent 54%),
+    /* the body turning away: lavender, then the primary's depth, never olive */
+    linear-gradient(152deg, transparent 30%, rgb(var(--accent-lavender) / 0.4) 100%),
+    linear-gradient(152deg, transparent 44%, rgb(var(--accent-primary) / 0.78) 100%),
+    linear-gradient(152deg, transparent 70%, rgb(var(--accent-primary-active) / 0.5) 100%),
+    /* the hue itself */
+    linear-gradient(rgb(var(--accent-mint)), rgb(var(--accent-mint)));
+  box-shadow:
+    inset 0 1px 0 rgb(var(--text-primary) / 0.4),
+    inset 0 -1px 0 rgb(var(--bg-base) / 0.5),
+    0 10px 22px -12px rgb(var(--bg-base) / 0.95),
+    0 2px 6px -3px rgb(var(--bg-base) / 0.7);
+  filter: brightness(calc(1 + 0.06 * var(--lift)));
+}
+.hail__accept::before {
+  content: '';
+  position: absolute;
+  inset: -9px;
+  z-index: -1;
+  border-radius: 50%;
+  background:
+    radial-gradient(60% 60% at 40% 45%, rgb(var(--accent-mint) / 0.7), transparent 72%),
+    radial-gradient(50% 50% at 72% 74%, rgb(var(--accent-sky) / 0.35), transparent 72%);
+  filter: blur(8px);
+  opacity: calc(0.34 + 0.45 * var(--lift) + 0.3 * var(--push));
+  transform: scale(calc(0.94 + 0.08 * var(--lift) + 0.04 * var(--push)));
+  transition: opacity 420ms ease, transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: none;
+}
+.hail__accept::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  padding: 1px;
+  background: linear-gradient(
+    146deg,
+    rgb(var(--text-primary) / calc(0.55 + 0.25 * var(--lift))) 0%,
+    rgb(var(--accent-mint) / calc(0.5 + 0.3 * var(--lift))) 30%,
+    rgb(var(--text-primary) / 0.06) 58%,
+    rgb(var(--accent-lavender) / calc(0.28 + 0.22 * var(--lift))) 100%
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  transition: background 420ms ease;
+  pointer-events: none;
+}
+.hail__accept:hover:not(:disabled) svg,
+.is-hover .hail__accept:not(:disabled) svg {
+  transform: scale(1.08);
+}
+.hail__accept:focus-visible,
+.is-focus .hail__accept {
+  box-shadow:
+    inset 0 1px 0 rgb(var(--text-primary) / 0.4),
+    inset 0 -1px 0 rgb(var(--bg-base) / 0.5),
+    0 0 0 2px rgb(var(--bg-chat)),
+    0 0 0 4px rgb(var(--accent-primary));
+}
+
+/* ── DECLINE ── the same material with the light left off: a rim that turns
+   with the key, a faint gloss, the thickness of the sheet, and no fill and no
+   aura. Hovering brings the glyph up to full; pressing it is going quiet, so
+   the press dims rather than flares. */
+.hail__decline {
+  color: rgb(var(--text-primary) / 0.78);
+  background:
+    /* the key on the top-left of a matte disc */
+    radial-gradient(90% 90% at 28% 18%, rgb(var(--text-primary) / calc(0.1 + 0.04 * var(--lift))), transparent 62%),
+    /* the body: a well of base, lit face to shaded, turning lavender low right */
+    linear-gradient(152deg, rgb(var(--bg-elevated) / 0.9) 0%, rgb(var(--bg-base) / 0.85) 60%, rgb(var(--accent-lavender) / 0.14) 100%),
+    linear-gradient(rgb(var(--bg-base)), rgb(var(--bg-base)));
+  box-shadow:
+    inset 0 1px 0 rgb(var(--text-primary) / 0.12),
+    inset 0 -1px 0 rgb(var(--bg-base) / 0.7),
+    inset 0 -8px 14px -10px rgb(var(--accent-lavender) / 0.2),
+    0 8px 18px -12px rgb(var(--bg-base) / 0.95),
+    0 2px 6px -3px rgb(var(--bg-base) / 0.7);
+  filter: brightness(calc(1 + 0.08 * var(--lift) - 0.16 * var(--push)));
+}
+.hail__decline::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  padding: 1px;
+  background: linear-gradient(
+    146deg,
+    rgb(var(--text-primary) / calc(0.48 + 0.22 * var(--lift))) 0%,
+    rgb(var(--text-primary) / calc(0.2 + 0.1 * var(--lift))) 30%,
+    rgb(var(--text-primary) / 0.06) 58%,
+    rgb(var(--accent-lavender) / calc(0.3 + 0.2 * var(--lift))) 100%
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  transition: background 420ms ease;
+  pointer-events: none;
+}
+.hail__decline:hover:not(:disabled),
+.is-hover .hail__decline:not(:disabled),
+.hail__decline:focus-visible,
+.is-focus .hail__decline {
+  color: rgb(var(--text-primary));
+}
+.hail__decline:focus-visible,
+.is-focus .hail__decline {
+  box-shadow:
+    inset 0 1px 0 rgb(var(--text-primary) / 0.1),
+    inset 0 -1px 0 rgb(var(--bg-base) / 0.55),
+    0 0 0 2px rgb(var(--bg-chat)),
+    0 0 0 4px rgb(var(--accent-primary));
+}
+
+/* ── MOTION ──
+ * The ring: born at the bezel, gone by 2.2x. Opacity peaks at once and decays
+ * with the growth, so the ring is brightest where it is still being made. */
+@keyframes hailRing {
+  0% {
+    transform: scale(1);
+    opacity: 0;
+  }
+  4% {
+    opacity: 0.8;
+  }
+  28% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+/* The console warming: standby to hail and back, four seconds each way. */
+@keyframes hailWarm {
+  0%,
+  100% {
+    opacity: 0.12;
+  }
+  46%,
+  58% {
+    opacity: 1;
+  }
+}
+
+/* ── STILL FRAME ──
+ * Reduced motion keeps everything and freezes it at the best moment: one ring
+ * caught a little past halfway, already fading; the console warmed most of the
+ * way to hail; the material at rest. Nothing is stripped. */
+@media (prefers-reduced-motion: reduce) {
+  .hail,
+  .hail * {
+    animation: none !important;
+    transition: none !important;
+  }
+  .hail__ring--a {
+    transform: scale(1.65);
+    opacity: 0.34;
+  }
+  .hail__ring--b {
+    opacity: 0;
+  }
+  .hail__console-warm {
+    opacity: 0.85;
+  }
+}

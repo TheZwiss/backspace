@@ -17,32 +17,32 @@ describe('Mascot', () => {
     const { container } = render(<Mascot state="idle" />);
     const stops = container.querySelectorAll('stop');
     const colors = Array.from(stops).map(s => s.getAttribute('stop-color'));
-    expect(colors).toContain('#c8f0de');
-    expect(colors).toContain('#6dbf96');
+    expect(colors).toContain('#9cefb7');
+    expect(colors).toContain('#86efac');
   });
 
   it('applies sleeping palette gradient stops', () => {
     const { container } = render(<Mascot state="sleeping" />);
     const stops = container.querySelectorAll('stop');
     const colors = Array.from(stops).map(s => s.getAttribute('stop-color'));
-    expect(colors).toContain('#ddd4f0');
-    expect(colors).toContain('#a898cc');
+    expect(colors).toContain('#cdc0f8');
+    expect(colors).toContain('#c4b5fd');
   });
 
   it('applies excited palette gradient stops', () => {
     const { container } = render(<Mascot state="excited" />);
     const stops = container.querySelectorAll('stop');
     const colors = Array.from(stops).map(s => s.getAttribute('stop-color'));
-    expect(colors).toContain('#fde0c8');
-    expect(colors).toContain('#e8a870');
+    expect(colors).toContain('#fab3b2');
+    expect(colors).toContain('#fca5a5');
   });
 
   it('applies lonely palette gradient stops', () => {
     const { container } = render(<Mascot state="lonely" />);
     const stops = container.querySelectorAll('stop');
     const colors = Array.from(stops).map(s => s.getAttribute('stop-color'));
-    expect(colors).toContain('#c0dced');
-    expect(colors).toContain('#78aec8');
+    expect(colors).toContain('#95d8f7');
+    expect(colors).toContain('#86d0f4');
   });
 
   it('renders upright viewBox for idle state', () => {

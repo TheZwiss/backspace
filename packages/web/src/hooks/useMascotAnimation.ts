@@ -268,12 +268,12 @@ export function useMascotAnimation(
 
     function setupIdle(): void {
       // Start floating
-      startFloat(svg, 5, 4200);
+      startFloat(svg, 5, 7000);
 
       // Shadow pulse
       const shadow = queryEl('[data-mascot="shadow"]');
       if (shadow) {
-        startShadowPulse(shadow, 32, 25, 0.13, 0.06, 4200);
+        startShadowPulse(shadow, 32, 25, 0.13, 0.06, 7000);
       }
 
       async function blink(): Promise<void> {
@@ -318,7 +318,7 @@ export function useMascotAnimation(
         await waitAnim(wiggleAnim);
 
         if (abortedRef.current) return;
-        restartFloatAndShadow(5, 4200, 32, 25, 0.13, 0.06);
+        restartFloatAndShadow(5, 7000, 32, 25, 0.13, 0.06);
       }
 
       const actions = [blink, blink, blink, blink, doubleBlink, lookAround, wiggle] as const;
@@ -329,7 +329,7 @@ export function useMascotAnimation(
         if (action) await action();
       }
 
-      scheduleNext(runRandomAction, 2500, 7000);
+      scheduleNext(runRandomAction, 4000, 10000);
     }
 
     // ═══ SLEEPING STATE ═══
@@ -340,7 +340,7 @@ export function useMascotAnimation(
         { transform: 'scaleX(1) scaleY(1)' },
         { transform: 'scaleX(1.015) scaleY(0.975)' },
         { transform: 'scaleX(1) scaleY(1)' },
-      ], { duration: 3800, easing: EASING.breathe, iterations: Infinity });
+      ], { duration: 7000, easing: EASING.breathe, iterations: Infinity });
 
       // Mouth breathing animation
       const mouth = queryEl('[data-mascot="mouth"]');
@@ -349,7 +349,7 @@ export function useMascotAnimation(
           { ry: '3.2px' },
           { ry: '4px' },
           { ry: '3.2px' },
-        ], { duration: 3800, easing: EASING.breathe, iterations: Infinity });
+        ], { duration: 7000, easing: EASING.breathe, iterations: Infinity });
       }
 
       // Z-particle spawning
@@ -378,7 +378,7 @@ export function useMascotAnimation(
           { opacity: 0.5, transform: `translateY(-12px) rotate(${rot * 0.3}deg) scale(0.95)`, offset: 0.25 },
           { opacity: 0.35, transform: `translateY(-35px) rotate(${rot * 0.7}deg) scale(1)`, offset: 0.65 },
           { opacity: 0, transform: `translateY(-55px) rotate(${rot}deg) scale(0.85)` },
-        ], { duration: 3200, easing: EASING.softOut });
+        ], { duration: 4200, easing: EASING.softOut });
 
         await waitAnim(zAnim);
 
@@ -388,19 +388,19 @@ export function useMascotAnimation(
         }
       }
 
-      scheduleNext(spawnZ, 3500, 6500);
+      scheduleNext(spawnZ, 5000, 9000);
     }
 
     // ═══ EXCITED STATE ═══
 
     function setupExcited(): void {
       // Start floating
-      startFloat(svg, 4, 4400);
+      startFloat(svg, 4, 6400);
 
       // Shadow pulse
       const shadow = queryEl('[data-mascot="shadow"]');
       if (shadow) {
-        startShadowPulse(shadow, 32, 25, 0.13, 0.06, 4400);
+        startShadowPulse(shadow, 32, 25, 0.13, 0.06, 6400);
       }
 
       async function blink(): Promise<void> {
@@ -451,7 +451,7 @@ export function useMascotAnimation(
 
         if (abortedRef.current) return;
         // Resume float
-        restartFloatAndShadow(4, 4400, 32, 25, 0.13, 0.06);
+        restartFloatAndShadow(4, 6400, 32, 25, 0.13, 0.06);
       }
 
       // Initial greeting fires once after 1500ms
@@ -488,7 +488,7 @@ export function useMascotAnimation(
         { transform: 'translateY(0) rotate(0deg)' },
         { transform: 'translateY(2px) rotate(1.5deg)' },
         { transform: 'translateY(0) rotate(0deg)' },
-      ], { duration: 6000, easing: EASING.gentle, iterations: Infinity });
+      ], { duration: 8000, easing: EASING.gentle, iterations: Infinity });
 
       async function lonelyBlink(): Promise<void> {
         await droopyBlink({
@@ -549,7 +549,7 @@ export function useMascotAnimation(
         if (action) await action();
       }
 
-      scheduleNext(runRandomAction, 3500, 9000);
+      scheduleNext(runRandomAction, 5000, 11000);
     }
 
     // ── Dispatch to the appropriate state setup ──
