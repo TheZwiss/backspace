@@ -55,13 +55,18 @@ function Header({ active, onSelect }: { active: string; onSelect: (id: string) =
 function Rows() {
   return (
     <div className="flex-1 overflow-y-auto p-4">
-      <h2 className="text-xs font-bold text-txt-tertiary mb-4 tracking-wider px-2">ONLINE — {ROWS.length}</h2>
+      <h2 className="friends-count text-xs font-bold text-txt-tertiary mb-4 tracking-wider px-2">ONLINE — {ROWS.length}</h2>
       {ROWS.map((row, i) => (
-        <div key={row.name} className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-interactive-hover">
-          <Avatar name={row.name} size={36} avatarColor={row.colour} userId={`u${i}`} />
-          <div className="flex-1 min-w-0">
-            <div className="text-[15px] font-semibold text-txt-primary">{row.name}</div>
-            <div className="text-[13px] text-txt-tertiary">{row.status}</div>
+        <div key={row.name} className="friends-row flex items-center justify-between px-3 h-[62px] rounded-[8px] hover:bg-interactive-hover group transition-colors mx-2">
+          <div className="flex items-center gap-3 min-w-0">
+            <Avatar name={row.name} size={36} avatarColor={row.colour} userId={`u${i}`} />
+            <div className="min-w-0">
+              <div className="text-[15px] font-semibold text-txt-primary">{row.name}</div>
+              <div className="text-[13px] text-txt-tertiary">{row.status}</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-1 text-txt-tertiary">
+            <span className="w-8 h-8 flex items-center justify-center rounded-full bg-interactive-hover">…</span>
           </div>
         </div>
       ))}
@@ -74,7 +79,7 @@ function Workbench() {
   return (
     <WorkbenchPage
       title="Friends on glass — design workbench"
-      description="The friends main column at its shipping size: the living home backdrop behind glass controls and a glass content panel. Left, the empty Online tab; right, a tab with rows, to judge names on the glass. Tabs are live; the backdrop must not change when they switch."
+      description="The friends main column at its shipping size: the living home backdrop, glass pills for the controls, each friend row its own bubble, the count its own pill, and Nori on the backdrop when nobody is there. Tabs are live; the backdrop must not change when they switch."
     >
       <Section title="Empty tab and a tab with rows (1000 × 760)">
         <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
@@ -82,7 +87,7 @@ function Workbench() {
             <Header active={active} onSelect={setActive} />
             <FriendsPanel>
               <div className="flex-1 overflow-y-auto p-4">
-                <h2 className="text-xs font-bold text-txt-tertiary mb-4 tracking-wider px-2">ONLINE — 0</h2>
+                <h2 className="friends-count text-xs font-bold text-txt-tertiary mb-4 tracking-wider px-2">ONLINE — 0</h2>
                 <div style={{ height: 'calc(100% - 32px)' }}>
                   <CrewEmptyState variant="nobodyOnline" size="hero">No one's online right now.</CrewEmptyState>
                 </div>
@@ -102,7 +107,7 @@ function Workbench() {
           <Header active="pending" onSelect={() => undefined} />
           <FriendsPanel>
             <div className="flex-1 overflow-y-auto p-4">
-              <h2 className="text-xs font-bold text-txt-tertiary mb-4 tracking-wider px-2">PENDING — 0</h2>
+              <h2 className="friends-count text-xs font-bold text-txt-tertiary mb-4 tracking-wider px-2">PENDING — 0</h2>
               <div style={{ height: 'calc(100% - 32px)' }}>
                 <CrewEmptyState variant="noPending" size="hero">No pending requests — Nori is napping.</CrewEmptyState>
               </div>

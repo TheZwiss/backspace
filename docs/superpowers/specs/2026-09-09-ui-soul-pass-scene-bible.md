@@ -348,11 +348,14 @@ solid ground):
   pills on `.glass-bubble`: the title with its icon in one pill, Online, All
   and Pending as one segmented pill with the active tab lifted, Add Friend
   as its own mint pill, the member-list toggle in a small pill at the right.
-  `FriendsPanel` is one glass panel at modal opacity (82%, `.glass-modal`'s
-  weight) holding the section label and the rows, so names sit on glass
-  with the sky as a faint presence, never as texture behind text. Empty
-  states are the same panel with Nori and the line inside it; the crew
-  states draw no stars of their own here.
+  There is no content panel. Jannis's correction on the first workbench:
+  "a bubble must only be as large as it needs to be to hold its contents,
+  not artificially stretch itself to match the whole screen real estate."
+  So `FriendsPanel` is a transparent scroll region, each friend or request
+  row is its own `.glass-bubble` sized to its content (`friends-row`), the
+  section count is its own small `.glass-pill` (`friends-count`), and the
+  empty states are bare: Nori and the line sit directly on the living
+  backdrop, part of the scene. The crew states draw no stars of their own.
 - Nori's mood cross-fades on tab change (a 300ms arrival in
   `CrewEmptyState`).
 

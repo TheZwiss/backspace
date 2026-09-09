@@ -187,7 +187,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
       case 'online':
         return (
           <div className="flex-1 overflow-y-auto p-4">
-            <h2 className="text-xs font-bold text-txt-tertiary mb-4 tracking-wider px-2">
+            <h2 className="friends-count text-xs font-bold text-txt-tertiary mb-4 tracking-wider px-2">
               {t('social:sections.online', { n: onlineFriends.length })}
             </h2>
             {onlineFriends.length === 0 ? (
@@ -204,7 +204,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
       case 'all':
         return (
           <div className="flex-1 overflow-y-auto p-4">
-            <h2 className="text-xs font-bold text-txt-tertiary mb-4 tracking-wider px-2">
+            <h2 className="friends-count text-xs font-bold text-txt-tertiary mb-4 tracking-wider px-2">
               {t('social:sections.all', { n: friends.length })}
             </h2>
             {friends.length === 0 ? (
@@ -221,7 +221,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
       case 'pending':
         return (
           <div className="flex-1 overflow-y-auto p-4">
-            <h2 className="text-xs font-bold text-txt-tertiary mb-4 tracking-wider px-2">
+            <h2 className="friends-count text-xs font-bold text-txt-tertiary mb-4 tracking-wider px-2">
               {t('social:sections.pending', { n: pendingIncoming.length + pendingOutgoing.length })}
             </h2>
             {[...pendingIncoming, ...pendingOutgoing].length === 0 ? (
@@ -882,7 +882,7 @@ function FriendItem({ friend, onRemove, onDm }: { friend: TaggedFriend, onRemove
   const { baseName: friendBaseName } = parseFederatedUsername(canonical.username);
   const friendDisplayName = canonical.displayName ?? friendBaseName;
   return (
-    <div className="flex items-center justify-between px-3 h-[62px] rounded-[8px] hover:bg-interactive-hover group transition-colors border-t border-interactive-muted mx-2">
+    <div className="friends-row flex items-center justify-between px-3 h-[62px] rounded-[8px] hover:bg-interactive-hover group transition-colors mx-2">
       <div className="flex items-center gap-3">
         <Avatar src={canonical.avatar} name={friendDisplayName} size={32} status={canonical.status} userId={canonical.homeUserId ?? canonical.id} avatarColor={canonical.avatarColor} />
         <div className="flex flex-col leading-tight">
@@ -940,7 +940,7 @@ function RequestItem({ request, type, onAccept, onDecline, onCancel }: {
   const reqDisplayName = user.displayName ?? reqBaseName;
 
   return (
-    <div className="flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-interactive-hover group transition-colors border-t border-interactive-muted mx-2">
+    <div className="friends-row flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-interactive-hover group transition-colors mx-2">
       <div className="flex items-center gap-3">
         <Avatar src={user.avatar} name={reqDisplayName} size={32} status={user.status as any} userId={user.homeUserId ?? user.id} avatarColor={user.avatarColor} />
         <div className="flex flex-col">
