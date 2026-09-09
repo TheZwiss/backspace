@@ -14,8 +14,6 @@ import {
   publishScreenShare,
   isScreenCaptureSupported,
   isCaptureCancellation,
-  describeStagedCapture,
-  type CapturedSurfaceKind,
 } from '../../utils/screenShare';
 import { StreamQualityControls, StreamSummary } from './StreamQualityControls';
 
@@ -50,6 +48,19 @@ import { StreamQualityControls, StreamSummary } from './StreamQualityControls';
  */
 
 type Tab = 'screens' | 'windows';
+
+/**
+ * The kind of surface being shared, shown next to "Ready to go live".
+ *
+ * Derived ONLY from a tile we enumerated and the user clicked, never from the
+ * captured track. `MediaTrackSettings.displaySurface` looks like the right
+ * source for this and is not: Firefox omits it, and Electron on a Wayland
+ * portal session reports `window` for a whole screen. A confidently wrong
+ * "Window" label is worse than no label, and the live preview already shows
+ * exactly what will be shared. So browser and portal captures show the plain
+ * "Ready to go live" and let the preview speak.
+ */
+type CapturedSurfaceKind = 'monitor' | 'window';
 type SetupError = 'cancelled' | 'unsupported' | 'captureFailed' | 'startFailed' | null;
 
 function errorKey(err: unknown): SetupError {
@@ -86,7 +97,6 @@ export function ScreenShareSetup() {
 
   // Staged capture (all platforms)
   const [staged, setStaged] = useState<MediaStream | null>(null);
-  const [stagedKindFromTrack, setStagedKindFromTrack] = useState<CapturedSurfaceKind | null>(null);
   const [stagedShareAudio, setStagedShareAudio] = useState<boolean>(config.shareAudio);
   const [staging, setStaging] = useState(false);
   const [starting, setStarting] = useState(false);
@@ -120,7 +130,6 @@ export function ScreenShareSetup() {
     if (stagedRef.current && stagedRef.current !== next) stopStagedCapture(stagedRef.current);
     stagedRef.current = next;
     setStaged(next);
-    if (!next) setStagedKindFromTrack(null);
   }, []);
 
   /**
@@ -144,7 +153,6 @@ export function ScreenShareSetup() {
         return;
       }
       replaceStaged(stream);
-      setStagedKindFromTrack(describeStagedCapture(stream));
       setStagedShareAudio(shareAudioAtStage);
     } catch (err) {
       if (generation !== stageGenerationRef.current) return;
@@ -377,11 +385,11 @@ export function ScreenShareSetup() {
       : null;
   const stageNow = () => void stage();
   const stagedSource = sources.find((s) => s.id === selectedId) ?? null;
-  // Only a source we picked ourselves has a name we can trust; see describeStagedCapture.
+  // Only a source we picked ourselves has a name and a kind we can trust.
   const stagedName = stagedSource?.name ?? null;
   // What the picker handed us: the standard track setting where reported, else the tile we clicked
   const stagedKind: CapturedSurfaceKind | null =
-    stagedKindFromTrack ?? (stagedSource ? (stagedSource.isScreen ? 'monitor' : 'window') : null);
+    stagedSource ? (stagedSource.isScreen ? 'monitor' : 'window') : null;
   const readyLabel = stagedKind
     ? `${t('voice:screenPicker.stageReady')} · ${t(`voice:screenPicker.kind.${stagedKind}`)}`
     : t('voice:screenPicker.stageReady');

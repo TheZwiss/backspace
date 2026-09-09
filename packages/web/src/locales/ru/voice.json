@@ -91,8 +91,7 @@
     "stageReady": "Готово к запуску",
     "kind": {
       "monitor": "Экран",
-      "window": "Окно",
-      "browser": "Вкладка браузера"
+      "window": "Окно"
     }
   },
   "streamSettings": {

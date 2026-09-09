@@ -311,28 +311,6 @@ export async function stageScreenCapture(): Promise<MediaStream> {
   }
 }
 
-export type CapturedSurfaceKind = 'monitor' | 'window' | 'browser';
-
-/**
- * What kind of surface the picker handed us, from the standard
- * `MediaTrackSettings.displaySurface` (Chromium and Safari report it; Firefox
- * does not, so the answer is null there).
- *
- * Deliberately does NOT return `track.label`. Browser labels are not a
- * trustworthy name for the captured surface: Chromium gives raw ids
- * ("window:1234:0"), and Firefox on a Wayland portal session reports
- * "Primary Monitor" even when the user picked a window. A wrong name is worse
- * than none, and the live preview already shows exactly what will be shared.
- * Where we picked the source ourselves (the Electron tile grid) we know its
- * real name and use that instead.
- */
-export function describeStagedCapture(stream: MediaStream): CapturedSurfaceKind | null {
-  const track = stream.getVideoTracks()[0];
-  if (!track) return null;
-  const surface = (track.getSettings() as MediaTrackSettings & { displaySurface?: string }).displaySurface;
-  return surface === 'monitor' || surface === 'window' || surface === 'browser' ? surface : null;
-}
-
 /**
  * Re-apply the current config to a staged (unpublished) capture. Cheap: the
  * track is local only, so there is no SFU renegotiation. Lets the setup screen
