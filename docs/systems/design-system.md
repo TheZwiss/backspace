@@ -190,6 +190,21 @@ Layers are absolutely positioned children of the host, back to front: aura, (hos
 
 **Design workbench.** Every material and scene ships with a dev page under `packages/web/src/dev/` plus an HTML entry beside `index.html`, built on `dev/workbench.tsx` (`WorkbenchPage`, `Section`, `Slot`, `StateRow`, `Surround`, `mountWorkbench`). A page renders the component at its real size inside its real surround, again at 3x, and in rest, hover, focus, pressed and disabled states. `dev-material.html` is the material tier's page. The i18n literal-string rule skips `src/dev/`; never use `100vh` there, the repo enforces `--app-vh`.
 
+## Scenes
+
+The bespoke half of the soul pass. Each scene is one component with a co-located stylesheet, one subject from the scene bible, and its own workbench page. A scene reads no store and handles no click unless the table says otherwise; the caller passes the copy in, already translated, so no scene owns a string. Every scene obeys the light rule (one key, upper left, shade toward lavender), keeps to the motion budget at rest (at most three infinite animations, six-second periods or longer, transform and opacity only), holds a still frame under `prefers-reduced-motion`, and paints only with `SCENE_PALETTE` in SVG and `rgb(var(--token) / a)` in CSS.
+
+| Scene | Component | Subject | Workbench | Notes |
+|---|---|---|---|---|
+| The rendezvous | `voice/VoiceEmptyPanel` | The empty voice channel as a meeting place with nobody moored yet: the craft left, a world low right, a beacon in orbit, a course through Join Voice | `dev-voice-empty.html` | Extracted from `MainContent`; desktop only. Uses container units, `:has()` and `hypot()` |
+| Docking | `auth/AuthBackdrop` | The approach to a station behind the login, register, invite and invalid-invite cards; four beats, the last in the derelict palette | `dev-auth-backdrop.html` | Sticky zero-height root sized to the scroll port by a ResizeObserver, so the scene stays still while the card scrolls and never paints under the desktop title bar |
+| The hail | `voice/IncomingCallModal` | A comm panel waking up: the avatar as the signal source, rings that die inside the panel, an instrument strip warming to the hail colour | `dev-incoming-call.html` | Behaviour untouched; the old `call-*` keyframes are no longer used by this surface |
+| The crew quarters | `ui/CrewEmptyState` | Every "no one is here" state as one room in six beats, with Nori as the crew | `dev-crew-empty.html` | Replaces the seven bare `Mascot` sites in FriendsPage, ChannelSidebar, MobileDmsScreen, MobileSpacesScreen |
+| The charts | `chat/ExploreEmpty`, `chat/ExploreCardBanner` | A star chart with nothing plotted; and the card banner given grain, vignette, rim and specular so a gradient stops reading as a placeholder | `dev-explore.html` | Narrow layout is a container query |
+| Scanning | `chat/SearchPopover` | One scanner sweep across the empty results area on open, then parked | `dev-search.html` | One finite animation; behaviour and strings untouched |
+| First light | `chat/WelcomeHero` | The figure in a porthole, a plotted course under the title, at the top of every conversation's history | `dev-welcome-hero.html` | Rendered height is part of the message-list scroll contract and equals the old header's to the pixel; see `message-list.md` |
+| Nori | `ui/Mascot` | The mascot, same silhouette and moods, relit under the key light | `dev-mascot.html` | The animation hook changed only in timings, now at or above the six-second floor |
+
 ## Input Tiers
 
 All defined in `globals.css`. No resting border — sunken `surface-input` background provides differentiation.
