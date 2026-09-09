@@ -494,8 +494,19 @@ function loadPending(root) {
     .filter((line) => line.length > 0 && !line.startsWith('#'));
 }
 
+/**
+ * Dev-only entries. Nothing under `src/dev/` is reachable from the app: each
+ * file is the entry of its own workbench page, loaded by hand during design
+ * work and never bundled into the product. Their copy addresses whoever is
+ * building the component, so the literal-string rule does not apply to them.
+ * Every other rule still does.
+ */
+function isDevHarness(rel) {
+  return rel.startsWith(`${WEB_SRC_DIR}/dev/`);
+}
+
 function isComponentFile(rel) {
-  return rel.endsWith('.tsx') && !isTestFile(rel);
+  return rel.endsWith('.tsx') && !isTestFile(rel) && !isDevHarness(rel);
 }
 
 export function checkLiteralStrings(root, options = {}) {
