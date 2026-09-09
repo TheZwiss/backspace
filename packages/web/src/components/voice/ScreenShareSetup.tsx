@@ -387,7 +387,8 @@ export function ScreenShareSetup() {
   const stagedSource = sources.find((s) => s.id === selectedId) ?? null;
   // Only a source we picked ourselves has a name and a kind we can trust.
   const stagedName = stagedSource?.name ?? null;
-  // What the picker handed us: the standard track setting where reported, else the tile we clicked
+  // Derived from our own enumeration, never from the track: displaySurface
+  // reports "window" for a whole monitor on a portal session.
   const stagedKind: CapturedSurfaceKind | null =
     stagedSource ? (stagedSource.isScreen ? 'monitor' : 'window') : null;
   const readyLabel = stagedKind
