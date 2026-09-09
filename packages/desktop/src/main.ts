@@ -1237,7 +1237,7 @@ if (!gotTheLock) {
     // Intercept getDisplayMedia(). Two ways to answer it:
     //   1. Preselected (current web client): ScreenShareSetup listed the
     //      sources via get-screen-sources, the user picked a tile, and the
-    //      renderer sent screen-share-preselect right before calling
+    //      renderer awaited screen-share-preselect before calling
     //      getDisplayMedia(). Answer immediately, no prompt.
     //   2. Prompted (older web clients, or nothing preselected): push the
     //      sources to the renderer and wait for screen-share-selected.
