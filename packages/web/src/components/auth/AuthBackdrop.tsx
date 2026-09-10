@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef } from 'react';
+import { BREATH_PERIODS, Breath } from '../telemetry/scene/StarField';
 import './AuthBackdrop.css';
 
 export type AuthBackdropVariant = 'login' | 'register' | 'join' | 'invalid';
@@ -11,7 +12,7 @@ interface AuthBackdropProps {
  * One near star. `x` and `y` are percentages of the frame, `r` the radius in
  * CSS pixels (so a star is one to two pixels wide on every screen, never
  * scaled with the frame), `tone` picks `star` or `dust` from the scene
- * palette, and `twinkle` marks the few whose opacity eases very slowly.
+ * palette, and `twinkle` marks the few that breathe.
  */
 interface NearStar {
   x: number;
@@ -103,17 +104,27 @@ export function AuthBackdrop({ variant }: AuthBackdropProps) {
         <div className="auth-backdrop__void" />
         <div className="auth-backdrop__far" />
         <svg className="auth-backdrop__near" width="100%" height="100%" focusable="false">
-          {NEAR_STARS.map((star, index) => (
-            <circle
-              key={index}
-              cx={`${star.x}%`}
-              cy={`${star.y}%`}
-              r={star.r}
-              className={`auth-backdrop__star auth-backdrop__star--${star.tone}${star.twinkle ? ' auth-backdrop__star--twinkle' : ''}`}
-              style={star.twinkle ? { animationDelay: `-${((index * 2.9) % 16).toFixed(1)}s` } : undefined}
-            />
-          ))}
+          {NEAR_STARS.map((star, index) =>
+            star.twinkle ? null : (
+              <circle key={index} cx={`${star.x}%`} cy={`${star.y}%`} r={star.r} className={`auth-backdrop__star auth-backdrop__star--${star.tone}`} />
+            ),
+          )}
         </svg>
+        <div className="auth-backdrop__breath">
+          {NEAR_STARS.map((star, index) =>
+            star.twinkle ? (
+              <Breath
+                key={index}
+                left={`${star.x}%`}
+                top={`${star.y}%`}
+                size={star.r > 0.85 ? 2 : 1}
+                period={BREATH_PERIODS[index % BREATH_PERIODS.length] ?? 5.9}
+                phase={(index * 2.9) % 9}
+                className={`auth-backdrop__star auth-backdrop__star--${star.tone}`}
+              />
+            ) : null,
+          )}
+        </div>
         <div className="auth-backdrop__world" />
       </div>
     </div>

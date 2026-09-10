@@ -13,12 +13,15 @@
  *     __frame             the window, sized to the scroll port
  *       __void            deep space, flat, at or below --bg-base
  *       __far             the far field: a tile of 1px stars, static
- *       __near            the near field: an SVG of placed 1-2px stars, a few twinkling
+ *       __near            the near field: an SVG of placed 1-2px stars, still
+ *       __breath          the few near stars that breathe, as spans from the
+ *                         shared sky (telemetry/scene/StarField), one
+ *                         compositor layer each
  *       __world           the world: one flat disc, one atmosphere line
  *
- * MOTION at rest: one infinite animation (the twinkle, 16s, opacity only).
- * Nothing else moves. No backdrop-filter, no SVG filter, no data-URI image
- * anywhere here: this is full-viewport on a Raspberry Pi.
+ * MOTION at rest: the breath (opacity, 4 to 9s, out of phase), on the
+ * compositor. Nothing else moves. No backdrop-filter, no SVG filter, no
+ * data-URI image anywhere here: this is full-viewport on a Raspberry Pi.
  */
 
 .auth-backdrop {
@@ -98,8 +101,11 @@
 
 /* ── NEAR FIELD ── the placed stars, 1.2 to 2.2px, crisp. The SVG has no
    viewBox on purpose: positions are percentages of the frame but radii are
-   CSS pixels, so a star is never scaled into a blob on a wide screen. */
-.auth-backdrop__near {
+   CSS pixels, so a star is never scaled into a blob on a wide screen. The
+   ones that breathe are spans in a sibling layer at the same percentages;
+   the tone classes colour both a circle's fill and a span's background. */
+.auth-backdrop__near,
+.auth-backdrop__breath {
   position: absolute;
   inset: 0;
   display: block;
@@ -107,12 +113,11 @@
 }
 .auth-backdrop__star--star {
   fill: rgb(var(--scene-star) / 0.82);
+  background-color: rgb(var(--scene-star) / 0.82);
 }
 .auth-backdrop__star--dust {
   fill: rgb(var(--scene-dust) / 0.7);
-}
-.auth-backdrop__star--twinkle {
-  animation: authTwinkle 16s ease-in-out infinite;
+  background-color: rgb(var(--scene-dust) / 0.7);
 }
 
 /* ── WORLD ── one flat disc, sized from the frame's height (capped at its
@@ -164,19 +169,5 @@
   --atmo-a: 0.28;
 }
 
-/* ── MOTION ──
- * The twinkle: a star eases between two brightnesses and back, slowly enough
- * that you notice the sky is alive only if you stay. */
-@keyframes authTwinkle {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
-}
-
-/* ── STILL FRAME ──
- * Reduced motion keeps everything and freezes it where it looks best: the
- * twinkling stars full. Nothing is stripped. */
-@media (prefers-reduced-motion: reduce) {
-  .auth-backdrop__star--twinkle {
-    animation: none;
-  }
-}
+/* ── MOTION ── the breath is the shared sky's (StarField.css): its keyframes,
+   its still frame under reduced motion. Nothing of this scene's own moves. */

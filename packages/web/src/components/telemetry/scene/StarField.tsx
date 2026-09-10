@@ -9,6 +9,10 @@ import './StarField.css';
  * independent pixel at every host size; the host crops it, and a smaller host
  * simply sees the top left of the same sky.
  *
+ * Scenes that place their stars by percentage of a frame rather than in
+ * pixels (the login backdrop, open space) keep their own still stars and
+ * take only `Breath`, the breathing star, from here.
+ *
  * Two layers, for one reason: cost. The still stars are one inline SVG,
  * painted once. The few that breathe are HTML spans, one each, animated on
  * the compositor thread. A CSS animation on an element inside an SVG runs on
@@ -94,11 +98,13 @@ function bandDistance(spec: StarFieldSpec, band: StarBand, fx: number, fy: numbe
   return Math.hypot((fx - px) * (spec.width / spec.height), fy - py);
 }
 
-/* The twinkle periods. A real star's light wavers on a scale of seconds; the
+/* The breath periods. A real star's light wavers on a scale of seconds; the
  * soothing version of that is a slow breath, four to nine seconds each way,
  * and no two periods a multiple of another, so the breathing stars never fall
- * into step. Slower than this and the sky reads as still. */
-const PERIODS = [4.2, 5.1, 5.9, 6.8, 7.7, 8.9] as const;
+ * into step. Slower than this and the sky reads as still. Every scene picks
+ * from this list, so the whole app breathes at one pace. */
+export const BREATH_PERIODS: ReadonlyArray<number> = [4.2, 5.1, 5.9, 6.8, 7.7, 8.9];
+const PERIODS = BREATH_PERIODS;
 
 export function scatterStars(spec: StarFieldSpec): Star[] {
   const next = mulberry32(spec.seed);
@@ -152,20 +158,55 @@ function StillStar({ star }: { star: Star }) {
   return <circle cx={star.x + 0.5} cy={star.y + 0.5} r={1} fill={fill} opacity={star.a} />;
 }
 
-/* A breathing star: the same point as a span. Its resting brightness is the
- * alpha of its colour, so the animation's opacity multiplies it and a dim
- * star stays a dim star. */
-function BreathingStar({ star, twinkle }: { star: Star; twinkle: NonNullable<Star['twinkle']> }) {
+export interface BreathProps {
+  /** Where the star sits, in the host's units: a pixel number or any CSS length. */
+  left: number | string;
+  top: number | string;
+  /** 1 for a crisp point, 2 for a round dot. */
+  size: 1 | 2;
+  /** Seconds each way and seconds into the loop at mount. */
+  period: number;
+  phase: number;
+  /** The star's colour with its resting brightness in the alpha; or leave it to `className`. */
+  color?: string;
+  className?: string;
+}
+
+/**
+ * A breathing star on its own: one span, one compositor layer, the opacity
+ * easing between a third and full on its own period and phase. Its resting
+ * brightness rides in the alpha of its colour, so the animation multiplies
+ * it and a dim star stays a dim star. Scenes that place stars by percentage
+ * of their frame (the login backdrop, open space) use this directly.
+ */
+export function Breath({ left, top, size, period, phase, color, className }: BreathProps) {
   const style: CSSProperties = {
-    left: star.x,
-    top: star.y,
-    width: star.size,
-    height: star.size,
-    backgroundColor: `rgb(${star.dust ? DUST_RGB : STAR_RGB} / ${star.a})`,
-    animationDuration: `${twinkle.period}s`,
-    animationDelay: `-${twinkle.phase}s`,
+    left,
+    top,
+    width: size,
+    height: size,
+    animationDuration: `${period}s`,
+    animationDelay: `-${phase}s`,
   };
-  return <span className={star.size === 2 ? 'star-field__breath star-field__breath--dot' : 'star-field__breath'} style={style} />;
+  if (color !== undefined) style.backgroundColor = color;
+  const classes = ['star-field__breath'];
+  if (size === 2) classes.push('star-field__breath--dot');
+  if (className) classes.push(className);
+  return <span className={classes.join(' ')} style={style} />;
+}
+
+/* A breathing star of the field: the same point as a span. */
+function BreathingStar({ star, twinkle }: { star: Star; twinkle: NonNullable<Star['twinkle']> }) {
+  return (
+    <Breath
+      left={star.x}
+      top={star.y}
+      size={star.size}
+      period={twinkle.period}
+      phase={twinkle.phase}
+      color={`rgb(${star.dust ? DUST_RGB : STAR_RGB} / ${star.a})`}
+    />
+  );
 }
 
 interface StarFieldProps {

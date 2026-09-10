@@ -26,7 +26,8 @@
 
 /* ── THE BREATH ── a star's opacity easing between a third and its rest,
    each on its own period and phase (set inline). Never all the way out,
-   never a flash. Its own layer, so the compositor owns it. */
+   never a flash. Its own layer, so the compositor owns it. Also used on its
+   own by the scenes that place stars by percentage (see `Breath`). */
 .star-field__breath {
   position: absolute;
   display: block;

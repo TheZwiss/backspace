@@ -1,6 +1,7 @@
-import { useId, type CSSProperties, type ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 import { Mascot, type MascotState } from './Mascot';
 import { SCENE_PALETTE as P } from '../telemetry/scene/palette';
+import { BREATH_PERIODS, Breath } from '../telemetry/scene/StarField';
 import './CrewEmptyState.css';
 
 /**
@@ -66,13 +67,15 @@ interface Star {
   tone: 'star' | 'dust';
 }
 
-/** A twinkling star also carries its own period and phase, so the group never beats in step. */
+/** A breathing star also carries its own period and phase, from the shared sky's list, so the group never beats in step. */
 interface Twinkler extends Star {
   period: number;
   phase: number;
 }
 
 const TONE: Record<Star['tone'], string> = { star: P.star, dust: P.dust };
+/** The star tone as channels, so a breathing star's rest can ride in its alpha. */
+const STAR_RGB = [1, 3, 5].map((i) => Number.parseInt(P.star.slice(i, i + 2), 16)).join(' ');
 
 function pickStar(next: () => number): Pick<Star, 'r' | 'a' | 'tone'> {
   const roll = next();
@@ -158,8 +161,8 @@ function skyFor(seed: number, density: 'field' | 'few'): Sky {
     r: 1,
     a: 0.8 + next() * 0.15,
     tone: 'star',
-    period: 14 + Math.round(next() * 8),
-    phase: Math.round(next() * 20),
+    period: BREATH_PERIODS[Math.floor(next() * BREATH_PERIODS.length)] ?? 5.9,
+    phase: Math.round(next() * 90) / 10,
   }));
   const sky: Sky = { offset, still, twinkle };
   SKIES.set(key, sky);
@@ -183,14 +186,12 @@ interface OpenSpaceProps {
 /**
  * Open space: a sparse field of crisp distant stars over the surface the host
  * already has. It paints no background of its own; the page's surface is the
- * sky (--bg-chat in a column, --bg-channel in a sidebar). One layer, the
- * stars, in one inline SVG that the host positions absolutely behind its
- * content and never lets past its own box. Sized by CSS, so the same sky
- * fills any frame without scaling a single star.
- *
- * The twinkle group is the one infinite animation this layer spends: a few
- * bright points easing between two opacities over fourteen seconds or more,
- * each on its own period and phase.
+ * sky (--bg-chat in a column, --bg-channel in a sidebar). One layer that the
+ * host positions absolutely behind its content and never lets past its own
+ * box: the still stars in one inline SVG, sized by CSS so the same sky fills
+ * any frame without scaling a single star, and the handful that breathe as
+ * the shared sky's spans (telemetry/scene/StarField), one compositor layer
+ * each, at the same percentages of the frame.
  */
 export function OpenSpace({ sky, density, className }: OpenSpaceProps) {
   // React's ids carry colons, which are not safe inside url(#…) references.
@@ -198,31 +199,28 @@ export function OpenSpace({ sky, density, className }: OpenSpaceProps) {
   const patternId = `open-space-${uid}`;
   const patch = skyFor(sky, density);
   return (
-    <svg className={`open-space${className ? ` ${className}` : ''}`} aria-hidden="true" focusable="false">
-      {density === 'field' && (
-        <defs>
-          <pattern
-            id={patternId}
-            width={TILE.w}
-            height={TILE.h}
-            patternUnits="userSpaceOnUse"
-            patternTransform={`translate(${patch.offset.x} ${patch.offset.y})`}
-          >
-            {FIELD.map((star, i) => <Point key={i} star={star} unit="px" />)}
-          </pattern>
-        </defs>
-      )}
-      {density === 'field' && <rect width="100%" height="100%" fill={`url(#${patternId})`} />}
-      {patch.still.map((star, i) => <Point key={i} star={star} unit="%" />)}
-      <g className="open-space__twinkle">
-        {patch.twinkle.map((star, i) => {
-          const timing: CSSProperties = { animationDuration: `${star.period}s`, animationDelay: `-${star.phase}s` };
-          return (
-            <circle key={i} cx={`${star.x}%`} cy={`${star.y}%`} r={star.r} fill={TONE[star.tone]} fillOpacity={star.a} style={timing} />
-          );
-        })}
-      </g>
-    </svg>
+    <div className={`open-space${className ? ` ${className}` : ''}`} aria-hidden="true">
+      <svg className="open-space__still" focusable="false">
+        {density === 'field' && (
+          <defs>
+            <pattern
+              id={patternId}
+              width={TILE.w}
+              height={TILE.h}
+              patternUnits="userSpaceOnUse"
+              patternTransform={`translate(${patch.offset.x} ${patch.offset.y})`}
+            >
+              {FIELD.map((star, i) => <Point key={i} star={star} unit="px" />)}
+            </pattern>
+          </defs>
+        )}
+        {density === 'field' && <rect width="100%" height="100%" fill={`url(#${patternId})`} />}
+        {patch.still.map((star, i) => <Point key={i} star={star} unit="%" />)}
+      </svg>
+      {patch.twinkle.map((star, i) => (
+        <Breath key={i} left={`${star.x}%`} top={`${star.y}%`} size={2} period={star.period} phase={star.phase} color={`rgb(${STAR_RGB} / ${star.a})`} />
+      ))}
+    </div>
   );
 }
 

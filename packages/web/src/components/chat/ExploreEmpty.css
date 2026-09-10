@@ -1,6 +1,6 @@
 /* ── EXPLORE, NOTHING TO SHOW ──
  * Scene bible row 8, second pass. The same open space as the crew states
- * (`OpenSpace` in CrewEmptyState.tsx owns the stars and their one animation,
+ * (`OpenSpace` in CrewEmptyState.tsx owns the stars and their breath,
  * and paints no background; the page's --bg-chat is the sky); this file only
  * seats Nori and the copy.
  *

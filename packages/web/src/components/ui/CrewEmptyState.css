@@ -7,10 +7,11 @@
  * Structure, back to front:
  *   (the host's surface)   --bg-chat in a column, --bg-channel in a sidebar;
  *                          this file paints no background of its own
- *   .open-space            one inline SVG, absolutely positioned by the host,
+ *   .open-space            one layer, absolutely positioned by the host,
  *                          covering the component's box and never more
- *     (tile / points)      the star field: 1-2px points on the pixel grid
- *     __twinkle            the handful that breathe
+ *     __still              the star field in one SVG: 1-2px points on the
+ *                          pixel grid, painted once
+ *     (breath spans)       the handful that breathe, from the shared sky
  *   .crew-empty__stage     Nori, at the size the call site gives
  *   .crew-empty__copy      the caller's line, full contrast
  *
@@ -18,39 +19,31 @@
  * space is the surface the page already has; no box is drawn on it, and
  * nothing adds light to it: no wash, grain, gloss, vignette, glow or scrim.
  *
- * MOTION: Nori's own hook runs the body. This file adds one infinite
- * animation, the twinkle: opacity only, fourteen seconds or longer per star,
- * every star on its own period and phase. Reduced motion holds each star at
- * its resting brightness.
+ * MOTION: Nori's own hook runs the body. The stars' breath is the shared
+ * sky's (opacity, 4 to 9s, on the compositor, each star on its own period
+ * and phase); reduced motion holds each star at its resting brightness.
  *
  * FILTERS: none. No backdrop-filter, no SVG filter, no raster image. */
 
-/* An SVG is a replaced element and takes no size from its offsets, so the
-   size is written out: exactly the host's box, never the padding around it,
-   so no star ever sits under a section label or a list row. */
+/* The layer is exactly the host's box, never the padding around it, so no
+   star ever sits under a section label or a list row. The SVG inside is a
+   replaced element and takes no size from its offsets, so its size is
+   written out. */
 .open-space {
   position: absolute;
   inset: 0;
   display: block;
-  width: 100%;
-  height: 100%;
+  overflow: hidden;
   pointer-events: none;
 }
-
-/* ── TWINKLE ── the bright few ease between full and a third, alternating,
-   so the eye catches one now and then and never a blink. */
-.open-space__twinkle circle {
-  animation: openSpaceTwinkle 16s ease-in-out infinite alternate;
+.open-space__still {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
-@keyframes openSpaceTwinkle {
-  from {
-    opacity: 1;
-  }
-  to {
-    opacity: 0.35;
-  }
-}
+/* ── THE BREATH ── the shared sky's (StarField.css): its keyframes, its
+   still frame under reduced motion. */
 
 /* ── THE CREW STATES ── */
 
@@ -101,9 +94,6 @@
 @media (prefers-reduced-motion: reduce) {
   .crew-empty__stage,
   .crew-empty__copy {
-    animation: none;
-  }
-  .open-space__twinkle circle {
     animation: none;
   }
 }
