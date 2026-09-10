@@ -27,7 +27,8 @@ export async function adminTelemetryRoutes(app: FastifyInstance): Promise<void> 
 
   // PUT /api/admin/telemetry: the on/off transition. Enabling an instance
   // that is already on is a no-op in setTelemetryEnabled: a repeated save must
-  // not rotate the id or restamp the last reported day.
+  // not rotate the id. Neither branch touches the last reported day, so a
+  // toggle never costs a ping.
   app.put<{ Body: { enabled?: unknown } | undefined }>(
     '/api/admin/telemetry',
     { preHandler: [authenticate, requireAdmin] },
@@ -37,7 +38,7 @@ export async function adminTelemetryRoutes(app: FastifyInstance): Promise<void> 
         sendError(reply, 400, 'validation_failed');
         return undefined;
       }
-      return setTelemetryEnabled(getRawDb(), enabled, utcDay(new Date()));
+      return setTelemetryEnabled(getRawDb(), enabled);
     },
   );
 

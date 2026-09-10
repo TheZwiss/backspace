@@ -18,7 +18,7 @@
   },
   "yes": {
     "title": "Signal acquired.",
-    "body": "The first hello goes out tomorrow at a random minute, and every day after. Thank you. It is a lot less quiet out here now.",
+    "body": "The first hello goes out at a random minute, and every day after. Thank you. It is a lot less quiet out here now.",
     "close": "Close"
   },
   "no": {

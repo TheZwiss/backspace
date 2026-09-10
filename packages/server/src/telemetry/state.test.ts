@@ -35,58 +35,68 @@ describe('telemetry state', () => {
     expect(readTelemetryState(db)).toEqual({ enabled: null, id: null, lastDay: null, lastError: null });
   });
 
-  it('mints an id and sets lastDay to today on enable', () => {
-    const s = setTelemetryEnabled(db, true, '2026-09-06');
+  it('mints an id and leaves the last reported day unset on enable', () => {
+    const s = setTelemetryEnabled(db, true);
     expect(s.enabled).toBe(true);
     expect(s.id).toMatch(/^[0-9a-f-]{36}$/);
-    expect(s.lastDay).toBe('2026-09-06');
+    // The day belongs to the reporter. Stamping it here held the first ping
+    // until tomorrow and cost a day of data on every toggle.
+    expect(s.lastDay).toBeNull();
     expect(s.lastError).toBeNull();
   });
 
   it('keeps the id across disable and re-enable', () => {
-    const first = setTelemetryEnabled(db, true, '2026-09-06').id;
-    expect(setTelemetryEnabled(db, false, '2026-09-06')).toMatchObject({ enabled: false, id: first });
-    const second = setTelemetryEnabled(db, true, '2026-09-07');
+    const first = setTelemetryEnabled(db, true).id;
+    expect(setTelemetryEnabled(db, false)).toMatchObject({ enabled: false, id: first });
+    const second = setTelemetryEnabled(db, true);
     expect(second.id).toBe(first);
-    expect(second.lastDay).toBe('2026-09-07');
+  });
+
+  it('carries the reported day through an off and on again, so a toggle costs no ping', () => {
+    setTelemetryEnabled(db, true);
+    recordTelemetrySuccess(db, '2026-09-06');
+    setTelemetryEnabled(db, false);
+    expect(setTelemetryEnabled(db, true).lastDay).toBe('2026-09-06');
   });
 
   it('mints an id only when there is none', () => {
     db.prepare('UPDATE instance_settings SET telemetry_enabled = 0, telemetry_id = NULL WHERE id = 1').run();
-    const first = setTelemetryEnabled(db, true, '2026-09-06').id;
+    const first = setTelemetryEnabled(db, true).id;
     expect(first).toMatch(/^[0-9a-f-]{36}$/);
-    expect(setTelemetryEnabled(db, false, '2026-09-06').id).toBe(first);
-    expect(setTelemetryEnabled(db, true, '2026-09-07').id).toBe(first);
+    expect(setTelemetryEnabled(db, false).id).toBe(first);
+    expect(setTelemetryEnabled(db, true).id).toBe(first);
   });
 
   it('keeps the id and last day when enable is called while already enabled', () => {
-    const first = setTelemetryEnabled(db, true, '2026-09-06');
-    const second = setTelemetryEnabled(db, true, '2026-09-07');
+    const first = setTelemetryEnabled(db, true);
+    recordTelemetrySuccess(db, '2026-09-06');
+    const second = setTelemetryEnabled(db, true);
     expect(second.id).toBe(first.id);
     expect(second.lastDay).toBe('2026-09-06');
     expect(readTelemetryState(db)).toMatchObject({ enabled: true, id: first.id, lastDay: '2026-09-06' });
   });
 
   it('keeps a pending error when enable is called while already enabled', () => {
-    setTelemetryEnabled(db, true, '2026-09-06');
+    setTelemetryEnabled(db, true);
     recordTelemetryFailure(db, '2026-09-07', 503);
-    expect(setTelemetryEnabled(db, true, '2026-09-07').lastError).toEqual({ day: '2026-09-07', status: 503 });
+    expect(setTelemetryEnabled(db, true).lastError).toEqual({ day: '2026-09-07', status: 503 });
   });
 
-  it('clears the last day and the last error on disable', () => {
-    setTelemetryEnabled(db, true, '2026-09-06');
+  it('keeps the last reported day and clears the last error on disable', () => {
+    setTelemetryEnabled(db, true);
+    recordTelemetrySuccess(db, '2026-09-06');
     recordTelemetryFailure(db, '2026-09-07', 503);
     const id = readTelemetryState(db).id;
-    expect(setTelemetryEnabled(db, false, '2026-09-07')).toEqual({
+    expect(setTelemetryEnabled(db, false)).toEqual({
       enabled: false,
       id,
-      lastDay: null,
+      lastDay: '2026-09-06',
       lastError: null,
     });
   });
 
   it('records success and failure', () => {
-    setTelemetryEnabled(db, true, '2026-09-06');
+    setTelemetryEnabled(db, true);
     recordTelemetryFailure(db, '2026-09-07', 503);
     expect(readTelemetryState(db).lastError).toEqual({ day: '2026-09-07', status: 503 });
     recordTelemetrySuccess(db, '2026-09-07');
@@ -94,13 +104,14 @@ describe('telemetry state', () => {
   });
 
   it('keeps the id and the last day when a failure is recorded', () => {
-    const id = setTelemetryEnabled(db, true, '2026-09-06').id;
+    const id = setTelemetryEnabled(db, true).id;
+    recordTelemetrySuccess(db, '2026-09-06');
     recordTelemetryFailure(db, '2026-09-07', 500);
     expect(readTelemetryState(db)).toMatchObject({ enabled: true, id, lastDay: '2026-09-06' });
   });
 
   it('reads a corrupt last error as no error', () => {
-    setTelemetryEnabled(db, true, '2026-09-06');
+    setTelemetryEnabled(db, true);
     db.prepare('UPDATE instance_settings SET telemetry_last_error = ? WHERE id = 1').run('not json');
     expect(readTelemetryState(db).lastError).toBeNull();
     db.prepare('UPDATE instance_settings SET telemetry_last_error = ? WHERE id = 1').run('{"day":"2026-09-07"}');
