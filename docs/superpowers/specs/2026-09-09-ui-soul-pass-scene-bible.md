@@ -146,6 +146,15 @@ Soothing and calm. Motion that is noticed is too much.
   every frame; the shared sky (`telemetry/scene/StarField`) draws its still
   stars in one SVG painted once and its breathing stars as spans, one layer
   each, for that reason. Scenes take their stars from it.
+- Nothing continuous flows at sixty frames a second. A screen that is
+  always redrawing costs a tenth of a core on an M1 Pro before a single
+  blur is counted, and it never sleeps. So the breath steps on a shared
+  quarter-second beat (`BREATH_TICK`): every period and phase is a multiple
+  of it and every star uses a `steps()` easing with one step per tick, so
+  the whole sky changes four times a second and the compositor draws four
+  frames, not sixty. Nori's loops inside her SVG step on the same beat.
+  Smooth motion is reserved for rare, short events (a streak, the
+  crossing) and for the one moored craft that is looked at, not idled on.
 - Hover changes one thing softly (a plume a little longer, a glow a little
   warmer) over half a second or more. Press does nothing theatrical.
 - `prefers-reduced-motion: reduce` freezes into the best frame and strips
