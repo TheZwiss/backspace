@@ -88,3 +88,13 @@
 {"snapshot_date":"2026-09-09","dimension":"/TheZwiss/backspace/commits/main","title":"/commits/main","count":35,"uniques":6}
 {"snapshot_date":"2026-09-09","dimension":"/TheZwiss/backspace/graphs/traffic","title":"/graphs/traffic","count":34,"uniques":1}
 {"snapshot_date":"2026-09-09","dimension":"/TheZwiss/backspace/pull/137","title":"/pull/137","count":34,"uniques":2}
+{"snapshot_date":"2026-09-10","dimension":"/TheZwiss/backspace","title":"Overview","count":674,"uniques":232}
+{"snapshot_date":"2026-09-10","dimension":"/TheZwiss/backspace/pulls","title":"/pulls","count":219,"uniques":19}
+{"snapshot_date":"2026-09-10","dimension":"/TheZwiss/backspace/issues","title":"/issues","count":134,"uniques":26}
+{"snapshot_date":"2026-09-10","dimension":"/TheZwiss/backspace/blob/main/docs/screenshots/voice-video-grid.webp","title":"/blob/main/docs/screenshots/voice-video-grid.webp","count":52,"uniques":44}
+{"snapshot_date":"2026-09-10","dimension":"/TheZwiss/backspace/pull/132","title":"/pull/132","count":50,"uniques":2}
+{"snapshot_date":"2026-09-10","dimension":"/TheZwiss/backspace/releases","title":"/releases","count":46,"uniques":21}
+{"snapshot_date":"2026-09-10","dimension":"/TheZwiss/backspace/releases/tag/v1.0.0","title":"/releases/tag/v1.0.0","count":42,"uniques":32}
+{"snapshot_date":"2026-09-10","dimension":"/TheZwiss/backspace/commits/main","title":"/commits/main","count":35,"uniques":6}
+{"snapshot_date":"2026-09-10","dimension":"/TheZwiss/backspace/pull/137","title":"/pull/137","count":34,"uniques":2}
+{"snapshot_date":"2026-09-10","dimension":"/TheZwiss/backspace/releases/tag/v1.1.2","title":"/releases/tag/v1.1.2","count":32,"uniques":23}
