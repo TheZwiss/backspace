@@ -373,10 +373,12 @@ opening it writes nothing.
 `routes/adminTelemetry.ts` is the only writer of the four `instance_settings`
 telemetry columns. `PATCH /api/settings/instance` does not touch them, so the id
 lifecycle has exactly one owner. The first enable mints a UUID that is kept for
-the life of the install; every enable stamps today as the last reported day,
-which is what makes the first ping go out tomorrow. Disabling keeps the id and
-clears the bookkeeping, so a later re-enable reports as the same instance.
-Saving "on" while it is already on changes nothing at all.
+the life of the install. Neither branch writes `telemetry_last_day`: that column
+belongs to the reporter, and stamping it here cost the instance a day's ping
+every time the switch was flipped twice. Disabling keeps the id and the last
+reported day and clears the pending error, so a later re-enable reports as the
+same instance and does not repeat a day it already sent. Saving "on" while it is
+already on changes nothing at all.
 
 The first admin to sign in on an instance that was never asked sees a one-time
 modal. Dismissing it without answering snoozes it for 7 days in that browser and

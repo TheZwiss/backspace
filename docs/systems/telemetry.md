@@ -133,13 +133,13 @@ because SQLite cannot add a `NOT NULL` column without a default to an existing
 table; `ensureDefaults` fills it on boot from the oldest local, non-deleted
 user's `created_at`, or from the current time when there is none.
 
-Transitions, all through `setTelemetryEnabled(sqlite, enabled, today)`:
+Transitions, all through `setTelemetryEnabled(sqlite, enabled)`:
 
 | From | To | What happens |
 |---|---|---|
-| `null` or off | on | a `crypto.randomUUID()` is minted if the row has no id yet, `telemetry_last_day` is set to today, the last error is cleared |
+| `null` or off | on | a `crypto.randomUUID()` is minted if the row has no id yet, the last error is cleared |
 | on | on | nothing at all |
-| any | off | the last day and the last error are cleared; the id is kept |
+| any | off | the last error is cleared; the id and the last reported day are kept |
 
 The id is minted once and kept for the life of the install, through any number
 of off-and-on cycles. This is what Home Assistant and Grafana do. Rotating it
@@ -152,12 +152,21 @@ day never qualifies; one that was on for longer stays eligible for up to 30
 days after the switch and is counted twice in the network series for that
 window. The 90-day retention removes the rows either way.
 
-The on-to-on case matters too. Restamping the last day on a repeated save would
-skip that day's ping. A second click in the admin panel and a re-run of
+The on-to-on case matters too. A second click in the admin panel and a re-run of
 `install.sh` with `TELEMETRY=on` both take that path and both change nothing.
 
-Setting the last day to today on the way in is what makes the first ping go out
-tomorrow rather than within the minute.
+**Neither branch writes `telemetry_last_day`.** That column records what the
+reporter actually sent, and `recordTelemetrySuccess` is the only thing that
+writes it. Until 2026-09-10 switching on stamped today, to hold the first ping
+until the next day rather than send it within the minute. It cost a full day of
+data every time an admin flipped the switch twice, and it protected nothing: the
+receiver's primary key is `(instance, day)` and it upserts, so a second ping for
+a day it already holds overwrites that row instead of adding one. With the
+column left alone, a toggle after the day's ping stays quiet because the day is
+already stamped, a toggle before it still reports at the slot, and an instance
+switched on after its slot has passed reports within the minute instead of
+staying dark until tomorrow. The panel reads "never reported" until a ping
+actually lands, which is what the column now means.
 
 **Backup restore is a known limit.** A database restored onto two machines
 carries the same `telemetry_id`. The receiver upserts both onto one row per day,
