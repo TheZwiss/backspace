@@ -533,6 +533,79 @@ function showNotification(title: string, body: string, onClick?: () => void): vo
 
 // ─── IPC Handlers ───────────────────────────────────────────────────────────
 
+// ---------------------------------------------------------------------------
+// Screen share sources
+// ---------------------------------------------------------------------------
+
+interface SerializedScreenSource {
+  id: string;
+  name: string;
+  thumbnailDataUrl: string;
+  appIconDataUrl: string | null;
+  isScreen: boolean;
+}
+
+interface PendingScreenSelection {
+  sourceId: string;
+  shareAudio: boolean;
+  at: number;
+}
+
+/** A preselection older than this is stale: the setup screen was closed without starting. */
+const PENDING_SCREEN_SELECTION_TTL_MS = 30_000;
+
+let pendingScreenSelection: PendingScreenSelection | null = null;
+/** Loopback preference for system-picker captures (no preselection carries it there). */
+let lastSystemPickerShareAudio: boolean | null = null;
+/** Last enumeration, so a preselected id resolves to its DesktopCapturerSource without a second scan. */
+let lastScreenSources: Electron.DesktopCapturerSource[] = [];
+
+async function enumerateScreenSources(): Promise<Electron.DesktopCapturerSource[]> {
+  const sources = await desktopCapturer.getSources({
+    types: ['screen', 'window'],
+    thumbnailSize: { width: 320, height: 180 },
+    fetchWindowIcons: true,
+  });
+  lastScreenSources = sources;
+  return sources;
+}
+
+function serializeScreenSources(sources: Electron.DesktopCapturerSource[]): SerializedScreenSource[] {
+  return sources.map((source) => ({
+    id: source.id,
+    name: source.name,
+    thumbnailDataUrl: source.thumbnail.toDataURL(),
+    appIconDataUrl: source.appIcon && !source.appIcon.isEmpty() ? source.appIcon.toDataURL() : null,
+    isScreen: source.id.startsWith('screen:'),
+  }));
+}
+
+/**
+ * Who picks the source. On a Wayland session the compositor's screencast
+ * portal does: `desktopCapturer.getSources()` opens the portal dialog and
+ * returns only what the user chose there, so an in-app grid is pointless and
+ * listing sources up front would prompt the user on every open. The renderer
+ * then shows a "choose" card that triggers the portal on click, like a browser.
+ * X11, macOS and Windows list everything without a prompt.
+ */
+type ScreenSharePickerMode = 'app' | 'system';
+
+function screenSharePickerMode(): ScreenSharePickerMode {
+  if (process.platform !== 'linux') return 'app';
+  const sessionType = (process.env.XDG_SESSION_TYPE ?? '').toLowerCase();
+  if (sessionType === 'wayland' || (!!process.env.WAYLAND_DISPLAY && sessionType !== 'x11')) return 'system';
+  return 'app';
+}
+
+/** One-shot: returns and clears the pending preselection, or null when absent or stale. */
+function takePendingScreenSelection(): PendingScreenSelection | null {
+  const pending = pendingScreenSelection;
+  pendingScreenSelection = null;
+  if (!pending) return null;
+  if (Date.now() - pending.at > PENDING_SCREEN_SELECTION_TTL_MS) return null;
+  return pending;
+}
+
 function registerIpcHandlers(): void {
   ipcMain.on('show-notification', (event, data: { title: string; body: string; options?: { channelId?: string; spaceId?: string; userId?: string } }) => {
     if (event.sender !== mainWindow?.webContents) return;
@@ -691,6 +764,25 @@ function registerIpcHandlers(): void {
   ipcMain.on('screen-share-selected', (_event, _sourceId: string | null, _shareAudio?: boolean) => {
     // Handled via ipcMain.once in the display media handler — this is just
     // a safety net to prevent unhandled-message warnings
+  });
+  // Setup-screen flow: the renderer lists sources up front, and preselects one
+  // right before it calls getDisplayMedia(); the handler answers from that.
+  ipcMain.handle('get-screen-sources', async () => serializeScreenSources(await enumerateScreenSources()));
+  ipcMain.handle('get-screen-share-picker-mode', () => screenSharePickerMode());
+  // handle, not on: the renderer awaits this before calling getDisplayMedia(),
+  // so the selection is guaranteed to be armed when the display-media handler
+  // runs. Fire-and-forget left the two unordered — the handler could win, fall
+  // back to the prompted flow, and leave this armed to hijack the next share.
+  ipcMain.handle('screen-share-preselect', (event, sourceId: string, shareAudio?: boolean) => {
+    if (event.sender !== mainWindow?.webContents) return;
+    if (typeof sourceId !== 'string' || !sourceId) return;
+    pendingScreenSelection = { sourceId, shareAudio: shareAudio === true, at: Date.now() };
+  });
+  // System-picker sessions have no tile to preselect; the renderer only tells
+  // us whether loopback audio should ride along with whatever the portal returns.
+  ipcMain.on('screen-share-audio-preference', (event, shareAudio?: boolean) => {
+    if (event.sender !== mainWindow?.webContents) return;
+    lastSystemPickerShareAudio = shareAudio === true;
   });
 
   // Auto-launch settings
@@ -1142,36 +1234,57 @@ if (!gotTheLock) {
     await session.defaultSession.clearStorageData({ storages: ['serviceworkers'] });
     await session.defaultSession.clearCache();
 
-    // Intercept getDisplayMedia() — show custom picker in renderer.
+    // Intercept getDisplayMedia(). Two ways to answer it:
+    //   1. Preselected (current web client): ScreenShareSetup listed the
+    //      sources via get-screen-sources, the user picked a tile, and the
+    //      renderer awaited screen-share-preselect before calling
+    //      getDisplayMedia(). Answer immediately, no prompt.
+    //   2. Prompted (older web clients, or nothing preselected): push the
+    //      sources to the renderer and wait for screen-share-selected.
     // Audio loopback controlled by user's shareAudio toggle.
     session.defaultSession.setDisplayMediaRequestHandler(async (_request, callback) => {
       console.log('[Main:ScreenShare] Handler invoked');
       try {
-        const sources = await desktopCapturer.getSources({
-          types: ['screen', 'window'],
-          thumbnailSize: { width: 320, height: 180 },
-          fetchWindowIcons: true,
-        });
+        const pending = takePendingScreenSelection();
+        if (pending) {
+          let selected = lastScreenSources.find((s) => s.id === pending.sourceId);
+          if (!selected) selected = (await enumerateScreenSources()).find((s) => s.id === pending.sourceId);
+          if (!selected) {
+            console.warn('[Main:ScreenShare] Preselected source vanished:', pending.sourceId);
+            // @ts-ignore — deny the request without crashing
+            callback();
+            return;
+          }
+          console.log('[Main:ScreenShare] Using preselected source:', pending.sourceId, 'audio:', pending.shareAudio);
+          callback({ video: selected, ...(pending.shareAudio ? { audio: 'loopback' } : {}) });
+          return;
+        }
+
+        const sources = await enumerateScreenSources();
         console.log('[Main:ScreenShare] Got', sources.length, 'sources');
 
         if (sources.length === 0) {
-          console.warn('[Main:ScreenShare] No sources — Screen Recording permission may not be granted');
+          console.warn('[Main:ScreenShare] No sources — Screen Recording permission may not be granted, or the system picker was cancelled');
           // @ts-ignore — Electron throws if we pass {} when video was requested; pass nothing to deny
           callback();
           return;
         }
 
-        const serialized = sources.map((source) => ({
-          id: source.id,
-          name: source.name,
-          thumbnailDataUrl: source.thumbnail.toDataURL(),
-          appIconDataUrl: source.appIcon && !source.appIcon.isEmpty()
-            ? source.appIcon.toDataURL() : null,
-          isScreen: source.id.startsWith('screen:'),
-        }));
+        // System picker (Wayland portal): the user already chose in the
+        // portal dialog and this is the only source it returned. Answer
+        // directly instead of showing a one-tile grid.
+        if (screenSharePickerMode() === 'system' && sources.length === 1) {
+          // Default off: this branch answers without consulting the renderer, so
+          // a web client too old to send a preference must not have its audio
+          // captured against the setting it thinks is in force.
+          const shareAudio = lastSystemPickerShareAudio ?? false;
+          console.log('[Main:ScreenShare] System picker returned one source:', sources[0]!.id, 'audio:', shareAudio);
+          callback({ video: sources[0]!, ...(shareAudio ? { audio: 'loopback' } : {}) });
+          return;
+        }
 
         // Send sources to renderer, wait for user selection
-        mainWindow?.webContents.send('screen-share-sources', serialized);
+        mainWindow?.webContents.send('screen-share-sources', serializeScreenSources(sources));
 
         const { sourceId, shareAudio } = await new Promise<{ sourceId: string | null; shareAudio: boolean }>((resolve) => {
           ipcMain.once('screen-share-selected', (_event, id: string | null, wantAudio?: boolean) => {
@@ -1207,6 +1320,11 @@ if (!gotTheLock) {
         console.error('[Main:ScreenShare] Handler error:', err);
         // @ts-ignore — deny the request without crashing
         callback();
+      } finally {
+        // The cache exists only to resolve a preselected id within one request.
+        // Holding it pins a full-size NativeImage thumbnail per source for the
+        // life of the process, so drop it as soon as the request is answered.
+        lastScreenSources = [];
       }
     });
 

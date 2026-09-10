@@ -97,6 +97,15 @@ contextBridge.exposeInMainWorld('backspace', {
   selectScreenSource: (sourceId: string | null, shareAudio?: boolean) => {
     ipcRenderer.send('screen-share-selected', sourceId, shareAudio ?? true);
   },
+  getScreenSources: () => ipcRenderer.invoke('get-screen-sources'),
+  // invoke, not send: the renderer must know the preselection has landed in the
+  // main process before it calls getDisplayMedia(), or the two race.
+  preselectScreenSource: (sourceId: string, shareAudio?: boolean) =>
+    ipcRenderer.invoke('screen-share-preselect', sourceId, shareAudio ?? true),
+  getScreenSharePickerMode: () => ipcRenderer.invoke('get-screen-share-picker-mode'),
+  setScreenShareAudioPreference: (shareAudio: boolean) => {
+    ipcRenderer.send('screen-share-audio-preference', shareAudio);
+  },
 
   // Instance URL management
   getInstanceUrl: () => ipcRenderer.invoke('get-instance-url'),

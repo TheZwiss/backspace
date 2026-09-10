@@ -1,15 +1,12 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useSpaceStore, getChannelOrigin } from '../../stores/spaceStore';
-import { getActiveRoom } from '../../hooks/useLiveKit';
 import { wsSend } from '../../hooks/useWebSocket';
 import { ScreenShareSettingsPopover } from './ScreenShareSettingsPopover';
 import { ConnectionInfoPopover } from './ConnectionInfoPopover';
-import { startScreenShare, stopScreenShare } from '../../utils/screenShare';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
-import { broadcastVoiceStatus } from '../../utils/voice';
-import { handleCameraAction } from '../../utils/voiceActions';
+import { handleCameraAction, handleScreenShareAction } from '../../utils/voiceActions';
 
 /**
  * VoiceControls renders the voice status + button rows.
@@ -26,10 +23,11 @@ export function VoiceControls() {
   const isLiveKitConnected = useVoiceStore((s) => s.isLiveKitConnected);
   const connectionQuality = useVoiceStore((s) => s.connectionQuality);
   const channels = useSpaceStore((s) => s.channels);
-  const [showScreenShareSettings, setShowScreenShareSettings] = useState(false);
+  // Screen-share button: idle → source picker; live → settings + stop menu.
+  const [showShareMenu, setShowShareMenu] = useState(false);
   const [showConnectionInfo, setShowConnectionInfo] = useState(false);
   const connectionBtnRef = useRef<HTMLButtonElement>(null);
-  const qualityBtnRef = useRef<HTMLButtonElement>(null);
+  const shareBtnRef = useRef<HTMLButtonElement>(null);
 
   const activeDmCall = useVoiceStore((s) => s.activeDmCall);
   const channelPerms = useSpaceStore((s) => currentVoiceChannelId ? s.channelPermissions.get(currentVoiceChannelId) : undefined);
@@ -41,26 +39,30 @@ export function VoiceControls() {
 
   const voiceOrigin = currentVoiceChannelId ? getChannelOrigin(currentVoiceChannelId) : '';
 
+  // A share that ends outside the menu (OS "Stop sharing" bar, track loss,
+  // keybind) must not leave a stale settings popover anchored to the button.
+  useEffect(() => {
+    if (!isScreenSharing) setShowShareMenu(false);
+  }, [isScreenSharing]);
+
   if (!currentVoiceChannelId && !activeDmCall) return null;
 
   const channel = channels.find(c => c.id === currentVoiceChannelId);
   const channelName = channel?.name ?? (activeDmCall ? t('voice:status.dmCall') : t('voice:status.voiceChannel'));
 
-  const handleScreenShare = async () => {
-    const room = getActiveRoom();
-    console.log('[SS] handleScreenShare clicked, room:', !!room, 'isScreenSharing:', isScreenSharing);
-    if (!room) return;
-    try {
-      if (!isScreenSharing) {
-        const started = await startScreenShare(room);
-        if (started) broadcastVoiceStatus();
-      } else {
-        await stopScreenShare(room);
-        broadcastVoiceStatus();
-      }
-    } catch (err) {
-      console.error('[VoiceControls] Failed to toggle screen share:', err);
+  const handleScreenShare = () => {
+    if (isScreenSharing) {
+      const next = !showShareMenu;
+      setShowShareMenu(next);
+      if (next) setShowConnectionInfo(false);
+      return;
     }
+    handleScreenShareAction();
+  };
+
+  const handleStopSharing = () => {
+    setShowShareMenu(false);
+    handleScreenShareAction();
   };
 
   const handleDisconnect = () => {
@@ -108,7 +110,7 @@ export function VoiceControls() {
           ref={connectionBtnRef}
           onClick={() => {
             setShowConnectionInfo(!showConnectionInfo);
-            if (!showConnectionInfo) setShowScreenShareSettings(false);
+            if (!showConnectionInfo) setShowShareMenu(false);
           }}
           className={`w-8 h-8 rounded-lg ${statusBgColor} flex items-center justify-center flex-shrink-0 hover:brightness-125 transition-all`}
           title={t('voice:controls.connectionInfo')}
@@ -147,7 +149,7 @@ export function VoiceControls() {
         />
       </div>
 
-      {/* Row 2: Camera, Screen Share, Video Quality, Noise Suppression */}
+      {/* Row 2: Camera, Screen Share, Noise Suppression */}
       <div className="relative flex items-center gap-1 px-3 pb-2 pt-1">
         {canSpeak && (
           <button
@@ -174,13 +176,18 @@ export function VoiceControls() {
 
         {canStream && (
           <button
+            ref={shareBtnRef}
             onClick={handleScreenShare}
+            // Idle the button starts a share; live it toggles a menu, so it
+            // only claims a popup in the state where it actually opens one.
+            aria-haspopup={isScreenSharing ? 'dialog' : undefined}
+            aria-expanded={isScreenSharing ? showShareMenu : undefined}
             className={`${btnBase} ${
               isScreenSharing
                 ? 'bg-surface-base text-status-online hover:bg-surface-channel'
                 : btnDefaultStyle
             }`}
-            title={isScreenSharing ? t('voice:controls.stopSharing') : t('voice:controls.shareScreen')}
+            title={isScreenSharing ? t('voice:controls.shareOptions') : t('voice:controls.shareScreen')}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
               <path d="M20 18C21.1 18 22 17.1 22 16V6C22 4.9 21.1 4 20 4H4C2.9 4 2 4.9 2 6V16C2 17.1 2.9 18 4 18H0V20H24V18H20ZM4 6H20V16H4V6Z" />
@@ -188,26 +195,6 @@ export function VoiceControls() {
             </svg>
           </button>
         )}
-
-        {/* Video Quality */}
-        <button
-          ref={qualityBtnRef}
-          onClick={() => {
-            setShowScreenShareSettings(!showScreenShareSettings);
-            if (!showScreenShareSettings) setShowConnectionInfo(false);
-          }}
-          className={`${btnBase} ${
-            showScreenShareSettings
-              ? 'bg-surface-base text-accent-primary hover:bg-surface-channel'
-              : btnDefaultStyle
-          }`}
-          title={t('voice:controls.videoQuality')}
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M3 5v14h18V5H3zm16 12H5V7h14v10z" />
-            <path d="M8 15l2.5-3.21L13 15l2-2.5L18 17H6z" />
-          </svg>
-        </button>
 
         {/* AI Noise Suppression (RNNoise) */}
         <button
@@ -237,11 +224,12 @@ export function VoiceControls() {
           </svg>
         </button>
 
-        {/* Screen Share Settings Popover */}
+        {/* Screen share menu — quality settings + stop, anchored to the share button */}
         <ScreenShareSettingsPopover
-          open={showScreenShareSettings}
-          onClose={() => setShowScreenShareSettings(false)}
-          anchorRef={qualityBtnRef}
+          open={showShareMenu && isScreenSharing}
+          onClose={() => setShowShareMenu(false)}
+          anchorRef={shareBtnRef}
+          onStopSharing={handleStopSharing}
         />
       </div>
     </>

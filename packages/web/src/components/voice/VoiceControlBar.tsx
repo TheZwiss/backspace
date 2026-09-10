@@ -36,8 +36,11 @@ export function VoiceControlBar() {
   const isDmCall = !!activeDmCall;
   const canSpeak = isDmCall || hasPermissionBit(channelPerms, PermissionBits.SPEAK);
   const canStream = isDmCall || hasPermissionBit(channelPerms, PermissionBits.STREAM);
-  const [qualityOpen, setQualityOpen] = useState(false);
-  const qualityBtnRef = useRef<HTMLButtonElement>(null);
+  // The screen-share button is the single entry point to stream settings:
+  // idle → opens the OS/Electron source picker; live → opens the settings
+  // popover (quality controls + the red stop action).
+  const [shareMenuOpen, setShareMenuOpen] = useState(false);
+  const shareBtnRef = useRef<HTMLButtonElement>(null);
 
   const handleMute = React.useCallback(() => {
     handleMuteAction(isSpaceMuted, isSpaceDeafened);
@@ -49,7 +52,24 @@ export function VoiceControlBar() {
 
   const handleCamera = () => handleCameraAction();
 
-  const handleScreenShare = () => handleScreenShareAction();
+  const handleScreenShare = () => {
+    if (isScreenSharing) {
+      setShareMenuOpen((open) => !open);
+      return;
+    }
+    handleScreenShareAction();
+  };
+
+  const handleStopSharing = () => {
+    setShareMenuOpen(false);
+    handleScreenShareAction();
+  };
+
+  // A share that ends outside the menu (OS "Stop sharing" bar, track loss,
+  // keybind) must not leave a stale settings popover anchored to the button.
+  useEffect(() => {
+    if (!isScreenSharing) setShareMenuOpen(false);
+  }, [isScreenSharing]);
 
   const handleDisconnect = () => handleDisconnectAction();
 
@@ -127,36 +147,32 @@ export function VoiceControlBar() {
           </button>
         )}
 
-        {/* Screen Share */}
+        {/* Screen Share — picker when idle, settings + stop menu when live */}
         {canStream && (
-          <button
-            onClick={handleScreenShare}
-            className={isScreenSharing ? btnGreen : btnDefault}
-            title={isScreenSharing ? t('voice:controls.stopSharing') : t('voice:controls.shareScreen')}
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M20 18C21.1 18 22 17.1 22 16V6C22 4.9 21.1 4 20 4H4C2.9 4 2 4.9 2 6V16C2 17.1 2.9 18 4 18H0V20H24V18H20ZM4 6H20V16H4V6Z" />
-              <path d="M15 11L11 14V12H9V10H11V8L15 11Z" />
-            </svg>
-          </button>
+          <>
+            <button
+              ref={shareBtnRef}
+              onClick={handleScreenShare}
+              // Idle the button starts a share; live it toggles a menu, so it
+              // only claims a popup in the state where it actually opens one.
+              aria-haspopup={isScreenSharing ? 'dialog' : undefined}
+              aria-expanded={isScreenSharing ? shareMenuOpen : undefined}
+              className={isScreenSharing ? btnGreen : btnDefault}
+              title={isScreenSharing ? t('voice:controls.shareOptions') : t('voice:controls.shareScreen')}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M20 18C21.1 18 22 17.1 22 16V6C22 4.9 21.1 4 20 4H4C2.9 4 2 4.9 2 6V16C2 17.1 2.9 18 4 18H0V20H24V18H20ZM4 6H20V16H4V6Z" />
+                <path d="M15 11L11 14V12H9V10H11V8L15 11Z" />
+              </svg>
+            </button>
+            <ScreenShareSettingsPopover
+              open={shareMenuOpen && isScreenSharing}
+              onClose={() => setShareMenuOpen(false)}
+              anchorRef={shareBtnRef}
+              onStopSharing={handleStopSharing}
+            />
+          </>
         )}
-
-        {/* Video Quality */}
-        <button
-          ref={qualityBtnRef}
-          onClick={() => setQualityOpen(!qualityOpen)}
-          className={qualityOpen
-            ? `${btnBase} bg-surface-channel text-txt-primary`
-            : btnDefault
-          }
-          title={t('voice:controls.videoQuality')}
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M3 5v14h18V5H3zm16 12H5V7h14v10z" />
-            <path d="M8 15l2.5-3.21L13 15l2-2.5L18 17H6z" />
-          </svg>
-        </button>
-        <ScreenShareSettingsPopover open={qualityOpen} onClose={() => setQualityOpen(false)} anchorRef={qualityBtnRef} />
 
         {/* Separator */}
         <div className="w-[1px] h-6 bg-white/10 mx-0.5" />

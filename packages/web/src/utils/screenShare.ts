@@ -6,6 +6,8 @@ import { getPublisherPC, getMediaStreamTrack } from './livekitInternals';
 import { broadcastVoiceStatus } from './voice';
 import { activate as activateHwOverdrive, deactivate as deactivateHwOverdrive } from './hwOverdrive';
 import { useUIStore } from '../stores/uiStore';
+import { openScreenShareSetup } from '../stores/screenShareSetupStore';
+import i18n from '../i18n';
 import {
   STANDARD_RESOLUTIONS, STANDARD_FRAMERATES, WIDTH_MAP,
   BITRATE_MATRIX_KBPS,
@@ -234,41 +236,136 @@ export async function applyOverdrive(
 }
 
 // ---------------------------------------------------------------------------
-// Start screen sharing — single path via setScreenShareEnabled()
-// In Electron, getDisplayMedia() is intercepted by setDisplayMediaRequestHandler
-// in the main process, which shows the custom picker automatically.
+// Capture constraints — the one place that turns config into getDisplayMedia input
 // ---------------------------------------------------------------------------
 
-export async function startScreenShare(room: Room): Promise<boolean> {
-  console.log('[SS] startScreenShare called, room state:', room.state);
+function buildCaptureConstraints(config: ScreenShareConfig, opts: ScreenShareBuildResult): DisplayMediaStreamOptions {
+  const video: MediaTrackConstraints = { frameRate: { ideal: opts.capture.frameRate } };
+  // Native mode: no resolution constraint so the display captures at full size
+  if (opts.capture.width > 0 && opts.capture.height > 0) {
+    video.width = { ideal: opts.capture.width };
+    video.height = { ideal: opts.capture.height };
+  }
+  return {
+    video,
+    audio: config.shareAudio ? {
+      // Request own-playback exclusion where supported; custom Electron picker needs 43.4+
+      // @ts-ignore — restrictOwnAudio is not yet in all TS type definitions
+      restrictOwnAudio: true,
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false,
+      channelCount: 2,
+    } : false,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Stage — capture without publishing.
+//
+// Every screen share starts here, on every platform. Browsers open their native
+// prompt; Electron's main process answers the request from the renderer's
+// preselected source (see ScreenShareSetup). The returned stream is previewed
+// in the setup screen and only reaches the room via publishScreenShare(), so
+// cancelling the setup never sends a frame.
+// ---------------------------------------------------------------------------
+
+export function isScreenCaptureSupported(): boolean {
+  return typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getDisplayMedia;
+}
+
+/**
+ * The user dismissed the picker rather than hitting a real failure. Both names
+ * occur in the wild: Chromium raises NotAllowedError, Firefox and the Wayland
+ * portal raise AbortError. Shared so a cancellation never also reports a fault.
+ */
+export function isCaptureCancellation(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  return err.name === 'NotAllowedError' || err.name === 'AbortError';
+}
+
+/** Must run inside a user gesture in browsers (getDisplayMedia requires transient activation). */
+export async function stageScreenCapture(): Promise<MediaStream> {
+  const config = useVoiceStore.getState().screenShareConfig;
+  const opts = buildScreenShareOptions(config);
+  if (!isScreenCaptureSupported()) {
+    throw new DOMException('getDisplayMedia is not available', 'NotSupportedError');
+  }
+  try {
+    const stream = await navigator.mediaDevices.getDisplayMedia(buildCaptureConstraints(config, opts));
+    const video = stream.getVideoTracks()[0];
+    if (video) video.contentHint = opts.contentHint;
+    return stream;
+  } catch (err) {
+    // Loopback unsupported (Linux without pulse, macOS without Catap) makes
+    // the whole getDisplayMedia call reject. No auto-retry: the picker
+    // selection was consumed, retrying would re-prompt it.
+    if (config.shareAudio && !isCaptureCancellation(err)) {
+      useUIStore.getState().addToast(
+        i18n.t('voice:screenPicker.audioCaptureFailed'),
+        'warning',
+        8000,
+      );
+    }
+    throw err;
+  }
+}
+
+/**
+ * Re-apply the current config to a staged (unpublished) capture. Cheap: the
+ * track is local only, so there is no SFU renegotiation. Lets the setup screen
+ * reflect quality changes in the preview before anything is sent.
+ */
+export async function applyStagedCaptureConfig(stream: MediaStream): Promise<void> {
+  const track = stream.getVideoTracks()[0];
+  if (!track || track.readyState !== 'live') return;
+  const config = useVoiceStore.getState().screenShareConfig;
+  const opts = buildScreenShareOptions(config);
+  const constraints = buildCaptureConstraints(config, opts).video;
+  try {
+    if (typeof constraints === 'object') await track.applyConstraints(constraints);
+  } catch (err) {
+    console.warn('[ScreenShare] Failed to apply staged constraints:', err);
+  }
+  track.contentHint = opts.contentHint;
+}
+
+export function stopStagedCapture(stream: MediaStream | null | undefined): void {
+  stream?.getTracks().forEach((t) => t.stop());
+}
+
+// ---------------------------------------------------------------------------
+// Publish — send a staged capture to the room as the local screen share
+// ---------------------------------------------------------------------------
+
+/** Codec of the currently published screen share; null when nothing is published. */
+let _publishedScreenShareCodec: 'vp9' | 'h264' | null = null;
+
+export function getPublishedScreenShareCodec(): 'vp9' | 'h264' | null {
+  return _publishedScreenShareCodec;
+}
+
+/** True while republishScreenShare() swaps publications; unpublish handlers must not treat it as a stop. */
+let _republishing = false;
+
+export async function publishScreenShare(room: Room, stream: MediaStream): Promise<boolean> {
   const config = useVoiceStore.getState().screenShareConfig;
   const hwOverdrive = useVoiceStore.getState().hwOverdrive;
   const opts = buildScreenShareOptions(config);
 
-  // Activate SDP profile override before WebRTC negotiation
-  if (hwOverdrive) {
-    activateHwOverdrive();
-  }
+  const videoTrack = stream.getVideoTracks()[0];
+  if (!videoTrack || videoTrack.readyState !== 'live') return false;
+  const audioTrack = stream.getAudioTracks().find((t) => t.readyState === 'live') ?? null;
 
+  // SDP profile override must be in place before the publish negotiation
+  if (hwOverdrive) activateHwOverdrive();
+  else deactivateHwOverdrive();
+
+  let videoPublished = false;
   try {
-    // For native mode: omit resolution constraint to capture at display's full native resolution
-    const captureOptions: any = {
-      audio: config.shareAudio ? {
-        // Request own-playback exclusion where supported; custom Electron picker needs 43.4+
-        // @ts-ignore — restrictOwnAudio is not yet in all TS type definitions
-        restrictOwnAudio: true,
-        echoCancellation: false,
-        noiseSuppression: false,
-        autoGainControl: false,
-        channelCount: 2,
-      } : false,
-      frameRate: opts.capture.frameRate,
-    };
-    if (opts.capture.width > 0 && opts.capture.height > 0) {
-      captureOptions.resolution = { width: opts.capture.width, height: opts.capture.height };
-    }
-
-    const track = await room.localParticipant.setScreenShareEnabled(true, captureOptions, {
+    videoTrack.contentHint = opts.contentHint;
+    await room.localParticipant.publishTrack(videoTrack, {
+      source: Track.Source.ScreenShare,
       videoCodec: opts.publish.videoCodec,
       videoEncoding: opts.publish.videoEncoding,
       // LiveKit uses screenShareEncoding (not videoEncoding) for screen share tracks.
@@ -280,43 +377,62 @@ export async function startScreenShare(room: Room): Promise<boolean> {
         backupCodecPolicy: opts.publish.backupCodecPolicy,
       } : {}),
     });
-
-    console.log('[SS] setScreenShareEnabled returned:', !!track);
-    if (!track) {
-      if (hwOverdrive) deactivateHwOverdrive();
-      return false;
+    videoPublished = true;
+    if (audioTrack) {
+      await room.localParticipant.publishTrack(audioTrack, { source: Track.Source.ScreenShareAudio });
     }
 
-    // Set content hint from builder (motion for gaming, detail for text)
-    const screenPub = room.localParticipant.getTrackPublications()
-      .find(p => p.source === Track.Source.ScreenShare);
-    if (screenPub?.track?.mediaStreamTrack) {
-      screenPub.track.mediaStreamTrack.contentHint = opts.contentHint;
-    }
-
+    _publishedScreenShareCodec = opts.publish.videoCodec;
     useVoiceStore.setState({ isScreenSharing: true });
     applyScreenShareOverdrive(room);
-
-    // Schedule hardware encoder detection
-    if (hwOverdrive) {
-      scheduleEncoderDetection(room);
-    }
-
+    if (hwOverdrive) scheduleEncoderDetection(room);
     return true;
   } catch (err) {
-    console.error('[ScreenShare] Failed to start screen share:', err);
-    if (hwOverdrive) deactivateHwOverdrive();
-    // Loopback unsupported (Linux without pulse, macOS without Catap) makes
-    // the whole getDisplayMedia call reject. No auto-retry: the picker
-    // selection was consumed, retrying would re-prompt it.
-    if (config.shareAudio && err instanceof Error && err.name !== 'NotAllowedError') {
-      useUIStore.getState().addToast(
-        'Could not start stream with system audio. Disable "Share system audio" in the picker if your system does not support it.',
-        'warning',
-        8000,
-      );
+    console.error('[ScreenShare] Failed to publish screen share:', err);
+    // A failure after the video went out (a rejected loopback track, a
+    // negotiation error) would otherwise leave a publication whose track we
+    // are about to stop: remote peers see a dead screen share, and no stop
+    // path can clear it because they are all gated on isScreenSharing.
+    if (videoPublished) {
+      try {
+        await room.localParticipant.unpublishTrack(videoTrack, false);
+      } catch (unpublishErr) {
+        console.error('[ScreenShare] Failed to roll back the video publication:', unpublishErr);
+      }
     }
+    if (hwOverdrive) deactivateHwOverdrive();
+    stopStagedCapture(stream);
     return false;
+  }
+}
+
+/**
+ * Re-publish the live screen share with the current publish options. The
+ * codec is baked into SDP negotiation, so a codec change needs a fresh
+ * publication — but the MediaStreamTrack is reusable, so no re-capture and
+ * no second picker prompt.
+ */
+export async function republishScreenShare(room: Room): Promise<void> {
+  const videoPub = room.localParticipant.getTrackPublication(Track.Source.ScreenShare);
+  const audioPub = room.localParticipant.getTrackPublication(Track.Source.ScreenShareAudio);
+  const videoTrack = videoPub?.track?.mediaStreamTrack;
+  if (!videoPub?.track || !videoTrack) return;
+  const audioTrack = audioPub?.track?.mediaStreamTrack ?? null;
+  const stream = new MediaStream([videoTrack, ...(audioTrack ? [audioTrack] : [])]);
+
+  _republishing = true;
+  try {
+    await room.localParticipant.unpublishTrack(videoPub.track, false);
+    if (audioPub?.track) await room.localParticipant.unpublishTrack(audioPub.track, false);
+  } finally {
+    _republishing = false;
+  }
+  _publishedScreenShareCodec = null;
+
+  const ok = await publishScreenShare(room, stream);
+  if (!ok) {
+    deactivateHwOverdrive();
+    useVoiceStore.setState({ isScreenSharing: false, hwOverdrive: false });
   }
 }
 
@@ -417,23 +533,29 @@ function scheduleEncoderDetection(room: Room): void {
 
 export async function stopScreenShare(room: Room): Promise<void> {
   try {
-    await room.localParticipant.setScreenShareEnabled(false);
+    for (const source of [Track.Source.ScreenShare, Track.Source.ScreenShareAudio]) {
+      const pub = room.localParticipant.getTrackPublication(source);
+      if (pub?.track) await room.localParticipant.unpublishTrack(pub.track, true);
+    }
   } catch (err) {
     console.error('[ScreenShare] Failed to stop screen share:', err);
   }
   deactivateHwOverdrive();
+  _publishedScreenShareCodec = null;
   useVoiceStore.setState({ isScreenSharing: false, hwOverdrive: false });
+  // `voice_status` is what carries isScreenSharing to people who are not in the
+  // LiveKit room (channel lists, join sheets). Every stop path funnels through
+  // here or through handleScreenShareUnpublished, so both must broadcast.
+  broadcastVoiceStatus();
 }
 
 // ---------------------------------------------------------------------------
-// Change screen share source — stops current stream, re-triggers picker
+// Change screen share source — stop, then reopen the setup screen
 // ---------------------------------------------------------------------------
 
 export async function changeScreenShare(room: Room): Promise<void> {
   await stopScreenShare(room);
-  setTimeout(async () => {
-    await startScreenShare(room);
-  }, 200);
+  openScreenShareSetup();
 }
 
 // ---------------------------------------------------------------------------
@@ -441,7 +563,12 @@ export async function changeScreenShare(room: Room): Promise<void> {
 // ---------------------------------------------------------------------------
 
 export function handleScreenShareUnpublished(): void {
+  if (_republishing) return;
   deactivateHwOverdrive();
+  _publishedScreenShareCodec = null;
   useVoiceStore.setState({ isScreenSharing: false, hwOverdrive: false });
+  // `voice_status` is what carries isScreenSharing to people who are not in the
+  // LiveKit room (channel lists, join sheets). Every stop path funnels through
+  // here or through handleScreenShareUnpublished, so both must broadcast.
   broadcastVoiceStatus();
 }
