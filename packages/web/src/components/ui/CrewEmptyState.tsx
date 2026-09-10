@@ -1,7 +1,7 @@
 import { useId, type ReactNode } from 'react';
 import { Mascot, type MascotState } from './Mascot';
 import { SCENE_PALETTE as P } from '../telemetry/scene/palette';
-import { BREATH_PERIODS, Breath } from '../telemetry/scene/StarField';
+import { BREATH_PERIODS, Breath, breathPhase } from '../telemetry/scene/StarField';
 import './CrewEmptyState.css';
 
 /**
@@ -161,8 +161,8 @@ function skyFor(seed: number, density: 'field' | 'few'): Sky {
     r: 1,
     a: 0.8 + next() * 0.15,
     tone: 'star',
-    period: BREATH_PERIODS[Math.floor(next() * BREATH_PERIODS.length)] ?? 5.9,
-    phase: Math.round(next() * 90) / 10,
+    period: BREATH_PERIODS[Math.floor(next() * BREATH_PERIODS.length)] ?? 5.75,
+    phase: breathPhase(next() * 9),
   }));
   const sky: Sky = { offset, still, twinkle };
   SKIES.set(key, sky);

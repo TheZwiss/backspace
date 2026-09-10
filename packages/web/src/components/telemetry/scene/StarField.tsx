@@ -102,9 +102,22 @@ function bandDistance(spec: StarFieldSpec, band: StarBand, fx: number, fy: numbe
  * soothing version of that is a slow breath, four to nine seconds each way,
  * and no two periods a multiple of another, so the breathing stars never fall
  * into step. Slower than this and the sky reads as still. Every scene picks
- * from this list, so the whole app breathes at one pace. */
-export const BREATH_PERIODS: ReadonlyArray<number> = [4.2, 5.1, 5.9, 6.8, 7.7, 8.9];
+ * from this list, so the whole app breathes at one pace.
+ *
+ * Every period and every phase is a multiple of the tick, and the animation
+ * moves in steps of one tick (StarField.css), so all the stars change on the
+ * same beat: the compositor draws a new frame four times a second instead of
+ * sixty, and a sky that breathes costs a fifteenth of one that flows. At one
+ * pixel, a step of a few percent of opacity every quarter second is not a
+ * step the eye can see; it is a shimmer. */
+export const BREATH_TICK = 0.25;
+export const BREATH_PERIODS: ReadonlyArray<number> = [4.25, 5, 5.75, 6.5, 7.75, 9];
 const PERIODS = BREATH_PERIODS;
+
+/** Snaps a phase, in seconds, onto the breath's tick. */
+export function breathPhase(seconds: number): number {
+  return Math.round(seconds / BREATH_TICK) * BREATH_TICK;
+}
 
 export function scatterStars(spec: StarFieldSpec): Star[] {
   const next = mulberry32(spec.seed);
@@ -132,7 +145,7 @@ export function scatterStars(spec: StarFieldSpec): Star[] {
     placed += 1;
     const breathes = placed % spec.twinkleEvery === 1;
     const twinkle = breathes
-      ? { period: PERIODS[Math.floor(next() * PERIODS.length)] ?? 5.9, phase: Math.round(next() * 90) / 10 }
+      ? { period: PERIODS[Math.floor(next() * PERIODS.length)] ?? 5.75, phase: breathPhase(next() * 9) }
       : undefined;
     stars.push(twinkle === undefined ? { x, y, size, a, dust } : { x, y, size, a, dust, twinkle });
   }
@@ -164,7 +177,7 @@ export interface BreathProps {
   top: number | string;
   /** 1 for a crisp point, 2 for a round dot. */
   size: 1 | 2;
-  /** Seconds each way and seconds into the loop at mount. */
+  /** Seconds each way, from `BREATH_PERIODS`, and seconds into the loop at mount (snapped to the tick). */
   period: number;
   phase: number;
   /** The star's colour with its resting brightness in the alpha; or leave it to `className`. */
@@ -186,7 +199,8 @@ export function Breath({ left, top, size, period, phase, color, className }: Bre
     width: size,
     height: size,
     animationDuration: `${period}s`,
-    animationDelay: `-${phase}s`,
+    animationDelay: `-${breathPhase(phase)}s`,
+    animationTimingFunction: `steps(${Math.max(1, Math.round(period / BREATH_TICK))}, jump-none)`,
   };
   if (color !== undefined) style.backgroundColor = color;
   const classes = ['star-field__breath'];

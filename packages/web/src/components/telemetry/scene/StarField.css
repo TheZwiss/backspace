@@ -24,15 +24,18 @@
   display: block;
 }
 
-/* ── THE BREATH ── a star's opacity easing between a third and its rest,
-   each on its own period and phase (set inline). Never all the way out,
-   never a flash. Its own layer, so the compositor owns it. Also used on its
-   own by the scenes that place stars by percentage (see `Breath`). */
+/* ── THE BREATH ── a star's opacity stepping between a third and its rest,
+   each on its own period and phase (set inline, with the step count that
+   puts one step on every tick of the shared beat). Never all the way out,
+   never a flash. Its own layer, so the compositor owns it, and because every
+   star steps on the same beat the compositor draws four frames a second for
+   the whole sky, not sixty. Also used on its own by the scenes that place
+   stars by percentage (see `Breath`). */
 .star-field__breath {
   position: absolute;
   display: block;
   will-change: opacity;
-  animation: starFieldBreath 5.9s ease-in-out infinite alternate;
+  animation: starFieldBreath 5.75s steps(23, jump-none) infinite alternate;
 }
 .star-field__breath--dot {
   border-radius: 50%;

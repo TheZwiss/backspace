@@ -118,7 +118,7 @@ export function AuthBackdrop({ variant }: AuthBackdropProps) {
                 left={`${star.x}%`}
                 top={`${star.y}%`}
                 size={star.r > 0.85 ? 2 : 1}
-                period={BREATH_PERIODS[index % BREATH_PERIODS.length] ?? 5.9}
+                period={BREATH_PERIODS[index % BREATH_PERIODS.length] ?? 5.75}
                 phase={(index * 2.9) % 9}
                 className={`auth-backdrop__star auth-backdrop__star--${star.tone}`}
               />

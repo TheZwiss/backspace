@@ -8,6 +8,24 @@ const EASING = {
   breathe: 'cubic-bezier(0.45, 0.05, 0.55, 0.95)',
 } as const;
 
+/**
+ * The beat every continuous loop inside the SVG steps on, in milliseconds.
+ * An animation on an element inside an SVG runs on the main thread and
+ * repaints the whole drawing whenever its value changes; a smooth loop
+ * changes it every frame, forever. Stepping the loop on a quarter-second
+ * beat (the same beat the scenes' stars breathe on) makes it repaint four
+ * times a second instead of sixty, and at the sizes Nori is drawn a step of
+ * a fraction of a pixel is not a step the eye can see. Loops on the SVG
+ * element itself (float, sway, breathe) are transforms the compositor owns
+ * and stay smooth.
+ */
+const SVG_LOOP_TICK_MS = 250;
+
+/** A stepped easing that changes the value once per tick over `durationMs`. */
+function steppedOverTicks(durationMs: number): string {
+  return `steps(${Math.max(1, Math.round(durationMs / SVG_LOOP_TICK_MS))}, jump-none)`;
+}
+
 export function useMascotAnimation(
   svgRef: React.RefObject<SVGSVGElement | null>,
   containerRef: React.RefObject<HTMLDivElement | null>,
@@ -231,7 +249,7 @@ export function useMascotAnimation(
         { rx: baseRx, opacity: baseOpacity },
         { rx: minRx, opacity: minOpacity },
         { rx: baseRx, opacity: baseOpacity },
-      ], { duration: period, easing: EASING.gentle, iterations: Infinity });
+      ], { duration: period, easing: steppedOverTicks(period), iterations: Infinity });
     }
 
     // ── Pause all SVG animations and restart float+shadow ──
@@ -349,7 +367,7 @@ export function useMascotAnimation(
           { ry: '3.2px' },
           { ry: '4px' },
           { ry: '3.2px' },
-        ], { duration: 7000, easing: EASING.breathe, iterations: Infinity });
+        ], { duration: 7000, easing: steppedOverTicks(7000), iterations: Infinity });
       }
 
       // Z-particle spawning
