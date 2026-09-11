@@ -77,7 +77,7 @@ Full spec: `docs/systems/design-system.md`
 
 No resting border — sunken `surface-input` background provides differentiation.
 
-**Glass material:** `backdrop-filter: blur(20px) saturate(120%)`, `rgba(20,20,26,0.52)`, border `rgba(255,255,255,0.07)`. Modal backdrops: `bg-black/50`.
+**Glass material:** `backdrop-filter: blur(20px) saturate(120%)`, `rgba(20,20,26,0.52)`, border `rgba(255,255,255,0.07)`. Modal backdrops: `.modal-scrim` (flat 50% black). Primary, danger and warning buttons use `.cta-primary`, `.cta-danger`, `.cta-warning`; see design-system.md "Button and backdrop classes".
 
 ---
 

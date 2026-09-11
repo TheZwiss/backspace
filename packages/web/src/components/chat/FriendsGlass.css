@@ -1,0 +1,233 @@
+/* ── THE FRIENDS PAGE ON GLASS ──
+ * The controls and the content panel that float over the home backdrop.
+ * Scene bible section 13: the top bar is gone; in its place four pills in
+ * one row on `.glass-bubble`; below them no panel, only the rows and each
+ * tab's count as bubbles of their own, each as large as its content and no
+ * larger. The pills are globals.css's glass (blur, fill, hairline border and
+ * shadow); the rows and the count are the same fill and edge without the
+ * blur, see "A ROW" for why. Nothing here is a new material: no rim, no
+ * gloss, no bevel. Depth is the darkness of the sky behind, not shading on
+ * the glass.
+ *
+ * Measures: the row keeps the header's 56px height and 16px side padding.
+ * Every pill is 36px tall, fully round, and 12px from its neighbour, so the
+ * row breathes and no two pills touch.
+ */
+
+/* ── THE ROW ── */
+.friends-header {
+  gap: 12px;
+}
+
+/* Every pill: a 36px round capsule. The material is `.glass-bubble`'s own. */
+.friends-header__title,
+.friends-header__tabs,
+.friends-header__add,
+.friends-header__trailing {
+  height: 36px;
+  border-radius: 9999px;
+  flex-shrink: 0;
+}
+
+/* ── THE TITLE PILL ── icon and page name, no interaction. */
+.friends-header__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px 0 12px;
+  font-size: 15px;
+  font-weight: 700;
+  color: rgb(var(--text-primary));
+}
+.friends-header__title svg {
+  display: block;
+  color: rgb(var(--text-secondary));
+}
+
+/* ── THE SEGMENTED PILL ── Online, All, Pending inside one capsule, each a
+ * 28px capsule of its own with 4px of glass around it. The active tab is
+ * lifted one step with the selected fill; hover changes the fill only, so
+ * the text never jumps. Full-height hit areas: the 4px surround belongs to
+ * the pill, the tab itself is the whole 28px. */
+.friends-header__tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+}
+.friends-header__tab {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 9999px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+  color: rgb(var(--text-secondary));
+  background-color: transparent;
+  transition: background-color 150ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.friends-header__tab:hover,
+.is-hover .friends-header__tab {
+  background-color: var(--interactive-hover);
+}
+.friends-header__tab.is-active {
+  color: rgb(var(--text-primary));
+  background-color: var(--interactive-selected);
+}
+.friends-header__tab.is-active:hover,
+.is-hover .friends-header__tab.is-active {
+  background-color: var(--interactive-selected);
+}
+
+/* ── THE ADD-FRIEND PILL ── the online green as before, dark type on it. As
+ * the active tab it goes quiet: glass with a mint tint and mint type, so it
+ * reads as chosen rather than as a button still asking to be pressed. The
+ * two-selector specificity is what lets the mint fill win over the glass
+ * class in both the normal cascade and the reduced-transparency fallback. */
+.friends-header__add {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 16px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+  transition: background-color 150ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.friends-header__add:not(.is-active) {
+  color: rgb(var(--bg-chat));
+  background-color: rgb(var(--status-online));
+  border-color: transparent;
+}
+.friends-header__add:not(.is-active):hover,
+.is-hover .friends-header__add:not(.is-active) {
+  background-color: rgb(var(--status-online) / 0.85);
+}
+.friends-header__add.is-active {
+  color: rgb(var(--status-online));
+  background-color: rgb(var(--status-online) / 0.14);
+}
+.friends-header__add.is-active:hover,
+.is-hover .friends-header__add.is-active {
+  background-color: rgb(var(--status-online) / 0.2);
+}
+
+/* ── THE TRAILING PILL ── a 36px disc at the far right holding the caller's
+ * 32px control (the member-list toggle). The control's own square hover is
+ * rounded to match the disc it sits in. */
+.friends-header__trailing {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  padding: 0;
+}
+.friends-header__trailing > * {
+  border-radius: 9999px;
+}
+
+/* ── FOCUS ── the app's two-stop ring on every control. */
+.friends-header__tab:focus-visible,
+.is-focus .friends-header__tab,
+.friends-header__add:focus-visible,
+.is-focus .friends-header__add {
+  outline: none;
+  box-shadow: 0 0 0 2px rgb(var(--bg-chat)), 0 0 0 4px rgb(var(--accent-primary));
+}
+
+/* ── THE SCROLL REGION ── paints nothing. A bubble is only as large as what
+ * it holds (Jannis, section 13), so there is no panel: the caller's block
+ * scrolls here over the bare sky, and the glass sits on the rows and the
+ * count below. `overflow: hidden` keeps the child's own scroll inside the
+ * column. */
+.friends-panel {
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ── A ROW ── every friend or request row is its own bubble, exactly the
+ * height of its content, the width of the column inside the caller's 16px
+ * padding, 8px from the next, 12px corners. Tinted, not frosted: the fill is
+ * the glass fill two steps deeper, with `.glass-bubble`'s hairline border,
+ * highlight and shadow, and no backdrop-filter. The sky behind is a near-
+ * black void with points on it, so a blur has almost nothing to soften and
+ * the tint alone reads as the same material; and a frosted row over a living
+ * sky costs one blur pass per row per frame, which with forty rows made the
+ * page lag and the laptop heat. Hover changes the fill only, one step lighter.
+ *
+ * Scoped under `.friends-panel` on purpose: the rows keep their own utility
+ * classes (`mx-2`, `rounded-[8px]`, `hover:bg-interactive-hover`), and
+ * Tailwind 3 emits those as plain rules, so only specificity, not load
+ * order, decides. The scope also means the mobile page, which renders no
+ * panel and no backdrop, keeps its plain rows. */
+.friends-panel .friends-row {
+  margin: 0 0 8px;
+  border-radius: 12px;
+  background-color: rgba(20, 20, 26, 0.68);
+  border: 1px solid var(--glass-border);
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.20),
+    0 8px 24px rgba(0, 0, 0, 0.12),
+    inset 0 1px 0 var(--glass-highlight);
+  transition: background-color 150ms ease;
+}
+.friends-panel .friends-row:last-child {
+  margin-bottom: 0;
+}
+.friends-panel .friends-row:hover,
+.is-hover .friends-panel .friends-row {
+  background-color: rgba(34, 34, 44, 0.74);
+}
+
+/* ── THE COUNT ── the tab's "Online — 5" line as a small pill sized to its
+ * text, above the rows. The same tint as the rows in `.glass-pill`'s
+ * proportions, for the same reason, and scoped for the same reason. Its type
+ * steps up from tertiary to secondary: tertiary on a pill over the sky falls
+ * short of readable. */
+.friends-panel .friends-count {
+  width: fit-content;
+  margin: 0 0 12px;
+  padding: 6px 12px;
+  border-radius: 9999px;
+  color: rgb(var(--text-secondary));
+  background-color: rgba(20, 20, 26, 0.68);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+/* ── THE SCROLLBAR ── the app's thumb is the input surface's grey, which on
+ * a solid column disappears and on the void is a slab. Over the sky it is a
+ * faint light line instead, and only there. */
+.friends-panel ::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.12);
+}
+.friends-panel ::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+/* ── REDUCED TRANSPARENCY ── globals.css turns every glass class solid; the
+ * tinted rows and count go solid with it, and the one fill that is its own
+ * translucency, the chosen add-friend pill's mint tint, is mixed into the
+ * solid surface so nothing stays see-through when everything around it has
+ * gone opaque. */
+@media (prefers-reduced-transparency: reduce) {
+  .friends-panel .friends-row,
+  .friends-panel .friends-count {
+    background-color: rgb(var(--bg-elevated));
+  }
+  .friends-panel .friends-row:hover,
+  .is-hover .friends-panel .friends-row {
+    background-color: color-mix(in srgb, white 6%, rgb(var(--bg-elevated)));
+  }
+  .friends-header__add.is-active {
+    background-color: color-mix(in srgb, rgb(var(--status-online)) 14%, rgb(var(--bg-elevated)));
+  }
+  .friends-header__add.is-active:hover,
+  .is-hover .friends-header__add.is-active {
+    background-color: color-mix(in srgb, rgb(var(--status-online)) 20%, rgb(var(--bg-elevated)));
+  }
+}

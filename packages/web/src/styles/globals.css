@@ -86,6 +86,16 @@
 
     /* ── Notification ── */
     --notification: 253 164 175;
+
+    /* ── The derelict: the cold end of the scene palette ──
+     * Shared by SilenceButton and by anything else that has stopped
+     * transmitting (a dark beacon, an expired connection). Mirrored as hex in
+     * components/telemetry/scene/palette.ts for SVG use. */
+    --derelict-lit: 35 37 49;
+    --derelict-body: 24 25 34;
+    --derelict-far: 17 18 25;
+    --derelict-rime: 199 210 254;
+    --derelict-signal: 140 152 186;
   }
 
   * {
@@ -222,6 +232,53 @@
   }
   .glass-pill-mine:hover {
     background: rgba(134, 239, 172, 0.16);
+  }
+
+  /* ── Modal backdrop ── one class for every dialog's scrim, so a change to
+     the darkness is made once. Flat, as Aether Drift has always had it. */
+  .modal-scrim {
+    background: rgb(0 0 0 / 0.5);
+  }
+
+  /* ── Primary, destructive and warning buttons ──
+   * One class per intent, so the colour and the states are written once.
+   * Flat Aether Drift surfaces: a matte fill, a slightly quieter fill on
+   * hover, nothing lit, nothing bevelled. Sizing, radius and layout stay with
+   * the call site as utilities; call sites may add disabled:opacity-50. */
+  .cta-primary,
+  .cta-danger,
+  .cta-warning {
+    color: #fff;
+    font-weight: 500;
+    background-color: rgb(var(--accent-primary));
+    transition: background-color 150ms ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .cta-danger {
+    background-color: rgb(var(--accent-rose));
+  }
+  .cta-warning {
+    background-color: rgb(var(--accent-amber));
+  }
+  .cta-primary:hover:not(:disabled) {
+    background-color: rgb(var(--accent-primary) / 0.8);
+  }
+  .cta-danger:hover:not(:disabled) {
+    background-color: rgb(var(--accent-rose) / 0.8);
+  }
+  .cta-warning:hover:not(:disabled) {
+    background-color: rgb(var(--accent-amber) / 0.8);
+  }
+  .cta-primary:focus-visible,
+  .cta-danger:focus-visible,
+  .cta-warning:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgb(var(--bg-chat)), 0 0 0 4px rgb(var(--accent-primary));
+  }
+  .cta-primary:disabled,
+  .cta-danger:disabled,
+  .cta-warning:disabled {
+    cursor: not-allowed;
   }
 
   /* ── Input Tiers ── */

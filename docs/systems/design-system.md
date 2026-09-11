@@ -136,7 +136,7 @@ breakpoint. Native browser zoom and pinch gestures retain their normal behavior.
 
 **Rule:** If it floats above the content plane, it's glass. Never use `bg-surface-elevated` for floating/overlay elements.
 
-**Modal backdrops:** `bg-black/50` — light enough for glass blur to show through.
+**Modal backdrops:** `.modal-scrim` — a radial vignette from 42% black at the centre to 66% at the corners, so the dialog sits in a pool of light and the app's edges fall away. Same average darkness as the flat 50% it replaced, still light enough for glass blur to show through. Every backdrop that sits behind a `.glass-modal` uses it (`Modal`, `ConfirmDialog`, `UserProfileModal`, `TransferOwnershipModal`, `IncomingCallModal`, `MobileFolderSheet`).
 
 **Portal target — `usePortalContainer()`:** Every overlay (context menu, tooltip, popover, modal, screen-share picker) MUST portal through `usePortalContainer()` (`packages/web/src/hooks/usePortalContainer.ts`) instead of hard-coding `document.body`. The hook returns `document.fullscreenElement ?? document.body` and re-renders subscribers on `fullscreenchange`. Without this, anything portaled while an element (e.g. the voice container in fullscreen mode) is in the browser's Fullscreen API top-layer is rendered outside that layer and is invisible. Components mounted at App root that render with `fixed inset-0` (not just portals) must also portal through this hook for the same reason.
 
@@ -158,6 +158,44 @@ breakpoint. Native browser zoom and pinch gestures retain their normal behavior.
 **Vendor prefix order is load-bearing.** In `globals.css`, write `-webkit-backdrop-filter` **first** and the unprefixed `backdrop-filter` **last**. Vite 8 minifies CSS with Lightning CSS, which folds a prefixed and an unprefixed declaration of the same property into one and keeps whichever came last. With the unprefixed line first, the build ships only `-webkit-backdrop-filter`, which Firefox does not implement, so every glass surface loses its blur there with nothing in the console. The same order applies to any other property written in both forms.
 
 ---
+
+## Button and backdrop classes
+
+Three classes in `globals.css` carry the flat Aether Drift button surfaces so
+colour and states are written once: `.cta-primary` (accent primary),
+`.cta-danger` (rose) and `.cta-warning` (amber), each with a softer fill on
+hover, a two-stop focus ring and a not-allowed cursor when disabled. Sizing,
+radius and layout stay at the call site as utilities; `disabled:opacity-50`
+composes. Do not add `bg-accent-primary`, `text-white` or `transition-colors`
+beside them. `.modal-scrim` is the flat 50% black backdrop every dialog uses.
+
+A first version of these classes shipped gloss, lit lips, rims and auras, and
+put rims and gloss on `.glass-modal` and a lit edge on toasts. It was rejected
+as forced 3D against this design system's flat calm glass and reverted on
+2026-09-10; the scene bible (`docs/superpowers/specs/2026-09-09-ui-soul-pass-scene-bible.md`,
+sections 4 and 12) records why. Glass is felt, not seen; nothing wears it.
+
+**Design workbench.** A scene ships with a dev page under `packages/web/src/dev/`
+plus an HTML entry beside `index.html`, built on `dev/workbench.tsx` and
+`dev/harness.tsx` (`WorkbenchPage`, `Section`, `Slot`, `Surround`,
+`mountScenePage`, and `?state=hover|focus|active` to force a state). The i18n
+literal-string rule skips `src/dev/`; never use `100vh` there.
+
+## Scenes
+
+The bespoke half of the soul pass. Each scene is one component with a co-located stylesheet, one subject from the scene bible, and its own workbench page. A scene reads no store and handles no click unless the table says otherwise; the caller passes the copy in, already translated, so no scene owns a string. Every scene obeys the bible's darkness rule (section 4: the void darker than the chrome, sparse crisp stars, flat vector shapes, no shading, gloss, rims, grain or plotted lines), keeps to the motion budget at rest (at most three animation definitions, transform and opacity only, every one on the compositor: the shared sky in `telemetry/scene/StarField` draws still stars in one SVG and breathing stars as spans, because an animation on an SVG child repaints the whole SVG every frame; and nothing continuous flows at sixty frames a second, on the compositor or off it, because an endless animation makes the window present a frame every refresh forever and the window manager composites the whole window at that rate: the breath steps on a shared quarter-second beat, `BREATH_TICK`, so an idle sky draws four frames a second, and every endless loop in `useMascotAnimation` is put on the same beat by `animate` itself), holds a still frame under `prefers-reduced-motion`, and paints only with `SCENE_PALETTE` in SVG and `rgb(var(--token) / a)` in CSS. The table below is refreshed when the second pass lands.
+
+| Scene | Component | Subject | Workbench | Notes |
+|---|---|---|---|---|
+| The ship on its way | `voice/VoiceEmptyPanel` | The empty voice channel: a near-black void darker than the header, the hello scene's flat craft top left with a soft plume, a flat dark world mostly off-frame low right with one thin atmosphere line, the shared sky with breathing stars and Sternschnuppen | `dev-voice-empty.html` | Extracted from `MainContent`; desktop only. The craft drifts on a nine-second loop; no filters |
+| Arriving | `auth/AuthBackdrop` | Behind the login, register and invite cards: the void, the stars, the world with its atmosphere line; the invalid-invite variant darker and colder | `dev-auth-backdrop.html` | Sticky zero-height root sized to the scroll port by a ResizeObserver, so the scene stays still while the card scrolls and never paints under the desktop title bar. The few breathing stars are the shared sky's spans |
+| A hail, calmly | `voice/IncomingCallModal` | The plain modal glass, the caller's avatar, one thin ring in the hail colour that eases out slowly, flat accept and decline | `dev-incoming-call.html` | Behaviour untouched; one animation while ringing |
+| Nori in open space | `ui/CrewEmptyState`, `chat/ExploreEmpty` | Every "no one is here" state and the empty explore page: the whole column as void, a sparse deterministic sky, Nori small at the centre, the copy plain on the dark | `dev-crew-empty.html`, `dev-explore.html` | `OpenSpace` is exported from CrewEmptyState and shared; its breathing stars are the shared sky's spans, plus Nori's hook. The hero size is positioned over its host's box. Replaces the seven bare `Mascot` sites |
+| Home space | `chat/HomeSpace` | The living backdrop behind the friends page's main column: the void, the shared sky with a density band, the same world low right, stars breathing, a Sternschnuppe every minute or so, and the ship crossing low every few minutes to slip behind the world's limb | `dev-friends-home.html` | Three animation definitions, all on the compositor, no filters; parked and still under reduced motion |
+| Friends on glass | `chat/FriendsGlass` | The friends page's controls as `.glass-bubble` pills (title, segmented tabs, Add Friend, the trailing toggle), each friend or request row its own content-sized bubble, the section count its own pill; no content panel, and the empty states bare on the backdrop | `dev-friends-home.html` | Rows and counts are tagged `friends-row` and `friends-count` in FriendsPage and styled only under `.friends-panel`, so the mobile page keeps its plain rows. Rows and count are tinted, not frosted: a backdrop-filter per row over a moving sky is a blur pass per row per frame. Solid fallbacks under reduced transparency |
+| Nori | `ui/Mascot` | The mascot, same silhouette and moods, relit flat under one soft light | `dev-mascot.html` | The animation hook changed only in timings, now at or above the six-second floor |
+
+Structure-only extractions that carry no scene: `chat/WelcomeHero` (the plain welcome header, rendered from `MessageList`; its height is part of the scroll contract, see `message-list.md`) and `chat/ExploreCardBanner` (the plain card banner). The first pass gave both a scene and the search popover a scanner; all three were rejected and reverted, see the bible's section 12.
 
 ## Input Tiers
 

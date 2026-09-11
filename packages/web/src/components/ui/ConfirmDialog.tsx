@@ -45,15 +45,12 @@ export function ConfirmDialog({
 
   if (!isOpen) return null;
 
-  const isDanger = variant === 'danger';
-  const confirmBg = isDanger
-    ? 'bg-accent-rose hover:bg-accent-rose/80'
-    : 'bg-accent-amber hover:bg-accent-amber/80';
+  const confirmClass = variant === 'danger' ? 'cta-danger' : 'cta-warning';
 
   return ReactDOM.createPortal(
     <div className="fixed inset-0 z-[10000] flex items-center justify-center animate-fade-in">
       <div
-        className="absolute inset-0 bg-black/50"
+        className="absolute inset-0 modal-scrim"
         onClick={() => { if (!loading) onClose(); }}
       />
       <div className="relative max-w-[440px] w-full mx-4 glass-modal rounded-xl animate-slide-up">
@@ -71,7 +68,7 @@ export function ConfirmDialog({
             <button
               onClick={onConfirm}
               disabled={loading}
-              className={`flex-1 py-2.5 ${confirmBg} text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50`}
+              className={`${confirmClass} flex-1 py-2.5 text-sm rounded-lg disabled:opacity-50`}
             >
               {loading ? t('common:states.pleaseWait') : (confirmLabel ?? t('common:actions.confirm'))}
             </button>

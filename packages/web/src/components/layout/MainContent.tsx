@@ -25,6 +25,7 @@ import { useCanonicalUserView } from '../../utils/userViewLookup';
 import type { User } from '@backspace/shared';
 import { Tooltip } from '../ui/Tooltip';
 import { joinVoiceChannel } from '../../utils/voice';
+import { VoiceEmptyPanel } from '../voice/VoiceEmptyPanel';
 import { SearchPopover } from '../chat/SearchPopover';
 import { isDmChannel, getChannelOrigin } from '../../stores/spaceStore';
 
@@ -420,19 +421,10 @@ export function MainContent() {
               <MemberListToggleButton />
             </div>
           </div>
-          <div className="flex-1 flex flex-col items-center justify-center gap-8 relative">
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(124,108,246,0.12)_0%,transparent_70%)] animate-gradient-pulse pointer-events-none" />
-            <div className="text-center relative z-10">
-              <h2 className="text-[28px] font-bold text-white mb-3">{channel.name}</h2>
-              <p className="text-txt-tertiary text-[15px]">{t('spaces:main.voice.empty')}</p>
-            </div>
-            <button
-              onClick={() => joinVoiceChannel(currentChannelId, useVoiceStore.getState().connectFn ?? undefined)}
-              className="relative z-10 px-8 py-3 bg-accent-primary hover:bg-accent-primary-hover text-white font-semibold rounded-full transition-all text-[15px] shadow-[0_4px_20px_rgba(124,108,246,0.3)]"
-            >
-              {t('spaces:main.voice.join')}
-            </button>
-          </div>
+          <VoiceEmptyPanel
+            channelName={channel.name}
+            onJoin={() => joinVoiceChannel(currentChannelId, useVoiceStore.getState().connectFn ?? undefined)}
+          />
         </div>
       );
     }

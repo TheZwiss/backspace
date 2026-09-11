@@ -11,7 +11,7 @@ import { useNavigate } from 'react-router-dom';
 import { getSpaceGradient } from '../../utils/gradients';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import type { Channel, SpaceFolder } from '@backspace/shared';
-import { Mascot } from '../ui/Mascot';
+import { CrewEmptyState } from '../ui/CrewEmptyState';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { TransferOwnershipModal } from '../modals/TransferOwnershipModal';
 import { MobileFolderSheet } from './MobileFolderSheet';
@@ -901,10 +901,7 @@ export function MobileSpacesScreen() {
               {/* Empty state — gated on settled (not loading) so the mascot
                   never flashes during the pre-skeleton load window. */}
               {isSpaceSettledEmpty && (
-                <div className="flex flex-col items-center justify-center h-32 opacity-80">
-                  <Mascot state="idle" className="w-20 h-20 mb-2" />
-                  <p className="text-txt-tertiary text-sm">{t('spaces:channels.empty')}</p>
-                </div>
+                <CrewEmptyState variant="noSpaces" size="compact">{t('spaces:channels.empty')}</CrewEmptyState>
               )}
             </>
           )}

@@ -1,0 +1,99 @@
+/* ── OPEN SPACE ──
+ * The shared layer behind every "no one is here" state (scene bible row 3,
+ * second pass) and the explore page with nothing to show (row 8). Nori alone
+ * in open space: the panel's own surface as the sky, a sparse field of crisp
+ * distant stars across the component, nothing built.
+ *
+ * Structure, back to front:
+ *   (the host's surface)   --bg-chat in a column, --bg-channel in a sidebar;
+ *                          this file paints no background of its own
+ *   .open-space            one layer, absolutely positioned by the host,
+ *                          covering the component's box and never more
+ *     __still              the star field in one SVG: 1-2px points on the
+ *                          pixel grid, painted once
+ *     (breath spans)       the handful that breathe, from the shared sky
+ *   .crew-empty__stage     Nori, at the size the call site gives
+ *   .crew-empty__copy      the caller's line, full contrast
+ *
+ * DARKNESS: depth comes from darkness and distance, never from shading. The
+ * space is the surface the page already has; no box is drawn on it, and
+ * nothing adds light to it: no wash, grain, gloss, vignette, glow or scrim.
+ *
+ * MOTION: Nori's own hook runs the body. The stars' breath is the shared
+ * sky's (opacity, 4 to 9s, on the compositor, each star on its own period
+ * and phase); reduced motion holds each star at its resting brightness.
+ *
+ * FILTERS: none. No backdrop-filter, no SVG filter, no raster image. */
+
+/* The layer is exactly the host's box, never the padding around it, so no
+   star ever sits under a section label or a list row. The SVG inside is a
+   replaced element and takes no size from its offsets, so its size is
+   written out. */
+.open-space {
+  position: absolute;
+  inset: 0;
+  display: block;
+  overflow: hidden;
+  pointer-events: none;
+}
+.open-space__still {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ── THE BREATH ── the shared sky's (StarField.css): its keyframes, its
+   still frame under reduced motion. */
+
+/* ── THE CREW STATES ── */
+
+.crew-empty--compact {
+  position: relative;
+}
+/* The hero covers the host's box instead of sitting in its flow: centred in
+   the whole column, and never a reason for the column to scroll. */
+.crew-empty--hero {
+  position: absolute;
+  inset: 0;
+}
+
+/* ── STAGE ── Nori's box, sized by the host's utilities (128px hero, 80px
+   compact) and centred by the flex column. */
+.crew-empty__stage {
+  position: relative;
+  flex: none;
+}
+
+/* ── COPY ── the caller's line: under Nori, centred, full contrast. It sits
+   on the dark itself; there is no scrim, well or shadow under it. */
+.crew-empty__copy {
+  position: relative;
+  max-width: 100%;
+  margin: 0;
+  padding: 0 16px;
+  /* The quiet grey these lines have always had: the copy is a caption under
+     Nori, not a heading, and a brighter tone fights the panel around it. */
+  font-weight: 400;
+  line-height: 1.45;
+  color: rgb(var(--text-tertiary));
+}
+
+/* ── ARRIVAL ── the state mounts when a tab changes; Nori and the line fade
+   in over a third of a second, so a mood change reads as a change and not a
+   swap. Transform-free, so the layout under it never moves. */
+.crew-empty__stage,
+.crew-empty__copy {
+  animation: crewArrive 300ms ease-out both;
+}
+@keyframes crewArrive {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ── REDUCED MOTION ── the best frame is every star at rest. */
+@media (prefers-reduced-motion: reduce) {
+  .crew-empty__stage,
+  .crew-empty__copy {
+    animation: none;
+  }
+}

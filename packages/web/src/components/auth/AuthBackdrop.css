@@ -1,0 +1,173 @@
+/* ── ARRIVING ──
+ * The scene behind the login, register and invite cards. Scene bible row 2,
+ * second pass, under the darkness rule (bible section 4). Seen from the
+ * craft you are arriving in: deep dark space, one large world low right and
+ * mostly off-frame, and sparse crisp stars. The card is the airlock window.
+ *
+ * Depth comes from darkness and distance, never from shading. Nothing here
+ * has a rim, a bevel, a gloss, a grain or a bloom; the void is the darkest
+ * thing on screen and the card always sits on dark.
+ *
+ * Structure, back to front (four layers):
+ *   .auth-backdrop        zero-height sticky root: costs no layout, stays put
+ *     __frame             the window, sized to the scroll port
+ *       __void            deep space, flat, at or below --bg-base
+ *       __far             the far field: a tile of 1px stars, static
+ *       __near            the near field: an SVG of placed 1-2px stars, still
+ *       __breath          the few near stars that breathe, as spans from the
+ *                         shared sky (telemetry/scene/StarField), one
+ *                         compositor layer each
+ *       __world           the world: one flat disc, one atmosphere line
+ *
+ * MOTION at rest: the breath (opacity, 4 to 9s, out of phase), on the
+ * compositor. Nothing else moves. No backdrop-filter, no SVG filter, no
+ * data-URI image anywhere here: this is full-viewport on a Raspberry Pi.
+ */
+
+.auth-backdrop {
+  /* The scene palette (telemetry/scene/palette.ts), as channel triplets.
+     `star` is --text-primary warmed two steps; `dust` is --derelict-rime. */
+  --scene-star: 243 237 228;
+  --scene-dust: var(--derelict-rime);
+  /* The living variants share one scene; the derelict one differs in these
+     channels. */
+  --void-drop: 0;
+  --star-a: 1;
+  --world-tint: var(--accent-lavender);
+  --world-tint-a: 0.07;
+  --atmo: var(--accent-sky);
+  --atmo-a: 0.55;
+  /* The scroll port's size, in px. The component measures it; until then,
+     the app's scaled viewport tokens, less the desktop title bar on the
+     height. Both are lengths on purpose: a percentage would resolve against
+     a different axis in `bottom` than in `width`, and the world is placed
+     with both. */
+  --scene-w: calc(100 * var(--app-vw));
+  --scene-h: calc(100 * var(--app-vh) - var(--titlebar-inset, 0px));
+
+  position: sticky;
+  top: 0;
+  z-index: 0;
+  width: 100%;
+  height: 0;
+  flex: none;
+  align-self: stretch;
+  overflow: visible;
+  pointer-events: none;
+}
+
+/* ── FRAME ── the window itself, the scroll port's height. Everything inside
+   is clipped here, never by the root. */
+.auth-backdrop__frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: var(--scene-h);
+  overflow: hidden;
+  contain: strict;
+  isolation: isolate;
+}
+
+/* ── VOID ── flat base-dark, edge to edge. The one thing painted over it is
+   a plain darkening for the derelict beat (--void-drop), which only ever
+   takes light away. No wash, no turn, no grain, no vignette. */
+.auth-backdrop__void {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(rgb(0 0 0 / var(--void-drop)), rgb(0 0 0 / var(--void-drop))),
+    rgb(var(--bg-base));
+}
+
+/* ── FAR FIELD ── one tile of 1px points, dim, static. The tile is large so
+   a full monitor never shows the repeat, and the points are few enough that
+   the field never reads as a texture. */
+.auth-backdrop__far {
+  position: absolute;
+  inset: 0;
+  opacity: var(--star-a);
+  background-image:
+    radial-gradient(1px 1px at 23px 41px, rgb(var(--scene-star) / 0.42), transparent),
+    radial-gradient(1px 1px at 141px 66px, rgb(var(--scene-dust) / 0.36), transparent),
+    radial-gradient(1px 1px at 251px 98px, rgb(var(--scene-star) / 0.3), transparent),
+    radial-gradient(1px 1px at 331px 187px, rgb(var(--scene-star) / 0.38), transparent),
+    radial-gradient(1px 1px at 58px 231px, rgb(var(--scene-star) / 0.34), transparent),
+    radial-gradient(1px 1px at 402px 29px, rgb(var(--scene-star) / 0.3), transparent),
+    radial-gradient(1px 1px at 196px 302px, rgb(var(--scene-dust) / 0.32), transparent),
+    radial-gradient(1px 1px at 367px 296px, rgb(var(--scene-star) / 0.36), transparent);
+  background-size: 431px 349px;
+}
+
+/* ── NEAR FIELD ── the placed stars, 1.2 to 2.2px, crisp. The SVG has no
+   viewBox on purpose: positions are percentages of the frame but radii are
+   CSS pixels, so a star is never scaled into a blob on a wide screen. The
+   ones that breathe are spans in a sibling layer at the same percentages;
+   the tone classes colour both a circle's fill and a span's background. */
+.auth-backdrop__near,
+.auth-backdrop__breath {
+  position: absolute;
+  inset: 0;
+  display: block;
+  opacity: var(--star-a);
+}
+.auth-backdrop__star--star {
+  fill: rgb(var(--scene-star) / 0.82);
+  background-color: rgb(var(--scene-star) / 0.82);
+}
+.auth-backdrop__star--dust {
+  fill: rgb(var(--scene-dust) / 0.7);
+  background-color: rgb(var(--scene-dust) / 0.7);
+}
+
+/* ── WORLD ── one flat disc, sized from the frame's height (capped at its
+   width, so a phone keeps the world in the corner) and cut off by the
+   bottom-right corner so it reads as far bigger than the window. The body is base-dark lifted one step toward lavender
+   (slate on the derelict beat, and darkened with the void there): a single
+   fill, no terminator, no weather. */
+.auth-backdrop__world {
+  --world-d: min(calc(var(--scene-h) * 0.92), var(--scene-w));
+  position: absolute;
+  right: calc(var(--world-d) * -0.36);
+  bottom: calc(var(--world-d) * -0.5);
+  width: var(--world-d);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background:
+    linear-gradient(rgb(0 0 0 / var(--void-drop)), rgb(0 0 0 / var(--void-drop))),
+    linear-gradient(rgb(var(--world-tint) / var(--world-tint-a)), rgb(var(--world-tint) / var(--world-tint-a))),
+    rgb(var(--bg-base));
+}
+/* The atmosphere: one thin, clean line on the lit limb. The light is above
+   and to the left, so the line is brightest at the crown of the disc and
+   thins out down the left side, gone well before the frame's bottom edge.
+   The only thing on the world that emits, and the whole allowance. */
+.auth-backdrop__world::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 50%;
+  border: 1.5px solid rgb(var(--atmo) / var(--atmo-a));
+  -webkit-mask: linear-gradient(165deg, rgb(0 0 0 / 1) 4%, rgb(0 0 0 / 0.55) 16%, transparent 34%);
+  mask: linear-gradient(165deg, rgb(0 0 0 / 1) 4%, rgb(0 0 0 / 0.55) 16%, transparent 34%);
+}
+
+/* ── LOGIN, REGISTER, JOIN ── the same scene: coming home, a berth being
+   prepared and an invite followed all arrive at the same world. */
+
+/* ── INVALID ── the beacon you followed has gone dark. Everything colder and
+   dimmer: the void a step darker, the stars dust-coloured and fainter, the
+   world lifted toward slate instead of lavender with its atmosphere frosted.
+   Melancholy, not broken. */
+.auth-backdrop--invalid {
+  --void-drop: 0.25;
+  --star-a: 0.7;
+  --scene-star: var(--derelict-rime);
+  --world-tint: var(--derelict-signal);
+  --world-tint-a: 0.06;
+  --atmo: var(--derelict-rime);
+  --atmo-a: 0.28;
+}
+
+/* ── MOTION ── the breath is the shared sky's (StarField.css): its keyframes,
+   its still frame under reduced motion. Nothing of this scene's own moves. */

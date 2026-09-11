@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { AuthBackdrop } from './AuthBackdrop';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Trans, useTranslation } from 'react-i18next';
 import { useAuthStore } from '../../stores/authStore';
@@ -417,7 +418,7 @@ export function RegisterPage() {
     // `min-h-full`) makes this element exactly viewport-height; the inner flex wrapper
     // uses `min-h-full` so short content still centers vertically.
     <div className="h-full overflow-y-auto bg-surface-base relative">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(124,108,246,0.06)_0%,transparent_50%)] pointer-events-none" />
+      <AuthBackdrop variant="register" />
       <div className="min-h-full flex items-center justify-center px-4 py-6 md:py-10 relative z-10">
         <div className="w-full max-w-[480px] bg-surface-elevated rounded-md p-6 md:p-8 shadow-elevation-high overflow-hidden">
         {/* Progress dots */}
@@ -584,7 +585,7 @@ export function RegisterPage() {
                 disabled={continueDisabled}
                 // py-3 on mobile yields ≥44 px tap target (Apple HIG); py-2.5 keeps the
                 // tighter desktop look from before.
-                className="w-full py-3 md:py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="cta-primary w-full py-3 md:py-2.5 rounded disabled:opacity-50"
               >
                 {t('common:actions.continue')}
               </button>
@@ -714,7 +715,7 @@ export function RegisterPage() {
               type="button"
               onClick={() => handleRegister(false)}
               disabled={isDisabled}
-              className="w-full py-3 md:py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="cta-primary w-full py-3 md:py-2.5 rounded disabled:opacity-50"
             >
               {retryAfter > 0
                 ? t('auth:register.rateLimited.retryIn', { seconds: retryAfter })
