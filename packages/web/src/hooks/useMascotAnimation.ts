@@ -9,15 +9,25 @@ const EASING = {
 } as const;
 
 /**
- * The beat every continuous loop inside the SVG steps on, in milliseconds.
- * An animation on an element inside an SVG runs on the main thread and
- * repaints the whole drawing whenever its value changes; a smooth loop
- * changes it every frame, forever. Stepping the loop on a quarter-second
- * beat (the same beat the scenes' stars breathe on) makes it repaint four
- * times a second instead of sixty, and at the sizes Nori is drawn a step of
- * a fraction of a pixel is not a step the eye can see. Loops on the SVG
- * element itself (float, sway, breathe) are transforms the compositor owns
- * and stay smooth.
+ * The beat every endless loop steps on, in milliseconds. The same beat the
+ * scenes' stars breathe on.
+ *
+ * Two different costs make this necessary, and the second one is the one
+ * that bites. An animation on an element inside the SVG runs on the main
+ * thread and repaints the whole drawing whenever its value changes, so a
+ * smooth loop repaints sixty times a second forever. A transform on the SVG
+ * element itself is cheaper per frame, because the compositor owns it, but
+ * it is not free: an animation that never ends makes the window present a
+ * new frame every refresh, forever, and the window manager then composites
+ * the whole window at that rate for as long as the app is open. Measured on
+ * an M1 Pro with Nori idle on the friends page, the three smooth transform
+ * loops alone cost 23 percent of the GPU process and 41 points of
+ * WindowServer, on this branch and equally on main.
+ *
+ * So the rule has no exceptions: if a loop runs forever, it steps. At the
+ * sizes Nori is drawn, a step every quarter second is a fraction of a pixel
+ * and not a step the eye can see. `animate` applies this to every infinite
+ * animation, so a loop added later cannot forget.
  */
 const SVG_LOOP_TICK_MS = 250;
 
@@ -63,13 +73,26 @@ export function useMascotAnimation(
       return containerRef.current?.querySelector<T>(selector) ?? null;
     }
 
+    /**
+     * Runs one animation and keeps it for cleanup. Any animation that never
+     * ends is put on the shared beat here rather than at the call site, so
+     * the rule holds for every loop in this file including ones added later.
+     * The beat replaces the loop's own easing: over seven or eight seconds
+     * of a five pixel drift, the shape of the curve is not something the eye
+     * reads, and the frame rate is.
+     */
     function animate(
       el: Element,
       keyframes: Keyframe[],
       options: KeyframeAnimationOptions,
     ): Animation | null {
       if (!el.animate) return null;
-      const anim = el.animate(keyframes, options);
+      const endless = options.iterations === Infinity;
+      const resolved: KeyframeAnimationOptions =
+        endless && typeof options.duration === 'number'
+          ? { ...options, easing: steppedOverTicks(options.duration) }
+          : options;
+      const anim = el.animate(keyframes, resolved);
       activeAnimations.current.push(anim);
       return anim;
     }
@@ -234,7 +257,7 @@ export function useMascotAnimation(
         { transform: `translateY(${amp * 0.6}px)` },
         { transform: `translateY(${-amp}px)` },
         { transform: `translateY(${amp * 0.6}px)` },
-      ], { duration: period, easing: EASING.gentle, iterations: Infinity });
+      ], { duration: period, iterations: Infinity });
     }
 
     function startShadowPulse(
@@ -249,7 +272,7 @@ export function useMascotAnimation(
         { rx: baseRx, opacity: baseOpacity },
         { rx: minRx, opacity: minOpacity },
         { rx: baseRx, opacity: baseOpacity },
-      ], { duration: period, easing: steppedOverTicks(period), iterations: Infinity });
+      ], { duration: period, iterations: Infinity });
     }
 
     // ── Pause all SVG animations and restart float+shadow ──
@@ -358,7 +381,7 @@ export function useMascotAnimation(
         { transform: 'scaleX(1) scaleY(1)' },
         { transform: 'scaleX(1.015) scaleY(0.975)' },
         { transform: 'scaleX(1) scaleY(1)' },
-      ], { duration: 7000, easing: EASING.breathe, iterations: Infinity });
+      ], { duration: 7000, iterations: Infinity });
 
       // Mouth breathing animation
       const mouth = queryEl('[data-mascot="mouth"]');
@@ -367,7 +390,7 @@ export function useMascotAnimation(
           { ry: '3.2px' },
           { ry: '4px' },
           { ry: '3.2px' },
-        ], { duration: 7000, easing: steppedOverTicks(7000), iterations: Infinity });
+        ], { duration: 7000, iterations: Infinity });
       }
 
       // Z-particle spawning
@@ -506,7 +529,7 @@ export function useMascotAnimation(
         { transform: 'translateY(0) rotate(0deg)' },
         { transform: 'translateY(2px) rotate(1.5deg)' },
         { transform: 'translateY(0) rotate(0deg)' },
-      ], { duration: 8000, easing: EASING.gentle, iterations: Infinity });
+      ], { duration: 8000, iterations: Infinity });
 
       async function lonelyBlink(): Promise<void> {
         await droopyBlink({

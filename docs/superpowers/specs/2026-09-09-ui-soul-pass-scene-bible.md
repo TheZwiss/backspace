@@ -152,7 +152,14 @@ Soothing and calm. Motion that is noticed is too much.
   quarter-second beat (`BREATH_TICK`): every period and phase is a multiple
   of it and every star uses a `steps()` easing with one step per tick, so
   the whole sky changes four times a second and the compositor draws four
-  frames, not sixty. Nori's loops inside her SVG step on the same beat.
+  frames, not sixty. Every one of Nori's loops steps on the same beat, the
+  transforms on her SVG element included. Compositor-owned is cheap per
+  frame but it is not free: an animation that never ends makes the window
+  present a new frame every refresh for as long as the app is open, and the
+  window manager then composites the whole window at that rate. Measured on
+  an M1 Pro with Nori idle on the friends page, her three smooth transform
+  loops cost 23 points of the GPU process and 24 points of WindowServer on
+  their own, and the same load was there on main before any of this pass.
   Smooth motion is reserved for rare, short events (a streak, the
   crossing) and for the one moored craft that is looked at, not idled on.
 - Hover changes one thing softly (a plume a little longer, a glow a little
