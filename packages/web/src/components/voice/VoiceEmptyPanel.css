@@ -23,8 +23,11 @@
  * MOTION at rest: the ship's drift (transform, a nine-second loop of a few
  * pixels and a fraction of a degree, the way a moored craft rides), the sky's
  * breath (opacity, 4 to 9s, out of phase) and the sky's streaks. Every
- * animation runs on the compositor. Hover on Join lengthens the plume over
- * 600ms. Reduced motion freezes the best frame.
+ * animation runs on the compositor and every endless one steps on the shared
+ * quarter-second beat, because compositor-owned is cheap per frame but an
+ * animation that never ends keeps the whole window presenting at the display's
+ * refresh rate for as long as the screen is open. Hover on Join lengthens the
+ * plume over 600ms. Reduced motion freezes the best frame.
  *
  * FILTERS: none. No backdrop-filter, no SVG filter, no blur anywhere.
  */
@@ -94,7 +97,13 @@
   height: var(--craft-h);
   left: calc(var(--ship-x) - var(--craft-w) * 0.65);
   top: calc(var(--ship-y) - var(--craft-h) * 0.5);
-  animation: voiceDrift 9s ease-in-out infinite;
+  /* Stepped on the shared quarter-second beat, like the sky's breath. The
+     drift is seven pixels over nine seconds, so a step is a fifth of a
+     pixel and nothing the eye can catch; running it smooth instead makes
+     the window present a frame every refresh for as long as the channel is
+     open, which measured 11 points of the GPU process and 37 of
+     WindowServer on an M1 Pro. */
+  animation: voiceDrift 9s steps(36, jump-none) infinite;
 }
 .voice-empty__craft-art {
   display: block;
@@ -165,7 +174,8 @@
 
 /* ── MOTION ──
  * The drift: a slow loop of a few pixels with a slight roll, the ship never
- * travelling. Three stations so it is not a metronome. */
+ * travelling. Three stations so it is not a metronome, and the stations do
+ * the easing now that the timing function carries the beat. */
 @keyframes voiceDrift {
   0%, 100% { transform: translate(0, 0) rotate(0deg); }
   36% { transform: translate(4px, -7px) rotate(0.8deg); }
