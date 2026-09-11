@@ -65,7 +65,7 @@
   border-radius: 8px;
   transform: rotate(-2deg);
   transform-origin: 62% 150%; /* pivot off-body: a wreck tumbles around nothing */
-  animation: silence-tumble 29s ease-in-out infinite alternate;
+  animation: silence-tumble 29s steps(116, jump-none) infinite alternate;
   filter: drop-shadow(0 7px 16px rgb(0 0 0 / 0.5));
   will-change: transform;
   transition: filter 420ms ease;
@@ -326,7 +326,7 @@
   filter: blur(1px);
   opacity: 0;
   pointer-events: none;
-  animation: silence-ping 18s cubic-bezier(0.2, 0.55, 0.35, 1) infinite;
+  animation: silence-ping 18s steps(72, jump-none) infinite;
 }
 
 @keyframes silence-ping {
@@ -373,25 +373,25 @@
 .silence-button__motes i:nth-child(1) {
   left: 14%;
   top: 58%;
-  animation: silence-mote-a 47s linear infinite;
+  animation: silence-mote-a 47s steps(188, jump-none) infinite;
 }
 .silence-button__motes i:nth-child(2) {
   left: 38%;
   top: 24%;
   opacity: 0.6;
-  animation: silence-mote-b 61s linear infinite;
+  animation: silence-mote-b 61s steps(244, jump-none) infinite;
 }
 .silence-button__motes i:nth-child(3) {
   left: 69%;
   top: 70%;
   opacity: 0.45;
-  animation: silence-mote-a 53s linear infinite reverse;
+  animation: silence-mote-a 53s steps(212, jump-none) infinite reverse;
 }
 .silence-button__motes i:nth-child(4) {
   left: 55%;
   top: 44%;
   opacity: 0.3;
-  animation: silence-mote-b 71s linear infinite reverse;
+  animation: silence-mote-b 71s steps(284, jump-none) infinite reverse;
 }
 
 @keyframes silence-mote-a {
@@ -458,7 +458,7 @@
   height: 3px;
   clip-path: polygon(0% 22%, 62% 0%, 100% 55%, 44% 100%);
   opacity: 0.85;
-  animation: silence-debris-a 63s ease-in-out infinite;
+  animation: silence-debris-a 63s steps(252, jump-none) infinite;
 }
 
 .silence-button__debris i:nth-child(2) {
@@ -468,7 +468,7 @@
   height: 2px;
   clip-path: polygon(0% 0%, 100% 30%, 70% 100%);
   opacity: 0.6;
-  animation: silence-debris-b 81s ease-in-out infinite;
+  animation: silence-debris-b 81s steps(324, jump-none) infinite;
 }
 
 .silence-button__debris i:nth-child(3) {
@@ -478,7 +478,7 @@
   height: 2px;
   clip-path: polygon(10% 0%, 100% 40%, 55% 100%, 0% 62%);
   opacity: 0.45;
-  animation: silence-debris-a 97s ease-in-out infinite reverse;
+  animation: silence-debris-a 97s steps(388, jump-none) infinite reverse;
 }
 
 @keyframes silence-debris-a {

@@ -162,6 +162,12 @@ Soothing and calm. Motion that is noticed is too much.
   their own, and the same load was there on main before any of this pass.
   Smooth motion is reserved for rare, short events (a streak, the
   crossing) and for the one moored craft that is looked at, not idled on.
+  A gesture the beat cannot serve is the one case that gets neither: a wave
+  at four steps a stroke reads as a windup toy, so it keeps its stroke and
+  takes a duty cycle instead. The pilot in the telemetry ask waves twice
+  over two and a half seconds and then rests for ten, which costs a fifth
+  of what waving without pause did and looks more like a greeting than a
+  nervous tic.
 - Hover changes one thing softly (a plume a little longer, a glow a little
   warmer) over half a second or more. Press does nothing theatrical.
 - `prefers-reduced-motion: reduce` freezes into the best frame and strips
