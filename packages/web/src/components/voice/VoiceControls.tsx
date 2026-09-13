@@ -21,6 +21,7 @@ export function VoiceControls() {
   const setRnnoiseEnabled = useVoiceStore((s) => s.setRnnoiseEnabled);
   const connectionError = useVoiceStore((s) => s.connectionError);
   const isLiveKitConnected = useVoiceStore((s) => s.isLiveKitConnected);
+  const voiceConnectionStatus = useVoiceStore((s) => s.voiceConnectionStatus);
   const connectionQuality = useVoiceStore((s) => s.connectionQuality);
   const channels = useSpaceStore((s) => s.channels);
   // Screen-share button: idle → source picker; live → settings + stop menu.
@@ -78,6 +79,18 @@ export function VoiceControls() {
     if (disconnectFn) disconnectFn();
   };
 
+  const handleRetry = () => {
+    const { connectFn, activeDmCall, currentVoiceChannelId } = useVoiceStore.getState();
+    const target = activeDmCall?.dmChannelId ?? currentVoiceChannelId;
+    if (connectFn && target) void connectFn(target, !!activeDmCall);
+  };
+
+  const connectionDetail = connectionError === 'network_disconnect'
+    ? t('voice:status.connectionLost')
+    : connectionError === 'connect_failed'
+      ? t('voice:status.connectionFailed')
+      : connectionError;
+
   const statusColor = connectionError
     ? 'text-txt-danger'
     : isLiveKitConnected
@@ -122,14 +135,30 @@ export function VoiceControls() {
 
         <div className="min-w-0 flex-1">
           <div className={`text-[13px] font-semibold leading-[18px] ${statusColor}`}>
-            {connectionError ? t('voice:status.connectionFailed') : isLiveKitConnected ? t('voice:status.connected') : t('voice:status.connecting')}
+            {voiceConnectionStatus === 'reconnecting'
+              ? t('voice:status.reconnecting')
+              : connectionError === 'network_disconnect'
+                ? t('voice:status.disconnected')
+                : connectionError
+                  ? t('voice:status.connectionFailed')
+                  : isLiveKitConnected
+                    ? t('voice:status.connected')
+                    : t('voice:status.connecting')}
           </div>
           <div className="text-[12px] text-txt-tertiary truncate leading-[16px]">
-            {connectionError ? connectionError : channelName}
+            {connectionDetail ?? channelName}
           </div>
         </div>
 
         <div className="flex items-center gap-0.5 flex-shrink-0">
+          {voiceConnectionStatus === 'disconnected' && connectionError && (
+            <button
+              onClick={handleRetry}
+              className="px-2 h-7 text-[12px] text-accent-primary hover:bg-interactive-hover rounded"
+            >
+              {t('voice:status.retry')}
+            </button>
+          )}
           <button
             onClick={handleDisconnect}
             className="w-7 h-7 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded"

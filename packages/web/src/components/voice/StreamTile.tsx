@@ -12,11 +12,25 @@ import { getSfxVolume } from '../../utils/sfx';
 import { ScreenShareSettingsPopover } from './ScreenShareSettingsPopover';
 import { useVoiceParticipantMeta } from '../../hooks/useVoiceParticipantMeta';
 import type { StreamTile as StreamTileType } from '../../hooks/useLiveKit';
+import type { TrackStatsSnapshot } from '../../hooks/useTrackStats';
+import {
+  classifyStreamHealth,
+  useStreamHealthWarning,
+} from '../../hooks/useStreamHealthWarning';
 
 interface StreamTileProps {
   tile: StreamTileType;
   large?: boolean;
+  stats: TrackStatsSnapshot | null;
 }
+
+const STREAM_HEALTH_KEYS = {
+  publisherNetwork: 'voice:streamDiagnostics.publisherNetwork',
+  publisherCpu: 'voice:streamDiagnostics.publisherCpu',
+  viewerNetwork: 'voice:streamDiagnostics.viewerNetwork',
+  reconnecting: 'voice:streamDiagnostics.reconnecting',
+  unknown: 'voice:streamDiagnostics.unknown',
+} as const;
 
 /** Wrapper component for stream quality settings — needs its own state + close guard. */
 function StreamQualityItem() {
@@ -177,7 +191,7 @@ function handleViewerWatchToggle(streamerUserId: string, watching: boolean): voi
   void room.localParticipant.publishData(payload, { reliable: true });
 }
 
-export function StreamTile({ tile, large }: StreamTileProps) {
+export function StreamTile({ tile, large, stats }: StreamTileProps) {
   const { t } = useTranslation(['voice', 'common']);
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -190,6 +204,9 @@ export function StreamTile({ tile, large }: StreamTileProps) {
   const { displayName, avatar, user } = useVoiceParticipantMeta(participant);
 
   const isWatching = watchingStreams.has(userId);
+  const voiceConnectionStatus = useVoiceStore((s) => s.voiceConnectionStatus);
+  const localConnectionQuality = useVoiceStore((s) => s.connectionQuality);
+  const publisherConnectionQuality = useVoiceStore((s) => s.connectionQualities.get(participant.identity) ?? 'unknown');
 
   const liveScreenTrack = tile.screenTrack?.readyState === 'live' ? tile.screenTrack : null;
   const liveLkScreenTrack = liveScreenTrack ? tile.lkScreenTrack : null;
@@ -198,6 +215,24 @@ export function StreamTile({ tile, large }: StreamTileProps) {
   const [qualityBadge, setQualityBadge] = useState<{ height: number; fps: number | null } | null>(null);
 
   const openContextMenu = useContextMenuStore((s) => s.open);
+
+  const screenStat = stats?.videoTracks.find((track) =>
+    track.source === 'screen_share'
+    && (isLocal
+      ? track.direction === 'send'
+      : track.direction === 'recv' && track.participantName === participant.username),
+  );
+  const healthCandidate = classifyStreamHealth({
+    reconnecting: voiceConnectionStatus === 'reconnecting',
+    isLocal,
+    publisherConnectionQuality,
+    localConnectionQuality,
+    outboundReason: isLocal ? screenStat?.qualityLimitation ?? null : null,
+    packetLoss: screenStat?.packetLoss ?? null,
+    jitter: screenStat?.jitter ?? null,
+    freezeCountDelta: screenStat?.freezeCountDelta ?? null,
+  });
+  const healthWarning = useStreamHealthWarning(healthCandidate, stats);
 
   // --- VIDEO --- use LiveKit's track.attach() to register the element
   // with the adaptive stream observer (enables SFU layer switching by viewport size)
@@ -408,6 +443,12 @@ export function StreamTile({ tile, large }: StreamTileProps) {
       <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-accent-rose rounded text-[11px] font-bold text-white uppercase tracking-wide">
         {t('voice:badges.live')}
       </div>
+
+      {healthWarning && (
+        <div className="absolute top-9 left-2 right-2 px-2 py-1.5 bg-black/75 border border-status-idle/40 rounded text-[11px] text-white text-center">
+          {t(STREAM_HEALTH_KEYS[healthWarning])}
+        </div>
+      )}
 
       {/* Quality badge — top right */}
       {qualityBadge && hasVideo && (

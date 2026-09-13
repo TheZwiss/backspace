@@ -33,6 +33,9 @@ let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
 // Chunk inArray() calls to stay safely under this limit.
 const BATCH_CHUNK_SIZE = 500;
 
+export const VOICE_RECONNECT_GRACE_MS = 60_000;
+const MAX_PENDING_VOICE_RECONNECTS = 10_000;
+
 function batchInArray<TId, TResult>(ids: TId[], queryFn: (chunk: TId[]) => TResult[]): TResult[] {
   if (ids.length <= BATCH_CHUNK_SIZE) return queryFn(ids);
   const results: TResult[] = [];
@@ -100,6 +103,9 @@ class ConnectionManager {
   private voiceUserStates: Map<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }> = new Map();
   // userId → Timeout
   private pendingOfflineTimeouts: Map<string, NodeJS.Timeout> = new Map();
+  // Voice has a longer grace than presence so a VPN/network handover can be
+  // recovered by LiveKit without creating a visible leave/join cycle.
+  private pendingVoiceReconnects: Map<string, { timeout: NodeJS.Timeout; roomId: string | null }> = new Map();
   // roomId → Timeout for ringing DM rooms (60s auto-cleanup)
   private ringingTimeouts: Map<string, NodeJS.Timeout> = new Map();
   // Callback registered by events.ts to fan dm_call_end out to peers on ring timeout.
@@ -114,7 +120,7 @@ class ConnectionManager {
   // Permission-muted users (SPEAK permission revoked while in voice)
   private permissionMutedUsers: Set<string> = new Set(); // Stores spaceId:userId
   // The specific WebSocket that initiated voice_join / DM call for this user.
-  // When THIS socket closes, voice state is cleaned up immediately.
+  // When THIS socket closes, voice cleanup enters the reconnect grace period.
   private voiceWs: Map<string, WebSocket> = new Map();
   // Per-user WebSocket rate limiters (shared across all tabs/connections)
   private userRateLimiters: Map<string, WsRateLimiter> = new Map();
@@ -149,70 +155,16 @@ class ConnectionManager {
     if (userConnections) {
       userConnections.delete(ws);
 
-      // ── Immediate voice cleanup if this was the voice-active socket ──
+      // Only the socket that owns voice starts the voice grace period. Closing
+      // another tab must not disturb the active voice session.
       if (this.voiceWs.get(userId) === ws) {
         this.voiceWs.delete(userId);
-
-        // Leave voice room (space or DM)
-        const left = this.leaveCurrentRoom(userId);
-        this.clearVoiceUserStatus(userId);
-        if (left) {
-          if (left.room.roomType === 'space') {
-            const meta = left.room.metadata as SpaceRoomMeta;
-            this.sendToSpace(meta.spaceId, {
-              type: 'voice_state_update',
-              channelId: left.roomId,
-              userId,
-              action: 'leave',
-            });
-          } else {
-            this.sendToDmMembers(left.roomId, {
-              type: 'voice_state_update',
-              channelId: left.roomId,
-              userId,
-              action: 'leave',
-            });
-            // Auto-end empty active DM calls
-            const updatedRoom = this.voiceRooms.get(left.roomId);
-            if (updatedRoom && updatedRoom.participants.size === 0
-                && (updatedRoom.metadata as DmRoomMeta).state === 'active') {
-              this.destroyRoom(left.roomId);
-              this.sendToDmMembers(left.roomId, {
-                type: 'dm_call_ended',
-                dmChannelId: left.roomId,
-              });
-            }
-          }
-        }
-
-        // Clean up ringing DM rooms where this user is the caller
-        for (const [roomId, room] of this.voiceRooms) {
-          if (room.roomType === 'dm') {
-            const meta = room.metadata as DmRoomMeta;
-            if (meta.state === 'ringing' && meta.callerId === userId) {
-              this.destroyRoom(roomId);
-              this.sendToDmMembers(roomId, {
-                type: 'dm_call_ended',
-                dmChannelId: roomId,
-              });
-            }
-          }
-        }
-
-        // Notify the user's remaining tabs so their UI updates
-        if (userConnections.size > 0 && left) {
-          this.sendToUser(userId, {
-            type: 'voice_disconnected',
-            userId,
-            channelId: left.roomId,
-            reason: 'session_closed',
-          });
-        }
+        this.scheduleVoiceDisconnect(userId);
       }
 
       if (userConnections.size === 0) {
         this.connections.delete(userId);
-        // Schedule disconnect cleanup (presence/offline, NOT voice — already handled above)
+        // Presence and voice have independent grace periods.
         this.scheduleDisconnect(userId);
       }
     }
@@ -239,6 +191,82 @@ class ConnectionManager {
     }
   }
 
+  private scheduleVoiceDisconnect(userId: string): void {
+    this.cancelVoiceDisconnect(userId);
+    const roomId = this.userToRoom.get(userId)
+      ?? Array.from(this.voiceRooms).find(([, room]) =>
+        room.roomType === 'dm'
+        && (room.metadata as DmRoomMeta).state === 'ringing'
+        && (room.metadata as DmRoomMeta).callerId === userId,
+      )?.[0]
+      ?? null;
+    if (!roomId) return;
+
+    if (this.pendingVoiceReconnects.size >= MAX_PENDING_VOICE_RECONNECTS) {
+      const oldest = this.pendingVoiceReconnects.entries().next().value as
+        | [string, { timeout: NodeJS.Timeout; roomId: string | null }]
+        | undefined;
+      if (oldest) {
+        clearTimeout(oldest[1].timeout);
+        this.pendingVoiceReconnects.delete(oldest[0]);
+        this.finalizeVoiceDisconnect(oldest[0], oldest[1].roomId);
+      }
+    }
+
+    const timeout = setTimeout(() => {
+      const pending = this.pendingVoiceReconnects.get(userId);
+      if (!pending || pending.timeout !== timeout) return;
+      this.pendingVoiceReconnects.delete(userId);
+      if (!this.voiceWs.has(userId)) this.finalizeVoiceDisconnect(userId, pending.roomId);
+    }, VOICE_RECONNECT_GRACE_MS);
+    this.pendingVoiceReconnects.set(userId, { timeout, roomId });
+  }
+
+  private cancelVoiceDisconnect(userId: string): void {
+    const pending = this.pendingVoiceReconnects.get(userId);
+    if (!pending) return;
+    clearTimeout(pending.timeout);
+    this.pendingVoiceReconnects.delete(userId);
+  }
+
+  private finalizeVoiceDisconnect(userId: string, expectedRoomId: string | null = null): void {
+    if (this.voiceWs.has(userId)) return;
+    const current = this.getUserRoom(userId);
+    const left = (!expectedRoomId || current?.roomId === expectedRoomId)
+      ? this.leaveCurrentRoom(userId)
+      : null;
+    this.clearVoiceUserStatus(userId);
+
+    if (left) {
+      if (left.room.roomType === 'space') {
+        const meta = left.room.metadata as SpaceRoomMeta;
+        this.sendToSpace(meta.spaceId, {
+          type: 'voice_state_update', channelId: left.roomId, userId, action: 'leave',
+        });
+      } else {
+        this.sendToDmMembers(left.roomId, {
+          type: 'voice_state_update', channelId: left.roomId, userId, action: 'leave',
+        });
+        const updatedRoom = this.voiceRooms.get(left.roomId);
+        if (updatedRoom && updatedRoom.participants.size === 0
+            && (updatedRoom.metadata as DmRoomMeta).state === 'active') {
+          this.destroyRoom(left.roomId);
+          this.sendToDmMembers(left.roomId, { type: 'dm_call_ended', dmChannelId: left.roomId });
+        }
+      }
+    }
+
+    for (const [roomId, room] of this.voiceRooms) {
+      if (room.roomType !== 'dm') continue;
+      const meta = room.metadata as DmRoomMeta;
+      if (meta.state === 'ringing' && meta.callerId === userId
+          && (!expectedRoomId || expectedRoomId === roomId)) {
+        this.destroyRoom(roomId);
+        this.sendToDmMembers(roomId, { type: 'dm_call_ended', dmChannelId: roomId });
+      }
+    }
+  }
+
   private finalizeDisconnect(userId: string) {
     // Double check they are still offline
     if (this.isUserOnline(userId)) return;
@@ -246,52 +274,6 @@ class ConnectionManager {
     console.log(`[ConnectionManager] Finalizing disconnect for user ${userId}`);
     const db = getDb();
     db.update(schema.users).set({ status: 'offline' }).where(eq(schema.users.id, userId)).run();
-
-    // Leave voice room if in one (handles both space and DM rooms)
-    const left = this.leaveCurrentRoom(userId);
-    this.clearVoiceUserStatus(userId);
-    this.voiceWs.delete(userId);
-    if (left) {
-      if (left.room.roomType === 'space') {
-        const meta = left.room.metadata as SpaceRoomMeta;
-        this.sendToSpace(meta.spaceId, {
-          type: 'voice_state_update',
-          channelId: left.roomId,
-          userId: userId,
-          action: 'leave',
-        });
-      } else {
-        // DM room — broadcast leave and auto-end if empty
-        this.sendToDmMembers(left.roomId, {
-          type: 'voice_state_update',
-          channelId: left.roomId,
-          userId: userId,
-          action: 'leave',
-        });
-        const updatedRoom = this.voiceRooms.get(left.roomId);
-        if (updatedRoom && updatedRoom.participants.size === 0 && (updatedRoom.metadata as DmRoomMeta).state === 'active') {
-          this.destroyRoom(left.roomId);
-          this.sendToDmMembers(left.roomId, {
-            type: 'dm_call_ended',
-            dmChannelId: left.roomId,
-          });
-        }
-      }
-    }
-
-    // Destroy any ringing DM rooms where this user is the caller
-    for (const [roomId, room] of this.voiceRooms) {
-      if (room.roomType === 'dm') {
-        const meta = room.metadata as DmRoomMeta;
-        if (meta.state === 'ringing' && meta.callerId === userId) {
-          this.destroyRoom(roomId);
-          this.sendToDmMembers(roomId, {
-            type: 'dm_call_ended',
-            dmChannelId: roomId,
-          });
-        }
-      }
-    }
 
     // Clear activity state
     this.clearUserActivities(userId);
@@ -759,7 +741,12 @@ class ConnectionManager {
     const displaced: string[] = [];
     for (const userId of room.participants) {
       this.userToRoom.delete(userId);
+      this.cancelVoiceDisconnect(userId);
       displaced.push(userId);
+    }
+
+    if (room.roomType === 'dm') {
+      this.cancelVoiceDisconnect((room.metadata as DmRoomMeta).callerId);
     }
 
     this.voiceRooms.delete(roomId);
@@ -816,6 +803,7 @@ class ConnectionManager {
 
   /** Store which ws owns the voice session for this user. */
   setVoiceWs(userId: string, ws: WebSocket): void {
+    this.cancelVoiceDisconnect(userId);
     this.voiceWs.set(userId, ws);
   }
 
@@ -826,6 +814,7 @@ class ConnectionManager {
 
   /** Clear the voice ws binding for this user. */
   clearVoiceWs(userId: string): void {
+    this.cancelVoiceDisconnect(userId);
     this.voiceWs.delete(userId);
   }
 
@@ -995,7 +984,7 @@ class ConnectionManager {
     // Leave voice room if in one
     const left = this.leaveCurrentRoom(userId);
     this.clearVoiceUserStatus(userId);
-    this.voiceWs.delete(userId);
+    this.clearVoiceWs(userId);
     if (left) {
       if (left.room.roomType === 'space') {
         const meta = left.room.metadata as SpaceRoomMeta;

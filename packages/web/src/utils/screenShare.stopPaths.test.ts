@@ -5,6 +5,7 @@ vi.mock('livekit-client', () => ({
   Room: class {},
   Track: { Source: { ScreenShare: 'screen_share', ScreenShareAudio: 'screen_share_audio', Camera: 'camera' } },
   BackupCodecPolicy: { SIMULCAST: 0 },
+  AudioPresets: { musicHighQualityStereo: { maxBitrate: 128_000 } },
 }));
 vi.mock('./voice', () => ({ broadcastVoiceStatus: vi.fn() }));
 vi.mock('../audio/AudioManager', () => ({ AudioManager: { getInstance: () => ({}) } }));
@@ -40,7 +41,7 @@ function makeRoom(publications: Record<string, unknown> = {}) {
 describe('screen-share stop paths broadcast voice status', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    useVoiceStore.setState({ isScreenSharing: true, hwOverdrive: false });
+    useVoiceStore.setState({ isScreenSharing: true });
   });
 
   it('stopScreenShare broadcasts and clears the sharing flag', async () => {
@@ -71,7 +72,7 @@ describe('screen-share stop paths broadcast voice status', () => {
 describe('an explicit stop clears both publications and broadcasts once', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    useVoiceStore.setState({ isScreenSharing: true, hwOverdrive: false });
+    useVoiceStore.setState({ isScreenSharing: true });
   });
 
   it('unpublishes the audio track even when the video track throws', async () => {
@@ -118,7 +119,7 @@ describe('an explicit stop clears both publications and broadcasts once', () => 
 describe('a republish that fails to land tells the room the share is gone', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    useVoiceStore.setState({ isScreenSharing: true, hwOverdrive: false });
+    useVoiceStore.setState({ isScreenSharing: true });
     // jsdom has no MediaStream; republishScreenShare builds one from the live tracks.
     (globalThis as { MediaStream?: unknown }).MediaStream = class {
       tracks: { kind: string; readyState: string; stop: () => void }[];

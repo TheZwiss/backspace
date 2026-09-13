@@ -53,6 +53,14 @@
       "server": "Server",
       "protocol": "Protocol"
     },
+    "video": {
+      "requestedCodec": "Requested codec",
+      "negotiatedCodec": "Negotiated codec",
+      "encoderImplementation": "Encoder implementation",
+      "qpDelta": "QP sum delta",
+      "nackDelta": "NACK delta",
+      "pliDelta": "PLI delta"
+    },
     "source": {
       "microphone": "Microphone",
       "camera": "Camera",
@@ -107,16 +115,20 @@
     },
     "codec": "Codec",
     "codecOption": {
-      "standard": "Standard",
-      "hardware": "NVIDIA / Apple"
+      "vp9": "VP9",
+      "h264": "H264"
     },
-    "hardwareNote": "GPU hardware encoder · resets when stream ends",
     "bitrate": "Bitrate",
     "custom": "Custom",
     "auto": "Auto",
     "customBitrateDisabled": "Custom bitrate disabled by administrator",
     "systemAudio": "System Audio",
-    "chromeEchoNote": "Use Chrome for echo-free audio",
+    "chromeEchoNote": "Chrome can exclude Backspace audio when the capture type supports it",
+    "electronWindowsAudioNote": "Windows loopback may capture call audio when restrictOwnAudio is unsupported",
+    "electronMacAudioNote": "macOS 13+ requires Screen & System Audio Recording permission",
+    "electronLinuxAudioNote": "Linux requires PulseAudio compatibility; Backspace audio may also be captured",
+    "systemAudioStartFailed": "Could not start the stream with system audio. Disable Share system audio if this platform does not support it.",
+    "softwareH264Fallback": "Hardware H264 encoding is unavailable. Software OpenH264 is in use; VP9 may perform better.",
     "degradation": {
       "maintainResolution": "hold resolution",
       "maintainFramerate": "hold framerate",
@@ -136,6 +148,13 @@
     "watch": "Watch Stream",
     "mute": "Mute Stream",
     "isStreaming": "{{name}} is streaming"
+  },
+  "streamDiagnostics": {
+    "publisherNetwork": "The streamer's network is unstable",
+    "publisherCpu": "The streamer's computer cannot encode video fast enough",
+    "viewerNetwork": "Your connection is unstable",
+    "reconnecting": "Connection lost — reconnecting…",
+    "unknown": "The connection is unstable; the affected side could not be determined"
   },
   "controls": {
     "spaceMutedSelfMuted": "Space Muted (self-muted)",
@@ -166,7 +185,11 @@
     "voiceCall": "Voice Call",
     "connectionFailed": "Connection Failed",
     "connected": "Voice Connected",
-    "connecting": "Connecting..."
+    "connecting": "Connecting...",
+    "reconnecting": "Reconnecting…",
+    "disconnected": "Disconnected",
+    "connectionLost": "Connection lost. Try again.",
+    "retry": "Retry"
   },
   "camera": {
     "auto": "Auto",

@@ -17,6 +17,7 @@ import { useActivityStore } from '../stores/activityStore';
 import { useDiscoverStore } from '../stores/discoverStore';
 import { useFederationStore } from '../stores/federationStore';
 import { detectClientKind } from '../platform/clientKind';
+import { ConnectionState as LiveKitConnectionState } from 'livekit-client';
 
 // ─── Rejected peer origins (for unreachable member indicators) ───────────────
 const rejectedPeerOrigins = new Set<string>();
@@ -389,13 +390,36 @@ function handleEvent(origin: string, event: ServerEvent): void {
           if (voiceOrigin === origin) {
             const serverKnowsUs = event.voiceStates?.[currentVoiceChannelId]?.includes(event.user.id);
             if (!serverKnowsUs) {
-              // leaveVoice() clears currentVoiceChannelId first to prevent
-              // AppLayout from auto-reconnecting (disconnect() fires with
-              // CLIENT_INITIATED which skips handleForceDisconnect).
-              useVoiceStore.getState().leaveVoice();
-              getActiveRoom()?.disconnect();
+              const activeRoom = getActiveRoom();
+              const localStatus = useVoiceStore.getState().voiceConnectionStatus;
+              const recoverable = localStatus === 'connecting'
+                || localStatus === 'reconnecting'
+                || (activeRoom != null && (
+                  activeRoom.state === LiveKitConnectionState.Connected
+                  || activeRoom.state === LiveKitConnectionState.Connecting
+                  || activeRoom.state === LiveKitConnectionState.Reconnecting
+                ));
+              if (recoverable) {
+                // A ready snapshot can race the new socket's voice
+                // registration. Reassert the session and keep LiveKit's own
+                // reconnect machinery and local media intent intact.
+                wsSend({ type: 'voice_join', channelId: currentVoiceChannelId }, origin);
+                broadcastVoiceStatus(origin);
+              }
+              // A completed network disconnect intentionally retains the
+              // channel ID for the Retry action. Absence from a ready snapshot
+              // alone is not a terminal refusal, so leave that intent intact.
             }
           }
+        }
+      }
+
+      // Active DM calls do not use voice_join. Re-sending voice_status lets the
+      // server bind the new socket while its DM participant is still in grace.
+      {
+        const state = useVoiceStore.getState();
+        if (state.activeDmCall && (state.callOrigin || getChannelOrigin(state.activeDmCall.dmChannelId)) === origin) {
+          broadcastVoiceStatus(origin);
         }
       }
 

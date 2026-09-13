@@ -26,8 +26,8 @@ const MODES: { value: ScreenShareConfig['mode']; labelKey: 'voice:streamSettings
 ];
 
 const CODEC_OPTIONS = [
-  { value: 'vp9' as const, labelKey: 'voice:streamSettings.codecOption.standard' as const, sub: 'VP9' },
-  { value: 'hw' as const, labelKey: 'voice:streamSettings.codecOption.hardware' as const, sub: 'H.264' },
+  { value: 'vp9' as const, labelKey: 'voice:streamSettings.codecOption.vp9' as const },
+  { value: 'h264' as const, labelKey: 'voice:streamSettings.codecOption.h264' as const },
 ];
 
 /** Whole Mbps when the value is round, otherwise one decimal; the number goes through the locale. */
@@ -57,8 +57,6 @@ export function formatKbps(kbps: number): string {
 export function StreamSummary({ className = '' }: { className?: string }) {
   const { t } = useTranslation(['voice', 'common']);
   const config = useVoiceStore((s) => s.screenShareConfig);
-  // hwOverdrive feeds the codec choice inside buildScreenShareOptions
-  useVoiceStore((s) => s.hwOverdrive);
   const result = buildScreenShareOptions(config);
   return (
     <span className={`text-[12px] text-txt-tertiary ${className}`}>
@@ -78,9 +76,8 @@ export function StreamQualityControls() {
   const { t } = useTranslation(['voice', 'common']);
   const config = useVoiceStore((s) => s.screenShareConfig);
   const setConfig = useVoiceStore((s) => s.setScreenShareConfig);
-  const hwOverdrive = useVoiceStore((s) => s.hwOverdrive);
-  const setHwOverdrive = useVoiceStore((s) => s.setHwOverdrive);
   const limits = useSettingsStore((s) => s.streamingLimits);
+  const electronPlatform = isElectron() ? window.backspace?.platform : null;
 
   const BITRATE_MIN = limits?.minBitrateKbps ?? 500;
   const BITRATE_MAX = limits?.maxBitrateKbps ?? 20000;
@@ -194,29 +191,18 @@ export function StreamQualityControls() {
         </div>
         <div className="flex gap-1.5">
           {CODEC_OPTIONS.map((c) => {
-            const isHw = c.value === 'hw';
-            const isSelected = isHw ? hwOverdrive : !hwOverdrive;
+            const isSelected = config.codec === c.value;
             return (
               <button
                 key={c.value}
-                onClick={() => setHwOverdrive(isHw)}
-                className={`${pillBase} flex flex-col items-center gap-0 leading-tight ${
-                  isSelected
-                    ? (isHw ? 'bg-accent-amber/60 text-white' : pillSelected)
-                    : (isHw ? 'bg-surface-elevated/50 text-txt-tertiary hover:bg-interactive-hover' : pillUnselected)
-                }`}
+                onClick={() => setConfig({ codec: c.value })}
+                className={`${pillBase} ${isSelected ? pillSelected : pillUnselected}`}
               >
-                <span>{t(c.labelKey)}</span>
-                <span className="text-[10px] opacity-60">{c.sub}</span>
+                {t(c.labelKey)}
               </button>
             );
           })}
         </div>
-        {hwOverdrive && (
-          <div className="text-[10px] text-accent-amber/80 mt-1">
-            {t('voice:streamSettings.hardwareNote')}
-          </div>
-        )}
       </div>
 
       {/* Bitrate — Auto | Custom pills like every other row; the slider only exists in Custom */}
@@ -284,9 +270,15 @@ export function StreamQualityControls() {
             <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider">
               {t('voice:streamSettings.systemAudio')}
             </div>
-            {isElectron() && config.shareAudio && (
+            {config.shareAudio && (
               <div className="text-[10px] text-accent-amber/80 mt-0.5">
-                {t('voice:streamSettings.chromeEchoNote')}
+                {electronPlatform === 'win32'
+                  ? t('voice:streamSettings.electronWindowsAudioNote')
+                  : electronPlatform === 'darwin'
+                    ? t('voice:streamSettings.electronMacAudioNote')
+                    : electronPlatform === 'linux'
+                      ? t('voice:streamSettings.electronLinuxAudioNote')
+                      : t('voice:streamSettings.chromeEchoNote')}
               </div>
             )}
           </div>

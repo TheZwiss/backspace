@@ -12,7 +12,11 @@ export interface ScreenShareConfig {
   mode: 'gaming' | 'text';
   customBitrateKbps: number | null;
   shareAudio: boolean;
+  codec: 'vp9' | 'h264';
 }
+
+export type VoiceConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'reconnecting';
+export type VoiceConnectionQuality = 'excellent' | 'good' | 'poor' | 'lost' | 'unknown';
 
 interface VoiceState {
   voiceUsers: Map<string, string[]>; // channelId → userIds
@@ -26,8 +30,11 @@ interface VoiceState {
   speakingUserIds: Set<string>;
   connectionError: string | null;
   isLiveKitConnected: boolean;
-  connectionQuality: 'excellent' | 'good' | 'poor' | 'lost' | 'unknown';
-  setConnectionQuality: (q: 'excellent' | 'good' | 'poor' | 'lost' | 'unknown') => void;
+  voiceConnectionStatus: VoiceConnectionStatus;
+  setVoiceConnectionStatus: (status: VoiceConnectionStatus) => void;
+  connectionQuality: VoiceConnectionQuality;
+  connectionQualities: Map<string, VoiceConnectionQuality>;
+  setConnectionQuality: (q: VoiceConnectionQuality, identity?: string) => void;
   inputVolume: number;  // 0-200 (100 = default)
   outputVolume: number; // 0-200 (100 = default)
   inputDeviceId: string;
@@ -113,8 +120,6 @@ interface VoiceState {
   setFocusedParticipant: (id: string | null) => void;
   setScreenShareConfig: (config: Partial<ScreenShareConfig>) => void;
   setLastScreenShareSourceId: (sourceId: string | null) => void;
-  hwOverdrive: boolean;
-  setHwOverdrive: (enabled: boolean) => void;
   noiseSuppression: boolean;
   echoCancellation: boolean;
   autoGainControl: boolean;
@@ -177,14 +182,16 @@ export const useVoiceStore = create<VoiceState>()(
       speakingUserIds: new Set(),
       connectionError: null,
       isLiveKitConnected: false,
+      voiceConnectionStatus: 'disconnected',
       connectionQuality: 'unknown',
+      connectionQualities: new Map(),
       inputVolume: 100,
       outputVolume: 100,
       inputDeviceId: 'default',
       outputDeviceId: 'default',
       cameraDeviceId: null,
       focusedParticipantId: null,
-      screenShareConfig: { height: 720, fps: 60, mode: 'gaming', customBitrateKbps: null, shareAudio: !isElectron() },
+      screenShareConfig: { height: 720, fps: 60, mode: 'gaming', customBitrateKbps: null, shareAudio: !isElectron(), codec: 'vp9' },
       lastScreenShareSourceId: null,
       participantVolumes: new Map(),
       setParticipantVolume: (userId, volume) => {
@@ -374,7 +381,13 @@ export const useVoiceStore = create<VoiceState>()(
       },
       setConnectionError: (error) => set({ connectionError: error }),
       setIsLiveKitConnected: (connected) => set({ isLiveKitConnected: connected }),
-      setConnectionQuality: (quality) => set({ connectionQuality: quality }),
+      setVoiceConnectionStatus: (voiceConnectionStatus) => set({ voiceConnectionStatus }),
+      setConnectionQuality: (quality, identity) => set((state) => {
+        if (!identity) return { connectionQuality: quality };
+        const connectionQualities = new Map(state.connectionQualities);
+        connectionQualities.set(identity, quality);
+        return { connectionQualities };
+      }),
 
       setInputVolume: (volume) => {
         set({ inputVolume: volume });
@@ -451,9 +464,6 @@ export const useVoiceStore = create<VoiceState>()(
       setScreenShareConfig: (config) => set((state) => ({
         screenShareConfig: { ...state.screenShareConfig, ...config },
       })),
-      // Hardware H.264 override — transient (intentionally excluded from partialize for non-persisted behavior)
-      hwOverdrive: false,
-      setHwOverdrive: (enabled) => set({ hwOverdrive: enabled }),
       noiseSuppression: true,
       echoCancellation: true,
       autoGainControl: true,
@@ -522,7 +532,6 @@ export const useVoiceStore = create<VoiceState>()(
 
       resetSession: () => set({
         // Connection state
-        hwOverdrive: false,
         voiceUsers: new Map(),
         voiceUserStates: new Map(),
         currentVoiceChannelId: null,
@@ -531,7 +540,9 @@ export const useVoiceStore = create<VoiceState>()(
         speakingUserIds: new Set(),
         connectionError: null,
         isLiveKitConnected: false,
+        voiceConnectionStatus: 'disconnected',
         connectionQuality: 'unknown',
+        connectionQualities: new Map(),
         focusedParticipantId: null,
         // Call state
         incomingCall: null,
@@ -588,7 +599,6 @@ export const useVoiceStore = create<VoiceState>()(
 
           return {
             currentVoiceChannelId: null,
-            hwOverdrive: false,
             isCameraOn: false,
             isScreenSharing: false,
             participants: [],
@@ -596,7 +606,9 @@ export const useVoiceStore = create<VoiceState>()(
             speakingUserIds: new Set(),
             connectionError: null,
             isLiveKitConnected: false,
+            voiceConnectionStatus: 'disconnected',
             connectionQuality: 'unknown',
+            connectionQualities: new Map(),
             focusedParticipantId: null,
             activeDmCall: null,
             outgoingCall: null,
@@ -635,7 +647,6 @@ export const useVoiceStore = create<VoiceState>()(
       handleForceDisconnect: () => {
         set({
           currentVoiceChannelId: null,
-          hwOverdrive: false,
           isCameraOn: false,
           isScreenSharing: false,
           participants: [],
@@ -643,7 +654,9 @@ export const useVoiceStore = create<VoiceState>()(
           speakingUserIds: new Set(),
           connectionError: null,
           isLiveKitConnected: false,
+          voiceConnectionStatus: 'disconnected',
           connectionQuality: 'unknown',
+          connectionQualities: new Map(),
           focusedParticipantId: null,
           activeDmCall: null,
           outgoingCall: null,
@@ -674,7 +687,9 @@ export const useVoiceStore = create<VoiceState>()(
         speakingUserIds: new Set(),
         connectionError: null,
         isLiveKitConnected: false,
+        voiceConnectionStatus: 'disconnected',
         connectionQuality: 'unknown',
+        connectionQualities: new Map(),
         inputVolume: 100,
         outputVolume: 100,
         inputDeviceId: 'default',
@@ -705,7 +720,7 @@ export const useVoiceStore = create<VoiceState>()(
     }),
     {
       name: 'backspace-voice-settings',
-      version: 13,
+      version: 14,
       migrate: (persistedState: any, version: number) => {
         if (version === 0) {
           persistedState.streamAttenuationEnabled = false;
@@ -766,6 +781,10 @@ export const useVoiceStore = create<VoiceState>()(
             delete persistedState.screenShareConfig.codec;
           }
         }
+        if (version < 14) {
+          persistedState.screenShareConfig ??= {};
+          persistedState.screenShareConfig.codec = 'vp9';
+        }
         return persistedState;
       },
       storage: createJSONStorage(() => localStorage),
@@ -805,6 +824,7 @@ export const useVoiceStore = create<VoiceState>()(
         merged.speakingUserIds = currentState.speakingUserIds;
         merged.deafenedUserIds = currentState.deafenedUserIds;
         merged.voiceUserStates = currentState.voiceUserStates;
+        merged.connectionQualities = currentState.connectionQualities;
         merged.participantVolumes = persistedState?.participantVolumes
           ? new Map(Object.entries(persistedState.participantVolumes))
           : currentState.participantVolumes;

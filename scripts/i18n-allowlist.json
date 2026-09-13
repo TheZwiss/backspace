@@ -36,6 +36,8 @@
   "Auto",
   "Bitrate",
   "Codec",
+  "VP9",
+  "H264",
   "Standard",
   "Gaming",
   "LIVE",

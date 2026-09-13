@@ -1,6 +1,6 @@
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Room, RoomEvent, DisconnectReason } from 'livekit-client';
+import { Room, RoomEvent, DisconnectReason, ConnectionState, Track, TrackEvent } from 'livekit-client';
 import { useLiveKit } from './useLiveKit';
 import { useVoiceStore } from '../stores/voiceStore';
 
@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
     onResumed: vi.fn(() => vi.fn()), onInputTrackEnded: vi.fn(() => vi.fn()),
     getStreamGeneration: () => 1, getFreshTrack: () => null,
   },
+  scheduleScreenShareOverdrive: vi.fn(),
 }));
 vi.mock('livekit-client', async importOriginal => {
   const sdk = await importOriginal<typeof import('livekit-client')>();
@@ -29,6 +30,10 @@ vi.mock('../audio/SpeakingDetector', () => ({
 vi.mock('./useWebSocket', () => ({ wsSend: vi.fn() }));
 vi.mock('../utils/voice', () => ({ broadcastVoiceStatus: vi.fn(), clearSpaceVoiceForDmCall: vi.fn() }));
 vi.mock('../utils/hwOverdrive', () => ({ deactivate: vi.fn() }));
+vi.mock('../utils/screenShare', async importOriginal => {
+  const original = await importOriginal<typeof import('../utils/screenShare')>();
+  return { ...original, scheduleScreenShareOverdrive: mocks.scheduleScreenShareOverdrive };
+});
 vi.mock('../stores/spaceStore', () => ({
   getApiForOrigin: () => ({ livekit: { token: mocks.token, dmToken: mocks.token } }),
   getChannelOrigin: () => '', getMyUserIdForOrigin: () => 'me',
@@ -50,6 +55,62 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 describe('voice capture teardown', () => {
+  it('preserves voice intent across Reconnecting → Connected', async () => {
+    useVoiceStore.setState({ currentVoiceChannelId: 'channel' });
+    const leaveSpy = vi.spyOn(useVoiceStore.getState(), 'leaveVoice');
+    const { result } = renderHook(() => useLiveKit());
+    await act(async () => { await result.current.connect('channel'); });
+
+    act(() => { result.current.room!.emit(RoomEvent.ConnectionStateChanged, ConnectionState.Reconnecting); });
+    expect(useVoiceStore.getState().voiceConnectionStatus).toBe('reconnecting');
+    expect(useVoiceStore.getState().currentVoiceChannelId).toBe('channel');
+
+    act(() => { result.current.room!.emit(RoomEvent.ConnectionStateChanged, ConnectionState.Connected); });
+    expect(useVoiceStore.getState().voiceConnectionStatus).toBe('connected');
+    expect(leaveSpy).not.toHaveBeenCalled();
+    expect(useVoiceStore.getState().currentVoiceChannelId).toBe('channel');
+  });
+
+  it('uses the bounded screen-share sender scheduler after reconnect and track restart', async () => {
+    const { result } = renderHook(() => useLiveKit());
+    await act(async () => { await result.current.connect('channel'); });
+    useVoiceStore.setState({ isScreenSharing: true });
+
+    act(() => {
+      result.current.room!.emit(RoomEvent.ConnectionStateChanged, ConnectionState.Reconnecting);
+      result.current.room!.emit(RoomEvent.ConnectionStateChanged, ConnectionState.Connected);
+    });
+    expect(mocks.scheduleScreenShareOverdrive).toHaveBeenCalledOnce();
+
+    let restart!: () => void;
+    const track = {
+      on: vi.fn((event: TrackEvent, handler: () => void) => {
+        if (event === TrackEvent.Restarted) restart = handler;
+      }),
+    };
+    act(() => {
+      result.current.room!.emit(RoomEvent.LocalTrackPublished, {
+        source: Track.Source.ScreenShare,
+        track,
+      } as never);
+      restart();
+    });
+
+    expect(track.on).toHaveBeenCalledWith(TrackEvent.Restarted, expect.any(Function));
+    expect(mocks.scheduleScreenShareOverdrive).toHaveBeenCalledTimes(2);
+  });
+
+  it('clears voice intent for a terminal semantic disconnect', async () => {
+    useVoiceStore.setState({ currentVoiceChannelId: 'channel' });
+    const { result } = renderHook(() => useLiveKit());
+    await act(async () => { await result.current.connect('channel'); });
+
+    act(() => { result.current.room!.emit(RoomEvent.Disconnected, DisconnectReason.PARTICIPANT_REMOVED); });
+
+    expect(useVoiceStore.getState().voiceConnectionStatus).toBe('disconnected');
+    expect(useVoiceStore.getState().currentVoiceChannelId).toBeNull();
+  });
+
   it('reports initial connect failure after the SDK emits Disconnected', async () => {
     mocks.connect.mockImplementationOnce(async function (this: Room) {
       this.emit(RoomEvent.Disconnected, DisconnectReason.JOIN_FAILURE);
@@ -58,8 +119,8 @@ describe('voice capture teardown', () => {
     useVoiceStore.setState({ currentVoiceChannelId: 'channel' });
     const { result } = renderHook(() => useLiveKit());
     await act(async () => { await result.current.connect('channel'); });
-    expect(result.current.connectionError).toBe('Failed to connect');
-    expect(useVoiceStore.getState().connectionError).toBe('Failed to connect');
+    expect(result.current.connectionError).toBe('connect_failed');
+    expect(useVoiceStore.getState().connectionError).toBe('connect_failed');
     expect(useVoiceStore.getState().currentVoiceChannelId).toBeNull();
     expect(result.current.isConnecting).toBe(false);
     expect(result.current.isConnected).toBe(false);
@@ -118,6 +179,19 @@ describe('voice capture teardown', () => {
     await act(async () => { await result.current.connect('channel'); });
     act(() => { result.current.room!.emit(RoomEvent.Disconnected, reason); });
     expect(mocks.audio.releaseInputStream).toHaveBeenCalledTimes(1);
+  });
+
+  it('retains voice intent and exposes retry after an exhausted network reconnect', async () => {
+    useVoiceStore.setState({ currentVoiceChannelId: 'channel' });
+    const { result } = renderHook(() => useLiveKit());
+    await act(async () => { await result.current.connect('channel'); });
+
+    act(() => { result.current.room!.emit(RoomEvent.Disconnected, undefined); });
+
+    expect(useVoiceStore.getState().currentVoiceChannelId).toBe('channel');
+    expect(result.current.connectionError).toBe('network_disconnect');
+    expect(useVoiceStore.getState().connectionError).toBe('network_disconnect');
+    expect(useVoiceStore.getState().voiceConnectionStatus).toBe('disconnected');
   });
 
   it('keeps capture warm while switching channels and ignores stale room events', async () => {

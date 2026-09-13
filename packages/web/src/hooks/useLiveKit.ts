@@ -12,10 +12,11 @@ import {
   LocalAudioTrack,
   LocalTrackPublication,
   DisconnectReason,
+  TrackEvent,
 } from 'livekit-client';
 import { getApiForOrigin, getChannelOrigin, getMyUserIdForOrigin, useSpaceStore } from '../stores/spaceStore';
 import { wsSend } from './useWebSocket';
-import { useVoiceStore } from '../stores/voiceStore';
+import { useVoiceStore, type VoiceConnectionQuality } from '../stores/voiceStore';
 import { useAuthStore } from '../stores/authStore';
 import { useUIStore } from '../stores/uiStore';
 import type { User } from '@backspace/shared';
@@ -27,8 +28,9 @@ import {
   CAMERA_OVERDRIVE,
   buildScreenShareOptions,
   applyOverdrive,
+  scheduleScreenShareOverdrive,
   republishScreenShare,
-  getPublishedScreenShareCodec,
+  getRequestedPublishedScreenShareCodec,
   handleScreenShareUnpublished,
   isScreenShareRepublishing,
   resolveNativeOverdrive,
@@ -49,6 +51,17 @@ let _activeRoom: Room | null = null;
  * of that marker outside the window where it is being rewritten.
  */
 let _activeTrackUpdate: Promise<void> = Promise.resolve();
+
+function toVoiceConnectionQuality(quality: ConnectionQuality): VoiceConnectionQuality {
+  switch (quality) {
+    case ConnectionQuality.Excellent: return 'excellent';
+    case ConnectionQuality.Good: return 'good';
+    case ConnectionQuality.Poor: return 'poor';
+    case ConnectionQuality.Lost: return 'lost';
+    case ConnectionQuality.Unknown: return 'unknown';
+    default: return 'unknown';
+  }
+}
 
 export function getActiveRoom(): Room | null {
   return _activeRoom;
@@ -213,7 +226,6 @@ export function useLiveKit() {
   const isCameraOn = useVoiceStore((s) => s.isCameraOn);
   const isScreenSharing = useVoiceStore((s) => s.isScreenSharing);
   const screenShareConfig = useVoiceStore((s) => s.screenShareConfig);
-  const hwOverdrive = useVoiceStore((s) => s.hwOverdrive);
   const voiceUserStates = useVoiceStore((s) => s.voiceUserStates);
   const spaceMutedUserIds = useVoiceStore((s) => s.spaceMutedUserIds);
   const spaceDeafenedUserIds = useVoiceStore((s) => s.spaceDeafenedUserIds);
@@ -620,6 +632,7 @@ export function useLiveKit() {
     setIsConnected(false);
     setIsConnecting(true);
     setConnectionState(ConnectionState.Connecting);
+    useVoiceStore.getState().setVoiceConnectionStatus('connecting');
     setConnectionError(null);
     setConnectedChannelId(null); // Clear this so AppLayout knows we are transitioning
 
@@ -711,6 +724,9 @@ export function useLiveKit() {
         if (publication.source === Track.Source.ScreenShare) {
           const { userId } = parseIdentity(newRoom.localParticipant.identity);
           useVoiceStore.getState().watchStream(userId);
+          publication.track?.on(TrackEvent.Restarted, () => {
+            scheduleScreenShareOverdrive(newRoom);
+          });
         }
         if (publication.source === Track.Source.Camera) {
           const mst = publication.track?.mediaStreamTrack;
@@ -801,8 +817,15 @@ export function useLiveKit() {
       });
       newRoom.on(RoomEvent.DataReceived, handleDataReceived);
       newRoom.on(RoomEvent.ConnectionQualityChanged, (quality: ConnectionQuality, participant: Participant) => {
+        const normalizedQuality = toVoiceConnectionQuality(quality);
+        useVoiceStore.getState().setConnectionQuality(normalizedQuality, participant.identity);
         if (participant.identity === newRoom.localParticipant.identity) {
-          useVoiceStore.getState().setConnectionQuality(quality as any);
+          useVoiceStore.getState().setConnectionQuality(normalizedQuality);
+        }
+      });
+      newRoom.on(RoomEvent.SignalReconnecting, () => {
+        if (roomRef.current === newRoom) {
+          useVoiceStore.getState().setVoiceConnectionStatus('reconnecting');
         }
       });
       newRoom.on(RoomEvent.ConnectionStateChanged, (state) => {
@@ -815,6 +838,9 @@ export function useLiveKit() {
           setIsConnecting(connecting);
 
           useVoiceStore.getState().setIsLiveKitConnected(connected);
+          useVoiceStore.getState().setVoiceConnectionStatus(
+            connected ? 'connected' : state === ConnectionState.Reconnecting ? 'reconnecting' : 'connecting',
+          );
 
           if (connected) {
             // On LiveKit reconnect, re-register with WS server (server may have restarted)
@@ -822,6 +848,9 @@ export function useLiveKit() {
               registerWithServer();
             }
             updateParticipants();
+            if (useVoiceStore.getState().isScreenSharing) {
+              scheduleScreenShareOverdrive(newRoom);
+            }
           }
         }
       });
@@ -841,12 +870,18 @@ export function useLiveKit() {
         // → triggers user_leave sound before the disconnect sound).
         useVoiceStore.getState().setSpeakingParticipants(new Set());
         useVoiceStore.setState({ participants: [], isLiveKitConnected: false });
+        useVoiceStore.getState().setVoiceConnectionStatus('disconnected');
 
-        // Non-client disconnect (identity collision, server shutdown, kicked, etc.)
-        // → clear voice intent so AppLayout doesn't auto-retry into an infinite loop.
-        // Client-initiated disconnects already clear this via leaveVoice() / VoiceControlBar.
-        if (reason !== undefined && reason !== DisconnectReason.CLIENT_INITIATED) {
+        // Semantic terminal reasons must never auto-retry. An exhausted network
+        // reconnect keeps voice intent so VoiceControls can offer a user retry.
+        const terminal = reason === DisconnectReason.DUPLICATE_IDENTITY
+          || reason === DisconnectReason.PARTICIPANT_REMOVED
+          || reason === DisconnectReason.ROOM_DELETED;
+        if (terminal) {
           useVoiceStore.getState().handleForceDisconnect();
+        } else if (reason !== DisconnectReason.CLIENT_INITIATED) {
+          setConnectionError('network_disconnect');
+          useVoiceStore.getState().setConnectionError('network_disconnect');
         }
       });
 
@@ -859,6 +894,7 @@ export function useLiveKit() {
       setRoom(newRoom);
       setIsConnected(true);
       useVoiceStore.getState().setIsLiveKitConnected(true);
+      useVoiceStore.getState().setVoiceConnectionStatus('connected');
 
       // Tell WS server we're in the voice channel now that LiveKit is connected
       registerWithServer();
@@ -889,9 +925,9 @@ export function useLiveKit() {
     } catch (err) {
       if (gen === _connectGeneration) {
         AudioManager.getInstance().releaseInputStream();
-        setConnectionError('Failed to connect');
+        setConnectionError('connect_failed');
         useVoiceStore.getState().leaveVoice();
-        useVoiceStore.getState().setConnectionError('Failed to connect');
+        useVoiceStore.getState().setConnectionError('connect_failed');
       }
     }
     finally { if (gen === _connectGeneration) setIsConnecting(false); }
@@ -922,6 +958,7 @@ export function useLiveKit() {
     setIsConnected(false);
     setIsConnecting(false);
     setConnectionState(ConnectionState.Disconnected);
+    useVoiceStore.getState().setVoiceConnectionStatus('disconnected');
     useVoiceStore.getState().setSpeakingParticipants(new Set());
     useVoiceStore.setState({ participants: [], isLiveKitConnected: false });
   }, []);
@@ -944,10 +981,9 @@ export function useLiveKit() {
       if (superseded) return;
       if (isScreenSharing) {
         const opts = buildScreenShareOptions(screenShareConfig);
-
         // Codec changed mid-stream — the codec is baked into SDP negotiation,
         // so republish the same track under the new options (no re-capture).
-        const publishedCodec = getPublishedScreenShareCodec();
+        const publishedCodec = getRequestedPublishedScreenShareCodec();
         if (publishedCodec && publishedCodec !== opts.publish.videoCodec) {
           await republishScreenShare(room);
           return;
@@ -975,7 +1011,7 @@ export function useLiveKit() {
     };
     _activeTrackUpdate = _activeTrackUpdate.then(updateActiveTracks).catch(() => {});
     return () => { superseded = true; };
-  }, [room, screenShareConfig, isScreenSharing, isCameraOn, hwOverdrive]);
+  }, [room, screenShareConfig, isScreenSharing, isCameraOn]);
 
   useEffect(() => {
     return () => {

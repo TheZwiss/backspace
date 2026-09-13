@@ -17,12 +17,18 @@ import { useUIStore } from '../stores/uiStore';
  */
 export function broadcastVoiceStatus(overrideOrigin?: string): void {
   const vs = useVoiceStore.getState();
-  const { isMuted, isDeafened, isCameraOn, isScreenSharing, currentVoiceChannelId, spaceMutedUserIds, spaceDeafenedUserIds } = vs;
-  if (!currentVoiceChannelId) return;
+  const {
+    isMuted, isDeafened, isCameraOn, isScreenSharing, currentVoiceChannelId,
+    activeDmCall, callOrigin, spaceMutedUserIds, spaceDeafenedUserIds,
+  } = vs;
+  const voiceTargetId = currentVoiceChannelId ?? activeDmCall?.dmChannelId;
+  if (!voiceTargetId) return;
 
-  const origin = overrideOrigin ?? getChannelOrigin(currentVoiceChannelId);
+  const origin = overrideOrigin ?? callOrigin ?? getChannelOrigin(voiceTargetId);
   const myId = getMyUserIdForOrigin(origin);
-  const spaceId = useSpaceStore.getState().channelToSpaceMap.get(currentVoiceChannelId);
+  const spaceId = currentVoiceChannelId
+    ? useSpaceStore.getState().channelToSpaceMap.get(currentVoiceChannelId)
+    : null;
   const spaceKey = (spaceId && myId) ? `${spaceId}:${myId}` : '';
 
   const effectiveMuted = isMuted || spaceMutedUserIds.has(spaceKey);

@@ -53,6 +53,14 @@
       "server": "Server",
       "protocol": "Protokoll"
     },
+    "video": {
+      "requestedCodec": "Angeforderter Codec",
+      "negotiatedCodec": "Ausgehandelter Codec",
+      "encoderImplementation": "Encoder-Implementierung",
+      "qpDelta": "QP-Summenänderung",
+      "nackDelta": "NACK-Änderung",
+      "pliDelta": "PLI-Änderung"
+    },
     "source": {
       "microphone": "Mikrofon",
       "camera": "Kamera",
@@ -107,16 +115,20 @@
     },
     "codec": "Codec",
     "codecOption": {
-      "standard": "Standard",
-      "hardware": "NVIDIA oder Apple"
+      "vp9": "VP9",
+      "h264": "H264"
     },
-    "hardwareNote": "GPU-Hardware-Encoder · wird nach dem Stream zurückgesetzt",
     "bitrate": "Bitrate",
     "custom": "Manuell",
     "auto": "Auto",
     "customBitrateDisabled": "Eigene Bitrate vom Administrator deaktiviert",
     "systemAudio": "Systemaudio",
-    "chromeEchoNote": "Für echofreies Audio Chrome verwenden",
+    "chromeEchoNote": "Chrome kann Backspace-Audio ausschließen, wenn die Aufnahmeart dies unterstützt",
+    "electronWindowsAudioNote": "Windows-Loopback kann Anrufaudio erfassen, wenn restrictOwnAudio nicht unterstützt wird",
+    "electronMacAudioNote": "macOS 13+ benötigt die Berechtigung für Bildschirm- und Systemaudioaufnahmen",
+    "electronLinuxAudioNote": "Linux benötigt PulseAudio-Kompatibilität; Backspace-Audio kann ebenfalls aufgenommen werden",
+    "systemAudioStartFailed": "Der Stream konnte nicht mit Systemaudio gestartet werden. Deaktiviere Systemaudio, wenn die Plattform es nicht unterstützt.",
+    "softwareH264Fallback": "Hardware-H264-Kodierung ist nicht verfügbar. OpenH264 wird als Software-Encoder verwendet; VP9 kann schneller sein.",
     "degradation": {
       "maintainResolution": "Auflösung halten",
       "maintainFramerate": "Framerate halten",
@@ -136,6 +148,13 @@
     "watch": "Stream ansehen",
     "mute": "Stream stummschalten",
     "isStreaming": "{{name}} streamt"
+  },
+  "streamDiagnostics": {
+    "publisherNetwork": "Das Netzwerk des Streamers ist instabil",
+    "publisherCpu": "Der Computer des Streamers kann das Video nicht schnell genug codieren",
+    "viewerNetwork": "Deine Verbindung ist instabil",
+    "reconnecting": "Verbindung verloren — Verbindung wird wiederhergestellt…",
+    "unknown": "Die Verbindung ist instabil; die betroffene Seite konnte nicht bestimmt werden"
   },
   "controls": {
     "spaceMutedSelfMuted": "Im Space stummgeschaltet (auch selbst stummgeschaltet)",
@@ -166,7 +185,11 @@
     "voiceCall": "Sprachanruf",
     "connectionFailed": "Verbindung fehlgeschlagen",
     "connected": "Sprachverbindung aktiv",
-    "connecting": "Verbindung wird hergestellt…"
+    "connecting": "Verbindung wird hergestellt…",
+    "reconnecting": "Verbindung wird wiederhergestellt…",
+    "disconnected": "Getrennt",
+    "connectionLost": "Verbindung verloren. Versuche es erneut.",
+    "retry": "Erneut versuchen"
   },
   "camera": {
     "auto": "Auto",

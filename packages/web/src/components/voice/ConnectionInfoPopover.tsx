@@ -7,6 +7,7 @@ import { useFloatingPosition } from '../../hooks/useFloatingPosition';
 import { usePortalContainer } from '../../hooks/usePortalContainer';
 import i18n from '../../i18n';
 import { formatters } from '../../i18n/formatters';
+import { useVoiceStore } from '../../stores/voiceStore';
 
 interface ConnectionInfoPopoverProps {
   open: boolean;
@@ -138,6 +139,7 @@ export function ConnectionInfoPopover({ open, onClose, anchorRef }: ConnectionIn
   const popoverRef = useRef<HTMLDivElement>(null);
   const portalContainer = usePortalContainer();
   const stats = useTrackStats(open);
+  const requestedCodec = useVoiceStore((s) => s.screenShareConfig.codec);
 
   const { style } = useFloatingPosition(anchorRef, popoverRef, {
     placement: 'top',
@@ -164,6 +166,9 @@ export function ConnectionInfoPopover({ open, onClose, anchorRef }: ConnectionIn
   if (!open) return null;
 
   const room = getActiveRoom();
+  const outboundScreen = stats?.videoTracks.find((track) =>
+    track.direction === 'send' && track.source === 'screen_share',
+  );
 
   return createPortal(
     <div
@@ -225,6 +230,27 @@ export function ConnectionInfoPopover({ open, onClose, anchorRef }: ConnectionIn
               <>
                 <Divider />
                 <SectionHeader title={t('voice:connectionInfo.section.video')} />
+                {outboundScreen && (
+                  <>
+                    <Row label={t('voice:connectionInfo.video.requestedCodec')} value={requestedCodec.toUpperCase()} />
+                    <Row label={t('voice:connectionInfo.video.negotiatedCodec')} value={outboundScreen.codec ?? '\u2014'} />
+                    {outboundScreen.encoderImpl && (
+                      <Row label={t('voice:connectionInfo.video.encoderImplementation')} value={outboundScreen.encoderImpl} />
+                    )}
+                    <Row
+                      label={t('voice:connectionInfo.video.qpDelta')}
+                      value={outboundScreen.qpSumDelta?.toString() ?? '\u2014'}
+                    />
+                    <Row
+                      label={t('voice:connectionInfo.video.nackDelta')}
+                      value={outboundScreen.nackCountDelta?.toString() ?? '\u2014'}
+                    />
+                    <Row
+                      label={t('voice:connectionInfo.video.pliDelta')}
+                      value={outboundScreen.pliCountDelta?.toString() ?? '\u2014'}
+                    />
+                  </>
+                )}
                 {stats.videoTracks.map((t) => (
                   <VideoTrackRow key={t.key} track={t} />
                 ))}

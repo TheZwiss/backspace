@@ -6,6 +6,7 @@ import { useVoiceStore } from '../../stores/voiceStore';
 import { deriveGridTiles } from '../../hooks/useLiveKit';
 import { useGridLayout } from '../../hooks/useGridLayout';
 import type { ParticipantInfo, GridTile } from '../../hooks/useLiveKit';
+import { useTrackStats } from '../../hooks/useTrackStats';
 
 interface VoiceGridProps {
   participants: ParticipantInfo[];
@@ -15,9 +16,17 @@ export function VoiceGrid({ participants }: VoiceGridProps) {
   const { t } = useTranslation(['voice', 'common']);
   const focusedParticipantId = useVoiceStore((s) => s.focusedParticipantId);
   const setFocusedParticipant = useVoiceStore((s) => s.setFocusedParticipant);
+  const watchingStreams = useVoiceStore((s) => s.watchingStreams);
   const [stripHidden, setStripHidden] = useState(false);
 
   const tiles = useMemo(() => deriveGridTiles(participants), [participants]);
+  const shouldCollectStreamStats = tiles.some((tile) =>
+    tile.kind === 'stream'
+    && (tile.participant.isLocal || watchingStreams.has(tile.participant.userId)),
+  );
+  // One WebRTC poller feeds every stream tile. Running useTrackStats inside
+  // each tile multiplied full PeerConnection scans by the number of streams.
+  const streamStats = useTrackStats(shouldCollectStreamStats);
 
   const { cols, tileWidth, tileHeight, ref: gridRef } = useGridLayout(tiles.length);
 
@@ -76,7 +85,7 @@ export function VoiceGrid({ participants }: VoiceGridProps) {
     tile.kind === 'user' ? (
       <VoiceUser tile={tile} large={large} />
     ) : (
-      <StreamTile tile={tile} large={large} />
+      <StreamTile tile={tile} large={large} stats={streamStats} />
     );
 
   // Focus mode: one large tile + bottom strip

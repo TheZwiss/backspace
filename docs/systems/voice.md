@@ -60,6 +60,15 @@ UI affordances:
 
 **Multi-tab:** Each user has one `voiceWs` binding. New tab → old socket gets `voice_disconnected { reason: 'displaced' }`
 
+**Transient reconnects:** Closing the voice-owning WebSocket starts a 60-second
+server grace period instead of immediately removing the participant. A
+`voice_join` for a space session, or `voice_status` for a DM call (which has no
+`voice_join` event), received from the replacement socket rebinds the existing
+session without a leave/join broadcast. A status message alone cannot claim a
+space voice session from an ordinary second tab. Explicit leave, moderator
+disconnect, displacement, and rejected joins remain terminal and clean up
+immediately.
+
 ---
 
 ## DM Call State Machine
@@ -250,29 +259,48 @@ Width map: 540→960, 720→1280, 1080→1920, 1440→2560, 2160→3840
 ScreenShareConfig {
   height: number | 'native',       // Resolution or capture at display res
   fps: number,                     // 30-120
-  mode: 'gaming' | 'text',         // Affects bitrate & content hint
+  mode: 'gaming' | 'text',         // Content hint and degradation priority
   customBitrateKbps: number | null, // Admin override (if allowed)
-  shareAudio: boolean               // System audio loopback (see Platform Support below)
+  shareAudio: boolean,              // System audio loopback (see Platform Support below)
+  codec: 'vp9' | 'h264'             // Persisted codec preference
 }
 ```
 
 ### Build Pipeline (`buildScreenShareOptions()`)
 1. Resolve bitrate from matrix (custom > override > default > native estimate)
 2. Clamp to instance limits (minBitrateKbps, maxBitrateKbps)
-3. Compute min bitrate = 25% of max
-4. Codec: VP9 (default) or H.264 (hardware overdrive)
-5. VP8 simulcast backup at reduced framerate/bitrate
-6. Content hint: `'detail'` (text) or `'motion'` (gaming)
+3. Select the persisted codec: VP9 (default) or H.264
+4. Configure a VP8 simulcast backup at reduced framerate/bitrate; room dynacast pauses it when no subscriber needs it
+5. Content hint: `'detail'` (text) or `'motion'` (gaming)
+6. Degradation preference: preserve resolution for text, balanced for gaming
 
 ### Native Mode
 - Captures at display's full resolution
 - Snaps to nearest known tier for bitrate lookup
 - Scales proportionally: `baseKbps * (capturedPixels / knownPixels) * (fps / knownFps)`
 
-### Hardware Overdrive
-- Forces H.264 hardware encoder via SDP profile override
-- Applied 2s after stream starts (after WebRTC negotiation), re-applied at 5s
-- 4s: detects if using software fallback, warns user
+### Codec and sender parameters
+- H.264 uses an SDP profile override only during its publish negotiation; the
+  hook is removed in `finally` so later camera or microphone negotiations are
+  unaffected.
+- Selecting H.264 does not guarantee hardware encoding. The negotiated codec
+  and `encoderImplementation` reported by WebRTC stats are shown in the
+  connection inspector. If Chromium reports the OpenH264 software fallback,
+  the publisher also receives a localized warning. Requested publication state
+  is tracked separately from the codec confirmed by outbound stats, so codec
+  changes can be serialized without presenting the requested value as a
+  negotiated result. Stats inspection retries briefly while the sender or
+  encoder implementation is still unavailable.
+- Sender parameters set the chosen bitrate ceiling and framerate with high
+  priority. Application starts immediately, retries at bounded intervals until
+  a real `RTCRtpSender` encoding is available, and always re-asserts the values
+  at 5 seconds after Chromium's bandwidth estimate converges. The same bounded
+  scheduler runs after LiveKit reconnects and screen-track restarts, where the
+  sender may again be temporarily absent or expose a placeholder encoding.
+  Capture constraints are applied once per scheduler run rather than on every
+  sender retry. The non-standard
+  `minBitrate` member was removed because Chromium discarded it during WebIDL
+  dictionary conversion; it never enforced a bitrate floor.
 
 ### Instance-Level Limits (admin-configured)
 - `allowedResolutions`, `allowedFramerates` (CSV in instance_settings)
@@ -290,7 +318,7 @@ The pipeline in `utils/screenShare.ts` is **stage → publish**:
 |------|----------|--------------|
 | Stage | `stageScreenCapture()` | `getDisplayMedia()` with constraints built from `screenShareConfig`. Returns a live but **unpublished** `MediaStream`, previewed in the setup screen. Browsers open their native prompt here, so it must run inside a click. |
 | Tune | `applyStagedCaptureConfig(stream)` | Re-applies resolution/frame rate/content hint to the staged track when the config changes. Local only, no SFU renegotiation — the reason quality can be adjusted after picking. |
-| Publish | `publishScreenShare(room, stream)` | `publishTrack()` for the video track (source `ScreenShare`; codec, `screenShareEncoding`, VP8 simulcast backup) and the audio track if present (source `ScreenShareAudio`). Sets `isScreenSharing`, schedules the overdrive passes and the hardware-encoder probe. |
+| Publish | `publishScreenShare(room, stream)` | `publishTrack()` for the video track (source `ScreenShare`; codec, `screenShareEncoding`, dynacast-managed VP8 simulcast backup) and the audio track if present (source `ScreenShareAudio`; high-quality stereo music preset). Sets `isScreenSharing`, retries sender parameters until the sender is ready, and re-asserts them after bandwidth estimation converges. |
 | Cancel | `stopStagedCapture(stream)` | Stops the staged tracks. Closing the setup screen never sends a frame. |
 
 The card is a fixed, near-viewport `glass-modal` surface (viewport width minus 6 rem, capped at `max-w-6xl`, 88 % of the app-scaled height) so the layout never jumps with its content. Where the app lists sources, a segmented control under the header switches **Screens / Windows** (with a window search field on the Windows tab). Browsers and system-picker mode have no such control: their picker decides, and the stage reports what came back instead. The source area is a **stage**: the app's thumbnail grid, or in browsers and system-picker mode an empty stage (monitor illustration, "Choose screen" button) that becomes the full-size live preview once staged.
@@ -345,7 +373,7 @@ Own-audio exclusion applies to all audio played by Backspace, including remote v
 |----------|-----------|-------|
 | Browser (Chrome/Edge) | `getDisplayMedia({ audio: true })` | Tab/window/system audio per the user's pick |
 | Electron / Windows | Chromium native loopback | Works out of the box |
-| Electron / macOS 13+ | CoreAudio Tap (Catap) | Requires `NSAudioCaptureUsageDescription` (set by `electron-builder.yml#mac.extendInfo`) |
+| Electron / macOS 13+ | CoreAudio Tap (Catap) | Requires `NSAudioCaptureUsageDescription` (set by `packages/desktop/electron-builder.yml#mac.extendInfo`) |
 | Electron / Linux | PulseAudio loopback | **Requires** the `PulseaudioLoopbackForScreenShare` Chromium feature flag — enabled at startup in `main.ts` for Linux. Works on PulseAudio and on PipeWire systems with the `pipewire-pulse` compat layer. PipeWire-only systems without pulse compat will fail. |
 
 **Failure handling.** When loopback is not supported, Chromium rejects the entire `getDisplayMedia` request — the source-picker selection has already been consumed, so silently retrying without audio would re-prompt the picker. `stageScreenCapture` (`utils/screenShare.ts`) instead surfaces a warning toast directing the user to turn off system audio if their system does not support loopback. We do **not** auto-mutate the user's `shareAudio` preference.
@@ -414,7 +442,22 @@ When neither native API is available the effect returns without throwing; the `v
 }
 ```
 
+Capture was already unprocessed stereo. LiveKit infers stereo from
+`channelCount: 2` and disables DTX and RED for stereo tracks; the explicit
+`forceStereo: true`, `dtx: false`, and `red: false` publication options preserve
+that behavior visibly. The functional change is the preset upgrade from
+`AudioPresets.music` (48 kbps) to `AudioPresets.musicHighQualityStereo`
+(128 kbps), approximately 80 kbps more for a screen share carrying audio.
+
 **Persistence:** `voiceStore` with Zustand localStorage. Keys: `echoCancellation`, `autoGainControl`, `rnnoiseEnabled`, `screenShareConfig`.
+
+**Diagnostics polling:** `VoiceGrid` owns one `useTrackStats` poller for all
+visible/observed stream tiles. Tiles consume the shared snapshot and apply the
+three-bad-sample / five-stable-second debounce independently, avoiding a full
+PeerConnection scan per tile. The connection inspector may start one additional
+poller only while it is open. Publisher CPU attribution is available on the
+publisher from outbound stats; viewers receive the publisher's LiveKit
+connection-quality signal but cannot infer a remote encoder's CPU limitation.
 
 **Camera preset:** 1280x720, 2Mbps, 30fps, H.264
 

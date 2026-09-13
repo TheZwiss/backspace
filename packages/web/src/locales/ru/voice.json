@@ -53,6 +53,14 @@
       "server": "Сервер",
       "protocol": "Протокол"
     },
+    "video": {
+      "requestedCodec": "Запрошенный кодек",
+      "negotiatedCodec": "Согласованный кодек",
+      "encoderImplementation": "Кодировщик",
+      "qpDelta": "Изменение суммы QP",
+      "nackDelta": "Изменение NACK",
+      "pliDelta": "Изменение PLI"
+    },
     "source": {
       "microphone": "Микрофон",
       "camera": "Камера",
@@ -107,16 +115,20 @@
     },
     "codec": "Кодек",
     "codecOption": {
-      "standard": "Стандартный",
-      "hardware": "NVIDIA или Apple"
+      "vp9": "VP9",
+      "h264": "H264"
     },
-    "hardwareNote": "Аппаратный кодировщик GPU · сбрасывается после завершения трансляции",
     "bitrate": "Битрейт",
     "custom": "Вручную",
     "auto": "Авто",
     "customBitrateDisabled": "Пользовательский битрейт отключён администратором",
     "systemAudio": "Системный звук",
-    "chromeEchoNote": "Для звука без эха используйте Chrome",
+    "chromeEchoNote": "Chrome может исключить звук Backspace, если это поддерживает выбранный тип захвата",
+    "electronWindowsAudioNote": "Windows loopback может захватить звук звонка, если restrictOwnAudio не поддерживается",
+    "electronMacAudioNote": "На macOS 13+ требуется разрешение на запись экрана и системного звука",
+    "electronLinuxAudioNote": "В Linux требуется совместимость с PulseAudio; звук Backspace также может попасть в трансляцию",
+    "systemAudioStartFailed": "Не удалось запустить трансляцию с системным звуком. Отключите системный звук, если платформа его не поддерживает.",
+    "softwareH264Fallback": "Аппаратное кодирование H264 недоступно. Используется программный OpenH264; VP9 может работать быстрее.",
     "degradation": {
       "maintainResolution": "приоритет разрешения",
       "maintainFramerate": "приоритет частоты кадров",
@@ -136,6 +148,13 @@
     "watch": "Смотреть трансляцию",
     "mute": "Заглушить трансляцию",
     "isStreaming": "{{name}} ведёт трансляцию"
+  },
+  "streamDiagnostics": {
+    "publisherNetwork": "Нестабильная сеть у транслирующего",
+    "publisherCpu": "Компьютер транслирующего не успевает кодировать видео",
+    "viewerNetwork": "Нестабильное соединение у вас",
+    "reconnecting": "Соединение потеряно — переподключение…",
+    "unknown": "Соединение нестабильно; точную сторону определить не удалось"
   },
   "controls": {
     "spaceMutedSelfMuted": "Микрофон отключён в пространстве и у вас",
@@ -166,7 +185,11 @@
     "voiceCall": "Голосовой звонок",
     "connectionFailed": "Не удалось подключиться",
     "connected": "Голосовая связь установлена",
-    "connecting": "Подключение…"
+    "connecting": "Подключение…",
+    "reconnecting": "Переподключение…",
+    "disconnected": "Отсоединено",
+    "connectionLost": "Соединение потеряно. Попробуйте ещё раз.",
+    "retry": "Повторить"
   },
   "camera": {
     "auto": "Авто",
