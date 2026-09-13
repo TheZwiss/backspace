@@ -89,6 +89,8 @@
     "subtitle": "Wähle, was du teilst, stelle die Qualität ein und starte.",
     "stageIdle": "Noch nichts ausgewählt",
     "stageReady": "Bereit zum Start",
+    "permissionHintMac": "macOS blockiert die Bildschirmaufnahme, solange Backspace keine Berechtigung dafür hat. Erteile sie unter Systemeinstellungen → Datenschutz & Sicherheit → Bildschirmaufnahme und versuche es dann erneut.",
+    "retrySources": "Erneut suchen",
     "kind": {
       "monitor": "Bildschirm",
       "window": "Fenster"

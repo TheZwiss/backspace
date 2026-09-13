@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { getElectronAPI, isElectron } from '../../platform/platform';
+import { getElectronAPI, isElectron, isElectronMac } from '../../platform/platform';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useScreenShareSetupStore } from '../../stores/screenShareSetupStore';
 import { usePortalContainer } from '../../hooks/usePortalContainer';
@@ -88,6 +88,7 @@ export function ScreenShareSetup() {
   // Electron source grid
   const [sources, setSources] = useState<ElectronScreenSource[]>([]);
   const [loadingSources, setLoadingSources] = useState(false);
+  const [sourcesNonce, setSourcesNonce] = useState(0);
   const [activeTab, setActiveTab] = useState<Tab>('screens');
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -121,8 +122,27 @@ export function ScreenShareSetup() {
    */
   const stageGenerationRef = useRef(0);
 
+  /**
+   * One auto-stage per open. `stage()`'s catch clears `staged`, `staging` and
+   * `selectedId` — every piece of state the auto-stage effect guards on — so a
+   * capture that keeps failing (macOS without the Screen Recording grant, or a
+   * preselected source the main process cannot resolve) would re-arm the effect
+   * immediately and spin IPC round trips, each one a fresh desktopCapturer scan
+   * with thumbnails, for as long as the screen stays open.
+   */
+  const autoStagedRef = useRef(false);
+
+  /**
+   * Whether the in-flight prompt has already been answered. The main process
+   * consumes the answer with `ipcMain.once`, so only the first tile click
+   * reaches the request; a second one would move the highlight and the ready
+   * bar onto a source that is not the one being captured.
+   */
+  const promptAnsweredRef = useRef(false);
+
   const markPromptInFlight = useCallback((value: boolean) => {
     promptInFlightRef.current = value;
+    promptAnsweredRef.current = false;
     setPromptInFlight(value);
   }, []);
 
@@ -172,13 +192,23 @@ export function ScreenShareSetup() {
   /** Electron: a tile was clicked. Resolve an in-flight prompt, or preselect and stage. */
   const stageSource = useCallback(async (sourceId: string) => {
     if (!api) return;
-    const generation = ++stageGenerationRef.current;
-    setSelectedId(sourceId);
     const shareAudio = useVoiceStore.getState().screenShareConfig.shareAudio;
     if (promptInFlightRef.current) {
+      // Only the first click answers the request; see promptAnsweredRef.
+      if (promptAnsweredRef.current) return;
+      promptAnsweredRef.current = true;
+      setSelectedId(sourceId);
+      // The in-flight stage() call owns the current generation and is waiting
+      // on the very capture this click answers, so it must keep it. Taking a
+      // new generation here would make that result stale on arrival: the
+      // stream is stopped on sight, no preview appears, and because the guard
+      // returns before the `finally`, the spinner never clears and Start stays
+      // disabled until the screen is closed.
       api.selectScreenSource(sourceId, shareAudio);
       return;
     }
+    setSelectedId(sourceId);
+    const generation = ++stageGenerationRef.current;
     if (api.preselectScreenSource) {
       // Awaited: the preselection and getDisplayMedia() travel different IPC
       // pipes with no ordering guarantee between them. If the display-media
@@ -211,7 +241,10 @@ export function ScreenShareSetup() {
     return () => { cancelled = true; };
   }, [isOpen, electron, api]);
 
-  // Electron: list sources up front when we can
+  // Electron: list sources up front when we can. `sourcesNonce` is what the
+  // empty state's "Try again" bumps — an enumeration that came back empty
+  // (macOS without the Screen Recording grant) is worth retrying by hand once
+  // the user has granted it, and nothing else would re-run this.
   useEffect(() => {
     if (!isOpen || !canListSources || !api?.getScreenSources) return;
     let cancelled = false;
@@ -221,7 +254,7 @@ export function ScreenShareSetup() {
       .catch((err) => { console.error('[ScreenShareSetup] getScreenSources failed:', err); if (!cancelled) setSources([]); })
       .finally(() => { if (!cancelled) setLoadingSources(false); });
     return () => { cancelled = true; };
-  }, [isOpen, canListSources, api]);
+  }, [isOpen, canListSources, api, sourcesNonce]);
 
   // Older desktop: main pushes sources for an in-flight getDisplayMedia
   useEffect(() => {
@@ -253,6 +286,7 @@ export function ScreenShareSetup() {
     // capture staged back then: reopening must never offer a stale surface as
     // "ready to go live", nor let Start publish it instead of a fresh pick.
     stageGenerationRef.current++;
+    autoStagedRef.current = false;
     replaceStaged(null);
     setStagedShareAudio(useVoiceStore.getState().screenShareConfig.shareAudio);
     setStaging(false);
@@ -262,9 +296,12 @@ export function ScreenShareSetup() {
 
   // Auto-stage the only screen so the common case needs a single click on Start
   useEffect(() => {
-    if (!isOpen || !canListSources || staged || staging || selectedId) return;
+    if (!isOpen || !canListSources || staged || staging || selectedId || autoStagedRef.current) return;
     const screens = sources.filter((s) => s.isScreen);
-    if (screens.length === 1 && activeTab === 'screens') void stageSource(screens[0]!.id);
+    if (screens.length === 1 && activeTab === 'screens') {
+      autoStagedRef.current = true;
+      void stageSource(screens[0]!.id);
+    }
   }, [isOpen, canListSources, sources, staged, staging, selectedId, activeTab, stageSource]);
 
   // Preview element ↔ staged stream
@@ -465,12 +502,35 @@ export function ScreenShareSetup() {
                       {t('voice:screenPicker.loadingSources')}
                     </div>
                   ) : activeSources.length === 0 ? (
-                    <div className="h-full flex items-center justify-center text-txt-tertiary text-sm">
-                      {activeTab === 'windows' && search.trim()
-                        ? t('voice:screenPicker.noWindowsMatch')
-                        : activeTab === 'screens'
-                          ? t('voice:screenPicker.noScreens')
-                          : t('voice:screenPicker.noWindows')}
+                    <div className="h-full flex flex-col items-center justify-center gap-3 px-6 text-center">
+                      <div className="text-txt-tertiary text-sm">
+                        {activeTab === 'windows' && search.trim()
+                          ? t('voice:screenPicker.noWindowsMatch')
+                          : activeTab === 'screens'
+                            ? t('voice:screenPicker.noScreens')
+                            : t('voice:screenPicker.noWindows')}
+                      </div>
+                      {/* Nothing at all, on either tab: the enumeration itself came
+                          back empty. On macOS that is almost always the missing
+                          Screen Recording grant, which the OS reports as "no
+                          sources" rather than as a denial, so the screen would
+                          otherwise be a dead end with nothing to act on. */}
+                      {sources.length === 0 && (
+                        <>
+                          {isElectronMac() && (
+                            <p className="text-[13px] text-txt-tertiary max-w-sm">
+                              {t('voice:screenPicker.permissionHintMac')}
+                            </p>
+                          )}
+                          <button
+                            onClick={() => setSourcesNonce((n) => n + 1)}
+                            disabled={loadingSources}
+                            className="px-4 py-2 rounded-full glass text-txt-primary hover:bg-white/[0.08] text-[13px] font-medium transition-colors disabled:opacity-40"
+                          >
+                            {t('voice:screenPicker.retrySources')}
+                          </button>
+                        </>
+                      )}
                     </div>
                   ) : (
                     <div className={`grid gap-3 ${activeTab === 'screens' ? 'grid-cols-2 desktop:grid-cols-3' : 'grid-cols-2 desktop:grid-cols-4'}`}>

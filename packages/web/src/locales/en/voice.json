@@ -89,6 +89,8 @@
     "subtitle": "Pick what to share, tune the quality, then start.",
     "stageIdle": "Nothing selected yet",
     "stageReady": "Ready to go live",
+    "permissionHintMac": "macOS blocks screen capture until Backspace has Screen Recording permission. Grant it in System Settings → Privacy & Security → Screen Recording, then try again.",
+    "retrySources": "Try again",
     "kind": {
       "monitor": "Screen",
       "window": "Window"
