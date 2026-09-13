@@ -348,6 +348,19 @@ export function getPublishedScreenShareCodec(): 'vp9' | 'h264' | null {
 /** True while republishScreenShare() swaps publications; unpublish handlers must not treat it as a stop. */
 let _republishing = false;
 
+/** True while republishScreenShare() swaps publications. See handleScreenShareUnpublished. */
+export function isScreenShareRepublishing(): boolean {
+  return _republishing;
+}
+
+/**
+ * True while stopScreenShare() is unpublishing. livekit-client emits
+ * `LocalTrackUnpublished` synchronously inside `unpublishTrack`, so the
+ * explicit stop path reaches handleScreenShareUnpublished mid-teardown; the
+ * flag keeps that from broadcasting a second `voice_status` for the one stop.
+ */
+let _stopping = false;
+
 export async function publishScreenShare(room: Room, stream: MediaStream): Promise<boolean> {
   const config = useVoiceStore.getState().screenShareConfig;
   const hwOverdrive = useVoiceStore.getState().hwOverdrive;
@@ -433,6 +446,12 @@ export async function republishScreenShare(room: Room): Promise<void> {
   if (!ok) {
     deactivateHwOverdrive();
     useVoiceStore.setState({ isScreenSharing: false, hwOverdrive: false });
+    // The swap suppressed handleScreenShareUnpublished, and a video publish
+    // that never landed emits no rollback unpublish either, so nothing else
+    // will carry the stop to the clients outside the LiveKit room. Without
+    // this their channel lists keep the sharing indicator up indefinitely
+    // while the sharer's own UI says they stopped.
+    broadcastVoiceStatus();
   }
 }
 
@@ -532,13 +551,22 @@ function scheduleEncoderDetection(room: Room): void {
 // ---------------------------------------------------------------------------
 
 export async function stopScreenShare(room: Room): Promise<void> {
+  _stopping = true;
   try {
     for (const source of [Track.Source.ScreenShare, Track.Source.ScreenShareAudio]) {
-      const pub = room.localParticipant.getTrackPublication(source);
-      if (pub?.track) await room.localParticipant.unpublishTrack(pub.track, true);
+      // Per publication, not per loop: a throw on the video track used to abort
+      // the loop, leaving the screen-share audio published with nothing left in
+      // the UI able to stop it — isScreenSharing is already false by then, so
+      // every stop path is closed and remote peers keep hearing the desktop.
+      try {
+        const pub = room.localParticipant.getTrackPublication(source);
+        if (pub?.track) await room.localParticipant.unpublishTrack(pub.track, true);
+      } catch (err) {
+        console.error(`[ScreenShare] Failed to unpublish ${source}:`, err);
+      }
     }
-  } catch (err) {
-    console.error('[ScreenShare] Failed to stop screen share:', err);
+  } finally {
+    _stopping = false;
   }
   deactivateHwOverdrive();
   _publishedScreenShareCodec = null;
@@ -564,6 +592,11 @@ export async function changeScreenShare(room: Room): Promise<void> {
 
 export function handleScreenShareUnpublished(): void {
   if (_republishing) return;
+  // The explicit stop path unpublishes synchronously, so this handler runs from
+  // inside stopScreenShare(), which clears the same state and broadcasts once
+  // its publications are gone. Returning here keeps a single stop to a single
+  // `voice_status` fan-out instead of two.
+  if (_stopping) return;
   deactivateHwOverdrive();
   _publishedScreenShareCodec = null;
   useVoiceStore.setState({ isScreenSharing: false, hwOverdrive: false });

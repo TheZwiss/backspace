@@ -30,6 +30,7 @@ import {
   republishScreenShare,
   getPublishedScreenShareCodec,
   handleScreenShareUnpublished,
+  isScreenShareRepublishing,
   resolveNativeOverdrive,
 } from '../utils/screenShare';
 import { parseStreamWatch } from '../utils/streamWatchProtocol';
@@ -763,8 +764,14 @@ export function useLiveKit() {
       });
       newRoom.on(RoomEvent.LocalTrackUnpublished, (publication: LocalTrackPublication) => {
         if (publication.source === Track.Source.ScreenShare) {
-          const { userId } = parseIdentity(newRoom.localParticipant.identity);
-          useVoiceStore.getState().unwatchStream(userId);
+          // A codec change unpublishes and republishes the same track. Dropping
+          // ourselves from the watched set there makes the local tile flicker on
+          // every toggle, since only LocalTrackPublished puts it back — so this
+          // half of the teardown honours the republish guard too.
+          if (!isScreenShareRepublishing()) {
+            const { userId } = parseIdentity(newRoom.localParticipant.identity);
+            useVoiceStore.getState().unwatchStream(userId);
+          }
           // OS-level "Stop sharing" fires this without going through stopScreenShare
           handleScreenShareUnpublished();
         }
