@@ -318,6 +318,57 @@ PK: userId (one enrollment per user; re-enrolling replaces the row)
 
 ---
 
+## Bot / Service Account Tables (issue #184)
+
+### users (additions)
+
+The `users` table gains three columns for bot accounts. Existing rows are unaffected — all new columns are NULL/`'human'` for human accounts.
+
+| Column | Type | Default | Notes |
+|--------|------|---------|-------|
+| accountType | text NOT NULL | `'human'` | `'human' \| 'bot' \| 'service'`. Replicated stubs must remain `'human'`. |
+| ownerUserId | text | NULL | FK → users.id CASCADE. Required for bots, NULL for humans. |
+| botDisplayTag | text | NULL | Optional display tag like `@openclaw`. |
+
+### bot_tokens
+| Column | Type | Default | Notes |
+|--------|------|---------|-------|
+| id | text PK | | Snowflake |
+| botUserId | text NOT NULL | | FK → users.id CASCADE |
+| tokenHash | text NOT NULL UNIQUE | | sha256(plaintext) hex — O(1) lookup-friendly |
+| tokenPrefix | text NOT NULL | | First 8 chars of plaintext for masked display |
+| scopes | text NOT NULL | `'[]'` | JSON array of scope strings |
+| allowedChannels | text | NULL | JSON array of channel IDs (used by #186). NULL = no explicit allowlist yet. |
+| label | text | NULL | Free-form label like "OpenClaw worker" |
+| createdAt | integer NOT NULL | | |
+| expiresAt | integer | NULL | NULL = never expires |
+| lastUsedAt | integer | NULL | Best-effort update on `/api/auth/bot/login` |
+| revokedAt | integer | NULL | NULL = active; set on revoke / rotate / bot-delete |
+| revokedReason | text | NULL | `'manual' \| 'rotated' \| 'owner_deleted_bot'` |
+
+**Indexes:**
+- `idx_bot_tokens_hash` (unique) on `(tokenHash)`
+- `idx_bot_tokens_bot_user_id` on `(botUserId)`
+
+### bot_token_audit
+| Column | Type | Notes |
+|--------|------|-------|
+| id | text PK | Snowflake |
+| tokenId | text NOT NULL | The affected token (empty string for bot-create / bot-delete) |
+| botUserId | text NOT NULL | The affected bot |
+| actorUserId | text NOT NULL | The human that performed the action |
+| action | text NOT NULL | `bot.create` / `bot.delete` / `token.mint` / `token.mint.initial` / `token.revoke` / `token.rotate` |
+| details | text | Free-form JSON |
+| createdAt | integer NOT NULL | |
+
+**Indexes:**
+- `idx_bot_token_audit_token_id` on `(tokenId)`
+- `idx_bot_token_audit_bot_user_id` on `(botUserId)`
+
+Append-only. Used for the "credentials are separately auditable" acceptance criterion in #184.
+
+---
+
 ## Moderation Tables
 
 ### bans

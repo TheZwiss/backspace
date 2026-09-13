@@ -597,6 +597,88 @@ export interface TotpDisableResponse {
   success: true;
 }
 
+// ─── Bot / Service Accounts (issue #184) ──────────────────────────────────
+
+/** Known bot scope catalog. Mirrors packages/server/src/utils/botTokens.ts. */
+export const BOT_SCOPES = [
+  'channels:read',
+  'messages:read',
+  'messages:write',
+  'messages:edit',
+  'messages:delete',
+  'reactions:write',
+  'threads:write',
+  'attachments:write',
+  'presence',
+  'voice:join',
+] as const;
+
+export type BotScope = (typeof BOT_SCOPES)[number];
+
+export interface Bot {
+  id: string;
+  username: string;
+  displayName: string | null;
+  accountType: 'bot';
+  ownerUserId: string;
+  botDisplayTag: string | null;
+  isDeleted: boolean;
+  createdAt: number;
+}
+
+export interface BotCreateRequest {
+  displayName: string;
+  botDisplayTag?: string;
+  scopes?: BotScope[];
+}
+
+export interface BotCreateResponse {
+  bot: Bot;
+  /** Plaintext token returned ONCE at create time. Caller MUST save it. */
+  initialToken: BotTokenMintResponse;
+}
+
+export interface BotTokenListItem {
+  id: string;
+  /** Masked: "bsbot_GE...NRXQ" */
+  tokenPreview: string;
+  scopes: string[];
+  /** Null means "no explicit allowlist" — see #186 for default-deny mode. */
+  allowedChannels: string[] | null;
+  label: string | null;
+  createdAt: number;
+  expiresAt: number | null;
+  lastUsedAt: number | null;
+  revokedAt: number | null;
+  revokedReason: string | null;
+}
+
+export interface BotTokenMintResponse {
+  id: string;
+  /** Plaintext. Returned EXACTLY ONCE. Never persisted, never returned again. */
+  plaintext: string;
+  tokenPreview: string;
+  scopes: string[];
+  label: string | null;
+  createdAt: number;
+}
+
+export interface BotAuthLoginRequest {
+  /** A bot API token in `bsbot_...` format. */
+  token: string;
+}
+
+export interface BotAuthLoginResponse {
+  /** Bot JWT — short-lived. Carries scopes for requireScope() checks. */
+  token: string;
+  bot: {
+    id: string;
+    username: string;
+    accountType: 'bot';
+  };
+  scopes: string[];
+}
+
 export interface CreateSpaceRequest {
   name: string;
   icon?: string;

@@ -79,6 +79,13 @@ import type {
   TotpDisableRequest,
   TotpDisableResponse,
   TotpRecoveryRegenerateRequest,
+  Bot,
+  BotCreateRequest,
+  BotCreateResponse,
+  BotTokenListItem,
+  BotTokenMintResponse,
+  BotAuthLoginRequest,
+  BotAuthLoginResponse,
 } from '@backspace/shared';
 import { getApiForOrigin, getOwnerInstanceForDm } from '../utils/crossStoreResolvers';
 
@@ -113,6 +120,11 @@ export class BackspaceApiClient {
      * and no code was supplied. The caller (authStore.login) discriminates.
      */
     login: (data: LoginRequest) => Promise<AuthResponse | LoginRequires2faResponse>;
+    /**
+     * Bot login: exchange an API token (`bsbot_...`) for a short-lived bot JWT
+     * carrying the token's scope set. See issue #184.
+     */
+    botLogin: (data: BotAuthLoginRequest) => Promise<BotAuthLoginResponse>;
     checkUsername: (username: string) => Promise<{ available: boolean; reason?: string }>;
     checkInvite: (token: string) => Promise<CheckInviteResponse>;
     attachProof: (targetDomain: string) => Promise<AttachProofResponse>;
@@ -123,7 +135,17 @@ export class BackspaceApiClient {
     totpDisable: (data: TotpDisableRequest) => Promise<TotpDisableResponse>;
     totpRegenerateRecoveryCodes: (data: TotpRecoveryRegenerateRequest) => Promise<TotpSetupConfirmResponse>;
   };
-
+  readonly bots: {
+    list: () => Promise<{ bots: Bot[] }>;
+    get: (id: string) => Promise<Bot>;
+    create: (data: BotCreateRequest) => Promise<BotCreateResponse>;
+    update: (id: string, data: Partial<{ displayName: string; botDisplayTag: string | null }>) => Promise<{ success: true }>;
+    delete: (id: string) => Promise<{ success: true }>;
+    listTokens: (id: string) => Promise<{ tokens: BotTokenListItem[] }>;
+    mintToken: (id: string, data: { label?: string; scopes?: string[] }) => Promise<BotTokenMintResponse>;
+    revokeToken: (botId: string, tokenId: string) => Promise<{ success: true }>;
+    rotateToken: (botId: string, tokenId: string) => Promise<BotTokenMintResponse>;
+  };
   readonly users: {
     me: () => Promise<User>;
     update: (data: UpdateUserRequest) => Promise<User>;
@@ -423,6 +445,24 @@ export class BackspaceApiClient {
         request<TotpDisableResponse>('POST', '/auth/totp/disable', data),
       totpRegenerateRecoveryCodes: (data: TotpRecoveryRegenerateRequest) =>
         request<TotpSetupConfirmResponse>('POST', '/auth/totp/recovery-codes/regenerate', data),
+      botLogin: (data: BotAuthLoginRequest) =>
+        request<BotAuthLoginResponse>('POST', '/auth/bot/login', data, false),
+    };
+
+    this.bots = {
+      list: () => request<{ bots: Bot[] }>('GET', '/bots'),
+      get: (id: string) => request<Bot>('GET', `/bots/${id}`),
+      create: (data: BotCreateRequest) => request<BotCreateResponse>('POST', '/bots', data),
+      update: (id: string, data: Partial<{ displayName: string; botDisplayTag: string | null }>) =>
+        request<{ success: true }>('PATCH', `/bots/${id}`, data),
+      delete: (id: string) => request<{ success: true }>('DELETE', `/bots/${id}`),
+      listTokens: (id: string) => request<{ tokens: BotTokenListItem[] }>('GET', `/bots/${id}/tokens`),
+      mintToken: (id: string, data: { label?: string; scopes?: string[] }) =>
+        request<BotTokenMintResponse>('POST', `/bots/${id}/tokens`, data),
+      revokeToken: (botId: string, tokenId: string) =>
+        request<{ success: true }>('DELETE', `/bots/${botId}/tokens/${tokenId}`),
+      rotateToken: (botId: string, tokenId: string) =>
+        request<BotTokenMintResponse>('POST', `/bots/${botId}/tokens/${tokenId}/rotate`, {}),
     };
 
     this.users = {

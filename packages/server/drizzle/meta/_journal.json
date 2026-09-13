@@ -85,6 +85,13 @@
       "when": 1789282337914,
       "tag": "0011_two_factor_auth",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1789286363825,
+      "tag": "0012_bot_accounts",
+      "breakpoints": true
     }
   ]
 }

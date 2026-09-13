@@ -434,6 +434,93 @@ The federation login self-heal path (`/api/auth/login` → home instance) does N
 
 ---
 
+## 5c. Bot / Service Accounts (issue #184)
+
+**Source files:**
+- `packages/server/src/utils/botTokens.ts` — token format (`bsbot_<base32(20)>`), sha256 hashing, scope catalog, masking
+- `packages/server/src/routes/bots.ts` — bot CRUD + token mint/revoke/rotate + bot login
+- `packages/server/src/utils/auth.ts` — extended with `requireHuman`, `requireBot`, `requireScope(name)`, `requireBotTokenStillActive`
+- `packages/server/src/db/schema.ts` — `users.accountType` / `ownerUserId` / `botDisplayTag`, `bot_tokens`, `bot_token_audit`
+
+### Identity model
+
+A bot is a `users` row with `accountType='bot'` and an `ownerUserId` pointing to the human that controls it. Bots have no password (sentinel `!bot-account` blocks password login attempts) — they authenticate exclusively via API tokens from the `bot_tokens` table.
+
+A human can own any number of bots. Bots can be tagged with `botDisplayTag` (e.g. `@openclaw`) for at-a-glance recognition in the UI.
+
+### Token model
+
+| Property | Value |
+|---|---|
+| Format | `bsbot_<base32(20 random bytes)>` — 160 bits of entropy |
+| At-rest storage | sha256(token) hex — 64 chars, unique-indexed for O(1) lookup |
+| Plaintext display | Once at mint time, never again |
+| Masked display | First 8 chars + last 4: `bsbot_GE...NRXQ` |
+| Rotation | Atomic: revoke old + mint new in one transaction; old is invalidated immediately |
+| Revocation | Sets `revokedAt` + `revokedReason`; subsequent JWTs minted from it are rejected via `requireBotTokenStillActive` |
+
+Why sha256 and not bcrypt here: the token has full 160 bits of entropy from `randomBytes(20)` — there is no password-stretching threat. Bcrypt would prevent the indexed lookup that makes `/api/auth/bot/login` fast.
+
+### Scope catalog
+
+Bots carry an explicit scope set. Admin-like scopes intentionally do not exist:
+
+| Scope | What it permits |
+|---|---|
+| `channels:read` | List + inspect channels within the allowlist |
+| `messages:read` | Read message history in allowed channels (subject to #186 history window) |
+| `messages:write` | Send messages in allowed channels |
+| `messages:edit` | Edit the bot's own messages |
+| `messages:delete` | Delete the bot's own messages |
+| `reactions:write` | Add / remove reactions on messages |
+| `threads:write` | Post in threads |
+| `attachments:write` | Upload attachments |
+| `presence` | Update the bot's presence (status) |
+| `voice:join` | Join voice channels |
+
+Scope enforcement is done by `requireScope(name)` (Fastify preHandler, see `utils/auth.ts`). Humans bypass scope checks (full privilege) — scoped routes are meaningful for bots, not for humans.
+
+### Endpoint surface
+
+| Endpoint | Auth | Purpose |
+|---|---|---|
+| `POST /api/bots` | JWT + `requireHuman` | Create a new bot (returns the bot + initial plaintext token ONCE) |
+| `GET /api/bots` | JWT | List bots owned by the caller |
+| `GET /api/bots/:id` | JWT | Bot details (owner or instance admin) |
+| `PATCH /api/bots/:id` | JWT | Update displayName / botDisplayTag (owner or admin) |
+| `DELETE /api/bots/:id` | JWT | Soft-delete bot + revoke all outstanding tokens (owner or admin) |
+| `POST /api/bots/:id/tokens` | JWT | Mint a new API token (owner) — returns plaintext ONCE |
+| `GET /api/bots/:id/tokens` | JWT | List tokens (masked) (owner) |
+| `DELETE /api/bots/:id/tokens/:tokenId` | JWT | Revoke a token (owner) |
+| `POST /api/bots/:id/tokens/:tokenId/rotate` | JWT | Atomic rotate (owner) — returns new plaintext ONCE |
+| `POST /api/auth/bot/login` | none (the bot token IS the auth) | Exchange `bsbot_...` for a bot JWT carrying the scope set |
+
+### Bot JWT vs human JWT
+
+The JWT payload gains three new optional fields:
+- `accountType`: `'human' | 'bot' | 'service'`
+- `scopes`: string[] — present for bots
+- `tokenId`: string — the API-token row this JWT was minted from
+
+The `authenticate` preHandler attaches these to `request.accountType` / `request.scopes` / `request.tokenId`. Downstream code can:
+
+- `requireHuman` — 403 unless caller is a human
+- `requireBot` — 403 unless caller is a bot
+- `requireScope('messages:write')` — 403 if scope missing (humans bypass)
+- `requireBotTokenStillActive` — 401 if the underlying API token was revoked since the JWT was minted
+
+### Federation safety
+
+- Replicated stubs (`passwordHash === '!federation-replicated'`) cannot create bots. (They cannot log in to begin with.)
+- Federated accounts (`homeInstance` set, `federationHomeOrphaned !== 1`) cannot create bots locally — bots are managed on the home instance.
+- Detached accounts (`federationHomeOrphaned = 1`) behave as sovereign local accounts and may create bots.
+
+### Audit
+
+Every bot / token operation appends a row to `bot_token_audit` with the acting userId. The table is append-only. Bot deletion additionally bulk-revokes all outstanding tokens in the same transaction.
+
+---
+
 ## 6. Account Deletion
 
 ### Self-Deletion

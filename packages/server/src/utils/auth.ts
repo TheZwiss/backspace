@@ -18,6 +18,14 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
 export interface JwtPayload {
   userId: string;
   username: string;
+  /** Discriminator for human vs bot. Optional for backward compat with
+   *  pre-#184 JWTs that only carry userId/username. New JWTs always set it. */
+  accountType?: 'human' | 'bot' | 'service';
+  /** Scope list for bot/service JWTs. Empty array for humans. */
+  scopes?: string[];
+  /** Bot-token ID this JWT was minted from (so we can revoke the API token
+   *  and invalidate outstanding JWTs in one place). Undefined for humans. */
+  tokenId?: string;
   iat?: number;
 }
 
@@ -110,11 +118,98 @@ export async function authenticate(
     (request as FastifyRequest & { userId: string; username: string }).userId = identity.userId;
     (request as FastifyRequest & { userId: string; username: string }).username = identity.username;
     (request as FastifyRequest & { userId: string; username: string }).homeInstance = identity.homeInstance;
+
+    // Issue #184: attach accountType + scopes for downstream scope checks.
+    // Bot JWTs also carry a tokenId so we can revoke the API token and
+    // reject outstanding JWTs in one place (see requireBotTokenStillActive).
+    const payload = verifyJwt(token);
+    (request as FastifyRequest & { accountType?: string }).accountType = payload.accountType ?? 'human';
+    (request as FastifyRequest & { scopes?: string[] }).scopes = payload.scopes ?? [];
+    (request as FastifyRequest & { tokenId?: string }).tokenId = payload.tokenId;
   } catch (err) {
     if (err instanceof AuthError) {
       return reply.code(err.statusCode).send({ error: err.message, statusCode: err.statusCode });
     }
     return reply.code(401).send({ error: 'Invalid or expired token', statusCode: 401 });
+  }
+}
+
+/**
+ * Reject bot/service JWTs at an endpoint that should only be reachable by
+ * humans (e.g. account deletion, password change, 2FA setup, bot creation).
+ * Use as a Fastify preHandler after `authenticate`.
+ */
+export async function requireHuman(
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<void> {
+  const accountType = (request as FastifyRequest & { accountType?: string }).accountType ?? 'human';
+  if (accountType !== 'human') {
+    reply.code(403).send({ error: 'This action is only available to human accounts', statusCode: 403 });
+  }
+}
+
+/**
+ * Scope guard factory. Returns a Fastify preHandler that 403s if the JWT
+ * doesn't carry the named scope. Use it on endpoints that should be
+ * reachable only by bot tokens minted with that scope.
+ */
+export function requireScope(scope: string) {
+  return async function scopeGuard(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ): Promise<void> {
+    const accountType = (request as FastifyRequest & { accountType?: string }).accountType ?? 'human';
+    const scopes = (request as FastifyRequest & { scopes?: string[] }).scopes ?? [];
+    if (accountType === 'human') {
+      // Humans are full-privilege — they bypass scope checks. Scoped routes
+      // are still meaningful (a human calling them just doesn't need the
+      // scope token). If you want humans explicitly excluded, layer
+      // `requireBot` ahead.
+      return;
+    }
+    if (!scopes.includes(scope)) {
+      reply.code(403).send({ error: `Missing scope: ${scope}`, statusCode: 403 });
+    }
+  };
+}
+
+/**
+ * Reverse: require the caller to be a bot (not a human). Use on routes that
+ * are only meaningful for automation clients, like gateway endpoints.
+ */
+export async function requireBot(
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<void> {
+  const accountType = (request as FastifyRequest & { accountType?: string }).accountType ?? 'human';
+  if (accountType === 'human') {
+    reply.code(403).send({ error: 'This endpoint is only available to bot/service accounts', statusCode: 403 });
+  }
+}
+
+/**
+ * Bot-token revocation check. Use as a preHandler after authenticate() to
+ * reject bot JWTs whose underlying API token has been revoked since the
+ * JWT was minted. Cheap: one indexed lookup on the tokenId.
+ */
+export async function requireBotTokenStillActive(
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<void> {
+  const tokenId = (request as FastifyRequest & { tokenId?: string }).tokenId;
+  if (!tokenId) return; // human JWT — nothing to check
+  const db = getDb();
+  const row = db.select({ revokedAt: schema.botTokens.revokedAt })
+    .from(schema.botTokens)
+    .where(eq(schema.botTokens.id, tokenId))
+    .get();
+  if (!row) {
+    reply.code(401).send({ error: 'Bot token no longer exists', statusCode: 401 });
+    return;
+  }
+  if (row.revokedAt !== null) {
+    reply.code(401).send({ error: 'Bot token has been revoked', statusCode: 401 });
   }
 }
 

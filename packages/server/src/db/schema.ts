@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, primaryKey, foreignKey, real, unique, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, primaryKey, foreignKey, real, unique, index, uniqueIndex, type AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 
 export const users = sqliteTable('users', {
@@ -25,6 +25,15 @@ export const users = sqliteTable('users', {
   federationRegistryUpdatedAt: integer('federation_registry_updated_at').default(0),
   federationHealPending: integer('federation_heal_pending').default(0),
   federationHomeOrphaned: integer('federation_home_orphaned').default(0),
+  // ── Bot / service accounts (issue #184) ─────────────────────────────────
+  // Distinguishes automation identities from humans. Default 'human'. Bots
+  // authenticate via bot_tokens (API tokens) rather than password+2FA. The
+  // `ownerUserId` column names the human that controls this bot — required
+  // for non-human accounts, NULL for humans. Federation stubs
+  // (passwordHash === '!federation-replicated') must remain 'human'.
+  accountType: text('account_type').notNull().default('human'),
+  ownerUserId: text('owner_user_id').references((): AnySQLiteColumn => users.id, { onDelete: 'cascade' }),
+  botDisplayTag: text('bot_display_tag'),
   createdAt: integer('created_at').notNull(),
 });
 
@@ -603,4 +612,63 @@ export const userRecoveryCodes = sqliteTable('user_recovery_codes', {
   createdAt: integer('created_at').notNull(),
 }, (table) => ({
   userIdx: index('idx_user_recovery_codes_user_id').on(table.userId),
+}));
+
+// ----------------------------------------------------------------------------
+// Bot / service accounts (issue #184). Bots authenticate via API tokens
+// (bot_tokens table) rather than password+2FA. Each token carries a scope
+// set + optional channel allowlist (see #186). Tokens are rotatable and
+// revocable independently of any human password.
+//
+// Federation safety:
+//   - Replicated stubs (passwordHash === '!federation-replicated') cannot
+//     create or use bot accounts. Enforced in routes/bots.ts.
+//   - Federated (non-detached) accounts cannot create bots locally — bots
+//     are managed on the home instance. Detached accounts may.
+//
+// Token format: `bsbot_<32 hex random>` → stored as sha256 hex for lookup.
+// The plaintext is shown to the user EXACTLY ONCE at mint time, never
+// persisted. Last-used timestamp is updated opportunistically (best
+// effort; not in a transaction — losing one update is fine).
+// ----------------------------------------------------------------------------
+
+export const botTokens = sqliteTable('bot_tokens', {
+  id: text('id').primaryKey(),
+  botUserId: text('bot_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  // sha256(plaintext) — 32 random bytes → 64 hex. Lookup-friendly (O(1) index).
+  tokenHash: text('token_hash').notNull().unique(),
+  // First 8 chars of plaintext for masked display in the UI ("bsbot_xx...xxxx").
+  tokenPrefix: text('token_prefix').notNull(),
+  // JSON array of scope strings (e.g. ["channels:read","messages:write"]).
+  scopes: text('scopes').notNull().default('[]'),
+  // JSON array of channel IDs this token is allowed to touch. NULL means
+  // "no explicit allowlist" (server-side scope checks still apply; #186 will
+  // turn this into a default-deny model). Empty array `[]` means deny-all.
+  allowedChannels: text('allowed_channels'),
+  // Free-form label like "OpenClaw worker", "ci-bot". Shown in the UI.
+  label: text('label'),
+  createdAt: integer('created_at').notNull(),
+  expiresAt: integer('expires_at'),
+  lastUsedAt: integer('last_used_at'),
+  revokedAt: integer('revoked_at'),
+  // Why it was revoked (manual, rotated, owner deleted bot). Audit only.
+  revokedReason: text('revoked_reason'),
+}, (table) => ({
+  hashIdx: uniqueIndex('idx_bot_tokens_hash').on(table.tokenHash),
+  botIdx: index('idx_bot_tokens_bot_user_id').on(table.botUserId),
+}));
+
+// Audit trail for bot-token operations. Records who did what and when.
+// Append-only.
+export const botTokenAudit = sqliteTable('bot_token_audit', {
+  id: text('id').primaryKey(),
+  tokenId: text('token_id').notNull(),
+  botUserId: text('bot_user_id').notNull(),
+  actorUserId: text('actor_user_id').notNull(),
+  action: text('action').notNull(),
+  details: text('details'),
+  createdAt: integer('created_at').notNull(),
+}, (table) => ({
+  tokenIdx: index('idx_bot_token_audit_token_id').on(table.tokenId),
+  botIdx: index('idx_bot_token_audit_bot_user_id').on(table.botUserId),
 }));

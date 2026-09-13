@@ -8,6 +8,7 @@ import { getDb, getRawDb, closeDatabase } from './db/index.js';
 import { checkFfmpeg } from './utils/thumbnail.js';
 import { authRoutes } from './routes/auth.js';
 import { totpRoutes } from './routes/totp.js';
+import { botRoutes } from './routes/bots.js';
 import { userRoutes } from './routes/users.js';
 import { spaceRoutes } from './routes/spaces.js';
 import { channelRoutes } from './routes/channels.js';
@@ -120,6 +121,7 @@ async function main(): Promise<void> {
 
   await app.register(authRoutes);
   await app.register(totpRoutes);
+  await app.register(botRoutes);
   await app.register(userRoutes);
   await app.register(spaceRoutes);
   await app.register(channelRoutes);
