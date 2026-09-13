@@ -50,6 +50,13 @@ import {
 } from './recovery';
 import { migrateUserData } from './userDataMigration';
 import { isNavigationAllowed } from './navigationPolicy';
+import {
+  screenSharePickerMode,
+  isPendingSelectionFresh,
+  screenEnumerationDecision,
+  type PendingScreenSelection,
+  type ScreenSharePickerMode,
+} from './screenSharePolicy';
 import { getDesktopLanguage, isDesktopLanguage, saveStoredLanguage, translateDesktop } from './l10n';
 
 // Override Electron's package.json-derived app name so userData lives at
@@ -545,20 +552,14 @@ interface SerializedScreenSource {
   isScreen: boolean;
 }
 
-interface PendingScreenSelection {
-  sourceId: string;
-  shareAudio: boolean;
-  at: number;
-}
-
-/** A preselection older than this is stale: the setup screen was closed without starting. */
-const PENDING_SCREEN_SELECTION_TTL_MS = 30_000;
-
 let pendingScreenSelection: PendingScreenSelection | null = null;
 /** Loopback preference for system-picker captures (no preselection carries it there). */
 let lastSystemPickerShareAudio: boolean | null = null;
 /** Last enumeration, so a preselected id resolves to its DesktopCapturerSource without a second scan. */
 let lastScreenSources: Electron.DesktopCapturerSource[] = [];
+/** Last list handed to the renderer, and when: what a throttled or unfocused caller gets back. */
+let lastServedScreenSources: SerializedScreenSource[] = [];
+let lastScreenEnumerationAt: number | null = null;
 
 async function enumerateScreenSources(): Promise<Electron.DesktopCapturerSource[]> {
   const sources = await desktopCapturer.getSources({
@@ -580,30 +581,15 @@ function serializeScreenSources(sources: Electron.DesktopCapturerSource[]): Seri
   }));
 }
 
-/**
- * Who picks the source. On a Wayland session the compositor's screencast
- * portal does: `desktopCapturer.getSources()` opens the portal dialog and
- * returns only what the user chose there, so an in-app grid is pointless and
- * listing sources up front would prompt the user on every open. The renderer
- * then shows a "choose" card that triggers the portal on click, like a browser.
- * X11, macOS and Windows list everything without a prompt.
- */
-type ScreenSharePickerMode = 'app' | 'system';
-
-function screenSharePickerMode(): ScreenSharePickerMode {
-  if (process.platform !== 'linux') return 'app';
-  const sessionType = (process.env.XDG_SESSION_TYPE ?? '').toLowerCase();
-  if (sessionType === 'wayland' || (!!process.env.WAYLAND_DISPLAY && sessionType !== 'x11')) return 'system';
-  return 'app';
+function currentPickerMode(): ScreenSharePickerMode {
+  return screenSharePickerMode(process.platform, process.env);
 }
 
 /** One-shot: returns and clears the pending preselection, or null when absent or stale. */
 function takePendingScreenSelection(): PendingScreenSelection | null {
   const pending = pendingScreenSelection;
   pendingScreenSelection = null;
-  if (!pending) return null;
-  if (Date.now() - pending.at > PENDING_SCREEN_SELECTION_TTL_MS) return null;
-  return pending;
+  return isPendingSelectionFresh(pending, Date.now()) ? pending : null;
 }
 
 function registerIpcHandlers(): void {
@@ -767,8 +753,28 @@ function registerIpcHandlers(): void {
   });
   // Setup-screen flow: the renderer lists sources up front, and preselects one
   // right before it calls getDisplayMedia(); the handler answers from that.
-  ipcMain.handle('get-screen-sources', async () => serializeScreenSources(await enumerateScreenSources()));
-  ipcMain.handle('get-screen-share-picker-mode', () => screenSharePickerMode());
+  // Thumbnails of every open window are pixel data, and the renderer runs the
+  // instance's web client — remote code. `screenEnumerationDecision` states the
+  // policy: the app's own window only, focused only, and no faster than the
+  // cache window, so a page polling on a timer cannot quietly photograph
+  // whatever the user switched to.
+  ipcMain.handle('get-screen-sources', async (event): Promise<SerializedScreenSource[]> => {
+    const decision = screenEnumerationDecision({
+      fromMainWindow: event.sender === mainWindow?.webContents,
+      windowFocused: mainWindow?.isFocused() ?? false,
+      lastEnumeratedAt: lastScreenEnumerationAt,
+      now: Date.now(),
+    });
+    if (decision === 'deny') return [];
+    if (decision === 'serve-cache') return lastServedScreenSources;
+    lastServedScreenSources = serializeScreenSources(await enumerateScreenSources());
+    lastScreenEnumerationAt = Date.now();
+    return lastServedScreenSources;
+  });
+  ipcMain.handle('get-screen-share-picker-mode', (event) => {
+    if (event.sender !== mainWindow?.webContents) return 'app';
+    return currentPickerMode();
+  });
   // handle, not on: the renderer awaits this before calling getDisplayMedia(),
   // so the selection is guaranteed to be armed when the display-media handler
   // runs. Fire-and-forget left the two unordered — the handler could win, fall
@@ -1273,7 +1279,7 @@ if (!gotTheLock) {
         // System picker (Wayland portal): the user already chose in the
         // portal dialog and this is the only source it returned. Answer
         // directly instead of showing a one-tile grid.
-        if (screenSharePickerMode() === 'system' && sources.length === 1) {
+        if (currentPickerMode() === 'system' && sources.length === 1) {
           // Default off: this branch answers without consulting the renderer, so
           // a web client too old to send a preference must not have its audio
           // captured against the setting it thinks is in force.
@@ -1321,10 +1327,13 @@ if (!gotTheLock) {
         // @ts-ignore — deny the request without crashing
         callback();
       } finally {
-        // The cache exists only to resolve a preselected id within one request.
-        // Holding it pins a full-size NativeImage thumbnail per source for the
-        // life of the process, so drop it as soon as the request is answered.
+        // The caches exist only to serve one setup flow: the NativeImage list to
+        // resolve a preselected id within this request, the serialized one to
+        // answer a repeat call without a second scan. Both pin a thumbnail per
+        // open window, so drop them as soon as the request is answered.
         lastScreenSources = [];
+        lastServedScreenSources = [];
+        lastScreenEnumerationAt = null;
       }
     });
 
