@@ -35,6 +35,13 @@ interface VoiceState {
   cameraDeviceId: string | null; // null = auto-select on next camera enable
   focusedParticipantId: string | null;
   screenShareConfig: ScreenShareConfig;
+  /**
+   * The source shared last time, so the setup screen can stage it again
+   * without being asked. Desktop only: browsers do not let the page name a
+   * source. Screen ids survive a restart, window ids do not, so a remembered
+   * window simply stops matching and the grid is shown instead.
+   */
+  lastScreenShareSourceId: string | null;
   // Per-participant volume (userId → 0-200, 100 = default)
   participantVolumes: Map<string, number>;
   setParticipantVolume: (userId: string, volume: number) => void;
@@ -105,6 +112,7 @@ interface VoiceState {
   toggleDeafen: () => void;
   setFocusedParticipant: (id: string | null) => void;
   setScreenShareConfig: (config: Partial<ScreenShareConfig>) => void;
+  setLastScreenShareSourceId: (sourceId: string | null) => void;
   hwOverdrive: boolean;
   setHwOverdrive: (enabled: boolean) => void;
   noiseSuppression: boolean;
@@ -177,6 +185,7 @@ export const useVoiceStore = create<VoiceState>()(
       cameraDeviceId: null,
       focusedParticipantId: null,
       screenShareConfig: { height: 720, fps: 60, mode: 'gaming', customBitrateKbps: null, shareAudio: !isElectron() },
+      lastScreenShareSourceId: null,
       participantVolumes: new Map(),
       setParticipantVolume: (userId, volume) => {
         set((state) => {
@@ -438,6 +447,7 @@ export const useVoiceStore = create<VoiceState>()(
       toggleScreenShare: () => set((state) => ({ isScreenSharing: !state.isScreenSharing })),
 
       setFocusedParticipant: (id) => set({ focusedParticipantId: id }),
+      setLastScreenShareSourceId: (sourceId) => set({ lastScreenShareSourceId: sourceId }),
       setScreenShareConfig: (config) => set((state) => ({
         screenShareConfig: { ...state.screenShareConfig, ...config },
       })),
@@ -771,6 +781,7 @@ export const useVoiceStore = create<VoiceState>()(
         outputDeviceId: state.outputDeviceId,
         cameraDeviceId: state.cameraDeviceId,
         screenShareConfig: state.screenShareConfig,
+        lastScreenShareSourceId: state.lastScreenShareSourceId,
         echoCancellation: state.echoCancellation,
         autoGainControl: state.autoGainControl,
         rnnoiseEnabled: state.rnnoiseEnabled,

@@ -16,6 +16,7 @@ import {
   isCaptureCancellation,
 } from '../../utils/screenShare';
 import { StreamQualityControls, StreamSummary } from './StreamQualityControls';
+import { pickAutoStageSource, type ScreenSourceTab } from '../../utils/screenShareSources';
 
 /**
  * ScreenShareSetup — the one screen every screen share starts from.
@@ -47,7 +48,7 @@ import { StreamQualityControls, StreamSummary } from './StreamQualityControls';
  * footer's action pill (next to Cancel / Start) or the footer summary.
  */
 
-type Tab = 'screens' | 'windows';
+type Tab = ScreenSourceTab;
 
 /**
  * The kind of surface being shared, shown next to "Ready to go live".
@@ -75,6 +76,7 @@ export function ScreenShareSetup() {
   const close = useScreenShareSetupStore((s) => s.close);
   const portalContainer = usePortalContainer();
   const config = useVoiceStore((s) => s.screenShareConfig);
+  const lastSourceId = useVoiceStore((s) => s.lastScreenShareSourceId);
   const isScreenSharing = useVoiceStore((s) => s.isScreenSharing);
 
   const api = getElectronAPI();
@@ -294,15 +296,18 @@ export function ScreenShareSetup() {
     pendingPromptIdRef.current = null;
   }, [isOpen, replaceStaged, markPromptInFlight]);
 
-  // Auto-stage the only screen so the common case needs a single click on Start
+  // Stage the remembered source (or a lone screen) so the common case needs a
+  // single click on Start
   useEffect(() => {
     if (!isOpen || !canListSources || staged || staging || selectedId || autoStagedRef.current) return;
-    const screens = sources.filter((s) => s.isScreen);
-    if (screens.length === 1 && activeTab === 'screens') {
-      autoStagedRef.current = true;
-      void stageSource(screens[0]!.id);
-    }
-  }, [isOpen, canListSources, sources, staged, staging, selectedId, activeTab, stageSource]);
+    const source = pickAutoStageSource(sources, lastSourceId, activeTab);
+    if (!source) return;
+    autoStagedRef.current = true;
+    // Show the tile that is about to be staged, rather than leaving the grid on
+    // Screens with a window in the preview and no highlight anywhere.
+    if (!source.isScreen) setActiveTab('windows');
+    void stageSource(source.id);
+  }, [isOpen, canListSources, sources, lastSourceId, staged, staging, selectedId, activeTab, stageSource]);
 
   // Preview element ↔ staged stream
   useEffect(() => {
@@ -393,12 +398,17 @@ export function ScreenShareSetup() {
       return;
     }
     broadcastVoiceStatus();
+    // Remember what was shared, not what was merely staged: a pick the user
+    // backed out of should not be the thing that comes up next time. Only a
+    // tile we enumerated has an id worth keeping — a browser or portal capture
+    // has none, and stores null so a stale one cannot outlive it.
+    useVoiceStore.getState().setLastScreenShareSourceId(selectedId);
     // Ownership moved to LiveKit: do not stop the tracks on close
     stagedRef.current = null;
     setStaged(null);
     setStarting(false);
     close();
-  }, [close]);
+  }, [close, selectedId]);
 
   const screens = useMemo(() => sources.filter((s) => s.isScreen), [sources]);
   const windows = useMemo(() => {
