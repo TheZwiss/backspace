@@ -74,6 +74,14 @@ Anything else is denied (`event.preventDefault()`) and logged as a warning in th
 
 `setWindowOpenHandler` (`main.ts:454-470`) is unrelated and unchanged by this — it governs `window.open()`/new-window requests (used for `/join/*` deep-link interception and external-link handling), not same-window top-level navigation.
 
+## Screen-source enumeration
+
+`get-screen-sources` (added with the screen-share setup screen) hands the renderer a 320x180 thumbnail of every screen and every open window. The renderer runs the instance's web client, which is remote code, so this is the same trust boundary `will-navigate` is about: before the setup screen existed, that pixel data reached the renderer only as the result of a `getDisplayMedia()` call, which Chromium gates behind transient activation. An `ipcMain.handle` has no such gate — a page could otherwise poll it on a timer and quietly collect snapshots of whatever the user has open.
+
+The gate is `screenEnumerationDecision()` in `screenSharePolicy.ts` (pure, unit-tested next to `screenSharePickerMode()`), applied in `main.ts`: the sender must be the main window's `webContents`, the window must be focused, and a call inside the 1 s cache window is answered with the previous serialized list rather than a fresh capture. `get-screen-share-picker-mode` carries the sender guard too. Both the NativeImage list and the serialized one are dropped once the display-media request is answered, so no thumbnail is pinned for the life of the process.
+
+What this does **not** do is make a hostile instance safe: a web client the user has the app focused on can still ask, and a share the user actually starts sends real frames. It bounds silent background collection, which is the part the user has no signal for. The honest mitigation for the rest is the same as everywhere else in this document — only connect the desktop app to instances you trust.
+
 ## Developer ID signing & notarization — NOT done, exact steps to procure
 
 No desktop release build carries a Developer ID or CA-issued signature, and there is no notarization step. Beyond that the posture differs per platform:

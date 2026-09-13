@@ -663,14 +663,29 @@ The main process intercepts `getDisplayMedia()` via `session.defaultSession.setD
 
 ### Preselected flow (current web client)
 
-1. Setup screen opens → renderer calls `getScreenSources()` (`ipcMain.handle('get-screen-sources')`) → main enumerates via `desktopCapturer.getSources({ types: ['screen', 'window'], thumbnailSize: { width: 320, height: 180 }, fetchWindowIcons: true })`, caches the result in `lastScreenSources`, returns the serialized list (id, name, thumbnail data URL, app icon data URL, isScreen flag)
+1. Setup screen opens → renderer calls `getScreenSources()` (`ipcMain.handle('get-screen-sources')`) → main enumerates via `desktopCapturer.getSources({ types: ['screen', 'window'], thumbnailSize: { width: 320, height: 180 }, fetchWindowIcons: true })`, caches the result in `lastScreenSources`, returns the serialized list (id, name, thumbnail data URL, app icon data URL, isScreen flag). Enumeration is gated — see "Who may enumerate" below
 2. User clicks a tile → renderer sends `screen-share-preselect` with `sourceId` + `shareAudio` → main stores `pendingScreenSelection` (30 s TTL)
 3. Renderer calls `getDisplayMedia()` → handler takes the pending selection (one-shot), resolves the id against the cache (re-enumerating if missing) and calls `callback({ video: source, audio: 'loopback' })` (audio only when `shareAudio`). No prompt round-trip.
 4. The stream is previewed in the setup screen and published on "Start stream".
 
+### Who may enumerate
+
+`get-screen-sources` hands the renderer a thumbnail of every open window, and the renderer runs the instance's web client — remote code. Before the setup screen existed, that pixel data only ever arrived as the *result* of a `getDisplayMedia()` call, which Chromium gates behind transient activation; an IPC handler has no such gate, so the decision is spelled out in `screenSharePolicy.ts` (`screenEnumerationDecision`) and applied in `main.ts`:
+
+| Condition | Answer |
+|-----------|--------|
+| Sender is not `mainWindow.webContents` | `[]` |
+| The app window is not focused | the last serialized list (no fresh capture) |
+| Less than `SCREEN_SOURCES_CACHE_MS` (1 s) since the last enumeration | the last serialized list |
+| Otherwise | a fresh `desktopCapturer` scan, cached with its timestamp |
+
+The setup screen enumerates once per open, so no legitimate flow meets the cache window. Both caches (`lastScreenSources`, the NativeImage list used to resolve a preselected id, and `lastServedScreenSources`, the serialized one) are dropped in the display-media handler's `finally`, so thumbnails are not pinned for the life of the process. `get-screen-share-picker-mode` carries the same sender guard and answers `'app'` to anything else.
+
+None of this substitutes for trusting the instance you connect to; it bounds what a hostile or compromised web client can collect silently. See `desktop-security.md`.
+
 ### System-picker flow (Wayland)
 
-`get-screen-share-picker-mode` returns `'system'` on Linux when `XDG_SESSION_TYPE=wayland` (or `WAYLAND_DISPLAY` is set and the session is not X11), `'app'` everywhere else. Under Wayland, `desktopCapturer.getSources()` itself opens the compositor's screencast portal and returns only what the user chose there, so:
+`get-screen-share-picker-mode` returns `'system'` on Linux when `XDG_SESSION_TYPE=wayland` (or `WAYLAND_DISPLAY` is set and the session is not X11), `'app'` everywhere else (`screenSharePickerMode()` in `screenSharePolicy.ts`, unit-tested there alongside the preselection TTL and the enumeration gate). This reads the session type, which is a guess: under XWayland the capture stack behaves like X11 while the session still reports `wayland`. A wrong guess costs one extra click — the click falls through to the prompted flow, which both sides already support. Under Wayland, `desktopCapturer.getSources()` itself opens the compositor's screencast portal and returns only what the user chose there, so:
 
 1. The renderer never enumerates up front (that would prompt on every open); it shows a "Choose" card and sends `screen-share-audio-preference` with the loopback choice
 2. The card's click calls `getDisplayMedia()` → handler enumerates → portal dialog → one source back
