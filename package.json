@@ -25,9 +25,10 @@
     "gen-icons": "node scripts/gen-icons.mjs"
   },
   "devDependencies": {
-    "sharp": "^0.33.5",
+    "@types/qrcode": "^1.5.6",
     "png-to-ico": "^2.1.8",
-    "png2icons": "^2.0.1"
+    "png2icons": "^2.0.1",
+    "sharp": "^0.33.5"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

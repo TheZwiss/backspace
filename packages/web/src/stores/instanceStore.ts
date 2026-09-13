@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { User, InstanceInfoResponse, ReplicatedInstance, AuthResponse, FederationRegistryEntry } from '@backspace/shared';
+import type { User, InstanceInfoResponse, ReplicatedInstance, AuthResponse, LoginRequires2faResponse, FederationRegistryEntry } from '@backspace/shared';
 import { BackspaceApiClient, createApiClient, api } from '../api/client';
 import { useAuthStore } from './authStore';
 import {
@@ -327,7 +327,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
 
       const tempClient = createApiClient(origin, () => null);
 
-      let response: AuthResponse | null = null;
+      let response: AuthResponse | LoginRequires2faResponse | null = null;
       let finalUsername: string;
 
       if (targetIsHome) {
@@ -389,17 +389,23 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       if (!response) {
         throw new Error('Failed to authenticate with remote instance');
       }
+      // Federation add-instance path: 2FA is the home instance's concern.
+      if ('requires2fa' in response && response.requires2fa === true) {
+        throw new Error('Login requires 2FA — visit the instance directly to complete setup.');
+      }
+      // Narrow discriminated union for the rest of the function.
+      const authResponse = response as AuthResponse;
 
       // Step 3: Complete connection
       const info = await tempClient.instance.info();
-      const authenticatedClient = createApiClient(origin, () => response.token);
+      const authenticatedClient = createApiClient(origin, () => authResponse.token);
 
       const instance: ConnectedInstance = {
         origin,
         label: info.name,
-        token: response.token,
-        user: response.user,
-        username: finalUsername,
+        token: authResponse.token,
+        user: authResponse.user,
+        username: authResponse.user.username,
         status: 'connected',
         api: authenticatedClient,
       };
@@ -426,7 +432,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       set({ registry, registryUpdatedAt });
 
       // Open WebSocket connection to the remote instance
-      connectInstance(origin, response.token);
+      connectInstance(origin, authResponse.token);
 
       // Automatic re-attach for detached accounts (re-attach spec §3.4).
       maybeAutoReattach(instance).catch(() => {});
@@ -467,18 +473,22 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     try {
       const tempClient = createApiClient(origin, () => null);
       const response = await tempClient.auth.login({ username, password });
+      if ('requires2fa' in response && response.requires2fa === true) {
+        throw new Error('Login requires 2FA — visit the instance directly to complete setup.');
+      }
+      const authResponse = response as AuthResponse;
 
       // Fetch instance info for the label
       const info = await tempClient.instance.info();
 
-      const authenticatedClient = createApiClient(origin, () => response.token);
+      const authenticatedClient = createApiClient(origin, () => authResponse.token);
 
       const instance: ConnectedInstance = {
         origin,
         label: info.name,
-        token: response.token,
-        user: response.user,
-        username: response.user.username,
+        token: authResponse.token,
+        user: authResponse.user,
+        username: authResponse.user.username,
         status: 'connected',
         api: authenticatedClient,
       };
@@ -506,7 +516,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       set({ registry, registryUpdatedAt });
 
       // Open WebSocket connection to the remote instance
-      connectInstance(origin, response.token);
+      connectInstance(origin, authResponse.token);
 
       // Automatic re-attach for detached accounts (re-attach spec §3.4).
       maybeAutoReattach(instance).catch(() => {});

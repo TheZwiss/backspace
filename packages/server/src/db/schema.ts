@@ -549,3 +549,58 @@ export const inviteRedemptions = sqliteTable('invite_redemptions', {
   inviteIdx: index('idx_invite_redemptions_invite_id').on(table.inviteId),
   userIdx: index('idx_invite_redemptions_user_id').on(table.userId),
 }));
+
+// ----------------------------------------------------------------------------
+// Two-factor authentication (issue #182). TOTP (RFC 6238) + single-use recovery
+// codes. At-rest encryption of the TOTP secret happens in utils/totp.ts (AES-
+// 256-GCM, key derived from JWT_SECRET via SHA-256); what is stored here is
+// the encrypted ciphertext + IV + authTag.
+//
+// Federation note: federated users (homeInstance set, federationHomeOrphaned=0)
+// manage 2FA on their HOME instance. They cannot enable, disable, or use 2FA
+// here. Detached accounts (federationHomeOrphaned=1) are sovereign LOCAL
+// accounts and behave like native users. Replicated stubs whose
+// passwordHash === '!federation-replicated' cannot enable 2FA (they cannot log
+// in at all). See routes/totp.ts for the enforcement and auth.md §5 for the
+// design.
+// ----------------------------------------------------------------------------
+
+export const userTotp = sqliteTable('user_totp', {
+  // PK is userId (one TOTP enrollment per user). Re-enrolling replaces the row
+  // in routes/totp.ts after a successful confirm().
+  userId: text('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+  // AES-256-GCM ciphertext envelope: base64(iv):base64(ciphertext):base64(authTag).
+  // Decrypted in-memory only inside verifyTotp(). Never returned to clients.
+  secret: text('secret').notNull(),
+  // RFC 6238 §5.1 defaults; kept as columns for forward-compat (Google
+  // Authenticator ignores algorithm/digits/period on import, but Bitwarden / 1P /
+  // Authy honour them).
+  algorithm: text('algorithm').notNull().default('SHA1'),
+  digits: integer('digits').notNull().default(6),
+  period: integer('period').notNull().default(30),
+  // null = setup initiated but not yet confirmed (RFC 6238 §5.3: verify before
+  // persisting). After confirm, set to Date.now(). A second setup() that doesn't
+  // complete confirm() must overwrite the row (handled by routes/totp.ts).
+  verifiedAt: integer('verified_at'),
+  // Replay protection (RFC 6238 §5.2): reject any code with counter <= lastUsedCounter.
+  // Persisted as string-encoded bigint so we don't lose precision above 2^53.
+  lastUsedCounter: text('last_used_counter').notNull().default('0'),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});
+
+export const userRecoveryCodes = sqliteTable('user_recovery_codes', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  // bcrypt hash of the recovery code (cost 12, matching password hashing).
+  // At-rest entropy: 8 random bytes → 12 base32 chars ≈ 60 bits — well within
+  // bcrypt's defensive envelope.
+  codeHash: text('code_hash').notNull(),
+  // null = unused. Set to Date.now() on successful consumption. The row stays
+  // for audit; the unique-by-user index makes subsequent attempts on the same
+  // hash fail (route handler iterates rows for the user).
+  usedAt: integer('used_at'),
+  createdAt: integer('created_at').notNull(),
+}, (table) => ({
+  userIdx: index('idx_user_recovery_codes_user_id').on(table.userId),
+}));

@@ -2,6 +2,7 @@ import type {
   AuthResponse,
   RegisterRequest,
   LoginRequest,
+  LoginRequires2faResponse,
   User,
   Space,
   SpaceWithChannelsAndMembers,
@@ -71,6 +72,13 @@ import type {
   AttachProofResponse,
   ReattachRequest,
   ReattachResponse,
+  TotpSetupInitiateResponse,
+  TotpSetupConfirmRequest,
+  TotpSetupConfirmResponse,
+  TotpStatusResponse,
+  TotpDisableRequest,
+  TotpDisableResponse,
+  TotpRecoveryRegenerateRequest,
 } from '@backspace/shared';
 import { getApiForOrigin, getOwnerInstanceForDm } from '../utils/crossStoreResolvers';
 
@@ -99,10 +107,21 @@ export class HttpError extends Error {
 export class BackspaceApiClient {
   readonly auth: {
     register: (data: RegisterRequest) => Promise<AuthResponse>;
-    login: (data: LoginRequest) => Promise<AuthResponse>;
+    /**
+     * Login. The server may respond with the normal `{ token, user }` payload,
+     * OR with `{ requires2fa: true, message }` if the account has 2FA enabled
+     * and no code was supplied. The caller (authStore.login) discriminates.
+     */
+    login: (data: LoginRequest) => Promise<AuthResponse | LoginRequires2faResponse>;
     checkUsername: (username: string) => Promise<{ available: boolean; reason?: string }>;
     checkInvite: (token: string) => Promise<CheckInviteResponse>;
     attachProof: (targetDomain: string) => Promise<AttachProofResponse>;
+    // ─── Two-factor authentication (issue #182) ───────────────────────────
+    totpSetupInitiate: () => Promise<TotpSetupInitiateResponse>;
+    totpSetupConfirm: (data: TotpSetupConfirmRequest) => Promise<TotpSetupConfirmResponse>;
+    totpStatus: () => Promise<TotpStatusResponse>;
+    totpDisable: (data: TotpDisableRequest) => Promise<TotpDisableResponse>;
+    totpRegenerateRecoveryCodes: (data: TotpRecoveryRegenerateRequest) => Promise<TotpSetupConfirmResponse>;
   };
 
   readonly users: {
@@ -394,6 +413,16 @@ export class BackspaceApiClient {
         request<CheckInviteResponse>('GET', `/auth/check-invite?token=${encodeURIComponent(token)}`, undefined, false),
       attachProof: (targetDomain: string) =>
         request<AttachProofResponse>('POST', '/auth/attach-proof', { targetDomain }),
+      totpSetupInitiate: () =>
+        request<TotpSetupInitiateResponse>('POST', '/auth/totp/setup/initiate', {}),
+      totpSetupConfirm: (data: TotpSetupConfirmRequest) =>
+        request<TotpSetupConfirmResponse>('POST', '/auth/totp/setup/confirm', data),
+      totpStatus: () =>
+        request<TotpStatusResponse>('GET', '/auth/totp/status'),
+      totpDisable: (data: TotpDisableRequest) =>
+        request<TotpDisableResponse>('POST', '/auth/totp/disable', data),
+      totpRegenerateRecoveryCodes: (data: TotpRecoveryRegenerateRequest) =>
+        request<TotpSetupConfirmResponse>('POST', '/auth/totp/recovery-codes/regenerate', data),
     };
 
     this.users = {

@@ -15,8 +15,18 @@ interface AuthState {
   user: User | null;
   isLoading: boolean;
   error: string | null;
+  /** Username + password held between the two login steps when 2FA is required. */
+  pending2fa: { username: string; password: string } | null;
   initSession: (token: string, user: User) => void;
   login: (username: string, password: string) => Promise<void>;
+  /**
+   * Second step of the login flow. Call after `login()` resolves with
+   * `{ requires2fa: true }`. Re-submits username + password + code to the
+   * server. Throws if no pending 2FA is queued.
+   */
+  loginStep2: (code: string) => Promise<void>;
+  /** Aborts the 2FA challenge (e.g. user clicks Cancel in the prompt). */
+  cancel2fa: () => void;
   register: (username: string, password: string, displayName?: string, avatarColor?: string) => Promise<void>;
   logout: () => void;
   loadUser: () => Promise<void>;
@@ -43,11 +53,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   isLoading: false,
   error: null,
+  pending2fa: null,
 
   initSession: (token: string, user: User) => {
     resetUserStores();
     localStorage.setItem('backspace_token', token);
-    set({ token, user, isLoading: false });
+    set({ token, user, isLoading: false, pending2fa: null });
     useInstanceStore.getState().autoConnectAll().catch(() => {});
   },
 
@@ -55,11 +66,51 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const response = await api.auth.login({ username, password });
-      get().initSession(response.token, response.user);
+      // Discriminated union — server returns either AuthResponse or
+      // { requires2fa: true }. The latter must NOT be treated as success.
+      if ('requires2fa' in response && response.requires2fa === true) {
+        set({ isLoading: false, pending2fa: { username, password } });
+        return;
+      }
+      // After the guard above, TypeScript still sees the union; narrow by
+      // asserting the shape via the absence of the discriminator.
+      const auth = response as Exclude<typeof response, { requires2fa: true }>;
+      get().initSession(auth.token, auth.user);
     } catch (err) {
       set({ isLoading: false, error: err instanceof Error ? err.message : 'Login failed' });
       throw err;
     }
+  },
+
+  loginStep2: async (code: string) => {
+    const pending = get().pending2fa;
+    if (!pending) {
+      throw new Error('No 2FA challenge in progress');
+    }
+    set({ isLoading: true, error: null });
+    try {
+      const response = await api.auth.login({
+        username: pending.username,
+        password: pending.password,
+        code: code.trim(),
+      });
+      if ('requires2fa' in response && response.requires2fa === true) {
+        // Still wrong — server returned 2FA-again (shouldn't happen unless
+        // our session was wrong; surface as a generic error rather than
+        // re-entering the challenge).
+        set({ isLoading: false, error: 'Invalid 2FA code' });
+        throw new Error('Invalid 2FA code');
+      }
+      const auth = response as Exclude<typeof response, { requires2fa: true }>;
+      get().initSession(auth.token, auth.user);
+    } catch (err) {
+      set({ isLoading: false, error: err instanceof Error ? err.message : 'Login failed' });
+      throw err;
+    }
+  },
+
+  cancel2fa: () => {
+    set({ pending2fa: null, error: null, isLoading: false });
   },
 
   register: async (username: string, password: string, displayName?: string, avatarColor?: string) => {
@@ -76,7 +127,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   logout: () => {
     localStorage.removeItem('backspace_token');
     resetUserStores();
-    set({ token: null, user: null });
+    set({ token: null, user: null, pending2fa: null });
   },
 
   loadUser: async () => {

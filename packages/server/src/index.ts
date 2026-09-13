@@ -7,6 +7,7 @@ import { config } from './config.js';
 import { getDb, getRawDb, closeDatabase } from './db/index.js';
 import { checkFfmpeg } from './utils/thumbnail.js';
 import { authRoutes } from './routes/auth.js';
+import { totpRoutes } from './routes/totp.js';
 import { userRoutes } from './routes/users.js';
 import { spaceRoutes } from './routes/spaces.js';
 import { channelRoutes } from './routes/channels.js';
@@ -118,6 +119,7 @@ async function main(): Promise<void> {
   resetStalePresenceOnBoot();
 
   await app.register(authRoutes);
+  await app.register(totpRoutes);
   await app.register(userRoutes);
   await app.register(spaceRoutes);
   await app.register(channelRoutes);

@@ -524,11 +524,77 @@ export interface RegisterRequest {
 export interface LoginRequest {
   username: string;
   password: string;
+  /**
+   * Optional second factor. Send a 6-digit TOTP code, or a 12-character
+   * recovery code (case-insensitive), when the user has 2FA enabled.
+   * Required if the server returns `{ requires2fa: true }`.
+   */
+  code?: string;
 }
 
 export interface AuthResponse {
   token: string;
   user: User;
+}
+
+/**
+ * Returned by POST /api/auth/login when the user's password was correct but
+ * 2FA is enabled and the request omitted `code`. The client should re-submit
+ * the same username/password plus the code (TOTP or recovery).
+ *
+ * Note: this is the response body, NOT an HTTP error — the request succeeded
+ * in part (password verification) and the server is asking for the second
+ * factor with HTTP 200. Clients should switch to a two-step UI.
+ */
+export interface LoginRequires2faResponse {
+  requires2fa: true;
+  /** Masked identifier for UI display — never includes the secret. */
+  message: string;
+}
+
+// ─── Two-Factor Authentication Types (issue #182) ─────────────────────────
+
+export interface TotpSetupInitiateResponse {
+  /** Base32-encoded secret. Displayed ONCE during setup. */
+  secret: string;
+  /** otpauth:// URI the authenticator app consumes. */
+  otpauthUrl: string;
+}
+
+export interface TotpSetupConfirmRequest {
+  /** First TOTP code from the authenticator, confirming the user scanned the QR. */
+  code: string;
+}
+
+export interface TotpSetupConfirmResponse {
+  /** Single-use recovery codes. Displayed ONCE — never returned again. */
+  recoveryCodes: string[];
+}
+
+export interface TotpDisableRequest {
+  /** Re-confirm password before destructive 2FA action. */
+  password: string;
+  /** Current TOTP code or unused recovery code. */
+  code: string;
+}
+
+export interface TotpRecoveryRegenerateRequest {
+  password: string;
+  /** Must be a fresh TOTP code (NOT a recovery code) — prevents a single leaked recovery from draining the rest. */
+  code: string;
+}
+
+export interface TotpStatusResponse {
+  /** TOTP fully verified and active. */
+  enabled: boolean;
+  /** Setup initiated but confirm() not yet completed. */
+  hasPendingSetup: boolean;
+  /** User has at least one unused recovery code. */
+  hasRecoveryCodes: boolean;
+}
+
+export interface TotpDisableResponse {
+  success: true;
 }
 
 export interface CreateSpaceRequest {

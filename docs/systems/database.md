@@ -289,6 +289,35 @@ PK: userId
 
 ---
 
+## Two-Factor Authentication Tables (issue #182)
+
+### user_totp
+PK: userId (one enrollment per user; re-enrolling replaces the row)
+| Column | Type | Default | Notes |
+|--------|------|---------|-------|
+| userId | text PK | | FK → users.id CASCADE |
+| secret | text NOT NULL | | AES-256-GCM ciphertext envelope `base64(iv):base64(ct):base64(tag)`. Plaintext never persisted. |
+| algorithm | text NOT NULL | `'SHA1'` | RFC 6238 §5.1 default |
+| digits | integer NOT NULL | 6 | RFC 6238 §5.1 default |
+| period | integer NOT NULL | 30 | Seconds per step |
+| verifiedAt | integer | | NULL = setup initiated but not yet confirmed. Set on first successful verify. |
+| lastUsedCounter | text NOT NULL | `'0'` | Bigint-as-string for replay protection (RFC 6238 §5.2). Updated to the matched counter on each TOTP login. |
+| createdAt | integer NOT NULL | | |
+| updatedAt | integer NOT NULL | | |
+
+### user_recovery_codes
+| Column | Type | Default | Notes |
+|--------|------|---------|-------|
+| id | text PK | | Snowflake |
+| userId | text NOT NULL | | FK → users.id CASCADE |
+| codeHash | text NOT NULL | | bcrypt(cost 12) of a 12-char base32 recovery code |
+| usedAt | integer | | NULL = unused; set on consumption (single-use) |
+| createdAt | integer NOT NULL | | |
+
+**Index:** `idx_user_recovery_codes_user_id` on `(userId)`.
+
+---
+
 ## Moderation Tables
 
 ### bans

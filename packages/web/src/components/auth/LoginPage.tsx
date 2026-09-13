@@ -8,9 +8,13 @@ import { SourceCodeLink } from '../ui/SourceCodeLink';
 export function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [retryAfter, setRetryAfter] = useState(0);
   const login = useAuthStore((s) => s.login);
+  const loginStep2 = useAuthStore((s) => s.loginStep2);
+  const cancel2fa = useAuthStore((s) => s.cancel2fa);
+  const pending2fa = useAuthStore((s) => s.pending2fa);
   const isLoading = useAuthStore((s) => s.isLoading);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -45,6 +49,28 @@ export function LoginPage() {
     e.preventDefault();
     setError('');
 
+    if (pending2fa) {
+      // Second step of the 2FA challenge.
+      const trimmed = code.trim();
+      if (!trimmed) {
+        setError('Enter your 2FA code or a recovery code');
+        return;
+      }
+      try {
+        await loginStep2(trimmed);
+        completeLogin();
+      } catch (err) {
+        if (err instanceof RateLimitError) {
+          setRetryAfter(err.retryAfter);
+          setError('');
+        } else {
+          setError(err instanceof Error ? err.message : 'Invalid code');
+          setCode('');
+        }
+      }
+      return;
+    }
+
     if (!username.trim()) {
       setError('Username is required');
       return;
@@ -56,11 +82,13 @@ export function LoginPage() {
 
     try {
       await login(username.trim(), password);
-      if (redirect && redirect.startsWith('/') && !redirect.startsWith('//')) {
-        navigate(redirect);
-      } else {
-        navigate('/channels/@me');
+      // If 2FA is required, the store now holds pending2fa; we render the
+      // 2FA prompt in the next paint instead of navigating away.
+      if (useAuthStore.getState().pending2fa) {
+        setCode('');
+        return;
       }
+      completeLogin();
     } catch (err) {
       if (err instanceof RateLimitError) {
         setRetryAfter(err.retryAfter);
@@ -71,6 +99,20 @@ export function LoginPage() {
     }
   };
 
+  const completeLogin = () => {
+    if (redirect && redirect.startsWith('/') && !redirect.startsWith('//')) {
+      navigate(redirect);
+    } else {
+      navigate('/channels/@me');
+    }
+  };
+
+  const handleCancel2fa = () => {
+    cancel2fa();
+    setCode('');
+    setError('');
+  };
+
   const isDisabled = isLoading || retryAfter > 0;
 
   return (
@@ -78,8 +120,14 @@ export function LoginPage() {
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(124,108,246,0.06)_0%,transparent_50%)]" />
       <div className="w-full max-w-[480px] bg-surface-elevated rounded-md p-8 shadow-elevation-high relative z-10">
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-txt-primary">Welcome back!</h1>
-          <p className="text-txt-tertiary mt-1">We're so excited to see you again!</p>
+          <h1 className="text-2xl font-bold text-txt-primary">
+            {pending2fa ? 'Two-factor authentication' : 'Welcome back!'}
+          </h1>
+          <p className="text-txt-tertiary mt-1">
+            {pending2fa
+              ? `Enter the 6-digit code from your authenticator app for ${pending2fa.username}, or a recovery code.`
+              : "We're so excited to see you again!"}
+          </p>
         </div>
 
         <form onSubmit={handleSubmit}>
@@ -96,32 +144,58 @@ export function LoginPage() {
             </div>
           )}
 
-          <div className="mb-5">
-            <label className="block text-xs font-bold text-txt-secondary uppercase mb-2">
-              Username <span className="text-txt-danger">*</span>
-            </label>
-            <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="input-standard w-full py-2.5"
-              autoFocus
-              autoComplete="username"
-            />
-          </div>
+          {!pending2fa && (
+            <>
+              <div className="mb-5">
+                <label className="block text-xs font-bold text-txt-secondary uppercase mb-2">
+                  Username <span className="text-txt-danger">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="input-standard w-full py-2.5"
+                  autoFocus
+                  autoComplete="username"
+                />
+              </div>
 
-          <div className="mb-5">
-            <label className="block text-xs font-bold text-txt-secondary uppercase mb-2">
-              Password <span className="text-txt-danger">*</span>
-            </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="input-standard w-full py-2.5"
-              autoComplete="current-password"
-            />
-          </div>
+              <div className="mb-5">
+                <label className="block text-xs font-bold text-txt-secondary uppercase mb-2">
+                  Password <span className="text-txt-danger">*</span>
+                </label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="input-standard w-full py-2.5"
+                  autoComplete="current-password"
+                />
+              </div>
+            </>
+          )}
+
+          {pending2fa && (
+            <div className="mb-5">
+              <label className="block text-xs font-bold text-txt-secondary uppercase mb-2">
+                Authentication code <span className="text-txt-danger">*</span>
+              </label>
+              <input
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\s+/g, ''))}
+                className="input-standard w-full py-2.5 text-center tracking-[0.4em] text-lg font-mono"
+                placeholder="123456"
+                maxLength={12}
+                autoFocus
+              />
+              <p className="mt-2 text-xs text-txt-tertiary">
+                Lost your device? Use one of your recovery codes instead — each is single-use.
+              </p>
+            </div>
+          )}
 
           <button
             type="submit"
@@ -130,17 +204,30 @@ export function LoginPage() {
           >
             {retryAfter > 0
               ? `Try again in ${retryAfter}s`
-              : isLoading
-                ? 'Logging in...'
-                : 'Log In'}
+              : pending2fa
+                ? (isLoading ? 'Verifying...' : 'Verify')
+                : (isLoading ? 'Logging in...' : 'Log In')}
           </button>
 
-          <p className="mt-3 text-sm text-txt-tertiary">
-            Need an account?{' '}
-            <Link to={`/register${redirect ? `?redirect=${encodeURIComponent(redirect)}` : ''}`} className="text-accent-primary hover:underline">
-              Register
-            </Link>
-          </p>
+          {pending2fa && (
+            <button
+              type="button"
+              onClick={handleCancel2fa}
+              disabled={isLoading}
+              className="w-full mt-2 py-2 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
+          )}
+
+          {!pending2fa && (
+            <p className="mt-3 text-sm text-txt-tertiary">
+              Need an account?{' '}
+              <Link to={`/register${redirect ? `?redirect=${encodeURIComponent(redirect)}` : ''}`} className="text-accent-primary hover:underline">
+                Register
+              </Link>
+            </p>
+          )}
         </form>
 
         {instanceInfo && (

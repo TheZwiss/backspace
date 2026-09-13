@@ -6,6 +6,7 @@ import { useSpaceStore } from '../../../stores/spaceStore';
 import { Avatar } from '../../ui/Avatar';
 import { ImageCropModal } from '../../ui/ImageCropModal';
 import { DeleteAccountModal } from '../DeleteAccountModal';
+import { TwoFactorAuthSection } from '../../auth/TwoFactorAuthSection';
 import { api } from '../../../api/client';
 import { useTransferStore } from '../../../stores/transferStore';
 import { waitForTransferAttachment } from '../../../utils/waitForTransfer';
@@ -754,6 +755,14 @@ export function AccountPanel() {
             {passwordLoading ? 'Changing...' : 'Change Password'}
           </button>
         </form>
+      </div>
+
+      {/* ── Two-Factor Authentication (issue #182) ── */}
+      <div>
+        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">Security</div>
+        <div className="rounded-lg bg-surface-input/40 border border-white/[0.04] p-3.5">
+          <TwoFactorAuthSection />
+        </div>
       </div>
 
       {/* ── Danger Zone ── */}

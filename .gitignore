@@ -12,6 +12,17 @@ packages/shared/dist/
 packages/desktop/dist/
 packages/desktop/dist-electron/
 
+# Transient tooling scratch (vitest/tsc/drizzle-kit redirections)
+.vitest-out*.txt
+.vitest-final.txt
+.tsc-out*.txt
+.tscc-out*.txt
+.drizzle-out.txt
+.pnpm-out.txt
+.pnpm-types.txt
+.run-totp-tests.ps1
+
+
 # Data
 data/
 *.db

@@ -374,6 +374,66 @@ When a user changes their password on their home instance, `authStore.changePass
 
 ---
 
+## 5b. Two-Factor Authentication (issue #182)
+
+**Source files:**
+- `packages/server/src/utils/totp.ts` — RFC 6238 implementation, AES-256-GCM secret-at-rest encryption, bcrypt recovery-code hashing, RFC 4648 base32 codec
+- `packages/server/src/routes/totp.ts` — Setup/disable/regenerate/status endpoints with federation guard
+- `packages/server/src/db/schema.ts` — `user_totp`, `user_recovery_codes` tables
+- `packages/server/drizzle/0011_two_factor_auth.sql` — migration
+
+**Threat model:**
+- Server DB compromise: secrets are AES-256-GCM encrypted at rest with a key derived from `JWT_SECRET` (SHA-256). Plaintext never persisted.
+- Stolen session: setup/replace/disable/regenerate all require password re-confirmation.
+- Code leak (e.g. shoulder-surfing): rate-limited per endpoint; recovery codes are single-use.
+- Replay: `last_used_counter` column tracks the highest accepted counter; codes with counter ≤ last seen are rejected silently.
+- Federation: federated accounts (non-detached) manage 2FA on their home instance. Detached accounts (sovereign local) may enable locally.
+
+### Endpoint surface
+
+| Endpoint | Auth | Purpose |
+|---|---|---|
+| `POST /api/auth/totp/setup/initiate` | JWT | Begin enrollment — generate secret, encrypt, store with `verified_at = NULL`. Returns `{ secret, otpauthUrl }` (one-time display). |
+| `POST /api/auth/totp/setup/confirm` | JWT | Verify first TOTP code, set `verified_at`, generate 10 bcrypt-hashed recovery codes. Returns `{ recoveryCodes }` (one-time). Rate limit 10/15min. |
+| `POST /api/auth/totp/disable` | JWT | Requires `password` + valid `code`. Deletes both tables. Rate limit 5/15min. |
+| `POST /api/auth/totp/recovery-codes/regenerate` | JWT | Requires `password` + **TOTP** code (NOT recovery — a leaked recovery code cannot drain the rest). Rotates the codes. Rate limit 5/15min. |
+| `GET /api/auth/totp/status` | JWT | Returns `{ enabled, hasPendingSetup, hasRecoveryCodes }` for the Settings UI. |
+
+### Login flow integration
+
+`POST /api/auth/login` accepts an optional `code` field. After password verification succeeds, for **local** and **detached** users only (not federated), the server checks for a verified `user_totp` enrollment:
+
+1. **No enrollment** → proceed to JWT.
+2. **Enrollment, no code provided** → HTTP 200 with `{ requires2fa: true, message: '...' }`. NOT an HTTP error — the client should re-submit with the code.
+3. **Enrollment, code provided** → try TOTP first, then recovery codes (single-use, marked `usedAt` on success). On TOTP success, persist the new `lastUsedCounter` for replay protection. On either success, proceed to JWT. On either failure, return HTTP 401 with the generic "Invalid username or password" message — **do not leak whether 2FA is enabled**.
+
+### Federation safety
+
+The `assert2faLocalAccount` guard in `routes/totp.ts` rejects:
+
+- **Federated accounts** (`homeInstance` set, `federationHomeOrphaned !== 1`) — 403 "Federated accounts must manage 2FA on their home instance". Prevents two sources of truth.
+- **Replicated stubs** (`passwordHash === '!federation-replicated'`) — 403. Defensive — these cannot log in to begin with.
+
+Detached accounts (`federationHomeOrphaned === 1`) are sovereign LOCAL accounts after their home was reset/lost — they manage 2FA locally.
+
+### Secret encryption
+
+`secret` column stores `base64(iv):base64(ciphertext):base64(authTag)` per record. Encryption key = `SHA-256(JWT_SECRET)`, so a separate KMS is not required. Per-record 12-byte random IV. 16-byte GCM auth tag. Tampering with the auth tag throws on `decryptTotpSecret()`.
+
+### Recovery codes
+
+12-character base32 (12 × 5 = 60 bits from `randomBytes(8)`), bcrypt-hashed at cost 12 (same as passwords). Single-use — the row's `usedAt` is stamped on consumption; subsequent attempts against the same hash fail because the row is excluded from the unused-code query.
+
+### Configuration
+
+Issuer label: env `BACKSPACE_ISSUER` (default `'Backspace'`). Embedded in the otpauth URL.
+
+### Federation-self-heal interaction
+
+The federation login self-heal path (`/api/auth/login` → home instance) does NOT propagate a 2FA code to the home. A federated user with 2FA enabled on the home must complete the home's 2FA step there; this server treats the home's auth response as authoritative. Cross-instance 2FA coordination is out of scope for issue #182 and should be tracked separately.
+
+---
+
 ## 6. Account Deletion
 
 ### Self-Deletion

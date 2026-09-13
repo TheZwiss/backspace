@@ -22,6 +22,7 @@
     "@sapphi-red/web-noise-suppressor": "^0.3.5",
     "idb": "^8.0.3",
     "livekit-client": "^2.9.0",
+    "qrcode": "^1.5.4",
     "prism-react-renderer": "^2.4.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

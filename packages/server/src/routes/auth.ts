@@ -1,8 +1,9 @@
 import type { FastifyInstance } from 'fastify';
-import { eq, or, lt } from 'drizzle-orm';
+import { eq, or, lt, and, isNull } from 'drizzle-orm';
 import { randomBytes } from 'node:crypto';
 import { getDb, schema } from '../db/index.js';
 import { hashPassword, verifyPassword, signJwt, authenticate } from '../utils/auth.js';
+import { verifyTotp, decryptTotpSecret, verifyRecoveryCode } from '../utils/totp.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { config } from '../config.js';
 import type { RegisterRequest, LoginRequest, AuthResponse } from '@backspace/shared';
@@ -360,7 +361,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       },
     },
   }, async (request, reply) => {
-    const { username, password } = request.body;
+    const { username, password, code } = request.body;
 
     if (!username || typeof username !== 'string') {
       return reply.code(400).send({ error: 'Username is required', statusCode: 400 });
@@ -379,6 +380,74 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
     if (user.isDeleted) {
       return reply.code(401).send({ error: 'This account has been deleted', statusCode: 401 });
+    }
+
+    // ─── 2FA pre-check (issue #182) ────────────────────────────────────────
+    // We check AFTER password validity is established but BEFORE we expose the
+    // JWT. Federated users (non-detached) skip this — 2FA for them is the home
+    // instance's responsibility. Detached accounts (federationHomeOrphaned=1)
+    // behave as sovereign LOCAL accounts and DO go through 2FA here.
+    //
+    // Flow:
+    //   - User has a verified TOTP enrollment → code required.
+    //   - code missing       → 200 with `{ requires2fa: true }` (NOT an error).
+    //   - code provided, ok  → proceed to JWT.
+    //   - code provided, bad → 401 (same surface as wrong password to avoid
+    //                            leaking whether the enrollment exists).
+    const isLocalEligible = user.homeInstance === null || user.federationHomeOrphaned === 1;
+    if (isLocalEligible) {
+      const totpRow = db.select().from(schema.userTotp)
+        .where(eq(schema.userTotp.userId, user.id))
+        .get();
+      if (totpRow && totpRow.verifiedAt !== null) {
+        const presentedCode = typeof code === 'string' ? code.trim() : '';
+        if (presentedCode.length === 0) {
+          // Don't reveal whether the user has 2FA — return the same surface
+          // shape as a normal login, but flag requires2fa for the client.
+          return reply.code(200).send({
+            requires2fa: true,
+            message: 'Two-factor authentication code required',
+          });
+        }
+
+        // Try TOTP first.
+        const decrypted = decryptTotpSecret(totpRow.secret);
+        const totpResult = verifyTotp(decrypted, presentedCode, totpRow.period, totpRow.digits, {
+          lastUsedCounter: Number(totpRow.lastUsedCounter),
+        });
+        let passed = totpResult.valid;
+
+        // On TOTP success, persist the new lastUsedCounter to defeat replays.
+        if (passed && totpResult.counter !== null) {
+          db.update(schema.userTotp)
+            .set({ lastUsedCounter: totpResult.counter.toString(), updatedAt: Date.now() })
+            .where(eq(schema.userTotp.userId, user.id))
+            .run();
+        }
+
+        // If TOTP didn't match, try as a recovery code (single-use).
+        if (!passed) {
+          const recoveryRows = db.select({ id: schema.userRecoveryCodes.id, codeHash: schema.userRecoveryCodes.codeHash })
+            .from(schema.userRecoveryCodes)
+            .where(and(eq(schema.userRecoveryCodes.userId, user.id), isNull(schema.userRecoveryCodes.usedAt)))
+            .all();
+          for (const row of recoveryRows) {
+            if (await verifyRecoveryCode(presentedCode, row.codeHash)) {
+              db.update(schema.userRecoveryCodes)
+                .set({ usedAt: Date.now() })
+                .where(eq(schema.userRecoveryCodes.id, row.id))
+                .run();
+              passed = true;
+              break;
+            }
+          }
+        }
+
+        if (!passed) {
+          // Same generic 401 surface as a wrong password — don't leak 2FA status.
+          return reply.code(401).send({ error: 'Invalid username or password', statusCode: 401 });
+        }
+      }
     }
 
     const validPassword = await verifyPassword(password, user.passwordHash);
