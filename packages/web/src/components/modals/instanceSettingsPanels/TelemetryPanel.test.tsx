@@ -42,9 +42,12 @@ describe('TelemetryPanel', () => {
     const set = vi.spyOn(api.admin.telemetry, 'set').mockResolvedValue(on);
     render(<TelemetryPanel />);
     await screen.findByText('Off');
-    await userEvent.click(screen.getByRole('switch'));
+    // While off, the invitation stands in for the switch.
+    await userEvent.click(screen.getByRole('button', { name: 'Hiii 👋' }));
     expect(set).toHaveBeenCalledWith(true);
     await waitFor(() => expect(screen.getByText('On')).toBeInTheDocument());
+    // Once on, the switch is what turns it back off.
+    expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'true');
   });
 
   it('shows the last error', async () => {
@@ -63,7 +66,9 @@ describe('TelemetryPanel', () => {
     vi.spyOn(api.admin.telemetry, 'get').mockResolvedValue({ enabled: null, id: null, lastDay: null, lastError: null });
     render(<TelemetryPanel />);
     expect(await screen.findByText('Never asked')).toBeInTheDocument();
-    expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'false');
+    // No switch sitting in its off position: an unanswered instance is invited.
+    expect(screen.queryByRole('switch')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Hiii 👋' })).toBeInTheDocument();
   });
 
   it('keeps the toggle on the server state when saving fails', async () => {
@@ -71,8 +76,8 @@ describe('TelemetryPanel', () => {
     vi.spyOn(api.admin.telemetry, 'set').mockRejectedValue(new Error('Nope'));
     const { container } = render(<TelemetryPanel />);
     await screen.findByText('Off');
-    await userEvent.click(screen.getByRole('switch'));
-    await waitFor(() => expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'false'));
+    await userEvent.click(screen.getByRole('button', { name: 'Hiii 👋' }));
+    await waitFor(() => expect(screen.queryByRole('switch')).not.toBeInTheDocument());
     expect(screen.getByText('Off')).toBeInTheDocument();
     expect(moodOf(container), 'the scene lit up for a save the server refused').toBe('farewell');
   });
@@ -110,14 +115,14 @@ describe('TelemetryPanel', () => {
     expect(moodOf(waiting.container)).toBe('idle');
   });
 
-  it('lights the beam when the switch goes on', async () => {
+  it('lights the beam when the answer goes on', async () => {
     vi.spyOn(api.admin.telemetry, 'get').mockResolvedValue(off);
     vi.spyOn(api.admin.telemetry, 'set').mockResolvedValue(on);
     const { container } = render(<TelemetryPanel />);
     await screen.findByText('Off');
     expect(moodOf(container)).toBe('farewell');
 
-    await userEvent.click(screen.getByRole('switch'));
+    await userEvent.click(screen.getByRole('button', { name: 'Hiii 👋' }));
 
     await waitFor(() => expect(screen.getByText('On')).toBeInTheDocument());
     expect(moodOf(container)).toBe('happy');

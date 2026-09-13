@@ -103,7 +103,7 @@ export async function reporterTick(deps: ReporterDeps): Promise<'sent' | 'skippe
     return 'sent';
   }
   if (status === 410) {
-    setTelemetryEnabled(deps.sqlite, false, today);
+    setTelemetryEnabled(deps.sqlite, false);
     deps.log.info('[telemetry] the receiver reports the service as retired, reporting switched off');
     return 'retired';
   }

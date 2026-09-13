@@ -774,11 +774,11 @@ fi
 #
 # The transition mirrors setTelemetryEnabled() in
 # packages/server/src/telemetry/state.ts: turning on mints an id if the
-# instance never had one and stamps today (UTC) as the last reported day so
-# the first ping goes out tomorrow; turning on an instance that is already on
-# changes nothing, because restamping the day would skip that day's ping;
-# turning off keeps the id for a later re-enable and clears the last day and
-# the last error. Nothing here can fail the install.
+# instance never had one, turning on an instance that is already on changes
+# nothing, and turning off keeps the id for a later re-enable. Neither branch
+# touches telemetry_last_day: that column is the reporter's record of what it
+# sent, and writing it here would cost the instance a day's ping. Nothing here
+# can fail the install.
 if [[ -n "${TELEMETRY:-}" ]]; then
   if [[ "$TELEMETRY" != "on" && "$TELEMETRY" != "off" ]]; then
     error "TELEMETRY must be 'on' or 'off' (got '${TELEMETRY}'). Leaving the usage ping unset."
@@ -794,13 +794,12 @@ if [[ -n "${TELEMETRY:-}" ]]; then
       const row = db.prepare("SELECT telemetry_enabled FROM instance_settings WHERE id = 1").get();
       if (!row) { db.close(); console.error("No instance_settings row"); process.exit(1); }
       const now = Date.now();
-      const today = new Date().toISOString().slice(0, 10);
       let result;
       if (process.env.BS_TELEMETRY === "on") {
-        const changes = db.prepare("UPDATE instance_settings SET telemetry_enabled = 1, telemetry_id = COALESCE(telemetry_id, ?), telemetry_last_day = ?, telemetry_last_error = NULL, updated_at = ? WHERE id = 1 AND (telemetry_enabled IS NULL OR telemetry_enabled = 0)").run(crypto.randomUUID(), today, now).changes;
-        result = changes === 1 ? "on, the first ping goes out tomorrow" : "already on, left as it is";
+        const changes = db.prepare("UPDATE instance_settings SET telemetry_enabled = 1, telemetry_id = COALESCE(telemetry_id, ?), telemetry_last_error = NULL, updated_at = ? WHERE id = 1 AND (telemetry_enabled IS NULL OR telemetry_enabled = 0)").run(crypto.randomUUID(), now).changes;
+        result = changes === 1 ? "on, the first ping goes out at the next slot" : "already on, left as it is";
       } else {
-        db.prepare("UPDATE instance_settings SET telemetry_enabled = 0, telemetry_last_day = NULL, telemetry_last_error = NULL, updated_at = ? WHERE id = 1").run(now);
+        db.prepare("UPDATE instance_settings SET telemetry_enabled = 0, telemetry_last_error = NULL, updated_at = ? WHERE id = 1").run(now);
         result = "off, nothing is sent";
       }
       db.close();

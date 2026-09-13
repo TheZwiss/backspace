@@ -383,7 +383,10 @@ It fails on:
    mechanism for a surface that has to land untranslated for a while.
    `node scripts/check-i18n.mjs --write-pending` regenerates it from the
    current tree. A line that is a false positive carries
-   `// i18n-check: allow-literal` on the line above.
+   `// i18n-check: allow-literal` on the line above. Files under
+   `packages/web/src/dev/` are exempt from this rule alone: each is the entry
+   of a design workbench page that the app never imports, and their copy
+   addresses whoever is building the component rather than a user.
 9. Translation markup that differs from English, or a paired HTML void tag
    (such as `<link>...</link>`) used as a `Trans` component wrapper. Void tags
    are parsed as empty HTML elements, so wrapper components use distinctive

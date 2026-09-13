@@ -40,32 +40,42 @@ export function readTelemetryState(sqlite: Database.Database): TelemetryStatus {
 /**
  * The single on/off transition. The id is minted once, the first time the
  * instance is switched on, and kept for the life of the install: switching off
- * stops the pings and clears the bookkeeping, switching on again reuses the
- * same id. A stable id is what Home Assistant and Grafana do, and it keeps a
- * re-enabled instance from looking like a new one to the receiver, restarting
- * its two-days-in-thirty qualification and moving its slot minute.
+ * stops the pings, switching on again reuses the same id. A stable id is what
+ * Home Assistant and Grafana do, and it keeps a re-enabled instance from
+ * looking like a new one to the receiver, restarting its two-days-in-thirty
+ * qualification and moving its slot minute.
  *
- * Switching on stamps today as the last reported day so the first ping goes
- * out tomorrow at the slot, never within the minute.
+ * Neither branch writes `telemetry_last_day`. That column records what the
+ * reporter actually sent and belongs to `recordTelemetrySuccess` alone.
+ * Stamping it here to hold the first ping until tomorrow cost a whole day of
+ * data every time an admin flipped the switch twice, and bought nothing: the
+ * receiver's primary key is `(instance, day)` and it upserts, so a repeated
+ * ping for a day it already holds overwrites that row instead of adding one.
+ * Leaving the column alone means a toggle after the day's ping stays quiet
+ * because the day is already stamped, a toggle before it still reports at the
+ * slot, and an instance switched on after its slot has passed reports within
+ * the minute rather than staying dark until tomorrow.
  *
- * Enabling an instance that is already on changes nothing. Restamping the
- * last day there would skip that day's ping. A repeated admin save and a
- * re-run of install.sh with TELEMETRY=on both take this path.
+ * The pending error is cleared on both branches: an admin working the switch
+ * is asking for another attempt, and the reporter's one-attempt-per-day guard
+ * reads that column.
+ *
+ * Enabling an instance that is already on changes nothing at all. A repeated
+ * admin save and a re-run of install.sh with TELEMETRY=on both take this path.
  */
 export function setTelemetryEnabled(
   sqlite: Database.Database,
   enabled: boolean,
-  today: string,
 ): TelemetryStatus {
   const current = readTelemetryState(sqlite);
   if (enabled && current.enabled === true) return current;
   if (enabled) {
     sqlite.prepare(
-      'UPDATE instance_settings SET telemetry_enabled = 1, telemetry_id = COALESCE(telemetry_id, ?), telemetry_last_day = ?, telemetry_last_error = NULL, updated_at = ? WHERE id = 1',
-    ).run(crypto.randomUUID(), today, Date.now());
+      'UPDATE instance_settings SET telemetry_enabled = 1, telemetry_id = COALESCE(telemetry_id, ?), telemetry_last_error = NULL, updated_at = ? WHERE id = 1',
+    ).run(crypto.randomUUID(), Date.now());
   } else {
     sqlite.prepare(
-      'UPDATE instance_settings SET telemetry_enabled = 0, telemetry_last_day = NULL, telemetry_last_error = NULL, updated_at = ? WHERE id = 1',
+      'UPDATE instance_settings SET telemetry_enabled = 0, telemetry_last_error = NULL, updated_at = ? WHERE id = 1',
     ).run(Date.now());
   }
   return readTelemetryState(sqlite);

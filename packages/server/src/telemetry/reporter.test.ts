@@ -59,10 +59,9 @@ describe('reporterTick', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('does not send on the day it was enabled, sends the next day after the slot', async () => {
-    setTelemetryEnabled(db, true, '2026-09-06');
+  it('waits for the slot and then sends, on the day it was enabled', async () => {
+    setTelemetryEnabled(db, true);
     const id = readTelemetryState(db).id!;
-    expect(await reporterTick(deps('2026-09-06T23:59:00Z'))).toBe('skipped');
     const slot = slotMinute(id);
     const before = new Date(Date.UTC(2026, 8, 7, 0, Math.max(slot - 1, 0))).toISOString();
     const after = new Date(Date.UTC(2026, 8, 7, 0, slot)).toISOString();
@@ -78,35 +77,35 @@ describe('reporterTick', () => {
   });
 
   it('does not double the slash when the endpoint carries one', async () => {
-    setTelemetryEnabled(db, true, '2026-09-06');
+    setTelemetryEnabled(db, true);
     const d = { ...deps('2026-09-08T23:59:59Z'), endpoint: 'https://hello.test/' };
     expect(await reporterTick(d)).toBe('sent');
     expect(fetchMock.mock.calls[0]?.[0]).toBe('https://hello.test/v1/ping');
   });
 
   it('records a failure and leaves lastDay alone', async () => {
-    setTelemetryEnabled(db, true, '2026-09-06');
+    setTelemetryEnabled(db, true);
     expect(await reporterTick(deps('2026-09-08T23:59:59Z', 503))).toBe('failed');
-    expect(readTelemetryState(db)).toMatchObject({ lastDay: '2026-09-06', lastError: { day: '2026-09-08', status: 503 } });
+    expect(readTelemetryState(db)).toMatchObject({ lastDay: null, lastError: { day: '2026-09-08', status: 503 } });
   });
 
   it('makes only one attempt on a day a ping failed', async () => {
-    setTelemetryEnabled(db, true, '2026-09-06');
+    setTelemetryEnabled(db, true);
     expect(await reporterTick(deps('2026-09-08T23:59:00Z', 503))).toBe('failed');
     expect(await reporterTick(deps('2026-09-08T23:59:59Z', 204))).toBe('skipped');
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(readTelemetryState(db).lastDay).toBe('2026-09-06');
+    expect(readTelemetryState(db).lastDay).toBeNull();
   });
 
   it('turns itself off on 410', async () => {
-    setTelemetryEnabled(db, true, '2026-09-06');
+    setTelemetryEnabled(db, true);
     expect(await reporterTick(deps('2026-09-08T23:59:59Z', 410))).toBe('retired');
     expect(readTelemetryState(db)).toMatchObject({ enabled: false, lastDay: null, lastError: null });
     expect(log.info).toHaveBeenCalledTimes(1);
   });
 
   it('treats a thrown fetch as a failure with status 0', async () => {
-    setTelemetryEnabled(db, true, '2026-09-06');
+    setTelemetryEnabled(db, true);
     const d = deps('2026-09-08T23:59:59Z');
     (d.fetch as unknown as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('offline'));
     expect(await reporterTick(d)).toBe('failed');
@@ -114,7 +113,7 @@ describe('reporterTick', () => {
   });
 
   it('records a status-0 failure when the payload cannot be built', async () => {
-    setTelemetryEnabled(db, true, '2026-09-06');
+    setTelemetryEnabled(db, true);
     // A build that throws (a query against a database in an unexpected state)
     // must burn the day like any other failure. Escaping the tick instead
     // would leave lastError unset and the minute timer would retry the same
@@ -127,10 +126,10 @@ describe('reporterTick', () => {
   });
 
   it('records nothing when telemetry is switched off while the ping is in flight', async () => {
-    setTelemetryEnabled(db, true, '2026-09-06');
+    setTelemetryEnabled(db, true);
     const d = deps('2026-09-08T23:59:59Z');
     (d.fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async () => {
-      setTelemetryEnabled(db, false, '2026-09-08');
+      setTelemetryEnabled(db, false);
       return new Response(null, { status: 204 });
     });
     expect(await reporterTick(d)).toBe('skipped');
@@ -141,18 +140,20 @@ describe('reporterTick', () => {
   it('records the outcome when telemetry is switched off and on again while the ping is in flight', async () => {
     // The id survives the round trip, so the row the ping came from is still
     // the current row and its bookkeeping applies.
-    const id = setTelemetryEnabled(db, true, '2026-09-06').id;
+    const id = setTelemetryEnabled(db, true).id;
     const d = deps('2026-09-08T23:59:59Z');
     (d.fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async () => {
-      setTelemetryEnabled(db, false, '2026-09-08');
-      setTelemetryEnabled(db, true, '2026-09-08');
+      setTelemetryEnabled(db, false);
+      setTelemetryEnabled(db, true);
       return new Response(null, { status: 503 });
     });
     expect(await reporterTick(d)).toBe('failed');
     expect(readTelemetryState(db)).toMatchObject({
       enabled: true,
       id,
-      lastDay: '2026-09-08',
+      // The toggle wrote no day of its own, so the only bookkeeping left is
+      // the failure the tick recorded.
+      lastDay: null,
       lastError: { day: '2026-09-08', status: 503 },
     });
   });

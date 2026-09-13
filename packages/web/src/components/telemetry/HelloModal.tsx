@@ -2,6 +2,8 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TelemetryPayload } from '@backspace/shared';
 import { Modal } from '../ui/Modal';
+import { HiButton } from './answers/HiButton';
+import { SilenceButton } from './answers/SilenceButton';
 import { HelloScene, type SceneMood } from './scene/HelloScene';
 import { PayloadPreview } from './PayloadPreview';
 
@@ -19,10 +21,15 @@ interface HelloModalProps {
 type Stage = 'ask' | 'saving' | 'yes' | 'no';
 
 /**
- * One class string for every button in the ask. The two answers must not
- * differ in size, weight or colour, so neither of them is the nudged one.
+ * The button that closes the ask once it has been answered. The two answers
+ * themselves are HiButton and SilenceButton, each illustrated as its own
+ * scene — a launch and a derelict. They share the row's height and flex basis
+ * so the pair still lines up, and both keep a full-contrast label, a visible
+ * focus ring and an unreduced hit area. Whatever a label says, it must name
+ * the answer it gives: no button here may read as "carry on", because that
+ * collects a yes from someone who never answered.
  */
-const BUTTON = 'flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 bg-surface-elevated hover:bg-interactive-selected text-txt-primary';
+const CLOSE_BUTTON = 'w-full py-2.5 rounded-lg text-sm font-medium transition-colors bg-surface-elevated hover:bg-interactive-selected text-txt-primary';
 
 /**
  * The one-time ask. The answer is saved before anything animates, so the
@@ -86,7 +93,7 @@ export function HelloModal({ open, onAnswer, onDismiss, preview, previewFailed =
             <>
               <h2 id={headingId} className="text-lg font-semibold text-txt-primary">{t('yes.title')}</h2>
               <p>{t('yes.body')}</p>
-              <button type="button" className={`${BUTTON} w-full`} onClick={close}>
+              <button type="button" className={CLOSE_BUTTON} onClick={close}>
                 {t('yes.close')}
               </button>
             </>
@@ -95,7 +102,7 @@ export function HelloModal({ open, onAnswer, onDismiss, preview, previewFailed =
             <>
               <h2 id={headingId} className="text-lg font-semibold text-txt-primary">{t('no.title')}</h2>
               <p>{t('no.body')}</p>
-              <button type="button" className={`${BUTTON} w-full`} onClick={close}>
+              <button type="button" className={CLOSE_BUTTON} onClick={close}>
                 {t('no.close')}
               </button>
             </>
@@ -110,22 +117,12 @@ export function HelloModal({ open, onAnswer, onDismiss, preview, previewFailed =
               <p>{t('ask.p3')}</p>
               {failed && <p role="alert" className="text-accent-rose">{t('ask.error')}</p>}
               <div className="flex gap-3">
-                <button
-                  type="button"
-                  disabled={stage === 'saving'}
-                  className={BUTTON}
-                  onClick={() => { void answer(true); }}
-                >
+                <HiButton disabled={stage === 'saving'} onClick={() => { void answer(true); }}>
                   {t('ask.yes')}
-                </button>
-                <button
-                  type="button"
-                  disabled={stage === 'saving'}
-                  className={BUTTON}
-                  onClick={() => { void answer(false); }}
-                >
+                </HiButton>
+                <SilenceButton disabled={stage === 'saving'} onClick={() => { void answer(false); }}>
                   {t('ask.no')}
-                </button>
+                </SilenceButton>
               </div>
               <div className="flex items-center justify-between gap-3 text-xs text-txt-tertiary">
                 <span aria-live="polite">{stage === 'saving' ? t('ask.saving') : ''}</span>
