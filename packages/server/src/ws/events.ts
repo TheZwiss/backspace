@@ -2425,7 +2425,6 @@ function handleVoiceMove(event: Record<string, unknown>, userId: string): void {
   connectionManager.leaveRoom(oldChannelId, targetUserId);
 
   // Broadcast leave from old channel
-  const targetRoom = connectionManager.getRoom(targetChannelId);
   connectionManager.sendToSpace(meta.spaceId, {
     type: 'voice_state_update',
     channelId: oldChannelId,
@@ -2436,6 +2435,12 @@ function handleVoiceMove(event: Record<string, unknown>, userId: string): void {
   // Lazy-create target room and join
   connectionManager.createRoom(targetChannelId, 'space', { type: 'space', spaceId: meta.spaceId });
   connectionManager.joinRoom(targetChannelId, targetUserId);
+
+  // Read the room after the join: an empty voice channel has no room at all
+  // (leaveRoom tears space rooms down when the last participant leaves), so
+  // looking it up any earlier reports no duration for the channel this move
+  // just occupied.
+  const targetRoom = connectionManager.getRoom(targetChannelId);
 
   // Broadcast join to new channel
   connectionManager.sendToSpace(meta.spaceId, {

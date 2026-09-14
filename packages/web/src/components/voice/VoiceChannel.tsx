@@ -22,7 +22,11 @@ function VoiceChannelTimer({ observation }: { observation: VoiceChannelElapsed }
     <span
       className="flex flex-shrink-0 items-center gap-1 text-[11px] leading-none tabular-nums text-txt-tertiary"
       title={t('channelDuration', { duration })}
-      aria-label={t('channelDuration', { duration })}
+      // The row is a button, and a label on a child becomes part of that
+      // button's accessible name. A duration that ticks every second would
+      // rewrite the name of the channel row once a second, so the timer stays
+      // out of the name and keeps only its hover title.
+      aria-hidden="true"
       data-testid="voice-channel-timer"
     >
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
@@ -180,17 +184,9 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, canManag
               height="16"
               viewBox="0 0 24 24"
               fill="currentColor"
-              role="button"
-              tabIndex={0}
-              aria-label={t('common:labels.settings')}
+              aria-hidden="true"
               className="pointer-events-none absolute right-full mr-1 opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 text-txt-tertiary hover:text-txt-primary transition-opacity"
               onClick={(e) => {
-                e.stopPropagation();
-                onSettingsClick?.();
-              }}
-              onKeyDown={(e) => {
-                if (e.key !== 'Enter' && e.key !== ' ') return;
-                e.preventDefault();
                 e.stopPropagation();
                 onSettingsClick?.();
               }}

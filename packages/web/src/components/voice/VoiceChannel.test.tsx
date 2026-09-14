@@ -146,12 +146,36 @@ describe('VoiceChannel occupancy timer', () => {
     );
   });
 
-  it('opens channel settings from the keyboard without activating the channel row', () => {
+  it('opens channel settings without also activating the channel row', () => {
     const onSettingsClick = vi.fn();
-    renderChannel(true, onSettingsClick);
+    const onClick = vi.fn();
+    render(
+      <VoiceChannel
+        channelId="voice-1"
+        channelName="Voice"
+        onClick={onClick}
+        canManage
+        onSettingsClick={onSettingsClick}
+      />,
+    );
 
-    fireEvent.keyDown(screen.getByTestId('voice-channel-settings'), { key: 'Enter' });
+    fireEvent.click(screen.getByTestId('voice-channel-settings'));
 
     expect(onSettingsClick).toHaveBeenCalledOnce();
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it('keeps the ticking duration out of the accessible name of the channel row', () => {
+    useVoiceStore.setState({
+      voiceChannelElapsedSeconds: new Map([['voice-1', {
+        elapsedSeconds: 65,
+        observedAt: Date.now(),
+      }]]),
+    });
+
+    renderChannel(true);
+
+    expect(screen.getByTestId('voice-channel-timer')).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.getByRole('button', { name: 'Voice' })).toBeInTheDocument();
   });
 });
