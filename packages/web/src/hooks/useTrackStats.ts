@@ -12,6 +12,8 @@ export interface AudioTrackStat {
   key: string;
   direction: TrackDirection;
   source: TrackSource;
+  /** LiveKit identity of the publisher; the only safe key to match a track to a participant. */
+  participantIdentity: string | null;
   participantName: string | null;
   bitrate: number;
   codec: string | null;
@@ -23,6 +25,8 @@ export interface VideoTrackStat {
   key: string;
   direction: TrackDirection;
   source: TrackSource;
+  /** LiveKit identity of the publisher; the only safe key to match a track to a participant. */
+  participantIdentity: string | null;
   participantName: string | null;
   bitrate: number;
   codec: string | null;
@@ -69,6 +73,7 @@ export interface TrackStatsSnapshot {
 interface TrackIdentity {
   source: TrackSource;
   direction: TrackDirection;
+  participantIdentity: string | null;
   participantName: string | null;
 }
 
@@ -239,6 +244,7 @@ export function useTrackStats(enabled: boolean): TrackStatsSnapshot | null {
           identityMap.set(mst.id, {
             source: mapSource(pub.source),
             direction: 'send',
+            participantIdentity: null,
             participantName: null,
           });
         }
@@ -253,6 +259,7 @@ export function useTrackStats(enabled: boolean): TrackStatsSnapshot | null {
             identityMap.set(mst.id, {
               source: mapSource(pub.source),
               direction: 'recv',
+              participantIdentity: rp.identity,
               participantName: name,
             });
           }
@@ -333,6 +340,7 @@ export function useTrackStats(enabled: boolean): TrackStatsSnapshot | null {
                   key: ssrcKey,
                   direction: 'send',
                   source: identity.source,
+                  participantIdentity: null,
                   participantName: null,
                   bitrate,
                   codec,
@@ -381,6 +389,7 @@ export function useTrackStats(enabled: boolean): TrackStatsSnapshot | null {
                   key: ssrcKey,
                   direction: 'send',
                   source: identity.source,
+                  participantIdentity: null,
                   participantName: null,
                   bitrate,
                   codec,
@@ -492,6 +501,7 @@ export function useTrackStats(enabled: boolean): TrackStatsSnapshot | null {
                   key: ssrcKey,
                   direction: 'recv',
                   source: identity.source,
+                  participantIdentity: identity.participantIdentity,
                   participantName: identity.participantName,
                   bitrate,
                   codec,
@@ -531,6 +541,7 @@ export function useTrackStats(enabled: boolean): TrackStatsSnapshot | null {
                   key: ssrcKey,
                   direction: 'recv',
                   source: identity.source,
+                  participantIdentity: identity.participantIdentity,
                   participantName: identity.participantName,
                   bitrate,
                   codec,

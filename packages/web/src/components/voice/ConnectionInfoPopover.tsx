@@ -7,6 +7,7 @@ import { useFloatingPosition } from '../../hooks/useFloatingPosition';
 import { usePortalContainer } from '../../hooks/usePortalContainer';
 import i18n from '../../i18n';
 import { formatters } from '../../i18n/formatters';
+import { VOICE_HEALTH, healthBand, type HealthBand } from '../../utils/voiceHealth';
 import { useVoiceStore } from '../../stores/voiceStore';
 
 interface ConnectionInfoPopoverProps {
@@ -33,22 +34,22 @@ function formatLossPercent(pct: number): string {
   return i18n.t('common:units.percent', { value: formatters.formatNumber(Math.round(pct * 10) / 10) });
 }
 
+const BAND_COLORS: Record<HealthBand, string> = {
+  good: 'text-status-online',
+  warn: 'text-status-idle',
+  bad: 'text-txt-danger',
+};
+
 function pingColor(ms: number): string {
-  if (ms <= 80) return 'text-status-online';
-  if (ms <= 200) return 'text-status-idle';
-  return 'text-txt-danger';
+  return BAND_COLORS[healthBand(ms, VOICE_HEALTH.pingWarnMs, VOICE_HEALTH.pingBadMs)];
 }
 
 function lossColor(pct: number): string {
-  if (pct <= 1) return 'text-status-online';
-  if (pct <= 5) return 'text-status-idle';
-  return 'text-txt-danger';
+  return BAND_COLORS[healthBand(pct, VOICE_HEALTH.lossWarnPct, VOICE_HEALTH.lossBadPct)];
 }
 
 function jitterColor(ms: number): string {
-  if (ms <= 30) return 'text-status-online';
-  if (ms <= 80) return 'text-status-idle';
-  return 'text-txt-danger';
+  return BAND_COLORS[healthBand(ms, VOICE_HEALTH.jitterWarnMs, VOICE_HEALTH.jitterBadMs)];
 }
 
 function sourceLabel(source: string): string {

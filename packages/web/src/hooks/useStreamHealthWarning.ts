@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { VoiceConnectionQuality } from '../stores/voiceStore';
+import { VOICE_HEALTH } from '../utils/voiceHealth';
 
 export type StreamHealthWarning =
   | 'publisherNetwork'
@@ -29,9 +30,9 @@ export function classifyStreamHealth(sample: StreamHealthSample): StreamHealthWa
   const viewerBad = !sample.isLocal && (
     sample.localConnectionQuality === 'poor'
     || sample.localConnectionQuality === 'lost'
-    || (sample.packetLoss ?? 0) > 5
-    || (sample.jitter ?? 0) > 80
-    || (sample.freezeCountDelta ?? 0) > 0
+    || (sample.packetLoss ?? 0) > VOICE_HEALTH.lossBadPct
+    || (sample.jitter ?? 0) > VOICE_HEALTH.jitterBadMs
+    || (sample.freezeCountDelta ?? 0) >= VOICE_HEALTH.freezesBadPerSample
   );
 
   if (publisherBad && viewerBad) return 'unknown';

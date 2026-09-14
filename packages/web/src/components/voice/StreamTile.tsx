@@ -220,7 +220,10 @@ export function StreamTile({ tile, large, stats }: StreamTileProps) {
     track.source === 'screen_share'
     && (isLocal
       ? track.direction === 'send'
-      : track.direction === 'recv' && track.participantName === participant.username),
+      // Matched on LiveKit identity, never on username: a replicated federated
+      // user can share a username with a local one, and matching by name would
+      // attribute one participant's degradation to the other.
+      : track.direction === 'recv' && track.participantIdentity === participant.identity),
   );
   const healthCandidate = classifyStreamHealth({
     reconnecting: voiceConnectionStatus === 'reconnecting',

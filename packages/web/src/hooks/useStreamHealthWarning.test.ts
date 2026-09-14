@@ -19,6 +19,9 @@ describe('stream health warning', () => {
 
     expect(classifyStreamHealth({ ...base, isLocal: true, outboundReason: 'cpu' })).toBe('publisherCpu');
     expect(classifyStreamHealth({ ...base, packetLoss: 6 })).toBe('viewerNetwork');
+    // One freeze in a sample is ordinary (a layer switch, a throttled tab); sustained freezing is not.
+    expect(classifyStreamHealth({ ...base, freezeCountDelta: 1 })).toBeNull();
+    expect(classifyStreamHealth({ ...base, freezeCountDelta: 2 })).toBe('viewerNetwork');
     expect(classifyStreamHealth({
       ...base,
       publisherConnectionQuality: 'poor',
