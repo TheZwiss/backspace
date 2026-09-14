@@ -92,10 +92,20 @@ updates:
       # @types/node tracks the RUNTIME, not npm's latest. The image runs
       # node:20-slim and CI's baseline leg is Node 20, so types describing a
       # newer Node let code typecheck clean and fail at runtime. The two script
-      # packages sit on 24 for the same reason: match what runs them.
-      # Unblock: whenever a runtime moves, in that same PR.
+      # packages sit on 24 for the same reason: match what runs them
+      # (`engines: node >=22.18`, and their workflows use Node 24).
+      #
+      # This one is ignored OUTRIGHT, not just for majors, which is the
+      # exception to the rule stated above. Dependabot's npm updater resolves
+      # one version per dependency across the whole pnpm workspace and cannot
+      # express a per-package split, so even a PATCH bump to the server's
+      # Node 20 types rewrites every other manifest to match -- #216 quietly
+      # downgraded scripts/metrics and scripts/pr-triage from ^24.0.0 to
+      # ^20.19.43. Nothing catches that: the Node 20 types are a subset, so it
+      # compiles clean and CI goes green while every Node 22+ API those two are
+      # entitled to use silently becomes a type error.
+      # Unblock: whenever a runtime moves, in that same PR, per package.
       - dependency-name: "@types/node"
-        update-types: ["version-update:semver-major"]
 
       # jsdom stays on 28. jsdom 30 pulls undici 8 while the pnpm overrides in
       # the root package.json pin undici@^7, leaving undici 6, 7 and 8 in one
