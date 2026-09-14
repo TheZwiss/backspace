@@ -320,9 +320,15 @@ jobs:
           version: 10.34.3
 
       - name: Setup Node.js
+        # Matches .nvmrc, the CI matrix's upper leg and the node24 SDK the
+        # Flatpak build already packages this same app with. The desktop build
+        # toolchain has a Node 22 floor of its own -- @electron/fuses 2 declares
+        # `engines: >=22.12.0` -- so this job cannot drop back to 20 without
+        # violating it. This is the BUILD Node only; the shipped app runs on
+        # Electron's own bundled Node, which this does not touch.
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
 
       - name: Install dependencies
@@ -361,9 +367,12 @@ jobs:
         # order (fuses are flipped, then the bundle is sealed).
         #
         # `npx --no` is deliberate: it runs the @electron/fuses already pinned
-        # in this package's devDependencies (1.8.0) and hard-fails instead of
-        # reaching the registry. A bare `npx` would silently fetch 2.x, which
-        # is ESM-only and requires Node >= 22.12 — this job is on Node 20.
+        # in this package's devDependencies and hard-fails instead of reaching
+        # the registry. A bare `npx` would verify the shipped binaries with
+        # whatever version the registry happens to serve, which is exactly the
+        # coupling this check must not have: the CLI's "<Fuse> is <State>"
+        # lines are parsed below, and afterPack.js flips the fuses using the
+        # pinned copy of the same package.
         run: |
           set -euo pipefail
 

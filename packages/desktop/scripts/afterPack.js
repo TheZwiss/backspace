@@ -116,7 +116,12 @@ function cleanNativeModules(appDir, platform) {
  * @returns {Promise<void>}
  */
 async function flipElectronFuses(context, platform) {
-  const { flipFuses, FuseVersion, FuseV1Options } = require('@electron/fuses');
+  // `@electron/fuses` is ESM-only from v2 on, and this hook is CommonJS
+  // (packages/desktop/package.json declares no "type", and electron-builder
+  // loads the hook with require()). A dynamic import is the one form that
+  // works regardless: `require()` of an ESM module only resolves on Node
+  // >=20.19/22.12, and release.yml still builds the desktop app on Node 20.
+  const { flipFuses, FuseVersion, FuseV1Options } = await import('@electron/fuses');
 
   const ext = { darwin: '.app', mas: '.app', win32: '.exe', linux: '' }[platform] ?? '';
   // Mirrors electron-builder's own (newer) PlatformPackager#addElectronFuses

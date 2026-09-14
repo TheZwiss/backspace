@@ -43,7 +43,14 @@ Inspect a packaged build's fuse states with:
 pnpm --filter @backspace/desktop exec electron-fuses read --app /path/to/Backspace.app
 ```
 
-`@electron/fuses` is pinned to `^1.8.0`, not the current npm-"latest" `2.x` line — `2.x` (`2.0.0`+) requires Node `>=22.12.0` and is ESM-only (no `require()` support), which is incompatible with this repo's Node 20 pin (`package.json` `engines.node`, and `release.yml`'s `node-version: 20`). `1.8.0` is the last plain-CommonJS release with no Node-version floor beyond what this repo already requires, and its `flipFuses`/`FuseVersion`/`FuseV1Options` API is unchanged from the `2.x` line.
+`@electron/fuses` is on the `^2.1.3` line. It was held at `^1.8.0` while `release.yml`'s desktop `build` job ran on Node 20: `2.0.0` made the package ESM-only and declared `engines: >=22.12.0`, and `afterPack.js` is CommonJS, so a plain `require()` of it resolves only on Node `>=20.19`/`>=22.12`. Two things moved to lift that:
+
+- `afterPack.js` loads the package with `await import('@electron/fuses')` rather than `require()`. `flipElectronFuses()` was already `async`, and a dynamic import is the one form that works from CommonJS on every Node version, so the hook no longer depends on the `require(esm)` backport being present.
+- The desktop `build` job runs on Node 24, matching `.nvmrc`, the CI matrix's upper leg and the `org.freedesktop.Sdk.Extension.node24` SDK the Flatpak build already packages this same app with. That satisfies the package's own `engines` floor instead of working around it.
+
+This is the *build* Node only. The shipped app runs on the Node that Electron bundles, which none of this touches.
+
+The `flipFuses`/`FuseVersion`/`FuseV1Options` API is unchanged across the major, and so is the `read` CLI's `<Fuse> is <State>` output that `release.yml`'s verification step parses. `2.1.3` also carries a fix specific to how this hook calls it — `pathToFuseFile` now only treats a real `.app` bundle path as a bundle (electron/fuses#123), which is the darwin path `flipElectronFuses()` builds.
 
 ## Asar integrity — what's NOT enabled, and why
 
