@@ -32,6 +32,6 @@
     "electron": "^43.4.0",
     "electron-builder": "^26.15.3",
     "typescript": "^5.7.2",
-    "vitest": "^4.1.11"
+    "vitest": "^5.0.0"
   }
 }
