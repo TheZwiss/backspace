@@ -134,7 +134,7 @@ export function VoiceControls() {
         </button>
 
         <div className="min-w-0 flex-1">
-          <div className={`text-[13px] font-semibold leading-[18px] ${statusColor}`}>
+          <div className={`truncate text-[13px] font-semibold leading-[18px] ${statusColor}`}>
             {voiceConnectionStatus === 'reconnecting'
               ? t('voice:status.reconnecting')
               : connectionError === 'network_disconnect'
