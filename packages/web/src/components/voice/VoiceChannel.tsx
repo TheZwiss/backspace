@@ -1,12 +1,38 @@
 import React, { useCallback, useMemo } from 'react';
-import { useVoiceStore } from '../../stores/voiceStore';
+import { useVoiceStore, type VoiceChannelElapsed } from '../../stores/voiceStore';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useContextMenuStore, type ContextMenuItem } from '../../stores/contextMenuStore';
 import { buildVoiceModMenuItems, VolumeSliderItem } from './voiceMenuItems';
 import { VoiceUserRow } from './VoiceUserRow';
+import { useTranslation } from 'react-i18next';
+import { useFormatters } from '../../i18n/formatters';
+import { useSharedSecondBeat } from '../../hooks/useSharedSecondBeat';
 
 const EMPTY_VOICE_USERS: string[] = [];
+
+function VoiceChannelTimer({ observation }: { observation: VoiceChannelElapsed }) {
+  const { t } = useTranslation('voice');
+  const { formatDuration } = useFormatters();
+  const now = useSharedSecondBeat();
+  const elapsedSeconds = observation.elapsedSeconds
+    + Math.floor(Math.max(0, now - observation.observedAt) / 1_000);
+  const duration = formatDuration(elapsedSeconds);
+  return (
+    <span
+      className="flex flex-shrink-0 items-center gap-1 text-[11px] leading-none tabular-nums text-txt-tertiary"
+      title={t('channelDuration', { duration })}
+      aria-label={t('channelDuration', { duration })}
+      data-testid="voice-channel-timer"
+    >
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 7v5l3 2" />
+      </svg>
+      {duration}
+    </span>
+  );
+}
 
 interface VoiceChannelProps {
   channelId: string;
@@ -33,10 +59,12 @@ interface VoiceChannelProps {
 
 /** Wrapper component for the volume slider so it can use hooks (useState). */
 export function VoiceChannel({ channelId, channelName, onClick, locked, canManage, onSettingsClick, voiceUserHandlers, dropZone }: VoiceChannelProps) {
+  const { t } = useTranslation(['voice', 'common']);
   const serverVoiceUsers = useVoiceStore((s) => s.voiceUsers.get(channelId)) ?? EMPTY_VOICE_USERS;
   const currentVoiceChannel = useVoiceStore((s) => s.currentVoiceChannelId);
   const participants = useVoiceStore((s) => s.participants);
   const isLiveKitConnected = useVoiceStore((s) => s.isLiveKitConnected);
+  const channelElapsedSeconds = useVoiceStore((s) => s.voiceChannelElapsedSeconds.get(channelId) ?? null);
 
   // For OUR channel: LiveKit participants are the single source of truth.
   // For other channels: use server-provided voiceUsers (only available source).
@@ -55,6 +83,9 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, canManag
   const participantMutes = useVoiceStore((s) => s.participantMutes);
   const unwatchedCameras = useVoiceStore((s) => s.unwatchedCameras);
   const speakingUserIds = useVoiceStore((s) => s.speakingUserIds);
+  const localConnectionQuality = useVoiceStore((s) => s.connectionQuality);
+  const connectionQualities = useVoiceStore((s) => s.connectionQualities);
+  const voiceConnectionStatus = useVoiceStore((s) => s.voiceConnectionStatus);
   const currentUserId = useVoiceStore((s) => {
     const local = s.participants.find(p => p.isLocal);
     return local?.userId ?? null;
@@ -141,21 +172,36 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, canManag
           </svg>
         )}
         <span className="truncate text-[15px] font-medium flex-1 text-left">{channelName}</span>
-        {canManage && (
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="currentColor"
-            className="flex-shrink-0 opacity-0 group-hover:opacity-100 text-txt-tertiary hover:text-txt-primary transition-opacity"
-            onClick={(e) => {
-              e.stopPropagation();
-              onSettingsClick?.();
-            }}
-          >
-            <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
-          </svg>
-        )}
+        <span className="relative flex flex-shrink-0 items-center">
+          {canManage && (
+            <svg
+              data-testid="voice-channel-settings"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              role="button"
+              tabIndex={0}
+              aria-label={t('common:labels.settings')}
+              className="pointer-events-none absolute right-full mr-1 opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 text-txt-tertiary hover:text-txt-primary transition-opacity"
+              onClick={(e) => {
+                e.stopPropagation();
+                onSettingsClick?.();
+              }}
+              onKeyDown={(e) => {
+                if (e.key !== 'Enter' && e.key !== ' ') return;
+                e.preventDefault();
+                e.stopPropagation();
+                onSettingsClick?.();
+              }}
+            >
+              <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
+            </svg>
+          )}
+          {voiceUsers.length > 0 && channelElapsedSeconds !== null && (
+            <VoiceChannelTimer observation={channelElapsedSeconds} />
+          )}
+        </span>
       </button>
 
       {/* Connected users */}
@@ -180,6 +226,20 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, canManag
             const isSpaceMuted = spaceMutedUserIds.has(`${spaceId}:${userId}`);
             const isSpaceDeafened = spaceDeafenedUserIds.has(`${spaceId}:${userId}`);
             const isPermissionMuted = permissionMutedUserIds.has(`${spaceId}:${userId}`);
+            const participantConnectionQuality = participant?.isLocal
+              ? localConnectionQuality
+              : participant
+                ? connectionQualities.get(participant.identity) ?? 'unknown'
+                : 'unknown';
+            const connectionWarning = isActive && participant
+              ? voiceConnectionStatus === 'reconnecting' && participant.isLocal
+                ? t('voiceDiagnostics.reconnecting')
+                : participantConnectionQuality === 'poor' || participantConnectionQuality === 'lost'
+                  ? participant.isLocal
+                    ? t('voiceDiagnostics.selfNetwork')
+                    : t('voiceDiagnostics.participantNetwork', { name: displayName })
+                  : null
+              : null;
 
             const userDrag = voiceUserHandlers?.(userId, channelId);
             const isDraggable = !!(userDrag?.draggable && userId !== myUser?.id);
@@ -211,6 +271,7 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, canManag
                   isPermissionMuted={isPermissionMuted}
                   isLocallyMuted={userId !== myUser?.id && (participantMutes.get(userId) ?? false)}
                   isSpeaking={speakingUserIds.has(userId)}
+                  connectionWarning={connectionWarning}
                 />
               </div>
             );

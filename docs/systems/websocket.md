@@ -161,9 +161,9 @@ handler alike, so both paths reach the same audience. (`reaction_added` and
 ### Voice
 | type | fields | scope |
 |------|--------|-------|
-| `voice_state_update` | channelId, userId, action: join/leave | space |
+| `voice_state_update` | channelId, userId, action: join/leave, channelElapsedSeconds? | space |
 | `voice_status_update` | userId, channelId, isMuted, isDeafened, isCameraOn, isScreenSharing | room |
-| `space_voice_state` | spaceId, voiceStates, voiceUserStates, spaceVoiceStates | the joining user. Scoped per-space voice-presence snapshot pushed when a user joins a space mid-session (see below). |
+| `space_voice_state` | spaceId, voiceStates, voiceChannelElapsedSeconds, voiceUserStates, spaceVoiceStates | the joining user. Scoped per-space voice-presence snapshot pushed when a user joins a space mid-session (see below). |
 | `voice_space_muted` | userId, channelId, spaceId, muted | space |
 | `voice_space_deafened` | userId, channelId, spaceId, deafened | space |
 | `voice_permission_muted` | userId, spaceId, muted | space |
@@ -223,6 +223,7 @@ reason: `'displaced'` (new tab) | `'session_closed'`
   spaceLayout?: SpaceLayoutItem[] | null,
   layoutUpdatedAt?: number,
   voiceStates?: Record<channelId, userId[]>,
+  voiceChannelElapsedSeconds?: Record<channelId, number>,
   voiceUserStates?: Record<string, { isMuted, isDeafened, isCameraOn, isScreenSharing }>,
   spaceVoiceStates?: Record<string, { spaceMuted, spaceDeafened, permissionMuted }>,
   readStates?: ReadState[],
@@ -236,7 +237,7 @@ reason: `'displaced'` (new tab) | `'session_closed'`
 
 **Federation filtering:** When the connecting user is federated (`homeInstance` is set), the server omits all DM-related data from the ready payload. `dmChannels` and `activeCalls` are sent as empty arrays, and `readStates` is filtered to only include space channel entries. Federated users receive their DM data from their home instance's ready payload instead.
 
-**Voice-state assembly:** `voiceStates` / `voiceUserStates` / `spaceVoiceStates` for each of the user's spaces are produced by `ConnectionManager.buildSpaceVoiceState(spaceId, userId)` — the single source of truth shared with the mid-session join push (see below). Voice presence is VIEW_CHANNEL-filtered per `computePermissions`: a user is never told who occupies a voice channel they cannot see.
+**Voice-state assembly:** `voiceStates` / `voiceChannelElapsedSeconds` / `voiceUserStates` / `spaceVoiceStates` for each of the user's spaces are produced by `ConnectionManager.buildSpaceVoiceState(spaceId, userId)` — the single source of truth shared with the mid-session join push (see below). `voiceChannelElapsedSeconds` is a whole-second duration computed from the in-memory `VoiceRoom.startedAt`; clients advance that duration from receipt time, so server/client clock skew cannot change the value. It disappears when the room becomes empty. Because rooms are intentionally in-memory, a server restart clears both occupancy and its duration until participants reconnect; this is not persisted to the database. Voice presence is VIEW_CHANNEL-filtered per `computePermissions`: a user is never told who occupies a voice channel they cannot see.
 
 ### Mid-session space join — `space_voice_state` push
 

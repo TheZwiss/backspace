@@ -106,7 +106,7 @@ export function VoiceGrid({ participants }: VoiceGridProps) {
               e.stopPropagation();
               setFocusedParticipant(null);
             }}
-            className="absolute top-4 right-4 z-10 px-3 py-1.5 bg-black/60 hover:bg-black/80 rounded-lg flex items-center gap-2 text-white/70 hover:text-white transition-colors"
+            className="absolute top-4 right-4 z-10 h-7 px-3 bg-black/60 hover:bg-black/80 rounded-lg flex items-center gap-2 text-white/70 hover:text-white transition-colors"
             title={t('voice:grid.backToGrid')}
           >
             <svg

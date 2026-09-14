@@ -35,6 +35,8 @@ export interface Formatters {
   formatPercent: (percent: number) => string;
   /** `1.5 kB`, `3 MB`; binary steps of 1024 with the conventional SI labels. */
   formatBytes: (bytes: number) => string;
+  /** `05:08` / `2:05:08`: elapsed whole seconds with locale-native digits. */
+  formatDuration: (elapsedSeconds: number) => string;
 }
 
 type DateTimeOptions = Intl.DateTimeFormatOptions;
@@ -143,6 +145,22 @@ export function createFormatters(getLocale: () => string): Formatters {
         unitDisplay: 'short',
         maximumFractionDigits: index === 0 ? 0 : 1,
       }).format(value);
+    },
+
+    formatDuration: (elapsedSeconds) => {
+      const total = Math.max(0, Math.floor(elapsedSeconds));
+      const hours = Math.floor(total / 3_600);
+      const minutes = Math.floor((total % 3_600) / 60);
+      const seconds = total % 60;
+      const segment = (value: number) => numberFormat({
+        minimumIntegerDigits: 2,
+        maximumFractionDigits: 0,
+        useGrouping: false,
+      }).format(value);
+      const tail = `${segment(minutes)}:${segment(seconds)}`;
+      return hours > 0
+        ? `${numberFormat({ maximumFractionDigits: 0, useGrouping: false }).format(hours)}:${tail}`
+        : tail;
     },
   };
 }

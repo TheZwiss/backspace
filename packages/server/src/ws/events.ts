@@ -2,7 +2,7 @@ import type { WebSocket } from 'ws';
 import { eq, inArray, and } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { generateSnowflake } from '../utils/snowflake.js';
-import { connectionManager } from './handler.js';
+import { connectionManager, getVoiceRoomElapsedSeconds } from './handler.js';
 import type { VoiceRoom, DmRoomMeta, SpaceRoomMeta } from './handler.js';
 import { isMember, getChannelSpaceId, isDmMember, isDeadOneOnOne, hasPermission, computePermissions, PermissionBits } from '../utils/permissions.js';
 import { broadcastDmMessage, getDmMessageWithUser, isDmReplyTargetInChannel } from '../routes/dm.js';
@@ -725,11 +725,13 @@ function handleVoiceJoin(event: Record<string, unknown>, userId: string, ws: Web
   connectionManager.joinRoom(channelId, userId);
 
   // Broadcast join
+  const joinedRoom = connectionManager.getRoom(channelId);
   connectionManager.sendToRoom(channelId, {
     type: 'voice_state_update',
     channelId,
     userId,
     action: 'join',
+    channelElapsedSeconds: joinedRoom ? getVoiceRoomElapsedSeconds(joinedRoom) : undefined,
   });
 
   // Also broadcast current voice status if it exists (persisted during moves)
@@ -2423,6 +2425,7 @@ function handleVoiceMove(event: Record<string, unknown>, userId: string): void {
   connectionManager.leaveRoom(oldChannelId, targetUserId);
 
   // Broadcast leave from old channel
+  const targetRoom = connectionManager.getRoom(targetChannelId);
   connectionManager.sendToSpace(meta.spaceId, {
     type: 'voice_state_update',
     channelId: oldChannelId,
@@ -2440,6 +2443,7 @@ function handleVoiceMove(event: Record<string, unknown>, userId: string): void {
     channelId: targetChannelId,
     userId: targetUserId,
     action: 'join',
+    channelElapsedSeconds: targetRoom ? getVoiceRoomElapsedSeconds(targetRoom) : undefined,
   });
 
   // Notify the moved user so they reconnect to LiveKit

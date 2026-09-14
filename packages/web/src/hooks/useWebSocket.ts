@@ -169,7 +169,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
   const { setUser } = useAuthStore.getState();
   const { populateFromReady, loadSpaceDetail, currentSpaceId, updateMemberPresence, addMember, removeMember, addDmChannel, removeDmChannel, upsertUserView } = useSpaceStore.getState();
   const { addMessage, addRealtimeMessage, updateMessage, removeMessage, setTyping, clearTyping, onReactionAdded, onReactionRemoved } = useChatStore.getState();
-  const { addVoiceUser, removeVoiceUser, clearVoiceUsersForOrigin, setVoiceUsers, setVoiceUserStatus, clearVoiceUserStatus } = useVoiceStore.getState();
+  const { addVoiceUser, removeVoiceUser, clearVoiceUsersForOrigin, setVoiceUsers, setVoiceChannelElapsedSeconds, setVoiceUserStatus, clearVoiceUserStatus } = useVoiceStore.getState();
 
   switch (event.type) {
     case 'ready':
@@ -294,6 +294,11 @@ function handleEvent(origin: string, event: ServerEvent): void {
       if (event.voiceStates) {
         for (const [channelId, userIds] of Object.entries(event.voiceStates)) {
           setVoiceUsers(channelId, userIds);
+        }
+      }
+      if (event.voiceChannelElapsedSeconds) {
+        for (const [channelId, elapsedSeconds] of Object.entries(event.voiceChannelElapsedSeconds)) {
+          setVoiceChannelElapsedSeconds(channelId, elapsedSeconds);
         }
       }
       // Initialize activity data from ready payload
@@ -611,6 +616,9 @@ function handleEvent(origin: string, event: ServerEvent): void {
     case 'voice_state_update':
       if (event.action === 'join') {
         addVoiceUser(event.channelId, event.userId);
+        if (event.channelElapsedSeconds !== undefined) {
+          setVoiceChannelElapsedSeconds(event.channelId, event.channelElapsedSeconds);
+        }
       } else {
         removeVoiceUser(event.channelId, event.userId);
         clearVoiceUserStatus(event.userId);
@@ -1266,10 +1274,12 @@ function handleEvent(origin: string, event: ServerEvent): void {
       // Clean up voice users for the deleted channel
       {
         const vs = useVoiceStore.getState();
-        if (vs.voiceUsers.has(event.channelId)) {
+        if (vs.voiceUsers.has(event.channelId) || vs.voiceChannelElapsedSeconds.has(event.channelId)) {
           const newVoiceUsers = new Map(vs.voiceUsers);
+          const voiceChannelElapsedSeconds = new Map(vs.voiceChannelElapsedSeconds);
           newVoiceUsers.delete(event.channelId);
-          useVoiceStore.setState({ voiceUsers: newVoiceUsers });
+          voiceChannelElapsedSeconds.delete(event.channelId);
+          useVoiceStore.setState({ voiceUsers: newVoiceUsers, voiceChannelElapsedSeconds });
         }
       }
       break;

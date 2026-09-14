@@ -18,8 +18,16 @@ export interface ScreenShareConfig {
 export type VoiceConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'reconnecting';
 export type VoiceConnectionQuality = 'excellent' | 'good' | 'poor' | 'lost' | 'unknown';
 
+export interface VoiceChannelElapsed {
+  /** Whole seconds reported by the server when this snapshot was received. */
+  elapsedSeconds: number;
+  /** Local receipt time; only subsequent progression uses the client clock. */
+  observedAt: number;
+}
+
 interface VoiceState {
   voiceUsers: Map<string, string[]>; // channelId → userIds
+  voiceChannelElapsedSeconds: Map<string, VoiceChannelElapsed>; // channelId → server duration + local observation time
   currentVoiceChannelId: string | null;
   isMuted: boolean;
   isDeafened: boolean;
@@ -97,6 +105,7 @@ interface VoiceState {
   setFederatedCallId: (id: string | null) => void;
   setCallOrigin: (origin: string | null) => void;
   setVoiceUsers: (channelId: string, userIds: string[]) => void;
+  setVoiceChannelElapsedSeconds: (channelId: string, elapsedSeconds: number | null) => void;
   addVoiceUser: (channelId: string, userId: string) => void;
   removeVoiceUser: (channelId: string, userId: string) => void;
   setCurrentVoiceChannel: (channelId: string | null) => void;
@@ -170,6 +179,7 @@ export const useVoiceStore = create<VoiceState>()(
   persist(
     (set, get) => ({
       voiceUsers: new Map(),
+      voiceChannelElapsedSeconds: new Map(),
       currentVoiceChannelId: null,
       isMuted: false,
       pttActive: false,
@@ -345,6 +355,21 @@ export const useVoiceStore = create<VoiceState>()(
         });
       },
 
+      setVoiceChannelElapsedSeconds: (channelId, elapsedSeconds) => {
+        set((state) => {
+          const next = new Map(state.voiceChannelElapsedSeconds);
+          if (elapsedSeconds === null) {
+            next.delete(channelId);
+          } else if (Number.isFinite(elapsedSeconds)) {
+            next.set(channelId, {
+              elapsedSeconds: Math.max(0, Math.floor(elapsedSeconds)),
+              observedAt: Date.now(),
+            });
+          }
+          return { voiceChannelElapsedSeconds: next };
+        });
+      },
+
       addVoiceUser: (channelId, userId) => {
         set((state) => {
           const newMap = new Map(state.voiceUsers);
@@ -360,8 +385,13 @@ export const useVoiceStore = create<VoiceState>()(
         set((state) => {
           const newMap = new Map(state.voiceUsers);
           const current = newMap.get(channelId) ?? [];
-          newMap.set(channelId, current.filter(id => id !== userId));
-          return { voiceUsers: newMap };
+          const remaining = current.filter(id => id !== userId);
+          newMap.set(channelId, remaining);
+          if (remaining.length > 0) return { voiceUsers: newMap };
+
+          const voiceChannelElapsedSeconds = new Map(state.voiceChannelElapsedSeconds);
+          voiceChannelElapsedSeconds.delete(channelId);
+          return { voiceUsers: newMap, voiceChannelElapsedSeconds };
         });
       },
 
@@ -528,11 +558,16 @@ export const useVoiceStore = create<VoiceState>()(
 
       getVoiceUsers: (channelId) => get().voiceUsers.get(channelId) ?? [],
 
-      clearAllVoiceUsers: () => set({ voiceUsers: new Map(), voiceUserStates: new Map() }),
+      clearAllVoiceUsers: () => set({
+        voiceUsers: new Map(),
+        voiceChannelElapsedSeconds: new Map(),
+        voiceUserStates: new Map(),
+      }),
 
       resetSession: () => set({
         // Connection state
         voiceUsers: new Map(),
+        voiceChannelElapsedSeconds: new Map(),
         voiceUserStates: new Map(),
         currentVoiceChannelId: null,
         participants: [],
@@ -573,12 +608,14 @@ export const useVoiceStore = create<VoiceState>()(
         const { channelOriginMap } = useSpaceStore.getState();
         set((state) => {
           const newVoiceUsers = new Map(state.voiceUsers);
+          const voiceChannelElapsedSeconds = new Map(state.voiceChannelElapsedSeconds);
           for (const [channelId] of newVoiceUsers) {
             if ((channelOriginMap.get(channelId) ?? '') === origin) {
               newVoiceUsers.delete(channelId);
+              voiceChannelElapsedSeconds.delete(channelId);
             }
           }
-          return { voiceUsers: newVoiceUsers };
+          return { voiceUsers: newVoiceUsers, voiceChannelElapsedSeconds };
         });
       },
 
@@ -589,13 +626,17 @@ export const useVoiceStore = create<VoiceState>()(
 
         set((state) => {
           // Optimistic: immediately remove self from the channel's voice users
-          const voiceUsers = (channelId && myId)
-            ? (() => {
-                const m = new Map(state.voiceUsers);
-                m.set(channelId, (m.get(channelId) ?? []).filter(id => id !== myId));
-                return m;
-              })()
-            : state.voiceUsers;
+          let voiceUsers = state.voiceUsers;
+          let voiceChannelElapsedSeconds = state.voiceChannelElapsedSeconds;
+          if (channelId && myId) {
+            const remaining = (state.voiceUsers.get(channelId) ?? []).filter(id => id !== myId);
+            voiceUsers = new Map(state.voiceUsers);
+            voiceUsers.set(channelId, remaining);
+            if (remaining.length === 0) {
+              voiceChannelElapsedSeconds = new Map(state.voiceChannelElapsedSeconds);
+              voiceChannelElapsedSeconds.delete(channelId);
+            }
+          }
 
           return {
             currentVoiceChannelId: null,
@@ -624,6 +665,7 @@ export const useVoiceStore = create<VoiceState>()(
             unwatchedCameras: new Set(),
             streamWatchers: new Map(),
             voiceUsers,
+            voiceChannelElapsedSeconds,
             // Reset mic permission flag on leave so the next join attempts a
             // fresh getUserMedia (the user may have granted permission via
             // OS settings while disconnected).
@@ -677,6 +719,7 @@ export const useVoiceStore = create<VoiceState>()(
 
       reset: () => set({
         voiceUsers: new Map(),
+        voiceChannelElapsedSeconds: new Map(),
         currentVoiceChannelId: null,
         isMuted: false,
         isDeafened: false,
@@ -823,6 +866,7 @@ export const useVoiceStore = create<VoiceState>()(
         merged.spaceDeafenedUserIds = currentState.spaceDeafenedUserIds;
         merged.permissionMutedUserIds = currentState.permissionMutedUserIds;
         merged.voiceUsers = currentState.voiceUsers;
+        merged.voiceChannelElapsedSeconds = currentState.voiceChannelElapsedSeconds;
         merged.participants = currentState.participants;
         merged.speakingParticipantIds = currentState.speakingParticipantIds;
         merged.speakingUserIds = currentState.speakingUserIds;

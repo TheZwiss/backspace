@@ -95,6 +95,14 @@ describe('createFormatters', () => {
     expect(createFormatters(() => 'ru').formatPercent(0)).toBe('0\u00a0%');
   });
 
+  it('formats elapsed durations through the selected locale', () => {
+    const en = createFormatters(() => 'en');
+    expect(en.formatDuration(0)).toBe('00:00');
+    expect(en.formatDuration(65)).toBe('01:05');
+    expect(en.formatDuration(7_508)).toBe('2:05:08');
+    expect(createFormatters(() => 'ar-EG-u-nu-arab').formatDuration(65)).toBe('٠١:٠٥');
+  });
+
   it('re-reads the language on every call so a language change takes effect', () => {
     let language = 'en';
     const formatters = createFormatters(() => language);

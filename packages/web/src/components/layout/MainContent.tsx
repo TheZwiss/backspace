@@ -206,9 +206,12 @@ export function MainContent() {
       return (
         <div
           ref={voiceContainerRef}
-          className={`flex-1 flex flex-col bg-surface-base min-w-0 group/voice relative ${voiceFullscreen ? 'h-screen' : ''}`}
+          className={`flex-1 flex flex-col bg-surface-base min-w-0 group/voice relative overflow-hidden ${voiceFullscreen ? 'h-screen' : ''}`}
         >
-          <div className={`h-14 px-5 flex items-center justify-between border-b border-border-hard flex-shrink-0 bg-surface-base transition-opacity duration-300 ${voiceFullscreen ? 'opacity-0 hover:opacity-100' : ''}`}>
+          <div
+            data-testid="voice-header-overlay"
+            className={`h-14 px-5 flex items-center justify-between bg-surface-base transition-opacity duration-300 ${voiceFullscreen ? 'pointer-events-none absolute inset-x-0 top-0 z-30 border-b border-white/5 bg-gradient-to-b from-black/90 via-black/70 to-transparent opacity-0 group-hover/voice:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100 [@media(any-pointer:coarse)]:opacity-100' : 'border-b border-border-hard flex-shrink-0'}`}
+          >
             <div className="flex items-center gap-[10px]">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary">
                 <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
@@ -225,20 +228,21 @@ export function MainContent() {
                 <span className="text-xs text-status-idle font-medium ml-2">{t('spaces:main.voice.connecting')}</span>
               )}
             </div>
-            <div className="flex items-center gap-1 flex-shrink-0">
+            <div className={`flex items-center gap-1 flex-shrink-0 ${voiceFullscreen ? 'pointer-events-auto mr-24' : ''}`}>
               <TransferIndicator />
               <MemberListToggleButton />
             </div>
           </div>
 
-          <div className="flex-1 flex overflow-hidden pb-20">
-            <VoiceGrid participants={participants} />
+          <div className="flex-1 flex overflow-hidden min-h-0">
+            <div className={`flex-1 min-w-0 flex relative ${voiceFullscreen ? '' : 'pb-20'}`}>
+              <VoiceGrid participants={participants} />
+              <VoiceControlBar />
+            </div>
             {voiceChatOpen && !voiceFullscreen && (
               <VoiceChatPanel channelId={currentChannelId} channelName={`@${dmName}`} />
             )}
           </div>
-
-          <VoiceControlBar />
         </div>
       );
     }
@@ -440,9 +444,12 @@ export function MainContent() {
     return (
       <div 
         ref={voiceContainerRef}
-        className={`flex-1 flex flex-col bg-surface-base min-w-0 group/voice relative ${voiceFullscreen ? 'h-screen' : ''}`}
+        className={`flex-1 flex flex-col bg-surface-base min-w-0 group/voice relative overflow-hidden ${voiceFullscreen ? 'h-screen' : ''}`}
       >
-        <div className={`h-14 px-5 flex items-center justify-between border-b border-border-hard flex-shrink-0 bg-surface-base transition-opacity duration-300 ${voiceFullscreen ? 'opacity-0 hover:opacity-100' : ''}`}>
+        <div
+          data-testid="voice-header-overlay"
+          className={`h-14 px-5 flex items-center justify-between bg-surface-base transition-opacity duration-300 ${voiceFullscreen ? 'pointer-events-none absolute inset-x-0 top-0 z-30 border-b border-white/5 bg-gradient-to-b from-black/90 via-black/70 to-transparent opacity-0 group-hover/voice:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100 [@media(any-pointer:coarse)]:opacity-100' : 'border-b border-border-hard flex-shrink-0'}`}
+        >
           <div className="flex items-center gap-[10px]">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary">
               <path d="M11 5L6 9H2V15H6L11 19V5ZM15.54 8.46C16.48 9.4 17 10.67 17 12S16.48 14.6 15.54 15.54L14.12 14.12C14.69 13.55 15 12.79 15 12S14.69 10.45 14.12 9.88L15.54 8.46Z" />
@@ -459,20 +466,21 @@ export function MainContent() {
               <span className="text-xs text-status-idle font-medium ml-2">{t('spaces:main.voice.connecting')}</span>
             )}
           </div>
-          <div className="flex items-center gap-1 flex-shrink-0">
+          <div className={`flex items-center gap-1 flex-shrink-0 ${voiceFullscreen ? 'pointer-events-auto mr-24' : ''}`}>
             <TransferIndicator />
             <MemberListToggleButton />
           </div>
         </div>
 
-        <div className="flex-1 flex overflow-hidden pb-20">
-          <VoiceGrid participants={participants} />
+        <div className="flex-1 flex overflow-hidden min-h-0">
+          <div className={`flex-1 min-w-0 flex relative ${voiceFullscreen ? '' : 'pb-20'}`}>
+            <VoiceGrid participants={participants} />
+            <VoiceControlBar />
+          </div>
           {voiceChatOpen && !voiceFullscreen && (
             <VoiceChatPanel channelId={currentChannelId} channelName={channel.name} />
           )}
         </div>
-
-        <VoiceControlBar />
       </div>
     );
   }

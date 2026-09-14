@@ -56,7 +56,10 @@ vi.mock('../../utils/voiceActions', async () => ({
   handleScreenShareAction: vi.fn(),
 }));
 
-function makeFakeMediaStreamTrack(kind: 'video' | 'audio'): MediaStreamTrack {
+function makeFakeMediaStreamTrack(
+  kind: 'video' | 'audio',
+  settings: MediaTrackSettings = { height: 720, frameRate: 30 },
+): MediaStreamTrack {
   // Minimal stand-in. VoiceGrid's deriveGridTiles only inspects
   // p.videoTrack?.readyState; VoiceUser/StreamTile attach via
   // lkVideoTrack/lkScreenTrack which we mock as null below.
@@ -65,7 +68,7 @@ function makeFakeMediaStreamTrack(kind: 'video' | 'audio'): MediaStreamTrack {
     readyState: 'live',
     addEventListener: vi.fn(),
     removeEventListener: vi.fn(),
-    getSettings: () => ({ height: 720, frameRate: 30 }),
+    getSettings: () => settings,
     stop: vi.fn(),
   } as unknown as MediaStreamTrack;
   return t;
@@ -220,6 +223,32 @@ describe('MobileVoiceFullScreen', () => {
     // badge in the StreamTile.
     expect(container.textContent).toMatch(/LIVE/);
     expect(container.textContent).toMatch(/is streaming/i);
+    expect(container.querySelector('[data-testid="stream-tile-placeholder"]')).toBeInTheDocument();
+    expect(container.querySelector('button[aria-label="Watch Stream"]')).toHaveClass('whitespace-nowrap');
+    // The placeholder already names the streamer; the normal bottom video
+    // caption must not cover its Watch button before subscription starts.
+    expect(container.querySelector('[data-testid="stream-tile-caption"]')).toBeNull();
+  });
+
+  it('never renders an infinite frame rate reported by the browser', () => {
+    useVoiceStore.setState({
+      watchingStreams: new Set(['2']),
+      participants: [
+        makeParticipant({
+          identity: '2:bob',
+          userId: '2',
+          username: 'bob',
+          isLocal: false,
+          isScreenSharing: true,
+          screenTrack: makeFakeMediaStreamTrack('video', { height: 1438, frameRate: Infinity }),
+        }),
+      ],
+    });
+
+    const { container } = renderScreen();
+
+    expect(container.querySelector('[data-testid="stream-quality-badge"]')).toHaveTextContent('1438p');
+    expect(container.textContent).not.toMatch(/infinity/i);
   });
 
   it('auto-focuses the first live screen-share publication on mount', async () => {

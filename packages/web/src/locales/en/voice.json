@@ -146,6 +146,7 @@
     "change": "Change Stream",
     "stopWatching": "Stop Watching",
     "watch": "Watch Stream",
+    "watchShort": "Watch",
     "mute": "Mute Stream",
     "isStreaming": "{{name}} is streaming"
   },
@@ -156,6 +157,12 @@
     "reconnecting": "Connection lost — reconnecting…",
     "unknown": "The connection is unstable; the affected side could not be determined"
   },
+  "voiceDiagnostics": {
+    "selfNetwork": "Your connection is unstable",
+    "participantNetwork": "{{name}} has an unstable connection",
+    "reconnecting": "Connection to the voice server was interrupted — reconnecting…"
+  },
+  "channelDuration": "Channel active for {{duration}}",
   "controls": {
     "spaceMutedSelfMuted": "Space Muted (self-muted)",
     "unmuteShortcut": "Unmute (M)",

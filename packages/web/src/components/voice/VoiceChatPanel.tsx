@@ -14,7 +14,10 @@ export function VoiceChatPanel({ channelId, channelName }: VoiceChatPanelProps) 
   const toggleVoiceChat = useUIStore((s) => s.toggleVoiceChat);
 
   return (
-    <div className="w-[340px] flex-shrink-0 bg-surface-chat flex flex-col border-l border-border-soft">
+    <div
+      data-testid="voice-chat-panel"
+      className="relative w-[340px] min-w-[280px] max-w-[42%] min-h-0 flex-shrink-0 overflow-hidden bg-surface-chat flex flex-col border-l border-border-soft"
+    >
       {/* Chat header */}
       <div className="h-12 px-4 flex items-center justify-between shadow-header flex-shrink-0">
         <span className="font-bold text-txt-primary text-[16px]">{t('voice:chatPanel.title')}</span>

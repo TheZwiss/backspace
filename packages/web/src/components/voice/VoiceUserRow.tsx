@@ -16,6 +16,7 @@ export interface VoiceUserRowProps {
   isPermissionMuted?: boolean;
   isLocallyMuted?: boolean;
   isSpeaking?: boolean;
+  connectionWarning?: string | null;
   size?: 'compact' | 'default';
   className?: string;
 }
@@ -35,6 +36,7 @@ export function VoiceUserRow({
   isPermissionMuted,
   isLocallyMuted,
   isSpeaking,
+  connectionWarning,
   size = 'default',
   className = '',
 }: VoiceUserRowProps) {
@@ -64,6 +66,17 @@ export function VoiceUserRow({
       </span>
       {/* Status badges */}
       <div className="flex items-center gap-1 flex-shrink-0">
+        {connectionWarning && (
+          <span
+            className="w-4 h-4 rounded-full bg-status-idle/15 text-status-idle flex items-center justify-center"
+            title={connectionWarning}
+            aria-label={connectionWarning}
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M12 2 1 21h22L12 2Zm1 16h-2v-2h2v2Zm0-4h-2v-4h2v4Z" />
+            </svg>
+          </span>
+        )}
         {/* Server muted / space deafened / permission muted — amber mic with slash */}
         {showServerMicIcon && (
           <span

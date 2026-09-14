@@ -13,7 +13,7 @@ Source files:
 1. Client sends `voice_join { channelId }` via WS
 2. Server checks CONNECT permission, enforces one-room-per-user
 3. Server loads voice restrictions from DB (space mute/deafen)
-4. Server broadcasts `voice_state_update { action: 'join' }` to space
+4. Server broadcasts `voice_state_update { action: 'join', channelElapsedSeconds }` to space. `channelElapsedSeconds` is the whole occupied duration computed by the server, so client/server clock skew cannot change the channel timer; the client advances it from receipt time on one shared, visibility-aware one-second beat. The duration survives participant joins and reconnect grace, and resets when the last participant leaves.
 5. Client calls `POST /api/livekit/token { channelId }` → gets JWT + LiveKit URL
 6. Client connects to LiveKit room with token
 
@@ -409,6 +409,8 @@ See `docs/systems/mobile-ui.md` → "MobileVoiceFullScreen" for the auto-focus s
 ## Voice Fullscreen
 
 The fullscreen toggle in `VoiceControlBar` flips the `voiceFullscreen` flag in `uiStore`; an effect in `MainContent.tsx` enters/exits the browser's Fullscreen API on `voiceContainerRef`. A second effect listens to `fullscreenchange` and reflects the actual document fullscreen element back into the store, so pressing Esc or system-level fullscreen-exit keeps state in sync. `voiceChatOpen && !voiceFullscreen` hides the side chat panel while fullscreen is active.
+
+**Fullscreen chrome:** the channel header and call controls are positioned over the video instead of reserving rows. Their overlay bands use `pointer-events: none`, and only the actual buttons opt back into hit testing, so transparent chrome never steals tile or Grid-button clicks. Hovering the voice surface reveals both overlays; devices without hover or with any coarse pointer (including hybrid touch laptops) keep them visible. The header actions leave the top-right Grid corner clear.
 
 **Cross-browser API fallback.** iOS Safari (and iPadOS pre-16.4) does not implement the standard `Element.requestFullscreen()` on generic elements, so the enter-fullscreen effect probes for the API in this order:
 

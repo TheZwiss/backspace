@@ -42,6 +42,10 @@ export function VoiceControlBar() {
   const [shareMenuOpen, setShareMenuOpen] = useState(false);
   const shareBtnRef = useRef<HTMLButtonElement>(null);
 
+  const containerClassName = voiceFullscreen
+    ? `pointer-events-none absolute inset-x-0 bottom-0 z-20 h-24 flex items-end justify-center pb-6 transition-opacity duration-300 ease-out ${shareMenuOpen ? 'opacity-100' : 'opacity-0 group-hover/voice:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100 [@media(any-pointer:coarse)]:opacity-100'}`
+    : 'absolute bottom-6 left-1/2 -translate-x-1/2 z-20 opacity-0 translate-y-4 group-hover/voice:opacity-100 group-hover/voice:translate-y-0 transition-all duration-300 ease-out';
+
   const handleMute = React.useCallback(() => {
     handleMuteAction(isSpaceMuted, isSpaceDeafened);
   }, [isSpaceMuted, isSpaceDeafened]);
@@ -88,8 +92,8 @@ export function VoiceControlBar() {
   }, [voiceFullscreen]);
 
   return (
-    <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 opacity-0 translate-y-4 group-hover/voice:opacity-100 group-hover/voice:translate-y-0 transition-all duration-300 ease-out">
-      <div className="flex items-center gap-1.5 rounded-full px-3 py-2 glass-bubble">
+    <div data-testid="voice-control-overlay" className={containerClassName}>
+      <div className="pointer-events-auto flex items-center gap-1.5 rounded-full px-3 py-2 glass-bubble">
         {/* Mute */}
         <button
           onClick={handleMute}

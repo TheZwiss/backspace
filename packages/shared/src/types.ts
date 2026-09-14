@@ -426,13 +426,13 @@ export type ClientEvent =
 
 // Server → Client Events
 export type ServerEvent =
-  | { type: 'ready'; user: User; spaces: SpaceWithChannelsAndMembers[]; dmChannels: DmChannel[]; folders?: SpaceFolder[]; spaceLayout?: SpaceLayoutItem[] | null; layoutUpdatedAt?: number; voiceStates?: Record<string, string[]>; voiceUserStates?: Record<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }>; readStates?: ReadState[]; activeCalls?: ActiveCallInfo[]; spaceVoiceStates?: Record<string, { spaceMuted: boolean; spaceDeafened: boolean }>; userActivities?: Record<string, Activity[]>; rejectedPeerOrigins?: string[]; awaitingApprovalPeerOrigins?: string[]; activePeerOrigins?: string[]; pendingApprovalCount?: number }
+  | { type: 'ready'; user: User; spaces: SpaceWithChannelsAndMembers[]; dmChannels: DmChannel[]; folders?: SpaceFolder[]; spaceLayout?: SpaceLayoutItem[] | null; layoutUpdatedAt?: number; voiceStates?: Record<string, string[]>; voiceChannelElapsedSeconds?: Record<string, number>; voiceUserStates?: Record<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }>; readStates?: ReadState[]; activeCalls?: ActiveCallInfo[]; spaceVoiceStates?: Record<string, { spaceMuted: boolean; spaceDeafened: boolean }>; userActivities?: Record<string, Activity[]>; rejectedPeerOrigins?: string[]; awaitingApprovalPeerOrigins?: string[]; activePeerOrigins?: string[]; pendingApprovalCount?: number }
   | { type: 'message_created'; message: MessageWithUser }
   | { type: 'message_updated'; message: MessageWithUser }
   | { type: 'message_deleted'; messageId: string; channelId: string }
   | { type: 'typing'; channelId: string; userId: string; username: string }
   | { type: 'presence_update'; userId: string; status: string; activities?: Activity[] }
-  | { type: 'voice_state_update'; channelId: string; userId: string; action: 'join' | 'leave' }
+  | { type: 'voice_state_update'; channelId: string; userId: string; action: 'join' | 'leave'; channelElapsedSeconds?: number }
   | { type: 'member_joined'; spaceId: string; member: MemberWithUser }
   | { type: 'member_left'; spaceId: string; userId: string }
   | { type: 'dm_message_created'; message: DmMessageWithUser }
@@ -451,7 +451,7 @@ export type ServerEvent =
   | { type: 'dm_call_ended'; dmChannelId: string }
   | { type: 'dm_call_undeliverable'; dmChannelId: string | null; federatedCallId: string; terminal: boolean; phase: DmCallPhase; failures: DmCallUndeliverableFailure[] }
   | { type: 'voice_status_update'; userId: string; channelId: string; isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }
-  | { type: 'space_voice_state'; spaceId: string; voiceStates: Record<string, string[]>; voiceUserStates: Record<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }>; spaceVoiceStates: Record<string, { spaceMuted: boolean; spaceDeafened: boolean; permissionMuted: boolean }> }
+  | { type: 'space_voice_state'; spaceId: string; voiceStates: Record<string, string[]>; voiceChannelElapsedSeconds: Record<string, number>; voiceUserStates: Record<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }>; spaceVoiceStates: Record<string, { spaceMuted: boolean; spaceDeafened: boolean; permissionMuted: boolean }> }
   | { type: 'dm_channel_created'; dmChannel: DmChannel }
   | { type: 'dm_channel_closed'; dmChannelId: string }
   | { type: 'dm_channel_updated'; dmChannelId: string; name: string | null; icon: string | null }
