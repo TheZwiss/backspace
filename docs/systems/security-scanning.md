@@ -551,6 +551,10 @@ Currently deferred, with the condition that releases each one:
 | fastify 4 + all `@fastify/*` | the 11.x plugin lines target Fastify 5; on Fastify 4 the server stops booting | one PR taking core and every plugin across together |
 | better-sqlite3 12 | v13 segfaults every spawned test instance on boot (exit 139) against `node:20-slim`, a native ABI mismatch rather than a flake | the Dockerfile base image moving off Node 20 |
 | `@tus/file-store` + `@tus/server` 1.x | matched pair; bumping either alone splits it | one PR moving both, upload pipeline exercised end to end |
+| `@types/node` 20 (24 for the script packages) | types describing a newer Node than the runtime let code typecheck clean and fail in production | whenever a runtime moves, in that same PR |
+| jsdom 28 | jsdom 30 pulls undici 8 against the `undici@^7` override, so every vitest worker dies with `webidl.util.markAsUncloneable is not a function` and the web suite does not run; it also changes SVG attribute-selector matching | extending the undici override to 8, then re-testing both |
+| vitest 4 | `@cloudflare/vitest-pool-workers` supports `vitest ^4.1.0` only and rides internal Vitest APIs; under 5 the receiver's Workers runtime throws before any test runs | upstream shipping vitest 5 support |
+| electron 43 | Electron 44 removes the macOS login-item API `src/main.ts` uses, and a major moves the Chromium and Node the shipped app runs on | a dedicated desktop PR, with the Flatpak sources regenerated |
 
 Two entries predate this policy and stay as they are: `uiohook-napi` is ignored
 outright (an exact-version pnpm patch makes any bump break
@@ -559,6 +563,46 @@ hand for the reason in the maintainer checklist below.
 
 Widening an ignore entry to get past a red build is the failure mode this section
 exists to prevent. If a major is genuinely wanted, do the migration.
+
+### The queue limit hides the backlog
+
+`open-pull-requests-limit: 10` caps how many npm PRs Dependabot keeps open, not
+how many updates it has waiting. Clearing the queue therefore does not drain the
+backlog, it reveals the next slice of it: the first pass through the deferred
+majors above was followed within twenty minutes by nine more PRs that the cap had
+been holding back.
+
+Do not raise the limit to find the bottom. Ask the resolver instead:
+
+```
+pnpm outdated -r
+```
+
+That lists every package behind its latest across the workspace in one shot, with
+no PR churn, and it is the right way to check whether an ignore entry is still
+earning its place.
+
+One entry can also preempt several future PRs. The `@fastify/*` wildcard covers
+`cors`, `helmet`, `multipart` and `static`, all of which are sitting a major
+behind and would otherwise arrive as four separate proposals for the same
+Fastify 5 migration.
+
+### A green check is not a verified upgrade
+
+Two cases from the first pass are worth keeping in mind:
+
+- **bcryptjs 2 to 3** was green, but green says nothing about whether existing
+  password hashes still verify. The check that mattered was running v3
+  `compareSync` against a hash produced by v2, and v2 against a v3 hash for
+  rollback safety. Both hold, and the async API and default export are unchanged;
+  v3 emits `$2b$` where v2 emitted `$2a$`, and either verifies under either
+  version. Since bcryptjs 3 ships its own types, `@types/bcryptjs` became a
+  deprecated stub and was dropped rather than bumped.
+- **png-to-ico 2 to 3** is invisible to CI, because `pnpm gen-icons` is a manual
+  script. Running the generator under both versions produced a byte-identical
+  `icon.ico`, so the bump is inert. It did surface that the committed icon set
+  has already drifted from what the current lockfile generates, which is separate
+  from any one bump and wants its own regen-and-commit.
 
 ## Supply-chain hardening
 

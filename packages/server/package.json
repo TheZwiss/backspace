@@ -39,7 +39,6 @@
     "tsx": "^4.23.13"
   },
   "devDependencies": {
-    "@types/bcryptjs": "^3.0.0",
     "@types/better-sqlite3": "^7.6.11",
     "@types/jsonwebtoken": "^9.0.6",
     "@types/node": "^20.14.0",

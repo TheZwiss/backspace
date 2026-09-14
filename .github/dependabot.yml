@@ -89,6 +89,44 @@ updates:
       - dependency-name: "@types/better-sqlite3"
         update-types: ["version-update:semver-major"]
 
+      # @types/node tracks the RUNTIME, not npm's latest. The image runs
+      # node:20-slim and CI's baseline leg is Node 20, so types describing a
+      # newer Node let code typecheck clean and fail at runtime. The two script
+      # packages sit on 24 for the same reason: match what runs them.
+      # Unblock: whenever a runtime moves, in that same PR.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+
+      # jsdom stays on 28. jsdom 30 pulls undici 8 while the pnpm overrides in
+      # the root package.json pin undici@^7, leaving undici 6, 7 and 8 in one
+      # tree; every vitest forks worker then dies with
+      # `webidl.util.markAsUncloneable is not a function` and the web suite does
+      # not run at all. It also changes SVG attribute-selector matching, which
+      # breaks the checkmark lookups in ContextMenuCheckbox.test.tsx.
+      # Unblock: extend the undici override to cover 8, then re-test both.
+      - dependency-name: jsdom
+        update-types: ["version-update:semver-major"]
+
+      # vitest stays on 4 because @cloudflare/vitest-pool-workers supports
+      # `vitest ^4.1.0` only and depends on internal Vitest APIs that carry no
+      # semver guarantee. Under vitest 5 the receiver's Workers runtime throws
+      # `jsg.SyntaxError` before a single test runs. This one is upstream's
+      # call, not ours.
+      # Unblock: when @cloudflare/vitest-pool-workers ships vitest 5 support.
+      - dependency-name: vitest
+        update-types: ["version-update:semver-major"]
+
+      # electron stays on 43. Electron 44 removes the macOS login-item API the
+      # main process uses (`openAsHidden` on Settings, `wasOpenedAsHidden` on
+      # LoginItemSettings, src/main.ts), and an Electron major also moves the
+      # Chromium and Node the shipped app runs on. That wants its own PR with a
+      # real smoke test, not a dependency bump. Note a bump here also needs the
+      # Flatpak offline sources regenerated or that leg fails on a missing
+      # tarball. See docs/systems/desktop.md and docs/systems/desktop-security.md.
+      # Unblock: a dedicated desktop PR porting the hidden-launch handling.
+      - dependency-name: electron
+        update-types: ["version-update:semver-major"]
+
       # The tus store and server are a matched pair: @tus/file-store 2.x wants
       # @tus/server 2.x, and bumping either alone splits the pair.
       # Unblock: one PR that moves both, with the upload pipeline exercised
