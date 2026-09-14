@@ -64,7 +64,7 @@
   <releases>
     <release version="1.3.0" date="2026-09-14">
       <description>
-        <p>Backspace 1.3.0 release.</p>
+        <p>Screen sharing starts with a preview and quality controls before you go live. Fullscreen streams use the whole window, with the header and call controls fading out once the pointer stops moving, and a voice call now survives a reconnect instead of dropping what you had.</p>
       </description>
     </release>
     <release version="1.2.2" date="2026-09-09">
