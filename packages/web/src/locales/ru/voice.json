@@ -191,7 +191,7 @@
     "voiceChannel": "Голосовой канал",
     "voiceCall": "Голосовой звонок",
     "connectionFailed": "Не удалось подключиться",
-    "connected": "Голосовая связь установлена",
+    "connected": "Связь установлена",
     "connecting": "Подключение…",
     "reconnecting": "Переподключение…",
     "disconnected": "Отсоединено",

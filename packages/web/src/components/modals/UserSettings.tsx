@@ -124,7 +124,7 @@ export function UserSettingsModal() {
   };
 
   const tabClass = (target: SettingsTab) =>
-    `w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
+    `w-full min-w-0 truncate text-left px-3 py-2 rounded-md text-sm transition-colors ${
       tab === target ? 'bg-interactive-selected text-txt-primary font-medium' : 'text-txt-tertiary hover:text-txt-secondary hover:bg-interactive-hover'
     }`;
 
