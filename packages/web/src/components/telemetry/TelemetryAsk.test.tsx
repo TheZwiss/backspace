@@ -6,7 +6,7 @@ import { TelemetryAsk } from './TelemetryAsk';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useAuthStore } from '../../stores/authStore';
 import { api } from '../../api/client';
-import { ASK_MAX_DISMISSALS, ASK_STORAGE_KEY, recordDismissal } from '../../utils/telemetryAsk';
+import { ASK_STORAGE_KEY, recordDismissal } from '../../utils/telemetryAsk';
 
 vi.mock('./scene/HelloScene', () => ({ HelloScene: () => <div data-testid="scene" /> }));
 
@@ -15,7 +15,7 @@ vi.mock('../../audio/AudioManager', () => ({
   AudioManager: { getInstance: vi.fn().mockReturnValue({ setOutputDevice: vi.fn(), setVolume: vi.fn() }) },
 }));
 
-const neverAsked: TelemetryStatus = { enabled: null, id: null, lastDay: null, lastError: null };
+const neverAsked: TelemetryStatus = { enabled: null, id: null, lastDay: null, lastError: null, askDue: true };
 
 const previewPayload: TelemetryPayload = {
   schema: 1,
@@ -84,20 +84,33 @@ describe('TelemetryAsk', () => {
     expect(screen.queryByText(/Jannis/)).not.toBeInTheDocument();
   });
 
-  it('does not ask once answered', async () => {
-    vi.spyOn(api.admin.telemetry, 'get').mockResolvedValue({ ...neverAsked, enabled: false });
+  it('does not ask while the instance says the ask is not due', async () => {
+    vi.spyOn(api.admin.telemetry, 'get').mockResolvedValue({ ...neverAsked, enabled: false, askDue: false });
     render(<TelemetryAsk />);
     await waitFor(() => expect(api.admin.telemetry.get).toHaveBeenCalled());
     expect(screen.queryByText(/Jannis/)).not.toBeInTheDocument();
   });
 
-  it('does not fetch the status once this browser has spent its dismissals', () => {
-    for (let i = 0; i < ASK_MAX_DISMISSALS; i += 1) recordDismissal(localStorage, Date.now());
+  it('never asks again once the instance said yes', async () => {
+    vi.spyOn(api.admin.telemetry, 'get').mockResolvedValue({ ...neverAsked, enabled: true, id: 'abc', askDue: false });
+    render(<TelemetryAsk />);
+    await waitFor(() => expect(api.admin.telemetry.get).toHaveBeenCalled());
+    expect(screen.queryByText(/Jannis/)).not.toBeInTheDocument();
+  });
+
+  it('asks again after a no on an earlier release, and says that it is asking again', async () => {
+    vi.spyOn(api.admin.telemetry, 'get').mockResolvedValue({ ...neverAsked, enabled: false, askDue: true });
+    render(<TelemetryAsk />);
+    expect(await screen.findByText("Hi again. It's Jannis.")).toBeInTheDocument();
+    expect(screen.queryByText("Hi. It's Jannis. I built this.")).not.toBeInTheDocument();
+  });
+
+  it('still fetches the status after any number of dismissals, so the ask always comes back', async () => {
+    for (let i = 0; i < 5; i += 1) recordDismissal(localStorage, Date.now() - 30 * 24 * 60 * 60 * 1000);
 
     render(<TelemetryAsk />);
 
-    expect(api.admin.telemetry.get).not.toHaveBeenCalled();
-    expect(screen.queryByText(/Jannis/)).not.toBeInTheDocument();
+    expect(await screen.findByText("Hi. It's Jannis. I built this.")).toBeInTheDocument();
   });
 
   it('says so when the preview could not be fetched', async () => {
@@ -130,7 +143,7 @@ describe('TelemetryAsk', () => {
   });
 
   it('saves the answer and does not record a dismissal when the modal then closes', async () => {
-    const set = vi.spyOn(api.admin.telemetry, 'set').mockResolvedValue({ ...neverAsked, enabled: true, id: 'abc' });
+    const set = vi.spyOn(api.admin.telemetry, 'set').mockResolvedValue({ ...neverAsked, enabled: true, id: 'abc', askDue: false });
     render(<TelemetryAsk />);
     expect(await screen.findByText("Hi. It's Jannis. I built this.")).toBeInTheDocument();
 
@@ -139,6 +152,18 @@ describe('TelemetryAsk', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Close' }));
 
     expect(screen.queryByText(/Jannis/)).not.toBeInTheDocument();
+    expect(localStorage.getItem(ASK_STORAGE_KEY)).toBeNull();
+  });
+
+  it('forgets an earlier "later" once an answer is stored', async () => {
+    localStorage.setItem(ASK_STORAGE_KEY, JSON.stringify({ snoozedUntil: Date.now() - 1 }));
+    vi.spyOn(api.admin.telemetry, 'set').mockResolvedValue({ ...neverAsked, enabled: false, askDue: false });
+    render(<TelemetryAsk />);
+    expect(await screen.findByText("Hi. It's Jannis. I built this.")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Radio silence' }));
+    await screen.findByRole('button', { name: 'Close' });
+
     expect(localStorage.getItem(ASK_STORAGE_KEY)).toBeNull();
   });
 });

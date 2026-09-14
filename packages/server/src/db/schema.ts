@@ -341,6 +341,8 @@ export const instanceSettings = sqliteTable('instance_settings', {
   telemetryLastDay: text('telemetry_last_day'),
   /** JSON { day, status } of the last failed attempt, null after a success. */
   telemetryLastError: text('telemetry_last_error'),
+  /** The server version running when telemetry was last switched off; the ask returns on the next minor. */
+  telemetryDeclinedVersion: text('telemetry_declined_version'),
   /** First-boot timestamp (ms); backfilled by ensureDefaults, so non-null after boot. */
   installedAt: integer('installed_at'),
   updatedAt: integer('updated_at').notNull(),

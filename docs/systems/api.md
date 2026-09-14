@@ -301,15 +301,18 @@ GET    /admin/telemetry/preview      → TelemetryPayload
 ```
 
 The opt-in daily usage report. `TelemetryStatus` is `{ enabled: boolean | null,
-id: string | null, lastDay: string | null, lastError: { day, status } | null }`,
-where `enabled: null` means the instance was never asked. All three routes are
-home-origin only.
+id: string | null, lastDay: string | null, lastError: { day, status } | null,
+askDue: boolean }`, where `enabled: null` means the instance was never asked and
+`askDue` says whether the admin should see the ask now (always while never
+answered, never after a yes, and after a no again from the next minor release
+on; telemetry.md §7). All three routes are home-origin only.
 
 `PUT` requires `enabled` to be a boolean and returns 400 `validation_failed` for
-anything else (`"yes"`, `1`, a missing field). It is the only writer of the four
+anything else (`"yes"`, `1`, a missing field). It is the only writer of the five
 `instance_settings` telemetry columns; the general settings PATCH never touches
 them. Enabling mints a `telemetry_id` if the instance never had one; disabling keeps
-the id, so a later re-enable reports under the same id. Neither branch touches
+the id, so a later re-enable reports under the same id, and stamps
+`telemetry_declined_version` with the running server version. Neither branch touches
 `telemetry_last_day`, which the reporter owns, so a toggle never costs a ping
 and never repeats one; both clear the pending error. Enabling an instance that is already on changes
 nothing. The id is never rotated.

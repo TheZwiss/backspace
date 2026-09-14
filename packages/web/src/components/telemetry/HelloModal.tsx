@@ -16,6 +16,12 @@ interface HelloModalProps {
   preview: TelemetryPayload | null;
   /** The preview fetch failed, so the preview says so instead of waiting on a request that already ended. */
   previewFailed?: boolean;
+  /**
+   * The instance said no on an earlier minor release and a new one is asking
+   * once more. Swaps the opening for one that owns up to asking again; the
+   * rest of the ask, the preview and the answers are the same.
+   */
+  reask?: boolean;
 }
 
 type Stage = 'ask' | 'saving' | 'yes' | 'no';
@@ -37,7 +43,7 @@ const CLOSE_BUTTON = 'w-full py-2.5 rounded-lg text-sm font-medium transition-co
  * save leaves the admin on the ask with an explanation. Nothing closes on its
  * own: every state ends with the admin pressing something.
  */
-export function HelloModal({ open, onAnswer, onDismiss, preview, previewFailed = false }: HelloModalProps) {
+export function HelloModal({ open, onAnswer, onDismiss, preview, previewFailed = false, reask = false }: HelloModalProps) {
   const { t } = useTranslation('telemetry');
   const [stage, setStage] = useState<Stage>('ask');
   const [failed, setFailed] = useState(false);
@@ -109,8 +115,8 @@ export function HelloModal({ open, onAnswer, onDismiss, preview, previewFailed =
           )}
           {asking && (
             <>
-              <h2 id={headingId} className="text-lg font-semibold text-txt-primary">{t('ask.title')}</h2>
-              <p>{t('ask.p1')}</p>
+              <h2 id={headingId} className="text-lg font-semibold text-txt-primary">{reask ? t('reask.title') : t('ask.title')}</h2>
+              <p>{reask ? t('reask.p1') : t('ask.p1')}</p>
               <p>{t('ask.p2')}</p>
               <p className="text-txt-primary">{t('ask.previewLead')}</p>
               <PayloadPreview preview={preview} failed={previewFailed} />

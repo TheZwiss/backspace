@@ -1496,4 +1496,9 @@ export interface TelemetryStatus {
   lastError: { day: string; status: number } | null;
   /** The random telemetry id, minted on the first enable and kept through off; null until then. */
   id: string | null;
+  /**
+   * Whether an admin should be asked now: always while never answered, never
+   * after a yes, and after a no again from the next minor release on.
+   */
+  askDue: boolean;
 }

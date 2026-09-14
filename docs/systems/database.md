@@ -392,6 +392,7 @@ The user INSERT, `usedCount` increment, and redemption row INSERT all run in a s
 | telemetryId | text | | Random UUID, minted on the first off-to-on transition and kept for the life of the install, through off. Never the federation `instanceId`. |
 | telemetryLastDay | text | | Last UTC day (`YYYY-MM-DD`) successfully reported. |
 | telemetryLastError | text | | JSON `{ day, status }` of the last failed attempt, null after a success. |
+| telemetryDeclinedVersion | text | | The server version running when telemetry was last switched off (by the modal, the panel, `install.sh` or a receiver `410`). The ask returns on the next minor release; null for a no recorded before the column existed, which is asked once more. |
 | installedAt | integer | | First-boot timestamp (epoch ms). Backfilled by `ensureDefaults` from the oldest local non-deleted account, or `Date.now()` on a fresh DB, so it is non-null after boot and never overwritten. |
 | updatedAt | integer NOT NULL | | |
 

@@ -16,6 +16,10 @@
     "saving": "Saving your choice",
     "error": "Your choice could not be saved. Nothing was sent. Please try again."
   },
+  "reask": {
+    "title": "Hi again. It's Jannis.",
+    "p1": "You said no on an earlier release, and that stood: nothing was sent. A new release is a new question, so I'm asking once more. Say no again and it stays quiet until the next one. Say yes and I'll never ask again."
+  },
   "yes": {
     "title": "Signal acquired.",
     "body": "The first hello goes out at a random minute, and every day after. Thank you. It is a lot less quiet out here now.",

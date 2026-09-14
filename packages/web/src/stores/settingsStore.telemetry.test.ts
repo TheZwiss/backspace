@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { api } from '../api/client';
 import { useSettingsStore } from './settingsStore';
 
-const status = { enabled: null, id: null, lastDay: null, lastError: null };
+const status = { enabled: null, id: null, lastDay: null, lastError: null, askDue: true };
 
 beforeEach(() => {
   useSettingsStore.setState({ telemetry: null, telemetryPreview: null });

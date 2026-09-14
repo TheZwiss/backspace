@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import * as schema from '../db/schema.js';
 import { ensureDefaults } from '../db/migrate.js';
 import { setWorkerId } from '../utils/snowflake.js';
+import { config } from '../config.js';
 
 // Auth is mocked the way adminUpdates.test.ts mocks it: the contract under test
 // is the admin gate, the response shapes and the id lifecycle, not JWT
@@ -93,7 +94,7 @@ describe('admin telemetry routes', () => {
   it('reads the never-asked state', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/admin/telemetry', headers: AUTH });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ enabled: null, id: null, lastDay: null, lastError: null });
+    expect(res.json()).toEqual({ enabled: null, id: null, lastDay: null, lastError: null, askDue: true });
   });
 
   it('mints an id on the first enable and keeps it on a repeated save', async () => {
@@ -123,11 +124,25 @@ describe('admin telemetry routes', () => {
       method: 'PUT', url: '/api/admin/telemetry', headers: AUTH, payload: { enabled: false },
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ enabled: false, id, lastDay: null, lastError: null });
+    expect(res.json()).toEqual({ enabled: false, id, lastDay: null, lastError: null, askDue: false });
     expect(stateRow()).toMatchObject({ telemetry_enabled: 0, telemetry_id: id, telemetry_last_day: null });
 
     const back = await app.inject({ method: 'PUT', url: '/api/admin/telemetry', headers: AUTH, payload: { enabled: true } });
     expect(back.json()).toMatchObject({ enabled: true, id });
+  });
+
+  it('stamps the running version on a no and reports the ask as not due', async () => {
+    await app.inject({ method: 'PUT', url: '/api/admin/telemetry', headers: AUTH, payload: { enabled: false } });
+    const row = sqlite.prepare('SELECT telemetry_declined_version AS v FROM instance_settings WHERE id = 1').get() as { v: string | null };
+    expect(row.v).toBe(config.version);
+    const res = await app.inject({ method: 'GET', url: '/api/admin/telemetry', headers: AUTH });
+    expect(res.json()).toMatchObject({ enabled: false, askDue: false });
+  });
+
+  it('reports the ask as due again for a no recorded before the version was kept', async () => {
+    sqlite.prepare('UPDATE instance_settings SET telemetry_enabled = 0, telemetry_declined_version = NULL WHERE id = 1').run();
+    const res = await app.inject({ method: 'GET', url: '/api/admin/telemetry', headers: AUTH });
+    expect(res.json()).toMatchObject({ enabled: false, askDue: true });
   });
 
   it('rejects a body without a boolean', async () => {

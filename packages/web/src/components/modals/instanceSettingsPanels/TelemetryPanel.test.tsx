@@ -5,9 +5,9 @@ import { TelemetryPanel } from './TelemetryPanel';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { api } from '../../../api/client';
 
-const off = { enabled: false, id: null, lastDay: null, lastError: null };
-const on = { enabled: true, id: '3f6c9e2a-1b2c-4d5e-8f90-1234567890ab', lastDay: '2026-09-06', lastError: null };
-const never = { enabled: null, id: null, lastDay: null, lastError: null };
+const off = { enabled: false, id: null, lastDay: null, lastError: null, askDue: false };
+const on = { enabled: true, id: '3f6c9e2a-1b2c-4d5e-8f90-1234567890ab', lastDay: '2026-09-06', lastError: null, askDue: false };
+const never = { enabled: null, id: null, lastDay: null, lastError: null, askDue: true };
 
 /** The mood the scene stands in, which is this panel's state as a picture. */
 function moodOf(container: HTMLElement): string | null {
@@ -63,7 +63,7 @@ describe('TelemetryPanel', () => {
   });
 
   it('says nothing was asked yet before an answer', async () => {
-    vi.spyOn(api.admin.telemetry, 'get').mockResolvedValue({ enabled: null, id: null, lastDay: null, lastError: null });
+    vi.spyOn(api.admin.telemetry, 'get').mockResolvedValue({ enabled: null, id: null, lastDay: null, lastError: null, askDue: true });
     render(<TelemetryPanel />);
     expect(await screen.findByText('Never asked')).toBeInTheDocument();
     // No switch sitting in its off position: an unanswered instance is invited.

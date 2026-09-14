@@ -12,6 +12,8 @@ export interface ReporterDeps {
   fetch: typeof fetch;
   now: () => Date;
   context: (today: string, telemetryId: string) => PayloadContext;
+  /** The running server version, stamped as the declined version when the receiver retires the service. */
+  version: string;
   log: { info(msg: string): void; debug(msg: string): void };
 }
 
@@ -55,7 +57,7 @@ function pingUrl(endpoint: string): string {
  * Neither the payload nor the receiver's answer is ever logged.
  */
 export async function reporterTick(deps: ReporterDeps): Promise<'sent' | 'skipped' | 'failed' | 'retired'> {
-  const state = readTelemetryState(deps.sqlite);
+  const state = readTelemetryState(deps.sqlite, deps.version);
   if (state.enabled !== true || state.id === null) return 'skipped';
   const telemetryId = state.id;
 
@@ -91,7 +93,7 @@ export async function reporterTick(deps: ReporterDeps): Promise<'sent' | 'skippe
     cause = `, ${error instanceof Error ? error.message : 'request failed'}`;
   }
 
-  const current = readTelemetryState(deps.sqlite);
+  const current = readTelemetryState(deps.sqlite, deps.version);
   if (current.enabled !== true || current.id !== telemetryId) {
     deps.log.debug('[telemetry] reporting was changed while a ping was in flight, nothing recorded');
     return 'skipped';
@@ -103,7 +105,7 @@ export async function reporterTick(deps: ReporterDeps): Promise<'sent' | 'skippe
     return 'sent';
   }
   if (status === 410) {
-    setTelemetryEnabled(deps.sqlite, false);
+    setTelemetryEnabled(deps.sqlite, false, deps.version);
     deps.log.info('[telemetry] the receiver reports the service as retired, reporting switched off');
     return 'retired';
   }
@@ -122,6 +124,7 @@ function productionDeps(): ReporterDeps {
     fetch: globalThis.fetch,
     now: () => new Date(),
     context: (today, id) => payloadContextFromConfig(config, today, id),
+    version: config.version,
     log: { info: (m) => console.log(m), debug: () => undefined },
   };
 }

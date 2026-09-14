@@ -1,0 +1,1 @@
+ALTER TABLE `instance_settings` ADD `telemetry_declined_version` text;

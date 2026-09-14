@@ -88,6 +88,18 @@ export function parseLatestRelease(payload: unknown): LatestRelease | null {
 }
 
 /**
+ * Reads the leading `major.minor.patch` of a version string. A prerelease or
+ * build suffix (`1.5.0-dev`, `1.4.0+abc`) is ignored, so a dev build compares
+ * as the release it is heading for. Anything else, such as a fork's custom
+ * label, returns null and the caller decides what ignorance means for it.
+ */
+export function parseVersion(value: string): [number, number, number] | null {
+  const match = /^(\d+)\.(\d+)\.(\d+)/.exec(value.trim());
+  if (!match) return null;
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+/**
  * Compares two `major.minor.patch` versions.
  *
  * Returns null when either side does not parse, which the caller reports as
@@ -95,13 +107,8 @@ export function parseLatestRelease(payload: unknown): LatestRelease | null {
  * be worse than admitting ignorance.
  */
 export function compareVersions(a: string, b: string): number | null {
-  const parse = (value: string): number[] | null => {
-    const match = /^(\d+)\.(\d+)\.(\d+)/.exec(value.trim());
-    if (!match) return null;
-    return [Number(match[1]), Number(match[2]), Number(match[3])];
-  };
-  const left = parse(a);
-  const right = parse(b);
+  const left = parseVersion(a);
+  const right = parseVersion(b);
   if (left === null || right === null) return null;
   for (let i = 0; i < 3; i++) {
     const l = left[i] ?? 0;

@@ -7,7 +7,7 @@ person or a domain, and everything that comes back is published as open data.
 Source files:
 - `packages/server/src/telemetry/day.ts` - UTC calendar-day helpers (`utcDay`, `addDays`, `isIsoDay`)
 - `packages/server/src/telemetry/rounding.ts` - `roundTwoSignificant`, the one rounding rule
-- `packages/server/src/telemetry/state.ts` - the four `instance_settings` columns and the on/off transition
+- `packages/server/src/telemetry/state.ts` - the five `instance_settings` columns, the on/off transition and `isAskDue`
 - `packages/server/src/telemetry/activity.ts` - `touchUserActivity`, `parseClientKind`
 - `packages/server/src/telemetry/payload.ts` - `buildTelemetryPayload`, the pure builder
 - `packages/server/src/telemetry/reporter.ts` - `slotMinute`, `reporterTick`, `startTelemetryReporter`, `stopTelemetryReporter`
@@ -34,7 +34,8 @@ What it is for:
   client kinds. A lower bound, never a measurement, because only the instances
   that opted in are in it.
 - Zero cost to anyone who does not opt in. Nothing is sent and nothing is
-  fetched. The ask stops after one answer or two dismissals.
+  fetched. The ask returns until it is answered, never after a yes, and once
+  per minor release after a no.
 
 What it is not: there is no client telemetry of any kind. The web, desktop and
 mobile clients report nothing, ever. There is no crash reporting, no error
@@ -117,7 +118,7 @@ that asks.
 
 ## 3. Opt-in state
 
-Four columns on `instance_settings` (see [database.md](database.md)), owned by
+Five columns on `instance_settings` (see [database.md](database.md)), owned by
 `telemetry/state.ts` and by nothing else. The general settings PATCH does not
 touch them.
 
@@ -127,19 +128,26 @@ touch them.
 | `telemetry_id` | the random UUID sent as `instance` |
 | `telemetry_last_day` | the last UTC day successfully reported |
 | `telemetry_last_error` | JSON `{ day, status }` of the last failed attempt, cleared on success |
+| `telemetry_declined_version` | the server version running when reporting was last switched off; decides when the ask returns, see §7 |
 
 `installed_at` on the same row is the first-boot timestamp. It is nullable
 because SQLite cannot add a `NOT NULL` column without a default to an existing
 table; `ensureDefaults` fills it on boot from the oldest local, non-deleted
 user's `created_at`, or from the current time when there is none.
 
-Transitions, all through `setTelemetryEnabled(sqlite, enabled)`:
+Transitions, all through `setTelemetryEnabled(sqlite, enabled, runningVersion)`:
 
 | From | To | What happens |
 |---|---|---|
 | `null` or off | on | a `crypto.randomUUID()` is minted if the row has no id yet, the last error is cleared |
 | on | on | nothing at all |
-| any | off | the last error is cleared; the id and the last reported day are kept |
+| any | off | the last error is cleared; `telemetry_declined_version` is stamped with the running version; the id and the last reported day are kept |
+
+The stamp is written by every path that switches off: the modal's no, the
+panel's toggle, `install.sh` with `TELEMETRY=off` (which mirrors the statement
+inline, so an unattended install that said no is not asked at the first login)
+and the receiver's `410` retirement in §5. Switching on leaves it alone; a yes
+ends the ask regardless of what was declined before.
 
 The id is minted once and kept for the life of the install, through any number
 of off-and-on cycles. This is what Home Assistant and Grafana do. Rotating it
@@ -233,7 +241,7 @@ backspace-server/<version>`, with a 10 second `AbortSignal.timeout`. Outcomes:
 | Result | What the instance does |
 |---|---|
 | 2xx | `telemetry_last_day = day`, the last error is cleared |
-| 410 | reporting is switched off through the same transition as the admin panel (the id is kept), with one info-level log line saying the service was retired |
+| 410 | reporting is switched off through the same transition as the admin panel (the id is kept, the running version is stamped as declined, so the ask returns on the next minor release: the first build that can carry a new endpoint), with one info-level log line saying the service was retired |
 | any other status | `telemetry_last_error = { day, status }`, a debug log line, retry tomorrow and never sooner |
 | a thrown request (network failure, timeout) | the same as any other status, recorded as status `0` |
 
@@ -262,8 +270,10 @@ GET /api/admin/telemetry/preview  → TelemetryPayload
 ```
 
 `TelemetryStatus` is `{ enabled: boolean | null, id: string | null, lastDay:
-string | null, lastError: { day, status } | null }`, read straight off the four
-columns.
+string | null, lastError: { day, status } | null, askDue: boolean }`. The first
+four are read straight off the columns; `askDue` is `isAskDue(enabled,
+telemetry_declined_version, config.version)`, the one place the re-ask rule in
+§7 is computed, so the client never compares versions itself.
 
 `PUT` requires `enabled` to be a boolean and answers `400 validation_failed`
 through `sendError` for anything else, including the string `"yes"` and the
@@ -295,19 +305,42 @@ once and closed, so before this the beam only ever arrived. Under
 
 ## 7. The ask
 
-An admin signed in on their home instance sees a one-time modal while
-`GET /api/admin/telemetry` returns `enabled: null`. It is never shown to
+An admin signed in on their home instance sees the modal while
+`GET /api/admin/telemetry` returns `askDue: true`. It is never shown to
 non-admins, and never on a remote instance reached through a federated account.
+
+When the ask is due, by instance state:
+
+| State | The ask |
+|---|---|
+| never answered (`enabled: null`) | due, and it keeps returning until somebody answers |
+| said yes (`enabled: true`) | never again, on any release |
+| said no (`enabled: false`) | quiet on the minor release the no was made on and its patches; due again from the next minor or major release on, then quiet again after the next no |
+
+The comparison is `major.minor` only, from the leading `x.y.z` of the version
+string; a prerelease suffix is ignored, so `1.5.0-dev` counts as 1.5. A
+version that does not parse on either side reads as not due, so a fork with a
+custom label is asked while it has never answered and left alone after its one
+no rather than nagged on every page load because its version never advances.
+A downgrade is quiet for the same reason a patch is. A no recorded before the
+column existed has no version and is due once, after which it follows the
+table. Switching off in the panel is a no like any other.
 
 Snoozing means "Decide later", Escape, or a click on the scrim: nothing is saved
 on the server, a timestamp goes into that browser's local storage, and the modal
-stays away for 7 days. After the second dismissal it stays away for good in that
-browser. The settings section remains either way, so nothing is unreachable.
+stays away for 7 days, then returns; there is no number of snoozes after which
+it stops. The record is forgotten once an answer is stored, so a "later" clicked
+before a no cannot hold back the ask a later release brings. The settings
+section remains either way, so nothing is unreachable. Until 2026-09-15 the
+second snooze ended the ask for good in that browser, which meant two idle
+clicks in one week silenced the question forever.
 
-Any answer by any admin ends the ask for everyone, because the setting belongs
-to the instance rather than to the person answering. "No" saves first and costs
-nothing, and the preview shown in the modal is the real payload from the preview
-route.
+Any answer by any admin settles the ask for everyone, because the setting
+belongs to the instance rather than to the person answering. "No" saves first
+and costs nothing, and the preview shown in the modal is the real payload from
+the preview route. A re-ask after an earlier no opens with its own title and
+first paragraph, saying that it is asking again and when it will stop; the rest
+of the modal is the same.
 
 The two answers are illustrated rather than plain, each its own component under
 `components/telemetry/answers/`: "Hiii 👋" is a launch, "Radio silence" a

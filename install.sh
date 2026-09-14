@@ -775,10 +775,12 @@ fi
 # The transition mirrors setTelemetryEnabled() in
 # packages/server/src/telemetry/state.ts: turning on mints an id if the
 # instance never had one, turning on an instance that is already on changes
-# nothing, and turning off keeps the id for a later re-enable. Neither branch
-# touches telemetry_last_day: that column is the reporter's record of what it
-# sent, and writing it here would cost the instance a day's ping. Nothing here
-# can fail the install.
+# nothing, and turning off keeps the id for a later re-enable and stamps the
+# running version as the declined one, so the admin panel stays quiet about it
+# until the next minor release rather than asking at the first login. Neither
+# branch touches telemetry_last_day: that column is the reporter's record of
+# what it sent, and writing it here would cost the instance a day's ping.
+# Nothing here can fail the install.
 if [[ -n "${TELEMETRY:-}" ]]; then
   if [[ "$TELEMETRY" != "on" && "$TELEMETRY" != "off" ]]; then
     error "TELEMETRY must be 'on' or 'off' (got '${TELEMETRY}'). Leaving the usage ping unset."
@@ -799,7 +801,8 @@ if [[ -n "${TELEMETRY:-}" ]]; then
         const changes = db.prepare("UPDATE instance_settings SET telemetry_enabled = 1, telemetry_id = COALESCE(telemetry_id, ?), telemetry_last_error = NULL, updated_at = ? WHERE id = 1 AND (telemetry_enabled IS NULL OR telemetry_enabled = 0)").run(crypto.randomUUID(), now).changes;
         result = changes === 1 ? "on, the first ping goes out at the next slot" : "already on, left as it is";
       } else {
-        db.prepare("UPDATE instance_settings SET telemetry_enabled = 0, telemetry_last_error = NULL, updated_at = ? WHERE id = 1").run(now);
+        const version = require("./package.json").version;
+        db.prepare("UPDATE instance_settings SET telemetry_enabled = 0, telemetry_declined_version = ?, telemetry_last_error = NULL, updated_at = ? WHERE id = 1").run(version, now);
         result = "off, nothing is sent";
       }
       db.close();

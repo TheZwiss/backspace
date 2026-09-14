@@ -359,6 +359,7 @@ interface TelemetryStatus {
   id: string | null;         // the random telemetry id, kept through off; null until the first enable
   lastDay: string | null;    // last UTC day successfully reported
   lastError: { day: string; status: number } | null;
+  askDue: boolean;           // whether an admin should be asked now, see telemetry.md §7
 }
 ```
 
@@ -370,20 +371,23 @@ something the reporter would not send. While reporting is off the preview's
 `instance` is the literal string `preview` rather than a freshly minted id, and
 opening it writes nothing.
 
-`routes/adminTelemetry.ts` is the only writer of the four `instance_settings`
+`routes/adminTelemetry.ts` is the only writer of the five `instance_settings`
 telemetry columns. `PATCH /api/settings/instance` does not touch them, so the id
 lifecycle has exactly one owner. The first enable mints a UUID that is kept for
 the life of the install. Neither branch writes `telemetry_last_day`: that column
 belongs to the reporter, and stamping it here cost the instance a day's ping
 every time the switch was flipped twice. Disabling keeps the id and the last
 reported day and clears the pending error, so a later re-enable reports as the
-same instance and does not repeat a day it already sent. Saving "on" while it is
-already on changes nothing at all.
+same instance and does not repeat a day it already sent. Disabling also stamps
+`telemetry_declined_version` with the running version, which is what keeps the
+ask quiet for the rest of that minor release. Saving "on" while it is already on
+changes nothing at all.
 
-The first admin to sign in on an instance that was never asked sees a one-time
-modal. Dismissing it without answering snoozes it for 7 days in that browser and
-stops it for good after the second dismissal; any answer by any admin ends the
-ask for everyone, because the setting belongs to the instance.
+An admin signing in while `askDue` is true sees the modal. Dismissing it
+without answering snoozes it for 7 days in that browser, after which it returns,
+as often as it takes; any answer by any admin settles the ask for everyone,
+because the setting belongs to the instance. A yes ends it for good. A no keeps
+it away until the next minor release, when it is asked once more.
 
 Full reference, including every field, the rounding rule, what is never sent and
 the 90-day retention at the receiver: [telemetry.md](telemetry.md).

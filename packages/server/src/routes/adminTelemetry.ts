@@ -22,7 +22,7 @@ export async function adminTelemetryRoutes(app: FastifyInstance): Promise<void> 
   app.get(
     '/api/admin/telemetry',
     { preHandler: [authenticate, requireAdmin] },
-    async (): Promise<TelemetryStatus> => readTelemetryState(getRawDb()),
+    async (): Promise<TelemetryStatus> => readTelemetryState(getRawDb(), config.version),
   );
 
   // PUT /api/admin/telemetry: the on/off transition. Enabling an instance
@@ -38,7 +38,7 @@ export async function adminTelemetryRoutes(app: FastifyInstance): Promise<void> 
         sendError(reply, 400, 'validation_failed');
         return undefined;
       }
-      return setTelemetryEnabled(getRawDb(), enabled);
+      return setTelemetryEnabled(getRawDb(), enabled, config.version);
     },
   );
 
@@ -56,7 +56,7 @@ export async function adminTelemetryRoutes(app: FastifyInstance): Promise<void> 
     { preHandler: [authenticate, requireAdmin] },
     async (): Promise<TelemetryPayload> => {
       const sqlite = getRawDb();
-      const state = readTelemetryState(sqlite);
+      const state = readTelemetryState(sqlite, config.version);
       const today = utcDay(new Date());
       const instance = state.enabled === true && state.id !== null ? state.id : 'preview';
       return buildTelemetryPayload(sqlite, payloadContextFromConfig(config, today, instance));

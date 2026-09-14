@@ -16,6 +16,10 @@
     "saving": "Deine Wahl wird gespeichert",
     "error": "Deine Wahl konnte nicht gespeichert werden. Es wurde nichts gesendet. Bitte versuch es noch einmal."
   },
+  "reask": {
+    "title": "Hi nochmal, ich bin Jannis.",
+    "p1": "Du hast bei einer früheren Version Nein gesagt, und dabei ist es geblieben: Es wurde nichts gesendet. Eine neue Version ist eine neue Frage, deshalb frage ich noch einmal. Sag wieder Nein, und es bleibt bis zur nächsten still. Sag Ja, und ich frage nie wieder."
+  },
   "yes": {
     "title": "Signal empfangen.",
     "body": "Das erste Hallo geht zu einer zufälligen Minute raus, und danach jeden Tag. Danke. Es ist gerade deutlich weniger still hier draußen.",
