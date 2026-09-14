@@ -3,6 +3,7 @@ import type { InstanceStreamingLimits, InstanceAdminSettings, TelemetryPayload, 
 import { api } from '../api/client';
 import { describeError } from '../i18n/errors';
 import { EMPTY_ACK, readUpdateAck, writeUpdateAck, pendingUpdateVersion, type UpdateAck } from '../utils/updateAck';
+import { clearDismissal } from '../utils/telemetryAsk';
 
 interface SettingsState {
   streamingLimits: InstanceStreamingLimits | null;
@@ -130,9 +131,14 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     set({ telemetryPreview });
   },
 
+  // Both the modal and the settings panel answer through here, so this is
+  // where a stored answer forgets the browser's snooze: a "later" clicked
+  // before a no has nothing left to hold back, and left in place it would
+  // delay the ask the next minor release brings.
   setTelemetryEnabled: async (enabled: boolean) => {
     const telemetry = await api.admin.telemetry.set(enabled);
     set({ telemetry });
+    clearDismissal(localStorage);
   },
 
   setIsAdmin: (isAdmin: boolean) => set({ isAdmin }),

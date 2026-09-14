@@ -371,9 +371,11 @@ something the reporter would not send. While reporting is off the preview's
 `instance` is the literal string `preview` rather than a freshly minted id, and
 opening it writes nothing.
 
-`routes/adminTelemetry.ts` is the only writer of the five `instance_settings`
-telemetry columns. `PATCH /api/settings/instance` does not touch them, so the id
-lifecycle has exactly one owner. The first enable mints a UUID that is kept for
+`routes/adminTelemetry.ts` is the only HTTP writer of the five
+`instance_settings` telemetry columns, and every write goes through
+`telemetry/state.ts`, which the reporter and `install.sh` also use.
+`PATCH /api/settings/instance` does not touch them, so the id lifecycle has
+exactly one owner. The first enable mints a UUID that is kept for
 the life of the install. Neither branch writes `telemetry_last_day`: that column
 belongs to the reporter, and stamping it here cost the instance a day's ping
 every time the switch was flipped twice. Disabling keeps the id and the last
@@ -618,7 +620,7 @@ re-arms both, and clearing site data brings them back.
 
 The permanent home of the opt-in daily report described in
 [telemetry.md](telemetry.md). It is the only place the setting can be changed
-after the one-time ask, and it always reads the home instance: there is no local
+outside the ask, and it always reads the home instance: there is no local
 copy of the state, so what the panel shows is what the server would send.
 
 Contents, top to bottom:

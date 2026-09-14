@@ -38,7 +38,7 @@ type Stage = 'ask' | 'saving' | 'yes' | 'no';
 const CLOSE_BUTTON = 'w-full py-2.5 rounded-lg text-sm font-medium transition-colors bg-surface-elevated hover:bg-interactive-selected text-txt-primary';
 
 /**
- * The one-time ask. The answer is saved before anything animates, so the
+ * The ask. The answer is saved before anything animates, so the
  * scene only ever celebrates something that is already stored, and a failed
  * save leaves the admin on the ask with an explanation. Nothing closes on its
  * own: every state ends with the admin pressing something.

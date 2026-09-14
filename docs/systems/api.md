@@ -308,9 +308,10 @@ answered, never after a yes, and after a no again from the next minor release
 on; telemetry.md §7). All three routes are home-origin only.
 
 `PUT` requires `enabled` to be a boolean and returns 400 `validation_failed` for
-anything else (`"yes"`, `1`, a missing field). It is the only writer of the five
-`instance_settings` telemetry columns; the general settings PATCH never touches
-them. Enabling mints a `telemetry_id` if the instance never had one; disabling keeps
+anything else (`"yes"`, `1`, a missing field). It is the only HTTP writer of the
+five `instance_settings` telemetry columns (the reporter records what it sent
+and `install.sh` can set the switch, both through the same `telemetry/state.ts`
+rules); the general settings PATCH never touches them. Enabling mints a `telemetry_id` if the instance never had one; disabling keeps
 the id, so a later re-enable reports under the same id, and stamps
 `telemetry_declined_version` with the running server version. Neither branch touches
 `telemetry_last_day`, which the reporter owns, so a toggle never costs a ping

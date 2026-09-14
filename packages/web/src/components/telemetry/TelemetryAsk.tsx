@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuthStore } from '../../stores/authStore';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { clearDismissal, recordDismissal, shouldShowAsk } from '../../utils/telemetryAsk';
+import { recordDismissal, shouldShowAsk } from '../../utils/telemetryAsk';
 import { HelloModal } from './HelloModal';
 
 /**
@@ -45,12 +45,8 @@ export function TelemetryAsk() {
     void fetchPreview().catch(() => setPreviewFailed(true));
   }, [isAdmin, telemetry, fetchPreview]);
 
-  const onAnswer = useCallback(async (enabled: boolean) => {
-    await setEnabled(enabled);
-    // A "later" clicked before this answer has nothing left to hold back, and
-    // left in place it would delay the re-ask a later release brings.
-    clearDismissal(localStorage);
-  }, [setEnabled]);
+  // The store forgets this browser's snooze once the answer is stored.
+  const onAnswer = useCallback((enabled: boolean) => setEnabled(enabled), [setEnabled]);
 
   const onDismiss = useCallback(() => {
     // An answer is stored on the instance and settles the ask for every admin,
