@@ -511,6 +511,55 @@ The Scorecard checks that no code change satisfies (`CIIBestPracticesID`,
 `FuzzingID`, `CodeReviewID`, `BranchProtectionID`, `SecurityPolicyID`) are maintainer
 settings or process. They belong to the checklist below, not to remediation.
 
+## Dependency update policy
+
+`.github/dependabot.yml` drives three ecosystems on a weekly schedule. Routine
+npm minor and patch bumps are collapsed into one grouped PR (`npm-minor-patch`),
+and action bumps into another (`github-actions`). Those two are the ones that
+carry nearly all of the patching value, and they land green most weeks.
+
+Majors are deliberately **not** grouped: each arrives as its own PR so it can be
+judged on its own. A major that the project is not ready for gets an `ignore`
+entry rather than a weekly close.
+
+### Why closing a major PR does not make it go away
+
+Closing a Dependabot PR suppresses only that exact `from -> to` version pair. The
+`npm-minor-patch` group keeps moving the *from* side, so the next weekly run sees
+a pair it has never proposed and opens the PR again. `better-sqlite3` is the
+worked example: closed at `11.10.0 -> 13.0.3`, the group moved the floor to
+`12.11.1`, and the following run opened `12.11.1 -> 13.0.3` as a new PR.
+
+A close is therefore a one-week reprieve, not a decision. The decision lives in
+the `ignore` block.
+
+### The shape of an ignore entry
+
+Every deferred major is pinned with `update-types: ["version-update:semver-major"]`
+so minor and patch releases, **including security patches**, keep flowing through
+the group. Nothing is frozen wholesale. Each entry carries a comment saying what
+unblocks it, and the upgrade is then done as its own PR with the entry deleted in
+the same change.
+
+Currently deferred, with the condition that releases each one:
+
+| Pinned at | Why | Unblocked by |
+|-----------|-----|--------------|
+| react / react-dom / `@types/*` 18 | `RefObject<T \| null>` variance and `useState` arity break across the chat components | the UI pass landing; then one PR moving all four together |
+| tailwindcss 3 | v4 moves the PostCSS plugin to `@tailwindcss/postcss` and replaces the config model the design system is built on | a dedicated port of the theme, surface/input tiers and `globals.css` |
+| typescript 5 | v7 removes the `baseUrl` compiler option (TS5102) that the workspace tsconfigs rely on | migrating every tsconfig off `baseUrl` first |
+| fastify 4 + all `@fastify/*` | the 11.x plugin lines target Fastify 5; on Fastify 4 the server stops booting | one PR taking core and every plugin across together |
+| better-sqlite3 12 | v13 segfaults every spawned test instance on boot (exit 139) against `node:20-slim`, a native ABI mismatch rather than a flake | the Dockerfile base image moving off Node 20 |
+| `@tus/file-store` + `@tus/server` 1.x | matched pair; bumping either alone splits it | one PR moving both, upload pipeline exercised end to end |
+
+Two entries predate this policy and stay as they are: `uiohook-napi` is ignored
+outright (an exact-version pnpm patch makes any bump break
+`pnpm install --frozen-lockfile`), and `docker-compose.yml` images are bumped by
+hand for the reason in the maintainer checklist below.
+
+Widening an ignore entry to get past a red build is the failure mode this section
+exists to prevent. If a major is genuinely wanted, do the migration.
+
 ## Supply-chain hardening
 
 - Every action is pinned to a full commit SHA (`# vX.Y.Z` comment) — resists
