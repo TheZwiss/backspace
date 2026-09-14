@@ -400,8 +400,11 @@ export function ChannelSidebar() {
   };
 
   const handleVoiceJoin = (channelId: string) => {
-    // Don't re-join the same channel — prevents duplicate LiveKit connections
-    if (currentVoiceChannelId === channelId) {
+    // Don't re-join the same channel — prevents duplicate LiveKit connections.
+    // A dropped session is the exception: the channel ID is kept so the user
+    // can resume, so this click has to reach joinVoiceChannel to reconnect.
+    if (currentVoiceChannelId === channelId
+        && useVoiceStore.getState().voiceConnectionStatus !== 'disconnected') {
       navigate(`/channels/${currentSpaceId}/${channelId}`);
       return;
     }

@@ -143,8 +143,16 @@ export function joinVoiceChannel(
   channelId: string,
   connectFn?: (channelId: string, isDm?: boolean) => Promise<void>,
 ): void {
-  const { currentVoiceChannelId, setCurrentVoiceChannel, addVoiceUser, removeVoiceUser } = useVoiceStore.getState();
-  if (currentVoiceChannelId === channelId) return;
+  const {
+    currentVoiceChannelId, voiceConnectionStatus,
+    setCurrentVoiceChannel, addVoiceUser, removeVoiceUser,
+  } = useVoiceStore.getState();
+  // Re-selecting the channel we are already live in stays a no-op, but a
+  // dropped session deliberately keeps `currentVoiceChannelId` set so the
+  // session can be resumed. Without the status check the same click would mean
+  // "nothing" instead of "reconnect", and hanging up would be the only way
+  // back into the channel the user never meant to leave.
+  if (currentVoiceChannelId === channelId && voiceConnectionStatus !== 'disconnected') return;
 
   // Leave old instance if switching cross-origin
   if (currentVoiceChannelId) {

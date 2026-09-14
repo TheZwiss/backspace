@@ -148,6 +148,50 @@ describe('voice reconnect grace', () => {
     connectionManager.removeConnection(ordinaryWs);
   });
 
+  it('ends the held session immediately when the resuming join is refused', () => {
+    const voiceWs = socket();
+    const newWs = socket();
+    joinSpace('grace-reject-user', 'grace-reject-room', voiceWs);
+    const sendSpy = vi.spyOn(connectionManager, 'sendToUser');
+
+    close(voiceWs);
+    connectionManager.addConnection('grace-reject-user', newWs);
+    // 'grace-reject-room' is an in-memory voice room with no backing channel
+    // row, so the join is refused exactly as a deleted channel or a revoked
+    // CONNECT would be.
+    handleClientEvent(
+      { type: 'voice_join', channelId: 'grace-reject-room' },
+      'grace-reject-user',
+      'grace-reject-user',
+      newWs,
+      false,
+    );
+
+    expect(connectionManager.getUserRoom('grace-reject-user')).toBeNull();
+    expect(sendSpy).toHaveBeenCalledWith('grace-reject-user', expect.objectContaining({
+      type: 'voice_disconnected', reason: 'rejected',
+    }));
+    connectionManager.removeConnection(newWs);
+  });
+
+  it('leaves a live session alone when a different channel refuses the join', () => {
+    const voiceWs = socket();
+    joinSpace('grace-other-user', 'grace-other-room', voiceWs);
+
+    handleClientEvent(
+      { type: 'voice_join', channelId: 'grace-unrelated-room' },
+      'grace-other-user',
+      'grace-other-user',
+      voiceWs,
+      false,
+    );
+
+    expect(connectionManager.getUserRoom('grace-other-user')?.roomId).toBe('grace-other-room');
+    connectionManager.clearVoiceWs('grace-other-user');
+    connectionManager.removeConnection(voiceWs);
+    connectionManager.destroyRoom('grace-other-room');
+  });
+
   it('rebinds an active DM through voice_status from the replacement socket', () => {
     const oldWs = socket();
     const newWs = socket();

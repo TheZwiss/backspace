@@ -67,7 +67,16 @@ server grace period instead of immediately removing the participant. A
 session without a leave/join broadcast. A status message alone cannot claim a
 space voice session from an ordinary second tab. Explicit leave, moderator
 disconnect, displacement, and rejected joins remain terminal and clean up
-immediately.
+immediately — a join refused for the room the user is still holding ends that
+session on the spot rather than letting it idle out the grace period.
+
+On the client, a LiveKit disconnect is terminal only for `DUPLICATE_IDENTITY`,
+`PARTICIPANT_REMOVED` and `ROOM_DELETED`. Every other reason keeps
+`currentVoiceChannelId` so the session can be resumed, and surfaces a Retry
+action (`VoiceControls` on desktop, `MobileVoiceMiniBar` on mobile). Because the
+channel ID outlives the connection, `joinVoiceChannel` treats re-selecting the
+current channel as a reconnect whenever `voiceConnectionStatus` is
+`disconnected`, and as a no-op otherwise.
 
 ---
 
@@ -452,7 +461,9 @@ that behavior visibly. The functional change is the preset upgrade from
 **Persistence:** `voiceStore` with Zustand localStorage. Keys: `echoCancellation`, `autoGainControl`, `rnnoiseEnabled`, `screenShareConfig`.
 
 **Diagnostics polling:** `VoiceGrid` owns one `useTrackStats` poller for all
-visible/observed stream tiles. Tiles consume the shared snapshot and apply the
+visible/observed stream tiles. The poll interval is 2 s (raised from 1 s when
+the poller became shared), so the connection inspector refreshes at that rate
+and the health debounce below spans roughly six seconds of degradation. Tiles consume the shared snapshot and apply the
 three-bad-sample / five-stable-second debounce independently, avoiding a full
 PeerConnection scan per tile. The connection inspector may start one additional
 poller only while it is open. Publisher CPU attribution is available on the

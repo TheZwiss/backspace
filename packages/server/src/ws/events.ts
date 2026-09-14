@@ -567,6 +567,24 @@ function broadcastRoomLeave(roomId: string, room: VoiceRoom, userId: string): vo
   }
 }
 
+/**
+ * A refused join is terminal for the client, so it must be terminal on the
+ * server too. When the refusal concerns the room the user is still holding —
+ * the resume-after-reconnect case, where CONNECT was revoked or the channel
+ * deleted mid-grace — leaving them parked there until the grace period expires
+ * would keep them listed in a voice channel they have already been told they
+ * are out of. A refusal aimed at any *other* channel leaves the live session
+ * alone, which is what it has always done.
+ */
+function rejectVoiceJoin(userId: string, channelId: string): void {
+  if (connectionManager.getUserRoom(userId)?.roomId === channelId) {
+    handleVoiceLeave(userId);
+  }
+  connectionManager.sendToUser(userId, {
+    type: 'voice_disconnected', userId, channelId, reason: 'rejected',
+  });
+}
+
 function handleVoiceJoin(event: Record<string, unknown>, userId: string, ws: WebSocket): void {
   const channelId = event.channelId as string;
 
@@ -578,17 +596,13 @@ function handleVoiceJoin(event: Record<string, unknown>, userId: string, ws: Web
   const spaceId = getChannelSpaceId(channelId);
   if (!spaceId) {
     connectionManager.sendToUser(userId, { type: 'error', message: 'Channel not found' });
-    connectionManager.sendToUser(userId, {
-      type: 'voice_disconnected', userId, channelId, reason: 'rejected',
-    });
+    rejectVoiceJoin(userId, channelId);
     return;
   }
 
   if (!hasPermission(userId, spaceId, PermissionBits.CONNECT, channelId)) {
     connectionManager.sendToUser(userId, { type: 'error', message: 'Missing CONNECT permission' });
-    connectionManager.sendToUser(userId, {
-      type: 'voice_disconnected', userId, channelId, reason: 'rejected',
-    });
+    rejectVoiceJoin(userId, channelId);
     return;
   }
 

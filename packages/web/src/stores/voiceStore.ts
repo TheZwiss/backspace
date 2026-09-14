@@ -782,8 +782,12 @@ export const useVoiceStore = create<VoiceState>()(
           }
         }
         if (version < 14) {
-          persistedState.screenShareConfig ??= {};
-          persistedState.screenShareConfig.codec = 'vp9';
+          // Guard like every other screenShareConfig migration: creating the
+          // object here would hand `merge` a partial config, and its shallow
+          // spread replaces the defaults wholesale rather than filling them in.
+          if (persistedState.screenShareConfig) {
+            persistedState.screenShareConfig.codec = 'vp9';
+          }
         }
         return persistedState;
       },
