@@ -129,3 +129,13 @@
 {"snapshot_date":"2026-09-13","dimension":"steamcommunity.com","title":"","count":7,"uniques":3}
 {"snapshot_date":"2026-09-13","dimension":"yandex.ru","title":"","count":3,"uniques":2}
 {"snapshot_date":"2026-09-13","dimension":"teams.public.onecdn.static.microsoft","title":"","count":2,"uniques":1}
+{"snapshot_date":"2026-09-14","dimension":"github.com","title":"","count":219,"uniques":35}
+{"snapshot_date":"2026-09-14","dimension":"Google","title":"","count":211,"uniques":46}
+{"snapshot_date":"2026-09-14","dimension":"chatgpt.com","title":"","count":127,"uniques":46}
+{"snapshot_date":"2026-09-14","dimension":"thezwiss.github.io","title":"","count":63,"uniques":21}
+{"snapshot_date":"2026-09-14","dimension":"backspacechat.com","title":"","count":46,"uniques":12}
+{"snapshot_date":"2026-09-14","dimension":"DuckDuckGo","title":"","count":32,"uniques":4}
+{"snapshot_date":"2026-09-14","dimension":"search.brave.com","title":"","count":15,"uniques":4}
+{"snapshot_date":"2026-09-14","dimension":"steamcommunity.com","title":"","count":4,"uniques":3}
+{"snapshot_date":"2026-09-14","dimension":"yandex.ru","title":"","count":4,"uniques":3}
+{"snapshot_date":"2026-09-14","dimension":"teams.public.onecdn.static.microsoft","title":"","count":2,"uniques":1}
