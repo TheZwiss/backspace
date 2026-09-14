@@ -14,7 +14,7 @@
     "vendor:check": "vitest run src/vendor-check.test.ts"
   },
   "devDependencies": {
-    "typescript": "^5.8.0",
+    "typescript": "^7.0.2",
     "vitest": "^4.1.11",
     "@types/node": "^24.0.0"
   }

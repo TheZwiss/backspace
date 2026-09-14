@@ -46,7 +46,7 @@
     "@types/ws": "^8.18.1",
     "cross-env": "^10.1.0",
     "drizzle-kit": "^0.31.10",
-    "typescript": "^5.4.0",
+    "typescript": "^7.0.2",
     "vitest": "^4.1.11",
     "ws": "^8.21.3"
   }
