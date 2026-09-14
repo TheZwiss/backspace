@@ -29,6 +29,75 @@ updates:
       # Docker stages until the patch is regenerated. Bump it by hand.
       - dependency-name: uiohook-napi
 
+      # ---------------------------------------------------------------------
+      # Framework majors we have deliberately deferred.
+      #
+      # Each entry below ignores ONLY `version-update:semver-major`, so minor
+      # and patch releases (including security patches) still flow through the
+      # npm-minor-patch group as normal. Without these, Dependabot reopens the
+      # same major PR every week: closing one only suppresses that exact
+      # version pair, and the minor-patch group keeps moving the base version,
+      # which makes the next weekly run see a brand-new pair.
+      #
+      # Each entry records what unblocks it. Do the upgrade as its own PR,
+      # then delete the entry. Do not silently widen an entry to dodge a red
+      # build.
+      # ---------------------------------------------------------------------
+
+      # React stays on 18. The move to 19 is a typed migration, not a bump:
+      # `RefObject<T | null>` variance and `useState` arity break across the
+      # chat components. Unblock: after the UI pass (#180) lands, in one PR
+      # that moves react, react-dom and both @types packages together.
+      - dependency-name: react
+        update-types: ["version-update:semver-major"]
+      - dependency-name: react-dom
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/react-dom"
+        update-types: ["version-update:semver-major"]
+
+      # Tailwind stays on 3. Version 4 moves the PostCSS plugin into
+      # `@tailwindcss/postcss` and replaces the JS config model that the
+      # Aether Drift design system is built on (docs/systems/design-system.md).
+      # Unblock: a dedicated PR that ports the theme, the surface/input tiers
+      # and globals.css, verified against Backspace-design-prototype.html.
+      - dependency-name: tailwindcss
+        update-types: ["version-update:semver-major"]
+
+      # TypeScript stays on 5. Version 7 removes the `baseUrl` compiler option
+      # (TS5102), which the workspace tsconfigs rely on.
+      # Unblock: a PR that migrates every tsconfig off baseUrl first.
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
+
+      # Fastify core and its plugins move together or not at all. The 11.x
+      # plugin lines target Fastify 5; on Fastify 4 the server stops booting.
+      # Unblock: one PR that takes fastify 4 -> 5 and every @fastify/* plugin
+      # in the same commit, with the federation and security-header suites green.
+      - dependency-name: fastify
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@fastify/*"
+        update-types: ["version-update:semver-major"]
+
+      # better-sqlite3 stays on 12. Version 13 segfaults every spawned test
+      # instance on boot (exit 139) against the node:20-slim base image, which
+      # is a native ABI mismatch rather than a flake.
+      # Unblock: when the Dockerfile base image moves off Node 20, re-test then.
+      - dependency-name: better-sqlite3
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/better-sqlite3"
+        update-types: ["version-update:semver-major"]
+
+      # The tus store and server are a matched pair: @tus/file-store 2.x wants
+      # @tus/server 2.x, and bumping either alone splits the pair.
+      # Unblock: one PR that moves both, with the upload pipeline exercised
+      # end to end (docs/systems/uploads.md).
+      - dependency-name: "@tus/file-store"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@tus/server"
+        update-types: ["version-update:semver-major"]
+
   - package-ecosystem: github-actions
     directory: /
     schedule:
