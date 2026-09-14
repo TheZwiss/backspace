@@ -98,23 +98,10 @@ describe('TelemetryAsk', () => {
     expect(screen.queryByText(/Jannis/)).not.toBeInTheDocument();
   });
 
-  it('asks again after a no on an earlier release, and says that it is asking again', async () => {
+  it('asks again after a no on an earlier release, with the same ask as the first time', async () => {
     vi.spyOn(api.admin.telemetry, 'get').mockResolvedValue({ ...neverAsked, enabled: false, askDue: true });
     render(<TelemetryAsk />);
-    expect(await screen.findByText("Hi again. It's Jannis.")).toBeInTheDocument();
-    expect(screen.queryByText("Hi. It's Jannis. I built this.")).not.toBeInTheDocument();
-  });
-
-  it('keeps the re-ask opening while it is open, although the status underneath changes', async () => {
-    vi.spyOn(api.admin.telemetry, 'get').mockResolvedValue({ ...neverAsked, enabled: false, askDue: true });
-    render(<TelemetryAsk />);
-    expect(await screen.findByText("Hi again. It's Jannis.")).toBeInTheDocument();
-
-    // The settings panel fetches the same slot; a status that arrives while the
-    // admin reads must not flip the opening under them.
-    act(() => { useSettingsStore.setState({ telemetry: { ...neverAsked, enabled: null, askDue: true } }); });
-    expect(screen.getByText("Hi again. It's Jannis.")).toBeInTheDocument();
-    expect(screen.queryByText("Hi. It's Jannis. I built this.")).not.toBeInTheDocument();
+    expect(await screen.findByText("Hi. It's Jannis. I built this.")).toBeInTheDocument();
   });
 
   it('still fetches the status after any number of dismissals, so the ask always comes back', async () => {

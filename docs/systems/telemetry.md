@@ -338,9 +338,8 @@ clicks in one week silenced the question forever.
 Any answer by any admin settles the ask for everyone, because the setting
 belongs to the instance rather than to the person answering. "No" saves first
 and costs nothing, and the preview shown in the modal is the real payload from
-the preview route. A re-ask after an earlier no opens with its own title and
-first paragraph, saying that it is asking again and when it will stop; the rest
-of the modal is the same.
+the preview route. A re-ask after an earlier no is the same modal as the first
+time; nothing in it refers to the earlier answer.
 
 The two answers are illustrated rather than plain, each its own component under
 `components/telemetry/answers/`: "Hiii 👋" is a launch, "Radio silence" a

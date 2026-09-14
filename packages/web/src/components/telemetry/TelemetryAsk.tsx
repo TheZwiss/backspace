@@ -19,10 +19,6 @@ export function TelemetryAsk() {
   const fetchPreview = useSettingsStore((s) => s.fetchTelemetryPreview);
   const setEnabled = useSettingsStore((s) => s.setTelemetryEnabled);
   const [open, setOpen] = useState(false);
-  // Whether this is a second ask after a no on an earlier release. Captured
-  // when the modal opens, because answering changes the status underneath it
-  // and the copy must not flip while the admin reads it.
-  const [reask, setReask] = useState(false);
   const [previewFailed, setPreviewFailed] = useState(false);
   // In-session suppression: the ask is opened at most once per page load, so a
   // dismissal that could not be written to storage still ends it for now.
@@ -40,7 +36,6 @@ export function TelemetryAsk() {
     if (!isAdmin || asked.current) return;
     if (!shouldShowAsk(telemetry, isAdmin, localStorage, Date.now())) return;
     asked.current = true;
-    setReask(telemetry?.enabled === false);
     setOpen(true);
     void fetchPreview().catch(() => setPreviewFailed(true));
   }, [isAdmin, telemetry, fetchPreview]);
@@ -59,5 +54,5 @@ export function TelemetryAsk() {
 
   if (!open) return null;
 
-  return <HelloModal open reask={reask} onAnswer={onAnswer} onDismiss={onDismiss} preview={preview} previewFailed={previewFailed} />;
+  return <HelloModal open onAnswer={onAnswer} onDismiss={onDismiss} preview={preview} previewFailed={previewFailed} />;
 }

@@ -133,14 +133,4 @@ describe('HelloModal', () => {
     expect(screen.getByText('Putting the message together')).toBeInTheDocument();
   });
 
-  it('owns up to asking again after an earlier no, and keeps the rest of the ask', () => {
-    render(<HelloModal open reask onAnswer={vi.fn().mockResolvedValue(undefined)} onDismiss={vi.fn()} preview={preview} />);
-
-    expect(screen.getByRole('heading', { name: "Hi again. It's Jannis." })).toBeInTheDocument();
-    expect(screen.getByText(/said no on an earlier release/)).toBeInTheDocument();
-    expect(screen.queryByText(/shouting into space/)).not.toBeInTheDocument();
-    expect(screen.getByText(/So this is me asking/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Hiii 👋' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Radio silence' })).toBeInTheDocument();
-  });
 });
