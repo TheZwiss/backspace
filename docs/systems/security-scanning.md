@@ -511,6 +511,99 @@ The Scorecard checks that no code change satisfies (`CIIBestPracticesID`,
 `FuzzingID`, `CodeReviewID`, `BranchProtectionID`, `SecurityPolicyID`) are maintainer
 settings or process. They belong to the checklist below, not to remediation.
 
+## Dependency update policy
+
+`.github/dependabot.yml` drives three ecosystems on a weekly schedule. Routine
+npm minor and patch bumps are collapsed into one grouped PR (`npm-minor-patch`),
+and action bumps into another (`github-actions`). Those two are the ones that
+carry nearly all of the patching value, and they land green most weeks.
+
+Majors are deliberately **not** grouped: each arrives as its own PR so it can be
+judged on its own. A major that the project is not ready for gets an `ignore`
+entry rather than a weekly close.
+
+### Why closing a major PR does not make it go away
+
+Closing a Dependabot PR suppresses only that exact `from -> to` version pair. The
+`npm-minor-patch` group keeps moving the *from* side, so the next weekly run sees
+a pair it has never proposed and opens the PR again. `better-sqlite3` is the
+worked example: closed at `11.10.0 -> 13.0.3`, the group moved the floor to
+`12.11.1`, and the following run opened `12.11.1 -> 13.0.3` as a new PR.
+
+A close is therefore a one-week reprieve, not a decision. The decision lives in
+the `ignore` block.
+
+### The shape of an ignore entry
+
+Every deferred major is pinned with `update-types: ["version-update:semver-major"]`
+so minor and patch releases, **including security patches**, keep flowing through
+the group. Nothing is frozen wholesale. Each entry carries a comment saying what
+unblocks it, and the upgrade is then done as its own PR with the entry deleted in
+the same change.
+
+Currently deferred, with the condition that releases each one:
+
+| Pinned at | Why | Unblocked by |
+|-----------|-----|--------------|
+| react / react-dom / `@types/*` 18 | `RefObject<T \| null>` variance and `useState` arity break across the chat components | the UI pass landing; then one PR moving all four together |
+| tailwindcss 3 | v4 moves the PostCSS plugin to `@tailwindcss/postcss` and replaces the config model the design system is built on | a dedicated port of the theme, surface/input tiers and `globals.css` |
+| typescript 5 | v7 removes the `baseUrl` compiler option (TS5102) that the workspace tsconfigs rely on | migrating every tsconfig off `baseUrl` first |
+| fastify 4 + all `@fastify/*` | the 11.x plugin lines target Fastify 5; on Fastify 4 the server stops booting | one PR taking core and every plugin across together |
+| better-sqlite3 12 | v13 segfaults every spawned test instance on boot (exit 139) against `node:20-slim`, a native ABI mismatch rather than a flake | the Dockerfile base image moving off Node 20 |
+| `@tus/file-store` + `@tus/server` 1.x | matched pair; bumping either alone splits it | one PR moving both, upload pipeline exercised end to end |
+| `@types/node` 20 (24 for the script packages) | types describing a newer Node than the runtime let code typecheck clean and fail in production | whenever a runtime moves, in that same PR |
+| jsdom 28 | jsdom 30 pulls undici 8 against the `undici@^7` override, so every vitest worker dies with `webidl.util.markAsUncloneable is not a function` and the web suite does not run; it also changes SVG attribute-selector matching | extending the undici override to 8, then re-testing both |
+| vitest 4 | `@cloudflare/vitest-pool-workers` supports `vitest ^4.1.0` only and rides internal Vitest APIs; under 5 the receiver's Workers runtime throws before any test runs | upstream shipping vitest 5 support |
+| electron 43 | Electron 44 removes the macOS login-item API `src/main.ts` uses, and a major moves the Chromium and Node the shipped app runs on | a dedicated desktop PR, with the Flatpak sources regenerated |
+
+Two entries predate this policy and stay as they are: `uiohook-napi` is ignored
+outright (an exact-version pnpm patch makes any bump break
+`pnpm install --frozen-lockfile`), and `docker-compose.yml` images are bumped by
+hand for the reason in the maintainer checklist below.
+
+Widening an ignore entry to get past a red build is the failure mode this section
+exists to prevent. If a major is genuinely wanted, do the migration.
+
+### The queue limit hides the backlog
+
+`open-pull-requests-limit: 10` caps how many npm PRs Dependabot keeps open, not
+how many updates it has waiting. Clearing the queue therefore does not drain the
+backlog, it reveals the next slice of it: the first pass through the deferred
+majors above was followed within twenty minutes by nine more PRs that the cap had
+been holding back.
+
+Do not raise the limit to find the bottom. Ask the resolver instead:
+
+```
+pnpm outdated -r
+```
+
+That lists every package behind its latest across the workspace in one shot, with
+no PR churn, and it is the right way to check whether an ignore entry is still
+earning its place.
+
+One entry can also preempt several future PRs. The `@fastify/*` wildcard covers
+`cors`, `helmet`, `multipart` and `static`, all of which are sitting a major
+behind and would otherwise arrive as four separate proposals for the same
+Fastify 5 migration.
+
+### A green check is not a verified upgrade
+
+Two cases from the first pass are worth keeping in mind:
+
+- **bcryptjs 2 to 3** was green, but green says nothing about whether existing
+  password hashes still verify. The check that mattered was running v3
+  `compareSync` against a hash produced by v2, and v2 against a v3 hash for
+  rollback safety. Both hold, and the async API and default export are unchanged;
+  v3 emits `$2b$` where v2 emitted `$2a$`, and either verifies under either
+  version. Since bcryptjs 3 ships its own types, `@types/bcryptjs` became a
+  deprecated stub and was dropped rather than bumped.
+- **png-to-ico 2 to 3** is invisible to CI, because `pnpm gen-icons` is a manual
+  script. Running the generator under both versions produced a byte-identical
+  `icon.ico`, so the bump is inert. It did surface that the committed icon set
+  has already drifted from what the current lockfile generates, which is separate
+  from any one bump and wants its own regen-and-commit.
+
 ## Supply-chain hardening
 
 - Every action is pinned to a full commit SHA (`# vX.Y.Z` comment) — resists

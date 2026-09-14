@@ -28,7 +28,7 @@
   },
   "devDependencies": {
     "sharp": "^0.35.4",
-    "png-to-ico": "^2.1.8",
+    "png-to-ico": "^3.0.2",
     "png2icons": "^2.0.1"
   },
   "pnpm": {
