@@ -7,13 +7,19 @@ import { useSpaceStore, getChannelOrigin, getMyUserIdForOrigin } from '../../sto
 import { ScreenShareSettingsPopover } from './ScreenShareSettingsPopover';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import { handleMuteAction, handleDeafenAction, handleCameraAction, handleScreenShareAction, handleDisconnectAction } from '../../utils/voiceActions';
+import { VOICE_CHROME_ATTR } from '../../hooks/usePointerReveal';
 
 const btnBase = 'w-10 h-10 flex items-center justify-center rounded-full transition-colors';
 const btnDefault = `${btnBase} bg-surface-channel text-txt-secondary hover:bg-surface-elevated hover:text-txt-primary`;
 const btnActive = (color: string) => `${btnBase} bg-${color}/20 text-${color} hover:bg-${color}/30`;
 const btnGreen = `${btnBase} bg-surface-channel text-status-online hover:bg-surface-elevated`;
 
-export function VoiceControlBar() {
+/**
+ * `revealed` is the fullscreen idle state, owned by MainContent because it
+ * watches the voice container the pointer actually moves over. It is ignored
+ * while docked, where plain hover on the voice panel is the right model.
+ */
+export function VoiceControlBar({ revealed = false }: { revealed?: boolean }) {
   const { t } = useTranslation(['voice', 'common']);
   const isMuted = useVoiceStore((s) => s.isMuted);
   const isDeafened = useVoiceStore((s) => s.isDeafened);
@@ -42,8 +48,13 @@ export function VoiceControlBar() {
   const [shareMenuOpen, setShareMenuOpen] = useState(false);
   const shareBtnRef = useRef<HTMLButtonElement>(null);
 
+  // An open share menu pins the bar: the popover hangs off it, so letting the
+  // idle timer pull it away would take the menu with it.
+  const fullscreenVisibility = revealed || shareMenuOpen
+    ? 'opacity-100'
+    : 'opacity-0 focus-within:opacity-100 [@media(hover:none)]:opacity-100 [@media(any-pointer:coarse)]:opacity-100';
   const containerClassName = voiceFullscreen
-    ? `pointer-events-none absolute inset-x-0 bottom-0 z-20 h-24 flex items-end justify-center pb-6 transition-opacity duration-300 ease-out ${shareMenuOpen ? 'opacity-100' : 'opacity-0 group-hover/voice:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100 [@media(any-pointer:coarse)]:opacity-100'}`
+    ? `pointer-events-none absolute inset-x-0 bottom-0 z-20 h-24 flex items-end justify-center pb-6 transition-opacity duration-300 ease-out ${fullscreenVisibility}`
     : 'absolute bottom-6 left-1/2 -translate-x-1/2 z-20 opacity-0 translate-y-4 group-hover/voice:opacity-100 group-hover/voice:translate-y-0 transition-all duration-300 ease-out';
 
   const handleMute = React.useCallback(() => {
@@ -92,7 +103,11 @@ export function VoiceControlBar() {
   }, [voiceFullscreen]);
 
   return (
-    <div data-testid="voice-control-overlay" className={containerClassName}>
+    <div
+      data-testid="voice-control-overlay"
+      className={containerClassName}
+      {...(voiceFullscreen ? { [VOICE_CHROME_ATTR]: '' } : {})}
+    >
       <div className="pointer-events-auto flex items-center gap-1.5 rounded-full px-3 py-2 glass-bubble">
         {/* Mute */}
         <button

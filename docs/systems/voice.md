@@ -410,7 +410,15 @@ See `docs/systems/mobile-ui.md` → "MobileVoiceFullScreen" for the auto-focus s
 
 The fullscreen toggle in `VoiceControlBar` flips the `voiceFullscreen` flag in `uiStore`; an effect in `MainContent.tsx` enters/exits the browser's Fullscreen API on `voiceContainerRef`. A second effect listens to `fullscreenchange` and reflects the actual document fullscreen element back into the store, so pressing Esc or system-level fullscreen-exit keeps state in sync. `voiceChatOpen && !voiceFullscreen` hides the side chat panel while fullscreen is active.
 
-**Fullscreen chrome:** the channel header and call controls are positioned over the video instead of reserving rows. Their overlay bands use `pointer-events: none`, and only the actual buttons opt back into hit testing, so transparent chrome never steals tile or Grid-button clicks. Hovering the voice surface reveals both overlays; devices without hover or with any coarse pointer (including hybrid touch laptops) keep them visible. The header actions leave the top-right Grid corner clear.
+**Fullscreen chrome:** the channel header and call controls are positioned over the video instead of reserving rows. Their overlay bands use `pointer-events: none`, and only the actual buttons opt back into hit testing, so transparent chrome never steals tile or Grid-button clicks. The header actions leave the top-right Grid corner clear.
+
+Both overlays are revealed by **pointer movement** and hidden again after `POINTER_REVEAL_IDLE_MS` (2.5 s) of stillness, via `hooks/usePointerReveal`. `MainContent` owns that state — it holds `voiceContainerRef`, which is the element the pointer moves over — and passes it to `VoiceControlBar` as `revealed`.
+
+This deliberately is **not** `group-hover/voice`, which is what it was until the idle behaviour was added. Hover is geometric: it asks whether the pointer is inside the box. Fullscreen makes `group/voice` the whole viewport, so hover is true wherever the pointer is, both overlays sat at `opacity-100` permanently, and the header band covered the top of the stream with no way to dismiss it short of moving the pointer out of the window. Idle is a question about time and needs a timer.
+
+An overlay carrying `data-voice-chrome` (the `VOICE_CHROME_ATTR` export) holds the reveal open while the pointer rests on it, so stopping on a button to aim does not pull it away. Because the bands are `pointer-events: none`, this only ever matches through the buttons that opt back in — resting over the transparent part of a band still times out, which is correct. An open screen-share menu pins the control bar for the same reason, since its popover hangs off it.
+
+The docked (non-fullscreen) layout keeps plain `group-hover/voice` and ignores `revealed`. There hover is the right model: the voice surface is a panel with sidebars beside it, so leaving it is something the pointer can actually do. Devices without hover or with any coarse pointer (including hybrid touch laptops) keep both overlays visible in either layout, and `focus-within` keeps them reachable by keyboard.
 
 **Cross-browser API fallback.** iOS Safari (and iPadOS pre-16.4) does not implement the standard `Element.requestFullscreen()` on generic elements, so the enter-fullscreen effect probes for the API in this order:
 

@@ -27,6 +27,31 @@ import { Tooltip } from '../ui/Tooltip';
 import { joinVoiceChannel } from '../../utils/voice';
 import { SearchPopover } from '../chat/SearchPopover';
 import { isDmChannel, getChannelOrigin } from '../../stores/spaceStore';
+import { usePointerReveal, VOICE_CHROME_ATTR } from '../../hooks/usePointerReveal';
+
+/**
+ * Voice channel header, in both of its shapes.
+ *
+ * Docked it is a real row that reserves its own height. In fullscreen it
+ * becomes a band floating over the video, so it must not reserve height and
+ * must not swallow clicks: the band is `pointer-events-none` and only the
+ * action buttons inside it opt back in. Visibility is driven by `revealed`
+ * rather than `group-hover`, because the group fills the viewport in
+ * fullscreen and would hold hover forever. `focus-within` keeps it reachable
+ * by keyboard, and pointers that cannot hover keep it up permanently.
+ */
+function voiceHeaderClassName(fullscreen: boolean, revealed: boolean): string {
+  const base = 'h-14 px-5 flex items-center justify-between bg-surface-base transition-opacity duration-300';
+  if (!fullscreen) {
+    return `${base} border-b border-border-hard flex-shrink-0`;
+  }
+  const overlay =
+    'pointer-events-none absolute inset-x-0 top-0 z-30 border-b border-white/5 bg-gradient-to-b from-black/90 via-black/70 to-transparent';
+  const visibility = revealed
+    ? 'opacity-100'
+    : 'opacity-0 focus-within:opacity-100 [@media(hover:none)]:opacity-100 [@media(any-pointer:coarse)]:opacity-100';
+  return `${base} ${overlay} ${visibility}`;
+}
 
 export function MainContent() {
   // 1. ALL HOOKS AT THE TOP
@@ -51,6 +76,11 @@ export function MainContent() {
   const openModal = useUIStore((s) => s.openModal);
 
   const voiceContainerRef = useRef<HTMLDivElement>(null);
+  // Fullscreen chrome is revealed by pointer movement and hidden once the
+  // pointer goes still. It cannot be `group-hover`: fullscreen makes this
+  // container the whole viewport, so hover is true wherever the pointer is
+  // and the chrome would never leave. See usePointerReveal.
+  const chromeRevealed = usePointerReveal(voiceContainerRef, voiceFullscreen);
   const searchButtonRef = useRef<HTMLButtonElement>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [jumpToMessageId, setJumpToMessageId] = useState<string | null>(null);
@@ -210,7 +240,8 @@ export function MainContent() {
         >
           <div
             data-testid="voice-header-overlay"
-            className={`h-14 px-5 flex items-center justify-between bg-surface-base transition-opacity duration-300 ${voiceFullscreen ? 'pointer-events-none absolute inset-x-0 top-0 z-30 border-b border-white/5 bg-gradient-to-b from-black/90 via-black/70 to-transparent opacity-0 group-hover/voice:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100 [@media(any-pointer:coarse)]:opacity-100' : 'border-b border-border-hard flex-shrink-0'}`}
+            className={voiceHeaderClassName(voiceFullscreen, chromeRevealed)}
+            {...(voiceFullscreen ? { [VOICE_CHROME_ATTR]: '' } : {})}
           >
             <div className="flex items-center gap-[10px]">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary">
@@ -237,7 +268,7 @@ export function MainContent() {
           <div className="flex-1 flex overflow-hidden min-h-0">
             <div className={`flex-1 min-w-0 flex relative ${voiceFullscreen ? '' : 'pb-20'}`}>
               <VoiceGrid participants={participants} />
-              <VoiceControlBar />
+              <VoiceControlBar revealed={chromeRevealed} />
             </div>
             {voiceChatOpen && !voiceFullscreen && (
               <VoiceChatPanel channelId={currentChannelId} channelName={`@${dmName}`} />
@@ -448,7 +479,8 @@ export function MainContent() {
       >
         <div
           data-testid="voice-header-overlay"
-          className={`h-14 px-5 flex items-center justify-between bg-surface-base transition-opacity duration-300 ${voiceFullscreen ? 'pointer-events-none absolute inset-x-0 top-0 z-30 border-b border-white/5 bg-gradient-to-b from-black/90 via-black/70 to-transparent opacity-0 group-hover/voice:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100 [@media(any-pointer:coarse)]:opacity-100' : 'border-b border-border-hard flex-shrink-0'}`}
+          className={voiceHeaderClassName(voiceFullscreen, chromeRevealed)}
+          {...(voiceFullscreen ? { [VOICE_CHROME_ATTR]: '' } : {})}
         >
           <div className="flex items-center gap-[10px]">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary">
@@ -475,7 +507,7 @@ export function MainContent() {
         <div className="flex-1 flex overflow-hidden min-h-0">
           <div className={`flex-1 min-w-0 flex relative ${voiceFullscreen ? '' : 'pb-20'}`}>
             <VoiceGrid participants={participants} />
-            <VoiceControlBar />
+            <VoiceControlBar revealed={chromeRevealed} />
           </div>
           {voiceChatOpen && !voiceFullscreen && (
             <VoiceChatPanel channelId={currentChannelId} channelName={channel.name} />
