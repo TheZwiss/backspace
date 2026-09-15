@@ -2,6 +2,10 @@
  * Detects the visitor's desktop platform and builds the GitHub release download links
  * for it. Pure and dependency-free: the navigator arrives as an argument so the module
  * runs the same in a test as it does in the browser.
+ *
+ * The offer is one primary build for the detected platform plus every other build of
+ * the release. The secondary list leads with the rest of the detected platform's own
+ * builds and then runs windows, mac, linux over what is left.
  */
 
 export type DesktopOs = 'windows' | 'mac' | 'linux' | 'other';
@@ -26,7 +30,11 @@ export interface DesktopDownload {
 
 export interface DesktopDownloadLinks {
   primary: DesktopDownload | null;
-  /** Every remaining build, ordered windows, mac, linux; within a platform the detected arch first. */
+  /**
+   * Every remaining build: the detected platform's own builds first, then the
+   * other platforms in windows, mac, linux order. Within a platform the
+   * detected architecture comes before the other one.
+   */
   others: DesktopDownload[];
   allReleasesUrl: string;
 }
@@ -73,7 +81,8 @@ const BUILDS: readonly BuildSpec[] = [
 /** The build offered when the browser will not say which architecture it runs on. */
 const DEFAULT_ARCH: Record<'mac' | 'linux', DesktopArch> = { mac: 'arm64', linux: 'x64' };
 
-function osFromHintPlatform(platform: string): DesktopOs {
+/** null when the hint names no platform this module recognises, which the caller reads as "ask the user agent". */
+function osFromHintPlatform(platform: string): DesktopOs | null {
   switch (platform) {
     case 'Windows':
       return 'windows';
@@ -81,9 +90,16 @@ function osFromHintPlatform(platform: string): DesktopOs {
       return 'mac';
     case 'Linux':
       return 'linux';
-    default:
-      // Chrome OS, Android, iOS and anything else this module has no build for.
+    case 'Chrome OS':
+    case 'Android':
+    case 'iOS':
+      // Recognised, and this module has no build for any of them.
       return 'other';
+    default:
+      // Chromium sends 'Unknown' when it cannot name the platform, and the
+      // list above is not closed. A value we do not know says nothing, so it
+      // must not outrank the user agent string.
+      return null;
   }
 }
 
@@ -98,8 +114,10 @@ function osFromUserAgent(userAgent: string): DesktopOs {
 function detectOs(nav: NavigatorLike): DesktopOs {
   const uaData = nav.userAgentData;
   if (uaData?.mobile === true) return 'other';
-  // A client hint platform decides the OS even when the user agent string disagrees.
-  const os = uaData?.platform ? osFromHintPlatform(uaData.platform) : osFromUserAgent(nav.userAgent);
+  // A recognised client hint platform decides the OS even when the user agent
+  // string disagrees. An absent or unrecognised one leaves the decision to it.
+  const hinted = uaData?.platform ? osFromHintPlatform(uaData.platform) : null;
+  const os = hinted ?? osFromUserAgent(nav.userAgent);
   // Safari on iPadOS sends a Mac user agent, and a Mac has no touch screen.
   if (os === 'mac' && (nav.maxTouchPoints ?? 0) > 1) return 'other';
   return os;
@@ -152,17 +170,28 @@ function buildsFor(os: BuildSpec['os'], arch: DesktopArch): BuildSpec[] {
   return BUILDS.filter((build) => build.os === os && build.arch === arch);
 }
 
-/** Windows first, then mac and linux with the architecture the visitor is most likely to want. */
-function orderedBuilds(detectedArch: DesktopArch | null): BuildSpec[] {
-  const macArch = detectedArch ?? DEFAULT_ARCH.mac;
-  const linuxArch = detectedArch ?? DEFAULT_ARCH.linux;
-  return [
-    ...BUILDS.filter((build) => build.os === 'windows'),
-    ...buildsFor('mac', macArch),
-    ...buildsFor('mac', otherArch(macArch)),
-    ...buildsFor('linux', linuxArch),
-    ...buildsFor('linux', otherArch(linuxArch)),
-  ];
+/** The canonical platform order, used for every platform the visitor is not on. */
+const PLATFORM_ORDER: readonly Exclude<DesktopOs, 'other'>[] = ['windows', 'mac', 'linux'];
+
+/** One platform's builds, the architecture the visitor is most likely to want first. */
+function platformBuilds(os: BuildSpec['os'], detectedArch: DesktopArch | null): BuildSpec[] {
+  // The Windows installer carries no architecture, so there is nothing to order.
+  if (os === 'windows') return BUILDS.filter((build) => build.os === 'windows');
+  const arch = detectedArch ?? DEFAULT_ARCH[os];
+  return [...buildsFor(os, arch), ...buildsFor(os, otherArch(arch))];
+}
+
+/**
+ * The visitor's own platform first, so the builds most likely to be wanted next
+ * (the other architecture, the other package format) sit closest to the primary
+ * offer. The platforms that are left follow in windows, mac, linux order.
+ */
+function orderedBuilds(detected: DetectedPlatform): BuildSpec[] {
+  const order =
+    detected.os === 'other'
+      ? PLATFORM_ORDER
+      : [detected.os, ...PLATFORM_ORDER.filter((os) => os !== detected.os)];
+  return order.flatMap((os) => platformBuilds(os, detected.arch));
 }
 
 function primaryBuild(detected: DetectedPlatform): BuildSpec | null {
@@ -189,7 +218,7 @@ function toDownload(build: BuildSpec, version: string, versionIsReleasable: bool
 export function buildDesktopDownloads(version: string, detected: DetectedPlatform): DesktopDownloadLinks {
   const versionIsReleasable = VERSION_PATTERN.test(version);
   const primarySpec = primaryBuild(detected);
-  const others = orderedBuilds(detected.arch)
+  const others = orderedBuilds(detected)
     .filter((build) => build !== primarySpec)
     .map((build) => toDownload(build, version, versionIsReleasable));
   return {

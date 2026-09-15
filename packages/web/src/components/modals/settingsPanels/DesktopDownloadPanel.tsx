@@ -90,11 +90,19 @@ const LINK_CLASS = 'text-sm text-txt-secondary hover:text-txt-primary transition
  * away, because detection can be wrong and a visitor may be downloading for
  * another machine.
  *
- * `version` is the instance version, or null while the instance info has not
- * loaded. A version that is not a release tag (a development build, or the
- * empty string this panel passes for null) makes every link point at the
- * releases listing, which is the honest answer when there is no tag to
- * download from.
+ * `version` is the instance version, or null while the instance info request is
+ * in flight or after it failed. Any version that is not a plain
+ * `major.minor.patch`, including the empty string this panel passes for null,
+ * makes every link point at the releases listing, which is the honest answer
+ * when there is no tag to download from. The server reports its version
+ * verbatim from `packages/server/package.json`, so a development checkout
+ * reports a plain triple like any other instance; the unloaded version is the
+ * case that actually reaches that fallback.
+ *
+ * The hazard the fallback does not cover is a plain version whose tag is not
+ * published yet, the window between a version bump landing and the release
+ * going out. Those links name assets GitHub answers 404 for, and the "All
+ * releases" link at the bottom is the recovery.
  */
 export function DesktopDownloadPanel({ version }: { version: string | null }) {
   const { t } = useTranslation('settings');

@@ -2,13 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { InstanceInfoResponse, User } from '@backspace/shared';
 
-// ── Fixtures and store mocks ────────────────────────────────────────────────
-// The modal reads four stores through selectors. Each is mocked with the
-// selector-aware callable idiom used across the web suite
-// (settingsPanels/AccountPanel.detachedNotice.test.tsx), so a selector gets the
-// fixture state and `getState()` keeps working for anything that reaches for it
-// outside a render. Everything a `vi.mock` factory touches lives in `vi.hoisted`,
-// because those factories run before module-level `const`s are initialised.
+// The screen reads three stores through selectors, and the panel it opens reads
+// a fourth. Each is mocked with the selector-aware callable idiom used across
+// the web suite (modals/UserSettings.test.tsx). Everything a `vi.mock` factory
+// touches lives in `vi.hoisted`, because those factories run before module-level
+// `const`s are initialised.
 const mocks = vi.hoisted(() => {
   const user: User = {
     id: 'user-self',
@@ -39,13 +37,8 @@ const mocks = vi.hoisted(() => {
   };
 
   return {
-    ui: {
-      activeModal: 'userSettings',
-      modalData: {} as Record<string, unknown>,
-      isMobile: false,
-      closeModal: vi.fn(),
-    },
-    auth: { user, logout: vi.fn() },
+    ui: { pushMobileScreen: vi.fn(), popMobileScreen: vi.fn() },
+    auth: { user },
     // useInstanceUpdateBadge reads these three; no update is pending, so no dot.
     settings: {
       updateStatus: null,
@@ -54,7 +47,7 @@ const mocks = vi.hoisted(() => {
     },
     instanceInfo,
     // The update store the Electron panel consumes, copied from
-    // settingsPanels/DesktopPanel.test.tsx.
+    // ../modals/settingsPanels/DesktopPanel.test.tsx.
     update: {
       initialize: vi.fn(),
       snapshot: {
@@ -99,17 +92,17 @@ vi.mock('../../api/client', () => ({
   api: { instance: { info: () => Promise.resolve(mocks.instanceInfo) } },
 }));
 
-// Every sibling panel is stubbed, so this test renders only the modal chrome and
-// whichever of the two Desktop panels the wiring picks.
-vi.mock('./settingsPanels/AccountPanel', () => ({ AccountPanel: () => null }));
-vi.mock('./settingsPanels/AppearancePanel', () => ({ AppearancePanel: () => null }));
-vi.mock('./settingsPanels/VoicePanel', () => ({ VoicePanel: () => null }));
-vi.mock('./settingsPanels/PrivacyPanel', () => ({ PrivacyPanel: () => null }));
-vi.mock('./settingsPanels/ConnectionsPanel', () => ({ ConnectionsPanel: () => null }));
-vi.mock('./settingsPanels/KeybindsPanel', () => ({ KeybindsPanel: () => null }));
-vi.mock('./settingsPanels/InstancePanel', () => ({ InstancePanel: () => null }));
+// Only the two Desktop panels are exercised here, so every other panel and the
+// transfer tray are stubbed out.
+vi.mock('./TransferIndicator', () => ({ TransferIndicator: () => null }));
+vi.mock('../modals/settingsPanels/AccountPanel', () => ({ AccountPanel: () => null }));
+vi.mock('../modals/settingsPanels/AppearancePanel', () => ({ AppearancePanel: () => null }));
+vi.mock('../modals/settingsPanels/VoicePanel', () => ({ VoicePanel: () => null }));
+vi.mock('../modals/settingsPanels/PrivacyPanel', () => ({ PrivacyPanel: () => null }));
+vi.mock('../modals/settingsPanels/ConnectionsPanel', () => ({ ConnectionsPanel: () => null }));
+vi.mock('../modals/settingsPanels/KeybindsPanel', () => ({ KeybindsPanel: () => null }));
 
-import { UserSettingsModal } from './UserSettings';
+import { MobileSettingsScreen } from './MobileSettingsScreen';
 
 /** The preload bridge whose presence is what `isElectron()` reads. */
 function installDesktopHost() {
@@ -125,22 +118,15 @@ function installDesktopHost() {
   });
 }
 
-/** True when the nodes appear in this order in the document, each one after the last. */
-function inDocumentOrder(...nodes: HTMLElement[]): boolean {
-  return nodes.every(
-    (node, i) =>
-      i === 0 ||
-      Boolean(nodes[i - 1].compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING),
-  );
-}
-
 /**
- * Renders the modal and waits for the instance info fetch to land, so the
- * assertions that follow run against a settled tree.
+ * Taps the hub's Desktop entry and renders the screen it pushes, the way
+ * MobileShell routes `settings-desktop` back into this component.
  */
-async function openSettings(): Promise<void> {
-  render(<UserSettingsModal />);
-  await screen.findByRole('link', { name: /Source code/i });
+function openDesktopPanel(): void {
+  fireEvent.click(screen.getByRole('button', { name: 'Desktop' }));
+  expect(mocks.ui.pushMobileScreen).toHaveBeenCalledWith('settings-desktop');
+  cleanup();
+  render(<MobileSettingsScreen initialPanel="desktop" />);
 }
 
 beforeEach(() => {
@@ -152,42 +138,36 @@ afterEach(() => {
   Reflect.deleteProperty(window as unknown as Record<string, unknown>, 'backspace');
 });
 
-describe('UserSettingsModal Desktop tab', () => {
-  it('shows the download offer in the browser', async () => {
-    await openSettings();
+describe('MobileSettingsScreen Desktop entry', () => {
+  it('opens the download offer in the browser', async () => {
+    render(<MobileSettingsScreen />);
 
-    const tab = screen.getByRole('button', { name: 'Desktop' });
-    // The tab sits inside App Settings: after that group's heading and its last
-    // entry, and before the next thing in the nav list. This account is not an
-    // admin, so what follows the group is the log out button in the footer.
-    expect(
-      inDocumentOrder(
-        screen.getByText('App Settings'),
-        screen.getByRole('button', { name: 'Keybinds' }),
-        tab,
-        screen.getByRole('button', { name: 'Log Out' }),
-      ),
-    ).toBe(true);
-    // Nothing starts a new group between the heading and the tab: the only
-    // group headings rendered are User Settings and App Settings.
-    expect(screen.getAllByText(/^(User Settings|App Settings|Administration)$/)).toHaveLength(2);
+    // Desktop is listed outside Electron; Keybinds still is not.
+    expect(screen.getByRole('button', { name: 'Desktop' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Keybinds' })).not.toBeInTheDocument();
 
-    fireEvent.click(tab);
+    openDesktopPanel();
 
     expect(await screen.findByRole('link', { name: 'All releases' })).toBeInTheDocument();
+    // The version reaches the panel, so the links name release assets.
+    expect(await screen.findByRole('link', { name: 'Windows installer' })).toHaveAttribute(
+      'href',
+      'https://github.com/TheZwiss/backspace/releases/download/v1.2.1/Backspace-1.2.1.exe',
+    );
     // The Electron-only panel stays out of the browser.
     expect(screen.queryByRole('button', { name: 'Change Instance' })).not.toBeInTheDocument();
   });
 
-  it('shows the desktop app settings inside Electron', async () => {
+  it('opens the desktop app settings inside Electron', async () => {
     installDesktopHost();
-    await openSettings();
+    render(<MobileSettingsScreen />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Desktop' }));
+    expect(screen.getByRole('button', { name: 'Keybinds' })).toBeInTheDocument();
 
-    // Both panels carry the same "Desktop" title, so the instance control is
+    openDesktopPanel();
+
+    // Both panels carry the same "Desktop" header, so the instance control is
     // what tells them apart.
-    expect(await screen.findByRole('heading', { name: 'Desktop' })).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: 'Change Instance' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'All releases' })).not.toBeInTheDocument();
   });

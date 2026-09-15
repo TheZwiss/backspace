@@ -432,14 +432,14 @@ Params: `{ channelId, spaceId }`
 
 Two modes controlled by `initialPanel` prop:
 
-1. **Hub mode** (`initialPanel` undefined): List of setting sections (Account, Voice & Video, Privacy, Connections, Keybinds + Desktop when in Electron, Instance for admins). Each pushes `settings-{id}`.
-2. **Direct panel mode** (`initialPanel` set): Renders the corresponding panel component (AccountPanel, VoicePanel, PrivacyPanel, ConnectionsPanel, KeybindsPanel, DesktopPanel) directly with a back header.
+1. **Hub mode** (`initialPanel` undefined): List of setting sections (Account, Appearance, Voice & Video, Privacy, Connections, Keybinds when in Electron, Desktop, Instance for admins). Each pushes `settings-{id}`.
+2. **Direct panel mode** (`initialPanel` set): Renders the corresponding panel component (AccountPanel, AppearancePanel, VoicePanel, PrivacyPanel, ConnectionsPanel, KeybindsPanel, and for Desktop either DesktopPanel or DesktopDownloadPanel) directly with a back header.
 
-**Electron-only entries.** The Keybinds and Desktop sections appear in the hub list only when `isElectron() === true` (mirrors the desktop `UserSettings` modal's gate on `DesktopPanel`). Rationale:
-- `DesktopPanel` exposes auto-launch, app-version + update check, and "Change Instance" — all of which call `window.backspace.*` IPC and are meaningless on web/iOS PWA.
-- `KeybindsPanel`'s value comes from the desktop app's `uiohook-napi`-backed global keybind manager. The web fallback (only-when-tab-focused, no global hooks, no recording flow on touch keyboards) has no useful surface for a phone-shaped viewport. Showing the panel anyway would mislead a mobile-web user into recording a binding that can never fire.
+**Desktop entry.** The Desktop section is listed everywhere, mirroring the `UserSettings` modal's wiring: inside Electron it opens `DesktopPanel`, in a browser it opens `DesktopDownloadPanel`, the download offer (see `docs/systems/desktop.md`, "Desktop tab in the browser"). A phone is a reasonable place to be offered the desktop build, because the visitor may be downloading for another machine. The download panel needs the instance version, so the screen fetches `api.instance.info()` on mount when that panel is the one being opened, cancelled on unmount; a failed fetch is tolerated and every link falls back to the releases listing.
 
-Both panels are mobile-fit at 360-390px viewports (single-column rows with `flex justify-between`, `min-w-0` on labels, small tap-target buttons). The gate is therefore a list-visibility decision, not a layout decision — once a desktop user happens to be on a narrow viewport (split-window, dock, etc.), the panels render correctly.
+**Keybinds stays Electron-only.** It appears in the hub list only when `isElectron() === true`. `KeybindsPanel`'s value comes from the desktop app's `uiohook-napi`-backed global keybind manager. The web fallback (only-when-tab-focused, no global hooks, no recording flow on touch keyboards) has no useful surface for a phone-shaped viewport. Showing the panel anyway would mislead a mobile-web user into recording a binding that can never fire.
+
+Both panels are mobile-fit at 360-390px viewports (single-column rows with `flex justify-between`, `min-w-0` on labels, small tap-target buttons). The gate is therefore a list-visibility decision, not a layout decision: once a desktop user happens to be on a narrow viewport (split-window, dock, etc.), the panels render correctly.
 
 ### MobileInstancePanel
 

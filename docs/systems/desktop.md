@@ -460,16 +460,39 @@ build of the same release below it, and a link to the releases listing last.
 
 The links are built from the instance version reported by `GET
 /api/instance/info`, so a visitor is offered the desktop build that matches the
-server they are signed in to. A version that is not a release tag, which is what
-a development build reports, points every link at the releases listing instead,
-because there is no tag to download from.
+server they are signed in to. A version that is not a plain `major.minor.patch`
+points every link at the releases listing instead, because there is no tag to
+download from. The server reads its version verbatim from
+`packages/server/package.json`, so a development checkout reports a plain triple
+like any other instance and gets real asset links; the case that actually
+reaches the fallback is the panel having no version yet, while the instance info
+request is in flight or after it failed.
+
+The hazard the fallback does not cover is the window between a version bump
+landing and its tag being published. The links then name assets that do not
+exist and GitHub answers 404. The "All releases" link at the bottom of the panel
+is the recovery, and it is present whatever the version says.
 
 Platform detection reads the user agent client hints first and the user agent
-string second (`packages/web/src/platform/desktopDownload.ts`). Windows is
-offered the combined installer, the one build that carries no architecture in
-its filename and picks one at install time. macOS and Linux need an
-architecture, so when the browser will not report one the panel falls back to
-the platform default and says so, naming the other build in the list.
+string second (`packages/web/src/platform/desktopDownload.ts`). A client hint
+platform the module does not recognise, `Unknown` included, decides nothing and
+leaves the answer to the user agent string. Windows is offered the combined
+installer, the one build that carries no architecture in its filename and picks
+one at install time. macOS and Linux need an architecture, so when the browser
+will not report one the panel falls back to the platform default and says so,
+naming the other build in the list.
+
+The secondary list leads with the rest of the detected platform's own builds
+(the other-architecture disk image on macOS; the matching deb, then the other
+architecture's AppImage and deb, on Linux), then runs windows, mac, linux over
+what is left, each platform with the detected architecture first. A visitor on
+an unsupported platform gets no primary offer and the plain windows, mac, linux
+order.
+
+The same wiring is mirrored in the mobile settings hub
+(`packages/web/src/components/layout/MobileSettingsScreen.tsx`), which is where
+a phone reaches settings: the desktop settings modal is never mounted on a
+mobile viewport. See `docs/systems/mobile-ui.md`.
 
 ### Release publishing
 

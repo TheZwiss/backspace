@@ -118,6 +118,14 @@ describe('detectDesktopPlatform', () => {
     expect(await detectDesktopPlatform(nav)).toEqual({ os: 'linux', arch: 'x64', archGuessed: false });
   });
 
+  it('falls back to the user agent when the hint platform is not one it knows', async () => {
+    const nav: NavigatorLike = {
+      userAgent: CHROME_WINDOWS,
+      userAgentData: { platform: 'Unknown', mobile: false },
+    };
+    expect(await detectDesktopPlatform(nav)).toEqual({ os: 'windows', arch: null, archGuessed: false });
+  });
+
   it('falls back to the platform default when getHighEntropyValues rejects', async () => {
     const nav: NavigatorLike = {
       userAgent: CHROME_MAC,
@@ -206,9 +214,10 @@ describe('buildDesktopDownloads', () => {
     const links = buildDesktopDownloads(VERSION, platform('mac', 'arm64'));
     expect(links.primary?.filename).toBe('Backspace-1.2.1-arm64.dmg');
     expect(links.primary?.kind).toBe('dmg');
+    // The visitor's own platform is exhausted first, then windows, mac, linux.
     expect(names(links.others)).toEqual([
-      'Backspace-1.2.1.exe',
       'Backspace-1.2.1-x64.dmg',
+      'Backspace-1.2.1.exe',
       'Backspace-1.2.1-arm64.AppImage',
       'Backspace-1.2.1-arm64.deb',
       'Backspace-1.2.1-x86_64.AppImage',
@@ -220,8 +229,8 @@ describe('buildDesktopDownloads', () => {
     const links = buildDesktopDownloads(VERSION, platform('mac', 'x64'));
     expect(links.primary?.filename).toBe('Backspace-1.2.1-x64.dmg');
     expect(names(links.others)).toEqual([
-      'Backspace-1.2.1.exe',
       'Backspace-1.2.1-arm64.dmg',
+      'Backspace-1.2.1.exe',
       'Backspace-1.2.1-x86_64.AppImage',
       'Backspace-1.2.1-amd64.deb',
       'Backspace-1.2.1-arm64.AppImage',
@@ -239,12 +248,12 @@ describe('buildDesktopDownloads', () => {
       url: `${BASE}Backspace-1.2.1-x86_64.AppImage`,
     });
     expect(names(links.others)).toEqual([
-      'Backspace-1.2.1.exe',
-      'Backspace-1.2.1-x64.dmg',
-      'Backspace-1.2.1-arm64.dmg',
       'Backspace-1.2.1-amd64.deb',
       'Backspace-1.2.1-arm64.AppImage',
       'Backspace-1.2.1-arm64.deb',
+      'Backspace-1.2.1.exe',
+      'Backspace-1.2.1-x64.dmg',
+      'Backspace-1.2.1-arm64.dmg',
     ]);
   });
 
@@ -252,12 +261,12 @@ describe('buildDesktopDownloads', () => {
     const links = buildDesktopDownloads(VERSION, platform('linux', 'arm64'));
     expect(links.primary?.filename).toBe('Backspace-1.2.1-arm64.AppImage');
     expect(names(links.others)).toEqual([
-      'Backspace-1.2.1.exe',
-      'Backspace-1.2.1-arm64.dmg',
-      'Backspace-1.2.1-x64.dmg',
       'Backspace-1.2.1-arm64.deb',
       'Backspace-1.2.1-x86_64.AppImage',
       'Backspace-1.2.1-amd64.deb',
+      'Backspace-1.2.1.exe',
+      'Backspace-1.2.1-arm64.dmg',
+      'Backspace-1.2.1-x64.dmg',
     ]);
   });
 

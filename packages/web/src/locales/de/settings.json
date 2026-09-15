@@ -386,7 +386,7 @@
       "linuxX64": "Für Linux herunterladen (AppImage, x64)",
       "linuxArm64": "Für Linux herunterladen (AppImage, arm64)"
     },
-    "archGuessed": "Dein Browser verrät nicht, welchen Prozessor dieser Rechner hat. Falls diese Version nicht startet, nimm {{build}} aus der Liste unten.",
+    "archGuessed": "Dein Browser meldet nicht, welchen Prozessor dieser Rechner hat. Falls diese Variante nicht startet, nimm {{build}} aus der Liste unten.",
     "unsupported": "Die Desktop-App läuft unter Windows, macOS und Linux.",
     "build": {
       "windows": "Windows-Installer",
