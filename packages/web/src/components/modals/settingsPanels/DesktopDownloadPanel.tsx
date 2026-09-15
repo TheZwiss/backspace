@@ -16,8 +16,13 @@ type Platform = 'windows' | 'mac' | 'linux';
 /** The two Linux package formats electron-builder emits. */
 type LinuxKind = 'appimage' | 'deb';
 
-/** The order the quiet tiles are offered in, and the order of the stacked three. */
-const PLATFORMS: readonly Platform[] = ['windows', 'mac', 'linux'];
+/**
+ * The order the quiet tiles are offered in, and the order of the stacked three.
+ * Windows, Linux, macOS is the platform order everywhere a visitor sees a
+ * download list: here, the README table and the Downloads table in the notes
+ * of every release.
+ */
+const PLATFORMS: readonly Platform[] = ['windows', 'linux', 'mac'];
 
 // The keys are spelled out rather than built from the platform, so the typed
 // `t` checks every one of them and a renamed key fails the build.
@@ -46,15 +51,15 @@ const DOWNLOAD_KEYS = {
 } as const satisfies Record<Platform, string>;
 
 /**
- * The architecture note only exists for the two platforms whose build is
- * architecture-specific, and it names the chip the way that platform's owners
- * do. Windows never reaches it: its one installer covers both architectures,
- * so detection never has to guess.
+ * The note shown when the browser would not name the architecture and the
+ * picker starts on the platform default. Each names the chip the way that
+ * platform's owners do.
  */
 const ARCH_GUESSED_KEYS = {
+  windows: 'desktopDownload.archGuessed.windows',
   mac: 'desktopDownload.archGuessed.mac',
   linux: 'desktopDownload.archGuessed.linux',
-} as const satisfies Record<'mac' | 'linux', string>;
+} as const satisfies Record<Platform, string>;
 
 /**
  * The identity mark, and the whole of it. A 3px bar in one pastel token per
@@ -69,36 +74,40 @@ const ACCENT_BARS = {
 
 /** What each tile's picker currently points at. Local to the panel, never persisted. */
 interface Selection {
+  windowsArch: DesktopArch;
   macArch: DesktopArch;
   linuxKind: LinuxKind;
   linuxArch: DesktopArch;
 }
 
 /** The same defaults the link builder falls back to when the browser says nothing. */
-const DEFAULT_SELECTION: Selection = { macArch: 'arm64', linuxKind: 'appimage', linuxArch: 'x64' };
+const DEFAULT_SELECTION: Selection = {
+  windowsArch: 'x64',
+  macArch: 'arm64',
+  linuxKind: 'appimage',
+  linuxArch: 'x64',
+};
 
 /** Detection only ever informs the detected platform's own picker; the rest keep their defaults. */
 function selectionFor(detected: DetectedPlatform): Selection {
   if (detected.arch === null) return DEFAULT_SELECTION;
+  if (detected.os === 'windows') return { ...DEFAULT_SELECTION, windowsArch: detected.arch };
   if (detected.os === 'mac') return { ...DEFAULT_SELECTION, macArch: detected.arch };
   if (detected.os === 'linux') return { ...DEFAULT_SELECTION, linuxArch: detected.arch };
   return DEFAULT_SELECTION;
 }
 
-/**
- * The build a tile's picker currently names, out of the seven the release
- * carries. The Windows installer is the one build with no architecture.
- */
+/** The build a tile's picker currently names, out of the eight the release carries. */
 function downloadFor(
   builds: readonly DesktopDownload[],
   platform: Platform,
   selection: Selection,
 ): DesktopDownload | null {
-  const matches = (kind: DesktopDownload['kind'], arch: DesktopArch | null) =>
+  const matches = (kind: DesktopDownload['kind'], arch: DesktopArch) =>
     builds.find((build) => build.os === platform && build.kind === kind && build.arch === arch) ?? null;
   switch (platform) {
     case 'windows':
-      return matches('exe', null);
+      return matches('exe', selection.windowsArch);
     case 'mac':
       return matches('dmg', selection.macArch);
     case 'linux':
@@ -372,14 +381,24 @@ export function DesktopDownloadPanel({ version }: { version: string | null }) {
     { value: 'appimage', label: t('desktopDownload.kind.appimage') },
     { value: 'deb', label: t('desktopDownload.kind.deb') },
   ];
-  const linuxArchSegments: readonly Segment<DesktopArch>[] = [
+  // Windows and Linux name their chips the same way; macOS has its own names.
+  const plainArchSegments: readonly Segment<DesktopArch>[] = [
     { value: 'x64', label: t('desktopDownload.arch.x64') },
     { value: 'arm64', label: t('desktopDownload.arch.arm64') },
   ];
 
-  /** Windows has nothing to choose; mac chooses a chip; Linux a format and a chip. */
+  /** Windows and mac choose a chip; Linux a format and a chip. */
   const pickersFor = (platform: Platform): ReactNode => {
-    if (platform === 'windows') return null;
+    if (platform === 'windows') {
+      return (
+        <SegmentedPicker
+          label={t('desktopDownload.picker.architecture')}
+          value={selection.windowsArch}
+          segments={plainArchSegments}
+          onChange={(windowsArch) => setSelection((current) => ({ ...current, windowsArch }))}
+        />
+      );
+    }
     if (platform === 'mac') {
       return (
         <SegmentedPicker
@@ -401,17 +420,14 @@ export function DesktopDownloadPanel({ version }: { version: string | null }) {
         <SegmentedPicker
           label={t('desktopDownload.picker.architecture')}
           value={selection.linuxArch}
-          segments={linuxArchSegments}
+          segments={plainArchSegments}
           onChange={(linuxArch) => setSelection((current) => ({ ...current, linuxArch }))}
         />
       </>
     );
   };
 
-  const guessedNote =
-    detected?.archGuessed && (heroPlatform === 'mac' || heroPlatform === 'linux')
-      ? t(ARCH_GUESSED_KEYS[heroPlatform])
-      : null;
+  const guessedNote = detected?.archGuessed && heroPlatform ? t(ARCH_GUESSED_KEYS[heroPlatform]) : null;
 
   return (
     <div className="ddl-panel">

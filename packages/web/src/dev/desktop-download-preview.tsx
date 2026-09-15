@@ -3,9 +3,10 @@
 // panel can be looked at and screenshotted for every platform it detects,
 // without owning five machines.
 //
-// `?os=windows|mac|linux|other` picks the platform the detector will see, and
-// `&guessed=1` withholds the architecture client hint so the panel falls to the
-// platform default and shows the note that admits the guess.
+// `?os=windows|mac|linux|other` picks the platform the detector will see,
+// `&arch=x86|arm` the architecture the client hint reports (each platform has a
+// typical default), and `&guessed=1` withholds the architecture hint so the
+// panel falls to the platform default and shows the note that admits the guess.
 import { createRoot } from 'react-dom/client';
 import { DesktopDownloadPanel } from '../components/modals/settingsPanels/DesktopDownloadPanel';
 import { initI18n } from '../i18n';
@@ -13,6 +14,8 @@ import { initializeInterfaceScale } from '../platform/interfaceScale';
 import '../styles/globals.css';
 
 type PreviewOs = 'windows' | 'mac' | 'linux' | 'other';
+/** The `architecture` values Chromium reports for the two chips a release is built for. */
+type PreviewArch = 'x86' | 'arm';
 
 /** The `platform` value Chromium reports for each case, `other` standing in for a phone. */
 const HINT_PLATFORMS: Record<PreviewOs, string> = {
@@ -37,30 +40,36 @@ function readOs(search: string): PreviewOs {
 }
 
 /**
- * The architecture the browser would report on a typical machine of each kind.
- * The brief's non-guessed Mac is Apple Silicon; a Linux or Windows desktop is
- * far more likely to be x64, and the architecture is what the picker starts on.
+ * The architecture the browser would report on a typical machine of each kind,
+ * used when the URL does not name one. The brief's non-guessed Mac is Apple
+ * Silicon; a Linux or Windows desktop is far more likely to be x64, and the
+ * architecture is what the picker starts on.
  */
-const HINT_ARCHITECTURES: Record<PreviewOs, string> = {
+const HINT_ARCHITECTURES: Record<PreviewOs, PreviewArch> = {
   windows: 'x86',
   mac: 'arm',
   linux: 'x86',
   other: 'arm',
 };
 
+function readArch(search: string, os: PreviewOs): PreviewArch {
+  const value = new URLSearchParams(search).get('arch');
+  if (value === 'x86' || value === 'arm') return value;
+  return HINT_ARCHITECTURES[os];
+}
+
 /**
  * Installs the client hints the detector reads. Without `getHighEntropyValues`
  * the detector has no architecture to go on and falls to the platform default,
  * which is exactly the `archGuessed` case.
  */
-function installNavigatorHints(os: PreviewOs, guessed: boolean): void {
+function installNavigatorHints(os: PreviewOs, arch: PreviewArch, guessed: boolean): void {
   const hints: HintNavigator['userAgentData'] = {
     platform: HINT_PLATFORMS[os],
     mobile: os === 'other',
   };
   if (!guessed) {
-    hints.getHighEntropyValues = () =>
-      Promise.resolve({ architecture: HINT_ARCHITECTURES[os], bitness: '64' });
+    hints.getHighEntropyValues = () => Promise.resolve({ architecture: arch, bitness: '64' });
   }
   Object.defineProperty(window.navigator, 'userAgentData', {
     value: hints,
@@ -81,7 +90,7 @@ function Column({ width, caption }: { width: number; caption: string }) {
   );
 }
 
-function Workbench({ os, guessed }: { os: PreviewOs; guessed: boolean }) {
+function Workbench({ os, arch, guessed }: { os: PreviewOs; arch: PreviewArch; guessed: boolean }) {
   return (
     <div
       style={{
@@ -93,7 +102,7 @@ function Workbench({ os, guessed }: { os: PreviewOs; guessed: boolean }) {
         gap: 40,
       }}
     >
-      <Column width={720} caption={`os=${os}${guessed ? ' guessed' : ''}, 720px content column`} />
+      <Column width={720} caption={`os=${os} arch=${arch}${guessed ? ' guessed' : ''}, 720px content column`} />
       <Column width={380} caption="380px, the stacked layout" />
     </div>
   );
@@ -101,13 +110,14 @@ function Workbench({ os, guessed }: { os: PreviewOs; guessed: boolean }) {
 
 async function start(): Promise<void> {
   const os = readOs(window.location.search);
+  const arch = readArch(window.location.search, os);
   const guessed = new URLSearchParams(window.location.search).get('guessed') === '1';
-  installNavigatorHints(os, guessed);
+  installNavigatorHints(os, arch, guessed);
   initializeInterfaceScale();
   await initI18n();
   const host = document.getElementById('root');
   if (!host) throw new Error('missing #root');
-  createRoot(host).render(<Workbench os={os} guessed={guessed} />);
+  createRoot(host).render(<Workbench os={os} arch={arch} guessed={guessed} />);
 }
 
 void start();

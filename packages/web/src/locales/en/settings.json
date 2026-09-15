@@ -379,7 +379,7 @@
   "desktopDownload": {
     "title": "Desktop",
     "intro": "Global keybinds, start at boot and a system tray icon.",
-    "unsupported": "The desktop app runs on Windows, macOS and Linux.",
+    "unsupported": "The desktop app runs on Windows, Linux and macOS.",
     "name": {
       "windows": "Windows",
       "mac": "macOS",
@@ -391,7 +391,7 @@
       "linux": "This machine"
     },
     "covers": {
-      "windows": "One installer for x64 and arm64",
+      "windows": "x64 or arm64",
       "mac": "Runs on Apple Silicon and Intel Macs",
       "linux": "AppImage or deb package, x64 or arm64"
     },
@@ -415,6 +415,7 @@
       "deb": "deb"
     },
     "archGuessed": {
+      "windows": "Your browser did not say which processor this PC has, so x64 is preselected.",
       "mac": "Your browser did not say which chip this Mac has, so Apple Silicon is preselected.",
       "linux": "Your browser did not say which processor this machine has, so x64 is preselected."
     },

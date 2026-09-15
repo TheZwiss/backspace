@@ -613,9 +613,11 @@ Grab the installer for your platform from the
 
 | Platform | File | Notes |
 |----------|------|-------|
-| Windows | `Backspace-<version>.exe` | Universal installer (x64 + arm64). SmartScreen may warn on first run; choose "More info" → "Run anyway". Auto-updates. |
-| macOS | `Backspace-<version>-arm64.dmg` (Apple Silicon) / `Backspace-<version>-x64.dmg` (Intel) | Builds are ad-hoc signed but **not notarized**, so Gatekeeper blocks the first launch. Open it once, dismiss the warning, then go to **System Settings → Privacy & Security** and click **Open Anyway** next to the Backspace message. On macOS 14 and earlier, right-click the app → **Open** → **Open** works instead. Auto-update is not available on macOS yet, so check the releases page for new versions. |
-| Linux | `Backspace-<version>-x86_64.AppImage` / `-arm64.AppImage`, or `.deb` (`amd64` / `arm64`) | AppImage auto-updates; `.deb` installs update via new releases. |
+| Windows | `Backspace-<version>-win-x64.exe` / `-win-arm64.exe` | Pick x64 unless you know the machine is ARM; the x64 build also runs on Windows on ARM. SmartScreen may warn on first run; choose "More info" → "Run anyway". Auto-updates. |
+| Linux | `Backspace-<version>-linux-x86_64.AppImage` / `-linux-arm64.AppImage`, or `-linux-amd64.deb` / `-linux-arm64.deb` | AppImage auto-updates; `.deb` installs update via new releases. |
+| macOS | `Backspace-<version>-mac-arm64.dmg` (Apple Silicon) / `-mac-x64.dmg` (Intel) | Builds are ad-hoc signed but **not notarized**, so Gatekeeper blocks the first launch. Open it once, dismiss the warning, then go to **System Settings → Privacy & Security** and click **Open Anyway** next to the Backspace message. On macOS 14 and earlier, right-click the app → **Open** → **Open** works instead. Auto-update is not available on macOS yet, so check the releases page for new versions. |
+
+Every release also carries `.blockmap` and `latest*.yml` files. The auto-updater reads those; they are not downloads.
 
 On first launch the app asks for your instance URL. Enter the address of the
 Backspace server you use (e.g. `https://chat.example.com`).

@@ -29,19 +29,29 @@ function hints(values: Record<string, unknown>): (h: string[]) => Promise<Record
 }
 
 describe('detectDesktopPlatform', () => {
-  it('reads Windows from client hints and asks for no architecture', async () => {
+  it('reads Windows x64 from client hints', async () => {
     const nav: NavigatorLike = {
       userAgent: CHROME_WINDOWS,
       userAgentData: { platform: 'Windows', mobile: false, getHighEntropyValues: hints({ architecture: 'x86', bitness: '64' }) },
     };
-    expect(await detectDesktopPlatform(nav)).toEqual({ os: 'windows', arch: null, archGuessed: false });
+    expect(await detectDesktopPlatform(nav)).toEqual({ os: 'windows', arch: 'x64', archGuessed: false });
   });
 
-  it('reads Windows from the user agent when there are no hints', async () => {
+  it('reads Windows arm64 from client hints', async () => {
+    const nav: NavigatorLike = {
+      userAgent: CHROME_WINDOWS,
+      userAgentData: { platform: 'Windows', mobile: false, getHighEntropyValues: hints({ architecture: 'arm', bitness: '64' }) },
+    };
+    expect(await detectDesktopPlatform(nav)).toEqual({ os: 'windows', arch: 'arm64', archGuessed: false });
+  });
+
+  it('guesses x64 on Windows without hints, whatever the user agent says', async () => {
+    // Every browser on Windows on ARM freezes the user agent at "Win64; x64",
+    // so the token proves nothing there and must not count as a detection.
     expect(await detectDesktopPlatform({ userAgent: FIREFOX_WINDOWS })).toEqual({
       os: 'windows',
-      arch: null,
-      archGuessed: false,
+      arch: 'x64',
+      archGuessed: true,
     });
   });
 
@@ -123,7 +133,7 @@ describe('detectDesktopPlatform', () => {
       userAgent: CHROME_WINDOWS,
       userAgentData: { platform: 'Unknown', mobile: false },
     };
-    expect(await detectDesktopPlatform(nav)).toEqual({ os: 'windows', arch: null, archGuessed: false });
+    expect(await detectDesktopPlatform(nav)).toEqual({ os: 'windows', arch: 'x64', archGuessed: true });
   });
 
   it('falls back to the platform default when getHighEntropyValues rejects', async () => {
@@ -171,18 +181,19 @@ function names(downloads: { filename: string }[]): string[] {
 }
 
 describe('buildDesktopDownloads', () => {
-  it('names the seven builds electron-builder emits', () => {
+  it('names the eight builds electron-builder emits', () => {
     const links = buildDesktopDownloads(VERSION, platform('other', null));
     expect(links.primary).toBeNull();
     expect(names(links.others).slice().sort()).toEqual(
       [
-        'Backspace-1.2.1.exe',
-        'Backspace-1.2.1-arm64.dmg',
-        'Backspace-1.2.1-x64.dmg',
-        'Backspace-1.2.1-x86_64.AppImage',
-        'Backspace-1.2.1-arm64.AppImage',
-        'Backspace-1.2.1-amd64.deb',
-        'Backspace-1.2.1-arm64.deb',
+        'Backspace-1.2.1-win-x64.exe',
+        'Backspace-1.2.1-win-arm64.exe',
+        'Backspace-1.2.1-mac-arm64.dmg',
+        'Backspace-1.2.1-mac-x64.dmg',
+        'Backspace-1.2.1-linux-x86_64.AppImage',
+        'Backspace-1.2.1-linux-arm64.AppImage',
+        'Backspace-1.2.1-linux-amd64.deb',
+        'Backspace-1.2.1-linux-arm64.deb',
       ].sort(),
     );
     for (const download of links.others) {
@@ -191,50 +202,81 @@ describe('buildDesktopDownloads', () => {
     expect(links.allReleasesUrl).toBe(RELEASES_URL);
   });
 
-  it('offers the combined installer on windows and defaults the other platforms', () => {
-    const links = buildDesktopDownloads(VERSION, platform('windows', null));
+  it('runs windows, linux, mac on an unsupported platform', () => {
+    const links = buildDesktopDownloads(VERSION, platform('other', null));
+    expect(names(links.others)).toEqual([
+      'Backspace-1.2.1-win-x64.exe',
+      'Backspace-1.2.1-win-arm64.exe',
+      'Backspace-1.2.1-linux-x86_64.AppImage',
+      'Backspace-1.2.1-linux-amd64.deb',
+      'Backspace-1.2.1-linux-arm64.AppImage',
+      'Backspace-1.2.1-linux-arm64.deb',
+      'Backspace-1.2.1-mac-arm64.dmg',
+      'Backspace-1.2.1-mac-x64.dmg',
+    ]);
+  });
+
+  it('offers the x64 installer on x64 windows and the arm64 one right after', () => {
+    const links = buildDesktopDownloads(VERSION, platform('windows', 'x64'));
     expect(links.primary).toEqual({
       os: 'windows',
-      arch: null,
+      arch: 'x64',
       kind: 'exe',
-      filename: 'Backspace-1.2.1.exe',
-      url: `${BASE}Backspace-1.2.1.exe`,
+      filename: 'Backspace-1.2.1-win-x64.exe',
+      url: `${BASE}Backspace-1.2.1-win-x64.exe`,
     });
     expect(names(links.others)).toEqual([
-      'Backspace-1.2.1-arm64.dmg',
-      'Backspace-1.2.1-x64.dmg',
-      'Backspace-1.2.1-x86_64.AppImage',
-      'Backspace-1.2.1-amd64.deb',
-      'Backspace-1.2.1-arm64.AppImage',
-      'Backspace-1.2.1-arm64.deb',
+      'Backspace-1.2.1-win-arm64.exe',
+      'Backspace-1.2.1-linux-x86_64.AppImage',
+      'Backspace-1.2.1-linux-amd64.deb',
+      'Backspace-1.2.1-linux-arm64.AppImage',
+      'Backspace-1.2.1-linux-arm64.deb',
+      'Backspace-1.2.1-mac-x64.dmg',
+      'Backspace-1.2.1-mac-arm64.dmg',
+    ]);
+  });
+
+  it('offers the arm64 installer on arm64 windows', () => {
+    const links = buildDesktopDownloads(VERSION, platform('windows', 'arm64'));
+    expect(links.primary?.filename).toBe('Backspace-1.2.1-win-arm64.exe');
+    expect(names(links.others)).toEqual([
+      'Backspace-1.2.1-win-x64.exe',
+      'Backspace-1.2.1-linux-arm64.AppImage',
+      'Backspace-1.2.1-linux-arm64.deb',
+      'Backspace-1.2.1-linux-x86_64.AppImage',
+      'Backspace-1.2.1-linux-amd64.deb',
+      'Backspace-1.2.1-mac-arm64.dmg',
+      'Backspace-1.2.1-mac-x64.dmg',
     ]);
   });
 
   it('offers the arm dmg on an Apple Silicon mac', () => {
     const links = buildDesktopDownloads(VERSION, platform('mac', 'arm64'));
-    expect(links.primary?.filename).toBe('Backspace-1.2.1-arm64.dmg');
+    expect(links.primary?.filename).toBe('Backspace-1.2.1-mac-arm64.dmg');
     expect(links.primary?.kind).toBe('dmg');
-    // The visitor's own platform is exhausted first, then windows, mac, linux.
+    // The visitor's own platform is exhausted first, then windows, linux, mac.
     expect(names(links.others)).toEqual([
-      'Backspace-1.2.1-x64.dmg',
-      'Backspace-1.2.1.exe',
-      'Backspace-1.2.1-arm64.AppImage',
-      'Backspace-1.2.1-arm64.deb',
-      'Backspace-1.2.1-x86_64.AppImage',
-      'Backspace-1.2.1-amd64.deb',
+      'Backspace-1.2.1-mac-x64.dmg',
+      'Backspace-1.2.1-win-arm64.exe',
+      'Backspace-1.2.1-win-x64.exe',
+      'Backspace-1.2.1-linux-arm64.AppImage',
+      'Backspace-1.2.1-linux-arm64.deb',
+      'Backspace-1.2.1-linux-x86_64.AppImage',
+      'Backspace-1.2.1-linux-amd64.deb',
     ]);
   });
 
   it('offers the intel dmg on an intel mac', () => {
     const links = buildDesktopDownloads(VERSION, platform('mac', 'x64'));
-    expect(links.primary?.filename).toBe('Backspace-1.2.1-x64.dmg');
+    expect(links.primary?.filename).toBe('Backspace-1.2.1-mac-x64.dmg');
     expect(names(links.others)).toEqual([
-      'Backspace-1.2.1-arm64.dmg',
-      'Backspace-1.2.1.exe',
-      'Backspace-1.2.1-x86_64.AppImage',
-      'Backspace-1.2.1-amd64.deb',
-      'Backspace-1.2.1-arm64.AppImage',
-      'Backspace-1.2.1-arm64.deb',
+      'Backspace-1.2.1-mac-arm64.dmg',
+      'Backspace-1.2.1-win-x64.exe',
+      'Backspace-1.2.1-win-arm64.exe',
+      'Backspace-1.2.1-linux-x86_64.AppImage',
+      'Backspace-1.2.1-linux-amd64.deb',
+      'Backspace-1.2.1-linux-arm64.AppImage',
+      'Backspace-1.2.1-linux-arm64.deb',
     ]);
   });
 
@@ -244,36 +286,38 @@ describe('buildDesktopDownloads', () => {
       os: 'linux',
       arch: 'x64',
       kind: 'appimage',
-      filename: 'Backspace-1.2.1-x86_64.AppImage',
-      url: `${BASE}Backspace-1.2.1-x86_64.AppImage`,
+      filename: 'Backspace-1.2.1-linux-x86_64.AppImage',
+      url: `${BASE}Backspace-1.2.1-linux-x86_64.AppImage`,
     });
     expect(names(links.others)).toEqual([
-      'Backspace-1.2.1-amd64.deb',
-      'Backspace-1.2.1-arm64.AppImage',
-      'Backspace-1.2.1-arm64.deb',
-      'Backspace-1.2.1.exe',
-      'Backspace-1.2.1-x64.dmg',
-      'Backspace-1.2.1-arm64.dmg',
+      'Backspace-1.2.1-linux-amd64.deb',
+      'Backspace-1.2.1-linux-arm64.AppImage',
+      'Backspace-1.2.1-linux-arm64.deb',
+      'Backspace-1.2.1-win-x64.exe',
+      'Backspace-1.2.1-win-arm64.exe',
+      'Backspace-1.2.1-mac-x64.dmg',
+      'Backspace-1.2.1-mac-arm64.dmg',
     ]);
   });
 
   it('offers the arm AppImage on arm linux', () => {
     const links = buildDesktopDownloads(VERSION, platform('linux', 'arm64'));
-    expect(links.primary?.filename).toBe('Backspace-1.2.1-arm64.AppImage');
+    expect(links.primary?.filename).toBe('Backspace-1.2.1-linux-arm64.AppImage');
     expect(names(links.others)).toEqual([
-      'Backspace-1.2.1-arm64.deb',
-      'Backspace-1.2.1-x86_64.AppImage',
-      'Backspace-1.2.1-amd64.deb',
-      'Backspace-1.2.1.exe',
-      'Backspace-1.2.1-arm64.dmg',
-      'Backspace-1.2.1-x64.dmg',
+      'Backspace-1.2.1-linux-arm64.deb',
+      'Backspace-1.2.1-linux-x86_64.AppImage',
+      'Backspace-1.2.1-linux-amd64.deb',
+      'Backspace-1.2.1-win-arm64.exe',
+      'Backspace-1.2.1-win-x64.exe',
+      'Backspace-1.2.1-mac-arm64.dmg',
+      'Backspace-1.2.1-mac-x64.dmg',
     ]);
   });
 
   it('points every link at the releases page for a version that is not major.minor.patch', () => {
     const links = buildDesktopDownloads('0.0.0-dev', platform('linux', 'x64'));
     expect(links.primary?.url).toBe(RELEASES_URL);
-    expect(links.others).toHaveLength(6);
+    expect(links.others).toHaveLength(7);
     for (const download of links.others) {
       expect(download.url).toBe(RELEASES_URL);
     }
@@ -282,7 +326,7 @@ describe('buildDesktopDownloads', () => {
 
   it('points every link at the releases page for an empty version', () => {
     const links = buildDesktopDownloads('', platform('other', null));
-    expect(links.others).toHaveLength(7);
+    expect(links.others).toHaveLength(8);
     for (const download of links.others) {
       expect(download.url).toBe(RELEASES_URL);
     }

@@ -1,6 +1,16 @@
 appId: com.backspace.desktop
 productName: Backspace
-artifactName: "${productName}-${version}-${arch}.${ext}"
+# Every release asset names its platform, so the GitHub asset list (which is
+# sorted by name and nothing else) groups by platform and reads on its own:
+# Backspace-1.4.0-win-x64.exe, -mac-arm64.dmg, -linux-x86_64.AppImage. The
+# architecture keeps electron-builder's per-format spelling: builder-util maps
+# x64 to `x86_64` for AppImage and `amd64` for deb, which are what those
+# formats' users expect, and leaves it `x64` elsewhere. Three other places
+# spell these names out by hand and have to move with this pattern: the
+# Downloads table that .github/workflows/release.yml writes into the release
+# notes, the build list in packages/web/src/platform/desktopDownload.ts, and
+# the download table in README.md.
+artifactName: "${productName}-${version}-${os}-${arch}.${ext}"
 directories:
   output: dist-electron
 files:
@@ -38,9 +48,13 @@ mac:
   minimumSystemVersion: "12.0"
   extendInfo:
     NSAudioCaptureUsageDescription: "Backspace needs access to system audio to share sound during screen sharing."
+  # dmg only. The zip target exists for Squirrel.Mac auto-update, and these
+  # builds are ad-hoc signed, which the updater classifies as `manual`
+  # (src/updateCapability.ts): nothing on a Mac ever downloads the zip, so it
+  # was 250 MB of dead weight per release. The zip target comes back the day a
+  # Developer ID certificate makes in-place updates possible on macOS.
   target:
     - dmg
-    - zip
 win:
   icon: ./build/icon.ico
   target:
@@ -66,3 +80,9 @@ linux:
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
+  # One installer per architecture. With this unset, electron-builder builds a
+  # combined x64+arm64 installer (twice the size) and, because artifactName
+  # carries ${arch}, the per-arch ones as well. electron-updater already picks
+  # the per-arch file by process.arch, and the Desktop tab in the web client
+  # picks by client hint, so the combined installer had no reader left.
+  buildUniversalInstaller: false

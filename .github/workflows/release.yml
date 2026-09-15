@@ -54,8 +54,16 @@ jobs:
         # The title matches every release shipped so far ("Backspace 1.0.3").
         # electron-builder would name the draft after the bare version instead,
         # because `releaseInfo.releaseName` is not set in electron-builder.yml.
-        # Notes stay empty: they are written by hand before the draft is
-        # published, as they have been for every release.
+        #
+        # The body starts as a Downloads table. GitHub sorts the asset list by
+        # name and offers no other order, which puts Linux first and Windows
+        # last; the table is what a visitor reads instead, in Windows, Linux,
+        # macOS order with plain labels. It is written before any asset exists
+        # (the draft is not visible until published) from the names
+        # electron-builder will produce, so it has to move with `artifactName`
+        # in packages/desktop/electron-builder.yml. The "What's new" notes are
+        # written by hand above it before the draft is published, as they have
+        # been for every release.
         run: |
           set -euo pipefail
 
@@ -74,11 +82,32 @@ jobs:
             exit 0
           fi
 
+          version="${TAG#v}"
+          base="https://github.com/$GH_REPO/releases/download/$TAG"
+          asset() { printf '[%s](%s/%s)' "$1" "$base" "$1"; }
+          notes="$(mktemp)"
+          {
+            echo "## Downloads"
+            echo
+            echo "| Platform | Download |"
+            echo "|---|---|"
+            echo "| Windows x64 | $(asset "Backspace-$version-win-x64.exe") |"
+            echo "| Windows arm64 | $(asset "Backspace-$version-win-arm64.exe") |"
+            echo "| Linux AppImage x86_64 | $(asset "Backspace-$version-linux-x86_64.AppImage") |"
+            echo "| Linux AppImage arm64 | $(asset "Backspace-$version-linux-arm64.AppImage") |"
+            echo "| Linux deb amd64 | $(asset "Backspace-$version-linux-amd64.deb") |"
+            echo "| Linux deb arm64 | $(asset "Backspace-$version-linux-arm64.deb") |"
+            echo "| macOS Apple Silicon | $(asset "Backspace-$version-mac-arm64.dmg") |"
+            echo "| macOS Intel | $(asset "Backspace-$version-mac-x64.dmg") |"
+            echo
+            echo "The \`.blockmap\` and \`latest*.yml\` files are read by the auto-updater and are not meant to be downloaded by hand."
+          } > "$notes"
+
           echo "No release carries $TAG yet — creating the draft."
           gh release create "$TAG" \
             --draft \
-            --title "Backspace ${TAG#v}" \
-            --notes ""
+            --title "Backspace $version" \
+            --notes-file "$notes"
 
   prepare-flatpak-metadata:
     name: Prepare Flatpak release metadata

@@ -476,18 +476,27 @@ is the recovery, and it is present whatever the version says.
 Platform detection reads the user agent client hints first and the user agent
 string second (`packages/web/src/platform/desktopDownload.ts`). A client hint
 platform the module does not recognise, `Unknown` included, decides nothing and
-leaves the answer to the user agent string. Windows is offered the combined
-installer, the one build that carries no architecture in its filename and picks
-one at install time. macOS and Linux need an architecture, so when the browser
-will not report one the panel falls back to the platform default and says so,
-naming the other build in the list.
+leaves the answer to the user agent string. Every build is architecture
+specific, so when the browser will not report one the panel falls back to the
+platform default (x64 on Windows and Linux, Apple Silicon on macOS) and says
+so; the tile's picker offers the other one.
+
+Windows is the one platform where the user agent string is not consulted for
+the architecture: every browser on Windows on ARM freezes it at `Win64; x64`,
+so the token proves nothing there. Only a client hint counts, and anything
+else is x64 marked as a guess. The x64 default is load-bearing rather than
+merely likely. The x64 installer runs under emulation on Windows on ARM, while
+the arm64 installer on an x64 machine has no package to extract, so a wrong
+guess has to land on x64.
 
 The secondary list leads with the rest of the detected platform's own builds
-(the other-architecture disk image on macOS; the matching deb, then the other
-architecture's AppImage and deb, on Linux), then runs windows, mac, linux over
-what is left, each platform with the detected architecture first. A visitor on
-an unsupported platform gets no primary offer and the plain windows, mac, linux
-order.
+(the other installer on Windows; the other-architecture disk image on macOS;
+the matching deb, then the other architecture's AppImage and deb, on Linux),
+then runs windows, linux, mac over what is left, each platform with the
+detected architecture first. A visitor on an unsupported platform gets no
+primary offer and the plain windows, linux, mac order. That order is the one
+used everywhere a visitor sees a download list: this tab, the README table,
+and the Downloads table in every release's notes.
 
 The same wiring is mirrored in the mobile settings hub
 (`packages/web/src/components/layout/MobileSettingsScreen.tsx`), which is where
@@ -531,6 +540,32 @@ native build jobs fan out (mac arm64+x64, win x64+arm64, linux x64, linux
 arm64), each uploading its installers, `.blockmap`s, and platform `latest*.yml`
 manifest into that one draft. The draft must be published manually — drafts are
 invisible to electron-updater.
+
+A release carries 16 assets, named
+`Backspace-<version>-<os>-<arch>.<ext>` (`artifactName` in
+`electron-builder.yml`, `${os}` being `win`, `mac` or `linux`):
+
+| Asset | Reader |
+|-------|--------|
+| `-win-x64.exe`, `-win-arm64.exe` (+ `.blockmap`) | Windows users; electron-updater picks by `process.arch` |
+| `-linux-x86_64.AppImage`, `-linux-arm64.AppImage` | Linux users; AppImage auto-update, one feed file per architecture |
+| `-linux-amd64.deb`, `-linux-arm64.deb` | Linux users |
+| `-mac-arm64.dmg`, `-mac-x64.dmg` (+ `.blockmap`) | Mac users; the blockmaps are unused while mac updates are `manual` |
+| `latest.yml`, `latest-linux.yml`, `latest-linux-arm64.yml`, `latest-mac.yml` | electron-updater; a `manual` mac still reads `latest-mac.yml` to raise its notice |
+
+The architecture spelling follows electron-builder's per-format convention
+(`x86_64` for an AppImage, `amd64` for a deb, `x64` elsewhere). There is no
+combined Windows installer (`nsis.buildUniversalInstaller: false`) and no mac
+zip: the zip only serves Squirrel.Mac auto-update, which ad-hoc signed builds
+cannot use.
+
+GitHub sorts the asset list by name and offers no other order, which puts
+Linux first and Windows last. So `create-release` writes a Downloads table
+into the draft body, in Windows, Linux, macOS order with plain labels, from
+the names electron-builder will produce; the "What's new" notes are written
+by hand above it before publishing. The web client's Desktop tab
+(`packages/web/src/platform/desktopDownload.ts`) and the README table spell
+the same names out and have to move with `artifactName`.
 
 The `create-release` job exists because electron-builder creates the release
 itself when it cannot find one for the tag, and four jobs doing that lookup
@@ -1245,7 +1280,7 @@ Toggle actions only fire on `pressed: true`. Push-to-talk fires on both press (u
 ```yaml
 appId: com.backspace.desktop
 productName: Backspace
-artifactName: "${productName}-${version}-${arch}.${ext}"
+artifactName: "${productName}-${version}-${os}-${arch}.${ext}"
 output: dist-electron
 ```
 
@@ -1253,8 +1288,8 @@ output: dist-electron
 
 | Platform | Formats |
 |----------|---------|
-| macOS | dmg, zip |
-| Windows | nsis (allows custom install dir) |
+| macOS | dmg (no zip: Squirrel.Mac auto-update needs a Developer ID first) |
+| Windows | nsis, one installer per architecture (allows custom install dir) |
 | Linux | AppImage, deb |
 
 ### Build Commands

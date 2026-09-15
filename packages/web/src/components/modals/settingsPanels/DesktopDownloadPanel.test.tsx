@@ -35,25 +35,44 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('DesktopDownloadPanel', () => {
-  it('puts the combined Windows installer in the hero and drops the Windows tile', async () => {
-    platformIs({ os: 'windows', arch: null, archGuessed: false });
+  it('puts the x64 installer in the Windows hero and follows the picker', async () => {
+    const user = userEvent.setup();
+    platformIs({ os: 'windows', arch: 'x64', archGuessed: false });
     render(<DesktopDownloadPanel version="1.2.3" />);
 
     const hero = await screen.findByRole('region', { name: 'Windows' });
     expect(hero).toHaveAttribute('data-tile', 'hero');
     expect(within(hero).getByText('This PC')).toBeInTheDocument();
-    // The one installer covers both architectures, so the hero offers no choice.
-    expect(within(hero).queryByRole('radiogroup')).not.toBeInTheDocument();
+    expect(within(hero).getByRole('radio', { name: 'x64' })).toHaveAttribute('aria-checked', 'true');
     expect(within(hero).getByRole('link', { name: 'Download for Windows' })).toHaveAttribute(
       'href',
-      asset('Backspace-1.2.3.exe'),
+      asset('Backspace-1.2.3-win-x64.exe'),
     );
     expect(within(hero).getByText('Version 1.2.3')).toBeInTheDocument();
+    expect(screen.queryByText(/preselected/)).not.toBeInTheDocument();
 
-    // Windows is the hero, so it must not also appear as a quiet tile.
+    await user.click(within(hero).getByRole('radio', { name: 'arm64' }));
+    expect(within(hero).getByRole('link', { name: 'Download for Windows' })).toHaveAttribute(
+      'href',
+      asset('Backspace-1.2.3-win-arm64.exe'),
+    );
+
+    // Windows is the hero, so it must not also appear as a quiet tile, and the
+    // quiet tiles keep the windows, linux, mac order with the hero taken out.
     expect(screen.getAllByRole('link', { name: 'Download for Windows' })).toHaveLength(1);
-    expect(tile('macOS')).toHaveAttribute('data-tile', 'quiet');
-    expect(tile('Linux')).toHaveAttribute('data-tile', 'quiet');
+    const quiet = screen.getAllByRole('region').filter((region) => region.getAttribute('data-tile') === 'quiet');
+    expect(quiet.map((region) => within(region).getByRole('heading').textContent)).toEqual(['Linux', 'macOS']);
+  });
+
+  it('preselects x64 on a guessed Windows machine and says so', async () => {
+    platformIs({ os: 'windows', arch: 'x64', archGuessed: true });
+    render(<DesktopDownloadPanel version="1.2.3" />);
+
+    const hero = await screen.findByRole('region', { name: 'Windows' });
+    expect(within(hero).getByRole('radio', { name: 'x64' })).toHaveAttribute('aria-checked', 'true');
+    expect(
+      screen.getByText('Your browser did not say which processor this PC has, so x64 is preselected.'),
+    ).toBeInTheDocument();
   });
 
   it('preselects Apple Silicon on a guessed Mac and follows the picker', async () => {
@@ -72,7 +91,7 @@ describe('DesktopDownloadPanel', () => {
     ).toBeInTheDocument();
 
     const download = within(hero).getByRole('link', { name: 'Download for macOS' });
-    expect(download).toHaveAttribute('href', asset('Backspace-1.2.3-arm64.dmg'));
+    expect(download).toHaveAttribute('href', asset('Backspace-1.2.3-mac-arm64.dmg'));
 
     await user.click(within(hero).getByRole('radio', { name: 'Intel' }));
 
@@ -83,7 +102,7 @@ describe('DesktopDownloadPanel', () => {
     );
     expect(within(hero).getByRole('link', { name: 'Download for macOS' })).toHaveAttribute(
       'href',
-      asset('Backspace-1.2.3-x64.dmg'),
+      asset('Backspace-1.2.3-mac-x64.dmg'),
     );
     // The rest of the hero is untouched by the choice.
     expect(within(hero).getByText('This Mac')).toBeInTheDocument();
@@ -107,19 +126,19 @@ describe('DesktopDownloadPanel', () => {
     expect(within(hero).getAllByRole('radiogroup')).toHaveLength(2);
     expect(within(hero).getByRole('link', { name: 'Download for Linux' })).toHaveAttribute(
       'href',
-      asset('Backspace-1.2.3-x86_64.AppImage'),
+      asset('Backspace-1.2.3-linux-x86_64.AppImage'),
     );
 
     await user.click(within(hero).getByRole('radio', { name: 'deb' }));
     expect(within(hero).getByRole('link', { name: 'Download for Linux' })).toHaveAttribute(
       'href',
-      asset('Backspace-1.2.3-amd64.deb'),
+      asset('Backspace-1.2.3-linux-amd64.deb'),
     );
 
     await user.click(within(hero).getByRole('radio', { name: 'arm64' }));
     expect(within(hero).getByRole('link', { name: 'Download for Linux' })).toHaveAttribute(
       'href',
-      asset('Backspace-1.2.3-arm64.deb'),
+      asset('Backspace-1.2.3-linux-arm64.deb'),
     );
   });
 
@@ -138,7 +157,7 @@ describe('DesktopDownloadPanel', () => {
     expect(intel).toHaveFocus();
     expect(within(hero).getByRole('link', { name: 'Download for macOS' })).toHaveAttribute(
       'href',
-      asset('Backspace-1.2.3-x64.dmg'),
+      asset('Backspace-1.2.3-mac-x64.dmg'),
     );
 
     // The group wraps, so the same key brings the first segment back.
@@ -154,24 +173,29 @@ describe('DesktopDownloadPanel', () => {
     render(<DesktopDownloadPanel version="1.2.3" />);
 
     expect(
-      await screen.findByText('The desktop app runs on Windows, macOS and Linux.'),
+      await screen.findByText('The desktop app runs on Windows, Linux and macOS.'),
     ).toBeInTheDocument();
 
     const tiles = screen.getAllByRole('region');
     expect(tiles).toHaveLength(3);
     for (const region of tiles) expect(region).toHaveAttribute('data-tile', 'quiet');
+    expect(tiles.map((region) => within(region).getByRole('heading').textContent)).toEqual([
+      'Windows',
+      'Linux',
+      'macOS',
+    ]);
 
     expect(within(tile('Windows')).getByRole('link', { name: 'Download for Windows' })).toHaveAttribute(
       'href',
-      asset('Backspace-1.2.3.exe'),
+      asset('Backspace-1.2.3-win-x64.exe'),
     );
     expect(within(tile('macOS')).getByRole('link', { name: 'Download for macOS' })).toHaveAttribute(
       'href',
-      asset('Backspace-1.2.3-arm64.dmg'),
+      asset('Backspace-1.2.3-mac-arm64.dmg'),
     );
     expect(within(tile('Linux')).getByRole('link', { name: 'Download for Linux' })).toHaveAttribute(
       'href',
-      asset('Backspace-1.2.3-x86_64.AppImage'),
+      asset('Backspace-1.2.3-linux-x86_64.AppImage'),
     );
     // Three downloads plus the releases listing.
     expect(screen.getAllByRole('link')).toHaveLength(4);
@@ -189,7 +213,7 @@ describe('DesktopDownloadPanel', () => {
   });
 
   it('opens every link in a new tab without leaking the opener', async () => {
-    platformIs({ os: 'windows', arch: null, archGuessed: false });
+    platformIs({ os: 'windows', arch: 'x64', archGuessed: false });
     render(<DesktopDownloadPanel version="1.2.3" />);
 
     await screen.findByRole('link', { name: 'Download for Windows' });
