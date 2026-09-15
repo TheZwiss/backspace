@@ -375,5 +375,28 @@
       "current": "Currently connected instance",
       "change": "Change Instance"
     }
+  },
+  "desktopDownload": {
+    "title": "Desktop",
+    "intro": "Backspace also runs as a desktop app, with global keybinds, start at boot and a system tray icon.",
+    "primary": {
+      "windows": "Download for Windows",
+      "macArm64": "Download for macOS (Apple Silicon)",
+      "macX64": "Download for macOS (Intel)",
+      "linuxX64": "Download for Linux (AppImage, x64)",
+      "linuxArm64": "Download for Linux (AppImage, arm64)"
+    },
+    "archGuessed": "Your browser did not report which processor this machine has. If this build does not run, use {{build}} from the list below.",
+    "unsupported": "The desktop app runs on Windows, macOS and Linux.",
+    "build": {
+      "windows": "Windows installer",
+      "macArm64": "macOS disk image (Apple Silicon)",
+      "macX64": "macOS disk image (Intel)",
+      "linuxAppImageX64": "Linux AppImage (x64)",
+      "linuxAppImageArm64": "Linux AppImage (arm64)",
+      "linuxDebX64": "Linux deb package (x64)",
+      "linuxDebArm64": "Linux deb package (arm64)"
+    },
+    "allReleases": "All releases"
   }
 }

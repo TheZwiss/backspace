@@ -375,5 +375,28 @@
       "current": "Aktuell verbundene Instanz",
       "change": "Instanz wechseln"
     }
+  },
+  "desktopDownload": {
+    "title": "Desktop",
+    "intro": "Backspace läuft auch als Desktop-App, mit globalen Tastenkürzeln, Start beim Anmelden und einem Symbol im Infobereich.",
+    "primary": {
+      "windows": "Für Windows herunterladen",
+      "macArm64": "Für macOS herunterladen (Apple Silicon)",
+      "macX64": "Für macOS herunterladen (Intel)",
+      "linuxX64": "Für Linux herunterladen (AppImage, x64)",
+      "linuxArm64": "Für Linux herunterladen (AppImage, arm64)"
+    },
+    "archGuessed": "Dein Browser verrät nicht, welchen Prozessor dieser Rechner hat. Falls diese Version nicht startet, nimm {{build}} aus der Liste unten.",
+    "unsupported": "Die Desktop-App läuft unter Windows, macOS und Linux.",
+    "build": {
+      "windows": "Windows-Installer",
+      "macArm64": "macOS-Image (Apple Silicon)",
+      "macX64": "macOS-Image (Intel)",
+      "linuxAppImageX64": "Linux-AppImage (x64)",
+      "linuxAppImageArm64": "Linux-AppImage (arm64)",
+      "linuxDebX64": "Linux-deb-Paket (x64)",
+      "linuxDebArm64": "Linux-deb-Paket (arm64)"
+    },
+    "allReleases": "Alle Versionen"
   }
 }
