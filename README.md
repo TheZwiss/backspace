@@ -816,5 +816,5 @@ Built on the shoulders of [Fastify](https://fastify.dev/),
 [Drizzle ORM](https://orm.drizzle.team/), [React](https://react.dev/),
 [LiveKit](https://livekit.io/), [Tailwind CSS](https://tailwindcss.com/),
 [Electron](https://www.electronjs.org/), and the broader open-source ecosystem.
-The interface uses the [DM Sans](https://github.com/googlefonts/dm-fonts) font
-(SIL Open Font License 1.1).
+The interface uses [DM Sans](https://github.com/googlefonts/dm-fonts) and
+[Inter](https://github.com/rsms/inter) (SIL Open Font License 1.1).

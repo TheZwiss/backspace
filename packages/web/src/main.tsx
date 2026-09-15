@@ -46,7 +46,6 @@ class ErrorBoundary extends React.Component<
           justifyContent: 'center',
           backgroundColor: '#0b0b10',
           color: '#efefef',
-          fontFamily: "'DM Sans', sans-serif",
           flexDirection: 'column',
           gap: '16px',
           padding: '24px',
@@ -64,7 +63,6 @@ class ErrorBoundary extends React.Component<
                 borderRadius: '8px',
                 cursor: 'pointer',
                 fontSize: '14px',
-                fontFamily: "'DM Sans', sans-serif",
               }}
             >
               {i18n.t('common:actions.tryAgain')}
@@ -79,7 +77,6 @@ class ErrorBoundary extends React.Component<
                 borderRadius: '8px',
                 cursor: 'pointer',
                 fontSize: '14px',
-                fontFamily: "'DM Sans', sans-serif",
               }}
             >
               {i18n.t('common:crash.reload')}

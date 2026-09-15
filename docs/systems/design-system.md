@@ -3,7 +3,7 @@
 Prototype (source of truth): `Backspace-design-prototype.html` (open in browser)
 Styles: `packages/web/src/styles/globals.css`
 Theme: `packages/web/tailwind.config.js`
-Font: DM Sans (primary) with system fallbacks
+Fonts: DM Sans by default; Inter for the Russian app UI; system fallbacks
 
 ---
 
