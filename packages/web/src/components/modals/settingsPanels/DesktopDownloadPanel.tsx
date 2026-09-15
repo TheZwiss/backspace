@@ -286,26 +286,25 @@ function QuietTile({
 }) {
   const { t } = useTranslation('settings');
   return (
+    // The content flows from the top and any spare height falls to the bottom
+    // of the tile. Pinning the link to the bottom edge lined the pair's links
+    // up, at the cost of a hollow band inside whichever tile has no picker.
     <section
       aria-labelledby={nameId}
       data-tile="quiet"
-      className="ddl-tile rounded-2xl border border-white/[0.04] bg-white/[0.03] p-4"
+      className="min-w-0 rounded-2xl border border-white/[0.04] bg-white/[0.03] p-4"
     >
-      <div className="ddl-tile__text min-w-0">
-        <PlatformName platform={platform} id={nameId} hero={false} />
-        <p className="mt-2 text-xs text-txt-tertiary">{t(COVERS_KEYS[platform])}</p>
-      </div>
-      <div className="ddl-tile__actions">
-        {pickers && <div className="flex flex-wrap gap-2">{pickers}</div>}
-        <a
-          href={href}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-sm font-medium text-accent-primary hover:text-accent-primary-hover transition-colors"
-        >
-          {t(DOWNLOAD_KEYS[platform])}
-        </a>
-      </div>
+      <PlatformName platform={platform} id={nameId} hero={false} />
+      <p className="mt-2 text-xs text-txt-tertiary">{t(COVERS_KEYS[platform])}</p>
+      {pickers && <div className="mt-3 flex flex-wrap gap-2">{pickers}</div>}
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-3 inline-block text-sm font-medium text-accent-primary hover:text-accent-primary-hover transition-colors"
+      >
+        {t(DOWNLOAD_KEYS[platform])}
+      </a>
     </section>
   );
 }
