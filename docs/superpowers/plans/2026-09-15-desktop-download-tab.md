@@ -15,12 +15,12 @@
 - The Desktop tab button in `UserSettings.tsx` currently renders only when `isElectron()` is true, in both the desktop sidebar and the mobile tab list. Both gates go. The tab keeps its position under the App Settings heading.
 - Inside the desktop app the tab renders the existing `DesktopPanel`, untouched.
 - In the browser it renders a new `DesktopDownloadPanel`: a title, one line saying what the app adds (voice polish, activity detection, global keybinds), one highlighted primary download for the detected platform, the remaining builds as plain links grouped by platform, and an "All releases" link to the GitHub releases page.
-- Windows never needs an architecture: the release carries a combined installer, `Backspace-<version>.exe`, that picks x64 or arm64 at install time.
+- Windows never needs an architecture: the release carries a combined installer, `Backspace-<version>.exe`, built with `--win --x64 --arm64`, that picks the architecture at install time. The release also carries `Backspace-<version>-x64.exe`, `Backspace-<version>-arm64.exe`, two Mac `.zip` files, blockmaps and updater metadata. None of those is offered; the combined installer is enough.
 - macOS needs one: `Backspace-<version>-arm64.dmg` or `Backspace-<version>-x64.dmg`. Chromium exposes the architecture through user-agent client hints; Safari and Firefox do not, and Safari on Apple Silicon reports itself as Intel. Fallback: Apple Silicon, with the Intel build as the first secondary link.
 - Linux needs one too: `Backspace-<version>-x86_64.AppImage`, `Backspace-<version>-arm64.AppImage`, `Backspace-<version>-amd64.deb`, `Backspace-<version>-arm64.deb`. Fallback: x64. The deb versus AppImage choice cannot be detected, so the primary is the AppImage and the deb for the same architecture is the first secondary link.
 - A phone or tablet, or an OS that is none of the three, gets no primary: a short note that the app runs on Windows, macOS and Linux, then the full list.
-- Links are built from `InstanceInfoResponse.version`, which `UserSettings.tsx` already fetches for the source-code footer. A version that is not a plain `major.minor.patch` (dev builds) makes every link point at the releases page instead.
-- The desktop app updates itself ten seconds after first launch, so linking the instance's version rather than the newest release is fine.
+- Links are built from `InstanceInfoResponse.version`, which `UserSettings.tsx` already fetches for the source-code footer. A version that is not a plain `major.minor.patch` makes every link point at the releases page instead. A plain version whose tag is not published yet links to a missing asset; accepted, the "All releases" link is the recovery.
+- The desktop app checks for updates ten seconds after launch. Windows and AppImage install them; macOS today offers a download link because the bundle is ad-hoc signed (see desktop.md "Update capability"). Linking the instance's version is still right: the app tells the user about anything newer.
 - Not included: a profile-menu entry, any change to release naming, a Flatpak link.
 
 ## Global constraints
@@ -29,7 +29,8 @@
 - Every user-facing string goes through i18next with a semantic key under the `settings` namespace, shipped in `en`, `de` and `ru` in the same task. Key shape is `settings:desktopDownload.<element>.<meaning>`; see `docs/systems/localization.md`. `node scripts/check-i18n.mjs` must pass.
 - No em dashes, no marketing register in copy. Plain sentences.
 - Surfaces follow `docs/systems/design-system.md`: this panel is structural content inside the settings modal, so matte classes like the other panels, no glass. Copy the row and button classes from `DesktopPanel.tsx` and `AppearancePanel.tsx` rather than inventing new ones.
-- The GitHub repository URL is `https://github.com/TheZwiss/backspace`. Release assets live under `releases/download/v<version>/<filename>`; the listing is `releases`; there is no fixed-name "latest" asset because filenames carry the version.
+- The GitHub repository URL is `https://github.com/TheZwiss/backspace`. Release assets live under `releases/download/v<version>/<filename>`; the listing is `releases`; there is no fixed-name "latest" asset because filenames carry the version. The new `RELEASES_URL` is `/releases` on purpose; `updateStore.ts` and the desktop package keep `/releases/latest` because they mean "the newest". Do not align one to the other.
+- Run `pnpm dev` and the server tests with the Node version in `.nvmrc`; the machine's default Node breaks better-sqlite3. Web tests and the web typecheck run fine on the default Node.
 - `window.backspace` is the desktop preload contract and must not change. See `docs/systems/desktop.md`.
 - Tests are Vitest with `@testing-library/react`, run with `cd packages/web && npx vitest run <path>`. Typecheck with `cd packages/web && npx tsc --noEmit -p .`.
 - Work on the local branch `feat/desktop-download-tab`. Commit per task. Do not push and do not open a PR; Jannis tests the whole result first.
@@ -69,17 +70,17 @@ export function detectDesktopPlatform(nav: NavigatorLike): Promise<DetectedPlatf
 export function buildDesktopDownloads(version: string, detected: DetectedPlatform): DesktopDownloadLinks;
 ```
 
-`NavigatorLike` is a small structural type the module defines so tests can pass a plain object: `{ userAgent: string; platform?: string; maxTouchPoints?: number; userAgentData?: { platform?: string; mobile?: boolean; getHighEntropyValues?: (hints: string[]) => Promise<Record<string, unknown>> } }`. The panel passes `window.navigator`.
+`NavigatorLike` is a small structural type the module defines so tests can pass a plain object: `{ userAgent: string; maxTouchPoints?: number; userAgentData?: { platform?: string; mobile?: boolean; getHighEntropyValues?: (hints: string[]) => Promise<Record<string, unknown>> } }`. The panel passes `window.navigator`. In jsdom `userAgentData` is undefined and `maxTouchPoints` is undefined, which the type allows.
 
 **Detection rules:**
-- OS from `userAgentData.platform` when present (`Windows`, `macOS`, `Linux`, `Chrome OS`, `Android`, `iOS`), else from the user-agent string. `Android`, `iOS`, `Chrome OS`, anything with `Mobile`, `iPhone`, `iPad`, `Android` in the UA, `userAgentData.mobile === true`, and a Mac with `maxTouchPoints > 1` (iPadOS Safari presents as a Mac) are all `other`.
-- Architecture from `getHighEntropyValues(['architecture', 'bitness'])` when the function exists and resolves: `architecture === 'arm'` is `arm64`; `architecture === 'x86'` with `bitness === '64'` is `x64`; anything else falls through. A rejected promise falls through. Then the UA string: `aarch64`, `arm64`, `ARM` mean `arm64`; `x86_64`, `x64`, `Win64`, `WOW64` mean `x64`. Then the default: mac `arm64`, linux `x64`, both with `archGuessed: true`. Windows and other get `arch: null, archGuessed: false`.
+- OS from `userAgentData.platform` when present (`Windows`, `macOS`, `Linux`, `Chrome OS`, `Android`, `iOS`), else from the user-agent string. `Android`, `iOS`, `Chrome OS`, anything with `Mobile`, `iPhone`, `iPad`, `Android`, `CrOS` in the UA, `userAgentData.mobile === true`, and a Mac with `maxTouchPoints > 1` (iPadOS Safari presents as a Mac) are all `other`.
+- Architecture from `getHighEntropyValues(['architecture', 'bitness'])` when the function exists and resolves: `architecture === 'arm'` is `arm64`; `architecture === 'x86'` with `bitness === '64'` is `x64`; anything else falls through. A rejected promise falls through. Then the UA string, case-insensitive: `aarch64` or `arm64` mean `arm64`; `x86_64`, `x64`, `Win64`, `WOW64` mean `x64`; `armv7l` and `armv8l` are 32-bit and fall through. Then the default: mac `arm64`, linux `x64`, both with `archGuessed: true`. Windows and other get `arch: null, archGuessed: false`.
 
 **Link rules:**
 - Filenames exactly as electron-builder emits them; see the design section. Base `https://github.com/TheZwiss/backspace/releases/download/v${version}/`.
 - The full build list is always seven entries: windows combined exe, mac arm64 dmg, mac x64 dmg, linux x86_64 AppImage, linux arm64 AppImage, linux amd64 deb, linux arm64 deb. `primary` is removed from `others`.
 - Primary by platform: windows exe; mac dmg for the detected arch; linux AppImage for the detected arch; other has no primary.
-- `others` ordering: windows, then mac, then linux. Within mac and linux, builds for the detected arch come before the other arch; for linux the AppImage precedes the deb within an arch.
+- `others` ordering: windows, then mac, then linux. Within mac and linux, order by `detected.arch`; when it is null use the platform default (mac `arm64` first, linux `x64` first). The detected arch applies to both platforms regardless of the detected OS. For linux the AppImage precedes the deb within an arch.
 - A version that fails `/^\d+\.\d+\.\d+$/` produces links whose `url` is `RELEASES_URL` for every entry, primary included.
 
 **Tests (real behaviour, no mocks beyond the navigator object):**
@@ -99,6 +100,7 @@ export function buildDesktopDownloads(version: string, detected: DetectedPlatfor
 - Create: `packages/web/src/components/modals/settingsPanels/DesktopDownloadPanel.tsx`
 - Create: `packages/web/src/components/modals/settingsPanels/DesktopDownloadPanel.test.tsx`
 - Modify: `packages/web/src/locales/en/settings.json`, `packages/web/src/locales/de/settings.json`, `packages/web/src/locales/ru/settings.json` (new `desktopDownload` block in each)
+- Modify only if the check script flags a value: `scripts/i18n-allowlist.json` (a flat JSON array of whole values)
 
 **Interfaces consumed:** everything exported by `packages/web/src/platform/desktopDownload.ts` (Task 1), with the exact names listed there.
 
@@ -106,16 +108,16 @@ export function buildDesktopDownloads(version: string, detected: DetectedPlatfor
 
 **Behaviour:**
 - On mount, call `detectDesktopPlatform(window.navigator)` in an effect; until it resolves, render the title, the intro line and the "All releases" link, no build list. Guard against setting state after unmount.
-- Title uses the existing tab name key `settings:nav.tabs.desktop` so the heading matches the sidebar, like the other panels do.
-- Intro line: one sentence on what the app adds. Then the primary as a filled button-styled link (`bg-accent-primary`, same classes as the download action in `DesktopPanel.tsx`), labelled "Download for Windows" / "Download for macOS (Apple Silicon)" / "Download for macOS (Intel)" / "Download for Linux (AppImage, x64)" and so on, built from per-platform and per-arch keys, never from string concatenation of English words in code.
-- When `archGuessed` is true, a small tertiary line under the primary says the architecture was assumed and points at the other one by name.
+- Heading from a new `settings:desktopDownload.title`, values copied from `settings:desktop.title` (`en` Desktop, `de` Desktop, `ru` Приложение), rendered with the same `<h2 className="text-lg font-semibold text-txt-primary mb-6">` as every other panel (see `DesktopPanel.tsx` around line 244). Panels title themselves from their own block, never from `nav.tabs.*`.
+- Intro line: one sentence on what the app adds. Then the primary as a filled button-styled link (`px-3 py-1.5 text-sm font-medium text-white bg-accent-primary hover:bg-accent-primary/80 rounded-lg transition-colors`, copied from the download action in `DesktopPanel.tsx`), labelled "Download for Windows" / "Download for macOS (Apple Silicon)" / "Download for macOS (Intel)" / "Download for Linux (AppImage, x64)" and so on. Select keys through `Record<...>` maps of literal key strings so the typed `t` checks them; no template-literal keys and no concatenation of English words in code.
+- When `archGuessed` is true, a small tertiary line under the primary says the architecture was assumed and names the other build with a `{{build}}` placeholder (plain text, no link; the other build is already the first entry of the list below). The placeholder must appear in all three languages.
 - For `other`, a tertiary note that the desktop app runs on Windows, macOS and Linux, then the full list.
 - The remaining builds as a plain list of links, each with the platform, the architecture, and the file kind, using `text-txt-secondary hover:text-txt-primary` like other secondary actions.
 - "All releases" as a link to `allReleasesUrl` at the bottom.
 - Every link has `target="_blank"` and `rel="noopener noreferrer"`.
 - No fetches, no stores, no `window.backspace` access.
 
-**Strings:** add a `desktopDownload` block under the `settings` namespace with keys for the intro, the primary label per platform and arch, the guessed-arch note, the unsupported-platform note, the list item pattern, and the all-releases link. Ship `en`, `de` and `ru`. Brand and platform names (`Backspace`, `Windows`, `macOS`, `Linux`, `AppImage`, `Apple Silicon`, `Intel`) are allowed to stay untranslated; add any that the check script flags to `scripts/i18n-allowlist.json`. Run `node scripts/check-i18n.mjs` from the repo root and make it pass.
+**Strings:** add a `desktopDownload` block under the `settings` namespace with keys for the title, the intro, the primary label per platform and arch, the guessed-arch note, the unsupported-platform note, the list item pattern, and the all-releases link. Ship `en`, `de` and `ru`. Existing wording to match: `settings:desktop.updates.download` is "Download" / "Herunterladen" / "Скачать". Brand and platform names (`Backspace`, `Windows`, `macOS`, `Linux`, `AppImage`, `Apple Silicon`, `Intel`) are allowed to stay untranslated; add any that the check script flags to `scripts/i18n-allowlist.json`. Run `node scripts/check-i18n.mjs` from the repo root and make it pass.
 
 **Tests (Testing Library, mock only `../../../platform/desktopDownload` so the platform is deterministic):**
 - Windows: the primary link text names Windows and its href is the combined exe for the given version.
@@ -134,8 +136,8 @@ export function buildDesktopDownloads(version: string, detected: DetectedPlatfor
 
 **Files:**
 - Modify: `packages/web/src/components/modals/UserSettings.tsx` (the two `isElectron() &&` tab buttons at roughly lines 168 and 232 on current main, and the `tab === 'desktop'` panel switch at roughly line 282)
-- Modify: `docs/systems/desktop.md` (a short subsection under the settings material stating the tab now exists in the browser and what it shows there)
-- Modify: `docs/systems/design-system.md` under "Settings organization" (one line: Desktop under App Settings is present in every environment)
+- Modify: `docs/systems/desktop.md`: add `### Desktop tab in the browser` at the end of the Auto-Update section, before "Release publishing" (around line 454), stating the tab now exists in the browser, what it shows, that the primary is built from the instance version, and that the combined Windows installer is the one offered.
+- Modify: `docs/systems/design-system.md` "Settings organization" (lines 18 to 27): rewrite the parenthetical that currently says the Desktop tab is Electron-only and would hide a preference from the browser. New wording: the browser shows the Desktop tab only as a download offer, so a preference placed there would be unreachable outside the app. Do not append a contradicting line; replace the sentence.
 
 **Interfaces consumed:** `DesktopDownloadPanel({ version })` from Task 2; `isElectron()` from `packages/web/src/platform/platform.ts`; the existing `instanceInfo` state in `UserSettings.tsx`.
 
@@ -145,12 +147,12 @@ export function buildDesktopDownloads(version: string, detected: DetectedPlatfor
 - Leave the deep-link allowlist for `modalData.tab` as it is; it already excludes `desktop`, and nothing links there yet.
 
 **Tests:**
-- If `UserSettings.test.tsx` exists on the branch, extend it; if not, create it with the minimum store setup the modal needs (look at how `TelemetryPanel.test.tsx` and `DesktopPanel.test.tsx` set up stores and `window.backspace`). Two cases: with `window.backspace` undefined the Desktop tab is present and clicking it shows the download panel's all-releases link; with `window.backspace` defined as in `DesktopPanel.test.tsx` the same click shows the existing desktop panel content. If the modal proves too heavy to render in isolation, say so in the report and cover the switch with a small extracted component instead; do not skip the test silently.
+- There is no `UserSettings.test.tsx` yet; create it. The modal needs: `useUIStore` with `activeModal: 'userSettings'`, `modalData: {}`, `isMobile: false`, `closeModal`; `useAuthStore` with a `user` and `logout`; `useSettingsStore` (reached through `hooks/useInstanceUpdateBadge.ts`); `api.instance.info` resolving `{ version: '1.2.1', sourceCodeUrl, commit, ... }`; and for the Electron case `window.backspace` plus the `updateStore` mock exactly as in `settingsPanels/DesktopPanel.test.tsx`. The store-mock idiom to copy is `settingsPanels/AccountPanel.detachedNotice.test.tsx` (selector-aware `Object.assign(fn, { getState, setState, subscribe })`). `vi.mock` every sibling panel (Account, Appearance, Voice, Privacy, Connections, Keybinds, Instance) to a one-line stub so only the two Desktop panels render for real. Two cases: with `window.backspace` undefined the Desktop tab is present under App Settings and clicking it shows the download panel's all-releases link; with `window.backspace` defined the same click shows the existing desktop panel's title. Do not skip the test; if something in this list is wrong on the branch, fix the setup and say so in the report.
 
 **Full gate, run from the repo root and paste the results in the report:**
 - `pnpm typecheck` (this includes the i18n check)
 - `cd packages/web && npx vitest run`
-- `pnpm dev` starts server and web without errors; open the settings modal in the browser at `http://localhost:5173`, confirm the Desktop tab under App Settings and the download panel with the right primary for the machine you are on; stop the dev server.
+- `pnpm dev` under the `.nvmrc` Node starts server and web without errors; open the settings modal in the browser at `http://localhost:5173`, confirm the Desktop tab under App Settings and the download panel with the right primary for the machine you are on; stop the dev server.
 
 **Acceptance:** all of the above green, docs updated, three commits on `feat/desktop-download-tab`, nothing pushed.
 
