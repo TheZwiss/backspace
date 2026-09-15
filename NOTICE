@@ -21,6 +21,15 @@ DM Sans
   The full license text is shipped alongside the font files at
   packages/web/public/fonts/OFL.txt.
 
+Inter
+  Files:    packages/web/public/fonts/InterVariable.woff2
+            packages/web/public/fonts/InterVariable-Italic.woff2
+  License:  SIL Open Font License, Version 1.1
+  Notice:   Copyright 2016 The Inter Project Authors
+            (https://github.com/rsms/inter)
+  The full license text is shipped alongside the font files at
+  packages/web/public/fonts/Inter-OFL.txt.
+
 ================================================================================
 Sound effects
 ================================================================================

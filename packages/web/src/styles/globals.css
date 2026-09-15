@@ -14,6 +14,24 @@
   font-display: swap;
 }
 
+@font-face {
+  font-family: 'Inter';
+  src: url('/fonts/InterVariable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0301, U+0304, U+0308, U+0329, U+0400-052F, U+1C80-1C8A, U+2000-206F, U+20AC, U+20B4, U+20BD, U+2116, U+2122, U+2191-2193, U+2212, U+2215, U+2713, U+2717, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Inter';
+  src: url('/fonts/InterVariable-Italic.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0301, U+0304, U+0308, U+0329, U+0400-052F, U+1C80-1C8A, U+2000-206F, U+20AC, U+20B4, U+20BD, U+2116, U+2122, U+2191-2193, U+2212, U+2215, U+2713, U+2717, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F, U+FEFF, U+FFFD;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -105,6 +123,11 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+  }
+
+  :root:lang(ru) body,
+  :root:lang(ru) #root {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   }
 
   /* Suppress native text selection and callout on mobile interactive elements.
@@ -354,6 +377,10 @@
   border: none !important;
   background: transparent !important;
   max-height: 400px;
+}
+
+:root:lang(ru) .emoji-picker-wrapper em-emoji-picker {
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
 }
 
 /* Mobile bottom-sheet variant: stretch the custom element to fill the

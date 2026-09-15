@@ -91,6 +91,17 @@ export function VoiceControls() {
       ? t('voice:status.connectionFailed')
       : connectionError;
 
+  const statusLabel = voiceConnectionStatus === 'reconnecting'
+    ? t('voice:status.reconnecting')
+    : connectionError === 'network_disconnect'
+      ? t('voice:status.disconnected')
+      : connectionError
+        ? t('voice:status.connectionFailed')
+        : isLiveKitConnected
+          ? t('voice:status.connected')
+          : t('voice:status.connecting');
+  const detailLabel = connectionDetail ?? channelName;
+
   const statusColor = connectionError
     ? 'text-txt-danger'
     : isLiveKitConnected
@@ -134,19 +145,11 @@ export function VoiceControls() {
         </button>
 
         <div className="min-w-0 flex-1">
-          <div className={`text-[13px] font-semibold leading-[18px] ${statusColor}`}>
-            {voiceConnectionStatus === 'reconnecting'
-              ? t('voice:status.reconnecting')
-              : connectionError === 'network_disconnect'
-                ? t('voice:status.disconnected')
-                : connectionError
-                  ? t('voice:status.connectionFailed')
-                  : isLiveKitConnected
-                    ? t('voice:status.connected')
-                    : t('voice:status.connecting')}
+          <div title={statusLabel} className={`truncate text-[13px] font-semibold leading-[18px] ${statusColor}`}>
+            {statusLabel}
           </div>
-          <div className="text-[12px] text-txt-tertiary truncate leading-[16px]">
-            {connectionDetail ?? channelName}
+          <div title={detailLabel} className="text-[12px] text-txt-tertiary truncate leading-[16px]">
+            {detailLabel}
           </div>
         </div>
 
