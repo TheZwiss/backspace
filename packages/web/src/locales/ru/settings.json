@@ -380,25 +380,47 @@
   },
   "desktopDownload": {
     "title": "Приложение",
-    "intro": "Backspace также работает как настольное приложение: глобальные сочетания клавиш, запуск при входе в систему и значок в системном трее.",
-    "primary": {
-      "windows": "Скачать для Windows",
-      "macArm64": "Скачать для macOS (Apple Silicon)",
-      "macX64": "Скачать для macOS (Intel)",
-      "linuxX64": "Скачать для Linux (AppImage, x64)",
-      "linuxArm64": "Скачать для Linux (AppImage, arm64)"
-    },
-    "archGuessed": "Браузер не сообщил, какой процессор у этого компьютера. Если сборка не запустится, выберите из списка ниже: «{{build}}».",
+    "intro": "Глобальные сочетания клавиш, запуск при входе в систему и значок в системном трее.",
     "unsupported": "Настольное приложение работает в Windows, macOS и Linux.",
-    "build": {
-      "windows": "Установщик для Windows",
-      "macArm64": "Образ macOS (Apple Silicon)",
-      "macX64": "Образ macOS (Intel)",
-      "linuxAppImageX64": "AppImage для Linux (x64)",
-      "linuxAppImageArm64": "AppImage для Linux (arm64)",
-      "linuxDebX64": "Пакет deb для Linux (x64)",
-      "linuxDebArm64": "Пакет deb для Linux (arm64)"
+    "name": {
+      "windows": "Windows",
+      "mac": "macOS",
+      "linux": "Linux"
     },
-    "allReleases": "Все выпуски"
+    "tag": {
+      "windows": "Этот ПК",
+      "mac": "Этот Mac",
+      "linux": "Этот компьютер"
+    },
+    "covers": {
+      "windows": "Один установщик для x64 и arm64",
+      "mac": "Работает на Mac с Apple Silicon и Intel",
+      "linux": "Пакет AppImage или deb, x64 или arm64"
+    },
+    "download": {
+      "windows": "Скачать для Windows",
+      "mac": "Скачать для macOS",
+      "linux": "Скачать для Linux"
+    },
+    "picker": {
+      "architecture": "Архитектура",
+      "format": "Формат пакета"
+    },
+    "arch": {
+      "appleSilicon": "Apple Silicon",
+      "intel": "Intel",
+      "x64": "x64",
+      "arm64": "arm64"
+    },
+    "kind": {
+      "appimage": "AppImage",
+      "deb": "deb"
+    },
+    "archGuessed": {
+      "mac": "Браузер не сообщил, какой чип у этого Mac, поэтому выбран вариант Apple Silicon.",
+      "linux": "Браузер не сообщил, какой процессор у этого компьютера, поэтому выбран вариант x64."
+    },
+    "version": "Версия {{version}}",
+    "allReleases": "Все выпуски на GitHub"
   }
 }

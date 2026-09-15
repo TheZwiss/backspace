@@ -42,5 +42,14 @@
   "Gaming",
   "LIVE",
   "{{value}} fps",
-  "https://instance.example.com"
+  "https://instance.example.com",
+  "Windows",
+  "macOS",
+  "Linux",
+  "Apple Silicon",
+  "Intel",
+  "x64",
+  "arm64",
+  "AppImage",
+  "deb"
 ]

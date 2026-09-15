@@ -378,25 +378,47 @@
   },
   "desktopDownload": {
     "title": "Desktop",
-    "intro": "Backspace also runs as a desktop app, with global keybinds, start at boot and a system tray icon.",
-    "primary": {
-      "windows": "Download for Windows",
-      "macArm64": "Download for macOS (Apple Silicon)",
-      "macX64": "Download for macOS (Intel)",
-      "linuxX64": "Download for Linux (AppImage, x64)",
-      "linuxArm64": "Download for Linux (AppImage, arm64)"
-    },
-    "archGuessed": "Your browser did not report which processor this machine has. If this build does not run, use {{build}} from the list below.",
+    "intro": "Global keybinds, start at boot and a system tray icon.",
     "unsupported": "The desktop app runs on Windows, macOS and Linux.",
-    "build": {
-      "windows": "Windows installer",
-      "macArm64": "macOS disk image (Apple Silicon)",
-      "macX64": "macOS disk image (Intel)",
-      "linuxAppImageX64": "Linux AppImage (x64)",
-      "linuxAppImageArm64": "Linux AppImage (arm64)",
-      "linuxDebX64": "Linux deb package (x64)",
-      "linuxDebArm64": "Linux deb package (arm64)"
+    "name": {
+      "windows": "Windows",
+      "mac": "macOS",
+      "linux": "Linux"
     },
-    "allReleases": "All releases"
+    "tag": {
+      "windows": "This PC",
+      "mac": "This Mac",
+      "linux": "This machine"
+    },
+    "covers": {
+      "windows": "One installer for x64 and arm64",
+      "mac": "Runs on Apple Silicon and Intel Macs",
+      "linux": "AppImage or deb package, x64 or arm64"
+    },
+    "download": {
+      "windows": "Download for Windows",
+      "mac": "Download for macOS",
+      "linux": "Download for Linux"
+    },
+    "picker": {
+      "architecture": "Architecture",
+      "format": "Package format"
+    },
+    "arch": {
+      "appleSilicon": "Apple Silicon",
+      "intel": "Intel",
+      "x64": "x64",
+      "arm64": "arm64"
+    },
+    "kind": {
+      "appimage": "AppImage",
+      "deb": "deb"
+    },
+    "archGuessed": {
+      "mac": "Your browser did not say which chip this Mac has, so Apple Silicon is preselected.",
+      "linux": "Your browser did not say which processor this machine has, so x64 is preselected."
+    },
+    "version": "Version {{version}}",
+    "allReleases": "All releases on GitHub"
   }
 }

@@ -148,9 +148,9 @@ describe('MobileSettingsScreen Desktop entry', () => {
 
     openDesktopPanel();
 
-    expect(await screen.findByRole('link', { name: 'All releases' })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'All releases on GitHub' })).toBeInTheDocument();
     // The version reaches the panel, so the links name release assets.
-    expect(await screen.findByRole('link', { name: 'Windows installer' })).toHaveAttribute(
+    expect(await screen.findByRole('link', { name: 'Download for Windows' })).toHaveAttribute(
       'href',
       'https://github.com/TheZwiss/backspace/releases/download/v1.2.1/Backspace-1.2.1.exe',
     );
@@ -169,6 +169,6 @@ describe('MobileSettingsScreen Desktop entry', () => {
     // Both panels carry the same "Desktop" header, so the instance control is
     // what tells them apart.
     expect(await screen.findByRole('button', { name: 'Change Instance' })).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'All releases' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'All releases on GitHub' })).not.toBeInTheDocument();
   });
 });

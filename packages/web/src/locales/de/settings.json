@@ -378,25 +378,47 @@
   },
   "desktopDownload": {
     "title": "Desktop",
-    "intro": "Backspace läuft auch als Desktop-App, mit globalen Tastenkürzeln, Start beim Anmelden und einem Symbol im Infobereich.",
-    "primary": {
-      "windows": "Für Windows herunterladen",
-      "macArm64": "Für macOS herunterladen (Apple Silicon)",
-      "macX64": "Für macOS herunterladen (Intel)",
-      "linuxX64": "Für Linux herunterladen (AppImage, x64)",
-      "linuxArm64": "Für Linux herunterladen (AppImage, arm64)"
-    },
-    "archGuessed": "Dein Browser meldet nicht, welchen Prozessor dieser Rechner hat. Falls diese Variante nicht startet, nimm {{build}} aus der Liste unten.",
+    "intro": "Globale Tastenkürzel, Start beim Anmelden und ein Symbol im Infobereich.",
     "unsupported": "Die Desktop-App läuft unter Windows, macOS und Linux.",
-    "build": {
-      "windows": "Windows-Installer",
-      "macArm64": "macOS-Image (Apple Silicon)",
-      "macX64": "macOS-Image (Intel)",
-      "linuxAppImageX64": "Linux-AppImage (x64)",
-      "linuxAppImageArm64": "Linux-AppImage (arm64)",
-      "linuxDebX64": "Linux-deb-Paket (x64)",
-      "linuxDebArm64": "Linux-deb-Paket (arm64)"
+    "name": {
+      "windows": "Windows",
+      "mac": "macOS",
+      "linux": "Linux"
     },
-    "allReleases": "Alle Versionen"
+    "tag": {
+      "windows": "Dieser PC",
+      "mac": "Dieser Mac",
+      "linux": "Dieser Rechner"
+    },
+    "covers": {
+      "windows": "Ein Installer für x64 und arm64",
+      "mac": "Läuft auf Macs mit Apple Silicon und Intel",
+      "linux": "AppImage oder deb-Paket, x64 oder arm64"
+    },
+    "download": {
+      "windows": "Für Windows herunterladen",
+      "mac": "Für macOS herunterladen",
+      "linux": "Für Linux herunterladen"
+    },
+    "picker": {
+      "architecture": "Architektur",
+      "format": "Paketformat"
+    },
+    "arch": {
+      "appleSilicon": "Apple Silicon",
+      "intel": "Intel",
+      "x64": "x64",
+      "arm64": "arm64"
+    },
+    "kind": {
+      "appimage": "AppImage",
+      "deb": "deb"
+    },
+    "archGuessed": {
+      "mac": "Dein Browser sagt nicht, welchen Chip dieser Mac hat, deshalb ist Apple Silicon vorausgewählt.",
+      "linux": "Dein Browser sagt nicht, welchen Prozessor dieser Rechner hat, deshalb ist x64 vorausgewählt."
+    },
+    "version": "Version {{version}}",
+    "allReleases": "Alle Versionen auf GitHub"
   }
 }

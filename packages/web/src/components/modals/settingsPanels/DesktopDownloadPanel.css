@@ -1,0 +1,84 @@
+/* ── DESKTOP DOWNLOAD PANEL ──
+ * Only the things Tailwind cannot express here live in this file.
+ *
+ * The panel is a column inside the settings modal, and the modal's width does
+ * not track the viewport: at 100% interface scale it is a fixed content column,
+ * and on mobile it fills a phone. A viewport breakpoint (`sm:`) would therefore
+ * flip the tiles to two columns while the column is still narrow, so the layout
+ * asks the panel's own width instead. Tailwind 3 in this repo has no container
+ * query plugin (see packages/web/tailwind.config.js), hence the plain CSS.
+ */
+
+.ddl-panel {
+  container-type: inline-size;
+}
+
+/* Two quiet tiles side by side, equal height so their download links line up. */
+.ddl-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-items: stretch;
+}
+
+/* The unsupported-platform case offers all three platforms, stacked. */
+.ddl-tiles--stack {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* A quiet tile: the platform above, what it takes to download it below, and
+   the download anchored to the bottom edge so the pair's links line up even
+   when one platform has a picker and the other does not. */
+.ddl-tile {
+  display: flex;
+  flex-direction: column;
+}
+
+.ddl-tile__text {
+  flex: 1 1 auto;
+}
+
+/* A stacked tile's coverage line shares the row with the picker and the link,
+   so on the widest platform it runs to two lines. Balanced, it breaks in the
+   middle rather than dropping a single word onto the second line. Browsers
+   without the property wrap it the ordinary way. */
+.ddl-tile__text p {
+  text-wrap: balance;
+}
+
+.ddl-tile__actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 12px;
+}
+
+/* Below this the two tiles cannot hold a picker row and a name on one line. */
+@container (max-width: 560px) {
+  .ddl-tiles {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* A stacked tile at full panel width is a row, not a column: stacking name,
+   sentence, picker and link down the left of a 650px box leaves the right half
+   empty and reads as a list that ran out of content. */
+@container (min-width: 561px) {
+  .ddl-tiles--stack .ddl-tile {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .ddl-tiles--stack .ddl-tile__actions {
+    flex-direction: row;
+    align-items: center;
+    flex-shrink: 0;
+    gap: 16px;
+    margin-top: 0;
+    padding-top: 0;
+  }
+}

@@ -174,7 +174,7 @@ describe('UserSettingsModal Desktop tab', () => {
 
     fireEvent.click(tab);
 
-    expect(await screen.findByRole('link', { name: 'All releases' })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'All releases on GitHub' })).toBeInTheDocument();
     // The Electron-only panel stays out of the browser.
     expect(screen.queryByRole('button', { name: 'Change Instance' })).not.toBeInTheDocument();
   });
@@ -189,6 +189,6 @@ describe('UserSettingsModal Desktop tab', () => {
     // what tells them apart.
     expect(await screen.findByRole('heading', { name: 'Desktop' })).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: 'Change Instance' })).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'All releases' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'All releases on GitHub' })).not.toBeInTheDocument();
   });
 });
