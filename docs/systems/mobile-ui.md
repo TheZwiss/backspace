@@ -349,7 +349,7 @@ Event options: `touchstart` is `{ passive: true }`, `touchmove` is `{ passive: f
 | `settings-privacy` | `MobileSettingsScreen` | `initialPanel="privacy"` |
 | `settings-connections` | `MobileSettingsScreen` | `initialPanel="connections"` |
 | `settings-keybinds` | `MobileSettingsScreen` | `initialPanel="keybinds"` (Electron-only entry; map row always present) |
-| `settings-desktop` | `MobileSettingsScreen` | `initialPanel="desktop"` (Electron-only entry; map row always present) |
+| `settings-desktop` | `MobileSettingsScreen` | `initialPanel="desktop"` (reachable everywhere; only the panel body differs by environment) |
 | `settings-instance` | `MobileInstancePanel` | — |
 | `settings-instance-general` | `GeneralPanel` (wrapped) | — |
 | `settings-instance-registration` | `RegistrationPanel` (wrapped) | — |
