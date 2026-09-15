@@ -24,7 +24,8 @@ there is an account. **Account** holds what lives on the server and follows the
 user to any device or instance: profile, credentials, deletion. Avatar and
 banner colours look like appearance and are not, because other people see them.
 A new presentation preference goes in Appearance, not in Account or in Desktop
-(which is Electron-only and would hide it from the browser).
+(the browser shows the Desktop tab only as a download offer, so a preference
+placed there would be unreachable outside the app).
 
 ## Interface scale
 

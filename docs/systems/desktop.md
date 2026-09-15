@@ -451,6 +451,26 @@ present the one button guaranteed not to help them.
 `electron-updater` errors when present (string only); used to populate
 `RecoveryState.lastUpdateError.code`.
 
+### Desktop tab in the browser
+
+The Desktop tab is no longer Electron-only. In a browser it renders
+`DesktopDownloadPanel` instead of the settings panel: a line on what the desktop
+app adds, one primary download for the platform the visitor is on, every other
+build of the same release below it, and a link to the releases listing last.
+
+The links are built from the instance version reported by `GET
+/api/instance/info`, so a visitor is offered the desktop build that matches the
+server they are signed in to. A version that is not a release tag, which is what
+a development build reports, points every link at the releases listing instead,
+because there is no tag to download from.
+
+Platform detection reads the user agent client hints first and the user agent
+string second (`packages/web/src/platform/desktopDownload.ts`). Windows is
+offered the combined installer, the one build that carries no architecture in
+its filename and picks one at install time. macOS and Linux need an
+architecture, so when the browser will not report one the panel falls back to
+the platform default and says so, naming the other build in the list.
+
 ### Release publishing
 
 Flatpak is represented by the standard update-capability abstraction: when the

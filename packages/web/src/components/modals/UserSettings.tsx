@@ -13,6 +13,7 @@ import { VoicePanel } from './settingsPanels/VoicePanel';
 import { PrivacyPanel } from './settingsPanels/PrivacyPanel';
 import { ConnectionsPanel } from './settingsPanels/ConnectionsPanel';
 import { DesktopPanel } from './settingsPanels/DesktopPanel';
+import { DesktopDownloadPanel } from './settingsPanels/DesktopDownloadPanel';
 import { InstancePanel } from './settingsPanels/InstancePanel';
 import { KeybindsPanel } from './settingsPanels/KeybindsPanel';
 import { isElectron } from '../../platform/platform';
@@ -165,7 +166,7 @@ export function UserSettingsModal() {
             <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('settings:nav.appSettings')}</div>
             <button onClick={() => handleTabClick('connections')} className={tabClass('connections')}>{t('settings:nav.tabs.connections')}</button>
             <button onClick={() => handleTabClick('keybinds')} className={tabClass('keybinds')}>{t('settings:nav.tabs.keybinds')}</button>
-            {isElectron() && <button onClick={() => handleTabClick('desktop')} className={tabClass('desktop')}>{t('settings:nav.tabs.desktop')}</button>}
+            <button onClick={() => handleTabClick('desktop')} className={tabClass('desktop')}>{t('settings:nav.tabs.desktop')}</button>
 
             {isAdmin && (
               <>
@@ -229,7 +230,7 @@ export function UserSettingsModal() {
               <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('settings:nav.appSettings')}</div>
               <button onClick={() => handleTabClick('connections')} className={tabClass('connections')}>{t('settings:nav.tabs.connections')}</button>
               <button onClick={() => handleTabClick('keybinds')} className={tabClass('keybinds')}>{t('settings:nav.tabs.keybinds')}</button>
-              {isElectron() && <button onClick={() => handleTabClick('desktop')} className={tabClass('desktop')}>{t('settings:nav.tabs.desktop')}</button>}
+              <button onClick={() => handleTabClick('desktop')} className={tabClass('desktop')}>{t('settings:nav.tabs.desktop')}</button>
 
               {isAdmin && (
                 <>
@@ -279,7 +280,11 @@ export function UserSettingsModal() {
               {tab === 'privacy' && <PrivacyPanel />}
               {tab === 'connections' && <ConnectionsPanel />}
               {tab === 'keybinds' && <KeybindsPanel />}
-              {tab === 'desktop' && <DesktopPanel />}
+              {tab === 'desktop' && (
+                isElectron()
+                  ? <DesktopPanel />
+                  : <DesktopDownloadPanel version={instanceInfo?.version ?? null} />
+              )}
               {tab === 'instance' && isAdmin && <InstancePanel />}
             </div>
           </SettingsScrollContainer>
