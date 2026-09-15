@@ -9,7 +9,7 @@ import { useSocialStore } from '../../stores/socialStore';
 import { useContextMenuStore } from '../../stores/contextMenuStore';
 import { Avatar } from '../ui/Avatar';
 import { AvatarStack } from '../ui/AvatarStack';
-import { Mascot } from '../ui/Mascot';
+import { CrewEmptyState } from '../ui/CrewEmptyState';
 import { resolveAssetUrl } from '../../utils/assetUrls';
 import { useNavigate } from 'react-router-dom';
 import { parseFederatedUsername, isFederationGlobeApplicable, isSelf } from '../../utils/identity';
@@ -298,10 +298,7 @@ export function MobileDmsScreen() {
         ))}
 
         {sortedDms.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-40 opacity-80">
-            <Mascot state="sleeping" className="w-20 h-20 mb-2" />
-            <p className="text-txt-tertiary text-sm">{t('dm:list.empty')}</p>
-          </div>
+          <CrewEmptyState variant="noDms" size="compact">{t('dm:list.empty')}</CrewEmptyState>
         )}
       </div>
 

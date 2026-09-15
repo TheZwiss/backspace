@@ -1,0 +1,176 @@
+/* ── THE HAIL ──
+ * Someone specific wants you. A dark glass panel, the caller, their name, and
+ * one ring that leaves the avatar very slowly and is gone before it reaches
+ * the panel's edge. Most of every cycle nothing is moving: the urgency is in
+ * the rhythm, not in ornament.
+ *
+ * Structure, back to front (all inside one plain .glass-modal):
+ *   __ring     one hairline in the hail colour, scale and opacity only
+ *   __body     the avatar, the caller's name and status, the two answers
+ *
+ * The panel is the plain Aether Drift glass. Nothing here adds a gradient,
+ * grain, vignette, rim or gloss to it. Nothing casts a shadow; nothing blurs.
+ * `--hail` is the palette's hail entry, set inline by the component.
+ *
+ * MOTION at rest: one infinite animation, eight seconds, transform and
+ * opacity only. Hover changes a fill softly and nothing else.
+ */
+
+.hail {
+  /* Geometry the ring shares with the body, so it stays centred on the
+     avatar no matter how the body is padded. */
+  --hail-pad-top: 44px;
+  --hail-avatar: 80px;
+  --hail-source-y: calc(var(--hail-pad-top) + var(--hail-avatar) / 2);
+
+  position: relative;
+  overflow: hidden;
+}
+
+/* ── RING ── born just outside the avatar, gone by 1.7x, which keeps it clear
+   of the panel's top edge and leaves it faint by the time it passes behind
+   the caller's name. It is visible for under a quarter of its eight-second
+   cycle; the rest is silence. Linear, so it grows at one pace and dims at
+   one pace, brightest where it is still next to the avatar. A hairline, no
+   glow: a ring that blurs is a ripple orb, and those were the first thing
+   cut. */
+.hail__ring {
+  position: absolute;
+  left: 50%;
+  top: var(--hail-source-y);
+  /* Born 4px clear of the avatar, so it is never mistaken for its border. */
+  width: calc(var(--hail-avatar) + 8px);
+  height: calc(var(--hail-avatar) + 8px);
+  margin: calc(var(--hail-avatar) / -2 - 4px) 0 0 calc(var(--hail-avatar) / -2 - 4px);
+  border-radius: 50%;
+  border: 2px solid var(--hail);
+  opacity: 0;
+  transform: scale(1);
+  transform-origin: 50% 50%;
+  animation: hailRing 8s linear infinite;
+  pointer-events: none;
+}
+
+/* ── BODY ── above the ring. */
+.hail__body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  padding: var(--hail-pad-top) 32px 32px;
+}
+
+.hail__source {
+  width: var(--hail-avatar);
+  height: var(--hail-avatar);
+  border-radius: 50%;
+}
+
+/* ── CALLER ── the name is the most legible thing on the panel, always. */
+.hail__caller {
+  text-align: center;
+}
+.hail__name {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: rgb(var(--text-primary));
+  overflow-wrap: anywhere;
+}
+.hail__status {
+  margin-top: 4px;
+  font-size: 13px;
+  color: rgb(var(--text-secondary));
+}
+
+/* ── ANSWERS ── two flat 56px discs, the original Aether Drift call buttons:
+   a tinted fill, a glyph in the same hue, a hover that only deepens the fill,
+   and a focus ring that owes nothing to the fill. No transform on press. */
+.hail__answers {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  margin-top: 4px;
+}
+.hail__accept,
+.hail__decline {
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 500ms ease;
+}
+.hail__accept svg,
+.hail__decline svg {
+  display: block;
+}
+.hail__accept:focus-visible,
+.is-focus .hail__accept,
+.hail__decline:focus-visible,
+.is-focus .hail__decline {
+  outline: none;
+  box-shadow: 0 0 0 2px rgb(var(--bg-chat)), 0 0 0 4px rgb(var(--accent-primary));
+}
+
+/* Accept: the online green. */
+.hail__accept {
+  color: rgb(var(--status-online));
+  background-color: rgb(var(--status-online) / 0.2);
+}
+.hail__accept:hover,
+.is-hover .hail__accept {
+  background-color: rgb(var(--status-online) / 0.35);
+}
+
+/* Decline: rose. */
+.hail__decline {
+  color: rgb(var(--accent-rose));
+  background-color: rgb(var(--accent-rose) / 0.2);
+}
+.hail__decline:hover,
+.is-hover .hail__decline {
+  background-color: rgb(var(--accent-rose) / 0.35);
+}
+
+/* ── MOTION ──
+ * The ring: opacity peaks as it is born and decays with the growth, so it is
+ * brightest at the avatar and nearly gone by the caller's name. */
+@keyframes hailRing {
+  0% {
+    transform: scale(1);
+    opacity: 0;
+  }
+  2% {
+    opacity: 0.85;
+  }
+  24% {
+    transform: scale(1.7);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.7);
+    opacity: 0;
+  }
+}
+
+/* ── STILL FRAME ──
+ * Reduced motion keeps the ring and freezes it halfway out, already fading
+ * and still clear of the caller's name. Nothing is stripped. */
+@media (prefers-reduced-motion: reduce) {
+  .hail__ring {
+    animation: none;
+    transform: scale(1.3);
+    opacity: 0.4;
+  }
+  .hail__accept,
+  .hail__decline {
+    transition: none;
+  }
+}

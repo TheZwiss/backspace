@@ -1,0 +1,195 @@
+/* ── ON ITS WAY ──
+ * The empty voice channel. Scene bible row 1, second pass, under the darkness
+ * rule (section 4): depth comes from darkness and distance, never from
+ * shading. A small craft left of centre, pointed toward the lower right, where
+ * a large world sits mostly off-frame on its night side. Sparse crisp stars.
+ * The channel name and Join in the dark between ship and world, and that dark
+ * is allowed to stay empty: it is vast, and it is waiting.
+ *
+ * Structure, back to front:
+ *   .voice-empty   the void itself: below --bg-base, darker than any chrome
+ *   .star-field    the shared sky (telemetry/scene/StarField): one field of
+ *                  1px and 2px points, one in five breathing, and three
+ *                  Sternschnuppen high in the frame
+ *   __world        a flat disc, base lifted a step toward lavender, with one
+ *                  thin atmosphere line on its lit limb
+ *   __craft        the hello scene's ship with Nori in the porthole, a soft
+ *                  plume, and the cabin's warmth; the whole thing drifts
+ *   __content      title, copy, Join; above everything, needing no scrim
+ *
+ * LIGHT: the cabin, softly, and the world's atmosphere. Nothing else emits,
+ * nothing casts a shadow, nothing lifts the black.
+ *
+ * MOTION at rest: the ship's drift (transform, a nine-second loop of a few
+ * pixels and a fraction of a degree, the way a moored craft rides), the sky's
+ * breath (opacity, 4 to 9s, out of phase) and the sky's streaks. Every
+ * animation runs on the compositor and every endless one steps on the shared
+ * quarter-second beat, because compositor-owned is cheap per frame but an
+ * animation that never ends keeps the whole window presenting at the display's
+ * refresh rate for as long as the screen is open. Hover on Join lengthens the
+ * plume over 600ms. Reduced motion freezes the best frame.
+ *
+ * FILTERS: none. No backdrop-filter, no SVG filter, no blur anywhere.
+ */
+
+.voice-empty {
+  /* Where things are, in panel coordinates. cqw/cqh resolve against the
+     panel, which is a size container; nothing here reads the viewport. */
+  --ship-x: 21cqw;
+  --ship-y: 24cqh;
+  /* The craft SVG is 240 x 160 units and the hull spans 210 of those, so the
+     hull is 87% of this width: 13 to 16% of the panel at every size. */
+  --craft-w: clamp(150px, 16cqw, 240px);
+  --craft-h: calc(var(--craft-w) * 160 / 240);
+  --world-x: 90cqw;
+  --world-y: 132cqh;
+  --world-d: clamp(520px, 108cqh, 1100px);
+
+  container-type: size;
+  min-height: 0;
+  overflow: hidden;
+  isolation: isolate;
+  /* The void. --bg-base dropped toward black without reaching it, so the
+     space is always darker than the header (which is --bg-base) and keeps
+     the token's warm hue. Nothing is painted over this. */
+  background: color-mix(in srgb, rgb(var(--bg-base)) 72%, black);
+}
+
+/* Everything decorative lives here and ignores the pointer. */
+.voice-empty__scene {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* ── WORLD ── the destination. Its centre sits below and to the right of the
+   panel so only its upper-left arc shows and it reads as far larger than the
+   frame. Night side: the void lifted one step toward lavender, never black,
+   never grey, so the disc silhouettes against the void without shading. */
+.voice-empty__world {
+  position: absolute;
+  width: var(--world-d);
+  height: var(--world-d);
+  left: calc(var(--world-x) - var(--world-d) / 2);
+  top: calc(var(--world-y) - var(--world-d) / 2);
+  border-radius: 50%;
+  background: color-mix(in srgb, rgb(var(--bg-base)) 95%, rgb(var(--accent-lavender)));
+}
+/* The atmosphere: one thin clean line on the lit limb, in the colour of
+   "ready", fading out at both ends. A ring masked to the arc that faces the
+   light (upper left), sitting just outside the surface. */
+.voice-empty__world::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 50%;
+  border: 1.5px solid rgb(var(--accent-sky) / 0.36);
+  -webkit-mask: conic-gradient(from 225deg, transparent 0deg, rgb(var(--bg-base)) 40deg, rgb(var(--bg-base)) 95deg, transparent 140deg);
+  mask: conic-gradient(from 225deg, transparent 0deg, rgb(var(--bg-base)) 40deg, rgb(var(--bg-base)) 95deg, transparent 140deg);
+}
+
+/* ── CRAFT ── the porthole is at 65% / 50% of the SVG box, which is where
+   --ship-x / --ship-y point. The box drifts; the art inside it is pitched
+   toward the lower right, the way it is going. */
+.voice-empty__craft {
+  position: absolute;
+  width: var(--craft-w);
+  height: var(--craft-h);
+  left: calc(var(--ship-x) - var(--craft-w) * 0.65);
+  top: calc(var(--ship-y) - var(--craft-h) * 0.5);
+  /* Stepped on the shared quarter-second beat, like the sky's breath. The
+     drift is seven pixels over nine seconds, so a step is a fifth of a
+     pixel and nothing the eye can catch; running it smooth instead makes
+     the window present a frame every refresh for as long as the channel is
+     open, which measured 11 points of the GPU process and 37 of
+     WindowServer on an M1 Pro. */
+  animation: voiceDrift 9s steps(36, jump-none) infinite;
+}
+.voice-empty__craft-art {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  rotate: 16deg;
+}
+/* The plume stretches from the mouth of the bell. Hover on Join opens the
+   throttle a little; nothing else changes. */
+.voice-empty__plume {
+  transform-box: view-box;
+  transform-origin: 134px 176px;
+  transform: scaleX(1);
+  transition: transform 600ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.voice-empty:has(.voice-empty__join:hover:not(:disabled)) .voice-empty__plume,
+.voice-empty:has(.voice-empty__join:focus-visible) .voice-empty__plume,
+.is-hover .voice-empty .voice-empty__plume,
+.is-focus .voice-empty .voice-empty__plume {
+  transform: scaleX(1.3);
+}
+/* The scene's Ship draws a blurred halo behind the porthole through an SVG
+   filter. The panel has its own warmth and no filters, so that halo is off. */
+.voice-empty .hs-glow {
+  display: none;
+}
+/* The cabin: a touch brighter than the scene's idle, because at this size
+   the window is the only warm thing in the frame. */
+.voice-empty .hs-lit {
+  opacity: 0.3;
+}
+
+/* ── CONTENT ── title, copy and the one button. Above every scene layer,
+   without a scrim: the void is dark enough that the copy needs no well. The
+   block is seated a little below centre: the ship needs the upper left, and
+   a two-line name in the shortest panel must clear its nose. */
+.voice-empty__content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 14cqh 24px 0;
+  max-width: 100%;
+}
+/* The name is the destination's name, so it may be long: it wraps for two
+   lines and then ellipsizes. */
+.voice-empty__title {
+  max-width: min(64cqw, 620px);
+  margin: 0 0 12px;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+.voice-empty__copy {
+  margin: 0 0 32px;
+  max-width: min(64cqw, 560px);
+}
+.voice-empty__join {
+  min-height: 44px;
+}
+
+/* ── MOTION ──
+ * The drift: a slow loop of a few pixels with a slight roll, the ship never
+ * travelling. Three stations so it is not a metronome, and the stations do
+ * the easing now that the timing function carries the beat. */
+@keyframes voiceDrift {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  36% { transform: translate(4px, -7px) rotate(0.8deg); }
+  70% { transform: translate(-3px, -3px) rotate(-0.6deg); }
+}
+
+/* ── STILL FRAME ──
+ * Reduced motion keeps the whole composition and freezes it: ship level, the
+ * twinklers at their resting opacity, the plume at cruising length. */
+@media (prefers-reduced-motion: reduce) {
+  .voice-empty *,
+  .voice-empty *::before,
+  .voice-empty *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
