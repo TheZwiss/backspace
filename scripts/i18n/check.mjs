@@ -36,7 +36,8 @@ export function requiredPluralForms(lng) {
     const resolved = new Intl.PluralRules(lng).resolvedOptions();
     const requestedBase = lng.toLowerCase().split('-')[0];
     const resolvedBase = resolved.locale.toLowerCase().split('-')[0];
-    if (requestedBase === resolvedBase) forms = resolved.pluralCategories;
+    // Sorted: ICU versions differ on the order, and callers only need the set.
+    if (requestedBase === resolvedBase) forms = [...resolved.pluralCategories].sort();
   } catch {
     forms = null;
   }

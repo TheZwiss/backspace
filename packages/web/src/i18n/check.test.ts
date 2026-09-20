@@ -111,7 +111,7 @@ describe('plural-forms', () => {
 
   it('takes the categories from Intl.PluralRules, so a language with only "other" needs no "one"', () => {
     expect(requiredPluralForms('zh')).toEqual(['other']);
-    expect(requiredPluralForms('ru')).toEqual(['one', 'few', 'many', 'other']);
+    expect(requiredPluralForms('ru')).toEqual(['few', 'many', 'one', 'other']);
     expect(requiredPluralForms('de-AT')).toEqual(['one', 'other']);
     expect(requiredPluralForms('ja')).toEqual(['other']);
   });
