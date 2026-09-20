@@ -48,11 +48,12 @@
 }
 </script>
 <!-- /BUILD:JSONLD -->
-<link rel="icon" type="image/png" href="../assets/logo.png" />
-<link rel="apple-touch-icon" href="../assets/logo.png" />
+<link rel="icon" type="image/svg+xml" href="../assets/logo.svg" />
+<link rel="apple-touch-icon" href="../assets/logo.svg" />
 <meta name="robots" content="index, follow" />
 
 <link rel="stylesheet" href="vendor/uplot.min.css" />
+<link rel="stylesheet" href="../assets/logo.css" />
 
 <style>
 /* ================= Aether Drift tokens (verbatim from the landing page) ================= */
@@ -60,6 +61,13 @@
   font-family: "DM Sans";
   src: url("../assets/dm-sans.woff2") format("woff2");
   font-weight: 100 1000;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Fabio XM";
+  src: url("../assets/fabio-xm-variable.ttf") format("truetype");
+  font-weight: 400 500;
   font-style: normal;
   font-display: swap;
 }
@@ -73,8 +81,11 @@
   --txt2: #a0a0aa;
   --txt3: #6d6d7c;
   --txt4: #5c5c68;
-  --primary: #7c6cf6;
-  --primary-hover: #6b5ce0;
+  --primary: #0061ff;
+  --primary-hover: #0052d9;
+  --primary-gradient: linear-gradient(135deg, color-mix(in oklch, var(--primary) 12%, white) 0%, color-mix(in oklch, var(--primary) 32%, white) 28%, color-mix(in oklch, var(--primary) 62%, white) 54%, var(--primary) 100%);
+  --primary-gradient-hover: var(--primary-gradient);
+  --site-bg-gradient: linear-gradient(180deg, #10182b 0%, #090111 100%);
   --mint: #86efac;
   --peach: #fca5a5;
   --lavender: #c4b5fd;
@@ -88,6 +99,7 @@
   --line: rgba(255, 255, 255, 0.07);
   --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
   --sans: "DM Sans", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --display: "Fabio XM", var(--sans);
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html { scroll-behavior: smooth; }
@@ -96,7 +108,7 @@ html { scroll-behavior: smooth; }
 
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 body {
-  background: var(--base);
+  background: var(--site-bg-gradient) fixed;
   color: var(--txt);
   font-family: var(--sans);
   font-optical-sizing: auto;
@@ -134,10 +146,10 @@ a:focus-visible, button:focus-visible {
   border-bottom: 1px solid var(--glass-border);
 }
 .nav-in { display: flex; align-items: center; gap: 26px; height: 60px; }
-.brand { display: flex; align-items: center; gap: 10px; font-weight: 640; font-size: 17px; letter-spacing: -0.01em; color: var(--txt); margin-right: auto; }
+.brand { display: flex; align-items: center; gap: 10px; font-family: var(--display); font-weight: 500; font-size: 18px; letter-spacing: -0.01em; color: var(--txt); margin-right: auto; }
 .brand:hover { text-decoration: none; }
 .brand img { width: 26px; height: 26px; }
-.brand .brand-sub { color: var(--txt3); font-weight: 460; }
+.brand .brand-sub { color: var(--txt3); font-weight: 400; }
 .nav-link { color: var(--txt2); font-size: 14.5px; font-weight: 460; }
 .nav-link:hover { color: var(--txt); text-decoration: none; }
 @media (max-width: 900px) { .nav-link { display: none; } }
@@ -151,16 +163,22 @@ a:focus-visible, button:focus-visible {
 }
 .btn:hover { text-decoration: none; transform: translateY(-1px); }
 .btn:active { transform: translateY(0); }
-.btn-primary { background: var(--primary); color: #fff; }
-.btn-primary:hover { background: var(--primary-hover); }
+.btn-primary {
+  background: var(--primary-gradient);
+  color: #0b1020;
+  border: 0;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+}
+.btn-primary:hover { background: var(--primary-gradient-hover); filter: brightness(1.04); }
 .btn-sm { padding: 8px 14px; font-size: 14px; border-radius: 10px; }
 
 /* ================= Page head ================= */
 main { padding-top: 60px; }
 .page-head { padding: 64px 0 8px; }
 h1 {
+  font-family: var(--display);
   font-size: clamp(2rem, 4.6vw, 3rem);
-  font-weight: 630; line-height: 1.06; letter-spacing: -0.03em;
+  font-weight: 500; line-height: 1.06; letter-spacing: -0.03em;
   margin-bottom: 18px;
   text-wrap: balance;
 }
@@ -216,7 +234,7 @@ h1 {
   text-transform: uppercase; font-weight: 500; color: var(--txt3);
   margin-bottom: 10px;
 }
-.notice-title { font-size: 1.15rem; font-weight: 600; letter-spacing: -0.015em; margin-bottom: 10px; }
+.notice-title { font-family: var(--display); font-size: 1.15rem; font-weight: 500; letter-spacing: -0.015em; margin-bottom: 10px; }
 .notice p { color: var(--txt2); font-size: 15px; max-width: 70ch; }
 .notice p + p { margin-top: 10px; }
 
@@ -247,10 +265,12 @@ h1 {
 .range-btn:disabled { color: var(--txt4); cursor: not-allowed; }
 .rangectl[aria-disabled="true"] { opacity: 0.6; }
 .range-btn[aria-pressed="true"] {
-  background: var(--primary); color: #fff;
+  background: var(--primary-gradient); color: #0b1020;
+  border-color: transparent;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
 }
 .range-btn[aria-pressed="true"]:disabled { background: rgba(124, 108, 246, 0.35); color: rgba(255, 255, 255, 0.7); }
-.range-btn[aria-pressed="true"]:hover:not(:disabled) { background: var(--primary-hover); color: #fff; }
+.range-btn[aria-pressed="true"]:hover:not(:disabled) { background: var(--primary-gradient-hover); color: #0b1020; filter: brightness(1.04); }
 .resolution {
   font-family: var(--mono); font-size: 12.5px; color: var(--txt4);
   line-height: 1.6; max-width: 62ch;
@@ -276,8 +296,9 @@ section.panel:last-of-type { padding-bottom: 96px; }
 .ch-amber::before { color: var(--amber); }
 .ch-rose::before { color: var(--rose); }
 h2 {
+  font-family: var(--display);
   font-size: clamp(1.5rem, 3vw, 2.1rem);
-  font-weight: 620; letter-spacing: -0.026em; line-height: 1.12;
+  font-weight: 500; letter-spacing: -0.026em; line-height: 1.12;
   margin-bottom: 14px;
 }
 .sec-copy { color: var(--txt2); max-width: 62ch; font-size: 15.5px; }
@@ -382,7 +403,7 @@ h2 {
    the user-agent heading style whatever its specificity, and the reset above has
    already zeroed the heading's margins. Edit the size or weight here and every
    card title follows. */
-.chart-title { font-size: 1.05rem; font-weight: 600; letter-spacing: -0.018em; margin-bottom: 6px; }
+.chart-title { font-family: var(--display); font-size: 1.05rem; font-weight: 500; letter-spacing: -0.018em; margin-bottom: 6px; }
 .chart-meta {
   font-family: var(--mono); font-size: 12.5px; color: var(--txt4);
   line-height: 1.8;
@@ -628,8 +649,9 @@ h2 {
  * headings Tasks 4 to 8 add would each have to remember to carry one.
  */
 .method-panel h3 {
+  font-family: var(--display);
   font-size: 1rem;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: -0.014em;
   color: var(--txt2);
   margin: 26px 0 8px;
@@ -676,7 +698,7 @@ footer a:hover { color: var(--txt); }
 
 <header class="nav">
   <div class="wrap nav-in">
-    <a class="brand" href="../"><img src="../assets/logo.png" alt="" width="26" height="26" /> Backspace <span class="brand-sub">insights</span></a>
+    <a class="brand" href="../"><span class="logo-mark" aria-hidden="true"></span><span>Backspace</span> <span class="brand-sub">insights</span></a>
     <a class="nav-link" href="#reach">Reach</a>
     <a class="nav-link" href="#following">Following</a>
     <a class="nav-link" href="#adoption">Adoption</a>
@@ -986,6 +1008,7 @@ footer a:hover { color: var(--txt); }
   </div>
 </footer>
 
+<script src="../assets/logo-color.js" defer></script>
 <script src="vendor/uplot.min.js"></script>
 <script>
 /*
