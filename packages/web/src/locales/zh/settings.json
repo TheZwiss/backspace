@@ -167,7 +167,7 @@
       },
       "bio": {
         "label": "关于我",
-        "placeholder": "向大家介绍一下你自己吧…",
+        "placeholder": "向大家介绍一下您自己吧…",
         "counter": "{{used}}/{{max}}"
       }
     },
@@ -178,7 +178,7 @@
       },
       "customStatus": {
         "label": "自定义状态",
-        "placeholder": "你现在在忙些什么？"
+        "placeholder": "您现在在忙些什么？"
       }
     },
     "password": {

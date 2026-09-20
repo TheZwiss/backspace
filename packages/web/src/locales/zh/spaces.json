@@ -268,15 +268,15 @@
       "owner": "拥有者",
       "noRoles": "无身份组",
       "ban": "封禁",
-      "kick": "移出",
+      "kick": "踢出",
       "confirm": {
         "banTitle": "封禁 {{name}}",
-        "kickTitle": "移出 {{name}}",
+        "kickTitle": "踢出 {{name}}",
         "banDescription": "他们将被永久封禁在此空间之外，直到被解封。",
         "kickDescription": "他们可以通过邀请链接重新加入。"
       },
       "updateRolesFailed": "更新身份组失败",
-      "kickFailed": "移出成员失败",
+      "kickFailed": "踢出成员失败",
       "banFailed": "封禁成员失败"
     }
   },
@@ -425,8 +425,8 @@
       "unmute": "取消静音",
       "deafen": "拒听",
       "undeafen": "取消拒听",
-      "spaceMuted": "空间已静音",
-      "spaceDeafened": "空间已拒听",
+      "spaceMuted": "已被空间静音",
+      "spaceDeafened": "已被空间拒听",
       "permissionMuted": "已静音（无发言权限）"
     }
   },
