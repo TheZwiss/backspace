@@ -17,3 +17,6 @@
 {"snapshot_date":"2026-09-18","dimension":"RU","title":"","count":7,"uniques":7}
 {"snapshot_date":"2026-09-18","dimension":"other","title":"","count":7,"uniques":7}
 {"snapshot_date":"2026-09-18","dimension":"DE","title":"","count":4,"uniques":4}
+{"snapshot_date":"2026-09-19","dimension":"other","title":"","count":10,"uniques":10}
+{"snapshot_date":"2026-09-19","dimension":"RU","title":"","count":7,"uniques":7}
+{"snapshot_date":"2026-09-19","dimension":"DE","title":"","count":3,"uniques":3}
