@@ -130,6 +130,17 @@
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   }
 
+  /* Simplified Chinese takes the platform stack outright. Neither DM Sans
+     nor the bundled Inter subset has Han glyphs, and a CJK face is several
+     megabytes, so the fix is to stop naming a Latin webfont at all: each OS
+     Latin face is listed directly ahead of the CJK companion it ships with,
+     so Latin, digits and Han come from one designed pair instead of a
+     webfont for the first two and a fallback for the third. */
+  :root:lang(zh) body,
+  :root:lang(zh) #root {
+    font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Segoe UI', 'Microsoft YaHei', system-ui, 'Noto Sans CJK SC', 'Noto Sans SC', sans-serif;
+  }
+
   /* Suppress native text selection and callout on mobile interactive elements.
      Our global useGlobalLongPress handler provides context menus instead.
      Text can still be copied via context menu "Copy Text" option. */
@@ -381,6 +392,10 @@
 
 :root:lang(ru) .emoji-picker-wrapper em-emoji-picker {
   --font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+}
+
+:root:lang(zh) .emoji-picker-wrapper em-emoji-picker {
+  --font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Segoe UI', 'Microsoft YaHei', system-ui, 'Noto Sans CJK SC', 'Noto Sans SC', sans-serif;
 }
 
 /* Mobile bottom-sheet variant: stretch the custom element to fill the

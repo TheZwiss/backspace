@@ -455,15 +455,35 @@ than being invented for the marketing copy: пространство, канал
 opens the app should meet the same words twice. When a product noun changes in
 the app catalogs, the landing page is the second place to change it.
 
-**The default design font does not cover Cyrillic.** Google Fonts publishes DM
-Sans with exactly two subsets, `latin` and `latin-ext`; there is no Cyrillic cut
-to vendor. Left alone, Russian text would mix DM Sans for Latin and digits with
-an OS fallback for Cyrillic. The landing page avoids that split with a platform
-UI stack under `:root:lang(ru)`. The app instead uses the bundled Inter Latin and
-Cyrillic subsets for the entire Russian UI, including Latin names and digits;
-English and German remain on DM Sans. This keeps each surface internally
-consistent, although the landing page and app render the same Russian words in
-different typefaces.
+**The default design font covers Latin only.** Google Fonts publishes DM Sans
+with exactly two subsets, `latin` and `latin-ext`; there is no Cyrillic or CJK
+cut to vendor. Left alone, a Russian or Chinese page would set its Latin words
+and all its digits in DM Sans and everything else in the OS fallback, which is
+two typefaces inside one sentence. Every non-Latin language therefore gets its
+own `font-family` under `:root:lang(xx)` in `globals.css`, on `body` and `#root`
+(the base rule targets `html, body, #root`, so overriding the two descendants is
+what wins the cascade) and again on the emoji picker's `--font-family`, since
+emoji-mart sets its own. `documentElement.lang` is set at init and on every
+runtime switch, so the rule follows the language without a rerender. The
+treatment differs by script:
+
+- **Russian** uses bundled Inter (`packages/web/public/fonts/InterVariable*.woff2`,
+  OFL, subset to Latin plus Cyrillic with a matching `unicode-range`) for the
+  entire UI, Latin names and digits included. The faces are declared globally
+  and applied only under `:lang(ru)`, so other languages never fetch them.
+- **Chinese** takes the platform stack outright, naming each OS Latin face
+  directly ahead of the CJK companion it ships with (SF and PingFang SC, Segoe
+  UI and Microsoft YaHei, then the Noto CJK family). A Han webfont is several
+  megabytes, and the OS pairs are designed to sit together, so vendoring buys
+  nothing there.
+- **English and German** stay on DM Sans.
+
+Each surface is internally consistent, although the landing page keeps a
+platform stack for Russian while the app uses Inter, so the same Russian words
+are set in different typefaces in the two places. A future language in a script
+DM Sans lacks needs its own `:lang()` pair of rules before release; the `zh`
+block is the template for a script without a vendorable face, the `ru` block for
+one with.
 
 Two things the page does not inherit from this document. It has no plural
 machinery, so a label under a stat tile is a bare nominative plural read as a
