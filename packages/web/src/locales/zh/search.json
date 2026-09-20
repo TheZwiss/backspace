@@ -1,0 +1,32 @@
+{
+  "input": {
+    "placeholder": "搜索消息…"
+  },
+  "filters": {
+    "toggle": "筛选条件",
+    "from": {
+      "label": "发送者",
+      "placeholder": "用户名"
+    },
+    "has": {
+      "label": "包含",
+      "any": "任何",
+      "file": "文件",
+      "image": "图片",
+      "link": "链接"
+    },
+    "before": {
+      "label": "早于"
+    },
+    "after": {
+      "label": "晚于"
+    }
+  },
+  "results": {
+    "empty": "未找到结果",
+    "hint": "输入关键词以搜索此频道中的消息",
+    "count_other": "{{count}} 条结果",
+    "loadMore": "加载更多（还剩 {{remaining}} 条）",
+    "attachments_other": "{{count}} 个附件"
+  }
+}

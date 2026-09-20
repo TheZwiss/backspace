@@ -21,13 +21,29 @@ export const PENDING_FILE = 'scripts/i18n-pending.txt';
 const PLURAL_SUFFIXES = ['zero', 'one', 'two', 'few', 'many', 'other'];
 const PLURAL_SUFFIX_RE = /_(zero|one|two|few|many|other)$/;
 
-/** CLDR categories each shipped language must supply for a plural family. */
-export const REQUIRED_PLURAL_FORMS = {
-  en: ['one', 'other'],
-  de: ['one', 'other'],
-  ru: ['one', 'few', 'many', 'other'],
-};
-const DEFAULT_PLURAL_FORMS = ['one', 'other'];
+/**
+ * CLDR categories a language must supply for a plural family, from the same
+ * `Intl.PluralRules` data i18next selects forms with at runtime. Derived, not
+ * listed, so adding a language never touches this file. Returns null for a
+ * code Intl does not know: it would silently resolve to the host locale, and
+ * a catalog directory the runtime cannot pluralize is a finding, not a guess.
+ */
+const pluralFormsCache = new Map();
+export function requiredPluralForms(lng) {
+  if (pluralFormsCache.has(lng)) return pluralFormsCache.get(lng);
+  let forms = null;
+  try {
+    const resolved = new Intl.PluralRules(lng).resolvedOptions();
+    const requestedBase = lng.toLowerCase().split('-')[0];
+    const resolvedBase = resolved.locale.toLowerCase().split('-')[0];
+    // Sorted: ICU versions differ on the order, and callers only need the set.
+    if (requestedBase === resolvedBase) forms = [...resolved.pluralCategories].sort();
+  } catch {
+    forms = null;
+  }
+  pluralFormsCache.set(lng, forms);
+  return forms;
+}
 
 // ---------------------------------------------------------------------------
 // Filesystem helpers
@@ -240,6 +256,9 @@ export function checkPluralForms(root) {
   const loaded = loadCatalogs(root);
   const findings = [];
 
+  // One finding per language the runtime cannot pluralize, not one per key.
+  const unknownLanguages = new Set();
+
   for (const ns of loaded.namespaces) {
     // A family is plural if any language gives it a suffix.
     const pluralBases = new Set();
@@ -256,7 +275,11 @@ export function checkPluralForms(root) {
       for (const [lng, fam] of perLanguage) {
         const forms = fam.get(base);
         if (!forms) continue; // parity reports the missing family
-        const required = REQUIRED_PLURAL_FORMS[lng] ?? DEFAULT_PLURAL_FORMS;
+        const required = requiredPluralForms(lng);
+        if (!required) {
+          unknownLanguages.add(lng);
+          continue;
+        }
         const missing = required.filter((form) => !forms.has(form));
         const unexpected = [...forms.keys()].filter((form) => form !== '' && !PLURAL_SUFFIXES.includes(form));
         if (forms.has('')) {
@@ -270,6 +293,9 @@ export function checkPluralForms(root) {
         }
       }
     }
+  }
+  for (const lng of unknownLanguages) {
+    findings.push({ rule: 'plural-forms', file: `${LOCALES_DIR}/${lng}`, message: `language "${lng}" is not known to Intl.PluralRules, so its plural forms cannot be checked` });
   }
   return findings;
 }

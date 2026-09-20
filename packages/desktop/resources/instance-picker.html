@@ -357,6 +357,22 @@
         errorNotBackspace: 'Unter dieser Adresse läuft keine Backspace-Instanz.',
         errorOther: 'Verbindung nicht möglich: {message}',
       },
+      zh: {
+        welcomeTitle: '欢迎使用 Backspace',
+        welcomeSubtitle: '连接到您的实例',
+        switchTitle: '切换实例',
+        switchSubtitle: '连接到其他 Backspace 实例，或取消以保留当前实例。',
+        urlLabel: '实例 URL',
+        connect: '连接',
+        cancel: '取消',
+        connecting: '正在连接…',
+        errorEmpty: '请输入实例 URL',
+        errorTimeout: '连接超时。请检查 URL 并重试。',
+        errorUnreachable: '无法连接。请检查 URL 并重试。',
+        errorStatus: '无法连接。服务器返回状态码 {status}。',
+        errorNotBackspace: '该地址不是 Backspace 实例。',
+        errorOther: '无法连接：{message}',
+      },
     };
     const LANG = new URLSearchParams(window.location.search).get('lang');
     const T = STRINGS[LANG] || STRINGS.en;

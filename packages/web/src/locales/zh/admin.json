@@ -1,0 +1,406 @@
+{
+  "general": {
+    "title": "常规",
+    "description": "配置您的 Backspace 实例。这些设置将影响所有用户。",
+    "instanceName": {
+      "label": "实例名称",
+      "description": "显示在登录页面和对等联邦实例上的名称。",
+      "counter": "{{length}}/{{max}}"
+    },
+    "discovery": {
+      "label": "发现功能",
+      "toggleLabel": "空间发现",
+      "toggleDescription": "允许空间出现在公开的“探索”页面中"
+    },
+    "gif": {
+      "label": "GIF 搜索",
+      "description": "启用由 Klipy 提供支持的 GIF 搜索。可从 Klipy 开发者后台免费获取 API 密钥。",
+      "placeholderSaved": "密钥已保存 — 输入新密钥以替换",
+      "placeholderKey": "Klipy API 密钥",
+      "enabled": "已启用",
+      "notConfigured": "未配置",
+      "clearKey": "清除密钥"
+    }
+  },
+  "registration": {
+    "title": "注册",
+    "description": "控制谁可以在此实例上创建账号。公开注册适用于本地注册；联邦注册适用于来自对等实例的用户在此创建账号。",
+    "public": {
+      "label": "公开注册",
+      "toggleLabel": "允许新的本地账号注册",
+      "toggleDescription": "任何人均可从注册页面创建本地账号。关闭后，只有通过邀请链接才能创建新的本地账号。"
+    },
+    "federated": {
+      "label": "联邦注册",
+      "toggleLabel": "允许新的联邦账号注册",
+      "toggleDescription": "来自其他实例的用户可通过其“连接”设置在此创建联邦账号。现有联邦账号始终可以正常登录，不受此设置影响。"
+    },
+    "saved": "注册设置已保存",
+    "saveFailed": "更新注册设置失败"
+  },
+  "invites": {
+    "label": "邀请链接",
+    "create": "+ 创建链接",
+    "tabs": {
+      "active": "生效中",
+      "archived": "已归档"
+    },
+    "loadFailed": "加载邀请失败",
+    "emptyActive": "暂无生效中的邀请链接。",
+    "emptyArchived": "暂无已归档的邀请链接。",
+    "noMatch": "没有匹配当前筛选条件的邀请链接。",
+    "filter": {
+      "status": "状态",
+      "sort": {
+        "recent": "最新创建",
+        "oldest": "最早创建",
+        "name": "名称 (A–Z)",
+        "mostUsed": "使用最多",
+        "expiringSoonest": "最快过期"
+      }
+    },
+    "status": {
+      "active": "生效中",
+      "expired": "已过期",
+      "exhausted": "已达上限",
+      "revoked": "已撤销"
+    },
+    "expiry": {
+      "preset": {
+        "hour1": "1 小时",
+        "hours24": "24 小时",
+        "days7": "7 天",
+        "days30": "30 天",
+        "custom": "自定义…"
+      },
+      "keepCurrent": "保持现状",
+      "invalidFuture": "请选择未来的日期和时间",
+      "invalidSelection": "无效的过期时间选项",
+      "revokedOn": "撤销于 {{date}}",
+      "expiredOn": "过期于 {{date}}",
+      "exhausted": "已耗尽",
+      "noExpiration": "永不过期",
+      "inDays_other": "{{count}} 天后过期",
+      "inHours_other": "{{count}} 小时后过期"
+    },
+    "form": {
+      "name": "名称",
+      "namePlaceholder": "例如：好友第一批",
+      "maxUses": "最大使用次数",
+      "unlimited": "无限制",
+      "uses": "次",
+      "expires": "过期时间",
+      "nameLength": "名称长度须在 1–64 个字符之间",
+      "maxUsesInteger": "最大使用次数必须为正整数"
+    },
+    "createModal": {
+      "title": "创建邀请链接",
+      "description": "生成一个可分享的链接，供他人在此实例上注册。您可以设置使用次数上限及过期时间。",
+      "submit": "创建链接",
+      "submitting": "正在创建…",
+      "createdCopied": "链接已创建，并已复制到剪贴板。",
+      "createdManual": "链接已创建，请从列表中手动复制。",
+      "failed": "创建邀请失败：{{message}}"
+    },
+    "editModal": {
+      "title": "编辑“{{name}}”",
+      "description": "调整此邀请链接的限制。URL 保持不变 — 已经持有该链接的人仍可在新限制下进行兑换。",
+      "used": "（已使用 {{used}} 次）",
+      "maxUsesBelowUsed": "最大使用次数不能少于当前已使用次数 ({{used}})",
+      "noChanges": "没有需要保存的更改",
+      "updated": "邀请已更新",
+      "failed": "更新邀请失败：{{message}}",
+      "submit": "保存更改",
+      "submitting": "正在保存…"
+    },
+    "reinstateModal": {
+      "title": "恢复“{{name}}”",
+      "descriptionRevoked": "此邀请之前已被撤销。恢复将生成一个具有不同 URL 的新链接 — 原 URL 保持失效。",
+      "descriptionLapsed": "此邀请已失效。恢复将重新激活相同的 URL — 之前保存过该链接的人可以再次使用它。",
+      "newLinkWarning": "将生成一个新的链接。持有旧 URL 的人将无法再使用旧链接。",
+      "maxUsesMeta": "（当前上限：{{max}}，已用：{{used}}）",
+      "maxUsesMin": "最大使用次数必须至少为 {{min}}（当前已使用：{{used}}）",
+      "submit": "恢复",
+      "submitNewLink": "使用新链接恢复",
+      "submitting": "正在恢复…",
+      "doneCopied": "已使用新链接恢复，并复制到剪贴板。",
+      "doneManual": "已使用新链接恢复，请从列表中手动复制。",
+      "doneSameLink": "已恢复，原链接已重新激活生效。",
+      "failed": "恢复失败：{{message}}"
+    },
+    "redemptions": {
+      "title": "“{{name}}”的兑换记录",
+      "description": "使用此邀请链接注册的用户，按注册时间先后排序。",
+      "revokedNotice": "此邀请已被撤销。下方记录展示在撤销前注册的用户。",
+      "revokedNoticeDated": "此邀请已于 {{date}} 撤销。下方记录展示在撤销前注册的用户。",
+      "usesOfMax_other": "{{count}} / {{max}} 次使用",
+      "uses_other": "{{count}} 次使用",
+      "loadFailed": "加载兑换记录失败",
+      "loadFailedInline": "无法加载兑换记录。",
+      "empty": "暂无兑换记录。",
+      "now": "（现为 {{name}}）",
+      "deletedUser": "已注销用户"
+    },
+    "row": {
+      "usage": "{{usage}} 次使用",
+      "createdBy": "由 {{name}} 创建",
+      "unknownCreator": "未知",
+      "subtitleActive": "{{usage}} · {{expiry}} · {{creator}}",
+      "subtitleArchived": "{{usage}} · {{expiry}} · {{when}}",
+      "used": "已使用",
+      "expires": "过期时间",
+      "expiredAt": "过期于",
+      "revokedAt": "撤销于",
+      "exhausted": "已达上限",
+      "created": "创建时间",
+      "createdByLabel": "创建者",
+      "token": "凭证标识",
+      "lastRedeemed": "最后兑换",
+      "copyLink": "复制链接",
+      "revoke": "撤销",
+      "viewRedemptions": "查看兑换记录",
+      "reinstate": "恢复",
+      "deletePermanently": "永久删除",
+      "copied": "已复制邀请链接",
+      "copyFailed": "复制链接失败",
+      "revoked": "邀请已撤销",
+      "revokeFailed": "撤销失败：{{message}}",
+      "deleted": "邀请已删除",
+      "deleteFailed": "删除失败：{{message}}",
+      "revokeDialog": {
+        "title": "确定撤销“{{name}}”吗？",
+        "description": "该链接将立即停止生效。持有该 URL 的人将无法再使用它。<br/><br/>如果您日后改变主意，点击<strong>恢复</strong>可在此条目下签发新链接 — 原 URL 保持失效。",
+        "confirm": "撤销链接"
+      },
+      "deleteDialog": {
+        "title": "确定永久删除“{{name}}”吗？",
+        "description": "此操作无法撤销。该链接的兑换历史也将一并清除。如果您只想停止该链接的使用，请改用<strong>撤销</strong> — 这将保留兑换记录。",
+        "confirm": "永久删除"
+      }
+    }
+  },
+  "storage": {
+    "title": "存储",
+    "description": "监控磁盘使用情况，并清理已删除内容或替换头像/横幅留下的孤立文件。",
+    "loading": "正在加载存储统计…",
+    "loadFailed": "加载存储统计失败",
+    "refresh": "刷新统计",
+    "overview": {
+      "label": "存储概况",
+      "totalFiles": "文件总数",
+      "referenced": "有引用的文件",
+      "orphanedFiles": "孤立文件",
+      "unlinkedUploads": "未关联的上传",
+      "danglingRecords": "游离记录",
+      "staleUploads": "过期上传"
+    },
+    "breakdown": {
+      "label": "文件类型分布",
+      "entry_other": "{{count}} 个文件 — {{size}}"
+    },
+    "uploadLimit": {
+      "label": "上传限制",
+      "maxFileSize": "单文件大小上限",
+      "saved": "上传上限已设置为 {{limit}}",
+      "saveFailed": "更新上传上限失败"
+    },
+    "cleanup": {
+      "label": "清理",
+      "nothingFound": "未发现孤立文件、过期上传或游离记录。",
+      "preview": "预览清理",
+      "run": "立即清理",
+      "running": "正在清理…",
+      "previewResult": "预览模式 — 未删除任何文件",
+      "complete": "清理完成",
+      "orphanedFiles_other": "{{count}} 个孤立/游离文件 ({{size}})",
+      "staleRecords_other": "，{{count}} 个过期上传记录",
+      "errors_other": "{{count}} 个错误：{{first}}",
+      "cleanedToast_other": "已清理 {{count}} 个文件 ({{size}})",
+      "failed": "清理失败"
+    },
+    "stale": {
+      "label": "过期上传",
+      "description": "位于 <code>.tus/</code> 中的废弃 tus 上传会话（暂停/崩溃且未调用 DELETE）。系统每 24 小时会自动清理一次；您也可以在此主动扫描清除。",
+      "maxAge": "最长保留时长（小时）",
+      "sessionFiles_other": "{{count}} 个会话文件 ({{size}})",
+      "cleanedToast_other": "已清理 {{count}} 个过期上传会话 ({{size}})",
+      "failed": "清理过期上传失败"
+    },
+    "media": {
+      "label": "媒体保留",
+      "olderThan": "删除早于此时间的聊天媒体：",
+      "days": "天",
+      "run": "立即删除",
+      "running": "正在删除…",
+      "files_other": "{{count}} 个文件 ({{size}})",
+      "deletedToast_other": "已删除 {{count}} 个文件 ({{size}})",
+      "failed": "媒体清理失败"
+    }
+  },
+  "streaming": {
+    "title": "推流",
+    "description": "这些限制适用于此实例上的所有用户。用户可在此范围内自行调整推流参数。",
+    "units": {
+      "fps": "{{value}} 帧",
+      "kbpsLabel": "kbps"
+    },
+    "bandwidth": {
+      "label": "带宽",
+      "description": "码率的上下限，以及画质滑块的调整步进。",
+      "customBitrate": {
+        "label": "允许自定义码率",
+        "description": "允许用户自行设定码率，而非强制使用矩阵默认值"
+      },
+      "range": "码率范围",
+      "min": "最小值",
+      "max": "最大值",
+      "step": "滑块步进"
+    },
+    "quality": {
+      "label": "画质",
+      "description": "屏幕共享可选的分辨率与帧率选项。",
+      "resolutions": "允许的分辨率",
+      "framerates": "允许的帧率"
+    },
+    "highEndWarning": {
+      "title": "已启用高性能画质设置。",
+      "description": "超过 1080p 或 60 帧的推流对客户端 CPU/GPU 编码性能要求极高，并且可能耗尽服务器带宽（尤其是流经 TURN 中继时）。高端配置（如 4K 120 帧）每路活跃流可能需要高达 45 Mbps 的带宽。在为所有用户启用这些选项之前，请确保您的网络基础设施具备足够的承载能力。"
+    },
+    "matrix": {
+      "label": "码率矩阵",
+      "description": "各分辨率和帧率组合对应的默认码率。可单独编辑各个单元格或全局等比例缩放。",
+      "scaleAll": "全局缩放",
+      "scaleHint": "拖动滑块全局缩放所有码率。可在下方微调各个具体组合。",
+      "cellDefault": "默认：{{value}}（点击 × 重置）",
+      "cellEdit": "点击编辑",
+      "resetAll": "全部重置为默认值"
+    },
+    "capWarning": {
+      "title": "矩阵中的部分数值超过了全局上限。",
+      "description": "部分码率设置超出了您配置的最大上限 {{max}}。在这些组合下推流的画质将被降级限制在您的上限之内。"
+    }
+  },
+  "updates": {
+    "title": "更新",
+    "badge": {
+      "settingsAriaLabel": "设置，实例有可用更新",
+      "toast": "此实例有可用的 Backspace {{version}} 新版本",
+      "toastAction": "查看"
+    },
+    "description": "此实例当前运行的版本，以及如何升级版本。",
+    "loading": "正在加载更新状态…",
+    "loadFailed": "无法加载更新状态。",
+    "copyFailed": "复制失败，请手动选中文本并复制。",
+    "running": {
+      "label": "当前运行",
+      "commit": "提交号 {{commit}} · ",
+      "channel": {
+        "prebuilt": "预构建镜像",
+        "source": "从源码构建",
+        "unknown": "安装方式未记录"
+      }
+    },
+    "available": {
+      "label": "可用版本",
+      "version": "Backspace {{version}} 现已可用",
+      "released": "发布于 {{date}} · ",
+      "releaseNotes": "发布说明",
+      "fromInstallDir": "在您的安装目录下运行：",
+      "scriptDescription": "自动创建数据库快照，拉取新镜像，并仅重启 Backspace 容器。如果新版本启动不健康，或启动后仍在运行旧代码，将自动回滚至当前版本。",
+      "noScript": "我没有 update.sh 脚本",
+      "manualIntro": "update.sh 包含在 1.0.5 及更高版本中。若是 git 检出仓库，运行 <code>git pull</code> 即可获取该脚本。否则在使用 <code>./backup.sh</code> 创建快照后，按步骤手动操作。",
+      "prebuiltInstall": "预构建镜像安装：",
+      "sourceInstall": "源码编译安装：",
+      "manualWarning": "请明确指定 <code>backspace</code> 服务名称，并且不要加上 <code>--remove-orphans</code> 参数。若该项目中还运行了其他容器，Compose 会提示该参数，但那样做会误删这些容器。"
+    },
+    "upToDate": "您当前运行的是最新版本。",
+    "disabled": {
+      "title": "更新检查功能已关闭",
+      "description": "此实例不会主动联网请求 GitHub。在您的 <code>.env</code> 中配置 <code>BACKSPACE_UPDATE_CHECK=true</code> 可开启自动检测，或者您可以自行查看 GitHub Releases 页面。"
+    },
+    "rateLimited": {
+      "title": "GitHub 限制了查询频率",
+      "description": "这并不代表是否有新更新。请稍后重试。"
+    },
+    "unreachable": {
+      "title": "无法检查更新",
+      "description": "暂时无法连接到 GitHub，无法确定是否有新版本。您的实例运行不受任何影响。"
+    },
+    "lastChecked": "最后检查时间：{{when}}",
+    "noLookups": "未执行过检查",
+    "checkAgain": "重新检查",
+    "checking": "正在检查…"
+  },
+  "users": {
+    "title": "用户",
+    "description": "查看并管理此实例上的用户账号。",
+    "searchPlaceholder": "搜索用户…",
+    "loading": "正在加载用户…",
+    "loadFailed": "加载用户失败",
+    "empty": "未找到用户",
+    "filters": {
+      "allInstances": "所有实例",
+      "localOnly": "仅限本地",
+      "allRoles": "所有角色",
+      "admin": "管理员",
+      "nonAdmin": "非管理员",
+      "joinedAfter": "加入时间晚于",
+      "joinedBefore": "加入时间早于",
+      "newest": "最新加入优先",
+      "oldest": "最早加入优先",
+      "nameDesc": "名称降序 (Z-A)",
+      "deleted": "已注销",
+      "clear": "清除筛选"
+    },
+    "badge": {
+      "admin": "管理员",
+      "deleted": "已注销"
+    },
+    "actions": {
+      "demote": "取消管理员权限",
+      "promote": "提拔为管理员",
+      "federatedNoAdmin": "联邦用户不能设为管理员",
+      "resetPassword": "重置密码",
+      "federatedNoReset": "联邦用户通过其主实例进行认证",
+      "delete": "删除用户",
+      "selfDelete": "请前往账号设置以注销您自己的账号"
+    },
+    "tempPassword": {
+      "label": "临时密码：",
+      "note": "仅显示一次。用户已被断开连接，必须使用临时密码重新登录。"
+    },
+    "pagination": "第 {{page}} 页，共 {{total}} 页（{{users}}）",
+    "count_other": "{{count}} 位用户",
+    "roleFailed": "更新角色失败",
+    "resetFailed": "重置密码失败",
+    "actionFailed": "操作失败",
+    "resetDialog": {
+      "title": "重置密码",
+      "description": "确定重置 <strong>{{username}}</strong> 的密码吗？该用户将立即断开连接，必须使用新的临时密码重新登录。",
+      "confirm": "重置密码"
+    },
+    "demoteDialog": {
+      "title": "取消管理员",
+      "description": "确定取消 <strong>{{username}}</strong> 的管理员特权吗？他们将失去对实例后台设置的访问权限。",
+      "confirm": "取消特权"
+    },
+    "deleteDialog": {
+      "title": "删除用户",
+      "description": "确定永久删除 <strong>{{username}}</strong> 吗？这将把他们从所有空间、私信和好友列表中移除。此操作无法撤销。",
+      "confirm": "删除用户"
+    }
+  },
+  "mobile": {
+    "title": "实例",
+    "sections": {
+      "general": "常规",
+      "registration": "注册",
+      "federation": "联邦",
+      "streaming": "推流",
+      "storage": "存储",
+      "updates": "更新",
+      "users": "用户",
+      "telemetry": "打个招呼"
+    }
+  }
+}

@@ -1,0 +1,136 @@
+{
+  "appName": "Backspace",
+  "actions": {
+    "save": "保存",
+    "cancel": "取消",
+    "close": "关闭",
+    "delete": "删除",
+    "confirm": "确认",
+    "copy": "复制",
+    "copied": "已复制",
+    "retry": "重试",
+    "back": "返回",
+    "done": "完成",
+    "edit": "编辑",
+    "remove": "移除",
+    "add": "添加",
+    "apply": "应用",
+    "reset": "重置",
+    "continue": "继续",
+    "dismiss": "忽略",
+    "ok": "确定",
+    "search": "搜索",
+    "clear": "清除",
+    "change": "更改",
+    "refresh": "刷新",
+    "openLink": "打开链接",
+    "tryAgain": "重试",
+    "reply": "回复",
+    "addReaction": "添加反应",
+    "share": "分享",
+    "accept": "接受",
+    "decline": "拒绝",
+    "pause": "暂停",
+    "resume": "恢复",
+    "abort": "中止",
+    "dismissAll": "全部忽略",
+    "filter": "筛选",
+    "sort": "排序",
+    "sortBy": "排序方式",
+    "leave": "退出",
+    "invitePeople": "邀请成员",
+    "previous": "上一页",
+    "next": "下一页",
+    "preview": "预览",
+    "logIn": "登录"
+  },
+  "states": {
+    "loading": "正在加载…",
+    "saving": "正在保存…",
+    "saved": "已保存",
+    "unknown": "未知",
+    "none": "无",
+    "enabled": "已启用",
+    "disabled": "已禁用",
+    "on": "开启",
+    "off": "关闭",
+    "yes": "是",
+    "no": "否",
+    "optional": "可选",
+    "required": "必填",
+    "default": "默认",
+    "recommended": "推荐",
+    "online": "在线",
+    "idle": "离开",
+    "doNotDisturb": "请勿打扰",
+    "offline": "离线",
+    "loadingSettings": "正在加载设置…",
+    "settingsSaved": "设置已保存",
+    "saveFailed": "保存失败",
+    "scanning": "正在扫描…",
+    "pleaseWait": "请稍候…"
+  },
+  "labels": {
+    "username": "用户名",
+    "password": "密码",
+    "displayName": "显示名称",
+    "friends": "好友",
+    "members": "成员",
+    "settings": "设置",
+    "dangerZone": "危险区域",
+    "searchMembers": "搜索成员…",
+    "noMembersFound": "未找到成员",
+    "or": "或",
+    "nameAZ": "按名称 (A-Z)"
+  },
+  "time": {
+    "today": "今天 {{time}}",
+    "yesterday": "昨天 {{time}}",
+    "never": "从不",
+    "justNow": "刚刚",
+    "minutesShort": "{{minutes}} 分钟",
+    "hoursMinutesShort": "{{hours}} 小时 {{minutes}} 分钟",
+    "elapsed": "已过去 {{duration}}"
+  },
+  "units": {
+    "ms": "{{value}} 毫秒",
+    "percent": "{{value}}%",
+    "kbps": "{{value}} kbps",
+    "mbps": "{{value}} Mbps"
+  },
+  "colors": {
+    "mint": "薄荷绿",
+    "sky": "天蓝",
+    "lavender": "薰衣草紫",
+    "coral": "珊瑚橙",
+    "rose": "玫瑰粉",
+    "teal": "水鸭青",
+    "amber": "琥珀黄",
+    "peach": "蜜桃粉"
+  },
+  "language": {
+    "label": "语言",
+    "description": "菜单、按钮和系统消息将以该语言显示。其他人发送的消息将保持原样。"
+  },
+  "crash": {
+    "title": "出了点问题",
+    "reload": "重新加载页面",
+    "details": "错误详情"
+  },
+  "app": {
+    "loading": "正在加载 Backspace"
+  },
+  "chrome": {
+    "toggleMemberList": "切换成员列表显示",
+    "closeSettings": "关闭设置"
+  },
+  "sourceCode": {
+    "label": "源代码 (AGPL)",
+    "labelWithBuild": "源代码 (AGPL) · {{build}}",
+    "title": "查看此实例运行版本的源代码 (AGPL-3.0)"
+  },
+  "devices": {
+    "newAudioInput": "检测到 {{label}}。可在语音设置中选择切换。",
+    "unnamedAudioInput": "新的音频设备"
+  }
+}

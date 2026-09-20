@@ -18,7 +18,7 @@ describe('resolveSupportedLanguage', () => {
 });
 
 describe('pickLanguage', () => {
-  const allReleased = new Set(['en', 'ru', 'de']);
+  const allReleased = new Set(['en', 'ru', 'de', 'zh']);
 
   it('prefers the stored choice over the browser languages', () => {
     expect(pickLanguage('de', ['ru-RU'], allReleased)).toBe('de');
@@ -40,8 +40,7 @@ describe('pickLanguage', () => {
 
 describe('availableLanguages', () => {
   it('offers every released language to users', () => {
-    // English, Russian and German all ship since 1.1.0.
-    expect(availableLanguages.map((l) => l.code)).toEqual(['en', 'ru', 'de']);
+    expect(availableLanguages.map((l) => l.code)).toEqual(['en', 'ru', 'de', 'zh']);
   });
 
   it('never lets detection pick a language that is not released', () => {
@@ -65,7 +64,7 @@ describe('availableLanguages', () => {
 
 describe('supportedLanguages', () => {
   it('lists every language by its own name and text direction', () => {
-    expect(supportedLanguages.map((l) => l.code)).toEqual(['en', 'ru', 'de']);
+    expect(supportedLanguages.map((l) => l.code)).toEqual(['en', 'ru', 'de', 'zh']);
     for (const language of supportedLanguages) {
       expect(language.nativeName.length).toBeGreaterThan(0);
       expect(['ltr', 'rtl']).toContain(language.dir);

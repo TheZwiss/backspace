@@ -1,0 +1,18 @@
+{
+  "transfers": {
+    "title": "传输列表",
+    "count_other": "{{count}} 项传输",
+    "clearCompleted": "清除已完成",
+    "empty": "暂无进行中的传输。",
+    "status": {
+      "done": "完成",
+      "failed": "失败：{{reason}}",
+      "aborted": "已中止",
+      "progress": "{{loaded}} / {{total}}"
+    }
+  },
+  "crop": {
+    "title": "裁剪图片",
+    "applying": "正在应用…"
+  }
+}

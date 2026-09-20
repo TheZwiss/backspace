@@ -1,0 +1,77 @@
+{
+  "tabs": {
+    "all": "全部",
+    "pending": "待处理",
+    "add": "添加好友",
+    "activity": "活动"
+  },
+  "sections": {
+    "online": "在线 — {{n}}",
+    "all": "所有好友 — {{n}}",
+    "pending": "待处理 — {{n}}",
+    "active": "活跃 — {{n}}",
+    "offline": "离线 — {{n}}"
+  },
+  "empty": {
+    "online": "当前没有人在线。",
+    "all": "暂无好友 — 快去添加好友吧！",
+    "pending": "没有待处理的申请 — Nori 正在小憩。",
+    "activity": "目前很安静… 当好友开始活动时，会显示在这里！"
+  },
+  "friend": {
+    "viaInstance": "来自 {{host}}",
+    "message": "发消息",
+    "remove": "删除好友"
+  },
+  "request": {
+    "incoming": "收到的好友申请",
+    "outgoing": "发出的好友申请",
+    "ignore": "忽略",
+    "cancel": "取消申请",
+    "send": "发送好友申请",
+    "pending": "申请已发送",
+    "sending": "正在发送…",
+    "cancelling": "正在取消…",
+    "sent": "好友申请已发送！"
+  },
+  "removeFriend": {
+    "title": "删除好友",
+    "description": "确定要将 {{name}} 从好友列表中删除吗？您以后随时可以重新向其发送好友申请。",
+    "fallbackName": "该用户"
+  },
+  "add": {
+    "title": "寻找用户",
+    "hint": "按用户名搜索，或使用 <handle>用户@实例</handle> 直接添加好友。",
+    "placeholder": "搜索或通过用户名添加…",
+    "direct": "向 <handle>{{handle}}</handle> 发送好友申请",
+    "sendRequest": "发送申请",
+    "discover": "发现用户",
+    "noSearchResults": "没有匹配您搜索的用户。",
+    "noDiscoverable": "暂无可发现的用户 — 快邀请大家加入吧！"
+  },
+  "mutuals": {
+    "friends_other": "{{count}} 位共同好友",
+    "spaces_other": "{{count}} 个共同空间",
+    "noFriends": "无共同好友",
+    "noSpaces": "无共同空间"
+  },
+  "profile": {
+    "tabs": {
+      "about": "个人介绍",
+      "mutualFriends": "共同好友",
+      "mutualSpaces": "共同空间"
+    },
+    "aboutMe": "关于我",
+    "memberSince": "注册时间",
+    "sendMessage": "发送消息",
+    "viewFull": "查看完整个人资料",
+    "addFriend": "添加好友"
+  },
+  "activity": {
+    "title": "当前活跃",
+    "quietTitle": "目前很安静…",
+    "quietDescription": "当好友开始活动时（例如玩游戏或进行语音通话），我们将在此处展示！",
+    "online": "在线 — {{n}}",
+    "offline": "离线 — {{n}}"
+  }
+}

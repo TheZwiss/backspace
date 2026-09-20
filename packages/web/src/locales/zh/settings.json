@@ -1,0 +1,424 @@
+{
+  "interfaceScale": {
+    "label": "界面缩放",
+    "description": "调整文字、按钮和面板的大小。设置保存在此设备上的当前浏览器或应用中。",
+    "reset": "重置为 100%"
+  },
+  "voice": {
+    "input": {
+      "title": "输入设备",
+      "checkingAccess": "正在检查麦克风权限…",
+      "accessDenied": {
+        "title": "麦克风访问被拒绝",
+        "description": "请授予麦克风权限以选择输入设备。",
+        "retry": "重试"
+      },
+      "permissionPrompt": {
+        "description": "需要麦克风权限以列出并选择输入设备。",
+        "enable": "允许麦克风权限"
+      },
+      "device": {
+        "systemDefault": "系统默认",
+        "currentlyUsing": "当前使用：{{label}}",
+        "none": "未检测到麦克风。"
+      },
+      "volume": {
+        "label": "输入音量"
+      },
+      "meter": {
+        "hint": "音量指示条将在您加入语音频道后激活。"
+      }
+    },
+    "output": {
+      "title": "输出设备",
+      "checkingAccess": "正在检查音频权限…",
+      "device": {
+        "systemDefault": "系统默认",
+        "unsupported": "此浏览器不支持选择输出设备。音频将通过系统默认设备播放。"
+      },
+      "permissionPrompt": {
+        "description": "请授予麦克风权限以列出输出设备（浏览器要求先获得麦克风权限方可读取输出设备名称）。",
+        "enable": "允许音频权限"
+      },
+      "volume": {
+        "label": "输出音量"
+      },
+      "testSound": "播放测试声音"
+    },
+    "video": {
+      "title": "视频",
+      "checkingAccess": "正在检查摄像头权限…",
+      "accessDenied": {
+        "title": "摄像头访问被拒绝",
+        "description": "请授予摄像头权限以选择摄像头。",
+        "retry": "重试"
+      },
+      "blocked": {
+        "browser": "摄像头已被浏览器层级拦截。请点击浏览器地址栏中的摄像头图标，重置权限后点击重试。",
+        "mac": "请在“系统设置”→“隐私与安全性”→“摄像头”中允许访问，然后重启应用。",
+        "windows": "请在“设置”→“隐私和安全性”→“相机”中允许访问，然后重启应用。",
+        "other": "摄像头权限被拒绝。请在浏览器/Chromium 提示框中重置权限后重试。"
+      },
+      "permissionPrompt": {
+        "description": "需要摄像头权限以选择摄像头并进行预览。",
+        "enable": "开启摄像头预览"
+      },
+      "camera": {
+        "label": "摄像头",
+        "auto": "自动（系统默认）",
+        "fallbackName": "摄像头 {{number}}",
+        "detectedFallback": "检测到的摄像头",
+        "currentlyUsing": "当前使用：{{label}}",
+        "none": "未检测到摄像头。"
+      },
+      "preview": {
+        "testAria": "测试摄像头",
+        "testHint": "点击以测试摄像头",
+        "stop": "停止预览",
+        "retry": "重试"
+      },
+      "previewError": {
+        "inUse": "摄像头正在被其他应用程序使用。",
+        "unavailable": "所选摄像头不可用。",
+        "notFound": "未检测到摄像头。",
+        "generic": "无法启动摄像头预览。"
+      }
+    },
+    "title": "语音与视频",
+    "volume": {
+      "sectionTitle": "音量",
+      "soundEffects": {
+        "label": "音效音量"
+      },
+      "messageSound": {
+        "label": "为每条消息播放提示音",
+        "description": "关闭（默认）：仅对私信及提及您的消息播放。开启：对所有频道的消息播放。"
+      }
+    },
+    "processing": {
+      "sectionTitle": "语音处理",
+      "noiseSuppression": {
+        "label": "AI 噪声抑制",
+        "description": "基于机器学习的噪声消除 (RNNoise)。可滤除键盘敲击、风扇和环境噪音。"
+      },
+      "echoCancellation": {
+        "label": "回声消除",
+        "description": "消除扬声器声音回录进麦克风的回声。语音频道和通话中始终开启。"
+      },
+      "autoGain": {
+        "label": "自动增益控制",
+        "description": "自动调节麦克风音量。直播推流时可能会导致人声压低。"
+      }
+    }
+  },
+  "nav": {
+    "userSettings": "用户设置",
+    "appSettings": "应用设置",
+    "administration": "后台管理",
+    "tabs": {
+      "account": "账号",
+      "appearance": "外观",
+      "voice": "语音与视频",
+      "privacy": "隐私",
+      "connections": "连接",
+      "keybinds": "按键绑定",
+      "desktop": "桌面端",
+      "instance": "实例"
+    },
+    "logOut": "退出登录",
+    "backToMenu": "返回设置菜单"
+  },
+  "appearance": {
+    "title": "外观"
+  },
+  "account": {
+    "title": "我的账号",
+    "detached": {
+      "notice": "该账号已与其主实例分离。",
+      "explanation": "{{homeInstance}} 已被重置或不再可用，因此该账号目前在此实例本地独立运行。您的个人资料和密码在此处进行管理。",
+      "reattachHint": "在 {{homeInstance}} 上以 {{username}} 身份登录时，您可以重新关联此账号。个人资料和在线状态将恢复同步。",
+      "reattachButton": "重新关联至 {{homeInstance}}",
+      "reattachConfirm": "确认以 {{username}} 身份重新关联",
+      "reattaching": "正在重新关联…",
+      "reattachFailed": "重新关联失败",
+      "reattached": "已成功与 {{username}} 重新关联账号"
+    },
+    "profile": {
+      "sectionTitle": "个人资料定制",
+      "avatar": {
+        "label": "头像",
+        "alt": "您的头像",
+        "change": "更改头像",
+        "uploadFailed": "上传头像失败",
+        "cropTitle": "裁剪头像"
+      },
+      "banner": {
+        "label": "横幅",
+        "change": "更改横幅",
+        "uploadFailed": "上传横幅失败",
+        "cropTitle": "裁剪横幅"
+      },
+      "avatarColor": {
+        "label": "头像颜色"
+      },
+      "bannerColor": {
+        "label": "横幅颜色",
+        "hexPlaceholder": "#十六进制颜色"
+      },
+      "bio": {
+        "label": "关于我",
+        "placeholder": "向大家介绍一下您自己吧…",
+        "counter": "{{used}}/{{max}}"
+      }
+    },
+    "details": {
+      "sectionTitle": "账号",
+      "status": {
+        "label": "状态"
+      },
+      "customStatus": {
+        "label": "自定义状态",
+        "placeholder": "您现在在忙些什么？"
+      }
+    },
+    "password": {
+      "current": {
+        "label": "当前密码",
+        "placeholder": "输入当前密码"
+      },
+      "new": {
+        "label": "新密码",
+        "placeholder": "至少 {{min}} 个字符"
+      },
+      "confirm": {
+        "label": "确认新密码",
+        "placeholder": "确认新密码"
+      },
+      "show": "显示密码",
+      "hide": "隐藏密码",
+      "tooShort": "新密码必须至少包含 {{min}} 个字符",
+      "mismatch": "两次输入的密码不一致",
+      "changed": "密码已更改",
+      "changeFailed": "更改密码失败",
+      "submit": "更改密码",
+      "submitting": "正在更改…"
+    },
+    "danger": {
+      "description": "一旦注销账号，将无法恢复。您的历史消息将保留，但会署名为“已注销用户”。",
+      "deleteButton": "注销账号"
+    },
+    "save": {
+      "updated": "个人资料已更新",
+      "failed": "更新个人资料失败"
+    },
+    "deletion": {
+      "title": "注销账号",
+      "warning": {
+        "headline": "这将永久注销您的账号。",
+        "spaces": "将退出所有空间成员关系",
+        "friends": "将解除所有好友关系",
+        "dms": "将退出所有私信会话",
+        "messages": "您的消息将保留，但会显示为“已注销用户”"
+      },
+      "ownedSpaces": {
+        "prompt_other": "您拥有 {{count}} 个空间。继续之前请先处理每个空间：",
+        "transfer": "转让",
+        "delete": "删除空间",
+        "selectOwner": "选择新拥有者…"
+      },
+      "processing": "正在处理…",
+      "confirm": {
+        "permanent": "此操作是永久性的，无法撤销。",
+        "usernamePrompt": "输入您的用户名 <username>{{username}}</username> 以确认",
+        "passwordPlaceholder": "输入您的密码",
+        "submit": "注销我的账号",
+        "deleting": "正在注销…"
+      },
+      "federation": {
+        "removing": "正在从已连接的实例中移除您的账号…",
+        "deleteAnyway": "仍要立即注销账号"
+      },
+      "complete": {
+        "title": "账号已注销",
+        "redirecting": "正在重定向至登录页面…"
+      },
+      "errors": {
+        "usernameMismatch": "用户名不匹配",
+        "spacesFailed": "处理空间失败",
+        "deleteFailed": "注销账号失败"
+      }
+    }
+  },
+  "privacy": {
+    "title": "隐私",
+    "discovery": {
+      "sectionTitle": "发现功能",
+      "label": "允许他人找到我的个人资料",
+      "description": "启用后，您的个人资料将出现在“发现用户”中。他人始终可以通过精准用户名添加您。"
+    },
+    "activity": {
+      "sectionTitle": "活动状态",
+      "label": "分享活动状态",
+      "description": "允许他人查看您正在进行的活动，例如您正在玩的游戏或正在听的音乐。"
+    }
+  },
+  "connections": {
+    "title": "连接"
+  },
+  "instance": {
+    "tabs": {
+      "general": "常规",
+      "registration": "注册",
+      "federation": "联邦",
+      "streaming": "推流",
+      "storage": "存储",
+      "users": "用户",
+      "updates": "更新",
+      "telemetry": "打个招呼"
+    }
+  },
+  "keybinds": {
+    "portal": {
+      "description": "在 Wayland 下，桌面环境负责管理 Backspace 的所有快捷键。请在系统的键盘快捷键设置中（Backspace 项下）分配、更改或删除快捷键。此处不使用本地浏览器/X11 绑定。",
+      "idle": "正在准备首次注册所有可用操作。",
+      "pending": "正在连接到桌面门户。如果弹出系统对话框，请为您要使用的操作选择快捷键。",
+      "ready": "Backspace 已注册。打开系统的键盘快捷键设置可更改或移除绑定。下方的列表为只读，当您切回 Backspace 时会自动刷新。",
+      "unavailable": "门户不可用、权限被拒绝或会话已结束。需要全局快捷键门户后端支持。Wayland 下已禁用本地绑定。",
+      "retry": "注册或重新连接快捷键",
+      "assigned": "系统快捷键：{{shortcut}}",
+      "notAssigned": "暂无有效的系统分配"
+    },
+    "title": "按键绑定",
+    "note": {
+      "webOnly": "快捷键在此标签页获得焦点时有效。如需在其他应用中使用全局快捷键，请使用桌面端应用。"
+    },
+    "section": {
+      "voice": "语音快捷键"
+    },
+    "action": {
+      "toggleMute": "切换静音",
+      "toggleDeafen": "切换拒听",
+      "pushToTalk": "按键发言",
+      "toggleCamera": "切换摄像头",
+      "toggleScreenShare": "切换屏幕共享",
+      "disconnect": "断开连接"
+    },
+    "row": {
+      "recordingPrompt": "请按下组合键…",
+      "notBound": "未绑定",
+      "record": "录制按键",
+      "escToCancel": "按 ESC 取消"
+    },
+    "key": {
+      "shift": "Shift",
+      "ctrl": "Ctrl",
+      "alt": "Alt",
+      "option": "Option",
+      "cmd": "Cmd",
+      "win": "Win",
+      "space": "空格",
+      "middleClick": "中键点击",
+      "mouse4": "鼠标侧键 4",
+      "mouse5": "鼠标侧键 5",
+      "mouseGeneric": "鼠标 {{button}}"
+    },
+    "accessibility": {
+      "title": "需要辅助功能权限",
+      "description": "Backspace 需要辅助功能权限才能在应用外部使用全局快捷键。",
+      "grant": "授予权限"
+    },
+    "hookError": {
+      "title": "全局快捷键不可用",
+      "description": "无法启动输入监听器。在 Linux 上，您的用户可能需要加入 <code>input</code> 用户组。"
+    },
+    "conflict": {
+      "message": "<strong>{{combo}}</strong> 已绑定至 <strong>{{action}}</strong>。是否覆盖？",
+      "overwrite": "覆盖"
+    }
+  },
+  "desktop": {
+    "title": "桌面端",
+    "autoLaunch": {
+      "openAtLogin": {
+        "label": "开机启动",
+        "description": "在您登录系统时自动启动 Backspace"
+      },
+      "startMinimized": {
+        "label": "启动时最小化",
+        "description": "启动后隐藏至系统托盘，而不是显示窗口"
+      }
+    },
+    "updates": {
+      "appName": "Backspace 桌面端",
+      "versionLabel": "版本 {{version}}",
+      "checking": "正在检查更新…",
+      "checkingShort": "正在检查…",
+      "checkNow": "检查更新",
+      "downloading": "正在下载 {{version}}，进度 {{percent}}%",
+      "downloadingWithRate": "正在下载 {{version}}，进度 {{percent}}%，速度 {{rate}}",
+      "rateMegabytes": "{{value}} MB/s",
+      "rateKilobytes": "{{value}} KB/s",
+      "upToDate": "您当前使用的是最新版本",
+      "available": "版本 {{version}} 现已可用",
+      "readyToInstall": "版本 {{version}} 已就绪，随时可以安装",
+      "installFailed": "无法安装版本 {{version}}",
+      "checkFailed": "上次检查更新失败",
+      "idle": "检查桌面端应用的新版本",
+      "external": "更新通过您的 Flatpak 软件管理器进行安装",
+      "download": "下载",
+      "restart": "重启",
+      "manualNote": "当前构建版本无法自动安装更新，因此需要从 GitHub 下载新版本并手动替换应用。请查阅发布说明以获取适用于您平台的步骤。",
+      "externalNote": "Flatpak 在应用外部以原子方式应用更新。请使用您的软件管理器或运行 <code>flatpak update</code> 命令来更新 Backspace。"
+    },
+    "instance": {
+      "current": "当前连接的实例",
+      "change": "切换实例"
+    }
+  },
+  "desktopDownload": {
+    "title": "桌面端",
+    "intro": "支持全局快捷键、开机启动和系统托盘图标。",
+    "unsupported": "桌面端应用支持 Windows、Linux 和 macOS。",
+    "name": {
+      "windows": "Windows",
+      "mac": "macOS",
+      "linux": "Linux"
+    },
+    "tag": {
+      "windows": "当前电脑",
+      "mac": "当前 Mac",
+      "linux": "当前设备"
+    },
+    "covers": {
+      "windows": "x64 或 arm64",
+      "mac": "支持 Apple Silicon 和 Intel 处理器的 Mac",
+      "linux": "AppImage 或 deb 软件包，x64 或 arm64"
+    },
+    "download": {
+      "windows": "下载 Windows 版",
+      "mac": "下载 macOS 版",
+      "linux": "下载 Linux 版"
+    },
+    "picker": {
+      "architecture": "架构",
+      "format": "软件包格式"
+    },
+    "arch": {
+      "appleSilicon": "Apple Silicon",
+      "intel": "Intel",
+      "x64": "x64",
+      "arm64": "arm64"
+    },
+    "kind": {
+      "appimage": "AppImage",
+      "deb": "deb"
+    },
+    "archGuessed": {
+      "windows": "您的浏览器未提供当前电脑的处理器类型，已预选 x64。",
+      "mac": "您的浏览器未提供当前 Mac 的芯片类型，已预选 Apple Silicon。",
+      "linux": "您的浏览器未提供当前设备的处理器类型，已预选 x64。"
+    },
+    "version": "版本 {{version}}",
+    "allReleases": "GitHub 上的所有版本"
+  }
+}

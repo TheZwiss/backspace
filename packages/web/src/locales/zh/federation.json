@@ -1,0 +1,298 @@
+{
+  "connections": {
+    "title": "已连接实例",
+    "description": "跨联邦 Backspace 实例关联账号。",
+    "empty": "未连接任何远端实例。添加一个实例即可开始联邦互动。",
+    "addButton": "+ 添加实例",
+    "home": {
+      "title": "主实例",
+      "asUser": "身份为 {{username}}",
+      "local": "本地"
+    },
+    "status": {
+      "connected": "已连接",
+      "disconnected": "已断开",
+      "unreachable": "无法连接",
+      "authExpired": "认证已过期"
+    },
+    "add": {
+      "title": "添加远端实例",
+      "urlPlaceholder": "https://instance.example.com",
+      "probing": "正在探测…",
+      "connect": "连接",
+      "connecting": "正在连接…",
+      "registrationClosed": "此实例已关闭新联邦账号注册。现有账号仍可登录。",
+      "passwordLabel": "输入您的密码以连接到 {{host}}",
+      "passwordPlaceholder": "您的账号密码",
+      "passwordHint": "您的密码由主实例校验，绝不会发送给 {{host}} — 该实例将获得为其专有的凭据。",
+      "fallbackNotice": "此实例上已存在一个同名账号，且无法识别主实例颁发的凭据。请使用您在该实例上设置的密码登录 — 之后将切换为该凭据。",
+      "usernamePlaceholder": "您在此实例上的用户名",
+      "remotePasswordLabel": "此实例的密码",
+      "remotePasswordPlaceholder": "远端实例上的密码",
+      "loggingIn": "正在登录…",
+      "loginAndConnect": "登录并连接"
+    },
+    "filter": {
+      "all": "全部",
+      "connected": "已连接",
+      "disconnected": "已断开",
+      "issues": "有异常",
+      "noMatch": "没有匹配当前筛选条件的实例。"
+    },
+    "sort": {
+      "dateAdded": "添加日期",
+      "lastConnected": "最后连接时间"
+    },
+    "row": {
+      "asUser": "身份为 {{username}}",
+      "added": "添加于 {{date}}",
+      "connectedAgo": "已连接 {{time}}",
+      "disconnectedAgo": "已断开 {{time}}",
+      "lastConnectedAgo": "最后连接于 {{time}}",
+      "remoteUserId": "远端用户 ID",
+      "addedLabel": "添加时间",
+      "disconnectedLabel": "断开时间",
+      "lastConnectedLabel": "最后连接",
+      "homePasswordPlaceholder": "您的主账号密码",
+      "disconnect": "断开连接",
+      "reconnect": "重新连接",
+      "reauthenticate": "重新认证",
+      "forceRemove": "强制移除",
+      "deleteIdentity": "删除身份",
+      "deleteIdentityDisabled": "请先断开连接以删除身份"
+    },
+    "forceRemove": {
+      "title": "强制移除条目",
+      "description": "这将移除 {{name}} 的注册表条目，且不会通知远端实例。仅在此实例永久无法访问时使用此项。",
+      "confirm": "强制移除"
+    },
+    "deleteIdentity": {
+      "title": "删除身份",
+      "description": "删除您在 <name>{{name}}</name> 上的联邦身份。请选择如何处理您的数据。",
+      "leave": {
+        "title": "悄悄退出",
+        "description": "与此实例断开连接。您的账号及所有数据将保留。"
+      },
+      "soft": {
+        "title": "注销用户",
+        "description": "注销您的账号但保留消息。您将显示为“已注销用户”。"
+      },
+      "full": {
+        "title": "彻底清除所有数据",
+        "description": "删除您的账号以及所有消息、私信、表情反应和文件。不留任何痕迹。"
+      },
+      "scope": {
+        "heading": "作用范围",
+        "this": "仅此实例",
+        "select": "选择实例…",
+        "all": "所有远端实例"
+      },
+      "deleting": "正在删除…",
+      "disconnect": "断开连接",
+      "confirm": "删除身份",
+      "toast": {
+        "disconnected": "已成功断开连接",
+        "deleted_other": "已在 {{count}} 个实例上成功删除身份",
+        "ownsSpaces": "{{host}}：请先转让空间所有权",
+        "failed": "{{host}}：{{error}}",
+        "failedGeneric": "失败"
+      }
+    },
+    "action": {
+      "friendRequest": "好友申请",
+      "spaceJoin": "加入空间",
+      "directMessage": "私信",
+      "friendRequestTo": "向 {{target}} 发送好友申请",
+      "joinSpace": "加入 {{target}}",
+      "directMessageTo": "向 {{target}} 发送私信"
+    },
+    "pending": {
+      "title": "待处理的对等审批",
+      "description": "您的管理员必须先批准，然后这些请求才能继续进行。",
+      "onPeer": "在 <peer>{{peer}}</peer>",
+      "cancelling": "正在取消…",
+      "cancelled": "已取消对等请求",
+      "cancelFailed": "取消失败：{{error}}"
+    },
+    "outcomes": {
+      "title": "近期对等结果",
+      "approved": "您向 {{host}} 发起的对等请求已被管理员批准。",
+      "denied": "您向 {{host}} 发起的对等请求已被管理员拒绝。",
+      "expired": "您向 {{host}} 发起的对等请求因管理员未操作而已过期。",
+      "originalAction": "原始操作：{{action}}",
+      "retry": "重试您的{{action}}",
+      "dismissing": "正在忽略…",
+      "dismissFailed": "忽略失败：{{error}}",
+      "dismissAllFailed": "全部忽略失败：{{error}}"
+    }
+  },
+  "admin": {
+    "title": "联邦",
+    "description": "配置联邦中继、密钥轮换并管理对等实例。",
+    "relay": {
+      "title": "中继设置",
+      "description": "控制联邦实例之间的私信中继。开启后，与对等实例用户的私信将通过服务器到服务器进行中继传输。",
+      "enable": {
+        "label": "启用私信中继",
+        "description": "向对等实例中继收发的私信"
+      },
+      "autoAccept": {
+        "label": "自动接受对等",
+        "description": "自动接受来自其他实例的对等请求。关闭时，仅允许手动发起的对等。"
+      },
+      "ttl": {
+        "label": "中继 TTL（天）",
+        "description": "中继消息在发件箱中保留多长时间后进行清理"
+      },
+      "rotation": {
+        "label": "默认密钥轮换（天）",
+        "description": "新对等实例的自动轮换周期。现有对等实例将保留其当前设置。"
+      }
+    },
+    "status": {
+      "active": "活跃",
+      "pending": "待处理",
+      "unreachable": "无法连接",
+      "rejected": "已拒绝（自动对等被拒）",
+      "rejectedShort": "已拒绝",
+      "revoked": "已撤销",
+      "awaitingApproval": "等待审批",
+      "needsAttention": "需要注意"
+    },
+    "filter": {
+      "statusHeading": "状态",
+      "sort": {
+        "lastSeen": "最后在线",
+        "dateAdded": "添加日期",
+        "failures": "失败次数",
+        "revokedDate": "撤销日期"
+      }
+    },
+    "views": {
+      "active": "活跃",
+      "revoked": "已撤销"
+    },
+    "peer": {
+      "revokedMeta": "撤销于：{{revoked}} · 建立对等于：{{peered}}",
+      "unreachableMeta": "最后在线：{{lastSeen}} · {{failures}}",
+      "activeMeta": "最后在线：{{lastSeen}} · 同步于：{{synced}}",
+      "failures_other": "{{count}} 次失败",
+      "reinitiate": "重新发起对等",
+      "deletePermanently": "永久删除",
+      "consecutiveFailures": "连续失败次数",
+      "authFailures": "认证失败次数",
+      "lastFailure": "上次失败时间",
+      "peeredSince": "建立对等时间",
+      "secretRotated": "密钥轮换时间",
+      "autoRotate": "自动轮换",
+      "rotationStatus": "轮换状态",
+      "rotateEvery_other": "每 {{count}} 天",
+      "defaultTag": "(默认)",
+      "inProgress": "进行中",
+      "idle": "空闲",
+      "intervalRange": "必须在 1-365 之间",
+      "intervalUpdated": "轮换周期已更新",
+      "checking": "正在检查…",
+      "checkNow": "立即检查",
+      "resetPeering": "重置对等",
+      "rotateSecret": "轮换密钥",
+      "rotationInProgress": "轮换已在进行中",
+      "revoke": "撤销",
+      "editInterval": "编辑轮换周期"
+    },
+    "approvals": {
+      "title": "待审批请求",
+      "outboundTitle_other": "{{name}} — {{count}} 位用户希望与对方互联",
+      "requested": "请求时间 {{time}}",
+      "subscriber": {
+        "friendAdd": "添加 {{target}} 为好友",
+        "spaceJoin": "希望加入 {{target}}",
+        "directMessage": "希望私信 {{target}}"
+      },
+      "approve": "批准",
+      "deny": "拒绝",
+      "established": "已与 {{name}} 建立对等",
+      "deniedToast": "已拒绝来自 {{name}} 的对等请求",
+      "confirm": {
+        "approveTitle": "批准对等请求",
+        "denyTitle": "拒绝对等请求",
+        "approveOutbound_other": "将代表发起请求的 {{count}} 位用户与 {{name}} 建立对等握手。远端实例必须可访问。",
+        "approveInbound": "将与 {{name}} 建立对等握手。远端实例必须可访问。",
+        "denyOutbound_other": "将拒绝向外对等请求并通知发起请求的用户。他们可在好友列表中重新触发请求。",
+        "denyInbound": "将拒绝该请求并屏蔽未来来自 {{name}} 的自动对等请求。您日后可在被拒对等列表中解除屏蔽。",
+        "approveAndPeer": "批准并建立对等",
+        "approve": "批准",
+        "denyAndNotify": "拒绝并通知",
+        "deny": "拒绝"
+      }
+    },
+    "resetCleanup": {
+      "title": "重置清理",
+      "peerReset": "{{name}} 已被重置",
+      "peerResetDescription": "该域名上正在运行新实例。请重新建立联邦以修复失效的好友关系和私信。",
+      "repeer": "重新建立对等",
+      "resetToast": "{{host}} 已重置 — 需要重新建立联邦",
+      "repeerIncomplete": "重新对等未完成 — {{name}} 仍保留针对您的失效对等记录。需由其管理员先重置对方一侧，然后您再次执行重新对等。",
+      "repeerInitiated": "已向 {{name}} 发起重新对等",
+      "removed": "已移除 {{username}} 及其所有内容",
+      "ownsSpaces": "{{username}} 拥有空间 — 请先转让所有权（空间设置 → 所有权）。",
+      "staleRemote": "远端实例仍保留针对您的失效对等记录。请让其管理员先重置对方一侧，然后您再次执行重新对等。",
+      "eventSummary": "<host>{{host}}</host> 已重置 — 自动清理了 {{identities}}，分离了包含本地内容的 {{accounts}}。已分离的账号仍可在本地正常工作 — 所有者仍可使用现有密码访问。所有者在两处均登录后，可在该账号设置（账号 → 分离通知）中将已分离账号重新关联到新主身份。",
+      "identitiesCleaned_other": "{{count}} 个复制身份",
+      "accountsDetached_other": "{{count}} 个账号",
+      "memberships_other": "{{count}} 个成员关系",
+      "messages_other": "{{count}} 条消息",
+      "owns": "拥有空间：{{spaces}}",
+      "dismissKeep": "忽略 — 保留所有已分离账号",
+      "confirm": {
+        "repeerTitle": "重新建立联邦",
+        "removeTitle": "移除已分离账号",
+        "repeerDescription": "这将删除本地对等记录并与 {{origin}} 开启全新的已认证握手。远端必须可访问且（若未开启自动接受）批准该请求。",
+        "removeDescription": "永久删除 {{username}} 及其在此实例上的所有内容？此操作无法撤销。",
+        "repeerConfirm": "重新对等并修复",
+        "removeConfirm": "永久删除"
+      }
+    },
+    "peers": {
+      "title": "对等实例",
+      "empty": "未配置联邦对等实例。当用户连接到远端实例时会自动创建对等。",
+      "noMatch": "没有对等实例匹配当前筛选条件。",
+      "noRevoked": "没有已撤销的对等实例。",
+      "backOnline": "{{name}} 已重新上线",
+      "stillUnreachable": "{{name}} 仍然无法连接",
+      "rotationInitiated": "密钥轮换已启动 — 15 分钟宽限期",
+      "revoked": "对等已撤销",
+      "reinitiated": "已重新发起对等",
+      "reinitiateFailed": "对等记录已删除但握手失败：{{error}}。请手动与 {{origin}} 重新对等",
+      "deleted": "对等记录已永久删除",
+      "resetDone": "已重置与 {{name}} 的对等关系",
+      "confirm": {
+        "rotate": {
+          "title": "轮换 HMAC 密钥",
+          "description": "这将为 {{name}} 生成新的 HMAC 密钥。在 15 分钟宽限期内，两个实例均会同时接受新旧密钥。",
+          "confirm": "轮换"
+        },
+        "revoke": {
+          "title": "撤销对等",
+          "description": "这将停止与 {{name}} 的所有联邦中继流量。待发送的发件箱条目将被清空。您之后可以重新发起对等。",
+          "confirm": "撤销"
+        },
+        "reinitiate": {
+          "title": "重新发起对等",
+          "description": "这将删除已撤销记录并与 {{origin}} 开始全新握手。远端实例必须可访问。",
+          "confirm": "重新发起"
+        },
+        "delete": {
+          "title": "删除对等记录",
+          "description": "这将永久删除 {{name}} 的对等记录。此操作无法撤销。",
+          "confirm": "删除"
+        },
+        "reset": {
+          "title": "重置对等关系",
+          "description": "确定重置与 {{name}} 的对等关系吗？这将删除本地对等记录和所有待发送发件箱条目。重置后必须与远端管理员线外联系重新发起对等。此操作无法撤销。",
+          "confirm": "重置"
+        }
+      }
+    }
+  }
+}

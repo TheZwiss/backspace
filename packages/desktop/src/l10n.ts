@@ -16,9 +16,9 @@ import { app } from 'electron';
 import fs from 'fs';
 import path from 'path';
 
-export type DesktopLanguage = 'en' | 'ru' | 'de';
+export type DesktopLanguage = 'en' | 'ru' | 'de' | 'zh';
 
-const DESKTOP_LANGUAGES: readonly DesktopLanguage[] = ['en', 'ru', 'de'];
+const DESKTOP_LANGUAGES: readonly DesktopLanguage[] = ['en', 'ru', 'de', 'zh'];
 
 const en = {
   'tray.show': 'Show Backspace',
@@ -81,7 +81,26 @@ const de: Catalog = {
   'update.download': 'Update herunterladen…',
 };
 
-export const DESKTOP_CATALOGS: Record<DesktopLanguage, Catalog> = { en, ru, de };
+const zh: Catalog = {
+  'tray.show': '显示 Backspace',
+  'tray.hide': '隐藏',
+  'tray.changeInstance': '切换实例',
+  'tray.sourceCode': '源代码 (AGPL)',
+  'tray.quit': '退出',
+  'menu.edit': '编辑',
+  'menu.window': '窗口',
+  'update.check': '检查更新…',
+  'update.checkAfterFailure': '检查更新…（上次尝试失败）',
+  'update.checking': '正在检查更新…',
+  'update.downloading': '正在下载更新…',
+  'update.ready': '更新已就绪',
+  'update.available': '有可用更新',
+  'update.restartToInstall': '重启以安装更新',
+  'update.downloadVersion': '下载 Backspace {version}…',
+  'update.download': '下载更新…',
+};
+
+export const DESKTOP_CATALOGS: Record<DesktopLanguage, Catalog> = { en, ru, de, zh };
 
 export function isDesktopLanguage(value: unknown): value is DesktopLanguage {
   return typeof value === 'string' && (DESKTOP_LANGUAGES as readonly string[]).includes(value);

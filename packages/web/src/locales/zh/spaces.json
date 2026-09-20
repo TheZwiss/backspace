@@ -1,0 +1,507 @@
+{
+  "create": {
+    "title": "创建空间",
+    "icon": {
+      "upload": "上传",
+      "previewAlt": "图标预览",
+      "colorLabel": "图标颜色",
+      "cropTitle": "裁剪空间图标",
+      "uploadFailed": "上传图标失败"
+    },
+    "name": {
+      "label": "空间名称",
+      "placeholder": "我的精彩空间",
+      "required": "空间名称为必填项"
+    },
+    "visibilityLabel": "可见性",
+    "description": {
+      "label": "空间简介",
+      "placeholder": "为您的空间写一段简短介绍…",
+      "counter": "{{length}}/{{max}}"
+    },
+    "submit": "创建",
+    "submitting": "正在创建…"
+  },
+  "channel": {
+    "create": {
+      "title": "创建频道",
+      "typeLabel": "频道类型",
+      "types": {
+        "text": {
+          "name": "文字",
+          "description": "发送消息、图片和文件"
+        },
+        "voice": {
+          "name": "语音",
+          "description": "进行语音和视频畅聊"
+        }
+      },
+      "nameLabel": "频道名称",
+      "namePlaceholder": "新频道",
+      "topicLabel": "主题（可选）",
+      "topicPlaceholder": "这个频道主要聊些什么？",
+      "categoryLabel": "所属分类",
+      "noCategory": "无分类",
+      "nameRequired": "频道名称为必填项",
+      "noSpaceSelected": "未选择空间",
+      "submit": "创建频道",
+      "submitting": "正在创建…"
+    },
+    "settings": {
+      "title": "频道设置",
+      "channelLabel": "频道",
+      "private": {
+        "label": "私密频道",
+        "description": "仅选定的成员和身份组可以查看此频道。",
+        "note": "没有显式访问权限的成员将无法看到此频道。拥有管理员权限的用户或空间拥有者始终可以查看所有频道。"
+      },
+      "deleteButton": "删除频道"
+    },
+    "delete": {
+      "title": "删除 #{{name}}？",
+      "description": "这将永久删除 <strong>#{{name}}</strong> 及其所有历史消息。此操作无法撤销。",
+      "descriptionVoice": "这将永久删除 <strong>#{{name}}</strong> 及其所有消息。当前处于该语音频道的任何用户都将被断开连接。此操作无法撤销。",
+      "confirm": "删除频道"
+    }
+  },
+  "category": {
+    "create": {
+      "title": "创建分类",
+      "nameLabel": "分类名称",
+      "namePlaceholder": "新分类",
+      "nameRequired": "分类名称为必填项",
+      "noSpaceSelected": "未选择空间",
+      "submit": "创建分类",
+      "submitting": "正在创建…"
+    },
+    "settings": {
+      "title": "分类设置",
+      "categoryLabel": "分类",
+      "private": {
+        "label": "私密分类",
+        "description": "仅选定的成员和身份组可以查看此分类下的频道。",
+        "note": "没有显式访问权限的成员将无法看到此分类。除非具体频道显式覆盖，否则其中的频道将继承此限制。"
+      },
+      "deleteButton": "删除分类"
+    },
+    "delete": {
+      "title": "删除“{{name}}”？",
+      "description": "这将永久删除 <strong>{{name}}</strong> 分类。其中的频道将被移至顶层。此操作无法撤销。",
+      "confirm": "删除分类"
+    }
+  },
+  "invite": {
+    "title": "邀请好友",
+    "intro": "发送给好友，或分享邀请链接。",
+    "requestOnly": {
+      "notice": "此空间采用申请加入模式。成员需向管理员申请批准方可加入，因此没有可分享的邀请链接。",
+      "dismiss": "知道了"
+    },
+    "searchPlaceholder": "搜索好友…",
+    "noMatches": "没有匹配您搜索的好友",
+    "noFriends": "暂无好友",
+    "alreadyMember": "已在空间中",
+    "removeSelected": "移除 {{name}}",
+    "selectFriends": "选择好友",
+    "send_other": "发送 {{count}} 个邀请",
+    "sending": "正在发送…",
+    "retryFailed": "重试失败项",
+    "status": {
+      "sent": "✓ 已发送",
+      "failed": "✗ {{reason}}"
+    },
+    "shareLink": "或分享链接",
+    "generating": "正在生成…",
+    "generateFailed": "生成邀请链接失败",
+    "failure": {
+      "inviteInvalid": "邀请链接不再有效",
+      "notAFriend": "不是好友",
+      "userNotFound": "未找到用户",
+      "alreadyMember": "已经是成员",
+      "upstream": "无法验证邀请，请重试",
+      "cannotInviteSelf": "无法邀请自己",
+      "invalidBody": "请求无效",
+      "invalidTarget": "目标无效",
+      "unreachable": "无法连接到您的实例",
+      "serverError": "无法发送（服务器错误）"
+    }
+  },
+  "join": {
+    "title": "加入空间",
+    "discoverIntro": "发现可加入的空间，或在“探索”中浏览全部空间。",
+    "discoverError": "当前无法加载可探索的空间。您仍可在下方使用邀请码加入。",
+    "discoverEmpty": "暂无可探索的空间。请尝试在下方输入邀请码，或稍后再来看看。",
+    "browseExplore": "在“探索”中浏览全部",
+    "discoveryOff": "此实例上已关闭空间发现功能。您仍可使用邀请码加入。",
+    "inviteDivider": "有邀请码？",
+    "invitePlaceholder": "例如 abc123 或 https://instance.com/join/abc123",
+    "submit": "加入空间",
+    "submitting": "正在加入…",
+    "connect": {
+      "intro": "连接到 <host>{{host}}</host> 以加入此空间。",
+      "passwordLabel": "输入您的密码以连接",
+      "passwordPlaceholder": "您的账号密码",
+      "passwordNote": "您的密码由主实例校验，绝不会发送给 {{host}}。该实例将获得为其专有的凭据。",
+      "submit": "连接并加入",
+      "submitting": "正在连接…"
+    },
+    "fallback": {
+      "notice": "{{host}} 上已存在一个同名账号，且无法识别主实例颁发的凭据。请使用您在该实例上设置的密码登录；之后将切换为该凭据。",
+      "usernamePlaceholder": "您在此实例上的用户名",
+      "passwordLabel": "此实例的密码",
+      "passwordPlaceholder": "远端实例上的密码",
+      "submit": "登录并加入",
+      "submitting": "正在登录…"
+    }
+  },
+  "explore": {
+    "title": "探索",
+    "searchPlaceholder": "搜索空间…",
+    "discoveryDisabled": "实例管理员已禁用空间发现功能。",
+    "noMatches": "没有匹配您搜索的空间。",
+    "empty": "暂无可发现的空间。",
+    "allJoined": "您已加入所有可发现的空间",
+    "joinedSection": "已加入",
+    "badges": {
+      "joined": "已加入",
+      "public": "公开",
+      "request": "需申请"
+    },
+    "noDescription": "无描述",
+    "memberCount_other": "{{count}} 名成员",
+    "viewSpace": "查看空间",
+    "join": "加入空间",
+    "joining": "正在加入…",
+    "requestPending": "申请待处理",
+    "requestMessagePlaceholder": "您为什么想加入？（可选）",
+    "sendRequest": "发送申请",
+    "sendingRequest": "正在发送…",
+    "requestToJoin": "申请加入",
+    "preview": {
+      "join": "加入",
+      "joining": "正在加入…",
+      "pending": "待处理",
+      "request": "申请",
+      "sending": "正在发送…"
+    }
+  },
+  "settings": {
+    "title": "空间设置",
+    "backAria": "返回空间设置菜单",
+    "nav": {
+      "general": "常规",
+      "management": "管理",
+      "tabs": {
+        "overview": "概览",
+        "discovery": "发现",
+        "roles": "身份组",
+        "bans": "封禁名单"
+      }
+    },
+    "discardChanges": "放弃修改",
+    "overview": {
+      "identity": "空间标识",
+      "iconLabel": "空间图标",
+      "iconAlt": "空间图标",
+      "colorLabel": "图标颜色",
+      "bannerLabel": "空间横幅",
+      "bannerAlt": "空间横幅",
+      "uploadBanner": "上传横幅 (16:9)",
+      "removeBanner": "移除横幅",
+      "nameLabel": "空间名称",
+      "iconUploadFailed": "上传图标失败",
+      "bannerUploadFailed": "上传横幅失败",
+      "cropIconTitle": "裁剪空间图标",
+      "cropBannerTitle": "裁剪空间横幅",
+      "transfer": {
+        "description": "将空间拥有权转让给另一位成员。转让后您将成为普通成员。",
+        "prompt": "确定将所有权转让给 <strong>{{name}}</strong> 吗？",
+        "button": "转让所有权",
+        "confirm": "转让",
+        "transferring": "正在转让…",
+        "success": "已将所有权转让给 {{name}}",
+        "failed": "转让所有权失败"
+      },
+      "delete": {
+        "description": "永久删除此空间及其所有数据。此操作无法撤销。",
+        "button": "删除空间",
+        "confirmAgain": "再次点击以确认删除",
+        "failed": "删除空间失败"
+      }
+    },
+    "discovery": {
+      "title": "发现设置",
+      "disabledNotice": "实例管理员已禁用空间发现功能。在重新启用发现功能之前，更改可见性将不会生效。",
+      "visibility": {
+        "label": "可见性",
+        "hint": "控制谁可以发现并加入此空间。",
+        "options": {
+          "private": {
+            "label": "私密",
+            "description": "仅持有邀请链接的人可以加入"
+          },
+          "request": {
+            "label": "需申请加入",
+            "description": "在“探索”中可见；他人可以申请加入"
+          },
+          "public": {
+            "label": "公开",
+            "description": "在“探索”中可见；任何人均可立即加入"
+          }
+        }
+      },
+      "description": {
+        "label": "描述",
+        "hint": "显示在“探索”页面中的简短摘要。",
+        "placeholder": "用于“探索”页面的简短介绍…",
+        "counter": "{{length}}/{{max}}"
+      },
+      "requests": {
+        "title": "待处理的加入申请",
+        "empty": "暂无待处理的加入申请",
+        "actionFailed": "操作失败"
+      }
+    },
+    "members": {
+      "description": "管理此空间的成员。点击成员可编辑其身份组。",
+      "listHeading": "成员 ({{total}})",
+      "owner": "拥有者",
+      "noRoles": "无身份组",
+      "ban": "封禁",
+      "kick": "踢出",
+      "confirm": {
+        "banTitle": "封禁 {{name}}",
+        "kickTitle": "踢出 {{name}}",
+        "banDescription": "他们将被永久封禁在此空间之外，直到被解封。",
+        "kickDescription": "他们可以通过邀请链接重新加入。"
+      },
+      "updateRolesFailed": "更新身份组失败",
+      "kickFailed": "踢出成员失败",
+      "banFailed": "封禁成员失败"
+    }
+  },
+  "bans": {
+    "title": "封禁管理",
+    "description": "被封禁的用户无法重新加入此空间，除非解除封禁。",
+    "loading": "正在加载封禁名单…",
+    "empty": "暂无被封禁的用户",
+    "listHeading": "封禁名单 ({{total}})",
+    "bannedBy": "由 {{moderator}} 于 {{date}} 封禁",
+    "bannedByWithReason": "由 {{moderator}} 于 {{date}} 封禁：{{reason}}",
+    "unban": "解除封禁",
+    "loadFailed": "加载封禁名单失败",
+    "unbanFailed": "解除用户封禁失败"
+  },
+  "roles": {
+    "title": "身份组",
+    "create": "创建身份组",
+    "creating": "正在创建…",
+    "listHeading": "身份组列表",
+    "description": "身份组用于定义成员具备的权限。排名越高的身份组优先级越高。",
+    "defaultName": "新身份组",
+    "copyName": "{{name}} 的副本",
+    "backToList": "返回身份组列表",
+    "created": "身份组已创建。请在下方进行个性化配置。",
+    "identity": "身份信息",
+    "nameLabel": "身份组名称",
+    "colorLabel": "身份组颜色",
+    "nameEmpty": "身份组名称不能为空",
+    "nameDuplicate": "已存在同名的身份组",
+    "groups": {
+      "general": "常规",
+      "text": "文字",
+      "voice": "语音"
+    },
+    "saved": "身份组已保存",
+    "copy": "复制身份组",
+    "copying": "正在复制…",
+    "delete": "删除身份组",
+    "deleting": "正在删除…",
+    "confirmDelete": "确认删除？",
+    "createFailed": "创建身份组失败",
+    "saveFailed": "保存身份组失败",
+    "deleteFailed": "删除身份组失败",
+    "copyFailed": "复制身份组失败"
+  },
+  "permissions": {
+    "title": "权限配置",
+    "names": {
+      "administrator": "管理员",
+      "viewChannel": "查看频道",
+      "manageChannels": "管理频道",
+      "manageRoles": "管理身份组",
+      "manageSpace": "管理空间",
+      "createInvite": "创建邀请",
+      "kickMembers": "踢出成员",
+      "banMembers": "封禁成员",
+      "sendMessages": "发送消息",
+      "manageMessages": "管理消息",
+      "attachFiles": "附加文件",
+      "readMessageHistory": "阅读消息历史",
+      "addReactions": "添加反应",
+      "connect": "连接语音",
+      "speak": "语音发言",
+      "muteMembers": "静音成员",
+      "deafenMembers": "拒听成员",
+      "moveMembers": "移动成员",
+      "stream": "视频推流",
+      "disconnectMembers": "断开成员连接"
+    },
+    "tristate": {
+      "deny": "拒绝",
+      "neutral": "中立（继承）",
+      "allow": "允许"
+    },
+    "overrideCount_other": "{{count}} 个权限覆盖",
+    "removeOverride": "移除权限覆盖",
+    "roleOverrides": "身份组权限覆盖",
+    "memberOverrides": "成员权限覆盖",
+    "addRole": "添加身份组",
+    "addMember": "添加成员",
+    "noMoreRoles": "没有更多可添加的身份组",
+    "loadFailed": "加载权限覆盖失败",
+    "saveFailed": "保存权限覆盖失败",
+    "partialFailure_other": "{{count}} 个权限覆盖保存失败"
+  },
+  "sidebar": {
+    "directMessages": "私信列表",
+    "addSpace": "添加空间",
+    "joinSpace": "加入空间",
+    "exploreSpaces": "探索空间",
+    "folder": {
+      "tooltip_other": "文件夹 ({{count}})",
+      "spaceCount_other": "{{count}} 个空间",
+      "unnamed": "未命名文件夹",
+      "rename": "重命名文件夹",
+      "color": "文件夹颜色",
+      "create": "创建文件夹",
+      "moveTo": "移动至文件夹",
+      "removeFrom": "从文件夹中移出",
+      "ungroup": "解散分组",
+      "created": "文件夹已创建",
+      "moved": "已移动到文件夹",
+      "removed": "已从文件夹中移出",
+      "ungrouped": "已解散文件夹"
+    },
+    "space": {
+      "inviteCopied": "邀请链接已复制到剪贴板",
+      "inviteFailed": "生成邀请失败",
+      "transferOwnership": "转让所有权",
+      "settings": "空间设置",
+      "leave": "退出空间",
+      "reconnecting": "正在重新连接至 {{instance}}…",
+      "remoteInstance": "远端实例",
+      "leaveConfirm": {
+        "title": "退出空间",
+        "titleNamed": "退出 {{name}}",
+        "description": "确定要退出此空间吗？重新加入需要新的邀请链接。"
+      },
+      "left": "已退出空间",
+      "leaveFailed": "退出空间失败"
+    },
+    "dmList": {
+      "comingSoon": "敬请期待",
+      "newDm": "新建私信",
+      "empty": "暂无会话。",
+      "leaveGroup": "退出群组",
+      "leaveGroupConfirm": {
+        "title": "退出群私信",
+        "description": "确定要退出吗？除非有人重新将您拉入，否则您无法再次加入。"
+      }
+    },
+    "userArea": {
+      "inputDevice": "输入设备",
+      "outputDevice": "输出设备",
+      "inputDevices": "输入设备列表",
+      "outputDevices": "输出设备列表",
+      "inputVolume": "输入音量",
+      "outputVolume": "输出音量",
+      "systemDefault": "系统默认",
+      "microphonePermission": "需要麦克风权限。",
+      "audioPermission": "需要音频权限。",
+      "enable": "启用",
+      "voiceSettings": "语音设置",
+      "mute": "静音",
+      "unmute": "取消静音",
+      "deafen": "拒听",
+      "undeafen": "取消拒听",
+      "spaceMuted": "已被空间静音",
+      "spaceDeafened": "已被空间拒听",
+      "permissionMuted": "已静音（无发言权限）"
+    }
+  },
+  "channels": {
+    "loading": "正在加载频道",
+    "create": "创建频道",
+    "createCategory": "创建分类",
+    "settings": "频道设置",
+    "categorySettings": "分类设置",
+    "delete": "删除频道",
+    "deleteCategory": "删除分类",
+    "emptyCategory": "暂无频道",
+    "empty": "暂无频道。",
+    "deleteConfirm": {
+      "title": "删除频道",
+      "description": "确定删除吗？这将永久删除该频道及其所有消息。"
+    },
+    "deleteCategoryConfirm": {
+      "title": "删除分类",
+      "description": "确定删除该分类吗？其中的频道将被移动到未分类区域 — 不会有频道被删除。"
+    },
+    "deleted": "频道已删除",
+    "deleteFailed": "删除频道失败",
+    "categoryDeleted": "分类已删除",
+    "categoryDeleteFailed": "删除分类失败"
+  },
+  "members": {
+    "titleWithCount_other": "成员 — {{count}}",
+    "loading": "正在加载成员",
+    "groups": {
+      "owner": "拥有者"
+    }
+  },
+  "mobile": {
+    "addSheet": {
+      "createSpace": "创建空间",
+      "joinSpace": "加入空间",
+      "exploreSpaces": "探索空间"
+    },
+    "muteUser": "静音用户"
+  },
+  "main": {
+    "selectChannel": "选择一个频道",
+    "selectChannelHint": "选择一个文字或语音频道以开始体验",
+    "notificationSettings": "通知设置",
+    "voice": {
+      "connectionFailed": "连接失败",
+      "connected": "已连接",
+      "connecting": "正在连接…",
+      "participants_other": "{{count}} 人已连接",
+      "inCall_other": "{{count}} 人在通话中",
+      "empty": "当前语音频道中暂无成员。",
+      "join": "加入语音"
+    },
+    "dm": {
+      "fallbackName": "私信",
+      "composerPlaceholder": "发消息给 {{target}}",
+      "calling": "正在呼叫 {{name}}…",
+      "groupSettings": "群组设置",
+      "openGroupSettings": "打开群组设置",
+      "memberCount_other": "({{count}} 名成员)",
+      "startVoiceCall": "发起语音通话",
+      "startVideoCall": "发起视频通话",
+      "addFriends": "添加好友到私信"
+    }
+  },
+  "ownership": {
+    "title": "转让所有权",
+    "description": "选择一位成员成为 <name>{{name}}</name> 的新拥有者",
+    "confirmQuestion": "确定将 <name>{{space}}</name> 的所有权转让给 <name>{{member}}</name> 吗？",
+    "regularMember": "转让后您将成为普通成员。",
+    "transferring": "正在转让…",
+    "confirm": "转让",
+    "loading": "正在加载成员…",
+    "success": "已将所有权转让给 {{name}}",
+    "failed": "转让所有权失败"
+  }
+}

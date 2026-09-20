@@ -1,0 +1,135 @@
+{
+  "names": {
+    "group": "群组",
+    "directMessage": "私信",
+    "theGroup": "该群组",
+    "unknownHandle": "未知",
+    "groupFallback": "群私信",
+    "emptyGroup": "空群组"
+  },
+  "preview": {
+    "image": "图片",
+    "video": "视频",
+    "audio": "音频",
+    "files_other": "📎 {{count}} 个文件",
+    "withSender": "{{name}}：{{text}}"
+  },
+  "system": {
+    "spaceInviteNamed": "📨 发送了 {{spaceName}} 的空间邀请",
+    "spaceInvite": "📨 发送了空间邀请",
+    "memberAdded": "{{actor}} 添加了 {{target}}",
+    "memberLeft": "{{target}} 退出了群组",
+    "memberRemoved": "{{actor}} 移除了 {{target}}",
+    "ownerChanged": "{{newOwner}} 现已成为群主",
+    "renamed": "{{actor}} 重命名了群组",
+    "nameCleared": "{{actor}} 清除了群组名称",
+    "iconChanged": "{{actor}} 更新了群组头像",
+    "generic": "系统消息",
+    "someone": "有人",
+    "aMember": "一位成员"
+  },
+  "deletedNotice": {
+    "accountDeleted": "该用户的账号已被注销"
+  },
+  "memberRow": {
+    "viewProfile": "查看个人资料",
+    "transferOwnership": "转让群主",
+    "removeFromGroup": "移出群组",
+    "removeFriend": "删除好友",
+    "ownerTooltip": "群主",
+    "actions": "成员操作"
+  },
+  "roster": {
+    "owner": "群主",
+    "sectionCount": "{{label}} — {{total}}"
+  },
+  "kick": {
+    "title": "移出群组",
+    "description": "确定要将 {{name}} 移出此群组吗？他们将无法再看到新消息。",
+    "success": "已将 {{name}} 移出群组",
+    "failed": "移出成员失败"
+  },
+  "transfer": {
+    "title": "转让群主",
+    "description": "确定要将群主权限转让给 {{name}} 吗？您将失去群主特权。",
+    "confirm": "转让",
+    "success": "已将群主权限转让给 {{name}}",
+    "failed": "转让群主失败"
+  },
+  "removeFriend": {
+    "failed": "删除好友失败"
+  },
+  "leave": {
+    "title": "退出群组",
+    "description": "确定要退出“{{name}}”吗？您将不再接收此对话的消息。",
+    "inProgress": "正在退出…",
+    "failed": "退出群组失败",
+    "explanation": "您将不再接收此对话的消息。其他成员将看到一条系统提示。"
+  },
+  "search": {
+    "trigger": "寻找或发起会话",
+    "placeholder": "搜索…",
+    "emptyHint": "搜索用户以发起聊天",
+    "conversations": "会话",
+    "users": "用户",
+    "searching": "正在搜索…",
+    "noResults": "未找到结果",
+    "createFailed": "创建私信失败"
+  },
+  "list": {
+    "title": "消息",
+    "empty": "暂无会话。",
+    "leaveGroup": "退出群组",
+    "justNow": "刚刚",
+    "minutesShort_other": "{{count}} 分钟",
+    "hoursShort_other": "{{count}} 小时",
+    "daysShort_other": "{{count}} 天"
+  },
+  "newDm": {
+    "title": "新建私信",
+    "searchPlaceholder": "搜索用户…",
+    "noUsers": "未找到用户"
+  },
+  "addMember": {
+    "title": "添加好友到私信",
+    "description": "选择要添加到此会话的好友。",
+    "capacity": "{{current}}/{{max}}",
+    "searchPlaceholder": "搜索好友…",
+    "limitReached": "该群私信已达到 {{max}} 人的成员上限。",
+    "alreadyInDm": "已在此私信中",
+    "noMatch": "没有符合搜索的好友",
+    "noFriends": "暂无好友",
+    "selectFriends": "选择好友",
+    "addCount_other": "添加 {{count}} 位好友",
+    "adding": "正在添加…",
+    "noOtherMember": "无法确定该会话中的另一位成员。",
+    "failed": "添加成员失败"
+  },
+  "groupSettings": {
+    "title": "群组设置",
+    "general": "常规",
+    "overview": "概览",
+    "backToMenu": "返回群私信设置菜单",
+    "changeIcon": "更改群头像",
+    "icon": "群头像",
+    "clickToUpload": "点击上传",
+    "removeIcon": "移除群头像",
+    "nameLabel": "群名称",
+    "nameAria": "群名称",
+    "nameCount": "{{current}}/{{max}}",
+    "addMember": "添加成员",
+    "groupFull": "群成员已满",
+    "groupFullSuffix": "— 群成员已满",
+    "cropTitle": "裁剪群头像",
+    "saveFailed": "保存设置失败"
+  },
+  "groupInfo": {
+    "title": "群组信息",
+    "plainTitle": "信息",
+    "notFound": "未找到会话。",
+    "notGroup": "该会话没有群组信息。",
+    "cancelEdit": "取消编辑",
+    "federated": "联邦群组",
+    "memberCount_other": "{{count}} 名成员"
+  }
+}

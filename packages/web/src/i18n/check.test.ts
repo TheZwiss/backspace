@@ -6,6 +6,7 @@ import {
   checkParity,
   checkPlaceholders,
   checkPluralForms,
+  requiredPluralForms,
   checkCountWithoutPlural,
   checkUntranslated,
   checkDirectIntl,
@@ -103,8 +104,28 @@ describe('plural-forms', () => {
       [locale('en', 'common')]: { n_one: 'a', n_other: 'b' },
       [locale('de', 'common')]: { n_one: 'a', n_other: 'b' },
       [locale('ru', 'common')]: { n_one: 'а', n_few: 'б', n_many: 'в', n_other: 'г' },
+      [locale('zh', 'common')]: { n_other: '个' },
     });
     expect(checkPluralForms(root)).toEqual([]);
+  });
+
+  it('takes the categories from Intl.PluralRules, so a language with only "other" needs no "one"', () => {
+    expect(requiredPluralForms('zh')).toEqual(['other']);
+    expect(requiredPluralForms('ru')).toEqual(['few', 'many', 'one', 'other']);
+    expect(requiredPluralForms('de-AT')).toEqual(['one', 'other']);
+    expect(requiredPluralForms('ja')).toEqual(['other']);
+  });
+
+  it('reports a catalog directory whose code Intl cannot pluralize, once, instead of guessing', () => {
+    const root = makeRoot({
+      [locale('en', 'common')]: { n_one: 'a', n_other: 'b', m_one: 'c', m_other: 'd' },
+      [locale('xx', 'common')]: { n_one: 'a', n_other: 'b', m_one: 'c', m_other: 'd' },
+    });
+    const findings = checkPluralForms(root) as Finding[];
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({ rule: 'plural-forms', file: 'packages/web/src/locales/xx' });
+    expect(findings[0].message).toMatch(/Intl\.PluralRules/);
+    expect(requiredPluralForms('_draft')).toBeNull();
   });
 });
 

@@ -10,6 +10,10 @@ export const supportedLanguages = [
   // PR once every surface is covered and the translation has been reviewed.
   { code: 'ru', nativeName: 'Русский', dir: 'ltr', released: true },
   { code: 'de', nativeName: 'Deutsch', dir: 'ltr', released: true },
+  // Simplified Chinese. Detection sends every zh-* tag here, Traditional
+  // included: a zh-TW reader gets a script they can read rather than English,
+  // and the picker names the variant so they know what they got.
+  { code: 'zh', nativeName: '简体中文', dir: 'ltr', released: true },
 ] as const satisfies readonly { code: string; nativeName: string; dir: 'ltr' | 'rtl'; released: boolean }[];
 
 export type SupportedLanguage = (typeof supportedLanguages)[number]['code'];
