@@ -9,8 +9,8 @@
 <link rel="alternate" hreflang="en" href="https://backspacechat.com/" />
 <link rel="alternate" hreflang="ru" href="https://backspacechat.com/ru/" />
 <link rel="alternate" hreflang="x-default" href="https://backspacechat.com/" />
-<link rel="icon" type="image/png" href="assets/logo.png" />
-<link rel="apple-touch-icon" href="assets/logo.png" />
+<link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
+<link rel="apple-touch-icon" href="assets/logo.svg" />
 
 <!-- Open Graph / social preview -->
 <meta property="og:type" content="website" />
@@ -77,12 +77,13 @@
 </script>
 
 <link rel="stylesheet" href="assets/site.css" />
+<link rel="stylesheet" href="assets/logo.css" />
 </head>
 <body>
 
 <header class="nav">
   <div class="wrap nav-in">
-    <a class="brand" href="#top"><img src="assets/logo.png" alt="" width="26" height="26" /> Backspace</a>
+    <a class="brand" href="#top"><span class="logo-mark" aria-hidden="true"></span><span>Backspace</span></a>
     <a class="nav-link" href="#voice">Voice</a>
     <a class="nav-link" href="#federation">Federation</a>
     <a class="nav-link" href="#install">Install</a>
@@ -116,7 +117,7 @@
     <!-- The living window: a hand-built replica of the real client -->
     <figure class="win" id="win" aria-label="A recreation of the Backspace app: a chat conversation in a self-hosted space, with a voice channel connected.">
       <div class="strip" aria-hidden="true">
-        <span class="tile logo"><img src="assets/logo.png" alt="" /></span>
+        <span class="tile logo"><span class="logo-mark" aria-hidden="true"></span></span>
         <span class="sep"></span>
         <span class="tile active" style="background:linear-gradient(135deg,var(--mint),var(--sky))">a</span>
         <span class="tile" style="background:linear-gradient(135deg,var(--peach),var(--rose))">k</span>
@@ -479,6 +480,7 @@
   </div>
 </footer>
 
+<script src="assets/logo-color.js" defer></script>
 <script src="assets/site.js" defer></script>
 
 </body>
