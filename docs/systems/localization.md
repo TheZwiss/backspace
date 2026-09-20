@@ -6,9 +6,16 @@ moves. This spec is the contract; the foundation PR implements it and each
 surface sweep PR extends it.
 
 Shipped languages: English (`en`, the source language and the fallback),
-Russian (`ru`), German (`de`), Chinese (`zh`). Adding a language is a catalog directory plus
-one entry in `supportedLanguages`; nothing else in the code should need to
-know the list.
+Russian (`ru`), German (`de`), Simplified Chinese (`zh`). Adding a language is a
+catalog directory plus one entry in `supportedLanguages`; nothing else in the
+code should need to know the list.
+
+`zh` is the Simplified catalog and detection maps every `zh-*` tag onto it,
+Traditional included: a `zh-TW` browser gets a script its user can read
+rather than English, and the picker says 简体中文 so they know which variant
+they have. A Traditional catalog would be `zh-Hant`, and adding it means
+teaching `resolveSupportedLanguage` to look at the script subtag, which it
+does not today.
 
 Source files:
 - Runtime setup: `packages/web/src/i18n/index.ts` (`initI18n`, `setLanguage`,
@@ -111,7 +118,10 @@ Every string that contains a count goes through an i18next plural key. No
 `${n} file${n === 1 ? '' : 's'}`, no `_one`/`_other` suffix tricks that leave
 the noun outside the catalog.
 
-Each language supplies the CLDR categories it needs:
+Each language supplies the CLDR categories it needs. The check script takes
+them from `Intl.PluralRules(lng).resolvedOptions().pluralCategories`, the
+same data i18next selects a form with at runtime, so there is no table to
+keep in step; for the shipped languages that is:
 
 | Language | Categories |
 |----------|-----------|
@@ -119,6 +129,9 @@ Each language supplies the CLDR categories it needs:
 | de | `_one`, `_other` |
 | ru | `_one`, `_few`, `_many`, `_other` |
 | zh | `_other` |
+
+A catalog directory whose code `Intl` does not know is a finding of its own,
+because the runtime could not pluralize it either.
 
 Example (`admin.json`):
 
@@ -240,7 +253,7 @@ language keeps following their browser; only the picker persists.
 
 The selector lives in the user settings modal, Account panel, section
 "Language". It lists `supportedLanguages`, showing each language by its
-`nativeName` (English, Русский, Deutsch, 中文); the list is not translated,
+`nativeName` (English, Русский, Deutsch, 简体中文); the list is not translated,
 because a user who cannot read the current language needs to find their own.
 
 Changing the language:
@@ -403,7 +416,8 @@ can be fixed in one pass.
 Surfaces are converted one PR at a time, in the order users meet them: auth,
 settings (done in the foundation PR as the reference), chat, dm, voice,
 spaces, social, search, uploads, mobile, federation, admin, desktop. Each
-PR ships `en`, `ru` and `de` for its namespace.
+PR ships every language in `supportedLanguages` for its namespace; the parity
+rule fails the PR otherwise.
 
 The Russian translation comes from the community. st7105 translated the
 whole app in PR #45, and that PR also established the detection order, the
