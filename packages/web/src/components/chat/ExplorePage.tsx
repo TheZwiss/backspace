@@ -4,7 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { useExploreStore, type TaggedExploreSpace } from '../../stores/exploreStore';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
-import { Mascot } from '../ui/Mascot';
+import { ExploreEmpty } from './ExploreEmpty';
+import { ExploreCardBanner } from './ExploreCardBanner';
 import { getSpaceGradient } from '../../utils/gradients';
 import { extractDominantColors, colorsToGradient } from '../../utils/colorExtractor';
 import { MemberListToggleButton } from '../layout/MemberListToggleButton';
@@ -128,14 +129,9 @@ export function ExplorePage() {
           </div>
         ) : !hasAnySpaces ? (
           /* True empty state — no discoverable spaces at all */
-          <div className="flex flex-col items-center justify-center h-64 opacity-80">
-            <Mascot state="lonely" className="w-32 h-32 mb-3" />
-            <p className="text-txt-tertiary text-sm">
-              {searchQuery
-                ? t('spaces:explore.noMatches')
-                : t('spaces:explore.empty')}
-            </p>
-          </div>
+          <ExploreEmpty searched={Boolean(searchQuery)}>
+            {searchQuery ? t('spaces:explore.noMatches') : t('spaces:explore.empty')}
+          </ExploreEmpty>
         ) : (
           <div className="p-6 space-y-6">
             {/* All-joined success banner (only when no unjoined spaces remain) */}
@@ -271,21 +267,7 @@ function SpaceCard({
         ? 'border-accent-mint/20 hover:border-accent-mint/40'
         : 'border-border-soft hover:border-border-hard'
     }`}>
-      {/* Banner area */}
-      <div className="h-32 relative overflow-hidden">
-        {/* Background layer */}
-        {bannerUrl ? (
-          <img src={bannerUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
-        ) : (
-          <div className="absolute inset-0" style={{ background: iconGradient ?? fallbackGradient }} />
-        )}
-
-        {/* Frosted bottom fade — Aether Drift glass */}
-        <div
-          className="absolute bottom-0 inset-x-0 h-16"
-          style={{ background: 'linear-gradient(to top, rgba(20,20,26,0.9), transparent)' }}
-        />
-
+      <ExploreCardBanner bannerUrl={bannerUrl} gradient={iconGradient ?? fallbackGradient}>
         {/* Joined badge (top-left) */}
         {isJoined && (
           <div className="absolute top-2 left-2 z-[2]">
@@ -308,8 +290,7 @@ function SpaceCard({
             {isPublic ? t('spaces:explore.badges.public') : t('spaces:explore.badges.request')}
           </span>
         </div>
-
-      </div>
+      </ExploreCardBanner>
 
       {/* Overlapping icon */}
       <div className="relative px-4 -mt-8 z-10">
@@ -374,7 +355,7 @@ function SpaceCard({
           <button
             onClick={handlePublicJoin}
             disabled={joining}
-            className="w-full py-2 bg-accent-primary hover:bg-accent-primary-hover text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
+            className="cta-primary w-full py-2 text-sm rounded disabled:opacity-50"
           >
             {joining ? (
               <span className="flex items-center justify-center gap-2">

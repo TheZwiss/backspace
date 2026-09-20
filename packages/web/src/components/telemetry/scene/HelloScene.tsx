@@ -50,6 +50,18 @@ function makeIds(uid: string): SceneIds {
 
 // Ambient loops and the reduced-motion still frames. Only transform and
 // opacity move. The choreography of happy and farewell lives in the hook.
+//
+// Everything here animates an element inside the SVG, which runs on the main
+// thread and repaints the whole drawing whenever its value changes, so every
+// endless loop steps on the shared quarter-second beat (BREATH_TICK). None of
+// them travels more than a pixel or two a second, so a step is invisible.
+//
+// The wave is the exception the beat cannot serve: five positions per stroke
+// reads as a windup toy. It keeps its stroke and gets a duty cycle instead,
+// which is the bible's other rule: two waves over 2.4 seconds, then the arm
+// rests for the remaining 9.6. Measured on an M1 Pro, waving without pause
+// cost 9 points of the renderer, 19 of the GPU process and held the page at a
+// full layout every frame; at a fifth of the duty it is a rounding error.
 const STYLE = `
 @keyframes hs-tw0{0%,100%{opacity:1}50%{opacity:.3}}
 @keyframes hs-tw1{0%,100%{opacity:.4}50%{opacity:1}}
@@ -57,14 +69,14 @@ const STYLE = `
 @keyframes hs-far{to{transform:translateX(-12px)}}
 @keyframes hs-near{to{transform:translateX(-20px)}}
 @keyframes hs-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
-@keyframes hs-wave{0%,100%{transform:rotate(-10deg)}50%{transform:rotate(16deg)}}
-.hs-root .hs-tw0{animation:hs-tw0 3.1s ease-in-out infinite}
-.hs-root .hs-tw1{animation:hs-tw1 4.7s ease-in-out infinite}
-.hs-root .hs-tw2{animation:hs-tw2 6.3s ease-in-out infinite}
-.hs-root .hs-far{animation:hs-far 70s ease-in-out infinite alternate}
-.hs-root .hs-near{animation:hs-near 40s ease-in-out infinite alternate}
-.hs-root .hs-craft{animation:hs-bob 4s ease-in-out infinite}
-.hs-root .hs-arm{transform-origin:${SHOULDER.x}px ${SHOULDER.y}px;animation:hs-wave 1.2s cubic-bezier(.45,.05,.55,.95) infinite}
+@keyframes hs-wave{0%{transform:rotate(-10deg)}5%{transform:rotate(16deg)}10%{transform:rotate(-10deg)}15%{transform:rotate(16deg)}20%,100%{transform:rotate(-10deg)}}
+.hs-root .hs-tw0{animation:hs-tw0 3.1s steps(12, jump-none) infinite}
+.hs-root .hs-tw1{animation:hs-tw1 4.7s steps(19, jump-none) infinite}
+.hs-root .hs-tw2{animation:hs-tw2 6.3s steps(25, jump-none) infinite}
+.hs-root .hs-far{animation:hs-far 70s steps(280, jump-none) infinite alternate}
+.hs-root .hs-near{animation:hs-near 40s steps(160, jump-none) infinite alternate}
+.hs-root .hs-craft{animation:hs-bob 4s steps(16, jump-none) infinite}
+.hs-root .hs-arm{transform-origin:${SHOULDER.x}px ${SHOULDER.y}px;animation:hs-wave 12s cubic-bezier(.45,.05,.55,.95) infinite}
 .hs-root:not([data-mood=idle]) .hs-arm{animation-play-state:paused}
 .hs-root .hs-glow{transform-origin:${PORT.cx}px ${PORT.cy}px}
 .hs-root .hs-pulse{transform-box:fill-box;transform-origin:center}

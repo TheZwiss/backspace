@@ -170,7 +170,7 @@ export function CreateChannelModal() {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+                className="cta-primary px-3 py-1.5 text-sm rounded-full disabled:opacity-50"
               >
                 {isLoading ? t('spaces:channel.create.submitting') : t('spaces:channel.create.submit')}
               </button>

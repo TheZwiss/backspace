@@ -1,0 +1,82 @@
+/* ── THE SKY ──
+ * The shared star field (StarField.tsx). The host positions and clips it;
+ * this file places its three kinds of thing and runs the two motions a sky
+ * has: the breath of a few stars and the occasional Sternschnuppe.
+ *
+ * Every animation here is on an HTML element, never on an SVG child, and
+ * moves opacity or transform only, so it runs on the compositor: no paint,
+ * no layout, no main-thread work per frame. That is the whole reason the
+ * breathing stars are spans and not points in the SVG.
+ */
+
+.star-field {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* The still stars: one SVG, anchored top left, painted once. */
+.star-field__still {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+}
+
+/* ── THE BREATH ── a star's opacity stepping between a third and its rest,
+   each on its own period and phase (set inline, with the step count that
+   puts one step on every tick of the shared beat). Never all the way out,
+   never a flash. Its own layer, so the compositor owns it, and because every
+   star steps on the same beat the compositor draws four frames a second for
+   the whole sky, not sixty. Also used on its own by the scenes that place
+   stars by percentage (see `Breath`). */
+.star-field__breath {
+  position: absolute;
+  display: block;
+  will-change: opacity;
+  animation: starFieldBreath 5.75s steps(23, jump-none) infinite alternate;
+}
+.star-field__breath--dot {
+  border-radius: 50%;
+}
+@keyframes starFieldBreath {
+  from { opacity: 0.3; }
+  to { opacity: 1; }
+}
+
+/* ── THE STREAK ── a Sternschnuppe: one pixel wide, 24 long, bright at the
+   head and gone at the tail, no blur. It falls toward the lower right about
+   a hundred pixels in well under a second, then waits the rest of its period
+   off-stage at opacity zero. The period and phase are the host's. */
+.star-field__streak {
+  position: absolute;
+  display: block;
+  width: 1px;
+  height: 24px;
+  background: linear-gradient(to bottom, transparent, rgb(243 237 228));
+  opacity: 0;
+  transform: rotate(-55deg);
+  transform-origin: 50% 100%;
+  animation: starFieldStreak linear infinite;
+}
+/* One percent of the period on screen. Translation is in the host's frame;
+   the line's rotation rides along unchanged. */
+@keyframes starFieldStreak {
+  0% { transform: translate(0, 0) rotate(-55deg); opacity: 0; }
+  0.15% { opacity: 0.85; }
+  0.8% { opacity: 0.85; }
+  1% { transform: translate(98px, 69px) rotate(-55deg); opacity: 0; }
+  100% { transform: translate(98px, 69px) rotate(-55deg); opacity: 0; }
+}
+
+/* ── STILL FRAME ── every star at its resting brightness, no streaks. */
+@media (prefers-reduced-motion: reduce) {
+  .star-field__breath,
+  .star-field__streak {
+    animation: none;
+  }
+  .star-field__breath {
+    opacity: 1;
+  }
+}

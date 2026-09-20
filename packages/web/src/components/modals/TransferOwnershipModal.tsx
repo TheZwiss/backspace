@@ -136,7 +136,7 @@ export function TransferOwnershipModal({ spaceId, onClose }: { spaceId: string; 
   };
 
   return ReactDOM.createPortal(
-    <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50">
+    <div className="fixed inset-0 z-[10000] flex items-center justify-center modal-scrim">
       <div
         ref={modalRef}
         className="w-[380px] max-h-[480px] glass-modal rounded-xl flex flex-col animate-in fade-in zoom-in-95 duration-150"

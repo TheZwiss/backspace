@@ -258,7 +258,7 @@ export function JoinSpaceModal() {
                   <button
                     type="submit"
                     disabled={isLoading || !inviteCode.trim()}
-                    className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+                    className="cta-primary px-3 py-1.5 text-sm rounded-full disabled:opacity-50"
                   >
                     {isLoading ? t('spaces:join.submitting') : t('spaces:join.submit')}
                   </button>
@@ -325,7 +325,7 @@ export function JoinSpaceModal() {
                 <button
                   type="submit"
                   disabled={isLoading || !password}
-                  className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+                  className="cta-primary px-3 py-1.5 text-sm rounded-full disabled:opacity-50"
                 >
                   {isLoading ? t('spaces:join.connect.submitting') : t('spaces:join.connect.submit')}
                 </button>
@@ -392,7 +392,7 @@ export function JoinSpaceModal() {
                 <button
                   type="submit"
                   disabled={isLoading || !fallbackUsername || !fallbackPassword}
-                  className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+                  className="cta-primary px-3 py-1.5 text-sm rounded-full disabled:opacity-50"
                 >
                   {isLoading ? t('spaces:join.fallback.submitting') : t('spaces:join.fallback.submit')}
                 </button>

@@ -96,7 +96,7 @@ export function MobileFolderSheet({ folder, onClose, onSelectSpace, onUpdateFold
 
   return (
     <>
-      <div className="fixed inset-0 z-[300] bg-black/50" onClick={onClose} />
+      <div className="fixed inset-0 z-[300] modal-scrim" onClick={onClose} />
       <div
         className={`fixed bottom-0 left-0 right-0 z-[301] rounded-t-2xl glass-modal max-h-[calc(60*var(--app-vh))] flex flex-col ${
           hasInteracted ? '' : 'animate-slide-up-sheet'
