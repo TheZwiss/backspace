@@ -295,3 +295,29 @@ the flat rule; CLAUDE.md colours line; desktop.md fallback row; search.md
 caption if it names a colour. Grep: no `0061ff`, `0052d9`, `0047bd`,
 `0 97 255`, `0 82 217`, `0 71 189`, `2E3D65`, `110222` outside
 `docs/superpowers/`. Typecheck web and desktop, run web tests.
+
+### Task 10: Dimensional app icon in lavender
+
+Jannis reviewed the flat icon sheet and asked for the contributor's
+dimensional app-icon composition back, recoloured to the lavender system
+("Lavender, plum ground"). Scope: the app-icon family only. The in-app
+sidebar tile, favicons, all tray files and the site header mark stay flat.
+
+Masters: `assets/brand/app-icon.svg` = the #229 composition (`git show
+96df70a5:site/assets/logo.svg`) with `#0061FF` replaced by `#7c6cf6`,
+`#2E3D65` by `#2a2740`, `#110222` by `#12101d`; same filters, same stroke
+overlay. `assets/brand/app-icon-small.svg` = the same recolour applied to
+the gradient small-glyph composition at `bd60bfeb:assets/brand/app-icon-small.svg`.
+New `assets/brand/mark-icon.svg` = the gradient mark alone (from
+`bd60bfeb:assets/brand/mark.svg`, recoloured), transparent, for the
+maskable inner and the social card.
+
+Pipeline: apple-touch-icon ground and the maskable ground become the
+plum gradient (`#2a2740` top to `#12101d` bottom); the maskable inner is
+`mark-icon.svg` at 60% height; `logo.png`, `icon-192/512`, `build/icon.*`,
+`build/icons/*`, `app-icon-1024.png` follow the masters automatically.
+`scripts/social-preview.html` uses `mark-icon.svg`. Favicons, `logo-mark.svg`
+and tray outputs unchanged (byte-identical after regeneration). README and
+the design-system Brand section: the flat rule now applies to UI surfaces
+(site header, sidebar tile, favicons, trays); the app-icon family is the
+dimensional composition on the plum ground.
