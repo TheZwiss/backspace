@@ -69,9 +69,9 @@
     --accent-coral: 251 146 60;
 
     /* ── Primary Action (replaces blurple) ── */
-    --accent-primary: 124 108 246;
-    --accent-primary-hover: 107 92 224;
-    --accent-primary-active: 95 79 208;
+    --accent-primary: 0 97 255;
+    --accent-primary-hover: 0 82 217;
+    --accent-primary-active: 0 71 189;
 
     /* ── Text Hierarchy ── */
     --text-primary: 239 239 239;
@@ -383,7 +383,7 @@
   --em-rgb-color: 216, 216, 222;
   --em-color-border: rgba(255, 255, 255, 0.07);
   --em-color-border-over: rgba(255, 255, 255, 0.12);
-  --rgb-accent: 124, 108, 246;
+  --rgb-accent: 0, 97, 255;
   --font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   border: none !important;
   background: transparent !important;
@@ -479,7 +479,7 @@
 .skeleton-block  { border-radius: 8px; }
 
 @keyframes search-flash {
-  0% { background-color: rgba(124, 108, 246, 0.2); }
+  0% { background-color: rgba(0, 97, 255, 0.2); }
   100% { background-color: transparent; }
 }
 .search-highlight { animation: search-flash 2s ease-out; }

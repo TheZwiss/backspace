@@ -78,7 +78,7 @@ export function LoginPage() {
 
   return (
     <div className="h-full overflow-y-auto flex flex-col items-center bg-surface-base relative">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(124,108,246,0.06)_0%,transparent_50%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(0,97,255,0.06)_0%,transparent_50%)]" />
       <div className="my-auto flex-shrink-0 w-full max-w-[480px] bg-surface-elevated rounded-md p-8 shadow-elevation-high relative z-10">
         <div className="text-center mb-6">
           <h1 className="text-2xl font-bold text-txt-primary">{t('auth:login.title')}</h1>

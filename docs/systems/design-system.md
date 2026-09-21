@@ -9,7 +9,7 @@ Fonts: DM Sans by default; Inter for the Russian UI; the platform CJK stack for 
 
 ## Principles
 
-- Calm over flashy. Warm over cool.
+- Calm over flashy. Surfaces stay warm; the brand primary is the electric blue.
 - Quiet glass (felt, not seen). No decorative gradients. Minimal shadows.
 - Two-material system: solid matte panels for content (75%), frosted glass bubbles for persistent controls (25%)
 - `prefers-reduced-transparency` → fall back to solid surfaces
@@ -119,6 +119,33 @@ breakpoint. Native browser zoom and pinch gestures retain their normal behavior.
 
 ### Status
 `--status-online`, `--status-idle`, `--status-dnd`, `--status-offline`
+
+---
+
+## Brand
+
+The mark is the backspace-key glyph. Vector masters live in `assets/brand/`;
+every app icon, favicon, tray icon and social preview is generated from
+them, never hand-edited.
+
+| Master | Feeds |
+|--------|-------|
+| `app-icon.svg` | App icon outputs above 32px (the full badge composition) |
+| `app-icon-small.svg` | App icon outputs at 16/32px (bolder, simplified mark) |
+| `mark.svg` | `packages/web/public/icons/logo-mark.svg`, the PWA maskable icon's inner mark, and any standalone render above 32px |
+| `mark-small.svg` | Favicons, the colour tray icons (Windows `.ico`, Linux PNG), and any standalone render at 32px or smaller |
+| `mark-tray.svg` | The macOS menu-bar template tray icon, tuned for 22px |
+| `mark-mono-dark.svg` | Mono silhouette master; no pipeline output today |
+
+Regenerate icons with `pnpm gen-icons`; regenerate the social preview with
+`pnpm gen-social-preview`. Both read only from `assets/brand/` and commit
+byte-stable output for a given lockfile — see `scripts/gen-icons.README.md`
+and `docs/systems/desktop.md` for the full matrix.
+
+The brand primary is `#0061ff`. It is a web/app/desktop primary, not a
+pastel accent, and is exposed as `--accent-primary` (see Color Palette
+above); the navy page gradient used on the marketing site is a
+website-only choice and does not apply here.
 
 ---
 
