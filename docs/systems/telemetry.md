@@ -349,6 +349,10 @@ area. Neither is disguised as navigation: pressing either answers the question
 it asks, and no button says "Continue" or "OK". Copy lives under the `telemetry`
 namespace, see [localization.md](localization.md).
 
+What fraction of admins say yes is not observable from the receiver. A
+triangulation from the shape of the ask and from the participation figures
+other projects publish is in [telemetry-opt-in-rate.md](telemetry-opt-in-rate.md).
+
 ---
 
 ## 8. The receiver
