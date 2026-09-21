@@ -162,6 +162,20 @@
     "empty": "暂无可发现的空间。",
     "allJoined": "您已加入所有可发现的空间",
     "joinedSection": "已加入",
+    "inner": {
+      "title": "内部空间",
+      "subtitle": "您所在实例上的空间"
+    },
+    "outer": {
+      "title": "外部空间",
+      "subtitle": "遍布 Backspace 的社区",
+      "empty": "外面还什么都没有。加入目录的空间会显示在这里。",
+      "noMatches": "外部空间中没有匹配您搜索的空间。",
+      "showMore": "显示更多",
+      "connectAndJoin": "连接并加入",
+      "connectAndRequest": "连接并申请",
+      "closedBadge": "不接受新账户"
+    },
     "badges": {
       "joined": "已加入",
       "public": "公开",

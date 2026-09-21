@@ -18,6 +18,7 @@ type ModalType =
   | 'addDmMember'
   | 'groupDmSettings'
   | 'userProfile'
+  | 'connectAndJoin'
   | null;
 
 interface MobileStackEntry {

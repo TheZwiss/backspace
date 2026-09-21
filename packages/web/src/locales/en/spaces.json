@@ -163,6 +163,20 @@
     "empty": "No discoverable spaces yet.",
     "allJoined": "You're in all discoverable spaces",
     "joinedSection": "Joined",
+    "inner": {
+      "title": "Inner Space",
+      "subtitle": "Spaces on your instances"
+    },
+    "outer": {
+      "title": "Outer Space",
+      "subtitle": "Communities across Backspace",
+      "empty": "Nothing out there yet. Spaces that opt in to the directory appear here.",
+      "noMatches": "Nothing in Outer Space matches your search.",
+      "showMore": "Show more",
+      "connectAndJoin": "Connect and join",
+      "connectAndRequest": "Connect and request",
+      "closedBadge": "Closed to new accounts"
+    },
     "badges": {
       "joined": "Joined",
       "public": "Public",
