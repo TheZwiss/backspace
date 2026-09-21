@@ -11,7 +11,7 @@
 #
 # The base is node:24-slim, Node v24.20.0. All three stages pin it by the digest
 # of the multi-arch index, so the same pin resolves on amd64 and on arm64.
-FROM node:24-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e AS deps
+FROM node:25-slim@sha256:81db02c4b671288a03915da9534dbd54f96d0e7c24d80ccc54f5b36b2e684370 AS deps
 
 RUN corepack enable && corepack prepare pnpm@10.34.3 --activate
 
@@ -40,7 +40,7 @@ RUN pnpm install --prod --frozen-lockfile
 # the native module is fetched once, in `deps`.
 #
 # Base: node:24-slim, Node v24.20.0.
-FROM node:24-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e AS builder
+FROM node:25-slim@sha256:81db02c4b671288a03915da9534dbd54f96d0e7c24d80ccc54f5b36b2e684370 AS builder
 
 RUN corepack enable && corepack prepare pnpm@10.34.3 --activate
 
@@ -78,7 +78,7 @@ RUN pnpm --filter @backspace/web build
 # Stage 3: Production runtime
 #
 # Base: node:24-slim, Node v24.20.0.
-FROM node:24-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e AS runtime
+FROM node:25-slim@sha256:81db02c4b671288a03915da9534dbd54f96d0e7c24d80ccc54f5b36b2e684370 AS runtime
 
 # No package manager ships in the runtime image. This stage installs nothing
 # from a registry: node_modules arrives from `deps` as a finished tree and the
