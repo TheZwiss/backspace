@@ -2,8 +2,9 @@
 /**
  * Backspace icon generator
  *
- * Reads from assets/brand/{app-icon.svg, app-icon-x{1,2,3}.png, mark.svg,
- * mark-mono-dark.svg} and writes the entire desktop + web icon set:
+ * Reads from assets/brand/{app-icon.svg, app-icon-small.svg, mark.svg,
+ * mark-small.svg, mark-mono-dark.svg} and writes the entire desktop + web
+ * icon set:
  *   - macOS .icns (10-rep iconset)
  *   - Windows .ico (multi-size)
  *   - Linux per-size PNGs (electron-builder dir mode)
@@ -11,27 +12,28 @@
  *   - Windows tray .ico (multi-size, DPI-auto)
  *   - Linux tray PNG (22x22)
  *   - Web favicons, PWA, in-app brand logo, PWA maskable
+ *   - assets/brand/app-icon-1024.png, a reference export of the app icon
  *
  * Run via `pnpm gen-icons` after artwork changes; commit the diff.
  *
- * APP-ICON RENDERING: every app-icon output sources from the 3D raster
- * PNGs (x1=149 / x2=294 / x3=440 / 1024), routed by closest-fit (smallest
- * source ≥ target) to minimise resampling, then masked to a rounded-square
- * silhouette (22 %·side ≈ Apple's macOS template radius). The flat
- * app-icon.svg is retained as a source but no longer rendered: at favicon
- * sizes its gradient mark halos into a white perimeter border (see
- * RASTER_THRESHOLD). Tray icons and the PWA maskable inner remain SVG-only.
+ * APP-ICON RENDERING: every app-icon output renders straight from vector.
+ * `app-icon.svg` already carries its own squircle badge, drop shadow and
+ * inner shadow, so there is no raster source and no post-render masking —
+ * sharp/librsvg renders the SVG at the target size and that's the pixel
+ * output. Sizes 16 and 32 render from `app-icon-small.svg` instead: at
+ * that size the standard mark's inset strokes and shadow read as noise,
+ * so the small variant carries a bolder, simplified mark inside the same
+ * badge geometry. See APP_ICON_SMALL_MAX.
  *
  * DETERMINISM: byte-stable for a given lockfile only. After bumping
  * sharp / png-to-ico / png2icons, expect a follow-up regen+commit in
  * the dep-bump PR — that diff isn't an artwork change, just upstream
- * encoder differences. See spec
- * docs/superpowers/specs/2026-04-27-icon-system-design.md.
+ * encoder differences.
  */
 
 import { fileURLToPath } from 'node:url';
 import { dirname, join, relative } from 'node:path';
-import { readFileSync, writeFileSync, mkdirSync, existsSync, statSync } from 'node:fs';
+import { readFileSync, writeFileSync, copyFileSync, mkdirSync, existsSync, statSync } from 'node:fs';
 import sharp from 'sharp';
 import pngToIco from 'png-to-ico';
 import png2icons from 'png2icons';
@@ -40,77 +42,53 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
 
 const SRC = {
-  appIcon:        join(ROOT, 'assets/brand/app-icon.svg'),
-  appIconPngX1:   join(ROOT, 'assets/brand/app-icon-x1.png'),
-  appIconPngX2:   join(ROOT, 'assets/brand/app-icon-x2.png'),
-  appIconPngX3:   join(ROOT, 'assets/brand/app-icon-x3.png'),
-  appIconPng1024: join(ROOT, 'assets/brand/app-icon-1024.png'),
-  mark:           join(ROOT, 'assets/brand/mark.svg'),
-  markMonoDark:   join(ROOT, 'assets/brand/mark-mono-dark.svg'),
+  appIcon:      join(ROOT, 'assets/brand/app-icon.svg'),
+  appIconSmall: join(ROOT, 'assets/brand/app-icon-small.svg'),
+  mark:         join(ROOT, 'assets/brand/mark.svg'),
+  markSmall:    join(ROOT, 'assets/brand/mark-small.svg'),
+  markMonoDark: join(ROOT, 'assets/brand/mark-mono-dark.svg'),
 };
 
 const DESKTOP_BUILD = join(ROOT, 'packages/desktop/build');
 const DESKTOP_RES   = join(ROOT, 'packages/desktop/resources');
-const WEB_ICONS     = join(ROOT, 'packages/web/public/icons');
+const WEB_ICONS      = join(ROOT, 'packages/web/public/icons');
+const BRAND          = join(ROOT, 'assets/brand');
 
-// Hex extracted from app-icon.svg's cls-1 fill (the badge background).
-// Used as the maskable PWA background so regular and maskable variants
-// read as the same brand on Android home screens.
-const MASKABLE_BG = '#1d1d1b';
+// app-icon.svg's badgeFill gradient (top to bottom). Reused here as an
+// opaque background for outputs that must carry zero transparent pixels:
+// the apple-touch-icon (iOS paints transparent corners black) and the
+// maskable PWA icon (Android launcher masks crop past the mark's own
+// bounding box, so anything outside it must already look like the badge).
+// Kept as hex constants rather than re-parsing app-icon.svg's <defs> —
+// the two files sharing a literal value is the intended coupling; if the
+// badge gradient ever changes, both need editing together regardless.
+const NAVY_GRADIENT_TOP = '#2E3D65';
+const NAVY_GRADIENT_BOTTOM = '#110222';
 
-// SVG render density. High enough to produce a clean intermediate for
-// the largest target (1024) from the smallest viewBox source (~100px).
-// Sharp/libvips downscales with Lanczos, so over-rendering then resizing
-// is fine and keeps output stable across all target sizes.
+// SVG render density. app-icon(-small).svg's viewBox is 256; mark(-small)
+// is 133x180. At density 1200, the 256 box pre-renders to ~3200px and the
+// 180-tall box to ~2250px — comfortably above every target here (largest
+// is the 1024 reference export), so every output is a downscale. Sharp/
+// libvips downscales with Lanczos, so over-rendering then resizing is
+// fine and keeps output stable across all target sizes.
 const SVG_DENSITY = 1200;
 
-// Every app-icon size renders from the 3D raster PNG sources; nothing
-// renders from the flat app-icon.svg. Set to 128 originally on the theory
-// that flat geometry reads crisper than the 3D render at favicon sizes —
-// but the flat mark's gradient sheen runs bright (#fff) to the badge
-// perimeter with no dark separation, so at 16/32 px it anti-aliases into a
-// white halo that reads as a border around the icon (reported in Safari
-// browser tabs; same defect in small Windows .ico / Linux launcher reps).
-// The committed 3D render frames the mark in a dark surround and stays
-// clean down to 16 px. Lanczos downscale from the 149 px @1x source is
-// sharp's standard high-quality resampler; the slight softness vs. a flat
-// vector render is the correct trade against the halo. Kept as a gate (not
-// hard-removed) so the SVG path can be re-enabled if a corrected flat mark
-// — one whose sheen doesn't reach the perimeter — is ever supplied.
-const RASTER_THRESHOLD = 0;
-
-// Rounded-square corner radius as a fraction of the side length. 0.22
-// matches the existing app-icon.svg geometry (rx=32.42 on a 147.46 viewBox
-// = 21.99 %) and sits within Apple's macOS app-icon template ratio
-// (~22.37 % on the 824×824 grid) — both produce visually identical
-// rounding at typical icon sizes.
-const SQUIRCLE_RADIUS_RATIO = 0.22;
-
-// Multi-resolution PNG sources for the 3D-rendered app icon. The x1/x2/x3
-// variants are the user-supplied @1x/@2x/@3x exports of the same render;
-// the 1024 variant is the full-resolution master. Each is independently
-// sampled at its native DPI rather than downscaled from a single master.
-// We pick the smallest source whose native dimension is ≥ the target
-// output size: minimises resampling distance (closer source resolution
-// → cleaner result), and the 1024 variant ensures every target ≤1024
-// is a downscale (no upscale anywhere, including the 1024 Linux output
-// and the .icns synthesis input).
-const APP_ICON_PNG_SOURCES = [
-  { key: 'appIconPngX1',   size: 149 },
-  { key: 'appIconPngX2',   size: 294 },
-  { key: 'appIconPngX3',   size: 440 },
-  { key: 'appIconPng1024', size: 1024 },
-];
+// App-icon outputs at this size or smaller render from app-icon-small.svg
+// instead of app-icon.svg. Per the brand spec, 16 and 32 are the only
+// sizes affected; the small variant's inset mark falls under the 1.5px
+// small-size legibility rule at those two sizes, which is accepted rather
+// than enlarging the inset (would require a different badge composition).
+const APP_ICON_SMALL_MAX = 32;
 
 // ---- helpers ----
 
 const loadSvg = (path) => readFileSync(path);
-const loadPng = (path) => readFileSync(path);
 
 async function renderPng(svg, size) {
   // Render SVG → square PNG at exact target size. fit: 'contain' preserves
-  // aspect ratio: wide-bbox SVGs (mark, mark-mono-dark) get transparent
-  // top/bottom padding instead of being stretched square.
+  // aspect ratio: wide-bbox SVGs (mark, mark-small, mark-mono-dark) get
+  // transparent top/bottom or left/right padding instead of being
+  // stretched square.
   return sharp(svg, { density: SVG_DENSITY })
     .resize(size, size, {
       fit: 'contain',
@@ -120,47 +98,27 @@ async function renderPng(svg, size) {
     .toBuffer();
 }
 
-function pickAppIconPngSource(sources, target) {
-  // Smallest source ≥ target; if every source is smaller, use the largest.
-  for (const s of APP_ICON_PNG_SOURCES) {
-    if (s.size >= target) return sources[s.key];
-  }
-  return sources[APP_ICON_PNG_SOURCES[APP_ICON_PNG_SOURCES.length - 1].key];
-}
-
-async function renderAppIconPngFromRaster(sources, size) {
-  const raster = pickAppIconPngSource(sources, size);
-  // fit: 'cover' is safe — every PNG source is square, so cover/contain
-  // produce identical pixels but cover avoids gratuitous transparent
-  // padding logic if a future variant ships non-square.
-  // kernel: lanczos3 is sharp's standard high-quality resampler for both
-  // up- and down-scaling; chosen explicitly for byte-stable determinism
-  // across sharp versions that change the default kernel.
-  const resized = await sharp(raster)
-    .resize(size, size, { fit: 'cover', kernel: sharp.kernel.lanczos3 })
-    .png({ compressionLevel: 9, palette: false })
-    .toBuffer();
-  // Squircle mask: clip corners to transparent so launchers / docks /
-  // homescreens that render the icon as-is produce the rounded silhouette
-  // they expect, instead of a hard-edged square. Apple's macOS template
-  // ratio is ~22.37 %; we use 22 % to match the geometry of the existing
-  // app-icon.svg (rx=32.42/147.46 ≈ 21.99 %).
-  const r = Math.round(size * SQUIRCLE_RADIUS_RATIO);
-  const mask = Buffer.from(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}"><rect x="0" y="0" width="${size}" height="${size}" rx="${r}" ry="${r}" fill="#fff"/></svg>`,
+function navyGradientSvg(size) {
+  // Full-bleed vertical gradient rect, no rounding — the badge shape
+  // itself provides the rounding when composited on top; this is only
+  // the fill that shows through the badge's transparent corners (or,
+  // for the maskable icon, the whole canvas outside the mark).
+  return Buffer.from(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}">` +
+      `<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="${size}" gradientUnits="userSpaceOnUse">` +
+      `<stop stop-color="${NAVY_GRADIENT_TOP}"/><stop offset="1" stop-color="${NAVY_GRADIENT_BOTTOM}"/>` +
+      `</linearGradient></defs><rect width="${size}" height="${size}" fill="url(#g)"/></svg>`,
   );
-  return sharp(resized)
-    .composite([{ input: mask, blend: 'dest-in' }])
-    .png({ compressionLevel: 9, palette: false })
-    .toBuffer();
 }
 
-async function renderAppIcon(sources, size) {
-  // Hybrid: raster ≥ threshold, vector below it. See RASTER_THRESHOLD.
-  if (size >= RASTER_THRESHOLD) {
-    return renderAppIconPngFromRaster(sources, size);
+async function renderAppIconPng(icons, size) {
+  if (size <= APP_ICON_SMALL_MAX) return renderPng(icons.appIconSmall, size);
+  if (size === 1024) {
+    // Reuse the once-rendered 1024 buffer computed in main() instead of
+    // re-invoking sharp — same deterministic bytes, one fewer rasterize.
+    return icons.appIcon1024;
   }
-  return renderPng(sources.appIcon, size);
+  return renderPng(icons.appIcon, size);
 }
 
 async function writePng(path, svg, size) {
@@ -169,9 +127,9 @@ async function writePng(path, svg, size) {
   writeFileSync(path, buf);
 }
 
-async function writeAppIconPng(path, sources, size) {
+async function writeAppIconPng(path, icons, size) {
   mkdirSync(dirname(path), { recursive: true });
-  const buf = await renderAppIcon(sources, size);
+  const buf = await renderAppIconPng(icons, size);
   writeFileSync(path, buf);
 }
 
@@ -182,61 +140,62 @@ async function writeIco(path, svg, sizes) {
   writeFileSync(path, ico);
 }
 
-async function writeAppIconIco(path, sources, sizes) {
-  // Every pixel size routes through renderAppIcon (3D raster, squircle-
-  // masked) so the whole .ico — taskbar/Properties small reps through the
-  // Alt+Tab / explorer large reps — shares one faithful render. Windows
-  // auto-picks the closest size for the active DPI. (Small reps were SVG-
-  // sourced until the flat mark's perimeter halo forced the raster switch;
-  // see RASTER_THRESHOLD.)
+async function writeAppIconIco(path, icons, sizes) {
+  // Every pixel size routes through renderAppIconPng, so the whole .ico —
+  // taskbar/Properties small reps through the Alt+Tab / explorer large
+  // reps — shares the same vector rendering rule (small ↔ app-icon-small).
+  // Windows auto-picks the closest size for the active DPI.
   mkdirSync(dirname(path), { recursive: true });
-  const buffers = await Promise.all(sizes.map((s) => renderAppIcon(sources, s)));
+  const buffers = await Promise.all(sizes.map((s) => renderAppIconPng(icons, s)));
   const ico = await pngToIco(buffers);
   writeFileSync(path, ico);
 }
 
-async function writeAppIconIcns(path, sources) {
+async function writeAppIconIcns(path, icons) {
   // png2icons.createICNS takes a single high-res PNG and synthesises the
   // full 10-rep iconset internally (16/16@2x, 32/32@2x, 128/128@2x,
-  // 256/256@2x, 512/512@2x). We feed it the 1024 raster output (designed
-  // 3D render, squircle-masked) and accept that the synthesised 16/32 reps
-  // are downsampled from raster rather than re-rendered from SVG. macOS
-  // surfaces .icns reps mostly at ≥128 (Dock, Mission Control, Launchpad)
-  // — the only place the small-rep softness shows is Finder column view,
-  // a worthwhile trade for a single-file .icns build that matches every
-  // other app-icon consumer's design intent.
+  // 256/256@2x, 512/512@2x). Feed it the 1024 vector render — every rep
+  // it derives is a downscale of a render already sized generously above
+  // any target (see SVG_DENSITY), so none of the synthesised reps are
+  // softer than a from-scratch render at that size would be.
   mkdirSync(dirname(path), { recursive: true });
-  const src = await renderAppIcon(sources, 1024);
-  const icns = png2icons.createICNS(src, png2icons.BICUBIC, 0);
+  const icns = png2icons.createICNS(icons.appIcon1024, png2icons.BICUBIC, 0);
   if (!icns) throw new Error(`png2icons.createICNS returned null for ${path}`);
   writeFileSync(path, icns);
 }
 
-async function writeCenteredMarkPng(path, markSvg, canvas, scale, bgHex) {
-  // Compose: square canvas + bare mark centred at scale × canvas.
-  //   bgHex = hex string → opaque background (PWA maskable: survives
-  //                       Android launcher masks like Samsung One UI's
-  //                       full circle, Pixel's squircle).
-  //   bgHex = null/undefined → transparent canvas (in-app slots whose
-  //                            container provides the visual frame, e.g.
-  //                            SpaceSidebar's 40×40 squircle tile).
-  const innerSize = Math.round(canvas * scale);
-  const inner = await sharp(markSvg, { density: SVG_DENSITY })
-    .resize(innerSize, innerSize, {
-      fit: 'contain',
-      background: { r: 0, g: 0, b: 0, alpha: 0 },
-    })
+async function writeAppleTouchIcon(path, icons, size) {
+  // Composite the app icon over a full-bleed copy of its own badge
+  // gradient. The badge's rounded corners are transparent in the SVG
+  // render; painting the identical gradient underneath means those
+  // corners read as continuous badge, not a hard-edged cutout, while the
+  // final PNG carries no transparent pixel (iOS paints transparent
+  // corners black, which would look like a defect here).
+  const bg = navyGradientSvg(size);
+  const icon = await renderAppIconPng(icons, size);
+  mkdirSync(dirname(path), { recursive: true });
+  const composed = await sharp(bg)
+    .composite([{ input: icon }])
     .png({ compressionLevel: 9, palette: false })
     .toBuffer();
+  writeFileSync(path, composed);
+}
+
+async function writeMaskableIcon(path, markSvg, canvas, heightScale) {
+  // PWA maskable icon: navy gradient fills the full canvas (Android
+  // launcher masks — circle, squircle, rounded-square — crop arbitrarily
+  // past the icon's own bounding box, so the badge colour must extend to
+  // every edge), with the bare mark centred at heightScale × canvas
+  // height. Scaling by height (not by fitting a square) keeps the mark's
+  // proportions identical to every other rendering of it.
+  const innerHeight = Math.round(canvas * heightScale);
+  const inner = await sharp(markSvg, { density: SVG_DENSITY })
+    .resize({ height: innerHeight })
+    .png({ compressionLevel: 9, palette: false })
+    .toBuffer();
+  const bg = navyGradientSvg(canvas);
   mkdirSync(dirname(path), { recursive: true });
-  const composed = await sharp({
-    create: {
-      width: canvas,
-      height: canvas,
-      channels: 4,
-      background: bgHex ?? { r: 0, g: 0, b: 0, alpha: 0 },
-    },
-  })
+  const composed = await sharp(bg)
     .composite([{ input: inner, gravity: 'center' }])
     .png({ compressionLevel: 9, palette: false })
     .toBuffer();
@@ -250,23 +209,22 @@ async function main() {
   // a downstream sharp error with a cryptic ENOENT.
   for (const [, path] of Object.entries(SRC)) {
     if (!existsSync(path)) {
-      throw new Error(
-        `Missing source SVG: ${relative(ROOT, path)} — copy from Artworks-Backspace/SVG/`,
-      );
+      throw new Error(`Missing source SVG: ${relative(ROOT, path)} — see assets/brand/`);
     }
   }
 
   const appIcon      = loadSvg(SRC.appIcon);
+  const appIconSmall = loadSvg(SRC.appIconSmall);
   const mark         = loadSvg(SRC.mark);
+  const markSmall    = loadSvg(SRC.markSmall);
   const markMonoDark = loadSvg(SRC.markMonoDark);
 
-  const appIconSources = {
-    appIcon,
-    appIconPngX1:   loadPng(SRC.appIconPngX1),
-    appIconPngX2:   loadPng(SRC.appIconPngX2),
-    appIconPngX3:   loadPng(SRC.appIconPngX3),
-    appIconPng1024: loadPng(SRC.appIconPng1024),
-  };
+  // Rendered once at the top of the pipeline: it's both the .icns
+  // synthesis input and the standalone reference export, and every
+  // app-icon output ≥1024 (there's only the one) routes through it.
+  const appIcon1024 = await renderPng(appIcon, 1024);
+
+  const icons = { appIcon, appIconSmall, appIcon1024 };
 
   const written = [];
   const trace = (label, path, info) =>
@@ -277,28 +235,35 @@ async function main() {
       path: relative(ROOT, path),
     });
 
+  // --- Brand: reference export ---
+  mkdirSync(BRAND, { recursive: true });
+  writeFileSync(join(BRAND, 'app-icon-1024.png'), appIcon1024);
+  trace('brand-1024', join(BRAND, 'app-icon-1024.png'), '1024x1024 (reference)');
+
   // --- Desktop: application icon ---
   const linuxSizes = [16, 32, 48, 64, 128, 256, 512, 1024];
   for (const s of linuxSizes) {
     const out = join(DESKTOP_BUILD, `icons/${s}x${s}.png`);
-    await writeAppIconPng(out, appIconSources, s);
-    trace('linux-png', out, `${s}x${s} (${s >= RASTER_THRESHOLD ? 'raster' : 'svg'})`);
+    await writeAppIconPng(out, icons, s);
+    trace('linux-png', out, `${s}x${s} (${s <= APP_ICON_SMALL_MAX ? 'small' : 'app-icon'})`);
   }
 
-  await writeAppIconPng(join(DESKTOP_BUILD, 'icon.png'), appIconSources, 512);
-  trace('build-icon', join(DESKTOP_BUILD, 'icon.png'), '512x512 (raster)');
+  await writeAppIconPng(join(DESKTOP_BUILD, 'icon.png'), icons, 512);
+  trace('build-icon', join(DESKTOP_BUILD, 'icon.png'), '512x512');
 
-  await writeAppIconIcns(join(DESKTOP_BUILD, 'icon.icns'), appIconSources);
-  trace('mac-icns', join(DESKTOP_BUILD, 'icon.icns'), '10-rep iconset (raster)');
+  await writeAppIconIcns(join(DESKTOP_BUILD, 'icon.icns'), icons);
+  trace('mac-icns', join(DESKTOP_BUILD, 'icon.icns'), '10-rep iconset');
 
   await writeAppIconIco(
     join(DESKTOP_BUILD, 'icon.ico'),
-    appIconSources,
+    icons,
     [16, 24, 32, 48, 64, 128, 256],
   );
-  trace('win-ico', join(DESKTOP_BUILD, 'icon.ico'), '7 sizes (raster)');
+  trace('win-ico', join(DESKTOP_BUILD, 'icon.ico'), '7 sizes');
 
   // --- Desktop: tray ---
+  // Unchanged for now: mark-mono-dark.svg / mark.svg, not the app-icon
+  // badge. Task 3 swaps these sources for the tray-tuned mark.
   await writePng(join(DESKTOP_RES, 'tray-iconTemplate.png'), markMonoDark, 22);
   trace('tray-mac-1x', join(DESKTOP_RES, 'tray-iconTemplate.png'), '22x22');
 
@@ -312,43 +277,40 @@ async function main() {
   trace('tray-linux', join(DESKTOP_RES, 'tray-icon.png'), '22x22');
 
   // --- Web: favicons + PWA + in-app ---
-  await writeAppIconPng(join(WEB_ICONS, 'favicon-16.png'), appIconSources, 16);
-  trace('favicon-16', join(WEB_ICONS, 'favicon-16.png'), '16 (raster)');
+  // Favicons render from mark-small.svg on transparent, not the app-icon
+  // badge: at 16/32 the badge's shadow and stroke overlay add nothing but
+  // noise, and a bare glyph filling the box reads better in a browser tab.
+  await writePng(join(WEB_ICONS, 'favicon-16.png'), markSmall, 16);
+  trace('favicon-16', join(WEB_ICONS, 'favicon-16.png'), '16 (mark-small)');
 
-  await writeAppIconPng(join(WEB_ICONS, 'favicon-32.png'), appIconSources, 32);
-  trace('favicon-32', join(WEB_ICONS, 'favicon-32.png'), '32 (raster)');
+  await writePng(join(WEB_ICONS, 'favicon-32.png'), markSmall, 32);
+  trace('favicon-32', join(WEB_ICONS, 'favicon-32.png'), '32 (mark-small)');
 
-  await writeAppIconPng(join(WEB_ICONS, 'apple-touch-icon.png'), appIconSources, 180);
-  trace('apple-touch', join(WEB_ICONS, 'apple-touch-icon.png'), '180 (raster)');
+  await writeAppleTouchIcon(join(WEB_ICONS, 'apple-touch-icon.png'), icons, 180);
+  trace('apple-touch', join(WEB_ICONS, 'apple-touch-icon.png'), '180 (app-icon, opaque)');
 
-  await writeAppIconPng(join(WEB_ICONS, 'icon-192.png'), appIconSources, 192);
-  trace('pwa-192', join(WEB_ICONS, 'icon-192.png'), '192 (raster)');
+  await writeAppIconPng(join(WEB_ICONS, 'icon-192.png'), icons, 192);
+  trace('pwa-192', join(WEB_ICONS, 'icon-192.png'), '192 (app-icon)');
 
-  await writeAppIconPng(join(WEB_ICONS, 'icon-512.png'), appIconSources, 512);
-  trace('pwa-512', join(WEB_ICONS, 'icon-512.png'), '512 (raster)');
+  await writeAppIconPng(join(WEB_ICONS, 'icon-512.png'), icons, 512);
+  trace('pwa-512', join(WEB_ICONS, 'icon-512.png'), '512 (app-icon)');
 
-  await writeCenteredMarkPng(
-    join(WEB_ICONS, 'icon-maskable-512.png'),
-    mark,
-    512,
-    0.6,
-    MASKABLE_BG,
-  );
-  trace('pwa-maskable', join(WEB_ICONS, 'icon-maskable-512.png'), `512 (60% mark on ${MASKABLE_BG})`);
+  await writeMaskableIcon(join(WEB_ICONS, 'icon-maskable-512.png'), mark, 512, 0.6);
+  trace('pwa-maskable', join(WEB_ICONS, 'icon-maskable-512.png'), '512 (navy gradient, 60% mark)');
 
-  // Logo for the SpaceSidebar home tile: routes through the standard
-  // app-icon hybrid path (raster ≥128, squircle-masked) — same designed
-  // 3D render as desktop launcher / dock / homescreen, just sized for
-  // the sidebar slot. The squircle's 22 %-radius transparent corners are
-  // fully contained by the sidebar's own CSS mask (`rounded-[20px → 13px]`
-  // on a 40×40 tile = 50 % → 32.5 % radius — both more aggressive than
-  // 22 %), so no transparent gaps show against the `#1a1a23` surface.
-  // The new raster's vignetted dark-gradient corners visually replace the
-  // legacy `#1d1d1b → #000000` SVG fill swap that was needed to make the
-  // flat badge read as an intentional dark tile rather than a warm-grey
-  // rectangle — the 3D render carries its own dark surround.
-  await writeAppIconPng(join(WEB_ICONS, 'logo.png'), appIconSources, 256);
-  trace('in-app-logo', join(WEB_ICONS, 'logo.png'), '256 (raster, sidebar tile)');
+  // In-app logo for the SpaceSidebar home tile: same app-icon render as
+  // every other ≥128px consumer (dock, launcher, homescreen), just sized
+  // for the sidebar slot. The badge's own rounded corners and dark
+  // gradient read cleanly against the sidebar's `#1a1a23` surface without
+  // any extra masking here.
+  await writeAppIconPng(join(WEB_ICONS, 'logo.png'), icons, 256);
+  trace('in-app-logo', join(WEB_ICONS, 'logo.png'), '256 (app-icon, sidebar tile)');
+
+  // logo-mark.svg is a byte copy of mark.svg — Task 1 measured the arrow
+  // channel at a 25px sidebar render as ~1.95 device px, clearing the
+  // 1.5px small-size legibility rule, so no bolder variant is needed here.
+  copyFileSync(SRC.mark, join(WEB_ICONS, 'logo-mark.svg'));
+  trace('logo-mark-svg', join(WEB_ICONS, 'logo-mark.svg'), 'copy of mark.svg');
 
   // --- Summary ---
   const fmtBytes = (n) => {
@@ -357,10 +319,10 @@ async function main() {
     return `${(n / (1024 * 1024)).toFixed(1)} MB`;
   };
   console.log('\nGenerated icons:');
-  console.log('  ' + 'kind'.padEnd(14) + 'info'.padEnd(30) + 'size'.padStart(10) + '  path');
-  console.log('  ' + '----'.padEnd(14) + '----'.padEnd(30) + '----'.padStart(10) + '  ----');
+  console.log('  ' + 'kind'.padEnd(14) + 'info'.padEnd(32) + 'size'.padStart(10) + '  path');
+  console.log('  ' + '----'.padEnd(14) + '----'.padEnd(32) + '----'.padStart(10) + '  ----');
   for (const r of written) {
-    console.log('  ' + r.label.padEnd(14) + r.info.padEnd(30) + fmtBytes(r.bytes).padStart(10) + '  ' + r.path);
+    console.log('  ' + r.label.padEnd(14) + r.info.padEnd(32) + fmtBytes(r.bytes).padStart(10) + '  ' + r.path);
   }
   const totalBytes = written.reduce((sum, r) => sum + r.bytes, 0);
   console.log(`\n${written.length} files written, ${fmtBytes(totalBytes)} total.`);

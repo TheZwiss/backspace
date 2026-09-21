@@ -37,18 +37,33 @@ git history clean.
 
 ## Sources
 
-Every app-icon output renders from the 3D-rendered raster sources — including favicons and the small `.ico` / Linux reps. The flat `app-icon.svg` is retained as a source but no longer rendered: at favicon sizes its gradient mark's bright sheen runs to the badge perimeter and anti-aliases into a white halo that reads as a border around the icon (reported in Safari tabs; same defect in small Windows/Linux reps). The closest-fit picker selects the smallest raster source whose native dimension is ≥ the target output size, so every output is a downscale — no upscale anywhere. See `RASTER_THRESHOLD` in `gen-icons.mjs` for the gate.
+Every app-icon output renders straight from vector — there is no raster
+source and no post-render masking. `app-icon.svg` already carries its own
+squircle badge, drop shadow and inner shadow (rendered through SVG
+`<filter>`, honoured by librsvg), so sharp renders it at the target size
+and that's the pixel output. The only routing decision is size: 16 and 32
+render from `app-icon-small.svg` instead, whose mark is a bolder,
+simplified variant of the same glyph in the same badge geometry — at
+16/32 the standard mark's inset strokes and soft-light overlay read as
+noise. See `APP_ICON_SMALL_MAX` in `gen-icons.mjs`.
 
 | Brand source                       | Drives                                                                              |
-|------------------------------------|-------------------------------------------------------------------------------------|
-| `assets/brand/app-icon.svg`        | Retained as the flat archival source; not rendered (gated off — see `RASTER_THRESHOLD`). Re-enable only with a corrected flat mark whose sheen stops short of the perimeter. |
-| `assets/brand/app-icon-x1.png` (149) | App-icon outputs ≤149 (favicons 16/32, Linux 16/32/48/64/128, Windows `.ico` 16/24/32/48/64/128 reps) |
-| `assets/brand/app-icon-x2.png` (294) | App-icon outputs >149 and ≤294 (Linux 256, Windows `.ico` 256 rep, apple-touch 180, PWA 192, in-app `logo.png` 256) |
-| `assets/brand/app-icon-x3.png` (440) | App-icon outputs >294 and ≤440 (currently unused — reserved for future intermediate targets) |
-| `assets/brand/app-icon-1024.png`     | App-icon outputs >440 (Linux 512, Linux 1024, `build/icon.png` 512, PWA 512, `.icns` synthesis input 1024) |
-| `assets/brand/mark.svg`              | Win/Linux tray, PWA maskable inner mark                                            |
-| `assets/brand/mark-mono-dark.svg`    | macOS menu-bar template (alpha + black)                                            |
+|------------------------------------|--------------------------------------------------------------------------------------|
+| `assets/brand/app-icon.svg`         | App-icon outputs >32px: Linux 48–1024, `build/icon.png`, `.icns`/`.ico` reps ≥48, apple-touch-icon, PWA 192/512, in-app `logo.png`, the `app-icon-1024.png` reference export |
+| `assets/brand/app-icon-small.svg`   | App-icon outputs at 16 and 32px: Linux 16/32, `.ico` reps 16/24/32                   |
+| `assets/brand/mark.svg`             | Win/Linux tray (`tray-icon.ico`/`.png`), PWA maskable inner mark, `logo-mark.svg` (byte copy) |
+| `assets/brand/mark-small.svg`       | Web favicons 16/32 (transparent, glyph fills the box)                               |
+| `assets/brand/mark-mono-dark.svg`   | macOS menu-bar template (alpha + black)                                             |
 
-After raster resize, every app-icon raster output is masked with a 22 %-radius rounded-square (matches Apple's macOS template ratio and the existing `app-icon.svg` geometry of `rx=32.42 / 147.46 ≈ 21.99 %`) so launchers/docks/homescreens that render the icon as-is produce the rounded silhouette they expect.
+Two outputs composite the app icon or mark over an opaque copy of the
+badge's own navy gradient (`#2E3D65` → `#110222`, matching `app-icon.svg`'s
+`badgeFill`) instead of leaving the canvas transparent:
+
+- `apple-touch-icon.png` — the app icon full-bleed on the gradient, so its
+  rounded corners read as continuous badge instead of the transparent
+  pixels iOS would otherwise paint black.
+- `icon-maskable-512.png` — the gradient fills the whole canvas (Android
+  launcher masks crop arbitrarily past the icon's own bounds) with the
+  bare mark centred at 60% of the canvas height.
 
 `Artworks-Backspace/` is the design archive — never read by this script.
