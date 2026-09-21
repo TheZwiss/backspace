@@ -52,11 +52,10 @@ const OUT_PATHS = [
 const WIDTH = 1280;
 const HEIGHT = 640;
 
-// Ground's bottom stop (navyGradientSvg's NAVY_GRADIENT_BOTTOM in
-// gen-icons.mjs) — used only as the flatten background for any stray
-// transparent pixel Chrome's screenshot might carry; the page itself
-// paints opaque all the way to its own edges.
-const FLATTEN_BG = '#110222';
+// The template's flat ground colour — used only as the flatten
+// background for any stray transparent pixel Chrome's screenshot might
+// carry; the page itself paints opaque all the way to its own edges.
+const FLATTEN_BG = '#0b0b10';
 
 const DEFAULT_CHROME_MAC =
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';

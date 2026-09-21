@@ -128,12 +128,17 @@ The mark is the backspace-key glyph. Vector masters live in `assets/brand/`;
 every app icon, favicon, tray icon and social preview is generated from
 them, never hand-edited.
 
+Two flat colours, no material: the mark is a single flat fill, `#7c6cf6`
+on dark grounds or `#ffffff` on a lavender tile or squircle. No gradient,
+stroke, glow, shadow, blur or blend anywhere the mark appears.
+
 | Master | Feeds |
 |--------|-------|
-| `app-icon.svg` | App icon outputs above 32px (the full badge composition) |
-| `app-icon-small.svg` | App icon outputs at 16/32px (bolder, simplified mark) |
-| `mark.svg` | `packages/web/public/icons/logo-mark.svg`, the PWA maskable icon's inner mark, and any standalone render above 32px |
+| `app-icon.svg` | App icon outputs above 32px — flat lavender squircle path plus a flat white glyph path, no `<defs>`, no filter |
+| `app-icon-small.svg` | App icon outputs at 16/32px (bolder, simplified mark, same flat composition) |
+| `mark.svg` | Standalone flat-lavender renders on dark grounds — e.g. the social preview |
 | `mark-small.svg` | Favicons, the colour tray icons (Windows `.ico`, Linux PNG), and any standalone render at 32px or smaller |
+| `mark-mono-light.svg` | The PWA maskable icon's inner mark and `packages/web/public/icons/logo-mark.svg` — the flat white glyph, for rendering on a lavender tile or squircle |
 | `mark-tray.svg` | The macOS menu-bar template tray icon, tuned for 22px |
 | `mark-mono-dark.svg` | Mono silhouette master; no pipeline output today |
 
@@ -148,8 +153,7 @@ even with no dependency change. See `scripts/gen-icons.README.md` and
 
 The brand primary is `#0061ff`. It is a web/app/desktop primary, not a
 pastel accent, and is exposed as `--accent-primary` (see Color Palette
-above); the navy page gradient used on the marketing site is a
-website-only choice and does not apply here.
+above).
 
 ---
 

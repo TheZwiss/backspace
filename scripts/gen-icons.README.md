@@ -38,32 +38,36 @@ git history clean.
 ## Sources
 
 Every app-icon output renders straight from vector: there is no raster
-source and no post-render masking. `app-icon.svg` already carries its own
-squircle badge, drop shadow and inner shadow (rendered through SVG
-`<filter>`, honoured by librsvg), so sharp renders it at the target size
-and that's the pixel output. The only routing decision is size: 16 and 32
+source and no post-render masking. `app-icon.svg` is a flat composition —
+a lavender (`#7c6cf6`) squircle path plus a white glyph path, no `<defs>`,
+no filter, no gradient — so sharp renders it at the target size and
+that's the pixel output. The only routing decision is size: 16 and 32
 render from `app-icon-small.svg` instead, whose mark is a bolder,
 simplified variant of the same glyph in the same badge geometry. At
-16/32 the standard mark's inset strokes and soft-light overlay read as
-noise. See `APP_ICON_SMALL_MAX` in `gen-icons.mjs`.
+16/32 the standard mark's inset strokes read as noise at that size. See
+`APP_ICON_SMALL_MAX` in `gen-icons.mjs`.
 
-| Brand source                       | Drives                                                                              |
-|------------------------------------|--------------------------------------------------------------------------------------|
-| `assets/brand/app-icon.svg`         | App-icon outputs >32px: Linux 48–1024, `build/icon.png`, `.ico` reps ≥48, apple-touch-icon, PWA 192/512, in-app `logo.png`, the `app-icon-1024.png` reference export; also every `.icns` rep, 16/32 included, since png2icons synthesises the whole iconset from the single 1024 render |
-| `assets/brand/app-icon-small.svg`   | App-icon outputs at 16 and 32px: Linux 16/32, `.ico` reps 16/24/32 (the `.icns` set does not use this file)            |
-| `assets/brand/mark.svg`             | PWA maskable inner mark, `logo-mark.svg` (byte copy)                                |
-| `assets/brand/mark-small.svg`       | Web favicons 16/32 (transparent, glyph fills the box), Win/Linux tray (`tray-icon.ico`/`.png`, colour) |
-| `assets/brand/mark-tray.svg`        | macOS menu-bar template + @2x (alpha + black; 18px body inset in the 22px canvas, 3px arrow channel) |
+| Brand source                          | Drives                                                                              |
+|----------------------------------------|--------------------------------------------------------------------------------------|
+| `assets/brand/app-icon.svg`             | App-icon outputs >32px: Linux 48–1024, `build/icon.png`, `.ico` reps ≥48, apple-touch-icon, PWA 192/512, in-app `logo.png`, the `app-icon-1024.png` reference export; also every `.icns` rep, 16/32 included, since png2icons synthesises the whole iconset from the single 1024 render |
+| `assets/brand/app-icon-small.svg`       | App-icon outputs at 16 and 32px: Linux 16/32, `.ico` reps 16/24/32 (the `.icns` set does not use this file)            |
+| `assets/brand/mark-small.svg`           | Web favicons 16/32 (transparent, glyph fills the box), Win/Linux tray (`tray-icon.ico`/`.png`, colour) |
+| `assets/brand/mark-mono-light.svg`      | PWA maskable inner mark (white glyph on the flat lavender ground), `logo-mark.svg` (byte copy, for the sidebar's lavender home tile) |
+| `assets/brand/mark-tray.svg`            | macOS menu-bar template + @2x (alpha + black; 18px body inset in the 22px canvas, 3px arrow channel) |
+
+`assets/brand/mark.svg` (the flat-lavender standalone glyph, for use on
+dark grounds) is not read by this script — it feeds `gen-social-preview.mjs`
+directly.
 
 Two outputs composite the app icon or mark over an opaque copy of the
-badge's own navy gradient (`#2E3D65` → `#110222`, matching `app-icon.svg`'s
-`badgeFill`) instead of leaving the canvas transparent:
+badge's own flat lavender fill (`#7c6cf6`, matching `app-icon.svg`'s
+squircle) instead of leaving the canvas transparent:
 
-- `apple-touch-icon.png`: the app icon full-bleed on the gradient, so its
-  rounded corners read as continuous badge instead of the transparent
+- `apple-touch-icon.png`: the app icon full-bleed on the flat ground, so
+  its rounded corners read as continuous badge instead of the transparent
   pixels iOS would otherwise paint black.
-- `icon-maskable-512.png`: the gradient fills the whole canvas (Android
-  launcher masks crop arbitrarily past the icon's own bounds) with the
-  bare mark centred at 60% of the canvas height.
+- `icon-maskable-512.png`: the flat lavender fills the whole canvas
+  (Android launcher masks crop arbitrarily past the icon's own bounds)
+  with the white mono mark centred at 60% of the canvas height.
 
 `Artworks-Backspace/` is the design archive — never read by this script.
