@@ -702,6 +702,11 @@ const DRAG_FIRST_CHART = `(async function () {
   var width = select === null ? 0 : Math.round(select.getBoundingClientRect().width);
   fire(document, "mouseup", to);
   await frame();
+  /* A real pointer leaves the chart after the drag, and the page's legends
+   * only return to their resting day on a leave; a drag that never left
+   * would carry the drag's end day into every later legend reading. */
+  fire(over, "mouseleave", to);
+  await frame();
   return "dragged from " + Math.round(from) + " to " + Math.round(to) +
     ", selection " + width + "px wide at mouseup";
 })()`;
@@ -747,6 +752,14 @@ const FOLD_VIEWPORTS = [[1440, 900], [1280, 720]];
  * uPlot listens on. Measured per viewport, inside the sweep, because the
  * wrap that causes the jump depends on the width. The cursor is taken off
  * again afterwards so the next reading starts from rest.
+ *
+ * The legend is read three times: at rest, under the pointer, and after the
+ * pointer leaves. At rest a legend shows the chart's latest measured day,
+ * dated, rather than dashes; under the pointer it shows the hovered day; and
+ * after the leave it is back on the latest day. The third reading is the one
+ * worth having: uPlot clears the legend on the way out and the page has to
+ * put the resting day back, so a page that showed the right thing on load and
+ * dashes after the first hover would pass the first two readings.
  */
 const HOVER_STABILITY = `(async function () {
   function frame() {
@@ -766,6 +779,35 @@ const HOVER_STABILITY = `(async function () {
   var over = overs[overs.length - 1];
   var card = over.closest(".chart-card");
   var title = card === null ? null : card.querySelector(".chart-title");
+  function legendOf() {
+    return card === null ? [] : Array.prototype.map.call(
+      card.querySelectorAll(".u-legend .u-value"), function (v) { return v.textContent; });
+  }
+  /* What the resting legend should read, from the plot's own data: the
+   * last x at which any y series holds a value, as a UTC day, then each
+   * series' value there. Reached through the cursor-sync group like every
+   * other instance reading in this file. */
+  var expected = null;
+  if (typeof uPlot !== "undefined" && typeof uPlot.sync === "function") {
+    var plots = uPlot.sync("insights-time").plots;
+    for (var p = 0; p < plots.length; p++) {
+      if (plots[p].over !== over) continue;
+      var d = plots[p].data;
+      for (var j = d[0].length - 1; j >= 0 && expected === null; j--) {
+        for (var k = 1; k < d.length; k++) {
+          if (d[k][j] === null || d[k][j] === undefined) continue;
+          var day = new Date(d[0][j] * 1000);
+          expected = [day.toISOString().slice(0, 10)];
+          for (var m = 1; m < d.length; m++) {
+            var v = d[m][j];
+            expected.push(v === null || v === undefined ? "not measured" : String(v));
+          }
+          break;
+        }
+      }
+    }
+  }
+  var restLegend = legendOf();
   var rest = heights();
   var topBefore = Math.round(over.getBoundingClientRect().top + window.scrollY);
   var box = over.getBoundingClientRect();
@@ -775,8 +817,7 @@ const HOVER_STABILITY = `(async function () {
   }));
   await frame();
   await frame();
-  var legendValues = card === null ? [] : Array.prototype.map.call(
-    card.querySelectorAll(".u-legend .u-value"), function (v) { return v.textContent; });
+  var legendValues = legendOf();
   var hovered = heights();
   var topAfter = Math.round(over.getBoundingClientRect().top + window.scrollY);
   var changed = [];
@@ -786,9 +827,13 @@ const HOVER_STABILITY = `(async function () {
   }
   over.dispatchEvent(new MouseEvent("mouseleave", { bubbles: false, cancelable: true, view: window }));
   await frame();
+  await frame();
   return {
     hovered: title === null ? "?" : title.textContent.replace(/\\s+/g, " ").trim(),
+    expected: expected,
+    restLegend: restLegend,
     legendValues: legendValues,
+    leftLegend: legendOf(),
     cards: rest.length,
     changed: changed,
     shift: topAfter - topBefore
@@ -1233,6 +1278,15 @@ async function main() {
       + `(legend read ${JSON.stringify(h.legendValues)}), ${h.cards} cards measured, `
       + `${h.changed.length} changed height`);
     for (const c of h.changed) console.log(`    ${c}`);
+    if (h.expected === null) {
+      console.log('    resting legend: NO EXPECTATION, the plot was not reached through the sync group');
+    } else {
+      const want = JSON.stringify(h.expected);
+      const same = (got) => JSON.stringify(got) === want ? 'MATCH' : 'DIFFERS';
+      console.log(`    latest measured day from the data ${want}; legend at rest `
+        + `${JSON.stringify(h.restLegend)} ${same(h.restLegend)}; after the pointer left `
+        + `${JSON.stringify(h.leftLegend)} ${same(h.leftLegend)}`);
+    }
   }
 
   console.log('\n=== zoom sync ===');

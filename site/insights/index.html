@@ -3711,13 +3711,15 @@ footer a:hover { color: var(--txt); }
   /*
    * The live legend readout.
    *
-   * uPlot calls this with `idx === null` when the cursor is off the plot, and
-   * with a real index when it is on it. The two cases must not print the same
-   * words: "not measured" with no cursor anywhere would announce that the
-   * whole series is unmeasured, which is a claim about the archive rather than
-   * about the pointer. So no cursor is a dash — the page's own "nothing to
-   * show here" — and only a selected day with a null value says it was not
-   * measured. A measured 0 prints "0".
+   * uPlot calls this with a real index when the legend has a day to show and
+   * with `idx === null` when it has none. With the resting state below, none
+   * means the pointer is on some chart and this chart has no point for that
+   * day. The two cases must not print the same words: "not measured" for a
+   * day this chart never covered would announce that the series is
+   * unmeasured, which is a claim about the archive rather than about the
+   * pointer. So no day is a dash — the page's own "nothing to show here" —
+   * and only a covered day with a null value says it was not measured. A
+   * measured 0 prints "0".
    */
   function seriesValue(u, value, seriesIdx, idx) {
     if (idx === null || idx === undefined) return I.DASH;
@@ -3728,6 +3730,102 @@ footer a:hover { color: var(--txt); }
   function xValue(u, value, seriesIdx, idx) {
     if (idx === null || idx === undefined || value === null || value === undefined) return I.DASH;
     return I.formatDay(value * 1000);
+  }
+
+  /*
+   * The legend's resting state: the latest measured day.
+   *
+   * uPlot's live legend is a cursor readout, so with no pointer on the plot
+   * it shows nothing, and every chart on the page sat under a row of dashes
+   * until someone hovered it. The reading a chart owes at rest is its most
+   * recent measurement, dated: the Date cell names the day, so a reader sees
+   * "2026-09-20 · Views: 59" and not a bare figure they must guess the day
+   * of.
+   *
+   * Two states, and the boundary between them is the pointer, not the
+   * cursor. Pointer on no chart: every legend shows its own latest measured
+   * day. Pointer on a chart: the page-wide cursor sync puts the hovered day
+   * in every legend, and a chart that does not cover that day shows a dash,
+   * which is the honest answer, rather than quietly falling back to its own
+   * latest day under a different date. So the hook below restores the
+   * resting index only when nothing is hovered, and `restAll` restores every
+   * plot when the pointer leaves one.
+   *
+   * The pointer is tracked here rather than read off uPlot because uPlot
+   * resets its legend to null for more reasons than a leave (a zoom, a
+   * double-click, a sync from another plot), and the one question the
+   * resting state turns on is whether anyone is pointing at anything. The
+   * leave listener runs after uPlot's own, so the hook alone would see the
+   * pointer still present when uPlot clears the legend on the way out;
+   * `restAll` after the listener covers that, and the hook covers every other
+   * path. Both are cheap and idempotent, so the overlap costs nothing.
+   *
+   * The resting index is the last x position at which ANY y series holds a
+   * value, computed once per plot from data that is fixed for its life. A
+   * series that is null there prints "not measured" for that day, which is
+   * exactly what it is. A plot with no value anywhere has no resting index and
+   * keeps the dash.
+   */
+  var pointerOnPlot = null;
+  var restingPlots = [];
+
+  function restingIndex(data) {
+    for (var j = data[0].length - 1; j >= 0; j--) {
+      for (var s = 1; s < data.length; s++) {
+        var v = data[s][j];
+        if (v !== null && v !== undefined) return j;
+      }
+    }
+    return null;
+  }
+
+  function showResting(entry) {
+    if (entry.rest === null) return;
+    var legend = entry.plot.legend;
+    if (legend.idx === entry.rest) return;
+    entry.plot.setLegend({ idx: entry.rest }, false);
+  }
+
+  function restAll() {
+    for (var i = 0; i < restingPlots.length; i++) showResting(restingPlots[i]);
+  }
+
+  /* The `setLegend` hook. uPlot has just written the legend; if it wrote
+   * nothing and nothing is hovered, write the resting day instead. `false`
+   * keeps the second write from firing this hook again. */
+  function restWhenIdle(u) {
+    if (pointerOnPlot !== null || u.legend.idx !== null) return;
+    for (var i = 0; i < restingPlots.length; i++) {
+      if (restingPlots[i].plot === u) {
+        showResting(restingPlots[i]);
+        return;
+      }
+    }
+  }
+
+  /*
+   * Registers a plot for the resting state and returns the function that
+   * unregisters it. Called after construction, when the legend exists, and
+   * the initial write happens here so the plot never shows the dashes.
+   */
+  function trackResting(plot, data) {
+    var entry = { plot: plot, rest: restingIndex(data) };
+    restingPlots.push(entry);
+    function enter() { pointerOnPlot = plot; }
+    function leave() {
+      if (pointerOnPlot === plot) pointerOnPlot = null;
+      if (pointerOnPlot === null) restAll();
+    }
+    plot.over.addEventListener("mouseenter", enter);
+    plot.over.addEventListener("mouseleave", leave);
+    showResting(entry);
+    return function () {
+      plot.over.removeEventListener("mouseenter", enter);
+      plot.over.removeEventListener("mouseleave", leave);
+      if (pointerOnPlot === plot) pointerOnPlot = null;
+      var at = restingPlots.indexOf(entry);
+      if (at !== -1) restingPlots.splice(at, 1);
+    };
   }
 
   /*
@@ -4302,7 +4400,15 @@ footer a:hover { color: var(--txt); }
      * drops half of what it declared is the failure this file's `bind` exists
      * to prevent, in another place.
      */
-    var hooks = opts.hooks;
+    /*
+     * The plot's hooks: the page's own first, the caller's appended. Every
+     * uPlot hook takes an array, so the merge is one shape for every key
+     * rather than a special case per hook. `setLegend` is the page's: it is
+     * what keeps a legend on its latest measured day when nothing is hovered
+     * (see `restWhenIdle`), and a caller that could overwrite it would take
+     * the resting state off one card without any reading showing why.
+     */
+    var hooks = { setLegend: [restWhenIdle] };
     if (opts.releases !== undefined) {
       if (opts.profile === "compact") {
         throw new Error("release markers need the hero profile");
@@ -4318,27 +4424,25 @@ footer a:hover { color: var(--txt); }
         throw new Error("releases sets the top padding, so padding cannot be passed with it");
       }
       config.padding = [LANE_CSS, null, null, null];
-      var painter = releasePainter(opts.releases.groups, colour(RELEASE_TOKEN, RELEASE_FALLBACK));
-      hooks = { draw: [painter] };
-      if (opts.hooks !== undefined) {
-        for (var key in opts.hooks) {
-          if (!Object.prototype.hasOwnProperty.call(opts.hooks, key)) continue;
-          var extra = opts.hooks[key];
-          /* A key present and set to nothing is a caller building its hooks
-           * conditionally, not a caller asking for an empty hook. Concatenating
-           * it would put `undefined` into the draw list, and uPlot calls that
-           * list one entry at a time deep inside a redraw, so the throw would
-           * name a line of the vendored library rather than this mistake. */
-          if (extra === undefined || extra === null) continue;
-          /* `concat` takes either shape: uPlot's own is an array of functions,
-           * and a caller who passes a lone function gets it appended as one
-           * entry rather than an error. */
-          if (key === "draw") hooks.draw = hooks.draw.concat(extra);
-          else hooks[key] = extra;
-        }
+      hooks.draw = [releasePainter(opts.releases.groups, colour(RELEASE_TOKEN, RELEASE_FALLBACK))];
+    }
+    if (opts.hooks !== undefined) {
+      for (var key in opts.hooks) {
+        if (!Object.prototype.hasOwnProperty.call(opts.hooks, key)) continue;
+        var extra = opts.hooks[key];
+        /* A key present and set to nothing is a caller building its hooks
+         * conditionally, not a caller asking for an empty hook. Concatenating
+         * it would put `undefined` into the list, and uPlot calls that list
+         * one entry at a time deep inside a redraw, so the throw would name a
+         * line of the vendored library rather than this mistake. */
+        if (extra === undefined || extra === null) continue;
+        /* `concat` takes either shape: uPlot's own is an array of functions,
+         * and a caller who passes a lone function gets it appended as one
+         * entry rather than an error. */
+        hooks[key] = (hooks[key] || []).concat(extra);
       }
     }
-    if (hooks !== undefined) config.hooks = hooks;
+    config.hooks = hooks;
     if (opts.plugins !== undefined) config.plugins = opts.plugins;
 
     var plot = new window.uPlot(config, data, host);
@@ -4360,9 +4464,11 @@ footer a:hover { color: var(--txt); }
      * count or the hint describing a chart that does not exist.
      */
     var detach = null;
+    var untrack = null;
     var counted = false;
     try {
       reserveLegendWidths(plot, data);
+      untrack = trackResting(plot, data);
       detach = trackSize(plot, host, profile);
       livePlots += 1;
       counted = true;
@@ -4370,6 +4476,13 @@ footer a:hover { color: var(--txt); }
     } catch (error) {
       if (counted) {
         livePlots -= 1;
+      }
+      if (untrack !== null) {
+        try {
+          untrack();
+        } catch (untrackError) {
+          reportChartFailure("Unregistering the legend's resting state after a failed mount", untrackError);
+        }
       }
       if (detach !== null) {
         try {
@@ -4405,6 +4518,7 @@ footer a:hover { color: var(--txt); }
         released = true;
         livePlots -= 1;
         syncHint();
+        untrack();
         detach();
         plot.destroy();
       }
