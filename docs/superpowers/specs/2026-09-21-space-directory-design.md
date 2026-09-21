@@ -97,7 +97,7 @@ New columns on `instance_settings`:
 | `directory_enabled INTEGER NOT NULL DEFAULT 0` | The admin allows spaces on this instance to be listed |
 | `directory_dirty INTEGER NOT NULL DEFAULT 0` | A ping is owed. Set by every change to the served document except member counts, cleared by a successful ping. Survives restarts and survives the toggle being off |
 | `directory_last_ping_at INTEGER` | ms timestamp of the last successful ping |
-| `directory_last_error TEXT` | JSON `{ at, status }` of the last failed ping, null after a success. `status` is an HTTP status, `network`, `timeout` or `origin` (the hub rejected the origin) |
+| `directory_last_error TEXT` | JSON `{ at, status }` of the last failed ping, null after a success. `status` is an HTTP status, `network`, `timeout`, `origin` (the hub rejected the origin) or `fetch` (the hub could not read this instance, with the hub's `reason`) |
 
 New column on `spaces`:
 
@@ -200,6 +200,7 @@ What it does with the answer:
 | `429` with `Retry-After` | retry after that many seconds (the hub's per-origin cooldown), dirty stays set |
 | `400` | `directory_last_error = { at, status: 'origin' }` and stop retrying until the next change; the origin itself is unacceptable (a port, an IP, http), and retrying will not help |
 | `410` | the hub is retired: clear dirty, record the status, stop pinging until the next boot |
+| `502` with `{ reason }` | the hub could not read this instance's endpoint: `directory_last_error = { at, status: 'fetch', reason }`, keep dirty, retry with backoff |
 | anything else, network error, timeout | keep dirty, retry with backoff 1, 5, 15, 60 minutes and then hourly |
 
 The retry loop runs while dirty regardless of the toggle, which is what makes
@@ -269,10 +270,13 @@ CREATE INDEX spaces_members ON spaces(member_count DESC);
    200 spaces, member counts non-negative integers no larger than 10^9): in
    one transaction, upsert `origins` (setting `last_ok_at`), delete the
    origin's `spaces` rows and insert the new ones. `204`.
-7. On anything else: leave the rows alone. `204` as well, since the caller
-   cannot act on the difference and a `5xx` would only make the pinger retry
-   against a problem on its own side. The pinger's own health signal is its
-   next fetch, not the hub's opinion.
+7. On anything else (fetch failed, non-200, invalid document, origin
+   mismatch): leave the rows alone and answer `502` with a body
+   `{ "reason": "unreachable" | "status" | "invalid" | "origin-mismatch" }`.
+   The rows are untouched either way; the status exists so the pinger keeps
+   the dirty flag and the admin panel can show why the hub could not read
+   this instance, which is usually a `DOMAIN` or reverse-proxy problem on the
+   instance's side.
 
 `GET /v1/spaces?q=&limit=&offset=`:
 
