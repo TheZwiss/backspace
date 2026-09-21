@@ -1,0 +1,14 @@
+<!--
+  Backspace mark, tuned for the macOS menu bar (22px template, 44px @2x).
+
+  Canvas: 22 x 22 device px at 1x (10 viewBox units per px). The body is the
+  mark-small squircle scaled to 18px tall (13.3px wide), sitting 2.5px below
+  the top edge so the arrow shaft lands on whole pixel rows 10..12 at 1x.
+  Compared with mark-small (channel 20 glyph units = 2.0px at this size) the
+  arrow channel is widened to 3.0px, the chevron tip moves 3 glyph units
+  left (left body 2.0px) and the chevron arms are shortened (arm end cap at
+  x - y = 32 glyph units instead of 40), so the '<' reads as two arms and a
+  shaft next to 1.5px system glyphs instead of a grey smudge. No fillets:
+  they are under 0.5px here. Alpha-only: macOS tints the silhouette.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 220 220"><path fill="#000" d="M87.136 25H132.864A43.636 43.636 0 0 1 176.5 68.636A31.364 31.364 0 0 1 145.136 100H120.926L135.713 85.213L114.5 64L63.5 115L114.5 166L135.713 144.787L120.926 130H145.136A31.364 31.364 0 0 1 176.5 161.364A43.636 43.636 0 0 1 132.864 205H87.136A43.636 43.636 0 0 1 43.5 161.364V68.636A43.636 43.636 0 0 1 87.136 25Z"/></svg>

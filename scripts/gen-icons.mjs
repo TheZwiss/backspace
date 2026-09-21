@@ -3,7 +3,7 @@
  * Backspace icon generator
  *
  * Reads from assets/brand/{app-icon.svg, app-icon-small.svg, mark.svg,
- * mark-small.svg, mark-mono-dark.svg} and writes the entire desktop + web
+ * mark-small.svg, mark-tray.svg} and writes the entire desktop + web
  * icon set:
  *   - macOS .icns (10-rep iconset)
  *   - Windows .ico (multi-size)
@@ -46,7 +46,7 @@ const SRC = {
   appIconSmall: join(ROOT, 'assets/brand/app-icon-small.svg'),
   mark:         join(ROOT, 'assets/brand/mark.svg'),
   markSmall:    join(ROOT, 'assets/brand/mark-small.svg'),
-  markMonoDark: join(ROOT, 'assets/brand/mark-mono-dark.svg'),
+  markTray:     join(ROOT, 'assets/brand/mark-tray.svg'),
 };
 
 const DESKTOP_BUILD = join(ROOT, 'packages/desktop/build');
@@ -86,9 +86,9 @@ const loadSvg = (path) => readFileSync(path);
 
 async function renderPng(svg, size) {
   // Render SVG → square PNG at exact target size. fit: 'contain' preserves
-  // aspect ratio: wide-bbox SVGs (mark, mark-small, mark-mono-dark) get
-  // transparent top/bottom or left/right padding instead of being
-  // stretched square.
+  // aspect ratio: wide-bbox SVGs (mark, mark-small) get transparent
+  // top/bottom or left/right padding instead of being stretched square;
+  // mark-tray already carries a square 22-unit canvas with its own inset.
   return sharp(svg, { density: SVG_DENSITY })
     .resize(size, size, {
       fit: 'contain',
@@ -234,7 +234,7 @@ async function main() {
   const appIconSmall = loadSvg(SRC.appIconSmall);
   const mark         = loadSvg(SRC.mark);
   const markSmall    = loadSvg(SRC.markSmall);
-  const markMonoDark = loadSvg(SRC.markMonoDark);
+  const markTray     = loadSvg(SRC.markTray);
 
   // Rendered once at the top of the pipeline: it's both the .icns
   // synthesis input and the standalone reference export, and every
@@ -301,19 +301,26 @@ async function main() {
   await trace('win-ico', join(DESKTOP_BUILD, 'icon.ico'), '7 sizes', winIcoMeasured);
 
   // --- Desktop: tray ---
-  // Unchanged for now: mark-mono-dark.svg / mark.svg, not the app-icon
-  // badge. Task 3 swaps these sources for the tray-tuned mark.
-  await writePng(join(DESKTOP_RES, 'tray-iconTemplate.png'), markMonoDark, 22);
-  await trace('tray-mac-1x', join(DESKTOP_RES, 'tray-iconTemplate.png'), '22x22');
+  // macOS menu bar: mark-tray.svg is a silhouette tuned for the 22px
+  // template (18px body inset in a square 22-unit canvas, 3px arrow
+  // channel, shaft on whole pixel rows), so it renders 1:1 here with no
+  // further fitting. main.ts marks the PNG as a template image and macOS
+  // tints the alpha; the file must stay pure black.
+  await writePng(join(DESKTOP_RES, 'tray-iconTemplate.png'), markTray, 22);
+  await trace('tray-mac-1x', join(DESKTOP_RES, 'tray-iconTemplate.png'), '22x22 (mark-tray)');
 
-  await writePng(join(DESKTOP_RES, 'tray-iconTemplate@2x.png'), markMonoDark, 44);
-  await trace('tray-mac-2x', join(DESKTOP_RES, 'tray-iconTemplate@2x.png'), '44x44');
+  await writePng(join(DESKTOP_RES, 'tray-iconTemplate@2x.png'), markTray, 44);
+  await trace('tray-mac-2x', join(DESKTOP_RES, 'tray-iconTemplate@2x.png'), '44x44 (mark-tray)');
 
-  const trayIcoMeasured = await writeIco(join(DESKTOP_RES, 'tray-icon.ico'), mark, [16, 20, 24, 32, 40, 48]);
-  await trace('tray-win-ico', join(DESKTOP_RES, 'tray-icon.ico'), '6 sizes', trayIcoMeasured);
+  // Windows and Linux trays render in colour from the bold small-size
+  // variant. The .ico's 16 and 20px frames fall under the 1.5px small-size
+  // rule with the standard mark (its channel is ~1.2px at 16), and the
+  // whole tray set takes the same source so every frame is the same glyph.
+  const trayIcoMeasured = await writeIco(join(DESKTOP_RES, 'tray-icon.ico'), markSmall, [16, 20, 24, 32, 40, 48]);
+  await trace('tray-win-ico', join(DESKTOP_RES, 'tray-icon.ico'), '6 sizes (mark-small)', trayIcoMeasured);
 
-  await writePng(join(DESKTOP_RES, 'tray-icon.png'), mark, 22);
-  await trace('tray-linux', join(DESKTOP_RES, 'tray-icon.png'), '22x22');
+  await writePng(join(DESKTOP_RES, 'tray-icon.png'), markSmall, 22);
+  await trace('tray-linux', join(DESKTOP_RES, 'tray-icon.png'), '22x22 (mark-small)');
 
   // --- Web: favicons + PWA + in-app ---
   // Favicons render from mark-small.svg on transparent, not the app-icon

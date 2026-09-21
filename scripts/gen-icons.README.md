@@ -51,9 +51,9 @@ noise. See `APP_ICON_SMALL_MAX` in `gen-icons.mjs`.
 |------------------------------------|--------------------------------------------------------------------------------------|
 | `assets/brand/app-icon.svg`         | App-icon outputs >32px: Linux 48–1024, `build/icon.png`, `.icns`/`.ico` reps ≥48, apple-touch-icon, PWA 192/512, in-app `logo.png`, the `app-icon-1024.png` reference export |
 | `assets/brand/app-icon-small.svg`   | App-icon outputs at 16 and 32px: Linux 16/32, `.ico` reps 16/24/32                   |
-| `assets/brand/mark.svg`             | Win/Linux tray (`tray-icon.ico`/`.png`), PWA maskable inner mark, `logo-mark.svg` (byte copy) |
-| `assets/brand/mark-small.svg`       | Web favicons 16/32 (transparent, glyph fills the box)                               |
-| `assets/brand/mark-mono-dark.svg`   | macOS menu-bar template (alpha + black)                                             |
+| `assets/brand/mark.svg`             | PWA maskable inner mark, `logo-mark.svg` (byte copy)                                |
+| `assets/brand/mark-small.svg`       | Web favicons 16/32 (transparent, glyph fills the box), Win/Linux tray (`tray-icon.ico`/`.png`, colour) |
+| `assets/brand/mark-tray.svg`        | macOS menu-bar template + @2x (alpha + black; 18px body inset in the 22px canvas, 3px arrow channel) |
 
 Two outputs composite the app icon or mark over an opaque copy of the
 badge's own navy gradient (`#2E3D65` → `#110222`, matching `app-icon.svg`'s
