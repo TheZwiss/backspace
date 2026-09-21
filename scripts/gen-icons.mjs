@@ -133,11 +133,21 @@ async function writeAppIconPng(path, icons, size) {
   writeFileSync(path, buf);
 }
 
+// Measures an already-rendered PNG buffer via sharp metadata — used to
+// report .ico frame dimensions, since sharp can't read an .ico container
+// back but the frame buffers are already in hand before packing.
+async function dimsOfBuffer(buf) {
+  const meta = await sharp(buf).metadata();
+  return `${meta.width}x${meta.height}`;
+}
+
 async function writeIco(path, svg, sizes) {
   mkdirSync(dirname(path), { recursive: true });
   const buffers = await Promise.all(sizes.map((s) => renderPng(svg, s)));
   const ico = await pngToIco(buffers);
   writeFileSync(path, ico);
+  const dims = await Promise.all(buffers.map(dimsOfBuffer));
+  return `${sizes.length} frames: ${dims.join(', ')}`;
 }
 
 async function writeAppIconIco(path, icons, sizes) {
@@ -149,6 +159,8 @@ async function writeAppIconIco(path, icons, sizes) {
   const buffers = await Promise.all(sizes.map((s) => renderAppIconPng(icons, s)));
   const ico = await pngToIco(buffers);
   writeFileSync(path, ico);
+  const dims = await Promise.all(buffers.map(dimsOfBuffer));
+  return `${sizes.length} frames: ${dims.join(', ')}`;
 }
 
 async function writeAppIconIcns(path, icons) {
@@ -162,6 +174,11 @@ async function writeAppIconIcns(path, icons) {
   const icns = png2icons.createICNS(icons.appIcon1024, png2icons.BICUBIC, 0);
   if (!icns) throw new Error(`png2icons.createICNS returned null for ${path}`);
   writeFileSync(path, icns);
+  // png2icons hands back only the container bytes, no per-rep metadata —
+  // report the one thing we can measure honestly: the source buffer it
+  // was built from.
+  const srcDims = await dimsOfBuffer(icons.appIcon1024);
+  return `${srcDims} source, container not decoded`;
 }
 
 async function writeAppleTouchIcon(path, icons, size) {
@@ -227,76 +244,98 @@ async function main() {
   const icons = { appIcon, appIconSmall, appIcon1024 };
 
   const written = [];
-  const trace = (label, path, info) =>
+  // Records a row for the summary table. `info` is the routing decision
+  // (which source, which rule) decided before rendering. `measured` is a
+  // read-back of the actual written file — for a PNG that's always sharp's
+  // own metadata on the bytes on disk, never the size we asked it to
+  // render, so a resize bug or a corrupt write shows up here instead of
+  // being hidden behind a label that only reflects intent. .ico/.icns
+  // can't be read back by sharp as a container, so their writers hand back
+  // a measured string built from the frame buffers (or source buffer)
+  // they already held before packing — passed in as `measuredOverride`.
+  async function trace(label, path, info, measuredOverride) {
+    let measured = measuredOverride;
+    if (measured === undefined) {
+      if (path.endsWith('.png')) {
+        const meta = await sharp(path).metadata();
+        measured = `${meta.width}x${meta.height} ${meta.channels}ch${meta.hasAlpha ? '+a' : ''}`;
+      } else if (path.endsWith('.svg')) {
+        measured = 'vector';
+      } else {
+        measured = 'n/a';
+      }
+    }
     written.push({
       label,
       info,
+      measured,
       bytes: statSync(path).size,
       path: relative(ROOT, path),
     });
+  }
 
   // --- Brand: reference export ---
   mkdirSync(BRAND, { recursive: true });
   writeFileSync(join(BRAND, 'app-icon-1024.png'), appIcon1024);
-  trace('brand-1024', join(BRAND, 'app-icon-1024.png'), '1024x1024 (reference)');
+  await trace('brand-1024', join(BRAND, 'app-icon-1024.png'), '1024x1024 (reference)');
 
   // --- Desktop: application icon ---
   const linuxSizes = [16, 32, 48, 64, 128, 256, 512, 1024];
   for (const s of linuxSizes) {
     const out = join(DESKTOP_BUILD, `icons/${s}x${s}.png`);
     await writeAppIconPng(out, icons, s);
-    trace('linux-png', out, `${s}x${s} (${s <= APP_ICON_SMALL_MAX ? 'small' : 'app-icon'})`);
+    await trace('linux-png', out, `${s}x${s} (${s <= APP_ICON_SMALL_MAX ? 'small' : 'app-icon'})`);
   }
 
   await writeAppIconPng(join(DESKTOP_BUILD, 'icon.png'), icons, 512);
-  trace('build-icon', join(DESKTOP_BUILD, 'icon.png'), '512x512');
+  await trace('build-icon', join(DESKTOP_BUILD, 'icon.png'), '512x512');
 
-  await writeAppIconIcns(join(DESKTOP_BUILD, 'icon.icns'), icons);
-  trace('mac-icns', join(DESKTOP_BUILD, 'icon.icns'), '10-rep iconset');
+  const icnsMeasured = await writeAppIconIcns(join(DESKTOP_BUILD, 'icon.icns'), icons);
+  await trace('mac-icns', join(DESKTOP_BUILD, 'icon.icns'), '10-rep iconset', icnsMeasured);
 
-  await writeAppIconIco(
+  const winIcoMeasured = await writeAppIconIco(
     join(DESKTOP_BUILD, 'icon.ico'),
     icons,
     [16, 24, 32, 48, 64, 128, 256],
   );
-  trace('win-ico', join(DESKTOP_BUILD, 'icon.ico'), '7 sizes');
+  await trace('win-ico', join(DESKTOP_BUILD, 'icon.ico'), '7 sizes', winIcoMeasured);
 
   // --- Desktop: tray ---
   // Unchanged for now: mark-mono-dark.svg / mark.svg, not the app-icon
   // badge. Task 3 swaps these sources for the tray-tuned mark.
   await writePng(join(DESKTOP_RES, 'tray-iconTemplate.png'), markMonoDark, 22);
-  trace('tray-mac-1x', join(DESKTOP_RES, 'tray-iconTemplate.png'), '22x22');
+  await trace('tray-mac-1x', join(DESKTOP_RES, 'tray-iconTemplate.png'), '22x22');
 
   await writePng(join(DESKTOP_RES, 'tray-iconTemplate@2x.png'), markMonoDark, 44);
-  trace('tray-mac-2x', join(DESKTOP_RES, 'tray-iconTemplate@2x.png'), '44x44');
+  await trace('tray-mac-2x', join(DESKTOP_RES, 'tray-iconTemplate@2x.png'), '44x44');
 
-  await writeIco(join(DESKTOP_RES, 'tray-icon.ico'), mark, [16, 20, 24, 32, 40, 48]);
-  trace('tray-win-ico', join(DESKTOP_RES, 'tray-icon.ico'), '6 sizes');
+  const trayIcoMeasured = await writeIco(join(DESKTOP_RES, 'tray-icon.ico'), mark, [16, 20, 24, 32, 40, 48]);
+  await trace('tray-win-ico', join(DESKTOP_RES, 'tray-icon.ico'), '6 sizes', trayIcoMeasured);
 
   await writePng(join(DESKTOP_RES, 'tray-icon.png'), mark, 22);
-  trace('tray-linux', join(DESKTOP_RES, 'tray-icon.png'), '22x22');
+  await trace('tray-linux', join(DESKTOP_RES, 'tray-icon.png'), '22x22');
 
   // --- Web: favicons + PWA + in-app ---
   // Favicons render from mark-small.svg on transparent, not the app-icon
   // badge: at 16/32 the badge's shadow and stroke overlay add nothing but
   // noise, and a bare glyph filling the box reads better in a browser tab.
   await writePng(join(WEB_ICONS, 'favicon-16.png'), markSmall, 16);
-  trace('favicon-16', join(WEB_ICONS, 'favicon-16.png'), '16 (mark-small)');
+  await trace('favicon-16', join(WEB_ICONS, 'favicon-16.png'), '16 (mark-small)');
 
   await writePng(join(WEB_ICONS, 'favicon-32.png'), markSmall, 32);
-  trace('favicon-32', join(WEB_ICONS, 'favicon-32.png'), '32 (mark-small)');
+  await trace('favicon-32', join(WEB_ICONS, 'favicon-32.png'), '32 (mark-small)');
 
   await writeAppleTouchIcon(join(WEB_ICONS, 'apple-touch-icon.png'), icons, 180);
-  trace('apple-touch', join(WEB_ICONS, 'apple-touch-icon.png'), '180 (app-icon, opaque)');
+  await trace('apple-touch', join(WEB_ICONS, 'apple-touch-icon.png'), '180 (app-icon, opaque)');
 
   await writeAppIconPng(join(WEB_ICONS, 'icon-192.png'), icons, 192);
-  trace('pwa-192', join(WEB_ICONS, 'icon-192.png'), '192 (app-icon)');
+  await trace('pwa-192', join(WEB_ICONS, 'icon-192.png'), '192 (app-icon)');
 
   await writeAppIconPng(join(WEB_ICONS, 'icon-512.png'), icons, 512);
-  trace('pwa-512', join(WEB_ICONS, 'icon-512.png'), '512 (app-icon)');
+  await trace('pwa-512', join(WEB_ICONS, 'icon-512.png'), '512 (app-icon)');
 
   await writeMaskableIcon(join(WEB_ICONS, 'icon-maskable-512.png'), mark, 512, 0.6);
-  trace('pwa-maskable', join(WEB_ICONS, 'icon-maskable-512.png'), '512 (navy gradient, 60% mark)');
+  await trace('pwa-maskable', join(WEB_ICONS, 'icon-maskable-512.png'), '512 (navy gradient, 60% mark)');
 
   // In-app logo for the SpaceSidebar home tile: same app-icon render as
   // every other ≥128px consumer (dock, launcher, homescreen), just sized
@@ -304,13 +343,13 @@ async function main() {
   // gradient read cleanly against the sidebar's `#1a1a23` surface without
   // any extra masking here.
   await writeAppIconPng(join(WEB_ICONS, 'logo.png'), icons, 256);
-  trace('in-app-logo', join(WEB_ICONS, 'logo.png'), '256 (app-icon, sidebar tile)');
+  await trace('in-app-logo', join(WEB_ICONS, 'logo.png'), '256 (app-icon, sidebar tile)');
 
   // logo-mark.svg is a byte copy of mark.svg — Task 1 measured the arrow
   // channel at a 25px sidebar render as ~1.95 device px, clearing the
   // 1.5px small-size legibility rule, so no bolder variant is needed here.
   copyFileSync(SRC.mark, join(WEB_ICONS, 'logo-mark.svg'));
-  trace('logo-mark-svg', join(WEB_ICONS, 'logo-mark.svg'), 'copy of mark.svg');
+  await trace('logo-mark-svg', join(WEB_ICONS, 'logo-mark.svg'), 'copy of mark.svg');
 
   // --- Summary ---
   const fmtBytes = (n) => {
@@ -319,10 +358,22 @@ async function main() {
     return `${(n / (1024 * 1024)).toFixed(1)} MB`;
   };
   console.log('\nGenerated icons:');
-  console.log('  ' + 'kind'.padEnd(14) + 'info'.padEnd(32) + 'size'.padStart(10) + '  path');
-  console.log('  ' + '----'.padEnd(14) + '----'.padEnd(32) + '----'.padStart(10) + '  ----');
+  console.log(
+    '  ' + 'kind'.padEnd(14) + 'info'.padEnd(32) + 'measured'.padEnd(34) + 'size'.padStart(10) + '  path',
+  );
+  console.log(
+    '  ' + '----'.padEnd(14) + '----'.padEnd(32) + '--------'.padEnd(34) + '----'.padStart(10) + '  ----',
+  );
   for (const r of written) {
-    console.log('  ' + r.label.padEnd(14) + r.info.padEnd(32) + fmtBytes(r.bytes).padStart(10) + '  ' + r.path);
+    console.log(
+      '  ' +
+        r.label.padEnd(14) +
+        r.info.padEnd(32) +
+        r.measured.padEnd(34) +
+        fmtBytes(r.bytes).padStart(10) +
+        '  ' +
+        r.path,
+    );
   }
   const totalBytes = written.reduce((sum, r) => sum + r.bytes, 0);
   console.log(`\n${written.length} files written, ${fmtBytes(totalBytes)} total.`);
