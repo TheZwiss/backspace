@@ -128,17 +128,27 @@ The mark is the backspace-key glyph. Vector masters live in `assets/brand/`;
 every app icon, favicon, tray icon and social preview is generated from
 them, never hand-edited.
 
-Two flat colours, no material: the mark is a single flat fill, `#7c6cf6`
-on dark grounds or `#ffffff` on a lavender tile or squircle. No gradient,
-stroke, glow, shadow, blur or blend anywhere the mark appears.
+The brand splits by surface, not by file type. UI surfaces — the site
+header, the in-app sidebar tile, favicons, and all tray icons — stay
+flat: a single flat fill, `#7c6cf6` on dark grounds or `#ffffff` on a
+lavender tile or squircle, no gradient, stroke, glow, shadow, blur or
+blend anywhere the mark appears. The app-icon family — every output
+where the OS shows this app as one launchable icon (dock, taskbar, Start
+menu, Alt-Tab, PWA install, iOS home screen, the maskable Android icon)
+— is dimensional: the contributor's original squircle-badge composition,
+recoloured to the lavender system. The badge is a vertical gradient from
+`#2a2740` (top) to `#12101d` (bottom) — "plum" — carrying a drop shadow,
+an inner shadow and a soft-light stroke overlay; the glyph inside it is
+a white-to-`#7c6cf6` gradient, not a flat fill.
 
 | Master | Feeds |
 |--------|-------|
-| `app-icon.svg` | App icon outputs above 32px — flat lavender squircle path plus a flat white glyph path, no `<defs>`, no filter |
-| `app-icon-small.svg` | App icon outputs at 16/32px (bolder, simplified mark, same flat composition) |
-| `mark.svg` | Standalone flat-lavender renders on dark grounds — e.g. the social preview |
-| `mark-small.svg` | Favicons, the colour tray icons (Windows `.ico`, Linux PNG), and any standalone render at 32px or smaller |
-| `mark-mono-light.svg` | The PWA maskable icon's inner mark and `packages/web/public/icons/logo-mark.svg` — the flat white glyph, for rendering on a lavender tile or squircle |
+| `app-icon.svg` | App icon outputs above 32px — the dimensional squircle badge (plum gradient, filters, stroke overlay) plus the white-to-`#7c6cf6` gradient glyph |
+| `app-icon-small.svg` | App icon outputs at 16/32px (bolder, simplified mark, same dimensional badge geometry) |
+| `mark-icon.svg` | The bare gradient glyph alone, transparent, no badge — the PWA maskable icon's inner mark and the social preview |
+| `mark.svg` | Standalone flat-lavender renders on dark UI-surface grounds |
+| `mark-small.svg` | Favicons, the colour tray icons (Windows `.ico`, Linux PNG), and any standalone render at 32px or smaller — flat |
+| `mark-mono-light.svg` | `packages/web/public/icons/logo-mark.svg` — the flat white glyph, for the in-app sidebar's lavender home tile |
 | `mark-tray.svg` | The macOS menu-bar template tray icon, tuned for 22px |
 | `mark-mono-dark.svg` | Mono silhouette master; no pipeline output today |
 
@@ -153,7 +163,9 @@ even with no dependency change. See `scripts/gen-icons.README.md` and
 
 The brand primary is `#7c6cf6`. It is a web/app/desktop primary, not a
 pastel accent, and is exposed as `--accent-primary` (see Color Palette
-above).
+above). The plum gradient (`#2a2740`/`#12101d`) exists only as the
+app-icon family's ground; it is not a UI surface colour and has no CSS
+variable.
 
 ---
 

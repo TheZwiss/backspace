@@ -9,12 +9,13 @@
  * copies of the same render.
  *
  * The template embeds everything it needs so Chrome has no file:// fetch
- * to make: the mark is read live from assets/brand/mark.svg (that file
- * stays the one source of truth for the glyph — see scripts/gen-icons.mjs)
- * and inlined as SVG markup, and both webfonts (site/assets/*) are
- * inlined as base64 data: URIs. Chrome over file:// does not resolve
- * external @font-face sources, so anything short of full inlining
- * renders with fallback fonts and no gradient.
+ * to make: the mark is read live from assets/brand/mark-icon.svg — the
+ * dimensional app-icon family's bare gradient glyph (white to
+ * `#7c6cf6`), transparent, matching the app icon rather than the flat
+ * `mark.svg` used on UI surfaces — and inlined as SVG markup, and both
+ * webfonts (site/assets/*) are inlined as base64 data: URIs. Chrome over
+ * file:// does not resolve external @font-face sources, so anything
+ * short of full inlining renders with fallback fonts and no gradient.
  *
  * Run via `pnpm gen-social-preview` after brand or copy changes; commit
  * the diff. Skips (exit 0) with a message if Chrome isn't found, so it
@@ -40,7 +41,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
 
 const TEMPLATE = join(ROOT, 'scripts/social-preview.html');
-const MARK_SVG = join(ROOT, 'assets/brand/mark.svg');
+const MARK_SVG = join(ROOT, 'assets/brand/mark-icon.svg');
 const FABIO_FONT = join(ROOT, 'site/assets/fabio-xm-variable.ttf');
 const DM_SANS_FONT = join(ROOT, 'site/assets/dm-sans.woff2');
 
