@@ -15,16 +15,16 @@ the same PR.
 ```bash
 pnpm gen-icons
 git status                       # review which files changed
-git add packages/desktop/build/ packages/desktop/resources/ packages/web/public/icons/
+git add packages/desktop/build/ packages/desktop/resources/ packages/web/public/icons/ assets/brand/app-icon-1024.png
 git commit -m "chore: regenerate brand icons"
 ```
 
-(Stage explicit paths rather than `git add -A` — the generator only writes to those three directories, and an unrelated working-tree change shouldn't accidentally land in a "regenerate icons" commit.)
+(Stage explicit paths rather than `git add -A` — the generator only writes to those four paths, and an unrelated working-tree change shouldn't accidentally land in a "regenerate icons" commit.)
 
 ## Determinism
 
 Output is byte-stable for a given lockfile. The same SVGs in produce the
-same PNG/ICO/ICNS bytes out, every time, on every OS — Sharp uses resvg
+same PNG/ICO/ICNS bytes out, every time, on every OS — Sharp uses librsvg
 internally and writes deterministic PNGs, png-to-ico and png2icons don't
 embed timestamps.
 
@@ -37,20 +37,20 @@ git history clean.
 
 ## Sources
 
-Every app-icon output renders straight from vector — there is no raster
+Every app-icon output renders straight from vector: there is no raster
 source and no post-render masking. `app-icon.svg` already carries its own
 squircle badge, drop shadow and inner shadow (rendered through SVG
 `<filter>`, honoured by librsvg), so sharp renders it at the target size
 and that's the pixel output. The only routing decision is size: 16 and 32
 render from `app-icon-small.svg` instead, whose mark is a bolder,
-simplified variant of the same glyph in the same badge geometry — at
+simplified variant of the same glyph in the same badge geometry. At
 16/32 the standard mark's inset strokes and soft-light overlay read as
 noise. See `APP_ICON_SMALL_MAX` in `gen-icons.mjs`.
 
 | Brand source                       | Drives                                                                              |
 |------------------------------------|--------------------------------------------------------------------------------------|
-| `assets/brand/app-icon.svg`         | App-icon outputs >32px: Linux 48–1024, `build/icon.png`, `.icns`/`.ico` reps ≥48, apple-touch-icon, PWA 192/512, in-app `logo.png`, the `app-icon-1024.png` reference export |
-| `assets/brand/app-icon-small.svg`   | App-icon outputs at 16 and 32px: Linux 16/32, `.ico` reps 16/24/32                   |
+| `assets/brand/app-icon.svg`         | App-icon outputs >32px: Linux 48–1024, `build/icon.png`, `.ico` reps ≥48, apple-touch-icon, PWA 192/512, in-app `logo.png`, the `app-icon-1024.png` reference export; also every `.icns` rep, 16/32 included, since png2icons synthesises the whole iconset from the single 1024 render |
+| `assets/brand/app-icon-small.svg`   | App-icon outputs at 16 and 32px: Linux 16/32, `.ico` reps 16/24/32 (the `.icns` set does not use this file)            |
 | `assets/brand/mark.svg`             | PWA maskable inner mark, `logo-mark.svg` (byte copy)                                |
 | `assets/brand/mark-small.svg`       | Web favicons 16/32 (transparent, glyph fills the box), Win/Linux tray (`tray-icon.ico`/`.png`, colour) |
 | `assets/brand/mark-tray.svg`        | macOS menu-bar template + @2x (alpha + black; 18px body inset in the 22px canvas, 3px arrow channel) |
@@ -59,10 +59,10 @@ Two outputs composite the app icon or mark over an opaque copy of the
 badge's own navy gradient (`#2E3D65` → `#110222`, matching `app-icon.svg`'s
 `badgeFill`) instead of leaving the canvas transparent:
 
-- `apple-touch-icon.png` — the app icon full-bleed on the gradient, so its
+- `apple-touch-icon.png`: the app icon full-bleed on the gradient, so its
   rounded corners read as continuous badge instead of the transparent
   pixels iOS would otherwise paint black.
-- `icon-maskable-512.png` — the gradient fills the whole canvas (Android
+- `icon-maskable-512.png`: the gradient fills the whole canvas (Android
   launcher masks crop arbitrarily past the icon's own bounds) with the
   bare mark centred at 60% of the canvas height.
 

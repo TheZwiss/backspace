@@ -13,8 +13,8 @@
  * stays the one source of truth for the glyph — see scripts/gen-icons.mjs)
  * and inlined as SVG markup, and both webfonts (site/assets/*) are
  * inlined as base64 data: URIs. Chrome over file:// does not resolve
- * external @font-face sources or mask: url() targets, so anything short
- * of full inlining renders with fallback fonts and no gradient.
+ * external @font-face sources, so anything short of full inlining
+ * renders with fallback fonts and no gradient.
  *
  * Run via `pnpm gen-social-preview` after brand or copy changes; commit
  * the diff. Skips (exit 0) with a message if Chrome isn't found, so it
@@ -114,11 +114,12 @@ async function main() {
       '--hide-scrollbars',
       `--window-size=${WIDTH},${HEIGHT}`,
       '--force-device-scale-factor=1',
-      // Gives Chrome real wall-clock time to decode/rasterize the two
-      // inlined webfonts before the screenshot is taken. There is no
-      // network fetch to wait on (everything is a data: URI), but font
-      // parsing is asynchronous relative to first paint and there is no
-      // JS hook available through the bare --screenshot flag to await
+      // Advances Chrome's virtual clock so pending loads and timers run
+      // to completion before the screenshot is taken; it is a heuristic
+      // for font readiness, not wall-clock time. There is no network
+      // fetch to wait on (everything is a data: URI), but font parsing
+      // is asynchronous relative to first paint and there is no JS hook
+      // available through the bare --screenshot flag to await
       // document.fonts.ready explicitly.
       '--virtual-time-budget=5000',
       `--screenshot=${tmpPng}`,

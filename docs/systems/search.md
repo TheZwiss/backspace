@@ -263,13 +263,13 @@ Defined in `globals.css`:
 
 ```css
 @keyframes search-flash {
-  0% { background-color: rgba(124, 108, 246, 0.2); }
+  0% { background-color: rgb(var(--accent-primary) / 0.2); }
   100% { background-color: transparent; }
 }
 .search-highlight { animation: search-flash 2s ease-out; }
 ```
 
-Purple flash (accent color at 20% opacity) that fades to transparent over 2 seconds.
+Primary-coloured flash (accent color at 20% opacity) that fades to transparent over 2 seconds.
 
 ---
 

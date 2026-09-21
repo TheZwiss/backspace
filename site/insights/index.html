@@ -117,7 +117,7 @@ body {
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
 }
-::selection { background: rgba(124, 108, 246, 0.35); }
+::selection { background: color-mix(in srgb, var(--primary) 35%, transparent); }
 img { max-width: 100%; height: auto; display: block; }
 a { color: var(--sky); text-decoration: none; }
 a:hover { text-decoration: underline; }
@@ -269,7 +269,7 @@ h1 {
   border-color: transparent;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
 }
-.range-btn[aria-pressed="true"]:disabled { background: rgba(124, 108, 246, 0.35); color: rgba(255, 255, 255, 0.7); }
+.range-btn[aria-pressed="true"]:disabled { background: color-mix(in srgb, var(--primary) 35%, transparent); color: rgba(255, 255, 255, 0.7); }
 .range-btn[aria-pressed="true"]:hover:not(:disabled) { background: var(--primary-gradient-hover); color: #0b1020; filter: brightness(1.04); }
 .resolution {
   font-family: var(--mono); font-size: 12.5px; color: var(--txt4);
@@ -383,7 +383,7 @@ h2 {
 .u-title { color: var(--txt); font-size: 15px; font-weight: 600; }
 .u-legend { font-size: 13px; color: var(--txt2); text-align: left; }
 .u-legend th { font-weight: 560; color: var(--txt2); }
-.u-select { background: rgba(124, 108, 246, 0.18); }
+.u-select { background: color-mix(in srgb, var(--primary) 18%, transparent); }
 .u-hz .u-cursor-x, .u-vt .u-cursor-y { border-right: 1px dashed var(--txt4); }
 .u-hz .u-cursor-y, .u-vt .u-cursor-x { border-bottom: 1px dashed var(--txt4); }
 .u-legend { margin: 10px 0 0; }

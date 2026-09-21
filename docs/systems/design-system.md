@@ -138,9 +138,13 @@ them, never hand-edited.
 | `mark-mono-dark.svg` | Mono silhouette master; no pipeline output today |
 
 Regenerate icons with `pnpm gen-icons`; regenerate the social preview with
-`pnpm gen-social-preview`. Both read only from `assets/brand/` and commit
-byte-stable output for a given lockfile — see `scripts/gen-icons.README.md`
-and `docs/systems/desktop.md` for the full matrix.
+`pnpm gen-social-preview`. Icon generation reads only from `assets/brand/`.
+The social preview also reads `scripts/social-preview.html` and the two
+webfonts in `site/assets/` (`fabio-xm-variable.ttf`, `dm-sans.woff2`)
+alongside the mark; its output is stable per Chrome build and font
+rasteriser, not per lockfile, so a Chrome or font upgrade can shift it
+even with no dependency change. See `scripts/gen-icons.README.md` and
+`docs/systems/desktop.md` for the full matrix.
 
 The brand primary is `#0061ff`. It is a web/app/desktop primary, not a
 pastel accent, and is exposed as `--accent-primary` (see Color Palette
