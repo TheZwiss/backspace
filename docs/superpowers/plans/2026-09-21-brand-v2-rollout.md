@@ -34,11 +34,10 @@ The brand as shipped in `site/assets/` on the PR head:
 - Every existing asset keeps its file name, path, pixel size and channel
   layout (see the size table below). Nothing that references an asset by
   path changes, unless a task says so.
-- No new runtime dependency. Tooling may use `sharp` (already `^0.35.4` in
-  `packages/server`) and `png2icons@2.0.1` (already in the lockfile via
-  electron-builder). Nothing else.
-- TypeScript strict, no `any`. Scripts are `.mjs` or `.ts` under
-  `scripts/`, following the `scripts/metrics` workspace-package pattern.
+- No new dependency. Tooling uses what the root `package.json` already
+  has: `sharp`, `png-to-ico`, `png2icons`. Nothing else.
+- TypeScript strict, no `any`. Scripts are `.mjs` under `scripts/`, in
+  the style of `scripts/gen-icons.mjs`.
 - Small sizes must read. Rule: wherever the mark renders at 32px or smaller
   on its long side, the arrow's transparent channel is at least 1.5 device
   px wide at 1x. If the site glyph does not satisfy that, a bolder
@@ -61,10 +60,9 @@ The brand as shipped in `site/assets/` on the PR head:
 | `assets/brand/mark-mono-dark.svg` | vector | glyph silhouette, `#000` fill |
 | `assets/brand/mark-small.svg` | vector | bold small-size variant, baked gradient |
 | `assets/brand/mark-tray.svg` | vector | mono silhouette tuned for 22px |
-| `assets/brand/app-icon-1024.png` | 1024, RGBA | app-icon |
-| `assets/brand/app-icon-x1.png` | 149, RGB | app-icon on `#0b0b10` |
-| `assets/brand/app-icon-x2.png` | 294, RGBA | app-icon |
-| `assets/brand/app-icon-x3.png` | 440, RGBA | app-icon |
+| `assets/brand/app-icon-small.svg` | vector | the 256 composition with the mark-small geometry |
+| `assets/brand/app-icon-1024.png` | 1024, RGBA | reference export of app-icon (an output now, not an input) |
+| `assets/brand/app-icon-x{1,2,3}.png` | deleted | were raster inputs for the old 3D icon |
 | `packages/web/public/icons/favicon-16.png` | 16, RGBA | mark-small, transparent |
 | `packages/web/public/icons/favicon-32.png` | 32, RGBA | mark-small, transparent |
 | `packages/web/public/icons/apple-touch-icon.png` | 180, RGBA, fully opaque | app-icon full-bleed (no transparent corners; iOS renders them black) |
@@ -72,9 +70,9 @@ The brand as shipped in `site/assets/` on the PR head:
 | `packages/web/public/icons/icon-512.png` | 512, RGBA | app-icon |
 | `packages/web/public/icons/icon-maskable-512.png` | 512, RGBA, fully opaque | navy gradient full-bleed, mark inside the central 80% safe zone |
 | `packages/web/public/icons/logo.png` | 256, RGBA | app-icon |
-| `packages/web/public/icons/logo-mark.svg` | vector | mark-small if the 25px rule needs it, else mark |
+| `packages/web/public/icons/logo-mark.svg` | vector | copy of mark.svg, or of mark-small.svg if Task 1's measurement says the 25px render fails the small-size rule |
 | `packages/desktop/build/icon.png` | 512, RGBA | app-icon |
-| `packages/desktop/build/icons/{16,32,48,64,128,256,512,1024}x{same}.png` | RGBA | app-icon; 16 and 32 use the small variant inside the squircle |
+| `packages/desktop/build/icons/{16,32,48,64,128,256,512,1024}x{same}.png` | RGBA | app-icon; 16 and 32 render from app-icon-small |
 | `packages/desktop/build/icon.icns` | 16..1024 | from the icons set |
 | `packages/desktop/build/icon.ico` | 16,24,32,48,64,128,256 | from the icons set |
 | `packages/desktop/resources/tray-iconTemplate.png` | 22, RGBA, mono black | mark-tray |
@@ -108,24 +106,40 @@ paths. No pipeline code in this task.
 
 ### Task 2: Render pipeline and raster outputs
 
-Add `scripts/brand/` as workspace package `@backspace/brand` (mirror
-`scripts/metrics/package.json` for shape), depending on `sharp` at the same
-range as `packages/server` and on `png2icons@2.0.1`. One entry point,
-`pnpm --filter @backspace/brand render`, that reads the masters in
-`assets/brand/` and writes every raster in the size table above, including
-`.icns` and `.ico`. Deterministic: running it twice yields byte-identical
-files. Print a table of outputs with their measured dimensions at the end.
+The repo already has the pipeline: `scripts/gen-icons.mjs` (`pnpm gen-icons`,
+root devDependencies sharp + png-to-ico + png2icons, documented in
+`scripts/gen-icons.README.md`). Adapt it to the v2 masters; do not create a
+new package.
 
-Includes a `README.md` in `assets/brand/` naming each master, what it feeds,
-and the regenerate command. Add `scripts/brand` to `pnpm-workspace.yaml`
-if the globs do not already cover it.
+Changes:
+- The old raster-source route (`APP_ICON_PNG_SOURCES`, `RASTER_THRESHOLD`,
+  `renderAppIconPngFromRaster`, the 22% squircle mask) goes away. The v2
+  `app-icon.svg` already carries its own squircle and shadows, so every
+  app-icon output renders from SVG. Sizes 16 and 32 render from
+  `app-icon-small.svg`; everything larger from `app-icon.svg`. Remove the
+  long comments that justified the raster route.
+- Favicons 16 and 32 render from `mark-small.svg` on transparent (the
+  glyph fills the box), not from the app icon.
+- `apple-touch-icon.png` is the app icon composited full-bleed on the
+  navy top colour `#2E3D65` to `#110222` gradient so no pixel is
+  transparent (iOS paints transparent corners black).
+- `icon-maskable-512.png`: navy gradient full-bleed, mark at 60% of the
+  canvas height, centred. Drop `MASKABLE_BG`.
+- `logo-mark.svg` in `packages/web/public/icons/` is written by the
+  pipeline as a copy of the master the size table names.
+- `assets/brand/app-icon-1024.png` is written as a reference export.
+- Tray outputs keep rendering from `mark-mono-dark.svg` and `mark.svg`
+  for now; Task 3 swaps their masters. Social previews are not part of
+  this script.
+- Keep the output table at the end; add the measured width x height of
+  every PNG to it (read back with sharp metadata).
+- Determinism: running twice yields byte-identical files. Check it.
 
-Commit the regenerated rasters. Do not touch the tray template files
-(Task 3) or the social previews (Task 4); the pipeline may leave those
-steps in place if their masters are missing, printing a skip line.
-
-Verify: `magick identify` on every output matches the table; the pipeline's
-own dimension table matches; `git status` shows only intended files.
+Update `scripts/gen-icons.README.md` to describe the v2 sources and
+routing (replace the raster-route paragraphs). Run `pnpm gen-icons` and
+commit the script, the README and every regenerated file. Verify each
+output against the size table with `magick identify` and list any
+mismatch as a concern.
 
 ### Task 3: macOS menu-bar icon and the tray set
 
@@ -140,9 +154,10 @@ at ~85% on dark), composite the candidate next to two or three real system
 glyph stand-ins of the same weight, and look at the result upscaled. Keep
 going until the arrow is unambiguous at 1x.
 
-Then extend the Task 2 pipeline so it renders
-`tray-iconTemplate.png`, `tray-iconTemplate@2x.png`, `tray-icon.png` and
-`tray-icon.ico` from the masters, and run it. Pixel-check the templates:
+Then point `scripts/gen-icons.mjs` at the new masters:
+`tray-iconTemplate.png` and `@2x` from `mark-tray.svg`, `tray-icon.png` and
+`tray-icon.ico` from `mark-small.svg`; update the README's source table;
+run `pnpm gen-icons`. Pixel-check the templates:
 every pixel with alpha > 0 has `r=g=b=0`.
 
 If a real check is possible, run the desktop app in dev
@@ -158,8 +173,9 @@ from the app icon. Content: the mark at a generous size, the word
 site's tagline "Group chat that lives on your own hardware." in DM Sans.
 Nothing else; no screenshots, no badges.
 
-Source lives at `scripts/brand/social-preview.html`; the pipeline renders it
-with headless Chrome (`/Applications/Google Chrome.app/Contents/MacOS/Google
+Source lives at `scripts/social-preview.html`, rendered by a new
+`scripts/gen-social-preview.mjs` (`pnpm gen-social-preview` in the root
+package.json, next to `gen-icons`) with headless Chrome (`/Applications/Google Chrome.app/Contents/MacOS/Google
 Chrome`, overridable via `CHROME` env) at exactly 1280x640, device scale 1,
 and skips with a clear message when Chrome is absent. Look at the render
 before committing it.
