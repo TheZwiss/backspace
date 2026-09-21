@@ -13,6 +13,10 @@ describe('parseOrigin', () => {
     expect(parseOrigin('HTTPS://Chat.Example.org', SELF)).toEqual({ ok: true, origin: ORIGIN });
   });
 
+  it('accepts a trailing slash and drops it, since a pathname of exactly / is not a path', () => {
+    expect(parseOrigin('https://Chat.Example.org/', SELF)).toEqual({ ok: true, origin: ORIGIN });
+  });
+
   it.each<[string, unknown]>([
     ['not a string', 42],
     ['null', null],
@@ -21,7 +25,6 @@ describe('parseOrigin', () => {
     ['a port', 'https://chat.example.org:8443'],
     ['userinfo', 'https://user:pw@chat.example.org'],
     ['a path', 'https://chat.example.org/api'],
-    ['a trailing slash', 'https://chat.example.org/'],
     ['a query', 'https://chat.example.org?x=1'],
     ['a fragment', 'https://chat.example.org#top'],
     ['localhost', 'https://localhost'],
@@ -99,6 +102,15 @@ describe('parseDocument', () => {
     expect(parseDocument(document({ origin: 'https://other.example.org' }), ORIGIN)).toEqual({ ok: false, reason: 'origin-mismatch' });
   });
 
+  it('canonicalises the document origin before comparing, so a mixed-case DOMAIN passes', () => {
+    expect(parseDocument(document({ origin: 'https://Chat.Example.org' }), ORIGIN).ok).toBe(true);
+    expect(parseDocument(document({ origin: 'https://Chat.Example.org/' }), ORIGIN).ok).toBe(true);
+  });
+
+  it('rejects an origin that does not parse as invalid, not as a mismatch', () => {
+    expect(parseDocument(document({ origin: 'not a url' }), ORIGIN)).toEqual({ ok: false, reason: 'invalid' });
+  });
+
   it('rejects an origin that is not a string as invalid, not as a mismatch', () => {
     expect(parseDocument(document({ origin: 7 }), ORIGIN)).toEqual({ ok: false, reason: 'invalid' });
   });
@@ -134,7 +146,15 @@ describe('parseDocument', () => {
     expect(parseDocument(document({}, [space({ icon: 'https://chat.example.org.evil.example/x.png' })]), ORIGIN)).toEqual({ ok: false, reason: 'invalid' });
     expect(parseDocument(document({}, [space({ icon: ORIGIN })]), ORIGIN)).toEqual({ ok: false, reason: 'invalid' });
     expect(parseDocument(document({}, [space({ icon: '/api/uploads/x.png' })]), ORIGIN)).toEqual({ ok: false, reason: 'invalid' });
+    expect(parseDocument(document({}, [space({ icon: 'https://chat.example.org:8443/x.png' })]), ORIGIN)).toEqual({ ok: false, reason: 'invalid' });
+    expect(parseDocument(document({}, [space({ icon: 'http://chat.example.org/x.png' })]), ORIGIN)).toEqual({ ok: false, reason: 'invalid' });
+    expect(parseDocument(document({}, [space({ icon: 'not a url' })]), ORIGIN)).toEqual({ ok: false, reason: 'invalid' });
+    expect(parseDocument(document({}, [space({ icon: `${ORIGIN}/` })]), ORIGIN)).toEqual({ ok: false, reason: 'invalid' });
     expect(parseDocument(document({}, [space({ icon: null })]), ORIGIN).ok).toBe(true);
+    expect(parseDocument(document({}, [space({ icon: 'https://Chat.Example.org/api/uploads/x.png' })]), ORIGIN)).toMatchObject({
+      ok: true,
+      doc: { spaces: [{ icon: 'https://Chat.Example.org/api/uploads/x.png' }] },
+    });
     expect(parseDocument(document({}, [space({ banner: `${ORIGIN}/api/uploads/b.png` })]), ORIGIN).ok).toBe(true);
   });
 

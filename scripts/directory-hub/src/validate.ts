@@ -92,10 +92,9 @@ export function parseOrigin(raw: unknown, selfHost: string): OriginResult {
   if (url.protocol !== 'https:') return { ok: false };
   if (url.username !== '' || url.password !== '') return { ok: false };
   if (url.port !== '') return { ok: false };
-  // The parser turns `https://host` into `https://host/`; anything longer is a path.
+  // The parser turns `https://host` into `https://host/`, so a pathname of exactly
+  // `/` is not a path and `https://host/` canonicalises like `https://host`.
   if (url.pathname !== '/' || url.search !== '' || url.hash !== '') return { ok: false };
-  // A trailing slash in the input is a path too: the ping names an origin, not a URL.
-  if (raw.endsWith('/')) return { ok: false };
   const host = url.hostname;
   if (!host.includes('.') || host.startsWith('[') || IPV4.test(host)) return { ok: false };
   if (host === selfHost.toLowerCase()) return { ok: false };
@@ -103,12 +102,29 @@ export function parseOrigin(raw: unknown, selfHost: string): OriginResult {
 }
 
 /**
+ * `new URL(value).origin`, or null when the value does not parse. Both the
+ * document's `origin` and its asset URLs go through this before they are
+ * compared with the canonical origin the hub fetched, because an instance whose
+ * `DOMAIN` has upper case letters serves them as configured while the hub
+ * lowercased the host in `parseOrigin`. The two are the same origin.
+ */
+function canonicalOrigin(value: string): string | null {
+  try { return new URL(value).origin; } catch { return null; }
+}
+
+/**
  * The one asset rule, ping step 6: an icon or banner is null or an absolute URL
- * under the origin the document came from, so a listing can never point a
- * viewer's browser at a third party.
+ * on the origin the document came from, with a path below it, so a listing can
+ * never point a viewer's browser at a third party. Comparing parsed origins
+ * rather than string prefixes is what makes the look-alike host
+ * `https://chat.example.org.evil.example/x` fail: its origin is the evil host.
  */
 function isAssetUrl(v: unknown, origin: string): v is string | null {
-  return v === null || (typeof v === 'string' && v.startsWith(`${origin}/`));
+  if (v === null) return true;
+  if (typeof v !== 'string') return false;
+  let url: URL;
+  try { url = new URL(v); } catch { return false; }
+  return url.origin === origin && url.pathname.length > 1;
 }
 
 function parseSpace(raw: unknown, origin: string): ValidSpace | null {
@@ -152,7 +168,9 @@ export function parseDocument(text: string, expectedOrigin: string): DocumentRes
   const { schema, origin, instance, spaces } = parsed;
   if (schema !== 1) return { ok: false, reason: 'invalid' };
   if (typeof origin !== 'string') return { ok: false, reason: 'invalid' };
-  if (origin !== expectedOrigin) return { ok: false, reason: 'origin-mismatch' };
+  const documentOrigin = canonicalOrigin(origin);
+  if (documentOrigin === null) return { ok: false, reason: 'invalid' };
+  if (documentOrigin !== expectedOrigin) return { ok: false, reason: 'origin-mismatch' };
 
   if (!isRecord(instance)) return { ok: false, reason: 'invalid' };
   const { name, federatedRegistrationOpen, version } = instance;
