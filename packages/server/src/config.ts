@@ -177,6 +177,19 @@ export const config = {
     /** Receiver base URL for the opt-in daily ping. Tests and a future move override it. */
     endpoint: envOptional('TELEMETRY_ENDPOINT') ?? 'https://hello.backspacechat.com',
   },
+  directory: {
+    /**
+     * Hub base URL for the opt-in space directory. Unset means the project
+     * hub. Set to an empty string to disable the pinger and the proxy
+     * entirely (forks, air-gapped installs). Trailing slashes are dropped.
+     *
+     * Written out rather than through envOptional, which folds an empty
+     * value into unset and would hand an operator who set '' the hub.
+     */
+    endpoint: process.env.DIRECTORY_ENDPOINT === undefined
+      ? 'https://explore.backspacechat.com'
+      : process.env.DIRECTORY_ENDPOINT.trim().replace(/\/+$/, ''),
+  },
   backup: {
     dir: envOptional('BACKUP_DIR') ?? resolve(dirname(env('DB_PATH', resolve(__dirname, '../../../data/backspace.db'))), 'backups'),
     intervalHours: envInt('BACKUP_INTERVAL_HOURS', 24),
