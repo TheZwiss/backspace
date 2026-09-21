@@ -1,52 +1,24 @@
-:root {
-  --logo-base: #0061ff;
-  --logo-aero-crest: white;
-  --logo-aero-sheen: color-mix(in oklch, var(--logo-base) 26%, white);
-  --logo-aero-core: color-mix(in oklch, var(--logo-base) 58%, white);
-  --logo-aero-depth: var(--logo-base);
-  --logo-aero-glow: color-mix(in oklch, var(--logo-base) 30%, transparent);
-}
-
 .logo-mark {
   position: relative;
   display: inline-block;
   flex: none;
   width: 16px;
   height: 21px;
-  isolation: isolate;
   vertical-align: middle;
-  filter:
-    drop-shadow(0 9px 22px var(--logo-aero-glow))
-    drop-shadow(0 0 9px color-mix(in oklch, var(--logo-base) 22%, transparent));
-  transform: translateZ(0);
 }
 
-.logo-mark::before,
 .logo-mark::after {
   content: "";
   position: absolute;
   inset: 0;
-}
-
-.logo-mark::after {
-  z-index: 1;
-  background: linear-gradient(135deg, var(--logo-aero-crest) 0%, var(--logo-aero-sheen) 28%, var(--logo-aero-core) 54%, var(--logo-aero-depth) 100%);
+  background: var(--primary);
   -webkit-mask: url("logo-glyph.svg") center / 100% 100% no-repeat;
   mask: url("logo-glyph.svg") center / 100% 100% no-repeat;
-}
-
-.logo-mark::before {
-  z-index: 2;
-  background: url("logo-glyph-stroke.svg") center / 100% 100% no-repeat;
-  mix-blend-mode: soft-light;
-  opacity: 1;
-  filter: brightness(1.45) contrast(1.15);
 }
 
 .brand .logo-mark {
   width: 20px;
   height: 26px;
-  cursor: pointer;
 }
 
 .brand > span:not(.logo-mark) {
@@ -54,7 +26,7 @@
 }
 
 .strip .tile.logo {
-  background: transparent;
+  background: var(--primary);
   padding: 0;
 }
 
@@ -63,80 +35,6 @@
   height: 88%;
 }
 
-.logo-color-popover[hidden] {
-  display: none;
-}
-
-.logo-color-popover {
-  position: fixed;
-  z-index: 1000;
-  width: min(244px, calc(100vw - 24px));
-  padding: 12px;
-  border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.07));
-  border-radius: 16px;
-  background: var(--glass-hi, rgba(30, 30, 40, 0.62));
-  -webkit-backdrop-filter: blur(20px) saturate(120%);
-  backdrop-filter: blur(20px) saturate(120%);
-  box-shadow: 0 18px 52px rgba(0, 0, 0, 0.44), inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  color: var(--txt, #efefef);
-}
-
-.logo-color-popover.is-open {
-  animation: logo-picker-in 150ms ease-out;
-}
-
-.logo-color-control {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.logo-color-control input {
-  width: 42px;
-  height: 34px;
-  padding: 0;
-  border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.07));
-  border-radius: 10px;
-  background: transparent;
-  cursor: pointer;
-}
-
-.logo-color-value {
-  color: var(--txt2, #a0a0aa);
-  font-family: var(--mono, ui-monospace, monospace);
-  font-size: 12px;
-}
-
-.logo-color-swatches {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 7px;
-  margin-top: 12px;
-}
-
-.logo-color-swatch {
-  width: 100%;
-  aspect-ratio: 1;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 999px;
-  background: var(--swatch);
-  cursor: pointer;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
-}
-
-.logo-color-swatch:hover,
-.logo-color-swatch:focus-visible {
-  outline: 2px solid color-mix(in oklch, var(--swatch) 60%, white);
-  outline-offset: 2px;
-}
-
-@keyframes logo-picker-in {
-  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .logo-color-popover.is-open {
-    animation: none;
-  }
+.strip .tile.logo .logo-mark::after {
+  background: #fff;
 }
