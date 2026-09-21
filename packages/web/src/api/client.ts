@@ -48,6 +48,7 @@ import type {
   InstanceUpdateStatus,
   ExploreSpace,
   JoinRequest,
+  DirectoryFeed,
   Role,
   SpaceLayoutItem,
   SpaceFolder,
@@ -317,6 +318,11 @@ export class BackspaceApiClient {
     getJoinRequests: (spaceId: string, status?: string) => Promise<{ requests: JoinRequest[] }>;
     decideJoinRequest: (spaceId: string, requestId: string, action: 'accept' | 'decline') => Promise<JoinRequest>;
     myJoinRequests: (status?: string) => Promise<{ requests: JoinRequest[] }>;
+  };
+
+  /** The public space directory, read through this instance's proxy (never the hub directly). */
+  readonly directory: {
+    list: (q?: string, limit?: number, offset?: number) => Promise<DirectoryFeed>;
   };
 
   readonly gif: {
@@ -736,6 +742,16 @@ export class BackspaceApiClient {
         const params = new URLSearchParams();
         if (status) params.set('status', status);
         return request<{ requests: JoinRequest[] }>('GET', `/users/@me/join-requests?${params}`);
+      },
+    };
+
+    this.directory = {
+      list: (q?: string, limit = 50, offset = 0) => {
+        const params = new URLSearchParams();
+        if (q) params.set('q', q);
+        params.set('limit', String(limit));
+        params.set('offset', String(offset));
+        return request<DirectoryFeed>('GET', `/directory?${params}`);
       },
     };
 

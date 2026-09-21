@@ -10,7 +10,7 @@ import type {
   PeeringNotification,
   PeeringTriggerReason,
 } from '@backspace/shared';
-import { useInstanceStore, DifferentPasswordError, isSelfOrigin } from '../../stores/instanceStore';
+import { useInstanceStore, connectToInstance, isSelfOrigin } from '../../stores/instanceStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useFederationStore } from '../../stores/federationStore';
@@ -84,7 +84,6 @@ type AuthPhase = 'password' | 'fallback-login';
 function AddInstanceFlow({ onDone }: { onDone: () => void }) {
   const { t } = useTranslation(['federation', 'common']);
   const user = useAuthStore((s) => s.user);
-  const connectToRemote = useInstanceStore((s) => s.connectToRemote);
   const loginToRemote = useInstanceStore((s) => s.loginToRemote);
   const probeInstance = useInstanceStore((s) => s.probeInstance);
 
@@ -118,22 +117,22 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
     setError('');
     setIsLoading(true);
     try {
-      await connectToRemote(
+      const outcome = await connectToInstance(
         probeResult.origin,
         password,
         user?.displayName || undefined,
       );
+      if (outcome.kind === 'needs-remote-password') {
+        setAuthPhase('fallback-login');
+        setFallbackUsername(outcome.remoteUsername);
+        setFallbackPassword('');
+        setError('');
+        return;
+      }
       setStep('done');
       onDone();
     } catch (err) {
-      if (err instanceof DifferentPasswordError) {
-        setAuthPhase('fallback-login');
-        setFallbackUsername(err.remoteUsername);
-        setFallbackPassword('');
-        setError('');
-      } else {
-        setError(describeError(err));
-      }
+      setError(describeError(err));
     } finally {
       setIsLoading(false);
     }

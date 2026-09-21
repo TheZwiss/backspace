@@ -102,7 +102,12 @@ export class DifferentPasswordError extends Error {
 
 // ─── URL normalization ───────────────────────────────────────────────────────
 
-function normalizeOrigin(url: string): string {
+/**
+ * Canonical origin of a user-typed or stored instance value: scheme added
+ * when missing, host lowercased, path and trailing slash dropped. Throws
+ * `Invalid URL` when the value does not parse.
+ */
+export function normalizeOrigin(url: string): string {
   let normalized = url.trim();
 
   // Add https:// if no protocol
@@ -1313,6 +1318,45 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     // Token cache preserved — scoped per user, survives logout for seamless reconnect
   },
 }));
+
+// ─── Shared connect path ─────────────────────────────────────────────────────
+
+export type ConnectOutcome =
+  | { kind: 'connected'; how: 'new' | 'reconnect' }
+  | { kind: 'needs-remote-password'; remoteUsername: string };
+
+/**
+ * The one way to establish a session on another instance from a user-typed
+ * password: the Connections panel and the directory's connect-then-join flow
+ * both go through it. An instance the store knows in the `error` or
+ * `disconnected` state is re-authenticated in place; anything else (unknown,
+ * or connected already) goes through `connectToRemote`, whose own checks
+ * decide. A remote account that does not accept the home-issued credential
+ * is reported as `needs-remote-password` so the caller can offer the explicit
+ * per-instance login form; every other failure is thrown as is.
+ */
+export async function connectToInstance(
+  origin: string,
+  password: string,
+  displayName?: string,
+): Promise<ConnectOutcome> {
+  const store = useInstanceStore.getState();
+  const canonical = normalizeOrigin(origin);
+  const existing = store.instances.find((i) => normalizeOrigin(i.origin) === canonical);
+  try {
+    if (existing && (existing.status === 'error' || existing.status === 'disconnected')) {
+      await store.reauthenticateInstance(existing.origin, password);
+      return { kind: 'connected', how: 'reconnect' };
+    }
+    await store.connectToRemote(canonical, password, displayName);
+    return { kind: 'connected', how: 'new' };
+  } catch (err) {
+    if (err instanceof DifferentPasswordError) {
+      return { kind: 'needs-remote-password', remoteUsername: err.remoteUsername };
+    }
+    throw err;
+  }
+}
 
 // ─── API client resolution ───────────────────────────────────────────────────
 // Register the resolver with spaceStore so getApiForOrigin() works everywhere.
