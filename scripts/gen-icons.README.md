@@ -37,11 +37,11 @@ git history clean.
 
 ## Sources
 
-The split is by surface, not by file type. UI surfaces — favicons, the
-tray icons, the in-app sidebar tile — stay the flat two-colour mark. The
-app-icon family — every output where the OS shows this app as one
+The split is by surface, not by file type. UI surfaces (favicons, the
+tray icons, the in-app sidebar tile) stay the flat two-colour mark. The
+app-icon family, meaning every output where the OS shows this app as one
 launchable icon (dock, taskbar, Start menu, Alt-Tab, PWA install, iOS
-home screen, the maskable Android icon) — is the dimensional composition:
+home screen, the maskable Android icon), is the dimensional composition:
 a squircle badge on a `#2a2740`-to-`#12101d` plum gradient, drop shadow,
 inner shadow and a soft-light stroke overlay, with the glyph itself a
 white-to-`#7c6cf6` gradient.
@@ -59,7 +59,7 @@ noise at that size. See `APP_ICON_SMALL_MAX` in `gen-icons.mjs`.
 |----------------------------------------|--------------------------------------------------------------------------------------|
 | `assets/brand/app-icon.svg`             | App-icon outputs >32px: Linux 48–1024, `build/icon.png`, `.ico` reps ≥48, apple-touch-icon, PWA 192/512, in-app `logo.png`, the `app-icon-1024.png` reference export; also every `.icns` rep, 16/32 included, since png2icons synthesises the whole iconset from the single 1024 render |
 | `assets/brand/app-icon-small.svg`       | App-icon outputs at 16 and 32px: Linux 16/32, `.ico` reps 16/24/32 (the `.icns` set does not use this file)            |
-| `assets/brand/mark-icon.svg`            | PWA maskable inner mark — the bare gradient glyph, transparent, from the app-icon composition, with no badge behind it |
+| `assets/brand/mark-icon.svg`            | PWA maskable inner mark: the bare gradient glyph, transparent, from the app-icon composition, with no badge behind it |
 | `assets/brand/mark-small.svg`           | Web favicons 16/32 (flat, transparent, glyph fills the box), Win/Linux tray (`tray-icon.ico`/`.png`, flat colour) |
 | `assets/brand/mark-mono-light.svg`      | `logo-mark.svg` (byte copy, for the sidebar's lavender home tile) |
 | `assets/brand/mark-tray.svg`            | macOS menu-bar template + @2x (alpha + black; 18px body inset in the 22px canvas, 3px arrow channel) |

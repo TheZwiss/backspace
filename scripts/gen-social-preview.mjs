@@ -9,10 +9,10 @@
  * copies of the same render.
  *
  * The template embeds everything it needs so Chrome has no file:// fetch
- * to make: the mark is read live from assets/brand/mark-icon.svg — the
+ * to make: the mark is read live from assets/brand/mark-icon.svg, the
  * dimensional app-icon family's bare gradient glyph (white to
  * `#7c6cf6`), transparent, matching the app icon rather than the flat
- * `mark.svg` used on UI surfaces — and inlined as SVG markup, and both
+ * `mark.svg` used on UI surfaces, and inlined as SVG markup, and both
  * webfonts (site/assets/*) are inlined as base64 data: URIs. Chrome over
  * file:// does not resolve external @font-face sources, so anything
  * short of full inlining renders with fallback fonts and no gradient.

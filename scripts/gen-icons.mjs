@@ -18,9 +18,9 @@
  *
  * FLAT VS DIMENSIONAL: the split is by surface, not by file type. UI
  * surfaces (the in-app sidebar tile, web favicons, desktop/menu-bar tray
- * icons) stay the flat two-colour mark. The app-icon family — everywhere
- * an OS shows this app as a single launchable icon (dock, taskbar,
- * Start menu, Alt-Tab, PWA install, iOS home screen) — is the
+ * icons) stay the flat two-colour mark. The app-icon family, meaning
+ * everywhere an OS shows this app as a single launchable icon (dock,
+ * taskbar, Start menu, Alt-Tab, PWA install, iOS home screen), is the
  * contributor's original dimensional composition recoloured to the
  * lavender system: a squircle badge on a `#2a2740`-to-`#12101d` plum
  * gradient, drop shadow, inner shadow and a soft-light stroke overlay,
@@ -73,7 +73,7 @@ const BRAND          = join(ROOT, 'assets/brand');
 // corners black) and the maskable PWA icon (Android launcher masks crop
 // past the mark's own bounding box, so anything outside it must already
 // look like the badge). Kept as hex constants rather than re-parsing
-// app-icon.svg's gradient stops — the two files sharing these literal
+// app-icon.svg's gradient stops: the two files sharing these literal
 // values is the intended coupling; if the badge gradient ever changes,
 // both need editing together regardless.
 const PLUM_GRADIENT_TOP = '#2a2740';
@@ -113,7 +113,7 @@ async function renderPng(svg, size) {
 }
 
 function plumGradientSvg(size) {
-  // Full-bleed vertical gradient rect, no rounding — the badge shape
+  // Full-bleed vertical gradient rect, no rounding: the badge shape
   // itself provides the rounding when composited on top; this is only
   // the fill that shows through the badge's transparent corners (or,
   // for the maskable icon, the whole canvas outside the mark).
@@ -214,12 +214,12 @@ async function writeAppleTouchIcon(path, icons, size) {
 
 async function writeMaskableIcon(path, markSvg, canvas, heightScale) {
   // PWA maskable icon: the badge's plum gradient fills the full canvas
-  // (Android launcher masks — circle, squircle, rounded-square — crop
-  // arbitrarily past the icon's own bounding box, so the ground must
+  // (Android launcher masks, such as circle, squircle or rounded-square,
+  // crop arbitrarily past the icon's own bounding box, so the ground must
   // extend to every edge), with the gradient mark centred at
   // heightScale × canvas height. Scaling by height (not by fitting a
   // square) keeps the mark's proportions identical to every other
-  // rendering of it. `markSvg` is mark-icon.svg — the same white-to-
+  // rendering of it. `markSvg` is mark-icon.svg, the same white-to-
   // lavender gradient glyph as the app icon's own badge, transparent
   // outside the glyph itself so the plum ground shows through.
   const innerHeight = Math.round(canvas * heightScale);
