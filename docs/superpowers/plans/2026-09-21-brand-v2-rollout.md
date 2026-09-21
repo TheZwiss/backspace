@@ -321,3 +321,29 @@ and tray outputs unchanged (byte-identical after regeneration). README and
 the design-system Brand section: the flat rule now applies to UI surfaces
 (site header, sidebar tile, favicons, trays); the app-icon family is the
 dimensional composition on the plum ground.
+
+### Task 11: App icon on Apple's icon grid
+
+The dock icon renders larger and rounder than neighbouring macOS icons. Two
+causes: the badge fills the whole canvas (Apple's template places the
+icon in an 824 px square centred on a 1024 canvas, transparent margin of
+100 px each side) and the contributor's squircle corner radius is about
+36% of the side where Apple's rounded rectangle is 22.37%.
+
+Masters: in `assets/brand/app-icon.svg` and `app-icon-small.svg`, replace
+the badge `<path>` with a `<rect x="0" y="0" width="256" height="256"
+rx="57.27" ry="57.27">` (22.37% of 256) carrying the same `badgeFill`
+gradient. Mark inset, gradient, stroke overlay and filters unchanged.
+
+Pipeline (`scripts/gen-icons.mjs`): a `macIconPng(size)` helper renders
+the composition at `round(size * 824/1024)` and centres it on a
+transparent `size` canvas. Use it for `build/icon.icns` (all reps) and
+`build/icon.png`. Everything else (Windows `.ico`, Linux `build/icons/*`,
+PWA `icon-192/512`, `logo.png`, `app-icon-1024.png`, apple-touch-icon,
+maskable) stays full-bleed: those platforms apply their own framing.
+README and the design-system Brand section note the margin rule.
+
+Verify: `build/icon.png` has transparent pixels in a 50 px border at 512
+(`magick ... -format '%[fx:p{2,2}.a]'` is 0) and none at the centre;
+icns reps follow. Regenerate, commit, and note that packaged macOS builds
+and the dev Dock icon both consume these files.
