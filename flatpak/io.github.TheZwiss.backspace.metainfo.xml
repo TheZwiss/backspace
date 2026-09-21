@@ -64,7 +64,7 @@
   <releases>
     <release version="1.4.0" date="2026-09-21">
       <description>
-        <p>Backspace 1.4.0 release.</p>
+        <p>Backspace has a new logo, on the app and every icon. The interface is available in Chinese, and Chinese and Russian text no longer split across two fonts. App Settings has a Desktop tab in the browser that offers the desktop download for your platform.</p>
       </description>
     </release>
     <release version="1.3.0" date="2026-09-14">
