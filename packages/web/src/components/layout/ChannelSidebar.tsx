@@ -441,7 +441,7 @@ export function ChannelSidebar() {
     return (
       <>
       <div className="w-60 desktop:w-full bg-surface-channel flex flex-col flex-shrink-0 select-none desktop:pl-[72px] border-r border-border-hard">
-        <div className="h-14 px-[10px] flex items-center border-b border-border-hard z-10">
+        <div className="h-12 px-[10px] flex items-center border-b border-border-hard z-10">
           <DmSearchBar />
         </div>
         <div className="flex-1 overflow-y-auto pt-4 px-2 no-scrollbar" style={{ paddingBottom: floatingPanelHeight + 24 }}>
@@ -556,7 +556,7 @@ export function ChannelSidebar() {
     <>
     <div className="w-60 desktop:w-full bg-surface-channel flex flex-col flex-shrink-0 select-none desktop:pl-[72px] border-r border-border-hard">
       {/* Space header */}
-      <div className="h-14 flex items-stretch border-b border-border-hard z-10 group/header">
+      <div className="h-12 flex items-stretch border-b border-border-hard z-10 group/header">
         <button
           onClick={() => openModal('spaceSettings')}
           className="flex-1 h-full px-4 flex items-center justify-between hover:bg-interactive-hover transition-colors min-w-0"

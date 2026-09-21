@@ -41,7 +41,7 @@ import { usePointerReveal, VOICE_CHROME_ATTR } from '../../hooks/usePointerRevea
  * by keyboard, and pointers that cannot hover keep it up permanently.
  */
 function voiceHeaderClassName(fullscreen: boolean, revealed: boolean): string {
-  const base = 'h-14 px-5 flex items-center justify-between bg-surface-base transition-opacity duration-300';
+  const base = 'h-12 px-5 flex items-center justify-between bg-surface-base transition-opacity duration-300';
   if (!fullscreen) {
     return `${base} border-b border-border-hard flex-shrink-0`;
   }
@@ -296,7 +296,7 @@ export function MainContent() {
             </button>
           </div>
         )}
-        <div className="h-14 px-5 flex items-center justify-between border-b border-border-hard flex-shrink-0 z-10 bg-surface-chat">
+        <div className="h-12 px-5 flex items-center justify-between border-b border-border-hard flex-shrink-0 z-10 bg-surface-chat">
           <div className="flex items-center gap-[10px] min-w-0">
             {isGroupDm ? (
               <div
@@ -423,7 +423,7 @@ export function MainContent() {
   if (!currentChannelId || !channel) {
     return (
       <div className="flex-1 flex flex-col bg-surface-chat relative">
-        <div className="h-14 px-5 flex items-center justify-between border-b border-border-hard">
+        <div className="h-12 px-5 flex items-center justify-between border-b border-border-hard">
           <span className="text-txt-tertiary">{t('spaces:main.selectChannel')}</span>
           <div className="flex items-center gap-1 flex-shrink-0">
             <TransferIndicator />
@@ -443,7 +443,7 @@ export function MainContent() {
     if (!isInThisChannel) {
       return (
         <div className="flex-1 flex flex-col bg-surface-base">
-          <div className="h-14 px-5 flex items-center justify-between border-b border-border-hard flex-shrink-0 bg-surface-base">
+          <div className="h-12 px-5 flex items-center justify-between border-b border-border-hard flex-shrink-0 bg-surface-base">
             <div className="flex items-center gap-[10px]">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary">
                 <path d="M11 5L6 9H2V15H6L11 19V5ZM15.54 8.46C16.48 9.4 17 10.67 17 12S16.48 14.6 15.54 15.54L14.12 14.12C14.69 13.55 15 12.79 15 12S14.69 10.45 14.12 9.88L15.54 8.46Z" />
@@ -519,7 +519,7 @@ export function MainContent() {
 
   return (
     <div className="flex-1 flex flex-col bg-surface-chat min-w-0 relative">
-      <div className="h-14 px-5 flex items-center justify-between border-b border-border-hard flex-shrink-0 z-10 bg-surface-chat">
+      <div className="h-12 px-5 flex items-center justify-between border-b border-border-hard flex-shrink-0 z-10 bg-surface-chat">
         <div className="flex items-center gap-[10px] min-w-0">
           <span className="text-[20px] font-medium text-txt-tertiary flex-shrink-0 leading-none">#</span>
           <span className="font-bold text-[15px] tracking-[-0.02em] text-txt-primary truncate leading-tight">{channel.name}</span>
