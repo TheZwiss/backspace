@@ -377,7 +377,13 @@ h2 {
 .u-hz .u-cursor-x, .u-vt .u-cursor-y { border-right: 1px dashed var(--txt4); }
 .u-hz .u-cursor-y, .u-vt .u-cursor-x { border-bottom: 1px dashed var(--txt4); }
 .u-legend { margin: 10px 0 0; }
-.u-legend .u-value { font-family: var(--mono); color: var(--txt); }
+/* Monospace, so the `min-width` in ch that `reserveLegendWidths` sets on
+   each value cell at mount is exact for the strings it was measured from.
+   `content-box` because uPlot pads every legend cell 4px a side and the
+   page's reset is `border-box`: under that, a `min-width` of ten characters
+   was a total width, and the ten-character date it was reserved for still
+   needed eight pixels more, so the cell still grew on hover. */
+.u-legend .u-value { font-family: var(--mono); color: var(--txt); box-sizing: content-box; }
 .u-legend .u-series { padding-right: 18px; }
 
 /* ================= Charts ================= */
@@ -3725,6 +3731,44 @@ footer a:hover { color: var(--txt); }
   }
 
   /*
+   * Give every legend value cell the width of the widest thing it will ever
+   * show, so the legend's line-wrapping depends on the viewport alone and
+   * never on where the cursor is.
+   *
+   * uPlot lays the single-value legend out as inline blocks that wrap, and
+   * the page-wide cursor sync rewrites every chart's legend at once. So a
+   * cell that grew from "—" to "2026-08-20" or "not measured" could push a
+   * legend ABOVE the hovered chart onto a second line, which moved the
+   * hovered chart under the pointer, which changed the day under it, which
+   * changed every legend again: the pointer chased its own layout and the
+   * page juddered for as long as it stayed there.
+   *
+   * The width is measured from the plot's own data through the same
+   * formatters the legend prints with, so it is exactly what the cell can
+   * show and not a guess: a series that never passes 999 reserves three
+   * characters, and a series with a gap reserves the twelve of "not
+   * measured". A plot's data is fixed for its life (the page rebuilds rather
+   * than calls `setData`), so once is enough. Row `i` of the legend is
+   * series `i`, the x series included, which is why the loop runs over
+   * `data` rather than over the y series alone. The cell is monospace
+   * (see the `.u-value` rule), so `ch` counts characters exactly.
+   */
+  function reserveLegendWidths(plot, data) {
+    var rows = plot.root.querySelectorAll(".u-legend .u-series");
+    for (var i = 0; i < rows.length && i < data.length; i++) {
+      var cell = rows[i].querySelector(".u-value");
+      if (cell === null) continue;
+      var values = data[i];
+      var widest = I.DASH.length;
+      for (var j = 0; j < values.length; j++) {
+        var text = i === 0 ? xValue(plot, values[j], i, j) : seriesValue(plot, values[j], i, j);
+        if (text.length > widest) widest = text.length;
+      }
+      cell.style.minWidth = widest + "ch";
+    }
+  }
+
+  /*
    * Keep the plot's pixel size in step with its container.
    *
    * The observer watches the scroll container, whose width is set by the page
@@ -4318,6 +4362,7 @@ footer a:hover { color: var(--txt); }
     var detach = null;
     var counted = false;
     try {
+      reserveLegendWidths(plot, data);
       detach = trackSize(plot, host, profile);
       livePlots += 1;
       counted = true;

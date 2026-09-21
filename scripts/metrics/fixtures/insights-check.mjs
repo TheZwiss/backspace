@@ -728,6 +728,73 @@ const DRAG_FIRST_CHART = `(async function () {
  */
 const FOLD_VIEWPORTS = [[1440, 900], [1280, 720]];
 
+/*
+ * Whether hovering a chart moves anything.
+ *
+ * The page-wide cursor sync rewrites every chart's legend when any chart is
+ * hovered, and uPlot lays the legend out as inline blocks that wrap. So a
+ * legend whose width depends on what the cursor shows can grow a card ABOVE
+ * the hovered chart by a line, which moves the hovered chart under the
+ * pointer, which changes the day the cursor is on, and so on: the pointer
+ * chases its own layout and the page judders. The page gives every legend
+ * value cell the width of the widest string it can show, measured from the
+ * plot's data at mount, to rule that out; this is the reading that says
+ * whether it still holds.
+ *
+ * Hovers the LAST plotted chart on the page, because the cards that can move
+ * it are the ones above it, and the last one has every other card above it.
+ * The hover is a synthetic `mousemove` on the plot's overlay, which is what
+ * uPlot listens on. Measured per viewport, inside the sweep, because the
+ * wrap that causes the jump depends on the width. The cursor is taken off
+ * again afterwards so the next reading starts from rest.
+ */
+const HOVER_STABILITY = `(async function () {
+  function frame() {
+    return new Promise(function (r) { requestAnimationFrame(function () { r(); }); });
+  }
+  function heights() {
+    return Array.prototype.map.call(document.querySelectorAll(".chart-card"), function (card) {
+      var title = card.querySelector(".chart-title");
+      return {
+        title: title === null ? "?" : title.textContent.replace(/\\s+/g, " ").trim(),
+        height: Math.round(card.getBoundingClientRect().height)
+      };
+    });
+  }
+  var overs = document.querySelectorAll(".chart-card .u-over");
+  if (overs.length === 0) return { hovered: null, changed: [], shift: null, cards: 0 };
+  var over = overs[overs.length - 1];
+  var card = over.closest(".chart-card");
+  var title = card === null ? null : card.querySelector(".chart-title");
+  var rest = heights();
+  var topBefore = Math.round(over.getBoundingClientRect().top + window.scrollY);
+  var box = over.getBoundingClientRect();
+  over.dispatchEvent(new MouseEvent("mousemove", {
+    bubbles: true, cancelable: true, view: window,
+    clientX: box.left + box.width / 2, clientY: box.top + box.height / 2
+  }));
+  await frame();
+  await frame();
+  var legendValues = card === null ? [] : Array.prototype.map.call(
+    card.querySelectorAll(".u-legend .u-value"), function (v) { return v.textContent; });
+  var hovered = heights();
+  var topAfter = Math.round(over.getBoundingClientRect().top + window.scrollY);
+  var changed = [];
+  for (var i = 0; i < rest.length; i++) {
+    if (hovered[i] === undefined || hovered[i].height === rest[i].height) continue;
+    changed.push(rest[i].title + " " + rest[i].height + "px -> " + hovered[i].height + "px");
+  }
+  over.dispatchEvent(new MouseEvent("mouseleave", { bubbles: false, cancelable: true, view: window }));
+  await frame();
+  return {
+    hovered: title === null ? "?" : title.textContent.replace(/\\s+/g, " ").trim(),
+    legendValues: legendValues,
+    cards: rest.length,
+    changed: changed,
+    shift: topAfter - topBefore
+  };
+})()`;
+
 const FOLD = `(function () {
   var height = window.innerHeight;
   function mark(name, node) {
@@ -775,6 +842,7 @@ async function main() {
   let after = null;
   const ranges = [];
   const folds = [];
+  const hovers = [];
   try {
     const target = await poll(async () => {
       const list = await fetch(`http://127.0.0.1:${debugPort}/json/list`).then((r) => r.json());
@@ -914,6 +982,7 @@ async function main() {
         // so a reading taken immediately measures the previous layout.
         await new Promise((r) => setTimeout(r, 500));
         folds.push(await evaluate(FOLD));
+        hovers.push({ viewport: [width, height], ...(await evaluate(HOVER_STABILITY, true)) });
       }
     } finally {
       // However this block ends. The override outlives the loop otherwise, and
@@ -1146,6 +1215,24 @@ async function main() {
       console.log(`    ${m.name}: ${m.top}px from the top of the document, `
         + `${m.visible ? 'on the first screen' : 'BELOW THE FOLD'}`);
     }
+  }
+
+  console.log('\n=== hover stability ===');
+  if (hovers.length === 0) {
+    console.log('  not measured: the run ended before the viewport sweep');
+  }
+  for (const h of hovers) {
+    if (h.hovered === null) {
+      console.log(`  ${h.viewport[0]}x${h.viewport[1]}: NO PLOT ON THE PAGE, nothing was hovered`);
+      continue;
+    }
+    const verdict = h.changed.length === 0 && h.shift === 0
+      ? 'STEADY'
+      : `MOVED, the hovered plot shifted ${h.shift}px`;
+    console.log(`  ${h.viewport[0]}x${h.viewport[1]}: ${verdict}; hovered "${h.hovered}" `
+      + `(legend read ${JSON.stringify(h.legendValues)}), ${h.cards} cards measured, `
+      + `${h.changed.length} changed height`);
+    for (const c of h.changed) console.log(`    ${c}`);
   }
 
   console.log('\n=== zoom sync ===');
