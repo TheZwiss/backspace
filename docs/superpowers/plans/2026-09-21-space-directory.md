@@ -10,18 +10,19 @@
 
 **Tech Stack:** Fastify 4 + Drizzle + better-sqlite3 (server), Cloudflare Workers + D1 + `@cloudflare/vitest-pool-workers` (hub), React 18 + Zustand 5 + i18next (web), Vitest everywhere.
 
-**Spec:** `docs/superpowers/specs/2026-09-21-space-directory-design.md`. The plan argues from the spec; read the section each task names before starting it.
+**Spec:** `docs/superpowers/specs/2026-09-21-space-directory-design.md`. The plan argues from the spec; read the section each task names before starting it. Revised 2026-09-21 after an independent review of the plan; the review's findings are folded in below, not listed separately.
 
 ## Global Constraints
 
 - No new runtime dependencies anywhere. The hub keeps `no-runtime-deps.test.ts` green.
 - TypeScript strict, no `any`, no placeholders, no TODOs. Every function fully implemented.
-- Every user-facing string goes through i18next with keys in all four catalogs (`en`, `de`, `ru`, `zh`); every server error is a registered `ErrorCode` with English text in `httpErrors.ts` and a message in the four `errors.json`. Run `pnpm --filter @backspace/web i18n:check` (or whatever `localization.md` names as the consistency check) before declaring a web task done.
+- Every user-facing string goes through i18next with keys in all four catalogs (`en`, `de`, `ru`, `zh`); every server error is a registered `ErrorCode` with English text in `httpErrors.ts` and a message in the four `errors.json`. The catalog consistency check is `pnpm check:i18n`, run from the repo root.
+- Typecheck is `pnpm typecheck` from the repo root (it builds `@backspace/shared` first, then typechecks every package, then runs the i18n check). `pnpm -r typecheck` alone sees stale shared types after Task 1.
 - No em dashes and no marketing register in any copy, comment, commit message or doc (project rule).
 - Federation rule: never assume a single global id. Spaces are addressed as `(origin, id)`.
 - Design system: Aether Drift. New surfaces reuse existing classes (`input-search`, `input-standard`, `glass-modal`, `bg-surface-channel`). Nothing floating uses `bg-surface-elevated`.
 - Commit after every task with a `feat(directory): ...`, `feat(hub): ...`, `feat(web): ...`, `docs: ...` subject. No push. The branch is `feat/space-directory`, already checked out; nothing goes to a PR until the whole feature has been tested end to end.
-- Server tests: `cd packages/server && npx vitest run <file>`. Web tests: `cd packages/web && npx vitest run <file>`. Hub tests: `cd scripts/directory-hub && pnpm test`. Typecheck: `pnpm -r typecheck` (or the per-package `typecheck` script).
+- Server tests: `cd packages/server && npx vitest run <file>`. Web tests: `cd packages/web && npx vitest run <file>`. Hub tests: `cd scripts/directory-hub && pnpm test`.
 - Numbers fixed by the spec and used verbatim: debounce 3 s; endpoint cache 30 s; hub per-origin cooldown 10 s with `Retry-After: 10`; hub per-address limit 2 per 10 s; fetch timeout 10 s; body cap 512 KB; document caps 200 spaces, name 100, description 200; feed `limit` 1..100 default 50, `offset` max 1000; feed cutoff 3 days; hub housekeeping 30 days; proxy cache 60 s, LRU 64, 30 requests per minute per user; backoff 1, 5, 15, 60 minutes then hourly; `Retry-After` default 10 s.
 
 ---
@@ -33,7 +34,7 @@
 - `errors.ts`: four new codes.
 
 **Server** (`packages/server/`)
-- `drizzle/0015_*.sql` (generated): five columns.
+- `drizzle/0015_*.sql` plus `drizzle/meta/_journal.json` and `0015_snapshot.json` (generated): five columns.
 - `src/db/schema.ts`: the five columns.
 - `src/directory/state.ts`: dirty flag, in-memory document version, listeners, ping bookkeeping. One module owns every write to the four `instance_settings` columns.
 - `src/directory/document.ts`: pure builder of the served document from SQLite.
@@ -43,26 +44,37 @@
 - `src/utils/httpErrors.ts`: English text for the four codes.
 - `src/config.ts`: `directory.endpoint`.
 - `src/index.ts`: route registration, pinger start and stop.
+- `test/helpers/twoInstanceHarness.ts`: `DIRECTORY_ENDPOINT` set explicitly for every spawned instance.
 
 **Hub** (`scripts/directory-hub/`, copied from `scripts/telemetry-receiver/`)
-- `src/env.ts`, `src/validate.ts` (origin and document validation, pure), `src/store.ts` (every D1 statement), `src/index.ts` (routes, scheduled), `migrations/0001_directory.sql`, `wrangler.toml`, `package.json`, `vitest.config.ts`, `test/apply-migrations.ts`, tests.
+- `src/env.ts` (with the `declare global { namespace Cloudflare { interface Env ... } }` block the receiver's file carries), `src/validate.ts` (origin and document validation, pure), `src/store.ts` (every D1 statement), `src/index.ts` (routes, scheduled), `migrations/0001_directory.sql`, `wrangler.toml`, `package.json`, `vitest.config.ts`, `test/apply-migrations.ts`, tests.
+- `pnpm-workspace.yaml`: the package listed explicitly (the file lists tooling packages one by one on purpose; `scripts/*` is not globbed).
 - `.github/workflows/directory-hub.yml`.
 
 **Web** (`packages/web/src/`)
 - `api/client.ts`: `directory.list`.
 - `utils/directory.ts`: `dedupeAgainstConnected` (pure).
+- `stores/instanceStore.ts`: export `normalizeOrigin`; new `connectToInstance` (the shared connect path, see Task 9).
 - `stores/directoryStore.ts`: feed state, paging, `connectAndJoin`.
-- `stores/exploreStore.ts`: export `getApiForOrigin`; `myRequests` keyed by origin.
-- `hooks/useSpaceJoin.ts`: origin-aware pending check.
+- `stores/exploreStore.ts`: `myRequests` keyed by origin, `fetchMyRequests` fanning out over connected instances.
+- `hooks/useSpaceJoin.ts`: origin-aware pending check. `hooks/useInstanceConnect.ts`: deleted (unused today; its one job moves into `connectToInstance`).
 - `components/chat/SpaceCard.tsx` (extracted from `ExplorePage.tsx`), `components/chat/ExplorePage.tsx` (Outer Space section), `components/chat/OuterSpaceSection.tsx`.
-- `components/modals/ConnectAndJoinModal.tsx`; `stores/uiStore.ts` (`'connectAndJoin'`); the modal host that renders `activeModal` (find it: `grep -rn "activeModal ===" packages/web/src/components`).
-- `components/modals/instanceSettingsPanels/GeneralPanel.tsx`, `components/modals/SpaceSettings.tsx`.
+- `components/modals/ConnectAndJoinModal.tsx` (self-gating on `activeModal`, like every other modal); `components/modals/RemotePasswordStep.tsx` (extracted from `ConnectedInstances.tsx`); `stores/uiStore.ts` (`'connectAndJoin'` in the `ModalType` union, which is not exported and stays that way); `components/layout/AppLayout.tsx` (the modal is added to both the mobile and the desktop modal lists, which render every modal unconditionally).
+- `components/modals/instanceSettingsPanels/GeneralPanel.tsx`, `components/modals/SpaceSettings.tsx`, `stores/settingsStore.ts` (the `discoveryEnabled` mirror into `streamingLimits` gains `directoryEnabled`).
 - `components/layout/ChannelSidebar.tsx`: the Explore entry.
 - `locales/{en,de,ru,zh}/{spaces,admin,errors}.json`.
 
 **Docs**: `docs/systems/directory.md` (new), `database.md`, `api.md`, `admin.md`, `spaces.md`, `client-federation.md`, `localization.md`, `deployment.md`, `telemetry.md`, `.env.example`, `CLAUDE.md`.
 
-**Plan depth, decided per task:** tasks 2, 3, 5, 7, 8 and 9 carry real code because they hold the logic the review found bugs in (cache invalidation, version guard, cooldown on unknown origins, diff writes, origin dedupe). Tasks 1, 4, 6, 10 to 15 are briefs with exact contracts, because they follow patterns that already exist in the files they touch.
+**Cross-module facts every task relies on** (verified against the code on 2026-09-21):
+- `getApiForOrigin` exists three times. The one to use everywhere in this plan is the exported `getApiForOrigin(origin): BackspaceApiClient` in `utils/crossStoreResolvers.ts` (also re-exported from `stores/spaceStore.ts`). Do not export the private copy in `exploreStore.ts` or `socialStore.ts`. The resolver returns the home client for `''`.
+- `resolveLocalOrigin()` (`routes/federation/origin.ts`) delegates to `getOurOrigin()`: `PUBLIC_ORIGIN`, else `https://DOMAIN`, else `http://localhost:<port>`. The third value is what a dev instance serves and the hub rejects it (`http`, no dot); it shows up as `directory_last_error.status: 'origin'`, which is correct behaviour and is documented in Task 14.
+- The modal host is `AppLayout.tsx`: two lists (mobile and desktop) render every modal component unconditionally; each modal reads `useUIStore` and gates itself on `activeModal === '<name>'`, reading its inputs from `modalData: Record<string, unknown>` and narrowing them at the use site.
+- `describeError(err)` (`i18n/errors.ts`) reads the `HttpError.code` the API client attaches; a caller that needs the code itself reads `err.code` after an `instanceof HttpError` check (see `api/client.ts`).
+- Server route tests build a bare Fastify without `@fastify/rate-limit`, so a route's `config.rateLimit` is asserted by reading the route options, not by sending 31 requests.
+- The hub test convention is the receiver's: `worker.fetch(req, env, ctx)` with `createExecutionContext()` / `waitOnExecutionContext()`, env varied by spreading (`{ ...env, RETIRED: '1' }`), `scheduled` called directly, and a `nextAddress()` helper that gives every request a distinct `cf-connecting-ip` so the shared rate-limit bucket is never the thing under test.
+
+**Plan depth, decided per task:** tasks 2, 3, 5, 7, 8a and 9 carry real code because they hold the logic the reviews found bugs in (cache invalidation, version guard, cooldown on unknown origins, diff writes, origin dedupe, the connect path). The rest are briefs with exact contracts, because they follow patterns that already exist in the files they touch.
 
 ---
 
@@ -106,7 +118,7 @@ export interface DirectoryDocumentSpace {
 export interface DirectoryDocument {
   schema: 1;
   origin: string;
-  instance: { name: string; federatedRegistrationOpen: boolean; version: string };
+  instance: { name: string; federatedRegistrationOpen: boolean; version: string | null };
   spaces: DirectoryDocumentSpace[];
 }
 
@@ -145,7 +157,7 @@ and `directoryEnabled: boolean;` to `InstanceInfoResponse`.
   directory_requires_discovery: 'Turn on space discovery before enabling the directory',
 ```
 
-- [ ] **Step 4: Catalog messages** in the four `errors.json` files (flat keys, alphabetical position does not matter). English:
+- [ ] **Step 4: Catalog messages** in the four `errors.json` files (flat keys). English:
 
 ```json
   "directory_disabled": "This instance is not connected to a directory.",
@@ -154,9 +166,9 @@ and `directoryEnabled: boolean;` to `InstanceInfoResponse`.
   "directory_requires_discovery": "Turn on space discovery first."
 ```
 
-German, Russian and Chinese: translate these four in the register of the neighbouring entries in each file (formal "Sie" is not used in the German catalog; check two existing entries and match them).
+German, Russian and Chinese: translate these four in the register of the neighbouring entries in each file (read two existing entries per file first and match their form of address).
 
-- [ ] **Step 5: Typecheck and the catalog check.** `pnpm -r typecheck` passes (the new `Space.directoryListed` will break `rowToSpace` in `spaces.ts` and any fixture that builds a `Space`; fix those to `directoryListed: false` now, Task 4 wires the real value). Run the i18n consistency check named in `docs/systems/localization.md`.
+- [ ] **Step 5: `pnpm typecheck` from the root.** The new `Space.directoryListed` breaks `rowToSpace` in `routes/spaces.ts` and any fixture that builds a `Space`; set `directoryListed: false` in those now, Task 4 wires the real value. The i18n check at the end of `pnpm typecheck` must pass.
 
 - [ ] **Step 6: Commit** `feat(directory): shared types and error codes`.
 
@@ -196,9 +208,9 @@ German, Russian and Chinese: translate these four in the register of the neighbo
   directoryLastError: text('directory_last_error'),
 ```
 
-Run `pnpm db:generate`; confirm one new `0015_*.sql` with five `ALTER TABLE ... ADD` statements and nothing else. If drizzle-kit emits anything unrelated, stop and reconcile the schema first.
+Run `pnpm db:generate`. Confirm: one new `0015_*.sql` with five `ALTER TABLE ... ADD` statements and nothing else; `drizzle/meta/_journal.json` gained an entry with `idx: 15`; `drizzle/meta/0015_snapshot.json` exists. The server applies migrations through drizzle's `migrate()`, which reads the journal; a `.sql` file without a journal entry is a silent no-op at boot while still passing the test harness (which globs `*.sql`). If drizzle-kit emits anything unrelated, stop and reconcile the schema first.
 
-- [ ] **Step 2: Write the failing tests** `state.test.ts`. Use the `applyMigrations` + `ensureDefaults` in-memory pattern from `src/telemetry/reporter.test.ts` (copy those twelve lines; do not import from the test file).
+- [ ] **Step 2: Write the failing tests** `state.test.ts`. Use the `applyMigrations` + `ensureDefaults` in-memory pattern from `src/telemetry/reporter.test.ts` (copy those lines; do not import from the test file).
 
 ```ts
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -384,7 +396,7 @@ export function _resetDirectoryStateForTests(): void {
 }
 ```
 
-- [ ] **Step 5: Run the tests**: pass. `pnpm -r typecheck` passes.
+- [ ] **Step 5: Run the tests**: pass. `pnpm typecheck` passes.
 
 - [ ] **Step 6: Commit** `feat(directory): state columns and the dirty flag`.
 
@@ -398,44 +410,49 @@ export function _resetDirectoryStateForTests(): void {
 - Create: `packages/server/src/directory/document.ts`
 - Create: `packages/server/src/routes/directory.ts` (the public route only; Task 6 adds the proxy to the same file)
 - Modify: `packages/server/src/config.ts`, `packages/server/src/index.ts` (register `directoryRoutes` next to `exploreRoutes`)
-- Test: `packages/server/src/directory/document.test.ts`, `packages/server/src/routes/directory.test.ts`
+- Test: `packages/server/src/directory/document.test.ts`, `packages/server/src/routes/directory.test.ts`, `packages/server/src/config.test.ts` (create if absent, or add to the existing config test)
 
 **Interfaces:**
 - Consumes: `getDocumentVersion` (Task 2), `resolveLocalOrigin` (`routes/federation/origin.ts`), `config.version`.
 - Produces: `buildDirectoryDocument(sqlite, ctx: { origin: string; version: string }): DirectoryDocument`; `config.directory.endpoint: string` (empty string means disabled); `directoryRoutes(app)`.
 
-- [ ] **Step 1: Config.** In `config.ts` after `telemetry`:
+- [ ] **Step 1: Config.** `envOptional` in `config.ts` is `process.env[key] || undefined`, so an empty value is indistinguishable from unset and would take the default. The directory needs empty to mean disabled, so the expression is written out:
 
 ```ts
   directory: {
     /**
-     * Hub base URL for the opt-in space directory. Empty disables the pinger
-     * and the proxy entirely (forks, air-gapped installs).
+     * Hub base URL for the opt-in space directory. Unset means the project
+     * hub. Set to an empty string to disable the pinger and the proxy
+     * entirely (forks, air-gapped installs). Trailing slashes are dropped.
      */
-    endpoint: envOptional('DIRECTORY_ENDPOINT') ?? 'https://explore.backspacechat.com',
+    endpoint: process.env.DIRECTORY_ENDPOINT === undefined
+      ? 'https://explore.backspacechat.com'
+      : process.env.DIRECTORY_ENDPOINT.trim().replace(/\/+$/, ''),
   },
 ```
 
-`envOptional` returns `undefined` for unset; make sure an explicitly empty `DIRECTORY_ENDPOINT=` yields `''` (check `envOptional`'s treatment of empty strings and adjust the expression so empty means empty, not default).
+Config test: unset gives the hub URL; `''` gives `''`; `'https://x.test/'` gives `'https://x.test'`. (Set `process.env` in the test and re-import the module with `vi.resetModules()`.)
 
 - [ ] **Step 2: Failing tests for the builder** `document.test.ts` (same in-memory harness as Task 2). Seed with raw SQL: two users, four spaces (A public listed with 2 members, B request listed with 1 member, C public not listed, D private with `directory_listed = 1`), `instance_name = 'Example'`, `federated_registration_open = 1`, `discovery_enabled = 1`, `directory_enabled = 1`. Assert:
-  - the document is `{ schema: 1, origin: 'https://home.test', instance: { name: 'Example', federatedRegistrationOpen: true, version: '1.4.0' }, spaces: [A, B] }` ordered A then B (member count desc), each space with `memberCount` from `space_members`, `icon`/`banner` rewritten to `https://home.test/api/uploads/<file>` when stored as a bare filename and left alone when already absolute;
+  - the document is `{ schema: 1, origin: 'https://home.test', instance: { name: 'Example', federatedRegistrationOpen: true, version: '1.4.0' }, spaces: [A, B] }` ordered A then B (member count desc);
+  - each `memberCount` equals what `GET /api/spaces/explore` reports for the same seed (run the explore route's query, `routes/explore.ts`, against the same database in the test and compare per id, so the two never drift);
+  - `icon` stored as a bare filename `x.png` becomes `https://home.test/api/uploads/x.png`; stored as `/api/uploads/x.png` becomes `https://home.test/api/uploads/x.png`; stored as `https://home.test/api/uploads/x.png` is kept; stored as `https://other.test/x.png` becomes `null` (never rejected, never forwarded: one foreign icon must not delist the whole document at the hub);
   - with `directory_enabled = 0`, `spaces` is `[]` and the envelope is intact;
   - with `discovery_enabled = 0`, same;
   - a description longer than 200 characters is cut to 200 and a name longer than 100 to 100;
   - 250 listed spaces yield 200.
 
-- [ ] **Step 3: Implement** `document.ts`. Reuse the Explore query shape (`routes/explore.ts`, the `LEFT JOIN space_members` with `COUNT(sm.user_id)`), adding `AND s.directory_listed = 1`, `GROUP BY s.id ORDER BY member_count DESC, s.created_at DESC LIMIT 200`, and the gates read from `instance_settings` in one `SELECT instance_name, federated_registration_open, discovery_enabled, directory_enabled`. Asset URL rule: a value starting with `http` or `/` is kept, otherwise `${origin}/api/uploads/${value}`; a `/`-relative value is prefixed with `origin`. Both branches must produce a URL that starts with `origin + '/'`, since the hub rejects anything else.
+- [ ] **Step 3: Implement** `document.ts`. Reuse the Explore query shape (`routes/explore.ts`, the `LEFT JOIN space_members` with `COUNT(sm.user_id)`), adding `AND s.directory_listed = 1`, `GROUP BY s.id ORDER BY member_count DESC, s.created_at DESC LIMIT 200`, and the gates read from `instance_settings` in one `SELECT instance_name, federated_registration_open, discovery_enabled, directory_enabled`. The one asset rule, as a small exported `absoluteAssetUrl(value: string | null, origin: string): string | null`: `null` stays `null`; a value starting with `origin + '/'` is kept; any other value starting with `http://` or `https://` becomes `null`; a value starting with `/` becomes `origin + value`; anything else becomes `${origin}/api/uploads/${value}`.
 
 - [ ] **Step 4: Failing route tests** `routes/directory.test.ts` (copy the Fastify + mocked `getDb`/`getRawDb` harness from `routes/settings.test.ts`; mock `../routes/federation/origin.js` `resolveLocalOrigin` to return `'https://home.test'`; mock `../config.js` with `{ config: { version: '1.4.0', directory: { endpoint: 'https://hub.test' } } }`). Assert:
-  - `GET /api/directory/spaces` with no auth header returns 200 and the document;
-  - two requests inside 30 s hit the builder once (spy on the builder module);
+  - `GET /api/directory/spaces` with no auth header returns 200 and the document, with `cache-control: public, max-age=30`;
+  - two requests inside 30 s hit the builder once (`vi.spyOn` on the `document.js` module export, mocked via `vi.mock` with a passthrough);
   - after `markDirectoryDirty`, the next request rebuilds (spy count 2);
-  - after 30 s (inject `now` through a module-level `setDirectoryClockForTests` or `vi.useFakeTimers`), the next request rebuilds.
+  - after 30 s (`vi.useFakeTimers()` and `vi.setSystemTime`), the next request rebuilds.
 
-- [ ] **Step 5: Implement the route.** Cache shape: `let cache: { version: number; at: number; doc: DirectoryDocument } | null`. Serve `cache.doc` when `cache.version === getDocumentVersion() && now - cache.at < 30_000`. The route sets `cache-control: public, max-age=30` and no auth `preHandler`. Register in `index.ts` right after `exploreRoutes`.
+- [ ] **Step 5: Implement the route.** Cache shape: `let cache: { version: number; at: number; doc: DirectoryDocument } | null`. Serve `cache.doc` when `cache.version === getDocumentVersion() && Date.now() - cache.at < 30_000`. No auth `preHandler`. Register in `index.ts` right after `exploreRoutes`. Export `_resetDirectoryRouteCacheForTests()`.
 
-- [ ] **Step 6: Run both test files**: pass. Commit `feat(directory): public document endpoint`.
+- [ ] **Step 6: Run the three test files**: pass. `pnpm typecheck` passes. Commit `feat(directory): public document endpoint`.
 
 ---
 
@@ -445,28 +462,29 @@ export function _resetDirectoryStateForTests(): void {
 
 **Files:**
 - Modify: `packages/server/src/routes/settings.ts`, `packages/server/src/routes/spaces.ts`, `packages/server/src/routes/instance.ts`
-- Test: extend `packages/server/src/routes/settings.test.ts`, `packages/server/src/routes/spaces.test.ts` (or create `spaces.directory.test.ts` with the same harness), `packages/server/src/routes/instance.test.ts` if it exists, else add the assertion where `/api/instance/info` is already tested.
+- Test: extend `packages/server/src/routes/settings.test.ts`; create `packages/server/src/routes/spaces.directory.test.ts` with the same harness; add the `directoryEnabled` assertion wherever `/api/instance/info` is already tested (grep for `instance/info` under `src/routes/*.test.ts`; if nowhere, add `instance.test.ts` with the settings harness).
 
 **Interfaces:**
-- Consumes: `markDirectoryDirty` (Task 2), the four error codes (Task 1).
+- Consumes: `markDirectoryDirty`, `readDirectoryState` (Task 2), the four error codes (Task 1).
 - Produces: `InstanceAdminSettings.directoryEnabled|directoryLastPingAt|directoryLastError` on both `/api/settings/instance` responses; `Space.directoryListed` in `rowToSpace`; `PATCH /api/spaces/:id` accepting `directoryListed`; `InstanceInfoResponse.directoryEnabled`.
 
 Brief:
 
-1. **One helper for the invariant**, in `settings.ts` (module-private): `applyDiscoveryAndDirectory(body, updateData, currentRow, reply): boolean`. Rules: `directoryEnabled: true` while the resulting discovery state is off returns `sendError(reply, 400, 'directory_requires_discovery')`; `discoveryEnabled: false` also writes `directoryEnabled = 0`. Call it from both `PATCH /api/settings/streaming` and `PATCH /api/settings/instance`, after the existing `discoveryEnabled` handling.
-2. **Dirty marks** after the write succeeds, when any of these changed value: `directoryEnabled`, `discoveryEnabled`, `instanceName`, `federatedRegistrationOpen`. Compare the row before and after; a PATCH that sends the same value marks nothing.
-3. **GET and PATCH `/api/settings/instance`** responses include the three fields (`directoryLastError` parsed through `readDirectoryState`, not re-parsed by hand). The PATCH ignores `directoryLastPingAt` and `directoryLastError` in the body.
-4. **`PATCH /api/spaces/:id`**: accept `directoryListed` (boolean, else `400 field_not_boolean`); `true` on a space whose resulting visibility is `private` returns `400 directory_private_space`; a visibility change to `private` writes `directoryListed = 0` in the same update. Mark dirty when: `directoryListed` changed in either direction; or the space is listed after the update and any of `name`, `description`, `icon`, `banner`, `avatarColor`, `visibility` changed.
-5. **`DELETE /api/spaces/:id`**: mark dirty after the transaction when the deleted row had `directory_listed = 1`.
-6. **`rowToSpace`**: `directoryListed: row.directoryListed === 1`.
-7. **`/api/instance/info`**: `directoryEnabled: settings?.directoryEnabled === 1`.
+1. **One response mapper.** `settings.ts` builds the `InstanceAdminSettings` response twice, verbatim, in `GET` and `PATCH /api/settings/instance`. Extract it into a module-private `rowToAdminSettings(row, sqlite)` first and add the three fields there (`directoryLastError` and `directoryLastPingAt` through `readDirectoryState`, not re-parsed by hand). Both routes use it.
+2. **Pre-write read.** `PATCH /api/settings/instance` reads the row only after the write today. Add a `SELECT` of the row before the update in both `PATCH /api/settings/instance` and `PATCH /api/settings/streaming` (the latter already reads `currentRow` for range validation; reuse it).
+3. **One helper for the invariant**, module-private: `applyDiscoveryAndDirectory(body, updateData, currentRow, reply): boolean`. Rules: `directoryEnabled: true` while the resulting discovery state is off returns `sendError(reply, 400, 'directory_requires_discovery')`; `discoveryEnabled: false` also writes `directoryEnabled = 0`. Called from both PATCH routes after the existing `discoveryEnabled` handling. The PATCH ignores `directoryLastPingAt` and `directoryLastError` in the body.
+4. **Dirty marks** after the write, when any of these changed value between the pre-write row and the body: `directoryEnabled`, `discoveryEnabled`, `instanceName`, `federatedRegistrationOpen`. A PATCH that sends the same value marks nothing.
+5. **`PATCH /api/spaces/:id`**: accept `directoryListed` (boolean, else `400 field_not_boolean`); `true` on a space whose resulting visibility is `private` returns `400 directory_private_space`; a visibility change to `private` writes `directoryListed = 0` in the same update. Mark dirty when: `directoryListed` changed in either direction; or the space is listed after the update and any of `name`, `description`, `icon`, `banner`, `avatarColor`, `visibility` changed.
+6. **`DELETE /api/spaces/:id`**: mark dirty after the transaction when the deleted row had `directory_listed = 1`.
+7. **`rowToSpace`**: `directoryListed: row.directoryListed === 1`.
+8. **`/api/instance/info`**: `directoryEnabled: settings?.directoryEnabled === 1`.
 
-Tests to write first, one `it` each: the invariant on both routes (rejects enabling without discovery; discovery off clears directory); each dirty transition marks (spy on `markDirectoryDirty` via `vi.mock('../directory/state.js')`) and an unchanged PATCH does not; `directoryListed` on a private space rejected; visibility to private clears the flag; delete of a listed space marks, delete of an unlisted one does not; GET returns the three fields; info returns `directoryEnabled`.
+Tests to write first, one `it` each: the invariant on both routes (rejects enabling without discovery; discovery off clears directory); each dirty transition marks (spy via `vi.mock('../directory/state.js', async (orig) => ({ ...(await orig()), markDirectoryDirty: vi.fn() }))`) and an unchanged PATCH does not; `directoryListed` on a private space rejected; visibility to private clears the flag; delete of a listed space marks, delete of an unlisted one does not; GET returns the three fields; info returns `directoryEnabled`.
 
 - [ ] **Step 1: Write the failing tests.**
 - [ ] **Step 2: Run them, confirm they fail for the right reason.**
-- [ ] **Step 3: Implement the seven points above.**
-- [ ] **Step 4: Run the full server suite** (`npx vitest run`): green.
+- [ ] **Step 3: Implement the eight points above.**
+- [ ] **Step 4: Run the full server suite** (`npx vitest run`): green. `pnpm typecheck` green.
 - [ ] **Step 5: Commit** `feat(directory): settings invariant, space listing flag, dirty marks`.
 
 ---
@@ -482,7 +500,7 @@ Tests to write first, one `it` each: the invariant on both routes (rejects enabl
 
 **Interfaces:**
 - Consumes: Task 2 state API; `slotMinute` from `../telemetry/reporter.js` (reuse, do not copy); `getInstanceId` from `../utils/federationEpoch.js`; `config.directory.endpoint`, `config.version`; `resolveLocalOrigin`.
-- Produces: `sendDirectoryPing(deps, mem): Promise<PingOutcome>`, `pingerTick(deps, mem): Promise<'sent' | 'skipped' | ...>`, `startDirectoryPinger()`, `stopDirectoryPinger()`, `createPingerMemory()`.
+- Produces: `sendDirectoryPing(deps, mem): Promise<PingOutcome>`, `pingerTick(deps, mem, opts?: { boot?: boolean }): Promise<'sent' | 'skipped'>`, `startDirectoryPinger()`, `stopDirectoryPinger()`, `createPingerMemory()`.
 
 - [ ] **Step 1: Failing tests.** Harness as Task 2 plus a `fetchMock` per test that resolves `new Response(body, { status, headers })`. Deps factory:
 
@@ -505,9 +523,11 @@ Cases (each its own `it`):
   - `400` records `{ status: 'origin' }` and sets `mem.haltedVersion` to the sent version; a later tick with the same version does not fetch; after `markDirectoryDirty` it fetches again;
   - `410` calls `clearDirectoryDirty`, records `{ status: 410 }`, sets `mem.retired = true`, and no later tick fetches;
   - `502` with `{"reason":"origin-mismatch"}` records `{ status: 'fetch', reason: 'origin-mismatch' }`, dirty stays, backoff 1 minute; a second failure backs off 5, then 15, then 60, then 60;
-  - a rejected fetch records `{ status: 'network' }`; an `AbortError`-named rejection records `'timeout'`;
+  - a rejected fetch records `{ status: 'network' }`; a rejection whose `name` is `'TimeoutError'` or `'AbortError'` records `'timeout'`;
   - `pingerTick` with the endpoint `''` never fetches;
-  - daily: with `directory_enabled = 1`, clean, `lastPingAt` yesterday, a tick one minute before the slot skips and a tick at the slot sends; an event ping earlier today (set `lastPingAt` to 00:05 today, slot at 09:00) does not satisfy the slot; after a failed slot attempt the same day, later ticks skip (attempted guard) unless dirty;
+  - **boot**: enabled, clean, `lastPingAt` set to today *after* the slot (so the daily rule is not due), `pingerTick(deps, mem, { boot: true })` sends; disabled and clean, boot does not send; disabled and dirty, boot sends;
+  - daily: with `directory_enabled = 1`, clean, `lastPingAt` yesterday, a tick one minute before the slot skips and a tick at the slot sends; an event ping earlier today (set `lastPingAt` to 00:05 today, slot at 09:00) does not satisfy the slot;
+  - **per-day guard, persisted**: after a failed slot attempt (`directory_last_error.at` on today), later ticks the same day skip even with a fresh `PingerMemory` (simulating a restart), unless dirty;
   - retry: with dirty and `mem.nextRetryAt` in the future the tick skips; in the past it sends regardless of `directory_enabled`.
 
 - [ ] **Step 2: Run, fail.**
@@ -531,11 +551,10 @@ export interface PingerMemory {
   nextRetryAt: number | null;
   haltedVersion: number | null;
   retired: boolean;
-  attemptedDay: string | null;
 }
 
 export function createPingerMemory(): PingerMemory {
-  return { failures: 0, nextRetryAt: null, haltedVersion: null, retired: false, attemptedDay: null };
+  return { failures: 0, nextRetryAt: null, haltedVersion: null, retired: false };
 }
 
 const BACKOFF_MS = [60_000, 300_000, 900_000, 3_600_000];
@@ -545,11 +564,15 @@ const DEFAULT_RETRY_AFTER_S = 10;
 export type PingOutcome = 'accepted' | 'cooldown' | 'origin-rejected' | 'retired' | 'fetch-failed' | 'failed';
 ```
 
-`sendDirectoryPing`: records `sentVersion = getDocumentVersion()` before the request; POSTs; then the answer table from spec section 6, writing through the Task 2 functions only. Backoff: `mem.nextRetryAt = now + BACKOFF_MS[Math.min(mem.failures, 3)]`, then `mem.failures += 1`. A `204` sets `failures = 0, nextRetryAt = null`.
+`sendDirectoryPing`: records `sentVersion = getDocumentVersion()` before the request; POSTs with `signal: AbortSignal.timeout(TIMEOUT_MS)`; then the answer table from spec section 6, writing through the Task 2 functions only. Backoff: `mem.nextRetryAt = now + BACKOFF_MS[Math.min(mem.failures, 3)]`, then `mem.failures += 1`. A `204` sets `failures = 0, nextRetryAt = null`.
 
-`pingerTick(deps, mem)`: returns `'skipped'` when `endpoint === ''` or `mem.retired`; reads state; if `dirty` and `mem.haltedVersion !== getDocumentVersion()` and (`mem.nextRetryAt === null || now >= mem.nextRetryAt`) then send; else if `enabled` and the daily rule holds (minute of day `>= slotMinute(instanceId)`, `lastPingAt === null || lastPingAt < todaySlotInstant`, `mem.attemptedDay !== today`) then set `mem.attemptedDay = today` and send; else `'skipped'`.
+`pingerTick(deps, mem, opts = {})`: returns `'skipped'` when `deps.endpoint === ''` or `mem.retired`; reads state; then in order:
+  1. if `opts.boot` and (`state.enabled` or `state.dirty`): send (the boot ping the spec requires, independent of the slot);
+  2. if `state.dirty` and `mem.haltedVersion !== getDocumentVersion()` and (`mem.nextRetryAt === null || now >= mem.nextRetryAt`): send;
+  3. if `state.enabled` and the daily rule holds: minute of day `>= slotMinute(deps.instanceId)`, `state.lastPingAt === null || state.lastPingAt < todaySlotInstant`, and the per-day guard `utcDay(state.lastError?.at) !== today` (the guard is derived from the persisted error, the way the reporter derives its own from `lastError.day`, so a restart loop cannot re-attempt a failing hub more than once a day): send;
+  4. else `'skipped'`.
 
-`startDirectoryPinger()`: build production deps (`getRawDb()`, `config.directory.endpoint`, `resolveLocalOrigin()`, `getInstanceId()`, `globalThis.fetch`, `config.version`); one `PingerMemory`; subscribe `onDirectoryDirty` to a 3 s debounced `sendDirectoryPing`; run `pingerTick` once at boot and every 60 s. `stopDirectoryPinger()` clears the interval, the debounce timer and the subscription. Guard: when `config.directory.endpoint === ''`, `start` logs one line and returns.
+`startDirectoryPinger()`: build production deps (`getRawDb()`, `config.directory.endpoint`, `resolveLocalOrigin()`, `getInstanceId()`, `globalThis.fetch`, `config.version`); one `PingerMemory`; subscribe `onDirectoryDirty` to a 3 s debounced `sendDirectoryPing`; run `pingerTick(deps, mem, { boot: true })` once at boot and `pingerTick(deps, mem)` every 60 s. `stopDirectoryPinger()` clears the interval, the debounce timer and the subscription. Guard: when `config.directory.endpoint === ''`, `start` logs one line and returns.
 
 - [ ] **Step 4: Run tests: pass.** Wire `index.ts`. Boot `pnpm dev` once and confirm the log shows the pinger starting and, with `DIRECTORY_ENDPOINT=` empty, the disabled line.
 
@@ -571,7 +594,7 @@ export type PingOutcome = 'accepted' | 'cooldown' | 'origin-rejected' | 'retired
 
 Brief: validate `q` (trim, max 100 chars), `limit` (1..100, default 50), `offset` (0..1000); forward to `${endpoint}/v1/spaces?...` with a 10 s timeout and `accept: application/json`; on a non-200 or a body that is not `{ schema: 1, spaces: [...] }` answer `502 directory_unreachable`; cache per exact `(q, limit, offset)` for 60 s in a Map with insertion-order eviction at 64 entries; coalesce identical in-flight requests by sharing the promise; route config `rateLimit: { max: 30, timeWindow: '1 minute' }` (the same shape `request-join` uses in `explore.ts`); when `endpoint === ''` answer `404 directory_disabled` before anything else. `_resetDirectoryProxyForTests()` clears the cache.
 
-Tests: disabled endpoint; passthrough of validated params (assert the upstream URL); clamping of out-of-range params; cache hit within 60 s (upstream called once for two requests); different `q` misses; 65th distinct query evicts the first; two concurrent identical requests call upstream once; upstream 500 and upstream garbage both map to 502 with the code.
+Tests: disabled endpoint; passthrough of validated params (assert the upstream URL); clamping of out-of-range params; cache hit within 60 s (upstream called once for two requests); different `q` misses; 65th distinct query evicts the first; two concurrent identical requests call upstream once; upstream 500 and upstream garbage both map to 502 with the code; the limiter is present with `max: 30` (read it from the route's options: register the routes on a Fastify instance with an `onRoute` hook that captures `routeOptions.config`, since the test app has no `@fastify/rate-limit`).
 
 - [ ] **Step 1: Failing tests. Step 2: Implement. Step 3: Suite green. Step 4: Commit** `feat(directory): feed proxy with cache and limiter`.
 
@@ -582,84 +605,135 @@ Tests: disabled endpoint; passthrough of validated params (assert the upstream U
 **Spec:** section 7 (tables, ping steps 3 and 6).
 
 **Files:**
-- Create: `scripts/directory-hub/` by copying `scripts/telemetry-receiver/` (`package.json` renamed to `@backspace/directory-hub`, `tsconfig.json`, `vitest.config.ts` without `EXPORT_TOKEN`, `test/apply-migrations.ts`, `src/no-runtime-deps.test.ts`, `src/harness.test.ts` adapted to assert the four tables). Delete `page.ts`, the export route and everything telemetry-specific. Add the package to `pnpm-workspace.yaml` if the workspace globs do not already cover `scripts/*`.
+- Create: `scripts/directory-hub/` by copying `scripts/telemetry-receiver/` (`package.json` renamed to `@backspace/directory-hub`, `tsconfig.json`, `vitest.config.ts` without `EXPORT_TOKEN`, `test/apply-migrations.ts`, `src/no-runtime-deps.test.ts`, `src/harness.test.ts` adapted to assert the four tables). Delete `page.ts`, the export route and everything telemetry-specific.
+- Modify: `pnpm-workspace.yaml`: add `- "scripts/directory-hub"` under the other tooling entries with a one-line comment (`# The space directory hub. See docs/systems/directory.md.`). This is unconditional; the file lists tooling packages one by one on purpose and does not glob `scripts/*`. Run `pnpm install` afterwards so the package is linked.
 - Create: `scripts/directory-hub/migrations/0001_directory.sql` with the DDL from spec section 7 verbatim.
 - Create: `scripts/directory-hub/wrangler.toml`: `name = "backspace-directory-hub"`, `routes = [{ pattern = "explore.backspacechat.com", custom_domain = true }]`, `RETIRED = "0"`, D1 binding `DB` with `database_name = "backspace-directory"` and `database_id = "REPLACE-AT-ROLLOUT"`, rate limiter `namespace_id = "1002"` with `limit = 2, period = 10`, cron `"23 3 * * *"`, same `compatibility_date` as the receiver.
-- Create: `src/env.ts` (`DB`, `RATE_LIMITER?`, `RETIRED?`, `TEST_MIGRATIONS?`, `HUB_HOST?`), `src/validate.ts`, `src/validate.test.ts`.
+- Create: `src/env.ts` (copy the receiver's file including its `declare global { namespace Cloudflare { interface Env extends ... {} } }` block, renaming the alias; fields `DB`, `RATE_LIMITER?`, `RETIRED?`, `TEST_MIGRATIONS?`, `HUB_HOST?`), `src/validate.ts`, `src/validate.test.ts`.
 
 **Interfaces:**
-- Produces: `parseOrigin(raw: unknown, selfHost: string): { ok: true; origin: string } | { ok: false }`; `parseDocument(text: string, expectedOrigin: string): { ok: true; doc: ValidDocument } | { ok: false; reason: 'invalid' | 'origin-mismatch' }` where `ValidDocument = { instanceName: string; federatedRegistrationOpen: boolean; version: string | null; spaces: ValidSpace[] }` and `ValidSpace = { id, name, description, icon, banner, avatarColor, visibility, memberCount, createdAt }` (same field set and types as `DirectoryDocumentSpace`, re-declared locally because the hub has no dependency on `@backspace/shared`); `MAX_DOCUMENT_BYTES = 512 * 1024`; `MAX_PING_BYTES = 1024`.
+- Produces: `parseOrigin(raw: unknown, selfHost: string): { ok: true; origin: string } | { ok: false }`; `parseDocument(text: string, expectedOrigin: string): { ok: true; doc: ValidDocument } | { ok: false; reason: 'invalid' | 'origin-mismatch' }` where `ValidDocument = { instanceName: string; federatedRegistrationOpen: boolean; version: string | null; spaces: ValidSpace[] }` and `ValidSpace = { id, name, description, icon, banner, avatarColor, visibility, memberCount, createdAt }` with the same types as `DirectoryDocumentSpace`, re-declared locally because the hub has no dependency on `@backspace/shared`, and `avatarColor` typed as the literal union `'mint' | 'peach' | 'lavender' | 'sky' | 'amber' | 'rose' | 'coral' | null` (copy the seven values from `AvatarColor` in `packages/shared/src/types.ts` and check them there first); `MAX_DOCUMENT_BYTES = 512 * 1024`; `MAX_PING_BYTES = 1024`.
 
 - [ ] **Step 1: Failing tests** `validate.test.ts`:
 
-`parseOrigin` accepts `'https://chat.example.org'` and canonicalises `'HTTPS://Chat.Example.org'` to the lowercase origin; rejects: not a string, `http://`, a port, userinfo, a path, a query, a fragment, `https://localhost`, `https://127.0.0.1`, `https://[::1]`, a bare `https://example` (no dot), the hub's own host, a body over 1024 bytes (tested at the handler level in Task 8, not here).
+`parseOrigin` accepts `'https://chat.example.org'` and canonicalises `'HTTPS://Chat.Example.org'` to the lowercase origin; rejects: not a string, `http://`, a port, userinfo, a path, a query, a fragment, `https://localhost`, `https://127.0.0.1`, `https://[::1]`, a bare `https://example` (no dot), the hub's own host.
 
-`parseDocument`: a well-formed document passes and returns the typed shape; `schema: 2` rejects `invalid`; `origin` different from `expectedOrigin` rejects `origin-mismatch`; a 201-space document rejects; name of 101 characters rejects; description of 201 rejects; `icon: 'https://other.example/x.png'` rejects (must start with `expectedOrigin + '/'`); `icon: null` passes; `memberCount: -1`, `1.5`, `10**9 + 1` reject; `visibility: 'private'` rejects; `avatarColor` must be null or a string of at most 32 characters; `instance.version` must be null/absent or match `/^[0-9A-Za-z.+-]{1,32}$/`; `instance.name` at most 100 characters; a body larger than `MAX_DOCUMENT_BYTES` rejects (measure encoded bytes like the receiver's `parsePing`); unknown top-level fields are ignored, unknown space fields are ignored.
+`parseDocument`: a well-formed document passes and returns the typed shape; `schema: 2` rejects `invalid`; `origin` different from `expectedOrigin` rejects `origin-mismatch`; a 201-space document rejects; name of 101 characters rejects; description of 201 rejects; `icon: 'https://other.example/x.png'` rejects (must start with `expectedOrigin + '/'`); `icon: null` passes; `memberCount: -1`, `1.5`, `10**9 + 1` reject; `visibility: 'private'` rejects; `avatarColor` must be null or one of the seven literals, anything else becomes `null` (mapped, not rejected: it is cosmetic); `instance.version` must be null/absent or match `/^[0-9A-Za-z.+-]{1,32}$/`; `instance.name` at most 100 characters; a text larger than `MAX_DOCUMENT_BYTES` rejects (measure encoded bytes like the receiver's `parsePing`; this is the second line of defence, the first is the capped reader in Task 8b); unknown top-level fields are ignored, unknown space fields are ignored.
 
 - [ ] **Step 2: Run, fail. Step 3: Implement** `validate.ts` as pure functions with no IO, mirroring the style of the receiver's `validate.ts` (documented constants, one exported function per concern). The IP-literal check: reject when the hostname matches `/^\d{1,3}(\.\d{1,3}){3}$/` or starts with `[`.
 
-- [ ] **Step 4: `pnpm test` green in the hub package** (the harness test asserts the tables exist; the no-runtime-deps test passes). `pnpm typecheck` green.
+- [ ] **Step 4: `pnpm test` green in the hub package** (the harness test asserts the four tables exist; the no-runtime-deps test passes). `pnpm --filter @backspace/directory-hub typecheck` green.
 
 - [ ] **Step 5: Commit** `feat(hub): directory hub scaffold and validators`.
 
 ---
 
-### Task 8: Hub routes, store and workflow
+### Task 8a: Hub store, hashing and diff writes
 
-**Spec:** section 7 (ping steps 1 to 8, the feed, scheduled job), section 11.
+**Spec:** section 7 (tables, ping step 7, the feed query).
 
 **Files:**
-- Create: `scripts/directory-hub/src/store.ts`, `src/index.ts`, `src/index.test.ts`, `src/store.test.ts`
-- Create: `.github/workflows/directory-hub.yml` (copy `telemetry-receiver.yml`; rename job names, paths filter and working directory; dispatch-only deploy with the same `if:` guard)
+- Create: `scripts/directory-hub/src/store.ts`, `src/hash.ts`, `src/store.test.ts`, `src/hash.test.ts`
 
 **Interfaces:**
-- Consumes: Task 7 validators.
-- Produces (store): `getLastFetchAt(db, origin): Promise<number | null>`, `touchFetchAttempt(db, origin, at)`, `readOriginHash(db, origin): Promise<string | null>`, `applyDocument(db, origin, doc: ValidDocument, documentHash: string, at: number): Promise<{ inserted: number; updated: number; deleted: number }>`, `touchOriginOk(db, origin, at)`, `feed(db, opts: { q: string; limit: number; offset: number; since: number }): Promise<FeedRow[]>`, `deleteOlderThan(db, cutoff: number): Promise<number>`, `isBlocked` folded into the feed query.
+- Consumes: `ValidDocument`, `ValidSpace` (Task 7).
+- Produces:
+  - `hash.ts`: `documentHash(doc: ValidDocument): Promise<string>` (SHA-256 hex of `JSON.stringify` of the validated document with `spaces` sorted by `id` and each space's keys in the fixed order `id, name, description, icon, banner, avatarColor, visibility, memberCount, createdAt`); `rowHash(space: ValidSpace): Promise<string>` (same key order).
+  - `store.ts`: `getLastFetchAt(db, origin): Promise<number | null>`; `touchFetchAttempt(db, origin, at): Promise<void>` (upsert); `readOriginHash(db, origin): Promise<string | null>`; `touchOriginOk(db, origin, at): Promise<void>`; `applyDocument(db, origin, doc: ValidDocument, docHash: string, at: number): Promise<{ inserted: number; updated: number; deleted: number }>`; `feed(db, opts: { q: string; limit: number; offset: number; since: number }): Promise<FeedRow[]>` where `FeedRow` carries every `DirectoryEntry` field in snake case as SQLite returns it; `deleteOlderThan(db, cutoff: number): Promise<number>`.
 
-- [ ] **Step 1: Failing store tests** (`cloudflare:test` `env.DB`, like the receiver's harness test):
+- [ ] **Step 1: Failing tests** (`cloudflare:test` `env.DB`, like the receiver's harness test):
+  - `hash`: the same document in a different `spaces` order and different key order hashes the same; changing one `memberCount` changes both the document hash and that row's hash and no other row's;
   - `applyDocument` on an empty origin inserts every row and the `origins` row with `first_seen_at = last_ok_at = at` and `document_hash`;
-  - applying the same document again with the same hash is the caller's skip (test `touchOriginOk` alone updates `last_ok_at` and nothing else, by comparing `spaces` rows before and after);
+  - `touchOriginOk` alone updates `last_ok_at` and nothing else (compare `spaces` rows before and after);
   - applying a document where one space changed `member_count`, one is new and one is gone: exactly one update, one insert, one delete, unchanged rows keep their `row_hash`;
   - applying an empty `spaces` deletes all rows for that origin and keeps the `origins` row;
+  - a 200-space document applies as 200 rows. This is a regression guard for the batch path, not a probe of the production statement cap: the local D1 in the test pool accepts far larger batches than production may (the receiver's tests run a 10,001-statement batch), so the cap stays unverified until it is observed against the deployed Worker. Task 14 records that.
   - `feed` orders by `member_count DESC, created_at DESC`, honours `limit` and `offset`, excludes origins with `last_ok_at < since`, excludes a blocked origin (`space_id = '*'`) and a blocked single space, matches `q` against name or description case-insensitively, and treats `%` and `_` in `q` literally (a `q` of `50%` matches a description containing `50%` and not one containing `50 percent`);
   - `deleteOlderThan` removes `origins` (with cascade) and `fetch_attempts` rows older than the cutoff and nothing newer.
 
-- [ ] **Step 2: Failing handler tests** `index.test.ts` (`SELF.fetch` from `cloudflare:test`, `fetchMock` from `cloudflare:test` for the outbound call: `fetchMock.activate(); fetchMock.disableNetConnect(); fetchMock.get('https://chat.example.org').intercept({ path: '/api/directory/spaces' }).reply(200, body)`):
-  - `410` while `RETIRED = '1'`;
-  - `400` on a body over 1024 bytes, on a missing `origin`, on each rejected origin shape (one representative);
-  - a valid ping fetches `https://chat.example.org/api/directory/spaces` with `accept: application/json` and no redirect following (reply `302` → `502 { reason: 'status' }`);
-  - a valid document answers `204` and the feed then lists its spaces with `origin`, `instanceName`, `federatedRegistrationOpen`;
-  - a second ping within 10 s answers `429` with `retry-after: 10` and does not fetch; a ping for a *never valid* origin (fetch replied 500) still writes `fetch_attempts`, so its second ping inside 10 s is also `429`;
-  - a fetch that fails (network error) answers `502 { reason: 'unreachable' }` and leaves earlier rows intact;
-  - an invalid document answers `502 { reason: 'invalid' }`; an origin mismatch `502 { reason: 'origin-mismatch' }`; rows intact in both;
-  - an empty `spaces` answers `204` and the feed no longer lists that origin's spaces;
-  - a document identical to the stored one (same hash) answers `204` and updates only `last_ok_at` (assert `spaces` rows untouched via `row_hash`s and a `SELECT` count);
-  - `GET /v1/spaces` validates `limit` and `offset` like the proxy, returns `{ schema: 1, spaces }`, sends `cache-control: public, max-age=60`, and omits an origin whose `last_ok_at` is older than 3 days;
-  - `scheduled` deletes origins older than 30 days.
+- [ ] **Step 2: Implement.** `applyDocument` builds one `db.batch([...])`: `INSERT ... ON CONFLICT(origin) DO UPDATE` for `origins`, one `DELETE` per vanished id, one `INSERT ... ON CONFLICT(origin, id) DO UPDATE` per new or changed row; a document that changes nothing still refreshes `last_ok_at` and `document_hash`. Every statement binds at most 100 parameters (D1's per-statement cap). The `LIKE` uses `ESCAPE '\'` with `%`, `_` and `\` escaped in `q`.
 
-- [ ] **Step 3: Implement.** `handlePing` in the order of spec section 7 steps 1 to 8. The document hash: `SHA-256` of `JSON.stringify` of the *validated* document with spaces sorted by `id` (canonical). The row hash: `SHA-256` of `JSON.stringify` of the validated space fields in a fixed key order. `applyDocument` builds one `db.batch([...])`: `INSERT ... ON CONFLICT(origin) DO UPDATE` for `origins`, one `DELETE` per vanished id, one `INSERT ... ON CONFLICT(origin, id) DO UPDATE` per new or changed row. `GET /v1/spaces`: check `caches.default.match(request)` first; on a miss build the response with the header and `ctx.waitUntil(caches.default.put(request, response.clone()))`; apply the same per-address limiter as the ping. Cache API is available in the Workers vitest pool; if `caches.default` proves unavailable there, guard with `typeof caches !== 'undefined'` and test the header only. `scheduled`: `deleteOlderThan(env.DB, controller.scheduledTime - 30 * 86_400_000)`.
-
-- [ ] **Step 4: Also test the batch size.** One test applies a 200-space document and asserts 200 rows: this is the check the spec flags for the maximum statements per `batch()`. If it fails, chunk the batch at 100 statements and note it in `directory.md`.
-
-- [ ] **Step 5: `pnpm test` and `pnpm typecheck` green.** Workflow file: `actionlint` passes (`brew list actionlint` or run it through the repo's usual lint step).
-
-- [ ] **Step 6: Commit** `feat(hub): ping verification, diff writes and the feed`.
+- [ ] **Step 3: Tests green, typecheck green. Commit** `feat(hub): store with hashed diff writes`.
 
 ---
 
-### Task 9: Web API client, dedupe and the directory store
+### Task 8b: Hub routes, scheduled job and workflow
+
+**Spec:** section 7 (ping steps 1 to 8, the feed route, scheduled job), section 11.
+
+**Files:**
+- Create: `scripts/directory-hub/src/index.ts`, `src/index.test.ts`
+- Create: `.github/workflows/directory-hub.yml`
+
+**Interfaces:**
+- Consumes: Task 7 validators, Task 8a store and hashes.
+- Produces: the Worker. The outbound fetch is injectable: `export default` is built by `createWorker(outbound: typeof fetch = globalThis.fetch)`, and `handlePing(request, env, outbound)` takes it as a parameter, so the tests pass a spy and never depend on the pool's undici bridge (`fetchMock` from `cloudflare:test` is not used anywhere in this repo and its behaviour with `redirect: 'manual'` is unverified).
+
+- [ ] **Step 1: Failing handler tests** `index.test.ts`, in the receiver's convention: `createWorker(spy).fetch(req, env, ctx)` with `createExecutionContext()`, a `nextAddress()` helper that gives every request a distinct `cf-connecting-ip` (copy it from the receiver's `index.test.ts`; without it the 2-per-10-s limiter from `wrangler.toml` fails the suite on the third request), and `scheduled` called directly:
+  - `410` while `RETIRED = '1'`;
+  - `400` on a body over 1024 bytes, on a missing `origin`, on each rejected origin shape (one representative);
+  - a valid ping calls the spy with `https://chat.example.org/api/directory/spaces` and an init containing `redirect: 'manual'`, `signal` set, and `headers.accept` of `application/json` (assert the init object; this is how the redirect rule is tested);
+  - a spy answering a `302` yields `502 { reason: 'status' }` and leaves rows intact;
+  - a valid document answers `204` and the feed then lists its spaces with `origin`, `instanceName`, `federatedRegistrationOpen`;
+  - a second ping within 10 s answers `429` with `retry-after: 10` and does not call the spy; a ping for a never-valid origin (spy replied 500) still writes `fetch_attempts`, so its second ping inside 10 s is also `429`;
+  - a spy that rejects answers `502 { reason: 'unreachable' }` and leaves earlier rows intact;
+  - an invalid document answers `502 { reason: 'invalid' }`; an origin mismatch `502 { reason: 'origin-mismatch' }`; rows intact in both;
+  - a response whose body streams more than 512 KB is cut off and answers `502 { reason: 'invalid' }` without buffering the rest (build a `ReadableStream` that yields 1 MB of `"x"` in chunks and asserts the reader stopped pulling after the cap);
+  - an empty `spaces` answers `204` and the feed no longer lists that origin's spaces;
+  - a document identical to the stored one answers `204` and updates only `last_ok_at`;
+  - `GET /v1/spaces` validates `limit` and `offset` like the proxy, returns `{ schema: 1, spaces }`, sends `cache-control: public, max-age=60`, and omits an origin whose `last_ok_at` is older than 3 days; the per-address limiter applies to it too;
+  - `scheduled` deletes origins older than 30 days.
+
+- [ ] **Step 2: Implement.** `handlePing` in the order of spec section 7 steps 1 to 8. The body read: check `content-length` first (over `MAX_DOCUMENT_BYTES` → `502 invalid` without reading), then read `response.body` through a reader that accumulates chunks and cancels the stream once the total passes the cap (never `response.text()` on an unbounded body). `GET /v1/spaces`: `caches.default.match(request)` first; on a miss build the response with the header and `ctx.waitUntil(caches.default.put(request, response.clone()))`. The Cache API works in the vitest pool (verified against the pinned `@cloudflare/vitest-pool-workers` 0.22.0), but isolated-storage rollback between tests is not guaranteed for it, so tests that read the feed after a write use a distinct query string per test (a `?t=<n>` the handler ignores) or call `caches.default.delete` in `beforeEach`. `scheduled`: `deleteOlderThan(env.DB, controller.scheduledTime - 30 * 86_400_000)`.
+
+- [ ] **Step 3: Workflow.** Copy `telemetry-receiver.yml`. In the test job rename the `--filter @backspace/telemetry-receiver` targets to `@backspace/directory-hub` and the `paths:` filter to `scripts/directory-hub/**`; in the deploy job rename `environment:` to `directory-hub` and the two `workingDirectory: scripts/telemetry-receiver` values on the `wrangler-action` steps. The GitHub environment `directory-hub` must be created by hand at rollout (Task 14 records it). `actionlint` passes.
+
+- [ ] **Step 4: `pnpm test` and typecheck green. Commit** `feat(hub): ping verification and the feed`.
+
+---
+
+### Task 9: Web API client, dedupe, the shared connect path and the directory store
 
 **Spec:** section 8 (dedupe rule), section 9 (`connectAndJoin` continuation, steps 1 to 4).
 
 **Files:**
-- Modify: `packages/web/src/api/client.ts`, `packages/web/src/stores/exploreStore.ts` (export `getApiForOrigin`)
-- Create: `packages/web/src/utils/directory.ts`, `packages/web/src/utils/directory.test.ts`, `packages/web/src/stores/directoryStore.ts`, `packages/web/src/stores/directoryStore.test.ts`
+- Modify: `packages/web/src/api/client.ts`, `packages/web/src/stores/instanceStore.ts` (export `normalizeOrigin`; add `connectToInstance`), `packages/web/src/components/modals/ConnectedInstances.tsx` (`handleConnect` and `handleFallbackLogin` call `connectToInstance`)
+- Delete: `packages/web/src/hooks/useInstanceConnect.ts` (no caller in the repo; its branch is wrong for this use, see below)
+- Create: `packages/web/src/utils/directory.ts`, `packages/web/src/utils/directory.test.ts`, `packages/web/src/stores/directoryStore.ts`, `packages/web/src/stores/directoryStore.test.ts`, `packages/web/src/stores/instanceStore.connect.test.ts`
 
 **Interfaces:**
-- Consumes: `DirectoryFeed`, `DirectoryEntry` (Task 1); `isSelfOrigin`, `useInstanceStore` (`instances[].origin`), `useInstanceConnect` semantics; `exploreStore.publicJoin`/`requestJoin` (they take a `TaggedExploreSpace`; build one from the entry with `_instanceOrigin: entry.origin`, `joined: false`).
-- Produces: `api.directory.list(q?: string, limit = 50, offset = 0): Promise<DirectoryFeed>`; `dedupeAgainstConnected(entries: DirectoryEntry[], connectedOrigins: string[]): DirectoryEntry[]`; store below.
+- Consumes: `DirectoryFeed`, `DirectoryEntry` (Task 1); `isSelfOrigin`, `probeInstance`, `connectToRemote`, `reauthenticateInstance`, `loginToRemote`, `DifferentPasswordError` (`instanceStore.ts`); `getApiForOrigin` from `utils/crossStoreResolvers.ts`; `exploreStore.publicJoin`/`requestJoin` (they take a `TaggedExploreSpace`; build one from the entry with `_instanceOrigin: entry.origin`, `joined: false`); `HttpError` and its `code` (`api/client.ts`).
+- Produces:
+  - `api.directory.list(q?: string, limit = 50, offset = 0): Promise<DirectoryFeed>`;
+  - `normalizeOrigin(url: string): string` exported;
+  - `connectToInstance(origin: string, password: string, displayName?: string): Promise<ConnectOutcome>` with `type ConnectOutcome = { kind: 'connected'; how: 'new' | 'reconnect' } | { kind: 'needs-remote-password'; remoteUsername: string }`;
+  - `dedupeAgainstConnected(entries: DirectoryEntry[], connectedOrigins: string[]): DirectoryEntry[]`;
+  - `useDirectoryStore` (shape below).
 
-- [ ] **Step 1: The pure helper, test first** (`directory.test.ts`):
+- [ ] **Step 1: The shared connect path, test first.** Today the only working connect code is inline in `AddInstanceFlow` (`ConnectedInstances.tsx`: `handleConnect` calls `connectToRemote`, catches `DifferentPasswordError` and switches to a fallback form that calls `loginToRemote`). `useInstanceConnect.ts` is unused, branches on whether the origin exists in the store at all (a connected instance would wrongly take the reauthenticate path) and has no fallback. Write `connectToInstance` in `instanceStore.ts` with the branch spec section 9 describes:
+
+```ts
+export async function connectToInstance(origin: string, password: string, displayName?: string): Promise<ConnectOutcome> {
+  const store = useInstanceStore.getState();
+  const canonical = normalizeOrigin(origin);
+  const existing = store.instances.find((i) => normalizeOrigin(i.origin) === canonical);
+  try {
+    if (existing && (existing.status === 'error' || existing.status === 'disconnected')) {
+      await store.reauthenticateInstance(existing.origin, password);
+      return { kind: 'connected', how: 'reconnect' };
+    }
+    await store.connectToRemote(canonical, password, displayName);
+    return { kind: 'connected', how: 'new' };
+  } catch (err) {
+    if (err instanceof DifferentPasswordError) return { kind: 'needs-remote-password', remoteUsername: err.remoteUsername };
+    throw err;
+  }
+}
+```
+
+Tests (`instanceStore.connect.test.ts`, mocking `connectToRemote`/`reauthenticateInstance` on the store): a known `error` instance reconnects; a known `connected` instance goes through `connectToRemote` (the store's own duplicate handling decides); an unknown origin connects; `DifferentPasswordError` maps to `needs-remote-password`; other errors rethrow. Then make `AddInstanceFlow.handleConnect` call `connectToInstance(probeResult.origin, password, displayName)` and switch to the fallback phase on `needs-remote-password`; `handleFallbackLogin` stays on `loginToRemote`. Delete `useInstanceConnect.ts`.
+
+- [ ] **Step 2: The pure helper, test first** (`directory.test.ts`):
 
 ```ts
 import { describe, it, expect } from 'vitest';
@@ -678,16 +752,20 @@ describe('dedupeAgainstConnected', () => {
   it('drops nothing when nothing is connected', () => {
     expect(dedupeAgainstConnected([e('https://a.test', '1')], [])).toHaveLength(1);
   });
+  it('ignores a connected value that does not parse', () => {
+    expect(dedupeAgainstConnected([e('https://a.test', '1')], ['not a url'])).toHaveLength(1);
+  });
 });
 ```
 
-Implement with `new URL(x).origin` on both sides (a value that does not parse is dropped from `connectedOrigins` and kept in entries).
+Implement with `new URL(x).origin` on both sides; a `connectedOrigins` value that does not parse is skipped; an entry whose origin does not parse is kept.
 
-- [ ] **Step 2: The store, test first** (`directoryStore.test.ts`; mock `../api/client` and `./instanceStore` the way `exploreStore` tests or `JoinSpace.test.tsx` mock them):
-  - `fetch('')` calls `api.directory.list('', 50, 0)`, stores entries minus connected origins (`isSelfOrigin` true for `window.location.origin`, plus `useInstanceStore.getState().instances.map(i => i.origin)`), `hasMore` true when a full page came back;
+- [ ] **Step 3: The store, test first** (`directoryStore.test.ts`; mock `../api/client` and `./instanceStore` the way `components/modals/JoinSpace.test.tsx` mocks stores):
+  - `fetch('')` calls `api.directory.list('', 50, 0)`, stores entries minus connected origins (`window.location.origin` plus `useInstanceStore.getState().instances.map(i => i.origin)`, every status), `hasMore` true when a full page came back;
   - `loadMore()` requests `offset + 50` and appends without duplicates by `(origin, id)`;
-  - a `404 directory_disabled` sets `status: 'disabled'`, a `502` sets `status: 'unreachable'`, anything else `status: 'error'`; success sets `'ok'`;
-  - `fetch(q)` resets `offset` and `entries`.
+  - an `HttpError` with code `directory_disabled` sets `status: 'disabled'`, `directory_unreachable` sets `'unreachable'`, anything else `'error'`; success sets `'ok'`;
+  - `fetch(q)` resets `offset` and `entries`;
+  - `connectAndJoin` on a public entry: `connectToInstance` then `publicJoin`, resolves `{ kind: 'joined', spaceId, origin }`, removes the entry, calls `fetchMyRequests`; on a request entry: `requestJoin` with the message, resolves `{ kind: 'requested' }`; a `publicJoin` rejecting with `HttpError` code `already_member` resolves `joined`; `needs-remote-password` from the connect step is returned as is without joining; `loginAndJoin(entry, username, remotePassword, message?)` runs `loginToRemote` then the same join step.
 
 Store shape:
 
@@ -701,19 +779,20 @@ interface DirectoryState {
   fetch: (query: string) => Promise<void>;
   loadMore: () => Promise<void>;
   connectAndJoin: (entry: DirectoryEntry, password: string, message?: string) => Promise<ConnectAndJoinResult>;
+  loginAndJoin: (entry: DirectoryEntry, username: string, remotePassword: string, message?: string) => Promise<ConnectAndJoinResult>;
   reset: () => void;
 }
-type ConnectAndJoinResult =
+export type ConnectAndJoinResult =
   | { kind: 'joined'; spaceId: string; origin: string }
   | { kind: 'requested' }
   | { kind: 'needs-remote-password'; remoteUsername: string };
 ```
 
-`connectAndJoin`: connect via the same logic `useInstanceConnect.connect` runs (extract that body into an exported plain function `connectToInstance(host, password): Promise<'new' | 'reconnect'>` in the hook file and have the hook call it, so the store and the hook share one path, including the `DifferentPasswordError` branch which the store surfaces as `needs-remote-password`); then `publicJoin` or `requestJoin` through `exploreStore` with a `TaggedExploreSpace` built from the entry; a `409 already_member` from `publicJoin` (check how `describeError`/the API client expose the code; match on the code, not the text) resolves as `joined`; finally `useExploreStore.getState().fetchMyRequests()` and remove the entry from `entries` (its origin is now connected).
+The join step is one private function `joinAfterConnect(entry, message)` shared by both actions.
 
-- [ ] **Step 3: `api.directory.list`** in `client.ts`, next to `explore`; `getApiForOrigin` exported from `exploreStore.ts`.
+- [ ] **Step 4: `api.directory.list`** in `client.ts`, next to `explore`: `request<DirectoryFeed>('GET', '/directory?' + params)`.
 
-- [ ] **Step 4: Tests green, typecheck green. Commit** `feat(web): directory store and origin dedupe`.
+- [ ] **Step 5: Tests green, `pnpm typecheck` green. Commit** `feat(web): directory store, origin dedupe and the shared connect path`.
 
 ---
 
@@ -726,18 +805,18 @@ type ConnectAndJoinResult =
 - Create: `packages/web/src/components/chat/OuterSpaceSection.tsx`
 - Modify: `packages/web/src/components/chat/ExplorePage.tsx`
 - Modify: `packages/web/src/locales/{en,de,ru,zh}/spaces.json`
-- Test: `packages/web/src/components/chat/OuterSpaceSection.test.tsx`, `packages/web/src/components/chat/SpaceCard.test.tsx`
+- Test: `packages/web/src/components/chat/OuterSpaceSection.test.tsx`, `packages/web/src/components/chat/SpaceCard.test.tsx`, `packages/web/src/components/chat/ExplorePage.search.test.tsx`
 
 **Interfaces:**
-- Consumes: Task 9 store; `useSpaceJoin`.
+- Consumes: Task 9 store; `useSpaceJoin`; `api.instance.info()` for the gate.
 - Produces: `SpaceCard` props `{ space: TaggedExploreSpace; onJoinSuccess(spaceId: string): void }` unchanged for Inner, plus an optional `outer?: { entry: DirectoryEntry; onConnect(entry: DirectoryEntry): void }`. When `outer` is set the card renders the origin chip always, a "Closed to new accounts" badge when `entry.federatedRegistrationOpen === false`, and a single action button "Connect and join" (public) or "Connect and request" (request) calling `onConnect`; it does not use `useSpaceJoin`'s join/request actions.
 
 Brief:
 
 1. Extract `SpaceCard` verbatim, then add the `outer` branch. Build the `TaggedExploreSpace` for an outer entry as `{ ...entry, _instanceOrigin: entry.origin, joined: false }`.
-2. `ExplorePage`: wrap the existing content (unjoined grid, joined section) under a section header "Inner Space" with subtitle "Spaces on your instances", using the same header typography the joined section uses (`text-xs font-semibold uppercase tracking-wider text-txt-tertiary`) with the subtitle in `text-[13px] text-txt-tertiary` beneath. Below it render `<OuterSpaceSection query={searchQuery} onConnect={...} />` whenever `directoryStore.status !== 'disabled'`. The existing true-empty state (no Inner spaces at all) must not hide Outer Space: restructure so the Inner empty copy renders inside the Inner section and Outer still renders below.
+2. `ExplorePage`: wrap the existing content (unjoined grid, then the collapsible joined section below it, as today) under a section header "Inner Space" with subtitle "Spaces on your instances", using the header typography the joined section uses (`text-xs font-semibold uppercase tracking-wider text-txt-tertiary`) with the subtitle in `text-[13px] text-txt-tertiary` beneath. Below it render `<OuterSpaceSection query={searchQuery} onConnect={...} />`. The section is gated on the home instance's public `directoryEnabled` flag read once on mount through `api.instance.info()` (unauthenticated, cheap, and known before any fetch, so an instance with the directory off never flashes the header); not on the store's status, which starts `idle`. The existing true-empty state (no Inner spaces at all) must not hide Outer Space: the Inner empty copy renders inside the Inner section and Outer still renders below.
 3. The search input drives both: the existing 300 ms debounce also calls `directoryStore.fetch(value)`.
-4. `OuterSpaceSection`: header "Outer Space", subtitle "Communities across Backspace"; states: `loading` (skeleton or `LoadingSpinner` inline in the header when entries exist, full-height spinner when they do not), `unreachable` (the `directory_unreachable` copy from `errors.json`, in the amber notice style ExplorePage uses for `discoveryDisabled`), `error` (rose notice), `ok` with zero entries and a query (`spaces:explore.outer.noMatches`), `ok` with zero entries and no query (`spaces:explore.outer.empty`, using `Mascot state="lonely"` like the page's empty state), `ok` with entries (grid identical to Inner's, `SpaceCard` with `outer`), and a "Show more" button when `hasMore`. On mount call `fetch(query)`.
+4. `OuterSpaceSection`: header "Outer Space", subtitle "Communities across Backspace"; states: `loading` (inline `LoadingSpinner` in the header when entries exist, full-height spinner when they do not), `unreachable` (the `directory_unreachable` copy from `errors.json`, in the amber notice style ExplorePage uses for `discoveryDisabled`), `error` (rose notice), `ok` with zero entries and a query (`spaces:explore.outer.noMatches`), `ok` with zero entries and no query (`spaces:explore.outer.empty`, with `Mascot state="lonely"` like the page's empty state), `ok` with entries (grid identical to Inner's, `SpaceCard` with `outer`), and a "Show more" button when `hasMore`. On mount call `fetch(query)`.
 5. Keys, English (add to `spaces.explore`):
 
 ```json
@@ -754,39 +833,58 @@ Brief:
 }
 ```
 
-German, Russian, Chinese: "Inner Space"/"Outer Space" are translated literally ("Innerer Space"/"Äußerer Space" keeps the loanword the German catalog already uses for Space; "Внутреннее пространство"/"Внешнее пространство"; "内部空间"/"外部空间"). The rest in each catalog's register.
+German, Russian, Chinese: "Inner Space"/"Outer Space" translated literally ("Innerer Space"/"Äußerer Space" keeps the loanword the German catalog already uses; "Внутреннее пространство"/"Внешнее пространство"; "内部空间"/"外部空间"). The rest in each catalog's register.
 
-6. Tests: `SpaceCard` outer branch renders the chip, the badge when closed, the right action label per visibility, and calls `onConnect` with the entry. `OuterSpaceSection` renders each of the seven states from a mocked store and calls `loadMore` on "Show more".
+6. Tests: `SpaceCard` outer branch renders the chip, the badge when closed, the right action label per visibility, and calls `onConnect` with the entry. `OuterSpaceSection` renders each of the seven states from a mocked store and calls `loadMore` on "Show more". `ExplorePage.search.test.tsx`: typing in the search box calls both `exploreStore.fetchSpaces` and `directoryStore.fetch` with the same value after the debounce; with `directoryEnabled: false` from the mocked `api.instance.info` the Outer header is never rendered.
 
-- [ ] **Step 1: Failing tests. Step 2: Implement. Step 3: Tests, typecheck and the i18n check green.**
-- [ ] **Step 4: Screenshots.** Run the dev harness (`pnpm dev`, the `run` skill or the repo's screenshot helper if one exists) and capture the Explore page in: both sections populated; Inner empty and Outer populated; Outer unreachable; Outer empty. Save under the scratchpad and list the paths in the task report. The section layout is reviewed on those screenshots before Task 11 starts.
+- [ ] **Step 1: Failing tests. Step 2: Implement. Step 3: Tests, `pnpm typecheck` green.**
+- [ ] **Step 4: Screenshots.** Run the dev harness (`pnpm dev`, or the `run` skill) and capture the Explore page in: both sections populated; Inner empty and Outer populated; Outer unreachable; Outer empty. Save under the scratchpad and list the paths in the task report. The section layout is reviewed on those screenshots before Task 11b starts.
 - [ ] **Step 5: Commit** `feat(web): Outer Space section on the Explore page`.
 
 ---
 
-### Task 11: Connect-and-join modal and origin-keyed pending requests
+### Task 11a: Pending join requests keyed by origin
 
-**Spec:** section 9 (steps 1 to 4), section 12.
+**Spec:** section 9 step 3, section 12.
 
 **Files:**
-- Create: `packages/web/src/components/modals/ConnectAndJoinModal.tsx`, `ConnectAndJoinModal.test.tsx`
-- Modify: `packages/web/src/stores/uiStore.ts` (`'connectAndJoin'` in `ModalType`), the modal host component that switches on `activeModal`, `packages/web/src/components/modals/ConnectedInstances.tsx` (share the password step), `packages/web/src/hooks/useSpaceJoin.ts`, `packages/web/src/stores/exploreStore.ts`, `packages/web/src/components/chat/ExplorePage.tsx` (wire `onConnect` to `openModal('connectAndJoin', { entry })`)
-- Modify: `packages/web/src/locales/{en,de,ru,zh}/spaces.json`, `federation.json` if the shared password step's keys live there
+- Modify: `packages/web/src/stores/exploreStore.ts`, `packages/web/src/hooks/useSpaceJoin.ts`
+- Test: `packages/web/src/stores/exploreStore.requests.test.ts`, `packages/web/src/hooks/useSpaceJoin.test.tsx` (extend if it exists)
 
 **Interfaces:**
-- Consumes: `directoryStore.connectAndJoin` (Task 9); `probeInstance`, `loginToRemote` from `instanceStore`; `describeError`.
-- Produces: the modal; `useSpaceJoin` pending check on `(origin, spaceId)`; `exploreStore.myRequests` as `Array<JoinRequest & { _instanceOrigin: string }>` and `fetchMyRequests(origins?: string[])` that queries home plus every connected instance (`Promise.allSettled`, tag each result).
+- Produces: `exploreStore.myRequests: Array<JoinRequest & { _instanceOrigin: string }>`; `fetchMyRequests(): Promise<void>` that queries home plus every instance with `status === 'connected'` via `Promise.allSettled`, tagging each result with its origin (`''` for home); `useSpaceJoin.isPending` comparing `r.spaceId === space.id && r._instanceOrigin === space._instanceOrigin`.
+
+Brief: this is an existing single-global-id assumption (`useSpaceJoin` matches on `spaceId` alone and `fetchMyRequests` asks only home) that Outer Space would otherwise lean on. Fix it on its own so the modal task starts from a correct base. `requestJoin` tags the request it appends with the space's origin.
+
+Tests: `fetchMyRequests` with one connected instance calls both clients and tags results; a rejected remote call keeps the home results; `isPending` is true only for the matching `(origin, spaceId)` pair and false for the same id on another origin.
+
+- [ ] **Step 1: Failing tests. Step 2: Implement. Step 3: Green. Step 4: Commit** `fix(web): key pending join requests by instance origin`.
+
+---
+
+### Task 11b: The connect-and-join modal
+
+**Spec:** section 9 (steps 1 to 4).
+
+**Files:**
+- Create: `packages/web/src/components/modals/RemotePasswordStep.tsx` (extracted from `AddInstanceFlow` in `ConnectedInstances.tsx`: the instance info line, the `registrationClosed` banner, the password form, and the fallback-login form as a `phase` prop), `packages/web/src/components/modals/ConnectAndJoinModal.tsx`, `ConnectAndJoinModal.test.tsx`
+- Modify: `packages/web/src/components/modals/ConnectedInstances.tsx` (`AddInstanceFlow` renders `RemotePasswordStep`), `packages/web/src/stores/uiStore.ts` (`'connectAndJoin'` added to the `ModalType` union; the union stays unexported), `packages/web/src/components/layout/AppLayout.tsx` (add `<ConnectAndJoinModal />` to **both** modal lists, mobile and desktop; every modal there is rendered unconditionally and gates itself), `packages/web/src/components/chat/ExplorePage.tsx` (wire `onConnect` to `openModal('connectAndJoin', { entry })`)
+- Modify: `packages/web/src/locales/{en,de,ru,zh}/spaces.json`
+
+**Interfaces:**
+- Consumes: `directoryStore.connectAndJoin` and `loginAndJoin` (Task 9); `probeInstance` (`instanceStore`); `describeError`; `useUIStore` (`activeModal`, `modalData`, `closeModal`, `showToast` or whatever the toast action is named in `uiStore.ts`).
+- Produces: the modal.
 
 Brief:
 
-1. **Modal.** `glass-modal` with `bg-black/50` backdrop like the other modals. On open: run `probeInstance(new URL(entry.origin).host)` immediately (the probe performs the self and duplicate checks and returns `federatedRegistrationOpen`); show the instance name and host from the probe result; the amber `registrationClosed` banner when closed; the intro line `spaces:explore.connect.intro` ("This space lives on {{host}}. Enter your password for {{home}} to create your identity there.") with `home` = the user's home host (`useAuthStore` user `homeInstance` or `window.location.host`); the same password form the `AddInstanceFlow` auth step renders (extract that step's JSX into a shared `RemotePasswordStep` component in `ConnectedInstances.tsx`'s folder and use it in both places rather than duplicating it); on submit call `connectAndJoin(entry, password, message?)`. For a `request` space the modal shows the optional request message textarea (same `REQUEST_MESSAGE_MAX_LENGTH` and placeholder keys as the card). Results: `joined` closes the modal, `setCurrentSpace(spaceId)`, `navigate('/channels/' + spaceId)` (same as `handleJoinSuccess` in ExplorePage); `requested` closes the modal and shows a toast `spaces:explore.connect.requested`; `needs-remote-password` switches the modal into the fallback login phase (`RemotePasswordStep`'s fallback variant, `loginToRemote`) and then continues with the join. Errors through `describeError` in the modal.
-2. **Pending requests by origin.** `exploreStore.fetchMyRequests` queries every connected instance and tags results; `useSpaceJoin.isPending` compares `r.spaceId === space.id && r._instanceOrigin === space._instanceOrigin`. `directoryStore.connectAndJoin` calls `fetchMyRequests()` after a successful connection so the just-connected origin is included.
-3. **Wire** the card's `onConnect` in `ExplorePage` to `openModal('connectAndJoin', { entry })`; the modal host reads `modalData.entry`.
+1. **Self-gating.** `const activeModal = useUIStore((s) => s.activeModal); const modalData = useUIStore((s) => s.modalData); if (activeModal !== 'connectAndJoin') return null;` then narrow `modalData.entry` at the use site with a type guard `isDirectoryEntry(v: unknown): v is DirectoryEntry` (checks `origin`, `id`, `name`, `visibility` are present with the right types); render nothing and log nothing if it fails.
+2. **Modal.** `glass-modal` with `bg-black/50` backdrop like the other modals. On open: run `probeInstance(new URL(entry.origin).host)` immediately (the probe performs the self and duplicate checks and returns `federatedRegistrationOpen`); until it resolves show a spinner; on failure show `describeError` and a close button. Then `RemotePasswordStep` in the `password` phase with the intro line `spaces:explore.connect.intro` ("This space lives on {{host}}. Enter your password for {{home}} to create your identity there.") where `home` is the user's home host (`useAuthStore` user `homeInstance` or `window.location.host`). For a `request` space an optional request message textarea (same `REQUEST_MESSAGE_MAX_LENGTH` and placeholder keys as the card) sits above the submit button. Submit calls `connectAndJoin(entry, password, message)`. Results: `joined` closes the modal, `setCurrentSpace(spaceId)`, `navigate('/channels/' + spaceId)` (same as `handleJoinSuccess` in ExplorePage); `requested` closes the modal and shows a toast `spaces:explore.connect.requested`; `needs-remote-password` switches `RemotePasswordStep` to its `fallback` phase (username prefilled with `remoteUsername`), whose submit calls `loginAndJoin(entry, username, remotePassword, message)` and handles the result the same way. Errors through `describeError` inside the step.
+3. **Wire** the card's `onConnect` in `ExplorePage` to `openModal('connectAndJoin', { entry })`.
 4. Keys: `spaces.explore.connect.{title, intro, requested, connecting}`; reuse `federation:connections.add.*` for the password labels and the closed banner.
 
-Tests: modal probes on open and shows host and name; closed banner when the probe says closed; submit calls `connectAndJoin` with the entry and password; `joined` navigates; `requested` closes with a toast; `needs-remote-password` shows the fallback form; `useSpaceJoin` marks pending only for the matching origin.
+Tests: modal renders nothing when `activeModal` is something else; probes on open and shows host and name; closed banner when the probe says closed; submit calls `connectAndJoin` with the entry, password and message; `joined` navigates and closes; `requested` closes with a toast; `needs-remote-password` shows the fallback form and its submit calls `loginAndJoin`; a probe failure shows the error. `AddInstanceFlow` still connects and still falls back (extend its existing test if there is one, otherwise a smoke test that the password phase renders and submits).
 
-- [ ] **Step 1: Failing tests. Step 2: Implement. Step 3: Green, typecheck, i18n check. Step 4: Screenshot the modal in the password and the fallback phases. Step 5: Commit** `feat(web): connect and join from an Outer Space card`.
+- [ ] **Step 1: Failing tests. Step 2: Implement. Step 3: Green, `pnpm typecheck`. Step 4: Screenshot the modal in the password and the fallback phases. Step 5: Commit** `feat(web): connect and join from an Outer Space card`.
 
 ---
 
@@ -795,17 +893,17 @@ Tests: modal probes on open and shows host and name; closed banner when the prob
 **Spec:** section 10.
 
 **Files:**
-- Modify: `packages/web/src/components/modals/instanceSettingsPanels/GeneralPanel.tsx`, `packages/web/src/components/modals/SpaceSettings.tsx` (`DiscoveryPanel`), `packages/web/src/stores/settingsStore.ts` (the draft includes `directoryEnabled`)
+- Modify: `packages/web/src/components/modals/instanceSettingsPanels/GeneralPanel.tsx` (the draft is component-local state in this file; add `directoryEnabled` to it), `packages/web/src/components/modals/SpaceSettings.tsx` (`DiscoveryPanel`), `packages/web/src/stores/settingsStore.ts` (`updateInstanceSettings` mirrors `discoveryEnabled` into `streamingLimits` because `DiscoveryPanel` reads the discovery flag from `streamingLimits`; extend the same mirror with `directoryEnabled`, and add `directoryEnabled` to `InstanceStreamingLimits` in `packages/shared/src/types.ts` plus `rowToLimits` in `routes/settings.ts` so `GET /api/settings/streaming`, which any user may read, carries it)
 - Modify: `packages/web/src/locales/{en,de,ru,zh}/admin.json`, `spaces.json`
 - Test: `GeneralPanel.directory.test.tsx`, `SpaceSettings.directorySwitch.test.tsx`
 
 **Interfaces:**
-- Consumes: `InstanceAdminSettings.directoryEnabled|directoryLastPingAt|directoryLastError`, `Space.directoryListed`, `InstanceInfoResponse.directoryEnabled` (for the space panel on a remote instance, read the instance's info through `getApiForOrigin(origin).instance.info()`; on home read `settingsStore.instanceSettings` if the user is admin, else `api.instance.info()`).
+- Consumes: `InstanceAdminSettings.directoryEnabled|directoryLastPingAt|directoryLastError`, `Space.directoryListed`, `InstanceStreamingLimits.directoryEnabled` (home) and, for a space on a connected remote instance, that instance's `getApiForOrigin(origin).settings.getStreaming()` from `utils/crossStoreResolvers.ts` (the panel already knows the space's origin through `getChannelOrigin`/the space store; follow how `DiscoveryPanel` resolves `discoveryEnabled` today and extend it the same way).
 
 Brief:
 
-1. **GeneralPanel**, under the discovery block: a second `Toggle` "List spaces in the Backspace directory" with description; `disabled` when `draft.discoveryEnabled === false`, with the reason `admin:general.directory.needsDiscovery` under it; when `federatedRegistrationOpen === false` show the amber note `admin:general.directory.registrationClosed`; a status line like `TelemetryPanel`'s: `admin:general.directory.status.never` / `.lastPing` (with the formatted date and time via `useFormatters`) / `.lastError` (with `status` and, when present, `reason` rendered through a small map to the keys `admin:general.directory.reasons.{unreachable,status,invalid,origin-mismatch}`); the disclosure sentence `admin:general.directory.disclosure`. Turning discovery off in the draft also turns the directory toggle off in the draft (mirrors the server invariant).
-2. **DiscoveryPanel**: a `Toggle` row "List in the Backspace directory" placed after the visibility options and before the description; states: enabled when `directoryEnabled` (instance) and `visibility !== 'private'` (draft value); disabled with `spaces:settings.discovery.directory.adminOff` when the instance has it off; disabled with `spaces:settings.discovery.directory.privateSpace` when the draft visibility is private (and the draft value is forced to off); the disclosure `spaces:settings.discovery.directory.disclosure`. Saved through `api.spaces.update(spaceId, { ..., directoryListed })` in the same save the panel already does. Never hidden.
+1. **GeneralPanel**, under the discovery block: a second `Toggle` "List spaces in the Backspace directory" with description; `disabled` when `draft.discoveryEnabled === false`, with the reason `admin:general.directory.needsDiscovery` under it; turning discovery off in the draft also turns the directory toggle off in the draft (mirrors the server invariant); when `federatedRegistrationOpen === false` show the amber note `admin:general.directory.registrationClosed`; a status line like `TelemetryPanel`'s: `admin:general.directory.status.never` / `.lastPing` (formatted date and time via `useFormatters`) / `.lastError` (with `status` and, when present, `reason` rendered through a small map to `admin:general.directory.reasons.{unreachable,status,invalid,origin-mismatch}`; a `status` of `'origin'` uses `admin:general.directory.reasons.origin`, which explains that the instance's own address was refused, the case a dev instance with no `DOMAIN` hits); the disclosure sentence `admin:general.directory.disclosure`.
+2. **DiscoveryPanel**: a `Toggle` row "List in the Backspace directory" placed after the visibility options and before the description; states: enabled when the instance's `directoryEnabled` is true and the draft `visibility !== 'private'`; disabled with `spaces:settings.discovery.directory.adminOff` when the instance has it off; disabled with `spaces:settings.discovery.directory.privateSpace` when the draft visibility is private (and the draft value is forced to off); the disclosure `spaces:settings.discovery.directory.disclosure`. Saved through `api.spaces.update(spaceId, { ..., directoryListed })` in the same save the panel already does. Never hidden.
 3. Keys, English:
 
 ```json
@@ -817,7 +915,13 @@ Brief:
   "registrationClosed": "New accounts from other instances are closed, so listed spaces will show as closed to new accounts.",
   "disclosure": "For each listed space this makes public: its name, description, icon, banner, member count and this instance's address. People browsing the directory load the icon and banner from this instance.",
   "status": { "never": "Never reported", "lastPing": "Last reported {{date}}", "lastError": "Last attempt failed ({{status}})" },
-  "reasons": { "unreachable": "the directory could not reach this instance", "status": "this instance answered with an error", "invalid": "this instance served an invalid document", "origin-mismatch": "this instance reports a different address than the one it was reached at" }
+  "reasons": {
+    "unreachable": "the directory could not reach this instance",
+    "status": "this instance answered with an error",
+    "invalid": "this instance served an invalid document",
+    "origin-mismatch": "this instance reports a different address than the one it was reached at",
+    "origin": "the directory refused this instance's address; it must be an https domain with no port (set DOMAIN or PUBLIC_ORIGIN)"
+  }
 }
 "spaces.settings.discovery.directory": {
   "label": "List in the Backspace directory",
@@ -828,9 +932,9 @@ Brief:
 }
 ```
 
-Tests: toggle disabled with reason when discovery is off; enabled otherwise; amber note when federated registration is closed; status line for each of the three states; space switch in each of its three states; save sends `directoryListed`.
+Tests: toggle disabled with reason when discovery is off; turning discovery off in the draft turns the directory off in the draft; enabled otherwise; amber note when federated registration is closed; status line for `never`, `lastPing`, a numeric error, a `fetch` error with reason, and an `origin` error; space switch in each of its three states; save sends `directoryListed`; `updateInstanceSettings` mirrors `directoryEnabled` into `streamingLimits`.
 
-- [ ] **Step 1: Failing tests. Step 2: Implement. Step 3: Green, typecheck, i18n check. Step 4: Screenshot both panels. Step 5: Commit** `feat(web): directory toggle and per-space listing switch`.
+- [ ] **Step 1: Failing tests. Step 2: Implement (server `rowToLimits` and the shared type first, then the store mirror, then the panels). Step 3: Green, `pnpm typecheck`. Step 4: Screenshot both panels. Step 5: Commit** `feat(web): directory toggle and per-space listing switch`.
 
 ---
 
@@ -839,11 +943,11 @@ Tests: toggle disabled with reason when discovery is off; enabled otherwise; amb
 **Spec:** section 8 (navigation).
 
 **Files:**
-- Modify: `packages/web/src/components/layout/ChannelSidebar.tsx` (the first placeholder nav item after Friends), `packages/web/src/locales/{en,de,ru,zh}/spaces.json` (`sidebar.dmList.explore` = "Explore"; reuse `spaces:explore.title` if identical)
+- Modify: `packages/web/src/components/layout/ChannelSidebar.tsx` (the first of the two placeholder items after Friends), `packages/web/src/locales/{en,de,ru,zh}/spaces.json` (`sidebar.dmList.explore` = "Explore"; the `comingSoon` key stays, the second placeholder still uses it)
 
-Brief: replace the first "Coming Soon" item with a clickable item that renders the compass SVG from `ExplorePage`'s header, the label, `onClick={() => navigate('/explore')}`, and the selected style (`bg-interactive-selected text-white`) when `location.pathname === '/explore'`; update the Home item's selected condition, which already excludes `/explore`. Leave the second placeholder untouched.
+Brief: replace the first placeholder `div` with a clickable item that renders the compass SVG from `ExplorePage`'s header, the label, `onClick={() => navigate('/explore')}`, and the selected style (`bg-interactive-selected text-white`) when `location.pathname === '/explore'`, in the same markup as the Friends item above it. The Home item's row condition already excludes `/explore`; its inner SVG is still gated on bare `!currentChannelId`, so give the SVG the row's condition. Leave the second placeholder untouched.
 
-- [ ] **Step 1: Implement. Step 2: Typecheck, i18n check, screenshot the home sidebar with Explore selected. Step 3: Commit** `feat(web): Explore entry in the home sidebar`.
+- [ ] **Step 1: Implement. Step 2: `pnpm typecheck` green; screenshot the home sidebar with Explore selected. Step 3: Commit** `feat(web): Explore entry in the home sidebar`.
 
 ---
 
@@ -855,7 +959,7 @@ Brief: replace the first "Coming Soon" item with a clickable item that renders t
 - Create: `docs/systems/directory.md`
 - Modify: `docs/systems/database.md`, `api.md`, `admin.md`, `spaces.md`, `client-federation.md`, `localization.md`, `deployment.md`, `telemetry.md`, `.env.example`, `CLAUDE.md`
 
-Brief: `directory.md` follows the structure of `telemetry.md` (source files list, why it exists, the three facts and the one rule from spec section 3, the state columns with the transition list, the document with its field table, the pinger's answer table, the hub's routes and tables, the blocklist procedure with the exact `wrangler d1 execute backspace-directory --command "INSERT INTO blocks ..."` lines for an origin block and a space block, the WAF rule to create, `DIRECTORY_ENDPOINT`, the free-plan paragraph, and what is deferred). Each other doc gets the delta spec section 14 names, in that doc's existing style. `.env.example` gets a `DIRECTORY_ENDPOINT` block after the telemetry one in the same voice. `CLAUDE.md` subsystem table gets a `directory.md` row. `telemetry.md` gets the honest paragraph from spec section 14, not a claim of independence.
+Brief: `directory.md` follows the structure of `telemetry.md` (source files list, why it exists, the three facts and the one rule from spec section 3, the state columns with the transition list, the document with its field table and the one asset URL rule, the pinger's answer table and the persisted per-day guard, the hub's routes and tables and the injectable outbound fetch, the blocklist procedure with the exact `wrangler d1 execute backspace-directory --command "INSERT INTO blocks ..."` lines for an origin block and a space block, the WAF rule to create, `DIRECTORY_ENDPOINT` and what empty means, the free-plan paragraph, the rollout checklist (D1 database and its id into `wrangler.toml`, custom domain, WAF rule, GitHub environment `directory-hub`, deploy dispatch), two known limits: the D1 `batch()` statement cap is unverified in production and a dev instance without `DOMAIN` serves `http://localhost:<port>` which the hub refuses as `status: 'origin'`, and what is deferred). Each other doc gets the delta spec section 14 names, in that doc's existing style; `api.md` also records `InstanceStreamingLimits.directoryEnabled`. `.env.example` gets a `DIRECTORY_ENDPOINT` block after the telemetry one in the same voice, saying that an empty value disables the feature. `CLAUDE.md` subsystem table gets a `directory.md` row. `telemetry.md` gets the honest paragraph from spec section 14, not a claim of independence.
 
 - [ ] **Step 1: Write. Step 2: Read each changed doc once end to end for placeholders and stale claims. Step 3: Commit** `docs: space directory subsystem`.
 
@@ -867,27 +971,27 @@ Brief: `directory.md` follows the structure of `telemetry.md` (source files list
 
 **Files:**
 - Create: `packages/server/test/directory-e2e.test.ts`
-- Modify: `packages/server/test/helpers/twoInstanceHarness.ts` (`SpawnInstanceOptions.directoryEndpoint?: string` passed through as `DIRECTORY_ENDPOINT`; `BootOptions.directoryEndpoint?: string`)
+- Modify: `packages/server/test/helpers/twoInstanceHarness.ts`: `SpawnInstanceOptions.directoryEndpoint?: string` and `BootOptions.directoryEndpoint?: string`. The child env is built as `{ ...process.env, ... }`, so a developer's own `DIRECTORY_ENDPOINT` would otherwise reach every spawned instance and start a live pinger in unrelated federation tests. Set `env.DIRECTORY_ENDPOINT = opts.directoryEndpoint ?? ''` explicitly, in the same place and for the same reason `DISABLE_FEDERATION_WORKERS` is set explicitly in both branches.
 
-Brief: start a stub hub in the test process (a plain `node:http` server on an ephemeral port) that records pings and, on each, fetches `${origin}/api/directory/spaces` itself and stores the result per origin, answering `204`. Boot two instances with `directoryEndpoint` pointed at the stub and `publicOriginAsTransport: true` (so the served `origin` matches the transport origin the stub fetches). Then: register an admin on instance A, enable discovery and the directory, create a public space, set `directoryListed: true`, and wait (poll up to 10 s) until the stub holds that space for A's origin. Then set `directoryListed: false` and assert the stub's next stored document for A has no spaces within 10 s. Then switch the directory off and assert the same. Finally, with the stub answering `502 { reason: 'unreachable' }` for one ping, assert `GET /api/settings/instance` on A shows `directoryLastError.status === 'fetch'` and `reason === 'unreachable'`, and that after the stub recovers the next ping clears it.
+Brief: start a stub hub in the test process (a plain `node:http` server on an ephemeral port) that records pings and, on each, fetches `${origin}/api/directory/spaces` itself and stores the result per origin, answering `204`. Boot two instances with `directoryEndpoint` pointed at the stub and `publicOriginAsTransport: true` (so the served `origin` matches the transport origin the stub fetches; the stub does not run the hub's origin validator, it only fetches). Then: register an admin on instance A, enable discovery and the directory, create a public space, set `directoryListed: true`, and wait (poll up to 10 s) until the stub holds that space for A's origin. Then set `directoryListed: false` and assert the stub's next stored document for A has no spaces within 10 s. Then switch the directory off and assert the same. Finally, with the stub answering `502 { reason: 'unreachable' }` for one ping, assert `GET /api/settings/instance` on A shows `directoryLastError.status === 'fetch'` and `reason === 'unreachable'`, and that after the stub recovers the next ping clears it.
 
-- [ ] **Step 1: Write the test. Step 2: Run `npx vitest run test/directory-e2e.test.ts`: green. Step 3: Full server suite green. Step 4: Commit** `test(directory): end to end listing and delisting`.
+- [ ] **Step 1: Write the test. Step 2: Run `npx vitest run test/directory-e2e.test.ts`: green. Step 3: Full server suite green (the existing federation tests must not have started a pinger: grep their logs for the pinger's start line, it must be absent). Step 4: Commit** `test(directory): end to end listing and delisting`.
 
 ---
 
 ## Self-review against the spec
 
 - Section 2 naming: Task 10 (headers and subtitles), Task 13 (sidebar).
-- Section 3 facts and the one rule: Task 2 (version), Task 3 (cache keyed on version), Task 5 (version-guarded clear), Task 8 (never delete on failure, replace not merge).
+- Section 3 facts and the one rule: Task 2 (version), Task 3 (cache keyed on version), Task 5 (version-guarded clear), Task 8a and 8b (never delete on failure, replace not merge).
 - Section 4: Task 2 (columns, state), Task 4 (transitions, invariant, wire fields), Task 1 (types).
-- Section 5: Task 3.
-- Section 6: Task 5 (boot ping and daily slot and answer table and backoff and the own guard).
-- Section 7: Tasks 7 and 8 (tables, validators, ping steps, feed, scheduled, workflow).
-- Section 8: Tasks 9 (dedupe by origin, `getApiForOrigin` export), 10 (sections, card, states), 13 (sidebar).
-- Section 9: Task 6 (proxy), Task 11 (modal, continuation, origin-keyed requests), Task 9 (`connectAndJoin`).
-- Section 10: Task 12.
-- Section 11: Task 7 (URL pinning, origin validation), Task 8 (cooldown on every origin, limiter), Task 12 (disclosure copy), Task 14 (blocklist procedure, WAF rule).
-- Section 13: Tasks 1, 10, 11, 12.
-- Section 14: Task 14. Section 15: every task's tests plus Task 15. Section 18 (rollout: D1, domain, WAF rule, deploy dispatch) is a manual step for the maintainer after merge, documented in `directory.md`.
+- Section 5: Task 3 (including the one asset rule and the explore-count comparison).
+- Section 6: Task 5 (explicit boot ping, daily slot, persisted per-day guard, answer table, backoff, own guard).
+- Section 7: Tasks 7, 8a, 8b (tables, validators, ping steps, capped reader, feed, scheduled, workflow).
+- Section 8: Tasks 9 (dedupe by origin), 10 (sections gated on the public flag, card, states, search driving both), 13 (sidebar).
+- Section 9: Task 6 (proxy with limiter asserted), Task 9 (the shared connect path with the status branch, `connectAndJoin`, `loginAndJoin`), Task 11a (origin-keyed requests), Task 11b (modal, both `AppLayout` lists).
+- Section 10: Task 12 (including the `streamingLimits` mirror so the space panel sees the flag).
+- Section 11: Task 7 (URL pinning, origin validation), Task 8b (cooldown on every origin, limiter, size cap), Task 12 (disclosure copy), Task 14 (blocklist procedure, WAF rule).
+- Section 13: Tasks 1, 10, 11b, 12.
+- Section 14: Task 14. Section 15: every task's tests plus Task 15. Section 18 (rollout) is a manual checklist in `directory.md`.
 
-Type names used across tasks: `DirectoryPingError`, `DirectoryDocument`, `DirectoryDocumentSpace`, `DirectoryEntry`, `DirectoryFeed` (Task 1); `readDirectoryState`, `markDirectoryDirty`, `getDocumentVersion`, `onDirectoryDirty`, `recordDirectoryPingSuccess`, `recordDirectoryPingFailure`, `clearDirectoryDirty` (Task 2, used by 3, 4, 5); `buildDirectoryDocument`, `config.directory.endpoint` (Task 3, used by 5, 6); `parseOrigin`, `parseDocument`, `ValidDocument` (Task 7, used by 8); `api.directory.list`, `dedupeAgainstConnected`, `useDirectoryStore` with `connectAndJoin` and `ConnectAndJoinResult` (Task 9, used by 10, 11); `SpaceCard` `outer` prop (Task 10, used by 11).
+Names used across tasks: `DirectoryPingError`, `DirectoryDocument` (with `instance.version: string | null`), `DirectoryDocumentSpace`, `DirectoryEntry`, `DirectoryFeed` (Task 1); `readDirectoryState`, `markDirectoryDirty`, `getDocumentVersion`, `onDirectoryDirty`, `recordDirectoryPingSuccess`, `recordDirectoryPingFailure`, `clearDirectoryDirty` (Task 2, used by 3, 4, 5); `buildDirectoryDocument`, `absoluteAssetUrl`, `config.directory.endpoint` (Task 3, used by 5, 6); `parseOrigin`, `parseDocument`, `ValidDocument`, `ValidSpace` (Task 7, used by 8a, 8b); `documentHash`, `rowHash`, `applyDocument`, `feed`, `touchFetchAttempt`, `getLastFetchAt`, `readOriginHash`, `touchOriginOk`, `deleteOlderThan` (Task 8a, used by 8b); `createWorker(outbound)` (Task 8b); `normalizeOrigin`, `connectToInstance`, `ConnectOutcome`, `api.directory.list`, `dedupeAgainstConnected`, `useDirectoryStore` with `connectAndJoin`, `loginAndJoin`, `ConnectAndJoinResult` (Task 9, used by 10, 11b); `SpaceCard` `outer` prop (Task 10, used by 11b); `myRequests[]._instanceOrigin` (Task 11a, used by `useSpaceJoin`); `RemotePasswordStep` (Task 11b); `InstanceStreamingLimits.directoryEnabled` (Task 12).
