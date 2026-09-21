@@ -1,0 +1,26 @@
+name = "backspace-directory-hub"
+main = "src/index.ts"
+# The newest date the workerd bundled with @cloudflare/vitest-pool-workers 0.22.0
+# supports. A later date makes the test runtime refuse to start.
+compatibility_date = "2026-08-22"
+
+routes = [{ pattern = "explore.backspacechat.com", custom_domain = true }]
+
+[vars]
+RETIRED = "0"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "backspace-directory"
+database_id = "REPLACE-AT-ROLLOUT"
+migrations_dir = "migrations"
+
+[[ratelimits]]
+name = "RATE_LIMITER"
+namespace_id = "1002"
+[ratelimits.simple]
+limit = 2
+period = 10
+
+[triggers]
+crons = ["23 3 * * *"]

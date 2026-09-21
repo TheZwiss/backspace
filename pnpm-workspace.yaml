@@ -7,3 +7,5 @@ packages:
   - "scripts/telemetry-receiver"
   # The fork-PR triage bot. See docs/systems/security-scanning.md.
   - "scripts/pr-triage"
+  # The space directory hub. See docs/systems/directory.md.
+  - "scripts/directory-hub"
