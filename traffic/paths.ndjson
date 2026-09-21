@@ -198,3 +198,13 @@
 {"snapshot_date":"2026-09-20","dimension":"/TheZwiss/backspace/graphs/traffic","title":"/graphs/traffic","count":42,"uniques":1}
 {"snapshot_date":"2026-09-20","dimension":"/TheZwiss/backspace/releases/tag/v1.3.0","title":"/releases/tag/v1.3.0","count":39,"uniques":23}
 {"snapshot_date":"2026-09-20","dimension":"/TheZwiss/backspace/pull/137","title":"/pull/137","count":35,"uniques":3}
+{"snapshot_date":"2026-09-21","dimension":"/TheZwiss/backspace","title":"Overview","count":570,"uniques":269}
+{"snapshot_date":"2026-09-21","dimension":"/TheZwiss/backspace/issues","title":"/issues","count":60,"uniques":18}
+{"snapshot_date":"2026-09-21","dimension":"/TheZwiss/backspace/pulls","title":"/pulls","count":57,"uniques":8}
+{"snapshot_date":"2026-09-21","dimension":"/TheZwiss/backspace/releases","title":"/releases","count":56,"uniques":35}
+{"snapshot_date":"2026-09-21","dimension":"/TheZwiss/backspace/releases/tag/v1.2.2","title":"/releases/tag/v1.2.2","count":52,"uniques":30}
+{"snapshot_date":"2026-09-21","dimension":"/TheZwiss/backspace/blob/main/docs/screenshots/voice-video-grid.webp","title":"/blob/main/docs/screenshots/voice-video-grid.webp","count":46,"uniques":38}
+{"snapshot_date":"2026-09-21","dimension":"/TheZwiss/backspace/releases/tag/v1.3.0","title":"/releases/tag/v1.3.0","count":44,"uniques":27}
+{"snapshot_date":"2026-09-21","dimension":"/TheZwiss/backspace/graphs/traffic","title":"/graphs/traffic","count":40,"uniques":1}
+{"snapshot_date":"2026-09-21","dimension":"/TheZwiss/backspace/blob/main/README.md","title":"/blob/main/README.md","count":24,"uniques":6}
+{"snapshot_date":"2026-09-21","dimension":"/TheZwiss/backspace/tree/main","title":"/tree/main","count":21,"uniques":10}

@@ -1,16 +1,16 @@
 {
-  "last_run": "2026-09-20T18:12:57.100Z",
-  "last_success": "2026-09-20T18:12:57.100Z",
+  "last_run": "2026-09-21T20:00:07.231Z",
+  "last_success": "2026-09-21T20:00:07.231Z",
   "error": null,
   "series_last_date": {
-    "traffic/views.csv": "2026-09-19",
-    "traffic/clones.csv": "2026-09-19",
-    "stars.csv": "2026-09-20",
-    "forks.csv": "2026-09-20",
-    "repo.csv": "2026-09-20",
-    "releases.csv": "2026-09-14",
-    "contributors.csv": "2026-09-13",
-    "workflows.csv": "2026-09-20",
-    "telemetry/network.csv": "2026-09-19"
+    "traffic/views.csv": "2026-09-20",
+    "traffic/clones.csv": "2026-09-20",
+    "stars.csv": "2026-09-21",
+    "forks.csv": "2026-09-21",
+    "repo.csv": "2026-09-21",
+    "releases.csv": "2026-09-21",
+    "contributors.csv": "2026-09-20",
+    "workflows.csv": "2026-09-21",
+    "telemetry/network.csv": "2026-09-20"
   }
 }
