@@ -41,6 +41,7 @@ export const spaces = sqliteTable('spaces', {
   ownerId: text('owner_id').notNull().references(() => users.id),
   inviteCode: text('invite_code').unique(),
   visibility: text('visibility').default('private'),
+  directoryListed: integer('directory_listed').notNull().default(0),
   description: text('description'),
   createdAt: integer('created_at').notNull(),
 });
@@ -343,6 +344,14 @@ export const instanceSettings = sqliteTable('instance_settings', {
   telemetryLastError: text('telemetry_last_error'),
   /** The server version running when telemetry was last switched off; the ask returns on the next minor. */
   telemetryDeclinedVersion: text('telemetry_declined_version'),
+  /** The admin allows spaces on this instance to be listed in the directory. */
+  directoryEnabled: integer('directory_enabled').notNull().default(0),
+  /** A directory ping is owed. Survives restarts and the toggle being off. */
+  directoryDirty: integer('directory_dirty').notNull().default(0),
+  /** ms timestamp of the last successful directory ping. */
+  directoryLastPingAt: integer('directory_last_ping_at'),
+  /** JSON DirectoryPingError of the last failed ping, null after a success. */
+  directoryLastError: text('directory_last_error'),
   /** First-boot timestamp (ms); backfilled by ensureDefaults, so non-null after boot. */
   installedAt: integer('installed_at'),
   updatedAt: integer('updated_at').notNull(),
