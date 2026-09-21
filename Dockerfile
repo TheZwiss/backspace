@@ -4,10 +4,13 @@
 
 # Stage 1: Production dependencies
 #
-# better-sqlite3 12.x ships a prebuilt binary for Node ABI v137, which is the ABI
-# of Node 24. prebuild-install downloads it, so this stage needs no Python and no
-# C++ compiler. The runtime stage copies the resulting node_modules and runs no
-# install of its own.
+# better-sqlite3 13.x is an N-API addon and ships its prebuilt binaries inside
+# the npm package (prebuilds/linux-x64.node and linux-arm64.node among them), so
+# the install downloads nothing extra and compiles nothing: this stage needs no
+# Python and no C++ compiler. pnpm would still run `node-gyp rebuild` on sight
+# of the package's binding.gyp, which is why the root package.json lists
+# better-sqlite3 under pnpm.ignoredBuiltDependencies. The runtime stage copies
+# the resulting node_modules and runs no install of its own.
 #
 # The base is node:24-slim, Node v24.20.0. All three stages pin it by the digest
 # of the multi-arch index, so the same pin resolves on amd64 and on arm64.
@@ -37,7 +40,7 @@ RUN pnpm install --prod --frozen-lockfile
 #
 # Installs only @backspace/web and what it depends on (@backspace/shared). That
 # keeps the server dependencies, better-sqlite3 among them, out of this stage, so
-# the native module is fetched once, in `deps`.
+# the native module is installed once, in `deps`.
 #
 # Base: node:24-slim, Node v24.20.0.
 FROM node:24-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e AS builder

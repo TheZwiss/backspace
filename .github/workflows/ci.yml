@@ -28,7 +28,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: [20, 24]
+        # 22 is the support floor (`engines.node` in package.json), 24 is what
+        # `.nvmrc` selects and what the Docker image runs.
+        node-version: [22, 24]
 
     steps:
       - name: Harden the runner
@@ -122,7 +124,7 @@ jobs:
 
   # Aggregate gate reporting a single, matrix-independent "Build & test" status.
   # Branch protection on main requires the "Build & test" context, but the matrix
-  # job above reports per-version contexts ("Build & test (Node 20/24)"). This job
+  # job above reports per-version contexts ("Build & test (Node 22/24)"). This job
   # keeps the stable required context alive and fails unless every matrix leg
   # succeeded (if: always() so a matrix failure still reports a definitive result
   # instead of leaving the required check pending forever).

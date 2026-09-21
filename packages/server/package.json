@@ -28,7 +28,7 @@
     "@tus/file-store": "^1.5.1",
     "@tus/server": "^1.10.2",
     "bcryptjs": "^3.0.3",
-    "better-sqlite3": "^12.11.1",
+    "better-sqlite3": "^13.0.3",
     "cheerio": "^1.0.0",
     "dotenv": "^18.0.0",
     "drizzle-orm": "^0.45.2",
@@ -39,9 +39,9 @@
     "tsx": "^4.23.13"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.11",
+    "@types/better-sqlite3": "^9.6.0",
     "@types/jsonwebtoken": "^9.0.6",
-    "@types/node": "^20.19.43",
+    "@types/node": "^22.20.4",
     "@types/ws": "^8.18.1",
     "cross-env": "^10.1.0",
     "drizzle-kit": "^0.31.10",

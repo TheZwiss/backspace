@@ -549,9 +549,8 @@ Currently deferred, with the condition that releases each one:
 | tailwindcss 3 | v4 moves the PostCSS plugin to `@tailwindcss/postcss` and replaces the config model the design system is built on | a dedicated port of the theme, surface/input tiers and `globals.css` |
 | typescript 5 | v7 removes the `baseUrl` compiler option (TS5102) that the workspace tsconfigs rely on | migrating every tsconfig off `baseUrl` first |
 | fastify 4 + all `@fastify/*` | the 11.x plugin lines target Fastify 5; on Fastify 4 the server stops booting | one PR taking core and every plugin across together |
-| better-sqlite3 12 | v13 segfaults every spawned test instance on boot (exit 139) against `node:20-slim`, a native ABI mismatch rather than a flake | the Dockerfile base image moving off Node 20 |
 | `@tus/file-store` + `@tus/server` 1.x | matched pair; bumping either alone splits it | one PR moving both, upload pipeline exercised end to end |
-| `@types/node` 20 (24 for the script packages) | types describing a newer Node than the runtime let code typecheck clean and fail in production | whenever a runtime moves, in that same PR |
+| `@types/node` 22 (24 for the script packages) | types describing a newer Node than the runtime let code typecheck clean and fail in production | whenever a runtime moves, in that same PR |
 | jsdom 28 | jsdom 30 pulls undici 8 against the `undici@^7` override, so every vitest worker dies with `webidl.util.markAsUncloneable is not a function` and the web suite does not run; it also changes SVG attribute-selector matching | extending the undici override to 8, then re-testing both |
 | vitest 4 | `@cloudflare/vitest-pool-workers` supports `vitest ^4.1.0` only and rides internal Vitest APIs; under 5 the receiver's Workers runtime throws before any test runs | upstream shipping vitest 5 support |
 | electron 43 | Electron 44 removes the macOS login-item API `src/main.ts` uses, and a major moves the Chromium and Node the shipped app runs on | a dedicated desktop PR, with the Flatpak sources regenerated |
@@ -656,11 +655,10 @@ GitHub, and the only one whose tests do not run in Node. What guards it:
   rather than a mock of it. `ci.yml`'s `pnpm -r test` runs this package too, so
   the runtime is already exercised on both Node legs of the main pipeline; this
   workflow adds the path-filtered check and the deploy.
-- **This workflow reads `.nvmrc` (24), not the `engines.node` floor of 20.**
-  `wrangler` and `miniflare` both declare `engines.node: ">=22.0.0"`. The suite
-  passes on Node 20 today, and `ci.yml`'s matrix keeps testing it there, but the
-  `deploy` job runs wrangler against the live account and should not be the
-  place a version below Cloudflare's declared floor first misbehaves.
+- **This workflow reads `.nvmrc` (24), not the `engines.node` floor of 22.12.**
+  `ci.yml`'s matrix covers the floor; the `deploy` job runs wrangler against the
+  live account and should run the version the deploy is known to work on, so a
+  wrangler bump that needs a newer Node fails a pull request, not a deploy.
 - **`permissions: contents: read`** at workflow level and nothing added at job
   level. The `environment:` key needs no scope of its own.
 

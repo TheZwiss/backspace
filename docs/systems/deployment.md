@@ -65,7 +65,7 @@ One installer, three modes, recorded as `DEPLOY_MODE` in `.env`. `install.sh` au
 
 `Dockerfile` has three stages:
 
-1. **`deps`** (`node:24-slim`): enables pnpm via corepack and produces the production dependency tree with `pnpm install --prod --frozen-lockfile` (`tsx` is a server runtime dependency). This is the only stage that installs `better-sqlite3`. It carries no C toolchain: the prebuilt binary is downloaded, not compiled.
+1. **`deps`** (`node:24-slim`): enables pnpm via corepack and produces the production dependency tree with `pnpm install --prod --frozen-lockfile` (`tsx` is a server runtime dependency). This is the only stage that installs `better-sqlite3`. It carries no C toolchain: the prebuilt binary ships inside the npm package and nothing is compiled.
 2. **`builder`** (`node:24-slim`): installs just the frontend's dependency subset with `pnpm install --frozen-lockfile --filter @backspace/web...`, copies `shared`/`web` source, and runs `pnpm --filter @backspace/web build` to produce the static frontend (`packages/web/dist`). The filter keeps the server's dependencies out of this stage, so no toolchain is needed here either.
 3. **`runtime`** (`node:24-slim`): installs `ffmpeg` (media) + `gosu` (privilege drop) only, with **no C toolchain**. Copies the production `node_modules` from `deps`, `shared` + `server` source, and the prebuilt `web/dist` from `builder`, creates `/app/data/uploads`, and runs the server **as the non-root `node` user** via `docker-entrypoint.sh` (which chowns `/app/data` as root, then `exec gosu node`) with `node --import tsx/esm src/index.ts` from `/app/packages/server`. It runs no `pnpm install` of its own.
 
@@ -75,9 +75,11 @@ One installer, three modes, recorded as `DEPLOY_MODE` in `.env`. `install.sh` au
 
 **Why the base is Node 24.** Node 20 reached end of life on 2026-04-30, and `docker-compose.yml` defaults self-hosters to the moving `latest` tag, so whatever the image runs is what lands on their machines. Node 24 is the active LTS and is one of the two legs of the CI matrix in `.github/workflows/ci.yml`, so the image runs a version the repo tests. Node 26 has a longer support runway but stays a Current line until 2026-10-28; moving to it belongs after that date, together with a CI leg for it.
 
-Node 24 also removes the C toolchain the image used to carry. `better-sqlite3` 12.x publishes prebuilt binaries for Node ABI v127, v137, v141 and v147, and none for v115, the ABI of Node 20. Node 24 is ABI v137, and the release carries `node-v137` assets for both `linux-x64` and `linux-arm64`, so `prebuild-install` downloads the binary instead of falling back to `node-gyp rebuild`. That is why the `deps` stage no longer installs `python3`, `make` and `g++`. Before changing the base again, check that the `better-sqlite3` release has a `-node-v<abi>-` asset for the new ABI on both architectures, e.g. `better-sqlite3-v<version>-node-v137-linux-arm64.tar.gz`. If it does not, the build falls back to a source compile and the toolchain has to come back.
+**Why the image carries no C toolchain.** `better-sqlite3` 13.x is an N-API addon (`NAPI_VERSION=10`, which is why it declares `engines.node: >=22`) and publishes its prebuilt binaries inside the npm package itself: `prebuilds/linux-x64.node`, `linux-arm64.node`, the musl pair, darwin and win32. The binary is not tied to one Node ABI, so a Node major bump within the supported range needs no new asset, and the install downloads nothing beyond the package. That is why the `deps` stage installs neither `python3`, `make` nor `g++`, and it is also why the root `package.json` lists `better-sqlite3` under `pnpm.ignoredBuiltDependencies` rather than `onlyBuiltDependencies`: the package still carries a `binding.gyp`, and pnpm runs `node-gyp rebuild` on sight of one regardless of the package's `gypfile: false`, which on an image with no Python fails the build. Ignoring the build script is the correct call because there is nothing to build. Before changing the base again, confirm the `better-sqlite3` release still ships `prebuilds/linux-x64.node` and `prebuilds/linux-arm64.node` (`npm pack better-sqlite3@<version>` and list the tarball) and that its `engines.node` still admits the new major. If a future version drops a prebuild, the build fails at import time inside the container rather than falling back to a compile, and the toolchain has to come back together with the `onlyBuiltDependencies` entry.
 
-**All three `FROM` lines are pinned by digest.** The digest is the one for the multi-arch index, not for a single platform's manifest, so the same pin resolves on `linux/amd64` and `linux/arm64`. The human-readable tag stays in the reference (`node:24-slim@sha256:...`) and the exact Node version is recorded in the comment above each stage. Renewing the pin means resolving the index digest again, `docker buildx imagetools inspect node:24-slim --format '{{.Manifest.Digest}}'`, and confirming the new image's ABI still has a `better-sqlite3` prebuild.
+Node 20 is no longer a supported runtime: `engines.node` is `>=22.12.0`, which is the floor every dependency in the tree declares (`better-sqlite3` 13 needs 22, `wrangler` and `miniflare` need 22, `@electron/rebuild` and `@electron/fuses` need 22.12), and CI tests 22 and 24.
+
+**All three `FROM` lines are pinned by digest.** The digest is the one for the multi-arch index, not for a single platform's manifest, so the same pin resolves on `linux/amd64` and `linux/arm64`. The human-readable tag stays in the reference (`node:24-slim@sha256:...`) and the exact Node version is recorded in the comment above each stage. Renewing the pin means resolving the index digest again, `docker buildx imagetools inspect node:24-slim --format '{{.Manifest.Digest}}'`, and confirming the new image's Node major is still inside `better-sqlite3`'s `engines.node` range.
 
 The server is run through `tsx` (no separate transpile step); TypeScript is executed directly at runtime.
 
@@ -95,8 +97,9 @@ container start, `docker-entrypoint.sh` runs as root only long enough to `chown`
 the `./data` bind mount to `node` (only entries not already node-owned, so it is
 near-instant after the first boot), then drops privileges via `gosu` and execs the
 server. The build toolchain (`python3`/`make`/`g++`) is not installed in the
-runtime stage. `sharp` loads a prebuilt binary; `better-sqlite3` is compiled in
-the separate `deps` stage and copied in, so neither needs a compiler at runtime.
+runtime stage. `sharp` and `better-sqlite3` both load prebuilt binaries that
+are installed in the separate `deps` stage and copied in, so neither needs a
+compiler at any stage.
 That keeps the runtime attack surface small. `ffmpeg` remains (a real runtime
 dependency).
 

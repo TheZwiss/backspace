@@ -85,7 +85,7 @@ No resting border — sunken `surface-input` background provides differentiation
 
 | Layer | Tech |
 |-------|------|
-| Runtime | Node.js 20+, TypeScript strict, pnpm workspaces |
+| Runtime | Node.js 22+, TypeScript strict, pnpm workspaces |
 | Server | Fastify 4, Drizzle ORM, SQLite (better-sqlite3), JWT + bcrypt |
 | Frontend | React 18, Vite 8, Tailwind CSS 3, Zustand 5 |
 | Voice | LiveKit (livekit-client + livekit-server-sdk), RNNoise |

@@ -63,13 +63,12 @@ jobs:
           version: 10.34.3
 
       # .nvmrc, which is 24, rather than the repository's `engines.node` floor
-      # of 20. The suite does pass on Node 20 today, measured: ci.yml's
-      # `pnpm -r test` picks this package up on both matrix legs and that is
-      # where the Node 20 coverage lives. But wrangler and miniflare, which the
-      # Workers pool starts, both declare `engines.node: ">=22.0.0"`, and the
-      # job below runs wrangler against the live account. Pinning the supported
-      # version here means a wrangler bump that starts using a Node 22 API
-      # breaks a pull request rather than a deploy.
+      # of 22.12. ci.yml's `pnpm -r test` picks this package up on both matrix
+      # legs, so the floor is covered there. The job below runs wrangler
+      # against the live account, and wrangler and miniflare declare
+      # `engines.node: ">=22.0.0"`; pinning the version the deploy actually
+      # uses means a wrangler bump that needs a newer Node breaks a pull
+      # request rather than a deploy.
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:

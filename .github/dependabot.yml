@@ -80,21 +80,9 @@ updates:
       - dependency-name: "@fastify/*"
         update-types: ["version-update:semver-major"]
 
-      # better-sqlite3 stays on 12. Version 13 segfaulted every spawned test
-      # instance on boot (exit 139) against the node:20-slim base image the
-      # Dockerfile used at the time, a native ABI mismatch rather than a flake.
-      # The base is node:24-slim now, so that finding is stale; CI's Node 20
-      # leg is still a supported runtime (`engines: node >=20`), though.
-      # Unblock: a dedicated PR that re-tests 13 on both CI legs and in the
-      # container, then delete this entry.
-      - dependency-name: better-sqlite3
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "@types/better-sqlite3"
-        update-types: ["version-update:semver-major"]
-
-      # @types/node tracks the RUNTIME, not npm's latest. Node 20 is the
-      # lowest supported runtime (`engines: node >=20`, CI's baseline leg), so
-      # types describing a newer Node let code typecheck clean and fail at
+      # @types/node tracks the RUNTIME, not npm's latest. Node 22 is the
+      # lowest supported runtime (`engines: node >=22.12`, CI's baseline leg),
+      # so types describing a newer Node let code typecheck clean and fail at
       # runtime on it, even though the image itself runs 24. The two script
       # packages sit on 24 for the same reason: match what runs them
       # (`engines: node >=22.18`, and their workflows use Node 24).
@@ -103,11 +91,11 @@ updates:
       # exception to the rule stated above. Dependabot's npm updater resolves
       # one version per dependency across the whole pnpm workspace and cannot
       # express a per-package split, so even a PATCH bump to the server's
-      # Node 20 types rewrites every other manifest to match -- #216 quietly
-      # downgraded scripts/metrics and scripts/pr-triage from ^24.0.0 to
-      # ^20.19.43. Nothing catches that: the Node 20 types are a subset, so it
-      # compiles clean and CI goes green while every Node 22+ API those two are
-      # entitled to use silently becomes a type error.
+      # Node 22 types rewrites every other manifest to match -- #216 quietly
+      # downgraded scripts/metrics and scripts/pr-triage from ^24.0.0 to the
+      # server's line (^20.19.43 at the time). Nothing catches that: the older
+      # types are a subset, so it compiles clean and CI goes green while every
+      # newer API those two are entitled to use silently becomes a type error.
       # Unblock: whenever a runtime moves, in that same PR, per package.
       - dependency-name: "@types/node"
 

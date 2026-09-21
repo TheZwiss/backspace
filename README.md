@@ -502,10 +502,10 @@ briefly restarts the `backspace` container (clients reconnect automatically).
 
 ## Development
 
-Requirements: **Node.js 20 or newer** and **pnpm 10**. The `.nvmrc` file selects
-Node 24, which is the active LTS and the version the Docker image runs. CI runs
-the suite on both Node 20 and Node 24, so a Node 20 host still works, but Node 20
-reached end of life in April 2026 and is not what a fresh checkout picks up.
+Requirements: **Node.js 22.12 or newer** and **pnpm 10**. The `.nvmrc` file
+selects Node 24, which is the active LTS and the version the Docker image runs.
+CI runs the suite on both Node 22 and Node 24. Node 20 reached end of life in
+April 2026 and is no longer supported: the native SQLite driver needs Node 22.
 Newer majors generally work but are not part of the test matrix.
 
 ```bash
@@ -514,7 +514,7 @@ cp .env.example .env          # set JWT_SECRET (openssl rand -hex 32)
 pnpm dev                       # API server on :3005, Vite dev server on :5173
 ```
 
-On Windows PowerShell, confirm Node 20 or newer and use the native copy command:
+On Windows PowerShell, confirm Node 22 or newer and use the native copy command:
 
 ```powershell
 node --version
@@ -664,7 +664,7 @@ packages/
 
 | Layer        | Technology |
 |--------------|------------|
-| Server       | Node.js 20+, Fastify 4, TypeScript (strict) |
+| Server       | Node.js 22+, Fastify 4, TypeScript (strict) |
 | Database     | SQLite (better-sqlite3) + Drizzle ORM |
 | Auth         | JWT + bcrypt |
 | Frontend     | React 18, Vite 8, Tailwind CSS 3, Zustand 5 |
