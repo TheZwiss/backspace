@@ -220,3 +220,78 @@ stack and delete the throwaway data directory afterwards.
 
 Report anything that looks wrong (mark too small, colour mismatch, cut-off
 glyph) as a concern; do not fix it in this task.
+
+## Revision: flat lavender (2026-09-21, after the live review)
+
+Jannis rejected the material and the colour on the live instance: the mark
+must be flat, and the primary stays lavender. The mark's shape and Fabio XM
+on the site stay. This revision supersedes the Spec's colour and material
+lines; everything else in the Spec, constraints and size table still binds.
+
+### Spec v3 (binding)
+
+- **Primary**: `#7c6cf6`, hover `#6b5ce0`, active `#5f4fd0`; triplets
+  `124 108 246`, `107 92 224`, `95 79 208`.
+- **Two flat colours, no material.** The mark is a single flat fill. On
+  dark grounds it is `#7c6cf6`; on a lavender tile or squircle it is
+  `#ffffff`. No gradient, stroke, glow, shadow, blur or blend anywhere,
+  app or site.
+- **App icon**: the same 256 squircle path, filled flat `#7c6cf6`, the
+  glyph inset as before filled `#ffffff`. No filters, no defs.
+- **Grounds**: Aether Drift dark (`#0b0b10` base). The site's navy page
+  gradient and gradient buttons go; `.btn-primary` is flat `--primary`
+  with white text as before #229 v2.
+- **Site mark**: flat `--primary` (a plain CSS mask fill or an inline
+  SVG); the hero mock's sidebar tile is a lavender tile with a white mark,
+  mirroring the app. The animated gradient, the glass edge and the
+  long-press colour picker are removed.
+- **Social preview**: `#0b0b10` ground, lavender mark, white wordmark in
+  Fabio XM, tagline in DM Sans.
+
+### Task 7: Flat masters, pipeline, rasters, social preview
+
+`assets/brand/`: `mark.svg` and `mark-small.svg` become flat `#7c6cf6`
+(same geometry, drop gradient and stroke). Add `mark-mono-light.svg`
+(standard geometry, `#fff`). `app-icon.svg` and `app-icon-small.svg`: flat
+lavender squircle, white glyph, no defs. `mark-tray.svg` and
+`mark-mono-dark.svg` unchanged.
+
+`scripts/gen-icons.mjs`: replace `navyGradientSvg` with a solid
+`#7c6cf6` ground for apple-touch-icon and maskable (mark on the maskable
+is `mark-mono-light.svg` at 60% height); `logo-mark.svg` is a copy of
+`mark-mono-light.svg`; favicons and colour tray stay on `mark-small.svg`.
+README and the design-system Brand section updated to the flat system.
+`scripts/social-preview.html`: `#0b0b10` ground, mark in `#7c6cf6`, no
+effects. Run both generators; verify sizes and opaque flags as before;
+commit everything.
+
+### Task 8: Site back to Aether Drift, flat mark
+
+`site/assets/site.css` and the inline copy in `site/insights/index.html`:
+`--primary` `#7c6cf6`, `--primary-hover` `#6b5ce0`; delete
+`--primary-gradient`, `--primary-gradient-hover`, `--site-bg-gradient`;
+body `background: var(--base)`; `.btn-primary` flat primary with `#fff`
+text and the pre-#229 hover; `.range-btn[aria-pressed="true"]` flat primary
+with `#fff`, its disabled state `color-mix(in srgb, var(--primary) 35%,
+transparent)`. `site/assets/logo.css`: `.logo-mark` keeps the mask
+approach but with a single flat `background: var(--primary)`, no `filter`,
+no `::before`, no aero variables; `.strip .tile.logo` is a lavender tile
+whose mark is white; delete the popover rules. Delete
+`site/assets/logo-color.js`, `site/assets/logo-glyph-stroke.svg` and the
+orphaned `site/assets/logo.png`; remove the script tags from the three
+pages. `site/assets/logo.svg` (favicon): the glyph alone, flat `#7c6cf6`,
+viewBox tight (copy of `assets/brand/mark.svg`). Fabio XM and the
+headline rules stay. Render the three pages headless and look at them.
+
+### Task 9: App, desktop and docs back to lavender
+
+`packages/web/src/styles/globals.css:54-56` triplets; `--primary` pairs in
+`packages/desktop/resources/instance-picker.html` and `recovery.html`;
+`scripts/metrics/src/datapage.ts` `--accent`; `packages/desktop/src/main.ts`
+tray fallback bytes (`#7c6cf6`: B=0xf6 G=0x6c R=0x7c) and comment;
+`MentionBadge.tsx` and `main.tsx` literals. Docs: design-system.md line 12
+back to "Calm over flashy. Warm over cool.", Brand section primary hex and
+the flat rule; CLAUDE.md colours line; desktop.md fallback row; search.md
+caption if it names a colour. Grep: no `0061ff`, `0052d9`, `0047bd`,
+`0 97 255`, `0 82 217`, `0 71 189`, `2E3D65`, `110222` outside
+`docs/superpowers/`. Typecheck web and desktop, run web tests.
