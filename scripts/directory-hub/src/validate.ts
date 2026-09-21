@@ -182,9 +182,15 @@ export function parseDocument(text: string, expectedOrigin: string): DocumentRes
 
   if (!Array.isArray(spaces) || spaces.length > MAX_SPACES) return { ok: false, reason: 'invalid' };
   const validSpaces: ValidSpace[] = [];
+  const seen = new Set<string>();
   for (const raw of spaces) {
     const space = parseSpace(raw, expectedOrigin);
     if (space === null) return { ok: false, reason: 'invalid' };
+    // An id names one row in `spaces`; a document that repeats one is not a
+    // document the instance endpoint produces, and which occurrence would
+    // win is not a question the hub should answer.
+    if (seen.has(space.id)) return { ok: false, reason: 'invalid' };
+    seen.add(space.id);
     validSpaces.push(space);
   }
 

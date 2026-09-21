@@ -2,7 +2,11 @@ import type { D1Migration } from '@cloudflare/vitest-pool-workers';
 
 export interface Env {
   DB: D1Database;
-  /** Absent in tests and in `wrangler dev` without the binding; the handlers skip limiting then. */
+  /**
+   * The per-address limiter miniflare builds from `wrangler.toml`, so it is
+   * live in the tests too. Absent in `wrangler dev` without the binding; the
+   * handlers skip limiting then.
+   */
   RATE_LIMITER?: RateLimit;
   /** "1" retires the service: every ping answers 410. */
   RETIRED?: string;

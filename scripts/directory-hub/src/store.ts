@@ -115,9 +115,9 @@ export async function touchOriginOk(db: D1Database, origin: string, at: number):
  *
  * The `origins` upsert is the first statement so the rows' foreign key has
  * its parent before the row writes run. Spaces are keyed by `id` on the way
- * in; a document that repeats an id, which a well-formed instance never
- * produces, stores the last occurrence, which is also what the upserts would
- * have left behind.
+ * in; `parseDocument` rejects a document that repeats an id, and if one ever
+ * reached here anyway the last occurrence would be stored, which is also
+ * what the upserts would have left behind.
  *
  * The read and the batch are two round trips, not one transaction. Two
  * applies for the same origin can only interleave inside the per-origin

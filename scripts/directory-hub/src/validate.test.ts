@@ -197,6 +197,13 @@ describe('parseDocument', () => {
     expect(parseDocument(document({}, [space({ id: undefined })]), ORIGIN)).toEqual({ ok: false, reason: 'invalid' });
   });
 
+  it('rejects a document in which two spaces share an id', () => {
+    const twice = [space({ id: 'dup', name: 'First' }), space({ id: 'dup', name: 'Second' })];
+    expect(parseDocument(document({}, twice), ORIGIN)).toEqual({ ok: false, reason: 'invalid' });
+    const distinct = [space({ id: 'one' }), space({ id: 'two' })];
+    expect(parseDocument(document({}, distinct), ORIGIN).ok).toBe(true);
+  });
+
   it('bounds instance.version to the version pattern and allows null or absent', () => {
     const instance = (version: unknown) => ({ name: 'n', federatedRegistrationOpen: false, version });
     expect(parseDocument(document({ instance: instance(null) }), ORIGIN)).toMatchObject({ ok: true, doc: { version: null } });
