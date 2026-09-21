@@ -1390,6 +1390,7 @@ function buildReadyPayload(userId: string): {
         ownerId: spaceRow.ownerId,
         inviteCode: spaceRow.inviteCode,
         visibility: (spaceRow.visibility ?? 'private') as SpaceWithChannelsAndMembers['visibility'],
+        directoryListed: false,
         description: spaceRow.description ?? null,
         createdAt: spaceRow.createdAt,
         channels: visibleChannels,

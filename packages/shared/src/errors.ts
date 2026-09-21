@@ -236,6 +236,12 @@ export const ERROR_CODES = [
   'voice_disabled',
   'voice_connect_forbidden',
   'file_not_found',
+
+  // Directory
+  'directory_disabled',
+  'directory_unreachable',
+  'directory_private_space',
+  'directory_requires_discovery',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

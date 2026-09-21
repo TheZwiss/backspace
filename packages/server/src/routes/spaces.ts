@@ -39,6 +39,7 @@ function rowToSpace(row: typeof schema.spaces.$inferSelect): Space {
     ownerId: row.ownerId,
     inviteCode: row.inviteCode,
     visibility: (row.visibility ?? 'private') as Space['visibility'],
+    directoryListed: false,
     description: row.description ?? null,
     createdAt: row.createdAt,
   };

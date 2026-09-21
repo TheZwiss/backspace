@@ -201,6 +201,9 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
       federationRelayTtlDays: row.federationRelayTtlDays,
       defaultAutoRotateIntervalDays: row.defaultAutoRotateIntervalDays,
       autoAcceptPeering: row.autoAcceptPeering === 1,
+      directoryEnabled: false,
+      directoryLastPingAt: null,
+      directoryLastError: null,
     };
 
     return reply.code(200).send(response);
@@ -300,6 +303,9 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
       federationRelayTtlDays: updatedRow.federationRelayTtlDays,
       defaultAutoRotateIntervalDays: updatedRow.defaultAutoRotateIntervalDays,
       autoAcceptPeering: updatedRow.autoAcceptPeering === 1,
+      directoryEnabled: false,
+      directoryLastPingAt: null,
+      directoryLastError: null,
     };
 
     return reply.code(200).send(response);

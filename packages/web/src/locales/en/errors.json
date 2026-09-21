@@ -201,5 +201,9 @@
   "internal_error": "Something went wrong on the server. Try again.",
   "voice_disabled": "Voice and video are not set up on this instance.",
   "voice_connect_forbidden": "You are not allowed to join this voice channel.",
-  "file_not_found": "That file could not be found."
+  "file_not_found": "That file could not be found.",
+  "directory_disabled": "This instance is not connected to a directory.",
+  "directory_unreachable": "Outer Space is not reachable right now. Inner Space still works.",
+  "directory_private_space": "Set the space to public or request to join before listing it.",
+  "directory_requires_discovery": "Turn on space discovery first."
 }

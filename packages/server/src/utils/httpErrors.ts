@@ -225,6 +225,10 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   voice_disabled: 'Voice/video is not configured on this server',
   voice_connect_forbidden: 'Missing CONNECT permission',
   file_not_found: 'File not found',
+  directory_disabled: 'The directory is not configured on this instance',
+  directory_unreachable: 'The directory could not be reached',
+  directory_private_space: 'A private space cannot be listed in the directory',
+  directory_requires_discovery: 'Turn on space discovery before enabling the directory',
 };
 
 function fillPlaceholders(text: string, details: ErrorDetails | undefined): string {

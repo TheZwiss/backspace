@@ -201,5 +201,9 @@
   "internal_error": "Auf dem Server ist etwas schiefgelaufen. Versuche es erneut.",
   "voice_disabled": "Sprach- und Videochat sind auf dieser Instanz nicht eingerichtet.",
   "voice_connect_forbidden": "Du darfst diesem Sprachkanal nicht beitreten.",
-  "file_not_found": "Diese Datei wurde nicht gefunden."
+  "file_not_found": "Diese Datei wurde nicht gefunden.",
+  "directory_disabled": "Diese Instanz ist mit keinem Verzeichnis verbunden.",
+  "directory_unreachable": "Der Äußere Space ist gerade nicht erreichbar. Der Innere Space funktioniert weiterhin.",
+  "directory_private_space": "Stell den Space auf „Öffentlich“ oder „Auf Anfrage“, bevor du ihn eintragen lässt.",
+  "directory_requires_discovery": "Schalte zuerst das Entdecken von Spaces ein."
 }
