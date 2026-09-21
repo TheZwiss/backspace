@@ -1,9 +1,11 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
+import type Database from 'better-sqlite3';
 import { eq } from 'drizzle-orm';
-import { getDb, schema } from '../db/index.js';
+import { getDb, getRawDb, schema } from '../db/index.js';
 import { authenticate, requireAdmin } from '../utils/auth.js';
 import { config } from '../config.js';
 import { sendError } from '../utils/httpErrors.js';
+import { markDirectoryDirty, readDirectoryState } from '../directory/state.js';
 import type { InstanceStreamingLimits, InstanceAdminSettings } from '@backspace/shared';
 import { STANDARD_RESOLUTIONS, STANDARD_FRAMERATES, BITRATE_MATRIX_KBPS } from '@backspace/shared/src/constants.js';
 
@@ -37,6 +39,77 @@ function rowToLimits(row: typeof schema.instanceSettings.$inferSelect): Instance
   };
 }
 
+type SettingsRow = typeof schema.instanceSettings.$inferSelect;
+type SettingsUpdate = Record<string, number | string | null>;
+
+function rowToAdminSettings(row: SettingsRow, sqlite: Database.Database): InstanceAdminSettings {
+  const gifKey = row.gifApiKey as string | null;
+  const maxUploadBytes = row.maxUploadSizeBytes ?? config.maxUploadSize;
+  const directory = readDirectoryState(sqlite);
+  return {
+    instanceName: row.instanceName ?? 'Backspace',
+    registrationOpen: row.registrationOpen !== null ? row.registrationOpen === 1 : config.registrationOpen,
+    federatedRegistrationOpen: row.federatedRegistrationOpen === 1,
+    discoveryEnabled: row.discoveryEnabled === 1,
+    gifApiKey: gifKey ? `****${gifKey.slice(-4)}` : undefined,
+    gifEnabled: !!gifKey,
+    maxUploadSizeMb: Math.round(maxUploadBytes / (1024 * 1024)),
+    federationRelayEnabled: row.federationRelayEnabled === 1,
+    federationRelayTtlDays: row.federationRelayTtlDays,
+    defaultAutoRotateIntervalDays: row.defaultAutoRotateIntervalDays,
+    autoAcceptPeering: row.autoAcceptPeering === 1,
+    directoryEnabled: directory.enabled,
+    directoryLastPingAt: directory.lastPingAt,
+    directoryLastError: directory.lastError,
+  };
+}
+
+/**
+ * The one place the "discovery off implies directory off" invariant lives
+ * (spec section 4). Runs after the caller has translated `discoveryEnabled`
+ * into `updateData`, so the resulting discovery state is known. Returns false
+ * after sending the error reply.
+ */
+function applyDiscoveryAndDirectory(
+  body: { directoryEnabled?: unknown },
+  updateData: SettingsUpdate,
+  currentRow: SettingsRow,
+  reply: FastifyReply,
+): boolean {
+  const discoveryOn = (updateData.discoveryEnabled ?? currentRow.discoveryEnabled) === 1;
+
+  if (body.directoryEnabled !== undefined) {
+    if (typeof body.directoryEnabled !== 'boolean') {
+      sendError(reply, 400, 'field_not_boolean', { field: 'directoryEnabled' });
+      return false;
+    }
+    if (body.directoryEnabled && !discoveryOn) {
+      sendError(reply, 400, 'directory_requires_discovery');
+      return false;
+    }
+    updateData.directoryEnabled = body.directoryEnabled ? 1 : 0;
+  }
+
+  if (!discoveryOn) {
+    updateData.directoryEnabled = 0;
+  }
+  return true;
+}
+
+/**
+ * Fields of instance_settings that feed the served directory document
+ * (spec section 4). A write that changes any of them owes a ping; the name
+ * is compared through the same fallback the document applies.
+ */
+function directoryDocumentChanged(updateData: SettingsUpdate, currentRow: SettingsRow): boolean {
+  const flags = ['directoryEnabled', 'discoveryEnabled', 'federatedRegistrationOpen'] as const;
+  for (const key of flags) {
+    if (updateData[key] !== undefined && updateData[key] !== currentRow[key]) return true;
+  }
+  return updateData.instanceName !== undefined
+    && updateData.instanceName !== (currentRow.instanceName ?? 'Backspace');
+}
+
 export async function settingsRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/settings/streaming — any authenticated user can read instance limits
   app.get('/api/settings/streaming', { preHandler: authenticate }, async (_request, reply) => {
@@ -53,7 +126,7 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
     const db = getDb();
 
     const body = request.body;
-    const updateData: Record<string, number | string | null> = { updatedAt: Date.now() };
+    const updateData: SettingsUpdate = { updatedAt: Date.now() };
 
     if (body.maxBitrateKbps !== undefined) {
       if (typeof body.maxBitrateKbps !== 'number' || body.maxBitrateKbps < 500 || body.maxBitrateKbps > 1000000) {
@@ -168,7 +241,17 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, 400, 'streaming_min_bitrate_not_below_max');
     }
 
+    // This route carries discoveryEnabled but not directoryEnabled: only the
+    // clearing half of the invariant applies here.
+    if (!applyDiscoveryAndDirectory({}, updateData, currentRow, reply)) {
+      return reply;
+    }
+
     db.update(schema.instanceSettings).set(updateData).where(eq(schema.instanceSettings.id, 1)).run();
+
+    if (directoryDocumentChanged(updateData, currentRow)) {
+      markDirectoryDirty(getRawDb());
+    }
 
     const updatedRow = db.select().from(schema.instanceSettings).where(eq(schema.instanceSettings.id, 1)).get();
     if (!updatedRow) {
@@ -187,26 +270,7 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, 500, 'instance_settings_missing');
     }
 
-    const gifKey = row.gifApiKey as string | null;
-    const maxUploadBytes = row.maxUploadSizeBytes ?? config.maxUploadSize;
-    const response: InstanceAdminSettings = {
-      instanceName: row.instanceName ?? 'Backspace',
-      registrationOpen: row.registrationOpen !== null ? row.registrationOpen === 1 : config.registrationOpen,
-      federatedRegistrationOpen: row.federatedRegistrationOpen === 1,
-      discoveryEnabled: row.discoveryEnabled === 1,
-      gifApiKey: gifKey ? `****${gifKey.slice(-4)}` : undefined,
-      gifEnabled: !!gifKey,
-      maxUploadSizeMb: Math.round(maxUploadBytes / (1024 * 1024)),
-      federationRelayEnabled: row.federationRelayEnabled === 1,
-      federationRelayTtlDays: row.federationRelayTtlDays,
-      defaultAutoRotateIntervalDays: row.defaultAutoRotateIntervalDays,
-      autoAcceptPeering: row.autoAcceptPeering === 1,
-      directoryEnabled: false,
-      directoryLastPingAt: null,
-      directoryLastError: null,
-    };
-
-    return reply.code(200).send(response);
+    return reply.code(200).send(rowToAdminSettings(row, getRawDb()));
   });
 
   // PATCH /api/settings/instance — admin only, updates instance admin settings
@@ -214,7 +278,7 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
     const db = getDb();
 
     const body = request.body;
-    const updateData: Record<string, number | string | null> = { updatedAt: Date.now() };
+    const updateData: SettingsUpdate = { updatedAt: Date.now() };
 
     if (body.instanceName !== undefined) {
       if (typeof body.instanceName !== 'string' || body.instanceName.trim().length === 0 || body.instanceName.trim().length > 32) {
@@ -282,32 +346,28 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
       updateData.autoAcceptPeering = body.autoAcceptPeering ? 1 : 0;
     }
 
+    const currentRow = db.select().from(schema.instanceSettings).where(eq(schema.instanceSettings.id, 1)).get();
+    if (!currentRow) {
+      return sendError(reply, 500, 'instance_settings_missing');
+    }
+
+    // directoryLastPingAt and directoryLastError are read-only on the wire:
+    // the pinger owns them, so the body's copies are never read.
+    if (!applyDiscoveryAndDirectory(body, updateData, currentRow, reply)) {
+      return reply;
+    }
+
     db.update(schema.instanceSettings).set(updateData).where(eq(schema.instanceSettings.id, 1)).run();
+
+    if (directoryDocumentChanged(updateData, currentRow)) {
+      markDirectoryDirty(getRawDb());
+    }
 
     const updatedRow = db.select().from(schema.instanceSettings).where(eq(schema.instanceSettings.id, 1)).get();
     if (!updatedRow) {
       return sendError(reply, 500, 'instance_settings_reload_failed');
     }
 
-    const updatedGifKey = updatedRow.gifApiKey as string | null;
-    const updatedMaxUploadBytes = updatedRow.maxUploadSizeBytes ?? config.maxUploadSize;
-    const response: InstanceAdminSettings = {
-      instanceName: updatedRow.instanceName ?? 'Backspace',
-      registrationOpen: updatedRow.registrationOpen !== null ? updatedRow.registrationOpen === 1 : config.registrationOpen,
-      federatedRegistrationOpen: updatedRow.federatedRegistrationOpen === 1,
-      discoveryEnabled: updatedRow.discoveryEnabled === 1,
-      gifApiKey: updatedGifKey ? `****${updatedGifKey.slice(-4)}` : undefined,
-      gifEnabled: !!updatedGifKey,
-      maxUploadSizeMb: Math.round(updatedMaxUploadBytes / (1024 * 1024)),
-      federationRelayEnabled: updatedRow.federationRelayEnabled === 1,
-      federationRelayTtlDays: updatedRow.federationRelayTtlDays,
-      defaultAutoRotateIntervalDays: updatedRow.defaultAutoRotateIntervalDays,
-      autoAcceptPeering: updatedRow.autoAcceptPeering === 1,
-      directoryEnabled: false,
-      directoryLastPingAt: null,
-      directoryLastError: null,
-    };
-
-    return reply.code(200).send(response);
+    return reply.code(200).send(rowToAdminSettings(updatedRow, getRawDb()));
   });
 }

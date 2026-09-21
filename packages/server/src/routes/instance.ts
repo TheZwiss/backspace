@@ -27,7 +27,7 @@ export async function instanceRoutes(app: FastifyInstance): Promise<void> {
       // network user (and federated peer) — public/unauthenticated by design.
       sourceCodeUrl: config.sourceCodeUrl,
       commit: config.commit,
-      directoryEnabled: false,
+      directoryEnabled: settings?.directoryEnabled === 1,
     };
 
     return reply.code(200).send(response);

@@ -106,4 +106,21 @@ describe('GET /api/instance/info', () => {
     expect(typeof body.instanceId).toBe('string');
     expect(body.instanceId).toMatch(/^[0-9a-f-]{36}$/);
   });
+
+  it('reports directoryEnabled=false by default', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/instance/info' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().directoryEnabled).toBe(false);
+  });
+
+  it('reports directoryEnabled=true when the admin turned the directory on', async () => {
+    testDb.update(schema.instanceSettings)
+      .set({ directoryEnabled: 1 })
+      .where(eq(schema.instanceSettings.id, 1))
+      .run();
+
+    const res = await app.inject({ method: 'GET', url: '/api/instance/info' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().directoryEnabled).toBe(true);
+  });
 });

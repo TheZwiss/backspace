@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
+import { eq } from 'drizzle-orm';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -102,6 +103,14 @@ describe('explore routes — error codes', () => {
     const body = JSON.parse(res.body);
     expect(body.code).toBe('space_not_found');
     expect(body.error).toBe('Space not found');
+  });
+
+  it('reports directoryListed on the joined space', async () => {
+    seedSpace('listed', 'public');
+    testDb.update(schema.spaces).set({ directoryListed: 1 }).where(eq(schema.spaces.id, 'listed')).run();
+    const res = await app.inject({ method: 'POST', url: '/api/spaces/listed/public-join' });
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body).directoryListed).toBe(true);
   });
 
   it('sends space_not_public when joining a space that is not public', async () => {
