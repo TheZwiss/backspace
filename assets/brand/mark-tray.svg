@@ -1,14 +1,17 @@
 <!--
-  Backspace mark, tuned for the macOS menu bar (22px template, 44px @2x).
+  Backspace mark, tuned for the macOS menu bar (18x22px template, 36x44 @2x).
 
-  Canvas: 22 x 22 device px at 1x (10 viewBox units per px). The body is the
-  mark-small squircle scaled to 16px tall (11.8px wide), the height of the
-  system's own menu-bar glyphs, with equal 3px top and bottom margins. It is
-  placed 0.40px right of the canvas centre: the straight left edge and the
-  arrow cut-out on the right put the silhouette's alpha centroid 0.40px left
-  of the body centre, and the shift puts the centroid on the canvas centre
-  at 1x and 2x (measured on the rendered alpha; the alpha bbox is then
-  L5 R4 at 1x because the right edge lands on a fractional column).
+  Canvas: 18 x 22 device px at 1x (10 viewBox units per px). The canvas is
+  narrower than the usual 22px square so the status item's own padding
+  gives the same gap to the neighbouring icons as they have between each
+  other (a 13px-wide glyph in a 22px box left a 6px wider gap). The body is
+  the mark-small squircle scaled to 16px tall (11.8px wide), the height of
+  the system's own menu-bar glyphs, with equal 3px top and bottom margins.
+  It is placed 0.40px right of the canvas centre: the straight left edge and
+  the arrow cut-out on the right put the silhouette's alpha centroid 0.40px
+  left of the body centre, and the shift puts the centroid on the canvas
+  centre at 1x and 2x (measured on the rendered alpha; the alpha bbox is
+  then L3 R2 at 1x because the right edge lands on a fractional column).
   Compared with mark-small (channel 20 glyph units = 1.8px at this size) the
   arrow channel is widened to 2.8px, the chevron tip moves 3 glyph units
   left and the chevron arms are shortened (arm end cap at x - y = 32 glyph
@@ -16,4 +19,4 @@
   1.5px system glyphs instead of a grey smudge. No fillets: they are under
   0.5px here. Alpha-only: macOS tints the silhouette.
 -->
-<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 220 220"><path fill="#000" d="M93.676 30H134.324A38.788 38.788 0 0 1 173.111 68.788A27.212 27.212 0 0 1 145.899 96H126.265L137.799 84.466L118 64.667L72.667 110L118 155.333L137.799 135.534L126.265 124H145.899A27.212 27.212 0 0 1 173.111 151.212A38.788 38.788 0 0 1 134.324 190H93.676A38.788 38.788 0 0 1 54.889 151.212V68.788A38.788 38.788 0 0 1 93.676 30Z"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="18" height="22" viewBox="0 0 180 220"><path fill="#000" d="M73.676 30H114.324A38.788 38.788 0 0 1 153.111 68.788A27.212 27.212 0 0 1 125.899 96H106.265L117.799 84.466L98 64.667L52.667 110L98 155.333L117.799 135.534L106.265 124H125.899A27.212 27.212 0 0 1 153.111 151.212A38.788 38.788 0 0 1 114.324 190H73.676A38.788 38.788 0 0 1 34.889 151.212V68.788A38.788 38.788 0 0 1 73.676 30Z"/></svg>

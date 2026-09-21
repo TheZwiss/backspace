@@ -75,10 +75,10 @@ The brand as shipped in `site/assets/` on the PR head:
 | `packages/desktop/build/icons/{16,32,48,64,128,256,512,1024}x{same}.png` | RGBA | app-icon; 16 and 32 render from app-icon-small |
 | `packages/desktop/build/icon.icns` | 16..1024 | from the icons set |
 | `packages/desktop/build/icon.ico` | 16,24,32,48,64,128,256 | from the icons set |
-| `packages/desktop/resources/tray-iconTemplate.png` | 22, RGBA, mono black | mark-tray |
-| `packages/desktop/resources/tray-iconTemplate@2x.png` | 44, RGBA, mono black | mark-tray |
-| `packages/desktop/resources/tray-icon.png` | 22, RGBA | mark-small, colour |
-| `packages/desktop/resources/tray-icon.ico` | 16,20,24,32,40,48 | mark-small, colour |
+| `packages/desktop/resources/tray-iconTemplate.png` | 18x22, RGBA, mono black | mark-tray (16px glyph, centred by alpha centroid) |
+| `packages/desktop/resources/tray-iconTemplate@2x.png` | 36x44, RGBA, mono black | mark-tray |
+| `packages/desktop/resources/tray-icon.png` | 22, RGBA | mark-small, colour, 18px glyph centred in the cell |
+| `packages/desktop/resources/tray-icon.ico` | 16,20,24,32,40,48 | mark-small, colour, glyph inset per frame (14,18,21,28,35,42 tall) |
 | `assets/social-preview.png` | 1280x640, RGB | social composition |
 | `site/social-preview.png` | 1280x640, RGB | identical file |
 

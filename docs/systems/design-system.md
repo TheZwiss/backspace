@@ -162,9 +162,9 @@ those platforms apply their own icon framing. See `macIconPng` in
 | `app-icon-small.svg` | App icon outputs at 16/32px (bolder, simplified mark, same dimensional badge geometry) |
 | `mark-icon.svg` | The bare gradient glyph alone, transparent, no badge: the PWA maskable icon's inner mark and the social preview |
 | `mark.svg` | Standalone flat-lavender renders on dark UI-surface grounds |
-| `mark-small.svg` | Favicons, the colour tray icons (Windows `.ico`, Linux PNG), and any standalone render at 32px or smaller (flat) |
+| `mark-small.svg` | Favicons, the colour tray icons (Windows `.ico`, Linux PNG; glyph inset in the tray cell and centred by alpha centroid), and any standalone render at 32px or smaller (flat) |
 | `mark-mono-light.svg` | `packages/web/public/icons/logo-mark.svg` (byte copy): the flat white glyph, for the in-app sidebar's lavender home tile |
-| `mark-tray.svg` | The macOS menu-bar template tray icon, tuned for 22px |
+| `mark-tray.svg` | The macOS menu-bar template tray icon: a 16px silhouette on an 18x22 canvas (36x44 @2x), centred by alpha centroid so it sits and spaces like the system's own menu-bar glyphs |
 | `mark-mono-dark.svg` | Mono silhouette master; no pipeline output today |
 
 Regenerate icons with `pnpm gen-icons`; regenerate the social preview with
