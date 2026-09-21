@@ -5,7 +5,16 @@ import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-dotenvConfig({ path: resolve(__dirname, '../../../.env') });
+// The test suite never reads the checkout's `.env`. CI has none, so a value a
+// developer keeps there (DOMAIN, REGISTRATION_OPEN, PORT) would make the same
+// suite pass in CI and fail locally: the self-homed identity guard, for one,
+// reads `config.domain` before the origin the federation tests mock. Vitest's
+// setup file (`test/setup-env.ts`) sets NODE_ENV and the keys the suite needs,
+// and the two-instance harness passes a child instance its whole environment
+// explicitly, so under test everything comes from the process environment.
+if (process.env.NODE_ENV !== 'test') {
+  dotenvConfig({ path: resolve(__dirname, '../../../.env') });
+}
 
 function env(key: string, defaultValue?: string): string {
   const value = process.env[key] ?? defaultValue;

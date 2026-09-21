@@ -54,7 +54,7 @@ function applyMigrations(db: Database.Database): void {
 // Override config paths to use the test-local tmpDir so tus file I/O is isolated.
 // We do this by mocking the config module.
 vi.mock('../config.js', async () => {
-  // Grab the real config first (runs dotenv so JWT_SECRET etc. are set)
+  // Grab the real config first (test/setup-env.ts has already set JWT_SECRET)
   const real = await import('../config.js');
   // We'll patch the directory fields; the proxy below reads `tmpDir` at
   // call time, which is reassigned in each beforeEach.
