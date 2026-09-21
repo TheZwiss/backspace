@@ -34,6 +34,7 @@ import { buildCspHeaderValue, CSP_REPORT_GROUP, CSP_REPORT_PATH } from './utils/
 import { startFederationWorkers, stopFederationWorkers } from './utils/federationWorker.js';
 import { startBackupWorker, stopBackupWorker } from './utils/backupWorker.js';
 import { startTelemetryReporter, stopTelemetryReporter } from './telemetry/reporter.js';
+import { startDirectoryPinger, stopDirectoryPinger } from './directory/pinger.js';
 import './utils/federationRollback.js'; // Side-effect: registers rollback callbacks for outbox terminal failures.
 import { registerCallRelayHooks } from './ws/events.js';
 import { resetStalePresenceOnBoot } from './utils/presenceBoot.js';
@@ -259,10 +260,16 @@ async function main(): Promise<void> {
 
   startBackupWorker();
 
+  // The space directory pinger stays outside the workers guard on purpose:
+  // the two-instance harness disables the workers and still needs the pinger,
+  // pointed at a local stub. It has its own guard, an empty DIRECTORY_ENDPOINT.
+  startDirectoryPinger();
+
   const shutdown = async () => {
     console.log('Shutting down...');
     stopFederationWorkers();
     stopTelemetryReporter();
+    stopDirectoryPinger();
     stopBackupWorker();
     await app.close();
     closeDatabase(); // checkpoints WAL — leaves a complete on-disk file

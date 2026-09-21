@@ -24,8 +24,15 @@ interface Row {
 let documentVersion = 0;
 const listeners = new Set<() => void>();
 
+export type DirectoryPingReason = NonNullable<DirectoryPingError['reason']>;
+
 const STATUSES = new Set(['network', 'timeout', 'origin', 'fetch']);
-const REASONS = new Set(['unreachable', 'status', 'invalid', 'origin-mismatch']);
+const REASONS: ReadonlySet<string> = new Set<DirectoryPingReason>(['unreachable', 'status', 'invalid', 'origin-mismatch']);
+
+/** True for a reason the hub may send with a 502, and that the wire type admits. */
+export function isDirectoryPingReason(value: unknown): value is DirectoryPingReason {
+  return typeof value === 'string' && REASONS.has(value);
+}
 
 function parseError(raw: string | null): DirectoryPingError | null {
   if (raw === null) return null;
@@ -37,7 +44,7 @@ function parseError(raw: string | null): DirectoryPingError | null {
     const statusOk = typeof status === 'number' || (typeof status === 'string' && STATUSES.has(status));
     if (!statusOk) return null;
     const out: DirectoryPingError = { at, status: status as DirectoryPingError['status'] };
-    if (typeof reason === 'string' && REASONS.has(reason)) out.reason = reason as DirectoryPingError['reason'];
+    if (isDirectoryPingReason(reason)) out.reason = reason;
     return out;
   } catch {
     return null;
