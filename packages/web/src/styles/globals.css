@@ -383,7 +383,7 @@
   --em-rgb-color: 216, 216, 222;
   --em-color-border: rgba(255, 255, 255, 0.07);
   --em-color-border-over: rgba(255, 255, 255, 0.12);
-  --rgb-accent: 0, 97, 255;
+  --rgb-accent: var(--accent-primary);
   --font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   border: none !important;
   background: transparent !important;
@@ -479,7 +479,7 @@
 .skeleton-block  { border-radius: 8px; }
 
 @keyframes search-flash {
-  0% { background-color: rgba(0, 97, 255, 0.2); }
+  0% { background-color: rgb(var(--accent-primary) / 0.2); }
   100% { background-color: transparent; }
 }
 .search-highlight { animation: search-flash 2s ease-out; }

@@ -51,10 +51,9 @@ Do NOT update docs for standard UI/UX fixes or minor logic bugs. Only structural
 Prototype (source of truth): `Backspace-design-prototype.html` (open in browser)
 Full spec: `docs/systems/design-system.md`
 
-**Core:** Warm matte surfaces with subtle frosted glass accents. Calm over flashy. Warm over cool.
+**Core:** Warm matte surfaces with subtle frosted glass accents. Calm over flashy. Surfaces stay warm; the brand primary is the electric blue.
 **Two-material system:** Solid matte panels for content (75%), frosted glass for persistent controls (25%).
-**Colors:** Warm dark surfaces (#13131a chat, #1a1a23 sidebars), pastel accents (mint, peach, lavender, sky, amber, rose, coral).
-**Brand primary:** Electric blue `#0061ff`.
+**Colors:** Warm dark surfaces (#13131a chat, #1a1a23 sidebars), pastel accents (mint, peach, lavender, sky, amber, rose, coral), brand primary electric blue (`#0061ff`).
 
 ### Surface Tiers
 | Tier | Class | When to Use |

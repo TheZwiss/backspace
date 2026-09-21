@@ -78,7 +78,7 @@ body {
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
 }
-::selection { background: rgba(124, 108, 246, 0.35); }
+::selection { background: color-mix(in srgb, var(--primary) 35%, transparent); }
 img { max-width: 100%; height: auto; display: block; }
 a { color: var(--sky); text-decoration: none; }
 a:hover { text-decoration: underline; }
@@ -135,7 +135,7 @@ a:focus-visible, button:focus-visible, summary:focus-visible {
 .hero::before {
   content: ""; position: absolute; inset: -200px 0 0 0; z-index: -1; pointer-events: none;
   background:
-    radial-gradient(900px 480px at 78% 0%, rgba(124, 108, 246, 0.09), transparent 62%),
+    radial-gradient(900px 480px at 78% 0%, color-mix(in srgb, var(--primary) 9%, transparent), transparent 62%),
     radial-gradient(760px 420px at 12% 12%, rgba(134, 239, 172, 0.05), transparent 58%);
 }
 .hero-head { max-width: 780px; margin: 0 auto 44px; text-align: center; }

@@ -7,6 +7,11 @@
   <style>
     @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
 
+    :root {
+      --primary: #0061ff;
+      --primary-hover: #0052d9;
+    }
+
     *, *::before, *::after {
       box-sizing: border-box;
       margin: 0;
@@ -127,7 +132,7 @@
     }
 
     .field input:focus {
-      box-shadow: 0 0 0 2px #0061ff, inset 0 1px 2px rgba(0, 0, 0, 0.25);
+      box-shadow: 0 0 0 2px var(--primary), inset 0 1px 2px rgba(0, 0, 0, 0.25);
       border-color: rgba(0, 97, 255, 0.3);
     }
 
@@ -162,7 +167,7 @@
     .connect-btn {
       width: 100%;
       padding: 0.625rem;
-      background: #0061ff;
+      background: var(--primary);
       color: #ffffff;
       border: none;
       border-radius: 4px;
@@ -174,7 +179,7 @@
     }
 
     .connect-btn:hover:not(:disabled) {
-      background: rgba(0, 97, 255, 0.8);
+      background: var(--primary-hover);
     }
 
     .connect-btn:disabled {

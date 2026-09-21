@@ -5,6 +5,10 @@
   <title>Backspace — Recovery</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
+    :root {
+      --primary: #0061ff;
+      --primary-hover: #0052d9;
+    }
     * { box-sizing: border-box; }
     html, body {
       margin: 0;
@@ -83,8 +87,8 @@
     }
     button.action:hover:not(:disabled) { background: #34343f; }
     button.action:disabled { opacity: 0.5; cursor: default; }
-    button.action.primary { background: #0061ff; border-color: transparent; }
-    button.action.primary:hover { background: #0052d9; }
+    button.action.primary { background: var(--primary); border-color: transparent; }
+    button.action.primary:hover { background: var(--primary-hover); }
     button.action.subtle {
       background: transparent;
       color: #a0a0aa;
