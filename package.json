@@ -24,6 +24,7 @@
     "dev:desktop": "pnpm --filter @backspace/desktop dev",
     "build:desktop": "pnpm --filter @backspace/desktop build",
     "gen-icons": "node scripts/gen-icons.mjs",
+    "gen-social-preview": "node scripts/gen-social-preview.mjs",
     "bump": "node scripts/bump-version.mjs"
   },
   "devDependencies": {
