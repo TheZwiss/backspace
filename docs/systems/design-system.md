@@ -131,20 +131,34 @@ them, never hand-edited.
 The brand splits by surface, not by file type. UI surfaces (the site
 header, the in-app sidebar tile, favicons, and all tray icons) stay
 flat: a single flat fill, `#7c6cf6` on dark grounds or `#ffffff` on a
-lavender tile or squircle, no gradient, stroke, glow, shadow, blur or
+lavender tile or badge shape, no gradient, stroke, glow, shadow, blur or
 blend anywhere the mark appears. The app-icon family, meaning every
 output where the OS shows this app as one launchable icon (dock,
 taskbar, Start menu, Alt-Tab, PWA install, iOS home screen, the
 maskable Android icon), is dimensional: the contributor's original
-squircle-badge composition, recoloured to the lavender system. The
-badge is a vertical gradient from `#2a2740` (top) to `#12101d`
-(bottom), called "plum", carrying a drop shadow, an inner shadow and a
-soft-light stroke overlay; the glyph inside it is a white-to-`#7c6cf6`
-gradient, not a flat fill.
+badge composition, recoloured to the lavender system. The badge is a
+rounded rectangle with a corner radius of 22.37% of its side (Apple's
+own template radius, not the contributor's original ~36% squircle) on
+a vertical gradient from `#2a2740` (top) to `#12101d` (bottom), called
+"plum", carrying a drop shadow, an inner shadow and a soft-light stroke
+overlay; the glyph inside it is a white-to-`#7c6cf6` gradient, not a
+flat fill.
+
+On macOS specifically, the badge also sits on Apple's icon grid: the
+visible artwork occupies an 824px square centred on a 1024 canvas (a
+transparent margin of 100px each side), matching how every other Dock
+icon is framed. `packages/desktop/build/icon.icns` and
+`packages/desktop/build/icon.png` (the dev-mode Dock icon) are the only
+two outputs that carry this margin; every other app-icon output
+(Windows `.ico`, Linux `build/icons/*`, PWA `icon-192`/`icon-512`, the
+in-app `logo.png`, `apple-touch-icon.png`, the maskable icon,
+`app-icon-1024.png`) renders full-bleed to the badge's own edge, because
+those platforms apply their own icon framing. See `macIconPng` in
+`scripts/gen-icons.mjs`.
 
 | Master | Feeds |
 |--------|-------|
-| `app-icon.svg` | App icon outputs above 32px: the dimensional squircle badge (plum gradient, filters, stroke overlay) plus the white-to-`#7c6cf6` gradient glyph |
+| `app-icon.svg` | App icon outputs above 32px: the dimensional badge (plum gradient, filters, stroke overlay, 22.37%-radius corners) plus the white-to-`#7c6cf6` gradient glyph |
 | `app-icon-small.svg` | App icon outputs at 16/32px (bolder, simplified mark, same dimensional badge geometry) |
 | `mark-icon.svg` | The bare gradient glyph alone, transparent, no badge: the PWA maskable icon's inner mark and the social preview |
 | `mark.svg` | Standalone flat-lavender renders on dark UI-surface grounds |

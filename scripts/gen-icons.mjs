@@ -22,13 +22,14 @@
  * everywhere an OS shows this app as a single launchable icon (dock,
  * taskbar, Start menu, Alt-Tab, PWA install, iOS home screen), is the
  * contributor's original dimensional composition recoloured to the
- * lavender system: a squircle badge on a `#2a2740`-to-`#12101d` plum
- * gradient, drop shadow, inner shadow and a soft-light stroke overlay,
- * with the glyph itself a white-to-`#7c6cf6` gradient. See
+ * lavender system: a badge (a rounded rectangle at Apple's own 22.37%
+ * template corner radius) on a `#2a2740`-to-`#12101d` plum gradient,
+ * drop shadow, inner shadow and a soft-light stroke overlay, with the
+ * glyph itself a white-to-`#7c6cf6` gradient. See
  * `docs/systems/design-system.md`'s Brand section for the full rule.
  *
  * APP-ICON RENDERING: every app-icon output renders straight from vector.
- * `app-icon.svg` already carries its own squircle badge, drop shadow and
+ * `app-icon.svg` already carries its own badge, drop shadow and
  * inner shadow, so there is no raster source and no post-render masking —
  * sharp/librsvg renders the SVG at the target size and that's the pixel
  * output. Sizes 16 and 32 render from `app-icon-small.svg` instead: at
@@ -66,7 +67,7 @@ const DESKTOP_RES   = join(ROOT, 'packages/desktop/resources');
 const WEB_ICONS      = join(ROOT, 'packages/web/public/icons');
 const BRAND          = join(ROOT, 'assets/brand');
 
-// app-icon.svg's squircle badge ground: a vertical gradient from plum to
+// app-icon.svg's badge ground: a vertical gradient from plum to
 // near-black, matching the badge's own `paint0_linear` gradient exactly.
 // Reused here as an opaque background for outputs that must carry zero
 // transparent pixels: the apple-touch-icon (iOS paints transparent
@@ -147,6 +148,40 @@ async function writeAppIconPng(path, icons, size) {
   writeFileSync(path, buf);
 }
 
+// Apple's icon-grid template places the visible artwork in an 824px
+// square centred on a 1024 canvas (a 100px transparent margin each
+// side) — every other OS frames its own icon (Windows applies its own
+// padding in Explorer/taskbar, Linux desktop environments crop or pad
+// per-DE, Android masks the maskable icon itself), so this margin is
+// specific to the two macOS consumers: the .icns and the dev/dock
+// `build/icon.png`. Renders the same badge composition as every other
+// app-icon output (routed through renderAppIconPng, so 16/32 would still
+// take the small variant, though neither macOS output ever requests
+// those sizes) at the scaled-down inner size, then centres it on a
+// transparent canvas of the requested size.
+async function macIconPng(icons, size) {
+  const innerSize = Math.round(size * (824 / 1024));
+  const inner = await renderAppIconPng(icons, innerSize);
+  const offset = Math.round((size - innerSize) / 2);
+  return sharp({
+    create: {
+      width: size,
+      height: size,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    },
+  })
+    .composite([{ input: inner, left: offset, top: offset }])
+    .png({ compressionLevel: 9, palette: false })
+    .toBuffer();
+}
+
+async function writeMacIconPng(path, icons, size) {
+  mkdirSync(dirname(path), { recursive: true });
+  const buf = await macIconPng(icons, size);
+  writeFileSync(path, buf);
+}
+
 // Measures an already-rendered PNG buffer via sharp metadata — used to
 // report .ico frame dimensions, since sharp can't read an .ico container
 // back but the frame buffers are already in hand before packing.
@@ -177,21 +212,21 @@ async function writeAppIconIco(path, icons, sizes) {
   return `${sizes.length} frames: ${dims.join(', ')}`;
 }
 
-async function writeAppIconIcns(path, icons) {
+async function writeAppIconIcns(path, macIcon1024) {
   // png2icons.createICNS takes a single high-res PNG and synthesises the
   // full 10-rep iconset internally (16/16@2x, 32/32@2x, 128/128@2x,
-  // 256/256@2x, 512/512@2x). Feed it the 1024 vector render — every rep
-  // it derives is a downscale of a render already sized generously above
-  // any target (see SVG_DENSITY), so none of the synthesised reps are
-  // softer than a from-scratch render at that size would be.
+  // 256/256@2x, 512/512@2x) by downscaling it. Feed it the margined 1024
+  // render (see macIconPng) so every synthesised rep inherits the same
+  // Apple-grid margin proportionally — there's no per-rep hook into
+  // png2icons to apply the margin after the fact.
   mkdirSync(dirname(path), { recursive: true });
-  const icns = png2icons.createICNS(icons.appIcon1024, png2icons.BICUBIC, 0);
+  const icns = png2icons.createICNS(macIcon1024, png2icons.BICUBIC, 0);
   if (!icns) throw new Error(`png2icons.createICNS returned null for ${path}`);
   writeFileSync(path, icns);
   // png2icons hands back only the container bytes, no per-rep metadata —
   // report the one thing we can measure honestly: the source buffer it
   // was built from.
-  const srcDims = await dimsOfBuffer(icons.appIcon1024);
+  const srcDims = await dimsOfBuffer(macIcon1024);
   return `${srcDims} source, container not decoded`;
 }
 
@@ -305,11 +340,15 @@ async function main() {
     await trace('linux-png', out, `${s}x${s} (${s <= APP_ICON_SMALL_MAX ? 'small' : 'app-icon'})`);
   }
 
-  await writeAppIconPng(join(DESKTOP_BUILD, 'icon.png'), icons, 512);
-  await trace('build-icon', join(DESKTOP_BUILD, 'icon.png'), '512x512');
+  // macOS dev/dock icon and packaged .icns: both apply Apple's icon-grid
+  // margin (824/1024 artwork centred on the canvas) — see macIconPng.
+  // Every other output below stays full-bleed.
+  await writeMacIconPng(join(DESKTOP_BUILD, 'icon.png'), icons, 512);
+  await trace('build-icon', join(DESKTOP_BUILD, 'icon.png'), '512x512 (Apple grid margin)');
 
-  const icnsMeasured = await writeAppIconIcns(join(DESKTOP_BUILD, 'icon.icns'), icons);
-  await trace('mac-icns', join(DESKTOP_BUILD, 'icon.icns'), '10-rep iconset', icnsMeasured);
+  const macIcon1024 = await macIconPng(icons, 1024);
+  const icnsMeasured = await writeAppIconIcns(join(DESKTOP_BUILD, 'icon.icns'), macIcon1024);
+  await trace('mac-icns', join(DESKTOP_BUILD, 'icon.icns'), '10-rep iconset (Apple grid margin)', icnsMeasured);
 
   const winIcoMeasured = await writeAppIconIco(
     join(DESKTOP_BUILD, 'icon.ico'),
