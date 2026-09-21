@@ -23,10 +23,12 @@ const connectToInstance = vi.fn(async (_origin: string, _password: string, _disp
   ({ kind: 'connected', how: 'new' }) as const,
 );
 const loginToRemote = vi.fn(async (_origin: string, _username: string, _password: string) => {});
+const connectToRemote = vi.fn(async (_origin: string, _password: string, _displayName?: string) => {});
+const reauthenticateInstance = vi.fn(async (_origin: string, _password: string) => {});
 
 vi.mock('./instanceStore', () => ({
   useInstanceStore: {
-    getState: () => ({ instances: session.instances, loginToRemote }),
+    getState: () => ({ instances: session.instances, loginToRemote, connectToRemote, reauthenticateInstance }),
     subscribe: () => () => {},
   },
   connectToInstance: (origin: string, password: string, displayName?: string) =>
@@ -80,6 +82,8 @@ beforeEach(() => {
   connectToInstance.mockResolvedValue({ kind: 'connected', how: 'new' });
   loginToRemote.mockReset();
   loginToRemote.mockResolvedValue(undefined);
+  connectToRemote.mockReset();
+  reauthenticateInstance.mockReset();
   publicJoin.mockReset();
   publicJoin.mockImplementation(async (space: { id: string }) => ({ id: space.id, name: 'Joined' }));
   requestJoin.mockReset();
@@ -295,6 +299,23 @@ describe('directoryStore.connectAndJoin', () => {
     expect(requestJoin).toHaveBeenCalledWith({ ...target, _instanceOrigin: ORIGIN, joined: false }, 'hello there');
     expect(publicJoin).not.toHaveBeenCalled();
     expect(result).toEqual({ kind: 'requested' });
+    expect(useDirectoryStore.getState().entries).toEqual([]);
+  });
+
+  it('joins straight away when the origin is connected already, without a new session', async () => {
+    const target = entry(ORIGIN, 'pub');
+    await seed(target);
+    // The card went stale: the user connected this origin through the
+    // Connections panel after Outer Space was loaded.
+    session.instances = [{ origin: ORIGIN, status: 'connected' }];
+    connectToInstance.mockResolvedValueOnce({ kind: 'connected', how: 'already' });
+
+    const result = await useDirectoryStore.getState().connectAndJoin(target, 'home-pw');
+
+    expect(result).toEqual({ kind: 'joined', spaceId: 'pub', origin: ORIGIN });
+    expect(publicJoin).toHaveBeenCalledWith({ ...target, _instanceOrigin: ORIGIN, joined: false });
+    expect(connectToRemote).not.toHaveBeenCalled();
+    expect(reauthenticateInstance).not.toHaveBeenCalled();
     expect(useDirectoryStore.getState().entries).toEqual([]);
   });
 

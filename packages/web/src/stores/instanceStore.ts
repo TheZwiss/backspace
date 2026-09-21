@@ -1322,18 +1322,24 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
 // ─── Shared connect path ─────────────────────────────────────────────────────
 
 export type ConnectOutcome =
-  | { kind: 'connected'; how: 'new' | 'reconnect' }
+  | { kind: 'connected'; how: 'new' | 'reconnect' | 'already' }
   | { kind: 'needs-remote-password'; remoteUsername: string };
 
 /**
  * The one way to establish a session on another instance from a user-typed
  * password: the Connections panel and the directory's connect-then-join flow
- * both go through it. An instance the store knows in the `error` or
- * `disconnected` state is re-authenticated in place; anything else (unknown,
- * or connected already) goes through `connectToRemote`, whose own checks
- * decide. A remote account that does not accept the home-issued credential
- * is reported as `needs-remote-password` so the caller can offer the explicit
- * per-instance login form; every other failure is thrown as is.
+ * both go through it. The branch is by the status the store holds for the
+ * origin: `error` or `disconnected` is re-authenticated in place;
+ * `connected` or `connecting` is usable already and short-circuits without
+ * touching the store (`connectToRemote` has no duplicate check of its own
+ * and would append a second entry); an unknown origin connects. A remote
+ * account that does not accept the home-issued credential is reported as
+ * `needs-remote-password` so the caller can offer the explicit per-instance
+ * login form; every other failure is thrown as is.
+ *
+ * This does not validate a typed URL: a caller that wants the self and
+ * duplicate checks for user input still runs `probeInstance` first, as the
+ * Connections flow does.
  */
 export async function connectToInstance(
   origin: string,
@@ -1343,8 +1349,11 @@ export async function connectToInstance(
   const store = useInstanceStore.getState();
   const canonical = normalizeOrigin(origin);
   const existing = store.instances.find((i) => normalizeOrigin(i.origin) === canonical);
+  if (existing && (existing.status === 'connected' || existing.status === 'connecting')) {
+    return { kind: 'connected', how: 'already' };
+  }
   try {
-    if (existing && (existing.status === 'error' || existing.status === 'disconnected')) {
+    if (existing) {
       await store.reauthenticateInstance(existing.origin, password);
       return { kind: 'connected', how: 'reconnect' };
     }

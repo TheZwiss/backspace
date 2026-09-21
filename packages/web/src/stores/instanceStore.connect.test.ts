@@ -98,13 +98,23 @@ describe('connectToInstance', () => {
     expect(reauthenticateInstance).toHaveBeenCalledWith(REMOTE, 'pw');
   });
 
-  it('sends a connected instance through connectToRemote and lets the store decide', async () => {
+  it('short-circuits a connected instance without touching the store', async () => {
     useInstanceStore.setState({ instances: [makeInstance({ status: 'connected' })] });
 
-    const outcome = await connectToInstance(REMOTE, 'pw', 'Erin');
+    const outcome = await connectToInstance('orbit.example/', 'pw', 'Erin');
 
-    expect(outcome).toEqual({ kind: 'connected', how: 'new' });
-    expect(connectToRemote).toHaveBeenCalledWith(REMOTE, 'pw', 'Erin');
+    expect(outcome).toEqual({ kind: 'connected', how: 'already' });
+    expect(connectToRemote).not.toHaveBeenCalled();
+    expect(reauthenticateInstance).not.toHaveBeenCalled();
+  });
+
+  it('short-circuits a connecting instance without touching the store', async () => {
+    useInstanceStore.setState({ instances: [makeInstance({ status: 'connecting' })] });
+
+    const outcome = await connectToInstance(REMOTE, 'pw');
+
+    expect(outcome).toEqual({ kind: 'connected', how: 'already' });
+    expect(connectToRemote).not.toHaveBeenCalled();
     expect(reauthenticateInstance).not.toHaveBeenCalled();
   });
 
