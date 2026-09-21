@@ -1211,6 +1211,14 @@ if (!gotTheLock) {
   // ─── App Lifecycle ──────────────────────────────────────────────────────────
 
   app.whenReady().then(async () => {
+    // Development runs inside the stock Electron.app bundle, whose Dock icon
+    // macOS caches per bundle, so the copied icns in the dev script does not
+    // show. Set it at runtime; packaged builds carry the icon in their own
+    // bundle and skip this.
+    if (process.platform === 'darwin' && !app.isPackaged && app.dock) {
+      app.dock.setIcon(path.join(__dirname, '..', 'build', 'icon.png'));
+    }
+
     // Win/Linux: frameless window has no menu bar, but we still need an
     // application menu so keyboard accelerators (Ctrl+C/V/X/Z/A) work.
     // The macOS app menu is owned by the recoveryStore subscriber below
