@@ -33,7 +33,7 @@ export const MentionBadge = React.memo(function MentionBadge({ userId }: Mention
     } else if (ownerId && userId === ownerId) {
       color = '#fda4af';
     } else {
-      color = '#0061ff'; // accent-primary default
+      color = '#7c6cf6'; // accent-primary default
     }
   } else {
     displayName = 'Unknown User';

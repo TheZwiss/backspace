@@ -9,7 +9,7 @@ Fonts: DM Sans by default; Inter for the Russian UI; the platform CJK stack for 
 
 ## Principles
 
-- Calm over flashy. Surfaces stay warm; the brand primary is the electric blue.
+- Calm over flashy. Warm over cool.
 - Quiet glass (felt, not seen). No decorative gradients. Minimal shadows.
 - Two-material system: solid matte panels for content (75%), frosted glass bubbles for persistent controls (25%)
 - `prefers-reduced-transparency` → fall back to solid surfaces
@@ -151,7 +151,7 @@ rasteriser, not per lockfile, so a Chrome or font upgrade can shift it
 even with no dependency change. See `scripts/gen-icons.README.md` and
 `docs/systems/desktop.md` for the full matrix.
 
-The brand primary is `#0061ff`. It is a web/app/desktop primary, not a
+The brand primary is `#7c6cf6`. It is a web/app/desktop primary, not a
 pastel accent, and is exposed as `--accent-primary` (see Color Palette
 above).
 

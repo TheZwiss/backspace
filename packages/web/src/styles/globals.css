@@ -69,9 +69,9 @@
     --accent-coral: 251 146 60;
 
     /* ── Primary Action (replaces blurple) ── */
-    --accent-primary: 0 97 255;
-    --accent-primary-hover: 0 82 217;
-    --accent-primary-active: 0 71 189;
+    --accent-primary: 124 108 246;
+    --accent-primary-hover: 107 92 224;
+    --accent-primary-active: 95 79 208;
 
     /* ── Text Hierarchy ── */
     --text-primary: 239 239 239;
