@@ -38,17 +38,29 @@ interface SpaceRow {
  * single foreign value must never delist the whole document.
  *
  * - null stays null
- * - a value already on this origin is kept
- * - any other absolute URL becomes null (never forwarded)
+ * - a value already on this origin is kept (origins compared case-insensitively)
+ * - any other absolute URL, or one that does not parse, becomes null (never forwarded)
  * - a rooted path becomes origin + path
  * - a bare filename is an upload
  */
 export function absoluteAssetUrl(value: string | null, origin: string): string | null {
   if (value === null) return null;
-  if (value.startsWith(`${origin}/`)) return value;
-  if (value.startsWith('http://') || value.startsWith('https://')) return null;
+  if (/^https?:\/\//i.test(value)) {
+    // Origins are compared through the URL parser, so a stored URL whose host
+    // differs from `origin` only in case (a mixed-case DOMAIN) still counts
+    // as ours. A value that does not parse is dropped like a foreign one.
+    return sameOrigin(value, origin) ? value : null;
+  }
   if (value.startsWith('/')) return `${origin}${value}`;
   return `${origin}/api/uploads/${value}`;
+}
+
+function sameOrigin(value: string, origin: string): boolean {
+  try {
+    return new URL(value).origin === new URL(origin).origin;
+  } catch {
+    return false;
+  }
 }
 
 // The Explore query (routes/explore.ts) with the two extra predicates, so a

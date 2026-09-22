@@ -224,4 +224,17 @@ describe('absoluteAssetUrl', () => {
     expect(absoluteAssetUrl('/api/uploads/x.png', ORIGIN)).toBe(`${ORIGIN}/api/uploads/x.png`);
     expect(absoluteAssetUrl('x.png', ORIGIN)).toBe(`${ORIGIN}/api/uploads/x.png`);
   });
+
+  it('compares origins case-insensitively, as a mixed-case DOMAIN produces them', () => {
+    expect(absoluteAssetUrl('https://Home.Test/api/uploads/x.png', ORIGIN)).toBe('https://Home.Test/api/uploads/x.png');
+    expect(absoluteAssetUrl(`${ORIGIN}/api/uploads/x.png`, 'https://HOME.test')).toBe(`${ORIGIN}/api/uploads/x.png`);
+    expect(absoluteAssetUrl('https://Other.Test/x.png', ORIGIN)).toBeNull();
+    expect(absoluteAssetUrl('http://home.test/x.png', ORIGIN)).toBeNull();
+    expect(absoluteAssetUrl('https://home.test:8443/x.png', ORIGIN)).toBeNull();
+  });
+
+  it('drops an absolute value that does not parse as a URL', () => {
+    expect(absoluteAssetUrl('https://', ORIGIN)).toBeNull();
+    expect(absoluteAssetUrl('http://exa mple.test/x.png', ORIGIN)).toBeNull();
+  });
 });

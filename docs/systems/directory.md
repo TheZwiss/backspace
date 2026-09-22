@@ -245,10 +245,13 @@ member count then creation time, the same order as Explore.
 **The one asset rule.** Every `icon` and `banner` in the document is either an
 absolute URL on this origin or null, because the hub rejects anything else and
 a single foreign value must never delist the whole document. `absoluteAssetUrl`
-maps a stored value as follows: null stays null; a value already under
-`origin + '/'` is kept; any other absolute `http(s)` URL becomes null; a rooted
-path becomes `origin + path`; a bare filename is an upload and becomes
-`origin + '/api/uploads/' + name`.
+maps a stored value as follows: null stays null; an absolute `http(s)` URL
+whose origin is this origin is kept; any other absolute URL becomes null; a
+rooted path becomes `origin + path`; a bare filename is an upload and becomes
+`origin + '/api/uploads/' + name`. The origin comparison goes through
+`new URL(...).origin` on both sides, so a stored URL whose host differs from
+`origin` only in case (a mixed-case `DOMAIN`) is kept, and an absolute value
+that does not parse is dropped like a foreign one.
 
 **Cache.** The built document is served for 30 seconds or until
 `markDirectoryDirty()` bumps the version, whichever is first. The response
