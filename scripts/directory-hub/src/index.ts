@@ -192,6 +192,7 @@ async function fetchDocument(
     response = await outbound(`${origin}${DOCUMENT_PATH}`, {
       method: 'GET',
       redirect: 'manual',
+      cache: 'no-store',
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       headers: { accept: 'application/json' },
     });

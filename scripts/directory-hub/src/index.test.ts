@@ -277,7 +277,7 @@ describe('POST /v1/ping', () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it('fetches the document URL with a manual redirect policy, a signal and an accept header', async () => {
+  it('fetches the document URL with a manual redirect policy, a signal, an accept header and no store', async () => {
     const spy = answering(() => jsonResponse(document()));
     const res = await call(spy, post(ping()));
     expect(res.status).toBe(204);
@@ -287,6 +287,7 @@ describe('POST /v1/ping', () => {
     expect(init.redirect).toBe('manual');
     expect(init.signal).toBeInstanceOf(AbortSignal);
     expect(new Headers(init.headers).get('accept')).toBe('application/json');
+    expect(init.cache).toBe('no-store');
   });
 
   it('canonicalises the pinged origin before fetching and storing', async () => {

@@ -251,13 +251,16 @@ path becomes `origin + path`; a bare filename is an upload and becomes
 `origin + '/api/uploads/' + name`.
 
 **Cache.** The built document is served for 30 seconds or until
-`markDirectoryDirty()` bumps the version, whichever is first, and the response
-carries `Cache-Control: public, max-age=30`. The cache is the guard against
-polling: the hub's fetches arrive from many Cloudflare addresses, and the
-app's global per-user-or-IP limiter is no help against a distributed reader.
-The cache never serves a document older than the last change, which is what
-makes an immediate delist ping fetch the delist rather than the previous
-document.
+`markDirectoryDirty()` bumps the version, whichever is first. The response
+carries `Cache-Control: no-cache`, so no intermediary (a CDN, a corporate
+proxy, a browser cache) can hold a pre-delist copy and answer the hub with
+it; every request revalidates against the instance, and the in-memory cache
+answers those revalidations. The hub's own fetch sends `cache: 'no-store'`
+for the same reason. The in-memory cache is the guard against polling: the
+hub's fetches arrive from many Cloudflare addresses, and the app's global
+per-user-or-IP limiter is no help against a distributed reader. The cache
+never serves a document older than the last change, which is what makes an
+immediate delist ping fetch the delist rather than the previous document.
 
 ---
 

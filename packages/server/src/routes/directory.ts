@@ -185,12 +185,14 @@ export async function directoryRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/directory/spaces: the public document the hub indexes. No auth
   // on purpose; the hub is a stranger. It never 404s (a switched-off
   // instance serves an empty list), so a fetch of one is a success that
-  // clears its rows at the hub.
+  // clears its rows at the hub. Served no-cache so no intermediary can hold
+  // a pre-delist copy; the in-memory cache above answers the revalidations
+  // and is the actual polling guard.
   app.get('/api/directory/spaces', async (_request, reply) => {
     const doc = getDocument();
     return reply
       .code(200)
-      .header('cache-control', `public, max-age=${DOCUMENT_CACHE_MS / 1000}`)
+      .header('cache-control', 'no-cache')
       .send(doc);
   });
 

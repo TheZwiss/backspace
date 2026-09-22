@@ -119,10 +119,10 @@ afterEach(async () => {
 });
 
 describe('GET /api/directory/spaces', () => {
-  it('serves the document without authentication and marks it cacheable for 30 s', async () => {
+  it('serves the document without authentication and forbids intermediaries from serving it stale', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/directory/spaces' });
     expect(res.statusCode).toBe(200);
-    expect(res.headers['cache-control']).toBe('public, max-age=30');
+    expect(res.headers['cache-control']).toBe('no-cache');
     expect(JSON.parse(res.body)).toEqual({
       schema: 1,
       origin: 'https://home.test',
