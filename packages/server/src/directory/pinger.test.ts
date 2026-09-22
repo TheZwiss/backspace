@@ -576,4 +576,51 @@ describe('createChangePingScheduler', () => {
     await vi.advanceTimersByTimeAsync(3_000);
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it('a ping that was in flight at stop does not re-arm the timer when it settles', async () => {
+    const flight = slow();
+    let calls = 0;
+    const respond = () => {
+      calls += 1;
+      return calls === 1 ? flight.respond() : Promise.resolve(ok());
+    };
+    const d = live(ok);
+    d.fetch = (fetchMock = vi.fn().mockImplementation(respond)) as unknown as typeof fetch;
+    const scheduler = createChangePingScheduler(d, mem, report);
+    markDirectoryDirty(db);
+    const tick = pingerTick(d, mem);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // A change during the flight: the timer fires, sees the flight and waits
+    // for it instead of joining it.
+    markDirectoryDirty(db);
+    scheduler.schedule();
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    scheduler.stop();
+    flight.settle(ok());
+    expect(await tick).toBe('sent');
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(report).not.toHaveBeenCalled();
+  });
+
+  it('a 429 that answers after stop does not re-arm the timer for the end of the cooldown', async () => {
+    const flight = slow();
+    const d = live(ok);
+    d.fetch = (fetchMock = vi.fn().mockImplementation(flight.respond)) as unknown as typeof fetch;
+    const scheduler = createChangePingScheduler(d, mem, report);
+    markDirectoryDirty(db);
+    scheduler.schedule();
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    scheduler.stop();
+    flight.settle(new Response(null, { status: 429, headers: { 'retry-after': '10' } }));
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(readDirectoryState(db).dirty).toBe(true);
+    expect(report).not.toHaveBeenCalled();
+  });
 });

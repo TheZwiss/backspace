@@ -269,6 +269,14 @@ export async function pingerTick(deps: PingerDeps, mem: PingerMemory, opts: { bo
  * The failure backoff is ignored on purpose: an edit is new information and
  * goes out 3 seconds after the last mark even while the tick is backing off.
  * The in-flight record is what keeps that from becoming two senders.
+ *
+ * The `max` also covers the boundary: Node's timers run on the monotonic clock
+ * with millisecond truncation while `deps.now()` reads the wall clock, so a
+ * timer armed for the end of a cooldown can fire a millisecond before
+ * `cooldownUntil`. That re-arms for the full debounce rather than for the one
+ * millisecond left, so a ping at the boundary can be 3 seconds late, once. It
+ * is what "the debounce, or the rest of the cooldown, whichever is longer"
+ * means; a log line reading that way is not a fault.
  */
 export function changePingDelay(mem: PingerMemory, nowMs: number): number {
   const remaining = mem.cooldownUntil === null ? 0 : mem.cooldownUntil - nowMs;
@@ -294,6 +302,14 @@ export interface ChangePingScheduler {
  * minute. Any other failure leaves that retry to the minute tick and its
  * backoff; a new mark during the backoff is a new change and sends after the
  * debounce regardless, with the in-flight record keeping the two senders apart.
+ *
+ * `stop` is final. Two of the re-arms above run from a promise continuation (a
+ * ping in flight settling, a 429 answering), so clearing the timer alone does
+ * not end the scheduler: a continuation that lands after `stop` would set a
+ * fresh timer, and that timer sends. `mem.retired` is not that seam either, it
+ * is the hub's 410 answer and nothing about a local shutdown sets it. The flag
+ * below is the seam, and `arm` is where it is read, because every path that
+ * schedules goes through `arm`.
  */
 export function createChangePingScheduler(
   deps: PingerDeps,
@@ -301,6 +317,7 @@ export function createChangePingScheduler(
   report: (err: unknown) => void,
 ): ChangePingScheduler {
   let timer: ReturnType<typeof setTimeout> | null = null;
+  let stopped = false;
 
   const fire = (): void => {
     timer = null;
@@ -333,6 +350,7 @@ export function createChangePingScheduler(
   };
 
   const arm = (): void => {
+    if (stopped) return;
     if (timer) clearTimeout(timer);
     timer = setTimeout(fire, changePingDelay(mem, deps.now().getTime()));
   };
@@ -340,6 +358,7 @@ export function createChangePingScheduler(
   return {
     schedule: arm,
     stop: () => {
+      stopped = true;
       if (timer) clearTimeout(timer);
       timer = null;
     },

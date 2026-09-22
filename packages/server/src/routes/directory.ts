@@ -11,7 +11,7 @@ import { resolveLocalOrigin } from './federation/origin.js';
 /**
  * How long a built document is served before it is rebuilt, whether or not
  * anything changed. The hub fetches from many Cloudflare addresses, so the
- * per-user-or-IP rate limiter is no guard against a distributed reader; this
+ * per-address rate limiter is no guard against a distributed reader; this
  * cache is. A change (markDirectoryDirty) drops it sooner, so the document
  * served is never older than the last change.
  */

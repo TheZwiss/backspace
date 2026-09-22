@@ -152,7 +152,16 @@ async function main(): Promise<void> {
   await app.register(rateLimit, {
     max: 200,
     timeWindow: '1 minute',
-    keyGenerator: (request) => (request as any).userId || request.ip,
+    // The budget is per client address, and only per address. The limiter runs
+    // on `onRequest`, while `authenticate` is a route `preHandler`, so nothing
+    // has put a user on the request yet when this key is taken: a key that
+    // reached for `request.userId` would read undefined on every request and
+    // fall back here anyway. Stated plainly instead, because the consequence is
+    // an operator's to know: everyone behind one NAT, VPN exit or corporate
+    // proxy shares one 200-per-minute budget. `trustProxy` is on, so the
+    // address is the one the fronting proxy forwards. See docs/systems/api.md,
+    // "Rate limiting".
+    keyGenerator: (request) => request.ip,
     // Test harnesses set DISABLE_RATE_LIMITS=1 to bypass per-IP exhaustion when
     // many tests share the loopback IP. Default unset; production unchanged.
     allowList: () => process.env.DISABLE_RATE_LIMITS === '1' || process.env.DISABLE_RATE_LIMITS === 'true',

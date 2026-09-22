@@ -5,6 +5,36 @@ Source files: `packages/server/src/routes/*.ts`
 
 ---
 
+## Rate limiting
+
+Every request passes one global limit of **200 per minute**, registered in
+`packages/server/src/index.ts`. **The key is the client address and nothing
+else.** The limiter runs on Fastify's `onRequest` hook while `authenticate` is
+a route `preHandler`, so no user is attached to the request yet when the key is
+taken; there is no per-account budget anywhere in the app. `trustProxy` is on,
+so the address is the one the fronting proxy forwards
+(see [deployment.md](deployment.md)).
+
+What an operator should take from that: **everyone sharing one public address
+shares one budget.** A school, an office behind a corporate proxy, a VPN exit
+or a household on CGNAT counts as a single client, and a busy client there can
+spend the minute's 200 for everybody at that address. The countermeasure is not
+in the app: give such a deployment its own address, or raise the limit.
+
+Routes may tighten the limit for themselves with `config.rateLimit`; those
+overrides sit with their routes (`routes/auth.ts`, `routes/directory.ts`,
+`routes/explore.ts`, `routes/messages.ts`, `routes/dm.ts`, `routes/gif.ts`,
+`routes/users.ts`, `routes/social.ts`), and they are keyed the same way, per
+address, for the same reason. `DISABLE_RATE_LIMITS=1` or `=true`
+switches every limit off and exists for test harnesses that share the loopback
+address; it is never set in production.
+
+Over the limit: `429` with the shared error body (`{ error, code:
+'rate_limited', statusCode: 429 }`, see [localization.md](localization.md))
+plus `retryAfter` in whole seconds, and the plugin's own `Retry-After` header.
+
+---
+
 ## Auth (`routes/auth.ts`) — public, rate-limited
 ```
 POST /auth/register         { username, password, displayName?, avatarColor?, homeInstance?, homeUserId?, inviteToken? } → { token, user }
@@ -216,7 +246,7 @@ GET    /users/@me/join-requests          ?status=            → { requests[] }
 GET    /directory/spaces                 (public)                  → DirectoryDocument
 GET    /directory                        (auth)  ?q=&limit=&offset= → DirectoryFeed
 ```
-`GET /directory/spaces` is the document the space directory hub indexes: `{ schema: 1, origin, instance: { name, federatedRegistrationOpen, version }, spaces[] }`, at most 200 spaces that are listed, discoverable and public or request, every `icon`/`banner` an absolute URL on this origin or null. Unauthenticated by design (the hub is a stranger), cached in memory for 30 s or until the next change, `Cache-Control: public, max-age=30`. It never 404s: with the directory or discovery off, `spaces` is empty and the envelope stays, so a hub fetch of a switched-off instance is a success that clears its rows.
+`GET /directory/spaces` is the document the space directory hub indexes: `{ schema: 1, origin, instance: { name, federatedRegistrationOpen, version }, spaces[] }`, at most 200 spaces that are listed, discoverable and public or request, every `icon`/`banner` an absolute URL on this origin or null. Unauthenticated by design (the hub is a stranger), cached in memory for 30 s or until the next change, and served `Cache-Control: no-cache` so no intermediary holds a pre-delist copy: the in-memory cache, not a shared cache, is what answers the revalidations. It never 404s: with the directory or discovery off, `spaces` is empty and the envelope stays, so a hub fetch of a switched-off instance is a success that clears its rows.
 
 `GET /directory` is the feed proxy the Explore page's Outer Space section reads; the browser never talks to the hub. `q` (cut to 100 chars), `limit` (1-100, default 50) and `offset` (0-1000) are clamped, not rejected, and forwarded to `{DIRECTORY_ENDPOINT}/v1/spaces`. Each distinct query is cached for 60 s (64 entries) counted from when the hub's edge copy was made (the receive time less the hub's `Age` header, absent or unparsable counting as 0, clamped to 60 s), so the proxy's answer is never older than 60 s end to end even though the hub caches for 60 s of its own; identical in-flight requests share one upstream fetch, and the route carries its own rate limit of 30 per minute under the global one (`429 rate_limited`, the global limiter's shape). `404 directory_disabled` when `DIRECTORY_ENDPOINT` is empty, and the same `404 directory_disabled` when the admin has turned `instance_settings.directoryBrowseEnabled` off, checked before any upstream fetch or cache read; `502 directory_unreachable` when the hub does not answer or answers something that is not a feed. Response `{ schema: 1, spaces: DirectoryEntry[] }`. See [directory.md](directory.md).
 
@@ -237,6 +267,7 @@ The final PATCH that completes an upload returns the `Attachment` JSON in its re
 ```
 GET  /uploads/:filename  (public, supports Range) → file stream
 ```
+Served `Cache-Control: public, max-age=31536000, immutable`: a stored file's name is the snowflake it was given at upload and its bytes are never rewritten, so the name identifies one immutable file for good. The sandboxing headers on the same response (`default-src 'none'` CSP, `nosniff`, `X-Frame-Options: DENY`, `Content-Disposition: attachment` for SVG and non-media) are in [uploads.md](uploads.md) and [web-security.md](web-security.md).
 
 ## GIF (`routes/gif.ts`) — auth required
 ```
