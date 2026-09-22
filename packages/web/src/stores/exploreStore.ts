@@ -3,6 +3,7 @@ import type { ExploreSpace, JoinRequest, SpaceWithChannelsAndMembers } from '@ba
 import { api } from '../api/client';
 import i18n from '../i18n';
 import { resolveAssetUrl } from '../utils/assetUrls';
+import { hostOf } from '../utils/identity';
 import { useInstanceStore, waitForAutoConnect } from './instanceStore';
 import { useSpaceStore } from './spaceStore';
 
@@ -39,10 +40,6 @@ interface ExploreState {
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
-
-function hostOf(origin: string): string {
-  try { return new URL(origin).host; } catch { return origin; }
-}
 
 /**
  * The client for the instance that owns a space. `''` is home. A space id

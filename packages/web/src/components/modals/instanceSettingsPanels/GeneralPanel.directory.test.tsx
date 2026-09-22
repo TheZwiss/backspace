@@ -184,6 +184,35 @@ describe('GeneralPanel directory status refresh', () => {
     expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
   });
 
+  it('follows the server again once an edit has arrived there through another writer', async () => {
+    vi.useFakeTimers();
+    seed({ instanceName: 'Workbench' });
+    const answers = ['Workbench 2', 'Workbench 3'];
+    const fetchInstanceSettings = vi.fn(async () => {
+      const instanceName = answers.shift();
+      if (instanceName === undefined) return;
+      useSettingsStore.setState((state) => ({
+        instanceSettings: { ...state.instanceSettings!, instanceName },
+      }));
+    });
+    useSettingsStore.setState({ fetchInstanceSettings });
+
+    render(<GeneralPanel />);
+    const name = screen.getByRole('textbox', { name: 'Instance Name' });
+    await act(async () => { fireEvent.change(name, { target: { value: 'Workbench 2' } }); });
+    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
+
+    // A second admin saved the same name: nothing left to save.
+    await act(async () => { vi.advanceTimersByTime(10_000); });
+    expect(name).toHaveValue('Workbench 2');
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+
+    // That admin renamed again: the untouched draft follows, with no stale save offered.
+    await act(async () => { vi.advanceTimersByTime(10_000); });
+    expect(name).toHaveValue('Workbench 3');
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+  });
+
   it('reseeds an untouched draft from a refresh that changed the editable fields', async () => {
     vi.useFakeTimers();
     seed({ instanceName: 'Workbench' });

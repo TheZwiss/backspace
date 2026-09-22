@@ -4,6 +4,7 @@ import {
   canonicalUserKey,
   isDeliveryFromHome,
   isFederationGlobeApplicable,
+  hostOf,
 } from './identity';
 
 describe('normalizeOriginToHost', () => {
@@ -152,5 +153,13 @@ describe('isFederationGlobeApplicable', () => {
 
   it('returns true for genuinely remote users', () => {
     expect(isFederationGlobeApplicable({ username: 'heidi@orbit.ddns.net' })).toBe(true);
+  });
+});
+
+describe('hostOf', () => {
+  it('returns the host of an origin, and the input itself when it does not parse', () => {
+    expect(hostOf('https://chat.example.org')).toBe('chat.example.org');
+    expect(hostOf('https://chat.example.org:8443/path')).toBe('chat.example.org:8443');
+    expect(hostOf('not an origin')).toBe('not an origin');
   });
 });

@@ -78,14 +78,24 @@ export function GeneralPanel() {
     || (draft !== null && seededFrom.current !== null && !sameDraft(draft, seededFrom.current));
 
   useEffect(() => {
-    if (!instanceSettings || isDirty) return;
+    if (!instanceSettings) return;
     const next = draftFrom(instanceSettings);
+    // A draft that already equals what the server holds (an untouched one,
+    // or an edit that arrived there through another writer) takes the new
+    // values as its seed, so later changes elsewhere keep reaching it; there
+    // is nothing to copy, so no new draft object and no re-render each poll.
+    if (draft !== null && sameDraft(draft, next)) {
+      seededFrom.current = next;
+      return;
+    }
+    if (isDirty) return;
     seededFrom.current = next;
     setDraft(next);
     setGifKeyDraft('');
     setGifKeyDirty(false);
     // A refresh that leaves the editable fields alone must not reseed a draft
-    // the user is typing in; `isDirty` is read at the moment the settings change.
+    // the user is typing in; `draft` and `isDirty` are read at the moment
+    // the settings change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [instanceSettings]);
 
@@ -114,7 +124,9 @@ export function GeneralPanel() {
         payload.gifApiKey = gifKeyDraft;
       }
       await updateInstanceSettings(payload);
-      // The server's answer is the new baseline, whatever it normalised.
+      // The server's answer is the new baseline, whatever it normalised. A
+      // poll dispatched before the save and answered after it can reseed the
+      // pre-save values for one interval; the next poll corrects it.
       const saved = useSettingsStore.getState().instanceSettings;
       if (saved) {
         const next = draftFrom(saved);

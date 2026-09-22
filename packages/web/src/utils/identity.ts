@@ -78,6 +78,15 @@ export function resolveDisplayIdentity(user: User, homeUser: User | null): User 
  * concrete host that an origin represents (which substitutes
  * `window.location.host` for the empty sentinel).
  */
+/**
+ * The host of an origin for a message, or the origin itself when it does
+ * not parse, so the text still names what was meant. Compare
+ * {@link normalizeOriginToHost}, whose `''` failure value is for matching.
+ */
+export function hostOf(origin: string): string {
+  try { return new URL(origin).host; } catch { return origin; }
+}
+
 export function normalizeOriginToHost(input: string | null | undefined): string {
   if (!input) return '';
   if (input.includes('://')) {

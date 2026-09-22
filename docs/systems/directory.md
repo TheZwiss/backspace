@@ -21,7 +21,7 @@ Source files:
 - `packages/shared/src/errors.ts` - the four `directory_*` error codes
 - `scripts/directory-hub/` - the Cloudflare Worker at `explore.backspacechat.com` (`src/index.ts` routes, `src/validate.ts`, `src/store.ts`, `src/hash.ts`, `migrations/0001_directory.sql`)
 - `.github/workflows/directory-hub.yml` - the hub's test job and its dispatch-only deploy
-- `packages/web/src/stores/directoryStore.ts` - the feed, the origin dedupe, `connectAndJoin` and `loginAndJoin`
+- `packages/web/src/stores/directoryStore.ts` - the feed, the page dedupe by `(origin, id)`, `connectAndJoin` and `loginAndJoin` (the origin dedupe runs at render in `OuterSpaceSection`)
 - `packages/web/src/utils/directory.ts` - `dedupeAgainstConnected`, `isDirectoryEntry`
 - `packages/web/src/stores/instanceStore.ts` - `connectToInstance`, the shared connect path
 - `packages/web/src/components/chat/ExplorePage.tsx`, `OuterSpaceSection.tsx`, `SpaceCard.tsx` - the two sections and the card

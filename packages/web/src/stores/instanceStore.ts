@@ -306,8 +306,6 @@ export function waitForAutoConnect(): Promise<void> {
   });
 }
 
-// ─── API client resolution ───────────────────────────────────────────────────
-
 // ─── Registry helpers ────────────────────────────────────────────────────────
 
 function upsertRegistryEntry(

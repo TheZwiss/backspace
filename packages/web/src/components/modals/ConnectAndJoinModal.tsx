@@ -11,6 +11,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { describeError } from '../../i18n/errors';
 import { isDirectoryEntry } from '../../utils/directory';
+import { hostOf } from '../../utils/identity';
 import { REQUEST_MESSAGE_MAX_LENGTH } from '../chat/SpaceCard';
 import {
   RemotePasswordStep,
@@ -29,10 +30,6 @@ type ProbeState =
   | { status: 'probing' }
   | { status: 'ready'; instance: RemoteInstanceInfo; connected: boolean }
   | { status: 'failed'; message: string };
-
-function safeHost(origin: string): string {
-  try { return new URL(origin).host; } catch { return origin; }
-}
 
 function canonicalOrigin(value: string): string | null {
   try { return new URL(value).origin; } catch { return null; }
@@ -85,7 +82,7 @@ function ConnectAndJoinDialog({ entry }: { entry: DirectoryEntry }) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const host = safeHost(entry.origin);
+  const host = hostOf(entry.origin);
   const home = user?.homeInstance || window.location.host;
   const isRequest = entry.visibility === 'request';
   const skipsPassword = probe.status === 'ready' && probe.connected;
