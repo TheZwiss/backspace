@@ -234,7 +234,7 @@ export function ExplorePage() {
                       >
                         <path d="M7 10l5 5 5-5z" />
                       </svg>
-                      <span className="text-xs font-semibold uppercase tracking-wider text-txt-tertiary group-hover:text-txt-secondary transition-colors">
+                      <span className="text-xs font-medium text-txt-tertiary group-hover:text-txt-secondary transition-colors">
                         {t('spaces:explore.joinedSection')}
                       </span>
                       <span className="text-xs text-txt-tertiary/60">
