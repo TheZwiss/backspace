@@ -111,20 +111,28 @@ function levelOf(draft: { discoveryEnabled: boolean; directoryEnabled: boolean }
  *
  * The server reports one flag, `directoryAvailable`, which is the endpoint and
  * the admin's browse setting together, so neither half means anything read on
- * its own. Both are therefore read at the same instant and reduced here to the
- * single fact the row needs, and it is that fact that is stored. Storing the
- * raw flag instead splits the pair: a save writes the setting immediately and
- * the flag is a round trip behind it, so for the length of that round trip the
- * panel would answer from one value before the change and one after, and tell
- * an admin who just switched browsing on that the instance has no directory.
+ * its own. They are reduced here, once, to the single fact the row needs, and
+ * it is that fact that is stored. Storing the raw flag instead splits the
+ * pair: a save writes the setting immediately and the flag is a round trip
+ * behind it, so for the length of that round trip the panel would answer from
+ * one value before the change and one after, and tell an admin who just
+ * switched browsing on that the instance has no directory.
  *
- * The reduction is stable under a save, which is what makes it safe to keep:
- * no setting an admin can write creates or removes an endpoint, so an answer
- * derived this way is never invalidated by the change that prompted the
- * re-read. `previous` is returned when this answer settles nothing, which is
- * an unavailable directory while browsing is off: the endpoint and the
- * setting are then indistinguishable causes, and a fact already established
- * is worth more than the absence of one.
+ * The two halves are not read at the same instant, and cannot be: the server
+ * reads its half when it handles the request, the client reads its half when
+ * the answer arrives. What makes the pairing sound is narrower. The setting
+ * only ever moves through this panel's own save, and a save both bumps
+ * `saveEpoch` before it writes, which refuses any answer whose request
+ * predates it, and bumps `directoryProbe` after it, which asks again. So an
+ * answer is only ever used when nothing moved the setting between the request
+ * going out and the answer coming back.
+ *
+ * The reduction is then stable for as long as the panel is open: no setting an
+ * admin can write creates or removes an endpoint, so an established answer is
+ * never invalidated by a later change. `previous` is returned when this answer
+ * settles nothing, which is an unavailable directory while browsing is off:
+ * the endpoint and the setting are then indistinguishable causes, and a fact
+ * already established is worth more than the absence of one.
  */
 function endpointFrom(directoryAvailable: boolean, browseEnabled: boolean, previous: boolean | null): boolean | null {
   if (directoryAvailable) return true;
@@ -154,6 +162,14 @@ export function GeneralPanel() {
   const [hasDirectoryEndpoint, setHasDirectoryEndpoint] = useState<boolean | null>(null);
   // Bumped after a save so the answer follows a change the admin just made.
   const [directoryProbe, setDirectoryProbe] = useState(0);
+  /**
+   * Saves begun. Read when an info request goes out and again when it comes
+   * back: an answer whose request spans a save is refused, because the
+   * setting it has to be paired with moved underneath it. A ref rather than
+   * state, so the refusal is in place the instant the save starts and does
+   * not wait for a render to commit.
+   */
+  const saveEpoch = useRef(0);
 
   // The settings the draft was last seeded from. A background refresh only
   // reseeds the draft while it still equals this, so an unsaved edit survives
@@ -184,13 +200,27 @@ export function GeneralPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [instanceSettings]);
 
+  // The reduction needs both halves, so there is nothing to ask until the
+  // settings are here. The modal renders this panel in the same commit as the
+  // effect that fetches them, and a child's effects run before its parent's,
+  // so on a first open the request would otherwise go out against an empty
+  // store, read the browse setting as off, learn nothing, and stay unknown:
+  // the 10 second poll fills the settings in but never asks again. The gate
+  // only goes false to true while the panel is open, so it costs one deferred
+  // request and no repeated ones.
+  const settingsLoaded = instanceSettings !== null;
+
   useEffect(() => {
+    if (!settingsLoaded) return;
     let cancelled = false;
+    const dispatchedAt = saveEpoch.current;
     api.instance.info()
       .then((info) => {
-        if (cancelled) return;
-        // The settings are read here, next to the answer they are paired
-        // with, rather than from the render's closure.
+        // A save that began after this request went out moved the half the
+        // answer has to be paired with; its own probe bump asks again.
+        if (cancelled || saveEpoch.current !== dispatchedAt) return;
+        // The setting is read here, against the answer it is paired with,
+        // rather than from the render's closure.
         const saved = useSettingsStore.getState().instanceSettings;
         setHasDirectoryEndpoint((previous) => endpointFrom(
           info.directoryAvailable === true,
@@ -205,7 +235,7 @@ export function GeneralPanel() {
         // lost one.
       });
     return () => { cancelled = true; };
-  }, [directoryProbe]);
+  }, [directoryProbe, settingsLoaded]);
 
   // The directory status line follows the pinger while the panel is open.
   useEffect(() => {
@@ -222,6 +252,12 @@ export function GeneralPanel() {
   const handleSave = async () => {
     setSaving(true);
     setSaveError('');
+    // Before the write, not after it: any endpoint answer still in flight was
+    // asked against the setting as it stands now, and this is about to move
+    // it. Bumped whether or not the save succeeds, because the request cannot
+    // know which it will be; a save that fails moves nothing, so the panel
+    // simply keeps the answer it already had.
+    saveEpoch.current += 1;
     try {
       const payload: Partial<InstanceAdminSettings> = {
         instanceName: draft.instanceName,
@@ -244,9 +280,9 @@ export function GeneralPanel() {
       }
       setGifKeyDirty(false);
       setGifKeyDraft('');
-      // The endpoint answer follows the save. It cannot go stale against it:
-      // `endpointFrom` reduced both halves at the instant they were read, and
-      // no setting an admin writes creates or removes an endpoint.
+      // Ask again, now that the setting has settled. The answer this replaces
+      // was refused by the epoch bump above, so nothing derived from a
+      // half-moved pair ever reaches the row.
       setDirectoryProbe((n) => n + 1);
       addToast(t('common:states.settingsSaved'), 'success', 2000);
     } catch (err) {

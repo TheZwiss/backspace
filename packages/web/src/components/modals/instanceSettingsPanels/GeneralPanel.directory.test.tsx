@@ -589,6 +589,81 @@ describe('GeneralPanel global browsing toggle', () => {
     expect(screen.getByRole('switch', { name: BROWSE })).toBeEnabled();
   });
 
+  /*
+   * A first open of instance settings. The modal renders this panel in the
+   * same commit as the effect that fetches the instance settings, and a
+   * child's effects run before its parent's, so the panel mounts with
+   * `instanceSettings` null and the settings arrive afterwards. The endpoint
+   * question needs the browse setting to answer, so asking before it is here
+   * reads the setting as off, learns nothing, and leaves the row saying
+   * nothing for the life of the modal: the 10 second poll fills the settings
+   * in but never asks again. On an endpoint-less instance that is the switch
+   * showing on and live under a line promising spaces this instance never
+   * shows.
+   */
+  it('waits for the instance settings before asking, so a first open still answers', async () => {
+    const infoSpy = vi.spyOn(api.instance, 'info').mockResolvedValue(info(false));
+    useSettingsStore.setState({ instanceSettings: null, updateInstanceSettings: vi.fn() });
+
+    const { rerender } = render(<GeneralPanel />);
+    // Nothing to pair an answer with yet, so nothing is asked.
+    expect(infoSpy).not.toHaveBeenCalled();
+    await act(async () => {});
+    expect(infoSpy).not.toHaveBeenCalled();
+
+    act(() => {
+      useSettingsStore.setState({ instanceSettings: { ...base, directoryBrowseEnabled: true } });
+    });
+    rerender(<GeneralPanel />);
+
+    expect(await screen.findByText(NO_ENDPOINT)).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: BROWSE })).toBeDisabled();
+    expect(screen.getByRole('switch', { name: BROWSE })).not.toBeChecked();
+    expect(infoSpy).toHaveBeenCalledTimes(1);
+  });
+
+  /*
+   * The save-spanning answer. An info request sent before a save is answered
+   * after it, so the setting it would be paired with is not the one it was
+   * asked against. Using it claims the endpoint is missing on an instance
+   * that has one, which is the same false claim from the other direction.
+   */
+  it('refuses an answer whose request was overtaken by a save', async () => {
+    let releaseInfo: (() => void) | null = null;
+    const infoSpy = vi.spyOn(api.instance, 'info')
+      .mockImplementationOnce(() => new Promise<InstanceInfoResponse>((resolve) => {
+        releaseInfo = () => resolve(info(false));
+      }))
+      // The replacement never answers, so what the row shows at the end is
+      // what the overtaken answer did or did not write.
+      .mockImplementationOnce(() => new Promise<InstanceInfoResponse>(() => {}));
+    // An endpoint is configured and browsing is off, so the first answer
+    // reads false for a reason that has nothing to do with the endpoint.
+    // The save releases it from inside the store write, which is the real
+    // interleaving: the setting has already moved, and the panel has not
+    // re-rendered yet, so the effect cleanup has not run.
+    const update = vi.fn(async (data: Partial<InstanceAdminSettings>) => {
+      useSettingsStore.setState((state) => ({
+        instanceSettings: { ...state.instanceSettings!, ...data },
+      }));
+      releaseInfo?.();
+    });
+    useSettingsStore.setState({
+      instanceSettings: { ...base, directoryBrowseEnabled: false },
+      updateInstanceSettings: update,
+    });
+    render(<GeneralPanel />);
+
+    await userEvent.click(screen.getByRole('switch', { name: BROWSE }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ directoryBrowseEnabled: true }));
+    expect(infoSpy).toHaveBeenCalledTimes(2);
+
+    expect(screen.queryByText(NO_ENDPOINT)).not.toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: BROWSE })).toBeEnabled();
+    expect(screen.getByRole('switch', { name: BROWSE })).toBeChecked();
+  });
+
   // A re-read that fails has learned nothing, so it may unsay nothing.
   it('keeps a correct no-endpoint answer when a later re-read fails', async () => {
     vi.spyOn(api.instance, 'info')

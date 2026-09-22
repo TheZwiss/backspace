@@ -676,14 +676,13 @@ One page, one search box, two sections in fixed order, strictly disjoint.
   appends the next page, never the whole feed. Header "Outer Space", subtitle
   "Communities across Backspace".
 
-**The section is gated on the home instance's `directoryAvailable`, not on
-the listing toggle.** `ExplorePage` reads the public `GET /api/instance/info`
-once on mount and renders `OuterSpaceSection` only when `directoryAvailable`
-is true, which the server sets from `config.directory.endpoint !== ''` and the
-admin's `directoryBrowseEnabled` (section 3); with
-it false, or the request failing, or an older server that does not send the
-field, the section is absent and the search box never hits the proxy.
-Browsing needs only an endpoint. The admin's listing opt-in
+**The section is gated on the home instance's `directoryAvailable`, not on the
+listing toggle.** `ExplorePage` reads the public `GET /api/instance/info` once
+on mount and renders `OuterSpaceSection` only when `directoryAvailable` is
+true, which the server sets from `config.directory.endpoint !== ''` and the
+admin's `directoryBrowseEnabled` (section 3); with it false, or the request
+failing, or an older server that does not send the field, the section is
+absent and the search box never hits the proxy. The admin's listing opt-in
 (`directoryEnabled`, section 3) is a separate switch that the page does not
 read: an instance whose admin lists nothing still shows Outer Space, which is
 the cold-start case the directory exists for (a fresh instance with no peers
@@ -691,9 +690,9 @@ must be able to browse). Browsing and listing are the two independent axes of
 section 3. The proxy's own `404 directory_disabled` (an empty
 `DIRECTORY_ENDPOINT`, or browsing switched off) is handled a second way: the
 store's `disabled` status renders nothing, which is what a client on an older
-build, or one whose mount predated the change, falls back to. The flag is read once per mount, so an endpoint changed
-under a running instance is reflected on the next visit, after the restart
-the change needs anyway.
+build, or one whose mount predated the change, falls back to. The flag is read
+once per mount, so an endpoint changed under a running instance is reflected
+on the next visit, after the restart the change needs anyway.
 
 **Deduped by origin, not by space.** Every entry whose canonical origin
 (`new URL(x).origin`) is the session's own (`window.location.origin`) or is
@@ -983,24 +982,43 @@ behaviour. Do not "fix" this into reflecting the raw column.
 The panel works the endpoint out from the same `GET /api/instance/info` the
 Explore page reads. Nothing was added to the API for it. `directoryAvailable`
 is the endpoint and the setting together, so **neither half means anything
-read on its own**: the panel reads the answer and the saved setting at the
-same instant and reduces them there to the one fact it needs, then stores that
-fact rather than the raw flag. An available directory proves an endpoint; an
-unavailable one with browsing on proves there is none; an unavailable one with
-browsing off proves nothing, and leaves whatever was already established
-standing. Unknown renders as neither claim: no note, and the switch reads the
-draft.
+read on its own**: the panel reduces the answer and the saved setting to the
+one fact it needs and stores that fact, not the raw flag. An available
+directory proves an endpoint; an unavailable one with browsing on proves there
+is none; an unavailable one with browsing off proves nothing, and leaves
+whatever was already established standing. Unknown renders as neither claim:
+no note, and the switch reads the draft.
 
-Storing the reduction rather than the flag is what makes the answer safe
-across a save. A save writes the setting at once and the info is a round trip
-behind it, so a panel holding the raw flag would answer from one value before
-the change and one after for the length of that round trip, and would tell an
-admin who had just switched browsing on that the instance has no directory. A
-reduced answer cannot go stale that way, because no setting an admin can write
-creates or removes an endpoint. The info is still re-read after every save, so
-a fact that was not yet establishable becomes establishable as soon as it is;
-and a re-read that fails changes nothing, since a request that learned nothing
-may unsay nothing.
+**The two halves are not read at the same instant, and cannot be.** The server
+reads its half when it handles the request; the client reads its half when the
+answer arrives. What makes the pairing sound is narrower: the setting only
+ever moves through this panel's own save, and a save bumps `saveEpoch` before
+it writes, which refuses any answer whose request predates it, then bumps
+`directoryProbe` after it, which asks again. An answer is therefore only used
+when nothing moved the setting between the request going out and the answer
+coming back. The effect's own cleanup is not enough on its own: an answer that
+lands after the store is written but before React commits the re-render would
+otherwise slip through, and a test pins that interleaving.
+
+Storing the reduction rather than the flag is what keeps it correct afterwards.
+A save writes the setting at once and the info is a round trip behind it, so a
+panel holding the raw flag would answer from one value before the change and
+one after for the length of that round trip, and would tell an admin who had
+just switched browsing on that the instance has no directory. A reduced answer
+cannot go stale that way, because no setting an admin can write creates or
+removes an endpoint. A re-read that fails changes nothing, since a request that
+learned nothing may unsay nothing.
+
+**Nothing is asked before the settings arrive.** The reduction needs the browse
+setting, so the probe is gated on `instanceSettings` being in the store. The
+settings modal renders this panel in the same commit as its own
+`fetchInstanceSettings()` effect, and a child's effects run before its
+parent's, so an ungated request would go out against an empty store, read the
+setting as off, learn nothing and leave the row saying nothing for the life of
+the modal: the ten second poll fills the settings in but never asks again. On
+an endpoint-less instance that is the switch showing on and live under a line
+promising spaces this instance never shows. The gate only goes false to true
+while the panel is open, so it costs one deferred request and no repeated ones.
 
 `settingsStore.updateInstanceSettings` mirrors `discoveryEnabled` and
 `directoryEnabled` from the server's answer into `streamingLimits`, so the
