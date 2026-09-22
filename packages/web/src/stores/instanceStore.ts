@@ -497,8 +497,12 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
         api: authenticatedClient,
       };
 
+      // Replace by origin, never append: a re-authentication runs this over
+      // the placeholder in `error` or `disconnected`, which stays in the list
+      // until the new session takes its place, so the origin is never absent
+      // (Outer Space dedupes against this list at render).
       set((state) => {
-        const updated = [...state.instances, instance];
+        const updated = [...state.instances.filter((i) => i.origin !== origin), instance];
         saveCachedTokens(updated, currentUser.id);
         return { instances: updated, isLoading: false };
       });
@@ -576,8 +580,10 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
         api: authenticatedClient,
       };
 
+      // Replace by origin, as connectToRemote does: the explicit login is the
+      // fallback for an origin whose placeholder may still be in the list.
       set((state) => {
-        const updated = [...state.instances, instance];
+        const updated = [...state.instances.filter((i) => i.origin !== origin), instance];
         const userId = useAuthStore.getState().user?.id;
         if (userId) saveCachedTokens(updated, userId);
         return { instances: updated, isLoading: false };
@@ -805,17 +811,15 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
   },
 
   reauthenticateInstance: async (origin: string, password: string) => {
-    const inst = get().instances.find(i => i.origin === origin);
-
-    // Clean up existing instance if present (stale placeholder or disconnected entry)
-    if (inst) {
-      set((state) => ({
-        instances: state.instances.filter(i => i.origin !== origin),
-      }));
+    // The stale placeholder (error or disconnected) stays in `instances`
+    // until connectToRemote replaces it by origin on success. Removing it up
+    // front left the origin absent for the request's duration, and for good
+    // on a wrong password, so its spaces surfaced in Outer Space under a chip
+    // saying the session had expired. Its spaces and socket do go now: the
+    // new session's ready payload brings them back.
+    if (get().instances.some((i) => i.origin === origin)) {
       useSpaceStore.getState().removeInstanceSpaces(origin);
     }
-
-    // Disconnect any lingering WS
     disconnectWs(origin);
 
     // Re-connect through the standard flow (handles register/login)

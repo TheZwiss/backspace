@@ -100,12 +100,13 @@ describe('ConnectionChips', () => {
 
     expect(screen.getByText('Zwiss')).toBeInTheDocument();
     expect(screen.getByText('session expired')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Reconnect' })).toBeInTheDocument();
+    // The accessible name carries the instance, so two chips never read the same.
+    expect(screen.getByRole('button', { name: 'Reconnect Zwiss' })).toBeInTheDocument();
 
     // The label falls back to the host when the registry has none.
     expect(screen.getByText('orbit.example')).toBeInTheDocument();
     expect(screen.getByText('unreachable')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retry orbit.example' })).toBeInTheDocument();
 
     expect(screen.queryByText('quiet.example')).not.toBeInTheDocument();
     expect(screen.queryByText('fine.example')).not.toBeInTheDocument();
@@ -144,19 +145,19 @@ describe('ConnectionChips', () => {
     const user = userEvent.setup();
     render(<ConnectionChips onRecovered={onRecovered} />);
 
-    await user.click(screen.getByRole('button', { name: 'Retry' }));
+    await user.click(screen.getByRole('button', { name: /^Retry/ }));
 
     expect(reconnectInstance).toHaveBeenCalledWith('https://orbit.example');
-    const connecting = screen.getByRole('button', { name: 'Connecting…' });
+    const connecting = screen.getByRole('button', { name: /^Connecting…/ });
     expect(connecting).toBeDisabled();
     // The store marks the instance connecting; the chip keeps showing while its own retry is in flight.
     useInstanceStore.setState({ instances: [liveInstance('https://orbit.example', 'connecting')] });
-    expect(screen.getByRole('button', { name: 'Connecting…' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Connecting…/ })).toBeInTheDocument();
 
     // Failure: the registry still says unreachable, the chip returns to its resting state.
     useInstanceStore.setState({ instances: [liveInstance('https://orbit.example', 'disconnected')] });
     finish();
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Retry/ })).toBeInTheDocument());
     expect(screen.getByText('unreachable')).toBeInTheDocument();
     expect(onRecovered).not.toHaveBeenCalled();
   });
@@ -174,7 +175,7 @@ describe('ConnectionChips', () => {
     const user = userEvent.setup();
     const { container } = render(<ConnectionChips onRecovered={onRecovered} />);
 
-    await user.click(screen.getByRole('button', { name: 'Retry' }));
+    await user.click(screen.getByRole('button', { name: /^Retry/ }));
 
     await waitFor(() => expect(onRecovered).toHaveBeenCalledOnce());
     expect(container).toBeEmptyDOMElement();
@@ -191,7 +192,7 @@ describe('ConnectionChips', () => {
     const { container } = render(<ConnectionChips onRecovered={onRecovered} />);
 
     expect(screen.queryByPlaceholderText('Your home account password')).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Reconnect' }));
+    await user.click(screen.getByRole('button', { name: /^Reconnect/ }));
 
     const password = screen.getByPlaceholderText('Your home account password');
     expect(password).toHaveFocus();
@@ -212,12 +213,12 @@ describe('ConnectionChips', () => {
     const user = userEvent.setup();
     render(<ConnectionChips onRecovered={onRecovered} />);
 
-    await user.click(screen.getByRole('button', { name: 'Reconnect' }));
+    await user.click(screen.getByRole('button', { name: /^Reconnect/ }));
     await user.type(screen.getByPlaceholderText('Your home account password'), 'abc');
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
 
     expect(screen.queryByPlaceholderText('Your home account password')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Reconnect' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Reconnect/ })).toBeInTheDocument();
     expect(reauthenticateInstance).not.toHaveBeenCalled();
   });
 
@@ -229,7 +230,7 @@ describe('ConnectionChips', () => {
     const user = userEvent.setup();
     render(<ConnectionChips onRecovered={onRecovered} />);
 
-    await user.click(screen.getByRole('button', { name: 'Reconnect' }));
+    await user.click(screen.getByRole('button', { name: /^Reconnect/ }));
     await user.type(screen.getByPlaceholderText('Your home account password'), 'wrong');
     await user.click(screen.getByRole('button', { name: 'Connect' }));
 

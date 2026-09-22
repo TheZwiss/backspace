@@ -57,6 +57,10 @@ export function ConnectionChips({ onRecovered }: ConnectionChipsProps) {
     return out;
   }, [registry, instances, retrying]);
 
+  // reconnectInstance returns at once when there is neither a live instance
+  // nor a cached token for the origin (reachable only after a force-remove
+  // race); the chip then simply returns to Retry, the same no-op the
+  // Connections row has for that state.
   const handleRetry = useCallback(async (origin: string) => {
     setRetrying((prev) => new Set(prev).add(origin));
     try {
@@ -110,6 +114,11 @@ function ConnectionChip({ entry, retrying, onRetry, onRecovered }: ConnectionChi
     onRecovered();
   };
 
+  // The visible action is one word; assistive tech gets the instance too, so
+  // two chips do not both read as "Reconnect, button".
+  const reconnectWord = t('spaces:explore.connections.reconnect');
+  const retryWord = retrying ? t('federation:connections.add.connecting') : t('spaces:explore.connections.retry');
+
   return (
     <li
       className={`glass-pill text-[13px] leading-5 ${
@@ -143,9 +152,10 @@ function ConnectionChip({ entry, retrying, onRetry, onRecovered }: ConnectionChi
           <button
             type="button"
             onClick={() => setExpanded(true)}
+            aria-label={`${reconnectWord} ${label}`}
             className="ml-1 text-accent-primary hover:text-accent-primary/80 font-medium transition-colors whitespace-nowrap"
           >
-            {t('spaces:explore.connections.reconnect')}
+            {reconnectWord}
           </button>
         )
       ) : (
@@ -153,9 +163,10 @@ function ConnectionChip({ entry, retrying, onRetry, onRecovered }: ConnectionChi
           type="button"
           onClick={() => onRetry(entry.origin)}
           disabled={retrying}
+          aria-label={`${retryWord} ${label}`}
           className="ml-1 text-accent-primary hover:text-accent-primary/80 font-medium transition-colors whitespace-nowrap disabled:text-txt-tertiary disabled:cursor-default"
         >
-          {retrying ? t('federation:connections.add.connecting') : t('spaces:explore.connections.retry')}
+          {retryWord}
         </button>
       )}
     </li>

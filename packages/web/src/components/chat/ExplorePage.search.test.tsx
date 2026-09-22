@@ -1,11 +1,14 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import type { DirectoryEntry, InstanceInfoResponse } from '@backspace/shared';
 import userEvent from '@testing-library/user-event';
 import { ExplorePage } from './ExplorePage';
 import { useExploreStore } from '../../stores/exploreStore';
-import { useInstanceStore } from '../../stores/instanceStore';
+import { useDirectoryStore } from '../../stores/directoryStore';
+import { useInstanceStore, type ConnectedInstance } from '../../stores/instanceStore';
+import { useAuthStore } from '../../stores/authStore';
+import { HttpError } from '../../api/client';
 
 // Stub AudioManager: the instance store imports it transitively and jsdom has no AudioWorkletNode.
 vi.mock('../../audio/AudioManager', () => ({
@@ -85,8 +88,10 @@ vi.mock('../../stores/directoryStore', async () => {
 });
 
 vi.mock('../../stores/spaceStore', () => ({
-  useSpaceStore: (selector: (s: { setCurrentSpace: () => void }) => unknown) =>
-    selector({ setCurrentSpace: vi.fn() }),
+  useSpaceStore: Object.assign(
+    (selector: (s: { setCurrentSpace: () => void }) => unknown) => selector({ setCurrentSpace: vi.fn() }),
+    { getState: () => ({ removeInstanceSpaces: vi.fn() }) },
+  ),
 }));
 
 vi.mock('../../stores/uiStore', () => ({
@@ -246,7 +251,7 @@ describe('ExplorePage connection chips', () => {
     expect(subtitle.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByText('Zwiss')).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Reconnect' }));
+    await user.click(screen.getByRole('button', { name: /^Reconnect/ }));
     await user.type(screen.getByPlaceholderText('Your home account password'), 'hunter2');
     await user.click(screen.getByRole('button', { name: 'Connect' }));
 
@@ -255,5 +260,79 @@ describe('ExplorePage connection chips', () => {
     expect(fetchSpaces).toHaveBeenLastCalledWith('alp');
     expect(fetchMyRequests).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole('list', { name: 'Connections that need attention' })).not.toBeInTheDocument();
+  });
+});
+
+describe('ExplorePage keeps an expired origin out of Outer Space through a failed reauth', () => {
+  const ZWISS = 'https://zwiss.example';
+  const zwissEntry: DirectoryEntry = {
+    id: 'alpine',
+    name: 'Zwiss Alpine Club',
+    description: null,
+    icon: null,
+    banner: null,
+    avatarColor: null,
+    visibility: 'public',
+    memberCount: 23,
+    createdAt: 1,
+    origin: ZWISS,
+    instanceName: 'Zwiss',
+    federatedRegistrationOpen: true,
+  };
+  const farEntry: DirectoryEntry = { ...zwissEntry, id: 'far', name: 'Far Away', origin: 'https://far.example', instanceName: 'Far' };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useExploreStore.setState({ searchQuery: '' });
+    useDirectoryStore.setState({ entries: [zwissEntry, farEntry], status: 'ok' });
+  });
+
+  afterEach(() => {
+    useInstanceStore.setState({ connectToRemote: useInstanceStore.getInitialState().connectToRemote });
+  });
+
+  it('the error placeholder stays in the list, the cards stay hidden, the chip shows the error', async () => {
+    // The real reauthenticateInstance over a connectToRemote that refuses the password.
+    const connectToRemote = vi.fn(async () => {
+      throw new HttpError(401, 'invalid_credentials', { error: 'x', code: 'invalid_credentials', statusCode: 401 }, 'invalid_credentials');
+    });
+    const placeholder: ConnectedInstance = {
+      origin: ZWISS,
+      label: 'Zwiss',
+      token: '',
+      username: 'jannis@home.example',
+      status: 'error',
+      user: { id: 'u1' } as ConnectedInstance['user'],
+      api: {} as ConnectedInstance['api'],
+    };
+    useAuthStore.setState({ user: { id: 'u1', username: 'jannis', displayName: 'Jannis' } as ConnectedInstance['user'] });
+    useInstanceStore.setState({
+      // The store's own reauthenticateInstance (an earlier case replaced it), over the refusing connectToRemote.
+      reauthenticateInstance: useInstanceStore.getInitialState().reauthenticateInstance,
+      connectToRemote,
+      instances: [placeholder],
+      registry: new Map([[
+        ZWISS,
+        { origin: ZWISS, label: 'Zwiss', username: 'jannis@home.example', remoteUserId: 'r1', status: 'auth_expired', addedAt: 1, lastConnectedAt: 1, disconnectedAt: null, errorMessage: null },
+      ]]),
+    });
+    const user = userEvent.setup();
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Outer Space')).toBeInTheDocument());
+
+    // Deduped: only the unknown origin's card is in Outer Space.
+    expect(screen.queryByText('Zwiss Alpine Club')).not.toBeInTheDocument();
+    expect(screen.getByText('Far Away')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Reconnect/ }));
+    await user.type(screen.getByPlaceholderText('Your home account password'), 'wrong');
+    await user.click(screen.getByRole('button', { name: 'Connect' }));
+
+    expect(await screen.findByText('Wrong username or password.')).toBeInTheDocument();
+    expect(connectToRemote).toHaveBeenCalledWith(ZWISS, 'wrong', 'Jannis');
+    // The origin never left the instance list, so its spaces never surfaced below the chip.
+    expect(useInstanceStore.getState().instances.map((i) => [i.origin, i.status])).toEqual([[ZWISS, 'error']]);
+    expect(screen.queryByText('Zwiss Alpine Club')).not.toBeInTheDocument();
+    expect(screen.getByText('session expired')).toBeInTheDocument();
   });
 });

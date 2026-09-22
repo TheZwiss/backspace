@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, within, act } from '@testing-library/react';
 import type { DirectoryEntry } from '@backspace/shared';
 import type { DirectoryStatus } from '../../stores/directoryStore';
@@ -100,11 +100,18 @@ function liveInstance(origin: string, status: ConnectedInstance['status']): Conn
   };
 }
 
+const originalLocation = window.location;
+
 describe('OuterSpaceSection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     setDirectory({});
     useInstanceStore.setState({ instances: [] });
+  });
+
+  afterEach(() => {
+    // One case below points the session at another origin; the rest read jsdom's own.
+    Object.defineProperty(window, 'location', { value: originalLocation, writable: true });
   });
 
   it('renders the header and fetches the query on mount', () => {

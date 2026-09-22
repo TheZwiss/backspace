@@ -27,9 +27,9 @@ export interface ReauthFormProps {
  *
  * On the desktop shell the row is one line, the field taking the width the
  * host gives it. On the mobile shell the row wraps: the field keeps a
- * minimum width and the two buttons move under it when the host is narrower
- * than that plus the buttons, which is how the form stacks inside a chip on
- * a phone.
+ * minimum width that shows its whole placeholder, and the two buttons move
+ * under it when the host is narrower than that plus the buttons, which is
+ * how the form stacks inside a chip on a phone.
  */
 export function ReauthForm({ origin, username, onDone, onCancel, className = '' }: ReauthFormProps) {
   const { t } = useTranslation(['federation', 'common']);
@@ -70,7 +70,7 @@ export function ReauthForm({ origin, username, onDone, onCancel, className = '' 
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder={t('federation:connections.row.homePasswordPlaceholder')}
-          className="input-standard flex-1 basis-[180px] min-w-0 py-1.5"
+          className="input-standard flex-1 basis-[220px] min-w-0 py-1.5"
           disabled={loading}
           autoFocus
           autoComplete="current-password"

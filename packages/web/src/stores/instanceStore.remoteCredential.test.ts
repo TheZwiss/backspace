@@ -406,3 +406,61 @@ describe('every path that establishes a remote session reconciles the credential
     expect(federationCredential).toHaveBeenCalledWith({ origin: REMOTE, markProvisioned: true });
   });
 });
+
+describe('a re-authentication keeps the origin in the instance list', () => {
+  function placeholder(status: ConnectedInstance['status']): ConnectedInstance {
+    return {
+      origin: REMOTE,
+      label: 'Orbit',
+      token: '',
+      username: 'erin@nova.example',
+      status,
+      user: NATIVE_USER as User,
+      api: {} as BackspaceApiClient,
+    };
+  }
+
+  it('a wrong password leaves the error placeholder where it was, so the origin stays known', async () => {
+    verifyPassword.mockResolvedValueOnce({ valid: false });
+    useInstanceStore.setState({ instances: [placeholder('error')] });
+
+    await expect(
+      useInstanceStore.getState().reauthenticateInstance(REMOTE, 'fake-wrong-password'),
+    ).rejects.toThrow('Incorrect password');
+
+    const instances = useInstanceStore.getState().instances;
+    expect(instances.map((i) => [i.origin, i.status])).toEqual([[REMOTE, 'error']]);
+    expect(remoteRegister).not.toHaveBeenCalled();
+  });
+
+  it('a successful re-authentication replaces the placeholder by origin, never appends', async () => {
+    remoteRegister.mockResolvedValue(authResponse());
+    useInstanceStore.setState({ instances: [placeholder('disconnected')] });
+
+    await useInstanceStore.getState().reauthenticateInstance(REMOTE, HOME_PASSWORD);
+
+    const instances = useInstanceStore.getState().instances;
+    expect(instances.map((i) => [i.origin, i.status])).toEqual([[REMOTE, 'connected']]);
+    expect(instances[0]?.token).toBe('remote-token-1');
+  });
+
+  it('connectToRemote appends a fresh origin and leaves the others alone', async () => {
+    remoteRegister.mockResolvedValue(authResponse());
+    const other: ConnectedInstance = { ...placeholder('connected'), origin: 'https://zeta.example', label: 'Zeta' };
+    useInstanceStore.setState({ instances: [other] });
+
+    await useInstanceStore.getState().connectToRemote(REMOTE, HOME_PASSWORD, 'Erin');
+
+    expect(useInstanceStore.getState().instances.map((i) => i.origin)).toEqual(['https://zeta.example', REMOTE]);
+  });
+
+  it('the explicit remote login replaces a placeholder by origin too', async () => {
+    remoteLogin.mockResolvedValue(authResponse());
+    useInstanceStore.setState({ instances: [placeholder('error')] });
+
+    await useInstanceStore.getState().loginToRemote(REMOTE, 'erin@nova.example', 'fake-remote-password');
+
+    const instances = useInstanceStore.getState().instances;
+    expect(instances.map((i) => [i.origin, i.status])).toEqual([[REMOTE, 'connected']]);
+  });
+});
