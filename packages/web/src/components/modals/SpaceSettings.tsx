@@ -16,6 +16,7 @@ import { MembersPanel } from './spaceSettingsPanels/MembersPanel';
 import { RolesPanel } from './spaceSettingsPanels/RolesPanel';
 import { BansPanel } from './spaceSettingsPanels/BansPanel';
 import { useVisibilityOptions } from './spaceSettingsPanels/spaceOptions';
+import { ListInDirectoryConfirm } from './DirectoryConfirmations';
 import type { SpaceVisibility, JoinRequest, InstanceStreamingLimits } from '@backspace/shared';
 
 const DESCRIPTION_MAX_LENGTH = 200;
@@ -175,6 +176,8 @@ export function DiscoveryPanel({ spaceId }: { spaceId: string }) {
   const visibilityOptions = useVisibilityOptions();
   const spaces = useSpaceStore((s) => s.spaces);
   const updateSpace = useSpaceStore((s) => s.updateSpace);
+  const isHomeAdmin = useSettingsStore((s) => s.isAdmin);
+  const updateInstanceSettings = useSettingsStore((s) => s.updateInstanceSettings);
 
   const space = spaces.find(s => s.id === spaceId);
   const { flags, failed: flagsFailed, loading: flagsLoading, retry: retryFlags } =
@@ -199,6 +202,13 @@ export function DiscoveryPanel({ spaceId }: { spaceId: string }) {
   const addToast = useUIStore((s) => s.addToast);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
+  // The instance-wide write offered under the reason below, and its own
+  // failure. Separate from `saving`, which belongs to this space's save bar:
+  // the two are different writes to different documents, and a refused rung
+  // must not read as a refused space save.
+  const [rungPending, setRungPending] = useState(false);
+  const [rungError, setRungError] = useState('');
+  const [confirmingRung, setConfirmingRung] = useState(false);
 
   useEffect(() => {
     if (space) {
@@ -223,6 +233,32 @@ export function DiscoveryPanel({ spaceId }: { spaceId: string }) {
     if (next === 'private') setDirectoryListed(false);
   };
 
+  /**
+   * Whether the person reading the "an administrator has to turn this on"
+   * reason is that administrator, and may act on it from here.
+   *
+   * Admin rights are per instance. `settingsStore.isAdmin` is written from
+   * the home instance's WS `ready` and from nowhere else: the handler reads
+   * `event.user.isAdmin` only when the event came from home, and a remote
+   * `ready` carrying it is discarded. There is no second signal either.
+   * Nothing in `instanceStore` records a role per connection, and the one
+   * route that would prove rights on another instance
+   * (`GET /api/settings/instance`, admin-only) would have to be fired at that
+   * instance on every panel open just to read its refusal, which is a request
+   * nobody asked for and an answer that is 403 for the ordinary case.
+   *
+   * So the action is offered only where the client actually knows the answer:
+   * a space whose home is this instance (`_instanceOrigin` empty, the same
+   * value `useInstanceDiscoveryFlags` reads home by) and an admin here. For a
+   * remote space the sentence stays exactly as it was, whatever this user is
+   * at home, because being an admin here says nothing about rights there, and
+   * because the write itself goes through `settingsStore`, which speaks to
+   * home and to nowhere else. An admin of the remote instance changes it
+   * there, on the Explore page of their own instance or in its settings.
+   */
+  const spaceIsHome = (space._instanceOrigin ?? '') === '';
+  const canEnableRung = isHomeAdmin && spaceIsHome;
+
   // Always rendered: the reason under a disabled switch is what tells an owner
   // whose instance has the directory off, or whose space is private, what to do.
   // The endpoint is asked before the admin's opt-in, because it is the
@@ -231,16 +267,60 @@ export function DiscoveryPanel({ spaceId }: { spaceId: string }) {
   // owner at a switch that would not help. What is missing is a hub to fetch
   // the listing document, not the document, which this instance serves from
   // the two discovery flags either way.
+  //
+  // The opt-in reason has two voices. To an owner it names the person who has
+  // to act; to the administrator reading their own instance's panel it names
+  // the setting instead, because telling admins that an administrator has to
+  // act is how this panel came to be a dead end for the one person who could
+  // change it.
   const directoryReason = flagsUnknown
     ? null
     : !directoryConfigured
       ? t('spaces:settings.discovery.directory.notConfigured')
       : !directoryEnabled
-        ? t('spaces:settings.discovery.directory.adminOff')
+        ? canEnableRung
+          ? t('spaces:settings.discovery.directory.adminOffSelf')
+          : t('spaces:settings.discovery.directory.adminOff')
         : visibility === 'private'
           ? t('spaces:settings.discovery.directory.privateSpace')
           : null;
   const directoryLocked = flagsUnknown || directoryReason !== null;
+  // The reason that has a way out of it, which is the opt-in one and only for
+  // an admin of the instance the space lives on. Derived, so it cannot be
+  // offered under a reason that has moved on.
+  const rungActionOffered = canEnableRung && !flagsUnknown && directoryConfigured && !directoryEnabled;
+
+  /**
+   * Turn on the global rung for this instance, which is what the reason above
+   * names.
+   *
+   * Both flags, not just the listing one: `directoryEnabled` without
+   * `discoveryEnabled` is the pair the server refuses
+   * (`directory_requires_discovery`), and the rung the ladder in
+   * Instance -> General calls global is exactly this pair. Writing one of them
+   * from here would fail on an instance that is invite-only and would leave a
+   * half-rung on one that is not.
+   *
+   * It goes through `settingsStore.updateInstanceSettings`, which speaks to
+   * home. That is correct precisely because `canEnableRung` requires the
+   * space to live here; the gate and the write agree about which instance
+   * this is. The store mirrors the server's answer back into
+   * `streamingLimits`, which for a home space is the document
+   * `useInstanceDiscoveryFlags` reads, so the reason clears and the switch
+   * unlocks on the next render with nothing to refetch.
+   */
+  const handleEnableRung = async () => {
+    setRungPending(true);
+    setRungError('');
+    try {
+      await updateInstanceSettings({ discoveryEnabled: true, directoryEnabled: true });
+    } catch (err) {
+      setRungError(describeError(err));
+    } finally {
+      setRungPending(false);
+      setConfirmingRung(false);
+    }
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -319,7 +399,29 @@ export function DiscoveryPanel({ spaceId }: { spaceId: string }) {
             />
           </label>
           {directoryReason !== null && (
-            <p className="text-xs text-txt-secondary">{directoryReason}</p>
+            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+              <p className="text-xs text-txt-secondary">{directoryReason}</p>
+              {rungActionOffered && (
+                <button
+                  type="button"
+                  onClick={() => setConfirmingRung(true)}
+                  disabled={rungPending}
+                  className="text-xs font-medium text-accent-primary hover:text-accent-primary/80 transition-colors disabled:text-txt-tertiary disabled:cursor-default"
+                >
+                  {t('spaces:settings.discovery.directory.adminOffSelfAction')}
+                </button>
+              )}
+            </div>
+          )}
+          {rungError && <p className="text-xs text-txt-danger">{rungError}</p>}
+          {rungActionOffered && (
+            <ListInDirectoryConfirm
+              isOpen={confirmingRung}
+              onClose={() => setConfirmingRung(false)}
+              onConfirm={handleEnableRung}
+              loading={rungPending}
+              intro={t('spaces:settings.discovery.directory.adminOffSelfIntro')}
+            />
           )}
           {flagsFailed && (
             // The switch is locked on a document that never arrived, so this

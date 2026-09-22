@@ -18,10 +18,20 @@ import { DiscoveryPanel } from './SpaceSettings';
 import { useSpaceStore, type TaggedSpace } from '../../stores/spaceStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useInstanceStore, type ConnectedInstance } from '../../stores/instanceStore';
-import { api, type BackspaceApiClient } from '../../api/client';
+import { api, HttpError, type BackspaceApiClient } from '../../api/client';
+import { describeError } from '../../i18n/errors';
 
 const SWITCH = 'List in the Backspace directory';
 const ADMIN_OFF = 'Your instance administrator has to turn on global space discovery.';
+// The same fact in the administrator's own voice, with the way out of it.
+const ADMIN_OFF_SELF = 'Global space discovery is off on this instance.';
+const RUNG_ACTION = 'Turn it on';
+const RUNG_INTRO = 'This turns on the global rung for the whole instance: spaces here become discoverable in Explore, and the instance starts reporting itself to the public directory.';
+const CONFIRM_TITLE = 'List spaces from this instance publicly?';
+const CONFIRM_LABEL = 'List spaces';
+const CONFIRM_DISCLOSURE = "For each listed space this makes public: its name, description, icon, banner, member count and this instance's address. People browsing the directory load the icon and banner from this instance.";
+const CONFIRM_OPT_IN = 'Only spaces whose owners turn listing on are sent, so this switch lists no space on its own.';
+const CONFIRM_OFF = 'To stop listing later: Settings, Instance, General, the space discovery choice.';
 const PRIVATE_SPACE = 'Set visibility to public or request to join first.';
 const LOAD_FAILED = 'Could not load the settings.';
 const NOT_CONFIGURED = 'This instance is not configured to reach a directory, so listing this space would reach none.';
@@ -56,9 +66,23 @@ const space: TaggedSpace = {
   _instanceOrigin: '',
 };
 
-function seed(spaceOverrides: Partial<TaggedSpace>, directoryEnabled: boolean): void {
+/**
+ * `isAdmin` is seeded explicitly rather than left at whatever a previous test
+ * put there: it now decides which of two sentences the panel states, so a
+ * leaked `true` would quietly rewrite the expectations of every case below.
+ */
+function seed(spaceOverrides: Partial<TaggedSpace>, directoryEnabled: boolean, isAdmin = false): void {
   useSpaceStore.setState({ spaces: [{ ...space, ...spaceOverrides }] });
-  useSettingsStore.setState({ streamingLimits: { ...limits, directoryEnabled } });
+  useSettingsStore.setState({ streamingLimits: { ...limits, directoryEnabled }, isAdmin });
+}
+
+const realUpdateInstanceSettings = useSettingsStore.getState().updateInstanceSettings;
+
+/** Stands in for the instance-wide write the reason's action makes. */
+function mockUpdateInstanceSettings(): ReturnType<typeof vi.fn> {
+  const updateInstanceSettings = vi.fn().mockResolvedValue(undefined);
+  useSettingsStore.setState({ updateInstanceSettings });
+  return updateInstanceSettings;
 }
 
 function directorySwitch(): HTMLElement {
@@ -118,6 +142,7 @@ beforeEach(() => {
 
 afterEach(() => {
   useSpaceStore.setState({ updateSpace: realUpdateSpace });
+  useSettingsStore.setState({ updateInstanceSettings: realUpdateInstanceSettings, isAdmin: false });
   vi.restoreAllMocks();
 });
 
@@ -428,5 +453,158 @@ describe('DiscoveryPanel instance flags by origin', () => {
     render(<DiscoveryPanel spaceId="space-1" />);
     expect(directorySwitch()).toBeEnabled();
     expect(homeStreaming).not.toHaveBeenCalled();
+  });
+});
+
+/*
+ * The panel used to end the conversation for the one person who could change
+ * the thing it named: "your instance administrator has to turn on global
+ * space discovery", read by the instance administrator, with nowhere to go.
+ *
+ * Admin rights are per instance, and the client only knows its own. The
+ * home WS `ready` is the only thing that ever writes `settingsStore.isAdmin`,
+ * a remote `ready` carrying the same field is discarded, and no other signal
+ * exists. So the action is offered for a space that lives here and for
+ * nobody else, and the write goes to the only instance the client can speak
+ * to as an admin.
+ */
+describe('DiscoveryPanel global rung action', () => {
+  it('names the setting rather than an absent administrator when the reader is one', () => {
+    seed({ visibility: 'public' }, false, true);
+    render(<DiscoveryPanel spaceId="space-1" />);
+
+    expect(screen.getByText(ADMIN_OFF_SELF)).toBeInTheDocument();
+    expect(screen.queryByText(ADMIN_OFF)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: RUNG_ACTION })).toBeInTheDocument();
+    // The space switch is still locked: the rung has to land first.
+    expect(directorySwitch()).toBeDisabled();
+  });
+
+  it('leaves the sentence alone for an owner who is not an instance admin', () => {
+    seed({ visibility: 'public' }, false, false);
+    render(<DiscoveryPanel spaceId="space-1" />);
+
+    expect(screen.getByText(ADMIN_OFF)).toBeInTheDocument();
+    expect(screen.queryByText(ADMIN_OFF_SELF)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: RUNG_ACTION })).not.toBeInTheDocument();
+  });
+
+  /*
+   * The trap. Being an admin at home says nothing about rights on the
+   * instance that owns a remote space, and the write this action makes goes
+   * to home whatever space is on screen. Offering it here would show a button
+   * that either does nothing for this space or changes the wrong instance.
+   */
+  it('offers nothing on a remote space, whatever the reader is at home', async () => {
+    seed({ visibility: 'public', _instanceOrigin: 'https://remote.test' }, true, true);
+    const getStreaming = connectRemote(
+      'https://remote.test',
+      Promise.resolve({ ...limits, discoveryEnabled: true, directoryEnabled: false, directoryConfigured: true }),
+    );
+    const updateInstanceSettings = mockUpdateInstanceSettings();
+    render(<DiscoveryPanel spaceId="space-1" />);
+
+    await waitFor(() => expect(screen.getByText(ADMIN_OFF)).toBeInTheDocument());
+    expect(getStreaming).toHaveBeenCalled();
+    expect(screen.queryByText(ADMIN_OFF_SELF)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: RUNG_ACTION })).not.toBeInTheDocument();
+    expect(updateInstanceSettings).not.toHaveBeenCalled();
+  });
+
+  it('says nothing about the rung when the instance has no directory endpoint', () => {
+    useSpaceStore.setState({ spaces: [{ ...space, visibility: 'public' }] });
+    useSettingsStore.setState({
+      streamingLimits: { ...limits, directoryEnabled: false, directoryConfigured: false },
+      isAdmin: true,
+    });
+    render(<DiscoveryPanel spaceId="space-1" />);
+
+    expect(screen.getByText(NOT_CONFIGURED)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: RUNG_ACTION })).not.toBeInTheDocument();
+  });
+
+  it('explains what becomes public instead of writing it', async () => {
+    seed({ visibility: 'public' }, false, true);
+    const updateInstanceSettings = mockUpdateInstanceSettings();
+    const user = userEvent.setup();
+    render(<DiscoveryPanel spaceId="space-1" />);
+
+    await user.click(screen.getByRole('button', { name: RUNG_ACTION }));
+
+    expect(updateInstanceSettings).not.toHaveBeenCalled();
+    expect(screen.getByText(CONFIRM_TITLE)).toBeInTheDocument();
+    // The one line this surface adds, because its write is the whole rung
+    // rather than the listing flag alone.
+    expect(screen.getByText(RUNG_INTRO)).toBeInTheDocument();
+    // And the same three paragraphs the Explore hint states, from the same
+    // keys: one decision, one wording.
+    expect(screen.getByText(CONFIRM_DISCLOSURE)).toBeInTheDocument();
+    expect(screen.getByText(CONFIRM_OPT_IN)).toBeInTheDocument();
+    expect(screen.getByText(CONFIRM_OFF)).toBeInTheDocument();
+  });
+
+  it('cancelling writes nothing and leaves the reason where it was', async () => {
+    seed({ visibility: 'public' }, false, true);
+    const updateInstanceSettings = mockUpdateInstanceSettings();
+    const user = userEvent.setup();
+    render(<DiscoveryPanel spaceId="space-1" />);
+
+    await user.click(screen.getByRole('button', { name: RUNG_ACTION }));
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(updateInstanceSettings).not.toHaveBeenCalled();
+    expect(screen.queryByText(CONFIRM_TITLE)).not.toBeInTheDocument();
+    expect(screen.getByText(ADMIN_OFF_SELF)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: RUNG_ACTION })).toBeEnabled();
+    expect(directorySwitch()).toBeDisabled();
+  });
+
+  /*
+   * Both flags, not just the listing one. `directoryEnabled` without
+   * `discoveryEnabled` is the pair the server refuses, and "global space
+   * discovery" is the ladder rung that is exactly this pair.
+   */
+  it('confirming writes the whole global rung exactly once, and the switch unlocks', async () => {
+    seed({ visibility: 'public' }, false, true);
+    const updateInstanceSettings = vi.fn().mockImplementation(async () => {
+      useSettingsStore.setState({
+        streamingLimits: { ...limits, discoveryEnabled: true, directoryEnabled: true },
+      });
+    });
+    useSettingsStore.setState({ updateInstanceSettings });
+    const user = userEvent.setup();
+    render(<DiscoveryPanel spaceId="space-1" />);
+
+    await user.click(screen.getByRole('button', { name: RUNG_ACTION }));
+    await user.click(screen.getByRole('button', { name: CONFIRM_LABEL }));
+
+    expect(updateInstanceSettings).toHaveBeenCalledOnce();
+    expect(updateInstanceSettings).toHaveBeenCalledWith({ discoveryEnabled: true, directoryEnabled: true });
+
+    // The store mirrors the answer into the document this panel reads, so the
+    // reason clears and the space switch unlocks with nothing to refetch.
+    await waitFor(() => expect(directorySwitch()).toBeEnabled());
+    expect(screen.queryByText(ADMIN_OFF_SELF)).not.toBeInTheDocument();
+    expect(screen.queryByText(CONFIRM_TITLE)).not.toBeInTheDocument();
+  });
+
+  it('a refused rung is reported under the reason, which stays', async () => {
+    seed({ visibility: 'public' }, false, true);
+    const err = new HttpError(403, 'Forbidden', undefined, 'forbidden');
+    const updateInstanceSettings = vi.fn().mockRejectedValue(err);
+    useSettingsStore.setState({ updateInstanceSettings });
+    const user = userEvent.setup();
+    render(<DiscoveryPanel spaceId="space-1" />);
+
+    await user.click(screen.getByRole('button', { name: RUNG_ACTION }));
+    await user.click(screen.getByRole('button', { name: CONFIRM_LABEL }));
+
+    // Stated under the reason, not behind a dialog that would have to be
+    // dismissed to read it.
+    await waitFor(() => expect(screen.getByText(describeError(err))).toBeInTheDocument());
+    expect(screen.queryByText(CONFIRM_TITLE)).not.toBeInTheDocument();
+    expect(screen.getByText(ADMIN_OFF_SELF)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: RUNG_ACTION })).toBeEnabled();
+    expect(directorySwitch()).toBeDisabled();
   });
 });

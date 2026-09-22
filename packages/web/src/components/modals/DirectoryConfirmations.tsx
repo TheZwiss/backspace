@@ -33,6 +33,17 @@ interface DirectoryConfirmProps {
   loading: boolean;
 }
 
+interface ListInDirectoryConfirmProps extends DirectoryConfirmProps {
+  /**
+   * One sentence placed before the shared paragraphs, for a caller whose
+   * write is not exactly the one the Explore hint makes. The per-space panel
+   * writes the whole global rung rather than the listing flag alone, so it
+   * says so here; everything after it is the same decision in the same
+   * words.
+   */
+  intro?: string;
+}
+
 /** The paragraphs of a confirmation, stacked. */
 function Facts({ facts }: { facts: readonly string[] }) {
   return (
@@ -46,7 +57,7 @@ function Facts({ facts }: { facts: readonly string[] }) {
  * Before `directoryEnabled: true`: this instance starts telling the hub about
  * itself and about every space whose owner has opted in.
  */
-export function ListInDirectoryConfirm({ isOpen, onClose, onConfirm, loading }: DirectoryConfirmProps) {
+export function ListInDirectoryConfirm({ isOpen, onClose, onConfirm, loading, intro }: ListInDirectoryConfirmProps) {
   const { t } = useTranslation(['spaces', 'admin']);
 
   return (
@@ -56,6 +67,7 @@ export function ListInDirectoryConfirm({ isOpen, onClose, onConfirm, loading }: 
       onConfirm={onConfirm}
       title={t('spaces:explore.notListed.confirm.title')}
       description={<Facts facts={[
+        ...(intro === undefined ? [] : [intro]),
         t('admin:general.directory.disclosure'),
         t('spaces:explore.notListed.confirm.optIn'),
         t('spaces:explore.notListed.confirm.off'),

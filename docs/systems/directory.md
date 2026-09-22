@@ -29,7 +29,7 @@ Source files:
 - `packages/web/src/components/modals/DirectoryConfirmations.tsx` - the two dialogs that stand in front of the listing and browsing switches
 - `packages/web/src/components/modals/ConnectAndJoinModal.tsx`, `RemotePasswordStep.tsx` - the connect-from-card dialog and the password step it shares with the Connections panel
 - `packages/web/src/components/modals/instanceSettingsPanels/GeneralPanel.tsx` - the admin space-discovery ladder and the directory status line
-- `packages/web/src/components/modals/SpaceSettings.tsx` - the per-space switch in `DiscoveryPanel`
+- `packages/web/src/components/modals/SpaceSettings.tsx` - the per-space switch in `DiscoveryPanel`, and the admin's way out of its opt-in reason
 - Design spec: `docs/superpowers/specs/2026-09-21-space-directory-design.md`
 
 ---
@@ -1159,9 +1159,36 @@ rendered:
   gated on the two discovery flags and never on the endpoint, so an
   endpoint-less instance with the rung stored does serve a populated document
   that no hub fetches.
-- Disabled with "Your admin has to enable the directory for this instance."
-  when `streamingLimits.directoryEnabled` is false. Never hidden: the reason
-  under a disabled switch is what tells an owner what to do.
+- Disabled with "Your instance administrator has to turn on global space
+  discovery." when `streamingLimits.directoryEnabled` is false. Never hidden:
+  the reason under a disabled switch is what tells an owner what to do.
+- **That reason has a second voice, and an action, for the administrator
+  reading their own instance's panel**: "Global space discovery is off on this
+  instance.", with "Turn it on" beside it. The sentence naming an absent
+  administrator, read by the administrator, was a dead end for the one person
+  who could change it. The action opens the same `ListInDirectoryConfirm` the
+  Explore hint's "List them" opens, with one extra first line
+  (`settings.discovery.directory.adminOffSelfIntro`) because this write is the
+  whole global rung and not the listing flag alone: it writes
+  `{ discoveryEnabled: true, directoryEnabled: true }`, the pair the ladder in
+  Instance -> General calls global, since `directoryEnabled` on its own is what
+  the server refuses with `directory_requires_discovery`. The store mirrors the
+  answer into `streamingLimits`, which for a home space is the document this
+  panel reads, so the reason clears and the switch unlocks with nothing to
+  refetch. A refusal is stated under the reason and the reason stays.
+- **The action is offered only for a space whose home is this instance.**
+  Admin rights are per instance and the client knows only its own:
+  `settingsStore.isAdmin` is written from the home WS `ready` and from nowhere
+  else (`useWebSocket.ts` reads `event.user.isAdmin` under `isHome` and
+  discards a remote `ready` carrying it), nothing in `instanceStore` records a
+  role per connection, and the only route that would prove rights on another
+  instance is admin-only, so asking would mean firing a request at that
+  instance on every panel open to read its 403. The gate is therefore
+  `isAdmin && _instanceOrigin === ''`, which is also what makes the write
+  correct: `updateInstanceSettings` speaks to home and to nowhere else. For a
+  remote space the owner-voiced sentence stays exactly as it was, whatever
+  this user is at home; an admin of that instance turns the rung on from their
+  own instance's Explore page or settings.
 - Disabled with "Set visibility to public or request to join first." when the
   draft visibility is private; choosing private in the panel switches the
   draft off, matching what the server does on save.

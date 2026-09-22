@@ -311,6 +311,9 @@
         "hint": "Show this space in Outer Space on every Backspace instance.",
         "notConfigured": "This instance is not configured to reach a directory, so listing this space would reach none.",
         "adminOff": "Your instance administrator has to turn on global space discovery.",
+        "adminOffSelf": "Global space discovery is off on this instance.",
+        "adminOffSelfAction": "Turn it on",
+        "adminOffSelfIntro": "This turns on the global rung for the whole instance: spaces here become discoverable in Explore, and the instance starts reporting itself to the public directory.",
         "privateSpace": "Set visibility to public or request to join first.",
         "disclosure": "Listing makes public: the space's name, description, icon, banner, member count and this instance's address. People browsing the directory load the icon and banner from this instance."
       },
