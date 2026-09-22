@@ -177,6 +177,13 @@
       "connectAndRequest": "Verbinden und anfragen",
       "closedBadge": "Keine neuen Konten"
     },
+    "connections": {
+      "title": "Verbindungen, die Aufmerksamkeit brauchen",
+      "sessionExpired": "Anmeldung abgelaufen",
+      "unreachable": "nicht erreichbar",
+      "reconnect": "Erneut anmelden",
+      "retry": "Erneut versuchen"
+    },
     "connect": {
       "title": "{{name}} beitreten",
       "intro": "Dieser Space liegt auf <host>{{host}}</host>. Gib dein Passwort für <home>{{home}}</home> ein, um dort deine Identität anzulegen.",

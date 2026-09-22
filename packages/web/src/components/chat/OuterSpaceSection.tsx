@@ -1,7 +1,9 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { DirectoryEntry } from '@backspace/shared';
 import { useDirectoryStore } from '../../stores/directoryStore';
+import { useInstanceStore } from '../../stores/instanceStore';
+import { dedupeAgainstConnected } from '../../utils/directory';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { Mascot } from '../ui/Mascot';
 import { SpaceCard, outerEntryToSpace } from './SpaceCard';
@@ -21,7 +23,8 @@ interface OuterSpaceSectionProps {
  */
 export function OuterSpaceSection({ query, onConnect }: OuterSpaceSectionProps) {
   const { t } = useTranslation(['spaces', 'errors']);
-  const entries = useDirectoryStore((s) => s.entries);
+  const feed = useDirectoryStore((s) => s.entries);
+  const instances = useInstanceStore((s) => s.instances);
   const status = useDirectoryStore((s) => s.status);
   const hasMore = useDirectoryStore((s) => s.hasMore);
   const fetch = useDirectoryStore((s) => s.fetch);
@@ -34,6 +37,15 @@ export function OuterSpaceSection({ query, onConnect }: OuterSpaceSectionProps) 
   useEffect(() => {
     void fetch(initialQuery.current);
   }, [fetch]);
+
+  // Deduped by origin at render, against the session's own origin and every
+  // instance the store knows in any status (spec section 9): a connection
+  // that appears, returns or expires moves its origin between the sections
+  // without a refetch of the feed.
+  const entries = useMemo(
+    () => dedupeAgainstConnected(feed, [window.location.origin, ...instances.map((i) => i.origin)]),
+    [feed, instances],
+  );
 
   if (status === 'disabled') return null;
 

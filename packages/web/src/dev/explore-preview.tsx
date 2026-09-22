@@ -15,18 +15,29 @@
 // fallback phase, reached the way a user reaches it (the harness submits a
 // password and the stubbed connect answers `needs-remote-password`).
 //
+// `?width=400` constrains the workbench to that many CSS pixels, for phone
+// widths a headless browser window cannot go down to (Chrome's floor is
+// 500). The viewport attribute still follows the window, which at these
+// sizes is the mobile shell either way.
+//
 // `?scene=home-sidebar` puts the home view's left column next to the page
 // with the router already at `/explore`, so the sidebar's Explore entry can
 // be seen in its selected state and the Home entry in its unselected one.
+//
+// `?scene=connections|connections-open` seeds the federation registry with
+// one expired and one unreachable connection over the `both` page, so the
+// chips row under the Inner Space subtitle can be seen collapsed, and with
+// the expired chip opened into its reauth form (the harness clicks
+// Reconnect the way a user does).
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
-import type { DirectoryEntry, InstanceInfoResponse, User } from '@backspace/shared';
+import type { DirectoryEntry, FederationRegistryEntry, InstanceInfoResponse, User } from '@backspace/shared';
 import { ExplorePage } from '../components/chat/ExplorePage';
 import { ChannelSidebar } from '../components/layout/ChannelSidebar';
 import { ConnectAndJoinModal } from '../components/modals/ConnectAndJoinModal';
 import { useExploreStore, type TaggedExploreSpace } from '../stores/exploreStore';
 import { useDirectoryStore } from '../stores/directoryStore';
-import { useInstanceStore } from '../stores/instanceStore';
+import { useInstanceStore, type ConnectedInstance } from '../stores/instanceStore';
 import { useAuthStore } from '../stores/authStore';
 import { useUIStore } from '../stores/uiStore';
 import { initI18n } from '../i18n';
@@ -41,7 +52,9 @@ type Scene =
   | 'connect-password'
   | 'connect-closed'
   | 'connect-fallback'
-  | 'home-sidebar';
+  | 'home-sidebar'
+  | 'connections'
+  | 'connections-open';
 
 const SCENES: ReadonlySet<string> = new Set<Scene>([
   'both',
@@ -52,6 +65,8 @@ const SCENES: ReadonlySet<string> = new Set<Scene>([
   'connect-closed',
   'connect-fallback',
   'home-sidebar',
+  'connections',
+  'connections-open',
 ]);
 
 function isScene(value: string | null): value is Scene {
@@ -61,6 +76,12 @@ function isScene(value: string | null): value is Scene {
 function readScene(search: string): Scene {
   const value = new URLSearchParams(search).get('scene');
   return isScene(value) ? value : 'both';
+}
+
+/** A positive integer width in CSS pixels, or null for the window's own. */
+function readWidth(search: string): number | null {
+  const value = Number(new URLSearchParams(search).get('width'));
+  return Number.isInteger(value) && value > 0 ? value : null;
 }
 
 /** Three unjoined spaces and one joined, one of them from a connected peer, as the Inner list ranks them. */
@@ -297,15 +318,79 @@ async function driveToFallback(): Promise<void> {
   input.form?.requestSubmit();
 }
 
+function registryEntry(origin: string, label: string, status: FederationRegistryEntry['status']): FederationRegistryEntry {
+  return {
+    origin,
+    label,
+    username: 'jannis@home.example',
+    remoteUserId: 'remote-user',
+    status,
+    addedAt: 1,
+    lastConnectedAt: 2,
+    disconnectedAt: null,
+    errorMessage: null,
+  };
+}
+
+function liveInstance(origin: string, label: string, status: ConnectedInstance['status']): ConnectedInstance {
+  return {
+    origin,
+    label,
+    token: 'workbench-token',
+    user: HOME_USER,
+    username: 'jannis@home.example',
+    status,
+    api: {} as ConnectedInstance['api'],
+  };
+}
+
+/**
+ * Three connections in the registry: one healthy, one whose session expired
+ * (its live instance is the tokenless error placeholder autoConnectAll
+ * leaves), one unreachable (its live instance disconnected with a token).
+ * The store actions the chips call are answered locally and never settle a
+ * status, so the row stays on screen to be looked at.
+ */
+function seedConnectionsScene(scene: Scene): void {
+  if (scene !== 'connections' && scene !== 'connections-open') return;
+  useAuthStore.setState({ user: HOME_USER });
+  useInstanceStore.setState({
+    instances: [
+      liveInstance('https://nova.example', 'Nova', 'connected'),
+      liveInstance('https://zwiss.example', 'Zwiss', 'error'),
+      liveInstance('https://orbit.example', 'Orbit', 'disconnected'),
+    ],
+    registry: new Map([
+      ['https://nova.example', registryEntry('https://nova.example', 'Nova', 'connected')],
+      ['https://zwiss.example', registryEntry('https://zwiss.example', 'Zwiss', 'auth_expired')],
+      ['https://orbit.example', registryEntry('https://orbit.example', '', 'unreachable')],
+    ]),
+    reconnectInstance: async () => {},
+    reauthenticateInstance: async () => {},
+  });
+}
+
+/** Opens the expired chip's form the way a user does: by clicking its Reconnect action. */
+async function openExpiredChip(): Promise<void> {
+  let button: HTMLButtonElement | null = null;
+  for (let i = 0; i < 300 && !button; i++) {
+    await nextFrame();
+    button = Array.from(document.querySelectorAll<HTMLButtonElement>('li button'))
+      .find((b) => b.textContent === 'Reconnect') ?? null;
+  }
+  if (!button) throw new Error('the expired chip did not render');
+  button.click();
+}
+
 /** The home sidebar needs a signed-in user for its user area; the stores' defaults give it the `!space` branch. */
 function seedHomeSidebarScene(scene: Scene): void {
   if (scene !== 'home-sidebar') return;
   useAuthStore.setState({ user: HOME_USER });
 }
 
-function Workbench({ scene }: { scene: Scene }) {
+function Workbench({ scene, width }: { scene: Scene; width: number | null }) {
   return (
-    <div style={{ height: 'calc(100 * var(--app-vh))', display: 'flex' }}>
+    <div style={{ height: 'calc(100 * var(--app-vh))', display: 'flex', width: width ?? undefined }}>
       {scene === 'home-sidebar' && (
         // AppLayout's host for the two sidebars: 312px wide, the channel column's
         // own `desktop:pl-[72px]` leaving room for the space strip, absent here.
@@ -313,7 +398,12 @@ function Workbench({ scene }: { scene: Scene }) {
           <ChannelSidebar />
         </div>
       )}
-      <ExplorePage />
+      {/* The shells host the page width-constrained (MainContent's column, the
+          mobile stack's absolute screen); a bare row-flex host would let the
+          page take its min-content width at phone sizes. */}
+      <div className="flex-1 min-w-0 flex overflow-hidden">
+        <ExplorePage />
+      </div>
       <ConnectAndJoinModal />
     </div>
   );
@@ -321,20 +411,23 @@ function Workbench({ scene }: { scene: Scene }) {
 
 async function start(): Promise<void> {
   const scene = readScene(window.location.search);
+  const width = readWidth(window.location.search);
   installInstanceInfo();
   initializeInterfaceScale();
   await initI18n();
   seedStores(scene);
   seedConnectScene(scene);
+  seedConnectionsScene(scene);
   seedHomeSidebarScene(scene);
   const host = document.getElementById('root');
   if (!host) throw new Error('missing #root');
   createRoot(host).render(
     <MemoryRouter initialEntries={[scene === 'home-sidebar' ? '/explore' : '/']}>
-      <Workbench scene={scene} />
+      <Workbench scene={scene} width={width} />
     </MemoryRouter>,
   );
   if (scene === 'connect-fallback') await driveToFallback();
+  if (scene === 'connections-open') await openExpiredChip();
 }
 
 void start();

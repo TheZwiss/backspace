@@ -177,6 +177,13 @@
       "connectAndRequest": "Connect and request",
       "closedBadge": "Closed to new accounts"
     },
+    "connections": {
+      "title": "Connections that need attention",
+      "sessionExpired": "session expired",
+      "unreachable": "unreachable",
+      "reconnect": "Reconnect",
+      "retry": "Retry"
+    },
     "connect": {
       "title": "Join {{name}}",
       "intro": "This space lives on <host>{{host}}</host>. Enter your password for <home>{{home}}</home> to create your identity there.",

@@ -428,6 +428,16 @@ The federation registry is a persistent server-side record of all instances a us
 - **Client:** `registry` Map in `instanceStore` (Zustand)
 - **LWW timestamp:** `federationRegistryUpdatedAt` on `users` table
 
+### Client readers
+
+Two surfaces read the client Map and must agree: the Connections panel
+(`ConnectedInstances.tsx`, every entry with its status, actions and the
+`ReauthForm`) and the Explore page's `ConnectionChips` (entries in
+`auth_expired` or `unreachable` only, with Retry and the same `ReauthForm`;
+see [directory.md](directory.md) section 9). Both render from the Map, so a
+status change from any path (`reconnectInstance`, `reauthenticateInstance`,
+`autoConnectAll`) reaches both at once.
+
 ### Lifecycle States
 
 | State | Meaning |

@@ -95,7 +95,7 @@ Rules:
 | `chat` | Message list, composer, attachments, embeds, reactions, replies, typing, jump-to-message |
 | `dm` | DM list, group DM management, DM calls, DM system messages |
 | `voice` | Voice channel controls, screen share, stream tiles, device pickers |
-| `spaces` | Space, category and channel CRUD, invites, discovery, membership, bans, roles; the Explore page's Inner and Outer Space sections, the connect-and-join dialog and the per-space directory switch (`explore.inner.*`, `explore.outer.*`, `explore.connect.*`, `settings.discovery.directory.*`) |
+| `spaces` | Space, category and channel CRUD, invites, discovery, membership, bans, roles; the Explore page's Inner and Outer Space sections, the connect-and-join dialog, the connections-that-need-attention chips and the per-space directory switch (`explore.inner.*`, `explore.outer.*`, `explore.connect.*`, `explore.connections.*`, `settings.discovery.directory.*`) |
 | `settings` | User settings modal and its panels (account, voice, privacy, connections, keybinds, desktop) |
 | `admin` | Instance settings panels (general, registration, users, storage, streaming, updates, federation); the directory toggle and its status line (`general.directory.*`) |
 | `federation` | Connected instances UI, peering requests, identity attach and detach |

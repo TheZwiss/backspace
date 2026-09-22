@@ -2,8 +2,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import type { DirectoryEntry, InstanceInfoResponse } from '@backspace/shared';
+import userEvent from '@testing-library/user-event';
 import { ExplorePage } from './ExplorePage';
 import { useExploreStore } from '../../stores/exploreStore';
+import { useInstanceStore } from '../../stores/instanceStore';
+
+// Stub AudioManager: the instance store imports it transitively and jsdom has no AudioWorkletNode.
+vi.mock('../../audio/AudioManager', () => ({
+  AudioManager: { getInstance: vi.fn().mockReturnValue({ setOutputDevice: vi.fn(), setVolume: vi.fn() }) },
+}));
 
 // ── Spies shared with the mocked modules ─────────────────────────────────────
 const { fetchSpaces, fetchMyRequests, fetchDirectory, loadMore, instanceInfo, openModal } = vi.hoisted(() => ({
@@ -192,5 +199,61 @@ describe('ExplorePage search and the Outer Space gate', () => {
     const innerEmpty = screen.getByText('No discoverable spaces yet.');
     const outerHeader = screen.getByText('Outer Space');
     expect(innerEmpty.compareDocumentPosition(outerHeader) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
+describe('ExplorePage connection chips', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useExploreStore.setState({ searchQuery: '' });
+    useInstanceStore.setState({ registry: new Map(), instances: [] });
+  });
+
+  it('renders no chip row when every connection is healthy', () => {
+    useInstanceStore.setState({
+      registry: new Map([[
+        'https://orbit.example',
+        { origin: 'https://orbit.example', label: 'Orbit', username: 'jannis@home.example', remoteUserId: 'r1', status: 'connected', addedAt: 1, lastConnectedAt: 1, disconnectedAt: null, errorMessage: null },
+      ]]),
+    });
+    renderPage();
+    expect(screen.queryByRole('list', { name: 'Connections that need attention' })).not.toBeInTheDocument();
+  });
+
+  it('shows the expired connection under the Inner subtitle and refetches Inner Space once it is back', async () => {
+    const reauthenticateInstance = vi.fn(async (origin: string) => {
+      const registry = new Map(useInstanceStore.getState().registry);
+      const entry = registry.get(origin);
+      if (entry) registry.set(origin, { ...entry, status: 'connected' });
+      useInstanceStore.setState({ registry });
+    });
+    useInstanceStore.setState({
+      reauthenticateInstance,
+      registry: new Map([[
+        'https://zwiss.example',
+        { origin: 'https://zwiss.example', label: 'Zwiss', username: 'jannis@home.example', remoteUserId: 'r1', status: 'auth_expired', addedAt: 1, lastConnectedAt: 1, disconnectedAt: null, errorMessage: null },
+      ]]),
+    });
+    useExploreStore.setState({ searchQuery: 'alp' });
+    const user = userEvent.setup();
+    renderPage();
+    expect(fetchSpaces).toHaveBeenCalledTimes(1);
+    expect(fetchMyRequests).toHaveBeenCalledTimes(1);
+
+    // The row sits between the Inner subtitle and the cards.
+    const subtitle = screen.getByText('Spaces on your instances');
+    const row = screen.getByRole('list', { name: 'Connections that need attention' });
+    expect(subtitle.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText('Zwiss')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Reconnect' }));
+    await user.type(screen.getByPlaceholderText('Your home account password'), 'hunter2');
+    await user.click(screen.getByRole('button', { name: 'Connect' }));
+
+    expect(reauthenticateInstance).toHaveBeenCalledWith('https://zwiss.example', 'hunter2');
+    await waitFor(() => expect(fetchSpaces).toHaveBeenCalledTimes(2));
+    expect(fetchSpaces).toHaveBeenLastCalledWith('alp');
+    expect(fetchMyRequests).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole('list', { name: 'Connections that need attention' })).not.toBeInTheDocument();
   });
 });

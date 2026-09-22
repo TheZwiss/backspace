@@ -3,7 +3,6 @@ import type { DirectoryEntry } from '@backspace/shared';
 import { api, HttpError } from '../api/client';
 import { useInstanceStore, connectToInstance } from './instanceStore';
 import { useExploreStore, type TaggedExploreSpace } from './exploreStore';
-import { dedupeAgainstConnected } from '../utils/directory';
 import { isAlreadyMemberError } from '../utils/joinErrors';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -16,6 +15,11 @@ export type ConnectAndJoinResult =
   | { kind: 'needs-remote-password'; remoteUsername: string };
 
 interface DirectoryState {
+  /**
+   * The feed as the proxy returned it. The origin dedupe against the
+   * session's connections is applied where it is rendered
+   * (`OuterSpaceSection`), so it follows the live instance list.
+   */
   entries: DirectoryEntry[];
   status: DirectoryStatus;
   query: string;
@@ -43,15 +47,6 @@ interface DirectoryState {
 export const DIRECTORY_PAGE_SIZE = 50;
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
-
-/**
- * Every origin the session already has a connection to: the home instance
- * and each instance the store knows, in any status. Section 8's dedupe rule
- * is by origin, so a disconnected or errored instance still counts.
- */
-function connectedOrigins(): string[] {
-  return [window.location.origin, ...useInstanceStore.getState().instances.map((i) => i.origin)];
-}
 
 function statusForError(err: unknown): DirectoryStatus {
   if (err instanceof HttpError) {
@@ -99,13 +94,12 @@ export const useDirectoryStore = create<DirectoryState>((set, get) => {
 
   /**
    * The join step both connect actions share. Runs once the origin has a
-   * session: the origin's entries leave Outer Space (they belong to Inner
-   * Space now), the space is joined or requested, and the pending requests
-   * are refreshed so the Inner card can show the right state.
+   * session: the space is joined or requested, and the pending requests are
+   * refreshed so the Inner card can show the right state. The origin's
+   * entries leave Outer Space on their own: the section dedupes at render
+   * against the instance list, which the connect step just added it to.
    */
   async function joinAfterConnect(entry: DirectoryEntry, message?: string): Promise<ConnectAndJoinResult> {
-    set((state) => ({ entries: dedupeAgainstConnected(state.entries, [entry.origin]) }));
-
     const explore = useExploreStore.getState();
     const space = toExploreSpace(entry);
     let result: ConnectAndJoinResult;
@@ -137,7 +131,7 @@ export const useDirectoryStore = create<DirectoryState>((set, get) => {
         const feed = await api.directory.list(query, DIRECTORY_PAGE_SIZE, 0);
         if (seq !== fetchSeq) return;
         set({
-          entries: dedupeAgainstConnected(feed.spaces, connectedOrigins()),
+          entries: feed.spaces,
           status: 'ok',
           offset: 0,
           hasMore: feed.spaces.length === DIRECTORY_PAGE_SIZE,
@@ -157,7 +151,7 @@ export const useDirectoryStore = create<DirectoryState>((set, get) => {
         const feed = await api.directory.list(query, DIRECTORY_PAGE_SIZE, nextOffset);
         if (seq !== fetchSeq) return;
         set((state) => ({
-          entries: appendUnique(state.entries, dedupeAgainstConnected(feed.spaces, connectedOrigins())),
+          entries: appendUnique(state.entries, feed.spaces),
           offset: nextOffset,
           hasMore: feed.spaces.length === DIRECTORY_PAGE_SIZE,
         }));

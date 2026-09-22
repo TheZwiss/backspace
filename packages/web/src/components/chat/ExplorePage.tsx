@@ -13,6 +13,7 @@ import { MemberListToggleButton } from '../layout/MemberListToggleButton';
 import { useFormatters } from '../../i18n/formatters';
 import { SpaceCard } from './SpaceCard';
 import { OuterSpaceSection } from './OuterSpaceSection';
+import { ConnectionChips } from './ConnectionChips';
 
 /** How long the search box waits after the last keystroke before both sections re-query. */
 const SEARCH_DEBOUNCE_MS = 300;
@@ -90,6 +91,15 @@ export function ExplorePage() {
     openModal('connectAndJoin', { entry });
   }, [openModal]);
 
+  // A connection came back through the chips row: Inner Space fans out over
+  // connected instances only, so the returning instance's spaces need a
+  // refetch. Outer Space dedupes at render from the instance list and needs
+  // none.
+  const handleConnectionRecovered = useCallback(() => {
+    fetchSpaces(searchQuery || undefined);
+    fetchMyRequests();
+  }, [fetchSpaces, fetchMyRequests, searchQuery]);
+
   const unjoinedSpaces = useMemo(
     () => spaces.filter(s => !s.joined),
     [spaces],
@@ -153,6 +163,9 @@ export function ExplorePage() {
               </span>
               <p className="text-[13px] text-txt-tertiary">{t('spaces:explore.inner.subtitle')}</p>
             </div>
+
+            {/* Connections that are out, with the way back in; nothing when all are healthy */}
+            <ConnectionChips onRecovered={handleConnectionRecovered} />
 
             {!discoveryEnabled && (
               <div className="mb-4 p-2.5 bg-accent-amber/10 border border-accent-amber/30 rounded text-[13px] text-accent-amber">

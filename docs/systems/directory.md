@@ -637,8 +637,31 @@ Inner Space is paginated and filtered, so matching on space ids would let a
 connected instance's off-page space reappear in Outer Space as "needs a
 connection", and the home instance tags its spaces with `''` rather than an
 origin. Origin is what the section's name means anyway: outer is what needs a
-connection first. Pages are appended without duplicates by `(origin, id)`,
-and a reply for an older query is ignored once a newer one has been sent.
+connection first. The dedupe is applied at render, in `OuterSpaceSection`,
+against the live instance list: `directoryStore.entries` holds the feed as
+the proxy returned it, and an origin the session connects, loses or gets
+back moves between the sections without a refetch. Pages are appended
+without duplicates by `(origin, id)`, and a reply for an older query is
+ignored once a newer one has been sent.
+
+**Connections that need attention.** A connection whose session expired or
+whose instance is unreachable is in neither section: Inner Space fans out
+over `connected` instances only, and the dedupe above drops its origin from
+Outer Space whatever its status. `ConnectionChips`, rendered directly under
+the Inner Space subtitle, is the hint that explains it: one `glass-pill`
+chip per federation registry entry (`instanceStore.registry`, the same
+record the Connections panel shows, so the two never disagree) whose status
+is `auth_expired` (rose dot, "session expired", Reconnect) or `unreachable`
+(amber dot, "unreachable", Retry). Retry calls `reconnectInstance` and shows
+the connecting word until the registry status settles; Reconnect opens the
+chip in place into `ReauthForm`, the one-line home-password form shared with
+the Connections row, which calls `reauthenticateInstance`. After either
+succeeds the page refetches Inner Space (`fetchSpaces`, `fetchMyRequests`);
+Outer Space needs nothing, the render-time dedupe sees the instance. With
+every connection healthy the row is absent. `disconnected` is deliberately
+not shown: that is the user's own choice in the Connections panel, and a
+chip for it would nag. A chip whose live instance is `connecting` on its own
+(startup, the socket's backoff) is hidden for that moment.
 
 The search box drives both sections through one 300 ms debounce: Inner
 filters as before, Outer re-queries the hub through the proxy, showing a

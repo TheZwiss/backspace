@@ -1,8 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, within, act } from '@testing-library/react';
 import type { DirectoryEntry } from '@backspace/shared';
 import type { DirectoryStatus } from '../../stores/directoryStore';
 import { OuterSpaceSection } from './OuterSpaceSection';
+import { useInstanceStore, type ConnectedInstance } from '../../stores/instanceStore';
+
+// Stub AudioManager: the instance store imports it transitively and jsdom has no AudioWorkletNode.
+vi.mock('../../audio/AudioManager', () => ({
+  AudioManager: { getInstance: vi.fn().mockReturnValue({ setOutputDevice: vi.fn(), setVolume: vi.fn() }) },
+}));
 
 // ── directoryStore: a plain state object the tests set per case ─────────────
 const { directory, fetchDirectory, loadMore } = vi.hoisted(() => {
@@ -82,10 +88,23 @@ function renderSection(query = '') {
 
 const UNREACHABLE = 'Outer Space is not reachable right now. Inner Space still works.';
 
+function liveInstance(origin: string, status: ConnectedInstance['status']): ConnectedInstance {
+  return {
+    origin,
+    label: new URL(origin).host,
+    token: 'tok',
+    user: {} as ConnectedInstance['user'],
+    username: 'jannis@home.example',
+    status,
+    api: {} as ConnectedInstance['api'],
+  };
+}
+
 describe('OuterSpaceSection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     setDirectory({});
+    useInstanceStore.setState({ instances: [] });
   });
 
   it('renders the header and fetches the query on mount', () => {
@@ -170,6 +189,30 @@ describe('OuterSpaceSection', () => {
     renderSection();
     fireEvent.click(screen.getByRole('button', { name: 'Show more' }));
     expect(loadMore).toHaveBeenCalledTimes(1);
+  });
+
+  it('dedupes by origin at render: an instance that appears in the session hides its entries without a refetch', () => {
+    setDirectory({ status: 'ok', entries: [entry('a'), entry('b', 'https://nova.example'), entry('c')] });
+    const { rerender } = renderSection();
+    expect(screen.getAllByRole('button', { name: 'Connect and join' })).toHaveLength(3);
+
+    // The user connected orbit.example through the Connections panel; the
+    // status does not matter, any known instance belongs to Inner Space.
+    act(() => {
+      useInstanceStore.setState({ instances: [liveInstance('https://orbit.example', 'error')] });
+    });
+    rerender(<OuterSpaceSection query="" onConnect={vi.fn()} />);
+    expect(screen.getAllByRole('button', { name: 'Connect and join' })).toHaveLength(1);
+    expect(screen.getByText('nova.example')).toBeInTheDocument();
+    expect(fetchDirectory).toHaveBeenCalledTimes(1);
+  });
+
+  it('dedupes the session\'s own origin and shows the empty copy when nothing is left', () => {
+    Object.defineProperty(window, 'location', { value: new URL('https://nova.example/'), writable: true });
+    setDirectory({ status: 'ok', entries: [entry('b', 'https://nova.example/')] });
+    renderSection();
+    expect(screen.queryByRole('button', { name: 'Connect and join' })).not.toBeInTheDocument();
+    expect(screen.getByTestId('outer-space-mascot')).toBeInTheDocument();
   });
 
   it('disabled: renders nothing at all', () => {

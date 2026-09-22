@@ -112,7 +112,7 @@ describe('directoryStore.fetch', () => {
     expect(state.hasMore).toBe(false);
   });
 
-  it('drops entries from the home origin and from every known instance, whatever its status', async () => {
+  it('stores the page as it came: the origin dedupe is applied at render, against the live instance list', async () => {
     session.instances = [
       { origin: 'https://orbit.example', status: 'connected' },
       { origin: 'https://zeta.example', status: 'error' },
@@ -129,7 +129,7 @@ describe('directoryStore.fetch', () => {
 
     await useDirectoryStore.getState().fetch('');
 
-    expect(useDirectoryStore.getState().entries.map((e) => e.id)).toEqual(['far']);
+    expect(useDirectoryStore.getState().entries.map((e) => e.id)).toEqual(['home', 'orbit', 'zeta', 'far']);
   });
 
   it('marks hasMore when a full page came back', async () => {
@@ -275,7 +275,7 @@ describe('directoryStore.connectAndJoin', () => {
     await useDirectoryStore.getState().fetch('');
   }
 
-  it('connects, joins a public space and removes the entry', async () => {
+  it('connects and joins a public space; the entries are left to the render-time dedupe', async () => {
     const target = entry(ORIGIN, 'pub');
     await seed(target, entry('https://other.example', 'keep'));
 
@@ -285,7 +285,8 @@ describe('directoryStore.connectAndJoin', () => {
     expect(publicJoin).toHaveBeenCalledWith({ ...target, _instanceOrigin: ORIGIN, joined: false });
     expect(requestJoin).not.toHaveBeenCalled();
     expect(result).toEqual({ kind: 'joined', spaceId: 'pub', origin: ORIGIN });
-    expect(useDirectoryStore.getState().entries.map((e) => e.id)).toEqual(['keep']);
+    // The origin is in the instance list now, which is what hides its entries in the section.
+    expect(useDirectoryStore.getState().entries.map((e) => e.id)).toEqual(['pub', 'keep']);
     expect(fetchMyRequests).toHaveBeenCalledOnce();
   });
 
@@ -299,7 +300,6 @@ describe('directoryStore.connectAndJoin', () => {
     expect(requestJoin).toHaveBeenCalledWith({ ...target, _instanceOrigin: ORIGIN, joined: false }, 'hello there');
     expect(publicJoin).not.toHaveBeenCalled();
     expect(result).toEqual({ kind: 'requested' });
-    expect(useDirectoryStore.getState().entries).toEqual([]);
   });
 
   it('joins straight away when the origin is connected already, without a new session', async () => {
@@ -316,7 +316,6 @@ describe('directoryStore.connectAndJoin', () => {
     expect(publicJoin).toHaveBeenCalledWith({ ...target, _instanceOrigin: ORIGIN, joined: false });
     expect(connectToRemote).not.toHaveBeenCalled();
     expect(reauthenticateInstance).not.toHaveBeenCalled();
-    expect(useDirectoryStore.getState().entries).toEqual([]);
   });
 
   it('treats already_member from the join as joined', async () => {
@@ -327,7 +326,6 @@ describe('directoryStore.connectAndJoin', () => {
     const result = await useDirectoryStore.getState().connectAndJoin(target, 'home-pw');
 
     expect(result).toEqual({ kind: 'joined', spaceId: 'pub', origin: ORIGIN });
-    expect(useDirectoryStore.getState().entries).toEqual([]);
   });
 
   it('returns needs-remote-password as is without joining', async () => {
@@ -361,15 +359,6 @@ describe('directoryStore.connectAndJoin', () => {
 
     await expect(useDirectoryStore.getState().connectAndJoin(target, 'home-pw')).rejects.toBeInstanceOf(HttpError);
   });
-
-  it('removes every entry of the origin once it is connected, not only the joined one', async () => {
-    const target = entry(ORIGIN, 'pub');
-    await seed(target, entry(ORIGIN, 'sibling'), entry('https://other.example', 'keep'));
-
-    await useDirectoryStore.getState().connectAndJoin(target, 'home-pw');
-
-    expect(useDirectoryStore.getState().entries.map((e) => e.id)).toEqual(['keep']);
-  });
 });
 
 describe('directoryStore.loginAndJoin', () => {
@@ -386,7 +375,6 @@ describe('directoryStore.loginAndJoin', () => {
     expect(connectToInstance).not.toHaveBeenCalled();
     expect(publicJoin).toHaveBeenCalledWith({ ...target, _instanceOrigin: ORIGIN, joined: false });
     expect(result).toEqual({ kind: 'joined', spaceId: 'pub', origin: ORIGIN });
-    expect(useDirectoryStore.getState().entries).toEqual([]);
     expect(fetchMyRequests).toHaveBeenCalledOnce();
   });
 
