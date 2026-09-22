@@ -278,7 +278,7 @@
         "hint": "Zeigt diesen Space auf jeder Backspace-Instanz im Äußeren Space.",
         "adminOff": "Die Instanzverwaltung muss das Verzeichnis für diese Instanz erst einschalten.",
         "privateSpace": "Stell die Sichtbarkeit zuerst auf „Öffentlich“ oder „Beitritt auf Anfrage“.",
-        "disclosure": "Der Eintrag macht öffentlich: Name, Beschreibung, Icon, Banner und Mitgliederzahl des Spaces sowie die Adresse dieser Instanz."
+        "disclosure": "Der Eintrag macht öffentlich: Name, Beschreibung, Icon, Banner und Mitgliederzahl des Spaces sowie die Adresse dieser Instanz. Wer das Verzeichnis durchstöbert, lädt Icon und Banner von dieser Instanz."
       },
       "description": {
         "label": "Beschreibung",

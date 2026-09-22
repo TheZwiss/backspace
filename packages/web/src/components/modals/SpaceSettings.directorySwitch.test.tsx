@@ -162,9 +162,12 @@ describe('DiscoveryPanel directory switch', () => {
     expect(homeUpdate).not.toHaveBeenCalled();
   });
 
-  it('carries the disclosure sentence', () => {
+  it('carries both disclosure sentences', () => {
     seed({ visibility: 'public' }, true);
     render(<DiscoveryPanel spaceId="space-1" />);
-    expect(screen.getByText(/Listing makes public: the space's name, description, icon, banner, member count and this instance's address\./)).toBeInTheDocument();
+    expect(screen.getByText(
+      "Listing makes public: the space's name, description, icon, banner, member count and this instance's address. "
+      + 'People browsing the directory load the icon and banner from this instance.',
+    )).toBeInTheDocument();
   });
 });
