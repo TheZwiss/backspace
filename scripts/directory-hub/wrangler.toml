@@ -5,6 +5,8 @@ main = "src/index.ts"
 compatibility_date = "2026-08-22"
 
 routes = [{ pattern = "explore.backspacechat.com", custom_domain = true }]
+# The hub answers only on its custom domain; no workers.dev hostname.
+workers_dev = false
 
 [vars]
 RETIRED = "0"
