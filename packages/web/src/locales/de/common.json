@@ -65,6 +65,7 @@
     "doNotDisturb": "Nicht stören",
     "offline": "Offline",
     "loadingSettings": "Einstellungen werden geladen…",
+    "loadSettingsFailed": "Die Einstellungen konnten nicht geladen werden.",
     "settingsSaved": "Einstellungen gespeichert",
     "saveFailed": "Speichern fehlgeschlagen",
     "scanning": "Wird geprüft…",

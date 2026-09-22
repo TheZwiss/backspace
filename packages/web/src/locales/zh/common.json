@@ -65,6 +65,7 @@
     "doNotDisturb": "请勿打扰",
     "offline": "离线",
     "loadingSettings": "正在加载设置…",
+    "loadSettingsFailed": "无法加载设置。",
     "settingsSaved": "设置已保存",
     "saveFailed": "保存失败",
     "scanning": "正在扫描…",

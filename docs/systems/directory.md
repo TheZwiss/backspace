@@ -821,14 +821,17 @@ workbench as `?scene=hint-member|hint-admin|hint-not-listed`
 
 **Known limit: two copies of `discoveryEnabled`.** The same flag lives in
 `exploreStore.discoveryEnabled`, written by `fetchSpaces` from the home
-instance's answer, and in `streamingLimits.discoveryEnabled`, written by the
-WS ready payload and by `updateInstanceSettings`. The hint reads the second
-one only. An admin who moves the rung somewhere other than this hint (the
-Instance -> General ladder, another client, another tab) updates the list on
-the next fetch while the hint keeps the rung it last knew, until the next WS
-ready refreshes the document. The fix is one flag, not a mirror kept in step
-between two stores; a mirror would be a third thing that can disagree with
-both.
+instance's answer and read by the hint's neighbours (`JoinSpace.tsx:41`), and
+in `streamingLimits.discoveryEnabled`, written by the WS ready payload and by
+`updateInstanceSettings` and read by the hint and `SpaceSettings`. Within one
+client the two stay in step where it matters: the Instance -> General ladder
+saves through `updateInstanceSettings` too, so the hint is right on the next
+render, and it is the Explore *list* that lags until the next `fetchSpaces`.
+The gap is across clients. A rung moved in another tab, another session or by
+another admin reaches the explore copy on the next fetch and the settings copy
+only on the next WS ready, so the hint can name a rung that is no longer the
+instance's. The fix is one flag, not a mirror kept in step between two stores;
+a mirror would be a third thing that can disagree with both.
 
 The search box drives both sections through one 300 ms debounce: Inner
 filters as before, Outer re-queries the hub through the proxy, showing a

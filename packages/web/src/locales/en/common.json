@@ -65,6 +65,7 @@
     "doNotDisturb": "Do Not Disturb",
     "offline": "Offline",
     "loadingSettings": "Loading settings…",
+    "loadSettingsFailed": "Could not load the settings.",
     "settingsSaved": "Settings saved",
     "saveFailed": "Failed to save",
     "scanning": "Scanning…",

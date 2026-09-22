@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { describeError } from '../../i18n/errors';
@@ -71,12 +71,20 @@ export function InstanceDiscoveryHint({ onDiscoveryEnabled }: InstanceDiscoveryH
 
   const [pending, setPending] = useState(false);
   // Kept with the row it was raised on. A message about a refused "List them"
-  // must not end up under the discovery-off text because an admin changed the
-  // rung in Instance -> General while it was on screen.
+  // must not end up under the discovery-off text because the rung moved while
+  // it was on screen.
   const [failure, setFailure] = useState<{ row: DiscoveryHintRow; message: string } | null>(null);
 
   const row = discoveryHintRow({ limits: streamingLimits, isAdmin });
   const error = failure !== null && failure.row === row ? failure.message : '';
+
+  // Dropped, not merely hidden, once the row it belongs to is no longer the
+  // one on screen. Keeping it would bring a message about an attempt made
+  // minutes ago back under the original row if the rung were toggled off and
+  // on again elsewhere.
+  useEffect(() => {
+    setFailure((current) => (current === null || current.row === row ? current : null));
+  }, [row]);
 
   // The store keeps the old settings when the PATCH is rejected, so a failure
   // leaves the hint on the row it was already on and the message sits under

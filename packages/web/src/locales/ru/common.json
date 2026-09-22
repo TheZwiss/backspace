@@ -65,6 +65,7 @@
     "doNotDisturb": "Не беспокоить",
     "offline": "Не в сети",
     "loadingSettings": "Загрузка настроек…",
+    "loadSettingsFailed": "Не удалось загрузить настройки.",
     "settingsSaved": "Настройки сохранены",
     "saveFailed": "Не удалось сохранить",
     "scanning": "Сканирование…",
