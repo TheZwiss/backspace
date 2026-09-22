@@ -65,6 +65,28 @@ describe('TRUSTED_PROXY_HOPS', () => {
     expect(await loadHops()).toBe(2);
   });
 
+  it('takes the cap, which is more hops than any deployment we know of', async () => {
+    process.env.TRUSTED_PROXY_HOPS = '4';
+    expect(await loadHops()).toBe(4);
+  });
+
+  it('refuses one hop above the cap, naming the value, the cap and what the number is', async () => {
+    // A slip of the finger (11 for 1) would otherwise trust the whole
+    // forwarded chain on a one-proxy instance, which is the behaviour this
+    // setting exists to remove, and it would do it on an instance whose
+    // operator believes they configured it.
+    process.env.TRUSTED_PROXY_HOPS = '5';
+    await expect(loadHops()).rejects.toThrow(/Got 5; the maximum is 4/);
+    await expect(loadHops()).rejects.toThrow(/proxies in front of this app/);
+    // The cap, not the operator's topology, is what to argue with.
+    await expect(loadHops()).rejects.toThrow(/the cap in packages\/server\/src\/config\.ts/);
+  });
+
+  it('refuses a typo that would restore the old trust-everything behaviour', async () => {
+    process.env.TRUSTED_PROXY_HOPS = '11';
+    await expect(loadHops()).rejects.toThrow(/Got 11; the maximum is 4/);
+  });
+
   it.each([
     ['not a number', 'one'],
     ['a fraction', '1.5'],

@@ -97,6 +97,72 @@ if (!/^https?:\/\//i.test(sourceCodeUrl)) {
 // (no build step) — the § 13 offer still works via version + sourceCodeUrl.
 const commit = envOptional('BACKSPACE_COMMIT') ?? null;
 
+/**
+ * The most hops any real deployment has. A CDN, in front of the operator's own
+ * reverse proxy, in front of a tunnel daemon is three, so four is already one
+ * more than the deepest topology this project has been asked about.
+ *
+ * The cap exists because the failure above it is silent. `TRUSTED_PROXY_HOPS=11`
+ * as a slip of the finger for 1 trusts eleven hops, which on a one-proxy
+ * instance means the whole forwarded chain, which is the `trustProxy: true`
+ * behaviour this setting exists to remove. Nothing would look wrong: the
+ * operator configured the thing, and the instance boots. A number that cannot
+ * describe a real deployment is a typo, and it is refused the same way
+ * '2 hops' is.
+ */
+const MAX_TRUSTED_PROXY_HOPS = 4;
+
+/**
+ * How many proxies in front of this app are trusted to have written
+ * `X-Forwarded-For`, counted from the app outwards. It becomes Fastify's
+ * `trustProxy` (see `index.ts`), and through it the source of `request.ip`.
+ *
+ * At 1, `request.ip` is the entry the nearest proxy appended, which is the
+ * address that proxy actually saw. Anything a client writes into the header
+ * sits further left and is ignored. `true`, which this was until it became a
+ * count, trusts the whole chain and takes the left-most entry: whatever the
+ * client cared to send.
+ *
+ * That matters because this address is what every rate limit in the app keys
+ * on, the global one and the per-route ones (`docs/systems/api.md`, "Rate
+ * limiting") and the hand-written limiter on `POST /federation/peer/accept`,
+ * which is unauthenticated first contact. It is also what the request log
+ * records as `remoteAddress`.
+ *
+ * **What an operator sets it to.** The number of proxies they actually run
+ * in front of the app:
+ *
+ * - `1` (the default) for the bundled Caddy, an operator's own reverse
+ *   proxy, or a tunnel daemon. Every deployment mode this repo ships is one
+ *   hop.
+ * - `2` for a CDN in front of their own proxy. Left at 1, the app sees the
+ *   CDN's address and everyone behind it lands in one rate-limit bucket.
+ * - `0` for nothing in front at all. That case is not cosmetic: at 1 a lone
+ *   `X-Forwarded-For` entry cannot be told apart from a proxy's word, so a
+ *   directly exposed instance left at 1 believes whatever a client sends. At
+ *   0 the header is ignored and the socket address is used.
+ *
+ * Too low is a degradation (everyone behind the nearest proxy shares a
+ * bucket); too high is a hole (the key goes back to the client). When in
+ * doubt, too low.
+ *
+ * Both ways of getting it wrong refuse to boot rather than resolving to
+ * something the operator did not choose: a value that is not a non-negative
+ * integer, and a value above `MAX_TRUSTED_PROXY_HOPS`. See
+ * `docs/systems/web-security.md` section 9 and
+ * `docs/systems/deployment.md`, "Server proxy-awareness".
+ */
+const trustedProxyHops = envCount('TRUSTED_PROXY_HOPS', 1);
+if (trustedProxyHops > MAX_TRUSTED_PROXY_HOPS) {
+  throw new Error(
+    `TRUSTED_PROXY_HOPS is how many proxies in front of this app may be trusted to have written X-Forwarded-For, ` +
+    `and it is what every rate limit keys on. Got ${trustedProxyHops}; the maximum is ${MAX_TRUSTED_PROXY_HOPS}. ` +
+    `A CDN in front of your own reverse proxy in front of a tunnel is 3, so if you meant 1 or 2 this is a typo. ` +
+    `If your deployment really has more than ${MAX_TRUSTED_PROXY_HOPS} hops, the cap in packages/server/src/config.ts ` +
+    `is what to change, and we would like to hear about the topology.`
+  );
+}
+
 // The running version, read from this package's own manifest rather than kept
 // as a second copy in the source. A hand-maintained constant is what let the
 // reported version sit at 1.0.0 through two releases: it duplicated
@@ -145,46 +211,7 @@ export const config = {
   sourceCodeUrl,
   commit,
 
-  /**
-   * How many proxies in front of this app are trusted to have written
-   * `X-Forwarded-For`, counted from the app outwards. It becomes Fastify's
-   * `trustProxy` (see `index.ts`), and through it the source of `request.ip`.
-   *
-   * At 1, `request.ip` is the entry the nearest proxy appended, which is the
-   * address that proxy actually saw. Anything a client writes into the header
-   * sits further left and is ignored. `true`, which this was until it became a
-   * count, trusts the whole chain and takes the left-most entry: whatever the
-   * client cared to send.
-   *
-   * That matters because this address is what every rate limit in the app keys
-   * on, the global one and the per-route ones (`docs/systems/api.md`, "Rate
-   * limiting") and the hand-written limiter on `POST /federation/peer/accept`,
-   * which is unauthenticated first contact. It is also what the request log
-   * records as `remoteAddress`.
-   *
-   * **What an operator sets it to.** The number of proxies they actually run
-   * in front of the app:
-   *
-   * - `1` (the default) for the bundled Caddy, an operator's own reverse
-   *   proxy, or a tunnel daemon. Every deployment mode this repo ships is one
-   *   hop.
-   * - `2` for a CDN in front of their own proxy. Left at 1, the app sees the
-   *   CDN's address and everyone behind it lands in one rate-limit bucket.
-   * - `0` for nothing in front at all. That case is not cosmetic: at 1 a lone
-   *   `X-Forwarded-For` entry cannot be told apart from a proxy's word, so a
-   *   directly exposed instance left at 1 believes whatever a client sends. At
-   *   0 the header is ignored and the socket address is used.
-   *
-   * Too low is a degradation (everyone behind the nearest proxy shares a
-   * bucket); too high is a hole (the key goes back to the client). When in
-   * doubt, too low.
-   *
-   * A mistyped value refuses to boot rather than falling back to 1, because a
-   * silent fallback is indistinguishable from a deliberate 1. See
-   * `docs/systems/web-security.md` section 9 and
-   * `docs/systems/deployment.md`, "Server proxy-awareness".
-   */
-  trustedProxyHops: envCount('TRUSTED_PROXY_HOPS', 1),
+  trustedProxyHops,
 
   livekit: {
     url: envOptional('LIVEKIT_URL'),

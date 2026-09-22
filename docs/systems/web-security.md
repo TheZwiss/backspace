@@ -668,7 +668,16 @@ topology, which only the operator knows, and because the app ships as a
 published image: a number baked into it could not be corrected by the two
 deployments that need a different one. A value that is not a non-negative
 integer stops the server at boot with a message instead of falling back to 1,
-so a mistyped setting cannot pass for a chosen one.
+so a mistyped setting cannot pass for a chosen one, and so does any value
+above **4**. That cap is there because the failure above it is the quiet one:
+`TRUSTED_PROXY_HOPS=11`, typed for 1, trusts the whole forwarded chain on a
+one-proxy instance, which is the `trustProxy: true` behaviour this setting
+exists to remove, on an instance whose operator believes it is configured. A
+CDN in front of an operator's own reverse proxy in front of a tunnel daemon is
+three hops, so four is already one more than the deepest topology anyone has
+described; the boot error names the value, the cap and where the cap lives, so
+an operator who genuinely exceeds it knows to argue with the cap rather than
+with their own network.
 
 The alternative, `trustProxy: true`, trusts the whole chain and takes the
 left-most entry, which is whatever the client cared to send. The app ran that
