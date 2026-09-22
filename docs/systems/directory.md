@@ -311,9 +311,11 @@ it; every request revalidates against the instance, and the in-memory cache
 answers those revalidations. The hub's own fetch sends `cache: 'no-store'`
 for the same reason. The in-memory cache is the guard against polling: the
 hub's fetches arrive from many Cloudflare addresses, and the app's global
-per-user-or-IP limiter is no help against a distributed reader. The cache
-never serves a document older than the last change, which is what makes an
-immediate delist ping fetch the delist rather than the previous document.
+limiter is keyed on the client address (never on the account, see
+[api.md](api.md) "Rate limiting"), so it is no help against a distributed
+reader. The cache never serves a document older than the last change, which is
+what makes an immediate delist ping fetch the delist rather than the previous
+document.
 
 ---
 
@@ -439,9 +441,15 @@ the reply's), and:
 - has its own `@fastify/rate-limit` config of 30 requests per minute under
   the global 200, since distinct `q` and `offset` values miss the cache and
   the global limit would let one user drive a few hundred thousand hub reads
-  a day through their instance. The key is the global limiter's key, which
-  today resolves to the client address because the limiter runs before
-  authentication, so the 30 per minute is per address in practice.
+  a day through their instance. It inherits the global limiter's key, which
+  is the client address and nothing else: the limiter is registered as a
+  plugin whose hook runs before authentication, so `request.userId` is unset
+  when the key is taken. That is structural, not a default that might change.
+  The consequence is an operator's to know: **the 30 per minute is per
+  address, so everyone behind one NAT, VPN exit or corporate proxy shares it**,
+  and a single busy browser there can spend the minute's Outer Space searches
+  for everybody at that address. Same key, same reasoning and the same
+  countermeasures as the global limit ([api.md](api.md) "Rate limiting").
 
 `404 directory_disabled` when `DIRECTORY_ENDPOINT` is empty; `502
 directory_unreachable` when the hub does not answer or answers badly, which
