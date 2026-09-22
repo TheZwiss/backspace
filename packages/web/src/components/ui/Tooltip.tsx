@@ -14,8 +14,6 @@ interface TooltipProps {
 export function Tooltip({ content, children, position = 'right', delay = 200 }: TooltipProps) {
   const isMobile = useUIStore((s) => s.isMobile);
 
-  // No tooltips on touch devices — return children unwrapped
-  if (isMobile) return <>{children}</>;
   const [isVisible, setIsVisible] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout>>();
   const anchorRef = useRef<HTMLDivElement>(null);
@@ -42,6 +40,12 @@ export function Tooltip({ content, children, position = 'right', delay = 200 }: 
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
   }, []);
+
+  // No tooltips on touch devices: render the children unwrapped. This has to
+  // sit below every hook call, because isMobile flips when the viewport
+  // crosses the mobile breakpoint, and an early return above the hooks would
+  // change the hook count between two renders of the same component.
+  if (isMobile) return <>{children}</>;
 
   return (
     <div ref={anchorRef} className="relative inline-flex" onMouseEnter={show} onMouseLeave={hide}>

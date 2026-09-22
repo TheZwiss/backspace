@@ -83,6 +83,19 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
     }
   }, [space?.name, space?.icon, space?.banner, space?.avatarColor]);
 
+  // Kept above the `!space` guard: deleting the space drops it out of the
+  // store while this panel is still mounted, and a hook below the guard would
+  // stop being called on that render.
+  const transferCandidates = useMemo(() => {
+    const candidates = members.filter(m => m.userId !== currentUser?.id);
+    if (!transferSearch.trim()) return candidates;
+    const q = transferSearch.toLowerCase();
+    return candidates.filter(m =>
+      m.user.displayName?.toLowerCase().includes(q) ||
+      m.user.username.toLowerCase().includes(q)
+    );
+  }, [members, currentUser?.id, transferSearch]);
+
   if (!space) return null;
 
   const hasNameChange = spaceName.trim() !== space.name;
@@ -248,16 +261,6 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
   };
 
   // Transfer ownership logic
-  const transferCandidates = useMemo(() => {
-    const candidates = members.filter(m => m.userId !== currentUser?.id);
-    if (!transferSearch.trim()) return candidates;
-    const q = transferSearch.toLowerCase();
-    return candidates.filter(m =>
-      m.user.displayName?.toLowerCase().includes(q) ||
-      m.user.username.toLowerCase().includes(q)
-    );
-  }, [members, currentUser?.id, transferSearch]);
-
   const transferTarget = transferTargetId ? members.find(m => m.userId === transferTargetId) : null;
 
   const handleTransfer = async () => {
