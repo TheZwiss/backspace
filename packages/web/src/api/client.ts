@@ -138,17 +138,18 @@ export class HttpError extends Error {
 }
 
 /**
- * A 429 from any route. An HttpError with the `rate_limited` code, so
- * `describeError` says it in the user's language, plus the seconds to wait
- * for the surfaces that count down (the auth pages).
+ * A 429 from any route. An HttpError with the body's own code when the
+ * route sends one (`lookup_rate_limited`, say) and `rate_limited` otherwise,
+ * so `describeError` says it in the user's language, plus the seconds to
+ * wait for the surfaces that count down (the auth pages).
  */
 export class RateLimitError extends HttpError {
   /** Seconds until the limiter admits the next request: the body's `retryAfter`, the Retry-After header, or 60. */
   readonly retryAfter: number;
 
   constructor(retryAfter: number, body?: unknown) {
-    const { errorText, details } = readErrorBody(body);
-    super(429, errorText ?? 'Rate limit exceeded', body, 'rate_limited', details);
+    const { errorText, code, details } = readErrorBody(body);
+    super(429, errorText ?? 'Rate limit exceeded', body, code ?? 'rate_limited', details);
     this.name = 'RateLimitError';
     this.retryAfter = retryAfter;
   }

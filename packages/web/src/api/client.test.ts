@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createApiClient, HttpError, RateLimitError } from './client';
+import { describeError } from '../i18n/errors';
 
 const originalFetch = globalThis.fetch;
 
@@ -37,6 +38,17 @@ describe('a 429 answer', () => {
     expect(limited.code).toBe('rate_limited');
     expect(limited.retryAfter).toBe(17);
     expect(limited.message).toBe('Too many requests');
+  });
+
+  it('keeps the server\'s own 429 code so its catalog text is reachable', async () => {
+    answer(429, JSON.stringify({ error: 'Too many lookups', code: 'lookup_rate_limited', statusCode: 429, retryAfter: 60 }), {
+      'content-type': 'application/json',
+    });
+    const err = (await thrownBy(() => client.users.me())) as RateLimitError;
+    expect(err).toBeInstanceOf(RateLimitError);
+    expect(err.code).toBe('lookup_rate_limited');
+    expect(err.retryAfter).toBe(60);
+    expect(describeError(err)).toBe('Too many lookups. Try again in a minute.');
   });
 
   it('keeps details from the body when there are any', async () => {

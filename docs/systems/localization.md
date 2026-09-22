@@ -328,10 +328,12 @@ and every per-route override of it) answers in the same shape through its
 code is typed there too: `{ error, code: 'rate_limited', statusCode: 429,
 retryAfter }`, with `retryAfter` in seconds next to the `Retry-After` header
 the plugin sets. On the client every 429 throws `RateLimitError`, an
-`HttpError` with `status 429` and the `rate_limited` code plus `retryAfter`,
-so `describeError` localizes it like any other server error and the auth
-pages keep their countdown. The federated lookup's `lookup_rate_limited` is
-a different code because it reports a peer's limit, not this instance's.
+`HttpError` with `status 429`, the body's own code when the route sends
+one and `rate_limited` otherwise, plus `retryAfter`, so `describeError`
+localizes it like any other server error and the auth pages keep their
+countdown. The federated lookup's `lookup_rate_limited` is a different code
+because it reports a peer's limit, not this instance's; it reaches the
+client through the same class and shows its own catalog text.
 
 Every route file is converted: auth, users, spaces, channels, messages, DMs
 (including the space-invite endpoint), social, explore, admin, settings,
