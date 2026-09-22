@@ -64,6 +64,23 @@ export function readDirectoryState(sqlite: Database.Database): DirectoryState {
   };
 }
 
+/**
+ * Whether people on this instance browse the directory: the incoming half of
+ * the feature, and the admin's own switch. The outgoing half (what this
+ * instance lists) is `DirectoryState.enabled` above, and the two never gate
+ * each other.
+ *
+ * The one place the column is read, so the proxy route and the public
+ * instance info can never disagree about what it means. A missing settings
+ * row reads as off, the same way `readDirectoryState` treats one.
+ */
+export function readDirectoryBrowseEnabled(sqlite: Database.Database): boolean {
+  const row = sqlite.prepare(
+    'SELECT directory_browse_enabled FROM instance_settings WHERE id = 1',
+  ).get() as { directory_browse_enabled: number } | undefined;
+  return row?.directory_browse_enabled === 1;
+}
+
 export function getDocumentVersion(): number {
   return documentVersion;
 }

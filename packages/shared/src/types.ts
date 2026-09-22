@@ -822,6 +822,13 @@ export interface InstanceAdminSettings {
   defaultAutoRotateIntervalDays: number;
   autoAcceptPeering: boolean;
   directoryEnabled: boolean;
+  /**
+   * The other directory axis: whether people on this instance see spaces from
+   * other instances in Explore. Independent of `directoryEnabled`, which is
+   * what this instance sends out. `DIRECTORY_ENDPOINT` sits above it: with no
+   * endpoint there is nothing to browse whatever this says.
+   */
+  directoryBrowseEnabled: boolean;
   /** Read-only on the wire; the server ignores them on PATCH. */
   directoryLastPingAt: number | null;
   directoryLastError: DirectoryPingError | null;

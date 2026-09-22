@@ -13,11 +13,12 @@
 //   admin-global          the global rung, last ping shown, federated accounts open
 //   admin-closed          the global rung with federated accounts closed: the amber note and its button, and a fetch error with reason
 //   admin-origin          the global rung, never reported, the hub refused the instance's address
+//   admin-no-directory    the local rung on an instance with no DIRECTORY_ENDPOINT: the browse row is inert and says why
 //   space-admin-off       public space, the instance has the directory off
 //   space-private         private space, the instance allows the directory
 //   space-listed          public space, listed
 import { createRoot } from 'react-dom/client';
-import type { InstanceAdminSettings, InstanceStreamingLimits } from '@backspace/shared';
+import type { InstanceAdminSettings, InstanceInfoResponse, InstanceStreamingLimits } from '@backspace/shared';
 import { GeneralPanel } from '../components/modals/instanceSettingsPanels/GeneralPanel';
 import { DiscoveryPanel } from '../components/modals/SpaceSettings';
 import { useSettingsStore } from '../stores/settingsStore';
@@ -32,6 +33,7 @@ type Scene =
   | 'admin-global'
   | 'admin-closed'
   | 'admin-origin'
+  | 'admin-no-directory'
   | 'space-admin-off'
   | 'space-private'
   | 'space-listed';
@@ -42,6 +44,7 @@ const SCENES: ReadonlySet<string> = new Set<Scene>([
   'admin-global',
   'admin-closed',
   'admin-origin',
+  'admin-no-directory',
   'space-admin-off',
   'space-private',
   'space-listed',
@@ -70,6 +73,7 @@ const ADMIN_BASE: InstanceAdminSettings = {
   defaultAutoRotateIntervalDays: 90,
   autoAcceptPeering: true,
   directoryEnabled: true,
+  directoryBrowseEnabled: true,
   directoryLastPingAt: LAST_PING_AT,
   directoryLastError: null,
 };
@@ -88,7 +92,45 @@ const ADMIN_SCENES: Record<Extract<Scene, `admin-${string}`>, InstanceAdminSetti
     directoryLastPingAt: null,
     directoryLastError: { at: LAST_PING_AT, status: 'origin' },
   },
+  'admin-no-directory': { ...ADMIN_BASE, directoryEnabled: false, directoryLastPingAt: null },
 };
+
+/** Scenes standing in for an instance with DIRECTORY_ENDPOINT unset. */
+const NO_ENDPOINT_SCENES: ReadonlySet<Scene> = new Set<Scene>(['admin-no-directory']);
+
+/**
+ * The General panel reads `directoryAvailable` from the public instance info,
+ * and the harness has no server to answer it. Without this the browse row
+ * would always render the "answer never arrived" state and the one state
+ * worth looking at, an instance with no directory to reach, could not be seen
+ * at all. Only that one request is intercepted; everything else goes through.
+ */
+function stubInstanceInfo(scene: Scene): void {
+  const settings = isAdminScene(scene) ? ADMIN_SCENES[scene] : null;
+  const info: InstanceInfoResponse = {
+    name: 'Workbench',
+    version: '1.4.0',
+    registrationOpen: true,
+    federatedRegistrationOpen: settings?.federatedRegistrationOpen ?? true,
+    instanceId: '123e4567-e89b-12d3-a456-426614174000',
+    sourceCodeUrl: 'https://github.com/TheZwiss/backspace',
+    commit: null,
+    // What the server computes: an endpoint to reach, and the setting on.
+    directoryAvailable: !NO_ENDPOINT_SCENES.has(scene) && (settings?.directoryBrowseEnabled ?? true),
+    directoryEnabled: settings?.directoryEnabled ?? false,
+  };
+  const passThrough = window.fetch.bind(window);
+  window.fetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    if (url.includes('/instance/info')) {
+      return Promise.resolve(new Response(JSON.stringify(info), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }));
+    }
+    return passThrough(input, init);
+  };
+}
 
 const LIMITS: InstanceStreamingLimits = {
   maxBitrateKbps: 20000,
@@ -158,6 +200,7 @@ async function start(): Promise<void> {
   const scene = readScene(window.location.search);
   initializeInterfaceScale();
   await initI18n();
+  stubInstanceInfo(scene);
   seedStores(scene);
   const host = document.getElementById('root');
   if (!host) throw new Error('missing #root');

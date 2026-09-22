@@ -9,14 +9,14 @@ never holds anything an instance does not serve on a public endpoint of its
 own.
 
 Source files:
-- `packages/server/src/directory/state.ts` - the four `instance_settings` columns, `markDirectoryDirty`, the in-memory document version
+- `packages/server/src/directory/state.ts` - the five `instance_settings` columns, `markDirectoryDirty`, `readDirectoryBrowseEnabled`, the in-memory document version
 - `packages/server/src/directory/document.ts` - `buildDirectoryDocument`, the pure builder, and `absoluteAssetUrl`
 - `packages/server/src/directory/pinger.ts` - `sendDirectoryPing`, `pingerTick`, `startDirectoryPinger`, `stopDirectoryPinger`
 - `packages/server/src/routes/directory.ts` - `GET /api/directory/spaces` (the document) and `GET /api/directory` (the feed proxy)
 - `packages/server/src/routes/settings.ts` - `applyDiscoveryAndDirectory`, the discovery-off invariant, the dirty marks on both PATCH routes
 - `packages/server/src/routes/spaces.ts` - `directoryListed` on `PATCH /api/spaces/:id`, the dirty marks on update and delete
-- `packages/server/src/routes/instance.ts` - `directoryEnabled` on the public instance info
-- `packages/server/drizzle/0015_real_tomas.sql` - the five columns
+- `packages/server/src/routes/instance.ts` - `directoryAvailable` and `directoryEnabled` on the public instance info
+- `packages/server/drizzle/0015_real_tomas.sql` - the five columns; `0016_whole_loki.sql` - `directory_browse_enabled`
 - `packages/shared/src/types.ts` - `DirectoryPingError`, `DirectoryDocument`, `DirectoryDocumentSpace`, `DirectoryEntry`, `DirectoryFeed`
 - `packages/shared/src/errors.ts` - the four `directory_*` error codes
 - `scripts/directory-hub/` - the Cloudflare Worker at `explore.backspacechat.com` (`src/index.ts` routes, `src/validate.ts`, `src/store.ts`, `src/hash.ts`, `migrations/0001_directory.sql`)
@@ -107,12 +107,38 @@ dirty flag only if nothing changed while its ping was in flight (section 5).
 
 ## 3. Opt-in state
 
-Four columns on `instance_settings` and one on `spaces` (see
-[database.md](database.md)), added by migration `0015_real_tomas`.
+### The two axes
+
+The directory has two directions, and neither gates the other.
+
+| Axis | Question | Admin setting | Above it |
+|---|---|---|---|
+| Outgoing | How far do spaces on this instance travel? | the discovery ladder, `discovery_enabled` + `directory_enabled` | `DIRECTORY_ENDPOINT` (no endpoint, no pinger) |
+| Incoming | Do the people on this instance see spaces from other instances? | `directory_browse_enabled` | `DIRECTORY_ENDPOINT` (no endpoint, nothing to browse) |
+
+An admin can list this instance's spaces globally while its own people browse
+nothing, and can browse everything while listing nothing. The reasons to turn
+browsing off are concrete: an Outer Space card loads its icon and banner as
+absolute URLs on the instance that owns the space, so opening Explore makes
+every user's browser contact hosts chosen by strangers; space names,
+descriptions and images authored by people the admin has no relationship with
+render inside their client with no moderation path; and some deployments
+forbid the outbound dependency on a third-party hub outright.
+
+`DIRECTORY_ENDPOINT` sits above both. It is the operator-level switch, and an
+empty value stops the pinger and browsing together; `directory_browse_enabled`
+cannot switch browsing on without an endpoint to reach.
+
+### The columns
+
+Five columns on `instance_settings` and one on `spaces` (see
+[database.md](database.md)), added by migrations `0015_real_tomas` and
+`0016_whole_loki`.
 
 | Column | Meaning |
 |---|---|
 | `instance_settings.directory_enabled` | `0` or `1`: the admin allows spaces on this instance to be listed |
+| `instance_settings.directory_browse_enabled` | `0` or `1`, default `1`: the admin allows people here to see spaces from other instances in Explore |
 | `instance_settings.directory_dirty` | `0` or `1`: a ping is owed. Set by every change to the served document except member counts, cleared by a successful ping that was sent after the change. Survives restarts and survives the toggle being off |
 | `instance_settings.directory_last_ping_at` | ms timestamp of the last ping the hub accepted, null before the first |
 | `instance_settings.directory_last_error` | JSON `DirectoryPingError` of the last failed ping, null after a success |
@@ -145,6 +171,26 @@ pinger's change ping scheduler.
 A space is served (section 4) when all four hold: `directory_enabled = 1`,
 `discovery_enabled = 1`, `spaces.directory_listed = 1`, and `visibility` is
 `public` or `request`.
+
+**What `directory_browse_enabled` gates, and what it does not.** Exactly two
+reads, both through `readDirectoryBrowseEnabled` in `directory/state.ts`, the
+one place the column is read:
+
+- `GET /api/directory`, the feed proxy, answers `404 directory_disabled` while
+  it is `0`, before any upstream fetch or cache read, which is the same answer
+  an empty `DIRECTORY_ENDPOINT` already gives. The client already renders that
+  as "no Outer Space", so the hiding needed no client work.
+- `directoryAvailable` on the public `GET /api/instance/info` is
+  `config.directory.endpoint !== ''` **and** the flag. The endpoint is checked
+  first, so no setting can advertise a directory the instance cannot reach.
+
+It gates nothing else. It is not in the served document, it never reaches the
+hub, the pinger does not read it, and `directoryDocumentChanged` in
+`routes/settings.ts` deliberately does not list it: a change to what this
+instance shows its own people owes the hub nothing, and marking the document
+dirty for it would cost every instance in the fleet a pointless ping. It is
+also absent from `InstanceStreamingLimits`, because no non-admin surface reads
+it; the Explore page learns the answer from `directoryAvailable`.
 
 **Discovery off implies directory off.** `applyDiscoveryAndDirectory` in
 `routes/settings.ts` is the one place the invariant lives, and both PATCH
@@ -181,8 +227,11 @@ everywhere a space is serialised: the spaces routes, the explore routes, and
 the WebSocket ready payload.
 
 On the wire: `GET /api/settings/instance` carries `directoryEnabled`,
-`directoryLastPingAt` and `directoryLastError` (the last two are read-only;
-the PATCH ignores them in the body). `GET /api/settings/streaming`
+`directoryBrowseEnabled`, `directoryLastPingAt` and `directoryLastError` (the
+last two are read-only; the PATCH ignores them in the body).
+`PATCH /api/settings/instance` accepts `directoryBrowseEnabled` as a strict
+boolean (`400 field_not_boolean` otherwise) and writes it on its own: it is
+not part of the discovery invariant and nothing clears it. `GET /api/settings/streaming`
 (`InstanceStreamingLimits`, readable by any signed-in user) carries
 `directoryEnabled` too, so the space settings panel of a non-admin can tell
 whether the instance allows listing. The public `GET /api/instance/info`
@@ -630,18 +679,19 @@ One page, one search box, two sections in fixed order, strictly disjoint.
 **The section is gated on the home instance's `directoryAvailable`, not on
 the listing toggle.** `ExplorePage` reads the public `GET /api/instance/info`
 once on mount and renders `OuterSpaceSection` only when `directoryAvailable`
-is true, which the server sets from `config.directory.endpoint !== ''`; with
+is true, which the server sets from `config.directory.endpoint !== ''` and the
+admin's `directoryBrowseEnabled` (section 3); with
 it false, or the request failing, or an older server that does not send the
 field, the section is absent and the search box never hits the proxy.
 Browsing needs only an endpoint. The admin's listing opt-in
 (`directoryEnabled`, section 3) is a separate switch that the page does not
 read: an instance whose admin lists nothing still shows Outer Space, which is
 the cold-start case the directory exists for (a fresh instance with no peers
-must be able to browse). Browsing and listing are two independent opt-ins,
-the operator's endpoint and the admin's toggle. The proxy's own
-`404 directory_disabled` (an empty
-`DIRECTORY_ENDPOINT`) is handled a second way: the store's `disabled` status
-renders nothing. The flag is read once per mount, so an endpoint changed
+must be able to browse). Browsing and listing are the two independent axes of
+section 3. The proxy's own `404 directory_disabled` (an empty
+`DIRECTORY_ENDPOINT`, or browsing switched off) is handled a second way: the
+store's `disabled` status renders nothing, which is what a client on an older
+build, or one whose mount predated the change, falls back to. The flag is read once per mount, so an endpoint changed
 under a running instance is reflected on the next visit, after the restart
 the change needs anyway.
 
@@ -907,6 +957,25 @@ own only radios:
   that people browsing the directory load the icon and banner from this
   instance.
 
+Directly under the ladder, in the same section and separated from it by a
+rule, one switch: "Show global spaces in Explore", with "People here see
+spaces from other instances in Outer Space. Their browsers load those spaces'
+icons and banners from the instances that own them." It is the incoming axis
+of section 3, so it sits beside the ladder rather than as a fourth rung of it,
+and it is a draft field saved by the panel's normal save bar like the rungs,
+not an immediate write. The three-rung ladder is a `radiogroup`, which may own
+only radios, so the switch is its sibling.
+
+The panel disables the switch and adds "This instance is not configured to
+reach a directory, so there is nothing to show." when the instance has no
+endpoint. It works that out from the same `GET /api/instance/info` the Explore
+page reads, paired with the saved setting: `directoryAvailable` is the
+endpoint and the setting together, so while the setting is on, an unavailable
+directory can only be a missing endpoint. While the setting is off the two
+causes cannot be told apart, and the panel says nothing rather than guess. The
+info is re-read after each save, so the pair is never taken from two sides of
+a change. Nothing was added to the API for this.
+
 `settingsStore.updateInstanceSettings` mirrors `discoveryEnabled` and
 `directoryEnabled` from the server's answer into `streamingLimits`, so the
 space settings panel below sees the cleared directory flag after the ladder
@@ -939,7 +1008,7 @@ lets the save's own error (`directory_requires_discovery`,
 
 Copy lives in the `spaces` namespace (`explore.inner.*`, `explore.outer.*`,
 `explore.connect.*`, `settings.discovery.directory.*`,
-`sidebar.dmList.explore`) and the `admin` namespace (`general.directory.*`),
+`sidebar.dmList.explore`) and the `admin` namespace (`general.discovery.*`, `general.directory.*`, `general.browse.*`),
 in `en`, `de`, `ru` and `zh`. The four server error codes
 `directory_disabled`, `directory_unreachable`, `directory_private_space` and
 `directory_requires_discovery` are registered in `packages/shared/src/errors.ts`
@@ -952,6 +1021,13 @@ and described in every `errors.json`. See [localization.md](localization.md).
 | Variable | Read by | Meaning |
 |---|---|---|
 | `DIRECTORY_ENDPOINT` | the server | hub base URL, default `https://explore.backspacechat.com` when the variable is unset. Trailing slashes are dropped. **An empty value disables the feature**: the pinger does not start and the proxy answers `404 directory_disabled`, for forks and air-gapped installs. Point it at a local `wrangler dev` to test end to end |
+
+This is the operator-level switch and it takes both axes down together. The
+admin-level switches are in the database: the discovery ladder for listing,
+`directory_browse_enabled` for browsing (section 3). An operator who wants
+only browsing off leaves the endpoint alone and lets the admin turn the switch
+off in the panel; one who wants the instance to contact no hub at all sets the
+variable empty, which needs a restart and cannot be undone from the UI.
 
 `config.directory.endpoint` is read directly from `process.env` rather than
 through the `envOptional` helper, which folds an empty value into unset and
@@ -1030,8 +1106,16 @@ back is found again without anyone touching a toggle.
 - **Browsing and listing are one endpoint.** Both the proxy and the pinger
   read `DIRECTORY_ENDPOINT`, so an operator cannot browse one hub and list on
   another, and an empty endpoint removes Outer Space along with the pinger.
-  Listing itself is the admin's separate toggle and lists nothing by itself:
-  no space is served until an owner asks.
+  Each direction has its own admin switch above that (section 3), and neither
+  lists anything by itself: no space is served until an owner asks.
+- **Browsing still hands a user's address to the instances on screen.**
+  Turning browsing off is all or nothing because an Outer Space card loads its
+  icon and banner straight from the instance that owns the space, so a user
+  who browses is seen by every instance whose card is rendered. The fix is to
+  proxy card images through the home instance, which would also let the home
+  instance cache and size them; it is not done. Until then the only way to
+  keep users from contacting strangers' hosts is the browse switch, and the
+  disclosure sentence in the admin panel says what a listed instance learns.
 - **A dropped socket leaves an instance's spaces in neither section.**
   `setInstanceStatus` moves a live instance to `disconnected` when its socket
   goes, without touching the registry, so the entry stays `connected`: the

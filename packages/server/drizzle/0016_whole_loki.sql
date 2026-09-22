@@ -1,0 +1,1 @@
+ALTER TABLE `instance_settings` ADD `directory_browse_enabled` integer DEFAULT 1 NOT NULL;

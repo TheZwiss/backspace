@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { InstanceAdminSettings } from '@backspace/shared';
+import type { InstanceAdminSettings, InstanceInfoResponse } from '@backspace/shared';
 import { GeneralPanel } from './GeneralPanel';
+import { api } from '../../../api/client';
 import { useSettingsStore } from '../../../stores/settingsStore';
 
 const INVITE = 'Invite only';
@@ -10,6 +11,28 @@ const LOCAL = 'Local space discovery';
 const GLOBAL = 'Global space discovery';
 const OPEN_ACCOUNTS = 'Open federated accounts';
 const DISCLOSURE = /its name, description, icon, banner, member count and this instance's address/;
+const BROWSE = 'Show global spaces in Explore';
+const NO_ENDPOINT = 'This instance is not configured to reach a directory, so there is nothing to show.';
+
+/** The public instance info, with the one field this panel reads set per test. */
+function info(directoryAvailable: boolean): InstanceInfoResponse {
+  return {
+    name: 'Workbench',
+    version: '1.4.0',
+    registrationOpen: true,
+    federatedRegistrationOpen: true,
+    instanceId: '123e4567-e89b-12d3-a456-426614174000',
+    sourceCodeUrl: 'https://example.test/source',
+    commit: null,
+    directoryAvailable,
+    directoryEnabled: false,
+  };
+}
+
+/** Replaces the default pending answer with a real one for this test. */
+function withInfo(directoryAvailable: boolean): void {
+  vi.spyOn(api.instance, 'info').mockResolvedValue(info(directoryAvailable));
+}
 
 const base: InstanceAdminSettings = {
   instanceName: 'Workbench',
@@ -22,6 +45,7 @@ const base: InstanceAdminSettings = {
   defaultAutoRotateIntervalDays: 90,
   autoAcceptPeering: true,
   directoryEnabled: false,
+  directoryBrowseEnabled: true,
   directoryLastPingAt: null,
   directoryLastError: null,
 };
@@ -40,11 +64,17 @@ function rung(name: string): HTMLElement {
 }
 
 beforeEach(() => {
+  // The default is "the answer has not arrived": a promise that never settles,
+  // so every test that does not care about the endpoint renders the panel in
+  // the state it holds before the info call returns, with no state update
+  // landing outside the test's control.
+  vi.spyOn(api.instance, 'info').mockReturnValue(new Promise<InstanceInfoResponse>(() => {}));
   useSettingsStore.setState({ instanceSettings: null, fetchInstanceSettings: vi.fn().mockResolvedValue(undefined) });
 });
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 describe('GeneralPanel discovery ladder', () => {
@@ -374,5 +404,126 @@ describe('GeneralPanel directory status refresh', () => {
     await act(async () => { vi.advanceTimersByTime(10_000); });
     expect(screen.getByRole('textbox', { name: 'Instance Name' })).toHaveValue('Renamed elsewhere');
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+  });
+});
+
+describe('GeneralPanel global browsing toggle', () => {
+  it('renders under the ladder with its label and description', () => {
+    seed({});
+    render(<GeneralPanel />);
+    expect(screen.getByRole('switch', { name: BROWSE })).toBeInTheDocument();
+    expect(screen.getByText(/People here see spaces from other instances in Outer Space/)).toBeInTheDocument();
+  });
+
+  it('is outside the discovery radiogroup, which owns only its rungs', () => {
+    seed({});
+    render(<GeneralPanel />);
+    const group = screen.getByRole('radiogroup', { name: 'Space discovery' });
+    expect(within(group).queryByRole('switch')).not.toBeInTheDocument();
+  });
+
+  it('reflects the loaded value', () => {
+    seed({ directoryBrowseEnabled: true });
+    const { unmount } = render(<GeneralPanel />);
+    expect(screen.getByRole('switch', { name: BROWSE })).toBeChecked();
+    unmount();
+
+    seed({ directoryBrowseEnabled: false });
+    render(<GeneralPanel />);
+    expect(screen.getByRole('switch', { name: BROWSE })).not.toBeChecked();
+  });
+
+  it('is a draft field: nothing is written until the panel is saved', async () => {
+    const update = seed({ directoryBrowseEnabled: true });
+    render(<GeneralPanel />);
+
+    await userEvent.click(screen.getByRole('switch', { name: BROWSE }));
+    expect(screen.getByRole('switch', { name: BROWSE })).not.toBeChecked();
+    expect(update).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ directoryBrowseEnabled: false }));
+  });
+
+  it('turns browsing back on through the same save path', async () => {
+    const update = seed({ directoryBrowseEnabled: false });
+    render(<GeneralPanel />);
+
+    await userEvent.click(screen.getByRole('switch', { name: BROWSE }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ directoryBrowseEnabled: true }));
+  });
+
+  it('leaves the ladder alone: the rung does not move and both its flags are sent unchanged', async () => {
+    const update = seed({ discoveryEnabled: true, directoryEnabled: true, directoryBrowseEnabled: true });
+    render(<GeneralPanel />);
+
+    await userEvent.click(screen.getByRole('switch', { name: BROWSE }));
+    expect(rung(GLOBAL)).toBeChecked();
+    expect(rung(LOCAL)).not.toBeChecked();
+    expect(rung(INVITE)).not.toBeChecked();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({
+      discoveryEnabled: true,
+      directoryEnabled: true,
+      directoryBrowseEnabled: false,
+    }));
+  });
+
+  it('moving the ladder leaves browsing where it was', async () => {
+    const update = seed({ discoveryEnabled: true, directoryEnabled: false, directoryBrowseEnabled: false });
+    render(<GeneralPanel />);
+
+    await userEvent.click(rung(GLOBAL));
+    expect(screen.getByRole('switch', { name: BROWSE })).not.toBeChecked();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({
+      discoveryEnabled: true,
+      directoryEnabled: true,
+      directoryBrowseEnabled: false,
+    }));
+  });
+
+  it('says there is no directory to reach, and disables the row, when the instance has no endpoint', async () => {
+    withInfo(false);
+    seed({ directoryBrowseEnabled: true });
+    render(<GeneralPanel />);
+
+    expect(await screen.findByText(NO_ENDPOINT)).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: BROWSE })).toBeDisabled();
+  });
+
+  it('says nothing while the instance can reach a directory', async () => {
+    withInfo(true);
+    seed({ directoryBrowseEnabled: true });
+    render(<GeneralPanel />);
+
+    await screen.findByRole('switch', { name: BROWSE });
+    expect(screen.queryByText(NO_ENDPOINT)).not.toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: BROWSE })).toBeEnabled();
+  });
+
+  it('says nothing while browsing is off, because the endpoint cannot be told apart from the setting', async () => {
+    withInfo(false);
+    seed({ directoryBrowseEnabled: false });
+    render(<GeneralPanel />);
+
+    await screen.findByRole('switch', { name: BROWSE });
+    expect(screen.queryByText(NO_ENDPOINT)).not.toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: BROWSE })).toBeEnabled();
+  });
+
+  it('re-reads the instance info after a save, so the pair is never read across a change', async () => {
+    const infoSpy = vi.spyOn(api.instance, 'info').mockResolvedValue(info(true));
+    seed({ directoryBrowseEnabled: true });
+    render(<GeneralPanel />);
+    await screen.findByRole('switch', { name: BROWSE });
+    expect(infoSpy).toHaveBeenCalledTimes(1);
+
+    await userEvent.click(screen.getByRole('switch', { name: BROWSE }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(infoSpy).toHaveBeenCalledTimes(2);
   });
 });

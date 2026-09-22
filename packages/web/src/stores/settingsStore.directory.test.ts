@@ -28,6 +28,7 @@ const settings: InstanceAdminSettings = {
   defaultAutoRotateIntervalDays: 90,
   autoAcceptPeering: true,
   directoryEnabled: false,
+  directoryBrowseEnabled: true,
   directoryLastPingAt: null,
   directoryLastError: null,
 };

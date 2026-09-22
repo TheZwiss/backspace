@@ -1,8 +1,9 @@
 import type { FastifyInstance } from 'fastify';
 import { eq } from 'drizzle-orm';
-import { getDb, schema } from '../db/index.js';
+import { getDb, getRawDb, schema } from '../db/index.js';
 import { config } from '../config.js';
 import { getInstanceId } from '../utils/federationEpoch.js';
+import { readDirectoryBrowseEnabled } from '../directory/state.js';
 import type { InstanceInfoResponse } from '@backspace/shared';
 
 export async function instanceRoutes(app: FastifyInstance): Promise<void> {
@@ -27,8 +28,11 @@ export async function instanceRoutes(app: FastifyInstance): Promise<void> {
       // network user (and federated peer) — public/unauthenticated by design.
       sourceCodeUrl: config.sourceCodeUrl,
       commit: config.commit,
-      // Browsing needs only an endpoint; listing is the admin's separate opt-in.
-      directoryAvailable: config.directory.endpoint !== '',
+      // Browsing needs an endpoint to reach and the admin's permission to use
+      // it. The endpoint is asked first: it is the operator-level switch, and
+      // the admin's flag cannot conjure a directory that is not configured.
+      // Listing is the other axis entirely, and its own opt-in below.
+      directoryAvailable: config.directory.endpoint !== '' && readDirectoryBrowseEnabled(getRawDb()),
       directoryEnabled: settings?.directoryEnabled === 1,
     };
 

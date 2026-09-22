@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { api } from '../../../api/client';
+import { Toggle } from '../../ui/Toggle';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { useUIStore } from '../../../stores/uiStore';
 import { describeError } from '../../../i18n/errors';
@@ -20,6 +22,7 @@ interface InstanceDraft {
   instanceName: string;
   discoveryEnabled: boolean;
   directoryEnabled: boolean;
+  directoryBrowseEnabled: boolean;
 }
 
 function draftFrom(settings: InstanceAdminSettings): InstanceDraft {
@@ -27,13 +30,15 @@ function draftFrom(settings: InstanceAdminSettings): InstanceDraft {
     instanceName: settings.instanceName,
     discoveryEnabled: settings.discoveryEnabled,
     directoryEnabled: settings.directoryEnabled,
+    directoryBrowseEnabled: settings.directoryBrowseEnabled,
   };
 }
 
 function sameDraft(a: InstanceDraft, b: InstanceDraft): boolean {
   return a.instanceName === b.instanceName
     && a.discoveryEnabled === b.discoveryEnabled
-    && a.directoryEnabled === b.directoryEnabled;
+    && a.directoryEnabled === b.directoryEnabled
+    && a.directoryBrowseEnabled === b.directoryBrowseEnabled;
 }
 
 type PingReasonKey =
@@ -115,6 +120,14 @@ export function GeneralPanel() {
   const [gifKeyDraft, setGifKeyDraft] = useState('');
   const [openingRegistration, setOpeningRegistration] = useState(false);
 
+  // `directoryAvailable` from the public instance info: the operator's
+  // DIRECTORY_ENDPOINT and the browse setting together, or null while the
+  // answer has not arrived and after a request that failed.
+  const [directoryAvailable, setDirectoryAvailable] = useState<boolean | null>(null);
+  // Bumped after a save so the pair below is never read across a change to
+  // the very setting it is derived from.
+  const [directoryProbe, setDirectoryProbe] = useState(0);
+
   // The settings the draft was last seeded from. A background refresh only
   // reseeds the draft while it still equals this, so an unsaved edit survives
   // the 10 second poll and a save or reset is what moves it on.
@@ -144,6 +157,18 @@ export function GeneralPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [instanceSettings]);
 
+  useEffect(() => {
+    let cancelled = false;
+    api.instance.info()
+      .then((info) => { if (!cancelled) setDirectoryAvailable(info.directoryAvailable === true); })
+      .catch(() => {
+        // Unknown, which the row treats as "say nothing": an instance whose
+        // own info endpoint is unreachable has bigger news than this toggle.
+        if (!cancelled) setDirectoryAvailable(null);
+      });
+    return () => { cancelled = true; };
+  }, [directoryProbe]);
+
   // The directory status line follows the pinger while the panel is open.
   useEffect(() => {
     const timer = setInterval(() => { void fetchInstanceSettings(); }, INSTANCE_SETTINGS_REFRESH_MS);
@@ -164,6 +189,7 @@ export function GeneralPanel() {
         instanceName: draft.instanceName,
         discoveryEnabled: draft.discoveryEnabled,
         directoryEnabled: draft.directoryEnabled,
+        directoryBrowseEnabled: draft.directoryBrowseEnabled,
       };
       if (gifKeyDirty) {
         payload.gifApiKey = gifKeyDraft;
@@ -180,6 +206,7 @@ export function GeneralPanel() {
       }
       setGifKeyDirty(false);
       setGifKeyDraft('');
+      setDirectoryProbe((n) => n + 1);
       addToast(t('common:states.settingsSaved'), 'success', 2000);
     } catch (err) {
       setSaveError(err instanceof Error ? describeError(err) : t('common:states.saveFailed'));
@@ -216,6 +243,20 @@ export function GeneralPanel() {
       setOpeningRegistration(false);
     }
   };
+
+  /**
+   * Whether this instance has no directory to reach at all.
+   *
+   * The public info reports one flag, `directoryAvailable`, which is the
+   * operator's `DIRECTORY_ENDPOINT` and the browse setting together. Read as
+   * a pair with the saved setting it answers the only question this row has:
+   * while browsing is on, an unavailable directory can only mean no endpoint
+   * is configured. While browsing is off the two causes cannot be told apart,
+   * so the row says nothing rather than guess, and `directoryProbe` re-reads
+   * the flag after a save so the pair is never taken from two sides of a
+   * change.
+   */
+  const noDirectoryEndpoint = directoryAvailable === false && instanceSettings.directoryBrowseEnabled;
 
   const lastError = instanceSettings.directoryLastError;
   const lastErrorReasonKey = lastError === null ? null : pingReasonKey(lastError);
@@ -325,6 +366,29 @@ export function GeneralPanel() {
               <p className="text-xs text-txt-tertiary">{t('admin:general.directory.disclosure')}</p>
             </div>
           )}
+          {/*
+            The other direction. The ladder is how far spaces here travel; this
+            row is what the people here are shown, and neither gates the other,
+            so it reads as its own row under a rule rather than as a fourth
+            rung of a ladder it does not belong to.
+          */}
+          <div className="mt-3 pt-3 border-t border-white/[0.04]">
+            <label className={`flex items-center justify-between gap-3 ${noDirectoryEndpoint ? '' : 'cursor-pointer'}`}>
+              <div className="min-w-0">
+                <div className="text-sm font-medium text-txt-primary">{t('admin:general.browse.toggleLabel')}</div>
+                <div className="text-xs text-txt-tertiary mt-0.5">{t('admin:general.browse.toggleDescription')}</div>
+              </div>
+              <Toggle
+                enabled={draft.directoryBrowseEnabled}
+                onChange={(value) => setDraft({ ...draft, directoryBrowseEnabled: value })}
+                disabled={noDirectoryEndpoint}
+                ariaLabel={t('admin:general.browse.toggleLabel')}
+              />
+            </label>
+            {noDirectoryEndpoint && (
+              <p className="mt-2 text-xs text-txt-tertiary">{t('admin:general.browse.unavailable')}</p>
+            )}
+          </div>
         </div>
       </div>
 

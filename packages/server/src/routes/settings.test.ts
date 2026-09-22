@@ -267,6 +267,83 @@ describe('directory fields on GET /api/settings/instance', () => {
   });
 });
 
+describe('directoryBrowseEnabled on the instance settings routes', () => {
+  it('is on by default, so an upgrade changes nothing for anyone', async () => {
+    expect(readSettings().directoryBrowseEnabled).toBe(1);
+    const res = await app.inject({ method: 'GET', url: '/api/settings/instance' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().directoryBrowseEnabled).toBe(true);
+  });
+
+  it('turns browsing off and says so on the way back', async () => {
+    const res = await app.inject({ method: 'PATCH', url: '/api/settings/instance', payload: { directoryBrowseEnabled: false } });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().directoryBrowseEnabled).toBe(false);
+    expect(readSettings().directoryBrowseEnabled).toBe(0);
+    expect((await app.inject({ method: 'GET', url: '/api/settings/instance' })).json().directoryBrowseEnabled).toBe(false);
+  });
+
+  it('turns browsing back on', async () => {
+    setSettings({ directoryBrowseEnabled: 0 });
+    const res = await app.inject({ method: 'PATCH', url: '/api/settings/instance', payload: { directoryBrowseEnabled: true } });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().directoryBrowseEnabled).toBe(true);
+    expect(readSettings().directoryBrowseEnabled).toBe(1);
+  });
+
+  it('rejects a non-boolean with field_not_boolean and writes nothing', async () => {
+    const res = await app.inject({ method: 'PATCH', url: '/api/settings/instance', payload: { directoryBrowseEnabled: 'yes' } });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toMatchObject({ code: 'field_not_boolean', details: { field: 'directoryBrowseEnabled' } });
+    expect(readSettings().directoryBrowseEnabled).toBe(1);
+  });
+
+  it('is independent of the listing axis: neither switch moves the other', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/settings/instance',
+      payload: { discoveryEnabled: true, directoryEnabled: true, directoryBrowseEnabled: false },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ directoryEnabled: true, directoryBrowseEnabled: false });
+
+    const off = await app.inject({ method: 'PATCH', url: '/api/settings/instance', payload: { discoveryEnabled: false } });
+    expect(off.statusCode).toBe(200);
+    expect(off.json()).toMatchObject({ directoryEnabled: false, directoryBrowseEnabled: false });
+  });
+
+  // The regression that would cost every instance in the fleet a pointless
+  // hub ping: what this instance shows its own people is not in the document
+  // it serves, so changing it owes nothing.
+  it('does not mark the directory dirty, either way', async () => {
+    const off = await app.inject({ method: 'PATCH', url: '/api/settings/instance', payload: { directoryBrowseEnabled: false } });
+    expect(off.statusCode).toBe(200);
+    expect(readSettings().directoryDirty).toBe(0);
+    expect(markDirectoryDirty).not.toHaveBeenCalled();
+
+    const on = await app.inject({ method: 'PATCH', url: '/api/settings/instance', payload: { directoryBrowseEnabled: true } });
+    expect(on.statusCode).toBe(200);
+    expect(readSettings().directoryDirty).toBe(0);
+    expect(markDirectoryDirty).not.toHaveBeenCalled();
+  });
+
+  it('marks dirty exactly once when a listing change rides along with it', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/settings/instance',
+      payload: { directoryEnabled: true, directoryBrowseEnabled: false },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(markDirectoryDirty).toHaveBeenCalledTimes(1);
+  });
+
+  it('stays out of GET /api/settings/streaming, which no non-admin surface needs it on', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/settings/streaming' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).not.toHaveProperty('directoryBrowseEnabled');
+  });
+});
+
 describe('directoryEnabled on GET /api/settings/streaming', () => {
   // The space settings panel reads this route (any signed-in user may), so the
   // per-space switch can say "your admin has to enable the directory" without

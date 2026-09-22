@@ -44,6 +44,11 @@
         "timeout": "the directory did not answer in time"
       }
     },
+    "browse": {
+      "toggleLabel": "Show global spaces in Explore",
+      "toggleDescription": "People here see spaces from other instances in Outer Space. Their browsers load those spaces' icons and banners from the instances that own them.",
+      "unavailable": "This instance is not configured to reach a directory, so there is nothing to show."
+    },
     "gif": {
       "label": "GIF Search",
       "description": "Enable GIF search powered by Klipy. Get a free API key from the Klipy developer portal.",

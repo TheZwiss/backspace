@@ -3,7 +3,7 @@ import type { DirectoryDocument, DirectoryFeed } from '@backspace/shared';
 import { getRawDb } from '../db/index.js';
 import { config } from '../config.js';
 import { buildDirectoryDocument } from '../directory/document.js';
-import { getDocumentVersion } from '../directory/state.js';
+import { getDocumentVersion, readDirectoryBrowseEnabled } from '../directory/state.js';
 import { authenticate } from '../utils/auth.js';
 import { sendError } from '../utils/httpErrors.js';
 import { resolveLocalOrigin } from './federation/origin.js';
@@ -238,7 +238,12 @@ export async function directoryRoutes(app: FastifyInstance): Promise<void> {
     },
   }, async (request, reply) => {
     const endpoint = config.directory.endpoint;
-    if (endpoint === '') return sendError(reply, 404, 'directory_disabled');
+    // Two switches, one answer. The operator's endpoint decides whether this
+    // instance can reach a directory at all; the admin's browse flag decides
+    // whether the people here look at one. Either being off is the same
+    // "there is no directory here" the client already knows how to render,
+    // and both are read before any fetch or cache lookup.
+    if (endpoint === '' || !readDirectoryBrowseEnabled(getRawDb())) return sendError(reply, 404, 'directory_disabled');
     const feed = await getFeed(endpoint, parseFeedQuery(request.query));
     if (feed === null) return sendError(reply, 502, 'directory_unreachable');
     return reply.code(200).send(feed);

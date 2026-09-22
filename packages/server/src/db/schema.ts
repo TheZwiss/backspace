@@ -352,6 +352,8 @@ export const instanceSettings = sqliteTable('instance_settings', {
   directoryLastPingAt: integer('directory_last_ping_at'),
   /** JSON DirectoryPingError of the last failed ping, null after a success. */
   directoryLastError: text('directory_last_error'),
+  /** People on this instance see spaces from other instances in Explore. */
+  directoryBrowseEnabled: integer('directory_browse_enabled').notNull().default(1),
   /** First-boot timestamp (ms); backfilled by ensureDefaults, so non-null after boot. */
   installedAt: integer('installed_at'),
   updatedAt: integer('updated_at').notNull(),

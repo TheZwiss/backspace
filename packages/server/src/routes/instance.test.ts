@@ -157,4 +157,50 @@ describe('GET /api/instance/info', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ directoryAvailable: false, directoryEnabled: true });
   });
+
+  // The second half of directoryAvailable: the admin's own switch for whether
+  // the people here browse at all. The endpoint sits above it, so no setting
+  // can report a directory this instance cannot reach.
+  it('reports directoryAvailable=false when the admin turned browsing off', async () => {
+    testDb.update(schema.instanceSettings)
+      .set({ directoryBrowseEnabled: 0 })
+      .where(eq(schema.instanceSettings.id, 1))
+      .run();
+
+    const res = await app.inject({ method: 'GET', url: '/api/instance/info' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().directoryAvailable).toBe(false);
+  });
+
+  it('reports directoryAvailable=true again once browsing is switched back on', async () => {
+    testDb.update(schema.instanceSettings)
+      .set({ directoryBrowseEnabled: 0 })
+      .where(eq(schema.instanceSettings.id, 1))
+      .run();
+    expect((await app.inject({ method: 'GET', url: '/api/instance/info' })).json().directoryAvailable).toBe(false);
+
+    testDb.update(schema.instanceSettings)
+      .set({ directoryBrowseEnabled: 1 })
+      .where(eq(schema.instanceSettings.id, 1))
+      .run();
+    expect((await app.inject({ method: 'GET', url: '/api/instance/info' })).json().directoryAvailable).toBe(true);
+  });
+
+  it('reports directoryAvailable=false with no endpoint whatever the browse setting says', async () => {
+    mockDirectory.endpoint = '';
+    for (const directoryBrowseEnabled of [0, 1]) {
+      testDb.update(schema.instanceSettings)
+        .set({ directoryBrowseEnabled })
+        .where(eq(schema.instanceSettings.id, 1))
+        .run();
+      const res = await app.inject({ method: 'GET', url: '/api/instance/info' });
+      expect(res.json().directoryAvailable).toBe(false);
+    }
+  });
+
+  it('browses by default: a fresh row has the setting on', async () => {
+    const row = testDb.select().from(schema.instanceSettings).where(eq(schema.instanceSettings.id, 1)).get();
+    expect(row?.directoryBrowseEnabled).toBe(1);
+    expect((await app.inject({ method: 'GET', url: '/api/instance/info' })).json().directoryAvailable).toBe(true);
+  });
 });

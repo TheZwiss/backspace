@@ -60,6 +60,7 @@ function rowToAdminSettings(row: SettingsRow, sqlite: Database.Database): Instan
     defaultAutoRotateIntervalDays: row.defaultAutoRotateIntervalDays,
     autoAcceptPeering: row.autoAcceptPeering === 1,
     directoryEnabled: directory.enabled,
+    directoryBrowseEnabled: row.directoryBrowseEnabled === 1,
     directoryLastPingAt: directory.lastPingAt,
     directoryLastError: directory.lastError,
   };
@@ -301,6 +302,17 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
 
     if (body.discoveryEnabled !== undefined) {
       updateData.discoveryEnabled = body.discoveryEnabled ? 1 : 0;
+    }
+
+    // The incoming directory axis. Deliberately not routed through
+    // applyDiscoveryAndDirectory or directoryDocumentChanged: what this
+    // instance shows its own people is nowhere in the document it serves, so
+    // a change here owes the hub nothing and must never cost a ping.
+    if (body.directoryBrowseEnabled !== undefined) {
+      if (typeof body.directoryBrowseEnabled !== 'boolean') {
+        return sendError(reply, 400, 'field_not_boolean', { field: 'directoryBrowseEnabled' });
+      }
+      updateData.directoryBrowseEnabled = body.directoryBrowseEnabled ? 1 : 0;
     }
 
     if (body.gifApiKey !== undefined) {

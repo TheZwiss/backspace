@@ -143,6 +143,18 @@ describe('GET /api/directory/spaces', () => {
     });
   });
 
+  // The incoming switch is nowhere in the outgoing document, and must not be:
+  // it is nobody's business but this instance's, and a change to it owes the
+  // hub nothing.
+  it('says nothing about browsing, whichever way the setting is turned', async () => {
+    const before = await app.inject({ method: 'GET', url: '/api/directory/spaces' });
+    sqlite.prepare('UPDATE instance_settings SET directory_browse_enabled = 0 WHERE id = 1').run();
+    markDirectoryDirty(sqlite);
+    const after = await app.inject({ method: 'GET', url: '/api/directory/spaces' });
+    expect(after.statusCode).toBe(200);
+    expect(JSON.parse(after.body)).toEqual(JSON.parse(before.body));
+  });
+
   it('builds once for two requests inside 30 s', async () => {
     const spy = vi.spyOn(documentModule, 'buildDirectoryDocument');
     await app.inject({ method: 'GET', url: '/api/directory/spaces' });
@@ -242,6 +254,37 @@ describe('GET /api/directory', () => {
     expect(res.statusCode).toBe(404);
     expect(JSON.parse(res.body).code).toBe('directory_disabled');
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  // The admin's incoming switch. Browsing needs two yeses, the operator's
+  // endpoint and the admin's setting, and either no answers the same way, so
+  // the client's existing "there is no directory here" path covers both.
+  it('answers 404 directory_disabled when browsing is off, without calling upstream', async () => {
+    sqlite.prepare('UPDATE instance_settings SET directory_browse_enabled = 0 WHERE id = 1').run();
+    const fetchMock = stubHub();
+    const res = await proxy('/api/directory?q=x');
+    expect(res.statusCode).toBe(404);
+    expect(JSON.parse(res.body).code).toBe('directory_disabled');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('serves the feed again once browsing is switched back on', async () => {
+    sqlite.prepare('UPDATE instance_settings SET directory_browse_enabled = 0 WHERE id = 1').run();
+    const fetchMock = stubHub();
+    expect((await proxy('/api/directory?q=chess')).statusCode).toBe(404);
+
+    sqlite.prepare('UPDATE instance_settings SET directory_browse_enabled = 1 WHERE id = 1').run();
+    const res = await proxy('/api/directory?q=chess');
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({ schema: 1, spaces: [ENTRY] });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('is on by default, so an instance that never touched the setting browses', async () => {
+    const row = sqlite.prepare('SELECT directory_browse_enabled AS v FROM instance_settings WHERE id = 1').get() as { v: number };
+    expect(row.v).toBe(1);
+    stubHub();
+    expect((await proxy('/api/directory?q=chess')).statusCode).toBe(200);
   });
 
   it('forwards validated params to the hub and returns its feed', async () => {
