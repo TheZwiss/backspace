@@ -51,10 +51,40 @@ describe('useSpaceJoin', () => {
 
   it('derives isPending from a matching pending request in the store', () => {
     useExploreStore.setState({
-      myRequests: [{ id: 'r', spaceId: 's1', status: 'pending' } as never],
+      myRequests: [{ id: 'r', spaceId: 's1', status: 'pending', _instanceOrigin: '' } as never],
     });
     const { result } = renderHook(() => useSpaceJoin(makeSpace({ visibility: 'request' })));
     expect(result.current.isPending).toBe(true);
+  });
+
+  it('isPending is keyed by (origin, spaceId): the same id on another origin is not pending', () => {
+    const remote = 'https://chat.example.org';
+    useExploreStore.setState({
+      myRequests: [{ id: 'r', spaceId: 's1', status: 'pending', _instanceOrigin: remote } as never],
+    });
+
+    const { result: onRemote } = renderHook(() =>
+      useSpaceJoin(makeSpace({ visibility: 'request', _instanceOrigin: remote })),
+    );
+    expect(onRemote.current.isPending).toBe(true);
+
+    const { result: onHome } = renderHook(() =>
+      useSpaceJoin(makeSpace({ visibility: 'request', _instanceOrigin: '' })),
+    );
+    expect(onHome.current.isPending).toBe(false);
+
+    const { result: onOther } = renderHook(() =>
+      useSpaceJoin(makeSpace({ visibility: 'request', _instanceOrigin: 'https://other.example.org' })),
+    );
+    expect(onOther.current.isPending).toBe(false);
+  });
+
+  it('ignores a request whose origin matches but whose status is not pending', () => {
+    useExploreStore.setState({
+      myRequests: [{ id: 'r', spaceId: 's1', status: 'declined', _instanceOrigin: '' } as never],
+    });
+    const { result } = renderHook(() => useSpaceJoin(makeSpace({ visibility: 'request' })));
+    expect(result.current.isPending).toBe(false);
   });
 
   it('join() calls publicJoin and returns the full space', async () => {

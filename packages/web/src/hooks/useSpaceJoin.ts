@@ -36,9 +36,15 @@ export function useSpaceJoin(space: TaggedExploreSpace): SpaceJoinControls {
 
   const isJoined = space.joined === true;
   const isPublic = space.visibility === 'public';
+  // Space ids are instance-local, so a request only matches on (origin, id).
   const isPending =
     localRequestSent ||
-    myRequests.some((r) => r.spaceId === space.id && r.status === 'pending');
+    myRequests.some(
+      (r) =>
+        r.spaceId === space.id &&
+        r._instanceOrigin === space._instanceOrigin &&
+        r.status === 'pending',
+    );
 
   // On success the caller navigates away and this component unmounts, so we do
   // not reset `joining` — matches the pre-refactor SpaceCard behavior and

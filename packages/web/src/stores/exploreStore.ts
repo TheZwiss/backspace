@@ -11,9 +11,18 @@ export interface TaggedExploreSpace extends ExploreSpace {
   _instanceOrigin: string; // '' = home instance
 }
 
+/**
+ * A join request keyed by the instance it lives on. Space ids are local to
+ * their instance, so a request is only identified by `(origin, spaceId)`;
+ * `''` is the home instance, matching `TaggedExploreSpace`.
+ */
+export interface TaggedJoinRequest extends JoinRequest {
+  _instanceOrigin: string;
+}
+
 interface ExploreState {
   spaces: TaggedExploreSpace[];
-  myRequests: JoinRequest[];
+  myRequests: TaggedJoinRequest[];
   searchQuery: string;
   isLoading: boolean;
   discoveryEnabled: boolean;
@@ -36,6 +45,32 @@ function getApiForOrigin(origin: string) {
   return instance?.api ?? api;
 }
 
+/**
+ * Wait for autoConnectAll to finish if it has not yet, so a fan-out over
+ * connected instances does not run against an incomplete or empty list on
+ * page reload.
+ */
+async function waitForAutoConnect(): Promise<void> {
+  if (useInstanceStore.getState()._autoConnectDone) return;
+  await new Promise<void>((resolve) => {
+    const unsub = useInstanceStore.subscribe((state) => {
+      if (state._autoConnectDone) {
+        unsub();
+        resolve();
+      }
+    });
+    // Re-check after subscribing to avoid a TOCTOU race
+    if (useInstanceStore.getState()._autoConnectDone) {
+      unsub();
+      resolve();
+    }
+  });
+}
+
+function getConnectedInstances() {
+  return useInstanceStore.getState().instances.filter(i => i.status === 'connected');
+}
+
 // ─── Store ──────────────────────────────────────────────────────────────────
 
 export const useExploreStore = create<ExploreState>((set, get) => ({
@@ -50,27 +85,10 @@ export const useExploreStore = create<ExploreState>((set, get) => ({
   fetchSpaces: async (query?: string) => {
     set({ isLoading: true, error: null });
 
-    // Wait for autoConnectAll to finish if it hasn't yet.
-    // This prevents fetching with an incomplete/empty instance list on page reload.
-    if (!useInstanceStore.getState()._autoConnectDone) {
-      await new Promise<void>((resolve) => {
-        const unsub = useInstanceStore.subscribe((state) => {
-          if (state._autoConnectDone) {
-            unsub();
-            resolve();
-          }
-        });
-        // Re-check after subscribing to avoid TOCTOU race
-        if (useInstanceStore.getState()._autoConnectDone) {
-          unsub();
-          resolve();
-        }
-      });
-    }
+    await waitForAutoConnect();
 
     try {
-      const instances = useInstanceStore.getState().instances;
-      const connectedInstances = instances.filter(i => i.status === 'connected');
+      const connectedInstances = getConnectedInstances();
 
       // Fetch from home + all connected remote instances in parallel
       const results = await Promise.allSettled([
@@ -133,12 +151,36 @@ export const useExploreStore = create<ExploreState>((set, get) => ({
   },
 
   fetchMyRequests: async () => {
-    try {
-      const { requests } = await api.explore.myJoinRequests('pending');
-      set({ myRequests: requests });
-    } catch {
-      // Non-critical — silently fail
+    await waitForAutoConnect();
+
+    // Pending requests live on the instance that owns the space, so ask home
+    // plus every connected instance and tag each result with its origin. A
+    // rejected client only drops its own rows: allSettled keeps the rest.
+    const connectedInstances = getConnectedInstances();
+
+    const results = await Promise.allSettled([
+      api.explore.myJoinRequests('pending').then(res => ({ requests: res.requests, origin: '' })),
+      ...connectedInstances.map(inst =>
+        inst.api.explore.myJoinRequests('pending').then(res => ({ requests: res.requests, origin: inst.origin }))
+      ),
+    ]);
+
+    const fulfilled = results.filter(
+      (r): r is PromiseFulfilledResult<{ requests: JoinRequest[]; origin: string }> => r.status === 'fulfilled'
+    );
+
+    // Nothing answered: keep what we have rather than blanking a list the
+    // cards are already showing. This is non-critical state, so no error.
+    if (fulfilled.length === 0) return;
+
+    const myRequests: TaggedJoinRequest[] = [];
+    for (const { value } of fulfilled) {
+      for (const request of value.requests) {
+        myRequests.push({ ...request, _instanceOrigin: value.origin });
+      }
     }
+
+    set({ myRequests });
   },
 
   publicJoin: async (space: TaggedExploreSpace) => {
@@ -165,7 +207,7 @@ export const useExploreStore = create<ExploreState>((set, get) => ({
     const request = await client.explore.requestJoin(space.id, message);
 
     set((state) => ({
-      myRequests: [...state.myRequests, request],
+      myRequests: [...state.myRequests, { ...request, _instanceOrigin: space._instanceOrigin }],
     }));
 
     return request;
