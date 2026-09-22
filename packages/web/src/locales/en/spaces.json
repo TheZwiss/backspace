@@ -166,15 +166,26 @@
     },
     "browseOff": {
       "text": "Spaces from other instances are not shown on this instance.",
-      "action": "Show global spaces in Explore"
+      "action": "Show global spaces in Explore",
+      "confirm": {
+        "title": "Show spaces from other instances here?",
+        "exposure": "Those instances see the IP address of every browser that loads one, and this instance's administrator does not control them.",
+        "off": "To stop showing them later: Settings, Instance, General, the switch for global spaces in Explore.",
+        "action": "Show global spaces"
+      }
     },
     "notListed": {
       "text": "Spaces on this instance are not listed in the public directory.",
-      "action": "List them"
+      "action": "List them",
+      "confirm": {
+        "title": "List spaces from this instance publicly?",
+        "optIn": "Only spaces whose owners turn listing on are sent, so this switch lists no space on its own.",
+        "off": "To stop listing later: Settings, Instance, General, the space discovery choice.",
+        "action": "List spaces"
+      }
     },
     "noMatches": "No spaces match your search.",
     "empty": "No discoverable spaces yet.",
-    "allJoined": "You're in all discoverable spaces",
     "joinedSection": "Joined",
     "notConnected": "Not connected to {{host}}",
     "inner": {

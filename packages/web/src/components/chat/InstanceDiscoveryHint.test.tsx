@@ -22,6 +22,15 @@ const LIST_LABEL = 'List them';
 const BROWSE_OFF_TEXT = 'Spaces from other instances are not shown on this instance.';
 const BROWSE_LABEL = 'Show global spaces in Explore';
 
+// The confirmations. Both labels are prefixes of nothing else on screen, and
+// `getByRole`'s name option matches the whole accessible name, so the browse
+// confirm button is never confused with the row button that opens it.
+const LIST_CONFIRM_TITLE = 'List spaces from this instance publicly?';
+const LIST_CONFIRM_LABEL = 'List spaces';
+const BROWSE_CONFIRM_TITLE = 'Show spaces from other instances here?';
+const BROWSE_CONFIRM_LABEL = 'Show global spaces';
+const CANCEL_LABEL = 'Cancel';
+
 /** The settings document the hint reads, with the two flags under test on top. */
 function limits(flags: { discoveryEnabled: boolean; directoryEnabled: boolean }): InstanceStreamingLimits {
   return {
@@ -78,6 +87,20 @@ beforeEach(() => {
   onBrowseEnabled.mockReset();
   onBrowseEnabled.mockResolvedValue(undefined);
 });
+
+/**
+ * The full gesture behind a confirmed action: the row's button, then the
+ * dialog's. Every test that used to be one click is now two, and writing it
+ * out once keeps what each test is actually about in view.
+ */
+async function clickThrough(
+  user: ReturnType<typeof userEvent.setup>,
+  rowLabel: string,
+  confirmLabel: string,
+): Promise<void> {
+  await user.click(screen.getByRole('button', { name: rowLabel }));
+  await user.click(screen.getByRole('button', { name: confirmLabel }));
+}
 
 describe('InstanceDiscoveryHint', () => {
   it('renders nothing while the instance settings have not arrived', () => {
@@ -293,7 +316,7 @@ describe('InstanceDiscoveryHint', () => {
     // Informational, not a warning: no amber treatment on this row.
     expect(container.querySelector('.bg-accent-amber\\/10')).toBeNull();
 
-    await user.click(screen.getByRole('button', { name: LIST_LABEL }));
+    await clickThrough(user, LIST_LABEL, LIST_CONFIRM_LABEL);
 
     expect(updateInstanceSettings).toHaveBeenCalledWith({ directoryEnabled: true });
     // Listing changes nothing about what this instance sees, so nothing refetches.
@@ -308,7 +331,7 @@ describe('InstanceDiscoveryHint', () => {
     const user = userEvent.setup();
     render(<InstanceDiscoveryHint directoryConfigured directoryAvailable onDiscoveryEnabled={onDiscoveryEnabled} onBrowseEnabled={onBrowseEnabled} />);
 
-    await user.click(screen.getByRole('button', { name: LIST_LABEL }));
+    await clickThrough(user, LIST_LABEL, LIST_CONFIRM_LABEL);
     expect(screen.getByRole('button', { name: LIST_LABEL })).toBeDisabled();
 
     finish();
@@ -322,9 +345,12 @@ describe('InstanceDiscoveryHint', () => {
     const user = userEvent.setup();
     render(<InstanceDiscoveryHint directoryConfigured directoryAvailable onDiscoveryEnabled={onDiscoveryEnabled} onBrowseEnabled={onBrowseEnabled} />);
 
-    await user.click(screen.getByRole('button', { name: LIST_LABEL }));
+    await clickThrough(user, LIST_LABEL, LIST_CONFIRM_LABEL);
 
     await waitFor(() => expect(screen.getByText(describeError(err))).toBeInTheDocument());
+    // The refusal is stated under the row, not behind a dialog that would
+    // have to be dismissed to read it.
+    expect(screen.queryByText(LIST_CONFIRM_TITLE)).not.toBeInTheDocument();
     expect(screen.getByText(NOT_LISTED_TEXT)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: LIST_LABEL })).toBeEnabled();
   });
@@ -421,7 +447,7 @@ describe('InstanceDiscoveryHint', () => {
       />,
     );
 
-    await user.click(screen.getByRole('button', { name: BROWSE_LABEL }));
+    await clickThrough(user, BROWSE_LABEL, BROWSE_CONFIRM_LABEL);
 
     expect(updateInstanceSettings).toHaveBeenCalledWith({ directoryBrowseEnabled: true });
     await waitFor(() => expect(onBrowseEnabled).toHaveBeenCalledOnce());
@@ -466,7 +492,7 @@ describe('InstanceDiscoveryHint', () => {
       />,
     );
 
-    await user.click(screen.getByRole('button', { name: BROWSE_LABEL }));
+    await clickThrough(user, BROWSE_LABEL, BROWSE_CONFIRM_LABEL);
     // The PATCH has answered by now; the re-read has not, and re-enabling here
     // would offer the click again under a row that is about to go.
     expect(updateInstanceSettings).toHaveBeenCalledOnce();
@@ -490,9 +516,10 @@ describe('InstanceDiscoveryHint', () => {
       />,
     );
 
-    await user.click(screen.getByRole('button', { name: BROWSE_LABEL }));
+    await clickThrough(user, BROWSE_LABEL, BROWSE_CONFIRM_LABEL);
 
     await waitFor(() => expect(screen.getByText(describeError(err))).toBeInTheDocument());
+    expect(screen.queryByText(BROWSE_CONFIRM_TITLE)).not.toBeInTheDocument();
     expect(screen.getByText(BROWSE_OFF_TEXT)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: BROWSE_LABEL })).toBeEnabled();
     // The save never landed, so there is nothing for the page to re-read.
@@ -536,5 +563,171 @@ describe('InstanceDiscoveryHint', () => {
 
     expect(screen.getByText(BROWSE_OFF_TEXT)).toBeInTheDocument();
     expect(screen.queryByText(NOT_LISTED_TEXT)).not.toBeInTheDocument();
+  });
+
+  /*
+   * Both directory actions are one click that changes what this instance
+   * does to everyone on it, and neither is visible from the page it changes:
+   * listing publishes the instance's address and every opted-in space's
+   * details to a hub anyone can read, and browsing sends every user's
+   * browser to instances this administrator does not control. The click that
+   * used to do either of those on its own now asks first, in words that name
+   * the consequence and say where the setting is undone.
+   */
+  describe('the confirmations in front of the two directory actions', () => {
+    const DISCLOSURE = "For each listed space this makes public: its name, description, icon, banner, member count and this instance's address. People browsing the directory load the icon and banner from this instance.";
+    const LIST_OPT_IN = 'Only spaces whose owners turn listing on are sent, so this switch lists no space on its own.';
+    const LIST_OFF = 'To stop listing later: Settings, Instance, General, the space discovery choice.';
+    const BROWSE_LOADS = "People here see spaces from other instances in Outer Space. Their browsers load those spaces' icons and banners from the instances that own them.";
+    const BROWSE_EXPOSURE = "Those instances see the IP address of every browser that loads one, and this instance's administrator does not control them.";
+    const BROWSE_OFF_WHERE = 'To stop showing them later: Settings, Instance, General, the switch for global spaces in Explore.';
+
+    it('the list action explains itself instead of writing anything', async () => {
+      seed({ isAdmin: true, streamingLimits: NOT_LISTED });
+      const user = userEvent.setup();
+      render(<InstanceDiscoveryHint directoryConfigured directoryAvailable onDiscoveryEnabled={onDiscoveryEnabled} onBrowseEnabled={onBrowseEnabled} />);
+
+      await user.click(screen.getByRole('button', { name: LIST_LABEL }));
+
+      expect(updateInstanceSettings).not.toHaveBeenCalled();
+      expect(screen.getByText(LIST_CONFIRM_TITLE)).toBeInTheDocument();
+      // What becomes public, in the words the admin settings panel already
+      // uses for the same switch rather than a second version of them.
+      expect(screen.getByText(DISCLOSURE)).toBeInTheDocument();
+      // That the switch publishes nothing by itself.
+      expect(screen.getByText(LIST_OPT_IN)).toBeInTheDocument();
+      // And where it is turned off again.
+      expect(screen.getByText(LIST_OFF)).toBeInTheDocument();
+      // The button says what it does, not "OK".
+      expect(screen.getByRole('button', { name: LIST_CONFIRM_LABEL })).toBeInTheDocument();
+    });
+
+    it('cancelling the list confirmation writes nothing and leaves the row where it was', async () => {
+      seed({ isAdmin: true, streamingLimits: NOT_LISTED });
+      const user = userEvent.setup();
+      render(<InstanceDiscoveryHint directoryConfigured directoryAvailable onDiscoveryEnabled={onDiscoveryEnabled} onBrowseEnabled={onBrowseEnabled} />);
+
+      await user.click(screen.getByRole('button', { name: LIST_LABEL }));
+      await user.click(screen.getByRole('button', { name: CANCEL_LABEL }));
+
+      expect(updateInstanceSettings).not.toHaveBeenCalled();
+      expect(screen.queryByText(LIST_CONFIRM_TITLE)).not.toBeInTheDocument();
+      expect(screen.getByText(NOT_LISTED_TEXT)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: LIST_LABEL })).toBeEnabled();
+    });
+
+    it('confirming the list action writes the flag exactly once', async () => {
+      seed({ isAdmin: true, streamingLimits: NOT_LISTED });
+      const user = userEvent.setup();
+      render(<InstanceDiscoveryHint directoryConfigured directoryAvailable onDiscoveryEnabled={onDiscoveryEnabled} onBrowseEnabled={onBrowseEnabled} />);
+
+      await clickThrough(user, LIST_LABEL, LIST_CONFIRM_LABEL);
+
+      expect(updateInstanceSettings).toHaveBeenCalledOnce();
+      expect(updateInstanceSettings).toHaveBeenCalledWith({ directoryEnabled: true });
+      await waitFor(() => expect(screen.queryByText(LIST_CONFIRM_TITLE)).not.toBeInTheDocument());
+    });
+
+    it('the browse action explains itself instead of writing anything', async () => {
+      seed({ isAdmin: true, streamingLimits: NOT_LISTED });
+      const user = userEvent.setup();
+      render(
+        <InstanceDiscoveryHint
+          directoryConfigured
+          directoryAvailable={false}
+          onDiscoveryEnabled={onDiscoveryEnabled}
+          onBrowseEnabled={onBrowseEnabled}
+        />,
+      );
+
+      await user.click(screen.getByRole('button', { name: BROWSE_LABEL }));
+
+      expect(updateInstanceSettings).not.toHaveBeenCalled();
+      expect(screen.getByText(BROWSE_CONFIRM_TITLE)).toBeInTheDocument();
+      expect(screen.getByText(BROWSE_LOADS)).toBeInTheDocument();
+      // The part the settings panel does not spell out: who learns what from
+      // those requests.
+      expect(screen.getByText(BROWSE_EXPOSURE)).toBeInTheDocument();
+      expect(screen.getByText(BROWSE_OFF_WHERE)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: BROWSE_CONFIRM_LABEL })).toBeInTheDocument();
+    });
+
+    it('cancelling the browse confirmation writes nothing and leaves the row where it was', async () => {
+      seed({ isAdmin: true, streamingLimits: NOT_LISTED });
+      const user = userEvent.setup();
+      render(
+        <InstanceDiscoveryHint
+          directoryConfigured
+          directoryAvailable={false}
+          onDiscoveryEnabled={onDiscoveryEnabled}
+          onBrowseEnabled={onBrowseEnabled}
+        />,
+      );
+
+      await user.click(screen.getByRole('button', { name: BROWSE_LABEL }));
+      await user.click(screen.getByRole('button', { name: CANCEL_LABEL }));
+
+      expect(updateInstanceSettings).not.toHaveBeenCalled();
+      expect(onBrowseEnabled).not.toHaveBeenCalled();
+      expect(screen.queryByText(BROWSE_CONFIRM_TITLE)).not.toBeInTheDocument();
+      expect(screen.getByText(BROWSE_OFF_TEXT)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: BROWSE_LABEL })).toBeEnabled();
+    });
+
+    it('confirming the browse action writes the flag exactly once', async () => {
+      seed({ isAdmin: true, streamingLimits: NOT_LISTED });
+      const user = userEvent.setup();
+      render(
+        <InstanceDiscoveryHint
+          directoryConfigured
+          directoryAvailable={false}
+          onDiscoveryEnabled={onDiscoveryEnabled}
+          onBrowseEnabled={onBrowseEnabled}
+        />,
+      );
+
+      await clickThrough(user, BROWSE_LABEL, BROWSE_CONFIRM_LABEL);
+
+      expect(updateInstanceSettings).toHaveBeenCalledOnce();
+      expect(updateInstanceSettings).toHaveBeenCalledWith({ directoryBrowseEnabled: true });
+      await waitFor(() => expect(screen.queryByText(BROWSE_CONFIRM_TITLE)).not.toBeInTheDocument());
+    });
+
+    /*
+     * Space discovery is local to this instance, reveals nothing outward and
+     * is undone by the same control. A dialog in front of it would be noise,
+     * and noise is what teaches an admin to click past the two that matter.
+     */
+    it('turning on space discovery is still one click, with nothing to confirm', async () => {
+      seed({ isAdmin: true, streamingLimits: DISCOVERY_OFF });
+      const user = userEvent.setup();
+      render(<InstanceDiscoveryHint directoryConfigured directoryAvailable onDiscoveryEnabled={onDiscoveryEnabled} onBrowseEnabled={onBrowseEnabled} />);
+
+      await user.click(screen.getByRole('button', { name: ENABLE_LABEL }));
+
+      expect(updateInstanceSettings).toHaveBeenCalledWith({ discoveryEnabled: true });
+      expect(screen.queryByRole('button', { name: CANCEL_LABEL })).not.toBeInTheDocument();
+    });
+
+    /*
+     * The settings can move under an open dialog, from another tab or a WS
+     * ready. A dialog asking about a rung that is no longer on the page must
+     * go with it rather than stay and write what the admin is no longer
+     * looking at.
+     */
+    it('a rung that moves while its dialog is open takes the dialog with it', async () => {
+      seed({ isAdmin: true, streamingLimits: NOT_LISTED });
+      const user = userEvent.setup();
+      render(<InstanceDiscoveryHint directoryConfigured directoryAvailable onDiscoveryEnabled={onDiscoveryEnabled} onBrowseEnabled={onBrowseEnabled} />);
+
+      await user.click(screen.getByRole('button', { name: LIST_LABEL }));
+      expect(screen.getByText(LIST_CONFIRM_TITLE)).toBeInTheDocument();
+
+      useSettingsStore.setState({ streamingLimits: DISCOVERY_OFF });
+
+      await waitFor(() => expect(screen.getByText(ADMIN_TEXT)).toBeInTheDocument());
+      expect(screen.queryByText(LIST_CONFIRM_TITLE)).not.toBeInTheDocument();
+      expect(updateInstanceSettings).not.toHaveBeenCalled();
+    });
   });
 });

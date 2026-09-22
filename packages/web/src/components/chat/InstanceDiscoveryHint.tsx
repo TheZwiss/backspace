@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { describeError } from '../../i18n/errors';
+import { ListInDirectoryConfirm, ShowGlobalSpacesConfirm } from '../modals/DirectoryConfirmations';
 
 /**
  * What the hint has to say about this instance's own discovery settings, or
@@ -142,6 +143,19 @@ export function InstanceDiscoveryHint({
   // must not end up under the discovery-off text because the rung moved while
   // it was on screen.
   const [failure, setFailure] = useState<{ row: DiscoveryHintRow; message: string } | null>(null);
+  /**
+   * The row whose action is waiting to be confirmed, or null when nothing is
+   * being asked.
+   *
+   * Ordinary component state, and not the kind the table forbids: it says
+   * whether a dialog is on screen, never what the instance's settings are.
+   * It is held as the row it was raised on rather than as a bare boolean for
+   * the same reason `failure` is: the settings can move under an open dialog,
+   * from another tab or a WS ready, and a dialog asking about the rung that
+   * was here a moment ago must go with it rather than stay and write
+   * something the admin is no longer looking at.
+   */
+  const [confirming, setConfirming] = useState<DiscoveryHintRow | null>(null);
 
   const row = discoveryHintRow({ limits: streamingLimits, directoryConfigured, directoryAvailable, isAdmin });
   const error = failure !== null && failure.row === row ? failure.message : '';
@@ -158,6 +172,7 @@ export function InstanceDiscoveryHint({
   // on again elsewhere.
   useEffect(() => {
     setFailure((current) => (current === null || current.row === row ? current : null));
+    setConfirming((current) => (current === null || current === row ? current : null));
   }, [row]);
 
   // The store keeps the old settings when the PATCH is rejected, so a failure
@@ -180,6 +195,11 @@ export function InstanceDiscoveryHint({
       setFailure({ row: startedOn, message });
     } finally {
       setPending(false);
+      // The question has been answered either way. A refusal is reported
+      // under the row, which is where every other failure on this surface is
+      // reported, and not behind a dialog that would have to be dismissed to
+      // read it.
+      setConfirming(null);
     }
   };
 
@@ -213,12 +233,16 @@ export function InstanceDiscoveryHint({
         // Both browse rows state the one fact; only the action differs.
         : t('spaces:explore.browseOff.text');
 
+  // Two of the three actions are asked about before they run. Space discovery
+  // is not: it is local to this instance, reveals nothing outward and is
+  // undone by the same control, so a dialog in front of it would be noise
+  // that teaches the admin to click past the two that matter.
   const action = row === 'discoveryOffAdmin'
     ? { label: t('spaces:explore.discoveryOff.enable'), onClick: handleEnableDiscovery }
     : row === 'browseOffAdmin'
-      ? { label: t('spaces:explore.browseOff.action'), onClick: handleEnableBrowse }
+      ? { label: t('spaces:explore.browseOff.action'), onClick: () => setConfirming('browseOffAdmin') }
       : row === 'notListed'
-        ? { label: t('spaces:explore.notListed.action'), onClick: handleListSpaces }
+        ? { label: t('spaces:explore.notListed.action'), onClick: () => setConfirming('notListed') }
         : null;
 
   // One frame for every row, in one of two tones. Amber is for the instance
@@ -249,6 +273,22 @@ export function InstanceDiscoveryHint({
         )}
       </div>
       {error && <p className="mt-1.5 text-txt-danger">{error}</p>}
+      {row === 'browseOffAdmin' && (
+        <ShowGlobalSpacesConfirm
+          isOpen={confirming === row}
+          onClose={() => setConfirming(null)}
+          onConfirm={handleEnableBrowse}
+          loading={pending}
+        />
+      )}
+      {row === 'notListed' && (
+        <ListInDirectoryConfirm
+          isOpen={confirming === row}
+          onClose={() => setConfirming(null)}
+          onConfirm={handleListSpaces}
+          loading={pending}
+        />
+      )}
     </div>
   );
 }

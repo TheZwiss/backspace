@@ -607,7 +607,11 @@ describe('ExplorePage follows a connection change while it is open', () => {
       directoryAvailable: true,
       directoryEnabled: true,
     });
+    // Through the confirmation: the browse switch sends every user's browser
+    // to instances this administrator does not control, so the hint asks
+    // before it writes.
     await user.click(screen.getByRole('button', { name: 'Show global spaces in Explore' }));
+    await user.click(screen.getByRole('button', { name: 'Show global spaces' }));
 
     expect(updateInstanceSettings).toHaveBeenCalledWith({ directoryBrowseEnabled: true });
     await waitFor(() => expect(screen.getByText('Outer Space')).toBeInTheDocument());

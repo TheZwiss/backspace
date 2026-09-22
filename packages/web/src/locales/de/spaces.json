@@ -166,15 +166,26 @@
     },
     "browseOff": {
       "text": "Spaces von anderen Instanzen werden auf dieser Instanz nicht angezeigt.",
-      "action": "Globale Spaces in „Entdecken“ anzeigen"
+      "action": "Globale Spaces in „Entdecken“ anzeigen",
+      "confirm": {
+        "title": "Spaces von anderen Instanzen hier anzeigen?",
+        "exposure": "Diese Instanzen sehen die IP-Adresse jedes Browsers, der etwas davon lädt, und die Verwaltung dieser Instanz hat keine Kontrolle über sie.",
+        "off": "Zum späteren Beenden: Einstellungen, Instanz, Allgemein, der Schalter für globale Spaces in „Entdecken“.",
+        "action": "Globale Spaces anzeigen"
+      }
     },
     "notListed": {
       "text": "Spaces auf dieser Instanz sind nicht im öffentlichen Verzeichnis eingetragen.",
-      "action": "Eintragen"
+      "action": "Eintragen",
+      "confirm": {
+        "title": "Spaces dieser Instanz öffentlich eintragen?",
+        "optIn": "Übertragen werden nur Spaces, deren Besitzer den Eintrag selbst einschalten; dieser Schalter trägt von sich aus keinen Space ein.",
+        "off": "Zum späteren Beenden: Einstellungen, Instanz, Allgemein, die Auswahl zum Entdecken von Spaces.",
+        "action": "Spaces eintragen"
+      }
     },
     "noMatches": "Keine Spaces passen zu deiner Suche.",
     "empty": "Noch keine Spaces zum Entdecken.",
-    "allJoined": "Du bist in allen Spaces, die es zu entdecken gibt",
     "joinedSection": "Beigetreten",
     "notConnected": "Keine Verbindung zu {{host}}",
     "inner": {

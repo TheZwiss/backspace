@@ -25,7 +25,8 @@ Source files:
 - `packages/web/src/utils/directory.ts` - `innerOrigins`, `dedupeAgainstConnected`, `isDirectoryEntry`
 - `packages/web/src/stores/instanceStore.ts` - `connectToInstance`, the shared connect path
 - `packages/web/src/components/chat/ExplorePage.tsx`, `OuterSpaceSection.tsx`, `SpaceCard.tsx` - the two sections and the card
-- `packages/web/src/components/chat/InstanceDiscoveryHint.tsx` - why Explore looks the way it does on this instance, and the admin's three one-click fixes
+- `packages/web/src/components/chat/InstanceDiscoveryHint.tsx` - why Explore looks the way it does on this instance, and the admin's three fixes from the page
+- `packages/web/src/components/modals/DirectoryConfirmations.tsx` - the two dialogs that stand in front of the listing and browsing switches
 - `packages/web/src/components/modals/ConnectAndJoinModal.tsx`, `RemotePasswordStep.tsx` - the connect-from-card dialog and the password step it shares with the Connections panel
 - `packages/web/src/components/modals/instanceSettingsPanels/GeneralPanel.tsx` - the admin space-discovery ladder and the directory status line
 - `packages/web/src/components/modals/SpaceSettings.tsx` - the per-space switch in `DiscoveryPanel`
@@ -903,6 +904,37 @@ disable while their call is in flight, and a rejected PATCH renders
 `describeError` under the text and leaves the row where it was, the store
 having kept the old settings; the message is held with the row it was raised
 on, so it disappears rather than following the hint to the next rung.
+
+**Two of the three actions ask before they write.** Listing and browsing each
+change what this instance does to everyone on it, in a way the page they are
+clicked from does not show: listing publishes this instance's address, and
+every opted-in space's name, description, icon, banner and member count, to a
+hub anyone can read; browsing sends every user's browser to the instances that
+own the spaces in Outer Space, which learn each viewer's IP address and are
+run by people this administrator does not control. Each therefore opens a
+`ConfirmDialog` (`DirectoryConfirmations.tsx`) whose three paragraphs are what
+the switch does, what it does not do, and where it is undone, and whose
+confirm button names the action rather than saying OK. The first paragraph of
+each is read from the `admin` catalog, `general.directory.disclosure` and
+`general.browse.toggleDescription`, the sentences the Instance -> General panel
+already states about the same two switches: one wording for each switch across
+both surfaces and four languages, rather than a second version that can drift.
+Cancel writes nothing and leaves the row untouched; confirm runs the same
+action the click used to run directly. A refusal closes the dialog and is
+stated under the row, where every other failure on this surface is stated,
+rather than behind a dialog that would have to be dismissed to read it.
+
+"Turn on space discovery" is deliberately left as a plain click: discovery is
+local to this instance, reveals nothing outward, and is undone by the same
+control, so a dialog there would be the noise that teaches an admin to click
+past the two that matter.
+
+The one piece of local state this adds is which row's dialog is open, held as
+the row it was raised on rather than as a boolean. The settings can move under
+an open dialog, from another tab or a WS ready, and a dialog asking about a
+rung that is no longer on the page goes with it rather than staying to write
+what the admin is no longer looking at. It says whether a dialog is on screen
+and never what the instance's settings are, so the table above stays derived.
 
 The listing row says nothing about Outer Space. **Browsing the directory
 never depends on `directoryEnabled`**, only on the operator's

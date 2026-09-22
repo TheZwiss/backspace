@@ -304,18 +304,6 @@ export function ExplorePage() {
               </div>
             ) : (
               <div className="space-y-6">
-                {/* All-joined success banner (only when no unjoined spaces remain) */}
-                {!hasUnjoined && hasJoined && !searchQuery && (
-                  <div className="flex items-center gap-2.5 px-4 py-2.5 bg-accent-mint/10 border border-accent-mint/20 rounded-lg">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="text-accent-mint flex-shrink-0">
-                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
-                    </svg>
-                    <span className="text-[13px] text-accent-mint">
-                      {t('spaces:explore.allJoined')}
-                    </span>
-                  </div>
-                )}
-
                 {/* Unjoined spaces grid */}
                 {hasUnjoined && (
                   <div className="card-grid">
