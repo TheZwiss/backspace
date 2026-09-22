@@ -35,6 +35,7 @@ import { startFederationWorkers, stopFederationWorkers } from './utils/federatio
 import { startBackupWorker, stopBackupWorker } from './utils/backupWorker.js';
 import { startTelemetryReporter, stopTelemetryReporter } from './telemetry/reporter.js';
 import { startDirectoryPinger, stopDirectoryPinger } from './directory/pinger.js';
+import { ERROR_MESSAGES } from './utils/httpErrors.js';
 import './utils/federationRollback.js'; // Side-effect: registers rollback callbacks for outbox terminal failures.
 import { registerCallRelayHooks } from './ws/events.js';
 import { resetStalePresenceOnBoot } from './utils/presenceBoot.js';
@@ -155,10 +156,14 @@ async function main(): Promise<void> {
     // Test harnesses set DISABLE_RATE_LIMITS=1 to bypass per-IP exhaustion when
     // many tests share the loopback IP. Default unset; production unchanged.
     allowList: () => process.env.DISABLE_RATE_LIMITS === '1' || process.env.DISABLE_RATE_LIMITS === 'true',
+    // The shared error shape (see localization.md) plus `retryAfter` in
+    // seconds; the plugin sets the Retry-After header itself. One builder
+    // covers every per-route override too, so a route that tightens its own
+    // limit does not need to spell the body out again.
     errorResponseBuilder: (_request, context) => ({
+      error: ERROR_MESSAGES.rate_limited,
+      code: 'rate_limited' as const,
       statusCode: 429,
-      error: 'Too Many Requests',
-      message: 'Rate limit exceeded',
       retryAfter: Math.ceil(context.ttl / 1000),
     }),
   });

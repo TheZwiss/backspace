@@ -183,6 +183,7 @@ describe('the violation sink sits behind the rate limiter', () => {
     // order in index.ts and invisible in the source of the route itself.
     const limit = 200;
     const statuses: number[] = [];
+    let limited: { status: number; retryAfter: string | null; body: unknown } | null = null;
     for (let i = 0; i < limit + 40; i++) {
       const res = await fetch(`${h.home.origin}/api/csp-report`, {
         method: 'POST',
@@ -190,8 +191,20 @@ describe('the violation sink sits behind the rate limiter', () => {
         body: JSON.stringify({ 'csp-report': { 'violated-directive': 'img-src' } }),
       });
       statuses.push(res.status);
+      if (res.status === 429 && limited === null) {
+        limited = { status: res.status, retryAfter: res.headers.get('retry-after'), body: await res.json() };
+      }
     }
     expect(statuses.filter((s) => s === 204).length).toBeGreaterThan(0);
     expect(statuses.filter((s) => s === 429).length).toBeGreaterThan(0);
+    // The limiter answers in the shared error shape so the client localizes
+    // it like any other code, with the wait in seconds next to it.
+    expect(limited?.retryAfter).toMatch(/^\d+$/);
+    expect(limited?.body).toEqual({
+      error: 'Too many requests',
+      code: 'rate_limited',
+      statusCode: 429,
+      retryAfter: Number(limited?.retryAfter),
+    });
   }, 60_000);
 });

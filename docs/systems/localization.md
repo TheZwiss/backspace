@@ -322,6 +322,13 @@ section shows this text as its unreachable state), `directory_private_space`
 (`directoryListed: true` on a private space) and
 `directory_requires_discovery` (`directoryEnabled: true` with discovery off).
 
+The global rate limiter (`@fastify/rate-limit` in `index.ts`, 200 per minute,
+and every per-route override of it) answers in the same shape through its
+`errorResponseBuilder`: `{ error, code: 'rate_limited', statusCode: 429,
+retryAfter }`, with `retryAfter` in seconds next to the `Retry-After` header
+the plugin sets. The federated lookup's `lookup_rate_limited` is a different
+code because it reports a peer's limit, not this instance's.
+
 Every route file is converted: auth, users, spaces, channels, messages, DMs
 (including the space-invite endpoint), social, explore, admin, settings,
 search, LiveKit, uploads, GIF and URL metadata. The `authenticate`,
