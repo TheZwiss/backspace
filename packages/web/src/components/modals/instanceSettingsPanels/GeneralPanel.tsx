@@ -312,11 +312,20 @@ export function GeneralPanel() {
                 rather than left saying spaces appear everywhere.
 
                 Unlike the browse switch below, a rung that is already stored
-                as selected still reads as selected. A radio shows what the
-                draft will save, and rendering a different rung as checked
-                would make the ladder disagree with the write it is about to
-                make. The admin can always step down from it; they simply
-                cannot step up into a level that would do nothing.
+                as selected still reads as selected, and the difference is not
+                inconsistency. The switch renders off because with no endpoint
+                nothing is browsed, so off is what is in effect. The rung
+                cannot say the same: `buildDirectoryDocument` gates the public
+                document on `directory_enabled` and `discovery_enabled` alone
+                and never on the endpoint, and `GET /api/directory/spaces` is
+                unauthenticated, so an endpoint-less instance stored at the
+                global rung is genuinely serving a populated public document
+                of its listed spaces right now. The only thing missing is a
+                hub fetching it. Rendering `local` as checked would hide a
+                live fact about what this instance publishes. The admin can
+                always step down from the rung, which stops the document
+                being populated; they simply cannot step up into a level whose
+                remaining half would do nothing.
               */
               const dead = option.level === 'global' && noDirectoryEndpoint;
               return (
@@ -349,7 +358,20 @@ export function GeneralPanel() {
           </fieldset>
           {level === 'global' && (
             <div className="ml-9 mr-2.5 mt-1.5 mb-1 space-y-3">
-              {!instanceSettings.federatedRegistrationOpen && (
+              {/*
+                Gated on the endpoint for the same reason the rung above it
+                is. The note warns that listed spaces will show as closed to
+                new accounts, and offers to open federated registration to fix
+                it; with no endpoint nothing here reaches a hub, so it would
+                be urging a security decision to head off a consequence that
+                cannot happen, directly under a rung that has just said so.
+
+                The ping line and the disclosure below are not gated, because
+                both stay true: the document really is built and served (see
+                the comment on the rung), so what it discloses is public and
+                the pinger's own history is worth reading.
+              */}
+              {!instanceSettings.federatedRegistrationOpen && !noDirectoryEndpoint && (
                 <div className="p-2.5 bg-accent-amber/10 border border-accent-amber/30 rounded text-[13px] text-accent-amber space-y-2">
                   <p>{t('admin:general.directory.registrationClosed')}</p>
                   <button

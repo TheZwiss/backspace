@@ -200,6 +200,36 @@ describe('GeneralPanel federated accounts warning', () => {
     expect(screen.queryByRole('button', { name: OPEN_ACCOUNTS })).not.toBeInTheDocument();
   });
 
+  /*
+   * The note urges a security decision to head off a consequence that cannot
+   * happen on an instance with no endpoint: nothing there reaches a hub, so
+   * no listed space is shown to anyone as closed to new accounts. It sat
+   * directly under a rung that had just said nothing can be listed globally.
+   */
+  it('says nothing with no directory endpoint, under a rung that has already said so', async () => {
+    withInfo(false);
+    seed({ discoveryEnabled: true, directoryEnabled: true, federatedRegistrationOpen: false });
+    render(<GeneralPanel />);
+    await act(async () => {});
+
+    expect(screen.getByText(/nothing here can be listed globally/)).toBeInTheDocument();
+    expect(screen.queryByText(/closed to new accounts/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: OPEN_ACCOUNTS })).not.toBeInTheDocument();
+    // The document really is built and served, so these two stay.
+    expect(screen.getByText('Never reported')).toBeInTheDocument();
+    expect(screen.getByText(DISCLOSURE)).toBeInTheDocument();
+  });
+
+  it('says it again once an endpoint is configured', async () => {
+    withInfo(true);
+    seed({ discoveryEnabled: true, directoryEnabled: true, federatedRegistrationOpen: false });
+    render(<GeneralPanel />);
+    await act(async () => {});
+
+    expect(screen.getByText(/listed spaces will show as closed to new accounts/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: OPEN_ACCOUNTS })).toBeInTheDocument();
+  });
+
   it('says nothing on the rungs below global', () => {
     seed({ discoveryEnabled: true, directoryEnabled: false, federatedRegistrationOpen: false });
     const { unmount } = render(<GeneralPanel />);
@@ -614,6 +644,31 @@ describe('GeneralPanel discovery ladder without a directory endpoint', () => {
     // The rungs that still do something stay available.
     expect(rung(INVITE)).toBeEnabled();
     expect(rung(LOCAL)).toBeEnabled();
+  });
+
+  /*
+   * A first open of the settings modal. The panel mounts before its parent's
+   * `fetchInstanceSettings()` has landed, so `instanceSettings` is null for
+   * the first render and the answer arrives afterwards. The endpoint read no
+   * longer depends on the settings at all, so it goes out at once and the row
+   * is right as soon as both have arrived, in either order.
+   */
+  it('answers on a first open, with the settings arriving after the endpoint read', async () => {
+    const infoSpy = vi.spyOn(api.instance, 'info').mockResolvedValue(info(false));
+    useSettingsStore.setState({ instanceSettings: null, updateInstanceSettings: vi.fn() });
+
+    const { rerender } = render(<GeneralPanel />);
+    await act(async () => {});
+    expect(infoSpy).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      useSettingsStore.setState({ instanceSettings: { ...base, directoryBrowseEnabled: true } });
+    });
+    rerender(<GeneralPanel />);
+
+    expect(screen.getByText(NO_ENDPOINT)).toBeInTheDocument();
+    expect(rung(GLOBAL)).toBeDisabled();
+    expect(infoSpy).toHaveBeenCalledTimes(1);
   });
 
   it('offers the global rung and its description once an endpoint is configured', async () => {
