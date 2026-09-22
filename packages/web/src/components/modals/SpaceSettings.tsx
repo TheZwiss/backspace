@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useFormatters } from '../../i18n/formatters';
 import { describeError } from '../../i18n/errors';
@@ -26,9 +26,21 @@ interface InstanceDiscoveryFlags {
   directoryEnabled: boolean;
 }
 
+/** What the Discovery panel knows about the instance its space lives on. */
+interface InstanceDiscoveryFlagsState {
+  /** The flags, or null while they are not known. */
+  flags: InstanceDiscoveryFlags | null;
+  /** A load this hook ran finished and left nothing to show. */
+  failed: boolean;
+  /** A load is running, so Retry is inert rather than re-entrant. */
+  loading: boolean;
+  /** Ask again. The only way back when the document did not arrive. */
+  retry: () => void;
+}
+
 /**
- * The discovery and directory flags of the instance a space lives on, or null
- * when they are not known.
+ * The discovery and directory flags of the instance a space lives on, the
+ * state of the load that fetches them, and the way to ask again.
  *
  * Home (`''`) reads the store's `streamingLimits`, the settings document any
  * signed-in user may fetch. That field is null until the document arrives and
@@ -39,38 +51,81 @@ interface InstanceDiscoveryFlags {
  * same reason; this panel offers a write off these flags, so it has more at
  * stake, not less.
  *
+ * **It fetches the document itself when it is missing.** One WS `ready`
+ * handler fills that field for the whole session, and nothing else does for a
+ * member (the Streaming panel is an admin surface). A `ready` whose fetch
+ * failed therefore left this panel with an unexplained disabled switch for
+ * the rest of the session, which is unknown saying nothing at all rather than
+ * saying it is unknown. The load runs only when the field is empty, since the
+ * panel reads the document and does not write it, and `failed` plus `retry`
+ * carry the rest, the same treatment the Streaming panel gives its own load.
+ *
  * A remote space asks its own instance through its own client on mount,
  * because home's flags say nothing about it: null while that answer is
  * pending, so the caller can keep its switches disabled rather than show
  * home's values. A failed fetch falls back to the store's values and lets the
  * save's own error speak, which is null as well on an instance whose own
- * document never arrived.
+ * document never arrived, and that pair is what `failed` reports.
  */
-function useInstanceDiscoveryFlags(origin: string): InstanceDiscoveryFlags | null {
+function useInstanceDiscoveryFlags(origin: string): InstanceDiscoveryFlagsState {
   const homeLimits = useSettingsStore((s) => s.streamingLimits);
+  const fetchStreamingLimits = useSettingsStore((s) => s.fetchStreamingLimits);
   const home: InstanceDiscoveryFlags | null = homeLimits === null
     ? null
     : { discoveryEnabled: homeLimits.discoveryEnabled, directoryEnabled: homeLimits.directoryEnabled };
   const [remote, setRemote] = useState<{ origin: string; flags: InstanceDiscoveryFlags | 'failed' } | null>(null);
+  const [homeFailed, setHomeFailed] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  // `fetchStreamingLimits` swallows its own error, so the outcome is read
+  // from the store: the document either arrived or it did not.
+  const loadHome = useCallback(async () => {
+    setLoading(true);
+    await fetchStreamingLimits();
+    setHomeFailed(useSettingsStore.getState().streamingLimits === null);
+    setLoading(false);
+  }, [fetchStreamingLimits]);
+
+  const loadRemote = useCallback(async (target: string) => {
+    setLoading(true);
+    try {
+      const limits = await getApiForOrigin(target).settings.getStreaming();
+      setRemote({ origin: target, flags: { discoveryEnabled: limits.discoveryEnabled, directoryEnabled: limits.directoryEnabled } });
+    } catch {
+      setRemote({ origin: target, flags: 'failed' });
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    if (!origin) return;
-    let cancelled = false;
-    getApiForOrigin(origin).settings.getStreaming().then(
-      (limits) => {
-        if (cancelled) return;
-        setRemote({ origin, flags: { discoveryEnabled: limits.discoveryEnabled, directoryEnabled: limits.directoryEnabled } });
-      },
-      () => {
-        if (!cancelled) setRemote({ origin, flags: 'failed' });
-      },
-    );
-    return () => { cancelled = true; };
-  }, [origin]);
+    if (origin) {
+      void loadRemote(origin);
+      return;
+    }
+    // Read through `getState` rather than from the render's `homeLimits`, so
+    // the document arriving does not run this again.
+    if (useSettingsStore.getState().streamingLimits === null) void loadHome();
+  }, [origin, loadRemote, loadHome]);
 
-  if (!origin) return home;
-  if (remote === null || remote.origin !== origin) return null;
-  return remote.flags === 'failed' ? home : remote.flags;
+  const retry = useCallback(() => {
+    if (origin) void loadRemote(origin);
+    else void loadHome();
+  }, [origin, loadRemote, loadHome]);
+
+  const remoteAnswered = remote !== null && remote.origin === origin;
+  const flags = !origin
+    ? home
+    : !remoteAnswered
+      ? null
+      : remote.flags === 'failed' ? home : remote.flags;
+
+  // Only a load that finished with nothing to show: a remote whose fetch
+  // failed while home holds a document is not a failure this panel reports,
+  // it is the fallback doing its job.
+  const failed = flags === null && (origin ? remoteAnswered && remote.flags === 'failed' : homeFailed);
+
+  return { flags, failed, loading, retry };
 }
 
 /**
@@ -88,10 +143,13 @@ export function DiscoveryPanel({ spaceId }: { spaceId: string }) {
   const updateSpace = useSpaceStore((s) => s.updateSpace);
 
   const space = spaces.find(s => s.id === spaceId);
-  const flags = useInstanceDiscoveryFlags(space?._instanceOrigin ?? '');
+  const { flags, failed: flagsFailed, loading: flagsLoading, retry: retryFlags } =
+    useInstanceDiscoveryFlags(space?._instanceOrigin ?? '');
   // Until the instance the space lives on has answered, neither flag is
-  // known: the notice stays hidden and the directory switch stays disabled
-  // with no reason, because a reason would be a guess about that instance.
+  // known: the notice stays hidden and the directory switch stays disabled,
+  // because a reason would be a guess about that instance. Unknown while a
+  // load is still running says nothing; unknown because the load came back
+  // empty says so, under the switch, with the way to ask again.
   const flagsUnknown = flags === null;
   // Both are read only on branches `flagsUnknown` already guards; the
   // fallbacks are what the type needs, never a claim about the instance.
@@ -219,6 +277,23 @@ export function DiscoveryPanel({ spaceId }: { spaceId: string }) {
           </label>
           {directoryReason !== null && (
             <p className="text-xs text-txt-secondary">{directoryReason}</p>
+          )}
+          {flagsFailed && (
+            // The switch is locked on a document that never arrived, so this
+            // is the one line that says why and the only way back: the same
+            // treatment the Streaming panel gives its own failed load, at the
+            // scale of a reason under a switch.
+            <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-xs flex flex-wrap items-center gap-2.5">
+              <span>{t('common:states.loadSettingsFailed')}</span>
+              <button
+                type="button"
+                onClick={retryFlags}
+                disabled={flagsLoading}
+                className="font-medium underline underline-offset-2 hover:no-underline transition-all disabled:no-underline disabled:opacity-60 disabled:cursor-default"
+              >
+                {t('common:actions.retry')}
+              </button>
+            </div>
           )}
           <p className="text-xs text-txt-tertiary">{t('spaces:settings.discovery.directory.disclosure')}</p>
         </div>

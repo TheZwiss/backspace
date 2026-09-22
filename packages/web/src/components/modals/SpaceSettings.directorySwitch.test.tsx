@@ -23,6 +23,7 @@ import { api, type BackspaceApiClient } from '../../api/client';
 const SWITCH = 'List in the Backspace directory';
 const ADMIN_OFF = 'Your instance administrator has to turn on global space discovery.';
 const PRIVATE_SPACE = 'Set visibility to public or request to join first.';
+const LOAD_FAILED = 'Could not load the settings.';
 
 const limits: InstanceStreamingLimits = {
   maxBitrateKbps: 20000,
@@ -231,13 +232,14 @@ describe('DiscoveryPanel instance flags by origin', () => {
     expect(screen.queryByText(ADMIN_OFF)).not.toBeInTheDocument();
   });
 
-  it('states nothing about a home instance whose settings document never arrived', () => {
+  it('states nothing about a home instance while its settings document is still coming', async () => {
     // `fetchStreamingLimits` leaves the field null when the request fails, so
     // null is "not known", not "directory off". Defaulting it locked the
     // switch under a sentence about the administrator's setting that nobody
     // had read.
     useSpaceStore.setState({ spaces: [{ ...space, visibility: 'public' }] });
     useSettingsStore.setState({ streamingLimits: null });
+    const homeStreaming = vi.spyOn(api.settings, 'getStreaming').mockReturnValue(new Promise(() => {}));
 
     render(<DiscoveryPanel spaceId="space-1" />);
 
@@ -245,19 +247,84 @@ describe('DiscoveryPanel instance flags by origin', () => {
     expect(screen.queryByText(ADMIN_OFF)).not.toBeInTheDocument();
     expect(screen.queryByText(PRIVATE_SPACE)).not.toBeInTheDocument();
     expect(screen.queryByText(/Space discovery is disabled/)).not.toBeInTheDocument();
+    // Nothing failed yet, so there is nothing to retry either.
+    expect(screen.queryByText(LOAD_FAILED)).not.toBeInTheDocument();
+    expect(homeStreaming).toHaveBeenCalledTimes(1);
   });
 
-  it('says its piece as soon as the document does arrive', () => {
+  it('says its piece as soon as the document does arrive', async () => {
     useSpaceStore.setState({ spaces: [{ ...space, visibility: 'public' }] });
     useSettingsStore.setState({ streamingLimits: null });
-    const { rerender } = render(<DiscoveryPanel spaceId="space-1" />);
+    vi.spyOn(api.settings, 'getStreaming').mockResolvedValue({ ...limits, directoryEnabled: false });
+
+    render(<DiscoveryPanel spaceId="space-1" />);
     expect(screen.queryByText(ADMIN_OFF)).not.toBeInTheDocument();
 
-    useSettingsStore.setState({ streamingLimits: { ...limits, directoryEnabled: false } });
-    rerender(<DiscoveryPanel spaceId="space-1" />);
-
-    expect(screen.getByText(ADMIN_OFF)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(ADMIN_OFF)).toBeInTheDocument());
     expect(directorySwitch()).toBeDisabled();
+  });
+
+  it('fetches the document itself when the session never got one', async () => {
+    // One WS ready fills `streamingLimits` for the whole session and nothing
+    // else does for a member, so a ready whose fetch failed used to leave
+    // this panel locked and silent until the next sign-in.
+    useSpaceStore.setState({ spaces: [{ ...space, visibility: 'public' }] });
+    useSettingsStore.setState({ streamingLimits: null });
+    const homeStreaming = vi.spyOn(api.settings, 'getStreaming').mockResolvedValue({ ...limits, directoryEnabled: true });
+
+    render(<DiscoveryPanel spaceId="space-1" />);
+
+    await waitFor(() => expect(directorySwitch()).toBeEnabled());
+    expect(homeStreaming).toHaveBeenCalledTimes(1);
+  });
+
+  it('says so when that load comes back empty, and offers the way to ask again', async () => {
+    useSpaceStore.setState({ spaces: [{ ...space, visibility: 'public' }] });
+    useSettingsStore.setState({ streamingLimits: null });
+    const homeStreaming = vi.spyOn(api.settings, 'getStreaming').mockRejectedValueOnce(new Error('down'));
+
+    render(<DiscoveryPanel spaceId="space-1" />);
+
+    // The failure is what the switch is locked on, so it is said under it,
+    // and it never turns into a sentence about the administrator's setting.
+    expect(await screen.findByText(LOAD_FAILED)).toBeInTheDocument();
+    expect(directorySwitch()).toBeDisabled();
+    expect(screen.queryByText(ADMIN_OFF)).not.toBeInTheDocument();
+
+    homeStreaming.mockResolvedValueOnce({ ...limits, directoryEnabled: true });
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+    await waitFor(() => expect(directorySwitch()).toBeEnabled());
+    expect(screen.queryByText(LOAD_FAILED)).not.toBeInTheDocument();
+    expect(homeStreaming).toHaveBeenCalledTimes(2);
+  });
+
+  it('a retry that fails again leaves the line and the button where they were', async () => {
+    useSpaceStore.setState({ spaces: [{ ...space, visibility: 'public' }] });
+    useSettingsStore.setState({ streamingLimits: null });
+    const homeStreaming = vi.spyOn(api.settings, 'getStreaming').mockRejectedValue(new Error('down'));
+
+    render(<DiscoveryPanel spaceId="space-1" />);
+    expect(await screen.findByText(LOAD_FAILED)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+    await waitFor(() => expect(homeStreaming).toHaveBeenCalledTimes(2));
+    expect(screen.getByText(LOAD_FAILED)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeEnabled();
+    expect(directorySwitch()).toBeDisabled();
+  });
+
+  it('a remote instance that answers nothing, with no home document to fall back on, says so too', async () => {
+    seed({ visibility: 'public', _instanceOrigin: 'https://remote.test' }, true);
+    useSettingsStore.setState({ streamingLimits: null });
+    const getStreaming = connectRemote('https://remote.test', Promise.reject(new Error('down')));
+
+    render(<DiscoveryPanel spaceId="space-1" />);
+
+    expect(await screen.findByText(LOAD_FAILED)).toBeInTheDocument();
+    expect(directorySwitch()).toBeDisabled();
+    expect(getStreaming).toHaveBeenCalledTimes(1);
   });
 
   it('reads a home space\'s flags from the store without a request', () => {

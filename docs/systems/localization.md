@@ -485,6 +485,23 @@ text, with `Co-authored-by` credit on every commit that carries them, and
 st7105 is asked to review the result. German is written by the maintainers;
 the release PR that flips its flag is merged only after a native read.
 
+**One name per concept, per language.** A concept the product names once in
+English is named once in each catalog, and that name is not reused for
+anything else. The space directory broke this rule in Russian first: it was
+«внешний каталог» in ten strings, «общедоступный каталог» in two and a bare
+«каталог» in three, and «каталог пространств» was also being used for
+*discovery*, which is a different setting with a different switch, so a space
+owner read that the directory was off and went looking for the listing
+control. Settled as «внешний каталог» for the directory (the spelling already
+in the majority, and the one that matches «внешнее пространство» for Outer
+Space), «обнаружение пространств» for discovery (already the admin panel's
+wording), and «папка» for a filesystem directory, so that «каталог» has
+exactly one meaning. German (`Verzeichnis`) and Chinese (`目录`) each carried
+one name already and were left alone. The rule cannot be checked by comparing
+languages to each other, so the Russian one is pinned by
+`src/i18n/ruDirectoryName.test.ts`; a language that develops the same split
+gets its own.
+
 Catalogs are Weblate compatible. No hosted translation platform is
 configured yet; when one is, it points at `packages/web/src/locales` and
 `en` is the source language.
