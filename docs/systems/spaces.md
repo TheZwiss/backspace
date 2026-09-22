@@ -302,11 +302,11 @@ leaves `isLoading` alone: the run that superseded it is still going, and its
 spinner is not the old one's to take down. `fetchMyRequests` has the same
 guard on a counter of its own, for the same reason: it was one call to home
 before multi-instance discovery and is now a fan-out too, and the page calls
-the two together. `reset()` bumps both counters, so anything in flight when
-the store is cleared is orphaned; nothing in the app calls `reset()` today
-(`authStore.resetUserStores` clears the space, social, voice, instance and
-activity stores, not this one or `directoryStore`), so that path is the
-tests' and whoever wires it later.
+the two together. `reset()` bumps both counters, so a fan-out still in flight
+when the session ends is orphaned rather than landing in the next one: this
+store and `directoryStore` are both cleared on sign-out, on account deletion
+and when another account signs in, through `authStore.resetUserStores`
+([auth.md](auth.md#resetuserstores)).
 
 **`resultsQuery` is the query the spaces on screen answer**, recorded when a
 fan-out lands rather than when it is asked for. The empty copy reads it, not

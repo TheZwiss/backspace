@@ -526,7 +526,7 @@ interface AuthState {
 ### `initSession(token, user)`
 
 Called after successful login or registration:
-1. `resetUserStores()` -- clears all user-scoped stores (chat, space, social, voice, instance, activity) and `clearSelfIds()` from identity registry
+1. `resetUserStores()` -- clears every user-scoped store and `clearSelfIds()` from the identity registry (see below)
 2. Saves token to localStorage
 3. Sets token + user in Zustand state
 4. Fires `useInstanceStore.autoConnectAll()` (fire-and-forget) for federation
@@ -538,11 +538,42 @@ Called by `useAuth()` hook when token exists but user object is null:
 2. On success: sets user, triggers `autoConnectAll()`
 3. On failure: removes token from localStorage, clears state (forces redirect to login)
 
+Step 3 does **not** call `resetUserStores()`. It runs at boot, on a stored
+token the server rejects, when the stores are still at their initial values,
+so there is nothing to clear; it is the one session-ending path that does not
+go through the fan-out, and it would need the call if it ever ran mid-session.
+
 ### `logout()`
 
 1. Removes token from localStorage
-2. Calls `resetUserStores()` (clears all stores + self IDs)
+2. Calls `resetUserStores()` (see below)
 3. Sets token and user to null
+
+### `resetUserStores()`
+
+The one place a session's client state is dropped. Called by `initSession`
+(so signing in as another account without a reload cannot inherit the
+previous one's rows), by `logout`, and by `deleteAccount`. It clears the
+identity registry's self IDs and then, in order: chat messages, the space,
+social, voice, instance, activity, explore and directory stores, and the
+settings store's update state.
+
+`exploreStore` and `directoryStore` were added to it on the space directory
+branch. `exploreStore.myRequests` holds the signed-in user's own pending
+join requests and a space card reads "Request Pending" off them, so leaving
+it behind showed one account's requests under another account's session
+until the next fan-out replaced them; `directoryStore` holds a feed fetched
+through the home proxy as the signed-in user. Both stores' `reset()` also
+bump the sequence counters that guard their fan-outs
+([spaces.md](spaces.md#multi-instance-discovery-explorestorets)), so the call
+is what stops a reply for the old session landing in the new one.
+
+Two paths end a session without going through this function, and both are
+safe because they replace the whole JS context: `handleUnauthorized` in
+`api/client.ts`, which drops the token on a 401 and navigates to `/login`
+with `window.location.href`, and the post-deletion redirect in
+`DeleteAccountModal`, which does the same three seconds after the flow
+completes (`authStore.deleteAccount` has already reset by then).
 
 ### Route Guards
 
