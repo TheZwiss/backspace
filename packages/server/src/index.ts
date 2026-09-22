@@ -35,7 +35,7 @@ import { startFederationWorkers, stopFederationWorkers } from './utils/federatio
 import { startBackupWorker, stopBackupWorker } from './utils/backupWorker.js';
 import { startTelemetryReporter, stopTelemetryReporter } from './telemetry/reporter.js';
 import { startDirectoryPinger, stopDirectoryPinger } from './directory/pinger.js';
-import { ERROR_MESSAGES } from './utils/httpErrors.js';
+import { errorBody } from './utils/httpErrors.js';
 import './utils/federationRollback.js'; // Side-effect: registers rollback callbacks for outbox terminal failures.
 import { registerCallRelayHooks } from './ws/events.js';
 import { resetStalePresenceOnBoot } from './utils/presenceBoot.js';
@@ -161,9 +161,7 @@ async function main(): Promise<void> {
     // covers every per-route override too, so a route that tightens its own
     // limit does not need to spell the body out again.
     errorResponseBuilder: (_request, context) => ({
-      error: ERROR_MESSAGES.rate_limited,
-      code: 'rate_limited' as const,
-      statusCode: 429,
+      ...errorBody(429, 'rate_limited'),
       retryAfter: Math.ceil(context.ttl / 1000),
     }),
   });

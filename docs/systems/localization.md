@@ -324,10 +324,14 @@ section shows this text as its unreachable state), `directory_private_space`
 
 The global rate limiter (`@fastify/rate-limit` in `index.ts`, 200 per minute,
 and every per-route override of it) answers in the same shape through its
-`errorResponseBuilder`: `{ error, code: 'rate_limited', statusCode: 429,
+`errorResponseBuilder`, built with `errorBody` from `httpErrors.ts` so the
+code is typed there too: `{ error, code: 'rate_limited', statusCode: 429,
 retryAfter }`, with `retryAfter` in seconds next to the `Retry-After` header
-the plugin sets. The federated lookup's `lookup_rate_limited` is a different
-code because it reports a peer's limit, not this instance's.
+the plugin sets. On the client every 429 throws `RateLimitError`, an
+`HttpError` with `status 429` and the `rate_limited` code plus `retryAfter`,
+so `describeError` localizes it like any other server error and the auth
+pages keep their countdown. The federated lookup's `lookup_rate_limited` is
+a different code because it reports a peer's limit, not this instance's.
 
 Every route file is converted: auth, users, spaces, channels, messages, DMs
 (including the space-invite endpoint), social, explore, admin, settings,

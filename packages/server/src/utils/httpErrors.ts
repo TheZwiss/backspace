@@ -250,6 +250,31 @@ export function errorText(code: ErrorCode, details?: ErrorDetails): string {
   return fillPlaceholders(ERROR_MESSAGES[code], details);
 }
 
+/** The shared error contract: `{ error, code, statusCode, details? }`. */
+export interface ErrorBody {
+  error: string;
+  code: ErrorCode;
+  statusCode: number;
+  details?: ErrorDetails;
+}
+
+/**
+ * The body of an error response in the shared contract.
+ *
+ * For the places that cannot go through `sendError` because something else
+ * sends the reply (the rate limiter's `errorResponseBuilder`) and still
+ * want the code typed rather than spelled.
+ */
+export function errorBody(statusCode: number, code: ErrorCode, details?: ErrorDetails): ErrorBody {
+  const body: ErrorBody = {
+    error: fillPlaceholders(ERROR_MESSAGES[code], details),
+    code,
+    statusCode,
+  };
+  if (details) body.details = details;
+  return body;
+}
+
 /**
  * Send an error response in the shared contract: `{ error, code, statusCode, details? }`.
  *
@@ -263,11 +288,5 @@ export function sendError(
   code: ErrorCode,
   details?: ErrorDetails,
 ): FastifyReply {
-  const body: { error: string; code: ErrorCode; statusCode: number; details?: ErrorDetails } = {
-    error: fillPlaceholders(ERROR_MESSAGES[code], details),
-    code,
-    statusCode,
-  };
-  if (details) body.details = details;
-  return reply.code(statusCode).send(body);
+  return reply.code(statusCode).send(errorBody(statusCode, code, details));
 }

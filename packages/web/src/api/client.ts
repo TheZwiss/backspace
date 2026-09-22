@@ -83,15 +83,6 @@ import { getApiForOrigin, getOwnerInstanceForDm } from '../utils/crossStoreResol
 
 export type { FederationPeer, FederationOrphanedAccount, FederationResetEvent, FederationResetEventsResponse, ApprovalRequest, PeeringSubscription, PeeringNotification };
 
-export class RateLimitError extends Error {
-  readonly retryAfter: number;
-  constructor(retryAfter: number) {
-    super('Rate limit exceeded');
-    this.name = 'RateLimitError';
-    this.retryAfter = retryAfter;
-  }
-}
-
 /**
  * Reply of the username availability check. `reason` is the server's
  * English text; `code` and `details` let the client say it in the user's
@@ -102,6 +93,17 @@ export interface CheckUsernameResponse {
   reason?: string;
   code?: ErrorCode;
   details?: ErrorDetails;
+}
+
+/** The parts of an error body the client reads; see HttpError.fromBody for the vintages. */
+function readErrorBody(body: unknown): { errorText?: string; code?: ErrorCode; details?: ErrorDetails } {
+  const record = typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : {};
+  const errorText = typeof record.error === 'string' && record.error.length > 0 ? record.error : undefined;
+  const code = isErrorCode(record.code) ? record.code : isErrorCode(record.error) ? record.error : undefined;
+  const details = typeof record.details === 'object' && record.details !== null
+    ? (record.details as ErrorDetails)
+    : undefined;
+  return { errorText, code, details };
 }
 
 export class HttpError extends Error {
@@ -130,13 +132,25 @@ export class HttpError extends Error {
    * knows are accepted, so a peer cannot inject arbitrary catalog keys.
    */
   static fromBody(status: number, body: unknown): HttpError {
-    const record = typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : {};
-    const errorText = typeof record.error === 'string' && record.error.length > 0 ? record.error : `HTTP ${status}`;
-    const code = isErrorCode(record.code) ? record.code : isErrorCode(record.error) ? record.error : undefined;
-    const details = typeof record.details === 'object' && record.details !== null
-      ? (record.details as ErrorDetails)
-      : undefined;
-    return new HttpError(status, errorText, body, code, details);
+    const { errorText, code, details } = readErrorBody(body);
+    return new HttpError(status, errorText ?? `HTTP ${status}`, body, code, details);
+  }
+}
+
+/**
+ * A 429 from any route. An HttpError with the `rate_limited` code, so
+ * `describeError` says it in the user's language, plus the seconds to wait
+ * for the surfaces that count down (the auth pages).
+ */
+export class RateLimitError extends HttpError {
+  /** Seconds until the limiter admits the next request: the body's `retryAfter`, the Retry-After header, or 60. */
+  readonly retryAfter: number;
+
+  constructor(retryAfter: number, body?: unknown) {
+    const { errorText, details } = readErrorBody(body);
+    super(429, errorText ?? 'Rate limit exceeded', body, 'rate_limited', details);
+    this.name = 'RateLimitError';
+    this.retryAfter = retryAfter;
   }
 }
 
@@ -427,10 +441,10 @@ export class BackspaceApiClient {
           onUnauthorized();
         }
         if (response.status === 429) {
-          const body = await response.json().catch(() => ({}));
+          const body: unknown = await response.json().catch(() => ({}));
           const retryAfter = (body as { retryAfter?: number }).retryAfter
             ?? (parseInt(response.headers.get('retry-after') || '', 10) || 60);
-          throw new RateLimitError(retryAfter);
+          throw new RateLimitError(retryAfter, body);
         }
         throw HttpError.fromBody(response.status, await response.json().catch(() => null));
       }
