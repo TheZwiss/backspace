@@ -271,6 +271,14 @@ the amber-means-update rule above, not a bug.
 Glass server strip overlays left 72px of channel sidebar.
 Channel sidebar fully opaque with gradient at left edge feeding glass.
 
+Card lists (Explore's Inner and Outer Space sections, the Friends page's
+discover list) share one class, `.card-grid` in `globals.css`: one full-width
+column below the desktop breakpoint, and above it
+`repeat(auto-fill, minmax(min(100%, 280px), 1fr))` with a 1rem gap. It is
+`auto-fill` and not `auto-fit` on purpose, because `auto-fit` collapses the
+empty tracks and stretches a list holding a single card over the whole row.
+Any new card list uses this class rather than its own template.
+
 ---
 
 ## Shadows

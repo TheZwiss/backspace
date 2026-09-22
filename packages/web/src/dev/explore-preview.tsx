@@ -3,11 +3,13 @@
 // Inner Space / Outer Space layout can be looked at and screenshotted in each
 // of its designed states without a populated instance, a peer, or a hub.
 //
-// `?scene=both|inner-empty|outer-unreachable|outer-empty` picks the state of
-// the two stores; `both` is the default. The page's own network calls are
-// replaced: the store actions become no-ops and the one unauthenticated call
-// the page makes itself (`GET /api/instance/info`, the directory gate) is
-// answered locally so the harness needs no server.
+// `?scene=both|inner-one|inner-two|inner-empty|outer-unreachable|outer-empty`
+// picks the state of the two stores; `both` is the default. `inner-one` and
+// `inner-two` cut the Inner list down to one and two unjoined cards, the
+// counts at which a card grid has empty tracks to spare. The page's own
+// network calls are replaced: the store actions become no-ops and the one
+// unauthenticated call the page makes itself (`GET /api/instance/info`, the
+// directory gate) is answered locally so the harness needs no server.
 //
 // `?scene=connect-password|connect-closed|connect-fallback` opens the
 // connect-and-join modal over the `both` page: the password phase for a
@@ -46,6 +48,8 @@ import '../styles/globals.css';
 
 type Scene =
   | 'both'
+  | 'inner-one'
+  | 'inner-two'
   | 'inner-empty'
   | 'outer-unreachable'
   | 'outer-empty'
@@ -58,6 +62,8 @@ type Scene =
 
 const SCENES: ReadonlySet<string> = new Set<Scene>([
   'both',
+  'inner-one',
+  'inner-two',
   'inner-empty',
   'outer-unreachable',
   'outer-empty',
@@ -226,9 +232,22 @@ function installInstanceInfo(): void {
   };
 }
 
+/**
+ * The Inner list for a scene: every fixture, the first one or two unjoined
+ * ones with the joined one still under them (the maintainer's case), or none.
+ */
+function innerSpacesFor(scene: Scene): TaggedExploreSpace[] {
+  const unjoined = INNER_SPACES.filter((space) => !space.joined);
+  const joined = INNER_SPACES.filter((space) => space.joined);
+  if (scene === 'inner-empty') return [];
+  if (scene === 'inner-one') return [...unjoined.slice(0, 1), ...joined];
+  if (scene === 'inner-two') return [...unjoined.slice(0, 2), ...joined];
+  return INNER_SPACES;
+}
+
 function seedStores(scene: Scene): void {
   useExploreStore.setState({
-    spaces: scene === 'inner-empty' ? [] : INNER_SPACES,
+    spaces: innerSpacesFor(scene),
     myRequests: [],
     isLoading: false,
     discoveryEnabled: true,

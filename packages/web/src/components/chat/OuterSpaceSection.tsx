@@ -89,7 +89,7 @@ export function OuterSpaceSection({ query, onConnect }: OuterSpaceSectionProps) 
       ) : (
         <div className="space-y-4">
           {hasEntries && (
-            <div className="grid grid-cols-1 desktop:grid-cols-[repeat(auto-fit,minmax(min(100%,280px),1fr))] gap-4">
+            <div className="card-grid">
               {entries.map((entry) => (
                 <SpaceCard
                   key={`${entry.id}:${entry.origin}`}

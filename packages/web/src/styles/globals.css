@@ -314,6 +314,27 @@
   ) {
     font-size: 16px !important;
   }
+
+  /* ── Card Grid ──
+   * The shared track for the card lists: Explore's Inner and Outer Space
+   * sections and the Friends page's discover list. One column below the
+   * desktop breakpoint, so a card is full width on a phone.
+   *
+   * `auto-fill`, not `auto-fit`: auto-fit collapses the empty tracks, so a
+   * list holding a single card stretches it over the whole row, where a
+   * banner and a Join button read as broken. auto-fill keeps the tracks, so
+   * a lone card is exactly as wide as a card in a full row. The `min(100%,
+   * 280px)` floor keeps the track from overflowing a container narrower than
+   * 280px, which the desktop layout reaches at small window widths.
+   */
+  .card-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1rem;
+  }
+  html[data-viewport="desktop"] .card-grid {
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  }
 }
 
 /* Accessibility: fall back to solid surfaces when transparency is reduced */
