@@ -11,9 +11,14 @@ Every request passes one global limit of **200 per minute**, registered in
 `packages/server/src/index.ts`. **The key is the client address and nothing
 else.** The limiter runs on Fastify's `onRequest` hook while `authenticate` is
 a route `preHandler`, so no user is attached to the request yet when the key is
-taken; there is no per-account budget anywhere in the app. `trustProxy` is on,
-so the address is the one the fronting proxy forwards
-(see [deployment.md](deployment.md)).
+taken; there is no per-account budget anywhere in the app.
+
+`trustProxy` is on and trusts every hop, so the address is the **left-most**
+`X-Forwarded-For` value, whoever wrote it. A front that overwrites that header
+(the bundled Caddy does) makes the key the real client; a front that appends to
+it, or no front at all, lets the client choose its own key. That condition
+belongs to the deployment, not to the code: [web-security.md](web-security.md)
+section 9 and [deployment.md](deployment.md), "Server proxy-awareness".
 
 What an operator should take from that: **everyone sharing one public address
 shares one budget.** A school, an office behind a corporate proxy, a VPN exit

@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { eq, and, desc, lt, inArray } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
@@ -307,7 +307,10 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
       rateLimit: {
         max: 5,
         timeWindow: '5 seconds',
-        keyGenerator: (request: any) => request.userId || request.ip,
+        // Per client address, like every limit in this app. A route limit runs
+        // on `onRequest` too, before `authenticate`, so there is no user on the
+        // request to key on. See docs/systems/api.md, "Rate limiting".
+        keyGenerator: (request: FastifyRequest) => request.ip,
       },
     },
   }, async (request, reply) => {

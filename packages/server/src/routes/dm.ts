@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { eq, and, or, desc, lt, inArray, isNull, sql } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
@@ -2353,7 +2353,11 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       rateLimit: {
         max: 30,
         timeWindow: '60 seconds',
-        keyGenerator: (request: any) => request.userId || request.ip,
+        // Per client address, like every limit in this app. A route limit runs
+        // on `onRequest`, and the DM routes authenticate in a plugin-level
+        // `preHandler` (see dmRoutes), so there is no user on the request to
+        // key on. See docs/systems/api.md, "Rate limiting".
+        keyGenerator: (request: FastifyRequest) => request.ip,
       },
     },
   }, async (request, reply) => {
@@ -2480,7 +2484,8 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       rateLimit: {
         max: 5,
         timeWindow: '5 seconds',
-        keyGenerator: (request: any) => request.userId || request.ip,
+        // Per client address; see the note on the space-invite limit above.
+        keyGenerator: (request: FastifyRequest) => request.ip,
       },
     },
   }, async (request, reply) => {

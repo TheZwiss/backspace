@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyReply } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { eq, or, lt } from 'drizzle-orm';
 import { randomBytes } from 'node:crypto';
 import { getDb, schema } from '../db/index.js';
@@ -45,7 +45,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       rateLimit: {
         max: 10,
         timeWindow: '2 minutes',
-        keyGenerator: (request: any) => request.ip,
+        keyGenerator: (request: FastifyRequest) => request.ip,
       },
     },
   }, async (request, reply) => {
@@ -253,7 +253,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       rateLimit: {
         max: 30,
         timeWindow: '1 minute',
-        keyGenerator: (request: any) => request.ip,
+        keyGenerator: (request: FastifyRequest) => request.ip,
       },
     },
   }, async (request, reply) => {
@@ -300,7 +300,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       rateLimit: {
         max: 30,
         timeWindow: '1 minute',
-        keyGenerator: (request: any) => request.ip,
+        keyGenerator: (request: FastifyRequest) => request.ip,
       },
     },
   }, async (request, reply) => {
@@ -333,7 +333,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       rateLimit: {
         max: 15,
         timeWindow: '2 minutes',
-        keyGenerator: (request: any) => request.ip,
+        keyGenerator: (request: FastifyRequest) => request.ip,
       },
     },
   }, async (request, reply) => {

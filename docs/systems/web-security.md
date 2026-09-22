@@ -651,6 +651,51 @@ server renders different HTML.
 
 ---
 
+## 9. The client address, and what rests on it
+
+The app runs Fastify with `trustProxy: true` (`packages/server/src/index.ts`).
+That trusts **every** hop, so `request.ip` is the left-most entry of
+`X-Forwarded-For` no matter who wrote it: a request arriving with
+`X-Forwarded-For: 9.9.9.9` is seen as coming from 9.9.9.9 even when the proxy
+appends the real address after it. `request.ips` keeps the whole chain, and
+nothing in the app reads it.
+
+**The rate limits are what rest on this.** The global limiter's key is the
+client address and there is nothing else it could key on (see
+[api.md](api.md), "Rate limiting"), the per-route limits key the same way, and
+the hand-written limiter on `POST /federation/peer/accept`
+(`routes/federation/handlers/peerHandshake.ts`, first contact, no JWT) buckets
+on `request.ip` too. So all of them hold exactly as far as the fronting proxy's
+handling of that header:
+
+| Front | `X-Forwarded-For` handling | Effect on the limit |
+|---|---|---|
+| Bundled Caddy (`allinone`, the shipped default) | overwrites; incoming values are ignored unless `trusted_proxies` is set, and this repo's `Caddyfile` does not set it | sound: the address is the real peer |
+| Operator's nginx using the snippet `install.sh` prints | **appends** (`$proxy_add_x_forwarded_for` is `"<incoming>, <peer>"`) | a client picks its own key and can rotate it per request, so the limit is evadable |
+| A tunnel provider | provider-specific | unknown until the operator checks |
+| App exposed directly | none; the client's header is the only one there is | evadable |
+
+An evaded rate limit is not an authentication bypass: every limited route still
+authenticates and authorizes normally. What it removes is the brake on
+brute-force and flood traffic, including the tighter per-route limits on login
+and registration.
+
+**What to do about it, per deployment.** Make the proxy in front of the app
+overwrite the header (nginx: `proxy_set_header X-Forwarded-For $remote_addr;`
+instead of `$proxy_add_x_forwarded_for`), or put the app behind something that
+already does. A CDN in front of a proxy is the case where overwriting is wrong,
+which is why the app cannot decide this for everyone.
+
+**Do not "fix" this by flipping `trustProxy` off.** The app would then read the
+proxy's own address for every request, which collapses every client on the
+deployment into one limiter key and breaks the limit far worse than the header
+does. The real fix is a hop count (`trustProxy: 1` for a single fronting
+proxy), which breaks a two-proxy or CDN deployment, so it is a deliberate
+decision, not a tightening to apply in passing. See also
+[deployment.md](deployment.md), "Server proxy-awareness".
+
+---
+
 ## Dependency note
 
 `@fastify/helmet` is pinned to `^11.1.1` and must stay on the 11.x line. The

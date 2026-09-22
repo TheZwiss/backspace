@@ -46,6 +46,25 @@ import fs from 'fs';
 
 async function main(): Promise<void> {
   const app = Fastify({
+    // Every hop is trusted, so `request.ip` is the LEFT-MOST entry of
+    // `X-Forwarded-For`, whoever put it there (verified: a request carrying
+    // `x-forwarded-for: 9.9.9.9` is seen as 9.9.9.9 even when the proxy
+    // appends the real address after it).
+    //
+    // The rate limiter keys on that address and has nothing else to key on
+    // (see the limiter below), so the limit holds only while the fronting
+    // proxy *overwrites* the header instead of appending to it. The bundled
+    // Caddy overwrites it, which is what the shipped all-in-one deployment
+    // rests on. A deployment exposed directly, or fronted by a proxy that
+    // appends (nginx's `$proxy_add_x_forwarded_for` does, and that is what
+    // install.sh prints for proxy mode), lets a client choose its own limiter
+    // key and rotate it per request.
+    //
+    // That condition is stated for operators in
+    // docs/systems/web-security.md section 9 and docs/systems/deployment.md,
+    // "Server proxy-awareness". Narrowing this to a hop count is the real fix
+    // and it would break a two-proxy deployment, so it is not a change to make
+    // in passing.
     trustProxy: true,
     logger: {
       level: 'info',
