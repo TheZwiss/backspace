@@ -40,10 +40,12 @@ export interface PingerMemory {
   haltedVersion: number | null;
   /** The hub answered 410: nothing is sent until the next boot. */
   retired: boolean;
+  /** The ping in flight, so the tick and the change ping never send on top of each other. */
+  inFlight: Promise<PingOutcome> | null;
 }
 
 export function createPingerMemory(): PingerMemory {
-  return { failures: 0, nextRetryAt: null, haltedVersion: null, retired: false };
+  return { failures: 0, nextRetryAt: null, haltedVersion: null, retired: false, inFlight: null };
 }
 
 const BACKOFF_MS: readonly [number, number, number, number] = [60_000, 300_000, 900_000, 3_600_000];
@@ -101,11 +103,23 @@ function recordFailure(deps: PingerDeps, mem: PingerMemory, error: DirectoryPing
  * One ping: tells the hub to fetch this instance's document, then applies the
  * answer table from section 6 of the spec. The document version is captured
  * before the request so a change that lands while the ping is in flight keeps
- * the dirty flag; the debounce sends the next ping for it.
+ * the dirty flag; the change ping sends the next ping for it.
+ *
+ * The ping is recorded in `mem.inFlight` for its duration: the tick skips
+ * while one is running and the change ping waits for it, so a retry never
+ * goes out twice and the backoff ladder steps once per failure.
  *
  * The hub's answer body is never logged.
  */
-export async function sendDirectoryPing(deps: PingerDeps, mem: PingerMemory): Promise<PingOutcome> {
+export function sendDirectoryPing(deps: PingerDeps, mem: PingerMemory): Promise<PingOutcome> {
+  const flight = performPing(deps, mem).finally(() => {
+    if (mem.inFlight === flight) mem.inFlight = null;
+  });
+  mem.inFlight = flight;
+  return flight;
+}
+
+async function performPing(deps: PingerDeps, mem: PingerMemory): Promise<PingOutcome> {
   const sentVersion = getDocumentVersion();
   let response: Response | null = null;
   let failure: 'network' | 'timeout' = 'network';
@@ -199,7 +213,7 @@ function retryDue(mem: PingerMemory, nowMs: number): boolean {
  * loop is not bypassed by the slot.
  */
 export async function pingerTick(deps: PingerDeps, mem: PingerMemory, opts: { boot?: boolean } = {}): Promise<'sent' | 'skipped'> {
-  if (deps.endpoint === '' || mem.retired) return 'skipped';
+  if (deps.endpoint === '' || mem.retired || mem.inFlight !== null) return 'skipped';
   const state = readDirectoryState(deps.sqlite);
   const now = deps.now();
   const nowMs = now.getTime();
@@ -270,8 +284,27 @@ export function createChangePingScheduler(
 
   const fire = (): void => {
     timer = null;
-    if (mem.retired) return;
-    if (!readDirectoryState(deps.sqlite).dirty || mem.haltedVersion === getDocumentVersion()) return;
+    try {
+      if (mem.retired) return;
+      if (!readDirectoryState(deps.sqlite).dirty || mem.haltedVersion === getDocumentVersion()) return;
+      // A cooldown or backoff can start after arming, when a tick-driven ping
+      // that was in flight at the mark comes back; the delay is recomputed
+      // rather than sent into.
+      if (!retryDue(mem, deps.now().getTime())) {
+        arm();
+        return;
+      }
+      // A ping in flight is not joined: a change that landed during it keeps
+      // the flag under the version guard and needs its own send once it
+      // settles. Whoever started that ping reports its failure.
+      if (mem.inFlight !== null) {
+        mem.inFlight.finally(arm).catch(() => undefined);
+        return;
+      }
+    } catch (err) {
+      report(err);
+      return;
+    }
     sendDirectoryPing(deps, mem)
       .then((outcome) => {
         if (outcome === 'cooldown' && readDirectoryState(deps.sqlite).dirty) arm();

@@ -36,6 +36,12 @@ function deps(nowIso: string, respond: () => Response | Promise<Response>): Ping
 }
 
 const ok = () => new Response(null, { status: 204 });
+/** A ping that stays in flight until the test settles it. */
+function slow(): { respond: () => Promise<Response>; settle: (response: Response) => void } {
+  let settle: (response: Response) => void = () => undefined;
+  const pending = new Promise<Response>((resolve) => { settle = resolve; });
+  return { respond: () => pending, settle };
+}
 const answer = (status: number, body: string | null = null, headers: Record<string, string> = {}) =>
   () => new Response(body, { status, headers });
 
@@ -81,7 +87,7 @@ describe('sendDirectoryPing', () => {
     expect(readDirectoryState(db)).toEqual({
       enabled: false, dirty: false, lastPingAt: Date.parse('2026-09-22T10:00:00Z'), lastError: null,
     });
-    expect(mem).toEqual({ failures: 0, nextRetryAt: null, haltedVersion: null, retired: false });
+    expect(mem).toEqual({ failures: 0, nextRetryAt: null, haltedVersion: null, retired: false, inFlight: null });
   });
 
   it('204 after a change that landed in flight leaves dirty set for the debounce, not the retry loop', async () => {
@@ -290,6 +296,21 @@ describe('pingerTick', () => {
     expect(await pingerTick(at('2026-09-23T09:00:00Z', answer(503)), createPingerMemory())).toBe('sent');
   });
 
+  it('skips while a ping is in flight, so two senders never overlap on one retry', async () => {
+    markDirectoryDirty(db);
+    const flight = slow();
+    const d = deps('2026-09-22T10:00:00Z', flight.respond);
+    const first = pingerTick(d, mem);
+    expect(mem.inFlight).not.toBeNull();
+    expect(await pingerTick(d, mem)).toBe('skipped');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    flight.settle(ok());
+    expect(await first).toBe('sent');
+    expect(mem.inFlight).toBeNull();
+    expect(readDirectoryState(db).dirty).toBe(false);
+    expect(await pingerTick(deps('2026-09-22T10:01:00Z', ok), mem)).toBe('skipped');
+  });
+
   it('retry: waits for nextRetryAt while dirty, then sends regardless of the toggle', async () => {
     markDirectoryDirty(db);
     const now = Date.parse('2026-09-22T10:00:00Z');
@@ -413,6 +434,62 @@ describe('createChangePingScheduler', () => {
     scheduler.schedule();
     await vi.advanceTimersByTimeAsync(3_000);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-checks the cooldown at fire time when one started after the timer was armed', async () => {
+    const scheduler = createChangePingScheduler(live(ok), mem, report);
+    markDirectoryDirty(db);
+    scheduler.schedule();
+    // A tick-driven ping that was in flight at the mark comes back 429 before the timer fires.
+    mem.nextRetryAt = Date.now() + 8_000;
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(fetchMock).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(4_999);
+    expect(fetchMock).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(readDirectoryState(db).dirty).toBe(false);
+  });
+
+  it('re-arms after a ping in flight settles instead of joining it, so a change during the flight gets its own send', async () => {
+    const flight = slow();
+    let calls = 0;
+    const respond = () => {
+      calls += 1;
+      return calls === 1 ? flight.respond() : Promise.resolve(ok());
+    };
+    const d = live(() => ok());
+    d.fetch = (fetchMock = vi.fn().mockImplementation(respond)) as unknown as typeof fetch;
+    const scheduler = createChangePingScheduler(d, mem, report);
+    markDirectoryDirty(db);
+    const tick = pingerTick(d, mem);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    markDirectoryDirty(db);
+    scheduler.schedule();
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    flight.settle(ok());
+    expect(await tick).toBe('sent');
+    expect(readDirectoryState(db).dirty).toBe(true);
+    await vi.advanceTimersByTimeAsync(2_999);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(readDirectoryState(db).dirty).toBe(false);
+    expect(report).not.toHaveBeenCalled();
+  });
+
+  it('routes a throwing state read to report instead of the timer', async () => {
+    const closed = new Database(':memory:');
+    closed.close();
+    const scheduler = createChangePingScheduler({ ...live(ok), sqlite: closed }, mem, report);
+    scheduler.schedule();
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(report).toHaveBeenCalledTimes(1);
+    expect(report.mock.calls[0]?.[0]).toBeInstanceOf(Error);
   });
 
   it('sends nothing once retired, and nothing after stop', async () => {

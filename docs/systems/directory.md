@@ -302,19 +302,26 @@ listing, delisting, the toggle and the fetch-failure status line end to end.
   a cooldown the hub already announced. When it fires it sends only if the
   flag is still dirty (a ping in flight may have covered the change), the
   retry loop is not halted on the current version, and the hub has not
-  retired the service. A `429` re-arms the timer for the cooldown's end, so a
-  second edit inside the hub's 10 second per-origin cooldown lands seconds
-  later rather than at the next minute tick. Any other failure leaves the
-  retry to the minute tick: backoffs are minute-scale, and two senders for
-  one retry would be worse than a minute of latency.
+  retired the service. It re-checks the cooldown at fire time and re-arms
+  when one started after the mark, and it never joins a ping already in
+  flight: it re-arms once that ping settles, so a change that landed during
+  the flight gets its own send under the version guard. A `429` re-arms the
+  timer for the cooldown's end, so a second edit inside the hub's 10 second
+  per-origin cooldown lands seconds later rather than at the next minute
+  tick. Any other failure leaves the retry to the minute tick: backoffs are
+  minute-scale, and two senders for one retry would be worse than a minute
+  of latency.
 
 **The per-day guard is derived from the persisted error, not from memory.**
 "No failure recorded today" reads `directory_last_error.at` and compares its
 UTC day with today, so a restart loop cannot re-attempt a failing hub more
 than once a day by the slot. What the pinger keeps only in memory (the
-failure count, the next retry instant, the halted version, the retired flag)
-is lost on restart on purpose: the boot ping resends whatever is dirty, and a
-retired hub is tried once more per boot.
+failure count, the next retry instant, the halted version, the retired flag,
+the ping in flight) is lost on restart on purpose: the boot ping resends
+whatever is dirty, and a retired hub is tried once more per boot. The ping in
+flight is the single-flight guard: the minute tick skips while one is
+running, so the tick and the change ping never send the same retry twice and
+the backoff ladder steps once per failure.
 
 **What it sends.** `POST {DIRECTORY_ENDPOINT}/v1/ping`, body
 `{ "schema": 1, "origin": "https://chat.example.org" }`, `Content-Type:
