@@ -25,6 +25,7 @@ Source files:
 - `packages/web/src/utils/directory.ts` - `innerOrigins`, `dedupeAgainstConnected`, `isDirectoryEntry`
 - `packages/web/src/stores/instanceStore.ts` - `connectToInstance`, the shared connect path
 - `packages/web/src/components/chat/ExplorePage.tsx`, `OuterSpaceSection.tsx`, `SpaceCard.tsx` - the two sections and the card
+- `packages/web/src/components/chat/InstanceDiscoveryHint.tsx` - why Explore looks the way it does on this instance, and the admin's two one-click fixes
 - `packages/web/src/components/modals/ConnectAndJoinModal.tsx`, `RemotePasswordStep.tsx` - the connect-from-card dialog and the password step it shares with the Connections panel
 - `packages/web/src/components/modals/instanceSettingsPanels/GeneralPanel.tsx` - the admin space-discovery ladder and the directory status line
 - `packages/web/src/components/modals/SpaceSettings.tsx` - the per-space switch in `DiscoveryPanel`
@@ -718,6 +719,41 @@ is absent. `disconnected` gets no chip: that is the user's own choice, its
 spaces are back in Outer Space, and a chip per disconnected instance would
 nag. A chip whose live instance is `connecting` on its own (startup, the
 socket's backoff) is hidden for that moment.
+
+**Why Explore looks the way it does here.** `InstanceDiscoveryHint` sits in
+the same slot directly under the chips. It names this instance's own
+discovery settings and, for an admin, changes them from the page. It reads
+`discoveryEnabled` from `exploreStore` and `isAdmin` plus
+`streamingLimits.directoryEnabled` from `settingsStore` (the listing opt-in,
+which any signed-in user may read), and derives one row, first match wins:
+
+| condition | what renders |
+|---|---|
+| the instance settings have not arrived and discovery is on | nothing |
+| discovery off, not an admin | amber notice: space discovery is off, spaces here are joinable by invite link only |
+| discovery off, admin | the same fact in the admin's voice, with "Turn on space discovery" |
+| discovery on, not listed, admin | a quiet row: spaces here are not listed in the public directory, with "List them" |
+| anything else | nothing |
+
+The two rows an admin sees are the ladder of section 3 one rung per click,
+offered in the same place. "Turn on space discovery" writes
+`discoveryEnabled: true` through `updateInstanceSettings`, which mirrors both
+flags back into `streamingLimits`, and the hint moves from the third row to
+the fourth by itself: there is no "just enabled" state to disagree with the
+settings. Enabling calls back into `ExplorePage` so Inner Space refills
+without a reload (`fetchSpaces`, `fetchMyRequests`); "List them" writes
+`directoryEnabled: true` and refetches nothing, because what this instance
+lists does not change what it sees. Both buttons disable while their call is
+in flight, and a rejected PATCH renders `describeError` under the text and
+leaves the row where it was, the store having kept the old settings.
+
+The listing row says nothing about Outer Space. **Browsing the directory
+never depends on `directoryEnabled`**, only on the operator's
+`DIRECTORY_ENDPOINT` (the gate above), so `explore.outer.empty` ("Nothing out
+there yet...") means the feed has nothing for this query, never that this
+instance lists nothing of its own. The three visible rows are in the Explore
+workbench as `?scene=hint-member|hint-admin|hint-not-listed`
+(`packages/web/dev-explore.html`), which takes `?width=400` for the wrap.
 
 The search box drives both sections through one 300 ms debounce: Inner
 filters as before, Outer re-queries the hub through the proxy, showing a

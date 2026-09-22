@@ -21,7 +21,7 @@ import { useInstanceStore, type ConnectedInstance } from '../../stores/instanceS
 import { api, type BackspaceApiClient } from '../../api/client';
 
 const SWITCH = 'List in the Backspace directory';
-const ADMIN_OFF = 'Your admin has to enable the directory for this instance.';
+const ADMIN_OFF = 'Your instance administrator has to turn on global space discovery.';
 const PRIVATE_SPACE = 'Set visibility to public or request to join first.';
 
 const limits: InstanceStreamingLimits = {

@@ -158,7 +158,16 @@
   "explore": {
     "title": "Entdecken",
     "searchPlaceholder": "Spaces suchen…",
-    "discoveryDisabled": "Das Entdecken von Spaces wurde von der Instanzverwaltung ausgeschaltet.",
+    "discoveryOff": {
+      "member": "Deine Instanzverwaltung hat das Entdecken von Spaces ausgeschaltet. Spaces hier sind nur über Einladungslinks erreichbar.",
+      "admin": "Das Entdecken von Spaces ist auf dieser Instanz ausgeschaltet. Spaces hier sind nur über Einladungslinks erreichbar.",
+      "enable": "Entdecken von Spaces einschalten",
+      "failed": "Die Einstellung konnte nicht geändert werden."
+    },
+    "notListed": {
+      "text": "Spaces auf dieser Instanz sind nicht im öffentlichen Verzeichnis eingetragen.",
+      "action": "Eintragen"
+    },
     "noMatches": "Keine Spaces passen zu deiner Suche.",
     "empty": "Noch keine Spaces zum Entdecken.",
     "allJoined": "Du bist in allen Spaces, die es zu entdecken gibt",
@@ -284,7 +293,7 @@
       "directory": {
         "label": "Ins Backspace-Verzeichnis eintragen",
         "hint": "Zeigt diesen Space auf jeder Backspace-Instanz im Äußeren Space.",
-        "adminOff": "Die Instanzverwaltung muss das Verzeichnis für diese Instanz erst einschalten.",
+        "adminOff": "Die Instanzverwaltung muss erst das globale Entdecken von Spaces einschalten.",
         "privateSpace": "Stell die Sichtbarkeit zuerst auf „Öffentlich“ oder „Beitritt auf Anfrage“.",
         "disclosure": "Der Eintrag macht öffentlich: Name, Beschreibung, Icon, Banner und Mitgliederzahl des Spaces sowie die Adresse dieser Instanz. Wer das Verzeichnis durchstöbert, lädt Icon und Banner von dieser Instanz."
       },

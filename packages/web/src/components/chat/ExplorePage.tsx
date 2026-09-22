@@ -15,6 +15,7 @@ import { useFormatters } from '../../i18n/formatters';
 import { SpaceCard } from './SpaceCard';
 import { OuterSpaceSection } from './OuterSpaceSection';
 import { ConnectionChips } from './ConnectionChips';
+import { InstanceDiscoveryHint } from './InstanceDiscoveryHint';
 
 /** How long the search box waits after the last keystroke before both sections re-query. */
 const SEARCH_DEBOUNCE_MS = 300;
@@ -37,7 +38,6 @@ export function ExplorePage() {
 
   const spaces = useExploreStore((s) => s.spaces);
   const isLoading = useExploreStore((s) => s.isLoading);
-  const discoveryEnabled = useExploreStore((s) => s.discoveryEnabled);
   const error = useExploreStore((s) => s.error);
   const searchQuery = useExploreStore((s) => s.searchQuery);
   const setSearchQuery = useExploreStore((s) => s.setSearchQuery);
@@ -154,6 +154,15 @@ export function ExplorePage() {
     refetchInner(connectedOriginsKey(useInstanceStore.getState().instances));
   }, [refetchInner]);
 
+  // Space discovery was just turned on from the hint below the chips. The
+  // connected set has not moved, so the effect above has nothing to do; what
+  // changed is what the home instance answers, and Inner Space is a snapshot
+  // of that answer.
+  const handleDiscoveryEnabled = useCallback(() => {
+    fetchSpaces(searchQueryRef.current || undefined);
+    fetchMyRequests();
+  }, [fetchSpaces, fetchMyRequests]);
+
   const unjoinedSpaces = useMemo(
     () => spaces.filter(s => !s.joined),
     [spaces],
@@ -221,11 +230,9 @@ export function ExplorePage() {
             {/* Connections that are out, with the way back in; nothing when all are healthy */}
             <ConnectionChips onRecovered={handleConnectionRecovered} />
 
-            {!discoveryEnabled && (
-              <div className="mb-4 p-2.5 bg-accent-amber/10 border border-accent-amber/30 rounded text-[13px] text-accent-amber">
-                {t('spaces:explore.discoveryDisabled')}
-              </div>
-            )}
+            {/* Why this instance shows what it shows, and the admin's way to change it */}
+            <InstanceDiscoveryHint onDiscoveryEnabled={handleDiscoveryEnabled} />
+
 
             {isLoading && spaces.length === 0 ? (
               <div className="flex items-center justify-center h-64">

@@ -157,7 +157,16 @@
   "explore": {
     "title": "探索",
     "searchPlaceholder": "搜索空间…",
-    "discoveryDisabled": "实例管理员已禁用空间发现功能。",
+    "discoveryOff": {
+      "member": "您的实例管理员已关闭空间发现。此处的空间只能通过邀请链接加入。",
+      "admin": "本实例已关闭空间发现。此处的空间只能通过邀请链接加入。",
+      "enable": "开启空间发现",
+      "failed": "无法更改该设置。"
+    },
+    "notListed": {
+      "text": "本实例的空间未列入公开目录。",
+      "action": "列入目录"
+    },
     "noMatches": "没有匹配您搜索的空间。",
     "empty": "暂无可发现的空间。",
     "allJoined": "您已加入所有可发现的空间",
@@ -282,7 +291,7 @@
       "directory": {
         "label": "列入 Backspace 目录",
         "hint": "在每个 Backspace 实例的外部空间中显示此空间。",
-        "adminOff": "需要管理员先为本实例启用目录。",
+        "adminOff": "需要实例管理员先开启全局空间发现。",
         "privateSpace": "请先将可见性设为公开或需申请加入。",
         "disclosure": "列入目录后将公开：空间的名称、描述、图标、横幅、成员数量以及本实例的地址。浏览目录的人会从本实例加载图标和横幅。"
       },

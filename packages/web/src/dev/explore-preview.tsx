@@ -46,9 +46,16 @@
 // `?scene=connections-panel` renders the Connections settings panel instead
 // of the page, with the expired row open on the same reauth form, because
 // the two surfaces share it.
+//
+// `?scene=hint-member|hint-admin|hint-not-listed` shows the instance
+// discovery hint that sits under the chips row in each of its three visible
+// rows: space discovery off as a member sees it, the same as an admin sees
+// it with the switch, and the quiet listing row an admin gets once discovery
+// is on. Pair them with `?width=400` to see the text wrap and the action
+// move below it.
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
-import type { DirectoryEntry, FederationRegistryEntry, InstanceInfoResponse, User } from '@backspace/shared';
+import type { DirectoryEntry, FederationRegistryEntry, InstanceInfoResponse, InstanceStreamingLimits, User } from '@backspace/shared';
 import { ExplorePage } from '../components/chat/ExplorePage';
 import { ChannelSidebar } from '../components/layout/ChannelSidebar';
 import { ConnectAndJoinModal } from '../components/modals/ConnectAndJoinModal';
@@ -58,6 +65,7 @@ import { useExploreStore, type TaggedExploreSpace } from '../stores/exploreStore
 import { useDirectoryStore } from '../stores/directoryStore';
 import { useInstanceStore, DifferentPasswordError, type ConnectedInstance } from '../stores/instanceStore';
 import { useAuthStore } from '../stores/authStore';
+import { useSettingsStore } from '../stores/settingsStore';
 import { useUIStore } from '../stores/uiStore';
 import { initI18n } from '../i18n';
 import { initializeInterfaceScale } from '../platform/interfaceScale';
@@ -83,7 +91,10 @@ type Scene =
   | 'connections-peer-down'
   | 'connections-other-password'
   | 'connections-recovered'
-  | 'connections-panel';
+  | 'connections-panel'
+  | 'hint-member'
+  | 'hint-admin'
+  | 'hint-not-listed';
 
 const SCENES: ReadonlySet<string> = new Set<Scene>([
   'both',
@@ -106,6 +117,9 @@ const SCENES: ReadonlySet<string> = new Set<Scene>([
   'connections-other-password',
   'connections-recovered',
   'connections-panel',
+  'hint-member',
+  'hint-admin',
+  'hint-not-listed',
 ]);
 
 function isScene(value: string | null): value is Scene {
@@ -278,15 +292,56 @@ function innerSpacesFor(scene: Scene): TaggedExploreSpace[] {
   return INNER_SPACES;
 }
 
+/** A stream-limits document the hint scenes vary the two discovery flags on. */
+const DEFAULT_HINT_LIMITS: InstanceStreamingLimits = {
+  maxBitrateKbps: 20000,
+  minBitrateKbps: 500,
+  bitrateStepKbps: 500,
+  allowedResolutions: [540, 720, 1080],
+  allowedFramerates: [30, 45, 60],
+  maxResolution: 1080,
+  maxFramerate: 60,
+  discoveryEnabled: true,
+  directoryEnabled: false,
+  bitrateMatrixOverrides: null,
+  allowCustomBitrate: true,
+};
+
+type HintScene = 'hint-member' | 'hint-admin' | 'hint-not-listed';
+
+function isHintScene(scene: Scene): scene is HintScene {
+  return scene === 'hint-member' || scene === 'hint-admin' || scene === 'hint-not-listed';
+}
+
+/** The instance settings behind each hint scene; only the two discovery flags differ. */
+const HINT_LIMITS: Record<HintScene, InstanceStreamingLimits> = {
+  'hint-member': { ...DEFAULT_HINT_LIMITS, discoveryEnabled: false, directoryEnabled: false },
+  'hint-admin': { ...DEFAULT_HINT_LIMITS, discoveryEnabled: false, directoryEnabled: false },
+  'hint-not-listed': { ...DEFAULT_HINT_LIMITS, discoveryEnabled: true, directoryEnabled: false },
+};
+
 function seedStores(scene: Scene): void {
+  // The hint scenes are the only ones that turn space discovery off, and the
+  // flags they run on are the ones in their own settings row.
+  const discoveryOff = isHintScene(scene) && !HINT_LIMITS[scene].discoveryEnabled;
+
   useExploreStore.setState({
-    spaces: innerSpacesFor(scene),
+    spaces: discoveryOff ? [] : innerSpacesFor(scene),
     myRequests: [],
     isLoading: false,
-    discoveryEnabled: true,
+    discoveryEnabled: !discoveryOff,
     error: null,
     fetchSpaces: async () => {},
     fetchMyRequests: async () => {},
+  });
+
+  // What the instance discovery hint reads. Outside the hint scenes this is
+  // the resting state of a fresh session: no admin, and settings that have
+  // not arrived, which is the hint's silent row.
+  useSettingsStore.setState({
+    isAdmin: scene === 'hint-admin' || scene === 'hint-not-listed',
+    streamingLimits: isHintScene(scene) ? HINT_LIMITS[scene] : null,
+    updateInstanceSettings: async () => {},
   });
 
   const outer = scene === 'outer-unreachable'

@@ -158,7 +158,16 @@
   "explore": {
     "title": "Explore",
     "searchPlaceholder": "Search spaces...",
-    "discoveryDisabled": "Space discovery is disabled by the instance administrator.",
+    "discoveryOff": {
+      "member": "Your instance administrator has turned off space discovery. Spaces here are joinable by invite link only.",
+      "admin": "Space discovery is off on this instance. Spaces here are joinable by invite link only.",
+      "enable": "Turn on space discovery",
+      "failed": "Could not change the setting."
+    },
+    "notListed": {
+      "text": "Spaces on this instance are not listed in the public directory.",
+      "action": "List them"
+    },
     "noMatches": "No spaces match your search.",
     "empty": "No discoverable spaces yet.",
     "allJoined": "You're in all discoverable spaces",
@@ -284,7 +293,7 @@
       "directory": {
         "label": "List in the Backspace directory",
         "hint": "Show this space in Outer Space on every Backspace instance.",
-        "adminOff": "Your admin has to enable the directory for this instance.",
+        "adminOff": "Your instance administrator has to turn on global space discovery.",
         "privateSpace": "Set visibility to public or request to join first.",
         "disclosure": "Listing makes public: the space's name, description, icon, banner, member count and this instance's address. People browsing the directory load the icon and banner from this instance."
       },
