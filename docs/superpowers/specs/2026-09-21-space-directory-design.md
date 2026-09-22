@@ -212,6 +212,19 @@ Response, `schema: 1`:
   is what makes an immediate delist ping fetch the delist rather than the
   previous document.
 
+  > **Corrected after implementation. The bullet above is design-time intent,
+  > not shipped behaviour.** The limiter is not per-user-or-IP. It is
+  > registered as a plugin whose hook runs before authentication, so
+  > `request.userId` is unset when the key is taken and the key is the client
+  > address, structurally rather than by a default that could change. The
+  > conclusion the bullet draws is unaffected, and the cache is still the
+  > guard; only the limiter's description was wrong. That description was
+  > copied from here into the route's own comment and then into the subsystem
+  > doc, and was wrong in all three places until `547316ac` and `a5965db4`.
+  > The mechanism is now described in one place, `docs/systems/api.md` under
+  > "Rate limiting", and everything else points at it. Do not copy the
+  > sentence above outward again.
+
 ## 6. The pinger (server)
 
 `packages/server/src/directory/pinger.ts`, started and stopped from
