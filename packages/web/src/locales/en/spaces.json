@@ -434,6 +434,7 @@
       "leaveFailed": "Failed to leave space"
     },
     "dmList": {
+      "explore": "Explore",
       "comingSoon": "Coming Soon",
       "newDm": "New Direct Message",
       "empty": "No conversations yet.",

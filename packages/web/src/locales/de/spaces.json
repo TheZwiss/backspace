@@ -434,6 +434,7 @@
       "leaveFailed": "Space konnte nicht verlassen werden"
     },
     "dmList": {
+      "explore": "Entdecken",
       "comingSoon": "Demnächst",
       "newDm": "Neue Direktnachricht",
       "empty": "Noch keine Unterhaltungen.",

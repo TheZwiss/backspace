@@ -428,6 +428,7 @@
       "leaveFailed": "退出空间失败"
     },
     "dmList": {
+      "explore": "探索",
       "comingSoon": "敬请期待",
       "newDm": "新建私信",
       "empty": "暂无会话。",

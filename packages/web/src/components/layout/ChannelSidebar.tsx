@@ -453,7 +453,7 @@ export function ChannelSidebar() {
                 : 'text-txt-tertiary hover:bg-interactive-hover hover:text-txt-secondary'
             }`}
           >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className={`flex-shrink-0 ${!currentChannelId ? 'text-white' : 'opacity-70 group-hover:opacity-100'}`}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className={`flex-shrink-0 ${!currentChannelId && location.pathname !== '/explore' ? 'text-white' : 'opacity-70 group-hover:opacity-100'}`}>
               <path d="M13 10a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-2-4a2 2 0 1 1 4 0 2 2 0 0 1-4 0Z" />
               <path d="M3 18a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1v-1c0-2.76-5.37-4-8-4s-8 1.24-8 4v1Z" />
               <path d="M3.5 13.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" opacity=".5" />
@@ -461,15 +461,21 @@ export function ChannelSidebar() {
             <span className="font-medium text-[16px]">{t('common:labels.friends')}</span>
           </div>
 
-          {/* Placeholder nav items */}
           <div
-            className="flex items-center gap-3 px-2 h-[42px] rounded-[6px] mb-[2px] text-txt-tertiary cursor-default opacity-50"
+            onClick={() => navigate('/explore')}
+            className={`flex items-center gap-3 px-2 h-[42px] rounded-[6px] cursor-pointer mb-[2px] transition-colors group ${
+              location.pathname === '/explore'
+                ? 'bg-interactive-selected text-white'
+                : 'text-txt-tertiary hover:bg-interactive-hover hover:text-txt-secondary'
+            }`}
           >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className={`flex-shrink-0 ${location.pathname === '/explore' ? 'text-white' : 'opacity-70 group-hover:opacity-100'}`}>
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-5.5-2.5l7.51-3.49L17.5 6.5 9.99 9.99 6.5 17.5zm5.5-6.6c.61 0 1.1.49 1.1 1.1s-.49 1.1-1.1 1.1-1.1-.49-1.1-1.1.49-1.1 1.1-1.1z" />
             </svg>
-            <span className="font-medium text-[16px]">{t('spaces:sidebar.dmList.comingSoon')}</span>
+            <span className="font-medium text-[16px]">{t('spaces:sidebar.dmList.explore')}</span>
           </div>
+
+          {/* Placeholder nav item */}
           <div
             className="flex items-center gap-3 px-2 h-[42px] rounded-[6px] mb-[2px] text-txt-tertiary cursor-default opacity-50"
           >

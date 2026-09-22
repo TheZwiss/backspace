@@ -14,10 +14,15 @@
 // request space, the same for an instance closed to new accounts, and the
 // fallback phase, reached the way a user reaches it (the harness submits a
 // password and the stubbed connect answers `needs-remote-password`).
+//
+// `?scene=home-sidebar` puts the home view's left column next to the page
+// with the router already at `/explore`, so the sidebar's Explore entry can
+// be seen in its selected state and the Home entry in its unselected one.
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import type { DirectoryEntry, InstanceInfoResponse, User } from '@backspace/shared';
 import { ExplorePage } from '../components/chat/ExplorePage';
+import { ChannelSidebar } from '../components/layout/ChannelSidebar';
 import { ConnectAndJoinModal } from '../components/modals/ConnectAndJoinModal';
 import { useExploreStore, type TaggedExploreSpace } from '../stores/exploreStore';
 import { useDirectoryStore } from '../stores/directoryStore';
@@ -35,7 +40,8 @@ type Scene =
   | 'outer-empty'
   | 'connect-password'
   | 'connect-closed'
-  | 'connect-fallback';
+  | 'connect-fallback'
+  | 'home-sidebar';
 
 const SCENES: ReadonlySet<string> = new Set<Scene>([
   'both',
@@ -45,6 +51,7 @@ const SCENES: ReadonlySet<string> = new Set<Scene>([
   'connect-password',
   'connect-closed',
   'connect-fallback',
+  'home-sidebar',
 ]);
 
 function isScene(value: string | null): value is Scene {
@@ -289,9 +296,22 @@ async function driveToFallback(): Promise<void> {
   input.form?.requestSubmit();
 }
 
-function Workbench() {
+/** The home sidebar needs a signed-in user for its user area; the stores' defaults give it the `!space` branch. */
+function seedHomeSidebarScene(scene: Scene): void {
+  if (scene !== 'home-sidebar') return;
+  useAuthStore.setState({ user: HOME_USER });
+}
+
+function Workbench({ scene }: { scene: Scene }) {
   return (
     <div style={{ height: 'calc(100 * var(--app-vh))', display: 'flex' }}>
+      {scene === 'home-sidebar' && (
+        // AppLayout's host for the two sidebars: 312px wide, the channel column's
+        // own `desktop:pl-[72px]` leaving room for the space strip, absent here.
+        <div className="flex w-[312px] flex-shrink-0">
+          <ChannelSidebar />
+        </div>
+      )}
       <ExplorePage />
       <ConnectAndJoinModal />
     </div>
@@ -305,11 +325,12 @@ async function start(): Promise<void> {
   await initI18n();
   seedStores(scene);
   seedConnectScene(scene);
+  seedHomeSidebarScene(scene);
   const host = document.getElementById('root');
   if (!host) throw new Error('missing #root');
   createRoot(host).render(
-    <MemoryRouter>
-      <Workbench />
+    <MemoryRouter initialEntries={[scene === 'home-sidebar' ? '/explore' : '/']}>
+      <Workbench scene={scene} />
     </MemoryRouter>,
   );
   if (scene === 'connect-fallback') await driveToFallback();
