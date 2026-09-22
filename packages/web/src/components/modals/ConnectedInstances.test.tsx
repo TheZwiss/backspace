@@ -123,3 +123,49 @@ describe('AddInstanceFlow', () => {
     expect(await screen.findByRole('button', { name: '+ Add Instance' })).toBeInTheDocument();
   });
 });
+
+describe('RegistryRow re-authentication', () => {
+  it('opens the shared reauth form from an expired row and submits the password to the store', async () => {
+    const user = userEvent.setup();
+    const reauthenticateInstance = vi.fn(async (origin: string) => {
+      const registry = new Map(useInstanceStore.getState().registry);
+      const entry = registry.get(origin);
+      if (entry) registry.set(origin, { ...entry, status: 'connected', errorMessage: null });
+      useInstanceStore.setState({ registry });
+    });
+    useInstanceStore.setState({
+      reauthenticateInstance,
+      registry: new Map([[
+        'https://zwiss.example',
+        {
+          origin: 'https://zwiss.example',
+          label: 'Zwiss',
+          username: 'jannis@home.example',
+          remoteUserId: 'r1',
+          status: 'auth_expired',
+          addedAt: 1,
+          lastConnectedAt: 1,
+          disconnectedAt: null,
+          errorMessage: 'Token expired',
+        },
+      ]]),
+    });
+    render(
+      <MemoryRouter>
+        <ConnectedInstances />
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByText('Zwiss'));
+    await user.click(screen.getByRole('button', { name: 'Re-authenticate' }));
+    const password = screen.getByPlaceholderText('Your home account password');
+    expect(password).toHaveFocus();
+    await user.type(password, 'hunter2');
+    await user.click(screen.getByRole('button', { name: 'Connect' }));
+
+    await waitFor(() => expect(reauthenticateInstance).toHaveBeenCalledWith('https://zwiss.example', 'hunter2'));
+    // The form closes on success; the row now reads connected.
+    await waitFor(() => expect(screen.queryByPlaceholderText('Your home account password')).not.toBeInTheDocument());
+    expect(screen.queryByText('Auth expired')).not.toBeInTheDocument();
+  });
+});

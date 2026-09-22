@@ -18,6 +18,7 @@ import { isElectron } from '../../platform/platform';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { StatusDot } from '../ui/StatusDot';
 import { RemotePasswordStep, type RemotePasswordPhase } from './RemotePasswordStep';
+import { ReauthForm } from './ReauthForm';
 import { useFormatters, type Formatters } from '../../i18n/formatters';
 import { describeError } from '../../i18n/errors';
 
@@ -575,14 +576,10 @@ function RegistryRow({
   const disconnectInstance = useInstanceStore((s) => s.disconnectInstance);
   const reconnectInstance = useInstanceStore((s) => s.reconnectInstance);
   const forceRemoveEntry = useInstanceStore((s) => s.forceRemoveEntry);
-  const reauthenticateInstance = useInstanceStore((s) => s.reauthenticateInstance);
 
   const [showForceRemoveConfirm, setShowForceRemoveConfirm] = useState(false);
   const [showDeleteIdentity, setShowDeleteIdentity] = useState(false);
   const [showReauth, setShowReauth] = useState(false);
-  const [reauthPassword, setReauthPassword] = useState('');
-  const [reauthLoading, setReauthLoading] = useState(false);
-  const [reauthError, setReauthError] = useState('');
 
   const name = entry.label || safeHost(entry.origin);
   const isDisconnected = entry.status === 'disconnected';
@@ -622,21 +619,6 @@ function RegistryRow({
   const handleForceRemove = () => {
     forceRemoveEntry(entry.origin);
     setShowForceRemoveConfirm(false);
-  };
-
-  const handleReauth = async () => {
-    if (!reauthPassword) return;
-    setReauthError('');
-    setReauthLoading(true);
-    try {
-      await reauthenticateInstance(entry.origin, reauthPassword);
-      setShowReauth(false);
-      setReauthPassword('');
-    } catch (err) {
-      setReauthError(describeError(err));
-    } finally {
-      setReauthLoading(false);
-    }
   };
 
   return (
@@ -708,42 +690,15 @@ function RegistryRow({
                 </div>
               )}
 
-              {/* Re-auth inline form */}
+              {/* Re-auth inline form, shared with the Explore page's connection chips */}
               {showReauth && (
-                <form onSubmit={(e) => { e.preventDefault(); handleReauth(); }} className="mt-3 space-y-2">
-                  <input type="text" autoComplete="username" value={entry.username ?? ''} readOnly tabIndex={-1} className="sr-only" />
-                  <div className="flex gap-2">
-                    <input
-                      type="password"
-                      value={reauthPassword}
-                      onChange={(e) => setReauthPassword(e.target.value)}
-                      placeholder={t('federation:connections.row.homePasswordPlaceholder')}
-                      className="input-standard flex-1 py-1.5"
-                      disabled={reauthLoading}
-                      autoFocus
-                      autoComplete="current-password"
-                    />
-                    <button
-                      type="submit"
-                      disabled={reauthLoading || !reauthPassword}
-                      className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-xs font-medium rounded transition-colors disabled:opacity-50"
-                    >
-                      {reauthLoading ? t('federation:connections.add.connecting') : t('federation:connections.add.connect')}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setShowReauth(false); setReauthPassword(''); setReauthError(''); }}
-                      className="px-2 py-1.5 text-xs text-txt-tertiary hover:text-txt-secondary transition-colors"
-                    >
-                      {t('common:actions.cancel')}
-                    </button>
-                  </div>
-                  {reauthError && (
-                    <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-xs">
-                      {reauthError}
-                    </div>
-                  )}
-                </form>
+                <ReauthForm
+                  origin={entry.origin}
+                  username={entry.username ?? ''}
+                  onDone={() => setShowReauth(false)}
+                  onCancel={() => setShowReauth(false)}
+                  className="mt-3 mb-3"
+                />
               )}
 
               {/* Actions */}
