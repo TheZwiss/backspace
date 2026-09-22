@@ -666,18 +666,28 @@ further left and are ignored.
 It is a variable rather than a constant because this describes the operator's
 topology, which only the operator knows, and because the app ships as a
 published image: a number baked into it could not be corrected by the two
-deployments that need a different one. A value that is not a non-negative
-integer stops the server at boot with a message instead of falling back to 1,
-so a mistyped setting cannot pass for a chosen one, and so does any value
-above **4**. That cap is there because the failure above it is the quiet one:
+deployments that need a different one. A **set** value that is not a
+non-negative integer stops the server at boot with a message instead of falling
+back to 1, so a mistyped setting cannot pass for a chosen one, and so does any
+value above **4**. A blank value (`TRUSTED_PROXY_HOPS=`, or whitespace) is the
+one thing that is not a refusal: it reads as unset and takes the default,
+because `KEY=` is how an operator un-sets a line and carries no number for the
+parse to discard.
+
+That cap is there because the failure above it is the quiet one:
 `TRUSTED_PROXY_HOPS=11`, typed for 1, trusts the whole forwarded chain on a
 one-proxy instance, which is the `trustProxy: true` behaviour this setting
 exists to remove, on an instance whose operator believes it is configured. A
 CDN in front of an operator's own reverse proxy in front of a tunnel daemon is
 three hops, so four is already one more than the deepest topology anyone has
-described; the boot error names the value, the cap and where the cap lives, so
-an operator who genuinely exceeds it knows to argue with the cap rather than
-with their own network.
+described. The refusal states the value it got, the cap, and what the number
+counts, and then asks the operator to open an issue describing the hops in
+front of their instance: someone who genuinely exceeds four should be arguing
+with the cap, not with their own network, and raising it needs the topology.
+It deliberately names no source file, because most operators run the published
+image and have no checkout to open. **Its exact wording lives with the check in
+`packages/server/src/config.ts` and is not copied anywhere**, this paragraph
+included.
 
 The alternative, `trustProxy: true`, trusts the whole chain and takes the
 left-most entry, which is whatever the client cared to send. The app ran that
@@ -747,13 +757,16 @@ what a proxy should do, and it is what the hop count expects. Rewriting it to
 client address on any deployment that later puts a CDN in front. It was left
 alone deliberately.
 
-`packages/server/src/config.trustedProxyHops.test.ts` holds both halves: the
-parse (a number, 0, an unset variable defaulting to 1, and five junk values
-that must refuse to boot) and the resulting address (a forged left-most entry,
-a forged chain, an overwriting proxy, no header at all, the two-proxy case and
-the zero case). Reading the value with the lenient `envInt` fails five of them;
-changing the default fails four. See also [deployment.md](deployment.md),
-"Server proxy-awareness".
+`packages/server/src/config.trustedProxyHops.test.ts` holds both halves, 18
+cases. The parse: a number an operator set, 0, the cap itself, an unset
+variable and a blank one both landing on 1, four junk values and two
+above-the-cap values that must refuse the import, and the refusal's parts
+asserted, including that it names no source file. The resulting address: a
+forged left-most entry, a forged chain, an overwriting proxy, no header at
+all, the two-proxy case and the zero case. Reading the value with the lenient
+`envInt` fails five of them, moving the default off 1 fails five, and deleting
+the cap check fails two. See also [deployment.md](deployment.md), "Server
+proxy-awareness".
 
 ---
 

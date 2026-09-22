@@ -573,8 +573,9 @@ EOF
 #   2  a CDN in front of your own reverse proxy, when that proxy APPENDS to
 #      X-Forwarded-For. Behind the bundled Caddy the number alone does nothing
 #      until Caddy's trusted_proxies names the CDN.
-# Anything that is not a non-negative integer, or is above 4, stops the server
+# Any value that is not a non-negative integer, or is above 4, stops the server
 # at boot with a message instead of quietly running a number you did not pick.
+# Leaving the line blank is not a value: it reads as unset and you get 1.
 # TRUSTED_PROXY_HOPS=1
 EOF
   fi
