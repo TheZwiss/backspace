@@ -159,7 +159,13 @@ export function FallbackForm({
           value={username}
           onChange={(e) => setUsername(e.target.value)}
           placeholder={t('federation:connections.add.usernamePlaceholder')}
-          className={`input-standard w-full ${usernameLocked ? 'text-txt-secondary cursor-default' : ''}`}
+          // Locked, it is a stated fact and not a blank: the sunken box, the
+          // border and the shadow all come off, because only a colour change
+          // still reads as an input the user is failing to type into. It
+          // stays a real input so the password manager keys on it.
+          className={usernameLocked
+            ? 'w-full bg-transparent px-0 py-1 text-sm text-txt-secondary cursor-default outline-none'
+            : 'input-standard w-full'}
           disabled={isLoading}
           readOnly={usernameLocked}
           autoComplete="username"

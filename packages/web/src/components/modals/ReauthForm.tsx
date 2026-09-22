@@ -1,8 +1,22 @@
-import React, { useEffect, useId, useRef, useState } from 'react';
+import React, { useId, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useInstanceStore, DifferentPasswordError } from '../../stores/instanceStore';
 import { describeError } from '../../i18n/errors';
 import { FallbackForm } from './RemotePasswordStep';
+
+/**
+ * The field a finished request hands the keyboard back to: the first input
+ * in the surface the user can actually type in. Read from the DOM rather
+ * than from a ref because the two phases mount different fields, and the
+ * second phase's belong to `FallbackForm`, which two other hosts also use
+ * and which should not grow a ref for this one of them. The `readonly`
+ * clause is what skips the hidden username field in the first phase and the
+ * locked account name in the second, both of which are real inputs on
+ * purpose, for password managers.
+ */
+function firstEditableField(surface: HTMLElement | null): HTMLInputElement | null {
+  return surface?.querySelector<HTMLInputElement>('input:not([disabled]):not([readonly])') ?? null;
+}
 
 export interface ReauthFormProps {
   /** The instance whose session expired. */
@@ -54,7 +68,6 @@ export function ReauthForm({ origin, username, onDone, onCancel, className = '' 
   const loginToRemote = useInstanceStore((s) => s.loginToRemote);
   const fieldId = useId();
   const surfaceRef = useRef<HTMLDivElement>(null);
-  const fieldRef = useRef<HTMLInputElement>(null);
 
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -114,16 +127,20 @@ export function ReauthForm({ origin, username, onDone, onCancel, className = '' 
    * surface at all, and in the Connections row it reaches the settings
    * modal's own document listener and closes the modal around a running
    * reconnect, with the answer arriving nowhere. The surface takes focus for
-   * the duration instead, and hands it back to the field afterwards so a
-   * refused password can simply be retyped.
+   * the duration instead, and hands it back to the phase's own field
+   * afterwards so a refused password can simply be retyped, in either phase.
+   *
+   * It is a layout effect, not a passive one: between the commit that makes
+   * the controls inert and a passive effect there is a frame in which the
+   * active element is `<body>` and an Escape would escape.
    */
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (loading) {
       surfaceRef.current?.focus();
       return;
     }
     if (surfaceRef.current && document.activeElement === surfaceRef.current) {
-      fieldRef.current?.focus();
+      firstEditableField(surfaceRef.current)?.focus();
     }
   }, [loading]);
 
@@ -152,6 +169,12 @@ export function ReauthForm({ origin, username, onDone, onCancel, className = '' 
   return (
     <div
       ref={surfaceRef}
+      // Named and marked busy because the surface is what holds focus while a
+      // request runs; without these a screen reader lands on an anonymous
+      // container and re-reads the panel with nothing saying why.
+      role="group"
+      aria-label={t('federation:connections.row.reauthenticate')}
+      aria-busy={loading}
       tabIndex={-1}
       className={`space-y-2.5 outline-none ${className}`}
       onKeyDown={handleKeyDown}
@@ -168,7 +191,6 @@ export function ReauthForm({ origin, username, onDone, onCancel, className = '' 
             </label>
             <input
               id={fieldId}
-              ref={fieldRef}
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}

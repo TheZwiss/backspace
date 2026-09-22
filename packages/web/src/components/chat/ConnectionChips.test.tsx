@@ -456,8 +456,33 @@ describe('ConnectionChips', () => {
     await user.click(screen.getByRole('button', { name: 'Login & Connect' }));
 
     expect(await screen.findByText('Wrong username or password.')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Password on the remote instance')).toBeInTheDocument();
+    // The handback holds in the second phase too: retrying is the only
+    // sensible next move, so the keyboard is already in the field.
+    expect(screen.getByPlaceholderText('Password on the remote instance')).toHaveFocus();
     expect(onRecovered).not.toHaveBeenCalled();
+  });
+
+  it('the surface is named and marked busy while a request runs', async () => {
+    seed([registryEntry('https://zwiss.example', 'auth_expired', 'Zwiss')]);
+    let finish: () => void = () => {};
+    reauthenticateInstance.mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve; }));
+    const user = userEvent.setup();
+    render(<ConnectionChips onRecovered={onRecovered} />);
+
+    await user.click(screen.getByRole('button', { name: /^Reconnect/ }));
+    // The surface holds focus for the length of the request, so it has to say
+    // what it is and that something is running.
+    const surface = screen.getByRole('group', { name: 'Re-authenticate' });
+    expect(surface).toHaveAttribute('aria-busy', 'false');
+
+    await user.type(screen.getByLabelText('Your home account password'), 'hunter2');
+    await user.click(screen.getByRole('button', { name: 'Connect' }));
+
+    await waitFor(() => expect(surface).toHaveAttribute('aria-busy', 'true'));
+    expect(surface).toHaveFocus();
+
+    finish();
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Reconnect/ })).toBeInTheDocument());
   });
 
   it('Escape collapses the second phase too', async () => {
