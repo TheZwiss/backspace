@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { InstanceStreamingLimits } from '@backspace/shared';
@@ -61,8 +61,26 @@ function directorySwitch(): HTMLElement {
   return screen.getByRole('switch', { name: SWITCH });
 }
 
+const realUpdateSpace = useSpaceStore.getState().updateSpace;
+
+/**
+ * The panel must save through the store's `updateSpace`, which resolves the
+ * space's own instance; the mock stands in for it so the assertion is on the
+ * call the panel makes, not on whichever client the store would pick.
+ */
+function mockUpdateSpace(): ReturnType<typeof vi.fn> {
+  const updateSpace = vi.fn().mockResolvedValue(undefined);
+  useSpaceStore.setState({ updateSpace });
+  return updateSpace;
+}
+
 beforeEach(() => {
   vi.spyOn(api.explore, 'getJoinRequests').mockResolvedValue({ requests: [] });
+});
+
+afterEach(() => {
+  useSpaceStore.setState({ updateSpace: realUpdateSpace });
+  vi.restoreAllMocks();
 });
 
 describe('DiscoveryPanel directory switch', () => {
@@ -112,19 +130,36 @@ describe('DiscoveryPanel directory switch', () => {
     expect(screen.getByText(PRIVATE_SPACE)).toBeInTheDocument();
   });
 
-  it('sends directoryListed with the save', async () => {
+  it('sends directoryListed with the save through the store', async () => {
     seed({ visibility: 'public', description: 'Design chatter' }, true);
-    const update = vi.spyOn(api.spaces, 'update').mockResolvedValue({ ...space, directoryListed: true });
+    const updateSpace = mockUpdateSpace();
     render(<DiscoveryPanel spaceId="space-1" />);
 
     await userEvent.click(directorySwitch());
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
-    expect(update).toHaveBeenCalledWith('space-1', {
+    expect(updateSpace).toHaveBeenCalledWith('space-1', {
       visibility: 'public',
       description: 'Design chatter',
       directoryListed: true,
     });
+  });
+
+  it('never saves a remote space through the home client', async () => {
+    seed({ visibility: 'public', description: 'Remote chatter', _instanceOrigin: 'https://remote.test' }, true);
+    const updateSpace = mockUpdateSpace();
+    const homeUpdate = vi.spyOn(api.spaces, 'update').mockResolvedValue({ ...space, directoryListed: true });
+    render(<DiscoveryPanel spaceId="space-1" />);
+
+    await userEvent.click(directorySwitch());
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(updateSpace).toHaveBeenCalledWith('space-1', {
+      visibility: 'public',
+      description: 'Remote chatter',
+      directoryListed: true,
+    });
+    expect(homeUpdate).not.toHaveBeenCalled();
   });
 
   it('carries the disclosure sentence', () => {

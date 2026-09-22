@@ -20,15 +20,18 @@ import type { SpaceVisibility, JoinRequest } from '@backspace/shared';
 const DESCRIPTION_MAX_LENGTH = 200;
 
 /**
- * Visibility, the directory switch and the description of one space. Both
- * instance flags come from the home instance's `streamingLimits`, the one
- * settings document any signed-in user may read; the panel does not ask a
- * remote instance for its own flags.
+ * Visibility, the directory switch and the description of one space. The save
+ * goes through the store's `updateSpace`, which resolves the client for the
+ * space's own instance and merges the answer back; a remote space must never
+ * be saved through the home client. Both instance flags come from the home
+ * instance's `streamingLimits`, the one settings document any signed-in user
+ * may read; the panel does not ask a remote instance for its own flags.
  */
 export function DiscoveryPanel({ spaceId }: { spaceId: string }) {
   const { t } = useTranslation(['spaces', 'common']);
   const visibilityOptions = useVisibilityOptions();
   const spaces = useSpaceStore((s) => s.spaces);
+  const updateSpace = useSpaceStore((s) => s.updateSpace);
   const discoveryEnabled = useSettingsStore((s) => s.streamingLimits?.discoveryEnabled ?? true);
   const directoryEnabled = useSettingsStore((s) => s.streamingLimits?.directoryEnabled ?? false);
 
@@ -78,7 +81,7 @@ export function DiscoveryPanel({ spaceId }: { spaceId: string }) {
     setSaving(true);
     setSaveError('');
     try {
-      await api.spaces.update(spaceId, { visibility, description: description.trim(), directoryListed });
+      await updateSpace(spaceId, { visibility, description: description.trim(), directoryListed });
       addToast(t('common:states.settingsSaved'), 'success', 2000);
     } catch (err) {
       setSaveError(describeError(err));
