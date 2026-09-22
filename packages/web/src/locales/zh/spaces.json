@@ -176,6 +176,13 @@
       "connectAndRequest": "连接并申请",
       "closedBadge": "不接受新账户"
     },
+    "connect": {
+      "title": "加入 {{name}}",
+      "intro": "此空间位于 <host>{{host}}</host>。请输入您在 <home>{{home}}</home> 的密码，以在该实例上创建您的身份。",
+      "probing": "正在连接 {{host}}…",
+      "connecting": "正在连接…",
+      "requested": "您加入 {{name}} 的申请已发送。"
+    },
     "badges": {
       "joined": "已加入",
       "public": "公开",

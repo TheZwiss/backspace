@@ -32,3 +32,19 @@ export function dedupeAgainstConnected(entries: DirectoryEntry[], connectedOrigi
     return origin === null || !connected.has(origin);
   });
 }
+
+/**
+ * Whether an unknown value (a modal's `modalData` slot, say) is a directory
+ * entry: the fields the connect-and-join flow reads must be present with the
+ * right types. Optional presentation fields are not checked.
+ */
+export function isDirectoryEntry(value: unknown): value is DirectoryEntry {
+  if (typeof value !== 'object' || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.origin === 'string' &&
+    typeof v.id === 'string' &&
+    typeof v.name === 'string' &&
+    (v.visibility === 'public' || v.visibility === 'request')
+  );
+}

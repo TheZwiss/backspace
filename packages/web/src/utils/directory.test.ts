@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { DirectoryEntry } from '@backspace/shared';
-import { dedupeAgainstConnected } from './directory';
+import { dedupeAgainstConnected, isDirectoryEntry } from './directory';
 
 const e = (origin: string, id: string): DirectoryEntry => ({
   origin,
@@ -48,5 +48,19 @@ describe('dedupeAgainstConnected', () => {
       ['https://a.test'],
     );
     expect(out.map((x) => x.origin)).toEqual(['https://b.test']);
+  });
+});
+
+describe('isDirectoryEntry', () => {
+  it('accepts an entry with the fields the connect flow reads', () => {
+    expect(isDirectoryEntry(e('https://a.example', 's1'))).toBe(true);
+  });
+
+  it('rejects non-objects, missing fields and an unknown visibility', () => {
+    expect(isDirectoryEntry(null)).toBe(false);
+    expect(isDirectoryEntry('entry')).toBe(false);
+    expect(isDirectoryEntry({ id: 's1', name: 'S', visibility: 'public' })).toBe(false);
+    expect(isDirectoryEntry({ ...e('https://a.example', 's1'), visibility: 'private' })).toBe(false);
+    expect(isDirectoryEntry({ ...e('https://a.example', 's1'), id: 7 })).toBe(false);
   });
 });

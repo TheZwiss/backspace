@@ -7,7 +7,8 @@ import { getSpaceGradient } from '../../utils/gradients';
 import { extractDominantColors, colorsToGradient } from '../../utils/colorExtractor';
 import { useSpaceJoin } from '../../hooks/useSpaceJoin';
 
-const REQUEST_MESSAGE_MAX_LENGTH = 200;
+/** Length cap of the optional message on a join request; the modal and the card share it. */
+export const REQUEST_MESSAGE_MAX_LENGTH = 200;
 
 /**
  * The Outer Space variant of the card. When set, the card belongs to an

@@ -8,22 +8,52 @@
 // replaced: the store actions become no-ops and the one unauthenticated call
 // the page makes itself (`GET /api/instance/info`, the directory gate) is
 // answered locally so the harness needs no server.
+//
+// `?scene=connect-password|connect-closed|connect-fallback` opens the
+// connect-and-join modal over the `both` page: the password phase for a
+// request space, the same for an instance closed to new accounts, and the
+// fallback phase, reached the way a user reaches it (the harness submits a
+// password and the stubbed connect answers `needs-remote-password`).
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
-import type { DirectoryEntry, InstanceInfoResponse } from '@backspace/shared';
+import type { DirectoryEntry, InstanceInfoResponse, User } from '@backspace/shared';
 import { ExplorePage } from '../components/chat/ExplorePage';
+import { ConnectAndJoinModal } from '../components/modals/ConnectAndJoinModal';
 import { useExploreStore, type TaggedExploreSpace } from '../stores/exploreStore';
 import { useDirectoryStore } from '../stores/directoryStore';
+import { useInstanceStore } from '../stores/instanceStore';
+import { useAuthStore } from '../stores/authStore';
+import { useUIStore } from '../stores/uiStore';
 import { initI18n } from '../i18n';
 import { initializeInterfaceScale } from '../platform/interfaceScale';
 import '../styles/globals.css';
 
-type Scene = 'both' | 'inner-empty' | 'outer-unreachable' | 'outer-empty';
+type Scene =
+  | 'both'
+  | 'inner-empty'
+  | 'outer-unreachable'
+  | 'outer-empty'
+  | 'connect-password'
+  | 'connect-closed'
+  | 'connect-fallback';
+
+const SCENES: ReadonlySet<string> = new Set<Scene>([
+  'both',
+  'inner-empty',
+  'outer-unreachable',
+  'outer-empty',
+  'connect-password',
+  'connect-closed',
+  'connect-fallback',
+]);
+
+function isScene(value: string | null): value is Scene {
+  return value !== null && SCENES.has(value);
+}
 
 function readScene(search: string): Scene {
   const value = new URLSearchParams(search).get('scene');
-  if (value === 'inner-empty' || value === 'outer-unreachable' || value === 'outer-empty') return value;
-  return 'both';
+  return isScene(value) ? value : 'both';
 }
 
 /** Three unjoined spaces and one joined, one of them from a connected peer, as the Inner list ranks them. */
@@ -193,10 +223,77 @@ function seedStores(scene: Scene): void {
   });
 }
 
+/** The signed-in user the modal names as the home of the password it asks for. */
+const HOME_USER: User = {
+  id: 'workbench-user',
+  username: 'jannis',
+  displayName: 'Jannis',
+  avatar: null,
+  banner: null,
+  accentColor: null,
+  avatarColor: 'lavender',
+  bio: null,
+  status: 'online',
+  customStatus: null,
+  isAdmin: false,
+  createdAt: 1,
+  homeInstance: 'home.example',
+  homeUserId: null,
+  replicatedInstances: [],
+};
+
+/** Opens the modal for `entry` with the probe and the connect actions answered locally. */
+function seedConnectScene(scene: Scene): void {
+  if (!scene.startsWith('connect-')) return;
+  const entry = scene === 'connect-closed' ? OUTER_ENTRIES[2] : OUTER_ENTRIES[1];
+  if (!entry) throw new Error('the connect scenes need the fixture entries');
+  useAuthStore.setState({ user: HOME_USER });
+  useInstanceStore.setState({
+    instances: [],
+    probeInstance: async (url: string) => ({
+      ...INSTANCE_INFO,
+      name: entry.instanceName,
+      federatedRegistrationOpen: entry.federatedRegistrationOpen,
+      origin: `https://${url}`,
+    }),
+  });
+  useDirectoryStore.setState({
+    connectAndJoin: async () => ({ kind: 'needs-remote-password', remoteUsername: 'jannis' }),
+    loginAndJoin: async () => ({ kind: 'requested' }),
+  });
+  useUIStore.setState({ activeModal: 'connectAndJoin', modalData: { entry } });
+}
+
+function nextFrame(): Promise<void> {
+  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+}
+
+/**
+ * Reaches the fallback phase the way a user does: types a password into the
+ * step and submits it, which the stubbed connect answers with
+ * `needs-remote-password`. React owns the input, so the value goes through
+ * the native setter and an input event rather than a plain assignment.
+ */
+async function driveToFallback(): Promise<void> {
+  let input: HTMLInputElement | null = null;
+  for (let i = 0; i < 300 && !input; i++) {
+    await nextFrame();
+    input = document.querySelector<HTMLInputElement>('input[type="password"]');
+  }
+  if (!input) throw new Error('the password step did not render');
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+  if (!setValue) throw new Error('no native value setter');
+  setValue.call(input, 'hunter2');
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  await nextFrame();
+  input.form?.requestSubmit();
+}
+
 function Workbench() {
   return (
     <div style={{ height: 'calc(100 * var(--app-vh))', display: 'flex' }}>
       <ExplorePage />
+      <ConnectAndJoinModal />
     </div>
   );
 }
@@ -207,6 +304,7 @@ async function start(): Promise<void> {
   initializeInterfaceScale();
   await initI18n();
   seedStores(scene);
+  seedConnectScene(scene);
   const host = document.getElementById('root');
   if (!host) throw new Error('missing #root');
   createRoot(host).render(
@@ -214,6 +312,7 @@ async function start(): Promise<void> {
       <Workbench />
     </MemoryRouter>,
   );
+  if (scene === 'connect-fallback') await driveToFallback();
 }
 
 void start();
