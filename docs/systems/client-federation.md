@@ -455,8 +455,11 @@ one thing (`connected`, `disconnected`, `unreachable`, `token-expired`,
 `instances`, `registry` and `registryUpdatedAt` in a single `set`. Call sites
 name a phase; none of them writes a status, which is what keeps the halves from
 drifting apart at one path and putting an instance's spaces in the wrong half of
-the Explore page (`innerOrigins` reads across the pair). The `live-*` phases are
-for the events the registry deliberately does not record: socket liveness
+the Explore page (`innerOrigins` reads across the pair). The one exception is
+`autoConnectAll` seeding a registry row from the server registry or from
+localStorage, which creates the persisted record for an origin that has no live
+half yet rather than moving one. The `live-*` phases are for the events the
+registry deliberately does not record: socket liveness
 (`setInstanceStatus`) and an attempt in flight, since a websocket blip must not
 leave a row saying the user disconnected — that row is what suppresses
 auto-connect on the next launch. `instanceStore.test.ts` asserts the pair after

@@ -340,16 +340,22 @@ export function waitForAutoConnect(): Promise<void> {
  *
  * `writeConnectionState` below is that piece of code. Every status change goes
  * through it, naming a phase from the table; nothing else in this file writes
- * a status to either projection. `innerOrigins` (`utils/directory.ts`) reads
- * across the pair, so halves that disagree put an instance's spaces in the
- * wrong half of the Explore page.
+ * a status to either projection, apart from `autoConnectAll` seeding a row from
+ * the server registry or from localStorage, which creates the persisted record
+ * for an origin that has no live half yet rather than moving one. `innerOrigins`
+ * (`utils/directory.ts`) reads across the pair, so halves that disagree put an
+ * instance's spaces in the wrong half of the Explore page.
  */
 
-/** The registry entry for `origin`, created from the defaults when it has none. */
+/**
+ * The registry entry for `origin`, created from the defaults when it has none.
+ * A status is required because a row is only ever created by a phase, which
+ * names one: there is no default status that some phase did not choose.
+ */
 function upsertRegistryEntry(
   registry: Map<string, FederationRegistryEntry>,
   origin: string,
-  updates: Partial<FederationRegistryEntry> & { origin: string },
+  updates: Partial<FederationRegistryEntry> & { origin: string; status: FederationRegistryStatus },
 ): Map<string, FederationRegistryEntry> {
   const next = new Map(registry);
   const existing = next.get(origin);
@@ -360,7 +366,6 @@ function upsertRegistryEntry(
       label: '',
       username: '',
       remoteUserId: '',
-      status: 'connected',
       addedAt: Date.now(),
       lastConnectedAt: null,
       disconnectedAt: null,
@@ -468,6 +473,13 @@ interface ConnectionWrite {
    * no live entry moves its registry half only.
    */
   insert?: Omit<ConnectedInstance, 'status' | 'error'>;
+  /**
+   * The store-wide loading flag, settled in the same `set` as the entry. The
+   * two connect flows are its only callers: the flag guards the form that
+   * produced the connection, so it belongs to the moment the entry appears
+   * rather than to a `set` after it.
+   */
+  isLoading?: boolean;
 }
 
 /**
@@ -499,9 +511,13 @@ function writeConnectionState(
 ): ConnectedInstance | undefined {
   const spec: PhaseSpec | null = phase ? CONNECTION_PHASES[phase] : null;
   const error = spec ? (write.error ?? spec.error) : undefined;
-  const registryPatch: (RegistryPatch & { status?: FederationRegistryStatus }) | null = spec
-    ? (spec.registry ? { ...write.registry, ...spec.registry() } : null)
-    : (write.registry ?? null);
+  // A phase's registry half is the only thing that may create a row, because it
+  // is the only one that names a status. A null-phase write carries fields
+  // alone, so for an origin with no row there is no status it could honestly be
+  // given and the write stays on the live half.
+  const registryPhase: (RegistryPatch & { status: FederationRegistryStatus }) | null =
+    spec && spec.registry ? { ...write.registry, ...spec.registry() } : null;
+  const registryFields: RegistryPatch | null = spec ? null : (write.registry ?? null);
 
   let written: ConnectedInstance | undefined;
 
@@ -522,12 +538,20 @@ function writeConnectionState(
 
     written = instances.find((i) => i.origin === origin);
 
-    if (!registryPatch) return { instances };
-    return {
-      instances,
-      registry: upsertRegistryEntry(state.registry, origin, { ...registryPatch, origin }),
-      registryUpdatedAt: Date.now(),
-    };
+    const patch: Partial<InstanceState> = { instances };
+    if (write.isLoading !== undefined) patch.isLoading = write.isLoading;
+
+    if (registryPhase) {
+      patch.registry = upsertRegistryEntry(state.registry, origin, { ...registryPhase, origin });
+      patch.registryUpdatedAt = Date.now();
+    } else if (registryFields) {
+      const entry = state.registry.get(origin);
+      if (entry) {
+        patch.registry = new Map(state.registry).set(origin, { ...entry, ...registryFields });
+        patch.registryUpdatedAt = Date.now();
+      }
+    }
+    return patch;
   });
 
   return written;
@@ -728,9 +752,9 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
           remoteUserId: response.user.id,
           addedAt: get().registry.get(origin)?.addedAt ?? Date.now(),
         },
+        isLoading: false,
       });
       saveCachedTokens(get().instances, currentUser.id);
-      set({ isLoading: false });
 
       // Open WebSocket connection to the remote instance
       connectInstance(origin, response.token);
@@ -797,10 +821,10 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
           remoteUserId: response.user.id,
           addedAt: get().registry.get(origin)?.addedAt ?? Date.now(),
         },
+        isLoading: false,
       });
       const userId = useAuthStore.getState().user?.id;
       if (userId) saveCachedTokens(get().instances, userId);
-      set({ isLoading: false });
 
       // Open WebSocket connection to the remote instance
       connectInstance(origin, response.token);
@@ -858,6 +882,14 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
   reconnectInstance: async (origin: string) => {
     let inst = get().instances.find(i => i.origin === origin);
 
+    // A live session, or an attempt already in flight, needs no second one.
+    // Asked of the entry the store already held, never of the placeholder the
+    // restore below inserts: that placeholder stands for this very attempt and
+    // is therefore `connecting`, so asking after it returned here with the
+    // cached token unverified and no socket opened, and left the origin in
+    // `connecting` for the next caller to read as a session.
+    if (inst && (inst.status === 'connected' || inst.status === 'connecting')) return;
+
     // If the instance was disconnected (removed from active instances array) but
     // has a cached token in localStorage, restore it so reconnect can proceed.
     if (!inst) {
@@ -882,8 +914,6 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
         },
       });
     }
-
-    if (inst.status === 'connected' || inst.status === 'connecting') return;
 
     // Tokenless placeholders can't reconnect — they need full re-authentication
     if (!inst.token) return;
@@ -1142,7 +1172,14 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       });
     }
 
-    // Migration: promote localStorage-only entries to registry
+    // Migration: promote localStorage-only entries to registry. The seed says
+    // `auth_expired`, the same status a known connection with no proven session
+    // gets above, because a cached token is not a session: an origin that is
+    // absent from `replicatedInstances` is never in the connect phase below, so
+    // it gets no live entry at all and a row saying `connected` would stand for
+    // a session that nothing is holding. An origin the connect phase does reach
+    // (the home instance of a federated account) moves off this status in the
+    // same run, and only `disconnected` would have kept it from being tried.
     for (const [origin] of Object.entries(cached)) {
       if (origin === window.location.origin) continue;
       if (!registry.has(origin)) {
@@ -1151,11 +1188,11 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
           label: cached[origin]?.label || new URL(origin).host,
           username: cached[origin]?.username || '',
           remoteUserId: '',
-          status: 'connected',
+          status: 'auth_expired',
           addedAt: Date.now(),
-          lastConnectedAt: Date.now(),
+          lastConnectedAt: null,
           disconnectedAt: null,
-          errorMessage: null,
+          errorMessage: registryReason('reauthenticate'),
         });
       }
     }

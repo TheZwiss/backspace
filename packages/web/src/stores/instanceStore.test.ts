@@ -80,7 +80,7 @@ vi.mock('./authStore', () => ({
   ),
 }));
 
-import { useInstanceStore } from './instanceStore';
+import { useInstanceStore, connectToInstance } from './instanceStore';
 import type { ConnectedInstance } from './instanceStore';
 
 const REMOTE = 'https://orbit.example';
@@ -223,6 +223,8 @@ describe('a connection moves both of its projections together', () => {
     await useInstanceStore.getState().connectToRemote(REMOTE, 'home-password', 'Erin');
 
     expect(agreedStatuses(REMOTE)).toEqual({ live: 'connected', registry: 'connected' });
+    // Settled in the same write as the entry, not in a `set` after it.
+    expect(useInstanceStore.getState().isLoading).toBe(false);
   });
 
   it('a connect the remote refuses leaves the placeholder as it stood, in agreement', async () => {
@@ -245,6 +247,7 @@ describe('a connection moves both of its projections together', () => {
     await useInstanceStore.getState().loginToRemote(REMOTE, 'erin', 'their-own-password');
 
     expect(agreedStatuses(REMOTE)).toEqual({ live: 'connected', registry: 'connected' });
+    expect(useInstanceStore.getState().isLoading).toBe(false);
   });
 
   it('disconnecting by hand leaves both halves disconnected', () => {
@@ -340,6 +343,74 @@ describe('autoConnectAll moves both projections together too', () => {
     expect(useInstanceStore.getState().registry.get(REMOTE)?.disconnectedAt).toBe(4_000);
     expect(remoteMe).not.toHaveBeenCalled();
     expect(connectInstance).not.toHaveBeenCalled();
+  });
+});
+
+describe('a resume from a cached token with no live entry', () => {
+  // The registry knows the origin and holds no live entry for it, which is
+  // what `connectToInstance(origin, '')` resumes from: the Explore page's
+  // connect-then-join and the Connections retry both arrive here.
+  beforeEach(() => {
+    cacheToken('cached-token');
+    useInstanceStore.setState({
+      instances: [],
+      registry: new Map([[REMOTE, registryEntry('disconnected', { disconnectedAt: 5_000 })]]),
+    });
+  });
+
+  // Asserted against the work, not against the statuses: the placeholder this
+  // path restores is `connecting`, and `connecting` sits beside every registry
+  // status, so a resume that returned before verifying anything left a pair
+  // these tests would have called consistent.
+  it('verifies the cached token and opens a socket', async () => {
+    remoteMe.mockResolvedValue(remoteUser());
+
+    const outcome = await connectToInstance(REMOTE, '');
+
+    expect(remoteMe).toHaveBeenCalledTimes(1);
+    expect(connectInstance).toHaveBeenCalledWith(REMOTE, 'cached-token');
+    expect(outcome).toEqual({ kind: 'connected', how: 'resumed' });
+    expect(agreedStatuses(REMOTE)).toEqual({ live: 'connected', registry: 'connected' });
+  });
+
+  it('asks for a password when the token is refused, and the second attempt reports no session either', async () => {
+    remoteMe.mockRejectedValue(refused());
+
+    expect(await connectToInstance(REMOTE, '')).toEqual({ kind: 'needs-password' });
+    expect(remoteMe).toHaveBeenCalledTimes(1);
+    expect(connectInstance).not.toHaveBeenCalled();
+
+    // The second click must not find a placeholder left behind in `connecting`
+    // and report `how: 'already'` over it: connect-then-join takes that for a
+    // session and goes on to join a space through it.
+    expect(await connectToInstance(REMOTE, '')).toEqual({ kind: 'needs-password' });
+    expect(remoteMe).toHaveBeenCalledTimes(2);
+    expect(connectInstance).not.toHaveBeenCalled();
+  });
+
+  it('reports the instance unreachable rather than asking for a password it cannot use', async () => {
+    remoteMe.mockRejectedValue(unreachable());
+
+    await expect(connectToInstance(REMOTE, '')).rejects.toThrow('peer_unreachable');
+    expect(remoteMe).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('a registry row seeded from a cached token', () => {
+  it('does not claim a session for an origin the connect phase never reaches', async () => {
+    cacheToken('cached-token');
+
+    await useInstanceStore.getState().autoConnectAll();
+
+    const state = useInstanceStore.getState();
+    // The origin is in the token cache alone: absent from `replicatedInstances`,
+    // it is never in the connect phase, so it gets no live entry and whatever
+    // the seed wrote is what the row keeps.
+    expect(state.instances.find((i) => i.origin === REMOTE)).toBeUndefined();
+    expect(remoteMe).not.toHaveBeenCalled();
+    expect(connectInstance).not.toHaveBeenCalled();
+    expect(state.registry.get(REMOTE)?.status).toBe('auth_expired');
+    expect(state.registry.get(REMOTE)?.lastConnectedAt).toBeNull();
   });
 });
 
