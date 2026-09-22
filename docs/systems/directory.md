@@ -842,7 +842,7 @@ doing. The order is the page's own sense, outgoing before incoming:
 | discovery off, not an admin | space discovery is off, spaces here are joinable by invite link only |
 | discovery off, admin | the same fact in the admin's voice, with "Turn on space discovery" |
 | not listed, admin, `directoryConfigured` true | no space here is listed in the public directory, with "List them" |
-| `directoryConfigured` true, `directoryAvailable` false, not an admin | spaces from other instances are not shown here |
+| `directoryConfigured` true, `directoryAvailable` false, not an admin | spaces from other instances are not shown here, because their administrator turned that off |
 | `directoryConfigured` true, `directoryAvailable` false, admin | the same sentence, with "Show global spaces in Explore" |
 
 The listing row does not ask whether discovery is on. It used to, by accident
@@ -859,6 +859,16 @@ Space, since listing alone does not change what this instance sees.
 A member is never given the listing row: they cannot change it, and what the
 instance publishes elsewhere is not a fact about the page they came to
 browse.
+
+**Every member row names the administrator.** A member cannot act on any of
+these settings, so a row that states only the absence reads as a fault or an
+outage, and the person who could explain it is not on the screen. Both member
+rows therefore say whose choice it is, in the same voice: "Your instance
+administrator has turned off space discovery..." and "...not shown here
+because your instance administrator turned that off." The admin halves of both
+pairs state the fact alone, because the reader chose it and is looking at the
+switch that undoes it. That is why the browse row is a `member`/`admin` pair
+of keys like the discovery row, and not one `text` shared by both.
 
 **One strip, not a card each.** Two or three of these sit above the spaces
 the page is for, so the rows share one frame and one divider set rather than

@@ -277,8 +277,13 @@ export function InstanceDiscoveryHint({
       case 'discoveryOffAdmin': return t('spaces:explore.discoveryOff.admin');
       case 'discoveryOffMember': return t('spaces:explore.discoveryOff.member');
       case 'notListed': return t('spaces:explore.notListed.text');
-      // Both browse rows state the one fact; only the action differs.
-      default: return t('spaces:explore.browseOff.text');
+      // The two browse rows state the one fact in two voices, like the two
+      // discovery rows above them. A member cannot act on it, so the sentence
+      // has to say that the state is their administrator's choice rather than
+      // a fault: an unexplained absence reads as something broken. An admin
+      // knows they chose it and is told the fact alone, next to the switch.
+      case 'browseOffMember': return t('spaces:explore.browseOff.member');
+      default: return t('spaces:explore.browseOff.admin');
     }
   };
 

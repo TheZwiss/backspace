@@ -165,7 +165,8 @@
       "failed": "Could not change the setting."
     },
     "browseOff": {
-      "text": "Spaces from other instances are not shown here.",
+      "member": "Spaces from other instances are not shown here because your instance administrator turned that off.",
+      "admin": "Spaces from other instances are not shown here.",
       "action": "Show global spaces in Explore",
       "confirm": {
         "title": "Show spaces from other instances here?",

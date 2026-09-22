@@ -19,6 +19,9 @@ const ADMIN_TEXT = 'Space discovery is off on this instance. Spaces here are joi
 const ENABLE_LABEL = 'Turn on space discovery';
 const NOT_LISTED_TEXT = 'No space here is listed in the public directory.';
 const LIST_LABEL = 'List them';
+// The two voices of the browse row. A member is told whose choice it is,
+// because they cannot act on it and an unexplained absence reads as a fault.
+const BROWSE_OFF_MEMBER = 'Spaces from other instances are not shown here because your instance administrator turned that off.';
 const BROWSE_OFF_TEXT = 'Spaces from other instances are not shown here.';
 const BROWSE_LABEL = 'Show global spaces in Explore';
 
@@ -394,8 +397,32 @@ describe('InstanceDiscoveryHint', () => {
       />,
     );
 
-    expect(screen.getByText(BROWSE_OFF_TEXT)).toBeInTheDocument();
+    expect(screen.getByText(BROWSE_OFF_MEMBER)).toBeInTheDocument();
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  });
+
+  /*
+   * A member cannot act on any of this, so every member row has to say that
+   * the state is a choice their administrator made. Without that, an absent
+   * Outer Space reads as a fault or an outage, and the person who could
+   * explain it is not on screen. The rule is asserted on the sentence rather
+   * than on the key, so a reworded string that drops the administrator fails
+   * here.
+   */
+  it('tells the member whose choice it is, not just that it is so', () => {
+    seed({ isAdmin: false, streamingLimits: NOT_LISTED });
+    render(
+      <InstanceDiscoveryHint
+        directoryConfigured
+        directoryAvailable={false}
+        onDiscoveryEnabled={onDiscoveryEnabled}
+        onBrowseEnabled={onBrowseEnabled}
+      />,
+    );
+
+    expect(screen.getByText(/your instance administrator/i)).toBeInTheDocument();
+    // And the bare fact, the admin's voice, is not what a member is shown.
+    expect(screen.queryByText(BROWSE_OFF_TEXT)).not.toBeInTheDocument();
   });
 
   it('names the same fact to an admin and offers the setting back on', () => {
@@ -611,7 +638,9 @@ describe('InstanceDiscoveryHint', () => {
         />,
       );
 
-      expect(rowTexts(container)).toEqual([MEMBER_TEXT, BROWSE_OFF_TEXT]);
+      // Both in the member's voice: each names the administrator, because
+      // neither is something this reader can change.
+      expect(rowTexts(container)).toEqual([MEMBER_TEXT, BROWSE_OFF_MEMBER]);
       expect(screen.queryByRole('button')).not.toBeInTheDocument();
     });
 

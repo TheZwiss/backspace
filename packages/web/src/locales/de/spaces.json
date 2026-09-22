@@ -165,7 +165,8 @@
       "failed": "Die Einstellung konnte nicht geändert werden."
     },
     "browseOff": {
-      "text": "Spaces von anderen Instanzen werden hier nicht angezeigt.",
+      "member": "Spaces von anderen Instanzen werden hier nicht angezeigt, weil deine Instanzverwaltung das ausgeschaltet hat.",
+      "admin": "Spaces von anderen Instanzen werden hier nicht angezeigt.",
       "action": "Globale Spaces in „Entdecken“ anzeigen",
       "confirm": {
         "title": "Spaces von anderen Instanzen hier anzeigen?",
