@@ -443,6 +443,25 @@ see [directory.md](directory.md) section 9). Both render from the Map, so a
 status change from any path (`reconnectInstance`, `reauthenticateInstance`,
 `autoConnectAll`) reaches both at once.
 
+### The one writer: `writeConnectionState`
+
+A connection is held in two projections that both carry a status — the live
+`ConnectedInstance` in `instances` and the entry in this Map — and neither is
+derived from the other, so one internal function in `instanceStore.ts` moves
+them together. `writeConnectionState(origin, phase, write?)` takes a phase from
+a table that names the live status, the registry status and the reason code as
+one thing (`connected`, `disconnected`, `unreachable`, `token-expired`,
+`no-session`, plus `live-*` phases that move the live entry alone), and writes
+`instances`, `registry` and `registryUpdatedAt` in a single `set`. Call sites
+name a phase; none of them writes a status, which is what keeps the halves from
+drifting apart at one path and putting an instance's spaces in the wrong half of
+the Explore page (`innerOrigins` reads across the pair). The `live-*` phases are
+for the events the registry deliberately does not record: socket liveness
+(`setInstanceStatus`) and an attempt in flight, since a websocket blip must not
+leave a row saying the user disconnected — that row is what suppresses
+auto-connect on the next launch. `instanceStore.test.ts` asserts the pair after
+every action that moves a connection.
+
 ### The reconnect surface: `ReauthForm`
 
 `ReauthForm` (`components/modals/ReauthForm.tsx`) is the whole way back from
@@ -506,7 +525,7 @@ sentence. The Connections row renders it through `describeRegistryError`
 store writes the code through `registryReason`, which types the value against
 the union so a typo at a write site does not compile.
 
-| Code | Written by | Status it accompanies |
+| Code | Reached from | Status it accompanies |
 |------|-----------|-----------------------|
 | `unreachable` | `reconnectInstance`, `autoConnectAll` on a network error | `unreachable` |
 | `session_expired` | `reconnectInstance`, `autoConnectAll` on an auth error; the tokenless placeholder path | `auth_expired` |
