@@ -218,10 +218,18 @@ export function GeneralPanel() {
    * own, and refused a save that merely renamed the instance.
    *
    * A refused answer leaves `hasDirectoryEndpoint` alone, so the row keeps
-   * whatever was last established rather than falling back to a claim. The
-   * rest of the reasoning, including the known limit that nothing asks again
-   * after a refusal no save caused, is in docs/systems/directory.md section
-   * 10.
+   * whatever was last established rather than falling back to a claim.
+   *
+   * Known limit, deliberate, and here rather than only in the doc because it
+   * reads like a bug at this line: nothing asks again after a refusal that no
+   * save caused, since only a save bumps `directoryProbe`. A change made
+   * elsewhere while a request is in flight therefore leaves the endpoint
+   * question where it was until the next save. That is a missed refresh and
+   * never a wrong answer, and what it would refresh cannot change while the
+   * panel is open, because no setting an admin writes creates or removes an
+   * endpoint. Re-probing on mismatch was considered and left out as
+   * complexity for a case that is already safe. The full account is in
+   * docs/systems/directory.md section 10.
    */
   useEffect(() => {
     if (!settingsLoaded) return;
