@@ -826,17 +826,52 @@ settings flags come from one document**, `settingsStore.streamingLimits`,
 which any signed-in user may read and which `updateInstanceSettings` keeps
 current; `isAdmin` comes from the same store, and `directoryConfigured` and
 `directoryAvailable` are passed down from the page, which already reads the
-public instance info. The row is derived from those and nothing else:
+public instance info. The rows are derived from those and nothing else.
 
-| condition | what renders |
+**Every row that applies is shown, not the first match.** These are two
+independent settings, not rungs of one ladder: an instance can be
+invite-only, unlisted and showing nobody else's spaces all at once.
+`discoveryHintRows` returns the applicable rows in a fixed order, and the
+surface stacks them. Returning one meant an admin fixed a thing and the page
+then admitted to another, and at no point said what the instance was actually
+doing. The order is the page's own sense, outgoing before incoming:
+
+| condition | row, in this order |
 |---|---|
-| `streamingLimits` is null (the document has not arrived) | nothing |
-| discovery off, not an admin | amber notice: space discovery is off, spaces here are joinable by invite link only |
+| `streamingLimits` is null (the document has not arrived) | nothing at all |
+| discovery off, not an admin | space discovery is off, spaces here are joinable by invite link only |
 | discovery off, admin | the same fact in the admin's voice, with "Turn on space discovery" |
-| `directoryConfigured` true, `directoryAvailable` false, not an admin | a quiet row: spaces from other instances are not shown on this instance |
+| not listed, admin, `directoryConfigured` true | no space here is listed in the public directory, with "List them" |
+| `directoryConfigured` true, `directoryAvailable` false, not an admin | spaces from other instances are not shown here |
 | `directoryConfigured` true, `directoryAvailable` false, admin | the same sentence, with "Show global spaces in Explore" |
-| discovery on, not listed, admin, `directoryConfigured` true | a quiet row: spaces here are not listed in the public directory, with "List them" |
-| anything else | nothing |
+
+The listing row does not ask whether discovery is on. It used to, by accident
+of being checked after the discovery row returned, and the accident hid the
+fact rather than stating it. Its action covers the difference: "List them"
+writes `{ discoveryEnabled: true, directoryEnabled: true }`, the pair the
+Instance -> General ladder calls global, so the flag combination the server
+refuses with `directory_requires_discovery` is never sent, and on an
+invite-only instance the confirmation takes one extra first line
+(`settings.discovery.directory.adminOffSelfIntro`) saying that local
+discovery comes on with it. Only then does it call back to refill Inner
+Space, since listing alone does not change what this instance sees.
+
+A member is never given the listing row: they cannot change it, and what the
+instance publishes elsewhere is not a fact about the page they came to
+browse.
+
+**One strip, not a card each.** Two or three of these sit above the spaces
+the page is for, so the rows share one frame and one divider set rather than
+stacking bordered boxes. The discovery row keeps its amber, but in the text
+rather than as a fill, and every action is the same quiet link; a row's
+failure renders directly under the row that raised it. On a phone the
+sentence takes the whole line so every action sits underneath, which keeps
+the stack even instead of letting one short sentence keep its action
+alongside; the variant is the project's `desktop:` one
+(`html[data-viewport]`), not a Tailwind breakpoint, because this app decides
+mobile from the layout width at the current interface scale. `pending` is
+held as the row whose write is in flight, so a stacked strip never disables a
+neighbour's unrelated action.
 
 **The two directory rows need the endpoint and the discovery rows do not.**
 Space discovery is local and reaches no hub, so its rows stand on an instance
@@ -889,21 +924,18 @@ the screen-share config, the one consumer that needs numbers whatever
 happened, reads them through `getStreamingLimits()`, which falls back at read
 time.
 
-The rows an admin sees are the ladder of section 3 one rung per click,
-offered in the same place, with the incoming axis between its two rungs.
-"Turn on space discovery" writes
+The actions an admin is offered are the settings of section 3, each beside
+the fact that names it. "Turn on space discovery" writes
 `discoveryEnabled: true` through `updateInstanceSettings`, which mirrors both
 flags from the server's answer back into `streamingLimits`, and the hint
-moves from the third row to the fourth in the same render: there is no "just
-enabled" state, and no refetch has to land for the row to be right. Enabling
-also calls back into `ExplorePage` so Inner Space refills without a reload
+drops the discovery row in the same render: there is no "just enabled"
+state, and no refetch has to land for the strip to be right. Enabling also
+calls back into `ExplorePage` so Inner Space refills without a reload
 (`fetchSpaces`, `fetchMyRequests`), but that call fills the list, not the
-hint. "List them" writes `directoryEnabled: true` and refetches nothing,
-because what this instance lists does not change what it sees. Both buttons
-disable while their call is in flight, and a rejected PATCH renders
+hint. A button disables while its own call is in flight, and a rejected PATCH renders
 `describeError` under the text and leaves the row where it was, the store
 having kept the old settings; the message is held with the row it was raised
-on, so it disappears rather than following the hint to the next rung.
+on, so it disappears rather than surfacing under a neighbour.
 
 **Two of the three actions ask before they write.** Listing and browsing each
 change what this instance does to everyone on it, in a way the page they are
@@ -940,9 +972,10 @@ The listing row says nothing about Outer Space. **Browsing the directory
 never depends on `directoryEnabled`**, only on the operator's
 `DIRECTORY_ENDPOINT` and the admin's browse setting (the gate above), so
 `explore.outer.empty` ("Nothing out there yet...") means the feed has nothing
-for this query, never that this instance lists nothing of its own. The five
-visible rows are in the Explore workbench as
-`?scene=hint-member|hint-admin|hint-not-listed|hint-browse-member|hint-browse-admin`
+for this query, never that this instance lists nothing of its own. The rows
+are in the Explore workbench as
+`?scene=hint-member|hint-admin|hint-not-listed|hint-browse-member|hint-browse-admin`,
+with `?scene=hint-all` for all three at once
 (`packages/web/dev-explore.html`), which takes `?width=400` for the wrap. The
 two browse scenes also take Outer Space off the page, which is the state the
 row exists to explain.

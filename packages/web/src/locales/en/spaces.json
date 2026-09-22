@@ -165,7 +165,7 @@
       "failed": "Could not change the setting."
     },
     "browseOff": {
-      "text": "Spaces from other instances are not shown on this instance.",
+      "text": "Spaces from other instances are not shown here.",
       "action": "Show global spaces in Explore",
       "confirm": {
         "title": "Show spaces from other instances here?",
@@ -175,7 +175,7 @@
       }
     },
     "notListed": {
-      "text": "Spaces on this instance are not listed in the public directory.",
+      "text": "No space here is listed in the public directory.",
       "action": "List them",
       "confirm": {
         "title": "List spaces from this instance publicly?",
@@ -313,7 +313,7 @@
         "adminOff": "Your instance administrator has to turn on global space discovery.",
         "adminOffSelf": "Global space discovery is off on this instance.",
         "adminOffSelfAction": "Turn it on",
-        "adminOffSelfIntro": "This turns on the global rung for the whole instance: spaces here become discoverable in Explore, and the instance starts reporting itself to the public directory.",
+        "adminOffSelfIntro": "This turns on global space discovery for the whole instance: spaces here become discoverable in Explore, and the instance starts reporting itself to the public directory.",
         "privateSpace": "Set visibility to public or request to join first.",
         "disclosure": "Listing makes public: the space's name, description, icon, banner, member count and this instance's address. People browsing the directory load the icon and banner from this instance."
       },

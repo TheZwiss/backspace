@@ -165,7 +165,7 @@
       "failed": "Die Einstellung konnte nicht geändert werden."
     },
     "browseOff": {
-      "text": "Spaces von anderen Instanzen werden auf dieser Instanz nicht angezeigt.",
+      "text": "Spaces von anderen Instanzen werden hier nicht angezeigt.",
       "action": "Globale Spaces in „Entdecken“ anzeigen",
       "confirm": {
         "title": "Spaces von anderen Instanzen hier anzeigen?",
@@ -175,7 +175,7 @@
       }
     },
     "notListed": {
-      "text": "Spaces auf dieser Instanz sind nicht im öffentlichen Verzeichnis eingetragen.",
+      "text": "Kein Space von hier ist im öffentlichen Verzeichnis eingetragen.",
       "action": "Eintragen",
       "confirm": {
         "title": "Spaces dieser Instanz öffentlich eintragen?",
@@ -313,7 +313,7 @@
         "adminOff": "Die Instanzverwaltung muss erst das globale Entdecken von Spaces einschalten.",
         "adminOffSelf": "Das globale Entdecken von Spaces ist auf dieser Instanz ausgeschaltet.",
         "adminOffSelfAction": "Einschalten",
-        "adminOffSelfIntro": "Damit wird die globale Stufe für die ganze Instanz eingeschaltet: Spaces hier lassen sich in „Entdecken“ finden, und die Instanz meldet sich beim öffentlichen Verzeichnis an.",
+        "adminOffSelfIntro": "Damit wird das globale Entdecken von Spaces für die ganze Instanz eingeschaltet: Spaces hier lassen sich in „Entdecken“ finden, und die Instanz meldet sich beim öffentlichen Verzeichnis an.",
         "privateSpace": "Stell die Sichtbarkeit zuerst auf „Öffentlich“ oder „Beitritt auf Anfrage“.",
         "disclosure": "Der Eintrag macht öffentlich: Name, Beschreibung, Icon, Banner und Mitgliederzahl des Spaces sowie die Adresse dieser Instanz. Wer das Verzeichnis durchstöbert, lädt Icon und Banner von dieser Instanz."
       },

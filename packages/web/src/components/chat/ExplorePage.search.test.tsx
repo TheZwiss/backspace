@@ -588,7 +588,7 @@ describe('ExplorePage follows a connection change while it is open', () => {
     renderPage();
 
     await waitFor(() =>
-      expect(screen.getByText('Spaces from other instances are not shown on this instance.')).toBeInTheDocument(),
+      expect(screen.getByText('Spaces from other instances are not shown here.')).toBeInTheDocument(),
     );
     expect(screen.queryByText('Outer Space')).not.toBeInTheDocument();
     expect(fetchDirectory).not.toHaveBeenCalled();
@@ -617,7 +617,7 @@ describe('ExplorePage follows a connection change while it is open', () => {
     await waitFor(() => expect(screen.getByText('Outer Space')).toBeInTheDocument());
     expect(instanceInfo).toHaveBeenCalledTimes(2);
     expect(
-      screen.queryByText('Spaces from other instances are not shown on this instance.'),
+      screen.queryByText('Spaces from other instances are not shown here.'),
     ).not.toBeInTheDocument();
   });
 });

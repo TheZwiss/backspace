@@ -53,9 +53,11 @@
 // of the page, with the expired row open on the same reauth form, because
 // the two surfaces share it.
 //
-// `?scene=hint-member|hint-admin|hint-not-listed|hint-browse-member|hint-browse-admin`
-// shows the instance discovery hint that sits under the chips row in each of
-// its five visible rows: space discovery off as a member sees it, the same as
+// `?scene=hint-member|hint-admin|hint-not-listed|hint-browse-member|hint-browse-admin|hint-all`
+// shows the instance discovery hint that sits under the chips row. The hint
+// states every fact that applies, so most of these scenes are stacks rather
+// than single rows, and `hint-all` is all three at once, the case to check
+// `?width=400` on: space discovery off as a member sees it, the same as
 // an admin sees it with the switch, the quiet listing row an admin gets once
 // discovery is on, and the two browse rows, where the admin has turned "Show
 // global spaces in Explore" off and Outer Space is therefore absent from the
@@ -106,7 +108,8 @@ type Scene =
   | 'hint-admin'
   | 'hint-not-listed'
   | 'hint-browse-member'
-  | 'hint-browse-admin';
+  | 'hint-browse-admin'
+  | 'hint-all';
 
 const SCENES: ReadonlySet<string> = new Set<Scene>([
   'both',
@@ -136,6 +139,7 @@ const SCENES: ReadonlySet<string> = new Set<Scene>([
   'hint-not-listed',
   'hint-browse-member',
   'hint-browse-admin',
+  'hint-all',
 ]);
 
 function isScene(value: string | null): value is Scene {
@@ -290,7 +294,7 @@ const INSTANCE_INFO: InstanceInfoResponse = {
  * nothing.
  */
 function instanceInfoFor(scene: Scene): InstanceInfoResponse {
-  if (scene === 'hint-browse-member' || scene === 'hint-browse-admin') {
+  if (scene === 'hint-browse-member' || scene === 'hint-browse-admin' || scene === 'hint-all') {
     return { ...INSTANCE_INFO, directoryAvailable: false };
   }
   return INSTANCE_INFO;
@@ -345,7 +349,8 @@ type HintScene =
   | 'hint-admin'
   | 'hint-not-listed'
   | 'hint-browse-member'
-  | 'hint-browse-admin';
+  | 'hint-browse-admin'
+  | 'hint-all';
 
 const HINT_SCENES: ReadonlySet<string> = new Set<HintScene>([
   'hint-member',
@@ -353,6 +358,7 @@ const HINT_SCENES: ReadonlySet<string> = new Set<HintScene>([
   'hint-not-listed',
   'hint-browse-member',
   'hint-browse-admin',
+  'hint-all',
 ]);
 
 function isHintScene(scene: Scene): scene is HintScene {
@@ -370,6 +376,9 @@ const HINT_LIMITS: Record<HintScene, InstanceStreamingLimits> = {
   'hint-not-listed': { ...DEFAULT_HINT_LIMITS, discoveryEnabled: true, directoryEnabled: false },
   'hint-browse-member': { ...DEFAULT_HINT_LIMITS, discoveryEnabled: true, directoryEnabled: true },
   'hint-browse-admin': { ...DEFAULT_HINT_LIMITS, discoveryEnabled: true, directoryEnabled: true },
+  // Everything off at once: the three-row stack, which is the case most
+  // likely to crowd at phone width and the one to check `?width=400` on.
+  'hint-all': { ...DEFAULT_HINT_LIMITS, discoveryEnabled: false, directoryEnabled: false },
 };
 
 function seedStores(scene: Scene): void {
@@ -392,7 +401,7 @@ function seedStores(scene: Scene): void {
   // the resting state of a fresh session: no admin, and settings that have
   // not arrived, which is the hint's silent row.
   useSettingsStore.setState({
-    isAdmin: scene === 'hint-admin' || scene === 'hint-not-listed' || scene === 'hint-browse-admin',
+    isAdmin: scene === 'hint-admin' || scene === 'hint-not-listed' || scene === 'hint-browse-admin' || scene === 'hint-all',
     streamingLimits: isHintScene(scene) ? HINT_LIMITS[scene] : null,
     updateInstanceSettings: async () => {},
   });

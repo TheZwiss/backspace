@@ -17,9 +17,9 @@ vi.mock('../../audio/AudioManager', () => ({
 const MEMBER_TEXT = 'Your instance administrator has turned off space discovery. Spaces here are joinable by invite link only.';
 const ADMIN_TEXT = 'Space discovery is off on this instance. Spaces here are joinable by invite link only.';
 const ENABLE_LABEL = 'Turn on space discovery';
-const NOT_LISTED_TEXT = 'Spaces on this instance are not listed in the public directory.';
+const NOT_LISTED_TEXT = 'No space here is listed in the public directory.';
 const LIST_LABEL = 'List them';
-const BROWSE_OFF_TEXT = 'Spaces from other instances are not shown on this instance.';
+const BROWSE_OFF_TEXT = 'Spaces from other instances are not shown here.';
 const BROWSE_LABEL = 'Show global spaces in Explore';
 
 // The confirmations. Both labels are prefixes of nothing else on screen, and
@@ -87,6 +87,15 @@ beforeEach(() => {
   onBrowseEnabled.mockReset();
   onBrowseEnabled.mockResolvedValue(undefined);
 });
+
+/**
+ * The rows on screen, in the order they are rendered. Each row states its
+ * fact in one paragraph, and a failure adds a second one under it, so a test
+ * that expects an error reads the tail of this rather than its length.
+ */
+function rowTexts(container: HTMLElement): string[] {
+  return Array.from(container.querySelectorAll('p')).map((p) => p.textContent ?? '');
+}
 
 /**
  * The full gesture behind a confirmed action: the row's button, then the
@@ -172,11 +181,13 @@ describe('InstanceDiscoveryHint', () => {
 
   it('names the reason to an admin and offers the switch', () => {
     seed({ isAdmin: true, streamingLimits: DISCOVERY_OFF });
-    render(<InstanceDiscoveryHint directoryConfigured directoryAvailable onDiscoveryEnabled={onDiscoveryEnabled} onBrowseEnabled={onBrowseEnabled} />);
+    const { container } = render(<InstanceDiscoveryHint directoryConfigured directoryAvailable onDiscoveryEnabled={onDiscoveryEnabled} onBrowseEnabled={onBrowseEnabled} />);
 
     expect(screen.getByText(ADMIN_TEXT)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: ENABLE_LABEL })).toBeInTheDocument();
-    expect(screen.queryByText(NOT_LISTED_TEXT)).not.toBeInTheDocument();
+    // And the listing row with it: this instance is invite-only AND unlisted,
+    // and saying only the first used to hide the second until it was fixed.
+    expect(rowTexts(container)).toEqual([ADMIN_TEXT, NOT_LISTED_TEXT]);
   });
 
   it('follows the settings document, not the explore store, in both directions', () => {
@@ -209,8 +220,8 @@ describe('InstanceDiscoveryHint', () => {
     expect(updateInstanceSettings).toHaveBeenCalledWith({ discoveryEnabled: true });
     await waitFor(() => expect(onDiscoveryEnabled).toHaveBeenCalledOnce());
 
-    // Row 3 to row 4 on the settings alone, with no refetch having landed: the
-    // second rung is offered in the same place the first was.
+    // The discovery row goes on the settings alone, with no refetch having
+    // landed, and the listing row that was under it all along stays put.
     expect(screen.queryByText(ADMIN_TEXT)).not.toBeInTheDocument();
     expect(screen.getByText(NOT_LISTED_TEXT)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: LIST_LABEL })).toBeInTheDocument();
@@ -225,6 +236,9 @@ describe('InstanceDiscoveryHint', () => {
 
     await user.click(screen.getByRole('button', { name: ENABLE_LABEL }));
     expect(screen.getByRole('button', { name: ENABLE_LABEL })).toBeDisabled();
+    // Only that row: a stacked strip must not disable a neighbour's unrelated
+    // action because this one is in flight.
+    expect(screen.getByRole('button', { name: LIST_LABEL })).toBeEnabled();
     expect(onDiscoveryEnabled).not.toHaveBeenCalled();
 
     finish();
@@ -313,12 +327,14 @@ describe('InstanceDiscoveryHint', () => {
     const { container } = render(<InstanceDiscoveryHint directoryConfigured directoryAvailable onDiscoveryEnabled={onDiscoveryEnabled} onBrowseEnabled={onBrowseEnabled} />);
 
     expect(screen.getByText(NOT_LISTED_TEXT)).toBeInTheDocument();
-    // Informational, not a warning: no amber treatment on this row.
-    expect(container.querySelector('.bg-accent-amber\\/10')).toBeNull();
+    // Informational, not a warning: no amber on this row.
+    expect(container.querySelector('.text-accent-amber')).toBeNull();
 
     await clickThrough(user, LIST_LABEL, LIST_CONFIRM_LABEL);
 
-    expect(updateInstanceSettings).toHaveBeenCalledWith({ directoryEnabled: true });
+    // The whole global rung. `directoryEnabled` on its own is the pair the
+    // server refuses, and this row is offered whether or not discovery is on.
+    expect(updateInstanceSettings).toHaveBeenCalledWith({ discoveryEnabled: true, directoryEnabled: true });
     // Listing changes nothing about what this instance sees, so nothing refetches.
     expect(onDiscoveryEnabled).not.toHaveBeenCalled();
     await waitFor(() => expect(container).toBeEmptyDOMElement());
@@ -393,11 +409,12 @@ describe('InstanceDiscoveryHint', () => {
       />,
     );
 
-    expect(screen.getByText(BROWSE_OFF_TEXT)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: BROWSE_LABEL })).toBeInTheDocument();
+    // Alongside the listing row, outgoing before incoming.
+    expect(rowTexts(container)).toEqual([NOT_LISTED_TEXT, BROWSE_OFF_TEXT]);
     // A choice the instance made, not a warning: the same quiet treatment the
     // listing row gets, and no amber.
-    expect(container.querySelector('.bg-accent-amber\\/10')).toBeNull();
+    expect(container.querySelector('.text-accent-amber')).toBeNull();
   });
 
   /*
@@ -456,7 +473,7 @@ describe('InstanceDiscoveryHint', () => {
     expect(onDiscoveryEnabled).not.toHaveBeenCalled();
 
     // The fact lives on the instance info, not in the settings document the
-    // PATCH answers with, so the row moves when the page's re-read lands and
+    // PATCH answers with, so the row goes when the page's re-read lands and
     // not before. Nothing in the hint remembers the click.
     expect(screen.getByText(BROWSE_OFF_TEXT)).toBeInTheDocument();
     rerender(
@@ -468,10 +485,10 @@ describe('InstanceDiscoveryHint', () => {
       />,
     );
 
-    // And the next rung is offered in the same place, exactly as the discovery
-    // row hands over to this one: these settings also list nothing.
+    // The browse row goes and the listing row, which was above it the whole
+    // time, stays: these settings also list nothing.
     expect(screen.queryByText(BROWSE_OFF_TEXT)).not.toBeInTheDocument();
-    expect(screen.getByText(NOT_LISTED_TEXT)).toBeInTheDocument();
+    expect(rowTexts(container)).toEqual([NOT_LISTED_TEXT]);
 
     // With the listing rung already taken there is nothing left to say.
     useSettingsStore.setState({ streamingLimits: LISTED });
@@ -527,42 +544,120 @@ describe('InstanceDiscoveryHint', () => {
   });
 
   /*
-   * Order, both ways. Discovery off is the deeper fact: no space here is in
-   * Explore for anyone, so what this instance shows is not yet the question.
-   * And browsing off comes before the listing row, because an admin who
-   * cannot see Outer Space is being asked about a section that is not on the
-   * page.
+   * Every fact that applies, in one order. These are two independent
+   * settings, not rungs of one ladder: an instance can be invite-only, or
+   * unlisted, or not showing anyone else's spaces, in any combination. The
+   * surface used to state the first match, so an admin fixed one thing and
+   * the page then admitted to another, and at no point showed what the
+   * instance was actually doing. The order is the page's own sense, outgoing
+   * before incoming: found at all, then listed globally, then what it shows
+   * of everyone else.
    */
-  it('names discovery being off before browsing being off', () => {
-    seed({ isAdmin: true, streamingLimits: DISCOVERY_OFF });
-    render(
-      <InstanceDiscoveryHint
-        directoryConfigured
-        directoryAvailable={false}
-        onDiscoveryEnabled={onDiscoveryEnabled}
-        onBrowseEnabled={onBrowseEnabled}
-      />,
-    );
+  describe('states every fact that applies, in one order', () => {
+    it('discovery off and nothing listed, the outgoing pair', () => {
+      seed({ isAdmin: true, streamingLimits: DISCOVERY_OFF });
+      const { container } = render(
+        <InstanceDiscoveryHint directoryConfigured directoryAvailable onDiscoveryEnabled={onDiscoveryEnabled} onBrowseEnabled={onBrowseEnabled} />,
+      );
 
-    expect(screen.getByText(ADMIN_TEXT)).toBeInTheDocument();
-    expect(screen.queryByText(BROWSE_OFF_TEXT)).not.toBeInTheDocument();
-  });
+      expect(rowTexts(container)).toEqual([ADMIN_TEXT, NOT_LISTED_TEXT]);
+      expect(screen.getByRole('button', { name: ENABLE_LABEL })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: LIST_LABEL })).toBeInTheDocument();
+    });
 
-  it('names browsing being off before the listing row', () => {
-    // Discovery on, nothing listed and nothing browsable: both directory rows
-    // apply, and the incoming one is the one on screen.
-    seed({ isAdmin: true, streamingLimits: NOT_LISTED });
-    render(
-      <InstanceDiscoveryHint
-        directoryConfigured
-        directoryAvailable={false}
-        onDiscoveryEnabled={onDiscoveryEnabled}
-        onBrowseEnabled={onBrowseEnabled}
-      />,
-    );
+    it('nothing listed and nothing shown, one rung of each axis', () => {
+      seed({ isAdmin: true, streamingLimits: NOT_LISTED });
+      const { container } = render(
+        <InstanceDiscoveryHint
+          directoryConfigured
+          directoryAvailable={false}
+          onDiscoveryEnabled={onDiscoveryEnabled}
+          onBrowseEnabled={onBrowseEnabled}
+        />,
+      );
 
-    expect(screen.getByText(BROWSE_OFF_TEXT)).toBeInTheDocument();
-    expect(screen.queryByText(NOT_LISTED_TEXT)).not.toBeInTheDocument();
+      expect(rowTexts(container)).toEqual([NOT_LISTED_TEXT, BROWSE_OFF_TEXT]);
+      expect(screen.getByRole('button', { name: LIST_LABEL })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: BROWSE_LABEL })).toBeInTheDocument();
+    });
+
+    it('all three at once, each with its own action', () => {
+      seed({ isAdmin: true, streamingLimits: DISCOVERY_OFF });
+      const { container } = render(
+        <InstanceDiscoveryHint
+          directoryConfigured
+          directoryAvailable={false}
+          onDiscoveryEnabled={onDiscoveryEnabled}
+          onBrowseEnabled={onBrowseEnabled}
+        />,
+      );
+
+      expect(rowTexts(container)).toEqual([ADMIN_TEXT, NOT_LISTED_TEXT, BROWSE_OFF_TEXT]);
+      expect(screen.getByRole('button', { name: ENABLE_LABEL })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: LIST_LABEL })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: BROWSE_LABEL })).toBeInTheDocument();
+    });
+
+    it('both member rows at once, with nothing to click', () => {
+      // A member is never told about the listing: they cannot change it, and
+      // it is not a fact about the page they came to browse.
+      seed({ isAdmin: false, streamingLimits: DISCOVERY_OFF });
+      const { container } = render(
+        <InstanceDiscoveryHint
+          directoryConfigured
+          directoryAvailable={false}
+          onDiscoveryEnabled={onDiscoveryEnabled}
+          onBrowseEnabled={onBrowseEnabled}
+        />,
+      );
+
+      expect(rowTexts(container)).toEqual([MEMBER_TEXT, BROWSE_OFF_TEXT]);
+      expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    });
+
+    it('one strip, not a card each: the rows share a frame', () => {
+      seed({ isAdmin: true, streamingLimits: DISCOVERY_OFF });
+      const { container } = render(
+        <InstanceDiscoveryHint
+          directoryConfigured
+          directoryAvailable={false}
+          onDiscoveryEnabled={onDiscoveryEnabled}
+          onBrowseEnabled={onBrowseEnabled}
+        />,
+      );
+
+      // Three facts above the spaces the page is for: one border, and the
+      // warning row carries its tone in the text rather than in a fill.
+      expect(container.querySelectorAll('.border').length).toBe(1);
+      expect(container.querySelector('.bg-accent-amber\\/10')).toBeNull();
+      expect(container.querySelector('p.text-accent-amber')?.textContent).toBe(ADMIN_TEXT);
+    });
+
+    /*
+     * A failure belongs to the row it was raised on, which matters more with
+     * the rows stacked: a message about a refused listing must not read as a
+     * comment on the row above or below it.
+     */
+    it('a refusal stays under the row that raised it', async () => {
+      seed({ isAdmin: true, streamingLimits: DISCOVERY_OFF });
+      const err = new HttpError(403, 'Forbidden', undefined, 'forbidden');
+      updateInstanceSettings.mockRejectedValueOnce(err);
+      const user = userEvent.setup();
+      const { container } = render(
+        <InstanceDiscoveryHint
+          directoryConfigured
+          directoryAvailable={false}
+          onDiscoveryEnabled={onDiscoveryEnabled}
+          onBrowseEnabled={onBrowseEnabled}
+        />,
+      );
+
+      await user.click(screen.getByRole('button', { name: ENABLE_LABEL }));
+
+      await waitFor(() => expect(screen.getByText(describeError(err))).toBeInTheDocument());
+      // Directly after the row it was raised on, and before the next one.
+      expect(rowTexts(container)).toEqual([ADMIN_TEXT, describeError(err), NOT_LISTED_TEXT, BROWSE_OFF_TEXT]);
+    });
   });
 
   /*
@@ -577,6 +672,9 @@ describe('InstanceDiscoveryHint', () => {
   describe('the confirmations in front of the two directory actions', () => {
     const DISCLOSURE = "For each listed space this makes public: its name, description, icon, banner, member count and this instance's address. People browsing the directory load the icon and banner from this instance.";
     const LIST_OPT_IN = 'Only spaces whose owners turn listing on are sent, so this switch lists no space on its own.';
+    // The extra first line the dialog takes when the write also turns on
+    // local discovery.
+    const RUNG_INTRO = 'This turns on global space discovery for the whole instance: spaces here become discoverable in Explore, and the instance starts reporting itself to the public directory.';
     const LIST_OFF = 'To stop listing later: Settings, Instance, General, the space discovery choice.';
     const BROWSE_LOADS = "People here see spaces from other instances in Outer Space. Their browsers load those spaces' icons and banners from the instances that own them.";
     const BROWSE_EXPOSURE = "Those instances see the IP address of every browser that loads one, and this instance's administrator does not control them.";
@@ -624,7 +722,7 @@ describe('InstanceDiscoveryHint', () => {
       await clickThrough(user, LIST_LABEL, LIST_CONFIRM_LABEL);
 
       expect(updateInstanceSettings).toHaveBeenCalledOnce();
-      expect(updateInstanceSettings).toHaveBeenCalledWith({ directoryEnabled: true });
+      expect(updateInstanceSettings).toHaveBeenCalledWith({ discoveryEnabled: true, directoryEnabled: true });
       await waitFor(() => expect(screen.queryByText(LIST_CONFIRM_TITLE)).not.toBeInTheDocument());
     });
 
@@ -715,19 +813,67 @@ describe('InstanceDiscoveryHint', () => {
      * go with it rather than stay and write what the admin is no longer
      * looking at.
      */
-    it('a rung that moves while its dialog is open takes the dialog with it', async () => {
+    it('a row that goes while its dialog is open takes the dialog with it', async () => {
+      seed({ isAdmin: true, streamingLimits: NOT_LISTED });
+      const user = userEvent.setup();
+      const { container } = render(<InstanceDiscoveryHint directoryConfigured directoryAvailable onDiscoveryEnabled={onDiscoveryEnabled} onBrowseEnabled={onBrowseEnabled} />);
+
+      await user.click(screen.getByRole('button', { name: LIST_LABEL }));
+      expect(screen.getByText(LIST_CONFIRM_TITLE)).toBeInTheDocument();
+
+      // Another tab, or another admin, lists the instance.
+      useSettingsStore.setState({ streamingLimits: LISTED });
+
+      await waitFor(() => expect(container).toBeEmptyDOMElement());
+      expect(screen.queryByText(LIST_CONFIRM_TITLE)).not.toBeInTheDocument();
+      expect(updateInstanceSettings).not.toHaveBeenCalled();
+    });
+
+    /*
+     * The listing action writes the discovery flag too, so on an
+     * invite-only instance the dialog has to say that before it is
+     * confirmed rather than after it has happened.
+     */
+    it('with discovery off as well, the listing dialog says it turns that on too', async () => {
+      seed({ isAdmin: true, streamingLimits: DISCOVERY_OFF });
+      const user = userEvent.setup();
+      render(<InstanceDiscoveryHint directoryConfigured directoryAvailable onDiscoveryEnabled={onDiscoveryEnabled} onBrowseEnabled={onBrowseEnabled} />);
+
+      await user.click(screen.getByRole('button', { name: LIST_LABEL }));
+
+      expect(screen.getByText(RUNG_INTRO)).toBeInTheDocument();
+      expect(screen.getByText(DISCLOSURE)).toBeInTheDocument();
+    });
+
+    it('on an instance that is already discoverable it does not', async () => {
       seed({ isAdmin: true, streamingLimits: NOT_LISTED });
       const user = userEvent.setup();
       render(<InstanceDiscoveryHint directoryConfigured directoryAvailable onDiscoveryEnabled={onDiscoveryEnabled} onBrowseEnabled={onBrowseEnabled} />);
 
       await user.click(screen.getByRole('button', { name: LIST_LABEL }));
-      expect(screen.getByText(LIST_CONFIRM_TITLE)).toBeInTheDocument();
 
-      useSettingsStore.setState({ streamingLimits: DISCOVERY_OFF });
+      expect(screen.queryByText(RUNG_INTRO)).not.toBeInTheDocument();
+      expect(screen.getByText(DISCLOSURE)).toBeInTheDocument();
+    });
 
-      await waitFor(() => expect(screen.getByText(ADMIN_TEXT)).toBeInTheDocument());
-      expect(screen.queryByText(LIST_CONFIRM_TITLE)).not.toBeInTheDocument();
-      expect(updateInstanceSettings).not.toHaveBeenCalled();
+    it('listing an invite-only instance refills Inner Space, listing a discoverable one does not', async () => {
+      seed({ isAdmin: true, streamingLimits: DISCOVERY_OFF });
+      const user = userEvent.setup();
+      const { unmount } = render(<InstanceDiscoveryHint directoryConfigured directoryAvailable onDiscoveryEnabled={onDiscoveryEnabled} onBrowseEnabled={onBrowseEnabled} />);
+
+      await clickThrough(user, LIST_LABEL, LIST_CONFIRM_LABEL);
+      // The discovery half of that write changed what this instance answers
+      // with, so the page's snapshot of it is stale.
+      await waitFor(() => expect(onDiscoveryEnabled).toHaveBeenCalledOnce());
+      unmount();
+
+      onDiscoveryEnabled.mockReset();
+      seed({ isAdmin: true, streamingLimits: NOT_LISTED });
+      render(<InstanceDiscoveryHint directoryConfigured directoryAvailable onDiscoveryEnabled={onDiscoveryEnabled} onBrowseEnabled={onBrowseEnabled} />);
+
+      await clickThrough(user, LIST_LABEL, LIST_CONFIRM_LABEL);
+      // What this instance lists does not change what it sees.
+      expect(onDiscoveryEnabled).not.toHaveBeenCalled();
     });
   });
 });
