@@ -282,6 +282,30 @@ export async function maybeAutoReattach(instance: ConnectedInstance): Promise<vo
   }
 }
 
+// ─── Auto-connect gate ───────────────────────────────────────────────────────
+
+/**
+ * Resolve once `autoConnectAll` has finished, so a fan-out over connected
+ * instances does not run against an incomplete or empty list on page reload.
+ * Resolves at once when it already has. The flag is re-read after subscribing
+ * because it can flip between the first check and the subscription.
+ */
+export function waitForAutoConnect(): Promise<void> {
+  if (useInstanceStore.getState()._autoConnectDone) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    const unsub = useInstanceStore.subscribe((state) => {
+      if (state._autoConnectDone) {
+        unsub();
+        resolve();
+      }
+    });
+    if (useInstanceStore.getState()._autoConnectDone) {
+      unsub();
+      resolve();
+    }
+  });
+}
+
 // ─── API client resolution ───────────────────────────────────────────────────
 
 // ─── Registry helpers ────────────────────────────────────────────────────────

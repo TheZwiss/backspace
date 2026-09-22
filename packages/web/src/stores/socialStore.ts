@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { Friend, FriendRequest, User } from '@backspace/shared';
 import { api } from '../api/client';
-import { useInstanceStore } from './instanceStore';
+import { useInstanceStore, waitForAutoConnect } from './instanceStore';
 import { normalizeUserAssets } from '../utils/assetUrls';
 
 // ─── Tagged types (origin tracking for federation) ───────────────────────────
@@ -22,25 +22,6 @@ function getApiForOrigin(origin: string) {
 
 let _friendsLoadInFlight = false;
 let _requestsLoadInFlight = false;
-
-// ─── Auto-connect wait (same pattern as discoverStore) ──────────────────────
-
-async function waitForAutoConnect(): Promise<void> {
-  if (useInstanceStore.getState()._autoConnectDone) return;
-  return new Promise<void>((resolve) => {
-    const unsub = useInstanceStore.subscribe((state) => {
-      if (state._autoConnectDone) {
-        unsub();
-        resolve();
-      }
-    });
-    // Double-check (race condition guard)
-    if (useInstanceStore.getState()._autoConnectDone) {
-      unsub();
-      resolve();
-    }
-  });
-}
 
 // ─── Store ───────────────────────────────────────────────────────────────────
 

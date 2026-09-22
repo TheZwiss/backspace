@@ -3,7 +3,7 @@ import type { ExploreSpace, JoinRequest, SpaceWithChannelsAndMembers } from '@ba
 import { api } from '../api/client';
 import i18n from '../i18n';
 import { resolveAssetUrl } from '../utils/assetUrls';
-import { useInstanceStore } from './instanceStore';
+import { useInstanceStore, waitForAutoConnect } from './instanceStore';
 import { useSpaceStore } from './spaceStore';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -57,28 +57,6 @@ function getApiForOrigin(origin: string) {
     throw new Error(i18n.t('spaces:explore.notConnected', { host: hostOf(origin) }));
   }
   return instance.api;
-}
-
-/**
- * Wait for autoConnectAll to finish if it has not yet, so a fan-out over
- * connected instances does not run against an incomplete or empty list on
- * page reload.
- */
-async function waitForAutoConnect(): Promise<void> {
-  if (useInstanceStore.getState()._autoConnectDone) return;
-  await new Promise<void>((resolve) => {
-    const unsub = useInstanceStore.subscribe((state) => {
-      if (state._autoConnectDone) {
-        unsub();
-        resolve();
-      }
-    });
-    // Re-check after subscribing to avoid a TOCTOU race
-    if (useInstanceStore.getState()._autoConnectDone) {
-      unsub();
-      resolve();
-    }
-  });
 }
 
 function getConnectedInstances() {

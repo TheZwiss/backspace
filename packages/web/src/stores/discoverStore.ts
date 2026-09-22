@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { DiscoverUser, User } from '@backspace/shared';
 import { api } from '../api/client';
-import { useInstanceStore } from './instanceStore';
+import { useInstanceStore, waitForAutoConnect } from './instanceStore';
 import { normalizeUserAssets } from '../utils/assetUrls';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -36,21 +36,7 @@ export const useDiscoverStore = create<DiscoverState>((set) => ({
   fetchUsers: async (query?: string) => {
     set({ isLoading: true, error: null });
 
-    // Wait for autoConnectAll to finish (same guard as exploreStore)
-    if (!useInstanceStore.getState()._autoConnectDone) {
-      await new Promise<void>((resolve) => {
-        const unsub = useInstanceStore.subscribe((state) => {
-          if (state._autoConnectDone) {
-            unsub();
-            resolve();
-          }
-        });
-        if (useInstanceStore.getState()._autoConnectDone) {
-          unsub();
-          resolve();
-        }
-      });
-    }
+    await waitForAutoConnect();
 
     // Lazy import — avoids pulling spaceStore's transitive dependency chain
     // (voiceStore → AudioManager) into test environments.

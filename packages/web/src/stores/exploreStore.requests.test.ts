@@ -30,22 +30,34 @@ vi.mock('../api/client', () => ({
   BackspaceApiClient: vi.fn(),
 }));
 
-vi.mock('./instanceStore', () => ({
-  useInstanceStore: Object.assign(
-    (selector: (s: unknown) => unknown) => selector(instanceState),
-    {
-      getState: () => instanceState,
-      setState: vi.fn(),
-      subscribe: (listener: (state: { _autoConnectDone: boolean }) => void) => {
-        subscribers.push(listener);
-        return () => {
-          const at = subscribers.indexOf(listener);
-          if (at >= 0) subscribers.splice(at, 1);
-        };
-      },
+vi.mock('./instanceStore', () => {
+  const subscribe = (listener: (state: { _autoConnectDone: boolean }) => void) => {
+    subscribers.push(listener);
+    return () => {
+      const at = subscribers.indexOf(listener);
+      if (at >= 0) subscribers.splice(at, 1);
+    };
+  };
+  return {
+    useInstanceStore: Object.assign(
+      (selector: (s: unknown) => unknown) => selector(instanceState),
+      { getState: () => instanceState, setState: vi.fn(), subscribe },
+    ),
+    // The real helper's contract against the mocked store: resolve at once
+    // when done, otherwise on the flip, and drop the subscription after.
+    waitForAutoConnect: () => {
+      if (instanceState._autoConnectDone) return Promise.resolve();
+      return new Promise<void>((resolve) => {
+        const unsub = subscribe((state) => {
+          if (state._autoConnectDone) {
+            unsub();
+            resolve();
+          }
+        });
+      });
     },
-  ),
-}));
+  };
+});
 
 // spaceStore pulls in AudioManager and the rest of the app; the requests
 // path never touches it, so a stub with the one method publicJoin uses is enough.

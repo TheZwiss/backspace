@@ -512,19 +512,13 @@ Source: `packages/web/src/stores/discoverStore.ts`
 
 ### Federation-Aware Initialization Guard
 
-`fetchUsers()` includes a critical guard that waits for `instanceStore._autoConnectDone` before proceeding:
-
-```typescript
-if (!useInstanceStore.getState()._autoConnectDone) {
-  await new Promise<void>((resolve) => {
-    const unsub = useInstanceStore.subscribe((state) => {
-      if (state._autoConnectDone) { unsub(); resolve(); }
-    });
-    // Double-check (race condition guard)
-    if (useInstanceStore.getState()._autoConnectDone) { unsub(); resolve(); }
-  });
-}
-```
+`fetchUsers()` starts with `await waitForAutoConnect()`, the one helper
+exported from `stores/instanceStore.ts` that resolves once
+`_autoConnectDone` is set (at once when it already is; otherwise it
+subscribes, re-checks the flag after subscribing to close the race, and
+unsubscribes on the flip). `socialStore.loadFriends`/`loadRequests`,
+`exploreStore.fetchSpaces`/`fetchMyRequests` and `utils/mutuals.ts` use the
+same helper.
 
 This ensures the discover page doesn't fire requests before all remote instance connections are established, which would miss remote users.
 

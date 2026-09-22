@@ -1,6 +1,6 @@
 import type { User } from '@backspace/shared';
 import { api } from '../api/client';
-import { useInstanceStore } from '../stores/instanceStore';
+import { useInstanceStore, waitForAutoConnect } from '../stores/instanceStore';
 import { normalizeUserAssets, resolveAssetUrl } from './assetUrls';
 
 // ─── Tagged types ────────────────────────────────────────────────────────────
@@ -36,21 +36,7 @@ export async function loadFederatedMutuals(
   targetHomeUserId?: string | null,
 ): Promise<FederatedMutuals> {
   // Wait for all remote connections to establish before fanning out
-  if (!useInstanceStore.getState()._autoConnectDone) {
-    await new Promise<void>((resolve) => {
-      const unsub = useInstanceStore.subscribe((state) => {
-        if (state._autoConnectDone) {
-          unsub();
-          resolve();
-        }
-      });
-      // Double-check (race condition guard)
-      if (useInstanceStore.getState()._autoConnectDone) {
-        unsub();
-        resolve();
-      }
-    });
-  }
+  await waitForAutoConnect();
 
   // Lazy import — avoids pulling spaceStore's transitive dependency chain into
   // test environments that don't set up AudioWorkletNode.

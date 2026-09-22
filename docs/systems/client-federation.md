@@ -157,6 +157,8 @@ Called once per session after login:
 4. For instances **without cached tokens**: create error placeholders (visible in Connections UI with "re-authenticate" prompt)
 5. Set `_autoConnectDone = true` to unblock topology sync
 
+`waitForAutoConnect()`, exported next to the store, resolves once that flag is set (immediately when it already is, with a re-check after subscribing so a flip between the check and the subscription is not missed). Every fan-out over connected instances (`exploreStore`, `socialStore`, `discoverStore`, `utils/mutuals.ts`) awaits it first.
+
 ### Topology Sync (`syncInstanceList`)
 
 After connections change, the client notifies all instances of the current topology. Each instance receives a perspective-correct list:
