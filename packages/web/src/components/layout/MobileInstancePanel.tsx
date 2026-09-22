@@ -140,14 +140,13 @@ export function MobileInstancePanel() {
   const { t } = useTranslation(['federation', 'admin', 'common']);
   const pushMobileScreen = useUIStore((s) => s.pushMobileScreen);
   const fetchInstanceSettings = useSettingsStore((s) => s.fetchInstanceSettings);
-  const fetchStreamingLimits = useSettingsStore((s) => s.fetchStreamingLimits);
 
   // Pre-fetch instance data so sub-panels have it when they mount
-  // (mirrors InstancePanel.tsx useEffect on desktop)
+  // (mirrors InstancePanel.tsx useEffect on desktop). Not the streaming
+  // limits: `StreamingPanel` is their only reader here and loads them itself.
   useEffect(() => {
     fetchInstanceSettings();
-    fetchStreamingLimits();
-  }, [fetchInstanceSettings, fetchStreamingLimits]);
+  }, [fetchInstanceSettings]);
 
   const approvalCount = useFederationApprovalCount(true);
   const updateBadge = useInstanceUpdateBadge();

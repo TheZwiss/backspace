@@ -569,7 +569,9 @@ Zustand store managing two data objects:
 | isAdmin | boolean | Set externally via `setIsAdmin()` | -- |
 | gifEnabled | boolean | `fetchGifEnabled()` | -- |
 
-**Default fallback:** If streaming limits fail to fetch, the store falls back to `DEFAULT_LIMITS`:
+**A failed fetch leaves `streamingLimits` null.** `fetchStreamingLimits()` logs and keeps the field unknown rather than substituting `DEFAULT_LIMITS`. The document carries `discoveryEnabled` and `directoryEnabled`, and those defaults assert a pair (`discoveryEnabled: true`, `directoryEnabled: false`) that would be shown to the user as fact: the Explore page's `InstanceDiscoveryHint` would tell an admin on a listed instance that their spaces are not listed, next to a button that writes the setting, and `StreamingPanel` could save invented limits over the instance's real configuration. Every reader handles null: the hint renders nothing, `SpaceSettings` falls back per flag with `??`, `StreamQualityControls` falls back per field, and `StreamingPanel` loads the document itself (below).
+
+`DEFAULT_LIMITS` still exists, as the read-time fallback inside `getStreamingLimits()`:
 ```typescript
 {
   maxBitrateKbps: 20000,
@@ -588,7 +590,9 @@ Zustand store managing two data objects:
 
 **Cross-field sync:** After every `updateInstanceSettings()` the store mirrors `discoveryEnabled` and `directoryEnabled` from the server's answer into `streamingLimits`, which is where the space settings `DiscoveryPanel` reads both flags for a home space (the warning banner and the directory switch's disabled reason; a remote space asks its own instance instead, see [directory.md](directory.md) §10). The answer is used rather than the request because switching discovery off clears the directory server-side.
 
-**Exported helper:** `getStreamingLimits()` returns current limits or defaults -- used by voice/streaming code outside React.
+**Exported helper:** `getStreamingLimits()` returns current limits or defaults -- used by voice/streaming code outside React. It is the one place a default may stand in: a screen share has to pick a bitrate whatever the server said. Anything that states a fact to the user, or offers to change one, reads `streamingLimits` and treats null as unknown.
+
+**Who fetches it:** the WS ready handler for every session (`useWebSocket.ts`), and `StreamingPanel` for itself when it opens. `InstancePanel` and `MobileInstancePanel` no longer pre-fetch it: the panel is the only reader of this document inside the instance-settings tree, and a parent's fetch cannot report its outcome to the panel that needs it.
 
 ### Admin UI Panels
 
@@ -778,6 +782,8 @@ Manages: storage overview, file type breakdown, upload limit, orphan cleanup, me
 #### StreamingPanel
 
 Manages: bitrate range (min/max/step), custom bitrate toggle, resolution/framerate allowlists, bitrate matrix.
+
+- **Its own load:** the panel calls `fetchStreamingLimits()` on mount and reads the outcome from the store afterwards (the action swallows its error, so "the document arrived" is the signal). Until it does, the panel shows the loading line; a load that leaves the document null shows the panel's rose failure block, the same treatment its save errors use, with a Retry that stays in place and is disabled while the request is in flight.
 
 - **Bandwidth section:** Range sliders + number inputs for min/max bitrate. Step size via preset pills (100, 250, 500, 1000, 2500, 5000 kbps) + custom number input.
 - **Custom Bitrate toggle:** Controls whether users can set their own bitrate vs using matrix defaults

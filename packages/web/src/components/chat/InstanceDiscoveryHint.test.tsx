@@ -186,10 +186,40 @@ describe('InstanceDiscoveryHint', () => {
     await user.click(screen.getByRole('button', { name: ENABLE_LABEL }));
     await waitFor(() => expect(screen.getByText(describeError(err))).toBeInTheDocument());
 
-    // The rung is moved somewhere else, in Instance -> General.
+    // The rung is moved somewhere else, in another tab or by another admin.
     useSettingsStore.setState({ streamingLimits: NOT_LISTED });
 
     await waitFor(() => expect(screen.getByText(NOT_LISTED_TEXT)).toBeInTheDocument());
+    expect(screen.queryByText(describeError(err))).not.toBeInTheDocument();
+
+    // And it is gone, not merely hidden: the rung coming back must not bring
+    // a message about an attempt made before it with it.
+    useSettingsStore.setState({ streamingLimits: DISCOVERY_OFF });
+    await waitFor(() => expect(screen.getByText(ADMIN_TEXT)).toBeInTheDocument());
+    expect(screen.queryByText(describeError(err))).not.toBeInTheDocument();
+  });
+
+  it('a failure raised after the row moved is not recorded at all', async () => {
+    seed({ isAdmin: true, streamingLimits: DISCOVERY_OFF });
+    const err = new HttpError(403, 'Forbidden', undefined, 'forbidden');
+    let fail: (reason: unknown) => void = () => {};
+    updateInstanceSettings.mockImplementationOnce(() => new Promise<void>((_resolve, reject) => { fail = reject; }));
+    const user = userEvent.setup();
+    render(<InstanceDiscoveryHint onDiscoveryEnabled={onDiscoveryEnabled} />);
+
+    await user.click(screen.getByRole('button', { name: ENABLE_LABEL }));
+
+    // The rung moves while the request is in flight: a WS ready, another tab.
+    useSettingsStore.setState({ streamingLimits: NOT_LISTED });
+    await waitFor(() => expect(screen.getByText(NOT_LISTED_TEXT)).toBeInTheDocument());
+
+    fail(err);
+    await waitFor(() => expect(screen.getByRole('button', { name: LIST_LABEL })).toBeEnabled());
+    expect(screen.queryByText(describeError(err))).not.toBeInTheDocument();
+
+    // The row the attempt was made on comes back, and it comes back clean.
+    useSettingsStore.setState({ streamingLimits: DISCOVERY_OFF });
+    await waitFor(() => expect(screen.getByText(ADMIN_TEXT)).toBeInTheDocument());
     expect(screen.queryByText(describeError(err))).not.toBeInTheDocument();
   });
 

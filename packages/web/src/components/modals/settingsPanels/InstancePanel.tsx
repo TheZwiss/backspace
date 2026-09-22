@@ -19,7 +19,6 @@ type SubTab = 'general' | 'registration' | 'federation' | 'streaming' | 'storage
 export function InstancePanel() {
   const { t } = useTranslation(['settings']);
   const fetchInstanceSettings = useSettingsStore((s) => s.fetchInstanceSettings);
-  const fetchStreamingLimits = useSettingsStore((s) => s.fetchStreamingLimits);
   const fetchTelemetry = useSettingsStore((s) => s.fetchTelemetry);
   // Read here rather than in the telemetry panel alone: the invitation has to
   // be decided before that tab is ever opened, because it is what invites the
@@ -57,10 +56,12 @@ export function InstancePanel() {
 
   useEffect(() => {
     fetchInstanceSettings();
-    fetchStreamingLimits();
+    // The streaming limits are not fetched here: `StreamingPanel` is the only
+    // reader of that document in this tree and loads it itself, which is also
+    // how it can say when the load failed.
     // Failure leaves `telemetry` null, which shows the plain entry.
     void fetchTelemetry().catch(() => undefined);
-  }, [fetchInstanceSettings, fetchStreamingLimits, fetchTelemetry]);
+  }, [fetchInstanceSettings, fetchTelemetry]);
 
   return (
     <div className="space-y-4">

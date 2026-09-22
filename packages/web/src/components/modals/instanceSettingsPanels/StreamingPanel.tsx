@@ -46,8 +46,12 @@ export function StreamingPanel() {
   // swallows its own error, so the outcome is read from the store: the
   // document either arrived or it did not.
   const loadLimits = useCallback(async () => {
+    // `loadFailed` is deliberately not cleared here. Clearing it would take
+    // the failure line, and the button that was just clicked, off the screen
+    // for the length of the retry and drop the admin back on "Loading
+    // settings"; the outcome below is what decides, so a retry that fails
+    // again never moves anything.
     setLoading(true);
-    setLoadFailed(false);
     await fetchStreamingLimits();
     setLoadFailed(useSettingsStore.getState().streamingLimits === null);
     setLoading(false);
@@ -84,14 +88,16 @@ export function StreamingPanel() {
     // A failed load says so and offers the way back, rather than leaving the
     // admin on a spinner for a request that is not coming.
     if (loadFailed) {
+      // The panel's own failure treatment, the one its save errors use: a
+      // load that failed is an error, not an empty state.
       return (
-        <div className="flex flex-wrap items-center gap-3 text-sm text-txt-tertiary">
+        <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm flex flex-wrap items-center gap-3">
           <span>{t('common:states.loadSettingsFailed')}</span>
           <button
             type="button"
             onClick={() => { void loadLimits(); }}
             disabled={loading}
-            className="text-accent-primary hover:text-accent-primary/80 font-medium transition-colors disabled:text-txt-tertiary disabled:cursor-default"
+            className="font-medium underline underline-offset-2 hover:no-underline transition-all disabled:no-underline disabled:opacity-60 disabled:cursor-default"
           >
             {t('common:actions.retry')}
           </button>

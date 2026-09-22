@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { describeError } from '../../i18n/errors';
@@ -78,6 +78,12 @@ export function InstanceDiscoveryHint({ onDiscoveryEnabled }: InstanceDiscoveryH
   const row = discoveryHintRow({ limits: streamingLimits, isAdmin });
   const error = failure !== null && failure.row === row ? failure.message : '';
 
+  // The row as of the last render, readable from a callback that started in an
+  // earlier one. A click's `row` is captured when the handler is created, and
+  // the settings can move under it while the request is in flight.
+  const rowRef = useRef(row);
+  rowRef.current = row;
+
   // Dropped, not merely hidden, once the row it belongs to is no longer the
   // one on screen. Keeping it would bring a message about an attempt made
   // minutes ago back under the original row if the rung were toggled off and
@@ -90,13 +96,20 @@ export function InstanceDiscoveryHint({ onDiscoveryEnabled }: InstanceDiscoveryH
   // leaves the hint on the row it was already on and the message sits under
   // the text until the next attempt.
   const runAction = async (change: () => Promise<void>) => {
+    const startedOn = row;
     setPending(true);
     setFailure(null);
     try {
       await change();
     } catch (err) {
+      // The row this attempt was made on can be gone by the time the request
+      // answers, moved by a WS ready or another tab. Recording the failure
+      // then would store a message the effect above never sees (the row it
+      // names is not the current one, and it does not change again on the way
+      // in), leaving it to surface the next time that rung came back.
+      if (rowRef.current !== startedOn) return;
       const message = err instanceof Error ? describeError(err) : t('spaces:explore.discoveryOff.failed');
-      setFailure({ row, message });
+      setFailure({ row: startedOn, message });
     } finally {
       setPending(false);
     }

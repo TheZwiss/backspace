@@ -58,6 +58,25 @@ describe('StreamingPanel loading', () => {
     expect(useSettingsStore.getState().streamingLimits).toEqual(LIMITS);
   });
 
+  it('a retry in flight keeps the failure line, with the button disabled', async () => {
+    const get = vi.spyOn(api.settings, 'getStreaming').mockRejectedValue(new Error('offline'));
+    render(<StreamingPanel />);
+    await screen.findByText(FAILED);
+
+    let finish: (limits: InstanceStreamingLimits) => void = () => {};
+    get.mockImplementationOnce(() => new Promise<InstanceStreamingLimits>((resolve) => { finish = resolve; }));
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+    // The admin stays where they clicked: no bounce back to the spinner, and
+    // the button they just used is visibly out of action.
+    expect(screen.getByText(FAILED)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeDisabled();
+    expect(screen.queryByText('Loading settings…')).not.toBeInTheDocument();
+
+    finish(LIMITS);
+    await waitFor(() => expect(screen.queryByText(FAILED)).not.toBeInTheDocument());
+  });
+
   it('a load that works never shows the failure line', async () => {
     vi.spyOn(api.settings, 'getStreaming').mockResolvedValue(LIMITS);
     render(<StreamingPanel />);
