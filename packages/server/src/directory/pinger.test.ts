@@ -1,12 +1,15 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import Database from 'better-sqlite3';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ensureDefaults } from '../db/migrate.js';
 import { slotMinute } from '../telemetry/reporter.js';
-import { readDirectoryState, markDirectoryDirty, getDocumentVersion, _resetDirectoryStateForTests } from './state.js';
-import { sendDirectoryPing, pingerTick, createPingerMemory, type PingerDeps, type PingerMemory } from './pinger.js';
+import { readDirectoryState, markDirectoryDirty, getDocumentVersion, recordDirectoryPingSuccess, _resetDirectoryStateForTests } from './state.js';
+import {
+  sendDirectoryPing, pingerTick, createPingerMemory, changePingDelay, createChangePingScheduler,
+  type PingerDeps, type PingerMemory,
+} from './pinger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 function applyMigrations(db: Database.Database): void {
@@ -298,5 +301,132 @@ describe('pingerTick', () => {
     expect(await pingerTick(deps('2026-09-22T10:00:00Z', ok), mem)).toBe('sent');
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(readDirectoryState(db).dirty).toBe(false);
+  });
+});
+
+describe('changePingDelay', () => {
+  const now = Date.parse('2026-09-22T10:00:00Z');
+
+  it('is the three second debounce with nothing running', () => {
+    expect(changePingDelay(mem, now)).toBe(3_000);
+  });
+
+  it('is the rest of a running Retry-After or backoff when that is longer', () => {
+    mem.nextRetryAt = now + 10_000;
+    expect(changePingDelay(mem, now)).toBe(10_000);
+    mem.nextRetryAt = now + 1_000;
+    expect(changePingDelay(mem, now)).toBe(3_000);
+    mem.nextRetryAt = now - 5_000;
+    expect(changePingDelay(mem, now)).toBe(3_000);
+  });
+});
+
+describe('createChangePingScheduler', () => {
+  const report = vi.fn();
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-22T10:00:00Z'));
+    report.mockClear();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  // The scheduler reads the clock through deps.now, so the fake clock is what it sees.
+  const live = (respond: () => Response) => ({ ...deps('2026-09-22T10:00:00Z', respond), now: () => new Date() });
+
+  it('a burst of dirty marks inside the debounce sends one ping three seconds after the last', async () => {
+    const scheduler = createChangePingScheduler(live(ok), mem, report);
+    markDirectoryDirty(db);
+    scheduler.schedule();
+    await vi.advanceTimersByTimeAsync(2_000);
+    markDirectoryDirty(db);
+    scheduler.schedule();
+    await vi.advanceTimersByTimeAsync(2_999);
+    expect(fetchMock).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(readDirectoryState(db).dirty).toBe(false);
+    expect(report).not.toHaveBeenCalled();
+  });
+
+  it('waits out a running Retry-After instead of sending into the cooldown', async () => {
+    const scheduler = createChangePingScheduler(live(ok), mem, report);
+    mem.nextRetryAt = Date.now() + 10_000;
+    markDirectoryDirty(db);
+    scheduler.schedule();
+    await vi.advanceTimersByTimeAsync(9_999);
+    expect(fetchMock).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('a 429 re-arms the timer for the end of the cooldown, not the next minute tick', async () => {
+    let calls = 0;
+    const respond = () => {
+      calls += 1;
+      return calls === 1 ? new Response(null, { status: 429, headers: { 'retry-after': '10' } }) : ok();
+    };
+    const scheduler = createChangePingScheduler(live(respond), mem, report);
+    markDirectoryDirty(db);
+    scheduler.schedule();
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(readDirectoryState(db).dirty).toBe(true);
+    await vi.advanceTimersByTimeAsync(9_999);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(readDirectoryState(db).dirty).toBe(false);
+    expect(mem.nextRetryAt).toBeNull();
+  });
+
+  it('a failure other than a cooldown leaves the retry to the minute tick', async () => {
+    const scheduler = createChangePingScheduler(live(answer(503)), mem, report);
+    markDirectoryDirty(db);
+    scheduler.schedule();
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(3_600_000);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(readDirectoryState(db).dirty).toBe(true);
+  });
+
+  it('sends nothing when a ping in flight already covered the change', async () => {
+    const scheduler = createChangePingScheduler(live(ok), mem, report);
+    markDirectoryDirty(db);
+    scheduler.schedule();
+    recordDirectoryPingSuccess(db, getDocumentVersion(), Date.now());
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('sends nothing while the retry loop is halted on the current version, and again after the next change', async () => {
+    const scheduler = createChangePingScheduler(live(ok), mem, report);
+    markDirectoryDirty(db);
+    mem.haltedVersion = getDocumentVersion();
+    scheduler.schedule();
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(fetchMock).not.toHaveBeenCalled();
+    markDirectoryDirty(db);
+    scheduler.schedule();
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends nothing once retired, and nothing after stop', async () => {
+    const scheduler = createChangePingScheduler(live(ok), mem, report);
+    mem.retired = true;
+    markDirectoryDirty(db);
+    scheduler.schedule();
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    mem.retired = false;
+    scheduler.schedule();
+    scheduler.stop();
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

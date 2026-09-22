@@ -231,8 +231,70 @@ export async function pingerTick(deps: PingerDeps, mem: PingerMemory, opts: { bo
   return 'skipped';
 }
 
+/**
+ * How long a change ping waits: the debounce, or the rest of a running
+ * `Retry-After` or backoff when that is longer. Sending inside a known
+ * cooldown only buys another 429, and the second one can come from the hub's
+ * per-address limiter, which sends no header and costs the default wait again.
+ */
+export function changePingDelay(mem: PingerMemory, nowMs: number): number {
+  const remaining = mem.nextRetryAt === null ? 0 : mem.nextRetryAt - nowMs;
+  return Math.max(DEBOUNCE_MS, remaining);
+}
+
+export interface ChangePingScheduler {
+  /** Arms (or re-arms) the change ping; called on every dirty mark. */
+  schedule(): void;
+  stop(): void;
+}
+
+/**
+ * The event path: one timer, re-armed on every dirty mark, that fires the
+ * change ping `changePingDelay` after the last mark so a burst of edits sends
+ * one ping. When it fires it sends only if the document is still dirty (a ping
+ * already in flight may have covered the change) and the retry loop is not
+ * halted on the current version.
+ *
+ * A 429 re-arms the timer for the cooldown's end instead of leaving the change
+ * to the minute tick: the hub's per-origin cooldown is 10 seconds, and an edit
+ * that follows another within it should land seconds later, not up to a
+ * minute. Backoffs after a failure are minute-scale and stay with the tick;
+ * re-arming on those too would make two senders for one retry.
+ */
+export function createChangePingScheduler(
+  deps: PingerDeps,
+  mem: PingerMemory,
+  report: (err: unknown) => void,
+): ChangePingScheduler {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  const fire = (): void => {
+    timer = null;
+    if (mem.retired) return;
+    if (!readDirectoryState(deps.sqlite).dirty || mem.haltedVersion === getDocumentVersion()) return;
+    sendDirectoryPing(deps, mem)
+      .then((outcome) => {
+        if (outcome === 'cooldown' && readDirectoryState(deps.sqlite).dirty) arm();
+      })
+      .catch(report);
+  };
+
+  const arm = (): void => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(fire, changePingDelay(mem, deps.now().getTime()));
+  };
+
+  return {
+    schedule: arm,
+    stop: () => {
+      if (timer) clearTimeout(timer);
+      timer = null;
+    },
+  };
+}
+
 let interval: ReturnType<typeof setInterval> | null = null;
-let debounce: ReturnType<typeof setTimeout> | null = null;
+let scheduler: ChangePingScheduler | null = null;
 let unsubscribe: (() => void) | null = null;
 
 function productionDeps(): PingerDeps {
@@ -249,10 +311,10 @@ function productionDeps(): PingerDeps {
 }
 
 /**
- * Boot ping once, a tick every minute, and a 3 second debounced ping on every
- * dirty mark so a burst of edits sends one ping. Started outside the
- * federation workers guard on purpose: the two-instance harness disables the
- * workers and still needs the pinger, pointed at a local stub.
+ * Boot ping once, a tick every minute, and the change ping scheduler on every
+ * dirty mark. Started outside the federation workers guard on purpose: the
+ * two-instance harness disables the workers and still needs the pinger,
+ * pointed at a local stub.
  */
 export function startDirectoryPinger(): void {
   if (interval) return;
@@ -266,14 +328,8 @@ export function startDirectoryPinger(): void {
     console.error('[directory] pinger failed:', err);
   };
 
-  unsubscribe = onDirectoryDirty(() => {
-    if (debounce) clearTimeout(debounce);
-    debounce = setTimeout(() => {
-      debounce = null;
-      if (mem.retired) return;
-      sendDirectoryPing(deps, mem).catch(report);
-    }, DEBOUNCE_MS);
-  });
+  scheduler = createChangePingScheduler(deps, mem, report);
+  unsubscribe = onDirectoryDirty(() => scheduler?.schedule());
 
   console.log(`[directory] pinger started, hub ${deps.endpoint}, origin ${deps.origin}`);
   pingerTick(deps, mem, { boot: true }).catch(report);
@@ -287,9 +343,9 @@ export function stopDirectoryPinger(): void {
     clearInterval(interval);
     interval = null;
   }
-  if (debounce) {
-    clearTimeout(debounce);
-    debounce = null;
+  if (scheduler) {
+    scheduler.stop();
+    scheduler = null;
   }
   if (unsubscribe) {
     unsubscribe();

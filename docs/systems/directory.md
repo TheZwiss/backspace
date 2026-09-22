@@ -71,7 +71,7 @@ the user is not connected to.
 ```
 space owner flips "List in the Backspace directory"  (or admin toggle, delete, visibility)
         |
-        v  markDirectoryDirty(): bumps the document version, drops the endpoint cache, debounced 3 s
+        v  markDirectoryDirty(): bumps the document version, drops the endpoint cache, change ping 3 s later
 instance server pinger  --POST { origin }-->  explore.backspacechat.com  (Worker + D1)
         ^                                              |
         |                                              v  GET {origin}/api/directory/spaces (verify by fetch)
@@ -139,7 +139,7 @@ sends a boot ping when the flag is set, so a counter that started over at zero
 cannot clear a stale flag. `markDirectoryDirty()` is the one call every change
 goes through: it sets the flag, bumps the version (which invalidates the
 document cache in `routes/directory.ts`, keyed on it), then notifies the
-pinger's debounce.
+pinger's change ping scheduler.
 
 A space is served (section 4) when all four hold: `directory_enabled = 1`,
 `discovery_enabled = 1`, `spaces.directory_listed = 1`, and `visibility` is
@@ -295,11 +295,18 @@ listing, delisting, the toggle and the fetch-failure status line end to end.
   and no backoff or `Retry-After` is running. An event ping earlier in the day
   does not satisfy the slot: the daily ping is the member-count refresh and
   always runs.
-- **Debounce.** On every `markDirectoryDirty()`, 3 seconds after the last one,
-  so a burst of edits sends one ping. The debounce sends unless the hub has
-  retired the service; it does not wait out a backoff or a `Retry-After`,
-  since an edit is new information and the hub's per-origin cooldown bounds
-  the cost.
+- **Change ping.** On every `markDirectoryDirty()`, one timer
+  (`createChangePingScheduler`) is re-armed for `changePingDelay`: 3 seconds
+  after the last mark, or the rest of a running `Retry-After` or backoff when
+  that is longer, so a burst of edits sends one ping and nothing is sent into
+  a cooldown the hub already announced. When it fires it sends only if the
+  flag is still dirty (a ping in flight may have covered the change), the
+  retry loop is not halted on the current version, and the hub has not
+  retired the service. A `429` re-arms the timer for the cooldown's end, so a
+  second edit inside the hub's 10 second per-origin cooldown lands seconds
+  later rather than at the next minute tick. Any other failure leaves the
+  retry to the minute tick: backoffs are minute-scale, and two senders for
+  one retry would be worse than a minute of latency.
 
 **The per-day guard is derived from the persisted error, not from memory.**
 "No failure recorded today" reads `directory_last_error.at` and compares its
@@ -318,7 +325,7 @@ and the hub's answer body is never logged.
 Every ping records the `documentVersion` it was sent under. When the answer
 arrives, the dirty flag is cleared only if the version is still the same; a
 change that landed while the ping was in flight keeps the flag and the
-debounce sends the next ping. This is the reporter's "state changed while a
+change ping sends the next one. This is the reporter's "state changed while a
 ping was in flight" check applied to a counter instead of the toggle.
 
 | Answer | What the instance does |
