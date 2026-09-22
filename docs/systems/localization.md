@@ -95,9 +95,9 @@ Rules:
 | `chat` | Message list, composer, attachments, embeds, reactions, replies, typing, jump-to-message |
 | `dm` | DM list, group DM management, DM calls, DM system messages |
 | `voice` | Voice channel controls, screen share, stream tiles, device pickers |
-| `spaces` | Space, category and channel CRUD, invites, discovery, membership, bans, roles |
+| `spaces` | Space, category and channel CRUD, invites, discovery, membership, bans, roles; the Explore page's Inner and Outer Space sections, the connect-and-join dialog and the per-space directory switch (`explore.inner.*`, `explore.outer.*`, `explore.connect.*`, `settings.discovery.directory.*`) |
 | `settings` | User settings modal and its panels (account, voice, privacy, connections, keybinds, desktop) |
-| `admin` | Instance settings panels (general, registration, users, storage, streaming, updates, federation) |
+| `admin` | Instance settings panels (general, registration, users, storage, streaming, updates, federation); the directory toggle and its status line (`general.directory.*`) |
 | `federation` | Connected instances UI, peering requests, identity attach and detach |
 | `social` | Friends page, friend requests, user profiles, mutuals, user search |
 | `search` | Search popover and filter help |
@@ -314,6 +314,13 @@ server has words in every language.
 Federation: error bodies relayed from a peer instance follow the same
 contract, so a code from a newer peer is localized and a bare `error` from
 an older peer is shown as is.
+
+The space directory ([directory.md](directory.md)) added four codes:
+`directory_disabled` (the feed proxy, `DIRECTORY_ENDPOINT` empty),
+`directory_unreachable` (the proxy could not read the hub; the Outer Space
+section shows this text as its unreachable state), `directory_private_space`
+(`directoryListed: true` on a private space) and
+`directory_requires_discovery` (`directoryEnabled: true` with discovery off).
 
 Every route file is converted: auth, users, spaces, channels, messages, DMs
 (including the space-invite endpoint), social, explore, admin, settings,

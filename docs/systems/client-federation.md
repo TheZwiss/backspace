@@ -8,8 +8,9 @@ Source files:
 - `packages/web/src/stores/spaceStore.ts` — Origin-aware space/channel store, `channelOriginMap`, `getChannelOrigin()`, `resolveUserOrigin()`, `getLayoutHomeOrigin()`, `getMyUserIdForOrigin()`, DM deduplication
 - `packages/web/src/utils/crossStoreResolvers.ts` — Neutral module holding the cross-store resolver bindings (`_getApiForOrigin`, `_resolveOriginFromHostname`, `_getUserIdForOrigin`) + the WS-populated user-ID cache. Breaks a TDZ cycle between spaceStore and instanceStore; see "API Client Resolution" below
 - `packages/web/src/utils/identity.ts` — Cross-instance user identity resolution (`isSelf`, `canonicalUserMatch`, self-ID registry)
-- `packages/web/src/hooks/useInstanceConnect.ts` — Connection flow hook for the Connections UI
 - `packages/web/src/components/modals/ConnectedInstances.tsx` — Connections settings panel
+- `packages/web/src/components/modals/RemotePasswordStep.tsx` - the password/fallback-login step shared by the Connections add-instance flow and the directory's connect-and-join dialog
+- `packages/web/src/components/modals/ConnectAndJoinModal.tsx` - connect-then-join from an Outer Space card (see [directory.md](directory.md) §9)
 
 ---
 
@@ -359,6 +360,25 @@ The **Connections** panel (in user settings) allows managing remote instance con
 - **Home Instance** — always shown, cannot be removed. Desktop app has a "Change" button.
 - **Remote Instances** — each shows status (connected/disconnected/error), hostname, username. Actions: Reconnect, Re-authenticate, Sync Password, Disconnect.
 - **Add Instance** — multi-step form: enter hostname → verify password → register/login → connected.
+
+### The shared connect path: `connectToInstance`
+
+`connectToInstance(origin, password, displayName?)` in `instanceStore.ts` is the one way to establish a session on another instance from a user-typed password. The Connections add-instance flow (after its `probeInstance` step) and the directory's connect-then-join flow both go through it. It branches on the status the store holds for the canonical origin:
+
+| Store status for the origin | What happens | Outcome |
+|---|---|---|
+| `connected` or `connecting` | nothing; the session is usable already, and `connectToRemote` has no duplicate check of its own and would append a second entry | `{ kind: 'connected', how: 'already' }` |
+| `error` or `disconnected` | `reauthenticateInstance(origin, password)` in place | `{ kind: 'connected', how: 'reconnect' }` |
+| unknown | `connectToRemote(origin, password, displayName)`, the flow above | `{ kind: 'connected', how: 'new' }` |
+| any, and the remote refused the home-issued credential | `DifferentPasswordError` is caught | `{ kind: 'needs-remote-password', remoteUsername }`, so the caller can offer the explicit per-instance login form |
+
+Every other failure is thrown as is. It does not validate a typed URL: a caller that wants the self and duplicate checks for user input still runs `probeInstance` first, as the Connections flow does.
+
+### Connect from an Outer Space card
+
+The Explore page's Outer Space section (the space directory, [directory.md](directory.md)) is a second entry point into this flow. Clicking an entry opens `ConnectAndJoinModal`, which probes the entry's host (unless the session already holds a `connected`/`connecting` instance for that origin, in which case the probe and the password step are skipped), shows the same `RemotePasswordStep` the Connections panel uses with the origin prefilled ("This space lives on chat.example.org. Enter your password for home.example.org to create your identity there."), calls `connectToInstance`, and then runs `exploreStore.publicJoin` or `requestJoin` against the new origin through `getApiForOrigin`. The typed password is verified against the home instance and the home mints the per-remote secret exactly as above; the remote never sees what was typed. A `409 already_member` is treated as a join, since the space arrives with the connection's ready payload.
+
+**Pending join requests are keyed by origin.** `exploreStore.fetchMyRequests()` fans out over the home instance and every connected instance with `Promise.allSettled`, tagging each request with `_instanceOrigin` (`''` for home), and `useSpaceJoin.isPending` compares `(origin, spaceId)`. Space ids are local to their instance; until this change a pending request on one origin showed as pending for a same-id space on any other, and a request made on a remote instance never appeared after a reload.
 
 ### Add-Instance Pre-Flight: `federatedRegistrationOpen`
 

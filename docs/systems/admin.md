@@ -70,6 +70,9 @@ Settings are split into two API surfaces:
 | federationRelayEnabled | boolean | federationRelayEnabled | boolean | Default: 1 (enabled) |
 | federationRelayTtlDays | number | federationRelayTtlDays | integer 1-365 | Default: 30 days |
 | autoAcceptPeering | boolean | autoAcceptPeering | boolean | Default: true. When false, `peer/accept` rejects unsolicited requests (403 PEERING_REQUIRES_APPROVAL); only requests where a local `pending` record already exists are accepted |
+| directoryEnabled | boolean | directoryEnabled | boolean; `true` needs `discoveryEnabled` on (400 `directory_requires_discovery`) | Default: false. Allows spaces here to be listed in the space directory. Cleared in the same write whenever discovery is switched off, on either PATCH route. See [directory.md](directory.md) |
+| directoryLastPingAt | number \| null | directoryLastPingAt | read-only, ignored on PATCH | Epoch ms of the last directory ping the hub accepted |
+| directoryLastError | DirectoryPingError \| null | directoryLastError | read-only, ignored on PATCH | `{ at, status, reason? }` of the last failed ping, null after a success; feeds the panel's status line |
 
 ### Streaming Settings Schema (InstanceStreamingLimits)
 
@@ -83,6 +86,7 @@ Settings are split into two API surfaces:
 | maxResolution | number | maxResolution | Must be in STANDARD_RESOLUTIONS | 1080 |
 | maxFramerate | number | maxFramerate | Must be in STANDARD_FRAMERATES | 60 |
 | discoveryEnabled | boolean | discoveryEnabled | boolean | true |
+| directoryEnabled | boolean | directoryEnabled | read-only on this route (set through `PATCH /api/settings/instance`); carried here so a non-admin's space settings can read it | false |
 | bitrateMatrixOverrides | Record<string,number>\|null | bitrateMatrixOverrides | Keys: `{res}_{fps}`, values: 1-1000000 | null |
 | allowCustomBitrate | boolean | allowCustomBitrate | boolean | true |
 
@@ -177,6 +181,7 @@ No authentication. Returns:
   sourceCodeUrl: string;      // AGPL § 13; config.sourceCodeUrl (env BACKSPACE_SOURCE_URL)
   commit: string | null;      // AGPL § 13; config.commit (env BACKSPACE_COMMIT, build-injected)
   instanceId: string;         // Persistent per-instance epoch (incarnation UUID); getInstanceId()
+  directoryEnabled: boolean;  // instanceSettings.directoryEnabled; the Explore page gates its Outer Space section on it
 }
 ```
 
@@ -195,7 +200,9 @@ GET  /api/settings/instance    — admin only → InstanceAdminSettings
 PATCH /api/settings/instance   — admin only → InstanceAdminSettings
 ```
 
-See field table above for validation rules. Cross-field: `discoveryEnabled` changes here are also synced to `streamingLimits` in the frontend store (`settingsStore.ts:updateInstanceSettings`).
+See field table above for validation rules. Cross-field: `discoveryEnabled` and `directoryEnabled` changes here are also synced to `streamingLimits` in the frontend store (`settingsStore.ts:updateInstanceSettings`), from the server's answer rather than the request, since turning discovery off clears the directory server-side.
+
+**Discovery off implies directory off.** `applyDiscoveryAndDirectory` in `routes/settings.ts` runs on both PATCH routes against the resulting state: `directoryEnabled: true` with discovery off is `400 directory_requires_discovery`, and a write that leaves discovery off clears `directoryEnabled` in the same write. A change to `directoryEnabled`, `discoveryEnabled`, `instanceName` or `federatedRegistrationOpen` calls `markDirectoryDirty()` so the directory pinger tells the hub; see [directory.md](directory.md) §3.
 
 ### Streaming Settings
 
@@ -571,12 +578,13 @@ Zustand store managing two data objects:
   maxResolution: 1080,
   maxFramerate: 60,
   discoveryEnabled: true,
+  directoryEnabled: false,
   bitrateMatrixOverrides: null,
   allowCustomBitrate: true,
 }
 ```
 
-**Cross-field sync:** When `updateInstanceSettings()` changes `discoveryEnabled`, it also patches `streamingLimits.discoveryEnabled` to keep the streaming panel's DiscoveryPanel warning banner in sync.
+**Cross-field sync:** After every `updateInstanceSettings()` the store mirrors `discoveryEnabled` and `directoryEnabled` from the server's answer into `streamingLimits`, which is where the space settings `DiscoveryPanel` reads both flags (the warning banner and the directory switch's disabled reason). The answer is used rather than the request because switching discovery off clears the directory server-side.
 
 **Exported helper:** `getStreamingLimits()` returns current limits or defaults -- used by voice/streaming code outside React.
 
@@ -653,11 +661,12 @@ Strings live in the `telemetry` namespace under `panel.*`. Registered as the
 
 #### GeneralPanel
 
-Manages: instance name, discovery toggle, GIF API key, federation relay toggle/TTL.
+Manages: instance name, discovery toggle, the directory toggle, GIF API key, federation relay toggle/TTL.
 
 - Instance name input: max 32 chars, enforced client-side via `slice(0, 32)`
 - GIF key: password input, separate dirty tracking (`gifKeyDirty`). Only sent on save if modified. "Clear key" button sets empty string.
 - Federation relay toggle and TTL input: drive `federationRelayEnabled` and `federationRelayTtlDays` instance settings.
+- Directory group, under discovery: the toggle "List spaces in the Backspace directory" (`directoryEnabled`), disabled with "Turn on space discovery first." while discovery is off in the draft (switching discovery off in the draft switches the directory off too, so the save is never refused); an amber note while `federatedRegistrationOpen` is off, since listed spaces will show as closed to new accounts; a status line of the same shape as the telemetry panel's, fed by `directoryLastPingAt` and `directoryLastError` ("Never reported" / "Last reported <date>", then "Last attempt failed (<reason>)" with the hub's reason for a `fetch` status, a sentence of its own for `origin`, `network` and `timeout`, or the bare HTTP status); and the one-sentence disclosure of what listing makes public. Strings under `admin:general.directory.*`. See [directory.md](directory.md) §10.
 
 The registration toggles (`registrationOpen` / `federatedRegistrationOpen`) and the invite-link manager live in [RegistrationPanel](#registrationpanel).
 
@@ -810,3 +819,4 @@ Manages: user list with search/filter/sort/pagination, admin promotion/demotion,
 - **Voice/streaming:** [voice.md](voice.md) -- Client-side enforcement of streaming limits
 - **Permissions:** [permissions.md](permissions.md) -- Admin flag is separate from RBAC; `isAdmin` is a user-level column, not a permission bit
 - **Telemetry:** [telemetry.md](telemetry.md) -- The opt-in daily usage report: payload, opt-in state model, reporter, receiver, retention
+- **Space directory:** [directory.md](directory.md) -- The opt-in public directory: the admin toggle and status line, the per-space switch, the pinger, the hub

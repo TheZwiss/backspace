@@ -51,6 +51,7 @@ IDs: Snowflake text, permissions: bigint decimal strings
 | inviteCode | text UNIQUE | | |
 | visibility | text | `'private'` | public/request/private |
 | description | text | | |
+| directoryListed | integer NOT NULL | 0 | The owner asked for this space to be listed in the space directory. Refused on a private space (`400 directory_private_space`) and cleared in the same write when a listed space goes private. Served on `GET /api/directory/spaces` only while `instance_settings.directoryEnabled` and `discoveryEnabled` are both 1. See [directory.md](directory.md). |
 | createdAt | integer NOT NULL | | |
 
 ### space_members
@@ -393,6 +394,10 @@ The user INSERT, `usedCount` increment, and redemption row INSERT all run in a s
 | telemetryLastDay | text | | Last UTC day (`YYYY-MM-DD`) successfully reported. |
 | telemetryLastError | text | | JSON `{ day, status }` of the last failed attempt, null after a success. |
 | telemetryDeclinedVersion | text | | The server version running when telemetry was last switched off (by the modal, the panel, `install.sh` or a receiver `410`). The ask returns on the next minor release; null for a no recorded before the column existed, which is asked once more. |
+| directoryEnabled | integer NOT NULL | 0 | The admin allows spaces on this instance to be listed in the space directory. Never 1 while `discoveryEnabled` is 0: both settings PATCH routes clear it in the same write that turns discovery off, and `directoryEnabled: true` with discovery off is refused (`400 directory_requires_discovery`). |
+| directoryDirty | integer NOT NULL | 0 | A directory ping is owed. Set by `markDirectoryDirty()` on every change to the served document except member counts; cleared by a ping the hub accepted, and only if nothing changed while it was in flight. Survives restarts and the toggle being off. |
+| directoryLastPingAt | integer | | Epoch ms of the last directory ping the hub accepted, null before the first. |
+| directoryLastError | text | | JSON `DirectoryPingError` (`{ at, status, reason? }`) of the last failed directory ping, null after a success. Also the per-day guard for the daily slot: the pinger will not retry a failing hub by the slot on a day that already recorded an error. See [directory.md](directory.md). |
 | installedAt | integer | | First-boot timestamp (epoch ms). Backfilled by `ensureDefaults` from the oldest local non-deleted account, or `Date.now()` on a fresh DB, so it is non-null after boot and never overwritten. |
 | updatedAt | integer NOT NULL | | |
 

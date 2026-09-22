@@ -7,6 +7,8 @@ Source files:
 - `packages/server/src/routes/users.ts` — Space layout (sidebar folders/ordering) persistence via `PUT /api/users/@me/space-layout`
 - `packages/web/src/stores/spaceStore.ts` — Client-side space state, multi-instance merge, LWW layout sync
 - `packages/web/src/stores/exploreStore.ts` — Explore page state, multi-instance discovery aggregation
+- `packages/web/src/stores/directoryStore.ts` - Outer Space: the directory feed, origin dedupe, connect-then-join (see [directory.md](directory.md))
+- `packages/web/src/components/chat/ExplorePage.tsx`, `SpaceCard.tsx`, `OuterSpaceSection.tsx` - the Explore page's two sections and the card both use
 - `packages/web/src/components/modals/CreateSpace.tsx` — Space creation modal (icon crop, color, visibility)
 - `packages/web/src/components/modals/JoinSpace.tsx` — Join-by-code modal with federation connect phases
 - `packages/web/src/components/modals/ExploreSpacePreviewCard.tsx` — Compact discoverable-space card rendered inside the Join Space modal
@@ -80,7 +82,9 @@ Cross-references: [database.md](database.md) (table schemas), [permissions.md](p
 **Endpoint:** `PATCH /api/spaces/:id`
 **Permission:** `MANAGE_SPACE`
 
-**Updatable fields:** name (1-100 chars), icon, banner, avatarColor (validated against AVATAR_COLORS), visibility (public/request/private), description (max 200 chars).
+**Updatable fields:** name (1-100 chars), icon, banner, avatarColor (validated against AVATAR_COLORS), visibility (public/request/private), description (max 200 chars), directoryListed (boolean).
+
+**Directory listing:** `directoryListed: true` is refused with `400 directory_private_space` when the resulting visibility is `private`, and a listed space switched to `private` has the flag cleared in the same write. A change to the flag, or to name, description, icon, banner, avatarColor or visibility while the space is listed, calls `markDirectoryDirty()` so the directory pinger tells the hub; deleting a listed space does the same. See [directory.md](directory.md) §3.
 
 **Side effects:**
 - Old icon/banner files deleted from disk when replaced
@@ -241,6 +245,8 @@ point, not a replacement.
 | `request` | Listed | Submit join request, requires approval |
 | `public` | Listed | Instant join, no invite needed |
 
+A `request` or `public` space whose owner has switched on "List in the Backspace directory" (`spaces.directoryListed`) is additionally served on `GET /api/directory/spaces` while the instance admin allows it (`instance_settings.directoryEnabled`, which itself requires discovery on), and from there appears in Outer Space on other instances. The switch lives in the space settings Discovery panel, always rendered: disabled with "Your admin has to enable the directory for this instance." while `streamingLimits.directoryEnabled` is false, disabled with "Set visibility to public or request to join first." while the space is private, and followed by a one-sentence disclosure of what listing makes public. See [directory.md](directory.md) §10.
+
 ### Explore Endpoint
 
 **Endpoint:** `GET /api/spaces/explore` (`explore.ts:exploreRoutes`)
@@ -269,6 +275,10 @@ point, not a replacement.
 ```
 
 Also returns `total` (filtered count), `totalAll` (all discoverable), `discoveryEnabled`.
+
+### Explore Page Sections
+
+One page, one search box, two sections in fixed order. **Inner Space** is the list described here (the unjoined grid, then the collapsible joined group), from `exploreStore.fetchSpaces()`. **Outer Space**, below it, is the space directory: entries from `directoryStore` read through `GET /api/directory`, minus every origin the session is connected to, paginated 50 at a time, rendered only when the home instance's `GET /api/instance/info` reports `directoryEnabled: true`. The search box drives both through one 300 ms debounce. Both sections render `SpaceCard`; an Outer card's action opens the connect-then-join dialog instead of joining directly. The home view's channel sidebar also has an "Explore" entry that routes to `/explore`. Full description in [directory.md](directory.md) §9.
 
 ### Multi-Instance Discovery (`exploreStore.ts`)
 
@@ -321,6 +331,7 @@ Decline flow:
 
 **User's own requests:** `GET /api/users/@me/join-requests?status=<optional>`
 - Returns all requests for the current user, optionally filtered by status
+- Client side, `exploreStore.fetchMyRequests()` asks the home instance and every connected instance (`Promise.allSettled`) and tags each request with `_instanceOrigin` (`''` for home); `useSpaceJoin.isPending` matches on `(origin, spaceId)`, since space ids are local to their instance
 
 ### Space Managers Resolution (`explore.ts:getSpaceManagers`)
 

@@ -68,7 +68,7 @@ GET    /users/:id/mutuals     ?homeUserId=               → { mutualFriends[], 
 GET    /spaces                                                                 → { spaces[] }
 POST   /spaces                { name, icon?, description? }                    → { space }
 GET    /spaces/:id                                                             → { space, channels[], members[], roles[] }
-PATCH  /spaces/:id            { name?, icon?, banner?, description?, visibility?, avatarColor? } → { space }   [MANAGE_SPACE]
+PATCH  /spaces/:id            { name?, icon?, banner?, description?, visibility?, avatarColor?, directoryListed? } → { space }   [MANAGE_SPACE]
 DELETE /spaces/:id                                                             → { success }  [owner]
 POST   /spaces/:id/invite                                                      → { inviteCode }  [CREATE_INVITE]
 POST   /spaces/:id/join       { inviteCode }                                   → { space }
@@ -76,6 +76,7 @@ POST   /spaces/join           { inviteCode }                                   �
 GET    /spaces/invite/:code/preview                                            → invite preview
 PATCH  /spaces/:id/transfer-ownership  { newOwnerId }                          → { space }  [owner]
 ```
+`directoryListed` must be a boolean (`400 field_not_boolean`), is refused with `400 directory_private_space` when the resulting visibility is `private`, and is cleared in the same write when a listed space is switched to `private`. `Space.directoryListed` is carried on every space response and in the WebSocket ready payload. A change to the flag, to a served field (`name`, `description`, `icon`, `banner`, `avatarColor`, `visibility`) of a listed space, or a `DELETE` of a listed space marks the directory dirty so the pinger tells the hub. See [directory.md](directory.md).
 
 ### Members
 ```
@@ -210,6 +211,15 @@ PATCH  /spaces/:id/join-requests/:rid    { action }          → { request }  [M
 GET    /users/@me/join-requests          ?status=            → { requests[] }
 ```
 
+## Directory (`routes/directory.ts`)
+```
+GET    /directory/spaces                 (public)                  → DirectoryDocument
+GET    /directory                        (auth)  ?q=&limit=&offset= → DirectoryFeed
+```
+`GET /directory/spaces` is the document the space directory hub indexes: `{ schema: 1, origin, instance: { name, federatedRegistrationOpen, version }, spaces[] }`, at most 200 spaces that are listed, discoverable and public or request, every `icon`/`banner` an absolute URL on this origin or null. Unauthenticated by design (the hub is a stranger), cached in memory for 30 s or until the next change, `Cache-Control: public, max-age=30`. It never 404s: with the directory or discovery off, `spaces` is empty and the envelope stays, so a hub fetch of a switched-off instance is a success that clears its rows.
+
+`GET /directory` is the feed proxy the Explore page's Outer Space section reads; the browser never talks to the hub. `q` (cut to 100 chars), `limit` (1-100, default 50) and `offset` (0-1000) are clamped, not rejected, and forwarded to `{DIRECTORY_ENDPOINT}/v1/spaces`. Each distinct query is cached for 60 s (64 entries), identical in-flight requests share one upstream fetch, and the route carries its own rate limit of 30 per minute under the global one. `404 directory_disabled` when `DIRECTORY_ENDPOINT` is empty; `502 directory_unreachable` when the hub does not answer or answers something that is not a feed. Response `{ schema: 1, spaces: DirectoryEntry[] }`. See [directory.md](directory.md).
+
 ## Uploads (`routes/files.ts`, `routes/uploads.ts`)
 
 ### Tus Upload Endpoints
@@ -244,8 +254,9 @@ Permissions checked: CONNECT, SPEAK, STREAM (space channels). DM calls: always f
 
 ## Instance (`routes/instance.ts`) — public
 ```
-GET /instance/info → { name, version, registrationOpen, federatedRegistrationOpen, instanceId, sourceCodeUrl, commit }
+GET /instance/info → { name, version, registrationOpen, federatedRegistrationOpen, instanceId, sourceCodeUrl, commit, directoryEnabled }
 ```
+`directoryEnabled` is `instance_settings.directoryEnabled`: whether the admin allows spaces here to be listed in the space directory. The Explore page reads it here to decide whether to render the Outer Space section at all (directory.md §9).
 `federatedRegistrationOpen` is a UX hint consumed by the Connections add-instance pre-flight (see `client-federation.md`). The 403 from `POST /auth/register` remains the security boundary.
 
 `instanceId` (`InstanceInfoResponse.instanceId`, `string`) is this instance's persistent **epoch** — the incarnation UUID minted once by `ensureDefaults` and stable across restarts (see `database.md → Instance Settings`). It is served here (unauthenticated, credential-free) purely as a **detection** signal: `probePeerReachable` reads it to observe that a peer behind a known origin has been factory-reset (a changed epoch). It is **never** written to a peer's trusted baseline from this channel — only the authenticated `/federation/epoch`, relay envelope, and handshake do that. See `federation.md` "Instance Epoch".
@@ -256,12 +267,15 @@ GET /instance/info → { name, version, registrationOpen, federatedRegistrationO
 ```
 GET   /settings/streaming    (auth)        → { streamingLimits }
 PATCH /settings/streaming    (admin)       → { streamingLimits }
-GET   /settings/instance     (admin)       → { instanceName, registrationOpen, federatedRegistrationOpen, discoveryEnabled, ... }
+GET   /settings/instance     (admin)       → { instanceName, registrationOpen, federatedRegistrationOpen, discoveryEnabled,
+                                               directoryEnabled, directoryLastPingAt, directoryLastError, ... }
 PATCH /settings/instance     (admin)       { instanceName?, registrationOpen?, federatedRegistrationOpen?,
-                                             discoveryEnabled?, gifApiKey?, maxUploadSizeMb?,
+                                             discoveryEnabled?, directoryEnabled?, gifApiKey?, maxUploadSizeMb?,
                                              federationRelayEnabled?, federationRelayTtlDays? } → { settings }
 ```
 `registrationOpen` and `federatedRegistrationOpen` are **independent** toggles. PATCH validates `federatedRegistrationOpen` is `boolean` if provided; rejects 400 otherwise. `registrationOpen` is stored as a nullable column (null = fall back to `config.registrationOpen` env default); `federatedRegistrationOpen` is NOT NULL with default 1.
+
+`directoryEnabled` (space directory, see [directory.md](directory.md)) must be a boolean (`400 field_not_boolean`) and needs discovery on: `directoryEnabled: true` while the resulting `discoveryEnabled` is off is `400 directory_requires_discovery`. Both PATCH routes enforce the invariant the other way round too: a write that leaves discovery off clears `directoryEnabled` in the same write, on `/settings/instance` and on `/settings/streaming` (which carries `discoveryEnabled` but not `directoryEnabled`). `directoryLastPingAt` and `directoryLastError` are read-only; the PATCH ignores them in the body. `InstanceStreamingLimits.directoryEnabled` is also carried on `GET /settings/streaming`, read-only there, so a non-admin's space settings can tell whether the instance allows listing. A change to `directoryEnabled`, `discoveryEnabled`, `instanceName` or `federatedRegistrationOpen` marks the directory dirty; repeating a stored value does not.
 
 ## Admin (`routes/admin.ts`) — admin required
 ```
