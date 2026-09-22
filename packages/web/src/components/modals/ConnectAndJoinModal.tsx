@@ -5,7 +5,7 @@ import type { DirectoryEntry } from '@backspace/shared';
 import { Modal } from '../ui/Modal';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { useUIStore } from '../../stores/uiStore';
-import { useInstanceStore, connectToInstance } from '../../stores/instanceStore';
+import { useInstanceStore, connectToInstance, resumableOrigin } from '../../stores/instanceStore';
 import { useDirectoryStore, type ConnectAndJoinResult } from '../../stores/directoryStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useSpaceStore } from '../../stores/spaceStore';
@@ -63,20 +63,14 @@ function instanceOf(entry: DirectoryEntry): RemoteInstanceInfo {
 
 /**
  * Whether the session holds anything for this origin that could come back
- * without a password: an instance it disconnected or whose session errored,
- * or a registry entry the user disconnected. `connectToInstance` makes the
- * call and reports what it managed; this only decides whether to ask it
- * before showing the password step.
+ * without a password. The rule is the store's (`resumableOrigin`), so the
+ * dialog cannot drift from what `connectToInstance` would actually do; this
+ * only decides whether to ask it before showing the password step.
  */
 function canResumeSessionOn(origin: string): boolean {
   const canonical = canonicalOrigin(origin);
   if (!canonical) return false;
-  const { instances, registry } = useInstanceStore.getState();
-  const live = instances.find((i) => canonicalOrigin(i.origin) === canonical);
-  if (live) return (live.status === 'disconnected' || live.status === 'error') && live.token !== '';
-  return Array.from(registry.values()).some(
-    (e) => canonicalOrigin(e.origin) === canonical && e.status === 'disconnected',
-  );
+  return resumableOrigin(useInstanceStore.getState(), canonical) !== null;
 }
 
 function initialProbeState(entry: DirectoryEntry): ProbeState {

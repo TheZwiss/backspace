@@ -124,6 +124,20 @@ describe('AddInstanceFlow', () => {
   });
 });
 
+describe('AddInstanceFlow outcome handling', () => {
+  it('never reports success for needs-password: the step stays open with the error', async () => {
+    const user = userEvent.setup();
+    connectToInstance.mockResolvedValue({ kind: 'needs-password' });
+    await openPasswordStep(user);
+
+    await user.type(screen.getByPlaceholderText('The one you sign in with'), 'hunter2');
+    await user.click(screen.getByRole('button', { name: 'Connect' }));
+
+    expect(await screen.findByText('Enter a password.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '+ Add Instance' })).not.toBeInTheDocument();
+  });
+});
+
 describe('RegistryRow re-authentication', () => {
   it('opens the shared reauth form from an expired row and submits the password to the store', async () => {
     const user = userEvent.setup();

@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import type { DirectoryEntry } from '@backspace/shared';
 import { api } from '../../api/client';
 import { useExploreStore } from '../../stores/exploreStore';
+import { useInstanceStore } from '../../stores/instanceStore';
 import { useDirectoryStore } from '../../stores/directoryStore';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -17,6 +18,15 @@ import { ConnectionChips } from './ConnectionChips';
 
 /** How long the search box waits after the last keystroke before both sections re-query. */
 const SEARCH_DEBOUNCE_MS = 300;
+
+/**
+ * The connected origins as one comparable string. Inner Space fans out over
+ * exactly these, so an unchanged value means an unchanged fan-out, whatever
+ * else moved in the instance list.
+ */
+function connectedOriginsKey(instances: { origin: string; status: string }[]): string {
+  return instances.filter((i) => i.status === 'connected').map((i) => i.origin).sort().join('\n');
+}
 
 export function ExplorePage() {
   const { t } = useTranslation(['spaces', 'common']);
@@ -91,14 +101,51 @@ export function ExplorePage() {
     openModal('connectAndJoin', { entry });
   }, [openModal]);
 
-  // A connection came back through the chips row: Inner Space fans out over
-  // connected instances only, so the returning instance's spaces need a
-  // refetch. Outer Space dedupes at render from the instance list and needs
-  // none.
-  const handleConnectionRecovered = useCallback(() => {
-    fetchSpaces(searchQuery || undefined);
+  // The instances Inner Space fans out over, as one stable string: a new
+  // value means the fan-out would return something else now. Derived in the
+  // selector so a render with an unchanged set is not a new value.
+  const connectedKey = useInstanceStore((s) => connectedOriginsKey(s.instances));
+
+  // The query the refetch below should use, read at call time: a keystroke
+  // must not refetch outside the search debounce.
+  const searchQueryRef = useRef(searchQuery);
+  searchQueryRef.current = searchQuery;
+
+  // What the page fetched Inner Space for last. The mount fetch above covers
+  // the first value, so the effect records it rather than fetching again.
+  const fetchedKey = useRef<string | null>(null);
+
+  const refetchInner = useCallback((key: string) => {
+    fetchedKey.current = key;
+    fetchSpaces(searchQueryRef.current || undefined);
     fetchMyRequests();
-  }, [fetchSpaces, fetchMyRequests, searchQuery]);
+  }, [fetchSpaces, fetchMyRequests]);
+
+  // Inner Space is a snapshot: `fetchSpaces` evaluates the fan-out once per
+  // call. When a connection is made, lost or dropped while this page is
+  // open, that snapshot is stale, and since Outer Space dedupes at render
+  // the same space would be on the page twice with contradictory actions
+  // (the stale "Join Space" card and a fresh "Connect and join" one).
+  // Refetching whenever the connected set changes keeps the two sections
+  // disjoint, and covers the other direction too: a space joined or
+  // requested on an origin that just came back appears in Inner without a
+  // reload.
+  useEffect(() => {
+    if (fetchedKey.current === null) {
+      fetchedKey.current = connectedKey;
+      return;
+    }
+    if (fetchedKey.current === connectedKey) return;
+    refetchInner(connectedKey);
+  }, [connectedKey, refetchInner]);
+
+  // A connection came back through the chips row. Recording the key here
+  // keeps the effect above from fetching the same thing again when the
+  // instance list catches up; a recovery that does not change that set (a
+  // token reconnect of an instance that stayed in it) is covered here alone.
+  const handleConnectionRecovered = useCallback(() => {
+    refetchInner(connectedOriginsKey(useInstanceStore.getState().instances));
+  }, [refetchInner]);
 
   const unjoinedSpaces = useMemo(
     () => spaces.filter(s => !s.joined),

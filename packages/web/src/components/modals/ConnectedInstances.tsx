@@ -73,7 +73,7 @@ function formatRelativeTime(t: FederationT, formatters: Formatters, timestamp: n
 type AddStep = 'url' | 'auth' | 'done';
 
 function AddInstanceFlow({ onDone }: { onDone: () => void }) {
-  const { t } = useTranslation(['federation', 'common']);
+  const { t } = useTranslation(['federation', 'common', 'errors']);
   const user = useAuthStore((s) => s.user);
   const loginToRemote = useInstanceStore((s) => s.loginToRemote);
   const probeInstance = useInstanceStore((s) => s.probeInstance);
@@ -114,6 +114,13 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
       if (outcome.kind === 'needs-remote-password') {
         setAuthPhase('fallback');
         setRemoteUsername(outcome.remoteUsername);
+        return;
+      }
+      if (outcome.kind === 'needs-password') {
+        // Only an empty password reaches this, which the step's submit
+        // blocks; handled rather than swallowed so a new outcome member can
+        // never read as success here.
+        setError(t('errors:password_required'));
         return;
       }
       setStep('done');

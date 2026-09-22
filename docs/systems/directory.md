@@ -649,7 +649,11 @@ the change needs anyway.
 an inner origin is dropped. `innerOrigins` (`utils/directory.ts`) names
 them: a federation registry entry (`instanceStore.registry`) whose status is
 `connected`, `auth_expired` or `unreachable`, and a live instance
-(`instanceStore.instances`) whose status is `connected` or `connecting`. A
+(`instanceStore.instances`) whose status is `connected` or `connecting`.
+Inner Space itself is a snapshot, so `ExplorePage` refetches it whenever the
+set of `connected` origins changes; without that, an instance disconnected
+while the page is open would leave its stale Inner cards beside the Outer
+cards the rule now allows, one space twice with contradictory actions. A
 registry entry in `disconnected` is not inner: the user chose to disconnect
 in the Connections panel, and for Explore that instance is an outer instance
 again, its spaces ordinary cards with "Connect and join". A live instance in
@@ -674,7 +678,13 @@ reuses what the session still holds. The dialog first asks
 `connectToInstance(origin, '')`, which resumes the cached token through
 `reconnectInstance`; a resumed session is the same state as one that was
 already there, so a public entry joins on the spot and a request entry gets
-its message box, with no password step. When there is nothing to resume or
+its message box, with no password step. Resumable means a live instance the session disconnected or whose session
+errored that still holds its token, or a registry entry in `disconnected`
+whose token comes back from `localStorage`; `resumableOrigin` in
+`instanceStore` is the single predicate, which the dialog calls rather than
+repeating. A registry entry in `auth_expired` is not resumable, its token
+having just been refused, while a live instance in `error` is, since the
+registry may not have judged it yet. When there is nothing to resume or
 the remote refuses the token (`needs-password`), the dialog runs the
 ordinary probe and password step, the store takes its
 `reauthenticateInstance` branch, the remote answers the registration with
@@ -929,6 +939,15 @@ back is found again without anyone touching a toggle.
   another, and an empty endpoint removes Outer Space along with the pinger.
   Listing itself is the admin's separate toggle and lists nothing by itself:
   no space is served until an owner asks.
+- **A dropped socket leaves an instance's spaces in neither section.**
+  `setInstanceStatus` moves a live instance to `disconnected` when its socket
+  goes, without touching the registry, so the entry stays `connected`: the
+  origin is inner (no Outer cards) but not in the Inner fan-out (which reads
+  live `connected`), and it gets no chip, since the chips read the registry.
+  The spaces come back when the socket's backoff reconnects. This predates
+  the chips and the inner-origin rule; closing it means having the socket
+  teardown write a registry status, which would also make the Connections
+  panel show a dropped socket as a state of its own.
 - **The instance endpoint is public and cached.** The hub is not its only
   reader and it must cope with being polled by anyone; the 30 second cache is
   the whole answer to that.

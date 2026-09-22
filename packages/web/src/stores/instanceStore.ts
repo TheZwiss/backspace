@@ -1354,14 +1354,20 @@ export type ConnectOutcome =
   | { kind: 'needs-remote-password'; remoteUsername: string };
 
 /**
- * Whether a cached token could still carry this origin back: a live
- * instance the user disconnected or whose session errored, as long as it
- * kept its token, or a registry entry the user disconnected, whose token
- * `reconnectInstance` restores from `localStorage`. An `unreachable` or
- * `auth_expired` registry entry is not listed: the first has a chip that
- * retries it already, the second is what a refused token becomes.
+ * The origin, as the store spells it, that a cached token could still carry
+ * back: a live instance the user disconnected or whose session errored, as
+ * long as it kept its token, or (with no live instance) a registry entry the
+ * user disconnected, whose token `reconnectInstance` restores from
+ * `localStorage`. Null when there is nothing to resume.
+ *
+ * The registry side lists `disconnected` only. `unreachable` has a chip that
+ * retries it already, and `auth_expired` is what a refused token becomes, so
+ * neither is worth a second attempt from a card. The live side does include
+ * `error`, that status's live counterpart, because a live instance can hold
+ * a token the registry has not judged yet; such an origin is inner anyway,
+ * so no card opens the dialog for it.
  */
-function resumableOrigin(state: InstanceState, canonical: string): string | null {
+export function resumableOrigin(state: InstanceState, canonical: string): string | null {
   const live = state.instances.find((i) => normalizeOrigin(i.origin) === canonical);
   if (live) {
     const stale = live.status === 'disconnected' || live.status === 'error';

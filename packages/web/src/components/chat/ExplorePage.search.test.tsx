@@ -40,7 +40,7 @@ const { fetchSpaces, fetchMyRequests, fetchDirectory, loadMore, instanceInfo, op
 vi.mock('../../stores/exploreStore', async () => {
   const { create } = await import('zustand');
   const useExploreStore = create<{
-    spaces: never[];
+    spaces: { id: string; name: string; _instanceOrigin: string; joined: boolean }[];
     myRequests: never[];
     searchQuery: string;
     isLoading: boolean;
@@ -51,7 +51,7 @@ vi.mock('../../stores/exploreStore', async () => {
     fetchMyRequests: typeof fetchMyRequests;
     setSearchQuery: (q: string) => void;
   }>((set) => ({
-    spaces: [],
+    spaces: [] as { id: string; name: string; _instanceOrigin: string; joined: boolean }[],
     myRequests: [],
     searchQuery: '',
     isLoading: false,
@@ -105,6 +105,16 @@ vi.mock('../../api/client', async (importOriginal) => ({
 }));
 
 vi.mock('../../hooks/useMascotAnimation', () => ({ useMascotAnimation: vi.fn() }));
+
+// The Inner cards' join hook: the page test never drives a join.
+vi.mock('../../hooks/useSpaceJoin', () => ({
+  useSpaceJoin: () => ({
+    isJoined: false, isPublic: true, isPending: false, joining: false, joinError: '',
+    showRequestForm: false, requestMessage: '', setRequestMessage: vi.fn(),
+    openRequestForm: vi.fn(), cancelRequestForm: vi.fn(),
+    join: vi.fn(async () => null), sendRequest: vi.fn(async () => {}),
+  }),
+}));
 
 function renderPage() {
   return render(
@@ -330,9 +340,124 @@ describe('ExplorePage keeps an expired origin out of Outer Space through a faile
 
     expect(await screen.findByText('Wrong username or password.')).toBeInTheDocument();
     expect(connectToRemote).toHaveBeenCalledWith(ZWISS, 'wrong', 'Jannis');
-    // The origin never left the instance list, so its spaces never surfaced below the chip.
+    // The origin never left the instance list (the round-1 store fix). Since
+    // round 2 the cards are held back by the registry's auth_expired rather
+    // than by this entry, so the list assertion pins the store contract, not
+    // what keeps Outer Space right.
     expect(useInstanceStore.getState().instances.map((i) => [i.origin, i.status])).toEqual([[ZWISS, 'error']]);
     expect(screen.queryByText('Zwiss Alpine Club')).not.toBeInTheDocument();
     expect(screen.getByText('session expired')).toBeInTheDocument();
+  });
+});
+
+// ── A connection change while the page is open ───────────────────────────────
+
+describe('ExplorePage follows a connection change while it is open', () => {
+  const ORBIT = 'https://orbit.example';
+
+  /** The space as Inner Space lists it on orbit, and as the directory feed carries it. */
+  const innerSpace = { id: 'nebula', name: 'Nebula Nine', _instanceOrigin: ORBIT, joined: false };
+  const outerEntry: DirectoryEntry = {
+    id: 'nebula',
+    name: 'Nebula Nine',
+    description: null,
+    icon: null,
+    banner: null,
+    avatarColor: null,
+    visibility: 'public',
+    memberCount: 4,
+    createdAt: 1,
+    origin: ORBIT,
+    instanceName: 'Orbit',
+    federatedRegistrationOpen: true,
+  };
+
+  function live(status: ConnectedInstance['status']): ConnectedInstance {
+    return {
+      origin: ORBIT, label: 'Orbit', token: 'tok', user: { id: 'u1' } as ConnectedInstance['user'],
+      username: 'jannis@home.example', status, api: {} as ConnectedInstance['api'],
+    };
+  }
+
+  function registry(status: 'connected' | 'disconnected') {
+    return new Map([[ORBIT, {
+      origin: ORBIT, label: 'Orbit', username: 'jannis@home.example', remoteUserId: 'r1',
+      status, addedAt: 1, lastConnectedAt: 1, disconnectedAt: null, errorMessage: null,
+    }]]);
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useExploreStore.setState({ searchQuery: '', spaces: [] });
+    useDirectoryStore.setState({ entries: [outerEntry], status: 'ok' });
+    useInstanceStore.setState({ instances: [], registry: new Map() });
+    // The real fan-out reaches connected instances only; the mock follows it.
+    fetchSpaces.mockImplementation(async () => {
+      const connected = useInstanceStore.getState().instances.some((i) => i.origin === ORBIT && i.status === 'connected');
+      useExploreStore.setState({ spaces: connected ? [innerSpace] : [] });
+    });
+  });
+
+  it('a disconnect leaves exactly one card for the space, the Outer one', async () => {
+    useInstanceStore.setState({ instances: [live('connected')], registry: registry('connected') });
+    useExploreStore.setState({ spaces: [innerSpace] });
+    useExploreStore.setState({ searchQuery: 'neb' });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Outer Space')).toBeInTheDocument());
+
+    // Connected: the Inner card, and the dedupe keeps the same space out of Outer.
+    expect(screen.getAllByText('Nebula Nine')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Join Space' })).toBeInTheDocument();
+    expect(fetchSpaces).toHaveBeenCalledTimes(1);
+
+    // The user disconnects orbit in the Connections panel, with Explore still open.
+    act(() => {
+      useInstanceStore.setState({ instances: [live('disconnected')], registry: registry('disconnected') });
+    });
+
+    await waitFor(() => expect(fetchSpaces).toHaveBeenCalledTimes(2));
+    // The refetch uses the query that is in the box, not a blank one.
+    expect(fetchSpaces).toHaveBeenLastCalledWith('neb');
+    expect(fetchMyRequests).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(screen.getAllByText('Nebula Nine')).toHaveLength(1));
+    expect(screen.getByRole('button', { name: 'Connect and join' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Join Space' })).not.toBeInTheDocument();
+  });
+
+  it('a connection coming back leaves exactly one card for the space, the Inner one', async () => {
+    useInstanceStore.setState({ instances: [live('disconnected')], registry: registry('disconnected') });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Outer Space')).toBeInTheDocument());
+
+    expect(screen.getAllByText('Nebula Nine')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Connect and join' })).toBeInTheDocument();
+
+    // The connect-and-join flow (or the Connections panel) brings the origin back.
+    act(() => {
+      useInstanceStore.setState({ instances: [live('connected')], registry: registry('connected') });
+    });
+
+    await waitFor(() => expect(fetchSpaces).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.getAllByText('Nebula Nine')).toHaveLength(1));
+    expect(screen.getByRole('button', { name: 'Join Space' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Connect and join' })).not.toBeInTheDocument();
+  });
+
+  it('does not refetch on mount beyond the one fetch the page already makes, nor on an unrelated status change', async () => {
+    useInstanceStore.setState({ instances: [live('connected')], registry: registry('connected') });
+    useExploreStore.setState({ spaces: [innerSpace] });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Outer Space')).toBeInTheDocument());
+    expect(fetchSpaces).toHaveBeenCalledTimes(1);
+    expect(fetchMyRequests).toHaveBeenCalledTimes(1);
+
+    // A registry-only change, and a re-set of the same connected list: the
+    // key is the sorted connected origins, so neither is a refetch.
+    act(() => {
+      useInstanceStore.setState({ registry: registry('connected'), instances: [live('connected')] });
+    });
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+    expect(fetchSpaces).toHaveBeenCalledTimes(1);
+    expect(fetchMyRequests).toHaveBeenCalledTimes(1);
   });
 });
