@@ -684,6 +684,24 @@ One page, one search box, two sections in fixed order, strictly disjoint.
   appends the next page, never the whole feed. Header "Outer Space", subtitle
   "Communities across Backspace".
 
+**Show more, and what its absence means.** The button renders while the store's
+`status` is `ok` and `hasMore` is true. The first page sets `hasMore` from the
+page being full; a continuation ends the feed on **either** a short page **or**
+a page that appended nothing new, and the second half is not redundant: the
+proxy clamps `offset` at 1000, so every page past the cap is the page at the
+cap again, a full page of entries the list already holds. Counting length alone
+kept `hasMore` true there and handed back the same fifty spaces for as long as
+the button was clicked.
+
+A continuation that fails is not the end of the feed and does not say anything
+about the entries already on screen, so it leaves `status` at `ok` and records
+itself in `loadMoreError` instead. The button therefore stays, which is the
+only way to ask for that page again, and the failure is shown as a notice above
+it: the unreachable sentence for `unreachable`, the generic one for `error` and
+for a `disabled` that arrives mid-session (an instance whose admin switched
+browsing off under the user). The button's absence means the end of the feed
+and nothing else.
+
 **The section is gated on the home instance's `directoryAvailable`, not on the
 listing toggle.** `ExplorePage` reads the public `GET /api/instance/info` once
 on mount and renders `OuterSpaceSection` only when `directoryAvailable` is
@@ -774,8 +792,27 @@ Space (`fetchSpaces`, `fetchMyRequests`); Outer Space needs nothing, the
 render-time dedupe sees the instance. With every connection healthy the row
 is absent. `disconnected` gets no chip: that is the user's own choice, its
 spaces are back in Outer Space, and a chip per disconnected instance would
-nag. A chip whose live instance is `connecting` on its own (startup, the
-socket's backoff) is hidden for that moment.
+nag.
+
+A chip whose live instance is `connecting` is hidden for that moment, with two
+exemptions. A chip whose own Retry is in flight stays and shows the connecting
+word instead, until the registry status settles. **A chip the user has opened
+into `ReauthForm` also stays**, whatever the live status does, which is the
+exemption that is easy to read as a bug: the obvious reading of "chips show
+connections that need attention" is that a connecting instance does not
+qualify. It stays because dropping the entry unmounts the chip, and unmounting
+`ReauthForm` discards what is in it, so a flip to `connecting` started anywhere
+else would empty the field under the user's hands. Every reachable flip is
+started elsewhere: `reconnectInstance` from the Connections panel's Retry and
+from `connectToInstance`'s empty-password resume (the connect-and-join path),
+and `autoConnectAll`, the session fan-out that runs both on sign-in and on a
+session restored from a stored token.
+
+The set of opened origins is held by the row rather than by the chip, because
+the row is where the decision to render a chip at all is made. An origin leaves
+it when its entry stops needing attention, which means the connection is back
+or the user disconnected it: a connection that recovers and expires again
+therefore opens an empty form rather than reviving the one that was on screen.
 
 **Why Explore looks the way it does here.** `InstanceDiscoveryHint` sits in
 the same slot directly under the chips. It names this instance's own
