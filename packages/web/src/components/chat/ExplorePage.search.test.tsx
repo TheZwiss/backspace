@@ -9,6 +9,7 @@ import { useExploreStore } from '../../stores/exploreStore';
 import { useDirectoryStore } from '../../stores/directoryStore';
 import { useInstanceStore, type ConnectedInstance } from '../../stores/instanceStore';
 import { useAuthStore } from '../../stores/authStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 import { HttpError } from '../../api/client';
 
 // Stub AudioManager: the instance store imports it transitively and jsdom has no AudioWorkletNode.
@@ -30,6 +31,7 @@ const { fetchSpaces, fetchMyRequests, fetchDirectory, loadMore, instanceInfo, op
     instanceId: 'home',
     sourceCodeUrl: 'https://example.invalid',
     commit: null,
+    directoryConfigured: true,
     directoryAvailable: true,
     directoryEnabled: true,
   })),
@@ -133,6 +135,9 @@ describe('ExplorePage search and the Outer Space gate', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useExploreStore.setState({ searchQuery: '', resultsQuery: '', error: null });
+    // The hint under the chips reads this store directly. Its resting state is
+    // a member whose settings have not arrived, which is the hint's silent row.
+    useSettingsStore.setState({ isAdmin: false, streamingLimits: null });
   });
 
   it('one debounce drives both stores with the same value', async () => {
@@ -174,6 +179,7 @@ describe('ExplorePage search and the Outer Space gate', () => {
       instanceId: 'home',
       sourceCodeUrl: 'https://example.invalid',
       commit: null,
+      directoryConfigured: true,
       directoryAvailable: true,
       directoryEnabled: false,
     });
@@ -192,6 +198,7 @@ describe('ExplorePage search and the Outer Space gate', () => {
       instanceId: 'home',
       sourceCodeUrl: 'https://example.invalid',
       commit: null,
+      directoryConfigured: true,
       directoryAvailable: false,
       directoryEnabled: true,
     });
@@ -535,5 +542,78 @@ describe('ExplorePage follows a connection change while it is open', () => {
     act(() => { useInstanceStore.setState({ instances: [live('disconnected'), second] }); });
     await waitFor(() => expect(fetchSpaces).toHaveBeenCalledTimes(2));
     expect(fetchMyRequests).toHaveBeenCalledTimes(2);
+  });
+
+  /*
+   * The browse setting, end to end through the page. `directoryBrowseEnabled`
+   * is admin-only, so the page never reads it: it reads the effect the public
+   * instance info reports, hands it to the hint as `directoryAvailable`, and
+   * re-reads that one document after the admin changes it. Without the row,
+   * turning the setting off left Explore with no Outer Space and nothing
+   * saying why.
+   */
+  it('names the absent Outer Space when browsing is off, and brings it back on the admin switch', async () => {
+    instanceInfo.mockResolvedValueOnce({
+      name: 'Home',
+      version: '1.0.0',
+      registrationOpen: true,
+      federatedRegistrationOpen: true,
+      instanceId: 'home',
+      sourceCodeUrl: 'https://example.invalid',
+      commit: null,
+      directoryConfigured: true,
+      directoryAvailable: false,
+      directoryEnabled: true,
+    });
+    const updateInstanceSettings = vi.fn(async () => {});
+    useSettingsStore.setState({
+      isAdmin: true,
+      streamingLimits: {
+        maxBitrateKbps: 20000,
+        minBitrateKbps: 500,
+        bitrateStepKbps: 500,
+        allowedResolutions: [540, 720, 1080],
+        allowedFramerates: [30, 45, 60],
+        maxResolution: 1080,
+        maxFramerate: 60,
+        discoveryEnabled: true,
+        directoryEnabled: true,
+        directoryConfigured: true,
+        bitrateMatrixOverrides: null,
+        allowCustomBitrate: true,
+      },
+      updateInstanceSettings,
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByText('Spaces from other instances are not shown on this instance.')).toBeInTheDocument(),
+    );
+    expect(screen.queryByText('Outer Space')).not.toBeInTheDocument();
+    expect(fetchDirectory).not.toHaveBeenCalled();
+
+    // The switch writes the admin setting, then the page re-reads the one
+    // public document both facts ride on: the section appears without a reload.
+    instanceInfo.mockResolvedValueOnce({
+      name: 'Home',
+      version: '1.0.0',
+      registrationOpen: true,
+      federatedRegistrationOpen: true,
+      instanceId: 'home',
+      sourceCodeUrl: 'https://example.invalid',
+      commit: null,
+      directoryConfigured: true,
+      directoryAvailable: true,
+      directoryEnabled: true,
+    });
+    await user.click(screen.getByRole('button', { name: 'Show global spaces in Explore' }));
+
+    expect(updateInstanceSettings).toHaveBeenCalledWith({ directoryBrowseEnabled: true });
+    await waitFor(() => expect(screen.getByText('Outer Space')).toBeInTheDocument());
+    expect(instanceInfo).toHaveBeenCalledTimes(2);
+    expect(
+      screen.queryByText('Spaces from other instances are not shown on this instance.'),
+    ).not.toBeInTheDocument();
   });
 });

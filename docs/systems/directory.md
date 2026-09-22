@@ -25,7 +25,7 @@ Source files:
 - `packages/web/src/utils/directory.ts` - `innerOrigins`, `dedupeAgainstConnected`, `isDirectoryEntry`
 - `packages/web/src/stores/instanceStore.ts` - `connectToInstance`, the shared connect path
 - `packages/web/src/components/chat/ExplorePage.tsx`, `OuterSpaceSection.tsx`, `SpaceCard.tsx` - the two sections and the card
-- `packages/web/src/components/chat/InstanceDiscoveryHint.tsx` - why Explore looks the way it does on this instance, and the admin's two one-click fixes
+- `packages/web/src/components/chat/InstanceDiscoveryHint.tsx` - why Explore looks the way it does on this instance, and the admin's three one-click fixes
 - `packages/web/src/components/modals/ConnectAndJoinModal.tsx`, `RemotePasswordStep.tsx` - the connect-from-card dialog and the password step it shares with the Connections panel
 - `packages/web/src/components/modals/instanceSettingsPanels/GeneralPanel.tsx` - the admin space-discovery ladder and the directory status line
 - `packages/web/src/components/modals/SpaceSettings.tsx` - the per-space switch in `DiscoveryPanel`
@@ -820,29 +820,63 @@ therefore opens an empty form rather than reviving the one that was on screen.
 
 **Why Explore looks the way it does here.** `InstanceDiscoveryHint` sits in
 the same slot directly under the chips. It names this instance's own
-discovery settings and, for an admin, changes them from the page. **Both
-flags come from one document**, `settingsStore.streamingLimits`, which any
-signed-in user may read and which `updateInstanceSettings` keeps current;
-`isAdmin` comes from the same store, and `directoryConfigured` is passed down
-from the page, which already reads the public instance info. The row is
-derived from those and nothing else:
+discovery settings and, for an admin, changes them from the page. **The two
+settings flags come from one document**, `settingsStore.streamingLimits`,
+which any signed-in user may read and which `updateInstanceSettings` keeps
+current; `isAdmin` comes from the same store, and `directoryConfigured` and
+`directoryAvailable` are passed down from the page, which already reads the
+public instance info. The row is derived from those and nothing else:
 
 | condition | what renders |
 |---|---|
 | `streamingLimits` is null (the document has not arrived) | nothing |
 | discovery off, not an admin | amber notice: space discovery is off, spaces here are joinable by invite link only |
 | discovery off, admin | the same fact in the admin's voice, with "Turn on space discovery" |
+| `directoryConfigured` true, `directoryAvailable` false, not an admin | a quiet row: spaces from other instances are not shown on this instance |
+| `directoryConfigured` true, `directoryAvailable` false, admin | the same sentence, with "Show global spaces in Explore" |
 | discovery on, not listed, admin, `directoryConfigured` true | a quiet row: spaces here are not listed in the public directory, with "List them" |
 | anything else | nothing |
 
-**The listing row needs the endpoint and the discovery rows do not.** Space
-discovery is local and reaches no hub, so its rows stand on an instance with
-no `DIRECTORY_ENDPOINT`. Listing does not: "List them" writes
+**The two directory rows need the endpoint and the discovery rows do not.**
+Space discovery is local and reaches no hub, so its rows stand on an instance
+with no `DIRECTORY_ENDPOINT`. Listing does not: "List them" writes
 `directoryEnabled`, and with no endpoint the pinger never starts, so the click
 wrote the flag, the row vanished as though it had worked, and the spaces were
-exactly as unlisted as before. The row is the one that offers the write, so it
-is the one withheld, and a `directoryConfigured` that has not arrived yet
-withholds it too, on the same rule as the null document below.
+exactly as unlisted as before. Browsing does not either: with no endpoint
+there is no directory to show, the browse setting is a switch over nothing,
+and naming it would point at a control that cannot change the outcome. Both
+rows are therefore withheld unless the endpoint is known to exist, and a
+`directoryConfigured` that has not arrived yet withholds them too, on the same
+rule as the null document below.
+
+**How a member learns the browse setting.** It cannot be read directly:
+`directoryBrowseEnabled` lives on `InstanceAdminSettings`, behind
+`GET /api/settings/instance`, which is admin-only, and a member surface must
+not carry an admin-only read. What every signed-in user may read is the
+setting's *effect*: `directoryAvailable` on the public `GET /api/instance/info`
+is the endpoint and the switch together (section 9). With
+`directoryConfigured` true, an unavailable directory can only be the switch,
+so the pair is the fact, and that pair is what these two rows are derived
+from. The feed proxy's `404 directory_disabled` is the other signal the client
+already holds, through `directoryStore.status === 'disabled'`, and it is not
+used here for two reasons: it cannot separate a missing endpoint from the
+admin's switch, since section 6 answers the same code for both, and it only
+exists after a fetch the page deliberately never makes when the section is
+gated off.
+
+**The browse row moves when the page re-reads, not when the PATCH answers.**
+"Show global spaces in Explore" writes `directoryBrowseEnabled: true` through
+`updateInstanceSettings`, and that answer does not carry the fact the row is
+derived from: the store mirrors `discoveryEnabled` and `directoryEnabled` into
+`streamingLimits`, and `directoryAvailable` is not in that document at all. So
+the hint calls back into `ExplorePage`, which re-reads `GET /api/instance/info`
+(the same call it makes on mount, kept as one function) and hands the new value
+down; the callback is awaited, so the button stays disabled until the row has
+actually moved rather than re-enabling under a row that is about to go. The
+page swallows a failed re-read: the save landed, so that failure is not the
+action's, and the row simply stays until the next read. Outer Space needs no
+further wiring, because `OuterSpaceSection` fetches its first page on mount and
+it mounts the moment the flag turns true.
 
 Unknown is not a fact: with no document the hint says nothing rather than
 guessing, because this is the one Explore surface that offers a write, and a
@@ -854,8 +888,9 @@ the screen-share config, the one consumer that needs numbers whatever
 happened, reads them through `getStreamingLimits()`, which falls back at read
 time.
 
-The two rows an admin sees are the ladder of section 3 one rung per click,
-offered in the same place. "Turn on space discovery" writes
+The rows an admin sees are the ladder of section 3 one rung per click,
+offered in the same place, with the incoming axis between its two rungs.
+"Turn on space discovery" writes
 `discoveryEnabled: true` through `updateInstanceSettings`, which mirrors both
 flags from the server's answer back into `streamingLimits`, and the hint
 moves from the third row to the fourth in the same render: there is no "just
@@ -871,11 +906,14 @@ on, so it disappears rather than following the hint to the next rung.
 
 The listing row says nothing about Outer Space. **Browsing the directory
 never depends on `directoryEnabled`**, only on the operator's
-`DIRECTORY_ENDPOINT` (the gate above), so `explore.outer.empty` ("Nothing out
-there yet...") means the feed has nothing for this query, never that this
-instance lists nothing of its own. The three visible rows are in the Explore
-workbench as `?scene=hint-member|hint-admin|hint-not-listed`
-(`packages/web/dev-explore.html`), which takes `?width=400` for the wrap.
+`DIRECTORY_ENDPOINT` and the admin's browse setting (the gate above), so
+`explore.outer.empty` ("Nothing out there yet...") means the feed has nothing
+for this query, never that this instance lists nothing of its own. The five
+visible rows are in the Explore workbench as
+`?scene=hint-member|hint-admin|hint-not-listed|hint-browse-member|hint-browse-admin`
+(`packages/web/dev-explore.html`), which takes `?width=400` for the wrap. The
+two browse scenes also take Outer Space off the page, which is the state the
+row exists to explain.
 
 **Known limit: two copies of `discoveryEnabled`.** The same flag lives in
 `exploreStore.discoveryEnabled`, written by `fetchSpaces` from the home
@@ -1078,6 +1116,17 @@ rendered:
 
 - Enabled when the instance allows it and the draft visibility is public or
   request.
+- Disabled with the first reason that applies, read from the settings document
+  of the instance the space lives on. The instance has no `DIRECTORY_ENDPOINT`
+  (`directoryConfigured: false` on `GET /settings/streaming`), so a listing
+  would reach no hub and the administrator's own opt-in cannot change that;
+  then the administrator's listing opt-in is off; then the space is private.
+  The endpoint is asked first because it is the fact the administrator cannot
+  fix from the setting the second reason names. The copy says the listing would
+  reach no directory, not that nothing is published: the served document is
+  gated on the two discovery flags and never on the endpoint, so an
+  endpoint-less instance with the rung stored does serve a populated document
+  that no hub fetches.
 - Disabled with "Your admin has to enable the directory for this instance."
   when `streamingLimits.directoryEnabled` is false. Never hidden: the reason
   under a disabled switch is what tells an owner what to do.

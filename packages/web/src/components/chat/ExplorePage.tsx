@@ -57,11 +57,15 @@ export function ExplorePage() {
   // Whether the home instance browses the directory at all: DIRECTORY_ENDPOINT
   // non-empty and the admin's browse setting on, which the server reports as
   // one flag. Not the admin's listing opt-in (`directoryEnabled`): a fresh
-  // instance that lists nothing must still be able to browse. Read once from
-  // the public instance info so an instance with no directory never flashes
-  // the Outer Space header; the store's own status starts idle and cannot
-  // answer this before its first fetch.
-  const [directoryAvailable, setDirectoryAvailable] = useState(false);
+  // instance that lists nothing must still be able to browse. Read from the
+  // public instance info so an instance with no directory never flashes the
+  // Outer Space header; the store's own status starts idle and cannot answer
+  // this before its first fetch.
+  //
+  // Null until the answer arrives, and null is not false: the section gates on
+  // an explicit `true`, and the hint below says nothing about the browse
+  // setting off an unknown, exactly as it does for the endpoint.
+  const [directoryAvailable, setDirectoryAvailable] = useState<boolean | null>(null);
   // Whether this instance has a DIRECTORY_ENDPOINT at all, reported on its own
   // so a client can tell a missing endpoint from an admin's switch. Null until
   // the answer arrives; the hint below offers nothing off an unknown.
@@ -75,20 +79,41 @@ export function ExplorePage() {
     fetchMyRequests();
   }, [fetchSpaces, fetchMyRequests]);
 
+  // Whether this component is still on screen, for the two directory facts
+  // below: they are written from a promise that outlives an unmount.
+  const mounted = useRef(true);
   useEffect(() => {
-    let cancelled = false;
-    api.instance.info()
-      .then((info) => {
-        if (cancelled) return;
-        setDirectoryAvailable(info.directoryAvailable === true);
-        setDirectoryConfigured(info.directoryConfigured === true);
-      })
-      .catch(() => {
-        // Unreachable: the section stays absent. An older server without the
-        // field lands in the strict comparison above and stays absent too.
-      });
-    return () => { cancelled = true; };
+    mounted.current = true;
+    return () => { mounted.current = false; };
   }, []);
+
+  /**
+   * Re-read the public instance info, the one document that carries both
+   * directory facts and that every signed-in user may read. Used on mount and
+   * again after the admin turns browsing on from the hint, which is a change
+   * this page cannot see any other way: the browse setting itself lives on the
+   * admin-only `InstanceAdminSettings`, so the page reads its effect
+   * (`directoryAvailable`) rather than the setting.
+   *
+   * Never rejects. An unreachable instance leaves both facts as they were,
+   * which on mount is unknown: the section stays absent and the hint offers
+   * nothing. An older server without the fields lands in the strict
+   * comparisons and reads as false rather than throwing.
+   */
+  const readInstanceInfo = useCallback(async (): Promise<void> => {
+    try {
+      const info = await api.instance.info();
+      if (!mounted.current) return;
+      setDirectoryAvailable(info.directoryAvailable === true);
+      setDirectoryConfigured(info.directoryConfigured === true);
+    } catch {
+      // Left as it was on purpose; see above.
+    }
+  }, []);
+
+  useEffect(() => {
+    void readInstanceInfo();
+  }, [readInstanceInfo]);
 
   // Debounced search, one timer for both sections. The directory is only
   // queried on an instance that has one; with it off the section is absent
@@ -98,7 +123,7 @@ export function ExplorePage() {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       fetchSpaces(value || undefined);
-      if (directoryAvailable) fetchDirectory(value);
+      if (directoryAvailable === true) fetchDirectory(value);
     }, SEARCH_DEBOUNCE_MS);
   }, [setSearchQuery, fetchSpaces, fetchDirectory, directoryAvailable]);
 
@@ -249,7 +274,9 @@ export function ExplorePage() {
             {/* Why this instance shows what it shows, and the admin's way to change it */}
             <InstanceDiscoveryHint
               directoryConfigured={directoryConfigured}
+              directoryAvailable={directoryAvailable}
               onDiscoveryEnabled={handleDiscoveryEnabled}
+              onBrowseEnabled={readInstanceInfo}
             />
 
             {isLoading && spaces.length === 0 ? (
@@ -344,7 +371,7 @@ export function ExplorePage() {
           </section>
 
           {/* Outer Space: the directory, only on an instance that browses one */}
-          {directoryAvailable && (
+          {directoryAvailable === true && (
             <OuterSpaceSection query={searchQuery} onConnect={handleConnect} />
           )}
         </div>

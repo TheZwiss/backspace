@@ -164,6 +164,10 @@
       "enable": "Entdecken von Spaces einschalten",
       "failed": "Die Einstellung konnte nicht geändert werden."
     },
+    "browseOff": {
+      "text": "Spaces von anderen Instanzen werden auf dieser Instanz nicht angezeigt.",
+      "action": "Globale Spaces in „Entdecken“ anzeigen"
+    },
     "notListed": {
       "text": "Spaces auf dieser Instanz sind nicht im öffentlichen Verzeichnis eingetragen.",
       "action": "Eintragen"

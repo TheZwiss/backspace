@@ -53,11 +53,13 @@
 // of the page, with the expired row open on the same reauth form, because
 // the two surfaces share it.
 //
-// `?scene=hint-member|hint-admin|hint-not-listed` shows the instance
-// discovery hint that sits under the chips row in each of its three visible
-// rows: space discovery off as a member sees it, the same as an admin sees
-// it with the switch, and the quiet listing row an admin gets once discovery
-// is on. Pair them with `?width=400` to see the text wrap and the action
+// `?scene=hint-member|hint-admin|hint-not-listed|hint-browse-member|hint-browse-admin`
+// shows the instance discovery hint that sits under the chips row in each of
+// its five visible rows: space discovery off as a member sees it, the same as
+// an admin sees it with the switch, the quiet listing row an admin gets once
+// discovery is on, and the two browse rows, where the admin has turned "Show
+// global spaces in Explore" off and Outer Space is therefore absent from the
+// page below. Pair them with `?width=400` to see the text wrap and the action
 // move below it.
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
@@ -102,7 +104,9 @@ type Scene =
   | 'connections-panel'
   | 'hint-member'
   | 'hint-admin'
-  | 'hint-not-listed';
+  | 'hint-not-listed'
+  | 'hint-browse-member'
+  | 'hint-browse-admin';
 
 const SCENES: ReadonlySet<string> = new Set<Scene>([
   'both',
@@ -130,6 +134,8 @@ const SCENES: ReadonlySet<string> = new Set<Scene>([
   'hint-member',
   'hint-admin',
   'hint-not-listed',
+  'hint-browse-member',
+  'hint-browse-admin',
 ]);
 
 function isScene(value: string | null): value is Scene {
@@ -276,14 +282,29 @@ const INSTANCE_INFO: InstanceInfoResponse = {
   directoryEnabled: true,
 };
 
+/**
+ * The public instance info for a scene. The browse scenes are the only ones
+ * that turn `directoryAvailable` off, which is what takes Outer Space off the
+ * page and puts the browse row in the hint; the endpoint stays configured,
+ * because with none there is no setting worth naming and the hint says
+ * nothing.
+ */
+function instanceInfoFor(scene: Scene): InstanceInfoResponse {
+  if (scene === 'hint-browse-member' || scene === 'hint-browse-admin') {
+    return { ...INSTANCE_INFO, directoryAvailable: false };
+  }
+  return INSTANCE_INFO;
+}
+
 /** Answers the directory gate locally; every other request goes through untouched. */
-function installInstanceInfo(): void {
+function installInstanceInfo(scene: Scene): void {
+  const info = instanceInfoFor(scene);
   const realFetch = window.fetch.bind(window);
   window.fetch = (input, init) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
     if (url.endsWith('/api/instance/info')) {
       return Promise.resolve(
-        new Response(JSON.stringify(INSTANCE_INFO), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        new Response(JSON.stringify(info), { status: 200, headers: { 'Content-Type': 'application/json' } }),
       );
     }
     return realFetch(input, init);
@@ -319,17 +340,36 @@ const DEFAULT_HINT_LIMITS: InstanceStreamingLimits = {
   allowCustomBitrate: true,
 };
 
-type HintScene = 'hint-member' | 'hint-admin' | 'hint-not-listed';
+type HintScene =
+  | 'hint-member'
+  | 'hint-admin'
+  | 'hint-not-listed'
+  | 'hint-browse-member'
+  | 'hint-browse-admin';
+
+const HINT_SCENES: ReadonlySet<string> = new Set<HintScene>([
+  'hint-member',
+  'hint-admin',
+  'hint-not-listed',
+  'hint-browse-member',
+  'hint-browse-admin',
+]);
 
 function isHintScene(scene: Scene): scene is HintScene {
-  return scene === 'hint-member' || scene === 'hint-admin' || scene === 'hint-not-listed';
+  return HINT_SCENES.has(scene);
 }
 
-/** The instance settings behind each hint scene; only the two discovery flags differ. */
+/**
+ * The instance settings behind each hint scene; only the two discovery flags
+ * differ. The browse scenes run with both of them on, so the row on screen is
+ * the incoming axis alone: the other two rows are settled and out of the way.
+ */
 const HINT_LIMITS: Record<HintScene, InstanceStreamingLimits> = {
   'hint-member': { ...DEFAULT_HINT_LIMITS, discoveryEnabled: false, directoryEnabled: false },
   'hint-admin': { ...DEFAULT_HINT_LIMITS, discoveryEnabled: false, directoryEnabled: false },
   'hint-not-listed': { ...DEFAULT_HINT_LIMITS, discoveryEnabled: true, directoryEnabled: false },
+  'hint-browse-member': { ...DEFAULT_HINT_LIMITS, discoveryEnabled: true, directoryEnabled: true },
+  'hint-browse-admin': { ...DEFAULT_HINT_LIMITS, discoveryEnabled: true, directoryEnabled: true },
 };
 
 function seedStores(scene: Scene): void {
@@ -352,7 +392,7 @@ function seedStores(scene: Scene): void {
   // the resting state of a fresh session: no admin, and settings that have
   // not arrived, which is the hint's silent row.
   useSettingsStore.setState({
-    isAdmin: scene === 'hint-admin' || scene === 'hint-not-listed',
+    isAdmin: scene === 'hint-admin' || scene === 'hint-not-listed' || scene === 'hint-browse-admin',
     streamingLimits: isHintScene(scene) ? HINT_LIMITS[scene] : null,
     updateInstanceSettings: async () => {},
   });
@@ -643,7 +683,7 @@ function Workbench({ scene, width }: { scene: Scene; width: number | null }) {
 async function start(): Promise<void> {
   const scene = readScene(window.location.search);
   const width = readWidth(window.location.search);
-  installInstanceInfo();
+  installInstanceInfo(scene);
   initializeInterfaceScale();
   await initI18n();
   seedStores(scene);
