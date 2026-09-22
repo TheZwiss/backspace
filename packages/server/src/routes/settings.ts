@@ -26,6 +26,7 @@ function rowToLimits(row: typeof schema.instanceSettings.$inferSelect): Instance
     maxResolution: row.maxResolution,
     maxFramerate: row.maxFramerate,
     discoveryEnabled: row.discoveryEnabled === 1,
+    directoryEnabled: row.directoryEnabled === 1,
     bitrateMatrixOverrides: (() => {
       const raw = row.bitrateMatrixOverrides as string | null;
       if (!raw) return null;

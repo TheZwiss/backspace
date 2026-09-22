@@ -273,6 +273,13 @@
           }
         }
       },
+      "directory": {
+        "label": "List in the Backspace directory",
+        "hint": "Show this space in Outer Space on every Backspace instance.",
+        "adminOff": "Your admin has to enable the directory for this instance.",
+        "privateSpace": "Set visibility to public or request to join first.",
+        "disclosure": "Listing makes public: the space's name, description, icon, banner, member count and this instance's address."
+      },
       "description": {
         "label": "Description",
         "hint": "A short summary shown on the Explore page.",

@@ -4,12 +4,32 @@ import { useSettingsStore } from '../../../stores/settingsStore';
 import { useUIStore } from '../../../stores/uiStore';
 import { Toggle } from '../../ui/Toggle';
 import { describeError } from '../../../i18n/errors';
-import type { InstanceAdminSettings } from '@backspace/shared';
+import { useFormatters } from '../../../i18n/formatters';
+import type { DirectoryPingError, InstanceAdminSettings } from '@backspace/shared';
 
 const INSTANCE_NAME_MAX_LENGTH = 32;
 
+type PingReasonKey =
+  `admin:general.directory.reasons.${NonNullable<DirectoryPingError['reason']> | 'origin' | 'network' | 'timeout'}`;
+
+/**
+ * The key under `admin:general.directory.reasons` that explains a failed ping,
+ * or null when the status speaks for itself. A hub that could not read this
+ * instance's document says why in `reason`; a hub that refused the address, or
+ * a ping that never got an answer, says so in `status`. A plain HTTP status is
+ * shown as the number it is.
+ */
+function pingReasonKey(error: DirectoryPingError): PingReasonKey | null {
+  if (typeof error.status === 'number') return null;
+  if (error.status === 'fetch') {
+    return error.reason ? `admin:general.directory.reasons.${error.reason}` : null;
+  }
+  return `admin:general.directory.reasons.${error.status}`;
+}
+
 export function GeneralPanel() {
   const { t } = useTranslation(['admin', 'common']);
+  const f = useFormatters();
   const instanceSettings = useSettingsStore((s) => s.instanceSettings);
   const updateInstanceSettings = useSettingsStore((s) => s.updateInstanceSettings);
 
@@ -33,7 +53,8 @@ export function GeneralPanel() {
 
   const baseChanges = instanceSettings && draft
     ? draft.instanceName !== instanceSettings.instanceName ||
-      draft.discoveryEnabled !== instanceSettings.discoveryEnabled
+      draft.discoveryEnabled !== instanceSettings.discoveryEnabled ||
+      draft.directoryEnabled !== instanceSettings.directoryEnabled
     : false;
   const hasChanges = baseChanges || gifKeyDirty;
 
@@ -44,6 +65,7 @@ export function GeneralPanel() {
       const payload: Partial<InstanceAdminSettings> = {
         instanceName: draft!.instanceName,
         discoveryEnabled: draft!.discoveryEnabled,
+        directoryEnabled: draft!.directoryEnabled,
       };
       if (gifKeyDirty) {
         payload.gifApiKey = gifKeyDraft;
@@ -58,6 +80,18 @@ export function GeneralPanel() {
       setSaving(false);
     }
   };
+
+  // The server clears the directory when discovery goes off; the draft does
+  // the same so the switch below never shows a state the save would refuse.
+  const setDiscovery = (enabled: boolean) => {
+    setDraft({ ...draft, discoveryEnabled: enabled, directoryEnabled: enabled && draft.directoryEnabled });
+  };
+
+  const lastError = draft.directoryLastError;
+  const lastErrorReasonKey = lastError === null ? null : pingReasonKey(lastError);
+  const pingLabel = draft.directoryLastPingAt === null
+    ? t('admin:general.directory.status.never')
+    : t('admin:general.directory.status.lastPing', { date: f.formatDateTime(draft.directoryLastPingAt) });
 
   const handleReset = () => {
     if (instanceSettings) setDraft({ ...instanceSettings });
@@ -100,8 +134,51 @@ export function GeneralPanel() {
               <div className="text-sm font-medium text-txt-primary">{t('admin:general.discovery.toggleLabel')}</div>
               <div className="text-xs text-txt-tertiary mt-0.5">{t('admin:general.discovery.toggleDescription')}</div>
             </div>
-            <Toggle enabled={draft.discoveryEnabled} onChange={(v) => setDraft({ ...draft, discoveryEnabled: v })} />
+            <Toggle
+              enabled={draft.discoveryEnabled}
+              onChange={setDiscovery}
+              ariaLabel={t('admin:general.discovery.toggleLabel')}
+            />
           </label>
+        </div>
+      </div>
+
+      {/* Directory */}
+      <div>
+        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:general.directory.label')}</div>
+        <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-3">
+          <label className={`flex items-center justify-between gap-4 ${draft.discoveryEnabled ? 'cursor-pointer' : 'cursor-default'}`}>
+            <div>
+              <div className="text-sm font-medium text-txt-primary">{t('admin:general.directory.toggleLabel')}</div>
+              <div className="text-xs text-txt-tertiary mt-0.5">{t('admin:general.directory.toggleDescription')}</div>
+            </div>
+            <Toggle
+              enabled={draft.directoryEnabled}
+              onChange={(v) => setDraft({ ...draft, directoryEnabled: v })}
+              disabled={!draft.discoveryEnabled}
+              ariaLabel={t('admin:general.directory.toggleLabel')}
+            />
+          </label>
+          {!draft.discoveryEnabled && (
+            <p className="text-xs text-txt-secondary">{t('admin:general.directory.needsDiscovery')}</p>
+          )}
+          {!draft.federatedRegistrationOpen && (
+            <div className="p-2.5 bg-accent-amber/10 border border-accent-amber/30 rounded text-[13px] text-accent-amber">
+              {t('admin:general.directory.registrationClosed')}
+            </div>
+          )}
+          {/* What the pinger last did, the same shape as the telemetry panel's line */}
+          <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3 space-y-1">
+            <div className="text-xs text-txt-tertiary">{pingLabel}</div>
+            {lastError !== null && (
+              <div className="text-xs text-txt-danger">
+                {t('admin:general.directory.status.lastError', {
+                  status: lastErrorReasonKey === null ? lastError.status : t(lastErrorReasonKey),
+                })}
+              </div>
+            )}
+          </div>
+          <p className="text-xs text-txt-tertiary">{t('admin:general.directory.disclosure')}</p>
         </div>
       </div>
 

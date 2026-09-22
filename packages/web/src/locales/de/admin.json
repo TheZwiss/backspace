@@ -12,6 +12,28 @@
       "toggleLabel": "Spaces entdecken",
       "toggleDescription": "Spaces dürfen auf der öffentlichen Seite „Entdecken“ erscheinen"
     },
+    "directory": {
+      "label": "Verzeichnis",
+      "toggleLabel": "Spaces im Backspace-Verzeichnis eintragen",
+      "toggleDescription": "Spaces, die sich eintragen, erscheinen auf jeder Backspace-Instanz im Äußeren Space",
+      "needsDiscovery": "Schalte zuerst das Entdecken von Spaces ein.",
+      "registrationClosed": "Neue Konten von anderen Instanzen sind geschlossen, eingetragene Spaces werden deshalb als „Keine neuen Konten“ angezeigt.",
+      "disclosure": "Für jeden eingetragenen Space wird öffentlich: Name, Beschreibung, Icon, Banner, Mitgliederzahl und die Adresse dieser Instanz. Wer das Verzeichnis durchstöbert, lädt Icon und Banner von dieser Instanz.",
+      "status": {
+        "never": "Noch nie gemeldet",
+        "lastPing": "Zuletzt gemeldet am {{date}}",
+        "lastError": "Letzter Versuch fehlgeschlagen ({{status}})"
+      },
+      "reasons": {
+        "unreachable": "das Verzeichnis konnte diese Instanz nicht erreichen",
+        "status": "diese Instanz hat mit einem Fehler geantwortet",
+        "invalid": "diese Instanz hat ein ungültiges Dokument ausgeliefert",
+        "origin-mismatch": "diese Instanz meldet eine andere Adresse als die, unter der sie erreicht wurde",
+        "origin": "das Verzeichnis hat die Adresse dieser Instanz abgelehnt; sie muss eine https-Domain ohne Port sein (DOMAIN oder PUBLIC_ORIGIN setzen)",
+        "network": "diese Instanz konnte das Verzeichnis nicht erreichen",
+        "timeout": "das Verzeichnis hat nicht rechtzeitig geantwortet"
+      }
+    },
     "gif": {
       "label": "GIF-Suche",
       "description": "Aktiviere die GIF-Suche über Klipy. Einen kostenlosen API-Schlüssel gibt es im Klipy-Entwicklerportal.",

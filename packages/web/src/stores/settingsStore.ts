@@ -43,6 +43,7 @@ const DEFAULT_LIMITS: InstanceStreamingLimits = {
   maxResolution: 1080,
   maxFramerate: 60,
   discoveryEnabled: true,
+  directoryEnabled: false,
   bitrateMatrixOverrides: null,
   allowCustomBitrate: true,
 };
@@ -100,14 +101,19 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   updateInstanceSettings: async (data: Partial<InstanceAdminSettings>) => {
     const updated = await api.settings.updateInstance(data);
     set({ instanceSettings: updated });
-    // If discoveryEnabled changed, also update it in streamingLimits for the DiscoveryPanel warning banner
-    if (data.discoveryEnabled !== undefined) {
-      set((state) => ({
-        streamingLimits: state.streamingLimits
-          ? { ...state.streamingLimits, discoveryEnabled: updated.discoveryEnabled }
-          : state.streamingLimits,
-      }));
-    }
+    // The space settings DiscoveryPanel reads both flags from streamingLimits,
+    // the document any signed-in user may fetch. Mirror them from the server's
+    // answer rather than from the request: turning discovery off clears the
+    // directory server-side, and the answer is where that shows.
+    set((state) => ({
+      streamingLimits: state.streamingLimits
+        ? {
+            ...state.streamingLimits,
+            discoveryEnabled: updated.discoveryEnabled,
+            directoryEnabled: updated.directoryEnabled,
+          }
+        : state.streamingLimits,
+    }));
   },
 
   fetchGifEnabled: async () => {

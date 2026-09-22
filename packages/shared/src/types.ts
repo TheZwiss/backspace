@@ -836,6 +836,8 @@ export interface InstanceStreamingLimits {
   maxResolution: number;
   maxFramerate: number;
   discoveryEnabled: boolean;
+  /** The admin allows spaces here to be listed in the directory. Read-only on this route; PATCH /settings/instance sets it. */
+  directoryEnabled: boolean;
   bitrateMatrixOverrides: Record<string, number> | null;
   allowCustomBitrate: boolean;
 }

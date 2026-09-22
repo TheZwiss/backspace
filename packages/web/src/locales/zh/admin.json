@@ -12,6 +12,28 @@
       "toggleLabel": "空间发现",
       "toggleDescription": "允许空间出现在公开的“探索”页面中"
     },
+    "directory": {
+      "label": "目录",
+      "toggleLabel": "将空间列入 Backspace 目录",
+      "toggleDescription": "选择加入的空间会出现在每个 Backspace 实例的外部空间中",
+      "needsDiscovery": "请先开启空间发现功能。",
+      "registrationClosed": "已关闭来自其他实例的新账户注册，因此列入目录的空间会显示为不接受新账户。",
+      "disclosure": "对于每个列入目录的空间，以下信息将公开：名称、描述、图标、横幅、成员数量以及本实例的地址。浏览目录的人会从本实例加载图标和横幅。",
+      "status": {
+        "never": "从未上报",
+        "lastPing": "上次上报于 {{date}}",
+        "lastError": "上次尝试失败（{{status}}）"
+      },
+      "reasons": {
+        "unreachable": "目录无法访问本实例",
+        "status": "本实例返回了错误",
+        "invalid": "本实例提供了无效的文档",
+        "origin-mismatch": "本实例上报的地址与访问它时使用的地址不一致",
+        "origin": "目录拒绝了本实例的地址；它必须是不带端口的 https 域名（请设置 DOMAIN 或 PUBLIC_ORIGIN）",
+        "network": "本实例无法访问目录",
+        "timeout": "目录未及时响应"
+      }
+    },
     "gif": {
       "label": "GIF 搜索",
       "description": "启用由 Klipy 提供支持的 GIF 搜索。可从 Klipy 开发者后台免费获取 API 密钥。",

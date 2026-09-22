@@ -267,6 +267,31 @@ describe('directory fields on GET /api/settings/instance', () => {
   });
 });
 
+describe('directoryEnabled on GET /api/settings/streaming', () => {
+  // The space settings panel reads this route (any signed-in user may), so the
+  // per-space switch can say "your admin has to enable the directory" without
+  // the admin-only instance settings.
+  it('is false by default', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/settings/streaming' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().directoryEnabled).toBe(false);
+  });
+
+  it('reflects the stored flag', async () => {
+    setSettings({ directoryEnabled: 1 });
+    const res = await app.inject({ method: 'GET', url: '/api/settings/streaming' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().directoryEnabled).toBe(true);
+  });
+
+  it('is carried on the PATCH /api/settings/streaming response too', async () => {
+    setSettings({ directoryEnabled: 1 });
+    const res = await app.inject({ method: 'PATCH', url: '/api/settings/streaming', payload: { maxFramerate: 30 } });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().directoryEnabled).toBe(true);
+  });
+});
+
 describe('PATCH /api/settings/instance directory invariant', () => {
   it('rejects directoryEnabled=true while discovery is off with directory_requires_discovery', async () => {
     setSettings({ discoveryEnabled: 0 });

@@ -7,6 +7,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { Avatar } from '../ui/Avatar';
+import { Toggle } from '../ui/Toggle';
 import { api } from '../../api/client';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import { OverviewPanel } from './spaceSettingsPanels/OverviewPanel';
@@ -18,18 +19,25 @@ import type { SpaceVisibility, JoinRequest } from '@backspace/shared';
 
 const DESCRIPTION_MAX_LENGTH = 200;
 
-function DiscoveryPanel({ spaceId }: { spaceId: string }) {
+/**
+ * Visibility, the directory switch and the description of one space. Both
+ * instance flags come from the home instance's `streamingLimits`, the one
+ * settings document any signed-in user may read; the panel does not ask a
+ * remote instance for its own flags.
+ */
+export function DiscoveryPanel({ spaceId }: { spaceId: string }) {
   const { t } = useTranslation(['spaces', 'common']);
   const visibilityOptions = useVisibilityOptions();
   const spaces = useSpaceStore((s) => s.spaces);
-  const updateSpace = useSpaceStore((s) => s.updateSpace);
   const discoveryEnabled = useSettingsStore((s) => s.streamingLimits?.discoveryEnabled ?? true);
+  const directoryEnabled = useSettingsStore((s) => s.streamingLimits?.directoryEnabled ?? false);
 
   const space = spaces.find(s => s.id === spaceId);
 
   const [visibility, setVisibility] = useState<SpaceVisibility>(
     (space?.visibility as SpaceVisibility) ?? 'private'
   );
+  const [directoryListed, setDirectoryListed] = useState(space?.directoryListed ?? false);
   const [description, setDescription] = useState(space?.description ?? '');
   const addToast = useUIStore((s) => s.addToast);
   const [saving, setSaving] = useState(false);
@@ -38,6 +46,7 @@ function DiscoveryPanel({ spaceId }: { spaceId: string }) {
   useEffect(() => {
     if (space) {
       setVisibility((space.visibility as SpaceVisibility) ?? 'private');
+      setDirectoryListed(space.directoryListed);
       setDescription(space.description ?? '');
     }
   }, [space]);
@@ -46,13 +55,30 @@ function DiscoveryPanel({ spaceId }: { spaceId: string }) {
 
   const hasChanges =
     visibility !== ((space.visibility as SpaceVisibility) ?? 'private') ||
+    directoryListed !== space.directoryListed ||
     description !== (space.description ?? '');
+
+  // The server refuses a listed private space and clears the listing when a
+  // space goes private; the draft does the same, so the switch never shows a
+  // state the save would refuse and a save cannot silently lose the listing.
+  const chooseVisibility = (next: SpaceVisibility) => {
+    setVisibility(next);
+    if (next === 'private') setDirectoryListed(false);
+  };
+
+  // Always rendered: the reason under a disabled switch is what tells an owner
+  // whose instance has the directory off, or whose space is private, what to do.
+  const directoryReason = !directoryEnabled
+    ? t('spaces:settings.discovery.directory.adminOff')
+    : visibility === 'private'
+      ? t('spaces:settings.discovery.directory.privateSpace')
+      : null;
 
   const handleSave = async () => {
     setSaving(true);
     setSaveError('');
     try {
-      await api.spaces.update(spaceId, { visibility, description: description.trim() });
+      await api.spaces.update(spaceId, { visibility, description: description.trim(), directoryListed });
       addToast(t('common:states.settingsSaved'), 'success', 2000);
     } catch (err) {
       setSaveError(describeError(err));
@@ -63,6 +89,7 @@ function DiscoveryPanel({ spaceId }: { spaceId: string }) {
 
   const handleReset = () => {
     setVisibility((space.visibility as SpaceVisibility) ?? 'private');
+    setDirectoryListed(space.directoryListed);
     setDescription(space.description ?? '');
     setSaveError('');
   };
@@ -95,7 +122,7 @@ function DiscoveryPanel({ spaceId }: { spaceId: string }) {
                   name="visibility"
                   value={opt.value}
                   checked={visibility === opt.value}
-                  onChange={() => setVisibility(opt.value)}
+                  onChange={() => chooseVisibility(opt.value)}
                   className="mt-0.5 accent-accent-primary"
                 />
                 <div>
@@ -105,6 +132,28 @@ function DiscoveryPanel({ spaceId }: { spaceId: string }) {
               </label>
             ))}
           </div>
+        </div>
+      </div>
+
+      <div>
+        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('spaces:explore.outer.title')}</div>
+        <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-2.5">
+          <label className={`flex items-center justify-between gap-4 ${directoryReason === null ? 'cursor-pointer' : 'cursor-default'}`}>
+            <div>
+              <div className="text-sm font-medium text-txt-primary">{t('spaces:settings.discovery.directory.label')}</div>
+              <div className="text-xs text-txt-tertiary mt-0.5">{t('spaces:settings.discovery.directory.hint')}</div>
+            </div>
+            <Toggle
+              enabled={directoryListed}
+              onChange={setDirectoryListed}
+              disabled={directoryReason !== null}
+              ariaLabel={t('spaces:settings.discovery.directory.label')}
+            />
+          </label>
+          {directoryReason !== null && (
+            <p className="text-xs text-txt-secondary">{directoryReason}</p>
+          )}
+          <p className="text-xs text-txt-tertiary">{t('spaces:settings.discovery.directory.disclosure')}</p>
         </div>
       </div>
 
