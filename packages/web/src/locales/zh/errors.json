@@ -63,6 +63,7 @@
   "federation_credential_remote_only": "这是当前实例，请输入其他实例的地址。",
   "federation_credential_home_only": "连接需从您的主实例进行设置，请在主实例操作。",
   "federation_credential_failed": "无法设置连接，请重试。",
+  "federation_different_password": "您在该实例上的账号有自己的密码。请使用该密码登录以重新连接。",
   "peer_reset_pending": "正在重置与该实例的连接，请稍候再试。",
   "dm_target_required": "请选择发送私信的对象。",
   "cannot_dm_self": "无法与自己发起私信会话。",

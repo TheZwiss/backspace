@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import type { FederationRegistryEntry, User } from '@backspace/shared';
 import { HttpError } from '../../api/client';
 import { ConnectionChips } from './ConnectionChips';
-import { useInstanceStore, type ConnectedInstance } from '../../stores/instanceStore';
+import { useInstanceStore, DifferentPasswordError, type ConnectedInstance } from '../../stores/instanceStore';
 import { useAuthStore } from '../../stores/authStore';
 
 // Stub AudioManager: the instance store imports it transitively and jsdom has no AudioWorkletNode.
@@ -65,6 +65,7 @@ function seed(entries: FederationRegistryEntry[], instances: ConnectedInstance[]
 
 const reconnectInstance = vi.fn(async (_origin: string) => {});
 const reauthenticateInstance = vi.fn(async (_origin: string, _password: string) => {});
+const loginToRemote = vi.fn(async (_origin: string, _username: string, _password: string) => {});
 const onRecovered = vi.fn();
 
 beforeEach(() => {
@@ -72,9 +73,11 @@ beforeEach(() => {
   reconnectInstance.mockResolvedValue(undefined);
   reauthenticateInstance.mockReset();
   reauthenticateInstance.mockResolvedValue(undefined);
+  loginToRemote.mockReset();
+  loginToRemote.mockResolvedValue(undefined);
   onRecovered.mockReset();
   useAuthStore.setState({ user: homeUser });
-  useInstanceStore.setState({ registry: new Map(), instances: [], reconnectInstance, reauthenticateInstance });
+  useInstanceStore.setState({ registry: new Map(), instances: [], reconnectInstance, reauthenticateInstance, loginToRemote });
 });
 
 describe('ConnectionChips', () => {
@@ -355,6 +358,87 @@ describe('ConnectionChips', () => {
     await user.click(screen.getByRole('button', { name: /^Reconnect/ }));
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
 
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Reconnect/ })).toHaveFocus());
+  });
+
+  it('a different password on the instance moves to the per-instance login instead of a dead end', async () => {
+    seed([registryEntry('https://zwiss.example', 'auth_expired', 'Zwiss')]);
+    reauthenticateInstance.mockRejectedValueOnce(new DifferentPasswordError('jannis@home.example'));
+    const user = userEvent.setup();
+    render(<ConnectionChips onRecovered={onRecovered} />);
+
+    await user.click(screen.getByRole('button', { name: /^Reconnect/ }));
+    await user.type(screen.getByLabelText('Your home account password'), 'hunter2');
+    await user.click(screen.getByRole('button', { name: 'Connect' }));
+
+    // The raw English the error class carries is never what the user reads.
+    expect(screen.queryByText('Account exists with a different password on this instance')).not.toBeInTheDocument();
+    // The second phase, with the username the error carried already in it.
+    expect(await screen.findByPlaceholderText('Password on the remote instance')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Your username on this instance')).toHaveValue('jannis@home.example');
+    expect(screen.getByText(/does not accept the credential your home instance issued/)).toBeInTheDocument();
+    // The home password the instance did not refuse is no longer asked for.
+    expect(screen.queryByLabelText('Your home account password')).not.toBeInTheDocument();
+  });
+
+  it('a success on the per-instance login restores the connection like any other path', async () => {
+    seed([registryEntry('https://zwiss.example', 'auth_expired', 'Zwiss')]);
+    reauthenticateInstance.mockRejectedValueOnce(new DifferentPasswordError('jannis@home.example'));
+    loginToRemote.mockImplementationOnce(async (origin: string) => {
+      const registry = new Map(useInstanceStore.getState().registry);
+      registry.set(origin, registryEntry(origin, 'connected', 'Zwiss'));
+      useInstanceStore.setState({ registry, instances: [liveInstance(origin, 'connected')] });
+    });
+    const user = userEvent.setup();
+    const { container } = render(<ConnectionChips onRecovered={onRecovered} />);
+
+    await user.click(screen.getByRole('button', { name: /^Reconnect/ }));
+    await user.type(screen.getByLabelText('Your home account password'), 'hunter2');
+    await user.click(screen.getByRole('button', { name: 'Connect' }));
+
+    await user.type(await screen.findByPlaceholderText('Password on the remote instance'), 'local-pw');
+    await user.click(screen.getByRole('button', { name: 'Login & Connect' }));
+
+    await waitFor(() => expect(loginToRemote).toHaveBeenCalledWith('https://zwiss.example', 'jannis@home.example', 'local-pw'));
+    await waitFor(() => expect(onRecovered).toHaveBeenCalledOnce());
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('a refused per-instance login shows its own error and keeps the second phase', async () => {
+    seed([registryEntry('https://zwiss.example', 'auth_expired', 'Zwiss')]);
+    reauthenticateInstance.mockRejectedValueOnce(new DifferentPasswordError('jannis@home.example'));
+    loginToRemote.mockRejectedValueOnce(
+      new HttpError(401, 'invalid_credentials', { error: 'x', code: 'invalid_credentials', statusCode: 401 }, 'invalid_credentials'),
+    );
+    const user = userEvent.setup();
+    render(<ConnectionChips onRecovered={onRecovered} />);
+
+    await user.click(screen.getByRole('button', { name: /^Reconnect/ }));
+    await user.type(screen.getByLabelText('Your home account password'), 'hunter2');
+    await user.click(screen.getByRole('button', { name: 'Connect' }));
+
+    await user.type(await screen.findByPlaceholderText('Password on the remote instance'), 'wrong');
+    await user.click(screen.getByRole('button', { name: 'Login & Connect' }));
+
+    expect(await screen.findByText('Wrong username or password.')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Password on the remote instance')).toBeInTheDocument();
+    expect(onRecovered).not.toHaveBeenCalled();
+  });
+
+  it('Escape collapses the second phase too', async () => {
+    seed([registryEntry('https://zwiss.example', 'auth_expired', 'Zwiss')]);
+    reauthenticateInstance.mockRejectedValueOnce(new DifferentPasswordError('jannis@home.example'));
+    const user = userEvent.setup();
+    render(<ConnectionChips onRecovered={onRecovered} />);
+
+    await user.click(screen.getByRole('button', { name: /^Reconnect/ }));
+    await user.type(screen.getByLabelText('Your home account password'), 'hunter2');
+    await user.click(screen.getByRole('button', { name: 'Connect' }));
+    await screen.findByPlaceholderText('Password on the remote instance');
+
+    await user.keyboard('{Escape}');
+
+    expect(screen.queryByPlaceholderText('Password on the remote instance')).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole('button', { name: /^Reconnect/ })).toHaveFocus());
   });
 });

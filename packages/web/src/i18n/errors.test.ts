@@ -101,4 +101,17 @@ describe('HttpError.fromBody', () => {
     expect(err.message).toBe('HTTP 502');
     expect(err.code).toBeUndefined();
   });
+
+  // The default instance carries the shipped catalogs (the test setup starts
+  // i18n in English), so this is the real contract, not a fixture's.
+  it('localizes the client-minted federation code from the shipped catalog', () => {
+    const err = HttpError.fromBody(409, {
+      error: 'Account exists with a different password on this instance',
+      code: 'federation_different_password',
+      statusCode: 409,
+    });
+    expect(describeError(err)).toBe(
+      'Your account on that instance has a password of its own. Sign in with it to reconnect.',
+    );
+  });
 });

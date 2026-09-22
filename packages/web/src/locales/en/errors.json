@@ -63,6 +63,7 @@
   "federation_credential_remote_only": "That is this instance. Enter the address of another one.",
   "federation_credential_home_only": "Connections are set up from your home instance. Do it there.",
   "federation_credential_failed": "The connection could not be set up. Try again.",
+  "federation_different_password": "Your account on that instance has a password of its own. Sign in with it to reconnect.",
   "peer_reset_pending": "The connection to that instance is being reset. Try again in a moment.",
   "dm_target_required": "Choose who to message.",
   "cannot_dm_self": "You cannot start a conversation with yourself.",

@@ -443,6 +443,37 @@ see [directory.md](directory.md) section 9). Both render from the Map, so a
 status change from any path (`reconnectInstance`, `reauthenticateInstance`,
 `autoConnectAll`) reaches both at once.
 
+### The reconnect surface: `ReauthForm`
+
+`ReauthForm` (`components/modals/ReauthForm.tsx`) is the whole way back from
+`auth_expired`, in both hosts. It has two phases and no chrome of its own, so
+each host places it on the panel or row it already has:
+
+1. **Home password.** A labelled field, Connect and Cancel, with the error
+   under the field it is about. Submitting calls `reauthenticateInstance`,
+   which drops the stale session and re-runs the standard connect flow.
+2. **The account's own password on that instance.** Reached only when phase 1
+   throws `DifferentPasswordError`, which means the instance has an account
+   for this user that does not accept the credential the home issued, and no
+   home password can fix it. The phase renders `FallbackForm`, exported from
+   `RemotePasswordStep.tsx` and shared with the Connections add flow and the
+   connect-and-join dialog, prefilled with the username the error carries;
+   its submit calls `loginToRemote`, which restores the connection exactly as
+   the add flow restores it. There is no Back: the password phase 1 asks for
+   is not what the instance refused.
+
+`DifferentPasswordError` is an `HttpError` (409) carrying the registered code
+`federation_different_password`, minted by the client rather than by a route,
+so `describeError` says it in the user's language anywhere it does surface as
+a message. Its English text is the log line and the last-resort fallback
+only.
+
+Escape cancels the surface in either phase and stops there rather than
+reaching the settings modal behind the Connections row; while a submit is in
+flight Cancel and Escape are both inert. In the chips host the collapsed pill
+becomes a small matte panel on a line of its own, bounded by the form rather
+than by the section, and collapsing hands focus back to the chip's action.
+
 ### Lifecycle States
 
 | State | Meaning |

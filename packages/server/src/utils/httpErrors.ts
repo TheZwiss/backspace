@@ -80,6 +80,7 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   federation_credential_remote_only: 'Federation credentials are only issued for remote instances',
   federation_credential_home_only: 'Federation credentials are issued by your home instance',
   federation_credential_failed: 'Failed to issue federation credential',
+  federation_different_password: 'The account on that instance does not accept the credential your home instance issued',
   // dm
   peer_reset_pending: 'Federation with this instance is being reset; try again shortly',
   dm_target_required: 'userId or (homeUserId + homeInstance) is required',

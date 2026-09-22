@@ -59,7 +59,10 @@ const mockUpdateMetadata = vi.fn();
 const mockLeave = vi.fn();
 const mockKickMember = vi.fn();
 const mockTransferOwnership = vi.fn();
-vi.mock('../../api/client', () => ({
+// Spread the real module: stores loaded through this tree extend HttpError
+// at load time, so a bare object mock breaks the import.
+vi.mock('../../api/client', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../../api/client')>(),
   api: {
     dm: {
       updateMetadata: (...args: unknown[]) => mockUpdateMetadata(...args),

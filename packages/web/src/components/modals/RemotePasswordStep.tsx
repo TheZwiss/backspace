@@ -43,8 +43,9 @@ function safeHost(origin: string): string {
   try { return new URL(origin).host; } catch { return origin; }
 }
 
-const submitClass =
-  'w-full px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50';
+const submitBase =
+  'px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50';
+const submitClass = `w-full ${submitBase}`;
 
 function PasswordForm({
   host,
@@ -100,29 +101,49 @@ function PasswordForm({
   );
 }
 
-function FallbackForm({
+/**
+ * The account's own credentials on the remote instance: the way in when
+ * that instance refused the credential the home issued. It carries its own
+ * notice, because the form only makes sense with the reason above it, and
+ * every host that shows it shows the same reason.
+ *
+ * Three hosts render it: the Connections panel's add-instance flow, the
+ * directory's connect-and-join dialog, and the reconnect surface
+ * (`ReauthForm`). The last one passes a `secondaryAction`, which puts the
+ * submit back to its own width and sets the action beside it; without one
+ * the submit keeps the full-width shape the dialogs use.
+ */
+export function FallbackForm({
   remoteUsername,
   isLoading,
   onLogin,
   extraFields,
+  secondaryAction,
 }: {
   remoteUsername: string;
   isLoading: boolean;
   onLogin: (username: string, remotePassword: string) => void;
   extraFields?: React.ReactNode;
+  secondaryAction?: React.ReactNode;
 }) {
   const { t } = useTranslation(['federation', 'common']);
   const [username, setUsername] = useState(remoteUsername);
   const [remotePassword, setRemotePassword] = useState('');
+  const usernameId = useId();
+  const passwordId = useId();
 
   return (
     <form
       onSubmit={(e) => { e.preventDefault(); if (username && remotePassword) onLogin(username, remotePassword); }}
       className="space-y-2"
     >
+      <div className="p-2 bg-accent-amber/10 border border-accent-amber/30 rounded text-xs text-accent-amber">
+        {t('federation:connections.add.fallbackNotice')}
+      </div>
       <div>
-        <label className="block text-xs text-txt-tertiary mb-1">{t('common:labels.username')}</label>
+        <label htmlFor={usernameId} className="block text-xs text-txt-tertiary mb-1">{t('common:labels.username')}</label>
         <input
+          id={usernameId}
           type="text"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
@@ -133,8 +154,9 @@ function FallbackForm({
         />
       </div>
       <div>
-        <label className="block text-xs text-txt-tertiary mb-1">{t('federation:connections.add.remotePasswordLabel')}</label>
+        <label htmlFor={passwordId} className="block text-xs text-txt-tertiary mb-1">{t('federation:connections.add.remotePasswordLabel')}</label>
         <input
+          id={passwordId}
           type="password"
           value={remotePassword}
           onChange={(e) => setRemotePassword(e.target.value)}
@@ -146,9 +168,16 @@ function FallbackForm({
         />
       </div>
       {extraFields}
-      <button type="submit" disabled={isLoading || !username || !remotePassword} className={submitClass}>
-        {isLoading ? t('federation:connections.add.loggingIn') : t('federation:connections.add.loginAndConnect')}
-      </button>
+      <div className="flex items-center gap-2">
+        <button
+          type="submit"
+          disabled={isLoading || !username || !remotePassword}
+          className={secondaryAction ? submitBase : submitClass}
+        >
+          {isLoading ? t('federation:connections.add.loggingIn') : t('federation:connections.add.loginAndConnect')}
+        </button>
+        {secondaryAction}
+      </div>
     </form>
   );
 }
@@ -197,12 +226,6 @@ export function RemotePasswordStep({
       {phase === 'password' && !instance.federatedRegistrationOpen && (
         <div className="p-3 rounded-lg bg-accent-amber/10 border border-accent-amber/30 text-sm text-accent-amber">
           {t('federation:connections.add.registrationClosed')}
-        </div>
-      )}
-
-      {phase === 'fallback' && (
-        <div className="p-2 bg-accent-amber/10 border border-accent-amber/30 rounded text-xs text-accent-amber">
-          {t('federation:connections.add.fallbackNotice')}
         </div>
       )}
 

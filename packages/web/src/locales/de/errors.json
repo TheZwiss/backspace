@@ -63,6 +63,7 @@
   "federation_credential_remote_only": "Das ist diese Instanz. Gib die Adresse einer anderen an.",
   "federation_credential_home_only": "Verbindungen werden von deiner Heimatinstanz aus eingerichtet. Mach das dort.",
   "federation_credential_failed": "Die Verbindung konnte nicht eingerichtet werden. Versuche es noch einmal.",
+  "federation_different_password": "Dein Konto auf dieser Instanz hat ein eigenes Passwort. Melde dich damit an, um die Verbindung wiederherzustellen.",
   "peer_reset_pending": "Die Verbindung zu dieser Instanz wird gerade zurückgesetzt. Versuche es gleich noch einmal.",
   "dm_target_required": "Wähle aus, wem du schreiben möchtest.",
   "cannot_dm_self": "Du kannst keine Unterhaltung mit dir selbst beginnen.",

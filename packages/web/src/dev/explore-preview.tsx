@@ -38,6 +38,8 @@
 //   connections-submitting   a submit that never settles
 //   connections-wrong        a submit the store refuses as a wrong password
 //   connections-peer-down    a submit the store refuses as unreachable
+//   connections-other-password  a submit the instance answers with an
+//                            account of its own, moving to the second phase
 //   connections-recovered    a submit that succeeds; the chip is gone
 // `connections-open` is kept as an alias of `connections-focused`.
 //
@@ -54,7 +56,7 @@ import { ConnectedInstances } from '../components/modals/ConnectedInstances';
 import { HttpError } from '../api/client';
 import { useExploreStore, type TaggedExploreSpace } from '../stores/exploreStore';
 import { useDirectoryStore } from '../stores/directoryStore';
-import { useInstanceStore, type ConnectedInstance } from '../stores/instanceStore';
+import { useInstanceStore, DifferentPasswordError, type ConnectedInstance } from '../stores/instanceStore';
 import { useAuthStore } from '../stores/authStore';
 import { useUIStore } from '../stores/uiStore';
 import { initI18n } from '../i18n';
@@ -79,6 +81,7 @@ type Scene =
   | 'connections-submitting'
   | 'connections-wrong'
   | 'connections-peer-down'
+  | 'connections-other-password'
   | 'connections-recovered'
   | 'connections-panel';
 
@@ -100,6 +103,7 @@ const SCENES: ReadonlySet<string> = new Set<Scene>([
   'connections-submitting',
   'connections-wrong',
   'connections-peer-down',
+  'connections-other-password',
   'connections-recovered',
   'connections-panel',
 ]);
@@ -440,6 +444,8 @@ function reauthFor(scene: Scene): (origin: string, password: string) => Promise<
       return () => Promise.reject(
         new HttpError(401, 'invalid_credentials', { error: 'invalid_credentials', code: 'invalid_credentials', statusCode: 401 }, 'invalid_credentials'),
       );
+    case 'connections-other-password':
+      return () => Promise.reject(new DifferentPasswordError('jannis@home.example'));
     case 'connections-peer-down':
       return () => Promise.reject(
         new HttpError(503, 'peer_unreachable', { error: 'peer_unreachable', code: 'peer_unreachable', statusCode: 503 }, 'peer_unreachable'),

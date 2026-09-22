@@ -322,6 +322,17 @@ section shows this text as its unreachable state), `directory_private_space`
 (`directoryListed: true` on a private space) and
 `directory_requires_discovery` (`directoryEnabled: true` with discovery off).
 
+One code is minted by the client and never by a route:
+`federation_different_password`, thrown as `DifferentPasswordError` when a
+remote instance refuses the credential the user's home issued for it. It sits
+in `ERROR_CODES` and in `ERROR_MESSAGES` like any other, because
+`ERROR_MESSAGES` is exhaustive and the English text is still the fallback, but
+no route sends it. The pattern for a client-minted code is the one
+`RateLimitError` established: subclass `HttpError`, pass a registered code, and
+let `describeError` find the catalog entry. Note that the i18n check reads
+`ERROR_CODES` by scanning the array for quoted words, so comments inside that
+array must carry no apostrophes or quotation marks.
+
 The global rate limiter (`@fastify/rate-limit` in `index.ts`, 200 per minute,
 and every per-route override of it) answers in the same shape through its
 `errorResponseBuilder`, built with `errorBody` from `httpErrors.ts` so the

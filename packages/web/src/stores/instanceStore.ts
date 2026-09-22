@@ -92,10 +92,27 @@ function isNetworkError(err: unknown): boolean {
 
 // ─── Error types ────────────────────────────────────────────────────────────
 
-/** Thrown when the remote instance already has an account for this user with a different password. */
-export class DifferentPasswordError extends Error {
+/**
+ * Thrown when the instance already has an account for this user and it does
+ * not accept the credential the home instance issued for it: the account
+ * predates per-remote credentials, or was made by hand there. The way out is
+ * the explicit per-instance login, so every surface that can offer it catches
+ * this class by name.
+ *
+ * It is an `HttpError` carrying a registered code, minted by the client
+ * rather than by a route, so `describeError` says it in the user's language
+ * wherever it does escape to a message. The English text stays as the log
+ * line and the last-resort fallback, never as what a Russian or German user
+ * reads.
+ */
+export class DifferentPasswordError extends HttpError {
   constructor(public remoteUsername: string) {
-    super('Account exists with a different password on this instance');
+    super(
+      409,
+      'Account exists with a different password on this instance',
+      { error: 'federation_different_password', code: 'federation_different_password', statusCode: 409 },
+      'federation_different_password',
+    );
     this.name = 'DifferentPasswordError';
   }
 }
@@ -798,7 +815,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
         set((state) => ({
           instances: state.instances.map(i =>
             i.origin === origin
-              ? { ...i, status: 'disconnected' as const, error: 'Instance unreachable — retrying in background' }
+              ? { ...i, status: 'disconnected' as const, error: 'Instance unreachable, retrying in background' }
               : i
           ),
         }));
@@ -816,7 +833,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
         set((state) => ({
           instances: state.instances.map(i =>
             i.origin === origin
-              ? { ...i, status: 'error' as const, error: 'Token expired — re-authenticate to reconnect' }
+              ? { ...i, status: 'error' as const, error: 'Token expired, re-authenticate to reconnect' }
               : i
           ),
         }));
@@ -1268,7 +1285,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
               set((state) => ({
                 instances: state.instances.map(i =>
                   i.origin === origin
-                    ? { ...i, status: 'disconnected' as const, error: 'Instance unreachable — retrying in background' }
+                    ? { ...i, status: 'disconnected' as const, error: 'Instance unreachable, retrying in background' }
                     : i
                 ),
               }));
@@ -1287,7 +1304,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
               set((state) => ({
                 instances: state.instances.map(i =>
                   i.origin === origin
-                    ? { ...i, status: 'error' as const, error: 'Token expired — re-authenticate to reconnect' }
+                    ? { ...i, status: 'error' as const, error: 'Token expired, re-authenticate to reconnect' }
                     : i
                 ),
               }));

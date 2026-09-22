@@ -703,9 +703,15 @@ registry entry (the same record the Connections panel shows, so the two
 never disagree) whose status is `auth_expired` (rose dot, "session expired",
 Reconnect) or `unreachable` (amber dot, "unreachable", Retry). Retry calls
 `reconnectInstance` and shows the connecting word until the registry status
-settles; Reconnect opens the chip in place into `ReauthForm`, the one-line
-home-password form shared with the Connections row, which calls
-`reauthenticateInstance`. After either succeeds the page refetches Inner
+settles; Reconnect replaces the pill with a small matte panel on a line of
+its own, holding `ReauthForm`, the reconnect surface shared with the
+Connections row (see
+[client-federation.md](client-federation.md), "The reconnect surface"). Its
+first phase calls `reauthenticateInstance`; an instance that has an account
+for this user with a password of its own moves it to the second phase, the
+shared `FallbackForm`, and `loginToRemote` finishes there. Escape and Cancel
+collapse the panel and hand focus back to the chip's action. After either
+succeeds the page refetches Inner
 Space (`fetchSpaces`, `fetchMyRequests`); Outer Space needs nothing, the
 render-time dedupe sees the instance. With every connection healthy the row
 is absent. `disconnected` gets no chip: that is the user's own choice, its

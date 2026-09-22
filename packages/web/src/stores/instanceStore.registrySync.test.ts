@@ -4,7 +4,10 @@ const getFederationRegistry = vi.fn();
 const putFederationRegistry = vi.fn(async () => ({ ok: true, updatedAt: 1 }));
 const ensurePeered = vi.fn(async () => ({ peeringStatus: 'active' }));
 
-vi.mock('../api/client', () => ({
+// Spread the real module: the store defines an error class that extends
+// HttpError at load time, so a bare object mock breaks the import.
+vi.mock('../api/client', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../api/client')>(),
   api: {
     users: {
       getFederationRegistry: () => getFederationRegistry(),

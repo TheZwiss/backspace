@@ -23,7 +23,7 @@ vi.mock('../../stores/instanceStore', async (importOriginal) => {
 });
 
 import { ConnectedInstances } from './ConnectedInstances';
-import { useInstanceStore } from '../../stores/instanceStore';
+import { useInstanceStore, DifferentPasswordError } from '../../stores/instanceStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useFederationStore } from '../../stores/federationStore';
 
@@ -180,6 +180,58 @@ describe('RegistryRow re-authentication', () => {
     await waitFor(() => expect(reauthenticateInstance).toHaveBeenCalledWith('https://zwiss.example', 'hunter2'));
     // The form closes on success; the row now reads connected.
     await waitFor(() => expect(screen.queryByLabelText('Your home account password')).not.toBeInTheDocument());
+    expect(screen.queryByText('Auth expired')).not.toBeInTheDocument();
+  });
+
+  it('a different password on the instance moves the row to the per-instance login and restores from it', async () => {
+    const user = userEvent.setup();
+    const reauthenticateInstance = vi.fn(async () => {
+      throw new DifferentPasswordError('jannis@home.example');
+    });
+    const loginToRemote = vi.fn(async (origin: string) => {
+      const registry = new Map(useInstanceStore.getState().registry);
+      const entry = registry.get(origin);
+      if (entry) registry.set(origin, { ...entry, status: 'connected', errorMessage: null });
+      useInstanceStore.setState({ registry });
+    });
+    useInstanceStore.setState({
+      reauthenticateInstance,
+      loginToRemote,
+      registry: new Map([[
+        'https://zwiss.example',
+        {
+          origin: 'https://zwiss.example',
+          label: 'Zwiss',
+          username: 'jannis@home.example',
+          remoteUserId: 'r1',
+          status: 'auth_expired',
+          addedAt: 1,
+          lastConnectedAt: 1,
+          disconnectedAt: null,
+          errorMessage: null,
+        },
+      ]]),
+    });
+    render(
+      <MemoryRouter>
+        <ConnectedInstances />
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByText('Zwiss'));
+    await user.click(screen.getByRole('button', { name: 'Re-authenticate' }));
+    await user.type(screen.getByLabelText('Your home account password'), 'hunter2');
+    await user.click(screen.getByRole('button', { name: 'Connect' }));
+
+    // The same way out the add flow offers, in the row that shares the form.
+    expect(await screen.findByPlaceholderText('Password on the remote instance')).toBeInTheDocument();
+    expect(screen.queryByText('Account exists with a different password on this instance')).not.toBeInTheDocument();
+
+    await user.type(screen.getByPlaceholderText('Password on the remote instance'), 'local-pw');
+    await user.click(screen.getByRole('button', { name: 'Login & Connect' }));
+
+    await waitFor(() => expect(loginToRemote).toHaveBeenCalledWith('https://zwiss.example', 'jannis@home.example', 'local-pw'));
+    await waitFor(() => expect(screen.queryByPlaceholderText('Password on the remote instance')).not.toBeInTheDocument());
     expect(screen.queryByText('Auth expired')).not.toBeInTheDocument();
   });
 });
