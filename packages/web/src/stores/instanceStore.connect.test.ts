@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import type { User } from '@backspace/shared';
+import type { FederationRegistryEntry, User } from '@backspace/shared';
 import type { BackspaceApiClient } from '../api/client';
 
 vi.mock('../api/client', async (importOriginal) => ({
@@ -63,14 +63,35 @@ function makeInstance(overrides: Partial<ConnectedInstance> = {}): ConnectedInst
 
 const connectToRemote = vi.fn(async (_origin: string, _password: string, _displayName?: string) => {});
 const reauthenticateInstance = vi.fn(async (_origin: string, _password: string) => {});
+const reconnectInstance = vi.fn(async (_origin: string) => {});
+
+/** What `reconnectInstance` leaves behind for `origin`: the live status and the registry status. */
+function settleReconnect(live: ConnectedInstance['status'], registryStatus: FederationRegistryEntry['status']) {
+  reconnectInstance.mockImplementationOnce(async () => {
+    useInstanceStore.setState({
+      instances: [makeInstance({ status: live })],
+      registry: new Map([[REMOTE, registryEntry(registryStatus)]]),
+    });
+  });
+}
+
+function registryEntry(status: FederationRegistryEntry['status']): FederationRegistryEntry {
+  return {
+    origin: REMOTE, label: 'Orbit', username: 'erin@nova.example', remoteUserId: 'remote-1',
+    status, addedAt: 1, lastConnectedAt: 1, disconnectedAt: 2, errorMessage: null,
+  };
+}
 
 beforeEach(() => {
   connectToRemote.mockReset();
   reauthenticateInstance.mockReset();
+  reconnectInstance.mockReset();
   useInstanceStore.setState({
     instances: [],
+    registry: new Map(),
     connectToRemote,
     reauthenticateInstance,
+    reconnectInstance,
   });
   Object.defineProperty(window, 'location', {
     value: new URL('https://nova.example/'),
@@ -152,5 +173,73 @@ describe('connectToInstance', () => {
   it('rejects an origin that does not parse before touching the store', async () => {
     await expect(connectToInstance('http://', 'pw')).rejects.toThrow('Invalid URL');
     expect(connectToRemote).not.toHaveBeenCalled();
+  });
+
+  it('with no password typed, a disconnected instance holding a token is resumed instead of asked', async () => {
+    useInstanceStore.setState({ instances: [makeInstance({ status: 'disconnected' })] });
+    settleReconnect('connected', 'connected');
+
+    const outcome = await connectToInstance(REMOTE, '');
+
+    expect(outcome).toEqual({ kind: 'connected', how: 'resumed' });
+    expect(reconnectInstance).toHaveBeenCalledWith(REMOTE);
+    expect(reauthenticateInstance).not.toHaveBeenCalled();
+    expect(connectToRemote).not.toHaveBeenCalled();
+  });
+
+  it('a registry entry in disconnected is resumable even with no live instance, from the cached token', async () => {
+    useInstanceStore.setState({ instances: [], registry: new Map([[REMOTE, registryEntry('disconnected')]]) });
+    settleReconnect('connected', 'connected');
+
+    const outcome = await connectToInstance('orbit.example/', '');
+
+    expect(outcome).toEqual({ kind: 'connected', how: 'resumed' });
+    expect(reconnectInstance).toHaveBeenCalledWith(REMOTE);
+  });
+
+  it('a token the remote refuses falls through to needs-password, without touching the password paths', async () => {
+    useInstanceStore.setState({ instances: [makeInstance({ status: 'disconnected' })] });
+    settleReconnect('error', 'auth_expired');
+
+    const outcome = await connectToInstance(REMOTE, '');
+
+    expect(outcome).toEqual({ kind: 'needs-password' });
+    expect(reauthenticateInstance).not.toHaveBeenCalled();
+    expect(connectToRemote).not.toHaveBeenCalled();
+  });
+
+  it('a resume that leaves the instance unreachable surfaces that error rather than asking for a password', async () => {
+    useInstanceStore.setState({ instances: [makeInstance({ status: 'disconnected' })] });
+    settleReconnect('disconnected', 'unreachable');
+
+    await expect(connectToInstance(REMOTE, '')).rejects.toMatchObject({ code: 'peer_unreachable' });
+    expect(reauthenticateInstance).not.toHaveBeenCalled();
+  });
+
+  it('a tokenless placeholder is not resumable: needs-password without a reconnect attempt', async () => {
+    useInstanceStore.setState({ instances: [makeInstance({ status: 'error', token: '' })] });
+
+    const outcome = await connectToInstance(REMOTE, '');
+
+    expect(outcome).toEqual({ kind: 'needs-password' });
+    expect(reconnectInstance).not.toHaveBeenCalled();
+  });
+
+  it('an unknown origin with no password is asked for one, never connected blind', async () => {
+    const outcome = await connectToInstance(REMOTE, '');
+
+    expect(outcome).toEqual({ kind: 'needs-password' });
+    expect(reconnectInstance).not.toHaveBeenCalled();
+    expect(connectToRemote).not.toHaveBeenCalled();
+  });
+
+  it('a typed password still re-authenticates a disconnected instance in place', async () => {
+    useInstanceStore.setState({ instances: [makeInstance({ status: 'disconnected' })] });
+
+    const outcome = await connectToInstance(REMOTE, 'pw');
+
+    expect(outcome).toEqual({ kind: 'connected', how: 'reconnect' });
+    expect(reconnectInstance).not.toHaveBeenCalled();
+    expect(reauthenticateInstance).toHaveBeenCalledWith(REMOTE, 'pw');
   });
 });

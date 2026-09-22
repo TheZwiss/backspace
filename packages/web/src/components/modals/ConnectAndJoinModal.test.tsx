@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import type { DirectoryEntry, User } from '@backspace/shared';
+import { HttpError } from '../../api/client';
 
 // Stub AudioManager to avoid AudioWorkletNode reference error in jsdom.
 // Reached transitively via spaceStore -> chatStore -> useWebSocket -> voiceStore.
@@ -14,6 +15,14 @@ vi.mock('../../audio/AudioManager', () => ({
     }),
   },
 }));
+
+// The resume path is a module export, not a store action, so it is replaced
+// at the module boundary; the store itself stays real.
+const { connectToInstance } = vi.hoisted(() => ({ connectToInstance: vi.fn() }));
+vi.mock('../../stores/instanceStore', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../stores/instanceStore')>();
+  return { ...actual, connectToInstance };
+});
 
 import { ConnectAndJoinModal } from './ConnectAndJoinModal';
 import { useUIStore } from '../../stores/uiStore';
@@ -115,12 +124,14 @@ function renderModal() {
 
 beforeEach(() => {
   mockNavigate.mockReset();
+  connectToInstance.mockReset();
+  connectToInstance.mockResolvedValue({ kind: 'needs-password' });
   probeInstance.mockReset();
   connectAndJoin.mockReset();
   loginAndJoin.mockReset();
   setCurrentSpace.mockReset();
   useUIStore.setState({ activeModal: null, modalData: {}, toasts: [], isMobile: false });
-  useInstanceStore.setState({ instances: [], probeInstance });
+  useInstanceStore.setState({ instances: [], registry: new Map(), probeInstance });
   useDirectoryStore.setState({ connectAndJoin, loginAndJoin });
   useAuthStore.setState({ user: homeUser });
   useSpaceStore.setState({ setCurrentSpace });
@@ -320,24 +331,6 @@ describe('ConnectAndJoinModal on an origin that is already connected', () => {
     expect(useUIStore.getState().activeModal).toBeNull();
   });
 
-  it('a disconnected known origin is not the stale-card case: it probes and asks for the password, then reconnects', async () => {
-    const user = userEvent.setup();
-    probeOk();
-    const e = entry();
-    useInstanceStore.setState({ instances: [connectedInstance('https://retro.example', 'disconnected')] });
-    connectAndJoin.mockResolvedValue({ kind: 'joined', spaceId: 'space-1', origin: 'https://retro.example' });
-    open(e);
-    renderModal();
-
-    await user.type(await screen.findByPlaceholderText('The one you sign in with'), 'hunter2');
-    expect(probeInstance).toHaveBeenCalledWith('retro.example');
-    await user.click(screen.getByRole('button', { name: 'Connect and join' }));
-
-    // connectToInstance takes the reauthenticate branch for a disconnected origin (instanceStore.connect.test).
-    await waitFor(() => expect(connectAndJoin).toHaveBeenCalledWith(e, 'hunter2', undefined));
-    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/channels/space-1'));
-  });
-
   it('a request entry shows only the message box and a Request button', async () => {
     const user = userEvent.setup();
     const e = entry({ visibility: 'request' });
@@ -360,5 +353,89 @@ describe('ConnectAndJoinModal on an origin that is already connected', () => {
     expect(useUIStore.getState().toasts.map((t) => t.message)).toContain(
       'Your request to join Retro Computing was sent.',
     );
+  });
+});
+
+// ── Disconnected: the cached session gets its chance first ───────────────────
+
+describe('ConnectAndJoinModal on an origin the session disconnected', () => {
+  const RETRO = 'https://retro.example';
+
+  it('a public entry whose cached token still works joins with no password step at all', async () => {
+    const e = entry();
+    useInstanceStore.setState({ instances: [connectedInstance(RETRO, 'disconnected')] });
+    connectToInstance.mockResolvedValue({ kind: 'connected', how: 'resumed' });
+    connectAndJoin.mockResolvedValue({ kind: 'joined', spaceId: 'space-1', origin: RETRO });
+    open(e);
+    renderModal();
+
+    await waitFor(() => expect(connectAndJoin).toHaveBeenCalledWith(e, '', undefined));
+    expect(connectToInstance).toHaveBeenCalledWith(RETRO, '');
+    expect(probeInstance).not.toHaveBeenCalled();
+    expect(screen.queryByPlaceholderText('The one you sign in with')).not.toBeInTheDocument();
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/channels/space-1'));
+    expect(setCurrentSpace).toHaveBeenCalledWith('space-1');
+  });
+
+  it('a request entry whose cached token still works goes straight to the message box', async () => {
+    const user = userEvent.setup();
+    const e = entry({ visibility: 'request' });
+    useInstanceStore.setState({ instances: [connectedInstance(RETRO, 'disconnected')] });
+    connectToInstance.mockResolvedValue({ kind: 'connected', how: 'resumed' });
+    connectAndJoin.mockResolvedValue({ kind: 'requested' });
+    open(e);
+    renderModal();
+
+    const box = await screen.findByPlaceholderText('Why do you want to join? (optional)');
+    expect(screen.queryByPlaceholderText('The one you sign in with')).not.toBeInTheDocument();
+    expect(connectAndJoin).not.toHaveBeenCalled();
+
+    await user.type(box, 'hello there');
+    await user.click(screen.getByRole('button', { name: 'Send Request' }));
+
+    await waitFor(() => expect(connectAndJoin).toHaveBeenCalledWith(e, '', 'hello there'));
+  });
+
+  it('an expired cached token falls through to the probe and the password step', async () => {
+    const user = userEvent.setup();
+    probeOk();
+    const e = entry();
+    useInstanceStore.setState({ instances: [connectedInstance(RETRO, 'disconnected')] });
+    connectToInstance.mockResolvedValue({ kind: 'needs-password' });
+    connectAndJoin.mockResolvedValue({ kind: 'joined', spaceId: 'space-1', origin: RETRO });
+    open(e);
+    renderModal();
+
+    await user.type(await screen.findByPlaceholderText('The one you sign in with'), 'hunter2');
+    expect(connectToInstance).toHaveBeenCalledWith(RETRO, '');
+    expect(probeInstance).toHaveBeenCalledWith('retro.example');
+    await user.click(screen.getByRole('button', { name: 'Connect and join' }));
+
+    await waitFor(() => expect(connectAndJoin).toHaveBeenCalledWith(e, 'hunter2', undefined));
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/channels/space-1'));
+  });
+
+  it('an instance that turns out unreachable shows that error instead of a password step', async () => {
+    const e = entry();
+    useInstanceStore.setState({ instances: [connectedInstance(RETRO, 'disconnected')] });
+    connectToInstance.mockRejectedValue(
+      new HttpError(503, 'peer_unreachable', { error: 'peer_unreachable', code: 'peer_unreachable', statusCode: 503 }, 'peer_unreachable'),
+    );
+    open(e);
+    renderModal();
+
+    expect(await screen.findByText('The other instance cannot be reached right now.')).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('The one you sign in with')).not.toBeInTheDocument();
+    expect(probeInstance).not.toHaveBeenCalled();
+    expect(connectAndJoin).not.toHaveBeenCalled();
+  });
+
+  it('an origin the session never knew is probed as before, with no resume attempt', async () => {
+    probeOk();
+    open(entry());
+    renderModal();
+
+    expect(await screen.findByPlaceholderText('The one you sign in with')).toBeInTheDocument();
+    expect(connectToInstance).not.toHaveBeenCalled();
   });
 });

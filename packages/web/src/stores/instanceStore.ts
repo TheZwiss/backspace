@@ -1348,8 +1348,38 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
 // ─── Shared connect path ─────────────────────────────────────────────────────
 
 export type ConnectOutcome =
-  | { kind: 'connected'; how: 'new' | 'reconnect' | 'already' }
+  | { kind: 'connected'; how: 'new' | 'reconnect' | 'already' | 'resumed' }
+  /** No password was typed and no cached session could be resumed: ask for one. */
+  | { kind: 'needs-password' }
   | { kind: 'needs-remote-password'; remoteUsername: string };
+
+/**
+ * Whether a cached token could still carry this origin back: a live
+ * instance the user disconnected or whose session errored, as long as it
+ * kept its token, or a registry entry the user disconnected, whose token
+ * `reconnectInstance` restores from `localStorage`. An `unreachable` or
+ * `auth_expired` registry entry is not listed: the first has a chip that
+ * retries it already, the second is what a refused token becomes.
+ */
+function resumableOrigin(state: InstanceState, canonical: string): string | null {
+  const live = state.instances.find((i) => normalizeOrigin(i.origin) === canonical);
+  if (live) {
+    const stale = live.status === 'disconnected' || live.status === 'error';
+    return stale && live.token !== '' ? live.origin : null;
+  }
+  for (const entry of state.registry.values()) {
+    if (normalizeOrigin(entry.origin) === canonical && entry.status === 'disconnected') return entry.origin;
+  }
+  return null;
+}
+
+/** The registry status for an origin after a reconnect attempt, however the store spells it. */
+function registryStatusFor(state: InstanceState, canonical: string): FederationRegistryEntry['status'] | undefined {
+  for (const entry of state.registry.values()) {
+    if (normalizeOrigin(entry.origin) === canonical) return entry.status;
+  }
+  return undefined;
+}
 
 /**
  * The one way to establish a session on another instance from a user-typed
@@ -1362,6 +1392,15 @@ export type ConnectOutcome =
  * account that does not accept the home-issued credential is reported as
  * `needs-remote-password` so the caller can offer the explicit per-instance
  * login form; every other failure is thrown as is.
+ *
+ * Called with an empty password it asks nothing of the user yet: an origin
+ * a cached token could carry back is resumed through `reconnectInstance`
+ * (the same token reconnect the Connections row and the Explore chips use),
+ * and the caller learns `resumed`, or `needs-password` when there was no
+ * session to resume or the token was refused. An instance that turned out
+ * unreachable is reported as `peer_unreachable` rather than as a password
+ * the user could fix. This is what lets a card for an instance the user
+ * disconnected join without a prompt they gain nothing from.
  *
  * This does not validate a typed URL: a caller that wants the self and
  * duplicate checks for user input still runs `probeInstance` first, as the
@@ -1378,6 +1417,20 @@ export async function connectToInstance(
   if (existing && (existing.status === 'connected' || existing.status === 'connecting')) {
     return { kind: 'connected', how: 'already' };
   }
+
+  if (password === '') {
+    const resumable = resumableOrigin(store, canonical);
+    if (!resumable) return { kind: 'needs-password' };
+    await store.reconnectInstance(resumable);
+    const after = useInstanceStore.getState();
+    const live = after.instances.find((i) => normalizeOrigin(i.origin) === canonical);
+    if (live?.status === 'connected') return { kind: 'connected', how: 'resumed' };
+    if (registryStatusFor(after, canonical) === 'unreachable') {
+      throw new HttpError(503, 'peer_unreachable', { error: 'peer_unreachable', code: 'peer_unreachable', statusCode: 503 }, 'peer_unreachable');
+    }
+    return { kind: 'needs-password' };
+  }
+
   try {
     if (existing) {
       await store.reauthenticateInstance(existing.origin, password);

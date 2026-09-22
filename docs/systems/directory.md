@@ -669,13 +669,20 @@ loses, gets back or disconnects moves between the sections without a
 refetch. Pages are appended without duplicates by `(origin, id)`, and a
 reply for an older query is ignored once a newer one has been sent.
 
-Connecting from a card whose origin the session knows as `disconnected` is
-the existing `connectToInstance` path (section 9, "Connect and join"): the
-dialog probes and asks for the home password as for any outer card, the
-store takes its `reauthenticateInstance` branch, the remote answers the
-registration with `username_taken` and the client logs in with the
-home-issued secret, and the new session replaces the placeholder by origin.
-The same federated identity is reused; no second account is created.
+Connecting from a card whose origin the session knows as `disconnected`
+reuses what the session still holds. The dialog first asks
+`connectToInstance(origin, '')`, which resumes the cached token through
+`reconnectInstance`; a resumed session is the same state as one that was
+already there, so a public entry joins on the spot and a request entry gets
+its message box, with no password step. When there is nothing to resume or
+the remote refuses the token (`needs-password`), the dialog runs the
+ordinary probe and password step, the store takes its
+`reauthenticateInstance` branch, the remote answers the registration with
+`username_taken` and the client logs in with the home-issued secret, and the
+new session replaces the placeholder by origin. Either way the same
+federated identity is reused; no second account is created. An instance that
+turns out unreachable is reported as `peer_unreachable` rather than as a
+password prompt the user cannot fix.
 
 **Connections that need attention.** A connection whose session expired or
 whose instance is unreachable is in neither section: Inner Space fans out

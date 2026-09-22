@@ -372,6 +372,7 @@ The **Connections** panel (in user settings) allows managing remote instance con
 | `connected` or `connecting` | nothing; the session is usable already, and `connectToRemote` has no duplicate check of its own and would append a second entry | `{ kind: 'connected', how: 'already' }` |
 | `error` or `disconnected` | `reauthenticateInstance(origin, password)` in place | `{ kind: 'connected', how: 'reconnect' }` |
 | unknown | `connectToRemote(origin, password, displayName)`, the flow above | `{ kind: 'connected', how: 'new' }` |
+| any, called with an empty password | a resumable origin (a live instance in `error`/`disconnected` that kept its token, or a registry entry in `disconnected`) is resumed with `reconnectInstance` | `{ kind: 'connected', how: 'resumed' }`, or `{ kind: 'needs-password' }` when there was nothing to resume or the token was refused, or a thrown `peer_unreachable` |
 | any, and the remote refused the home-issued credential | `DifferentPasswordError` is caught | `{ kind: 'needs-remote-password', remoteUsername }`, so the caller can offer the explicit per-instance login form |
 
 Every other failure is thrown as is. It does not validate a typed URL: a caller that wants the self and duplicate checks for user input still runs `probeInstance` first, as the Connections flow does.

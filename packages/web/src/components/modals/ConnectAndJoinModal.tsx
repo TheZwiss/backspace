@@ -1,11 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import type { DirectoryEntry } from '@backspace/shared';
 import { Modal } from '../ui/Modal';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { useUIStore } from '../../stores/uiStore';
-import { useInstanceStore } from '../../stores/instanceStore';
+import { useInstanceStore, connectToInstance } from '../../stores/instanceStore';
 import { useDirectoryStore, type ConnectAndJoinResult } from '../../stores/directoryStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useSpaceStore } from '../../stores/spaceStore';
@@ -21,12 +21,15 @@ import {
 } from './RemotePasswordStep';
 
 /**
- * What the dialog knows about the entry's instance. `probing` is the moment
- * between opening and the probe's answer; `ready` carries what the step
- * shows, and `connected` says the session already has this origin, so the
- * password step is skipped and the join runs against it directly.
+ * What the dialog knows about the entry's instance. `resuming` is the
+ * moment a cached session is being offered its chance, `probing` the one
+ * between opening (or a failed resume) and the probe's answer; `ready`
+ * carries what the step shows, and `connected` says the session has this
+ * origin, so the password step is skipped and the join runs against it
+ * directly.
  */
 type ProbeState =
+  | { status: 'resuming' }
   | { status: 'probing' }
   | { status: 'ready'; instance: RemoteInstanceInfo; connected: boolean }
   | { status: 'failed'; message: string };
@@ -49,17 +52,37 @@ function hasSessionOn(origin: string): boolean {
   );
 }
 
-function initialProbeState(entry: DirectoryEntry): ProbeState {
-  if (!hasSessionOn(entry.origin)) return { status: 'probing' };
+/** What `ready, connected` shows about the entry's instance. */
+function instanceOf(entry: DirectoryEntry): RemoteInstanceInfo {
   return {
-    status: 'ready',
-    connected: true,
-    instance: {
-      name: entry.instanceName,
-      origin: entry.origin,
-      federatedRegistrationOpen: entry.federatedRegistrationOpen,
-    },
+    name: entry.instanceName,
+    origin: entry.origin,
+    federatedRegistrationOpen: entry.federatedRegistrationOpen,
   };
+}
+
+/**
+ * Whether the session holds anything for this origin that could come back
+ * without a password: an instance it disconnected or whose session errored,
+ * or a registry entry the user disconnected. `connectToInstance` makes the
+ * call and reports what it managed; this only decides whether to ask it
+ * before showing the password step.
+ */
+function canResumeSessionOn(origin: string): boolean {
+  const canonical = canonicalOrigin(origin);
+  if (!canonical) return false;
+  const { instances, registry } = useInstanceStore.getState();
+  const live = instances.find((i) => canonicalOrigin(i.origin) === canonical);
+  if (live) return (live.status === 'disconnected' || live.status === 'error') && live.token !== '';
+  return Array.from(registry.values()).some(
+    (e) => canonicalOrigin(e.origin) === canonical && e.status === 'disconnected',
+  );
+}
+
+function initialProbeState(entry: DirectoryEntry): ProbeState {
+  if (hasSessionOn(entry.origin)) return { status: 'ready', connected: true, instance: instanceOf(entry) };
+  if (canResumeSessionOn(entry.origin)) return { status: 'resuming' };
+  return { status: 'probing' };
 }
 
 const textButtonClass = 'text-sm text-txt-tertiary hover:text-txt-secondary transition-colors';
@@ -95,9 +118,14 @@ function ConnectAndJoinDialog({ entry }: { entry: DirectoryEntry }) {
     } else if (result.kind === 'requested') {
       closeModal();
       addToast(t('spaces:explore.connect.requested', { name: entry.name }), 'success', 3000);
-    } else {
+    } else if (result.kind === 'needs-remote-password') {
       setPhase('fallback');
       setRemoteUsername(result.remoteUsername);
+    } else {
+      // The store found nothing to resume. Only the resume path asks with an
+      // empty password, and it reads that answer itself, so this is the
+      // safety net: fall back to asking, rather than sitting on a spinner.
+      setProbe({ status: 'probing' });
     }
   };
 
@@ -112,6 +140,35 @@ function ConnectAndJoinDialog({ entry }: { entry: DirectoryEntry }) {
       setIsLoading(false);
     }
   };
+
+  // The resume: an origin the session disconnected is offered its cached
+  // token before the user is asked for anything. `connectToInstance` with no
+  // password answers `needs-password` when there was nothing to resume or
+  // the token was refused, and the dialog then runs the ordinary probe and
+  // password step; an instance that turned out unreachable is reported as an
+  // error rather than as a prompt the user cannot fix. A resumed session is
+  // the same state as a session that was already there, so a public entry
+  // joins on the spot and a request entry gets its message box.
+  useEffect(() => {
+    if (probe.status !== 'resuming') return undefined;
+    let cancelled = false;
+    connectToInstance(entry.origin, '')
+      .then((outcome) => {
+        if (cancelled) return;
+        if (outcome.kind === 'connected') {
+          setProbe({ status: 'ready', connected: true, instance: instanceOf(entry) });
+          return;
+        }
+        setProbe({ status: 'probing' });
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setProbe({ status: 'failed', message: describeError(err) });
+      });
+    return () => { cancelled = true; };
+    // The entry is fixed for the dialog's life; the status drives this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [probe.status]);
 
   const requestMessage = isRequest ? message.trim() || undefined : undefined;
   const handleConnect = (password: string) => run(() => connectAndJoin(entry, password, requestMessage));
@@ -143,13 +200,19 @@ function ConnectAndJoinDialog({ entry }: { entry: DirectoryEntry }) {
     return () => { cancelled = true; };
   }, [probe.status, host, probeInstance]);
 
-  // The stale-card case for a public space: the session already has the
-  // origin, so there is nothing to ask and the join runs on open. The dialog
-  // is mounted once per open, so this is a mount effect by design.
+  // A public space on an origin the session holds, whether it held it on
+  // open (the stale-card case) or a resume just brought it back: there is
+  // nothing to ask and the join runs by itself. The ref keeps it to one run
+  // for the dialog's life.
   const joinsOnOpen = skipsPassword && !isRequest;
+  const joinStarted = useRef(false);
   useEffect(() => {
-    if (joinsOnOpen) void handleJoinConnected();
-  }, []);
+    if (!joinsOnOpen || joinStarted.current) return;
+    joinStarted.current = true;
+    void handleJoinConnected();
+    // handleJoinConnected closes over state the guard makes single-use.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [joinsOnOpen]);
 
   const messageField = isRequest ? (
     <textarea
@@ -169,7 +232,7 @@ function ConnectAndJoinDialog({ entry }: { entry: DirectoryEntry }) {
       title={t('spaces:explore.connect.title', { name: entry.name })}
       mobileStyle="sheet"
     >
-      {probe.status === 'probing' && (
+      {(probe.status === 'probing' || probe.status === 'resuming') && (
         <div role="status" className="py-8 flex flex-col items-center gap-3 text-txt-tertiary">
           <LoadingSpinner size={28} className="text-accent-primary" />
           <span className="text-sm">{t('spaces:explore.connect.probing', { host })}</span>

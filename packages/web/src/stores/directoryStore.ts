@@ -12,6 +12,8 @@ export type DirectoryStatus = 'idle' | 'loading' | 'ok' | 'disabled' | 'unreacha
 export type ConnectAndJoinResult =
   | { kind: 'joined'; spaceId: string; origin: string }
   | { kind: 'requested' }
+  /** Nothing was typed and no cached session could be resumed: the dialog asks for the password. */
+  | { kind: 'needs-password' }
   | { kind: 'needs-remote-password'; remoteUsername: string };
 
 interface DirectoryState {
@@ -163,7 +165,10 @@ export const useDirectoryStore = create<DirectoryState>((set, get) => {
 
     connectAndJoin: async (entry, password, message) => {
       const outcome = await connectToInstance(entry.origin, password);
-      if (outcome.kind === 'needs-remote-password') return outcome;
+      // Both non-connected outcomes are handed back: the dialog decides what
+      // to ask for. An empty password is how it offers a cached session a
+      // chance before prompting at all.
+      if (outcome.kind !== 'connected') return outcome;
       return joinAfterConnect(entry, message);
     },
 
