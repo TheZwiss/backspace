@@ -755,7 +755,10 @@ whatever that session has connected.
   under it "Last attempt failed (<reason>)" when there is an error. A `fetch`
   status shows the hub's reason, `origin`, `network` and `timeout` show their
   own sentence (the `origin` one names `DOMAIN` and `PUBLIC_ORIGIN`), and a
-  plain HTTP status is shown as the number it is.
+  plain HTTP status is shown as the number it is. The line reads the store,
+  not the panel's draft, and the panel re-reads the settings every 10 seconds
+  while open, so the change ping's result appears a few seconds after a save
+  without reopening the panel; an unsaved edit survives the refresh.
 - One sentence naming what becomes public for each listed space: its name,
   description, icon, banner, member count and this instance's address, and
   that people browsing the directory load the icon and banner from this

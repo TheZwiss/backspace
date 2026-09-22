@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { InstanceAdminSettings } from '@backspace/shared';
 import { GeneralPanel } from './GeneralPanel';
@@ -37,7 +37,11 @@ function directorySwitch(): HTMLElement {
 }
 
 beforeEach(() => {
-  useSettingsStore.setState({ instanceSettings: null });
+  useSettingsStore.setState({ instanceSettings: null, fetchInstanceSettings: vi.fn().mockResolvedValue(undefined) });
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe('GeneralPanel directory toggle', () => {
@@ -127,5 +131,72 @@ describe('GeneralPanel directory toggle', () => {
     seed({});
     render(<GeneralPanel />);
     expect(screen.getByText(/its name, description, icon, banner, member count and this instance's address/)).toBeInTheDocument();
+  });
+});
+
+describe('GeneralPanel directory status refresh', () => {
+  it('refetches the settings every 10 seconds while mounted and follows the new ping time', async () => {
+    vi.useFakeTimers();
+    seed({ directoryLastPingAt: null });
+    const fetchInstanceSettings = vi.fn(async () => {
+      useSettingsStore.setState((state) => ({
+        instanceSettings: { ...state.instanceSettings!, directoryLastPingAt: Date.UTC(2023, 10, 14, 22, 13) },
+      }));
+    });
+    useSettingsStore.setState({ fetchInstanceSettings });
+
+    const { unmount } = render(<GeneralPanel />);
+    expect(screen.getByText('Never reported')).toBeInTheDocument();
+    expect(fetchInstanceSettings).not.toHaveBeenCalled();
+
+    await act(async () => { vi.advanceTimersByTime(10_000); });
+    expect(fetchInstanceSettings).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(/^Last reported /)).toHaveTextContent(/2023/);
+    expect(screen.queryByText('Never reported')).not.toBeInTheDocument();
+
+    unmount();
+    await act(async () => { vi.advanceTimersByTime(30_000); });
+    expect(fetchInstanceSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps an unsaved edit across a background refresh', async () => {
+    vi.useFakeTimers();
+    seed({ instanceName: 'Workbench', directoryEnabled: false, directoryLastPingAt: null });
+    const fetchInstanceSettings = vi.fn(async () => {
+      useSettingsStore.setState((state) => ({
+        instanceSettings: { ...state.instanceSettings!, directoryLastPingAt: 1_700_000_000_000 },
+      }));
+    });
+    useSettingsStore.setState({ fetchInstanceSettings });
+
+    render(<GeneralPanel />);
+    const name = screen.getByRole('textbox', { name: 'Instance Name' });
+    await act(async () => { fireEvent.change(name, { target: { value: 'Renamed' } }); });
+    await act(async () => { fireEvent.click(directorySwitch()); });
+    expect(name).toHaveValue('Renamed');
+    expect(directorySwitch()).toHaveAttribute('aria-checked', 'true');
+
+    await act(async () => { vi.advanceTimersByTime(10_000); });
+    expect(fetchInstanceSettings).toHaveBeenCalledTimes(1);
+    expect(name).toHaveValue('Renamed');
+    expect(directorySwitch()).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByText(/^Last reported /)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
+  });
+
+  it('reseeds an untouched draft from a refresh that changed the editable fields', async () => {
+    vi.useFakeTimers();
+    seed({ instanceName: 'Workbench' });
+    const fetchInstanceSettings = vi.fn(async () => {
+      useSettingsStore.setState((state) => ({
+        instanceSettings: { ...state.instanceSettings!, instanceName: 'Renamed elsewhere' },
+      }));
+    });
+    useSettingsStore.setState({ fetchInstanceSettings });
+
+    render(<GeneralPanel />);
+    await act(async () => { vi.advanceTimersByTime(10_000); });
+    expect(screen.getByRole('textbox', { name: 'Instance Name' })).toHaveValue('Renamed elsewhere');
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
   });
 });

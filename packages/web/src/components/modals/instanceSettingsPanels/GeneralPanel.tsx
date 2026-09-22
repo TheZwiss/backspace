@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { useUIStore } from '../../../stores/uiStore';
@@ -8,6 +8,34 @@ import { useFormatters } from '../../../i18n/formatters';
 import type { DirectoryPingError, InstanceAdminSettings } from '@backspace/shared';
 
 const INSTANCE_NAME_MAX_LENGTH = 32;
+
+/**
+ * How often the panel re-reads the instance settings while it is open, so
+ * the directory status line follows the pinger: the change ping lands a few
+ * seconds after a save, the daily ping and any failure later.
+ */
+export const INSTANCE_SETTINGS_REFRESH_MS = 10_000;
+
+/** The fields this panel edits; everything else is read live from the store. */
+interface InstanceDraft {
+  instanceName: string;
+  discoveryEnabled: boolean;
+  directoryEnabled: boolean;
+}
+
+function draftFrom(settings: InstanceAdminSettings): InstanceDraft {
+  return {
+    instanceName: settings.instanceName,
+    discoveryEnabled: settings.discoveryEnabled,
+    directoryEnabled: settings.directoryEnabled,
+  };
+}
+
+function sameDraft(a: InstanceDraft, b: InstanceDraft): boolean {
+  return a.instanceName === b.instanceName
+    && a.discoveryEnabled === b.discoveryEnabled
+    && a.directoryEnabled === b.directoryEnabled;
+}
 
 type PingReasonKey =
   `admin:general.directory.reasons.${NonNullable<DirectoryPingError['reason']> | 'origin' | 'network' | 'timeout'}`;
@@ -32,45 +60,67 @@ export function GeneralPanel() {
   const f = useFormatters();
   const instanceSettings = useSettingsStore((s) => s.instanceSettings);
   const updateInstanceSettings = useSettingsStore((s) => s.updateInstanceSettings);
+  const fetchInstanceSettings = useSettingsStore((s) => s.fetchInstanceSettings);
 
   const addToast = useUIStore((s) => s.addToast);
 
-  const [draft, setDraft] = useState<InstanceAdminSettings | null>(null);
+  const [draft, setDraft] = useState<InstanceDraft | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [gifKeyDirty, setGifKeyDirty] = useState(false);
   const [gifKeyDraft, setGifKeyDraft] = useState('');
 
+  // The settings the draft was last seeded from. A background refresh only
+  // reseeds the draft while it still equals this, so an unsaved edit survives
+  // the 10 second poll and a save or reset is what moves it on.
+  const seededFrom = useRef<InstanceDraft | null>(null);
+  const isDirty = gifKeyDirty
+    || (draft !== null && seededFrom.current !== null && !sameDraft(draft, seededFrom.current));
+
   useEffect(() => {
-    if (instanceSettings) {
-      setDraft({ ...instanceSettings });
-      setGifKeyDraft('');
-      setGifKeyDirty(false);
-    }
+    if (!instanceSettings || isDirty) return;
+    const next = draftFrom(instanceSettings);
+    seededFrom.current = next;
+    setDraft(next);
+    setGifKeyDraft('');
+    setGifKeyDirty(false);
+    // A refresh that leaves the editable fields alone must not reseed a draft
+    // the user is typing in; `isDirty` is read at the moment the settings change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [instanceSettings]);
 
-  if (!draft) return <div className="text-sm text-txt-tertiary">{t('common:states.loadingSettings')}</div>;
+  // The directory status line follows the pinger while the panel is open.
+  useEffect(() => {
+    const timer = setInterval(() => { void fetchInstanceSettings(); }, INSTANCE_SETTINGS_REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [fetchInstanceSettings]);
 
-  const baseChanges = instanceSettings && draft
-    ? draft.instanceName !== instanceSettings.instanceName ||
-      draft.discoveryEnabled !== instanceSettings.discoveryEnabled ||
-      draft.directoryEnabled !== instanceSettings.directoryEnabled
-    : false;
-  const hasChanges = baseChanges || gifKeyDirty;
+  if (!draft || !instanceSettings) {
+    return <div className="text-sm text-txt-tertiary">{t('common:states.loadingSettings')}</div>;
+  }
+
+  const hasChanges = gifKeyDirty || !sameDraft(draft, draftFrom(instanceSettings));
 
   const handleSave = async () => {
     setSaving(true);
     setSaveError('');
     try {
       const payload: Partial<InstanceAdminSettings> = {
-        instanceName: draft!.instanceName,
-        discoveryEnabled: draft!.discoveryEnabled,
-        directoryEnabled: draft!.directoryEnabled,
+        instanceName: draft.instanceName,
+        discoveryEnabled: draft.discoveryEnabled,
+        directoryEnabled: draft.directoryEnabled,
       };
       if (gifKeyDirty) {
         payload.gifApiKey = gifKeyDraft;
       }
       await updateInstanceSettings(payload);
+      // The server's answer is the new baseline, whatever it normalised.
+      const saved = useSettingsStore.getState().instanceSettings;
+      if (saved) {
+        const next = draftFrom(saved);
+        seededFrom.current = next;
+        setDraft(next);
+      }
       setGifKeyDirty(false);
       setGifKeyDraft('');
       addToast(t('common:states.settingsSaved'), 'success', 2000);
@@ -87,14 +137,16 @@ export function GeneralPanel() {
     setDraft({ ...draft, discoveryEnabled: enabled, directoryEnabled: enabled && draft.directoryEnabled });
   };
 
-  const lastError = draft.directoryLastError;
+  const lastError = instanceSettings.directoryLastError;
   const lastErrorReasonKey = lastError === null ? null : pingReasonKey(lastError);
-  const pingLabel = draft.directoryLastPingAt === null
+  const pingLabel = instanceSettings.directoryLastPingAt === null
     ? t('admin:general.directory.status.never')
-    : t('admin:general.directory.status.lastPing', { date: f.formatDateTime(draft.directoryLastPingAt) });
+    : t('admin:general.directory.status.lastPing', { date: f.formatDateTime(instanceSettings.directoryLastPingAt) });
 
   const handleReset = () => {
-    if (instanceSettings) setDraft({ ...instanceSettings });
+    const next = draftFrom(instanceSettings);
+    seededFrom.current = next;
+    setDraft(next);
     setGifKeyDirty(false);
     setGifKeyDraft('');
     setSaveError('');
@@ -117,6 +169,7 @@ export function GeneralPanel() {
             value={draft.instanceName}
             onChange={(e) => setDraft({ ...draft, instanceName: e.target.value.slice(0, INSTANCE_NAME_MAX_LENGTH) })}
             placeholder={t('common:appName')}
+            aria-label={t('admin:general.instanceName.label')}
             className="input-standard w-full"
           />
           <div className="text-[11px] text-txt-tertiary text-right mt-1">
@@ -162,7 +215,7 @@ export function GeneralPanel() {
           {!draft.discoveryEnabled && (
             <p className="text-xs text-txt-secondary">{t('admin:general.directory.needsDiscovery')}</p>
           )}
-          {!draft.federatedRegistrationOpen && (
+          {!instanceSettings.federatedRegistrationOpen && (
             <div className="p-2.5 bg-accent-amber/10 border border-accent-amber/30 rounded text-[13px] text-accent-amber">
               {t('admin:general.directory.registrationClosed')}
             </div>
@@ -193,17 +246,17 @@ export function GeneralPanel() {
             type="password"
             value={gifKeyDirty ? gifKeyDraft : ''}
             onChange={(e) => { setGifKeyDraft(e.target.value); setGifKeyDirty(true); }}
-            placeholder={draft.gifEnabled ? t('admin:general.gif.placeholderSaved') : t('admin:general.gif.placeholderKey')}
+            placeholder={instanceSettings.gifEnabled ? t('admin:general.gif.placeholderSaved') : t('admin:general.gif.placeholderKey')}
             className="input-standard w-full"
             autoComplete="off"
           />
           <div className="flex items-center gap-2">
             <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded ${
-              draft.gifEnabled ? 'bg-status-online/15 text-status-online' : 'bg-white/5 text-txt-tertiary'
+              instanceSettings.gifEnabled ? 'bg-status-online/15 text-status-online' : 'bg-white/5 text-txt-tertiary'
             }`}>
-              {draft.gifEnabled ? t('admin:general.gif.enabled') : t('admin:general.gif.notConfigured')}
+              {instanceSettings.gifEnabled ? t('admin:general.gif.enabled') : t('admin:general.gif.notConfigured')}
             </span>
-            {draft.gifEnabled && !gifKeyDirty && (
+            {instanceSettings.gifEnabled && !gifKeyDirty && (
               <button
                 onClick={() => { setGifKeyDraft(''); setGifKeyDirty(true); }}
                 className="text-[11px] text-txt-tertiary hover:text-txt-danger transition-colors"
