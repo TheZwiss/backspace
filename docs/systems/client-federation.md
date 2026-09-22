@@ -474,9 +474,10 @@ opened origins itself and exempts them, because dropping an entry unmounts
 the chip and unmounting `ReauthForm` discards the password being typed into
 it: a `reconnectInstance` started anywhere else (the Connections panel, the
 connect-and-join dialog's silent resume, startup) would otherwise empty the
-field under the user's hands. An origin leaves the set when its entry stops
-needing attention, so a connection that comes back and expires again opens a
-fresh form.
+field under the user's hands. An origin leaves the set as soon as its entry
+is anything but `auth_expired`, which is the only status the form exists
+for, so a connection that comes back, is disconnected, or stops answering
+takes its open state with it and a later expiry opens a fresh form.
 
 Escape cancels the surface in either phase, and never travels past it in any
 state. That containment is load-bearing: `Modal.tsx` closes the settings

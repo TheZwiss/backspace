@@ -101,10 +101,23 @@ function getConnectedInstances() {
  * exactly when this overtakes.
  *
  * There is one store per process, so the counter lives beside it rather than
- * in a factory closure; `reset()` bumps it, which orphans an in-flight
- * fan-out on logout the way `directoryStore.reset` does.
+ * in a factory closure. `reset()` bumps it too, so an in-flight fan-out is
+ * orphaned whenever the store is cleared; nothing in the app calls `reset()`
+ * today (`authStore.resetUserStores` does not include this store or
+ * `directoryStore`), so that path is the tests' and whoever wires it later.
  */
 let fetchSeq = 0;
+
+/**
+ * The same guard for the pending-requests fan-out, which needs one for the
+ * same reason: on `main` it was a single call to home, and this branch made
+ * it a `Promise.allSettled` over every connected instance, so it now lasts as
+ * long as its slowest member and two of them can overtake. The page calls it
+ * beside `fetchSpaces` on mount, on every search and on every change to the
+ * connected set, and an overtaken answer leaves a card reading "Request
+ * Pending" that is not, or missing one that is.
+ */
+let requestsSeq = 0;
 
 export const useExploreStore = create<ExploreState>((set, get) => ({
   spaces: [],
@@ -190,6 +203,7 @@ export const useExploreStore = create<ExploreState>((set, get) => ({
   },
 
   fetchMyRequests: async () => {
+    const seq = ++requestsSeq;
     await waitForAutoConnect();
 
     // Pending requests live on the instance that owns the space, so ask home
@@ -211,6 +225,9 @@ export const useExploreStore = create<ExploreState>((set, get) => ({
     // Nothing answered: keep what we have rather than blanking a list the
     // cards are already showing. This is non-critical state, so no error.
     if (fulfilled.length === 0) return;
+    // Superseded: a later fan-out has already asked, and its answer is the
+    // one the page should end up with.
+    if (seq !== requestsSeq) return;
 
     const myRequests: TaggedJoinRequest[] = [];
     for (const { value } of fulfilled) {
@@ -255,9 +272,10 @@ export const useExploreStore = create<ExploreState>((set, get) => ({
   setSearchQuery: (q: string) => set({ searchQuery: q }),
 
   reset: () => {
-    // Orphan whatever is in flight: its answer belongs to the session that
-    // just ended.
+    // Orphan whatever is in flight: its answer belongs to the state this
+    // call is clearing.
     fetchSeq++;
+    requestsSeq++;
     set({
       spaces: [],
       myRequests: [],

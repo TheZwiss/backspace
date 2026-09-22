@@ -234,6 +234,20 @@ describe('OuterSpaceSection', () => {
     expect(loadMore).toHaveBeenCalledTimes(1);
   });
 
+  it('the failure notice wins over the empty copy when the dedupe leaves nothing on screen', () => {
+    // Every entry in the feed belongs to an origin the session is connected
+    // to, so the list renders empty while the store still holds a feed. The
+    // continuation that failed is the only thing there is to say.
+    setDirectory({ status: 'ok', entries: [entry('a')], hasMore: true, loadMoreError: 'unreachable' });
+    useInstanceStore.setState({ instances: [liveInstance('https://orbit.example', 'connected')] });
+    renderSection();
+
+    expect(screen.getByText(UNREACHABLE)).toBeInTheDocument();
+    expect(screen.queryByTestId('outer-space-mascot')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Nothing out there yet/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Show more' })).toBeInTheDocument();
+  });
+
   it('a show more refused for any other reason shows the generic notice, button and all', () => {
     setDirectory({ status: 'ok', entries: [entry('a')], hasMore: true, loadMoreError: 'error' });
     renderSection();

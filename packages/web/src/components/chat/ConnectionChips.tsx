@@ -57,9 +57,10 @@ export function ConnectionChips({ onRecovered }: ConnectionChipsProps) {
    * into it, so a `connecting` flip from anywhere else in the app (a Retry
    * in the Connections panel, a resume the connect-and-join dialog starts)
    * would empty the field under the user's hands. Only a change that ends
-   * the flow takes an open chip away: `needsAttention` going false means the
-   * connection is back or the user disconnected it, and there is nothing
-   * left to re-authenticate.
+   * the flow takes an open chip away: the form exists for `auth_expired`
+   * alone, so any other status means there is nothing left to
+   * re-authenticate, whether the connection came back, the user disconnected
+   * it, or the instance stopped answering.
    */
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set());
 
@@ -74,17 +75,20 @@ export function ConnectionChips({ onRecovered }: ConnectionChipsProps) {
     return out;
   }, [registry, instances, retrying, open]);
 
-  // An origin that no longer needs attention takes its open state with it, so
-  // a later expiry opens a fresh form rather than reviving the one that was
-  // on screen when the connection came back. Keyed on the registry alone, and
-  // returning the same set when nothing was dropped, so it cannot feed itself.
+  // An origin whose entry is no longer `auth_expired` takes its open state
+  // with it, so a later expiry opens a fresh form rather than reviving the
+  // one that was on screen. `auth_expired` and not merely "still needs
+  // attention": a flip to `unreachable` renders the chip as a pill with
+  // Retry, its form gone with the render, and an origin left in the set
+  // there would go on exempting a chip that has nothing open to protect.
+  // Keyed on the registry alone, and returning the same set when nothing was
+  // dropped, so it cannot feed itself.
   useEffect(() => {
     setOpen((prev) => {
       if (prev.size === 0) return prev;
       const next = new Set<string>();
       for (const origin of prev) {
-        const entry = registry.get(origin);
-        if (entry && needsAttention(entry)) next.add(origin);
+        if (registry.get(origin)?.status === 'auth_expired') next.add(origin);
       }
       return next.size === prev.size ? prev : next;
     });

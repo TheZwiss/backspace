@@ -107,6 +107,19 @@ export const useDirectoryStore = create<DirectoryState>((set, get) => {
   let fetchSeq = 0;
 
   /**
+   * Whether a continuation is already running.
+   *
+   * Show more has no in-flight state of its own, so two clicks in the same
+   * page called `loadMore` twice, and both read the same `offset` because
+   * neither had written it yet: two requests for one page, and the second
+   * appended nothing. That second answer is indistinguishable from the
+   * proxy's clamped page at the offset cap, so the rule that ends the feed
+   * on a page that appends nothing took Show more away with pages still to
+   * come. One continuation at a time is what makes that rule safe.
+   */
+  let loadingMore = false;
+
+  /**
    * The join step both connect actions share. Runs once the origin has a
    * session: the space is joined or requested, and the pending requests are
    * refreshed so the Inner card can show the right state. The origin's
@@ -159,9 +172,10 @@ export const useDirectoryStore = create<DirectoryState>((set, get) => {
 
     loadMore: async () => {
       const { status, hasMore, query, offset } = get();
-      if (status !== 'ok' || !hasMore) return;
+      if (status !== 'ok' || !hasMore || loadingMore) return;
       const seq = fetchSeq;
       const nextOffset = offset + DIRECTORY_PAGE_SIZE;
+      loadingMore = true;
       set({ loadMoreError: null });
       try {
         const feed = await api.directory.list(query, DIRECTORY_PAGE_SIZE, nextOffset);
@@ -184,6 +198,10 @@ export const useDirectoryStore = create<DirectoryState>((set, get) => {
         // `status` stays `ok`: what is on screen is still the feed, and the
         // Show more button is the only way to ask for the page again.
         set({ loadMoreError: statusForError(err) });
+      } finally {
+        // Including the two early returns above: a superseded continuation
+        // still finished, and the flag is not the next one's to hold.
+        loadingMore = false;
       }
     },
 

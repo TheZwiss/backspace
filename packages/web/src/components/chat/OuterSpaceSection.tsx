@@ -76,6 +76,11 @@ export function OuterSpaceSection({ query, onConnect }: OuterSpaceSectionProps) 
   if (status === 'disabled') return null;
 
   const hasEntries = entries.length > 0;
+  // A notice takes the empty copy's place rather than sitting under it: with
+  // `status` left on `ok` after a refused continuation, a feed whose every
+  // visible entry had been deduped against a connected origin would have
+  // rendered "Nothing out there yet" with nothing saying that a page had just
+  // failed to arrive.
   const notice = outerNotice(status, loadMoreError);
   // `idle` only exists between mount and the first `fetch` call, and a fetch
   // never leaves it there, so it is drawn as loading rather than as empty.
@@ -101,7 +106,7 @@ export function OuterSpaceSection({ query, onConnect }: OuterSpaceSectionProps) 
         <div className="flex items-center justify-center h-64" data-testid="outer-space-loading">
           <LoadingSpinner />
         </div>
-      ) : status === 'ok' && !hasEntries ? (
+      ) : status === 'ok' && !hasEntries && notice === 'none' ? (
         resultsQuery ? (
           <p className="text-txt-tertiary text-sm py-6 text-center">{t('spaces:explore.outer.noMatches')}</p>
         ) : (

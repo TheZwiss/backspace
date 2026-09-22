@@ -1,9 +1,20 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { createInstance, type i18n as I18n } from 'i18next';
-import { describeRegistryError, registryReason } from './registryErrors';
+import enFederation from '../locales/en/federation.json';
+import deFederation from '../locales/de/federation.json';
+import { describeRegistryError, registryReason, type RegistryErrorReason } from './registryErrors';
 
 let i18n: I18n;
 
+/**
+ * The real catalogs, not a copy of the four sentences.
+ *
+ * A fixture that restates the English and German here passes forever against
+ * text the app stopped showing the moment somebody reworded a key, and the
+ * i18n check cannot see the mismatch either: it compares languages to each
+ * other, not a test to the catalog. Loading the files means a renamed key
+ * fails this test and a reworded one cannot drift from it.
+ */
 beforeAll(async () => {
   i18n = createInstance();
   await i18n.init({
@@ -12,28 +23,8 @@ beforeAll(async () => {
     defaultNS: 'common',
     ns: ['common', 'federation'],
     resources: {
-      en: {
-        common: {},
-        federation: {
-          connections: { row: { reason: {
-            unreachable: 'This instance could not be reached.',
-            sessionExpired: 'The saved session expired. Re-authenticate to reconnect.',
-            reauthenticate: 'Re-authenticate to connect.',
-            authenticateHome: 'Authenticate to connect to your home instance.',
-          } } },
-        },
-      },
-      de: {
-        common: {},
-        federation: {
-          connections: { row: { reason: {
-            unreachable: 'Diese Instanz war nicht erreichbar.',
-            sessionExpired: 'Die gespeicherte Sitzung ist abgelaufen. Melde dich erneut an, um die Verbindung wiederherzustellen.',
-            reauthenticate: 'Melde dich erneut an, um zu verbinden.',
-            authenticateHome: 'Melde dich an, um dich mit deiner Heimatinstanz zu verbinden.',
-          } } },
-        },
-      },
+      en: { common: {}, federation: enFederation },
+      de: { common: {}, federation: deFederation },
     },
   });
 });
@@ -42,20 +33,31 @@ function t() {
   return i18n.getFixedT(null, ['federation', 'common']);
 }
 
+/** The reason codes the store writes, against the catalog key each one reads. */
+const REASONS: ReadonlyArray<[RegistryErrorReason, keyof typeof enFederation.connections.row.reason]> = [
+  ['unreachable', 'unreachable'],
+  ['session_expired', 'sessionExpired'],
+  ['reauthenticate', 'reauthenticate'],
+  ['authenticate_home', 'authenticateHome'],
+];
+
 describe('describeRegistryError', () => {
-  it('has words in the reader\'s language for every reason the store writes', () => {
-    expect(describeRegistryError(t(), registryReason('unreachable'))).toBe('Diese Instanz war nicht erreichbar.');
-    expect(describeRegistryError(t(), registryReason('session_expired'))).toBe(
-      'Die gespeicherte Sitzung ist abgelaufen. Melde dich erneut an, um die Verbindung wiederherzustellen.',
-    );
-    expect(describeRegistryError(t(), registryReason('reauthenticate'))).toBe('Melde dich erneut an, um zu verbinden.');
-    expect(describeRegistryError(t(), registryReason('authenticate_home'))).toBe(
-      'Melde dich an, um dich mit deiner Heimatinstanz zu verbinden.',
-    );
+  it('reads every reason the store writes out of the catalog', () => {
+    for (const [reason, key] of REASONS) {
+      expect(describeRegistryError(t(), registryReason(reason))).toBe(deFederation.connections.row.reason[key]);
+    }
+  });
+
+  it('says them in the reader\'s language, not in the source language', () => {
+    for (const [reason, key] of REASONS) {
+      const shown = describeRegistryError(t(), reason);
+      expect(shown).not.toBe(enFederation.connections.row.reason[key]);
+      expect(shown.length).toBeGreaterThan(0);
+    }
   });
 
   it('never shows the code itself', () => {
-    for (const reason of ['unreachable', 'session_expired', 'reauthenticate', 'authenticate_home'] as const) {
+    for (const [reason] of REASONS) {
       expect(describeRegistryError(t(), reason)).not.toContain('_');
       expect(describeRegistryError(t(), reason)).not.toBe(reason);
     }

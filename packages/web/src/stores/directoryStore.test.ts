@@ -294,6 +294,56 @@ describe('directoryStore.loadMore', () => {
     expect(useDirectoryStore.getState().loadMoreError).toBeNull();
   });
 
+  it('a second click while the first is in flight asks for nothing and ends nothing', async () => {
+    // Show more has no in-flight state, so two clicks in one page both read
+    // the offset neither has written yet and ask for the same page. The
+    // second answer appends nothing, which is exactly what the offset-cap
+    // rule reads as the end of the feed, so the button would vanish with
+    // pages still to come.
+    const page = fullPage('https://a.test', 0);
+    directoryList.mockResolvedValueOnce({ schema: 1, spaces: page });
+    await useDirectoryStore.getState().fetch('');
+    directoryList.mockClear();
+
+    let release: () => void = () => {};
+    directoryList.mockImplementationOnce(
+      () => new Promise((resolve) => { release = () => resolve({ schema: 1, spaces: fullPage('https://b.test', 0) }); }),
+    );
+
+    const first = useDirectoryStore.getState().loadMore();
+    const second = useDirectoryStore.getState().loadMore();
+    expect(directoryList).toHaveBeenCalledTimes(1);
+
+    release();
+    await Promise.all([first, second]);
+
+    const state = useDirectoryStore.getState();
+    expect(directoryList).toHaveBeenCalledTimes(1);
+    expect(state.entries).toHaveLength(PAGE * 2);
+    expect(state.hasMore).toBe(true);
+    expect(state.offset).toBe(PAGE);
+
+    // And the next click is the next page, not the one just loaded.
+    directoryList.mockResolvedValueOnce({ schema: 1, spaces: [entry('https://c.test', 'last')] });
+    await useDirectoryStore.getState().loadMore();
+    expect(directoryList).toHaveBeenLastCalledWith('', PAGE, PAGE * 2);
+  });
+
+  it('a continuation that failed does not hold the flag against the retry', async () => {
+    directoryList.mockResolvedValueOnce({ schema: 1, spaces: fullPage('https://a.test', 0) });
+    await useDirectoryStore.getState().fetch('');
+
+    directoryList.mockRejectedValueOnce(httpError('directory_unreachable', 502));
+    await useDirectoryStore.getState().loadMore();
+    expect(useDirectoryStore.getState().loadMoreError).toBe('unreachable');
+
+    directoryList.mockResolvedValueOnce({ schema: 1, spaces: [entry('https://b.test', 'late')] });
+    await useDirectoryStore.getState().loadMore();
+
+    expect(useDirectoryStore.getState().entries).toHaveLength(PAGE + 1);
+    expect(useDirectoryStore.getState().loadMoreError).toBeNull();
+  });
+
   it('stops at the proxy offset cap: a full page of entries already held ends the feed', async () => {
     // Past offset 1000 the proxy clamps and answers with the page at the cap
     // again. It is a full page, so counting its length alone kept `hasMore`

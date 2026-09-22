@@ -308,6 +308,36 @@ describe('exploreStore.fetchSpaces', () => {
   });
 });
 
+describe('exploreStore.fetchMyRequests sequencing', () => {
+  /** See the note in the fetchSpaces sequencing suite. */
+  const reachedTheClients = () => new Promise((resolve) => { setTimeout(resolve, 0); });
+
+  it('a slow earlier fan-out does not overwrite a fast later one', async () => {
+    // On `main` this was one call to home. The branch made it a fan-out over
+    // every connected instance, so it lasts as long as its slowest member,
+    // and the page calls it on mount, on every search and on every change to
+    // the connected set. An overtaken answer leaves a card reading "Request
+    // Pending" that is not, or missing one that is.
+    let releaseSlow: () => void = () => {};
+    homeApi.explore.myJoinRequests.mockImplementationOnce(
+      () => new Promise((resolve) => { releaseSlow = () => resolve({ requests: [makeRequest({ id: 'slow' })] }); }),
+    );
+    homeApi.explore.myJoinRequests.mockImplementationOnce(async () => ({ requests: [makeRequest({ id: 'fast' })] }));
+
+    const slow = useExploreStore.getState().fetchMyRequests();
+    const fast = useExploreStore.getState().fetchMyRequests();
+    await reachedTheClients();
+    await fast;
+
+    expect(useExploreStore.getState().myRequests.map((r) => r.id)).toEqual(['fast']);
+
+    releaseSlow();
+    await slow;
+
+    expect(useExploreStore.getState().myRequests.map((r) => r.id)).toEqual(['fast']);
+  });
+});
+
 describe('exploreStore.fetchSpaces sequencing', () => {
   function answer(spaces: { id: string }[]) {
     return { spaces, total: spaces.length, totalAll: spaces.length, discoveryEnabled: true };

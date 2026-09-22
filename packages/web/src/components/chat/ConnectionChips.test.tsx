@@ -186,6 +186,35 @@ describe('ConnectionChips', () => {
     expect(screen.queryByText('Orbit')).not.toBeInTheDocument();
   });
 
+  it('an origin that stops being expired stops being exempt', async () => {
+    // The form only exists for `auth_expired`. A flip to `unreachable`
+    // renders the chip as a pill with Retry and takes the form with it, so
+    // the origin must leave the open set with it: otherwise it would go on
+    // exempting a chip that has nothing open to protect.
+    seed(
+      [registryEntry('https://zwiss.example', 'auth_expired', 'Zwiss')],
+      [liveInstance('https://zwiss.example', 'error')],
+    );
+    const user = userEvent.setup();
+    render(<ConnectionChips onRecovered={onRecovered} />);
+    await user.click(screen.getByRole('button', { name: /^Reconnect/ }));
+    expect(screen.getByLabelText('Your home account password')).toBeInTheDocument();
+
+    act(() => {
+      useInstanceStore.setState({
+        registry: new Map([['https://zwiss.example', registryEntry('https://zwiss.example', 'unreachable', 'Zwiss')]]),
+      });
+    });
+    expect(screen.queryByLabelText('Your home account password')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Retry/ })).toBeInTheDocument();
+
+    // The chip is an ordinary one again, so the connecting rule applies to it.
+    act(() => {
+      useInstanceStore.setState({ instances: [liveInstance('https://zwiss.example', 'connecting')] });
+    });
+    expect(screen.queryByText('Zwiss')).not.toBeInTheDocument();
+  });
+
   it('a connection that comes back and expires again opens an empty form', async () => {
     seed([registryEntry('https://zwiss.example', 'auth_expired', 'Zwiss')]);
     const user = userEvent.setup();
