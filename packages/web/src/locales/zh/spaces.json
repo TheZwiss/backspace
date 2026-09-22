@@ -174,7 +174,8 @@
     "notConnected": "未连接到 {{host}}",
     "inner": {
       "title": "内部空间",
-      "subtitle": "您所在实例上的空间"
+      "subtitle": "您所在实例上的空间",
+      "noneAnswered": "没有实例作出响应。在有实例响应之前，内部空间将保持为空。"
     },
     "outer": {
       "title": "外部空间",

@@ -22,6 +22,25 @@ export interface TaggedJoinRequest extends JoinRequest {
   _instanceOrigin: string;
 }
 
+/**
+ * Why the last `fetchSpaces` has nothing to show, as a fact rather than as a
+ * sentence.
+ *
+ * The store used to keep the English text it would have rendered, and the
+ * Explore page printed it, so a reader in German, Russian or Chinese got
+ * English at the one moment the page had nothing else to say. The words live
+ * at the surface now, the same split the federation registry's reason codes
+ * follow (`i18n/registryErrors.ts`): `none_answered` is a state with a
+ * catalog entry of its own, and `failed` carries the cause so `describeError`
+ * can say what the server said, in the reader's language, with the English
+ * `error` text left as the last-resort fallback it already is.
+ */
+export type ExploreFetchFailure =
+  /** Every client in the fan-out rejected: home and every connected instance. */
+  | { kind: 'none_answered' }
+  /** The fan-out could not be run at all. */
+  | { kind: 'failed'; cause: unknown };
+
 interface ExploreState {
   spaces: TaggedExploreSpace[];
   myRequests: TaggedJoinRequest[];
@@ -38,7 +57,7 @@ interface ExploreState {
   isLoading: boolean;
   discoveryEnabled: boolean;
   totalAll: number;
-  error: string | null;
+  error: ExploreFetchFailure | null;
 
   fetchSpaces: (query?: string) => Promise<void>;
   fetchMyRequests: () => Promise<void>;
@@ -71,6 +90,22 @@ function getConnectedInstances() {
 
 // ─── Store ──────────────────────────────────────────────────────────────────
 
+/**
+ * Sequence number of the most recent `fetchSpaces`, so a slow reply for an
+ * older query cannot overwrite the answer to a newer one. The same guard
+ * `directoryStore` runs on the other half of the Explore page, and the page
+ * needs both: one search box drives the two stores, and without this the
+ * Inner list could settle on the previous query while Outer showed the
+ * current one. The fan-out is a `Promise.allSettled` over one client per
+ * instance, so its duration is the slowest instance in the set, which is
+ * exactly when this overtakes.
+ *
+ * There is one store per process, so the counter lives beside it rather than
+ * in a factory closure; `reset()` bumps it, which orphans an in-flight
+ * fan-out on logout the way `directoryStore.reset` does.
+ */
+let fetchSeq = 0;
+
 export const useExploreStore = create<ExploreState>((set, get) => ({
   spaces: [],
   myRequests: [],
@@ -82,6 +117,7 @@ export const useExploreStore = create<ExploreState>((set, get) => ({
   error: null,
 
   fetchSpaces: async (query?: string) => {
+    const seq = ++fetchSeq;
     set({ isLoading: true, error: null });
 
     await waitForAutoConnect();
@@ -102,7 +138,11 @@ export const useExploreStore = create<ExploreState>((set, get) => ({
 
       // If ALL instances failed, surface an error
       if (fulfilled.length === 0 && rejected.length > 0) {
-        set({ isLoading: false, error: 'Failed to reach any instance for discovery' });
+        // A superseded fan-out says nothing, and leaves `isLoading` to the
+        // one that superseded it: clearing it here would take the spinner off
+        // a list that is still being fetched.
+        if (seq !== fetchSeq) return;
+        set({ isLoading: false, error: { kind: 'none_answered' } });
         return;
       }
 
@@ -135,6 +175,7 @@ export const useExploreStore = create<ExploreState>((set, get) => ({
         }
       }
 
+      if (seq !== fetchSeq) return;
       set({
         spaces: allSpaces,
         resultsQuery: query ?? '',
@@ -143,10 +184,8 @@ export const useExploreStore = create<ExploreState>((set, get) => ({
         isLoading: false,
       });
     } catch (err) {
-      set({
-        isLoading: false,
-        error: err instanceof Error ? err.message : 'Failed to fetch spaces',
-      });
+      if (seq !== fetchSeq) return;
+      set({ isLoading: false, error: { kind: 'failed', cause: err } });
     }
   },
 
@@ -215,14 +254,19 @@ export const useExploreStore = create<ExploreState>((set, get) => ({
 
   setSearchQuery: (q: string) => set({ searchQuery: q }),
 
-  reset: () => set({
-    spaces: [],
-    myRequests: [],
-    searchQuery: '',
-    resultsQuery: '',
-    isLoading: false,
-    discoveryEnabled: true,
-    totalAll: 0,
-    error: null,
-  }),
+  reset: () => {
+    // Orphan whatever is in flight: its answer belongs to the session that
+    // just ended.
+    fetchSeq++;
+    set({
+      spaces: [],
+      myRequests: [],
+      searchQuery: '',
+      resultsQuery: '',
+      isLoading: false,
+      discoveryEnabled: true,
+      totalAll: 0,
+      error: null,
+    });
+  },
 }));

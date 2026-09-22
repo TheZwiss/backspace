@@ -280,4 +280,117 @@ describe('exploreStore.fetchSpaces', () => {
     expect(useExploreStore.getState().resultsQuery).toBe('nebula');
     expect(useExploreStore.getState().error).not.toBeNull();
   });
+
+  it('records a fan-out nobody answered as a state, not as a sentence', async () => {
+    // Once, not for good: a standing rejection outlives `clearAllMocks` and
+    // turns the next test's first call into a rejection nobody is waiting on.
+    homeApi.explore.list.mockRejectedValueOnce(new Error('down'));
+
+    await useExploreStore.getState().fetchSpaces();
+
+    // The words for this are the Explore page's, in the reader's language.
+    expect(useExploreStore.getState().error).toEqual({ kind: 'none_answered' });
+    expect(useExploreStore.getState().isLoading).toBe(false);
+  });
+
+  it('keeps the cause when the fan-out itself could not run', async () => {
+    // Nothing is in flight in this state: the instance list is read before
+    // the first client is asked for anything, so the throw leaves the try
+    // block with no request to abandon.
+    instanceState.instances = undefined as unknown as typeof instanceState.instances;
+
+    await useExploreStore.getState().fetchSpaces();
+
+    const { error, isLoading } = useExploreStore.getState();
+    expect(error).toMatchObject({ kind: 'failed' });
+    expect((error as { kind: 'failed'; cause: unknown }).cause).toBeInstanceOf(TypeError);
+    expect(isLoading).toBe(false);
+  });
+});
+
+describe('exploreStore.fetchSpaces sequencing', () => {
+  function answer(spaces: { id: string }[]) {
+    return { spaces, total: spaces.length, totalAll: spaces.length, discoveryEnabled: true };
+  }
+
+  /**
+   * Let every started fan-out reach its request. `fetchSpaces` awaits
+   * `waitForAutoConnect` before it calls a client, so until the microtask
+   * queue drains the mocks below have not been entered and the handles that
+   * settle them do not exist yet.
+   */
+  const reachedTheClients = () => new Promise((resolve) => { setTimeout(resolve, 0); });
+
+  it('a slow earlier fan-out does not overwrite a fast later one', async () => {
+    // The Explore search box drives this store and `directoryStore` from one
+    // debounce. Without the guard the Inner list settles on whichever answer
+    // arrives last, which on a slow instance is the query the user already
+    // moved on from, and the two halves of the page disagree.
+    let releaseSlow: () => void = () => {};
+    homeApi.explore.list.mockImplementationOnce(
+      () => new Promise((resolve) => { releaseSlow = () => resolve(answer([{ id: 'slow' }])); }),
+    );
+    homeApi.explore.list.mockImplementationOnce(async () => answer([{ id: 'fast' }]));
+
+    const slow = useExploreStore.getState().fetchSpaces('slow');
+    const fast = useExploreStore.getState().fetchSpaces('fast');
+    await fast;
+
+    expect(useExploreStore.getState().spaces.map((s) => s.id)).toEqual(['fast']);
+    expect(useExploreStore.getState().resultsQuery).toBe('fast');
+
+    releaseSlow();
+    await slow;
+
+    expect(useExploreStore.getState().spaces.map((s) => s.id)).toEqual(['fast']);
+    expect(useExploreStore.getState().resultsQuery).toBe('fast');
+    expect(useExploreStore.getState().isLoading).toBe(false);
+  });
+
+  it('a superseded fan-out that fails says nothing and leaves the spinner alone', async () => {
+    let refuseSlow: () => void = () => {};
+    homeApi.explore.list.mockImplementationOnce(
+      () => new Promise((_resolve, reject) => { refuseSlow = () => reject(new Error('down')); }),
+    );
+    let releaseFast: () => void = () => {};
+    homeApi.explore.list.mockImplementationOnce(
+      () => new Promise((resolve) => { releaseFast = () => resolve(answer([{ id: 'fast' }])); }),
+    );
+
+    const slow = useExploreStore.getState().fetchSpaces('slow');
+    const fast = useExploreStore.getState().fetchSpaces('fast');
+    await reachedTheClients();
+
+    refuseSlow();
+    await slow;
+
+    // The newer fan-out is still running: its spinner is not the old one's to
+    // take down, and its list is not the old one's to blame.
+    expect(useExploreStore.getState().error).toBeNull();
+    expect(useExploreStore.getState().isLoading).toBe(true);
+
+    releaseFast();
+    await fast;
+
+    expect(useExploreStore.getState().spaces.map((s) => s.id)).toEqual(['fast']);
+    expect(useExploreStore.getState().isLoading).toBe(false);
+  });
+
+  it('reset orphans whatever is in flight', async () => {
+    let release: () => void = () => {};
+    homeApi.explore.list.mockImplementationOnce(
+      () => new Promise((resolve) => { release = () => resolve(answer([{ id: 'late' }])); }),
+    );
+
+    const pending = useExploreStore.getState().fetchSpaces('late');
+    await reachedTheClients();
+    useExploreStore.getState().reset();
+    release();
+    await pending;
+
+    // The answer belongs to the session that ended; nothing from it lands.
+    expect(useExploreStore.getState().spaces).toEqual([]);
+    expect(useExploreStore.getState().isLoading).toBe(false);
+    expect(useExploreStore.getState().resultsQuery).toBe('');
+  });
 });

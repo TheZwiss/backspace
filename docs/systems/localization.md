@@ -345,6 +345,13 @@ before this change carries an English sentence that is still the row's only
 explanation. See
 [client-federation.md](client-federation.md#the-reason-field-errormessage).
 
+`exploreStore.error` follows the same rule with a smaller vocabulary:
+`{ kind: 'none_answered' }` or `{ kind: 'failed', cause }`, rendered by the
+Explore page from `spaces:explore.inner.noneAnswered` and `describeError`
+respectively. The test for a store that reports a failure is whether the
+words could be chosen later, at the surface, in the language the reader has
+now.
+
 The check reads `ERROR_CODES` by scanning the array for quoted words, so it
 strips comments from the file first (`readErrorCodes` in
 `scripts/i18n/check.mjs`). Without that step a single apostrophe in a comment

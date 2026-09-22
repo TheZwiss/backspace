@@ -12,6 +12,7 @@ import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { Mascot } from '../ui/Mascot';
 import { MemberListToggleButton } from '../layout/MemberListToggleButton';
 import { useFormatters } from '../../i18n/formatters';
+import { describeError } from '../../i18n/errors';
 import { SpaceCard } from './SpaceCard';
 import { OuterSpaceSection } from './OuterSpaceSection';
 import { ConnectionChips } from './ConnectionChips';
@@ -246,7 +247,12 @@ export function ExplorePage() {
               </div>
             ) : error ? (
               <div className="p-3 bg-accent-rose/10 border border-accent-rose/30 rounded text-sm text-txt-danger">
-                {error}
+                {/* The store keeps the failure as a fact; the words are this
+                    surface's, so they follow the reader's language and not
+                    whatever language was selected when the request failed. */}
+                {error.kind === 'none_answered'
+                  ? t('spaces:explore.inner.noneAnswered')
+                  : describeError(error.cause)}
               </div>
             ) : !hasAnySpaces ? (
               /* True empty state: no discoverable Inner spaces at all. Outer Space still renders below. */

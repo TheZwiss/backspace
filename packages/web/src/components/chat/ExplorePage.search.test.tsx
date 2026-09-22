@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import type { DirectoryEntry, InstanceInfoResponse } from '@backspace/shared';
 import userEvent from '@testing-library/user-event';
 import { ExplorePage } from './ExplorePage';
+import type { ExploreFetchFailure } from '../../stores/exploreStore';
 import { useExploreStore } from '../../stores/exploreStore';
 import { useDirectoryStore } from '../../stores/directoryStore';
 import { useInstanceStore, type ConnectedInstance } from '../../stores/instanceStore';
@@ -47,7 +48,7 @@ vi.mock('../../stores/exploreStore', async () => {
     isLoading: boolean;
     discoveryEnabled: boolean;
     totalAll: number;
-    error: string | null;
+    error: ExploreFetchFailure | null;
     fetchSpaces: typeof fetchSpaces;
     fetchMyRequests: typeof fetchMyRequests;
     setSearchQuery: (q: string) => void;
@@ -131,7 +132,7 @@ function renderPage() {
 describe('ExplorePage search and the Outer Space gate', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    useExploreStore.setState({ searchQuery: '', resultsQuery: '' });
+    useExploreStore.setState({ searchQuery: '', resultsQuery: '', error: null });
   });
 
   it('one debounce drives both stores with the same value', async () => {
@@ -233,6 +234,25 @@ describe('ExplorePage search and the Outer Space gate', () => {
     expect(screen.getByText('No spaces match your search.')).toBeInTheDocument();
   });
 
+  it('says a fan-out nobody answered in the reader\'s language, never in the store\'s', async () => {
+    renderPage();
+    act(() => { useExploreStore.setState({ error: { kind: 'none_answered' } }); });
+
+    expect(screen.getByText('No instance answered. Inner Space is empty until one does.')).toBeInTheDocument();
+    expect(screen.queryByText('Failed to reach any instance for discovery')).not.toBeInTheDocument();
+  });
+
+  it('describes a fan-out that could not run through the error catalog', async () => {
+    renderPage();
+    const cause = new HttpError(503, 'peer_unreachable', { error: 'Instance unreachable', code: 'peer_unreachable', statusCode: 503 }, 'peer_unreachable');
+    act(() => { useExploreStore.setState({ error: { kind: 'failed', cause } }); });
+
+    expect(screen.getByText('The other instance cannot be reached right now.')).toBeInTheDocument();
+    // The English the error carries for logs and older clients is not what
+    // the page shows.
+    expect(screen.queryByText('Instance unreachable')).not.toBeInTheDocument();
+  });
+
   it('keeps the Inner empty copy inside the Inner section and Outer below it', async () => {
     renderPage();
     await waitFor(() => expect(screen.getByText('Outer Space')).toBeInTheDocument());
@@ -245,7 +265,7 @@ describe('ExplorePage search and the Outer Space gate', () => {
 describe('ExplorePage connection chips', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    useExploreStore.setState({ searchQuery: '', resultsQuery: '' });
+    useExploreStore.setState({ searchQuery: '', resultsQuery: '', error: null });
     useInstanceStore.setState({ registry: new Map(), instances: [] });
   });
 
@@ -318,7 +338,7 @@ describe('ExplorePage keeps an expired origin out of Outer Space through a faile
 
   beforeEach(() => {
     vi.clearAllMocks();
-    useExploreStore.setState({ searchQuery: '', resultsQuery: '' });
+    useExploreStore.setState({ searchQuery: '', resultsQuery: '', error: null });
     useDirectoryStore.setState({ entries: [zwissEntry, farEntry], status: 'ok' });
   });
 

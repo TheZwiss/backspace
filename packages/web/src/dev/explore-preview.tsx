@@ -4,6 +4,8 @@
 // of its designed states without a populated instance, a peer, or a hub.
 //
 // `?scene=both|inner-one|inner-two|inner-empty|outer-unreachable|outer-empty`
+// `?scene=inner-none-answered` is the Inner list's failure: no instance in
+// the fan-out answered, so the section has a rose notice and nothing else.
 // `?scene=outer-load-more-retry` is the state a refused continuation leaves:
 // the feed already on screen, the notice about the page that did not arrive,
 // and Show more still under it, because that button is the only way to ask
@@ -80,6 +82,7 @@ type Scene =
   | 'inner-one'
   | 'inner-two'
   | 'inner-empty'
+  | 'inner-none-answered'
   | 'outer-unreachable'
   | 'outer-empty'
   | 'outer-load-more-retry'
@@ -106,6 +109,7 @@ const SCENES: ReadonlySet<string> = new Set<Scene>([
   'inner-one',
   'inner-two',
   'inner-empty',
+  'inner-none-answered',
   'outer-unreachable',
   'outer-empty',
   'outer-load-more-retry',
@@ -332,11 +336,12 @@ function seedStores(scene: Scene): void {
   const discoveryOff = isHintScene(scene) && !HINT_LIMITS[scene].discoveryEnabled;
 
   useExploreStore.setState({
-    spaces: discoveryOff ? [] : innerSpacesFor(scene),
+    spaces: discoveryOff || scene === 'inner-none-answered' ? [] : innerSpacesFor(scene),
     myRequests: [],
     isLoading: false,
     discoveryEnabled: !discoveryOff,
-    error: null,
+    // The page renders the words for this; the store holds the state only.
+    error: scene === 'inner-none-answered' ? { kind: 'none_answered' } : null,
     fetchSpaces: async () => {},
     fetchMyRequests: async () => {},
   });

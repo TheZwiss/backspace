@@ -175,7 +175,8 @@
     "notConnected": "Not connected to {{host}}",
     "inner": {
       "title": "Inner Space",
-      "subtitle": "Spaces on your instances"
+      "subtitle": "Spaces on your instances",
+      "noneAnswered": "No instance answered. Inner Space is empty until one does."
     },
     "outer": {
       "title": "Outer Space",

@@ -283,11 +283,37 @@ One page, one search box, two sections in fixed order. **Inner Space** is the li
 ### Multi-Instance Discovery (`exploreStore.ts`)
 
 `fetchSpaces()` queries home + all connected remote instances in parallel:
-1. Waits for `instanceStore._autoConnectDone` to avoid querying with incomplete instance list
-2. `Promise.allSettled` across home API + all connected instance APIs
-3. Deduplicates by `spaceId:origin` key
-4. Normalizes remote asset URLs via `resolveAssetUrl`
-5. Merges into `TaggedExploreSpace[]` with `_instanceOrigin`
+1. Takes a sequence number, so a reply for an older query cannot land on a newer one (see below)
+2. Waits for `instanceStore._autoConnectDone` to avoid querying with incomplete instance list
+3. `Promise.allSettled` across home API + all connected instance APIs
+4. Deduplicates by `spaceId:origin` key
+5. Normalizes remote asset URLs via `resolveAssetUrl`
+6. Merges into `TaggedExploreSpace[]` with `_instanceOrigin`, and records `resultsQuery`
+
+**One fan-out at a time wins.** `fetchSpaces` captures a module-level
+`fetchSeq` on entry and drops its own result if the counter moved while it
+ran, the same guard `directoryStore` runs on Outer Space. A fan-out lasts as
+long as its slowest instance, and one search box drives both stores through
+one debounce, so without it the Inner list could settle on the previous
+query's answer while Outer showed the current one. A superseded run also
+leaves `isLoading` alone: the run that superseded it is still going, and its
+spinner is not the old one's to take down. `reset()` bumps the counter, which
+orphans anything in flight at logout.
+
+**`resultsQuery` is the query the spaces on screen answer**, recorded when a
+fan-out lands rather than when it is asked for. The empty copy reads it, not
+`searchQuery`: the box is live and the fetch is debounced, so deciding from
+the box made the copy flip between "no matches" and "nothing yet" about a
+list that had not moved.
+
+**A failure is a state, not a sentence.** `error` is
+`ExploreFetchFailure | null`: `{ kind: 'none_answered' }` when every client in
+the fan-out rejected, and `{ kind: 'failed', cause }` when the fan-out could
+not be run at all. The words belong to the surface, so `ExplorePage` renders
+the first from `spaces:explore.inner.noneAnswered` and the second through
+`describeError(cause)`; the store keeping English text was English on screen
+for every reader of the other three languages. `JoinSpace` reads the same
+field as a boolean and has copy of its own.
 
 ### Public Join
 

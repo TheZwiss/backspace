@@ -175,7 +175,8 @@
     "notConnected": "Keine Verbindung zu {{host}}",
     "inner": {
       "title": "Innerer Space",
-      "subtitle": "Spaces auf deinen Instanzen"
+      "subtitle": "Spaces auf deinen Instanzen",
+      "noneAnswered": "Keine Instanz hat geantwortet. Der innere Space bleibt leer, bis eine antwortet."
     },
     "outer": {
       "title": "Äußerer Space",
