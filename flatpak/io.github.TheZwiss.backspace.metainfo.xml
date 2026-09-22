@@ -64,7 +64,7 @@
   <releases>
     <release version="1.5.0" date="2026-09-22">
       <description>
-        <p>Backspace 1.5.0 release.</p>
+        <p>Spaces on other instances are findable now. The Explore page has an Outer Space section listing spaces from instances you have never connected to, and joining one connects you to its instance first. Listing is opt in on both sides: the instance admin allows it and the space owner asks for it. Explore also names the instances that did not answer instead of quietly showing a short list.</p>
       </description>
     </release>
     <release version="1.4.0" date="2026-09-21">
