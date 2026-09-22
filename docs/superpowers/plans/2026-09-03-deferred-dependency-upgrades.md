@@ -141,8 +141,8 @@ Why none of them lands:
 - CVE-2026-3635 only manifests with a restrictive `trustProxy`. At the time of
   writing this server set `trustProxy: true`, which the advisory calls out as
   "expected behavior". **That premise changed on 2026-09-22**: the server now
-  sets a hop count of 1 (`packages/server/src/utils/trustedProxy.ts`), which is
-  the restrictive form. The advisory stays unreachable for the other reason:
+  sets a hop count (`TRUSTED_PROXY_HOPS`, default 1, read in
+  `packages/server/src/config.ts`), which is the restrictive form. The advisory stays unreachable for the other reason:
   its sinks are `request.protocol` and `request.host`, and no code in
   `packages/server/src` reads either. The public origin comes from `DOMAIN`
   (`getOurOrigin`), the tus `Location` is relative on purpose

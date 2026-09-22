@@ -17,11 +17,13 @@ creates and 1000 PATCHes per minute per user), which run inside the tus handler
 after auth.
 
 The address comes from Fastify's `trustProxy`, which is a **count of trusted
-hops** and ships at 1 (`utils/trustedProxy.ts`): the key is the address the
-nearest proxy appended, and entries a client writes into `X-Forwarded-For` are
-ignored. A deployment with a CDN in front of its own proxy, or with no proxy at
-all, has to change that number; see [web-security.md](web-security.md) section
-9 and [deployment.md](deployment.md), "Server proxy-awareness".
+hops**: the `TRUSTED_PROXY_HOPS` environment variable, default 1, read in
+`config.ts` and documented there and in `.env.example`. At 1 the key is the
+address the nearest proxy appended, and entries a client writes into
+`X-Forwarded-For` are ignored. A deployment with a CDN in front of its own
+proxy, or with no proxy at all, sets a different number; see
+[web-security.md](web-security.md) section 9 and
+[deployment.md](deployment.md), "Server proxy-awareness".
 
 What an operator should take from that: **everyone sharing one public address
 shares one budget.** A school, an office behind a corporate proxy, a VPN exit

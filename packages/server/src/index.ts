@@ -39,7 +39,6 @@ import { errorBody } from './utils/httpErrors.js';
 import './utils/federationRollback.js'; // Side-effect: registers rollback callbacks for outbox terminal failures.
 import { registerCallRelayHooks } from './ws/events.js';
 import { resetStalePresenceOnBoot } from './utils/presenceBoot.js';
-import { TRUSTED_PROXY_HOPS } from './utils/trustedProxy.js';
 
 import { registerWebSocket } from './ws/handler.js';
 import path from 'path';
@@ -47,12 +46,12 @@ import fs from 'fs';
 
 async function main(): Promise<void> {
   const app = Fastify({
-    // The number of trusted hops, not `true`. `request.ip` is the address the
+    // A count of trusted hops, not `true`. `request.ip` is the address the
     // nearest proxy appended rather than the left-most thing in
     // `X-Forwarded-For`, so a client cannot pick the address its rate limits
-    // are counted under. See utils/trustedProxy.ts for what to change it to
-    // and when.
-    trustProxy: TRUSTED_PROXY_HOPS,
+    // are counted under. `TRUSTED_PROXY_HOPS` in config.ts carries what the
+    // number means and when an operator changes it.
+    trustProxy: config.trustedProxyHops,
     logger: {
       level: 'info',
     },
@@ -165,8 +164,8 @@ async function main(): Promise<void> {
     // fall back here anyway. Stated plainly instead, because the consequence is
     // an operator's to know: everyone behind one NAT, VPN exit or corporate
     // proxy shares one 200-per-minute budget. Which address that is comes from
-    // `TRUSTED_PROXY_HOPS` (utils/trustedProxy.ts), which is what keeps a
-    // client from choosing its own. See docs/systems/api.md, "Rate limiting".
+    // `config.trustedProxyHops`, which is what keeps a client from choosing
+    // its own. See docs/systems/api.md, "Rate limiting".
     keyGenerator: (request) => request.ip,
     // Test harnesses set DISABLE_RATE_LIMITS=1 to bypass per-IP exhaustion when
     // many tests share the loopback IP. Default unset; production unchanged.

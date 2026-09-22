@@ -655,11 +655,20 @@ server renders different HTML.
 
 `request.ip` is what every rate limit in the app is billed to, so where that
 address comes from is a security property, not a detail. The app runs Fastify
-with `trustProxy: TRUSTED_PROXY_HOPS`, a **hop count of 1**
-(`packages/server/src/utils/trustedProxy.ts`), which means: trust the one proxy
-directly in front of the app, and nothing further out. `request.ip` is the
-entry that proxy appended, which is the peer it actually saw. Entries a client
-puts in the header sit further left and are ignored.
+with `trustProxy: config.trustedProxyHops`, a **count of trusted hops** that
+defaults to 1 and is set with the `TRUSTED_PROXY_HOPS` environment variable
+(read and validated in `packages/server/src/config.ts`, documented there and in
+`.env.example`). One hop means: trust the proxy directly in front of the app
+and nothing further out. `request.ip` is then the entry that proxy appended,
+which is the peer it actually saw, and entries a client puts in the header sit
+further left and are ignored.
+
+It is a variable rather than a constant because this describes the operator's
+topology, which only the operator knows, and because the app ships as a
+published image: a number baked into it could not be corrected by the two
+deployments that need a different one. A value that is not a non-negative
+integer stops the server at boot with a message instead of falling back to 1,
+so a mistyped setting cannot pass for a chosen one.
 
 The alternative, `trustProxy: true`, trusts the whole chain and takes the
 left-most entry, which is whatever the client cared to send. The app ran that
@@ -684,20 +693,20 @@ of this.
 | Bundled Caddy (`allinone`, the shipped default) | overwrites the header; incoming values ignored, since this repo's `Caddyfile` sets no `trusted_proxies` | the real client | correct |
 | Operator's nginx with the snippet `install.sh` prints | **appends**: `"<whatever the client sent>, <peer nginx saw>"` | the real client; the client's own entries are ignored | correct, and this is what the hop count fixed |
 | A tunnel provider (Cloudflare and friends) | one hop that writes its own entry | the real client | correct |
-| CDN in front of the operator's own proxy | two hops | the CDN's address, so every client behind it shares one bucket | **raise the number to 2** |
-| App exposed directly, no proxy at all | only what the client chose to send | the client's own claim | **set the number to 0**, which ignores the header and uses the socket address |
+| CDN in front of the operator's own proxy | two hops | the CDN's address, so every client behind it shares one bucket | **`TRUSTED_PROXY_HOPS=2`** |
+| App exposed directly, no proxy at all | only what the client chose to send | the client's own claim | **`TRUSTED_PROXY_HOPS=0`**, which ignores the header and uses the socket address |
 
 The two rows that need a number other than 1 are the two the app cannot detect
 for itself: one proxy looks exactly like none-plus-a-lying-client from inside
-the process. The constant's own comment says which way to move it, and both
-mistakes are asymmetric: too low costs a shared bucket, too high gives the key
-back to the client.
+the process. That is why the number is the operator's to set, and why
+`.env.example` spells out all three cases. Both mistakes are asymmetric: too
+low costs a shared bucket, too high gives the key back to the client.
 
-**Do not "fix" anything here by flipping `trustProxy` off** while a proxy is in
+**Do not "fix" anything here by disabling proxy trust** while a proxy is in
 front. The app would then read the proxy's own address for every request and
 collapse every client on the instance into one limiter key. The number is the
-mechanism; `false` is only right when there is genuinely nothing in front, and
-`0` says that more clearly.
+mechanism, and `TRUSTED_PROXY_HOPS=0` is the honest way to say "nothing is in
+front of me".
 
 **The nginx snippet in `install.sh` is correct as it stands.** Appending is
 what a proxy should do, and it is what the hop count expects. Rewriting it to
@@ -705,10 +714,13 @@ what a proxy should do, and it is what the hop count expects. Rewriting it to
 client address on any deployment that later puts a CDN in front. It was left
 alone deliberately.
 
-`packages/server/src/utils/trustedProxy.test.ts` holds the behaviour: a forged
-left-most entry, a forged chain, an overwriting proxy, no header at all, the
-two-proxy case and the zero case. Putting `true` back fails three of them. See
-also [deployment.md](deployment.md), "Server proxy-awareness".
+`packages/server/src/config.trustedProxyHops.test.ts` holds both halves: the
+parse (a number, 0, an unset variable defaulting to 1, and five junk values
+that must refuse to boot) and the resulting address (a forged left-most entry,
+a forged chain, an overwriting proxy, no header at all, the two-proxy case and
+the zero case). Reading the value with the lenient `envInt` fails five of them;
+changing the default fails four. See also [deployment.md](deployment.md),
+"Server proxy-awareness".
 
 ---
 
