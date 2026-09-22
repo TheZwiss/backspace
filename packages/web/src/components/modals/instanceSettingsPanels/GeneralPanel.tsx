@@ -263,64 +263,68 @@ export function GeneralPanel() {
         <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:general.discovery.label')}</div>
         <p className="text-xs text-txt-tertiary mb-2">{t('admin:general.discovery.description')}</p>
         <div className="rounded-lg bg-white/[0.02] p-3.5">
+          {/*
+            The group owns the three rungs and nothing else: a `radiogroup` may
+            own only radios, so what hangs under the global rung is a sibling of
+            the fieldset, indented to line up under it. `global` is the last
+            rung, so this renders exactly where it reads.
+          */}
           <fieldset role="radiogroup" aria-label={t('admin:general.discovery.label')} className="min-w-0 space-y-1.5">
             {DISCOVERY_LEVELS.map((option) => (
-              <div key={option.level}>
-                <label
-                  className={`flex items-start gap-3 p-2.5 rounded cursor-pointer transition-colors ${
-                    level === option.level ? 'bg-interactive-selected' : 'hover:bg-interactive-hover'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="instance-discovery-level"
-                    value={option.level}
-                    checked={level === option.level}
-                    onChange={() => selectLevel(option.level)}
-                    aria-label={t(option.labelKey)}
-                    aria-describedby={`discovery-level-${option.level}-description`}
-                    className="mt-0.5 accent-accent-primary"
-                  />
-                  <div>
-                    <div className="text-sm font-medium text-txt-primary">{t(option.labelKey)}</div>
-                    <div id={`discovery-level-${option.level}-description`} className="text-xs text-txt-tertiary">
-                      {t(option.descriptionKey)}
-                    </div>
+              <label
+                key={option.level}
+                className={`flex items-start gap-3 p-2.5 rounded cursor-pointer transition-colors ${
+                  level === option.level ? 'bg-interactive-selected' : 'hover:bg-interactive-hover'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="instance-discovery-level"
+                  value={option.level}
+                  checked={level === option.level}
+                  onChange={() => selectLevel(option.level)}
+                  aria-label={t(option.labelKey)}
+                  aria-describedby={`discovery-level-${option.level}-description`}
+                  className="mt-0.5 accent-accent-primary"
+                />
+                <div>
+                  <div className="text-sm font-medium text-txt-primary">{t(option.labelKey)}</div>
+                  <div id={`discovery-level-${option.level}-description`} className="text-xs text-txt-tertiary">
+                    {t(option.descriptionKey)}
                   </div>
-                </label>
-                {/* Everything the global rung brings with it hangs under the global rung */}
-                {option.level === 'global' && level === 'global' && (
-                  <div className="ml-9 mr-2.5 mt-1.5 mb-1 space-y-3">
-                    {!instanceSettings.federatedRegistrationOpen && (
-                      <div className="p-2.5 bg-accent-amber/10 border border-accent-amber/30 rounded text-[13px] text-accent-amber space-y-2">
-                        <p>{t('admin:general.directory.registrationClosed')}</p>
-                        <button
-                          type="button"
-                          onClick={handleOpenFederatedRegistration}
-                          disabled={openingRegistration}
-                          className="px-2.5 py-1 rounded bg-accent-amber/20 hover:bg-accent-amber/30 text-[13px] font-medium transition-colors disabled:opacity-50"
-                        >
-                          {t('admin:general.directory.openFederatedRegistration')}
-                        </button>
-                      </div>
-                    )}
-                    {/* What the pinger last did, the same shape as the telemetry panel's line */}
-                    <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3 space-y-1">
-                      <div className="text-xs text-txt-tertiary">{pingLabel}</div>
-                      {lastError !== null && (
-                        <div className="text-xs text-txt-danger">
-                          {t('admin:general.directory.status.lastError', {
-                            status: lastErrorReasonKey === null ? lastError.status : t(lastErrorReasonKey),
-                          })}
-                        </div>
-                      )}
-                    </div>
-                    <p className="text-xs text-txt-tertiary">{t('admin:general.directory.disclosure')}</p>
+                </div>
+              </label>
+            ))}
+          </fieldset>
+          {level === 'global' && (
+            <div className="ml-9 mr-2.5 mt-1.5 mb-1 space-y-3">
+              {!instanceSettings.federatedRegistrationOpen && (
+                <div className="p-2.5 bg-accent-amber/10 border border-accent-amber/30 rounded text-[13px] text-accent-amber space-y-2">
+                  <p>{t('admin:general.directory.registrationClosed')}</p>
+                  <button
+                    type="button"
+                    onClick={handleOpenFederatedRegistration}
+                    disabled={openingRegistration}
+                    className="px-2.5 py-1 rounded bg-accent-amber/20 hover:bg-accent-amber/30 text-[13px] font-medium transition-colors disabled:opacity-50"
+                  >
+                    {t('admin:general.directory.openFederatedRegistration')}
+                  </button>
+                </div>
+              )}
+              {/* What the pinger last did, the same shape as the telemetry panel's line */}
+              <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3 space-y-1">
+                <div className="text-xs text-txt-tertiary">{pingLabel}</div>
+                {lastError !== null && (
+                  <div className="text-xs text-txt-danger">
+                    {t('admin:general.directory.status.lastError', {
+                      status: lastErrorReasonKey === null ? lastError.status : t(lastErrorReasonKey),
+                    })}
                   </div>
                 )}
               </div>
-            ))}
-          </fieldset>
+              <p className="text-xs text-txt-tertiary">{t('admin:general.directory.disclosure')}</p>
+            </div>
+          )}
         </div>
       </div>
 

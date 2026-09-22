@@ -852,7 +852,9 @@ runs on both PATCH routes, still answers `400 directory_requires_discovery`
 for `directoryEnabled: true` with discovery off, and still clears
 `directoryEnabled` in the same write when discovery is off (section 3).
 
-Under the `global` rung, indented beneath it and nowhere else:
+Under the `global` rung, indented beneath it and nowhere else, and rendered
+as a sibling of the radiogroup rather than inside it, since a radiogroup may
+own only radios:
 
 - While `federatedRegistrationOpen` is off, the amber note "New accounts from
   other instances are closed, so listed spaces will show as closed to new

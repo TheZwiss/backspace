@@ -662,11 +662,9 @@ Strings live in the `telemetry` namespace under `panel.*`. Registered as the
 
 #### GeneralPanel
 
-Manages: instance name, the space-discovery ladder, GIF API key, federation relay toggle/TTL.
+Manages: instance name, the space-discovery ladder, GIF API key.
 
 - Instance name input: max 32 chars, enforced client-side via `slice(0, 32)`
-- GIF key: password input, separate dirty tracking (`gifKeyDirty`). Only sent on save if modified. "Clear key" button sets empty string.
-- Federation relay toggle and TTL input: drive `federationRelayEnabled` and `federationRelayTtlDays` instance settings.
 - Space discovery ladder: one radio group ("Space discovery", "How far spaces on this instance can be found.") replacing what used to be a discovery toggle and a directory toggle. Three mutually exclusive rungs, each a superset of the one above, and each writing both stored flags at once:
 
   | Rung | Label | `discoveryEnabled` | `directoryEnabled` |
@@ -676,7 +674,8 @@ Manages: instance name, the space-discovery ladder, GIF API key, federation rela
   | `global` | Global space discovery | true | true |
 
   The selected rung is derived from the draft by `levelOf()`, never stored as a third piece of state, and picking a rung applies that row through `LEVEL_FLAGS`. The pair the server refuses (`directory_requires_discovery`) has no rung, so the old "switching discovery off clears the directory in the draft" special case is gone; the server-side invariant is unchanged and still guards the API.
-- Under the `global` rung only, indented beneath it: (1) while `federatedRegistrationOpen` is off, the amber note that listed spaces will show as closed to new accounts, with an "Open federated accounts" button that calls `updateInstanceSettings({ federatedRegistrationOpen: true })` immediately, outside the draft, disabled while in flight and reporting failure through the panel's `saveError` line. The flag is never flipped automatically by picking the rung: opening sign-ups to strangers stays an explicit click. The note appears as soon as the rung is picked in the draft, before any save. (2) a status line of the same shape as the telemetry panel's, fed by `directoryLastPingAt` and `directoryLastError` ("Never reported" / "Last reported <date>", then "Last attempt failed (<reason>)" with the hub's reason for a `fetch` status, a sentence of its own for `origin`, `network` and `timeout`, or the bare HTTP status). (3) the one-sentence disclosure of what listing makes public. The status line reads the store's `instanceSettings`, not the draft, and the panel calls `fetchInstanceSettings()` every 10 seconds while mounted (`INSTANCE_SETTINGS_REFRESH_MS`) so it follows the pinger, whatever rung is selected; the draft holds only the three editable fields and a refresh reseeds it only while it has no unsaved edit. Strings under `admin:general.discovery.*` and `admin:general.directory.*`. See [directory.md](directory.md) §10.
+- Under the `global` rung only, indented beneath it and rendered as a sibling of the radiogroup (which may own only radios): (1) while `federatedRegistrationOpen` is off, the amber note that listed spaces will show as closed to new accounts, with an "Open federated accounts" button that calls `updateInstanceSettings({ federatedRegistrationOpen: true })` immediately, outside the draft, disabled while in flight and reporting failure through the panel's `saveError` line. The flag is never flipped automatically by picking the rung: opening sign-ups to strangers stays an explicit click. The note appears as soon as the rung is picked in the draft, before any save. (2) a status line of the same shape as the telemetry panel's, fed by `directoryLastPingAt` and `directoryLastError` ("Never reported" / "Last reported <date>", then "Last attempt failed (<reason>)" with the hub's reason for a `fetch` status, a sentence of its own for `origin`, `network` and `timeout`, or the bare HTTP status). (3) the one-sentence disclosure of what listing makes public. The status line reads the store's `instanceSettings`, not the draft, and the panel calls `fetchInstanceSettings()` every 10 seconds while mounted (`INSTANCE_SETTINGS_REFRESH_MS`) so it follows the pinger, whatever rung is selected; the draft holds only the three editable fields and a refresh reseeds it only while it has no unsaved edit. Strings under `admin:general.discovery.*` and `admin:general.directory.*`. See [directory.md](directory.md) §10.
+- GIF key: password input, separate dirty tracking (`gifKeyDirty`). Only sent on save if modified. "Clear key" button sets empty string.
 
 The registration toggles (`registrationOpen` / `federatedRegistrationOpen`) and the invite-link manager live in [RegistrationPanel](#registrationpanel).
 
@@ -744,7 +743,9 @@ See [api.md → Admin: Invite Management](api.md#admin-invite-management-routesi
 
 #### FederationPanel
 
-Manages: federation peers list, pending approval requests (inbound + outbound), manual peering initiation, secret rotation, peer reset.
+Manages: the relay settings (`federationRelayEnabled`, `autoAcceptPeering`, `federationRelayTtlDays`, `defaultAutoRotateIntervalDays`), federation peers list, pending approval requests (inbound + outbound), manual peering initiation, secret rotation, peer reset.
+
+- Relay group (`federation:admin.relay.*`): two toggles, relay enabled and auto-accept peering, and two number inputs clamped to 1-365 days, the relay TTL and the default auto-rotation interval. All four are draft fields saved together through `updateInstanceSettings`.
 
 - **Pending Approvals section:** Visible only when `pendingApprovalCount > 0` (from ready payload — the count sums inbound + outbound rows). Positioned above the peer list. Both directions render as rows in the same unified queue, branched on `direction`:
   - **Inbound rows** — "{instanceName} ({origin}) — wants to peer with us." Approve / Deny buttons.

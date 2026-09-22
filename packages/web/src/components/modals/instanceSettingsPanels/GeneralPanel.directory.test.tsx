@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { InstanceAdminSettings } from '@backspace/shared';
 import { GeneralPanel } from './GeneralPanel';
@@ -58,6 +58,25 @@ describe('GeneralPanel discovery ladder', () => {
     expect(screen.getByText('Spaces appear in Explore for people on this instance and on instances connected to it.')).toBeInTheDocument();
     expect(screen.getByText('Spaces that opt in also appear in the public Backspace directory, on every instance.')).toBeInTheDocument();
     expect(screen.getAllByRole('radio')).toHaveLength(3);
+  });
+
+  it('groups the three rungs and nothing else', () => {
+    seed({ discoveryEnabled: true, directoryEnabled: true, federatedRegistrationOpen: false });
+    render(<GeneralPanel />);
+    const group = screen.getByRole('radiogroup', { name: 'Space discovery' });
+    expect(within(group).getAllByRole('radio')).toHaveLength(3);
+
+    // A radiogroup may own only radios, so everything the global rung brings
+    // with it sits outside the group even though it reads as being under the
+    // rung.
+    expect(within(group).queryByRole('button', { name: OPEN_ACCOUNTS })).not.toBeInTheDocument();
+    expect(within(group).queryByText(/closed to new accounts/)).not.toBeInTheDocument();
+    expect(within(group).queryByText('Never reported')).not.toBeInTheDocument();
+    expect(within(group).queryByText(DISCLOSURE)).not.toBeInTheDocument();
+
+    expect(screen.getByRole('button', { name: OPEN_ACCOUNTS })).toBeInTheDocument();
+    expect(screen.getByText('Never reported')).toBeInTheDocument();
+    expect(screen.getByText(DISCLOSURE)).toBeInTheDocument();
   });
 
   it('checks the invite rung when discovery is off', () => {
