@@ -1,0 +1,675 @@
+{
+  "packages/desktop/src/activityDetector.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "packages/desktop/src/keybindManager.ts": {
+    "@typescript-eslint/no-require-imports": {
+      "count": 1
+    }
+  },
+  "packages/desktop/src/main.ts": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 5
+    },
+    "@typescript-eslint/no-require-imports": {
+      "count": 3
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 3
+    }
+  },
+  "packages/desktop/src/recovery.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/server/src/db/pendingMigrations.test.ts": {
+    "@typescript-eslint/no-require-imports": {
+      "count": 1
+    }
+  },
+  "packages/server/src/index.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/server/src/routes/admin.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/server/src/routes/channels.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/server/src/routes/dm.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 4
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 4
+    }
+  },
+  "packages/server/src/routes/explore.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/server/src/routes/federation.presenceUpdate.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    }
+  },
+  "packages/server/src/routes/federation.resolveOrCreate.test.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/server/src/routes/federation/dmChannels.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "packages/server/src/routes/federation/events/calls.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/server/src/routes/federation/events/dispatch.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/server/src/routes/federation/events/dmMessages.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "packages/server/src/routes/federation/events/friends.ts": {
+    "prefer-const": {
+      "count": 3
+    }
+  },
+  "packages/server/src/routes/federation/events/membership.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 3
+    }
+  },
+  "packages/server/src/routes/federation/handlers/approvals.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "packages/server/src/routes/federation/handlers/attach.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 4
+    }
+  },
+  "packages/server/src/routes/federation/handlers/peerAdmin.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/server/src/routes/federation/handlers/peerHandshake.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 3
+    }
+  },
+  "packages/server/src/routes/federation/handlers/relay.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "packages/server/src/routes/federation/identity.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/server/src/routes/federation/origin.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/server/src/routes/federation/reconciliation.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "packages/server/src/routes/messages.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "packages/server/src/routes/settings.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/server/src/routes/social.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "packages/server/src/routes/spaces.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "packages/server/src/routes/users.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/server/src/utils/auth.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "packages/server/src/utils/embedResolver.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/server/src/utils/federationOutbox.systemType.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    }
+  },
+  "packages/server/src/utils/federationPresence.peerLifecycle.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "packages/server/src/utils/federationWorker.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/server/src/utils/fileCleanup.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "packages/server/src/utils/spaceInviteSnapshot.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 7
+    }
+  },
+  "packages/server/src/utils/storageJanitor.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 5
+    }
+  },
+  "packages/server/src/ws/events.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 8
+    }
+  },
+  "packages/server/src/ws/handler.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 3
+    }
+  },
+  "packages/server/test/federation-e2e-call-addressing.test.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/web/src/api/client.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    }
+  },
+  "packages/web/src/audio/AudioManager.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    }
+  },
+  "packages/web/src/components/JoinPage.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "packages/web/src/components/auth/RegisterPage.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    },
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "packages/web/src/components/chat/ConnectionChips.test.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 6
+    }
+  },
+  "packages/web/src/components/chat/ExplorePage.search.test.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "packages/web/src/components/chat/FriendsPage.test.tsx": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 8
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "packages/web/src/components/chat/FriendsPage.tsx": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "packages/web/src/components/chat/InstanceDiscoveryHint.test.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/web/src/components/chat/Message.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/web/src/components/chat/MessageInput.tsx": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    }
+  },
+  "packages/web/src/components/chat/MessageList.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "packages/web/src/components/chat/OuterSpaceSection.test.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/web/src/components/chat/SearchPopover.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/web/src/components/chat/SpaceInviteCard.test.tsx": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "packages/web/src/components/layout/ChannelSidebar.tsx": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/web/src/components/layout/DmListItem.tsx": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "packages/web/src/components/layout/DmSearchBar.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    },
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "packages/web/src/components/layout/MainContent.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "packages/web/src/components/layout/MobileGroupDmInfo.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "packages/web/src/components/layout/MobileScreenStack.tsx": {
+    "prefer-const": {
+      "count": 1
+    }
+  },
+  "packages/web/src/components/layout/MobileVoiceFullScreen.test.tsx": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 6
+    }
+  },
+  "packages/web/src/components/layout/SpaceSidebar.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "packages/web/src/components/modals/AddDmMemberModal.tsx": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "packages/web/src/components/modals/CategorySettingsModal.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/web/src/components/modals/ChannelSettingsModal.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "packages/web/src/components/modals/ConnectedInstances.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/web/src/components/modals/DeleteAccountModal.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "packages/web/src/components/modals/GroupDmSettings.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "packages/web/src/components/modals/InviteModal.test.tsx": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 20
+    }
+  },
+  "packages/web/src/components/modals/InviteModal.tsx": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "packages/web/src/components/modals/NewDmModal.tsx": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "packages/web/src/components/modals/UserProfileModal.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/web/src/components/modals/instanceSettingsPanels/FederationPanel.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 3
+    }
+  },
+  "packages/web/src/components/modals/instanceSettingsPanels/UsersPanel.tsx": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "packages/web/src/components/modals/settingsPanels/AccountPanel.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "packages/web/src/components/modals/settingsPanels/KeybindsPanel.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/web/src/components/modals/spaceSettingsPanels/OverviewPanel.tsx": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    },
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "packages/web/src/components/modals/spaceSettingsPanels/RolesPanel.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "packages/web/src/components/ui/ContextMenuRenderer.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/web/src/components/ui/PermissionsEditor.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/web/src/components/ui/UserProfilePopout.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/web/src/components/voice/SoundController.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "packages/web/src/components/voice/VoiceChannel.test.tsx": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    }
+  },
+  "packages/web/src/components/voice/VoiceControlBar.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/web/src/components/voice/VoiceGrid.test.tsx": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "packages/web/src/hooks/__tests__/useGridLayout.test.ts": {
+    "prefer-const": {
+      "count": 1
+    }
+  },
+  "packages/web/src/hooks/dmMessageCreated.fallback.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 5
+    }
+  },
+  "packages/web/src/hooks/useAudioDevices.test.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/web/src/hooks/useFloatingPosition.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/web/src/hooks/useLiveKit.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 6
+    }
+  },
+  "packages/web/src/hooks/useMascotAnimation.ts": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "packages/web/src/hooks/useTrackStats.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 10
+    }
+  },
+  "packages/web/src/hooks/useVisualViewportInset.ts": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "packages/web/src/hooks/useWebSocket.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 23
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 4
+    }
+  },
+  "packages/web/src/i18n/formatters.ts": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "packages/web/src/stores/chatStore.rekey.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "packages/web/src/stores/chatStore.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 5
+    }
+  },
+  "packages/web/src/stores/directoryStore.test.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 15
+    }
+  },
+  "packages/web/src/stores/exploreStore.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/web/src/stores/instanceStore.connect.test.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 6
+    }
+  },
+  "packages/web/src/stores/instanceStore.failover.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "packages/web/src/stores/instanceStore.remoteCredential.test.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/web/src/stores/socialStore.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/web/src/stores/spaceStore.dmAlternatives.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "packages/web/src/stores/spaceStore.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/web/src/stores/transferStore.test.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "packages/web/src/stores/transferStore.upload.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 6
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/web/src/stores/voiceStore.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/web/src/test/setup.ts": {
+    "@typescript-eslint/no-this-alias": {
+      "count": 1
+    }
+  },
+  "packages/web/src/utils/colorExtractor.ts": {
+    "prefer-const": {
+      "count": 1
+    }
+  },
+  "packages/web/src/utils/dmFormatters.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 5
+    }
+  },
+  "packages/web/src/utils/dmOriginFailover.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "packages/web/src/utils/livekitInternals.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 5
+    }
+  },
+  "packages/web/src/utils/screenShare.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "packages/web/src/utils/screenShare.ts": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "scripts/directory-hub/src/env.ts": {
+    "@typescript-eslint/no-empty-object-type": {
+      "count": 1
+    },
+    "@typescript-eslint/no-namespace": {
+      "count": 1
+    }
+  },
+  "scripts/directory-hub/src/index.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "scripts/gen-icons.mjs": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "scripts/metrics/src/collect.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "scripts/telemetry-receiver/src/env.ts": {
+    "@typescript-eslint/no-empty-object-type": {
+      "count": 1
+    },
+    "@typescript-eslint/no-namespace": {
+      "count": 1
+    }
+  },
+  "scripts/telemetry-receiver/src/index.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "scripts/telemetry-receiver/src/validate.test.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  }
+}

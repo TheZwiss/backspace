@@ -133,6 +133,8 @@ Data: `data/` at the repository root (backspace.db + uploads/ + backups/), mount
 
 **Dev:** `pnpm install && pnpm dev` → server :3005 + Vite :5173
 
+**Lint:** `pnpm lint` (ESLint flat config in `eslint.config.js`; violations that predate the lint step are counted in `eslint-suppressions.json`, so new ones fail the run)
+
 **Deployment:**
 - Docker Compose: `backspace` + `caddy` (auto-HTTPS) + `livekit` (optional)
 - `./install.sh` — Interactive first-time setup

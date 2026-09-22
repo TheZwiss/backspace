@@ -1,7 +1,7 @@
 name: CI
 
-# Runs the workspace's typecheck, production build, and full test suite on every
-# pull request and on pushes to main. Purpose: catch compile errors and test
+# Runs the workspace's lint, typecheck, production build, and full test suite on
+# every pull request and on pushes to main. Purpose: catch compile errors and test
 # regressions before merge instead of relying on each contributor running tests
 # locally. Once this check is green on a PR, enable branch protection on `main`
 # ("Require status checks to pass" → select "Build & test") to make it blocking.
@@ -91,6 +91,44 @@ jobs:
       - name: Test
         run: pnpm -r test
 
+  # ESLint over every workspace package. Its own job rather than a step in the
+  # matrix above: the rule set is not type-aware and reads no compiled output,
+  # so the result cannot differ between Node 22 and Node 24, and a step would
+  # run it twice and add its runtime to the critical path of both legs. Here it
+  # runs in parallel with them and gates through the aggregate job below. The
+  # install is the same one the matrix does, on its own runner; nothing is
+  # built, because linting needs sources only.
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 10.34.3
+
+      # ESLint 10 needs Node ^22.13 or >=24, above the repository's 22.12
+      # floor, so this job pins the .nvmrc version rather than the floor.
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
   # The container image has its own build graph: the Dockerfile copies files
   # into the builder stage one path at a time, so a build script that starts
   # reading a new path passes every job above and still fails the image. That
@@ -131,7 +169,7 @@ jobs:
   build-and-test-required:
     name: Build & test
     if: always()
-    needs: [build-and-test, build-image]
+    needs: [build-and-test, build-image, lint]
     runs-on: ubuntu-latest
     steps:
       - name: Verify matrix result
@@ -144,4 +182,8 @@ jobs:
             echo "Container image build did not succeed: ${{ needs.build-image.result }}"
             exit 1
           fi
-          echo "All matrix legs passed and the image builds."
+          if [ "${{ needs.lint.result }}" != "success" ]; then
+            echo "Lint did not succeed: ${{ needs.lint.result }}"
+            exit 1
+          fi
+          echo "All matrix legs passed, lint is clean and the image builds."
