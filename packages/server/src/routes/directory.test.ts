@@ -188,10 +188,10 @@ const ENTRY: DirectoryEntry = {
 
 type FetchMock = ReturnType<typeof vi.fn<(input: string | URL | Request, init?: RequestInit) => Promise<Response>>>;
 
-function feedResponse(spaces: DirectoryEntry[] = [ENTRY]): Response {
+function feedResponse(spaces: DirectoryEntry[] = [ENTRY], extraHeaders: Record<string, string> = {}): Response {
   return new Response(JSON.stringify({ schema: 1, spaces }), {
     status: 200,
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...extraHeaders },
   });
 }
 
@@ -288,6 +288,45 @@ describe('GET /api/directory', () => {
     await proxy('/api/directory?q=chess');
     vi.setSystemTime(T0 + 60_000);
     await proxy('/api/directory?q=chess');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  // The hub caches the feed at its edge for 60 s and says how old its copy
+  // is in `Age`; the proxy's own 60 s counts from when the edge copy was
+  // made, so freshness is bounded at 60 s end to end.
+  it('expires an answer with Age: 50 after 10 s, not 60', async () => {
+    const fetchMock = stubHub(async () => feedResponse([ENTRY], { age: '50' }));
+    await proxy('/api/directory?q=chess');
+    vi.setSystemTime(T0 + 9_000);
+    await proxy('/api/directory?q=chess');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    vi.setSystemTime(T0 + 10_000);
+    await proxy('/api/directory?q=chess');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the full 60 s when the answer carries no Age', async () => {
+    const fetchMock = stubHub();
+    await proxy('/api/directory?q=chess');
+    vi.setSystemTime(T0 + 59_000);
+    await proxy('/api/directory?q=chess');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the full 60 s when the Age header is not a number', async () => {
+    const fetchMock = stubHub(async () => feedResponse([ENTRY], { age: 'soon' }));
+    await proxy('/api/directory?q=chess');
+    vi.setSystemTime(T0 + 59_000);
+    await proxy('/api/directory?q=chess');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('clamps an Age beyond the TTL so the entry expires on the next request without throwing', async () => {
+    const fetchMock = stubHub(async () => feedResponse([ENTRY], { age: '500' }));
+    const first = await proxy('/api/directory?q=chess');
+    expect(first.statusCode).toBe(200);
+    const second = await proxy('/api/directory?q=chess');
+    expect(second.statusCode).toBe(200);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 

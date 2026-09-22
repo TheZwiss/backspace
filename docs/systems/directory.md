@@ -370,7 +370,18 @@ the reply's), and:
   so the two agree on what a request means;
 - caches each distinct `(limit, offset, q)` for 60 seconds in a map of at most
   64 entries that drops its oldest entry when full, so a delist reaches clients
-  within about a minute and the cache cannot grow without bound;
+  within about a minute and the cache cannot grow without bound. The 60
+  seconds count from when the hub's edge copy was made, not from when it
+  arrived: the hub serves the feed from its edge cache for 60 s of its own
+  and says how old the copy is in `Age` (seconds; absent on a miss), and the
+  proxy stores the entry at `Date.now() - age * 1000` (absent or
+  non-numeric counts as 0, a value above 60 s is clamped to 60 s, so the
+  entry then expires on the next request). Without this the two caches
+  stacked: a proxy that fetched at second 59 of the edge copy served it
+  until second 119. The upstream `cache-control` is not consulted, because
+  the zone's browser-cache setting rewrites it to `max-age=14400` on a hit,
+  the CDN's browser-facing header rather than the edge TTL. Freshness is
+  therefore bounded at 60 s end to end;
 - coalesces identical in-flight requests into one upstream fetch;
 - caches nothing on failure, so the next request tries again;
 - accepts only a body that is `{ schema: 1, spaces: [...] }` of objects, and

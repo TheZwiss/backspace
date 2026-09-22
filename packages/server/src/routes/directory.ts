@@ -45,6 +45,13 @@ export function _resetDirectoryRouteCacheForTests(): void {
  * through its own instance, which validates the query, forwards it, and keeps
  * each distinct query for a minute so a delist reaches clients within about
  * that long while the hub sees one read per query per instance per minute.
+ *
+ * The hub caches the feed at its edge for the same minute and reports the
+ * copy's age in `Age` (seconds; absent on a miss). The minute here counts
+ * from when the edge copy was made, not from when it arrived, so the two
+ * caches never stack into two minutes: freshness is bounded at 60 s end to
+ * end. The upstream `cache-control` is not read for this, since the CDN
+ * rewrites it to its browser-facing value on a hit.
  */
 const FEED_CACHE_MS = 60_000;
 const FEED_CACHE_MAX_ENTRIES = 64;
@@ -119,8 +126,27 @@ function isDirectoryFeed(value: unknown): value is DirectoryFeed {
     && candidate.spaces.every((entry) => typeof entry === 'object' && entry !== null);
 }
 
+interface FetchedFeed {
+  feed: DirectoryFeed;
+  /** How old the hub's copy already was when it answered, in ms; 0 when it did not say. */
+  ageMs: number;
+}
+
+/**
+ * The `Age` header as milliseconds. Absent or not a whole number of seconds
+ * counts as 0; a value beyond the proxy's own TTL is clamped to it, so the
+ * stored instant is never further back than one full TTL.
+ */
+function ageMsOf(response: Response): number {
+  const raw = response.headers.get('age');
+  if (raw === null) return 0;
+  const seconds = Number(raw.trim());
+  if (!Number.isFinite(seconds) || seconds < 0) return 0;
+  return Math.min(seconds * 1000, FEED_CACHE_MS);
+}
+
 /** Null on any failure: no answer, a non-200, or a body that is not a feed. */
-async function fetchFeed(endpoint: string, query: FeedQuery): Promise<DirectoryFeed | null> {
+async function fetchFeed(endpoint: string, query: FeedQuery): Promise<FetchedFeed | null> {
   let response: Response;
   try {
     response = await fetch(feedUrl(endpoint, query), {
@@ -142,9 +168,10 @@ async function fetchFeed(endpoint: string, query: FeedQuery): Promise<DirectoryF
   } catch {
     return null;
   }
-  return isDirectoryFeed(body) ? body : null;
+  return isDirectoryFeed(body) ? { feed: body, ageMs: ageMsOf(response) } : null;
 }
 
+/** `at` is when the copy was made: the receive time less the hub's `Age`. */
 function storeFeed(key: string, feed: DirectoryFeed, at: number): void {
   if (feedCache.size >= FEED_CACHE_MAX_ENTRIES) {
     const oldest = feedCache.keys().next();
@@ -170,9 +197,10 @@ function getFeed(endpoint: string, query: FeedQuery): Promise<DirectoryFeed | nu
   if (pending !== undefined) return pending;
 
   const request = fetchFeed(endpoint, query)
-    .then((feed) => {
-      if (feed !== null) storeFeed(key, feed, Date.now());
-      return feed;
+    .then((fetched) => {
+      if (fetched === null) return null;
+      storeFeed(key, fetched.feed, Date.now() - fetched.ageMs);
+      return fetched.feed;
     })
     .finally(() => {
       feedInflight.delete(key);
