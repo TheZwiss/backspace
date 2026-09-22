@@ -53,7 +53,7 @@
       "addedLabel": "添加时间",
       "disconnectedLabel": "断开时间",
       "lastConnectedLabel": "最后连接",
-      "homePasswordPlaceholder": "您的主账号密码",
+      "homePasswordLabel": "您的主账号密码",
       "disconnect": "断开连接",
       "reconnect": "重新连接",
       "reauthenticate": "重新认证",

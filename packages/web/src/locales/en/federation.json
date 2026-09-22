@@ -53,7 +53,7 @@
       "addedLabel": "Added",
       "disconnectedLabel": "Disconnected",
       "lastConnectedLabel": "Last connected",
-      "homePasswordPlaceholder": "Your home account password",
+      "homePasswordLabel": "Your home account password",
       "disconnect": "Disconnect",
       "reconnect": "Reconnect",
       "reauthenticate": "Re-authenticate",

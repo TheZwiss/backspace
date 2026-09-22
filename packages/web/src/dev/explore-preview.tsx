@@ -26,17 +26,32 @@
 // with the router already at `/explore`, so the sidebar's Explore entry can
 // be seen in its selected state and the Home entry in its unselected one.
 //
-// `?scene=connections|connections-open` seeds the federation registry with
-// one expired and one unreachable connection over the `both` page, so the
-// chips row under the Inner Space subtitle can be seen collapsed, and with
-// the expired chip opened into its reauth form (the harness clicks
-// Reconnect the way a user does).
+// `?scene=connections` seeds the federation registry with one expired and
+// one unreachable connection over the `both` page, so the chips row under
+// the Inner Space subtitle can be seen collapsed. The `connections-*` scenes
+// after it open the expired chip into its reconnect panel and drive that
+// panel into one designed state each, always the way a user reaches it (the
+// harness clicks Reconnect, types into the field and submits it; only the
+// store action behind it is stubbed):
+//   connections-focused      the panel as it opens, the field holding focus
+//   connections-idle         the same panel with the focus given up
+//   connections-submitting   a submit that never settles
+//   connections-wrong        a submit the store refuses as a wrong password
+//   connections-peer-down    a submit the store refuses as unreachable
+//   connections-recovered    a submit that succeeds; the chip is gone
+// `connections-open` is kept as an alias of `connections-focused`.
+//
+// `?scene=connections-panel` renders the Connections settings panel instead
+// of the page, with the expired row open on the same reauth form, because
+// the two surfaces share it.
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import type { DirectoryEntry, FederationRegistryEntry, InstanceInfoResponse, User } from '@backspace/shared';
 import { ExplorePage } from '../components/chat/ExplorePage';
 import { ChannelSidebar } from '../components/layout/ChannelSidebar';
 import { ConnectAndJoinModal } from '../components/modals/ConnectAndJoinModal';
+import { ConnectedInstances } from '../components/modals/ConnectedInstances';
+import { HttpError } from '../api/client';
 import { useExploreStore, type TaggedExploreSpace } from '../stores/exploreStore';
 import { useDirectoryStore } from '../stores/directoryStore';
 import { useInstanceStore, type ConnectedInstance } from '../stores/instanceStore';
@@ -58,7 +73,14 @@ type Scene =
   | 'connect-fallback'
   | 'home-sidebar'
   | 'connections'
-  | 'connections-open';
+  | 'connections-open'
+  | 'connections-focused'
+  | 'connections-idle'
+  | 'connections-submitting'
+  | 'connections-wrong'
+  | 'connections-peer-down'
+  | 'connections-recovered'
+  | 'connections-panel';
 
 const SCENES: ReadonlySet<string> = new Set<Scene>([
   'both',
@@ -73,6 +95,13 @@ const SCENES: ReadonlySet<string> = new Set<Scene>([
   'home-sidebar',
   'connections',
   'connections-open',
+  'connections-focused',
+  'connections-idle',
+  'connections-submitting',
+  'connections-wrong',
+  'connections-peer-down',
+  'connections-recovered',
+  'connections-panel',
 ]);
 
 function isScene(value: string | null): value is Scene {
@@ -316,23 +345,44 @@ function nextFrame(): Promise<void> {
   return new Promise((resolve) => requestAnimationFrame(() => resolve()));
 }
 
+/** Polls `find` once per frame until it answers, so a driver never races a render. */
+async function waitForElement<T>(find: () => T | null | undefined, what: string): Promise<T> {
+  for (let i = 0; i < 300; i++) {
+    const found = find();
+    if (found) return found;
+    await nextFrame();
+  }
+  throw new Error(what);
+}
+
+/**
+ * React owns every input here, so a value goes in through the native setter
+ * and an input event rather than a plain assignment, which React would not
+ * see.
+ */
+function typeInto(input: HTMLInputElement, value: string): void {
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+  if (!setValue) throw new Error('no native value setter');
+  setValue.call(input, value);
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+/** The one password field on screen, once it is there. */
+function passwordField(): Promise<HTMLInputElement> {
+  return waitForElement(
+    () => document.querySelector<HTMLInputElement>('input[type="password"]'),
+    'the password field did not render',
+  );
+}
+
 /**
  * Reaches the fallback phase the way a user does: types a password into the
  * step and submits it, which the stubbed connect answers with
- * `needs-remote-password`. React owns the input, so the value goes through
- * the native setter and an input event rather than a plain assignment.
+ * `needs-remote-password`.
  */
 async function driveToFallback(): Promise<void> {
-  let input: HTMLInputElement | null = null;
-  for (let i = 0; i < 300 && !input; i++) {
-    await nextFrame();
-    input = document.querySelector<HTMLInputElement>('input[type="password"]');
-  }
-  if (!input) throw new Error('the password step did not render');
-  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
-  if (!setValue) throw new Error('no native value setter');
-  setValue.call(input, 'hunter2');
-  input.dispatchEvent(new Event('input', { bubbles: true }));
+  const input = await passwordField();
+  typeInto(input, 'hunter2');
   await nextFrame();
   input.form?.requestSubmit();
 }
@@ -370,35 +420,110 @@ function liveInstance(origin: string, label: string, status: ConnectedInstance['
  * The store actions the chips call are answered locally and never settle a
  * status, so the row stays on screen to be looked at.
  */
+function isConnectionsScene(scene: Scene): boolean {
+  return scene === 'connections' || scene.startsWith('connections-');
+}
+
+/** The expired instance every `connections-*` scene reconnects. */
+const EXPIRED_ORIGIN = 'https://zwiss.example';
+
+/**
+ * What the scene's `reauthenticateInstance` does with the submitted
+ * password. Everything else about the store stays the same, so the only
+ * difference between the panel's states is the answer it is waiting on.
+ */
+function reauthFor(scene: Scene): (origin: string, password: string) => Promise<void> {
+  switch (scene) {
+    case 'connections-submitting':
+      return () => new Promise<void>(() => {});
+    case 'connections-wrong':
+      return () => Promise.reject(
+        new HttpError(401, 'invalid_credentials', { error: 'invalid_credentials', code: 'invalid_credentials', statusCode: 401 }, 'invalid_credentials'),
+      );
+    case 'connections-peer-down':
+      return () => Promise.reject(
+        new HttpError(503, 'peer_unreachable', { error: 'peer_unreachable', code: 'peer_unreachable', statusCode: 503 }, 'peer_unreachable'),
+      );
+    case 'connections-recovered':
+      return async (origin: string) => {
+        const registry = new Map(useInstanceStore.getState().registry);
+        registry.set(origin, registryEntry(origin, 'Zwiss', 'connected'));
+        useInstanceStore.setState({
+          registry,
+          instances: useInstanceStore.getState().instances.map((i) =>
+            i.origin === origin ? liveInstance(i.origin, i.label, 'connected') : i,
+          ),
+        });
+      };
+    default:
+      return async () => {};
+  }
+}
+
 function seedConnectionsScene(scene: Scene): void {
-  if (scene !== 'connections' && scene !== 'connections-open') return;
+  if (!isConnectionsScene(scene)) return;
   useAuthStore.setState({ user: HOME_USER });
   useInstanceStore.setState({
     instances: [
       liveInstance('https://nova.example', 'Nova', 'connected'),
-      liveInstance('https://zwiss.example', 'Zwiss', 'error'),
+      liveInstance(EXPIRED_ORIGIN, 'Zwiss', 'error'),
       liveInstance('https://orbit.example', 'Orbit', 'disconnected'),
     ],
     registry: new Map([
       ['https://nova.example', registryEntry('https://nova.example', 'Nova', 'connected')],
-      ['https://zwiss.example', registryEntry('https://zwiss.example', 'Zwiss', 'auth_expired')],
+      [EXPIRED_ORIGIN, registryEntry(EXPIRED_ORIGIN, 'Zwiss', 'auth_expired')],
       ['https://orbit.example', registryEntry('https://orbit.example', '', 'unreachable')],
     ]),
     reconnectInstance: async () => {},
-    reauthenticateInstance: async () => {},
+    reauthenticateInstance: reauthFor(scene),
   });
 }
 
-/** Opens the expired chip's form the way a user does: by clicking its Reconnect action. */
-async function openExpiredChip(): Promise<void> {
-  let button: HTMLButtonElement | null = null;
-  for (let i = 0; i < 300 && !button; i++) {
-    await nextFrame();
-    button = Array.from(document.querySelectorAll<HTMLButtonElement>('li button'))
-      .find((b) => b.textContent === 'Reconnect') ?? null;
-  }
-  if (!button) throw new Error('the expired chip did not render');
+/** Clicks the one button on screen whose whole label is `text`. */
+async function clickButton(text: string, what: string): Promise<void> {
+  const button = await waitForElement(
+    () => Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((b) => b.textContent === text),
+    what,
+  );
   button.click();
+}
+
+/**
+ * Drives one `connections-*` scene into its state, always through the
+ * surface: the chip's Reconnect action opens the panel, the field takes a
+ * password, and the form is submitted. Which state that lands in is the
+ * stubbed `reauthenticateInstance`'s business, not the driver's.
+ */
+async function driveConnectionsScene(scene: Scene): Promise<void> {
+  if (scene === 'connections' || !isConnectionsScene(scene)) return;
+
+  if (scene === 'connections-panel') {
+    // The row's actions live behind its own disclosure, so the row opens first.
+    const row = await waitForElement(
+      () => Array.from(document.querySelectorAll<HTMLElement>('span')).find((e) => e.textContent === 'Zwiss'),
+      'the expired registry row did not render',
+    );
+    row.click();
+    await clickButton('Re-authenticate', 'the expired row has no re-authenticate action');
+    return;
+  }
+
+  await clickButton('Reconnect', 'the expired chip did not render');
+  const field = await passwordField();
+
+  if (scene === 'connections-idle') {
+    field.blur();
+    return;
+  }
+  if (scene === 'connections-open' || scene === 'connections-focused') return;
+
+  typeInto(field, 'hunter2');
+  await nextFrame();
+  field.form?.requestSubmit();
+  // Three frames: the submit, the store's answer, the render that shows it.
+  await nextFrame();
+  await nextFrame();
+  await nextFrame();
 }
 
 /** The home sidebar needs a signed-in user for its user area; the stores' defaults give it the `!space` branch. */
@@ -421,7 +546,16 @@ function Workbench({ scene, width }: { scene: Scene; width: number | null }) {
           mobile stack's absolute screen); a bare row-flex host would let the
           page take its min-content width at phone sizes. */}
       <div className="flex-1 min-w-0 flex overflow-hidden">
-        <ExplorePage />
+        {scene === 'connections-panel' ? (
+          // The settings modal's content column, at the width it gives a panel.
+          <div className="flex-1 min-w-0 overflow-y-auto bg-surface-chat p-6">
+            <div className="max-w-[740px]">
+              <ConnectedInstances />
+            </div>
+          </div>
+        ) : (
+          <ExplorePage />
+        )}
       </div>
       <ConnectAndJoinModal />
     </div>
@@ -446,7 +580,7 @@ async function start(): Promise<void> {
     </MemoryRouter>,
   );
   if (scene === 'connect-fallback') await driveToFallback();
-  if (scene === 'connections-open') await openExpiredChip();
+  await driveConnectionsScene(scene);
 }
 
 void start();

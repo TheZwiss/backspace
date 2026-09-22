@@ -53,7 +53,7 @@
       "addedLabel": "Добавлен",
       "disconnectedLabel": "Отключён",
       "lastConnectedLabel": "Последнее подключение",
-      "homePasswordPlaceholder": "Пароль учётной записи на домашнем сервере",
+      "homePasswordLabel": "Пароль учётной записи на домашнем сервере",
       "disconnect": "Отключиться",
       "reconnect": "Переподключиться",
       "reauthenticate": "Войти заново",

@@ -172,14 +172,14 @@ describe('RegistryRow re-authentication', () => {
 
     await user.click(screen.getByText('Zwiss'));
     await user.click(screen.getByRole('button', { name: 'Re-authenticate' }));
-    const password = screen.getByPlaceholderText('Your home account password');
+    const password = screen.getByLabelText('Your home account password');
     expect(password).toHaveFocus();
     await user.type(password, 'hunter2');
     await user.click(screen.getByRole('button', { name: 'Connect' }));
 
     await waitFor(() => expect(reauthenticateInstance).toHaveBeenCalledWith('https://zwiss.example', 'hunter2'));
     // The form closes on success; the row now reads connected.
-    await waitFor(() => expect(screen.queryByPlaceholderText('Your home account password')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByLabelText('Your home account password')).not.toBeInTheDocument());
     expect(screen.queryByText('Auth expired')).not.toBeInTheDocument();
   });
 });

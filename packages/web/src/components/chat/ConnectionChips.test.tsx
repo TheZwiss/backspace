@@ -191,10 +191,10 @@ describe('ConnectionChips', () => {
     const user = userEvent.setup();
     const { container } = render(<ConnectionChips onRecovered={onRecovered} />);
 
-    expect(screen.queryByPlaceholderText('Your home account password')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Your home account password')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /^Reconnect/ }));
 
-    const password = screen.getByPlaceholderText('Your home account password');
+    const password = screen.getByLabelText('Your home account password');
     expect(password).toHaveFocus();
     // The password manager gets the account's username from a hidden field.
     expect(container.querySelector('input[autocomplete="username"]')).toHaveValue('jannis@home.example');
@@ -214,10 +214,10 @@ describe('ConnectionChips', () => {
     render(<ConnectionChips onRecovered={onRecovered} />);
 
     await user.click(screen.getByRole('button', { name: /^Reconnect/ }));
-    await user.type(screen.getByPlaceholderText('Your home account password'), 'abc');
+    await user.type(screen.getByLabelText('Your home account password'), 'abc');
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
 
-    expect(screen.queryByPlaceholderText('Your home account password')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Your home account password')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Reconnect/ })).toBeInTheDocument();
     expect(reauthenticateInstance).not.toHaveBeenCalled();
   });
@@ -231,11 +231,130 @@ describe('ConnectionChips', () => {
     render(<ConnectionChips onRecovered={onRecovered} />);
 
     await user.click(screen.getByRole('button', { name: /^Reconnect/ }));
-    await user.type(screen.getByPlaceholderText('Your home account password'), 'wrong');
+    await user.type(screen.getByLabelText('Your home account password'), 'wrong');
     await user.click(screen.getByRole('button', { name: 'Connect' }));
 
     expect(await screen.findByText('Wrong username or password.')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Your home account password')).toBeInTheDocument();
+    expect(screen.getByLabelText('Your home account password')).toBeInTheDocument();
     expect(onRecovered).not.toHaveBeenCalled();
+  });
+
+  it('the expanded chip is a panel on its own row, not a stretched pill', async () => {
+    seed([
+      registryEntry('https://zwiss.example', 'auth_expired', 'Zwiss'),
+      registryEntry('https://orbit.example', 'unreachable'),
+    ]);
+    const user = userEvent.setup();
+    render(<ConnectionChips onRecovered={onRecovered} />);
+
+    await user.click(screen.getByRole('button', { name: /^Reconnect/ }));
+
+    const [expired, unreachable] = screen.getAllByRole('listitem');
+    // The pill tier is gone with the pill: expanded it is a matte panel.
+    expect(expired).not.toHaveClass('glass-pill');
+    expect(expired).toHaveClass('w-full');
+    const panel = expired?.firstElementChild;
+    expect(panel).toHaveClass('bg-surface-elevated');
+    // Bounded by the form it holds, never by the section it sits in.
+    expect(panel).toHaveClass('max-w-[22rem]');
+    // The identity line keeps its reading order above the field.
+    expect(expired?.textContent?.indexOf('Zwiss')).toBeLessThan(expired?.textContent?.indexOf('session expired') ?? -1);
+    // The sibling chip is untouched and still a pill.
+    expect(unreachable).toHaveClass('glass-pill');
+  });
+
+  it('the error sits inside the field block, under the field it is about', async () => {
+    seed([registryEntry('https://zwiss.example', 'auth_expired', 'Zwiss')]);
+    reauthenticateInstance.mockRejectedValueOnce(
+      new HttpError(401, 'invalid_credentials', { error: 'x', code: 'invalid_credentials', statusCode: 401 }, 'invalid_credentials'),
+    );
+    const user = userEvent.setup();
+    render(<ConnectionChips onRecovered={onRecovered} />);
+
+    await user.click(screen.getByRole('button', { name: /^Reconnect/ }));
+    await user.type(screen.getByLabelText('Your home account password'), 'wrong');
+    await user.click(screen.getByRole('button', { name: 'Connect' }));
+
+    const message = await screen.findByText('Wrong username or password.');
+    const field = screen.getByLabelText('Your home account password');
+    expect(field.parentElement).toBe(message.parentElement);
+    expect(field.nextElementSibling).toBe(message);
+  });
+
+  it('an unreachable instance surfaces its own text rather than a password error', async () => {
+    seed([registryEntry('https://zwiss.example', 'auth_expired', 'Zwiss')]);
+    reauthenticateInstance.mockRejectedValueOnce(
+      new HttpError(503, 'peer_unreachable', { error: 'x', code: 'peer_unreachable', statusCode: 503 }, 'peer_unreachable'),
+    );
+    const user = userEvent.setup();
+    render(<ConnectionChips onRecovered={onRecovered} />);
+
+    await user.click(screen.getByRole('button', { name: /^Reconnect/ }));
+    await user.type(screen.getByLabelText('Your home account password'), 'hunter2');
+    await user.click(screen.getByRole('button', { name: 'Connect' }));
+
+    expect(await screen.findByText('The other instance cannot be reached right now.')).toBeInTheDocument();
+  });
+
+  it('while submitting the action reads the connecting word and Cancel is inert', async () => {
+    seed([registryEntry('https://zwiss.example', 'auth_expired', 'Zwiss')]);
+    let finish: () => void = () => {};
+    reauthenticateInstance.mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve; }));
+    const user = userEvent.setup();
+    render(<ConnectionChips onRecovered={onRecovered} />);
+
+    await user.click(screen.getByRole('button', { name: /^Reconnect/ }));
+    const field = screen.getByLabelText('Your home account password');
+    await user.type(field, 'hunter2');
+    await user.click(screen.getByRole('button', { name: 'Connect' }));
+
+    expect(await screen.findByRole('button', { name: 'Connecting…' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
+    expect(field).toBeDisabled();
+    // Escape is inert too: the submit it would undo is already running.
+    await user.keyboard('{Escape}');
+    expect(screen.getByLabelText('Your home account password')).toBeInTheDocument();
+
+    // The chip's own registry entry is untouched by this mock, so the
+    // surface simply collapses back to its resting action.
+    finish();
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Reconnect/ })).toBeInTheDocument());
+  });
+
+  it('Enter in the field submits the form', async () => {
+    seed([registryEntry('https://zwiss.example', 'auth_expired', 'Zwiss')]);
+    const user = userEvent.setup();
+    render(<ConnectionChips onRecovered={onRecovered} />);
+
+    await user.click(screen.getByRole('button', { name: /^Reconnect/ }));
+    await user.type(screen.getByLabelText('Your home account password'), 'hunter2{Enter}');
+
+    await waitFor(() => expect(reauthenticateInstance).toHaveBeenCalledWith('https://zwiss.example', 'hunter2'));
+  });
+
+  it('Escape collapses the form and hands focus back to the chip action', async () => {
+    seed([registryEntry('https://zwiss.example', 'auth_expired', 'Zwiss')]);
+    const user = userEvent.setup();
+    render(<ConnectionChips onRecovered={onRecovered} />);
+
+    await user.click(screen.getByRole('button', { name: /^Reconnect/ }));
+    expect(screen.getByLabelText('Your home account password')).toHaveFocus();
+
+    await user.keyboard('{Escape}');
+
+    expect(screen.queryByLabelText('Your home account password')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Reconnect/ })).toHaveFocus());
+    expect(reauthenticateInstance).not.toHaveBeenCalled();
+  });
+
+  it('Cancel hands focus back to the chip action too', async () => {
+    seed([registryEntry('https://zwiss.example', 'auth_expired', 'Zwiss')]);
+    const user = userEvent.setup();
+    render(<ConnectionChips onRecovered={onRecovered} />);
+
+    await user.click(screen.getByRole('button', { name: /^Reconnect/ }));
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Reconnect/ })).toHaveFocus());
   });
 });

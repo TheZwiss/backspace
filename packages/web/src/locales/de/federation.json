@@ -53,7 +53,7 @@
       "addedLabel": "Hinzugefügt",
       "disconnectedLabel": "Getrennt",
       "lastConnectedLabel": "Zuletzt verbunden",
-      "homePasswordPlaceholder": "Passwort deines Heimatkontos",
+      "homePasswordLabel": "Passwort deines Heimatkontos",
       "disconnect": "Trennen",
       "reconnect": "Erneut verbinden",
       "reauthenticate": "Erneut anmelden",

@@ -262,7 +262,7 @@ describe('ExplorePage connection chips', () => {
     expect(screen.getByText('Zwiss')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /^Reconnect/ }));
-    await user.type(screen.getByPlaceholderText('Your home account password'), 'hunter2');
+    await user.type(screen.getByLabelText('Your home account password'), 'hunter2');
     await user.click(screen.getByRole('button', { name: 'Connect' }));
 
     expect(reauthenticateInstance).toHaveBeenCalledWith('https://zwiss.example', 'hunter2');
@@ -335,7 +335,7 @@ describe('ExplorePage keeps an expired origin out of Outer Space through a faile
     expect(screen.getByText('Far Away')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /Reconnect/ }));
-    await user.type(screen.getByPlaceholderText('Your home account password'), 'wrong');
+    await user.type(screen.getByLabelText('Your home account password'), 'wrong');
     await user.click(screen.getByRole('button', { name: 'Connect' }));
 
     expect(await screen.findByText('Wrong username or password.')).toBeInTheDocument();
