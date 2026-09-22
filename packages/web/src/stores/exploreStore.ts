@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { ExploreSpace, JoinRequest, SpaceWithChannelsAndMembers } from '@backspace/shared';
 import { api } from '../api/client';
+import i18n from '../i18n';
 import { resolveAssetUrl } from '../utils/assetUrls';
 import { useInstanceStore } from './instanceStore';
 import { useSpaceStore } from './spaceStore';
@@ -39,10 +40,23 @@ interface ExploreState {
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
+function hostOf(origin: string): string {
+  try { return new URL(origin).host; } catch { return origin; }
+}
+
+/**
+ * The client for the instance that owns a space. `''` is home. A space id
+ * only means something on its own instance, so a remote origin the session
+ * does not hold is an error, never a silent fall-through to home: the join
+ * or request would land on the wrong instance with a foreign id.
+ */
 function getApiForOrigin(origin: string) {
   if (!origin) return api;
   const instance = useInstanceStore.getState().instances.find(i => i.origin === origin);
-  return instance?.api ?? api;
+  if (!instance) {
+    throw new Error(i18n.t('spaces:explore.notConnected', { host: hostOf(origin) }));
+  }
+  return instance.api;
 }
 
 /**

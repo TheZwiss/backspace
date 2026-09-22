@@ -163,6 +163,7 @@
     "empty": "No discoverable spaces yet.",
     "allJoined": "You're in all discoverable spaces",
     "joinedSection": "Joined",
+    "notConnected": "Not connected to {{host}}",
     "inner": {
       "title": "Inner Space",
       "subtitle": "Spaces on your instances"

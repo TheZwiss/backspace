@@ -162,6 +162,7 @@
     "empty": "暂无可发现的空间。",
     "allJoined": "您已加入所有可发现的空间",
     "joinedSection": "已加入",
+    "notConnected": "未连接到 {{host}}",
     "inner": {
       "title": "内部空间",
       "subtitle": "您所在实例上的空间"

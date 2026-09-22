@@ -212,3 +212,34 @@ describe('exploreStore.requestJoin', () => {
     ]);
   });
 });
+
+describe('exploreStore origin resolution', () => {
+  it('rejects a public join for an origin the session does not hold, without touching home', async () => {
+    instanceState.instances = [];
+
+    await expect(
+      useExploreStore.getState().publicJoin(makeSpace({ id: 's3', _instanceOrigin: 'https://gone.example' })),
+    ).rejects.toThrow('Not connected to gone.example');
+
+    expect(homeApi.explore.publicJoin).not.toHaveBeenCalled();
+  });
+
+  it('rejects a join request for an origin the session does not hold, without touching home', async () => {
+    instanceState.instances = [];
+
+    await expect(
+      useExploreStore.getState().requestJoin(makeSpace({ id: 's3', _instanceOrigin: 'https://gone.example' }), 'hi'),
+    ).rejects.toThrow('Not connected to gone.example');
+
+    expect(homeApi.explore.requestJoin).not.toHaveBeenCalled();
+    expect(useExploreStore.getState().myRequests).toEqual([]);
+  });
+
+  it('still routes the empty origin to home', async () => {
+    homeApi.explore.requestJoin.mockResolvedValue(makeRequest({ id: 'home-r', spaceId: 's1' }));
+
+    await useExploreStore.getState().requestJoin(makeSpace({ id: 's1', _instanceOrigin: '' }));
+
+    expect(homeApi.explore.requestJoin).toHaveBeenCalledWith('s1', undefined);
+  });
+});
