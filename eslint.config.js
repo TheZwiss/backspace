@@ -2,9 +2,10 @@
 // whole repository; CI runs the same command in its own job.
 //
 // Two mechanisms keep the run green without hollowing the rule set out:
-//   - Rules that encode a decision the project has not taken (React Compiler
-//     readiness, CommonJS in build scripts) are switched off below, each with
-//     the condition that would bring it back.
+//   - A few rules are switched off below, each with the reason at the switch:
+//     either it does not apply to the files in question (CommonJS in build
+//     scripts) or it has more existing violations than one task could work
+//     through, in which case the comment names the count.
 //   - Violations that predate the lint step stay recorded in
 //     eslint-suppressions.json. The rule keeps firing on new code; only the
 //     counted, already-present occurrences are ignored. Regenerate with
@@ -78,7 +79,12 @@ module.exports = tseslint.config(
       '**/node_modules/**',
       '**/dist/**',
       '**/dist-electron/**',
-      '**/build/**',
+      // electron-builder's resource directory, which holds only the app icons
+      // it packs. Named rather than globbed as `**/build/**`: that pattern
+      // also matched packages/web/src/build, the dev Content-Security-Policy
+      // builder vite.config.ts imports, and `eslint .` reports nothing about
+      // a source file it was told to skip.
+      'packages/desktop/build/**',
       '**/installers/**',
       '**/coverage/**',
       // Runtime data, not source: the SQLite database, uploads and backups.
@@ -161,22 +167,39 @@ module.exports = tseslint.config(
     ...reactHooks.configs.flat['recommended-latest'],
     rules: {
       ...reactHooks.configs.flat['recommended-latest'].rules,
-      // The five rules below come from the React Compiler rule set that
-      // eslint-plugin-react-hooks 7 folds into its recommended config. They
-      // flag patterns that are legal in the React this app runs and would
-      // block ordinary new components, so they stay off until the project
-      // adopts the compiler. Counts at the time of writing:
-      // set-state-in-effect 89 sites, refs 42, preserve-manual-memoization 6,
-      // purity 5, immutability 2.
       // Raised from the plugin's default of 'warn' so the 13 sites that
       // already miss a dependency can be recorded in the suppressions file and
       // a new one fails the run instead of printing a line nobody reads.
       'react-hooks/exhaustive-deps': 'error',
+
+      // The four rules below are off because each has more existing
+      // violations than this task could fix, not because the rule is wrong
+      // for this codebase. The other thirteen rules in the plugin's
+      // recommended set are on, most of them from the same React Compiler
+      // group these four belong to, so this is not "the compiler rules are
+      // off". Each is off on its own count, measured with
+      // `eslint packages/web/src --rule '{"<rule>": "error"}'`:
+      //   set-state-in-effect          89 sites
+      //   refs                         42 sites
+      //   preserve-manual-memoization   6 sites
+      //   purity                        5 sites
+      // Turning one back on means fixing its sites or recording them in
+      // eslint-suppressions.json, the way immutability's one remaining site
+      // is recorded below.
       'react-hooks/set-state-in-effect': 'off',
       'react-hooks/refs': 'off',
       'react-hooks/preserve-manual-memoization': 'off',
       'react-hooks/purity': 'off',
-      'react-hooks/immutability': 'off',
+
+      // react-hooks/immutability stays on (it caught a direct write to a prop
+      // in FederationPanel). Its one remaining site is
+      // components/layout/DmSearchBar.tsx, recorded in
+      // eslint-suppressions.json: the rule reports `close()` inside an effect
+      // declared above `const close = useCallback(...)` as read before
+      // declaration. Under the React Compiler that ordering matters; without
+      // it the effect body runs after the whole component body, so `close` is
+      // initialised by the time the listener can fire. Drop the entry once
+      // the declaration moves above the effect.
     },
   },
 );

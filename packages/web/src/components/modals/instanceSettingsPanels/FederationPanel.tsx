@@ -389,13 +389,14 @@ function sortPeers(peers: FederationPeer[], sortBy: SortBy, view: PeerView): Fed
 
 // ─── Peer Row ────────────────────────────────────────────────────────────────
 
-function PeerRow({ peer, view, expanded, onToggleExpand, onAction, onRecheck, recheckLoading, defaultAutoRotateIntervalDays }: {
+function PeerRow({ peer, view, expanded, onToggleExpand, onAction, onRecheck, onIntervalSaved, recheckLoading, defaultAutoRotateIntervalDays }: {
   peer: FederationPeer;
   view: PeerView;
   expanded: boolean;
   onToggleExpand: () => void;
   onAction: (type: 'rotate' | 'revoke' | 'reinitiate' | 'delete' | 'reset') => void;
   onRecheck: () => void;
+  onIntervalSaved: (autoRotateIntervalDays: number) => void;
   recheckLoading: boolean;
   defaultAutoRotateIntervalDays: number;
 }) {
@@ -420,10 +421,11 @@ function PeerRow({ peer, view, expanded, onToggleExpand, onAction, onRecheck, re
     setIntervalError('');
     try {
       const result = await api.federation.updatePeer(peer.id, { autoRotateIntervalDays: intervalDraft });
-      // Update peer in parent state via a re-fetch would be cleanest,
-      // but for responsiveness we update the peer object directly.
-      // This works because React re-renders from the parent's setPeers.
-      peer.autoRotateIntervalDays = result.peer.autoRotateIntervalDays;
+      // The peer list lives in the parent's state, so the new value goes back
+      // there. Writing it into the `peer` prop instead would mutate the object
+      // the parent still holds and leave the render that shows it to whatever
+      // else happens to re-render this row.
+      onIntervalSaved(result.peer.autoRotateIntervalDays);
       setEditingInterval(false);
       addToast(t('federation:admin.peer.intervalUpdated'), 'success', 2000);
     } catch (err) {
@@ -1386,6 +1388,9 @@ export function FederationPanel({ onApprovalCountChange }: { onApprovalCountChan
                   onToggleExpand={() => setExpandedPeerId(expandedPeerId === peer.id ? null : peer.id)}
                   onAction={(type) => setConfirmAction({ type, peer })}
                   onRecheck={() => handleRecheck(peer)}
+                  onIntervalSaved={(autoRotateIntervalDays) => setPeers((prev) => prev.map((p) =>
+                    p.id === peer.id ? { ...p, autoRotateIntervalDays } : p
+                  ))}
                   recheckLoading={recheckingId === peer.id}
                   defaultAutoRotateIntervalDays={useSettingsStore.getState().instanceSettings?.defaultAutoRotateIntervalDays ?? 90}
                 />

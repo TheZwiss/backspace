@@ -318,6 +318,9 @@
     },
     "react-hooks/exhaustive-deps": {
       "count": 1
+    },
+    "react-hooks/immutability": {
+      "count": 1
     }
   },
   "packages/web/src/components/layout/MainContent.tsx": {

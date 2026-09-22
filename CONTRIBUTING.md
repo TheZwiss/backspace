@@ -218,6 +218,13 @@ and it is the part that breaks.
 - `pnpm build` succeeds (shared types, server, and web all build).
 - The dev server and web client both start without errors (`pnpm dev`).
 - Tests pass (`pnpm test` where applicable to the package you touched).
+- `pnpm lint` exits 0. Violations that predate the lint step are counted per
+  file per rule in `eslint-suppressions.json`, so the rules still fire on
+  everything you write. If you *fixed* one of those counted violations, the
+  run fails with "there are suppressions left that do not occur anymore": run
+  `pnpm lint:prune` and commit the smaller `eslint-suppressions.json` with
+  your change. That failure is the point. Leaving the freed slot open would
+  let the next `any` or unused import into that file unnoticed.
 - You updated the relevant `docs/systems/` spec if your change altered schema,
   API routes, WebSocket events, the federation protocol, permissions, or the
   design system.

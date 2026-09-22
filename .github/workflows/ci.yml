@@ -115,8 +115,12 @@ jobs:
         with:
           version: 10.34.3
 
-      # ESLint 10 needs Node ^22.13 or >=24, above the repository's 22.12
-      # floor, so this job pins the .nvmrc version rather than the floor.
+      # ESLint 10 declares `node: ^20.19 || ^22.13 || >=24`, which excludes
+      # this repository's 22.12 floor. Nothing enforces that range: the eslint
+      # bin has no version check, pnpm prints no warning without
+      # engine-strict, and `pnpm lint` on 22.12.0 exits 0 today. The pin is so
+      # CI runs on a version the package says it supports, not because the run
+      # would otherwise fail.
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
