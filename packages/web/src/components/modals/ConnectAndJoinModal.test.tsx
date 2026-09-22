@@ -320,6 +320,24 @@ describe('ConnectAndJoinModal on an origin that is already connected', () => {
     expect(useUIStore.getState().activeModal).toBeNull();
   });
 
+  it('a disconnected known origin is not the stale-card case: it probes and asks for the password, then reconnects', async () => {
+    const user = userEvent.setup();
+    probeOk();
+    const e = entry();
+    useInstanceStore.setState({ instances: [connectedInstance('https://retro.example', 'disconnected')] });
+    connectAndJoin.mockResolvedValue({ kind: 'joined', spaceId: 'space-1', origin: 'https://retro.example' });
+    open(e);
+    renderModal();
+
+    await user.type(await screen.findByPlaceholderText('The one you sign in with'), 'hunter2');
+    expect(probeInstance).toHaveBeenCalledWith('retro.example');
+    await user.click(screen.getByRole('button', { name: 'Connect and join' }));
+
+    // connectToInstance takes the reauthenticate branch for a disconnected origin (instanceStore.connect.test).
+    await waitFor(() => expect(connectAndJoin).toHaveBeenCalledWith(e, 'hunter2', undefined));
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/channels/space-1'));
+  });
+
   it('a request entry shows only the message box and a Request button', async () => {
     const user = userEvent.setup();
     const e = entry({ visibility: 'request' });

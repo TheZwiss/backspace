@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, within, act } from '@testing-library/react';
-import type { DirectoryEntry } from '@backspace/shared';
+import type { DirectoryEntry, FederationRegistryEntry } from '@backspace/shared';
 import type { DirectoryStatus } from '../../stores/directoryStore';
 import { OuterSpaceSection } from './OuterSpaceSection';
 import { useInstanceStore, type ConnectedInstance } from '../../stores/instanceStore';
@@ -88,6 +88,13 @@ function renderSection(query = '') {
 
 const UNREACHABLE = 'Outer Space is not reachable right now. Inner Space still works.';
 
+function registryEntry(origin: string, status: FederationRegistryEntry['status']): [string, FederationRegistryEntry] {
+  return [origin, {
+    origin, label: '', username: 'jannis@home.example', remoteUserId: 'r1', status,
+    addedAt: 1, lastConnectedAt: null, disconnectedAt: null, errorMessage: null,
+  }];
+}
+
 function liveInstance(origin: string, status: ConnectedInstance['status']): ConnectedInstance {
   return {
     origin,
@@ -106,7 +113,7 @@ describe('OuterSpaceSection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     setDirectory({});
-    useInstanceStore.setState({ instances: [] });
+    useInstanceStore.setState({ instances: [], registry: new Map() });
   });
 
   afterEach(() => {
@@ -203,15 +210,40 @@ describe('OuterSpaceSection', () => {
     const { rerender } = renderSection();
     expect(screen.getAllByRole('button', { name: 'Connect and join' })).toHaveLength(3);
 
-    // The user connected orbit.example through the Connections panel; the
-    // status does not matter, any known instance belongs to Inner Space.
+    // The user connected orbit.example through the Connections panel.
     act(() => {
-      useInstanceStore.setState({ instances: [liveInstance('https://orbit.example', 'error')] });
+      useInstanceStore.setState({ instances: [liveInstance('https://orbit.example', 'connected')] });
     });
     rerender(<OuterSpaceSection query="" onConnect={vi.fn()} />);
     expect(screen.getAllByRole('button', { name: 'Connect and join' })).toHaveLength(1);
     expect(screen.getByText('nova.example')).toBeInTheDocument();
     expect(fetchDirectory).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps an expired or unreachable origin out (its chip explains), lets a disconnected one back in', () => {
+    setDirectory({
+      status: 'ok',
+      entries: [entry('a', 'https://expired.example'), entry('b', 'https://down.example'), entry('c', 'https://quiet.example'), entry('d', 'https://far.example')],
+    });
+    useInstanceStore.setState({
+      registry: new Map([
+        registryEntry('https://expired.example', 'auth_expired'),
+        registryEntry('https://down.example', 'unreachable'),
+        registryEntry('https://quiet.example', 'disconnected'),
+      ]),
+      instances: [
+        liveInstance('https://expired.example', 'error'),
+        liveInstance('https://down.example', 'disconnected'),
+        liveInstance('https://quiet.example', 'disconnected'),
+      ],
+    });
+    renderSection();
+    expect(screen.queryByText('expired.example')).not.toBeInTheDocument();
+    expect(screen.queryByText('down.example')).not.toBeInTheDocument();
+    // Disconnected by the user's own choice: for Explore it is an outer instance again.
+    expect(screen.getByText('quiet.example')).toBeInTheDocument();
+    expect(screen.getByText('far.example')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Connect and join' })).toHaveLength(2);
   });
 
   it('dedupes the session\'s own origin and shows the empty copy when nothing is left', () => {

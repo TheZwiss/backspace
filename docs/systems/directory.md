@@ -22,7 +22,7 @@ Source files:
 - `scripts/directory-hub/` - the Cloudflare Worker at `explore.backspacechat.com` (`src/index.ts` routes, `src/validate.ts`, `src/store.ts`, `src/hash.ts`, `migrations/0001_directory.sql`)
 - `.github/workflows/directory-hub.yml` - the hub's test job and its dispatch-only deploy
 - `packages/web/src/stores/directoryStore.ts` - the feed, the page dedupe by `(origin, id)`, `connectAndJoin` and `loginAndJoin` (the origin dedupe runs at render in `OuterSpaceSection`)
-- `packages/web/src/utils/directory.ts` - `dedupeAgainstConnected`, `isDirectoryEntry`
+- `packages/web/src/utils/directory.ts` - `innerOrigins`, `dedupeAgainstConnected`, `isDirectoryEntry`
 - `packages/web/src/stores/instanceStore.ts` - `connectToInstance`, the shared connect path
 - `packages/web/src/components/chat/ExplorePage.tsx`, `OuterSpaceSection.tsx`, `SpaceCard.tsx` - the two sections and the card
 - `packages/web/src/components/modals/ConnectAndJoinModal.tsx`, `RemotePasswordStep.tsx` - the connect-from-card dialog and the password step it shares with the Connections panel
@@ -645,37 +645,56 @@ under a running instance is reflected on the next visit, after the restart
 the change needs anyway.
 
 **Deduped by origin, not by space.** Every entry whose canonical origin
-(`new URL(x).origin`) is the session's own (`window.location.origin`) or
-matches any instance in `instanceStore.instances` in any status is dropped.
-Inner Space is paginated and filtered, so matching on space ids would let a
-connected instance's off-page space reappear in Outer Space as "needs a
-connection", and the home instance tags its spaces with `''` rather than an
-origin. Origin is what the section's name means anyway: outer is what needs a
-connection first. The dedupe is applied at render, in `OuterSpaceSection`,
-against the live instance list: `directoryStore.entries` holds the feed as
-the proxy returned it, and an origin the session connects, loses or gets
-back moves between the sections without a refetch. Pages are appended
-without duplicates by `(origin, id)`, and a reply for an older query is
-ignored once a newer one has been sent.
+(`new URL(x).origin`) is the session's own (`window.location.origin`) or is
+an inner origin is dropped. `innerOrigins` (`utils/directory.ts`) names
+them: a federation registry entry (`instanceStore.registry`) whose status is
+`connected`, `auth_expired` or `unreachable`, and a live instance
+(`instanceStore.instances`) whose status is `connected` or `connecting`. A
+registry entry in `disconnected` is not inner: the user chose to disconnect
+in the Connections panel, and for Explore that instance is an outer instance
+again, its spaces ordinary cards with "Connect and join". A live instance in
+`error` or `disconnected` with no registry standing of its own is not inner
+either. The two fault states stay inner because a connection chip (below)
+explains the absence; a disconnected one would otherwise need a chip per
+instance, forever, for a user who deliberately disconnected from many. This
+refines the design spec's "any status" wording, which was written before
+the chips existed. Inner Space is paginated and filtered, so matching on
+space ids would let a connected instance's off-page space reappear in Outer
+Space as "needs a connection", and the home instance tags its spaces with
+`''` rather than an origin. Origin is what the section's name means anyway:
+outer is what needs a connection first. The dedupe is applied at render, in
+`OuterSpaceSection`, from the registry and the live list: `directoryStore.entries`
+holds the feed as the proxy returned it, and an origin the session connects,
+loses, gets back or disconnects moves between the sections without a
+refetch. Pages are appended without duplicates by `(origin, id)`, and a
+reply for an older query is ignored once a newer one has been sent.
+
+Connecting from a card whose origin the session knows as `disconnected` is
+the existing `connectToInstance` path (section 9, "Connect and join"): the
+dialog probes and asks for the home password as for any outer card, the
+store takes its `reauthenticateInstance` branch, the remote answers the
+registration with `username_taken` and the client logs in with the
+home-issued secret, and the new session replaces the placeholder by origin.
+The same federated identity is reused; no second account is created.
 
 **Connections that need attention.** A connection whose session expired or
 whose instance is unreachable is in neither section: Inner Space fans out
-over `connected` instances only, and the dedupe above drops its origin from
-Outer Space whatever its status. `ConnectionChips`, rendered directly under
-the Inner Space subtitle, is the hint that explains it: one `glass-pill`
-chip per federation registry entry (`instanceStore.registry`, the same
-record the Connections panel shows, so the two never disagree) whose status
-is `auth_expired` (rose dot, "session expired", Reconnect) or `unreachable`
-(amber dot, "unreachable", Retry). Retry calls `reconnectInstance` and shows
-the connecting word until the registry status settles; Reconnect opens the
-chip in place into `ReauthForm`, the one-line home-password form shared with
-the Connections row, which calls `reauthenticateInstance`. After either
-succeeds the page refetches Inner Space (`fetchSpaces`, `fetchMyRequests`);
-Outer Space needs nothing, the render-time dedupe sees the instance. With
-every connection healthy the row is absent. `disconnected` is deliberately
-not shown: that is the user's own choice in the Connections panel, and a
-chip for it would nag. A chip whose live instance is `connecting` on its own
-(startup, the socket's backoff) is hidden for that moment.
+over `connected` instances only, and the dedupe above keeps its origin out
+of Outer Space. `ConnectionChips`, rendered directly under the Inner Space
+subtitle, is the hint that explains it: one `glass-pill` chip per federation
+registry entry (the same record the Connections panel shows, so the two
+never disagree) whose status is `auth_expired` (rose dot, "session expired",
+Reconnect) or `unreachable` (amber dot, "unreachable", Retry). Retry calls
+`reconnectInstance` and shows the connecting word until the registry status
+settles; Reconnect opens the chip in place into `ReauthForm`, the one-line
+home-password form shared with the Connections row, which calls
+`reauthenticateInstance`. After either succeeds the page refetches Inner
+Space (`fetchSpaces`, `fetchMyRequests`); Outer Space needs nothing, the
+render-time dedupe sees the instance. With every connection healthy the row
+is absent. `disconnected` gets no chip: that is the user's own choice, its
+spaces are back in Outer Space, and a chip per disconnected instance would
+nag. A chip whose live instance is `connecting` on its own (startup, the
+socket's backoff) is hidden for that moment.
 
 The search box drives both sections through one 300 ms debounce: Inner
 filters as before, Outer re-queries the hub through the proxy, showing a
@@ -747,7 +766,7 @@ the same `spaceId:origin` key `exploreStore` uses; no global id is assumed
 anywhere. A user browsing a connected remote instance sees that instance's
 Explore page, which proxies through its own `DIRECTORY_ENDPOINT`; the feed is
 the same hub unless that admin pointed elsewhere, and the dedupe runs against
-whatever that session has connected.
+whatever that session holds as inner.
 
 ---
 

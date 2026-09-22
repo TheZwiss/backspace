@@ -1,4 +1,4 @@
-import type { DirectoryEntry } from '@backspace/shared';
+import type { DirectoryEntry, FederationRegistryEntry } from '@backspace/shared';
 
 /**
  * Canonical origin of a value (`new URL(x).origin`), or null when it does not
@@ -13,12 +13,46 @@ function canonicalOrigin(value: string): string | null {
   }
 }
 
+/** The two fields of a live `ConnectedInstance` the origin rule reads. */
+export interface LiveInstanceStatus {
+  origin: string;
+  status: 'connected' | 'connecting' | 'disconnected' | 'error';
+}
+
+/**
+ * The origins that belong to Inner Space, so their directory entries are
+ * dropped from Outer Space: a registry entry that is `connected`, or in one
+ * of the two fault states whose chip explains the absence (`auth_expired`,
+ * `unreachable`), and a live instance that is `connected` or `connecting`.
+ * A `disconnected` registry entry is the user's own choice and does not
+ * qualify: for Explore that instance is an outer instance again, its spaces
+ * ordinary cards, and connecting from one reuses the identity the session
+ * still holds. A live instance in `error` or `disconnected` with no registry
+ * standing of its own does not qualify either. The home origin is added by
+ * the caller. Each origin is listed once, as the store spells it.
+ */
+export function innerOrigins(
+  registry: Iterable<FederationRegistryEntry>,
+  instances: Iterable<LiveInstanceStatus>,
+): string[] {
+  const out = new Set<string>();
+  for (const entry of registry) {
+    if (entry.status === 'connected' || entry.status === 'auth_expired' || entry.status === 'unreachable') {
+      out.add(entry.origin);
+    }
+  }
+  for (const live of instances) {
+    if (live.status === 'connected' || live.status === 'connecting') out.add(live.origin);
+  }
+  return Array.from(out);
+}
+
 /**
  * Outer Space is deduped by origin, not by space: every entry whose origin
- * is one the session already has a connection to (the home instance or any
- * entry of `instanceStore.instances`, whatever its status) is dropped, since
- * those spaces belong to Inner Space. A connected value that does not parse
- * is skipped; an entry whose own origin does not parse is kept.
+ * is one of `connectedOrigins` (the home instance plus `innerOrigins`) is
+ * dropped, since those spaces belong to Inner Space or are accounted for by
+ * a connection chip. A connected value that does not parse is skipped; an
+ * entry whose own origin does not parse is kept.
  */
 export function dedupeAgainstConnected(entries: DirectoryEntry[], connectedOrigins: string[]): DirectoryEntry[] {
   const connected = new Set<string>();

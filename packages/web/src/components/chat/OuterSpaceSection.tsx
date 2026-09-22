@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { DirectoryEntry } from '@backspace/shared';
 import { useDirectoryStore } from '../../stores/directoryStore';
 import { useInstanceStore } from '../../stores/instanceStore';
-import { dedupeAgainstConnected } from '../../utils/directory';
+import { dedupeAgainstConnected, innerOrigins } from '../../utils/directory';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { Mascot } from '../ui/Mascot';
 import { SpaceCard, outerEntryToSpace } from './SpaceCard';
@@ -24,6 +24,7 @@ interface OuterSpaceSectionProps {
 export function OuterSpaceSection({ query, onConnect }: OuterSpaceSectionProps) {
   const { t } = useTranslation(['spaces', 'errors']);
   const feed = useDirectoryStore((s) => s.entries);
+  const registry = useInstanceStore((s) => s.registry);
   const instances = useInstanceStore((s) => s.instances);
   const status = useDirectoryStore((s) => s.status);
   const hasMore = useDirectoryStore((s) => s.hasMore);
@@ -38,13 +39,13 @@ export function OuterSpaceSection({ query, onConnect }: OuterSpaceSectionProps) 
     void fetch(initialQuery.current);
   }, [fetch]);
 
-  // Deduped by origin at render, against the session's own origin and every
-  // instance the store knows in any status (spec section 9): a connection
-  // that appears, returns or expires moves its origin between the sections
-  // without a refetch of the feed.
+  // Deduped by origin at render, against the session's own origin and the
+  // origins that belong to Inner Space or to a connection chip (spec section
+  // 9): a connection that appears, returns, expires or is disconnected moves
+  // its origin between the sections without a refetch of the feed.
   const entries = useMemo(
-    () => dedupeAgainstConnected(feed, [window.location.origin, ...instances.map((i) => i.origin)]),
-    [feed, instances],
+    () => dedupeAgainstConnected(feed, [window.location.origin, ...innerOrigins(registry.values(), instances)]),
+    [feed, registry, instances],
   );
 
   if (status === 'disabled') return null;

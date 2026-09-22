@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { DirectoryEntry } from '@backspace/shared';
-import { dedupeAgainstConnected, isDirectoryEntry } from './directory';
+import type { FederationRegistryEntry } from '@backspace/shared';
+import { dedupeAgainstConnected, innerOrigins, isDirectoryEntry } from './directory';
 
 const e = (origin: string, id: string): DirectoryEntry => ({
   origin,
@@ -62,5 +63,45 @@ describe('isDirectoryEntry', () => {
     expect(isDirectoryEntry({ id: 's1', name: 'S', visibility: 'public' })).toBe(false);
     expect(isDirectoryEntry({ ...e('https://a.example', 's1'), visibility: 'private' })).toBe(false);
     expect(isDirectoryEntry({ ...e('https://a.example', 's1'), id: 7 })).toBe(false);
+  });
+});
+
+describe('innerOrigins', () => {
+  const reg = (origin: string, status: FederationRegistryEntry['status']): FederationRegistryEntry => ({
+    origin, label: '', username: '', remoteUserId: '', status, addedAt: 1, lastConnectedAt: null, disconnectedAt: null, errorMessage: null,
+  });
+
+  it('keeps a connected, an expired and an unreachable registry entry inner', () => {
+    const out = innerOrigins(
+      [reg('https://a.test', 'connected'), reg('https://b.test', 'auth_expired'), reg('https://c.test', 'unreachable')],
+      [],
+    );
+    expect(out).toEqual(['https://a.test', 'https://b.test', 'https://c.test']);
+  });
+
+  it('a disconnected registry entry is outer again, even with a live instance holding its token', () => {
+    const out = innerOrigins(
+      [reg('https://a.test', 'disconnected')],
+      [{ origin: 'https://a.test', status: 'disconnected' }],
+    );
+    expect(out).toEqual([]);
+  });
+
+  it('a live instance that is connected or connecting is inner whatever the registry says', () => {
+    const out = innerOrigins(
+      [reg('https://a.test', 'disconnected')],
+      [{ origin: 'https://a.test', status: 'connecting' }, { origin: 'https://b.test', status: 'connected' }],
+    );
+    expect(out).toEqual(['https://a.test', 'https://b.test']);
+  });
+
+  it('a live instance in error or disconnected with no registry entry is outer', () => {
+    const out = innerOrigins([], [{ origin: 'https://a.test', status: 'error' }, { origin: 'https://b.test', status: 'disconnected' }]);
+    expect(out).toEqual([]);
+  });
+
+  it('lists an origin once', () => {
+    const out = innerOrigins([reg('https://a.test', 'connected')], [{ origin: 'https://a.test', status: 'connected' }]);
+    expect(out).toEqual(['https://a.test']);
   });
 });

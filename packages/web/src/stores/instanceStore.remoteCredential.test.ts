@@ -444,6 +444,20 @@ describe('a re-authentication keeps the origin in the instance list', () => {
     expect(instances[0]?.token).toBe('remote-token-1');
   });
 
+  it('a re-authentication over a disconnected placeholder reuses the federated account, never makes a second', async () => {
+    remoteRegister.mockRejectedValue(
+      new HttpError(409, 'Username is already taken', { error: 'Username is already taken', code: 'username_taken', statusCode: 409 }, 'username_taken'),
+    );
+    remoteLogin.mockResolvedValue(authResponse());
+    useInstanceStore.setState({ instances: [placeholder('disconnected')] });
+
+    await useInstanceStore.getState().reauthenticateInstance(REMOTE, HOME_PASSWORD);
+
+    expect(remoteLogin).toHaveBeenCalledWith(REMOTE, { username: 'erin@nova.example', password: ISSUED_SECRET });
+    const instances = useInstanceStore.getState().instances;
+    expect(instances.map((i) => [i.origin, i.username, i.status])).toEqual([[REMOTE, 'erin@nova.example', 'connected']]);
+  });
+
   it('connectToRemote appends a fresh origin and leaves the others alone', async () => {
     remoteRegister.mockResolvedValue(authResponse());
     const other: ConnectedInstance = { ...placeholder('connected'), origin: 'https://zeta.example', label: 'Zeta' };
