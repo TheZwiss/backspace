@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { InstanceStreamingLimits } from '@backspace/shared';
 
@@ -17,7 +17,8 @@ vi.mock('../../audio/AudioManager', () => ({
 import { DiscoveryPanel } from './SpaceSettings';
 import { useSpaceStore, type TaggedSpace } from '../../stores/spaceStore';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { api } from '../../api/client';
+import { useInstanceStore, type ConnectedInstance } from '../../stores/instanceStore';
+import { api, type BackspaceApiClient } from '../../api/client';
 
 const SWITCH = 'List in the Backspace directory';
 const ADMIN_OFF = 'Your admin has to enable the directory for this instance.';
@@ -74,8 +75,29 @@ function mockUpdateSpace(): ReturnType<typeof vi.fn> {
   return updateSpace;
 }
 
+/**
+ * A connected remote whose client answers `GET /settings/streaming` with the
+ * given flags; the panel must read a remote space's flags through it, never
+ * through the home store.
+ */
+function connectRemote(origin: string, answer: Promise<InstanceStreamingLimits>): ReturnType<typeof vi.fn> {
+  const getStreaming = vi.fn(() => answer);
+  const instance: ConnectedInstance = {
+    origin,
+    label: new URL(origin).host,
+    token: 'tok',
+    user: { id: 'remote-user', username: 'jannis@home.test', displayName: 'Jannis' } as ConnectedInstance['user'],
+    username: 'jannis@home.test',
+    status: 'connected',
+    api: { settings: { getStreaming } } as unknown as BackspaceApiClient,
+  };
+  useInstanceStore.setState({ instances: [instance] });
+  return getStreaming;
+}
+
 beforeEach(() => {
   vi.spyOn(api.explore, 'getJoinRequests').mockResolvedValue({ requests: [] });
+  useInstanceStore.setState({ instances: [] });
 });
 
 afterEach(() => {
@@ -169,5 +191,52 @@ describe('DiscoveryPanel directory switch', () => {
       "Listing makes public: the space's name, description, icon, banner, member count and this instance's address. "
       + 'People browsing the directory load the icon and banner from this instance.',
     )).toBeInTheDocument();
+  });
+});
+
+describe('DiscoveryPanel instance flags by origin', () => {
+  it('reads a remote space\'s flags from that instance, keeping the switch disabled until they arrive', async () => {
+    seed({ visibility: 'public', _instanceOrigin: 'https://remote.test' }, false);
+    const homeStreaming = vi.spyOn(api.settings, 'getStreaming');
+    let answer: (limits: InstanceStreamingLimits) => void = () => {};
+    const getStreaming = connectRemote('https://remote.test', new Promise((resolve) => { answer = resolve; }));
+
+    render(<DiscoveryPanel spaceId="space-1" />);
+    expect(getStreaming).toHaveBeenCalledTimes(1);
+    expect(directorySwitch()).toBeDisabled();
+    expect(screen.queryByText(ADMIN_OFF)).not.toBeInTheDocument();
+
+    answer({ ...limits, discoveryEnabled: true, directoryEnabled: true });
+    await waitFor(() => expect(directorySwitch()).toBeEnabled());
+    expect(screen.queryByText(ADMIN_OFF)).not.toBeInTheDocument();
+    expect(homeStreaming).not.toHaveBeenCalled();
+  });
+
+  it('shows the remote instance\'s reasons, not home\'s, when the remote has the directory off', async () => {
+    seed({ visibility: 'public', _instanceOrigin: 'https://remote.test' }, true);
+    connectRemote('https://remote.test', Promise.resolve({ ...limits, discoveryEnabled: false, directoryEnabled: false }));
+
+    render(<DiscoveryPanel spaceId="space-1" />);
+    await waitFor(() => expect(screen.getByText(ADMIN_OFF)).toBeInTheDocument());
+    expect(directorySwitch()).toBeDisabled();
+    expect(screen.getByText(/Space discovery is disabled/)).toBeInTheDocument();
+  });
+
+  it('falls back to the store when the remote fetch fails', async () => {
+    seed({ visibility: 'public', _instanceOrigin: 'https://remote.test' }, true);
+    connectRemote('https://remote.test', Promise.reject(new Error('down')));
+
+    render(<DiscoveryPanel spaceId="space-1" />);
+    await waitFor(() => expect(directorySwitch()).toBeEnabled());
+    expect(screen.queryByText(ADMIN_OFF)).not.toBeInTheDocument();
+  });
+
+  it('reads a home space\'s flags from the store without a request', () => {
+    seed({ visibility: 'public', _instanceOrigin: '' }, true);
+    const homeStreaming = vi.spyOn(api.settings, 'getStreaming');
+
+    render(<DiscoveryPanel spaceId="space-1" />);
+    expect(directorySwitch()).toBeEnabled();
+    expect(homeStreaming).not.toHaveBeenCalled();
   });
 });

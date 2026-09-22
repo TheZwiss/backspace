@@ -783,10 +783,16 @@ rendered:
   draft off, matching what the server does on save.
 - Under it, the same one-sentence disclosure.
 
-Both flags come from the home instance's `streamingLimits`, the one settings
-document any signed-in user may read; the panel does not ask a remote
-instance for its own flags, which is the same limitation the discovery flag
-already had for remote spaces.
+Both flags come from the instance the space lives on
+(`useInstanceDiscoveryFlags`): a home space reads the store's
+`streamingLimits`, the one settings document any signed-in user may read; a
+space whose `_instanceOrigin` is a connected remote asks that instance's own
+`GET /api/settings/streaming` through its own client on mount, since home's
+flags say nothing about it. Until the answer arrives the directory switch is
+disabled with no reason and the discovery notice is hidden, rather than
+showing home's values. A failed fetch falls back to the store's values and
+lets the save's own error (`directory_requires_discovery`,
+`directory_private_space`) speak.
 
 Copy lives in the `spaces` namespace (`explore.inner.*`, `explore.outer.*`,
 `explore.connect.*`, `settings.discovery.directory.*`,

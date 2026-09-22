@@ -9,6 +9,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { Avatar } from '../ui/Avatar';
 import { Toggle } from '../ui/Toggle';
 import { api } from '../../api/client';
+import { getApiForOrigin } from '../../utils/crossStoreResolvers';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import { OverviewPanel } from './spaceSettingsPanels/OverviewPanel';
 import { MembersPanel } from './spaceSettingsPanels/MembersPanel';
@@ -19,23 +20,68 @@ import type { SpaceVisibility, JoinRequest } from '@backspace/shared';
 
 const DESCRIPTION_MAX_LENGTH = 200;
 
+/** The two instance flags the Discovery panel gates its switches on. */
+interface InstanceDiscoveryFlags {
+  discoveryEnabled: boolean;
+  directoryEnabled: boolean;
+}
+
+/**
+ * The discovery and directory flags of the instance a space lives on. Home
+ * (`''`) reads the store's `streamingLimits`, the settings document any
+ * signed-in user may fetch. A remote space asks its own instance through its
+ * own client on mount, because home's flags say nothing about it: `null`
+ * while that answer is pending, so the caller can keep its switches disabled
+ * rather than show home's values. A failed fetch falls back to the store's
+ * values and lets the save's own error speak.
+ */
+function useInstanceDiscoveryFlags(origin: string): InstanceDiscoveryFlags | null {
+  const homeDiscovery = useSettingsStore((s) => s.streamingLimits?.discoveryEnabled ?? true);
+  const homeDirectory = useSettingsStore((s) => s.streamingLimits?.directoryEnabled ?? false);
+  const home: InstanceDiscoveryFlags = { discoveryEnabled: homeDiscovery, directoryEnabled: homeDirectory };
+  const [remote, setRemote] = useState<{ origin: string; flags: InstanceDiscoveryFlags | 'failed' } | null>(null);
+
+  useEffect(() => {
+    if (!origin) return;
+    let cancelled = false;
+    getApiForOrigin(origin).settings.getStreaming().then(
+      (limits) => {
+        if (cancelled) return;
+        setRemote({ origin, flags: { discoveryEnabled: limits.discoveryEnabled, directoryEnabled: limits.directoryEnabled } });
+      },
+      () => {
+        if (!cancelled) setRemote({ origin, flags: 'failed' });
+      },
+    );
+    return () => { cancelled = true; };
+  }, [origin]);
+
+  if (!origin) return home;
+  if (remote === null || remote.origin !== origin) return null;
+  return remote.flags === 'failed' ? home : remote.flags;
+}
+
 /**
  * Visibility, the directory switch and the description of one space. The save
  * goes through the store's `updateSpace`, which resolves the client for the
  * space's own instance and merges the answer back; a remote space must never
- * be saved through the home client. Both instance flags come from the home
- * instance's `streamingLimits`, the one settings document any signed-in user
- * may read; the panel does not ask a remote instance for its own flags.
+ * be saved through the home client. The instance flags come from the instance
+ * the space lives on (`useInstanceDiscoveryFlags`): the store for a home
+ * space, that instance's own `GET /settings/streaming` for a remote one.
  */
 export function DiscoveryPanel({ spaceId }: { spaceId: string }) {
   const { t } = useTranslation(['spaces', 'common']);
   const visibilityOptions = useVisibilityOptions();
   const spaces = useSpaceStore((s) => s.spaces);
   const updateSpace = useSpaceStore((s) => s.updateSpace);
-  const discoveryEnabled = useSettingsStore((s) => s.streamingLimits?.discoveryEnabled ?? true);
-  const directoryEnabled = useSettingsStore((s) => s.streamingLimits?.directoryEnabled ?? false);
 
   const space = spaces.find(s => s.id === spaceId);
+  const flags = useInstanceDiscoveryFlags(space?._instanceOrigin ?? '');
+  // Until a remote instance has answered, neither flag is known: the notice
+  // stays hidden and the directory switch stays disabled with no reason.
+  const discoveryEnabled = flags?.discoveryEnabled ?? true;
+  const directoryEnabled = flags?.directoryEnabled ?? false;
+  const flagsPending = flags === null;
 
   const [visibility, setVisibility] = useState<SpaceVisibility>(
     (space?.visibility as SpaceVisibility) ?? 'private'
@@ -71,11 +117,14 @@ export function DiscoveryPanel({ spaceId }: { spaceId: string }) {
 
   // Always rendered: the reason under a disabled switch is what tells an owner
   // whose instance has the directory off, or whose space is private, what to do.
-  const directoryReason = !directoryEnabled
-    ? t('spaces:settings.discovery.directory.adminOff')
-    : visibility === 'private'
-      ? t('spaces:settings.discovery.directory.privateSpace')
-      : null;
+  const directoryReason = flagsPending
+    ? null
+    : !directoryEnabled
+      ? t('spaces:settings.discovery.directory.adminOff')
+      : visibility === 'private'
+        ? t('spaces:settings.discovery.directory.privateSpace')
+        : null;
+  const directoryLocked = flagsPending || directoryReason !== null;
 
   const handleSave = async () => {
     setSaving(true);
@@ -141,7 +190,7 @@ export function DiscoveryPanel({ spaceId }: { spaceId: string }) {
       <div>
         <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('spaces:explore.outer.title')}</div>
         <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-2.5">
-          <label className={`flex items-center justify-between gap-4 ${directoryReason === null ? 'cursor-pointer' : 'cursor-default'}`}>
+          <label className={`flex items-center justify-between gap-4 ${directoryLocked ? 'cursor-default' : 'cursor-pointer'}`}>
             <div>
               <div className="text-sm font-medium text-txt-primary">{t('spaces:settings.discovery.directory.label')}</div>
               <div className="text-xs text-txt-tertiary mt-0.5">{t('spaces:settings.discovery.directory.hint')}</div>
@@ -149,7 +198,7 @@ export function DiscoveryPanel({ spaceId }: { spaceId: string }) {
             <Toggle
               enabled={directoryListed}
               onChange={setDirectoryListed}
-              disabled={directoryReason !== null}
+              disabled={directoryLocked}
               ariaLabel={t('spaces:settings.discovery.directory.label')}
             />
           </label>

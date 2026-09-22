@@ -585,7 +585,7 @@ Zustand store managing two data objects:
 }
 ```
 
-**Cross-field sync:** After every `updateInstanceSettings()` the store mirrors `discoveryEnabled` and `directoryEnabled` from the server's answer into `streamingLimits`, which is where the space settings `DiscoveryPanel` reads both flags (the warning banner and the directory switch's disabled reason). The answer is used rather than the request because switching discovery off clears the directory server-side.
+**Cross-field sync:** After every `updateInstanceSettings()` the store mirrors `discoveryEnabled` and `directoryEnabled` from the server's answer into `streamingLimits`, which is where the space settings `DiscoveryPanel` reads both flags for a home space (the warning banner and the directory switch's disabled reason; a remote space asks its own instance instead, see [directory.md](directory.md) §10). The answer is used rather than the request because switching discovery off clears the directory server-side.
 
 **Exported helper:** `getStreamingLimits()` returns current limits or defaults -- used by voice/streaming code outside React.
 
