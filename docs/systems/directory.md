@@ -1304,8 +1304,10 @@ empty and stays honest.
    which is run by hand from a workstation because a deploy that takes over a
    hostname may prompt for confirmation. Every deploy after that is the
    workflow.
-3. The WAF rate-limiting rule, in the Cloudflare dashboard, in front of both
-   `hello.backspacechat.com` and `explore.backspacechat.com`. The rule sits
+3. The WAF rate-limiting rule, in the Cloudflare dashboard under
+   Security -> Security rules -> Create rule -> Rate limiting rule, in front
+   of both `hello.backspacechat.com` and `explore.backspacechat.com`, matched
+   by an `http.host` expression naming the two. The rule sits
    before the Worker is invoked, so a flood is refused without spending the
    free-plan request budget; the Worker's own limiter (2 per 10 seconds per
    address on the hub) is the second line. The rule's threshold is a
@@ -1313,9 +1315,18 @@ empty and stays honest.
    enough that a fleet of instances each reading the feed once a minute per
    query and pinging a few times a day never trips it.
 4. The GitHub environment `directory-hub`, holding `CLOUDFLARE_API_TOKEN`
-   (scoped to editing Workers and D1 on that account and nothing else) and
-   `CLOUDFLARE_ACCOUNT_ID`. Both live on the environment rather than at
-   repository level, so no other job can read them.
+   and `CLOUDFLARE_ACCOUNT_ID`. Both live on the environment rather than at
+   repository level, so no other job can read them. The token needs three
+   permissions and no others: account `Workers Scripts: Edit` to upload the
+   script, account `D1: Edit` for the migration step, and zone
+   `Workers Routes: Edit` for the `routes` entry in `wrangler.toml`, which is
+   a custom domain and therefore reconciled against the zone rather than the
+   account. Account Resources includes the account; Zone Resources includes
+   `backspacechat.com`. A token holding only the two account permissions gets
+   as far as uploading the Worker and then fails the deploy with
+   `/zones/<id>/workers/routes` "No access to the specified resource". The
+   script is live at that point and the previously attached custom domain
+   still serves it, so the symptom is a red run rather than an outage.
 5. Dispatch `directory-hub.yml` from `main`. That is every deploy after the
    hand-run first one in step 2.
 

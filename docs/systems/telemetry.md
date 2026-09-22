@@ -466,10 +466,14 @@ stay put:
    hostname and can ask for confirmation, and a step that may prompt does not
    belong in a job with no terminal. Every deploy after that is the workflow.
 
-Two more secrets drive the deploy job itself: `CLOUDFLARE_API_TOKEN`, scoped to
-editing Workers and D1 on that account and nothing else, and
+Two more secrets drive the deploy job itself: `CLOUDFLARE_API_TOKEN` and
 `CLOUDFLARE_ACCOUNT_ID`. Both live on the `telemetry-receiver` GitHub
 environment rather than at repository level, so no other job can read them.
+The token needs account `Workers Scripts: Edit`, account `D1: Edit` and zone
+`Workers Routes: Edit`; the zone permission is for the custom domain in
+`routes`, which is reconciled against the zone and not the account. See
+[directory.md](directory.md) section 12 for what a token missing it does,
+which is upload the script and then fail the deploy.
 
 **Retiring the service.** `RETIRED` is a plain `[vars]` entry in `wrangler.toml`,
 not a secret. Setting it to `"1"` and deploying makes every ping answer `410`,

@@ -830,10 +830,14 @@ rename.
       to a single-maintainer repository.
 - [ ] **Cloudflare deploy secrets.** `CLOUDFLARE_API_TOKEN` and
       `CLOUDFLARE_ACCOUNT_ID` on the `telemetry-receiver` environment, plus a
-      branch policy on that environment allowing `main` only. The API token
-      should be scoped to editing Workers and D1 on that one account, not to an
-      account-wide edit. Until they exist a dispatched deploy fails at the
-      wrangler step; nothing else in the repository is affected.
+      branch policy on that environment allowing `main` only. The same pair,
+      on a `directory-hub` environment, drives the space directory's hub. Each
+      token carries three permissions and no more: account `Workers Scripts:
+      Edit`, account `D1: Edit` and zone `Workers Routes: Edit`, never an
+      account-wide edit; the reasoning for the zone one is in
+      [directory.md](directory.md) section 12. Until they exist a dispatched
+      deploy fails at the wrangler step; nothing else in the repository is
+      affected.
 - [ ] **Manual image bumps:** Dependabot does not track `docker-compose.yml`
       `image:` pins — update `caddy` and `livekit/livekit-server` by hand when new
       releases ship. (Renovate, which parses compose, is an optional future
