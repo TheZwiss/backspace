@@ -138,9 +138,17 @@ Why none of them lands:
   `Readable.fromWeb(...)` calls in `utils/federationWorker.ts:912` and
   `routes/federation/profile.ts:161` are on the outbound fetch side, not a
   reply.
-- CVE-2026-3635 only manifests with a restrictive `trustProxy`. This server sets
-  `trustProxy: true` at `packages/server/src/index.ts:41`, which the advisory
-  calls out as "expected behavior".
+- CVE-2026-3635 only manifests with a restrictive `trustProxy`. At the time of
+  writing this server set `trustProxy: true`, which the advisory calls out as
+  "expected behavior". **That premise changed on 2026-09-22**: the server now
+  sets a hop count of 1 (`packages/server/src/utils/trustedProxy.ts`), which is
+  the restrictive form. The advisory stays unreachable for the other reason:
+  its sinks are `request.protocol` and `request.host`, and no code in
+  `packages/server/src` reads either. The public origin comes from `DOMAIN`
+  (`getOurOrigin`), the tus `Location` is relative on purpose
+  (`routes/files.ts`), and `request.ip` is a different value that the advisory
+  does not concern. A route that starts building a URL from the request host
+  would make this reachable and is the thing to watch for.
 
 There is no fix in the 4 line. The npm `four` dist-tag is 4.29.1, which is
 what is installed. Terminal.

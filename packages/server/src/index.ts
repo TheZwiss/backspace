@@ -39,6 +39,7 @@ import { errorBody } from './utils/httpErrors.js';
 import './utils/federationRollback.js'; // Side-effect: registers rollback callbacks for outbox terminal failures.
 import { registerCallRelayHooks } from './ws/events.js';
 import { resetStalePresenceOnBoot } from './utils/presenceBoot.js';
+import { TRUSTED_PROXY_HOPS } from './utils/trustedProxy.js';
 
 import { registerWebSocket } from './ws/handler.js';
 import path from 'path';
@@ -46,26 +47,12 @@ import fs from 'fs';
 
 async function main(): Promise<void> {
   const app = Fastify({
-    // Every hop is trusted, so `request.ip` is the LEFT-MOST entry of
-    // `X-Forwarded-For`, whoever put it there (verified: a request carrying
-    // `x-forwarded-for: 9.9.9.9` is seen as 9.9.9.9 even when the proxy
-    // appends the real address after it).
-    //
-    // The rate limiter keys on that address and has nothing else to key on
-    // (see the limiter below), so the limit holds only while the fronting
-    // proxy *overwrites* the header instead of appending to it. The bundled
-    // Caddy overwrites it, which is what the shipped all-in-one deployment
-    // rests on. A deployment exposed directly, or fronted by a proxy that
-    // appends (nginx's `$proxy_add_x_forwarded_for` does, and that is what
-    // install.sh prints for proxy mode), lets a client choose its own limiter
-    // key and rotate it per request.
-    //
-    // That condition is stated for operators in
-    // docs/systems/web-security.md section 9 and docs/systems/deployment.md,
-    // "Server proxy-awareness". Narrowing this to a hop count is the real fix
-    // and it would break a two-proxy deployment, so it is not a change to make
-    // in passing.
-    trustProxy: true,
+    // The number of trusted hops, not `true`. `request.ip` is the address the
+    // nearest proxy appended rather than the left-most thing in
+    // `X-Forwarded-For`, so a client cannot pick the address its rate limits
+    // are counted under. See utils/trustedProxy.ts for what to change it to
+    // and when.
+    trustProxy: TRUSTED_PROXY_HOPS,
     logger: {
       level: 'info',
     },
@@ -177,9 +164,9 @@ async function main(): Promise<void> {
     // reached for `request.userId` would read undefined on every request and
     // fall back here anyway. Stated plainly instead, because the consequence is
     // an operator's to know: everyone behind one NAT, VPN exit or corporate
-    // proxy shares one 200-per-minute budget. `trustProxy` is on, so the
-    // address is the one the fronting proxy forwards. See docs/systems/api.md,
-    // "Rate limiting".
+    // proxy shares one 200-per-minute budget. Which address that is comes from
+    // `TRUSTED_PROXY_HOPS` (utils/trustedProxy.ts), which is what keeps a
+    // client from choosing its own. See docs/systems/api.md, "Rate limiting".
     keyGenerator: (request) => request.ip,
     // Test harnesses set DISABLE_RATE_LIMITS=1 to bypass per-IP exhaustion when
     // many tests share the loopback IP. Default unset; production unchanged.

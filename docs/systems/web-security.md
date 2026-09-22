@@ -653,46 +653,62 @@ server renders different HTML.
 
 ## 9. The client address, and what rests on it
 
-The app runs Fastify with `trustProxy: true` (`packages/server/src/index.ts`).
-That trusts **every** hop, so `request.ip` is the left-most entry of
-`X-Forwarded-For` no matter who wrote it: a request arriving with
-`X-Forwarded-For: 9.9.9.9` is seen as coming from 9.9.9.9 even when the proxy
-appends the real address after it. `request.ips` keeps the whole chain, and
-nothing in the app reads it.
+`request.ip` is what every rate limit in the app is billed to, so where that
+address comes from is a security property, not a detail. The app runs Fastify
+with `trustProxy: TRUSTED_PROXY_HOPS`, a **hop count of 1**
+(`packages/server/src/utils/trustedProxy.ts`), which means: trust the one proxy
+directly in front of the app, and nothing further out. `request.ip` is the
+entry that proxy appended, which is the peer it actually saw. Entries a client
+puts in the header sit further left and are ignored.
 
-**The rate limits are what rest on this.** The global limiter's key is the
-client address and there is nothing else it could key on (see
-[api.md](api.md), "Rate limiting"), the per-route limits key the same way, and
-the hand-written limiter on `POST /federation/peer/accept`
-(`routes/federation/handlers/peerHandshake.ts`, first contact, no JWT) buckets
-on `request.ip` too. So all of them hold exactly as far as the fronting proxy's
-handling of that header:
+The alternative, `trustProxy: true`, trusts the whole chain and takes the
+left-most entry, which is whatever the client cared to send. The app ran that
+way until this was corrected, and under it a request arriving with
+`X-Forwarded-For: 9.9.9.9` was read as coming from 9.9.9.9 even when the proxy
+appended the real address after it.
 
-| Front | `X-Forwarded-For` handling | Effect on the limit |
-|---|---|---|
-| Bundled Caddy (`allinone`, the shipped default) | overwrites; incoming values are ignored unless `trusted_proxies` is set, and this repo's `Caddyfile` does not set it | sound: the address is the real peer |
-| Operator's nginx using the snippet `install.sh` prints | **appends** (`$proxy_add_x_forwarded_for` is `"<incoming>, <peer>"`) | a client picks its own key and can rotate it per request, so the limit is evadable |
-| A tunnel provider | provider-specific | unknown until the operator checks |
-| App exposed directly | none; the client's header is the only one there is | evadable |
+**What rests on the address.** The global rate limiter keys on it and has
+nothing else to key on (see [api.md](api.md), "Rate limiting"); the per-route
+limits key the same way; the hand-written limiter on
+`POST /federation/peer/accept`
+(`routes/federation/handlers/peerHandshake.ts`, unauthenticated first contact)
+buckets on it; and Fastify's request log records it as `remoteAddress`, so it
+is also what an operator reads when deciding who to block. Limits keyed on a
+user instead (the two upload limits in `routes/files.ts`) do not depend on any
+of this.
 
-An evaded rate limit is not an authentication bypass: every limited route still
-authenticates and authorizes normally. What it removes is the brake on
-brute-force and flood traffic, including the tighter per-route limits on login
-and registration.
+**What each front yields at a hop count of 1.**
 
-**What to do about it, per deployment.** Make the proxy in front of the app
-overwrite the header (nginx: `proxy_set_header X-Forwarded-For $remote_addr;`
-instead of `$proxy_add_x_forwarded_for`), or put the app behind something that
-already does. A CDN in front of a proxy is the case where overwriting is wrong,
-which is why the app cannot decide this for everyone.
+| Front | `X-Forwarded-For` it produces | `request.ip` | Verdict |
+|---|---|---|---|
+| Bundled Caddy (`allinone`, the shipped default) | overwrites the header; incoming values ignored, since this repo's `Caddyfile` sets no `trusted_proxies` | the real client | correct |
+| Operator's nginx with the snippet `install.sh` prints | **appends**: `"<whatever the client sent>, <peer nginx saw>"` | the real client; the client's own entries are ignored | correct, and this is what the hop count fixed |
+| A tunnel provider (Cloudflare and friends) | one hop that writes its own entry | the real client | correct |
+| CDN in front of the operator's own proxy | two hops | the CDN's address, so every client behind it shares one bucket | **raise the number to 2** |
+| App exposed directly, no proxy at all | only what the client chose to send | the client's own claim | **set the number to 0**, which ignores the header and uses the socket address |
 
-**Do not "fix" this by flipping `trustProxy` off.** The app would then read the
-proxy's own address for every request, which collapses every client on the
-deployment into one limiter key and breaks the limit far worse than the header
-does. The real fix is a hop count (`trustProxy: 1` for a single fronting
-proxy), which breaks a two-proxy or CDN deployment, so it is a deliberate
-decision, not a tightening to apply in passing. See also
-[deployment.md](deployment.md), "Server proxy-awareness".
+The two rows that need a number other than 1 are the two the app cannot detect
+for itself: one proxy looks exactly like none-plus-a-lying-client from inside
+the process. The constant's own comment says which way to move it, and both
+mistakes are asymmetric: too low costs a shared bucket, too high gives the key
+back to the client.
+
+**Do not "fix" anything here by flipping `trustProxy` off** while a proxy is in
+front. The app would then read the proxy's own address for every request and
+collapse every client on the instance into one limiter key. The number is the
+mechanism; `false` is only right when there is genuinely nothing in front, and
+`0` says that more clearly.
+
+**The nginx snippet in `install.sh` is correct as it stands.** Appending is
+what a proxy should do, and it is what the hop count expects. Rewriting it to
+`proxy_set_header X-Forwarded-For $remote_addr;` would throw away the real
+client address on any deployment that later puts a CDN in front. It was left
+alone deliberately.
+
+`packages/server/src/utils/trustedProxy.test.ts` holds the behaviour: a forged
+left-most entry, a forged chain, an overwriting proxy, no header at all, the
+two-proxy case and the zero case. Putting `true` back fails three of them. See
+also [deployment.md](deployment.md), "Server proxy-awareness".
 
 ---
 
