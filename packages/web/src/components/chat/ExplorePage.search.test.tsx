@@ -11,6 +11,7 @@ import { useInstanceStore, type ConnectedInstance } from '../../stores/instanceS
 import { useAuthStore } from '../../stores/authStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { HttpError } from '../../api/client';
+import { setLanguage } from '../../i18n';
 
 // Stub AudioManager: the instance store imports it transitively and jsdom has no AudioWorkletNode.
 vi.mock('../../audio/AudioManager', () => ({
@@ -140,6 +141,12 @@ describe('ExplorePage search and the Outer Space gate', () => {
     // The hint under the chips reads this store directly. Its resting state is
     // a member whose settings have not arrived, which is the hint's silent row.
     useSettingsStore.setState({ isAdmin: false, streamingLimits: null });
+  });
+
+  // One test in here reads the page in Russian. Every other assertion in the
+  // file is English, so the language goes back whatever the test did.
+  afterEach(async () => {
+    await setLanguage('en');
   });
 
   it('one debounce drives both stores with the same value', async () => {
@@ -293,12 +300,23 @@ describe('ExplorePage search and the Outer Space gate', () => {
     expect(screen.queryByText(/Could not reach/)).not.toBeInTheDocument();
   });
 
-  it('never shows the partial notice beside the fan-out nobody answered', async () => {
+  it('keeps the Russian singular off a list of hosts whose count ends in one', async () => {
+    // Russian `one` selects for 21, 31 and so on, so the raw length would put
+    // «Сервер … недоступен» over 21 listed hosts. The count reaching the
+    // catalog is a selector and nothing else: no form interpolates it.
+    await setLanguage('ru');
+    const hosts = Array.from({ length: 21 }, (_, i) => `n${i}.example.net`);
     renderPage();
-    act(() => { useExploreStore.setState({ error: { kind: 'none_answered' }, unansweredOrigins: [] }); });
+    act(() => {
+      useExploreStore.setState({ unansweredOrigins: hosts.map((h) => `https://${h}`) });
+    });
 
-    expect(screen.getByText('No instance answered. Inner Space is empty until one does.')).toBeInTheDocument();
-    expect(screen.queryByText(/Could not reach/)).not.toBeInTheDocument();
+    expect(screen.getByText(
+      `Серверы ${hosts.join(', ')} недоступны. Пространства на них не показаны.`,
+    )).toBeInTheDocument();
+    // The singular noun, predicate and pronoun, none of which may appear.
+    expect(screen.queryByText(/Сервер .+ недоступен\./)).not.toBeInTheDocument();
+    expect(screen.queryByText(/на нём не показаны/)).not.toBeInTheDocument();
   });
 
   it('describes a fan-out that could not run through the error catalog', async () => {

@@ -13,7 +13,7 @@ import { Mascot } from '../ui/Mascot';
 import { MemberListToggleButton } from '../layout/MemberListToggleButton';
 import { useFormatters } from '../../i18n/formatters';
 import { describeError } from '../../i18n/errors';
-import { hostOf } from '../../utils/identity';
+import { deliveringHost } from '../../utils/identity';
 import { SpaceCard } from './SpaceCard';
 import { OuterSpaceSection } from './OuterSpaceSection';
 import { ConnectionChips } from './ConnectionChips';
@@ -210,10 +210,10 @@ export function ExplorePage() {
   }, [fetchSpaces, fetchMyRequests]);
 
   // The hosts behind those origins, for the notice. Home is the empty
-  // sentinel, which `hostOf` returns unchanged, so it is named by the host
-  // this client is served from: the same instance its home client talks to.
+  // sentinel, which `deliveringHost` resolves to the host this client is
+  // served from: the same instance its home client talks to.
   const unansweredHosts = useMemo(
-    () => unansweredOrigins.map((origin) => hostOf(origin) || window.location.host),
+    () => unansweredOrigins.map((origin) => deliveringHost(origin)),
     [unansweredOrigins],
   );
 
@@ -298,7 +298,12 @@ export function ExplorePage() {
             {unansweredHosts.length > 0 && (
               <div className="mb-4 p-2.5 bg-accent-amber/10 border border-accent-amber/30 rounded text-[13px] text-accent-amber">
                 {t('spaces:explore.inner.unreachable', {
-                  count: unansweredHosts.length,
+                  // One host or several is the only distinction the forms
+                  // make, and none of them interpolates `count`, so the
+                  // numeral only selects. Russian `one` also fires for 21,
+                  // 31 and so on, which would put a singular noun and
+                  // predicate over a list of 21 hosts.
+                  count: unansweredHosts.length === 1 ? 1 : 2,
                   hosts: unansweredHosts.join(', '),
                 })}
               </div>

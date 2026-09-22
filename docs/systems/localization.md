@@ -504,7 +504,7 @@ gets its own.
 
 «Обзор» had the same shape: it named the Explore page and also the Overview
 tab in space settings and in group DM settings, while about a dozen strings
-point at the Explore page by that name («в разделе „Обзор"»). Kept as «Обзор»
+point at the Explore page by that name (в разделе «Обзор»). Kept as «Обзор»
 for the Explore page, since it is the idiomatic label for a browse surface and
 was already the majority reading, and the two tabs renamed «Основное», which
 describes what they are (an editing panel for name, icon and banner) and

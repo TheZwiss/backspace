@@ -280,7 +280,7 @@ Also returns `total` (filtered count), `totalAll` (all discoverable), `discovery
 
 ### Explore Page Sections
 
-One page, one search box, two sections in fixed order. **Inner Space** is the list described here (the unjoined grid, then the collapsible joined group), from `exploreStore.fetchSpaces()`. **Outer Space**, below it, is the space directory: entries from `directoryStore` read through `GET /api/directory`, minus every origin the session is connected to, paginated 50 at a time, rendered only when the home instance's `GET /api/instance/info` reports `directoryEnabled: true`. The search box drives both through one 300 ms debounce. Both sections render `SpaceCard`; an Outer card's action opens the connect-then-join dialog instead of joining directly. The home view's channel sidebar also has an "Explore" entry that routes to `/explore`. Full description in [directory.md](directory.md) §9.
+One page, one search box, two sections in fixed order. **Inner Space** is the list described here (the unjoined grid, then the collapsible joined group), from `exploreStore.fetchSpaces()`. **Outer Space**, below it, is the space directory: entries from `directoryStore` read through `GET /api/directory`, minus every origin the session is connected to, paginated 50 at a time, rendered only on an instance that browses a directory. The search box drives both through one 300 ms debounce. Both sections render `SpaceCard`; an Outer card's action opens the connect-then-join dialog instead of joining directly. The home view's channel sidebar also has an "Explore" entry that routes to `/explore`. Full description in [directory.md](directory.md) §9.
 
 ### Multi-Instance Discovery (`exploreStore.ts`)
 

@@ -104,7 +104,7 @@ export function normalizeOriginToHost(input: string | null | undefined): string 
  * `window.location.host` for the empty-origin sentinel (`''` = our home
  * connection). All other inputs are normalized via {@link normalizeOriginToHost}.
  */
-function deliveringHost(origin: string): string {
+export function deliveringHost(origin: string): string {
   if (origin === '') return typeof window === 'undefined' ? '' : window.location.host;
   return normalizeOriginToHost(origin);
 }

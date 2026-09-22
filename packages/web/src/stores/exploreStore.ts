@@ -126,9 +126,9 @@ function getConnectedInstances() {
  *
  * There is one store per process, so the counter lives beside it rather than
  * in a factory closure. `reset()` bumps it too, so an in-flight fan-out is
- * orphaned whenever the store is cleared; nothing in the app calls `reset()`
- * today (`authStore.resetUserStores` does not include this store or
- * `directoryStore`), so that path is the tests' and whoever wires it later.
+ * orphaned whenever the store is cleared, and `authStore.resetUserStores`
+ * clears it on sign-out, on account deletion and when another account signs
+ * in: a reply for the old session cannot land in the new one.
  */
 let fetchSeq = 0;
 

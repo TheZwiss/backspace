@@ -11,8 +11,8 @@ import enDm from '../locales/en/dm.json';
  * The Russian catalog used «Обзор» for two unrelated places: the Explore
  * page, where you browse spaces you have not joined, and the Overview tab
  * inside space settings and group DM settings. About a dozen strings point
- * at the Explore page by that name («в разделе „Обзор"», «на странице
- * „Обзор"»), so a settings tab carrying the same word made every one of
+ * at the Explore page by that name (в разделе «Обзор», на странице
+ * «Обзор»), so a settings tab carrying the same word made every one of
  * those readings ambiguous.
  *
  * Settled as «Обзор» for the Explore page, which is the idiomatic Russian
