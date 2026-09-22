@@ -502,6 +502,14 @@ languages to each other, so the Russian one is pinned by
 `src/i18n/ruDirectoryName.test.ts`; a language that develops the same split
 gets its own.
 
+«Обзор» had the same shape: it named the Explore page and also the Overview
+tab in space settings and in group DM settings, while about a dozen strings
+point at the Explore page by that name («в разделе „Обзор"»). Kept as «Обзор»
+for the Explore page, since it is the idiomatic label for a browse surface and
+was already the majority reading, and the two tabs renamed «Основное», which
+describes what they are (an editing panel for name, icon and banner) and
+collides with no sibling tab. Pinned by `src/i18n/ruOverviewTabName.test.ts`.
+
 Catalogs are Weblate compatible. No hosted translation platform is
 configured yet; when one is, it points at `packages/web/src/locales` and
 `en` is the source language.

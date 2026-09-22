@@ -253,7 +253,7 @@
       "general": "Общие",
       "management": "Управление",
       "tabs": {
-        "overview": "Обзор",
+        "overview": "Основное",
         "discovery": "Обнаружение",
         "roles": "Роли",
         "bans": "Блокировки"
