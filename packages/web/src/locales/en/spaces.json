@@ -187,7 +187,7 @@
     },
     "connect": {
       "title": "Join {{name}}",
-      "intro": "This space lives on <host>{{host}}</host>. Enter your password for <home>{{home}}</home> to create your identity there.",
+      "intro": "This space lives on <host>{{host}}</host>. Connecting creates your identity there, linked to your account on <home>{{home}}</home>.",
       "probing": "Reaching {{host}}…",
       "connecting": "Connecting…",
       "requested": "Your request to join {{name}} was sent."

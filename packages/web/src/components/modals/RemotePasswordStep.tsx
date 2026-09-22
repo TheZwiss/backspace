@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { StatusDot } from '../ui/StatusDot';
 
@@ -65,6 +65,7 @@ function PasswordForm({
 }) {
   const { t } = useTranslation(['federation']);
   const [password, setPassword] = useState('');
+  const fieldId = useId();
 
   return (
     <form
@@ -73,10 +74,11 @@ function PasswordForm({
     >
       <input type="text" autoComplete="username" value={homeUsername} readOnly tabIndex={-1} className="sr-only" />
       <div>
-        <label className="block text-xs text-txt-tertiary mb-1">
+        <label htmlFor={fieldId} className="block text-xs text-txt-tertiary mb-1">
           {t('federation:connections.add.passwordLabel', { host })}
         </label>
         <input
+          id={fieldId}
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}

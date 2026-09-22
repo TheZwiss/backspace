@@ -697,9 +697,12 @@ Clicking an Outer card opens `ConnectAndJoinModal` with the entry. The dialog:
    skipped: a public space is joined on open, a request space shows only the
    message field.
 2. Shows `RemotePasswordStep`, the password step shared with the Connections
-   panel's add-instance flow: "This space lives on chat.example.org. Enter your
-   password for home.example.org to create your identity there." For a
-   request space a message field sits between the password and the button.
+   panel's add-instance flow, under the intro "This space lives on
+   chat.example.org. Connecting creates your identity there, linked to your
+   account on home.example.org." The field label and its hint are the only
+   two places the modal says "password"; the placeholder ("The one you sign
+   in with") says which one without repeating the label. For a request space
+   a message field sits between the password and the button.
 3. Runs `directoryStore.connectAndJoin(entry, password, message?)`, which
    calls `connectToInstance(origin, password)`, the one shared connect path in
    `instanceStore`: an origin the store knows as `connected` or `connecting`

@@ -160,8 +160,25 @@ describe('ConnectAndJoinModal probe', () => {
     expect(screen.getByText(/This space lives on/)).toBeInTheDocument();
     expect(screen.getByText('retro.example')).toBeInTheDocument();
     expect(screen.getByText('home.example')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Your account password')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('The one you sign in with')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Connect and join' })).toBeInTheDocument();
+  });
+
+  it('asks for the password once: the field label and the hint, not the intro or the placeholder', async () => {
+    probeOk();
+    open(entry());
+    const { container } = renderModal();
+    const field = await screen.findByLabelText(/Enter your password/);
+
+    const intro = screen.getByText(/This space lives on/);
+    expect(intro.textContent).not.toMatch(/password/i);
+    expect(field).toHaveAttribute('placeholder');
+    const placeholder = field.getAttribute('placeholder') ?? '';
+    expect(placeholder).not.toMatch(/password/i);
+    expect(placeholder).not.toBe('Enter your password to connect to retro.example');
+
+    const words = (container.textContent ?? '').match(/password/gi) ?? [];
+    expect(words.length).toBeLessThanOrEqual(2);
   });
 
   it('falls back to the page host for the home when the user has no homeInstance', async () => {
@@ -186,7 +203,7 @@ describe('ConnectAndJoinModal probe', () => {
     open(entry());
     renderModal();
     expect(screen.getByRole('status')).toBeInTheDocument();
-    expect(screen.queryByPlaceholderText('Your account password')).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('The one you sign in with')).not.toBeInTheDocument();
   });
 
   it('shows the probe error and a close button when the probe fails', async () => {
@@ -196,7 +213,7 @@ describe('ConnectAndJoinModal probe', () => {
     renderModal();
 
     expect(await screen.findByText('This instance is already connected')).toBeInTheDocument();
-    expect(screen.queryByPlaceholderText('Your account password')).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('The one you sign in with')).not.toBeInTheDocument();
     // The title bar's X is labelled Close as well; the footer button is the last one.
     const closeButtons = screen.getAllByRole('button', { name: 'Close' });
     await user.click(closeButtons[closeButtons.length - 1]);
@@ -215,7 +232,7 @@ describe('ConnectAndJoinModal submit', () => {
     open(e);
     renderModal();
 
-    await user.type(await screen.findByPlaceholderText('Your account password'), 'hunter2');
+    await user.type(await screen.findByPlaceholderText('The one you sign in with'), 'hunter2');
     expect(screen.queryByPlaceholderText('Why do you want to join? (optional)')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Connect and join' }));
 
@@ -233,7 +250,7 @@ describe('ConnectAndJoinModal submit', () => {
     open(e);
     renderModal();
 
-    await user.type(await screen.findByPlaceholderText('Your account password'), 'hunter2');
+    await user.type(await screen.findByPlaceholderText('The one you sign in with'), 'hunter2');
     await user.type(screen.getByPlaceholderText('Why do you want to join? (optional)'), 'let me in');
     await user.click(screen.getByRole('button', { name: 'Connect and request' }));
 
@@ -254,7 +271,7 @@ describe('ConnectAndJoinModal submit', () => {
     open(e);
     renderModal();
 
-    await user.type(await screen.findByPlaceholderText('Your account password'), 'hunter2');
+    await user.type(await screen.findByPlaceholderText('The one you sign in with'), 'hunter2');
     await user.type(screen.getByPlaceholderText('Why do you want to join? (optional)'), 'hello');
     await user.click(screen.getByRole('button', { name: 'Connect and request' }));
 
@@ -277,12 +294,12 @@ describe('ConnectAndJoinModal submit', () => {
     open(entry());
     renderModal();
 
-    await user.type(await screen.findByPlaceholderText('Your account password'), 'wrong');
+    await user.type(await screen.findByPlaceholderText('The one you sign in with'), 'wrong');
     await user.click(screen.getByRole('button', { name: 'Connect and join' }));
 
     expect(await screen.findByText('Invalid password')).toBeInTheDocument();
     expect(useUIStore.getState().activeModal).toBe('connectAndJoin');
-    expect(screen.getByPlaceholderText('Your account password')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('The one you sign in with')).toBeInTheDocument();
   });
 });
 
@@ -313,7 +330,7 @@ describe('ConnectAndJoinModal on an origin that is already connected', () => {
 
     expect(await screen.findByText('Retro')).toBeInTheDocument();
     expect(probeInstance).not.toHaveBeenCalled();
-    expect(screen.queryByPlaceholderText('Your account password')).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('The one you sign in with')).not.toBeInTheDocument();
     expect(screen.queryByText(/This space lives on/)).not.toBeInTheDocument();
     expect(connectAndJoin).not.toHaveBeenCalled();
 

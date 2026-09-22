@@ -187,7 +187,7 @@
     },
     "connect": {
       "title": "{{name}} beitreten",
-      "intro": "Dieser Space liegt auf <host>{{host}}</host>. Gib dein Passwort für <home>{{home}}</home> ein, um dort deine Identität anzulegen.",
+      "intro": "Dieser Space liegt auf <host>{{host}}</host>. Beim Verbinden wird dort deine Identität angelegt, verknüpft mit deinem Konto auf <home>{{home}}</home>.",
       "probing": "Verbindung zu {{host}} wird geprüft…",
       "connecting": "Verbindung wird hergestellt…",
       "requested": "Deine Anfrage für {{name}} wurde gesendet."

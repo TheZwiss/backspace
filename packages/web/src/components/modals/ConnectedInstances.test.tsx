@@ -96,7 +96,7 @@ describe('AddInstanceFlow', () => {
     expect(screen.getByText('Retro')).toBeInTheDocument();
     expect(screen.getByText('https://retro.example')).toBeInTheDocument();
 
-    await user.type(screen.getByPlaceholderText('Your account password'), 'hunter2');
+    await user.type(screen.getByPlaceholderText('The one you sign in with'), 'hunter2');
     await user.click(screen.getByRole('button', { name: 'Connect' }));
 
     await waitFor(() => expect(connectToInstance).toHaveBeenCalledWith('https://retro.example', 'hunter2', 'Jannis'));
@@ -110,7 +110,7 @@ describe('AddInstanceFlow', () => {
     loginToRemote.mockResolvedValue(undefined);
     await openPasswordStep(user);
 
-    await user.type(screen.getByPlaceholderText('Your account password'), 'hunter2');
+    await user.type(screen.getByPlaceholderText('The one you sign in with'), 'hunter2');
     await user.click(screen.getByRole('button', { name: 'Connect' }));
 
     expect(await screen.findByText(/An account already exists on this instance/)).toBeInTheDocument();
