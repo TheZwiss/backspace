@@ -25,6 +25,7 @@
     "test/federation-e2e-*.test.ts",
     "test/federation-handshake-desync.test.ts",
     "test/cors-posture.test.ts",
-    "test/http-security-headers.test.ts"
+    "test/http-security-headers.test.ts",
+    "test/directory-e2e.test.ts"
   ]
 }

@@ -268,7 +268,11 @@ next to the telemetry reporter. Unlike the reporter it does not sit under
 `DISABLE_FEDERATION_WORKERS`: the two-instance federation harness disables
 the workers and still needs the pinger, pointed at a local stub. Its own
 guard is an empty `DIRECTORY_ENDPOINT` (section 11), which logs one line and
-starts nothing.
+starts nothing. The harness sets that empty value on every child explicitly
+(a developer's own `DIRECTORY_ENDPOINT` would otherwise reach every spawned
+instance through the inherited environment); `test/directory-e2e.test.ts`
+passes `directoryEndpoint` to point both instances at its stub hub and proves
+listing, delisting, the toggle and the fetch-failure status line end to end.
 
 **When it pings**, in the order `pingerTick` checks:
 
