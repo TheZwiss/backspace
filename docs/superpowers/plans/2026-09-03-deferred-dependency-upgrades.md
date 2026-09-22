@@ -148,7 +148,11 @@ Why none of them lands:
   (`getOurOrigin`), the tus `Location` is relative on purpose
   (`routes/files.ts`), and `request.ip` is a different value that the advisory
   does not concern. A route that starts building a URL from the request host
-  would make this reachable and is the thing to watch for.
+  would make this reachable and is the thing to watch for. **If one ever does,
+  there is no patch to take:** the 4 line has no fix, so the response would be
+  the Fastify 5 migration this note defers, brought forward and done properly,
+  not a point release. That is the cost this deferral is carrying, and it is
+  worth re-reading the row before adding any such route.
 
 There is no fix in the 4 line. The npm `four` dist-tag is 4.29.1, which is
 what is installed. Terminal.

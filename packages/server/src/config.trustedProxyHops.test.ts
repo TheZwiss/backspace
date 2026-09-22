@@ -65,6 +65,18 @@ describe('TRUSTED_PROXY_HOPS', () => {
     expect(await loadHops()).toBe(2);
   });
 
+  it('reads a blank value as unset rather than refusing to boot', async () => {
+    // `TRUSTED_PROXY_HOPS=` is what an operator types to un-set a line, and it
+    // is what an env_file passes through. It carries no number, so there is no
+    // choice being silently discarded: this is the same "no opinion" an absent
+    // variable expresses, and `envOptional` treats blank the same way.
+    process.env.TRUSTED_PROXY_HOPS = '';
+    expect(await loadHops()).toBe(1);
+    // A line left with a space after the '=' is the same gesture.
+    process.env.TRUSTED_PROXY_HOPS = '   ';
+    expect(await loadHops()).toBe(1);
+  });
+
   it('takes the cap, which is more hops than any deployment we know of', async () => {
     process.env.TRUSTED_PROXY_HOPS = '4';
     expect(await loadHops()).toBe(4);
@@ -78,8 +90,12 @@ describe('TRUSTED_PROXY_HOPS', () => {
     process.env.TRUSTED_PROXY_HOPS = '5';
     await expect(loadHops()).rejects.toThrow(/Got 5; the maximum is 4/);
     await expect(loadHops()).rejects.toThrow(/proxies in front of this app/);
-    // The cap, not the operator's topology, is what to argue with.
-    await expect(loadHops()).rejects.toThrow(/the cap in packages\/server\/src\/config\.ts/);
+    // The cap, not the operator's topology, is what to argue with, and the
+    // message has to say so in a way that works for someone running the
+    // published image with no checkout to open.
+    await expect(loadHops()).rejects.toThrow(/that is the limit to raise and not your setting/);
+    await expect(loadHops()).rejects.toThrow(/open an issue at https:\/\/github\.com\/[^\s]+\/issues/);
+    await expect(loadHops()).rejects.not.toThrow(/packages\/server\/src\/config\.ts/);
   });
 
   it('refuses a typo that would restore the old trust-everything behaviour', async () => {
@@ -92,7 +108,6 @@ describe('TRUSTED_PROXY_HOPS', () => {
     ['a fraction', '1.5'],
     ['a negative', '-1'],
     ['digits with a suffix', '2 hops'],
-    ['an empty value', ''],
   ])('refuses to boot on %s rather than falling back to the default', async (_label, value) => {
     process.env.TRUSTED_PROXY_HOPS = value;
     // The failure has to be the refusal, not a quiet 1: an operator who

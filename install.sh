@@ -480,6 +480,18 @@ else
   MAX_UPLOAD_SIZE=104857600  # 100 MB
 fi
 
+# ── Trusted proxy hops ──────────────────────────────────────
+# The number of proxies in front of the app that may be trusted to have written
+# X-Forwarded-For. Every rate limit keys on the address it produces. All three
+# deployment modes are one hop, which is the app's default, so this is written
+# commented-out and only becomes a live line when an operator (or a previous
+# run) set one: 0 for an app exposed with nothing in front, 2 for a CDN ahead
+# of an appending reverse proxy. An explicit env value or an existing .env
+# value always wins; neither is second-guessed here, because only the operator
+# knows their topology.
+existing_hops=$(env_val TRUSTED_PROXY_HOPS)
+TRUSTED_PROXY_HOPS="${TRUSTED_PROXY_HOPS:-${existing_hops}}"
+
 # ── Phase 3: Generate Secrets ───────────────────────────────
 
 step "Generating configuration"
@@ -536,6 +548,34 @@ EOF
 # files automatically — no -f flags needed.
 COMPOSE_FILE=docker-compose.yml:docker-compose.proxy.yml
 APP_PORT=${APP_PORT_FINAL}
+EOF
+  fi
+
+  if [[ -n "$TRUSTED_PROXY_HOPS" ]]; then
+    cat << EOF
+
+# Proxies in front of this app that may be trusted to have written
+# X-Forwarded-For. Preserved from your previous configuration or from the
+# environment; see .env.example for what each value means.
+TRUSTED_PROXY_HOPS=${TRUSTED_PROXY_HOPS}
+EOF
+  else
+    cat << 'EOF'
+
+# How many proxies sit in front of this app and may be trusted to have written
+# X-Forwarded-For. It is the address every rate limit counts a request against.
+# The default of 1 is right for all three deployment modes above: the bundled
+# Caddy, your own reverse proxy and a tunnel daemon are each one hop. Change it
+# only if your topology differs:
+#   0  nothing in front at all (the app exposed directly). Leaving such an
+#      instance at 1 lets a client send its own X-Forwarded-For and choose the
+#      address its rate limits are counted against.
+#   2  a CDN in front of your own reverse proxy, when that proxy APPENDS to
+#      X-Forwarded-For. Behind the bundled Caddy the number alone does nothing
+#      until Caddy's trusted_proxies names the CDN.
+# Anything that is not a non-negative integer, or is above 4, stops the server
+# at boot with a message instead of quietly running a number you did not pick.
+# TRUSTED_PROXY_HOPS=1
 EOF
   fi
 

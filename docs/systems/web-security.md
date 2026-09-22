@@ -685,6 +685,17 @@ way until this was corrected, and under it a request arriving with
 `X-Forwarded-For: 9.9.9.9` was read as coming from 9.9.9.9 even when the proxy
 appended the real address after it.
 
+**The count governs the address, and only the address.** The rest of the
+`X-Forwarded-*` family is trusted or not, without following the number: at 1 or
+more, `request.protocol` and `request.hostname` are taken from
+`X-Forwarded-Proto` and `X-Forwarded-Host` (the last entry, at any count), and
+at 0 they come from the socket and the `Host` header. Raising the count to 2
+for a CDN changes which address is billed and leaves protocol and host where
+they were. Nothing in this server reads those two, which is what keeps it from
+mattering; a route that builds a URL from the request host would change that
+(see the CVE note in
+`docs/superpowers/plans/2026-09-03-deferred-dependency-upgrades.md`).
+
 **What rests on the address.** The global rate limiter keys on it and has
 nothing else to key on (see [api.md](api.md), "Rate limiting"); the per-route
 limits key the same way; the hand-written limiter on
@@ -702,14 +713,27 @@ of this.
 | Bundled Caddy (`allinone`, the shipped default) | overwrites the header; incoming values ignored, since this repo's `Caddyfile` sets no `trusted_proxies` | the real client | correct |
 | Operator's nginx with the snippet `install.sh` prints | **appends**: `"<whatever the client sent>, <peer nginx saw>"` | the real client; the client's own entries are ignored | correct, and this is what the hop count fixed |
 | A tunnel provider (Cloudflare and friends) | one hop that writes its own entry | the real client | correct |
-| CDN in front of the operator's own proxy | two hops | the CDN's address, so every client behind it shares one bucket | **`TRUSTED_PROXY_HOPS=2`** |
+| CDN in front of an inner proxy that **appends** (nginx and friends) | two hops: `"<client>, <CDN>"` | at 1, the CDN's address, so every client behind it shares one bucket | **`TRUSTED_PROXY_HOPS=2`** |
+| CDN in front of the **bundled Caddy** | one hop: Caddy discards the CDN's entry and writes the CDN's address | the CDN's address at any count | the number alone does nothing. Give Caddy `trusted_proxies` first (see below), then set 2 |
 | App exposed directly, no proxy at all | only what the client chose to send | the client's own claim | **`TRUSTED_PROXY_HOPS=0`**, which ignores the header and uses the socket address |
 
-The two rows that need a number other than 1 are the two the app cannot detect
+The rows that need a number other than 1 are the ones the app cannot detect
 for itself: one proxy looks exactly like none-plus-a-lying-client from inside
 the process. That is why the number is the operator's to set, and why
-`.env.example` spells out all three cases. Both mistakes are asymmetric: too
-low costs a shared bucket, too high gives the key back to the client.
+`.env.example` spells out the cases. Both mistakes are asymmetric: too low
+costs a shared bucket, too high gives the key back to the client.
+
+**A CDN behind the bundled Caddy needs the Caddyfile changed, not just the
+number.** Caddy ignores an incoming `X-Forwarded-For` unless `trusted_proxies`
+names the sender, so behind the shipped `Caddyfile` the CDN's entry is thrown
+away and the app is handed a one-entry header containing the CDN's own address.
+Measured: identical behaviour at 1, 2 and 3. Raising the count on such a
+deployment changes nothing at all, which is worse than leaving it alone,
+because it looks like the problem has been dealt with. The order is: tell Caddy
+which addresses to trust (`trusted_proxies static <CDN ranges>` in the
+`reverse_proxy` block, or the global `servers > trusted_proxies` option), then
+set `TRUSTED_PROXY_HOPS=2`. An inner proxy that appends, nginx as configured by
+this repo's snippet among them, needs only the number.
 
 **Do not "fix" anything here by disabling proxy trust** while a proxy is in
 front. The app would then read the proxy's own address for every request and

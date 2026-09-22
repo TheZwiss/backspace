@@ -1,4 +1,4 @@
-import Fastify from 'fastify';
+import Fastify, { type FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
@@ -166,7 +166,7 @@ async function main(): Promise<void> {
     // proxy shares one 200-per-minute budget. Which address that is comes from
     // `config.trustedProxyHops`, which is what keeps a client from choosing
     // its own. See docs/systems/api.md, "Rate limiting".
-    keyGenerator: (request) => request.ip,
+    keyGenerator: (request: FastifyRequest) => request.ip,
     // Test harnesses set DISABLE_RATE_LIMITS=1 to bypass per-IP exhaustion when
     // many tests share the loopback IP. Default unset; production unchanged.
     allowList: () => process.env.DISABLE_RATE_LIMITS === '1' || process.env.DISABLE_RATE_LIMITS === 'true',

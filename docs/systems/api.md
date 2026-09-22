@@ -7,9 +7,13 @@ Source files: `packages/server/src/routes/*.ts`
 
 ## Rate limiting
 
-Every request passes one global limit of **200 per minute**, registered in
-`packages/server/src/index.ts`. **The key is the client address and nothing
-else.** The limiter runs on Fastify's `onRequest` hook while `authenticate` is
+Every request passes a limit: the global **200 per minute** registered in
+`packages/server/src/index.ts`, or the route's own where it declares one. A
+route with `config.rateLimit` **replaces** the global limit for itself rather
+than sitting under it, so a route that allows 100 per minute allows 100 per
+minute even though the global number is smaller. Read the per-route numbers
+below as the whole budget for that route, not as a second gate. **The key is
+the client address and nothing else.** The limiter runs on Fastify's `onRequest` hook while `authenticate` is
 a route `preHandler`, so no user is attached to the request yet when the key is
 taken. Nothing in the HTTP limiter is per account; the only per-user budgets in
 the app are the two hand-written upload limits in `routes/files.ts` (30 upload
@@ -258,7 +262,7 @@ GET    /directory                        (auth)  ?q=&limit=&offset= → Director
 ```
 `GET /directory/spaces` is the document the space directory hub indexes: `{ schema: 1, origin, instance: { name, federatedRegistrationOpen, version }, spaces[] }`, at most 200 spaces that are listed, discoverable and public or request, every `icon`/`banner` an absolute URL on this origin or null. Unauthenticated by design (the hub is a stranger), cached in memory for 30 s or until the next change, and served `Cache-Control: no-cache` so no intermediary holds a pre-delist copy: the in-memory cache, not a shared cache, is what answers the revalidations. It never 404s: with the directory or discovery off, `spaces` is empty and the envelope stays, so a hub fetch of a switched-off instance is a success that clears its rows.
 
-`GET /directory` is the feed proxy the Explore page's Outer Space section reads; the browser never talks to the hub. `q` (cut to 100 chars), `limit` (1-100, default 50) and `offset` (0-1000) are clamped, not rejected, and forwarded to `{DIRECTORY_ENDPOINT}/v1/spaces`. Each distinct query is cached for 60 s (64 entries) counted from when the hub's edge copy was made (the receive time less the hub's `Age` header, absent or unparsable counting as 0, clamped to 60 s), so the proxy's answer is never older than 60 s end to end even though the hub caches for 60 s of its own; identical in-flight requests share one upstream fetch, and the route carries its own rate limit of 30 per minute under the global one (`429 rate_limited`, the global limiter's shape). `404 directory_disabled` when `DIRECTORY_ENDPOINT` is empty, and the same `404 directory_disabled` when the admin has turned `instance_settings.directoryBrowseEnabled` off, checked before any upstream fetch or cache read; `502 directory_unreachable` when the hub does not answer or answers something that is not a feed. Response `{ schema: 1, spaces: DirectoryEntry[] }`. See [directory.md](directory.md).
+`GET /directory` is the feed proxy the Explore page's Outer Space section reads; the browser never talks to the hub. `q` (cut to 100 chars), `limit` (1-100, default 50) and `offset` (0-1000) are clamped, not rejected, and forwarded to `{DIRECTORY_ENDPOINT}/v1/spaces`. Each distinct query is cached for 60 s (64 entries) counted from when the hub's edge copy was made (the receive time less the hub's `Age` header, absent or unparsable counting as 0, clamped to 60 s), so the proxy's answer is never older than 60 s end to end even though the hub caches for 60 s of its own; identical in-flight requests share one upstream fetch, and the route carries its own rate limit of 30 per minute, which replaces the global one for it (`429 rate_limited`, the global limiter's shape). `404 directory_disabled` when `DIRECTORY_ENDPOINT` is empty, and the same `404 directory_disabled` when the admin has turned `instance_settings.directoryBrowseEnabled` off, checked before any upstream fetch or cache read; `502 directory_unreachable` when the hub does not answer or answers something that is not a feed. Response `{ schema: 1, spaces: DirectoryEntry[] }`. See [directory.md](directory.md).
 
 ## Uploads (`routes/files.ts`, `routes/uploads.ts`)
 

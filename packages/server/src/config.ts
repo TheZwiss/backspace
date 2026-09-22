@@ -45,17 +45,23 @@ function envBool(key: string, defaultValue: boolean): boolean {
 }
 
 /**
- * A count, read strictly: the value must be a non-negative integer and nothing
- * else. Unlike `envInt` this refuses `parseInt`'s leftovers ('2 hops', '1.5',
- * '') instead of silently taking the digits it recognises, and it never falls
- * back to the default once the variable is set. A security-shaped number that
- * quietly becomes the default when it is mistyped is the failure this guards
- * against: the operator would be told nothing and would run a setting they did
- * not choose.
+ * A count, read strictly: a set value must be a non-negative integer and
+ * nothing else. Unlike `envInt` this refuses `parseInt`'s leftovers ('2 hops',
+ * '1.5', '-1') instead of silently taking the digits it recognises. A
+ * security-shaped number that quietly becomes the default when it is mistyped
+ * is the failure this guards against: the operator would be told nothing and
+ * would run a setting they did not choose.
+ *
+ * A blank value is unset, which is `envOptional`'s rule and this file's
+ * convention (`DIRECTORY_ENDPOINT` opts out of it in writing, because an empty
+ * URL means something there). Blank carries no number, so there is no choice
+ * to discard, and `KEY=` is what an operator types to un-set a line: refusing
+ * it would stop an instance booting over a gesture that means "I have no
+ * opinion", which the default already covers.
  */
 function envCount(key: string, defaultValue: number): number {
   const value = process.env[key];
-  if (value === undefined) return defaultValue;
+  if (value === undefined || value.trim() === '') return defaultValue;
   const trimmed = value.trim();
   if (!/^\d+$/.test(trimmed)) {
     throw new Error(
@@ -109,6 +115,10 @@ const commit = envOptional('BACKSPACE_COMMIT') ?? null;
  * operator configured the thing, and the instance boots. A number that cannot
  * describe a real deployment is a typo, and it is refused the same way
  * '2 hops' is.
+ *
+ * The refusal cannot tell an operator to edit this file: most of them run the
+ * published image and have no checkout. It states the cap and asks for the
+ * topology instead, which is the thing we would need in order to raise it.
  */
 const MAX_TRUSTED_PROXY_HOPS = 4;
 
@@ -146,6 +156,16 @@ const MAX_TRUSTED_PROXY_HOPS = 4;
  * bucket); too high is a hole (the key goes back to the client). When in
  * doubt, too low.
  *
+ * **It governs the address and nothing else.** The rest of the
+ * `X-Forwarded-*` family is trusted or not, without following the count: at
+ * any value of 1 or more, `request.protocol` and `request.hostname` come from
+ * `X-Forwarded-Proto` and `X-Forwarded-Host` (the last entry, whatever the
+ * number), and at 0 they come from the socket and the `Host` header. Raising
+ * the count to 2 for a CDN therefore changes which address is billed and
+ * leaves protocol and host exactly where they were. No route in this server
+ * reads either of those two, which is what keeps that from mattering; a route
+ * that starts building a URL from the request host would make it matter.
+ *
  * Both ways of getting it wrong refuse to boot rather than resolving to
  * something the operator did not choose: a value that is not a non-negative
  * integer, and a value above `MAX_TRUSTED_PROXY_HOPS`. See
@@ -157,9 +177,9 @@ if (trustedProxyHops > MAX_TRUSTED_PROXY_HOPS) {
   throw new Error(
     `TRUSTED_PROXY_HOPS is how many proxies in front of this app may be trusted to have written X-Forwarded-For, ` +
     `and it is what every rate limit keys on. Got ${trustedProxyHops}; the maximum is ${MAX_TRUSTED_PROXY_HOPS}. ` +
-    `A CDN in front of your own reverse proxy in front of a tunnel is 3, so if you meant 1 or 2 this is a typo. ` +
-    `If your deployment really has more than ${MAX_TRUSTED_PROXY_HOPS} hops, the cap in packages/server/src/config.ts ` +
-    `is what to change, and we would like to hear about the topology.`
+    `A CDN in front of your own reverse proxy in front of a tunnel is 3 hops, so if you meant 1 or 2 this is a typo. ` +
+    `If your deployment really does have more than ${MAX_TRUSTED_PROXY_HOPS}, that is the limit to raise and not your ` +
+    `setting: open an issue at ${UPSTREAM_SOURCE_URL}/issues describing the hops in front of this instance.`
   );
 }
 
