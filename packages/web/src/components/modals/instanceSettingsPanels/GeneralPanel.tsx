@@ -104,6 +104,33 @@ function levelOf(draft: { discoveryEnabled: boolean; directoryEnabled: boolean }
   return draft.directoryEnabled ? 'global' : 'local';
 }
 
+/**
+ * What one `GET /api/instance/info` answer says about this instance having a
+ * `DIRECTORY_ENDPOINT`: true it has one, false it has none, null nothing new
+ * was learned.
+ *
+ * The server reports one flag, `directoryAvailable`, which is the endpoint and
+ * the admin's browse setting together, so neither half means anything read on
+ * its own. Both are therefore read at the same instant and reduced here to the
+ * single fact the row needs, and it is that fact that is stored. Storing the
+ * raw flag instead splits the pair: a save writes the setting immediately and
+ * the flag is a round trip behind it, so for the length of that round trip the
+ * panel would answer from one value before the change and one after, and tell
+ * an admin who just switched browsing on that the instance has no directory.
+ *
+ * The reduction is stable under a save, which is what makes it safe to keep:
+ * no setting an admin can write creates or removes an endpoint, so an answer
+ * derived this way is never invalidated by the change that prompted the
+ * re-read. `previous` is returned when this answer settles nothing, which is
+ * an unavailable directory while browsing is off: the endpoint and the
+ * setting are then indistinguishable causes, and a fact already established
+ * is worth more than the absence of one.
+ */
+function endpointFrom(directoryAvailable: boolean, browseEnabled: boolean, previous: boolean | null): boolean | null {
+  if (directoryAvailable) return true;
+  return browseEnabled ? false : previous;
+}
+
 export function GeneralPanel() {
   const { t } = useTranslation(['admin', 'common']);
   const f = useFormatters();
@@ -120,12 +147,12 @@ export function GeneralPanel() {
   const [gifKeyDraft, setGifKeyDraft] = useState('');
   const [openingRegistration, setOpeningRegistration] = useState(false);
 
-  // `directoryAvailable` from the public instance info: the operator's
-  // DIRECTORY_ENDPOINT and the browse setting together, or null while the
-  // answer has not arrived and after a request that failed.
-  const [directoryAvailable, setDirectoryAvailable] = useState<boolean | null>(null);
-  // Bumped after a save so the pair below is never read across a change to
-  // the very setting it is derived from.
+  // Whether this instance has a DIRECTORY_ENDPOINT to reach, or null while
+  // that cannot be told. Stored already derived, never as the raw
+  // `directoryAvailable` half: see `endpointFrom` for why the derivation has
+  // to happen at the instant the answer arrives.
+  const [hasDirectoryEndpoint, setHasDirectoryEndpoint] = useState<boolean | null>(null);
+  // Bumped after a save so the answer follows a change the admin just made.
   const [directoryProbe, setDirectoryProbe] = useState(0);
 
   // The settings the draft was last seeded from. A background refresh only
@@ -160,11 +187,22 @@ export function GeneralPanel() {
   useEffect(() => {
     let cancelled = false;
     api.instance.info()
-      .then((info) => { if (!cancelled) setDirectoryAvailable(info.directoryAvailable === true); })
+      .then((info) => {
+        if (cancelled) return;
+        // The settings are read here, next to the answer they are paired
+        // with, rather than from the render's closure.
+        const saved = useSettingsStore.getState().instanceSettings;
+        setHasDirectoryEndpoint((previous) => endpointFrom(
+          info.directoryAvailable === true,
+          saved?.directoryBrowseEnabled === true,
+          previous,
+        ));
+      })
       .catch(() => {
-        // Unknown, which the row treats as "say nothing": an instance whose
-        // own info endpoint is unreachable has bigger news than this toggle.
-        if (!cancelled) setDirectoryAvailable(null);
+        // Nothing learned, so nothing unsaid. A re-read that fails must not
+        // retract an answer that was right: an instance whose own info
+        // endpoint is momentarily unreachable has not grown an endpoint, nor
+        // lost one.
       });
     return () => { cancelled = true; };
   }, [directoryProbe]);
@@ -206,6 +244,9 @@ export function GeneralPanel() {
       }
       setGifKeyDirty(false);
       setGifKeyDraft('');
+      // The endpoint answer follows the save. It cannot go stale against it:
+      // `endpointFrom` reduced both halves at the instant they were read, and
+      // no setting an admin writes creates or removes an endpoint.
       setDirectoryProbe((n) => n + 1);
       addToast(t('common:states.settingsSaved'), 'success', 2000);
     } catch (err) {
@@ -244,19 +285,10 @@ export function GeneralPanel() {
     }
   };
 
-  /**
-   * Whether this instance has no directory to reach at all.
-   *
-   * The public info reports one flag, `directoryAvailable`, which is the
-   * operator's `DIRECTORY_ENDPOINT` and the browse setting together. Read as
-   * a pair with the saved setting it answers the only question this row has:
-   * while browsing is on, an unavailable directory can only mean no endpoint
-   * is configured. While browsing is off the two causes cannot be told apart,
-   * so the row says nothing rather than guess, and `directoryProbe` re-reads
-   * the flag after a save so the pair is never taken from two sides of a
-   * change.
-   */
-  const noDirectoryEndpoint = directoryAvailable === false && instanceSettings.directoryBrowseEnabled;
+  // Known to have no directory to reach. Only the established `false` counts:
+  // null is "not known", which the row renders as neither claim, the same as
+  // a reachable directory.
+  const noDirectoryEndpoint = hasDirectoryEndpoint === false;
 
   const lastError = instanceSettings.directoryLastError;
   const lastErrorReasonKey = lastError === null ? null : pingReasonKey(lastError);
@@ -378,8 +410,19 @@ export function GeneralPanel() {
                 <div className="text-sm font-medium text-txt-primary">{t('admin:general.browse.toggleLabel')}</div>
                 <div className="text-xs text-txt-tertiary mt-0.5">{t('admin:general.browse.toggleDescription')}</div>
               </div>
+              {/*
+                The switch shows the effective state, not the stored column.
+                With no endpoint to reach, nothing is browsed whatever the
+                column says, so a switch in the on position next to a line
+                saying there is nothing to show would assert two things at
+                once and only one of them would be true. The column is not
+                written to match: the stored value is invisible and harmless
+                while there is no endpoint, and browsing resumes at whatever
+                the admin last chose if one is ever configured. Do not
+                "correct" this into reflecting the raw draft.
+              */}
               <Toggle
-                enabled={draft.directoryBrowseEnabled}
+                enabled={draft.directoryBrowseEnabled && !noDirectoryEndpoint}
                 onChange={(value) => setDraft({ ...draft, directoryBrowseEnabled: value })}
                 disabled={noDirectoryEndpoint}
                 ariaLabel={t('admin:general.browse.toggleLabel')}

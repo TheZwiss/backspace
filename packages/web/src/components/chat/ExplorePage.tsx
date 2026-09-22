@@ -47,12 +47,13 @@ export function ExplorePage() {
 
   const [joinedCollapsed, setJoinedCollapsed] = useState(false);
 
-  // Whether the home instance can reach a directory at all (DIRECTORY_ENDPOINT
-  // non-empty), which is what browsing needs. Not the admin's listing opt-in
-  // (`directoryEnabled`): a fresh instance that lists nothing must still be
-  // able to browse. Read once from the public instance info so an instance
-  // with no directory never flashes the Outer Space header; the store's own
-  // status starts idle and cannot answer this before its first fetch.
+  // Whether the home instance browses the directory at all: DIRECTORY_ENDPOINT
+  // non-empty and the admin's browse setting on, which the server reports as
+  // one flag. Not the admin's listing opt-in (`directoryEnabled`): a fresh
+  // instance that lists nothing must still be able to browse. Read once from
+  // the public instance info so an instance with no directory never flashes
+  // the Outer Space header; the store's own status starts idle and cannot
+  // answer this before its first fetch.
   const [directoryAvailable, setDirectoryAvailable] = useState(false);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -319,7 +320,7 @@ export function ExplorePage() {
             )}
           </section>
 
-          {/* Outer Space: the directory, only on an instance that can reach one */}
+          {/* Outer Space: the directory, only on an instance that browses one */}
           {directoryAvailable && (
             <OuterSpaceSection query={searchQuery} onConnect={handleConnect} />
           )}

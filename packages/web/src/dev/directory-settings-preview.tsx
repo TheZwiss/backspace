@@ -13,7 +13,7 @@
 //   admin-global          the global rung, last ping shown, federated accounts open
 //   admin-closed          the global rung with federated accounts closed: the amber note and its button, and a fetch error with reason
 //   admin-origin          the global rung, never reported, the hub refused the instance's address
-//   admin-no-directory    the local rung on an instance with no DIRECTORY_ENDPOINT: the browse row is inert and says why
+//   admin-no-directory    the local rung on an instance with no DIRECTORY_ENDPOINT: the browse row reads off, is inert, and says why
 //   space-admin-off       public space, the instance has the directory off
 //   space-private         private space, the instance allows the directory
 //   space-listed          public space, listed

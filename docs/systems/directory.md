@@ -969,15 +969,38 @@ and it is a draft field saved by the panel's normal save bar like the rungs,
 not an immediate write. The three-rung ladder is a `radiogroup`, which may own
 only radios, so the switch is its sibling.
 
-The panel disables the switch and adds "This instance is not configured to
-reach a directory, so there is nothing to show." when the instance has no
-endpoint. It works that out from the same `GET /api/instance/info` the Explore
-page reads, paired with the saved setting: `directoryAvailable` is the
-endpoint and the setting together, so while the setting is on, an unavailable
-directory can only be a missing endpoint. While the setting is off the two
-causes cannot be told apart, and the panel says nothing rather than guess. The
-info is re-read after each save, so the pair is never taken from two sides of
-a change. Nothing was added to the API for this.
+On an instance with no endpoint the panel renders the switch **off** and
+disabled, with "This instance is not configured to reach a directory, so there
+is nothing to show." beneath it. **Off is deliberate and is not a reading of
+the stored column.** The effective state is off whatever the column says,
+because there is nothing to browse; a switch in the on position next to a line
+saying there is nothing to show would assert two things at once and only one
+of them would be true. The column is not written to match: the stored `1` stays
+stored, invisible and harmless, and browsing resumes at the admin's last choice
+if an endpoint is ever configured, which is the documented default-on
+behaviour. Do not "fix" this into reflecting the raw column.
+
+The panel works the endpoint out from the same `GET /api/instance/info` the
+Explore page reads. Nothing was added to the API for it. `directoryAvailable`
+is the endpoint and the setting together, so **neither half means anything
+read on its own**: the panel reads the answer and the saved setting at the
+same instant and reduces them there to the one fact it needs, then stores that
+fact rather than the raw flag. An available directory proves an endpoint; an
+unavailable one with browsing on proves there is none; an unavailable one with
+browsing off proves nothing, and leaves whatever was already established
+standing. Unknown renders as neither claim: no note, and the switch reads the
+draft.
+
+Storing the reduction rather than the flag is what makes the answer safe
+across a save. A save writes the setting at once and the info is a round trip
+behind it, so a panel holding the raw flag would answer from one value before
+the change and one after for the length of that round trip, and would tell an
+admin who had just switched browsing on that the instance has no directory. A
+reduced answer cannot go stale that way, because no setting an admin can write
+creates or removes an endpoint. The info is still re-read after every save, so
+a fact that was not yet establishable becomes establishable as soon as it is;
+and a re-read that fails changes nothing, since a request that learned nothing
+may unsay nothing.
 
 `settingsStore.updateInstanceSettings` mirrors `discoveryEnabled` and
 `directoryEnabled` from the server's answer into `streamingLimits`, so the

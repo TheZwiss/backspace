@@ -17,9 +17,9 @@ interface OuterSpaceSectionProps {
 /**
  * The directory half of the Explore page: spaces on instances the session is
  * not connected to. The page gates it on the home instance's
- * `directoryAvailable` flag (an endpoint is configured), not on the admin's
- * listing opt-in; the section itself renders the store's states and nothing
- * else.
+ * `directoryAvailable` flag (an endpoint is configured and the admin allows
+ * browsing), not on the admin's listing opt-in; the section itself renders
+ * the store's states and nothing else.
  */
 export function OuterSpaceSection({ query, onConnect }: OuterSpaceSectionProps) {
   const { t } = useTranslation(['spaces', 'errors']);
