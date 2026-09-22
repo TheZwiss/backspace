@@ -722,30 +722,44 @@ socket's backoff) is hidden for that moment.
 
 **Why Explore looks the way it does here.** `InstanceDiscoveryHint` sits in
 the same slot directly under the chips. It names this instance's own
-discovery settings and, for an admin, changes them from the page. It reads
-`discoveryEnabled` from `exploreStore` and `isAdmin` plus
-`streamingLimits.directoryEnabled` from `settingsStore` (the listing opt-in,
-which any signed-in user may read), and derives one row, first match wins:
+discovery settings and, for an admin, changes them from the page. **Both
+flags come from one document**, `settingsStore.streamingLimits`, which any
+signed-in user may read and which `updateInstanceSettings` keeps current;
+`isAdmin` comes from the same store. The row is derived from that document
+and nothing else:
 
 | condition | what renders |
 |---|---|
-| the instance settings have not arrived and discovery is on | nothing |
+| `streamingLimits` is null (the document has not arrived) | nothing |
 | discovery off, not an admin | amber notice: space discovery is off, spaces here are joinable by invite link only |
 | discovery off, admin | the same fact in the admin's voice, with "Turn on space discovery" |
 | discovery on, not listed, admin | a quiet row: spaces here are not listed in the public directory, with "List them" |
 | anything else | nothing |
 
+Unknown is not a fact: with no document the hint says nothing rather than
+guessing, because this is the one Explore surface that offers a write, and a
+guessed `directoryEnabled: false` would tell an admin their listed instance
+is not listed next to a button that acts on it. That is also why
+`settingsStore.fetchStreamingLimits` leaves the field null when the request
+fails instead of substituting `DEFAULT_LIMITS`, which asserts both flags;
+the screen-share config, the one consumer that needs numbers whatever
+happened, reads them through `getStreamingLimits()`, which falls back at read
+time.
+
 The two rows an admin sees are the ladder of section 3 one rung per click,
 offered in the same place. "Turn on space discovery" writes
 `discoveryEnabled: true` through `updateInstanceSettings`, which mirrors both
-flags back into `streamingLimits`, and the hint moves from the third row to
-the fourth by itself: there is no "just enabled" state to disagree with the
-settings. Enabling calls back into `ExplorePage` so Inner Space refills
-without a reload (`fetchSpaces`, `fetchMyRequests`); "List them" writes
-`directoryEnabled: true` and refetches nothing, because what this instance
-lists does not change what it sees. Both buttons disable while their call is
-in flight, and a rejected PATCH renders `describeError` under the text and
-leaves the row where it was, the store having kept the old settings.
+flags from the server's answer back into `streamingLimits`, and the hint
+moves from the third row to the fourth in the same render: there is no "just
+enabled" state, and no refetch has to land for the row to be right. Enabling
+also calls back into `ExplorePage` so Inner Space refills without a reload
+(`fetchSpaces`, `fetchMyRequests`), but that call fills the list, not the
+hint. "List them" writes `directoryEnabled: true` and refetches nothing,
+because what this instance lists does not change what it sees. Both buttons
+disable while their call is in flight, and a rejected PATCH renders
+`describeError` under the text and leaves the row where it was, the store
+having kept the old settings; the message is held with the row it was raised
+on, so it disappears rather than following the hint to the next rung.
 
 The listing row says nothing about Outer Space. **Browsing the directory
 never depends on `directoryEnabled`**, only on the operator's
@@ -754,6 +768,17 @@ there yet...") means the feed has nothing for this query, never that this
 instance lists nothing of its own. The three visible rows are in the Explore
 workbench as `?scene=hint-member|hint-admin|hint-not-listed`
 (`packages/web/dev-explore.html`), which takes `?width=400` for the wrap.
+
+**Known limit: two copies of `discoveryEnabled`.** The same flag lives in
+`exploreStore.discoveryEnabled`, written by `fetchSpaces` from the home
+instance's answer, and in `streamingLimits.discoveryEnabled`, written by the
+WS ready payload and by `updateInstanceSettings`. The hint reads the second
+one only. An admin who moves the rung somewhere other than this hint (the
+Instance -> General ladder, another client, another tab) updates the list on
+the next fetch while the hint keeps the rung it last knew, until the next WS
+ready refreshes the document. The fix is one flag, not a mirror kept in step
+between two stores; a mirror would be a third thing that can disagree with
+both.
 
 The search box drives both sections through one 300 ms debounce: Inner
 filters as before, Outer re-queries the hub through the proxy, showing a

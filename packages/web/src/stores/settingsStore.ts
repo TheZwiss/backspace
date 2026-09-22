@@ -48,6 +48,14 @@ const DEFAULT_LIMITS: InstanceStreamingLimits = {
   allowCustomBitrate: true,
 };
 
+/**
+ * The limits, with the defaults standing in while the document is unknown.
+ *
+ * This is the one place a default may be substituted: a screen share has to
+ * pick a bitrate whatever the server said. Everything that states a fact to
+ * the user, or offers to change one, reads `streamingLimits` itself and
+ * treats null as unknown.
+ */
 export function getStreamingLimits(): InstanceStreamingLimits {
   return useSettingsStore.getState().streamingLimits ?? DEFAULT_LIMITS;
 }
@@ -79,8 +87,14 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       const limits = await api.settings.getStreaming();
       set({ streamingLimits: limits });
     } catch (err) {
-      console.warn('[Settings] Failed to fetch streaming limits, using defaults:', err);
-      set({ streamingLimits: DEFAULT_LIMITS });
+      // Left null, not filled with defaults. The document carries the two
+      // discovery flags, and `DEFAULT_LIMITS` asserts `directoryEnabled: false`:
+      // substituting it told an admin on a listed instance that their spaces
+      // are not listed, next to a button that writes the setting. Every reader
+      // of this field already handles null, and the one consumer that needs a
+      // number whatever happened (the screen-share config) goes through
+      // `getStreamingLimits()`, which falls back at read time.
+      console.warn('[Settings] Failed to fetch streaming limits:', err);
     }
   },
 

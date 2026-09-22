@@ -233,7 +233,6 @@ export function ExplorePage() {
             {/* Why this instance shows what it shows, and the admin's way to change it */}
             <InstanceDiscoveryHint onDiscoveryEnabled={handleDiscoveryEnabled} />
 
-
             {isLoading && spaces.length === 0 ? (
               <div className="flex items-center justify-center h-64">
                 <LoadingSpinner />

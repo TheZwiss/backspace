@@ -20,7 +20,8 @@ const ENABLE_LABEL = 'Turn on space discovery';
 const NOT_LISTED_TEXT = 'Spaces on this instance are not listed in the public directory.';
 const LIST_LABEL = 'List them';
 
-function limits(directoryEnabled: boolean, discoveryEnabled = true): InstanceStreamingLimits {
+/** The settings document the hint reads, with the two flags under test on top. */
+function limits(flags: { discoveryEnabled: boolean; directoryEnabled: boolean }): InstanceStreamingLimits {
   return {
     maxBitrateKbps: 20000,
     minBitrateKbps: 500,
@@ -29,19 +30,30 @@ function limits(directoryEnabled: boolean, discoveryEnabled = true): InstanceStr
     allowedFramerates: [30, 45, 60],
     maxResolution: 1080,
     maxFramerate: 60,
-    discoveryEnabled,
-    directoryEnabled,
     bitrateMatrixOverrides: null,
     allowCustomBitrate: true,
+    ...flags,
   };
 }
+
+const DISCOVERY_OFF = limits({ discoveryEnabled: false, directoryEnabled: false });
+const NOT_LISTED = limits({ discoveryEnabled: true, directoryEnabled: false });
+const LISTED = limits({ discoveryEnabled: true, directoryEnabled: true });
 
 const updateInstanceSettings = vi.fn(async (_data: Partial<InstanceAdminSettings>) => {});
 const onDiscoveryEnabled = vi.fn();
 
-/** Seeds the two stores the hint reads. */
-function seed(state: { discoveryEnabled: boolean; isAdmin: boolean; streamingLimits: InstanceStreamingLimits | null }) {
-  useExploreStore.setState({ discoveryEnabled: state.discoveryEnabled });
+/**
+ * Seeds the settings store the hint reads. The explore store is seeded with
+ * the opposite of the settings document by default: nothing but
+ * `exploreStore.fetchSpaces` writes that field, so a hint that read it would
+ * be reporting a fact its own buttons cannot change, and these tests would
+ * pass while the row never moved.
+ */
+function seed(state: { isAdmin: boolean; streamingLimits: InstanceStreamingLimits | null }) {
+  useExploreStore.setState({
+    discoveryEnabled: state.streamingLimits === null ? true : !state.streamingLimits.discoveryEnabled,
+  });
   useSettingsStore.setState({
     isAdmin: state.isAdmin,
     streamingLimits: state.streamingLimits,
@@ -56,34 +68,32 @@ beforeEach(() => {
 });
 
 describe('InstanceDiscoveryHint', () => {
-  it('renders nothing while the instance settings have not arrived and discovery is on', () => {
-    seed({ discoveryEnabled: true, isAdmin: true, streamingLimits: null });
+  it('renders nothing while the instance settings have not arrived', () => {
+    seed({ isAdmin: true, streamingLimits: null });
+    const { container } = render(<InstanceDiscoveryHint onDiscoveryEnabled={onDiscoveryEnabled} />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('says nothing to a member either before the settings arrive: unknown is not a fact', () => {
+    seed({ isAdmin: false, streamingLimits: null });
     const { container } = render(<InstanceDiscoveryHint onDiscoveryEnabled={onDiscoveryEnabled} />);
     expect(container).toBeEmptyDOMElement();
   });
 
   it('renders nothing when discovery is on and the instance is listed', () => {
-    seed({ discoveryEnabled: true, isAdmin: true, streamingLimits: limits(true) });
+    seed({ isAdmin: true, streamingLimits: LISTED });
     const { container } = render(<InstanceDiscoveryHint onDiscoveryEnabled={onDiscoveryEnabled} />);
     expect(container).toBeEmptyDOMElement();
   });
 
   it('renders nothing for a member on an instance with discovery on that is not listed', () => {
-    seed({ discoveryEnabled: true, isAdmin: false, streamingLimits: limits(false) });
+    seed({ isAdmin: false, streamingLimits: NOT_LISTED });
     const { container } = render(<InstanceDiscoveryHint onDiscoveryEnabled={onDiscoveryEnabled} />);
     expect(container).toBeEmptyDOMElement();
   });
 
   it('tells a member why Explore is empty, without an action', () => {
-    seed({ discoveryEnabled: false, isAdmin: false, streamingLimits: limits(false, false) });
-    render(<InstanceDiscoveryHint onDiscoveryEnabled={onDiscoveryEnabled} />);
-
-    expect(screen.getByText(MEMBER_TEXT)).toBeInTheDocument();
-    expect(screen.queryByRole('button')).not.toBeInTheDocument();
-  });
-
-  it('gives a member no action even before the instance settings arrive', () => {
-    seed({ discoveryEnabled: false, isAdmin: false, streamingLimits: null });
+    seed({ isAdmin: false, streamingLimits: DISCOVERY_OFF });
     render(<InstanceDiscoveryHint onDiscoveryEnabled={onDiscoveryEnabled} />);
 
     expect(screen.getByText(MEMBER_TEXT)).toBeInTheDocument();
@@ -91,7 +101,7 @@ describe('InstanceDiscoveryHint', () => {
   });
 
   it('names the reason to an admin and offers the switch', () => {
-    seed({ discoveryEnabled: false, isAdmin: true, streamingLimits: limits(false, false) });
+    seed({ isAdmin: true, streamingLimits: DISCOVERY_OFF });
     render(<InstanceDiscoveryHint onDiscoveryEnabled={onDiscoveryEnabled} />);
 
     expect(screen.getByText(ADMIN_TEXT)).toBeInTheDocument();
@@ -99,19 +109,27 @@ describe('InstanceDiscoveryHint', () => {
     expect(screen.queryByText(NOT_LISTED_TEXT)).not.toBeInTheDocument();
   });
 
-  it('the admin row appears before the instance settings arrive, since it does not need them', () => {
-    seed({ discoveryEnabled: false, isAdmin: true, streamingLimits: null });
-    render(<InstanceDiscoveryHint onDiscoveryEnabled={onDiscoveryEnabled} />);
-
+  it('follows the settings document, not the explore store, in both directions', () => {
+    // Discovery on in the explore store, off in the document the button writes.
+    useExploreStore.setState({ discoveryEnabled: true });
+    useSettingsStore.setState({ isAdmin: true, streamingLimits: DISCOVERY_OFF, updateInstanceSettings });
+    const { unmount } = render(<InstanceDiscoveryHint onDiscoveryEnabled={onDiscoveryEnabled} />);
     expect(screen.getByRole('button', { name: ENABLE_LABEL })).toBeInTheDocument();
+    unmount();
+
+    // And the other way round: the stale explore store must not suppress the row.
+    useExploreStore.setState({ discoveryEnabled: false });
+    useSettingsStore.setState({ streamingLimits: NOT_LISTED });
+    render(<InstanceDiscoveryHint onDiscoveryEnabled={onDiscoveryEnabled} />);
+    expect(screen.getByRole('button', { name: LIST_LABEL })).toBeInTheDocument();
   });
 
   it('enabling discovery saves the flag, refetches the page and moves the hint to the listing rung', async () => {
-    seed({ discoveryEnabled: false, isAdmin: true, streamingLimits: limits(false, false) });
-    // The real store mirrors the server's answer back into both stores.
+    seed({ isAdmin: true, streamingLimits: DISCOVERY_OFF });
+    // Exactly what the real store does on a resolved PATCH: the server's answer
+    // mirrored into `streamingLimits`, and nothing else touched.
     updateInstanceSettings.mockImplementationOnce(async () => {
-      useSettingsStore.setState({ streamingLimits: limits(false, true) });
-      useExploreStore.setState({ discoveryEnabled: true });
+      useSettingsStore.setState({ streamingLimits: NOT_LISTED });
     });
     const user = userEvent.setup();
     render(<InstanceDiscoveryHint onDiscoveryEnabled={onDiscoveryEnabled} />);
@@ -121,15 +139,15 @@ describe('InstanceDiscoveryHint', () => {
     expect(updateInstanceSettings).toHaveBeenCalledWith({ discoveryEnabled: true });
     await waitFor(() => expect(onDiscoveryEnabled).toHaveBeenCalledOnce());
 
-    // Row 3 to row 4, from the settings alone: the second rung is offered in
-    // the same place the first was.
+    // Row 3 to row 4 on the settings alone, with no refetch having landed: the
+    // second rung is offered in the same place the first was.
     expect(screen.queryByText(ADMIN_TEXT)).not.toBeInTheDocument();
     expect(screen.getByText(NOT_LISTED_TEXT)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: LIST_LABEL })).toBeInTheDocument();
   });
 
   it('the enable button is disabled while its call is in flight', async () => {
-    seed({ discoveryEnabled: false, isAdmin: true, streamingLimits: limits(false, false) });
+    seed({ isAdmin: true, streamingLimits: DISCOVERY_OFF });
     let finish: () => void = () => {};
     updateInstanceSettings.mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve; }));
     const user = userEvent.setup();
@@ -144,7 +162,7 @@ describe('InstanceDiscoveryHint', () => {
   });
 
   it('a rejected enable shows the described error and leaves the row in place', async () => {
-    seed({ discoveryEnabled: false, isAdmin: true, streamingLimits: limits(false, false) });
+    seed({ isAdmin: true, streamingLimits: DISCOVERY_OFF });
     const err = new HttpError(403, 'Forbidden', undefined, 'forbidden');
     updateInstanceSettings.mockRejectedValueOnce(err);
     const user = userEvent.setup();
@@ -158,8 +176,25 @@ describe('InstanceDiscoveryHint', () => {
     expect(onDiscoveryEnabled).not.toHaveBeenCalled();
   });
 
+  it('a failure does not follow the hint to the next row', async () => {
+    seed({ isAdmin: true, streamingLimits: DISCOVERY_OFF });
+    const err = new HttpError(403, 'Forbidden', undefined, 'forbidden');
+    updateInstanceSettings.mockRejectedValueOnce(err);
+    const user = userEvent.setup();
+    render(<InstanceDiscoveryHint onDiscoveryEnabled={onDiscoveryEnabled} />);
+
+    await user.click(screen.getByRole('button', { name: ENABLE_LABEL }));
+    await waitFor(() => expect(screen.getByText(describeError(err))).toBeInTheDocument());
+
+    // The rung is moved somewhere else, in Instance -> General.
+    useSettingsStore.setState({ streamingLimits: NOT_LISTED });
+
+    await waitFor(() => expect(screen.getByText(NOT_LISTED_TEXT)).toBeInTheDocument());
+    expect(screen.queryByText(describeError(err))).not.toBeInTheDocument();
+  });
+
   it('a thrown non-Error falls back to the catalog message', async () => {
-    seed({ discoveryEnabled: false, isAdmin: true, streamingLimits: limits(false, false) });
+    seed({ isAdmin: true, streamingLimits: DISCOVERY_OFF });
     updateInstanceSettings.mockImplementationOnce(() => Promise.reject('nope'));
     const user = userEvent.setup();
     render(<InstanceDiscoveryHint onDiscoveryEnabled={onDiscoveryEnabled} />);
@@ -170,9 +205,9 @@ describe('InstanceDiscoveryHint', () => {
   });
 
   it('tells an admin the instance is not listed and offers to list it', async () => {
-    seed({ discoveryEnabled: true, isAdmin: true, streamingLimits: limits(false) });
+    seed({ isAdmin: true, streamingLimits: NOT_LISTED });
     updateInstanceSettings.mockImplementationOnce(async () => {
-      useSettingsStore.setState({ streamingLimits: limits(true) });
+      useSettingsStore.setState({ streamingLimits: LISTED });
     });
     const user = userEvent.setup();
     const { container } = render(<InstanceDiscoveryHint onDiscoveryEnabled={onDiscoveryEnabled} />);
@@ -190,7 +225,7 @@ describe('InstanceDiscoveryHint', () => {
   });
 
   it('the list button is disabled while its call is in flight', async () => {
-    seed({ discoveryEnabled: true, isAdmin: true, streamingLimits: limits(false) });
+    seed({ isAdmin: true, streamingLimits: NOT_LISTED });
     let finish: () => void = () => {};
     updateInstanceSettings.mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve; }));
     const user = userEvent.setup();
@@ -204,7 +239,7 @@ describe('InstanceDiscoveryHint', () => {
   });
 
   it('a rejected listing shows the described error and leaves the row in place', async () => {
-    seed({ discoveryEnabled: true, isAdmin: true, streamingLimits: limits(false) });
+    seed({ isAdmin: true, streamingLimits: NOT_LISTED });
     const err = new HttpError(400, 'Directory requires discovery', undefined, 'directory_requires_discovery');
     updateInstanceSettings.mockRejectedValueOnce(err);
     const user = userEvent.setup();

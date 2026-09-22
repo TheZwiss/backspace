@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useExploreStore } from '../../stores/exploreStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { describeError } from '../../i18n/errors';
 
@@ -11,25 +10,33 @@ import { describeError } from '../../i18n/errors';
  * on moves the hint from `discoveryOffAdmin` to `notListed` because the
  * settings changed, not because the component remembers the click.
  */
-export type DiscoveryHintRow = 'none' | 'discoveryOffMember' | 'discoveryOffAdmin' | 'notListed';
+type DiscoveryHintRow = 'none' | 'discoveryOffMember' | 'discoveryOffAdmin' | 'notListed';
 
 /**
  * The row to render, first match wins.
  *
- * `directoryEnabled` is null while the instance settings have not arrived. A
- * running instance with discovery on then says nothing, because the listing
- * state is the only thing left to report and it is not known yet; with
- * discovery off the first two rows do not depend on it, so the reason for an
- * empty Explore page is named right away.
+ * Both flags come from one document, `settingsStore.streamingLimits`, which
+ * is null until it arrives and is the only place `updateInstanceSettings`
+ * keeps current. A hint that took `discoveryEnabled` from the explore store
+ * instead would be stating a fact its own button cannot change: nothing
+ * writes that field but `exploreStore.fetchSpaces`, so the row would sit on
+ * "space discovery is off" until a refetch happened to land, and would stay
+ * there for the session if that refetch failed.
+ *
+ * Unknown is not a fact either, so a null document renders nothing rather
+ * than guessing a default. The failure that used to make this a real risk is
+ * gone (`fetchStreamingLimits` leaves the field null when the request fails
+ * rather than substituting defaults that assert `directoryEnabled: false`),
+ * but the rule stands on its own: this surface offers writes, and it must
+ * never offer one off a guessed value.
  */
-export function discoveryHintRow(state: {
-  discoveryEnabled: boolean;
-  directoryEnabled: boolean | null;
+function discoveryHintRow(state: {
+  limits: { discoveryEnabled: boolean; directoryEnabled: boolean } | null;
   isAdmin: boolean;
 }): DiscoveryHintRow {
-  if (state.directoryEnabled === null && state.discoveryEnabled) return 'none';
-  if (!state.discoveryEnabled) return state.isAdmin ? 'discoveryOffAdmin' : 'discoveryOffMember';
-  if (state.directoryEnabled === false && state.isAdmin) return 'notListed';
+  if (state.limits === null) return 'none';
+  if (!state.limits.discoveryEnabled) return state.isAdmin ? 'discoveryOffAdmin' : 'discoveryOffMember';
+  if (!state.limits.directoryEnabled && state.isAdmin) return 'notListed';
   return 'none';
 }
 
@@ -58,30 +65,30 @@ interface InstanceDiscoveryHintProps {
  */
 export function InstanceDiscoveryHint({ onDiscoveryEnabled }: InstanceDiscoveryHintProps) {
   const { t } = useTranslation(['spaces']);
-  const discoveryEnabled = useExploreStore((s) => s.discoveryEnabled);
   const isAdmin = useSettingsStore((s) => s.isAdmin);
   const streamingLimits = useSettingsStore((s) => s.streamingLimits);
   const updateInstanceSettings = useSettingsStore((s) => s.updateInstanceSettings);
 
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState('');
+  // Kept with the row it was raised on. A message about a refused "List them"
+  // must not end up under the discovery-off text because an admin changed the
+  // rung in Instance -> General while it was on screen.
+  const [failure, setFailure] = useState<{ row: DiscoveryHintRow; message: string } | null>(null);
 
-  const row = discoveryHintRow({
-    discoveryEnabled,
-    directoryEnabled: streamingLimits === null ? null : streamingLimits.directoryEnabled,
-    isAdmin,
-  });
+  const row = discoveryHintRow({ limits: streamingLimits, isAdmin });
+  const error = failure !== null && failure.row === row ? failure.message : '';
 
   // The store keeps the old settings when the PATCH is rejected, so a failure
   // leaves the hint on the row it was already on and the message sits under
   // the text until the next attempt.
   const runAction = async (change: () => Promise<void>) => {
     setPending(true);
-    setError('');
+    setFailure(null);
     try {
       await change();
     } catch (err) {
-      setError(err instanceof Error ? describeError(err) : t('spaces:explore.discoveryOff.failed'));
+      const message = err instanceof Error ? describeError(err) : t('spaces:explore.discoveryOff.failed');
+      setFailure({ row, message });
     } finally {
       setPending(false);
     }
