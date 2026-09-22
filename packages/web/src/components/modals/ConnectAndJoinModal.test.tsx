@@ -95,6 +95,7 @@ function probeOk(federatedRegistrationOpen = true) {
     instanceId: 'retro',
     sourceCodeUrl: null,
     commit: null,
+    directoryAvailable: true,
     directoryEnabled: true,
     origin: 'https://retro.example',
   });

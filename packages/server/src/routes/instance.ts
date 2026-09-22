@@ -27,6 +27,8 @@ export async function instanceRoutes(app: FastifyInstance): Promise<void> {
       // network user (and federated peer) — public/unauthenticated by design.
       sourceCodeUrl: config.sourceCodeUrl,
       commit: config.commit,
+      // Browsing needs only an endpoint; listing is the admin's separate opt-in.
+      directoryAvailable: config.directory.endpoint !== '',
       directoryEnabled: settings?.directoryEnabled === 1,
     };
 

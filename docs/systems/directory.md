@@ -122,10 +122,12 @@ Four columns on `instance_settings` and one on `spaces` (see
 export interface DirectoryPingError {
   at: number;
   status: number | 'network' | 'timeout' | 'origin' | 'fetch';
-  /** Present when status is 'fetch': the hub's reason it could not read this instance. */
   reason?: 'unreachable' | 'status' | 'invalid' | 'origin-mismatch';
 }
 ```
+
+`reason` is present when `status` is `'fetch'`: the hub's reason it could not
+read this instance.
 
 `readDirectoryState` parses the error column defensively: a value that is not
 an object with a numeric `at` and a known `status` reads as null rather than
@@ -183,7 +185,8 @@ the PATCH ignores them in the body). `GET /api/settings/streaming`
 (`InstanceStreamingLimits`, readable by any signed-in user) carries
 `directoryEnabled` too, so the space settings panel of a non-admin can tell
 whether the instance allows listing. The public `GET /api/instance/info`
-carries `directoryEnabled` as well; the Explore page reads it there
+carries `directoryEnabled` as well, next to `directoryAvailable` (whether
+`DIRECTORY_ENDPOINT` is non-empty); the Explore page reads the latter there
 (section 9).
 
 ---
@@ -331,8 +334,10 @@ fourth consecutive failure, then hourly, reset by any accepted ping.
 `GET /api/directory?q=&limit=&offset=` on the instance, authenticated, in
 `routes/directory.ts`. The browser never talks to the hub; it reads the feed
 through its own instance, which validates the query, forwards it to
-`{DIRECTORY_ENDPOINT}/v1/spaces` with the same `Accept`, `User-Agent`, 10
-second timeout and `redirect: 'error'` as the pinger, and:
+`{DIRECTORY_ENDPOINT}/v1/spaces` with `Accept: application/json` and the same
+`User-Agent`, 10 second timeout and `redirect: 'error'` as the pinger (which
+sends `Content-Type` rather than `Accept`, since it posts a body and ignores
+the reply's), and:
 
 - clamps rather than rejects: `q` trimmed and cut to 100 characters, `limit`
   1 to 100 (default 50), `offset` 0 to 1000, the same bounds the hub applies,
@@ -584,17 +589,23 @@ One page, one search box, two sections in fixed order, strictly disjoint.
   appends the next page, never the whole feed. Header "Outer Space", subtitle
   "Communities across Backspace".
 
-**The section is gated on the home instance's `directoryEnabled`.**
-`ExplorePage` reads the public `GET /api/instance/info` once on mount and
-renders `OuterSpaceSection` only when `directoryEnabled` is true; with it
-false, or the request failing, the section is absent and the search box never
-hits the proxy. That flag is the admin's listing toggle (`directory_enabled`),
-so on an instance whose admin has not switched the directory on, users do not
-see Outer Space either; listing and browsing are one switch. The proxy's own
-`404 directory_disabled` (an empty `DIRECTORY_ENDPOINT`) is handled a second
-way: the store's `disabled` status renders nothing. The flag is read once per
-mount, so an admin flipping it while a user has the page open is reflected on
-the next visit.
+**The section is gated on the home instance's `directoryAvailable`, not on
+the listing toggle.** `ExplorePage` reads the public `GET /api/instance/info`
+once on mount and renders `OuterSpaceSection` only when `directoryAvailable`
+is true, which the server sets from `config.directory.endpoint !== ''`; with
+it false, or the request failing, or an older server that does not send the
+field, the section is absent and the search box never hits the proxy.
+Browsing needs only an endpoint. The admin's listing opt-in
+(`directoryEnabled`, section 3) is a separate switch that the page does not
+read: an instance whose admin lists nothing still shows Outer Space, which is
+the cold-start case the directory exists for (a fresh instance with no peers
+must be able to browse). Browsing and listing are two independent opt-ins,
+the operator's endpoint and the admin's toggle. The proxy's own
+`404 directory_disabled` (an empty
+`DIRECTORY_ENDPOINT`) is handled a second way: the store's `disabled` status
+renders nothing. The flag is read once per mount, so an endpoint changed
+under a running instance is reflected on the next visit, after the restart
+the change needs anyway.
 
 **Deduped by origin, not by space.** Every entry whose canonical origin
 (`new URL(x).origin`) is the session's own (`window.location.origin`) or
@@ -786,7 +797,8 @@ empty and stays honest.
    (scoped to editing Workers and D1 on that account and nothing else) and
    `CLOUDFLARE_ACCOUNT_ID`. Both live on the environment rather than at
    repository level, so no other job can read them.
-5. Dispatch `directory-hub.yml` from `main`.
+5. Dispatch `directory-hub.yml` from `main`. That is every deploy after the
+   hand-run first one in step 2.
 
 **Retiring the service.** `RETIRED` is a plain `[vars]` entry in
 `wrangler.toml`, not a secret. Setting it to `"1"` and deploying makes every
@@ -800,8 +812,9 @@ back is found again without anyone touching a toggle.
 ## 13. Known limits
 
 - **The D1 `batch()` statement cap is unverified in production.** A document
-  of 200 spaces that changes entirely writes up to 402 statements in one
-  batch (the `origins` upsert, up to 200 deletes, up to 200 upserts). The
+  of 200 spaces that changes entirely writes up to 401 statements in one
+  batch (one `origins` upsert, then one statement per delete and one per
+  changed row: up to 200 deletes and up to 200 upserts). The
   local Workers pool accepts far larger batches; the production limit has not
   been measured, and a batch over it would fail the ping with a `500`, which
   the pinger records as a plain status and retries with backoff. Until it is
@@ -809,15 +822,15 @@ back is found again without anyone touching a toggle.
 - **A dev instance without `DOMAIN` cannot be listed.** `resolveLocalOrigin()`
   falls back to `http://localhost:<port>`, the hub refuses it as `400`, and
   the admin panel shows the `origin` reason ("the directory refused this
-  instance's address; it must be an https domain with no port"). This is the
-  right answer for a dev box and the wrong one for nothing else, since a
-  production instance always has `DOMAIN` or `PUBLIC_ORIGIN`.
-- **Listing and browsing are one switch.** The Outer Space section is gated
-  on the admin's `directoryEnabled`, so an instance whose admin has not
-  allowed listing shows no Outer Space to its users, even though its proxy
-  would serve the feed. An instance that only wants to browse has to switch
-  the toggle on, which lists nothing by itself: no space is served until an
-  owner asks.
+  instance's address; it must be an https domain with no port (set DOMAIN or
+  PUBLIC_ORIGIN)"). This is the right answer for a dev box and the wrong one
+  for nothing else, since a production instance always has `DOMAIN` or
+  `PUBLIC_ORIGIN`.
+- **Browsing and listing are one endpoint.** Both the proxy and the pinger
+  read `DIRECTORY_ENDPOINT`, so an operator cannot browse one hub and list on
+  another, and an empty endpoint removes Outer Space along with the pinger.
+  Listing itself is the admin's separate toggle and lists nothing by itself:
+  no space is served until an owner asks.
 - **The instance endpoint is public and cached.** The hub is not its only
   reader and it must cope with being polled by anyone; the 30 second cache is
   the whole answer to that.

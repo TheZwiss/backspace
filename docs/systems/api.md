@@ -254,9 +254,9 @@ Permissions checked: CONNECT, SPEAK, STREAM (space channels). DM calls: always f
 
 ## Instance (`routes/instance.ts`) — public
 ```
-GET /instance/info → { name, version, registrationOpen, federatedRegistrationOpen, instanceId, sourceCodeUrl, commit, directoryEnabled }
+GET /instance/info → { name, version, registrationOpen, federatedRegistrationOpen, instanceId, sourceCodeUrl, commit, directoryAvailable, directoryEnabled }
 ```
-`directoryEnabled` is `instance_settings.directoryEnabled`: whether the admin allows spaces here to be listed in the space directory. The Explore page reads it here to decide whether to render the Outer Space section at all (directory.md §9).
+`directoryAvailable` is `config.directory.endpoint !== ''`: whether this instance can browse the space directory at all. The Explore page reads it here to decide whether to render the Outer Space section (directory.md §9). `directoryEnabled` is `instance_settings.directoryEnabled`: whether the admin allows spaces here to be listed. The two are independent; the space settings panel reads the latter through `GET /settings/streaming`, not from here.
 `federatedRegistrationOpen` is a UX hint consumed by the Connections add-instance pre-flight (see `client-federation.md`). The 403 from `POST /auth/register` remains the security boundary.
 
 `instanceId` (`InstanceInfoResponse.instanceId`, `string`) is this instance's persistent **epoch** — the incarnation UUID minted once by `ensureDefaults` and stable across restarts (see `database.md → Instance Settings`). It is served here (unauthenticated, credential-free) purely as a **detection** signal: `probePeerReachable` reads it to observe that a peer behind a known origin has been factory-reset (a changed epoch). It is **never** written to a peer's trusted baseline from this channel — only the authenticated `/federation/epoch`, relay envelope, and handshake do that. See `federation.md` "Instance Epoch".

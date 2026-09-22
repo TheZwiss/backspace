@@ -19,6 +19,7 @@ const { fetchSpaces, fetchMyRequests, fetchDirectory, loadMore, instanceInfo, op
     instanceId: 'home',
     sourceCodeUrl: 'https://example.invalid',
     commit: null,
+    directoryAvailable: true,
     directoryEnabled: true,
   })),
   openModal: vi.fn(),
@@ -135,7 +136,9 @@ describe('ExplorePage search and the Outer Space gate', () => {
     expect(instanceInfo).toHaveBeenCalledTimes(1);
   });
 
-  it('never renders the Outer header when the directory is off', async () => {
+  it('renders the Outer header when the directory is available but the admin has not turned listing on', async () => {
+    // Browsing needs only DIRECTORY_ENDPOINT; the listing opt-in is a separate
+    // switch. A fresh instance with no peers must still be able to browse.
     instanceInfo.mockResolvedValueOnce({
       name: 'Home',
       version: '1.0.0',
@@ -144,7 +147,26 @@ describe('ExplorePage search and the Outer Space gate', () => {
       instanceId: 'home',
       sourceCodeUrl: 'https://example.invalid',
       commit: null,
+      directoryAvailable: true,
       directoryEnabled: false,
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Outer Space')).toBeInTheDocument());
+    fireEvent.change(screen.getByPlaceholderText('Search spaces...'), { target: { value: 'nebula' } });
+    await waitFor(() => expect(fetchDirectory).toHaveBeenCalledWith('nebula'), { timeout: 1500 });
+  });
+
+  it('never renders the Outer header when the directory is unavailable, even with listing on', async () => {
+    instanceInfo.mockResolvedValueOnce({
+      name: 'Home',
+      version: '1.0.0',
+      registrationOpen: true,
+      federatedRegistrationOpen: true,
+      instanceId: 'home',
+      sourceCodeUrl: 'https://example.invalid',
+      commit: null,
+      directoryAvailable: false,
+      directoryEnabled: true,
     });
     renderPage();
     expect(instanceInfo).toHaveBeenCalledTimes(1);

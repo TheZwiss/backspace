@@ -36,11 +36,13 @@ export function ExplorePage() {
 
   const [joinedCollapsed, setJoinedCollapsed] = useState(false);
 
-  // Whether the home instance is connected to a directory. Read once from the
-  // public instance info so an instance with the directory off never flashes
-  // the Outer Space header; the store's own status starts idle and cannot
-  // answer this before its first fetch.
-  const [directoryEnabled, setDirectoryEnabled] = useState(false);
+  // Whether the home instance can reach a directory at all (DIRECTORY_ENDPOINT
+  // non-empty), which is what browsing needs. Not the admin's listing opt-in
+  // (`directoryEnabled`): a fresh instance that lists nothing must still be
+  // able to browse. Read once from the public instance info so an instance
+  // with no directory never flashes the Outer Space header; the store's own
+  // status starts idle and cannot answer this before its first fetch.
+  const [directoryAvailable, setDirectoryAvailable] = useState(false);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -53,9 +55,10 @@ export function ExplorePage() {
   useEffect(() => {
     let cancelled = false;
     api.instance.info()
-      .then((info) => { if (!cancelled) setDirectoryEnabled(info.directoryEnabled); })
+      .then((info) => { if (!cancelled) setDirectoryAvailable(info.directoryAvailable === true); })
       .catch(() => {
-        // Unreachable or an older server without the flag: the section stays absent.
+        // Unreachable: the section stays absent. An older server without the
+        // field lands in the strict comparison above and stays absent too.
       });
     return () => { cancelled = true; };
   }, []);
@@ -68,9 +71,9 @@ export function ExplorePage() {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       fetchSpaces(value || undefined);
-      if (directoryEnabled) fetchDirectory(value);
+      if (directoryAvailable) fetchDirectory(value);
     }, SEARCH_DEBOUNCE_MS);
-  }, [setSearchQuery, fetchSpaces, fetchDirectory, directoryEnabled]);
+  }, [setSearchQuery, fetchSpaces, fetchDirectory, directoryAvailable]);
 
   useEffect(() => {
     return () => {
@@ -243,8 +246,8 @@ export function ExplorePage() {
             )}
           </section>
 
-          {/* Outer Space: the directory, only on an instance that is connected to one */}
-          {directoryEnabled && (
+          {/* Outer Space: the directory, only on an instance that can reach one */}
+          {directoryAvailable && (
             <OuterSpaceSection query={searchQuery} onConnect={handleConnect} />
           )}
         </div>

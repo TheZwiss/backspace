@@ -859,6 +859,12 @@ export interface InstanceInfoResponse {
   sourceCodeUrl: string;
   // Short git SHA/tag of the running build; null in dev builds with no commit injected.
   commit: string | null;
+  // The two directory opt-ins are independent (directory.md section 9).
+  // directoryAvailable: this instance can browse the directory at all, which
+  // is DIRECTORY_ENDPOINT being non-empty. The Explore page gates Outer Space
+  // on it. directoryEnabled: the admin allows spaces here to be listed; the
+  // space settings panel reads it.
+  directoryAvailable: boolean;
   directoryEnabled: boolean;
 }
 

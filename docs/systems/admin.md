@@ -181,7 +181,8 @@ No authentication. Returns:
   sourceCodeUrl: string;      // AGPL § 13; config.sourceCodeUrl (env BACKSPACE_SOURCE_URL)
   commit: string | null;      // AGPL § 13; config.commit (env BACKSPACE_COMMIT, build-injected)
   instanceId: string;         // Persistent per-instance epoch (incarnation UUID); getInstanceId()
-  directoryEnabled: boolean;  // instanceSettings.directoryEnabled; the Explore page gates its Outer Space section on it
+  directoryAvailable: boolean;  // config.directory.endpoint !== ''; the Explore page gates its Outer Space section on it
+  directoryEnabled: boolean;  // instanceSettings.directoryEnabled; the admin's listing opt-in, independent of the above
 }
 ```
 

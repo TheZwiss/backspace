@@ -26,6 +26,17 @@ vi.mock('../db/index.js', () => ({
   schema,
 }));
 
+// The real config with a mutable directory block, so the directoryAvailable
+// tests can switch the endpoint off; beforeEach puts it back. Everything else
+// (version in particular) stays real, so the version assertion below still
+// compares against the package manifest and not against a fixture.
+const mockDirectory = vi.hoisted(() => ({ endpoint: 'https://hub.test' }));
+
+vi.mock('../config.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../config.js')>();
+  return { config: { ...actual.config, directory: mockDirectory } };
+});
+
 function applyMigrations(db: Database.Database): void {
   const migrationsDir = path.resolve(__dirname, '../../drizzle');
   const files = fs.readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
@@ -47,6 +58,7 @@ async function buildApp(): Promise<FastifyInstance> {
 }
 
 beforeEach(async () => {
+  mockDirectory.endpoint = 'https://hub.test';
   sqlite = new Database(':memory:');
   sqlite.pragma('foreign_keys = ON');
   applyMigrations(sqlite);
@@ -122,5 +134,27 @@ describe('GET /api/instance/info', () => {
     const res = await app.inject({ method: 'GET', url: '/api/instance/info' });
     expect(res.statusCode).toBe(200);
     expect(res.json().directoryEnabled).toBe(true);
+  });
+
+  // directoryAvailable is whether this instance can browse the directory at
+  // all (DIRECTORY_ENDPOINT non-empty). It is independent of directoryEnabled,
+  // the admin's listing opt-in: a fresh instance that lists nothing must still
+  // be able to browse.
+  it('reports directoryAvailable=true when an endpoint is configured, whatever the listing toggle', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/instance/info' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ directoryAvailable: true, directoryEnabled: false });
+  });
+
+  it('reports directoryAvailable=false when DIRECTORY_ENDPOINT is empty, even with listing on', async () => {
+    mockDirectory.endpoint = '';
+    testDb.update(schema.instanceSettings)
+      .set({ directoryEnabled: 1 })
+      .where(eq(schema.instanceSettings.id, 1))
+      .run();
+
+    const res = await app.inject({ method: 'GET', url: '/api/instance/info' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ directoryAvailable: false, directoryEnabled: true });
   });
 });
