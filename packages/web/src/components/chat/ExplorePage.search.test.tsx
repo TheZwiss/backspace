@@ -43,6 +43,7 @@ vi.mock('../../stores/exploreStore', async () => {
     spaces: { id: string; name: string; _instanceOrigin: string; joined: boolean }[];
     myRequests: never[];
     searchQuery: string;
+    resultsQuery: string;
     isLoading: boolean;
     discoveryEnabled: boolean;
     totalAll: number;
@@ -54,6 +55,7 @@ vi.mock('../../stores/exploreStore', async () => {
     spaces: [] as { id: string; name: string; _instanceOrigin: string; joined: boolean }[],
     myRequests: [],
     searchQuery: '',
+    resultsQuery: '',
     isLoading: false,
     discoveryEnabled: true,
     totalAll: 0,
@@ -73,6 +75,7 @@ vi.mock('../../stores/directoryStore', async () => {
     query: string;
     offset: number;
     hasMore: boolean;
+    loadMoreError: 'disabled' | 'unreachable' | 'error' | null;
     fetch: typeof fetchDirectory;
     loadMore: typeof loadMore;
   }>(() => ({
@@ -81,6 +84,7 @@ vi.mock('../../stores/directoryStore', async () => {
     query: '',
     offset: 0,
     hasMore: false,
+    loadMoreError: null,
     fetch: fetchDirectory,
     loadMore,
   }));
@@ -127,7 +131,7 @@ function renderPage() {
 describe('ExplorePage search and the Outer Space gate', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    useExploreStore.setState({ searchQuery: '' });
+    useExploreStore.setState({ searchQuery: '', resultsQuery: '' });
   });
 
   it('one debounce drives both stores with the same value', async () => {
@@ -208,6 +212,27 @@ describe('ExplorePage search and the Outer Space gate', () => {
     expect(fetchDirectory).not.toHaveBeenCalled();
   });
 
+  it('the Inner empty copy follows the query the spaces answer, not the one being typed', async () => {
+    renderPage();
+    expect(screen.getByText('No discoverable spaces yet.')).toBeInTheDocument();
+
+    // Typing moves the search box at once; the fan-out behind it waits out
+    // the debounce, so for that interval the copy would be describing a
+    // result set that has not changed.
+    fireEvent.change(screen.getByPlaceholderText('Search spaces...'), { target: { value: 'zzz' } });
+    expect(screen.getByText('No discoverable spaces yet.')).toBeInTheDocument();
+    expect(screen.queryByText('No spaces match your search.')).not.toBeInTheDocument();
+
+    // The fan-out lands: now the empty list is an empty answer for "zzz".
+    await waitFor(() => expect(fetchSpaces).toHaveBeenCalledWith('zzz'), { timeout: 1500 });
+    act(() => { useExploreStore.setState({ resultsQuery: 'zzz' }); });
+    expect(screen.getByText('No spaces match your search.')).toBeInTheDocument();
+
+    // And the other way: the box is cleared while the no-match answer stands.
+    fireEvent.change(screen.getByPlaceholderText('Search spaces...'), { target: { value: '' } });
+    expect(screen.getByText('No spaces match your search.')).toBeInTheDocument();
+  });
+
   it('keeps the Inner empty copy inside the Inner section and Outer below it', async () => {
     renderPage();
     await waitFor(() => expect(screen.getByText('Outer Space')).toBeInTheDocument());
@@ -220,7 +245,7 @@ describe('ExplorePage search and the Outer Space gate', () => {
 describe('ExplorePage connection chips', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    useExploreStore.setState({ searchQuery: '' });
+    useExploreStore.setState({ searchQuery: '', resultsQuery: '' });
     useInstanceStore.setState({ registry: new Map(), instances: [] });
   });
 
@@ -293,7 +318,7 @@ describe('ExplorePage keeps an expired origin out of Outer Space through a faile
 
   beforeEach(() => {
     vi.clearAllMocks();
-    useExploreStore.setState({ searchQuery: '' });
+    useExploreStore.setState({ searchQuery: '', resultsQuery: '' });
     useDirectoryStore.setState({ entries: [zwissEntry, farEntry], status: 'ok' });
   });
 

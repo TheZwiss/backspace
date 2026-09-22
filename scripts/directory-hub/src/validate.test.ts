@@ -158,6 +158,14 @@ describe('parseDocument', () => {
     expect(parseDocument(document({}, [space({ banner: `${ORIGIN}/api/uploads/b.png` })]), ORIGIN).ok).toBe(true);
   });
 
+  it('rejects a non-https scheme whose inner origin matches', () => {
+    // `new URL('blob:https://chat.example.org/uuid').origin` is the inner
+    // origin, so an origin comparison alone accepts it and every viewer gets a
+    // broken image: a blob URL only resolves in the tab that created it.
+    expect(parseDocument(document({}, [space({ icon: `blob:${ORIGIN}/6f6a1e2c-0f4b-4a0e-9b6b-0a2d1e2f3a4b` })]), ORIGIN)).toEqual({ ok: false, reason: 'invalid' });
+    expect(parseDocument(document({}, [space({ banner: `blob:${ORIGIN}/6f6a1e2c-0f4b-4a0e-9b6b-0a2d1e2f3a4b` })]), ORIGIN)).toEqual({ ok: false, reason: 'invalid' });
+  });
+
   it('requires memberCount to be an integer between 0 and 10^9', () => {
     expect(parseDocument(document({}, [space({ memberCount: 0 })]), ORIGIN).ok).toBe(true);
     expect(parseDocument(document({}, [space({ memberCount: 10 ** 9 })]), ORIGIN).ok).toBe(true);

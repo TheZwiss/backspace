@@ -254,16 +254,67 @@ describe('directoryStore.loadMore', () => {
     expect(directoryList).not.toHaveBeenCalled();
   });
 
-  it('keeps the loaded entries when the next page fails', async () => {
+  it('keeps the loaded entries and the way to ask again when the next page fails', async () => {
     directoryList.mockResolvedValueOnce({ schema: 1, spaces: fullPage('https://a.test', 0) });
     await useDirectoryStore.getState().fetch('');
     directoryList.mockRejectedValueOnce(httpError('directory_unreachable', 502));
 
     await useDirectoryStore.getState().loadMore();
 
-    expect(useDirectoryStore.getState().status).toBe('unreachable');
+    // The failure belongs to the continuation, not to the feed on screen:
+    // moving `status` off `ok` took Show more away with it, and with it the
+    // only way to retry.
+    expect(useDirectoryStore.getState().status).toBe('ok');
+    expect(useDirectoryStore.getState().loadMoreError).toBe('unreachable');
+    expect(useDirectoryStore.getState().hasMore).toBe(true);
     expect(useDirectoryStore.getState().entries).toHaveLength(PAGE);
     expect(useDirectoryStore.getState().offset).toBe(0);
+  });
+
+  it('clears the failure once a later attempt brings a page', async () => {
+    directoryList.mockResolvedValueOnce({ schema: 1, spaces: fullPage('https://a.test', 0) });
+    await useDirectoryStore.getState().fetch('');
+    directoryList.mockRejectedValueOnce(httpError('directory_unreachable', 502));
+    await useDirectoryStore.getState().loadMore();
+
+    directoryList.mockResolvedValueOnce({ schema: 1, spaces: [entry('https://a.test', 'late')] });
+    await useDirectoryStore.getState().loadMore();
+
+    const state = useDirectoryStore.getState();
+    expect(state.loadMoreError).toBeNull();
+    expect(state.entries).toHaveLength(PAGE + 1);
+    expect(state.offset).toBe(PAGE);
+    expect(state.hasMore).toBe(false);
+  });
+
+  it('a first page that fails carries no continuation failure', async () => {
+    directoryList.mockRejectedValueOnce(httpError('directory_unreachable', 502));
+    await useDirectoryStore.getState().fetch('');
+    expect(useDirectoryStore.getState().status).toBe('unreachable');
+    expect(useDirectoryStore.getState().loadMoreError).toBeNull();
+  });
+
+  it('stops at the proxy offset cap: a full page of entries already held ends the feed', async () => {
+    // Past offset 1000 the proxy clamps and answers with the page at the cap
+    // again. It is a full page, so counting its length alone kept `hasMore`
+    // true and Show more handed back the same fifty spaces for as long as it
+    // was clicked.
+    const page = fullPage('https://a.test', 0);
+    directoryList.mockResolvedValueOnce({ schema: 1, spaces: page });
+    await useDirectoryStore.getState().fetch('');
+    directoryList.mockResolvedValueOnce({ schema: 1, spaces: page });
+
+    await useDirectoryStore.getState().loadMore();
+
+    const state = useDirectoryStore.getState();
+    expect(state.entries).toHaveLength(PAGE);
+    expect(state.hasMore).toBe(false);
+    expect(state.loadMoreError).toBeNull();
+
+    // And the button it drives is gone, so nothing asks a third time.
+    directoryList.mockClear();
+    await useDirectoryStore.getState().loadMore();
+    expect(directoryList).not.toHaveBeenCalled();
   });
 });
 

@@ -231,6 +231,35 @@ describe('DiscoveryPanel instance flags by origin', () => {
     expect(screen.queryByText(ADMIN_OFF)).not.toBeInTheDocument();
   });
 
+  it('states nothing about a home instance whose settings document never arrived', () => {
+    // `fetchStreamingLimits` leaves the field null when the request fails, so
+    // null is "not known", not "directory off". Defaulting it locked the
+    // switch under a sentence about the administrator's setting that nobody
+    // had read.
+    useSpaceStore.setState({ spaces: [{ ...space, visibility: 'public' }] });
+    useSettingsStore.setState({ streamingLimits: null });
+
+    render(<DiscoveryPanel spaceId="space-1" />);
+
+    expect(directorySwitch()).toBeDisabled();
+    expect(screen.queryByText(ADMIN_OFF)).not.toBeInTheDocument();
+    expect(screen.queryByText(PRIVATE_SPACE)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Space discovery is disabled/)).not.toBeInTheDocument();
+  });
+
+  it('says its piece as soon as the document does arrive', () => {
+    useSpaceStore.setState({ spaces: [{ ...space, visibility: 'public' }] });
+    useSettingsStore.setState({ streamingLimits: null });
+    const { rerender } = render(<DiscoveryPanel spaceId="space-1" />);
+    expect(screen.queryByText(ADMIN_OFF)).not.toBeInTheDocument();
+
+    useSettingsStore.setState({ streamingLimits: { ...limits, directoryEnabled: false } });
+    rerender(<DiscoveryPanel spaceId="space-1" />);
+
+    expect(screen.getByText(ADMIN_OFF)).toBeInTheDocument();
+    expect(directorySwitch()).toBeDisabled();
+  });
+
   it('reads a home space\'s flags from the store without a request', () => {
     seed({ visibility: 'public', _instanceOrigin: '' }, true);
     const homeStreaming = vi.spyOn(api.settings, 'getStreaming');

@@ -59,7 +59,13 @@
       "reauthenticate": "Re-authenticate",
       "forceRemove": "Force Remove",
       "deleteIdentity": "Delete Identity",
-      "deleteIdentityDisabled": "Disconnect first to delete identity"
+      "deleteIdentityDisabled": "Disconnect first to delete identity",
+      "reason": {
+        "unreachable": "This instance could not be reached.",
+        "sessionExpired": "The saved session expired. Re-authenticate to reconnect.",
+        "reauthenticate": "Re-authenticate to connect.",
+        "authenticateHome": "Authenticate to connect to your home instance."
+      }
     },
     "forceRemove": {
       "title": "Force Remove Entry",

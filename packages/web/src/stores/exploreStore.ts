@@ -26,6 +26,15 @@ interface ExploreState {
   spaces: TaggedExploreSpace[];
   myRequests: TaggedJoinRequest[];
   searchQuery: string;
+  /**
+   * The query `spaces` answers, recorded when a fan-out lands rather than
+   * when it is asked for. `searchQuery` is the live search box and the fetch
+   * behind it is debounced, so anything that describes the current result set
+   * (the empty copy: nothing matched, against nothing to show) has to read
+   * this one instead, or it states something about results that have not
+   * arrived.
+   */
+  resultsQuery: string;
   isLoading: boolean;
   discoveryEnabled: boolean;
   totalAll: number;
@@ -66,6 +75,7 @@ export const useExploreStore = create<ExploreState>((set, get) => ({
   spaces: [],
   myRequests: [],
   searchQuery: '',
+  resultsQuery: '',
   isLoading: false,
   discoveryEnabled: true,
   totalAll: 0,
@@ -127,6 +137,7 @@ export const useExploreStore = create<ExploreState>((set, get) => ({
 
       set({
         spaces: allSpaces,
+        resultsQuery: query ?? '',
         discoveryEnabled: homeDiscoveryEnabled,
         totalAll: totalAllSum,
         isLoading: false,
@@ -208,6 +219,7 @@ export const useExploreStore = create<ExploreState>((set, get) => ({
     spaces: [],
     myRequests: [],
     searchQuery: '',
+    resultsQuery: '',
     isLoading: false,
     discoveryEnabled: true,
     totalAll: 0,

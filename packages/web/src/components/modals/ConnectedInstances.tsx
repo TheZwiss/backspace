@@ -21,6 +21,7 @@ import { RemotePasswordStep, type RemotePasswordPhase } from './RemotePasswordSt
 import { ReauthForm } from './ReauthForm';
 import { useFormatters, type Formatters } from '../../i18n/formatters';
 import { describeError } from '../../i18n/errors';
+import { describeRegistryError } from '../../i18n/registryErrors';
 
 type FederationT = TFunction<['federation', 'common']>;
 
@@ -693,7 +694,7 @@ function RegistryRow({
               {/* Error message */}
               {entry.errorMessage && (
                 <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-xs mb-3">
-                  {entry.errorMessage}
+                  {describeRegistryError(t, entry.errorMessage)}
                 </div>
               )}
 

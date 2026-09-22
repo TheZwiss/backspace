@@ -59,7 +59,13 @@
       "reauthenticate": "Erneut anmelden",
       "forceRemove": "Entfernen erzwingen",
       "deleteIdentity": "Identität löschen",
-      "deleteIdentityDisabled": "Trenne zuerst die Verbindung, um die Identität zu löschen"
+      "deleteIdentityDisabled": "Trenne zuerst die Verbindung, um die Identität zu löschen",
+      "reason": {
+        "unreachable": "Diese Instanz war nicht erreichbar.",
+        "sessionExpired": "Die gespeicherte Sitzung ist abgelaufen. Melde dich erneut an, um die Verbindung wiederherzustellen.",
+        "reauthenticate": "Melde dich erneut an, um zu verbinden.",
+        "authenticateHome": "Melde dich an, um dich mit deiner Heimatinstanz zu verbinden."
+      }
     },
     "forceRemove": {
       "title": "Eintrag zwangsweise entfernen",

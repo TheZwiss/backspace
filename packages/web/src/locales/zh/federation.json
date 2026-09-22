@@ -59,7 +59,13 @@
       "reauthenticate": "重新认证",
       "forceRemove": "强制移除",
       "deleteIdentity": "删除身份",
-      "deleteIdentityDisabled": "请先断开连接以删除身份"
+      "deleteIdentityDisabled": "请先断开连接以删除身份",
+      "reason": {
+        "unreachable": "无法连接到此实例。",
+        "sessionExpired": "保存的会话已过期。请重新认证以恢复连接。",
+        "reauthenticate": "请重新认证以连接。",
+        "authenticateHome": "请认证以连接到您的主实例。"
+      }
     },
     "forceRemove": {
       "title": "强制移除条目",

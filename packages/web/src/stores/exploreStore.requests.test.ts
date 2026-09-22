@@ -255,3 +255,29 @@ describe('exploreStore origin resolution', () => {
     expect(homeApi.explore.requestJoin).toHaveBeenCalledWith('s1', undefined);
   });
 });
+
+describe('exploreStore.fetchSpaces', () => {
+  it('records the query the spaces on hand answer, when they arrive', async () => {
+    homeApi.explore.list.mockResolvedValue({ spaces: [], total: 0, totalAll: 0, discoveryEnabled: true });
+
+    await useExploreStore.getState().fetchSpaces('nebula');
+    expect(useExploreStore.getState().resultsQuery).toBe('nebula');
+
+    // The empty search is the empty string, not the absent one: the copy that
+    // reads this distinguishes "nothing matched" from "nothing to show".
+    await useExploreStore.getState().fetchSpaces();
+    expect(useExploreStore.getState().resultsQuery).toBe('');
+  });
+
+  it('leaves the recorded query alone when every instance refuses', async () => {
+    homeApi.explore.list.mockResolvedValue({ spaces: [], total: 0, totalAll: 0, discoveryEnabled: true });
+    await useExploreStore.getState().fetchSpaces('nebula');
+
+    homeApi.explore.list.mockRejectedValue(new Error('down'));
+    await useExploreStore.getState().fetchSpaces('orbit');
+
+    // Nothing arrived, so the spaces on screen still answer the old query.
+    expect(useExploreStore.getState().resultsQuery).toBe('nebula');
+    expect(useExploreStore.getState().error).not.toBeNull();
+  });
+});

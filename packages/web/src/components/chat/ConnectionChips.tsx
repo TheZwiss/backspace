@@ -35,7 +35,9 @@ interface ConnectionChipsProps {
  * With every connection healthy the component renders nothing. A chip whose
  * live instance is `connecting` on its own (startup, the socket's backoff) is
  * hidden for that moment; a chip whose Retry is in flight stays and shows the
- * connecting word instead, until the registry status settles.
+ * connecting word instead, until the registry status settles; and a chip the
+ * user has opened stays too, because hiding it would take the form, and the
+ * password half-typed in it, off the page (see `open` below).
  */
 export function ConnectionChips({ onRecovered }: ConnectionChipsProps) {
   const { t } = useTranslation(['spaces']);
@@ -46,16 +48,59 @@ export function ConnectionChips({ onRecovered }: ConnectionChipsProps) {
   // Origins whose Retry this row started and has not seen finish.
   const [retrying, setRetrying] = useState<ReadonlySet<string>>(() => new Set());
 
+  /**
+   * Origins whose chip the user has opened into the re-authentication form.
+   *
+   * It is held here rather than in the chip because this is where the
+   * decision to render a chip at all is made. A chip dropped from `entries`
+   * unmounts, and unmounting `ReauthForm` discards the password being typed
+   * into it, so a `connecting` flip from anywhere else in the app (a Retry
+   * in the Connections panel, a resume the connect-and-join dialog starts)
+   * would empty the field under the user's hands. Only a change that ends
+   * the flow takes an open chip away: `needsAttention` going false means the
+   * connection is back or the user disconnected it, and there is nothing
+   * left to re-authenticate.
+   */
+  const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set());
+
   const entries = useMemo(() => {
     const out: AttentionEntry[] = [];
     for (const entry of registry.values()) {
       if (!needsAttention(entry)) continue;
       const live = instances.find((i) => i.origin === entry.origin);
-      if (live?.status === 'connecting' && !retrying.has(entry.origin)) continue;
+      if (live?.status === 'connecting' && !retrying.has(entry.origin) && !open.has(entry.origin)) continue;
       out.push(entry);
     }
     return out;
-  }, [registry, instances, retrying]);
+  }, [registry, instances, retrying, open]);
+
+  // An origin that no longer needs attention takes its open state with it, so
+  // a later expiry opens a fresh form rather than reviving the one that was
+  // on screen when the connection came back. Keyed on the registry alone, and
+  // returning the same set when nothing was dropped, so it cannot feed itself.
+  useEffect(() => {
+    setOpen((prev) => {
+      if (prev.size === 0) return prev;
+      const next = new Set<string>();
+      for (const origin of prev) {
+        const entry = registry.get(origin);
+        if (entry && needsAttention(entry)) next.add(origin);
+      }
+      return next.size === prev.size ? prev : next;
+    });
+  }, [registry]);
+
+  const handleExpand = useCallback((origin: string) => {
+    setOpen((prev) => new Set(prev).add(origin));
+  }, []);
+
+  const handleCollapse = useCallback((origin: string) => {
+    setOpen((prev) => {
+      const next = new Set(prev);
+      next.delete(origin);
+      return next;
+    });
+  }, []);
 
   // reconnectInstance returns at once when there is neither a live instance
   // nor a cached token for the origin (reachable only after a force-remove
@@ -87,6 +132,9 @@ export function ConnectionChips({ onRecovered }: ConnectionChipsProps) {
           key={entry.origin}
           entry={entry}
           retrying={retrying.has(entry.origin)}
+          expanded={open.has(entry.origin)}
+          onExpand={handleExpand}
+          onCollapse={handleCollapse}
           onRetry={handleRetry}
           onRecovered={onRecovered}
         />
@@ -98,6 +146,10 @@ export function ConnectionChips({ onRecovered }: ConnectionChipsProps) {
 interface ConnectionChipProps {
   entry: AttentionEntry;
   retrying: boolean;
+  /** Owned by the row: an open chip is one the row keeps rendering. */
+  expanded: boolean;
+  onExpand: (origin: string) => void;
+  onCollapse: (origin: string) => void;
   onRetry: (origin: string) => void;
   onRecovered: () => void;
 }
@@ -145,9 +197,8 @@ function ChipIdentity({ label, stateWord, expired, dimmed }: {
  * Escape and Cancel both collapse it and hand focus back to the action that
  * opened it, so the keyboard never lands on the document body.
  */
-function ConnectionChip({ entry, retrying, onRetry, onRecovered }: ConnectionChipProps) {
+function ConnectionChip({ entry, retrying, expanded, onExpand, onCollapse, onRetry, onRecovered }: ConnectionChipProps) {
   const { t } = useTranslation(['spaces', 'federation']);
-  const [expanded, setExpanded] = useState(false);
   const actionRef = useRef<HTMLButtonElement>(null);
   const [restoreFocus, setRestoreFocus] = useState(false);
 
@@ -167,7 +218,7 @@ function ConnectionChip({ entry, retrying, onRetry, onRecovered }: ConnectionChi
 
   const handleCollapse = () => {
     setRestoreFocus(true);
-    setExpanded(false);
+    onCollapse(entry.origin);
   };
 
   // Success normally takes the chip off the row entirely (the registry now
@@ -209,7 +260,7 @@ function ConnectionChip({ entry, retrying, onRetry, onRecovered }: ConnectionChi
         <button
           ref={actionRef}
           type="button"
-          onClick={() => setExpanded(true)}
+          onClick={() => onExpand(entry.origin)}
           aria-label={`${reconnectWord} ${label}`}
           className="ml-1 text-accent-primary hover:text-accent-primary/80 font-medium transition-colors whitespace-nowrap"
         >

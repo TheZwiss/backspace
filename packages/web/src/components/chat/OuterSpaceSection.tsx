@@ -1,12 +1,30 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { DirectoryEntry } from '@backspace/shared';
-import { useDirectoryStore } from '../../stores/directoryStore';
+import { useDirectoryStore, type DirectoryFailure, type DirectoryStatus } from '../../stores/directoryStore';
 import { useInstanceStore } from '../../stores/instanceStore';
 import { dedupeAgainstConnected, innerOrigins } from '../../utils/directory';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { Mascot } from '../ui/Mascot';
 import { SpaceCard, outerEntryToSpace } from './SpaceCard';
+
+/**
+ * The notice under the list, first match wins: the state of the page the
+ * section is showing, or, when that page arrived, the state of the
+ * continuation that did not.
+ *
+ * One derived value for both, because the two sources say the same thing to
+ * the user and only ever differ in which request failed. `disabled` has no
+ * notice of its own here: the whole section is gone before this is read when
+ * the first page was refused that way, and a continuation refused mid-session
+ * is an instance that changed under the user, which the generic notice covers.
+ */
+function outerNotice(status: DirectoryStatus, loadMoreError: DirectoryFailure | null): 'none' | 'unreachable' | 'error' {
+  if (status === 'unreachable' || status === 'error') return status;
+  if (loadMoreError === 'unreachable') return 'unreachable';
+  if (loadMoreError === 'error' || loadMoreError === 'disabled') return 'error';
+  return 'none';
+}
 
 interface OuterSpaceSectionProps {
   /** The page's search query; the section fetches it on mount, the page re-fetches on change. */
@@ -28,6 +46,13 @@ export function OuterSpaceSection({ query, onConnect }: OuterSpaceSectionProps) 
   const instances = useInstanceStore((s) => s.instances);
   const status = useDirectoryStore((s) => s.status);
   const hasMore = useDirectoryStore((s) => s.hasMore);
+  const loadMoreError = useDirectoryStore((s) => s.loadMoreError);
+  // The query the entries on screen answer, which is not what the search box
+  // holds: the box is live and the fetch is debounced, so reading the prop
+  // flipped the empty copy between "nothing matches" and "nothing out there
+  // yet" for the length of the debounce, about a result set that had not
+  // moved. The store records the query with the request it belongs to.
+  const resultsQuery = useDirectoryStore((s) => s.query);
   const fetch = useDirectoryStore((s) => s.fetch);
   const loadMore = useDirectoryStore((s) => s.loadMore);
 
@@ -51,6 +76,7 @@ export function OuterSpaceSection({ query, onConnect }: OuterSpaceSectionProps) 
   if (status === 'disabled') return null;
 
   const hasEntries = entries.length > 0;
+  const notice = outerNotice(status, loadMoreError);
   // `idle` only exists between mount and the first `fetch` call, and a fetch
   // never leaves it there, so it is drawn as loading rather than as empty.
   const isLoading = status === 'loading' || status === 'idle';
@@ -76,7 +102,7 @@ export function OuterSpaceSection({ query, onConnect }: OuterSpaceSectionProps) 
           <LoadingSpinner />
         </div>
       ) : status === 'ok' && !hasEntries ? (
-        query ? (
+        resultsQuery ? (
           <p className="text-txt-tertiary text-sm py-6 text-center">{t('spaces:explore.outer.noMatches')}</p>
         ) : (
           <div className="flex flex-col items-center justify-center h-64 opacity-80">
@@ -101,13 +127,13 @@ export function OuterSpaceSection({ query, onConnect }: OuterSpaceSectionProps) 
             </div>
           )}
 
-          {status === 'unreachable' && (
+          {notice === 'unreachable' && (
             <div className="p-2.5 bg-accent-amber/10 border border-accent-amber/30 rounded text-[13px] text-accent-amber">
               {t('errors:directory_unreachable')}
             </div>
           )}
 
-          {status === 'error' && (
+          {notice === 'error' && (
             <div className="p-3 bg-accent-rose/10 border border-accent-rose/30 rounded text-sm text-txt-danger">
               {t('errors:generic')}
             </div>

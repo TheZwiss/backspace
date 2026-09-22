@@ -4,6 +4,10 @@
 // of its designed states without a populated instance, a peer, or a hub.
 //
 // `?scene=both|inner-one|inner-two|inner-empty|outer-unreachable|outer-empty`
+// `?scene=outer-load-more-retry` is the state a refused continuation leaves:
+// the feed already on screen, the notice about the page that did not arrive,
+// and Show more still under it, because that button is the only way to ask
+// again.
 // picks the state of the two stores; `both` is the default. `inner-one` and
 // `inner-two` cut the Inner list down to one and two unjoined cards, the
 // counts at which a card grid has empty tracks to spare. The page's own
@@ -78,6 +82,7 @@ type Scene =
   | 'inner-empty'
   | 'outer-unreachable'
   | 'outer-empty'
+  | 'outer-load-more-retry'
   | 'connect-password'
   | 'connect-closed'
   | 'connect-fallback'
@@ -103,6 +108,7 @@ const SCENES: ReadonlySet<string> = new Set<Scene>([
   'inner-empty',
   'outer-unreachable',
   'outer-empty',
+  'outer-load-more-retry',
   'connect-password',
   'connect-closed',
   'connect-fallback',
@@ -345,10 +351,14 @@ function seedStores(scene: Scene): void {
   });
 
   const outer = scene === 'outer-unreachable'
-    ? { entries: [], status: 'unreachable' as const, hasMore: false }
+    ? { entries: [], status: 'unreachable' as const, hasMore: false, loadMoreError: null }
     : scene === 'outer-empty'
-      ? { entries: [], status: 'ok' as const, hasMore: false }
-      : { entries: OUTER_ENTRIES, status: 'ok' as const, hasMore: true };
+      ? { entries: [], status: 'ok' as const, hasMore: false, loadMoreError: null }
+      : scene === 'outer-load-more-retry'
+        // A continuation that failed leaves the status on `ok`: the feed on
+        // screen is still the feed, and Show more has to stay reachable.
+        ? { entries: OUTER_ENTRIES, status: 'ok' as const, hasMore: true, loadMoreError: 'unreachable' as const }
+        : { entries: OUTER_ENTRIES, status: 'ok' as const, hasMore: true, loadMoreError: null };
 
   useDirectoryStore.setState({
     ...outer,

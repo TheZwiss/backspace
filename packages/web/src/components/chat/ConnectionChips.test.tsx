@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { FederationRegistryEntry, User } from '@backspace/shared';
 import { HttpError } from '../../api/client';
@@ -137,6 +137,75 @@ describe('ConnectionChips', () => {
     );
     const { container } = render(<ConnectionChips onRecovered={onRecovered} />);
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it('keeps an open form, and the password typed into it, across a connecting flip it did not start', async () => {
+    // The Connections panel, the connect-and-join dialog and startup all call
+    // `reconnectInstance`, which marks the live instance connecting. Hiding
+    // the chip for that moment unmounted the form and took the half-typed
+    // password with it.
+    seed(
+      [registryEntry('https://zwiss.example', 'auth_expired', 'Zwiss')],
+      [liveInstance('https://zwiss.example', 'error')],
+    );
+    const user = userEvent.setup();
+    render(<ConnectionChips onRecovered={onRecovered} />);
+
+    await user.click(screen.getByRole('button', { name: /^Reconnect/ }));
+    await user.type(screen.getByLabelText('Your home account password'), 'hunter2');
+
+    act(() => {
+      useInstanceStore.setState({ instances: [liveInstance('https://zwiss.example', 'connecting')] });
+    });
+
+    expect(screen.getByLabelText('Your home account password')).toHaveValue('hunter2');
+  });
+
+  it('still hides a closed chip on the same flip', async () => {
+    seed(
+      [
+        registryEntry('https://zwiss.example', 'auth_expired', 'Zwiss'),
+        registryEntry('https://orbit.example', 'auth_expired', 'Orbit'),
+      ],
+      [liveInstance('https://zwiss.example', 'error')],
+    );
+    const user = userEvent.setup();
+    render(<ConnectionChips onRecovered={onRecovered} />);
+
+    await user.click(screen.getByRole('button', { name: 'Reconnect Zwiss' }));
+    act(() => {
+      useInstanceStore.setState({
+        instances: [
+          liveInstance('https://zwiss.example', 'connecting'),
+          liveInstance('https://orbit.example', 'connecting'),
+        ],
+      });
+    });
+
+    expect(screen.getByLabelText('Your home account password')).toBeInTheDocument();
+    expect(screen.queryByText('Orbit')).not.toBeInTheDocument();
+  });
+
+  it('a connection that comes back and expires again opens an empty form', async () => {
+    seed([registryEntry('https://zwiss.example', 'auth_expired', 'Zwiss')]);
+    const user = userEvent.setup();
+    render(<ConnectionChips onRecovered={onRecovered} />);
+
+    await user.click(screen.getByRole('button', { name: /^Reconnect/ }));
+    await user.type(screen.getByLabelText('Your home account password'), 'hunter2');
+
+    // Restored from the Connections panel, then expired again later.
+    act(() => {
+      useInstanceStore.setState({ registry: new Map([['https://zwiss.example', registryEntry('https://zwiss.example', 'connected', 'Zwiss')]]) });
+    });
+    expect(screen.queryByLabelText('Your home account password')).not.toBeInTheDocument();
+
+    act(() => {
+      useInstanceStore.setState({ registry: new Map([['https://zwiss.example', registryEntry('https://zwiss.example', 'auth_expired', 'Zwiss')]]) });
+    });
+
+    expect(screen.queryByLabelText('Your home account password')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Reconnect/ })).toBeInTheDocument();
   });
 
   it('Retry calls reconnectInstance with the origin and shows the connecting word meanwhile', async () => {

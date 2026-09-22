@@ -27,18 +27,30 @@ interface InstanceDiscoveryFlags {
 }
 
 /**
- * The discovery and directory flags of the instance a space lives on. Home
- * (`''`) reads the store's `streamingLimits`, the settings document any
- * signed-in user may fetch. A remote space asks its own instance through its
- * own client on mount, because home's flags say nothing about it: `null`
- * while that answer is pending, so the caller can keep its switches disabled
- * rather than show home's values. A failed fetch falls back to the store's
- * values and lets the save's own error speak.
+ * The discovery and directory flags of the instance a space lives on, or null
+ * when they are not known.
+ *
+ * Home (`''`) reads the store's `streamingLimits`, the settings document any
+ * signed-in user may fetch. That field is null until the document arrives and
+ * stays null when the request fails, and null is not a fact: defaulting it
+ * (`?? true` / `?? false`) told an owner their space was not listed, and
+ * locked the switch that says so, on the strength of a document nobody had
+ * read. `InstanceDiscoveryHint` states nothing from a null document for the
+ * same reason; this panel offers a write off these flags, so it has more at
+ * stake, not less.
+ *
+ * A remote space asks its own instance through its own client on mount,
+ * because home's flags say nothing about it: null while that answer is
+ * pending, so the caller can keep its switches disabled rather than show
+ * home's values. A failed fetch falls back to the store's values and lets the
+ * save's own error speak, which is null as well on an instance whose own
+ * document never arrived.
  */
 function useInstanceDiscoveryFlags(origin: string): InstanceDiscoveryFlags | null {
-  const homeDiscovery = useSettingsStore((s) => s.streamingLimits?.discoveryEnabled ?? true);
-  const homeDirectory = useSettingsStore((s) => s.streamingLimits?.directoryEnabled ?? false);
-  const home: InstanceDiscoveryFlags = { discoveryEnabled: homeDiscovery, directoryEnabled: homeDirectory };
+  const homeLimits = useSettingsStore((s) => s.streamingLimits);
+  const home: InstanceDiscoveryFlags | null = homeLimits === null
+    ? null
+    : { discoveryEnabled: homeLimits.discoveryEnabled, directoryEnabled: homeLimits.directoryEnabled };
   const [remote, setRemote] = useState<{ origin: string; flags: InstanceDiscoveryFlags | 'failed' } | null>(null);
 
   useEffect(() => {
@@ -77,11 +89,14 @@ export function DiscoveryPanel({ spaceId }: { spaceId: string }) {
 
   const space = spaces.find(s => s.id === spaceId);
   const flags = useInstanceDiscoveryFlags(space?._instanceOrigin ?? '');
-  // Until a remote instance has answered, neither flag is known: the notice
-  // stays hidden and the directory switch stays disabled with no reason.
-  const discoveryEnabled = flags?.discoveryEnabled ?? true;
+  // Until the instance the space lives on has answered, neither flag is
+  // known: the notice stays hidden and the directory switch stays disabled
+  // with no reason, because a reason would be a guess about that instance.
+  const flagsUnknown = flags === null;
+  // Both are read only on branches `flagsUnknown` already guards; the
+  // fallbacks are what the type needs, never a claim about the instance.
+  const discoveryEnabled = flags?.discoveryEnabled ?? false;
   const directoryEnabled = flags?.directoryEnabled ?? false;
-  const flagsPending = flags === null;
 
   const [visibility, setVisibility] = useState<SpaceVisibility>(
     (space?.visibility as SpaceVisibility) ?? 'private'
@@ -117,14 +132,14 @@ export function DiscoveryPanel({ spaceId }: { spaceId: string }) {
 
   // Always rendered: the reason under a disabled switch is what tells an owner
   // whose instance has the directory off, or whose space is private, what to do.
-  const directoryReason = flagsPending
+  const directoryReason = flagsUnknown
     ? null
     : !directoryEnabled
       ? t('spaces:settings.discovery.directory.adminOff')
       : visibility === 'private'
         ? t('spaces:settings.discovery.directory.privateSpace')
         : null;
-  const directoryLocked = flagsPending || directoryReason !== null;
+  const directoryLocked = flagsUnknown || directoryReason !== null;
 
   const handleSave = async () => {
     setSaving(true);
@@ -149,7 +164,7 @@ export function DiscoveryPanel({ spaceId }: { spaceId: string }) {
   return (
     <div className="space-y-5">
       <h2 className="text-lg font-semibold text-txt-primary mb-6">{t('spaces:settings.discovery.title')}</h2>
-      {!discoveryEnabled && (
+      {!flagsUnknown && !discoveryEnabled && (
         <div className="p-2.5 bg-accent-amber/10 border border-accent-amber/30 rounded text-[13px] text-accent-amber">
           {t('spaces:settings.discovery.disabledNotice')}
         </div>

@@ -7,7 +7,10 @@ import { isAlreadyMemberError } from '../utils/joinErrors';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-export type DirectoryStatus = 'idle' | 'loading' | 'ok' | 'disabled' | 'unreachable' | 'error';
+/** The three ways a directory request can fail, as the section renders them. */
+export type DirectoryFailure = 'disabled' | 'unreachable' | 'error';
+
+export type DirectoryStatus = 'idle' | 'loading' | 'ok' | DirectoryFailure;
 
 export type ConnectAndJoinResult =
   | { kind: 'joined'; spaceId: string; origin: string }
@@ -27,6 +30,14 @@ interface DirectoryState {
   query: string;
   offset: number;
   hasMore: boolean;
+  /**
+   * Why the last `loadMore` brought nothing, or null when the last one
+   * brought a page. It is kept apart from `status` on purpose: a failed
+   * continuation says nothing about the entries already on screen, and
+   * moving `status` off `ok` took the Show more button away with it, which
+   * left the user no way to ask again.
+   */
+  loadMoreError: DirectoryFailure | null;
 
   /** Replace the list with the first page for `query`. */
   fetch: (query: string) => Promise<void>;
@@ -50,7 +61,7 @@ export const DIRECTORY_PAGE_SIZE = 50;
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-function statusForError(err: unknown): DirectoryStatus {
+function statusForError(err: unknown): DirectoryFailure {
   if (err instanceof HttpError) {
     if (err.code === 'directory_disabled') return 'disabled';
     if (err.code === 'directory_unreachable') return 'unreachable';
@@ -87,6 +98,7 @@ const initialState = {
   query: '',
   offset: 0,
   hasMore: false,
+  loadMoreError: null as DirectoryFailure | null,
 };
 
 export const useDirectoryStore = create<DirectoryState>((set, get) => {
@@ -137,10 +149,11 @@ export const useDirectoryStore = create<DirectoryState>((set, get) => {
           status: 'ok',
           offset: 0,
           hasMore: feed.spaces.length === DIRECTORY_PAGE_SIZE,
+          loadMoreError: null,
         });
       } catch (err) {
         if (seq !== fetchSeq) return;
-        set({ entries: [], status: statusForError(err), offset: 0, hasMore: false });
+        set({ entries: [], status: statusForError(err), offset: 0, hasMore: false, loadMoreError: null });
       }
     },
 
@@ -149,17 +162,28 @@ export const useDirectoryStore = create<DirectoryState>((set, get) => {
       if (status !== 'ok' || !hasMore) return;
       const seq = fetchSeq;
       const nextOffset = offset + DIRECTORY_PAGE_SIZE;
+      set({ loadMoreError: null });
       try {
         const feed = await api.directory.list(query, DIRECTORY_PAGE_SIZE, nextOffset);
         if (seq !== fetchSeq) return;
-        set((state) => ({
-          entries: appendUnique(state.entries, feed.spaces),
-          offset: nextOffset,
-          hasMore: feed.spaces.length === DIRECTORY_PAGE_SIZE,
-        }));
+        set((state) => {
+          const entries = appendUnique(state.entries, feed.spaces);
+          return {
+            entries,
+            offset: nextOffset,
+            // A page that added nothing is the end of the feed, whatever its
+            // length. Past the proxy's offset cap (1000) every further page
+            // is the page at the cap again, so a full page of entries the
+            // list already holds used to keep `hasMore` true and Show more
+            // loading the same fifty spaces for as long as it was clicked.
+            hasMore: entries.length > state.entries.length && feed.spaces.length === DIRECTORY_PAGE_SIZE,
+          };
+        });
       } catch (err) {
         if (seq !== fetchSeq) return;
-        set({ status: statusForError(err) });
+        // `status` stays `ok`: what is on screen is still the feed, and the
+        // Show more button is the only way to ask for the page again.
+        set({ loadMoreError: statusForError(err) });
       }
     },
 

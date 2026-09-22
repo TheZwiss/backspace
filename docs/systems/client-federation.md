@@ -468,6 +468,16 @@ so `describeError` says it in the user's language anywhere it does surface as
 a message. Its English text is the log line and the last-resort fallback
 only.
 
+The chips host keeps an open chip mounted. `ConnectionChips` hides a chip
+whose live instance is `connecting` on its own, but it holds the set of
+opened origins itself and exempts them, because dropping an entry unmounts
+the chip and unmounting `ReauthForm` discards the password being typed into
+it: a `reconnectInstance` started anywhere else (the Connections panel, the
+connect-and-join dialog's silent resume, startup) would otherwise empty the
+field under the user's hands. An origin leaves the set when its entry stops
+needing attention, so a connection that comes back and expires again opens a
+fresh form.
+
 Escape cancels the surface in either phase, and never travels past it in any
 state. That containment is load-bearing: `Modal.tsx` closes the settings
 modal from a document-level Escape listener, so an Escape let through during
@@ -486,6 +496,36 @@ than by the section, and collapsing hands focus back to the chip's action.
 | `disconnected` | User intentionally disconnected; account exists on remote |
 | `unreachable` | Remote is down/unresponsive |
 | `auth_expired` | Token invalid; needs re-authentication |
+
+### The reason field (`errorMessage`)
+
+`errorMessage` on a registry entry is a machine-readable reason code, not a
+sentence. The Connections row renders it through `describeRegistryError`
+(`i18n/registryErrors.ts`), which is the only place the words exist; the
+store writes the code through `registryReason`, which types the value against
+the union so a typo at a write site does not compile.
+
+| Code | Written by | Status it accompanies |
+|------|-----------|-----------------------|
+| `unreachable` | `reconnectInstance`, `autoConnectAll` on a network error | `unreachable` |
+| `session_expired` | `reconnectInstance`, `autoConnectAll` on an auth error; the tokenless placeholder path | `auth_expired` |
+| `reauthenticate` | `autoConnectAll` seeding a `replicatedInstances` entry with no registry row | `auth_expired` |
+| `authenticate_home` | `autoConnectAll` seeding the home instance of a federated account | `auth_expired` |
+
+These are deliberately not `ErrorCode`s: nothing throws them, no route sends
+them, and `ERROR_MESSAGES` on the server is exhaustive over `ErrorCode`, so a
+code there would mean English text in the server package for a string only
+this client writes and reads. The rule they follow is the same one
+([localization.md](localization.md)): the value on the wire is a code and the
+client owns the words.
+
+The registry syncs through the home instance, so a row can arrive holding the
+English sentence a client on an older version wrote. `describeRegistryError`
+passes a value it does not recognise through unchanged rather than dropping
+the only explanation the row has.
+
+The live `ConnectedInstance.error` field is a separate, unrendered string for
+the console and stays English.
 
 ### Sync Pattern
 

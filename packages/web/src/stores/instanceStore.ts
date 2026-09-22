@@ -15,6 +15,9 @@ import { connectInstance, disconnectInstance as disconnectWs, disconnectAllRemot
 import { failoverDmOriginsFromDisconnected } from '../utils/dmOriginFailover';
 import { useUIStore } from './uiStore';
 import { parseFederatedUsername } from '../utils/identity';
+// The registry's `errorMessage` carries one of these codes, never a sentence:
+// the Connections row is what turns it into words, in the user's language.
+import { registryReason } from '../i18n/registryErrors';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -824,7 +827,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
         const errRegistry = upsertRegistryEntry(get().registry, origin, {
           origin,
           status: 'unreachable',
-          errorMessage: 'Instance unreachable',
+          errorMessage: registryReason('unreachable'),
         });
         set({ registry: errRegistry, registryUpdatedAt: Date.now() });
 
@@ -842,7 +845,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
         const errRegistry = upsertRegistryEntry(get().registry, origin, {
           origin,
           status: 'auth_expired',
-          errorMessage: 'Token expired',
+          errorMessage: registryReason('session_expired'),
         });
         set({ registry: errRegistry, registryUpdatedAt: Date.now() });
       }
@@ -1056,7 +1059,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
         addedAt: Date.now(),
         lastConnectedAt: null,
         disconnectedAt: null,
-        errorMessage: 'Re-authenticate to connect',
+        errorMessage: registryReason('reauthenticate'),
       });
     }
 
@@ -1115,7 +1118,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
             addedAt: Date.now(),
             lastConnectedAt: null,
             disconnectedAt: null,
-            errorMessage: 'Authenticate to connect to your home instance',
+            errorMessage: registryReason('authenticate_home'),
           });
         }
       }
@@ -1193,7 +1196,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     for (const { origin } of withoutToken) {
       const entry = registry.get(origin);
       if (entry) {
-        registry.set(origin, { ...entry, status: 'auth_expired', errorMessage: 'Session expired, re-authenticate to reconnect' });
+        registry.set(origin, { ...entry, status: 'auth_expired', errorMessage: registryReason('session_expired') });
       }
     }
 
@@ -1293,7 +1296,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
               // Update registry entry on network error
               const entry = registry.get(origin);
               if (entry) {
-                registry.set(origin, { ...entry, status: 'unreachable', errorMessage: 'Instance unreachable' });
+                registry.set(origin, { ...entry, status: 'unreachable', errorMessage: registryReason('unreachable') });
               }
 
               // Start WebSocket — its built-in exponential backoff retry will auto-recover
@@ -1312,7 +1315,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
               // Update registry entry on auth error
               const entry = registry.get(origin);
               if (entry) {
-                registry.set(origin, { ...entry, status: 'auth_expired', errorMessage: 'Token expired' });
+                registry.set(origin, { ...entry, status: 'auth_expired', errorMessage: registryReason('session_expired') });
               }
             }
           }

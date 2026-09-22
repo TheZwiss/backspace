@@ -298,3 +298,60 @@ describe('RegistryRow re-authentication', () => {
     expect(onClose).toHaveBeenCalled();
   });
 });
+
+describe('RegistryRow reason', () => {
+  function seedEntry(errorMessage: string | null, status: 'auth_expired' | 'unreachable' = 'auth_expired') {
+    useInstanceStore.setState({
+      registry: new Map([[
+        'https://zwiss.example',
+        {
+          origin: 'https://zwiss.example',
+          label: 'Zwiss',
+          username: 'jannis@home.example',
+          remoteUserId: 'r1',
+          status,
+          addedAt: 1,
+          lastConnectedAt: 1,
+          disconnectedAt: null,
+          errorMessage,
+        },
+      ]]),
+    });
+    return render(
+      <MemoryRouter>
+        <ConnectedInstances />
+      </MemoryRouter>,
+    );
+  }
+
+  it('reads the stored reason out of the catalog, never the code itself', async () => {
+    const user = userEvent.setup();
+    seedEntry('session_expired');
+
+    await user.click(screen.getByText('Zwiss'));
+
+    expect(screen.getByText('The saved session expired. Re-authenticate to reconnect.')).toBeInTheDocument();
+    expect(screen.queryByText('session_expired')).not.toBeInTheDocument();
+  });
+
+  it('has words for the unreachable reason too', async () => {
+    const user = userEvent.setup();
+    seedEntry('unreachable', 'unreachable');
+
+    await user.click(screen.getByText('Zwiss'));
+
+    expect(screen.getByText('This instance could not be reached.')).toBeInTheDocument();
+  });
+
+  it('shows an entry written by an older client as it stands', async () => {
+    // The registry syncs through the home instance, so a row can arrive
+    // carrying the English sentence a client on an older version wrote.
+    // Dropping it would leave the row with no explanation at all.
+    const user = userEvent.setup();
+    seedEntry('Token expired');
+
+    await user.click(screen.getByText('Zwiss'));
+
+    expect(screen.getByText('Token expired')).toBeInTheDocument();
+  });
+});

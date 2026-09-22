@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, within, act } from '@testing-library/react';
 import type { DirectoryEntry, FederationRegistryEntry } from '@backspace/shared';
-import type { DirectoryStatus } from '../../stores/directoryStore';
+import type { DirectoryFailure, DirectoryStatus } from '../../stores/directoryStore';
 import { OuterSpaceSection } from './OuterSpaceSection';
 import { useInstanceStore, type ConnectedInstance } from '../../stores/instanceStore';
 
@@ -20,6 +20,7 @@ const { directory, fetchDirectory, loadMore } = vi.hoisted(() => {
     query: '',
     offset: 0,
     hasMore: false,
+    loadMoreError: null as DirectoryFailure | null,
     fetch: fetchDirectory,
     loadMore,
   };
@@ -77,7 +78,7 @@ function entry(id: string, origin = 'https://orbit.example'): DirectoryEntry {
 }
 
 function setDirectory(patch: Partial<typeof directory>) {
-  Object.assign(directory, { entries: [], status: 'ok', query: '', offset: 0, hasMore: false }, patch);
+  Object.assign(directory, { entries: [], status: 'ok', query: '', offset: 0, hasMore: false, loadMoreError: null }, patch);
 }
 
 function renderSection(query = '') {
@@ -178,6 +179,24 @@ describe('OuterSpaceSection', () => {
     expect(screen.queryByText(/Nothing out there yet/)).not.toBeInTheDocument();
   });
 
+  it('the empty copy follows the query the entries answer, not the one being typed', () => {
+    // The search box is live and the fetch behind it is debounced, so for a
+    // moment the page holds the results for the empty query while the box
+    // already says "zzz". The copy has to describe the results.
+    setDirectory({ status: 'ok', query: '' });
+    const { rerender } = renderSection('');
+    expect(screen.getByText(/Nothing out there yet/)).toBeInTheDocument();
+
+    rerender(<OuterSpaceSection query="zzz" onConnect={vi.fn()} />);
+    expect(screen.getByText(/Nothing out there yet/)).toBeInTheDocument();
+    expect(screen.queryByText('Nothing in Outer Space matches your search.')).not.toBeInTheDocument();
+
+    // And the other way: the box is cleared while the no-match page stands.
+    act(() => { setDirectory({ status: 'ok', query: 'zzz' }); });
+    rerender(<OuterSpaceSection query="" onConnect={vi.fn()} />);
+    expect(screen.getByText('Nothing in Outer Space matches your search.')).toBeInTheDocument();
+  });
+
   it('ok, zero entries, no query: the early-days copy with the mascot', () => {
     setDirectory({ status: 'ok' });
     renderSection('');
@@ -203,6 +222,30 @@ describe('OuterSpaceSection', () => {
     renderSection();
     fireEvent.click(screen.getByRole('button', { name: 'Show more' }));
     expect(loadMore).toHaveBeenCalledTimes(1);
+  });
+
+  it('a failed show more keeps the button reachable under its notice', () => {
+    setDirectory({ status: 'ok', entries: [entry('a')], hasMore: true, loadMoreError: 'unreachable' });
+    renderSection();
+    const notice = screen.getByText(UNREACHABLE);
+    const button = screen.getByRole('button', { name: 'Show more' });
+    expect(notice.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(button);
+    expect(loadMore).toHaveBeenCalledTimes(1);
+  });
+
+  it('a show more refused for any other reason shows the generic notice, button and all', () => {
+    setDirectory({ status: 'ok', entries: [entry('a')], hasMore: true, loadMoreError: 'error' });
+    renderSection();
+    expect(screen.getByText('Something went wrong.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Show more' })).toBeInTheDocument();
+  });
+
+  it('no notice while nothing has failed', () => {
+    setDirectory({ status: 'ok', entries: [entry('a')], hasMore: true });
+    renderSection();
+    expect(screen.queryByText(UNREACHABLE)).not.toBeInTheDocument();
+    expect(screen.queryByText('Something went wrong.')).not.toBeInTheDocument();
   });
 
   it('dedupes by origin at render: an instance that appears in the session hides its entries without a refetch', () => {

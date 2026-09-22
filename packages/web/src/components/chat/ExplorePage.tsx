@@ -40,6 +40,12 @@ export function ExplorePage() {
   const isLoading = useExploreStore((s) => s.isLoading);
   const error = useExploreStore((s) => s.error);
   const searchQuery = useExploreStore((s) => s.searchQuery);
+  // What the spaces on screen were fetched for. The search box is live and
+  // the fetch behind it waits out the debounce, so the empty copy has to be
+  // decided from the query the results belong to; reading `searchQuery` made
+  // it flip to "no matches" while the results it described were still the
+  // ones for the previous query, and back again when the box was cleared.
+  const resultsQuery = useExploreStore((s) => s.resultsQuery);
   const setSearchQuery = useExploreStore((s) => s.setSearchQuery);
   const fetchSpaces = useExploreStore((s) => s.fetchSpaces);
   const fetchMyRequests = useExploreStore((s) => s.fetchMyRequests);
@@ -247,7 +253,7 @@ export function ExplorePage() {
               <div className="flex flex-col items-center justify-center h-64 opacity-80">
                 <Mascot state="lonely" className="w-32 h-32 mb-3" />
                 <p className="text-txt-tertiary text-sm">
-                  {searchQuery
+                  {resultsQuery
                     ? t('spaces:explore.noMatches')
                     : t('spaces:explore.empty')}
                 </p>

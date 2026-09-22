@@ -331,6 +331,20 @@ no route sends it. The pattern for a client-minted code is the one
 `RateLimitError` established: subclass `HttpError`, pass a registered code, and
 let `describeError` find the catalog entry.
 
+Client state that is not an error follows the same split without joining
+`ErrorCode`. The federation registry's `errorMessage` holds one of four
+reason codes (`unreachable`, `session_expired`, `reauthenticate`,
+`authenticate_home`) written by `instanceStore` and turned into words by
+`describeRegistryError` in `i18n/registryErrors.ts`, against
+`federation:connections.row.reason.*`. They are not `ErrorCode`s because
+nothing throws or sends them and `ERROR_MESSAGES` is exhaustive over that
+union, which would put English text in the server package for a string only
+the web client writes and reads. A value the switch does not recognise is
+rendered as it stands: registry rows sync between clients, and one written
+before this change carries an English sentence that is still the row's only
+explanation. See
+[client-federation.md](client-federation.md#the-reason-field-errormessage).
+
 The check reads `ERROR_CODES` by scanning the array for quoted words, so it
 strips comments from the file first (`readErrorCodes` in
 `scripts/i18n/check.mjs`). Without that step a single apostrophe in a comment
