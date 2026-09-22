@@ -27,6 +27,11 @@ function rowToLimits(row: typeof schema.instanceSettings.$inferSelect): Instance
     maxFramerate: row.maxFramerate,
     discoveryEnabled: row.discoveryEnabled === 1,
     directoryEnabled: row.directoryEnabled === 1,
+    // From configuration, not from the row: whether this instance has a hub
+    // to reach at all. Every surface that offers to list a space needs it,
+    // and a space's own instance is the only one that can answer it, which
+    // is why it travels on the document a peer's client already fetches.
+    directoryConfigured: config.directory.endpoint !== '',
     bitrateMatrixOverrides: (() => {
       const raw = row.bitrateMatrixOverrides as string | null;
       if (!raw) return null;

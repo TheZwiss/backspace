@@ -845,6 +845,18 @@ export interface InstanceStreamingLimits {
   discoveryEnabled: boolean;
   /** The admin allows spaces here to be listed in the directory. Read-only on this route; PATCH /settings/instance sets it. */
   directoryEnabled: boolean;
+  /**
+   * This instance has a `DIRECTORY_ENDPOINT` to reach. Read-only and derived
+   * from configuration, never stored, never accepted on a PATCH.
+   *
+   * It rides on this document because this is the one settings document any
+   * signed-in user may read, on their own instance or on a peer: a space's
+   * own instance answers for itself, which `GET /instance/info` on the home
+   * instance cannot do for a space that lives somewhere else. Without it the
+   * per-space listing switch was enabled on an instance with no endpoint,
+   * writing a flag whose listing document no hub ever fetches.
+   */
+  directoryConfigured: boolean;
   bitrateMatrixOverrides: Record<string, number> | null;
   allowCustomBitrate: boolean;
 }

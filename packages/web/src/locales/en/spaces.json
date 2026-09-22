@@ -294,6 +294,7 @@
       "directory": {
         "label": "List in the Backspace directory",
         "hint": "Show this space in Outer Space on every Backspace instance.",
+        "notConfigured": "This instance is not configured to reach a directory, so listing this space would reach none.",
         "adminOff": "Your instance administrator has to turn on global space discovery.",
         "privateSpace": "Set visibility to public or request to join first.",
         "disclosure": "Listing makes public: the space's name, description, icon, banner, member count and this instance's address. People browsing the directory load the icon and banner from this instance."

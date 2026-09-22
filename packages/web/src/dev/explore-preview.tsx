@@ -314,6 +314,7 @@ const DEFAULT_HINT_LIMITS: InstanceStreamingLimits = {
   maxFramerate: 60,
   discoveryEnabled: true,
   directoryEnabled: false,
+  directoryConfigured: true,
   bitrateMatrixOverrides: null,
   allowCustomBitrate: true,
 };

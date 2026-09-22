@@ -44,6 +44,9 @@ const DEFAULT_LIMITS: InstanceStreamingLimits = {
   maxFramerate: 60,
   discoveryEnabled: true,
   directoryEnabled: false,
+  // The screen-share path is the only reader of these defaults and never
+  // asks this; false is the value that claims nothing.
+  directoryConfigured: false,
   bitrateMatrixOverrides: null,
   allowCustomBitrate: true,
 };

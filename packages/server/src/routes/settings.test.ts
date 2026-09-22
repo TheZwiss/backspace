@@ -43,6 +43,16 @@ vi.mock('../directory/state.js', async (orig) => ({
   markDirectoryDirty: vi.fn(),
 }));
 
+// The real config with a mutable directory block, so the endpoint can be
+// switched off for the `directoryConfigured` cases; `beforeEach` puts it
+// back. Everything else stays real, upload size included.
+const mockDirectory = vi.hoisted(() => ({ endpoint: 'https://hub.test' }));
+
+vi.mock('../config.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../config.js')>();
+  return { config: { ...actual.config, directory: mockDirectory } };
+});
+
 function applyMigrations(db: Database.Database): void {
   const migrationsDir = path.resolve(__dirname, '../../drizzle');
   const files = fs.readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
@@ -64,6 +74,7 @@ async function buildApp(): Promise<FastifyInstance> {
 }
 
 beforeEach(async () => {
+  mockDirectory.endpoint = 'https://hub.test';
   sqlite = new Database(':memory:');
   sqlite.pragma('foreign_keys = ON');
   applyMigrations(sqlite);
@@ -366,6 +377,50 @@ describe('directoryEnabled on GET /api/settings/streaming', () => {
     const res = await app.inject({ method: 'PATCH', url: '/api/settings/streaming', payload: { maxFramerate: 30 } });
     expect(res.statusCode).toBe(200);
     expect(res.json().directoryEnabled).toBe(true);
+  });
+});
+
+describe('directoryConfigured on GET /api/settings/streaming', () => {
+  // The per-space listing switch needs to know whether this instance has a
+  // hub to reach, and for a space on a peer only that peer can answer it:
+  // the home instance's own `GET /instance/info` says nothing about where
+  // someone else's space lives. It rides here because this is the settings
+  // document any signed-in user may read on any instance.
+  it('reports the endpoint, whatever the stored flags say', async () => {
+    for (const directoryEnabled of [0, 1] as const) {
+      setSettings({ directoryEnabled, discoveryEnabled: 1 });
+      const res = await app.inject({ method: 'GET', url: '/api/settings/streaming' });
+      expect(res.statusCode).toBe(200);
+      expect(res.json().directoryConfigured).toBe(true);
+    }
+  });
+
+  it('is false with no endpoint, even with the listing flag stored on', async () => {
+    // The state the switch used to offer a write in: the admin's opt-in
+    // stored, and no hub for the document it opts into.
+    mockDirectory.endpoint = '';
+    setSettings({ directoryEnabled: 1, discoveryEnabled: 1 });
+    const res = await app.inject({ method: 'GET', url: '/api/settings/streaming' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ directoryConfigured: false, directoryEnabled: true });
+  });
+
+  it('is carried on the PATCH response too', async () => {
+    mockDirectory.endpoint = '';
+    const res = await app.inject({ method: 'PATCH', url: '/api/settings/streaming', payload: { maxFramerate: 30 } });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().directoryConfigured).toBe(false);
+  });
+
+  it('is not writable: a PATCH carrying it changes nothing', async () => {
+    mockDirectory.endpoint = '';
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/settings/streaming',
+      payload: { directoryConfigured: true } as Record<string, unknown>,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().directoryConfigured).toBe(false);
   });
 });
 

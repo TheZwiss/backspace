@@ -32,6 +32,9 @@ function limits(flags: { discoveryEnabled: boolean; directoryEnabled: boolean })
     maxFramerate: 60,
     bitrateMatrixOverrides: null,
     allowCustomBitrate: true,
+    // The hint reads neither this nor the endpoint behind it; it is here so
+    // the fixture is the document the server actually sends.
+    directoryConfigured: true,
     ...flags,
   };
 }

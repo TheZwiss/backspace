@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { InstanceStreamingLimits } from '@backspace/shared';
 
@@ -24,6 +24,7 @@ const SWITCH = 'List in the Backspace directory';
 const ADMIN_OFF = 'Your instance administrator has to turn on global space discovery.';
 const PRIVATE_SPACE = 'Set visibility to public or request to join first.';
 const LOAD_FAILED = 'Could not load the settings.';
+const NOT_CONFIGURED = 'This instance is not configured to reach a directory, so listing this space would reach none.';
 
 const limits: InstanceStreamingLimits = {
   maxBitrateKbps: 20000,
@@ -35,6 +36,7 @@ const limits: InstanceStreamingLimits = {
   maxFramerate: 60,
   discoveryEnabled: true,
   directoryEnabled: true,
+  directoryConfigured: true,
   bitrateMatrixOverrides: null,
   allowCustomBitrate: true,
 };
@@ -81,6 +83,19 @@ function mockUpdateSpace(): ReturnType<typeof vi.fn> {
  * given flags; the panel must read a remote space's flags through it, never
  * through the home store.
  */
+/** A connected remote whose client answers with whatever `getStreaming` does. */
+function remoteInstance(origin: string, getStreaming: () => Promise<InstanceStreamingLimits>): ConnectedInstance {
+  return {
+    origin,
+    label: new URL(origin).host,
+    token: 'tok',
+    user: { id: 'remote-user', username: 'jannis@home.test', displayName: 'Jannis' } as ConnectedInstance['user'],
+    username: 'jannis@home.test',
+    status: 'connected',
+    api: { settings: { getStreaming } } as unknown as BackspaceApiClient,
+  };
+}
+
 function connectRemote(origin: string, answer: Promise<InstanceStreamingLimits>): ReturnType<typeof vi.fn> {
   const getStreaming = vi.fn(() => answer);
   const instance: ConnectedInstance = {
@@ -183,6 +198,34 @@ describe('DiscoveryPanel directory switch', () => {
       directoryListed: true,
     });
     expect(homeUpdate).not.toHaveBeenCalled();
+  });
+
+  it('is disabled with the endpoint reason on an instance with no directory to reach', () => {
+    // The admin's opt-in can be stored on an instance that has no
+    // DIRECTORY_ENDPOINT: the server gates its public listing document on the
+    // two discovery flags alone, so the document is served and simply no hub
+    // fetches it. The switch used to be enabled here and its write reached
+    // nothing.
+    useSpaceStore.setState({ spaces: [{ ...space, visibility: 'public' }] });
+    useSettingsStore.setState({ streamingLimits: { ...limits, directoryEnabled: true, directoryConfigured: false } });
+
+    render(<DiscoveryPanel spaceId="space-1" />);
+
+    expect(directorySwitch()).toBeDisabled();
+    expect(screen.getByText(NOT_CONFIGURED)).toBeInTheDocument();
+    expect(screen.queryByText(ADMIN_OFF)).not.toBeInTheDocument();
+  });
+
+  it('says the endpoint is missing before it says the administrator has to act', () => {
+    // Both are off. The endpoint is the one the administrator cannot fix by
+    // flipping the setting the other reason points at.
+    useSpaceStore.setState({ spaces: [{ ...space, visibility: 'public' }] });
+    useSettingsStore.setState({ streamingLimits: { ...limits, directoryEnabled: false, directoryConfigured: false } });
+
+    render(<DiscoveryPanel spaceId="space-1" />);
+
+    expect(screen.getByText(NOT_CONFIGURED)).toBeInTheDocument();
+    expect(screen.queryByText(ADMIN_OFF)).not.toBeInTheDocument();
   });
 
   it('carries both disclosure sentences', () => {
@@ -325,6 +368,57 @@ describe('DiscoveryPanel instance flags by origin', () => {
     expect(await screen.findByText(LOAD_FAILED)).toBeInTheDocument();
     expect(directorySwitch()).toBeDisabled();
     expect(getStreaming).toHaveBeenCalledTimes(1);
+  });
+
+  it('takes the endpoint fact from the space\'s own instance, not from home', async () => {
+    // The trap a home-only `GET /instance/info` read would fall into: home
+    // has a directory to reach, the instance the space lives on does not.
+    seed({ visibility: 'public', _instanceOrigin: 'https://remote.test' }, true);
+    connectRemote('https://remote.test', Promise.resolve({
+      ...limits, discoveryEnabled: true, directoryEnabled: true, directoryConfigured: false,
+    }));
+
+    render(<DiscoveryPanel spaceId="space-1" />);
+
+    await waitFor(() => expect(screen.getByText(NOT_CONFIGURED)).toBeInTheDocument());
+    expect(directorySwitch()).toBeDisabled();
+  });
+
+  it('a late answer for the origin left behind writes nothing', async () => {
+    // The panel is not remounted when the space changes: `spaceId` comes from
+    // the store and the modal resets on `isOpen` alone, so browser back or
+    // forward swaps the origin under a request already in flight. A late
+    // write used to land as another origin's answer, which reads as "not
+    // answered yet": a disabled switch with no reason and no Retry, and no
+    // further load to correct it.
+    let answerFirst: (limits: InstanceStreamingLimits) => void = () => {};
+    const first = vi.fn(() => new Promise<InstanceStreamingLimits>((resolve) => { answerFirst = resolve; }));
+    const second = vi.fn(async () => ({ ...limits, discoveryEnabled: true, directoryEnabled: true, directoryConfigured: true }));
+
+    useSpaceStore.setState({ spaces: [
+      { ...space, id: 'space-1', visibility: 'public', _instanceOrigin: 'https://first.test' },
+      { ...space, id: 'space-2', visibility: 'public', _instanceOrigin: 'https://second.test' },
+    ] });
+    useInstanceStore.setState({ instances: [
+      remoteInstance('https://first.test', first),
+      remoteInstance('https://second.test', second),
+    ] });
+
+    const { rerender } = render(<DiscoveryPanel spaceId="space-1" />);
+    expect(first).toHaveBeenCalledTimes(1);
+
+    // The space changes under the open modal; the second origin answers.
+    rerender(<DiscoveryPanel spaceId="space-2" />);
+    await waitFor(() => expect(directorySwitch()).toBeEnabled());
+
+    // The first origin answers late, for a space nobody is looking at.
+    answerFirst({ ...limits, discoveryEnabled: false, directoryEnabled: false, directoryConfigured: false });
+    await act(async () => { await Promise.resolve(); });
+
+    expect(directorySwitch()).toBeEnabled();
+    expect(screen.queryByText(ADMIN_OFF)).not.toBeInTheDocument();
+    expect(screen.queryByText(NOT_CONFIGURED)).not.toBeInTheDocument();
+    expect(screen.queryByText(LOAD_FAILED)).not.toBeInTheDocument();
   });
 
   it('reads a home space\'s flags from the store without a request', () => {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useFormatters } from '../../i18n/formatters';
 import { describeError } from '../../i18n/errors';
@@ -16,14 +16,26 @@ import { MembersPanel } from './spaceSettingsPanels/MembersPanel';
 import { RolesPanel } from './spaceSettingsPanels/RolesPanel';
 import { BansPanel } from './spaceSettingsPanels/BansPanel';
 import { useVisibilityOptions } from './spaceSettingsPanels/spaceOptions';
-import type { SpaceVisibility, JoinRequest } from '@backspace/shared';
+import type { SpaceVisibility, JoinRequest, InstanceStreamingLimits } from '@backspace/shared';
 
 const DESCRIPTION_MAX_LENGTH = 200;
 
-/** The two instance flags the Discovery panel gates its switches on. */
+/** The three instance facts the Discovery panel gates its switches on. */
 interface InstanceDiscoveryFlags {
   discoveryEnabled: boolean;
+  /** The admin's listing opt-in. */
   directoryEnabled: boolean;
+  /** The instance has a `DIRECTORY_ENDPOINT`, so a listing can reach a hub. */
+  directoryConfigured: boolean;
+}
+
+/** The three fields of a streaming-settings document this panel reads. */
+function flagsOf(limits: InstanceStreamingLimits): InstanceDiscoveryFlags {
+  return {
+    discoveryEnabled: limits.discoveryEnabled,
+    directoryEnabled: limits.directoryEnabled,
+    directoryConfigured: limits.directoryConfigured,
+  };
 }
 
 /** What the Discovery panel knows about the instance its space lives on. */
@@ -70,31 +82,53 @@ interface InstanceDiscoveryFlagsState {
 function useInstanceDiscoveryFlags(origin: string): InstanceDiscoveryFlagsState {
   const homeLimits = useSettingsStore((s) => s.streamingLimits);
   const fetchStreamingLimits = useSettingsStore((s) => s.fetchStreamingLimits);
-  const home: InstanceDiscoveryFlags | null = homeLimits === null
-    ? null
-    : { discoveryEnabled: homeLimits.discoveryEnabled, directoryEnabled: homeLimits.directoryEnabled };
+  const home: InstanceDiscoveryFlags | null = homeLimits === null ? null : flagsOf(homeLimits);
   const [remote, setRemote] = useState<{ origin: string; flags: InstanceDiscoveryFlags | 'failed' } | null>(null);
   const [homeFailed, setHomeFailed] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  /**
+   * The load whose answer this panel is still waiting for.
+   *
+   * The panel is not remounted when the space changes: `DiscoveryPanel` takes
+   * `spaceId` from `spaceStore.currentSpaceId`, and the modal resets on
+   * `isOpen` alone, so browser back or forward, or any other
+   * `setCurrentSpace` while it is open, swaps one space's origin for
+   * another's under a request that is already in flight. A late answer
+   * writing anyway put the previous origin's flags in `remote`, which reads
+   * as "this origin has not answered" against the new one: a disabled switch
+   * with no reason line, no Retry, and no further load to correct it, since
+   * the new origin's own load had already finished. Each loader takes a
+   * number and writes nothing once another has started.
+   */
+  const runId = useRef(0);
+
   // `fetchStreamingLimits` swallows its own error, so the outcome is read
   // from the store: the document either arrived or it did not.
   const loadHome = useCallback(async () => {
+    const id = ++runId.current;
     setLoading(true);
     await fetchStreamingLimits();
+    if (runId.current !== id) return;
     setHomeFailed(useSettingsStore.getState().streamingLimits === null);
     setLoading(false);
   }, [fetchStreamingLimits]);
 
   const loadRemote = useCallback(async (target: string) => {
+    const id = ++runId.current;
     setLoading(true);
     try {
       const limits = await getApiForOrigin(target).settings.getStreaming();
-      setRemote({ origin: target, flags: { discoveryEnabled: limits.discoveryEnabled, directoryEnabled: limits.directoryEnabled } });
+      if (runId.current !== id) return;
+      setRemote({ origin: target, flags: flagsOf(limits) });
     } catch {
+      if (runId.current !== id) return;
       setRemote({ origin: target, flags: 'failed' });
     } finally {
-      setLoading(false);
+      // `loading` belongs to the newest load, so a superseded one leaves it
+      // alone: clearing it here would say the panel had settled while the
+      // load it is actually waiting for is still running.
+      if (runId.current === id) setLoading(false);
     }
   }, []);
 
@@ -151,10 +185,11 @@ export function DiscoveryPanel({ spaceId }: { spaceId: string }) {
   // load is still running says nothing; unknown because the load came back
   // empty says so, under the switch, with the way to ask again.
   const flagsUnknown = flags === null;
-  // Both are read only on branches `flagsUnknown` already guards; the
+  // All three are read only on branches `flagsUnknown` already guards; the
   // fallbacks are what the type needs, never a claim about the instance.
   const discoveryEnabled = flags?.discoveryEnabled ?? false;
   const directoryEnabled = flags?.directoryEnabled ?? false;
+  const directoryConfigured = flags?.directoryConfigured ?? false;
 
   const [visibility, setVisibility] = useState<SpaceVisibility>(
     (space?.visibility as SpaceVisibility) ?? 'private'
@@ -190,13 +225,21 @@ export function DiscoveryPanel({ spaceId }: { spaceId: string }) {
 
   // Always rendered: the reason under a disabled switch is what tells an owner
   // whose instance has the directory off, or whose space is private, what to do.
+  // The endpoint is asked before the admin's opt-in, because it is the
+  // deeper fact and the one the admin cannot change: on an instance with no
+  // `DIRECTORY_ENDPOINT`, "your administrator has to turn this on" points an
+  // owner at a switch that would not help. What is missing is a hub to fetch
+  // the listing document, not the document, which this instance serves from
+  // the two discovery flags either way.
   const directoryReason = flagsUnknown
     ? null
-    : !directoryEnabled
-      ? t('spaces:settings.discovery.directory.adminOff')
-      : visibility === 'private'
-        ? t('spaces:settings.discovery.directory.privateSpace')
-        : null;
+    : !directoryConfigured
+      ? t('spaces:settings.discovery.directory.notConfigured')
+      : !directoryEnabled
+        ? t('spaces:settings.discovery.directory.adminOff')
+        : visibility === 'private'
+          ? t('spaces:settings.discovery.directory.privateSpace')
+          : null;
   const directoryLocked = flagsUnknown || directoryReason !== null;
 
   const handleSave = async () => {

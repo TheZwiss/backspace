@@ -13,6 +13,7 @@ const limits: InstanceStreamingLimits = {
   maxFramerate: 60,
   discoveryEnabled: true,
   directoryEnabled: false,
+  directoryConfigured: true,
   bitrateMatrixOverrides: null,
   allowCustomBitrate: true,
 };
