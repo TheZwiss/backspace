@@ -399,10 +399,21 @@ export function checkDirectIntl(root) {
 // Rule 7: error-code-missing
 // ---------------------------------------------------------------------------
 
+/**
+ * The codes listed in `ERROR_CODES`, read by scanning the array for quoted
+ * words.
+ *
+ * Comments are stripped first (`stripComments` is a hoisted declaration in
+ * the literal-string section below). Without that, one apostrophe in a
+ * comment inside the array, as in "the user's home", desynchronises every
+ * quote pair after it, and the check reports a hundred-odd findings naming
+ * fragments of the file rather than the comment that caused them. Prose in
+ * that array is allowed to be ordinary English.
+ */
 export function readErrorCodes(root) {
   const abs = path.join(root, ERRORS_TS);
   if (!existsSync(abs)) return [];
-  const text = readFileSync(abs, 'utf8');
+  const text = stripComments(readFileSync(abs, 'utf8'));
   const block = /ERROR_CODES\s*=\s*\[([\s\S]*?)\]/.exec(text);
   if (!block) return [];
   return [...block[1].matchAll(/['"]([^'"]+)['"]/g)].map((m) => m[1]);

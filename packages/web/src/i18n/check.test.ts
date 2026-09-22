@@ -11,6 +11,7 @@ import {
   checkUntranslated,
   checkDirectIntl,
   checkErrorCodes,
+  readErrorCodes,
   checkLiteralStrings,
   checkMarkup,
   listLiteralStringFiles,
@@ -220,6 +221,26 @@ describe('error-code-missing', () => {
       'packages/shared/src/errors.ts': errorsTs,
       [locale('en', 'errors')]: { generic: 'g', not_found: 'x', recipient_deleted: 'y' },
     });
+    expect(checkErrorCodes(root)).toEqual([]);
+  });
+
+  // An apostrophe in a comment inside the array used to desynchronise every
+  // quote pair after it, turning the whole rest of the file into "codes".
+  it('reads codes past a comment carrying an apostrophe', () => {
+    const commented = [
+      'export const ERROR_CODES = [',
+      "  // the user's home instance issues it, and a \"quoted\" word too",
+      "  'not_found',",
+      "  /* the account's own password */",
+      "  'recipient_deleted',",
+      '] as const;',
+      '',
+    ].join('\n');
+    const root = makeRoot({
+      'packages/shared/src/errors.ts': commented,
+      [locale('en', 'errors')]: { generic: 'g', not_found: 'x', recipient_deleted: 'y' },
+    });
+    expect(readErrorCodes(root)).toEqual(['not_found', 'recipient_deleted']);
     expect(checkErrorCodes(root)).toEqual([]);
   });
 });

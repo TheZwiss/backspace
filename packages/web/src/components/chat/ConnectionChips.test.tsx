@@ -5,6 +5,7 @@ import type { FederationRegistryEntry, User } from '@backspace/shared';
 import { HttpError } from '../../api/client';
 import { ConnectionChips } from './ConnectionChips';
 import { useInstanceStore, DifferentPasswordError, type ConnectedInstance } from '../../stores/instanceStore';
+import { describeError } from '../../i18n/errors';
 import { useAuthStore } from '../../stores/authStore';
 
 // Stub AudioManager: the instance store imports it transitively and jsdom has no AudioWorkletNode.
@@ -381,6 +382,40 @@ describe('ConnectionChips', () => {
     expect(screen.queryByLabelText('Your home account password')).not.toBeInTheDocument();
   });
 
+  it('the account being restored is shown but not editable', async () => {
+    seed([registryEntry('https://zwiss.example', 'auth_expired', 'Zwiss')]);
+    reauthenticateInstance.mockRejectedValueOnce(new DifferentPasswordError('jannis@home.example'));
+    const user = userEvent.setup();
+    render(<ConnectionChips onRecovered={onRecovered} />);
+
+    await user.click(screen.getByRole('button', { name: /^Reconnect/ }));
+    await user.type(screen.getByLabelText('Your home account password'), 'hunter2');
+    await user.click(screen.getByRole('button', { name: 'Connect' }));
+
+    // Restoring a connection is not choosing an account: typing another name
+    // here would silently re-bind the origin to a different identity. The
+    // field stays in the DOM so the password manager keys on it.
+    const field = await screen.findByPlaceholderText('Your username on this instance');
+    expect(field).toHaveAttribute('readonly');
+    await user.type(field, 'someone-else');
+    expect(field).toHaveValue('jannis@home.example');
+  });
+
+  it('the error is announced, not only shown', async () => {
+    seed([registryEntry('https://zwiss.example', 'auth_expired', 'Zwiss')]);
+    reauthenticateInstance.mockRejectedValueOnce(
+      new HttpError(401, 'invalid_credentials', { error: 'x', code: 'invalid_credentials', statusCode: 401 }, 'invalid_credentials'),
+    );
+    const user = userEvent.setup();
+    render(<ConnectionChips onRecovered={onRecovered} />);
+
+    await user.click(screen.getByRole('button', { name: /^Reconnect/ }));
+    await user.type(screen.getByLabelText('Your home account password'), 'wrong');
+    await user.click(screen.getByRole('button', { name: 'Connect' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Wrong username or password.');
+  });
+
   it('a success on the per-instance login restores the connection like any other path', async () => {
     seed([registryEntry('https://zwiss.example', 'auth_expired', 'Zwiss')]);
     reauthenticateInstance.mockRejectedValueOnce(new DifferentPasswordError('jannis@home.example'));
@@ -440,5 +475,15 @@ describe('ConnectionChips', () => {
 
     expect(screen.queryByPlaceholderText('Password on the remote instance')).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole('button', { name: /^Reconnect/ })).toHaveFocus());
+  });
+});
+
+describe('DifferentPasswordError', () => {
+  // The class passes its code to super(); a wrong argument there would leave
+  // every surface showing the English message with nothing else failing.
+  it('describes itself from the catalog rather than from its own message', () => {
+    expect(describeError(new DifferentPasswordError('jannis@home.example'))).toBe(
+      'Your account on that instance has a password of its own. Sign in with it to reconnect.',
+    );
   });
 });

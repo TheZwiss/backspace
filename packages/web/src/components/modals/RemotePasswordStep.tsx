@@ -112,6 +112,14 @@ function PasswordForm({
  * (`ReauthForm`). The last one passes a `secondaryAction`, which puts the
  * submit back to its own width and sets the action beside it; without one
  * the submit keeps the full-width shape the dialogs use.
+ *
+ * `usernameLocked` says whether the account is a choice. Adding a connection
+ * it is: the user picks which account on that instance to link. Restoring
+ * one it is not: the account is already in the registry entry, and a typed
+ * change would re-bind the connection to a different identity without
+ * asking, since `loginToRemote` replaces the instance and upserts the
+ * registry entry by origin. The field stays in the DOM either way so the
+ * password manager keys on it.
  */
 export function FallbackForm({
   remoteUsername,
@@ -119,12 +127,15 @@ export function FallbackForm({
   onLogin,
   extraFields,
   secondaryAction,
+  usernameLocked = false,
 }: {
   remoteUsername: string;
   isLoading: boolean;
   onLogin: (username: string, remotePassword: string) => void;
   extraFields?: React.ReactNode;
   secondaryAction?: React.ReactNode;
+  /** True where the account is the identity being restored rather than one being chosen. */
+  usernameLocked?: boolean;
 }) {
   const { t } = useTranslation(['federation', 'common']);
   const [username, setUsername] = useState(remoteUsername);
@@ -148,8 +159,9 @@ export function FallbackForm({
           value={username}
           onChange={(e) => setUsername(e.target.value)}
           placeholder={t('federation:connections.add.usernamePlaceholder')}
-          className="input-standard w-full"
+          className={`input-standard w-full ${usernameLocked ? 'text-txt-secondary cursor-default' : ''}`}
           disabled={isLoading}
+          readOnly={usernameLocked}
           autoComplete="username"
         />
       </div>

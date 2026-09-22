@@ -1182,7 +1182,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
           user: currentUser, // placeholder
           username: ri.username,
           status: 'error' as const,
-          error: 'Session expired — re-authenticate to reconnect',
+          error: 'Session expired, re-authenticate to reconnect',
           api: createApiClient(origin, () => null),
         }));
         return { instances: [...state.instances, ...placeholders] };
@@ -1193,7 +1193,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     for (const { origin } of withoutToken) {
       const entry = registry.get(origin);
       if (entry) {
-        registry.set(origin, { ...entry, status: 'auth_expired', errorMessage: 'Session expired — re-authenticate to reconnect' });
+        registry.set(origin, { ...entry, status: 'auth_expired', errorMessage: 'Session expired, re-authenticate to reconnect' });
       }
     }
 

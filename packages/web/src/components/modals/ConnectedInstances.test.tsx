@@ -23,6 +23,8 @@ vi.mock('../../stores/instanceStore', async (importOriginal) => {
 });
 
 import { ConnectedInstances } from './ConnectedInstances';
+import { Modal } from '../ui/Modal';
+import { HttpError } from '../../api/client';
 import { useInstanceStore, DifferentPasswordError } from '../../stores/instanceStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useFederationStore } from '../../stores/federationStore';
@@ -233,5 +235,66 @@ describe('RegistryRow re-authentication', () => {
     await waitFor(() => expect(loginToRemote).toHaveBeenCalledWith('https://zwiss.example', 'jannis@home.example', 'local-pw'));
     await waitFor(() => expect(screen.queryByPlaceholderText('Password on the remote instance')).not.toBeInTheDocument());
     expect(screen.queryByText('Auth expired')).not.toBeInTheDocument();
+  });
+
+  // The row lives inside the settings modal, which closes on a document-level
+  // Escape. The reauth surface must swallow the key in every state: letting it
+  // through during a submit would close the modal around a running reconnect
+  // and leave its answer with nowhere to arrive.
+  it('Escape inside the reauth form never reaches the modal, idle or submitting', async () => {
+    const user = userEvent.setup();
+    // The submit is made to fail, so the form is still there to press Escape in.
+    let refuse: (err: Error) => void = () => {};
+    const reauthenticateInstance = vi.fn(() => new Promise<void>((_resolve, reject) => { refuse = reject; }));
+    const onClose = vi.fn();
+    useInstanceStore.setState({
+      reauthenticateInstance,
+      registry: new Map([[
+        'https://zwiss.example',
+        {
+          origin: 'https://zwiss.example',
+          label: 'Zwiss',
+          username: 'jannis@home.example',
+          remoteUserId: 'r1',
+          status: 'auth_expired',
+          addedAt: 1,
+          lastConnectedAt: 1,
+          disconnectedAt: null,
+          errorMessage: null,
+        },
+      ]]),
+    });
+    render(
+      <MemoryRouter>
+        <Modal isOpen onClose={onClose} title="Settings">
+          <ConnectedInstances />
+        </Modal>
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByText('Zwiss'));
+    await user.click(screen.getByRole('button', { name: 'Re-authenticate' }));
+    const password = screen.getByLabelText('Your home account password');
+
+    // Submitting: the key is swallowed, the form stays, the modal stays.
+    await user.type(password, 'hunter2');
+    await user.click(screen.getByRole('button', { name: 'Connect' }));
+    expect(await screen.findByRole('button', { name: 'Connecting…' })).toBeDisabled();
+    await user.keyboard('{Escape}');
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('Your home account password')).toBeInTheDocument();
+
+    // Idle: the key collapses the form and still does not reach the modal.
+    refuse(new HttpError(401, 'invalid_credentials', { error: 'x', code: 'invalid_credentials', statusCode: 401 }, 'invalid_credentials'));
+    expect(await screen.findByText('Wrong username or password.')).toBeInTheDocument();
+    // The submit handed the keyboard back to the field, so the retype is immediate.
+    expect(screen.getByLabelText('Your home account password')).toHaveFocus();
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByLabelText('Your home account password')).not.toBeInTheDocument());
+    expect(onClose).not.toHaveBeenCalled();
+
+    // With the form gone, the modal owns Escape again.
+    await user.keyboard('{Escape}');
+    expect(onClose).toHaveBeenCalled();
   });
 });

@@ -92,9 +92,8 @@ export const ERROR_CODES = [
   'federation_credential_home_only',
   'federation_credential_failed',
   // Minted by the client, not by a route: the remote account refused the
-  // credential the home instance issued for it, so the only way in is the
-  // password that account holds of its own. No apostrophes or quotes belong
-  // inside this array; the i18n check reads it by scanning for quoted words.
+  // credential this user's home instance issued for it, so the only way in
+  // is the password that account holds of its own.
   'federation_different_password',
   // dm
   'peer_reset_pending',

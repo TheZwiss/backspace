@@ -329,9 +329,15 @@ in `ERROR_CODES` and in `ERROR_MESSAGES` like any other, because
 `ERROR_MESSAGES` is exhaustive and the English text is still the fallback, but
 no route sends it. The pattern for a client-minted code is the one
 `RateLimitError` established: subclass `HttpError`, pass a registered code, and
-let `describeError` find the catalog entry. Note that the i18n check reads
-`ERROR_CODES` by scanning the array for quoted words, so comments inside that
-array must carry no apostrophes or quotation marks.
+let `describeError` find the catalog entry.
+
+The check reads `ERROR_CODES` by scanning the array for quoted words, so it
+strips comments from the file first (`readErrorCodes` in
+`scripts/i18n/check.mjs`). Without that step a single apostrophe in a comment
+inside the array desynchronises every quote pair after it and the run reports
+a hundred-odd findings naming fragments of the file rather than the comment
+that caused them. Prose in that array is ordinary English; the stripping is
+what keeps it safe.
 
 The global rate limiter (`@fastify/rate-limit` in `index.ts`, 200 per minute,
 and every per-route override of it) answers in the same shape through its

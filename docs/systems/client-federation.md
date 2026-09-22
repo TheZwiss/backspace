@@ -468,9 +468,13 @@ so `describeError` says it in the user's language anywhere it does surface as
 a message. Its English text is the log line and the last-resort fallback
 only.
 
-Escape cancels the surface in either phase and stops there rather than
-reaching the settings modal behind the Connections row; while a submit is in
-flight Cancel and Escape are both inert. In the chips host the collapsed pill
+Escape cancels the surface in either phase, and never travels past it in any
+state. That containment is load-bearing: `Modal.tsx` closes the settings
+modal from a document-level Escape listener, so an Escape let through during
+a submit would close the modal around a running reconnect and leave a
+`DifferentPasswordError` with no surface to arrive in. The handler therefore
+stops the event first and judges it after; while a submit is in flight the
+key is swallowed and does nothing, as Cancel does. In the chips host the collapsed pill
 becomes a small matte panel on a line of its own, bounded by the form rather
 than by the section, and collapsing hands focus back to the chip's action.
 

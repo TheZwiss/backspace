@@ -1,4 +1,4 @@
-import React, { useId, useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useInstanceStore, DifferentPasswordError } from '../../stores/instanceStore';
 import { describeError } from '../../i18n/errors';
@@ -42,16 +42,19 @@ export interface ReauthFormProps {
  * restores it. There is no Back, because the password the first phase asks
  * for is not what the instance refused.
  *
- * Escape cancels while the surface is idle, in either phase, and stops there
- * rather than reaching whatever else listens for it (the settings modal
- * behind the Connections row). While a submit is in flight both Cancel and
- * Escape are inert, because the action they would undo is already running.
+ * Escape cancels while the surface is idle, in either phase. It never
+ * travels past this surface, in any state, because the settings modal behind
+ * the Connections row closes on Escape from a document listener: during a
+ * submit the key is swallowed and does nothing, exactly as Cancel does,
+ * rather than being let through to close the modal around a running request.
  */
 export function ReauthForm({ origin, username, onDone, onCancel, className = '' }: ReauthFormProps) {
   const { t } = useTranslation(['federation', 'common']);
   const reauthenticateInstance = useInstanceStore((s) => s.reauthenticateInstance);
   const loginToRemote = useInstanceStore((s) => s.loginToRemote);
   const fieldId = useId();
+  const surfaceRef = useRef<HTMLDivElement>(null);
+  const fieldRef = useRef<HTMLInputElement>(null);
 
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -102,9 +105,36 @@ export function ReauthForm({ origin, username, onDone, onCancel, className = '' 
     onCancel();
   };
 
+  /**
+   * Keep the keyboard on this surface across a submit.
+   *
+   * The field and both buttons go inert while a request runs, and a disabled
+   * element cannot hold focus, so whichever of them the user was on hands
+   * focus to `<body>`. An Escape pressed there never passes through this
+   * surface at all, and in the Connections row it reaches the settings
+   * modal's own document listener and closes the modal around a running
+   * reconnect, with the answer arriving nowhere. The surface takes focus for
+   * the duration instead, and hands it back to the field afterwards so a
+   * refused password can simply be retyped.
+   */
+  useEffect(() => {
+    if (loading) {
+      surfaceRef.current?.focus();
+      return;
+    }
+    if (surfaceRef.current && document.activeElement === surfaceRef.current) {
+      fieldRef.current?.focus();
+    }
+  }, [loading]);
+
+  // Escape belongs to this surface in every state, submitting included: the
+  // event is stopped first and judged after, so nothing above can act on it.
+  // While a submit is in flight it is swallowed rather than acted on, the
+  // same as Cancel.
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key !== 'Escape' || loading) return;
+    if (e.key !== 'Escape') return;
     e.stopPropagation();
+    if (loading) return;
     handleCancel();
   };
 
@@ -120,7 +150,12 @@ export function ReauthForm({ origin, username, onDone, onCancel, className = '' 
   );
 
   return (
-    <div className={`space-y-2.5 ${className}`} onKeyDown={handleKeyDown}>
+    <div
+      ref={surfaceRef}
+      tabIndex={-1}
+      className={`space-y-2.5 outline-none ${className}`}
+      onKeyDown={handleKeyDown}
+    >
       {phase === 'password' ? (
         <form onSubmit={(e) => { void handleSubmit(e); }} className="space-y-2.5">
           <input type="text" autoComplete="username" value={username} readOnly tabIndex={-1} className="sr-only" />
@@ -133,6 +168,7 @@ export function ReauthForm({ origin, username, onDone, onCancel, className = '' 
             </label>
             <input
               id={fieldId}
+              ref={fieldRef}
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -142,7 +178,7 @@ export function ReauthForm({ origin, username, onDone, onCancel, className = '' 
               autoComplete="current-password"
             />
             {error && (
-              <p className="mt-1.5 px-2 py-1.5 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-xs break-words">
+              <p role="alert" className="mt-1.5 px-2 py-1.5 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-xs break-words">
                 {error}
               </p>
             )}
@@ -165,12 +201,13 @@ export function ReauthForm({ origin, username, onDone, onCancel, className = '' 
             isLoading={loading}
             onLogin={(remoteName, remotePassword) => { void handleLogin(remoteName, remotePassword); }}
             secondaryAction={cancelButton}
+            usernameLocked
           />
           {/* Two fields answer for this one, so it sits under the pair rather
               than under either of them, as the dialogs that share this form
               place it. */}
           {error && (
-            <p className="px-2 py-1.5 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-xs break-words">
+            <p role="alert" className="px-2 py-1.5 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-xs break-words">
               {error}
             </p>
           )}
