@@ -999,14 +999,29 @@ no note, and the switch reads the draft.
 
 **The two halves are not read at the same instant, and cannot be.** The server
 reads its half when it handles the request; the client reads its half when the
-answer arrives. What makes the pairing sound is narrower: the setting only
-ever moves through this panel's own save, and a save bumps `saveEpoch` before
-it writes, which refuses any answer whose request predates it, then bumps
-`directoryProbe` after it, which asks again. An answer is therefore only used
-when nothing moved the setting between the request going out and the answer
-coming back. The effect's own cleanup is not enough on its own: an answer that
-lands after the store is written but before React commits the re-render would
-otherwise slip through, and a test pins that interleaving.
+answer arrives. The rule that makes the pairing sound is one comparison, and it
+lives in the probe effect in `GeneralPanel.tsx`: **the browse setting is
+captured when the request goes out and compared when it comes back, and an
+answer is used only when the two still agree.** An answer that no longer
+matches describes a pair that no longer exists, so it is dropped and the row
+keeps whatever was last established.
+
+Comparing, rather than counting this panel's own saves, is deliberate. The
+setting does not move only through the save bar: the panel's 10 second poll
+and the settings modal's own mount fetch both write it, and either can carry a
+change made by another admin, another tab or a direct API call, with nothing in
+this panel to know it happened. A counter bumped by the save caught only its
+own writes, and refused an answer across a save that merely renamed the
+instance. It also refused an answer across a save that *failed*, while only
+asking again when one succeeded, which could leave an endpoint-less instance
+at "not known" for the life of the modal. The comparison has none of those
+cases: a failed save moves nothing, so the answer still matches and is kept.
+
+Known limit: nothing asks again after a refusal that no save caused, so a
+change made elsewhere while a request is in flight leaves the endpoint question
+where it was until the next save. That is a missed refresh, never a wrong
+answer, and what it would refresh cannot change while the panel is open, since
+no setting an admin writes creates or removes an endpoint.
 
 Storing the reduction rather than the flag is what keeps it correct afterwards.
 A save writes the setting at once and the info is a round trip behind it, so a

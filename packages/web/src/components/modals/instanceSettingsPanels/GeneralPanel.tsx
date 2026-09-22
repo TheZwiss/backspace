@@ -120,12 +120,11 @@ function levelOf(draft: { discoveryEnabled: boolean; directoryEnabled: boolean }
  *
  * The two halves are not read at the same instant, and cannot be: the server
  * reads its half when it handles the request, the client reads its half when
- * the answer arrives. What makes the pairing sound is narrower. The setting
- * only ever moves through this panel's own save, and a save both bumps
- * `saveEpoch` before it writes, which refuses any answer whose request
- * predates it, and bumps `directoryProbe` after it, which asks again. So an
- * answer is only ever used when nothing moved the setting between the request
- * going out and the answer coming back.
+ * the answer arrives. What makes the pairing sound is the caller's job, not
+ * this function's, and it is written down at the one place that does it, the
+ * probe effect in `GeneralPanel`. In short: the setting is captured when the
+ * request goes out and compared when it comes back, and an answer is used
+ * only when the two agree.
  *
  * The reduction is then stable for as long as the panel is open: no setting an
  * admin can write creates or removes an endpoint, so an established answer is
@@ -162,15 +161,6 @@ export function GeneralPanel() {
   const [hasDirectoryEndpoint, setHasDirectoryEndpoint] = useState<boolean | null>(null);
   // Bumped after a save so the answer follows a change the admin just made.
   const [directoryProbe, setDirectoryProbe] = useState(0);
-  /**
-   * Saves begun. Read when an info request goes out and again when it comes
-   * back: an answer whose request spans a save is refused, because the
-   * setting it has to be paired with moved underneath it. A ref rather than
-   * state, so the refusal is in place the instant the save starts and does
-   * not wait for a render to commit.
-   */
-  const saveEpoch = useRef(0);
-
   // The settings the draft was last seeded from. A background refresh only
   // reseeds the draft while it still equals this, so an unsaved edit survives
   // the 10 second poll and a save or reset is what moves it on.
@@ -210,21 +200,41 @@ export function GeneralPanel() {
   // request and no repeated ones.
   const settingsLoaded = instanceSettings !== null;
 
+  /**
+   * The endpoint probe, and the one place the pairing rule lives.
+   *
+   * `directoryAvailable` is the endpoint and the browse setting together, so
+   * an answer is only worth anything beside the setting the server had when
+   * it answered. The setting is therefore captured when the request goes out
+   * and compared when it comes back; if it no longer matches, the answer is
+   * refused, because it describes a pair that no longer exists.
+   *
+   * Capturing rather than trusting the store at either end matters because
+   * the setting does not move only through this panel's own save. The 10
+   * second poll and the settings modal's own mount fetch both write it, and
+   * either can carry a change made by another admin, another tab or a direct
+   * API call, with nothing here to know it happened. A comparison catches all
+   * of them; an epoch counter bumped by this panel's save caught only its
+   * own, and refused a save that merely renamed the instance.
+   *
+   * A refused answer leaves `hasDirectoryEndpoint` alone, so the row keeps
+   * whatever was last established rather than falling back to a claim. The
+   * rest of the reasoning, including the known limit that nothing asks again
+   * after a refusal no save caused, is in docs/systems/directory.md section
+   * 10.
+   */
   useEffect(() => {
     if (!settingsLoaded) return;
     let cancelled = false;
-    const dispatchedAt = saveEpoch.current;
+    const askedWith = useSettingsStore.getState().instanceSettings?.directoryBrowseEnabled === true;
     api.instance.info()
       .then((info) => {
-        // A save that began after this request went out moved the half the
-        // answer has to be paired with; its own probe bump asks again.
-        if (cancelled || saveEpoch.current !== dispatchedAt) return;
-        // The setting is read here, against the answer it is paired with,
-        // rather than from the render's closure.
-        const saved = useSettingsStore.getState().instanceSettings;
+        if (cancelled) return;
+        const answeredWith = useSettingsStore.getState().instanceSettings?.directoryBrowseEnabled === true;
+        if (answeredWith !== askedWith) return;
         setHasDirectoryEndpoint((previous) => endpointFrom(
           info.directoryAvailable === true,
-          saved?.directoryBrowseEnabled === true,
+          answeredWith,
           previous,
         ));
       })
@@ -252,12 +262,6 @@ export function GeneralPanel() {
   const handleSave = async () => {
     setSaving(true);
     setSaveError('');
-    // Before the write, not after it: any endpoint answer still in flight was
-    // asked against the setting as it stands now, and this is about to move
-    // it. Bumped whether or not the save succeeds, because the request cannot
-    // know which it will be; a save that fails moves nothing, so the panel
-    // simply keeps the answer it already had.
-    saveEpoch.current += 1;
     try {
       const payload: Partial<InstanceAdminSettings> = {
         instanceName: draft.instanceName,
@@ -280,9 +284,9 @@ export function GeneralPanel() {
       }
       setGifKeyDirty(false);
       setGifKeyDraft('');
-      // Ask again, now that the setting has settled. The answer this replaces
-      // was refused by the epoch bump above, so nothing derived from a
-      // half-moved pair ever reaches the row.
+      // Ask again, now that the setting has settled. An answer still in flight
+      // from before the save is refused by the probe effect's own comparison
+      // if the save moved the setting, and correctly kept if it did not.
       setDirectoryProbe((n) => n + 1);
       addToast(t('common:states.settingsSaved'), 'success', 2000);
     } catch (err) {
