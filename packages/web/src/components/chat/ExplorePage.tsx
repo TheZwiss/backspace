@@ -106,6 +106,11 @@ export function ExplorePage() {
   // selector so a render with an unchanged set is not a new value.
   const connectedKey = useInstanceStore((s) => connectedOriginsKey(s.instances));
 
+  // Startup fills the instance list one origin at a time. Both store actions
+  // await `waitForAutoConnect()` anyway, so a refetch per arrival would ask
+  // for the same answer K times; the page holds off until the list is whole.
+  const autoConnectDone = useInstanceStore((s) => s._autoConnectDone);
+
   // The query the refetch below should use, read at call time: a keystroke
   // must not refetch outside the search debounce.
   const searchQueryRef = useRef(searchQuery);
@@ -131,13 +136,15 @@ export function ExplorePage() {
   // requested on an origin that just came back appears in Inner without a
   // reload.
   useEffect(() => {
-    if (fetchedKey.current === null) {
+    if (!autoConnectDone || fetchedKey.current === null) {
+      // Not a fetch: whatever the set is now, the mount fetch (or the one
+      // that follows this gate opening) covers it.
       fetchedKey.current = connectedKey;
       return;
     }
     if (fetchedKey.current === connectedKey) return;
     refetchInner(connectedKey);
-  }, [connectedKey, refetchInner]);
+  }, [connectedKey, autoConnectDone, refetchInner]);
 
   // A connection came back through the chips row. Recording the key here
   // keeps the effect above from fetching the same thing again when the

@@ -390,7 +390,7 @@ describe('ExplorePage follows a connection change while it is open', () => {
     vi.clearAllMocks();
     useExploreStore.setState({ searchQuery: '', spaces: [] });
     useDirectoryStore.setState({ entries: [outerEntry], status: 'ok' });
-    useInstanceStore.setState({ instances: [], registry: new Map() });
+    useInstanceStore.setState({ instances: [], registry: new Map(), _autoConnectDone: true });
     // The real fan-out reaches connected instances only; the mock follows it.
     fetchSpaces.mockImplementation(async () => {
       const connected = useInstanceStore.getState().instances.some((i) => i.origin === ORBIT && i.status === 'connected');
@@ -459,5 +459,36 @@ describe('ExplorePage follows a connection change while it is open', () => {
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
     expect(fetchSpaces).toHaveBeenCalledTimes(1);
     expect(fetchMyRequests).toHaveBeenCalledTimes(1);
+  });
+
+  it('waits for autoconnect: origins arriving one at a time fetch nothing until it is done', async () => {
+    // A reload straight onto /explore. Both store actions await
+    // waitForAutoConnect anyway, so a fetch per arriving instance would be
+    // pure load; the page holds off until the list is whole.
+    useInstanceStore.setState({ instances: [], registry: new Map(), _autoConnectDone: false });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Outer Space')).toBeInTheDocument());
+    expect(fetchSpaces).toHaveBeenCalledTimes(1);
+
+    const second = { ...live('connected'), origin: 'https://nova.example', label: 'Nova' };
+    act(() => { useInstanceStore.setState({ instances: [live('connected')] }); });
+    act(() => { useInstanceStore.setState({ instances: [live('connected'), second] }); });
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+
+    // Still only the mount fetch.
+    expect(fetchSpaces).toHaveBeenCalledTimes(1);
+    expect(fetchMyRequests).toHaveBeenCalledTimes(1);
+
+    // The flip itself is not a fetch either: the mount fetch awaits
+    // waitForAutoConnect, so its fan-out already saw the whole list.
+    act(() => { useInstanceStore.setState({ _autoConnectDone: true }); });
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+    expect(fetchSpaces).toHaveBeenCalledTimes(1);
+
+    // From here the page follows the set again: the first change after the
+    // gate opened is the first refetch.
+    act(() => { useInstanceStore.setState({ instances: [live('disconnected'), second] }); });
+    await waitFor(() => expect(fetchSpaces).toHaveBeenCalledTimes(2));
+    expect(fetchMyRequests).toHaveBeenCalledTimes(2);
   });
 });
