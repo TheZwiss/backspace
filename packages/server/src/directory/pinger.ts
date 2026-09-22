@@ -34,8 +34,16 @@ export interface PingerDeps {
 export interface PingerMemory {
   /** Consecutive failures since the last accepted ping; picks the backoff step. */
   failures: number;
-  /** Earliest instant the retry loop or the daily rule may send again, in ms. */
+  /**
+   * End of the failure backoff, in ms. The tick and the daily rule wait it out;
+   * the change ping does not, an edit is new information.
+   */
   nextRetryAt: number | null;
+  /**
+   * End of a hub `Retry-After` (a 429), in ms. Every sender waits it out:
+   * sending into a cooldown buys nothing but another 429.
+   */
+  cooldownUntil: number | null;
   /** Document version the hub rejected the origin for; the retry loop waits for the next change. */
   haltedVersion: number | null;
   /** The hub answered 410: nothing is sent until the next boot. */
@@ -45,7 +53,7 @@ export interface PingerMemory {
 }
 
 export function createPingerMemory(): PingerMemory {
-  return { failures: 0, nextRetryAt: null, haltedVersion: null, retired: false, inFlight: null };
+  return { failures: 0, nextRetryAt: null, cooldownUntil: null, haltedVersion: null, retired: false, inFlight: null };
 }
 
 const BACKOFF_MS: readonly [number, number, number, number] = [60_000, 300_000, 900_000, 3_600_000];
@@ -143,7 +151,7 @@ async function performPing(deps: PingerDeps, mem: PingerMemory): Promise<PingOut
 
   if (response === null) {
     recordFailure(deps, mem, { at, status: failure });
-    deps.log.debug(`[directory] ping did not go through (${failure}, ${cause}), retrying in ${describeDelay(mem, at)}`);
+    deps.log.debug(`[directory] ping did not go through (${failure}, ${cause}), retrying in ${describeDelay(mem.nextRetryAt, at)}`);
     return 'failed';
   }
 
@@ -152,14 +160,15 @@ async function performPing(deps: PingerDeps, mem: PingerMemory): Promise<PingOut
     const cleared = recordDirectoryPingSuccess(deps.sqlite, sentVersion, at);
     mem.failures = 0;
     mem.nextRetryAt = null;
+    mem.cooldownUntil = null;
     deps.log.debug(cleared
       ? '[directory] ping accepted'
       : '[directory] ping accepted, the document changed in flight so the next change ping is still owed');
     return 'accepted';
   }
   if (status === 429) {
-    mem.nextRetryAt = at + retryAfterMs(response.headers.get('retry-after'), at);
-    deps.log.debug(`[directory] hub asked for a pause, next ping in ${describeDelay(mem, at)}`);
+    mem.cooldownUntil = at + retryAfterMs(response.headers.get('retry-after'), at);
+    deps.log.debug(`[directory] hub asked for a pause, next ping in ${describeDelay(mem.cooldownUntil, at)}`);
     return 'cooldown';
   }
   if (status === 400) {
@@ -179,22 +188,28 @@ async function performPing(deps: PingerDeps, mem: PingerMemory): Promise<PingOut
     const reason = await readFetchReason(response);
     if (reason !== undefined) {
       recordFailure(deps, mem, { at, status: 'fetch', reason });
-      deps.log.debug(`[directory] the hub could not read this instance's document (${reason}), retrying in ${describeDelay(mem, at)}`);
+      deps.log.debug(`[directory] the hub could not read this instance's document (${reason}), retrying in ${describeDelay(mem.nextRetryAt, at)}`);
       return 'fetch-failed';
     }
   }
   recordFailure(deps, mem, { at, status });
-  deps.log.debug(`[directory] ping did not go through (status ${status}), retrying in ${describeDelay(mem, at)}`);
+  deps.log.debug(`[directory] ping did not go through (status ${status}), retrying in ${describeDelay(mem.nextRetryAt, at)}`);
   return 'failed';
 }
 
-function describeDelay(mem: PingerMemory, at: number): string {
-  const ms = mem.nextRetryAt === null ? 0 : Math.max(0, mem.nextRetryAt - at);
+function describeDelay(until: number | null, at: number): string {
+  const ms = until === null ? 0 : Math.max(0, until - at);
   return `${Math.round(ms / 1000)}s`;
 }
 
+/** No hub cooldown is running. The one wait every sender honours. */
+function cooldownOver(mem: PingerMemory, nowMs: number): boolean {
+  return mem.cooldownUntil === null || nowMs >= mem.cooldownUntil;
+}
+
+/** Neither the failure backoff nor a hub cooldown is running. What the tick and the daily rule wait for. */
 function retryDue(mem: PingerMemory, nowMs: number): boolean {
-  return mem.nextRetryAt === null || nowMs >= mem.nextRetryAt;
+  return (mem.nextRetryAt === null || nowMs >= mem.nextRetryAt) && cooldownOver(mem, nowMs);
 }
 
 /**
@@ -208,9 +223,9 @@ function retryDue(mem: PingerMemory, nowMs: number): boolean {
  *
  * The daily rule's per-day guard comes from the persisted error, not from
  * memory, so a restart loop cannot re-attempt a failing hub more than once a
- * day by the slot. It also waits out nextRetryAt: a 429 at the slot is not
- * retried every minute until the hub relents, and a backoff set by the retry
- * loop is not bypassed by the slot.
+ * day by the slot. It also waits out both the cooldown and the backoff: a 429
+ * at the slot is not retried every minute until the hub relents, and a backoff
+ * set by the retry loop is not bypassed by the slot.
  */
 export async function pingerTick(deps: PingerDeps, mem: PingerMemory, opts: { boot?: boolean } = {}): Promise<'sent' | 'skipped'> {
   if (deps.endpoint === '' || mem.retired || mem.inFlight !== null) return 'skipped';
@@ -247,12 +262,16 @@ export async function pingerTick(deps: PingerDeps, mem: PingerMemory, opts: { bo
 
 /**
  * How long a change ping waits: the debounce, or the rest of a running
- * `Retry-After` or backoff when that is longer. Sending inside a known
- * cooldown only buys another 429, and the second one can come from the hub's
- * per-address limiter, which sends no header and costs the default wait again.
+ * `Retry-After` when that is longer. Sending inside a known cooldown only buys
+ * another 429, and the second one can come from the hub's per-address limiter,
+ * which sends no header and costs the default wait again.
+ *
+ * The failure backoff is ignored on purpose: an edit is new information and
+ * goes out 3 seconds after the last mark even while the tick is backing off.
+ * The in-flight record is what keeps that from becoming two senders.
  */
 export function changePingDelay(mem: PingerMemory, nowMs: number): number {
-  const remaining = mem.nextRetryAt === null ? 0 : mem.nextRetryAt - nowMs;
+  const remaining = mem.cooldownUntil === null ? 0 : mem.cooldownUntil - nowMs;
   return Math.max(DEBOUNCE_MS, remaining);
 }
 
@@ -272,8 +291,9 @@ export interface ChangePingScheduler {
  * A 429 re-arms the timer for the cooldown's end instead of leaving the change
  * to the minute tick: the hub's per-origin cooldown is 10 seconds, and an edit
  * that follows another within it should land seconds later, not up to a
- * minute. Backoffs after a failure are minute-scale and stay with the tick;
- * re-arming on those too would make two senders for one retry.
+ * minute. Any other failure leaves that retry to the minute tick and its
+ * backoff; a new mark during the backoff is a new change and sends after the
+ * debounce regardless, with the in-flight record keeping the two senders apart.
  */
 export function createChangePingScheduler(
   deps: PingerDeps,
@@ -287,10 +307,10 @@ export function createChangePingScheduler(
     try {
       if (mem.retired) return;
       if (!readDirectoryState(deps.sqlite).dirty || mem.haltedVersion === getDocumentVersion()) return;
-      // A cooldown or backoff can start after arming, when a tick-driven ping
-      // that was in flight at the mark comes back; the delay is recomputed
-      // rather than sent into.
-      if (!retryDue(mem, deps.now().getTime())) {
+      // A cooldown can start after arming, when a tick-driven ping that was in
+      // flight at the mark comes back 429; the delay is recomputed rather than
+      // sent into. A backoff that started the same way is not waited for.
+      if (!cooldownOver(mem, deps.now().getTime())) {
         arm();
         return;
       }

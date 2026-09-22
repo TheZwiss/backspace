@@ -83,11 +83,12 @@ describe('sendDirectoryPing', () => {
     markDirectoryDirty(db);
     mem.failures = 3;
     mem.nextRetryAt = 42;
+    mem.cooldownUntil = 43;
     expect(await sendDirectoryPing(deps('2026-09-22T10:00:00Z', ok), mem)).toBe('accepted');
     expect(readDirectoryState(db)).toEqual({
       enabled: false, dirty: false, lastPingAt: Date.parse('2026-09-22T10:00:00Z'), lastError: null,
     });
-    expect(mem).toEqual({ failures: 0, nextRetryAt: null, haltedVersion: null, retired: false, inFlight: null });
+    expect(mem).toEqual({ failures: 0, nextRetryAt: null, cooldownUntil: null, haltedVersion: null, retired: false, inFlight: null });
   });
 
   it('204 after a change that landed in flight leaves dirty set for the debounce, not the retry loop', async () => {
@@ -103,7 +104,8 @@ describe('sendDirectoryPing', () => {
     markDirectoryDirty(db);
     const now = Date.parse('2026-09-22T10:00:00Z');
     expect(await sendDirectoryPing(deps('2026-09-22T10:00:00Z', answer(429, null, { 'retry-after': '7' })), mem)).toBe('cooldown');
-    expect(mem.nextRetryAt).toBe(now + 7000);
+    expect(mem.cooldownUntil).toBe(now + 7000);
+    expect(mem.nextRetryAt).toBeNull();
     expect(mem.failures).toBe(0);
     expect(readDirectoryState(db)).toMatchObject({ dirty: true, lastError: null, lastPingAt: null });
   });
@@ -112,7 +114,8 @@ describe('sendDirectoryPing', () => {
     markDirectoryDirty(db);
     const now = Date.parse('2026-09-22T10:00:00Z');
     expect(await sendDirectoryPing(deps('2026-09-22T10:00:00Z', answer(429)), mem)).toBe('cooldown');
-    expect(mem.nextRetryAt).toBe(now + 10_000);
+    expect(mem.cooldownUntil).toBe(now + 10_000);
+    expect(mem.nextRetryAt).toBeNull();
     expect(readDirectoryState(db).dirty).toBe(true);
   });
 
@@ -154,6 +157,7 @@ describe('sendDirectoryPing', () => {
     expect(readDirectoryState(db)).toMatchObject({ dirty: true, lastError: { at: now, status: 'fetch', reason: 'origin-mismatch' } });
     expect(mem.failures).toBe(1);
     expect(mem.nextRetryAt).toBe(now + 60_000);
+    expect(mem.cooldownUntil).toBeNull();
 
     expect(await sendDirectoryPing(d, mem)).toBe('fetch-failed');
     expect(mem.nextRetryAt).toBe(now + 300_000);
@@ -332,13 +336,21 @@ describe('changePingDelay', () => {
     expect(changePingDelay(mem, now)).toBe(3_000);
   });
 
-  it('is the rest of a running Retry-After or backoff when that is longer', () => {
-    mem.nextRetryAt = now + 10_000;
+  it('is the rest of a running Retry-After when that is longer', () => {
+    mem.cooldownUntil = now + 10_000;
     expect(changePingDelay(mem, now)).toBe(10_000);
-    mem.nextRetryAt = now + 1_000;
+    mem.cooldownUntil = now + 1_000;
     expect(changePingDelay(mem, now)).toBe(3_000);
-    mem.nextRetryAt = now - 5_000;
+    mem.cooldownUntil = now - 5_000;
     expect(changePingDelay(mem, now)).toBe(3_000);
+  });
+
+  it('ignores a failure backoff: an edit is new information', () => {
+    mem.failures = 1;
+    mem.nextRetryAt = now + 60_000;
+    expect(changePingDelay(mem, now)).toBe(3_000);
+    mem.cooldownUntil = now + 8_000;
+    expect(changePingDelay(mem, now)).toBe(8_000);
   });
 });
 
@@ -374,7 +386,7 @@ describe('createChangePingScheduler', () => {
 
   it('waits out a running Retry-After instead of sending into the cooldown', async () => {
     const scheduler = createChangePingScheduler(live(ok), mem, report);
-    mem.nextRetryAt = Date.now() + 10_000;
+    mem.cooldownUntil = Date.now() + 10_000;
     markDirectoryDirty(db);
     scheduler.schedule();
     await vi.advanceTimersByTimeAsync(9_999);
@@ -400,18 +412,76 @@ describe('createChangePingScheduler', () => {
     await vi.advanceTimersByTimeAsync(1);
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(readDirectoryState(db).dirty).toBe(false);
-    expect(mem.nextRetryAt).toBeNull();
+    expect(mem.cooldownUntil).toBeNull();
   });
 
-  it('a failure other than a cooldown leaves the retry to the minute tick', async () => {
-    const scheduler = createChangePingScheduler(live(answer(503)), mem, report);
+  it('a mark during a cooldown waits for the rest of the cooldown, not the debounce', async () => {
+    let calls = 0;
+    const respond = () => {
+      calls += 1;
+      return calls === 1 ? new Response(null, { status: 429, headers: { 'retry-after': '10' } }) : ok();
+    };
+    const scheduler = createChangePingScheduler(live(respond), mem, report);
     markDirectoryDirty(db);
     scheduler.schedule();
     await vi.advanceTimersByTimeAsync(3_000);
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    await vi.advanceTimersByTimeAsync(3_600_000);
+    const cooldownEnd = Date.now() + 10_000;
+    expect(mem.cooldownUntil).toBe(cooldownEnd);
+
+    // An edit five seconds into the cooldown: the debounce alone would send at
+    // eight, the cooldown says ten.
+    await vi.advanceTimersByTimeAsync(5_000);
+    markDirectoryDirty(db);
+    scheduler.schedule();
+    await vi.advanceTimersByTimeAsync(4_999);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(Date.now()).toBe(cooldownEnd);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(readDirectoryState(db).dirty).toBe(false);
+    expect(mem.cooldownUntil).toBeNull();
+    expect(report).not.toHaveBeenCalled();
+  });
+
+  it('a mark during a backoff sends after 3 s, and the tick does not send again for it', async () => {
+    let calls = 0;
+    const respond = () => {
+      calls += 1;
+      return calls === 1 ? new Response(null, { status: 503 }) : ok();
+    };
+    const d = live(respond);
+    const scheduler = createChangePingScheduler(d, mem, report);
+    markDirectoryDirty(db);
+    scheduler.schedule();
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(mem.nextRetryAt).toBe(Date.now() + 60_000);
     expect(readDirectoryState(db).dirty).toBe(true);
+
+    // The failure alone does not re-arm: that retry belongs to the minute tick.
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // An edit is new information and goes out 3 s later, backoff or not. The
+    // tick, meanwhile, still waits the backoff out.
+    markDirectoryDirty(db);
+    scheduler.schedule();
+    expect(await pingerTick(d, mem)).toBe('skipped');
+    await vi.advanceTimersByTimeAsync(2_999);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(readDirectoryState(db).dirty).toBe(false);
+    expect(mem.nextRetryAt).toBeNull();
+    expect(mem.failures).toBe(0);
+
+    // That send covered the retry too: once the backoff would have ended,
+    // the tick finds nothing to do.
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(await pingerTick(d, mem)).toBe('skipped');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(report).not.toHaveBeenCalled();
   });
 
   it('sends nothing when a ping in flight already covered the change', async () => {
@@ -441,7 +511,7 @@ describe('createChangePingScheduler', () => {
     markDirectoryDirty(db);
     scheduler.schedule();
     // A tick-driven ping that was in flight at the mark comes back 429 before the timer fires.
-    mem.nextRetryAt = Date.now() + 8_000;
+    mem.cooldownUntil = Date.now() + 8_000;
     await vi.advanceTimersByTimeAsync(3_000);
     expect(fetchMock).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(4_999);
