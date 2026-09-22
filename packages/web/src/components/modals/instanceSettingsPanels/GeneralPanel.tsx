@@ -104,40 +104,6 @@ function levelOf(draft: { discoveryEnabled: boolean; directoryEnabled: boolean }
   return draft.directoryEnabled ? 'global' : 'local';
 }
 
-/**
- * What one `GET /api/instance/info` answer says about this instance having a
- * `DIRECTORY_ENDPOINT`: true it has one, false it has none, null nothing new
- * was learned.
- *
- * The server reports one flag, `directoryAvailable`, which is the endpoint and
- * the admin's browse setting together, so neither half means anything read on
- * its own. They are reduced here, once, to the single fact the row needs, and
- * it is that fact that is stored. Storing the raw flag instead splits the
- * pair: a save writes the setting immediately and the flag is a round trip
- * behind it, so for the length of that round trip the panel would answer from
- * one value before the change and one after, and tell an admin who just
- * switched browsing on that the instance has no directory.
- *
- * The two halves are not read at the same instant, and cannot be: the server
- * reads its half when it handles the request, the client reads its half when
- * the answer arrives. What makes the pairing sound is the caller's job, not
- * this function's, and it is written down at the one place that does it, the
- * probe effect in `GeneralPanel`. In short: the setting is captured when the
- * request goes out and compared when it comes back, and an answer is used
- * only when the two agree.
- *
- * The reduction is then stable for as long as the panel is open: no setting an
- * admin can write creates or removes an endpoint, so an established answer is
- * never invalidated by a later change. `previous` is returned when this answer
- * settles nothing, which is an unavailable directory while browsing is off:
- * the endpoint and the setting are then indistinguishable causes, and a fact
- * already established is worth more than the absence of one.
- */
-function endpointFrom(directoryAvailable: boolean, browseEnabled: boolean, previous: boolean | null): boolean | null {
-  if (directoryAvailable) return true;
-  return browseEnabled ? false : previous;
-}
-
 export function GeneralPanel() {
   const { t } = useTranslation(['admin', 'common']);
   const f = useFormatters();
@@ -154,13 +120,12 @@ export function GeneralPanel() {
   const [gifKeyDraft, setGifKeyDraft] = useState('');
   const [openingRegistration, setOpeningRegistration] = useState(false);
 
-  // Whether this instance has a DIRECTORY_ENDPOINT to reach, or null while
-  // that cannot be told. Stored already derived, never as the raw
-  // `directoryAvailable` half: see `endpointFrom` for why the derivation has
-  // to happen at the instant the answer arrives.
+  // Whether the operator gave this instance a DIRECTORY_ENDPOINT, or null
+  // while the answer has not arrived. Reported on its own by the public
+  // instance info, so it is read and rendered; it is not derived from
+  // anything the admin can change here, and nothing in this panel can move
+  // it, so it is asked once.
   const [hasDirectoryEndpoint, setHasDirectoryEndpoint] = useState<boolean | null>(null);
-  // Bumped after a save so the answer follows a change the admin just made.
-  const [directoryProbe, setDirectoryProbe] = useState(0);
   // The settings the draft was last seeded from. A background refresh only
   // reseeds the draft while it still equals this, so an unsaved edit survives
   // the 10 second poll and a save or reset is what moves it on.
@@ -190,70 +155,21 @@ export function GeneralPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [instanceSettings]);
 
-  // The reduction needs both halves, so there is nothing to ask until the
-  // settings are here. The modal renders this panel in the same commit as the
-  // effect that fetches them, and a child's effects run before its parent's,
-  // so on a first open the request would otherwise go out against an empty
-  // store, read the browse setting as off, learn nothing, and stay unknown:
-  // the 10 second poll fills the settings in but never asks again. The gate
-  // only goes false to true while the panel is open, so it costs one deferred
-  // request and no repeated ones.
-  const settingsLoaded = instanceSettings !== null;
-
-  /**
-   * The endpoint probe, and the one place the pairing rule lives.
-   *
-   * `directoryAvailable` is the endpoint and the browse setting together, so
-   * an answer is only worth anything beside the setting the server had when
-   * it answered. The setting is therefore captured when the request goes out
-   * and compared when it comes back; if it no longer matches, the answer is
-   * refused, because it describes a pair that no longer exists.
-   *
-   * Capturing rather than trusting the store at either end matters because
-   * the setting does not move only through this panel's own save. The 10
-   * second poll and the settings modal's own mount fetch both write it, and
-   * either can carry a change made by another admin, another tab or a direct
-   * API call, with nothing here to know it happened. A comparison catches all
-   * of them; an epoch counter bumped by this panel's save caught only its
-   * own, and refused a save that merely renamed the instance.
-   *
-   * A refused answer leaves `hasDirectoryEndpoint` alone, so the row keeps
-   * whatever was last established rather than falling back to a claim.
-   *
-   * Known limit, deliberate, and here rather than only in the doc because it
-   * reads like a bug at this line: nothing asks again after a refusal that no
-   * save caused, since only a save bumps `directoryProbe`. A change made
-   * elsewhere while a request is in flight therefore leaves the endpoint
-   * question where it was until the next save. That is a missed refresh and
-   * never a wrong answer, and what it would refresh cannot change while the
-   * panel is open, because no setting an admin writes creates or removes an
-   * endpoint. Re-probing on mismatch was considered and left out as
-   * complexity for a case that is already safe. The full account is in
-   * docs/systems/directory.md section 10.
-   */
+  // One read of one fact. The server reports `directoryConfigured` on its
+  // own, so there is nothing to pair it with and nothing that can move it
+  // under this panel: no setting an admin writes creates or removes an
+  // endpoint. A failed request leaves it unknown, which the row renders as
+  // neither claim.
   useEffect(() => {
-    if (!settingsLoaded) return;
     let cancelled = false;
-    const askedWith = useSettingsStore.getState().instanceSettings?.directoryBrowseEnabled === true;
     api.instance.info()
-      .then((info) => {
-        if (cancelled) return;
-        const answeredWith = useSettingsStore.getState().instanceSettings?.directoryBrowseEnabled === true;
-        if (answeredWith !== askedWith) return;
-        setHasDirectoryEndpoint((previous) => endpointFrom(
-          info.directoryAvailable === true,
-          answeredWith,
-          previous,
-        ));
-      })
+      .then((info) => { if (!cancelled) setHasDirectoryEndpoint(info.directoryConfigured === true); })
       .catch(() => {
-        // Nothing learned, so nothing unsaid. A re-read that fails must not
-        // retract an answer that was right: an instance whose own info
-        // endpoint is momentarily unreachable has not grown an endpoint, nor
-        // lost one.
+        // Unknown. An instance whose own info endpoint is unreachable has
+        // bigger news than this row, and a guess here would be a claim.
       });
     return () => { cancelled = true; };
-  }, [directoryProbe, settingsLoaded]);
+  }, []);
 
   // The directory status line follows the pinger while the panel is open.
   useEffect(() => {
@@ -292,10 +208,6 @@ export function GeneralPanel() {
       }
       setGifKeyDirty(false);
       setGifKeyDraft('');
-      // Ask again, now that the setting has settled. An answer still in flight
-      // from before the save is refused by the probe effect's own comparison
-      // if the save moved the setting, and correctly kept if it did not.
-      setDirectoryProbe((n) => n + 1);
       addToast(t('common:states.settingsSaved'), 'success', 2000);
     } catch (err) {
       setSaveError(err instanceof Error ? describeError(err) : t('common:states.saveFailed'));
@@ -391,18 +303,35 @@ export function GeneralPanel() {
             rung, so this renders exactly where it reads.
           */}
           <fieldset role="radiogroup" aria-label={t('admin:general.discovery.label')} className="min-w-0 space-y-1.5">
-            {DISCOVERY_LEVELS.map((option) => (
+            {DISCOVERY_LEVELS.map((option) => {
+              /*
+                The global rung promises the public directory, which needs a
+                DIRECTORY_ENDPOINT the operator may not have given. Without
+                one, no pinger runs and no hub is ever told, so the rung is
+                not offered and its description is replaced by the reason
+                rather than left saying spaces appear everywhere.
+
+                Unlike the browse switch below, a rung that is already stored
+                as selected still reads as selected. A radio shows what the
+                draft will save, and rendering a different rung as checked
+                would make the ladder disagree with the write it is about to
+                make. The admin can always step down from it; they simply
+                cannot step up into a level that would do nothing.
+              */
+              const dead = option.level === 'global' && noDirectoryEndpoint;
+              return (
               <label
                 key={option.level}
-                className={`flex items-start gap-3 p-2.5 rounded cursor-pointer transition-colors ${
-                  level === option.level ? 'bg-interactive-selected' : 'hover:bg-interactive-hover'
-                }`}
+                className={`flex items-start gap-3 p-2.5 rounded transition-colors ${
+                  dead ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
+                } ${level === option.level ? 'bg-interactive-selected' : dead ? '' : 'hover:bg-interactive-hover'}`}
               >
                 <input
                   type="radio"
                   name="instance-discovery-level"
                   value={option.level}
                   checked={level === option.level}
+                  disabled={dead}
                   onChange={() => selectLevel(option.level)}
                   aria-label={t(option.labelKey)}
                   aria-describedby={`discovery-level-${option.level}-description`}
@@ -411,11 +340,12 @@ export function GeneralPanel() {
                 <div>
                   <div className="text-sm font-medium text-txt-primary">{t(option.labelKey)}</div>
                   <div id={`discovery-level-${option.level}-description`} className="text-xs text-txt-tertiary">
-                    {t(option.descriptionKey)}
+                    {dead ? t('admin:general.discovery.unconfigured') : t(option.descriptionKey)}
                   </div>
                 </div>
               </label>
-            ))}
+              );
+            })}
           </fieldset>
           {level === 'global' && (
             <div className="ml-9 mr-2.5 mt-1.5 mb-1 space-y-3">

@@ -15,7 +15,7 @@ const BROWSE = 'Show global spaces in Explore';
 const NO_ENDPOINT = 'This instance is not configured to reach a directory, so there is nothing to show.';
 
 /** The public instance info, with the one field this panel reads set per test. */
-function info(directoryAvailable: boolean): InstanceInfoResponse {
+function info(directoryConfigured: boolean): InstanceInfoResponse {
   return {
     name: 'Workbench',
     version: '1.4.0',
@@ -24,14 +24,17 @@ function info(directoryAvailable: boolean): InstanceInfoResponse {
     instanceId: '123e4567-e89b-12d3-a456-426614174000',
     sourceCodeUrl: 'https://example.test/source',
     commit: null,
-    directoryAvailable,
+    // What this panel reads: the operator's endpoint, on its own. The other
+    // two are reported beside it and no surface here uses them.
+    directoryConfigured,
+    directoryAvailable: directoryConfigured,
     directoryEnabled: false,
   };
 }
 
 /** Replaces the default pending answer with a real one for this test. */
-function withInfo(directoryAvailable: boolean): void {
-  vi.spyOn(api.instance, 'info').mockResolvedValue(info(directoryAvailable));
+function withInfo(directoryConfigured: boolean): void {
+  vi.spyOn(api.instance, 'info').mockResolvedValue(info(directoryConfigured));
 }
 
 const base: InstanceAdminSettings = {
@@ -521,269 +524,127 @@ describe('GeneralPanel global browsing toggle', () => {
     expect(screen.getByRole('switch', { name: BROWSE })).toBeEnabled();
   });
 
-  it('says nothing while browsing is off, because the endpoint cannot be told apart from the setting', async () => {
+  /*
+   * The endpoint fact is reported on its own, so the browse setting no longer
+   * has anything to do with reading it. It used to: `directoryAvailable`
+   * folded the two together, and the panel had to pair the answer with the
+   * setting and refuse the pairing whenever the setting moved. All of that is
+   * gone, and with it the case where an endpoint-less instance could not be
+   * recognised at all while browsing was off.
+   */
+  it('says there is no directory to reach even while browsing is off', async () => {
     withInfo(false);
     seed({ directoryBrowseEnabled: false });
     render(<GeneralPanel />);
 
-    await screen.findByRole('switch', { name: BROWSE });
-    expect(screen.queryByText(NO_ENDPOINT)).not.toBeInTheDocument();
-    expect(screen.getByRole('switch', { name: BROWSE })).toBeEnabled();
+    expect(await screen.findByText(NO_ENDPOINT)).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: BROWSE })).toBeDisabled();
+    expect(screen.getByRole('switch', { name: BROWSE })).not.toBeChecked();
   });
 
-  it('re-reads the instance info after a save', async () => {
-    const infoSpy = vi.spyOn(api.instance, 'info').mockResolvedValue(info(true));
+  it('says nothing when the instance info cannot be read', async () => {
+    vi.spyOn(api.instance, 'info').mockRejectedValue(new Error('offline'));
     seed({ directoryBrowseEnabled: true });
     render(<GeneralPanel />);
-    await screen.findByRole('switch', { name: BROWSE });
-    expect(infoSpy).toHaveBeenCalledTimes(1);
+    await act(async () => {});
 
-    await userEvent.click(screen.getByRole('switch', { name: BROWSE }));
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
-    expect(infoSpy).toHaveBeenCalledTimes(2);
-  });
-
-  /*
-   * The window the re-read used to open. The saved setting changes the moment
-   * the PATCH answers; the instance info is a round trip behind it. While
-   * that request is open the panel must not answer from one value before the
-   * change and one after, which is how turning browsing on used to be met
-   * with "this instance is not configured to reach a directory" and the
-   * switch the admin had just moved going dead.
-   */
-  it('says nothing about the endpoint while the post-save re-read is in flight', async () => {
-    let releaseInfo: (() => void) | null = null;
-    const infoSpy = vi.spyOn(api.instance, 'info')
-      .mockResolvedValueOnce(info(false))
-      .mockImplementationOnce(() => new Promise<InstanceInfoResponse>((resolve) => {
-        releaseInfo = () => resolve(info(true));
-      }));
-    // An endpoint is configured; the first answer reads false only because
-    // browsing is off, which is exactly the pair that cannot be split. The
-    // save writes the store the way the real action does, since the whole
-    // point is what the panel reads between that write and the re-read.
-    const update = vi.fn(async (data: Partial<InstanceAdminSettings>) => {
-      useSettingsStore.setState((state) => ({
-        instanceSettings: { ...state.instanceSettings!, ...data },
-      }));
-    });
-    useSettingsStore.setState({
-      instanceSettings: { ...base, directoryBrowseEnabled: false },
-      updateInstanceSettings: update,
-    });
-    render(<GeneralPanel />);
-    await screen.findByRole('switch', { name: BROWSE });
-
-    await userEvent.click(screen.getByRole('switch', { name: BROWSE }));
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
-    expect(update).toHaveBeenCalledWith(expect.objectContaining({ directoryBrowseEnabled: true }));
-    expect(infoSpy).toHaveBeenCalledTimes(2);
-
-    // The second answer has not landed yet.
     expect(screen.queryByText(NO_ENDPOINT)).not.toBeInTheDocument();
     expect(screen.getByRole('switch', { name: BROWSE })).toBeEnabled();
     expect(screen.getByRole('switch', { name: BROWSE })).toBeChecked();
-
-    await act(async () => { releaseInfo?.(); });
-    expect(screen.queryByText(NO_ENDPOINT)).not.toBeInTheDocument();
-    expect(screen.getByRole('switch', { name: BROWSE })).toBeEnabled();
   });
 
   /*
-   * A first open of instance settings. The modal renders this panel in the
-   * same commit as the effect that fetches the instance settings, and a
-   * child's effects run before its parent's, so the panel mounts with
-   * `instanceSettings` null and the settings arrive afterwards. The endpoint
-   * question needs the browse setting to answer, so asking before it is here
-   * reads the setting as off, learns nothing, and leaves the row saying
-   * nothing for the life of the modal: the 10 second poll fills the settings
-   * in but never asks again. On an endpoint-less instance that is the switch
-   * showing on and live under a line promising spaces this instance never
-   * shows.
+   * One fact, one read. Nothing this panel does can create or remove an
+   * endpoint, so nothing re-asks: not a save, and not the 10 second settings
+   * poll, which hands the store a fresh settings object every time it lands.
+   * Widening the effect's dependencies would turn a single read into a
+   * request every ten seconds against the public info endpoint.
    */
-  it('waits for the instance settings before asking, so a first open still answers', async () => {
-    // Fake timers before the render, so the panel's own 10 second poll is the
-    // one being advanced later rather than a real interval nobody sees.
+  it('reads the endpoint once, and neither a save nor the poll asks again', async () => {
     vi.useFakeTimers();
-    const infoSpy = vi.spyOn(api.instance, 'info').mockResolvedValue(info(false));
-    // What the poll really does: hand the store a fresh settings object each
-    // time it lands, same values, new identity.
+    const infoSpy = vi.spyOn(api.instance, 'info').mockResolvedValue(info(true));
     const fetchInstanceSettings = vi.fn(async () => {
       useSettingsStore.setState((state) => (
         state.instanceSettings === null ? {} : { instanceSettings: { ...state.instanceSettings } }
       ));
     });
-    useSettingsStore.setState({ instanceSettings: null, updateInstanceSettings: vi.fn(), fetchInstanceSettings });
-
-    const { rerender } = render(<GeneralPanel />);
-    // Nothing to pair an answer with yet, so nothing is asked.
-    expect(infoSpy).not.toHaveBeenCalled();
-    await act(async () => {});
-    expect(infoSpy).not.toHaveBeenCalled();
-
-    act(() => {
-      useSettingsStore.setState({ instanceSettings: { ...base, directoryBrowseEnabled: true } });
-    });
-    rerender(<GeneralPanel />);
-    await act(async () => {});
-
-    expect(screen.getByText(NO_ENDPOINT)).toBeInTheDocument();
-    expect(screen.getByRole('switch', { name: BROWSE })).toBeDisabled();
-    expect(screen.getByRole('switch', { name: BROWSE })).not.toBeChecked();
-    expect(infoSpy).toHaveBeenCalledTimes(1);
-
-    // And the gate is a gate, not a subscription. Widening the effect's
-    // dependency from "the settings are here" to the settings themselves
-    // typechecks, passes every other test, and quietly turns this into a
-    // request to the public info endpoint every ten seconds.
-    await act(async () => { vi.advanceTimersByTime(30_000); });
-    // The poll really ran, so the assertion under it is about the gate and
-    // not about a timer that never fired.
-    expect(fetchInstanceSettings).toHaveBeenCalledTimes(3);
-    expect(infoSpy).toHaveBeenCalledTimes(1);
-  });
-
-  /*
-   * The half that does not move through this panel. The browse setting is
-   * also written by the 10 second poll and by the settings modal's own mount
-   * fetch, either of which can carry a change made by another admin, another
-   * tab or a direct API call. An answer asked against one value and read
-   * beside another describes a pair that never existed: here an instance that
-   * has an endpoint would be reported as having none.
-   */
-  it('refuses an answer when the setting moved from outside this panel', async () => {
-    let releaseInfo: (() => void) | null = null;
-    vi.spyOn(api.instance, 'info')
-      .mockImplementationOnce(() => new Promise<InstanceInfoResponse>((resolve) => {
-        releaseInfo = () => resolve(info(false));
-      }));
-    // An endpoint is configured and browsing is off, so this answer reads
-    // false for a reason that has nothing to do with the endpoint.
-    seed({ directoryBrowseEnabled: false });
-    render(<GeneralPanel />);
-
-    // Another admin turns browsing on; the poll brings it in. Nothing this
-    // panel did, so nothing this panel could have counted.
-    await act(async () => {
-      useSettingsStore.setState((state) => ({
-        instanceSettings: { ...state.instanceSettings!, directoryBrowseEnabled: true },
-      }));
-    });
-    await act(async () => { releaseInfo?.(); });
-
-    expect(screen.queryByText(NO_ENDPOINT)).not.toBeInTheDocument();
-    expect(screen.getByRole('switch', { name: BROWSE })).toBeEnabled();
-  });
-
-  /*
-   * A save that fails moves nothing, so an answer in flight across it is
-   * still about the pair it was asked about and must still be used. An
-   * earlier shape of this guard counted saves rather than comparing the
-   * setting, and refused this answer while only bumping the probe on success,
-   * which left an endpoint-less instance at unknown for the life of the
-   * modal with nothing asking again.
-   */
-  it('keeps an answer that was in flight across a save that failed', async () => {
-    let releaseInfo: (() => void) | null = null;
-    vi.spyOn(api.instance, 'info')
-      .mockImplementationOnce(() => new Promise<InstanceInfoResponse>((resolve) => {
-        releaseInfo = () => resolve(info(false));
-      }));
-    const update = vi.fn().mockRejectedValue(new Error('nope'));
-    useSettingsStore.setState({
-      instanceSettings: { ...base, directoryBrowseEnabled: true },
-      updateInstanceSettings: update,
-    });
-    render(<GeneralPanel />);
-
-    await act(async () => {
-      fireEvent.change(screen.getByRole('textbox', { name: 'Instance Name' }), { target: { value: 'Renamed' } });
-    });
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
-    expect(screen.getByText('nope')).toBeInTheDocument();
-
-    await act(async () => { releaseInfo?.(); });
-    expect(screen.getByText(NO_ENDPOINT)).toBeInTheDocument();
-    expect(screen.getByRole('switch', { name: BROWSE })).toBeDisabled();
-  });
-
-  /*
-   * The save-spanning answer. An info request sent before a save is answered
-   * after it, so the setting it would be paired with is not the one it was
-   * asked against. Using it claims the endpoint is missing on an instance
-   * that has one, which is the same false claim from the other direction.
-   */
-  it('refuses an answer whose request was overtaken by a save', async () => {
-    let releaseInfo: (() => void) | null = null;
-    const infoSpy = vi.spyOn(api.instance, 'info')
-      .mockImplementationOnce(() => new Promise<InstanceInfoResponse>((resolve) => {
-        releaseInfo = () => resolve(info(false));
-      }))
-      // The replacement never answers, so what the row shows at the end is
-      // what the overtaken answer did or did not write.
-      .mockImplementationOnce(() => new Promise<InstanceInfoResponse>(() => {}));
-    // An endpoint is configured and browsing is off, so the first answer
-    // reads false for a reason that has nothing to do with the endpoint.
-    // The save releases it from inside the store write, which is the real
-    // interleaving: the setting has already moved, and the panel has not
-    // re-rendered yet, so the effect cleanup has not run.
     const update = vi.fn(async (data: Partial<InstanceAdminSettings>) => {
       useSettingsStore.setState((state) => ({
         instanceSettings: { ...state.instanceSettings!, ...data },
       }));
-      releaseInfo?.();
     });
     useSettingsStore.setState({
-      instanceSettings: { ...base, directoryBrowseEnabled: false },
+      instanceSettings: { ...base, directoryBrowseEnabled: true },
       updateInstanceSettings: update,
+      fetchInstanceSettings,
     });
+
     render(<GeneralPanel />);
+    await act(async () => {});
+    expect(infoSpy).toHaveBeenCalledTimes(1);
 
-    await userEvent.click(screen.getByRole('switch', { name: BROWSE }));
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
-    expect(update).toHaveBeenCalledWith(expect.objectContaining({ directoryBrowseEnabled: true }));
-    expect(infoSpy).toHaveBeenCalledTimes(2);
+    await act(async () => { fireEvent.click(screen.getByRole('switch', { name: BROWSE })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Save' })); });
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ directoryBrowseEnabled: false }));
 
-    expect(screen.queryByText(NO_ENDPOINT)).not.toBeInTheDocument();
-    expect(screen.getByRole('switch', { name: BROWSE })).toBeEnabled();
-    expect(screen.getByRole('switch', { name: BROWSE })).toBeChecked();
+    await act(async () => { vi.advanceTimersByTime(30_000); });
+    // The poll really ran, so the assertion under it is about the read and
+    // not about a timer that never fired.
+    expect(fetchInstanceSettings).toHaveBeenCalledTimes(3);
+    expect(infoSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('GeneralPanel discovery ladder without a directory endpoint', () => {
+  /*
+   * The rung promised that listed spaces "appear in the public Backspace
+   * directory, on every instance". With no DIRECTORY_ENDPOINT the pinger
+   * never starts and no hub is ever told, so the promise was false and the
+   * rung offered a level that did nothing.
+   */
+  it('does not offer the global rung and replaces its promise with the reason', async () => {
+    withInfo(false);
+    seed({ discoveryEnabled: true, directoryEnabled: false });
+    render(<GeneralPanel />);
+    await act(async () => {});
+
+    expect(rung(GLOBAL)).toBeDisabled();
+    expect(screen.getByText(/nothing here can be listed globally/)).toBeInTheDocument();
+    expect(screen.queryByText('Spaces that opt in also appear in the public Backspace directory, on every instance.')).not.toBeInTheDocument();
+    // The rungs that still do something stay available.
+    expect(rung(INVITE)).toBeEnabled();
+    expect(rung(LOCAL)).toBeEnabled();
   });
 
-  // A re-read that fails has learned nothing, so it may unsay nothing.
-  it('keeps a correct no-endpoint answer when a later re-read fails', async () => {
-    vi.spyOn(api.instance, 'info')
-      .mockResolvedValueOnce(info(false))
-      .mockRejectedValueOnce(new Error('offline'));
-    seed({ directoryBrowseEnabled: true });
+  it('offers the global rung and its description once an endpoint is configured', async () => {
+    withInfo(true);
+    seed({ discoveryEnabled: true, directoryEnabled: false });
     render(<GeneralPanel />);
-    await screen.findByText(NO_ENDPOINT);
+    await act(async () => {});
 
-    // An unrelated edit, saved: the re-read it triggers fails.
-    await act(async () => {
-      fireEvent.change(screen.getByRole('textbox', { name: 'Instance Name' }), { target: { value: 'Renamed' } });
-    });
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
-
-    expect(screen.getByText(NO_ENDPOINT)).toBeInTheDocument();
-    expect(screen.getByRole('switch', { name: BROWSE })).toBeDisabled();
+    expect(rung(GLOBAL)).toBeEnabled();
+    expect(screen.getByText('Spaces that opt in also appear in the public Backspace directory, on every instance.')).toBeInTheDocument();
+    expect(screen.queryByText(/nothing here can be listed globally/)).not.toBeInTheDocument();
   });
 
-  // An answer that settles nothing does not throw away one that settled it.
-  it('keeps the no-endpoint answer when a later read cannot tell the two causes apart', async () => {
-    vi.spyOn(api.instance, 'info')
-      .mockResolvedValueOnce(info(false))
-      .mockResolvedValueOnce(info(false));
-    seed({ directoryBrowseEnabled: true });
-    const { rerender } = render(<GeneralPanel />);
-    await screen.findByText(NO_ENDPOINT);
+  /*
+   * A rung already stored as selected still reads as selected, unlike the
+   * browse switch, which renders off. A radio shows what the draft will save,
+   * and a different rung rendered as checked would make the ladder disagree
+   * with its own write. Stepping down from it stays possible.
+   */
+  it('leaves an already-selected global rung checked, and lets the admin step down', async () => {
+    withInfo(false);
+    const update = seed({ discoveryEnabled: true, directoryEnabled: true });
+    render(<GeneralPanel />);
+    await act(async () => {});
 
-    // Browsing reads off from here on, so the second answer proves nothing.
-    act(() => {
-      useSettingsStore.setState((state) => ({
-        instanceSettings: { ...state.instanceSettings!, directoryBrowseEnabled: false },
-      }));
-    });
-    rerender(<GeneralPanel />);
-    expect(screen.getByText(NO_ENDPOINT)).toBeInTheDocument();
+    expect(rung(GLOBAL)).toBeChecked();
+    expect(rung(GLOBAL)).toBeDisabled();
+
+    await act(async () => { fireEvent.click(rung(LOCAL)); });
+    expect(rung(LOCAL)).toBeChecked();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Save' })); });
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ discoveryEnabled: true, directoryEnabled: false }));
   });
 });

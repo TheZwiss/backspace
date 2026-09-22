@@ -15,7 +15,7 @@ Source files:
 - `packages/server/src/routes/directory.ts` - `GET /api/directory/spaces` (the document) and `GET /api/directory` (the feed proxy)
 - `packages/server/src/routes/settings.ts` - `applyDiscoveryAndDirectory`, the discovery-off invariant, the dirty marks on both PATCH routes
 - `packages/server/src/routes/spaces.ts` - `directoryListed` on `PATCH /api/spaces/:id`, the dirty marks on update and delete
-- `packages/server/src/routes/instance.ts` - `directoryAvailable` and `directoryEnabled` on the public instance info
+- `packages/server/src/routes/instance.ts` - `directoryConfigured`, `directoryAvailable` and `directoryEnabled` on the public instance info
 - `packages/server/drizzle/0015_real_tomas.sql` - the five columns; `0016_whole_loki.sql` - `directory_browse_enabled`
 - `packages/shared/src/types.ts` - `DirectoryPingError`, `DirectoryDocument`, `DirectoryDocumentSpace`, `DirectoryEntry`, `DirectoryFeed`
 - `packages/shared/src/errors.ts` - the four `directory_*` error codes
@@ -180,7 +180,11 @@ one place the column is read:
   it is `0`, before any upstream fetch or cache read, which is the same answer
   an empty `DIRECTORY_ENDPOINT` already gives. The client already renders that
   as "no Outer Space", so the hiding needed no client work.
-- `directoryAvailable` on the public `GET /api/instance/info` is
+- `directoryConfigured` on the public `GET /api/instance/info` is
+  `config.directory.endpoint !== ''` on its own, untouched by this flag: it is
+  the fact every directory promise rests on, and a client that cannot see it
+  offers listing and browsing on instances where neither can happen.
+- `directoryAvailable` on the same endpoint is
   `config.directory.endpoint !== ''` **and** the flag. The endpoint is checked
   first, so no setting can advertise a directory the instance cannot reach.
 
@@ -819,16 +823,26 @@ the same slot directly under the chips. It names this instance's own
 discovery settings and, for an admin, changes them from the page. **Both
 flags come from one document**, `settingsStore.streamingLimits`, which any
 signed-in user may read and which `updateInstanceSettings` keeps current;
-`isAdmin` comes from the same store. The row is derived from that document
-and nothing else:
+`isAdmin` comes from the same store, and `directoryConfigured` is passed down
+from the page, which already reads the public instance info. The row is
+derived from those and nothing else:
 
 | condition | what renders |
 |---|---|
 | `streamingLimits` is null (the document has not arrived) | nothing |
 | discovery off, not an admin | amber notice: space discovery is off, spaces here are joinable by invite link only |
 | discovery off, admin | the same fact in the admin's voice, with "Turn on space discovery" |
-| discovery on, not listed, admin | a quiet row: spaces here are not listed in the public directory, with "List them" |
+| discovery on, not listed, admin, `directoryConfigured` true | a quiet row: spaces here are not listed in the public directory, with "List them" |
 | anything else | nothing |
+
+**The listing row needs the endpoint and the discovery rows do not.** Space
+discovery is local and reaches no hub, so its rows stand on an instance with
+no `DIRECTORY_ENDPOINT`. Listing does not: "List them" writes
+`directoryEnabled`, and with no endpoint the pinger never starts, so the click
+wrote the flag, the row vanished as though it had worked, and the spaces were
+exactly as unlisted as before. The row is the one that offers the write, so it
+is the one withheld, and a `directoryConfigured` that has not arrived yet
+withholds it too, on the same rule as the null document below.
 
 Unknown is not a fact: with no document the hint says nothing rather than
 guessing, because this is the one Explore surface that offers a write, and a
@@ -1024,61 +1038,34 @@ stored, invisible and harmless, and browsing resumes at the admin's last choice
 if an endpoint is ever configured, which is the documented default-on
 behaviour. Do not "fix" this into reflecting the raw column.
 
-The panel works the endpoint out from the same `GET /api/instance/info` the
-Explore page reads. Nothing was added to the API for it. `directoryAvailable`
-is the endpoint and the setting together, so **neither half means anything
-read on its own**: the panel reduces the answer and the saved setting to the
-one fact it needs and stores that fact, not the raw flag. An available
-directory proves an endpoint; an unavailable one with browsing on proves there
-is none; an unavailable one with browsing off proves nothing, and leaves
-whatever was already established standing. Unknown renders as neither claim:
-no note, and the switch reads the draft.
+The panel reads the endpoint from `directoryConfigured` on the same
+`GET /api/instance/info` the Explore page reads: one field, reported on its
+own, read once on mount. Nothing in the panel can create or remove an endpoint,
+so nothing re-asks, and a request that fails leaves the fact unknown, which
+renders as neither claim: no note, the switch reads the draft, and the global
+rung keeps its description.
 
-**The two halves are not read at the same instant, and cannot be.** The server
-reads its half when it handles the request; the client reads its half when the
-answer arrives. The rule that makes the pairing sound is one comparison, and it
-lives in the probe effect in `GeneralPanel.tsx`: **the browse setting is
-captured when the request goes out and compared when it comes back, and an
-answer is used only when the two still agree.** An answer that no longer
-matches describes a pair that no longer exists, so it is dropped and the row
-keeps whatever was last established.
+The same fact takes the **global rung** out of the ladder, because listing
+needs the endpoint exactly as much as browsing does: with none, the pinger
+never starts and no hub is ever told. The rung is disabled and its description
+is replaced by "This instance is not configured to reach a directory, so
+nothing here can be listed globally", instead of promising that spaces "appear
+in the public Backspace directory, on every instance". A rung already stored as
+selected still reads as selected, unlike the switch, which renders off: a radio
+shows what the draft will save, and rendering a different rung as checked would
+make the ladder disagree with its own write. Stepping down from it stays
+possible; only stepping up into a level that would do nothing is refused.
 
-Comparing, rather than counting this panel's own saves, is deliberate. The
-setting does not move only through the save bar: the panel's 10 second poll
-and the settings modal's own mount fetch both write it, and either can carry a
-change made by another admin, another tab or a direct API call, with nothing in
-this panel to know it happened. A counter bumped by the save caught only its
-own writes, and refused an answer across a save that merely renamed the
-instance. It also refused an answer across a save that *failed*, while only
-asking again when one succeeded, which could leave an endpoint-less instance
-at "not known" for the life of the modal. The comparison has none of those
-cases: a failed save moves nothing, so the answer still matches and is kept.
-
-Known limit: nothing asks again after a refusal that no save caused, so a
-change made elsewhere while a request is in flight leaves the endpoint question
-where it was until the next save. That is a missed refresh, never a wrong
-answer, and what it would refresh cannot change while the panel is open, since
-no setting an admin writes creates or removes an endpoint.
-
-Storing the reduction rather than the flag is what keeps it correct afterwards.
-A save writes the setting at once and the info is a round trip behind it, so a
-panel holding the raw flag would answer from one value before the change and
-one after for the length of that round trip, and would tell an admin who had
-just switched browsing on that the instance has no directory. A reduced answer
-cannot go stale that way, because no setting an admin can write creates or
-removes an endpoint. A re-read that fails changes nothing, since a request that
-learned nothing may unsay nothing.
-
-**Nothing is asked before the settings arrive.** The reduction needs the browse
-setting, so the probe is gated on `instanceSettings` being in the store. The
-settings modal renders this panel in the same commit as its own
-`fetchInstanceSettings()` effect, and a child's effects run before its
-parent's, so an ungated request would go out against an empty store, read the
-setting as off, learn nothing and leave the row saying nothing for the life of
-the modal: the ten second poll fills the settings in but never asks again. On
-an endpoint-less instance that is the switch showing on and live under a line
-promising spaces this instance never shows. The gate only goes false to true
-while the panel is open, so it costs one deferred request and no repeated ones.
+**This used to be a great deal harder, and the history is worth one paragraph
+so nobody rebuilds it.** `directoryAvailable` folded the endpoint and the
+browse setting into one boolean, so the panel had to pair a server answer with
+a client value that could move underneath it: it derived the endpoint from the
+pair, captured the setting when the request went out, compared it when the
+answer came back, refused a mismatch, and re-asked after every save. All of it
+was correct and all of it was accidental complexity, caused by a fact that was
+not reported. Reporting `directoryConfigured` deleted the derivation, the
+capture, the comparison, the re-probe and the gate that made the probe wait for
+the settings to load.
 
 `settingsStore.updateInstanceSettings` mirrors `discoveryEnabled` and
 `directoryEnabled` from the server's answer into `streamingLimits`, so the

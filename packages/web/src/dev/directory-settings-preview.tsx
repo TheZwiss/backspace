@@ -99,11 +99,12 @@ const ADMIN_SCENES: Record<Extract<Scene, `admin-${string}`>, InstanceAdminSetti
 const NO_ENDPOINT_SCENES: ReadonlySet<Scene> = new Set<Scene>(['admin-no-directory']);
 
 /**
- * The General panel reads `directoryAvailable` from the public instance info,
- * and the harness has no server to answer it. Without this the browse row
- * would always render the "answer never arrived" state and the one state
- * worth looking at, an instance with no directory to reach, could not be seen
- * at all. Only that one request is intercepted; everything else goes through.
+ * The General panel reads `directoryConfigured` from the public instance info,
+ * and the harness has no server to answer it. Without this the browse row and
+ * the global rung would always render the "answer never arrived" state and the
+ * one state worth looking at, an instance with no directory to reach, could
+ * not be seen at all. Only that one request is intercepted; everything else
+ * goes through.
  */
 function stubInstanceInfo(scene: Scene): void {
   const settings = isAdminScene(scene) ? ADMIN_SCENES[scene] : null;
@@ -115,7 +116,9 @@ function stubInstanceInfo(scene: Scene): void {
     instanceId: '123e4567-e89b-12d3-a456-426614174000',
     sourceCodeUrl: 'https://github.com/TheZwiss/backspace',
     commit: null,
-    // What the server computes: an endpoint to reach, and the setting on.
+    // The operator's endpoint, on its own.
+    directoryConfigured: !NO_ENDPOINT_SCENES.has(scene),
+    // What the server computes from it: the endpoint and the setting together.
     directoryAvailable: !NO_ENDPOINT_SCENES.has(scene) && (settings?.directoryBrowseEnabled ?? true),
     directoryEnabled: settings?.directoryEnabled ?? false,
   };

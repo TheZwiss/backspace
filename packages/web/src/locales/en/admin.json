@@ -23,7 +23,8 @@
           "label": "Global space discovery",
           "description": "Spaces that opt in also appear in the public Backspace directory, on every instance."
         }
-      }
+      },
+      "unconfigured": "This instance is not configured to reach a directory, so nothing here can be listed globally."
     },
     "directory": {
       "registrationClosed": "New accounts from other instances are closed, so listed spaces will show as closed to new accounts.",

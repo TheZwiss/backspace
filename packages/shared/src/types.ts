@@ -866,11 +866,21 @@ export interface InstanceInfoResponse {
   sourceCodeUrl: string;
   // Short git SHA/tag of the running build; null in dev builds with no commit injected.
   commit: string | null;
-  // The two directory opt-ins are independent (directory.md section 9).
-  // directoryAvailable: this instance can browse the directory at all, which
-  // is DIRECTORY_ENDPOINT being non-empty. The Explore page gates Outer Space
-  // on it. directoryEnabled: the admin allows spaces here to be listed; the
-  // space settings panel reads it.
+  // Three independent directory facts (directory.md section 9). They are
+  // reported separately because folding any two of them into one boolean
+  // leaves a client unable to tell which of them is false, and every surface
+  // that says something about the directory needs a different one.
+  //
+  // directoryConfigured: the operator gave this instance a DIRECTORY_ENDPOINT.
+  // Nothing about the directory works without it: no pinger, no proxy, no
+  // Outer Space. Every surface that promises the directory will do something
+  // gates on this.
+  // directoryAvailable: people here browse the directory, which is
+  // directoryConfigured and the admin's browse setting together. The Explore
+  // page gates Outer Space on it.
+  // directoryEnabled: the admin allows spaces here to be listed; the space
+  // settings panel reads it.
+  directoryConfigured: boolean;
   directoryAvailable: boolean;
   directoryEnabled: boolean;
 }

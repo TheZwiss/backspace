@@ -70,31 +70,66 @@ beforeEach(() => {
 describe('InstanceDiscoveryHint', () => {
   it('renders nothing while the instance settings have not arrived', () => {
     seed({ isAdmin: true, streamingLimits: null });
-    const { container } = render(<InstanceDiscoveryHint onDiscoveryEnabled={onDiscoveryEnabled} />);
+    const { container } = render(<InstanceDiscoveryHint directoryConfigured onDiscoveryEnabled={onDiscoveryEnabled} />);
     expect(container).toBeEmptyDOMElement();
   });
 
   it('says nothing to a member either before the settings arrive: unknown is not a fact', () => {
     seed({ isAdmin: false, streamingLimits: null });
-    const { container } = render(<InstanceDiscoveryHint onDiscoveryEnabled={onDiscoveryEnabled} />);
+    const { container } = render(<InstanceDiscoveryHint directoryConfigured onDiscoveryEnabled={onDiscoveryEnabled} />);
     expect(container).toBeEmptyDOMElement();
   });
 
   it('renders nothing when discovery is on and the instance is listed', () => {
     seed({ isAdmin: true, streamingLimits: LISTED });
-    const { container } = render(<InstanceDiscoveryHint onDiscoveryEnabled={onDiscoveryEnabled} />);
+    const { container } = render(<InstanceDiscoveryHint directoryConfigured onDiscoveryEnabled={onDiscoveryEnabled} />);
     expect(container).toBeEmptyDOMElement();
   });
 
   it('renders nothing for a member on an instance with discovery on that is not listed', () => {
     seed({ isAdmin: false, streamingLimits: NOT_LISTED });
-    const { container } = render(<InstanceDiscoveryHint onDiscoveryEnabled={onDiscoveryEnabled} />);
+    const { container } = render(<InstanceDiscoveryHint directoryConfigured onDiscoveryEnabled={onDiscoveryEnabled} />);
     expect(container).toBeEmptyDOMElement();
+  });
+
+  /*
+   * "List them" writes `directoryEnabled`, which only does anything on an
+   * instance the operator gave a DIRECTORY_ENDPOINT. Without one the click
+   * wrote the flag, the row vanished as though it had worked, and no hub was
+   * ever told. The row is the one that offers the write, so it is the one
+   * withheld.
+   */
+  it('does not offer to list spaces on an instance with no directory endpoint', () => {
+    seed({ isAdmin: true, streamingLimits: NOT_LISTED });
+    const { container } = render(
+      <InstanceDiscoveryHint directoryConfigured={false} onDiscoveryEnabled={onDiscoveryEnabled} />,
+    );
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('does not offer it before the endpoint is known either: unknown is not a fact', () => {
+    seed({ isAdmin: true, streamingLimits: NOT_LISTED });
+    const { container } = render(
+      <InstanceDiscoveryHint directoryConfigured={null} onDiscoveryEnabled={onDiscoveryEnabled} />,
+    );
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  /*
+   * Space discovery is local and needs no hub, so its row is unaffected by
+   * the endpoint: an admin with discovery off still gets told, and still gets
+   * the switch.
+   */
+  it('still names discovery being off with no directory endpoint', () => {
+    seed({ isAdmin: true, streamingLimits: DISCOVERY_OFF });
+    render(<InstanceDiscoveryHint directoryConfigured={false} onDiscoveryEnabled={onDiscoveryEnabled} />);
+    expect(screen.getByText(/Space discovery is off on this instance/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Turn on space discovery' })).toBeInTheDocument();
   });
 
   it('tells a member why Explore is empty, without an action', () => {
     seed({ isAdmin: false, streamingLimits: DISCOVERY_OFF });
-    render(<InstanceDiscoveryHint onDiscoveryEnabled={onDiscoveryEnabled} />);
+    render(<InstanceDiscoveryHint directoryConfigured onDiscoveryEnabled={onDiscoveryEnabled} />);
 
     expect(screen.getByText(MEMBER_TEXT)).toBeInTheDocument();
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
@@ -102,7 +137,7 @@ describe('InstanceDiscoveryHint', () => {
 
   it('names the reason to an admin and offers the switch', () => {
     seed({ isAdmin: true, streamingLimits: DISCOVERY_OFF });
-    render(<InstanceDiscoveryHint onDiscoveryEnabled={onDiscoveryEnabled} />);
+    render(<InstanceDiscoveryHint directoryConfigured onDiscoveryEnabled={onDiscoveryEnabled} />);
 
     expect(screen.getByText(ADMIN_TEXT)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: ENABLE_LABEL })).toBeInTheDocument();
@@ -113,14 +148,14 @@ describe('InstanceDiscoveryHint', () => {
     // Discovery on in the explore store, off in the document the button writes.
     useExploreStore.setState({ discoveryEnabled: true });
     useSettingsStore.setState({ isAdmin: true, streamingLimits: DISCOVERY_OFF, updateInstanceSettings });
-    const { unmount } = render(<InstanceDiscoveryHint onDiscoveryEnabled={onDiscoveryEnabled} />);
+    const { unmount } = render(<InstanceDiscoveryHint directoryConfigured onDiscoveryEnabled={onDiscoveryEnabled} />);
     expect(screen.getByRole('button', { name: ENABLE_LABEL })).toBeInTheDocument();
     unmount();
 
     // And the other way round: the stale explore store must not suppress the row.
     useExploreStore.setState({ discoveryEnabled: false });
     useSettingsStore.setState({ streamingLimits: NOT_LISTED });
-    render(<InstanceDiscoveryHint onDiscoveryEnabled={onDiscoveryEnabled} />);
+    render(<InstanceDiscoveryHint directoryConfigured onDiscoveryEnabled={onDiscoveryEnabled} />);
     expect(screen.getByRole('button', { name: LIST_LABEL })).toBeInTheDocument();
   });
 
@@ -132,7 +167,7 @@ describe('InstanceDiscoveryHint', () => {
       useSettingsStore.setState({ streamingLimits: NOT_LISTED });
     });
     const user = userEvent.setup();
-    render(<InstanceDiscoveryHint onDiscoveryEnabled={onDiscoveryEnabled} />);
+    render(<InstanceDiscoveryHint directoryConfigured onDiscoveryEnabled={onDiscoveryEnabled} />);
 
     await user.click(screen.getByRole('button', { name: ENABLE_LABEL }));
 
@@ -151,7 +186,7 @@ describe('InstanceDiscoveryHint', () => {
     let finish: () => void = () => {};
     updateInstanceSettings.mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve; }));
     const user = userEvent.setup();
-    render(<InstanceDiscoveryHint onDiscoveryEnabled={onDiscoveryEnabled} />);
+    render(<InstanceDiscoveryHint directoryConfigured onDiscoveryEnabled={onDiscoveryEnabled} />);
 
     await user.click(screen.getByRole('button', { name: ENABLE_LABEL }));
     expect(screen.getByRole('button', { name: ENABLE_LABEL })).toBeDisabled();
@@ -166,7 +201,7 @@ describe('InstanceDiscoveryHint', () => {
     const err = new HttpError(403, 'Forbidden', undefined, 'forbidden');
     updateInstanceSettings.mockRejectedValueOnce(err);
     const user = userEvent.setup();
-    render(<InstanceDiscoveryHint onDiscoveryEnabled={onDiscoveryEnabled} />);
+    render(<InstanceDiscoveryHint directoryConfigured onDiscoveryEnabled={onDiscoveryEnabled} />);
 
     await user.click(screen.getByRole('button', { name: ENABLE_LABEL }));
 
@@ -181,7 +216,7 @@ describe('InstanceDiscoveryHint', () => {
     const err = new HttpError(403, 'Forbidden', undefined, 'forbidden');
     updateInstanceSettings.mockRejectedValueOnce(err);
     const user = userEvent.setup();
-    render(<InstanceDiscoveryHint onDiscoveryEnabled={onDiscoveryEnabled} />);
+    render(<InstanceDiscoveryHint directoryConfigured onDiscoveryEnabled={onDiscoveryEnabled} />);
 
     await user.click(screen.getByRole('button', { name: ENABLE_LABEL }));
     await waitFor(() => expect(screen.getByText(describeError(err))).toBeInTheDocument());
@@ -205,7 +240,7 @@ describe('InstanceDiscoveryHint', () => {
     let fail: (reason: unknown) => void = () => {};
     updateInstanceSettings.mockImplementationOnce(() => new Promise<void>((_resolve, reject) => { fail = reject; }));
     const user = userEvent.setup();
-    render(<InstanceDiscoveryHint onDiscoveryEnabled={onDiscoveryEnabled} />);
+    render(<InstanceDiscoveryHint directoryConfigured onDiscoveryEnabled={onDiscoveryEnabled} />);
 
     await user.click(screen.getByRole('button', { name: ENABLE_LABEL }));
 
@@ -227,7 +262,7 @@ describe('InstanceDiscoveryHint', () => {
     seed({ isAdmin: true, streamingLimits: DISCOVERY_OFF });
     updateInstanceSettings.mockImplementationOnce(() => Promise.reject('nope'));
     const user = userEvent.setup();
-    render(<InstanceDiscoveryHint onDiscoveryEnabled={onDiscoveryEnabled} />);
+    render(<InstanceDiscoveryHint directoryConfigured onDiscoveryEnabled={onDiscoveryEnabled} />);
 
     await user.click(screen.getByRole('button', { name: ENABLE_LABEL }));
 
@@ -240,7 +275,7 @@ describe('InstanceDiscoveryHint', () => {
       useSettingsStore.setState({ streamingLimits: LISTED });
     });
     const user = userEvent.setup();
-    const { container } = render(<InstanceDiscoveryHint onDiscoveryEnabled={onDiscoveryEnabled} />);
+    const { container } = render(<InstanceDiscoveryHint directoryConfigured onDiscoveryEnabled={onDiscoveryEnabled} />);
 
     expect(screen.getByText(NOT_LISTED_TEXT)).toBeInTheDocument();
     // Informational, not a warning: no amber treatment on this row.
@@ -259,7 +294,7 @@ describe('InstanceDiscoveryHint', () => {
     let finish: () => void = () => {};
     updateInstanceSettings.mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve; }));
     const user = userEvent.setup();
-    render(<InstanceDiscoveryHint onDiscoveryEnabled={onDiscoveryEnabled} />);
+    render(<InstanceDiscoveryHint directoryConfigured onDiscoveryEnabled={onDiscoveryEnabled} />);
 
     await user.click(screen.getByRole('button', { name: LIST_LABEL }));
     expect(screen.getByRole('button', { name: LIST_LABEL })).toBeDisabled();
@@ -273,7 +308,7 @@ describe('InstanceDiscoveryHint', () => {
     const err = new HttpError(400, 'Directory requires discovery', undefined, 'directory_requires_discovery');
     updateInstanceSettings.mockRejectedValueOnce(err);
     const user = userEvent.setup();
-    render(<InstanceDiscoveryHint onDiscoveryEnabled={onDiscoveryEnabled} />);
+    render(<InstanceDiscoveryHint directoryConfigured onDiscoveryEnabled={onDiscoveryEnabled} />);
 
     await user.click(screen.getByRole('button', { name: LIST_LABEL }));
 

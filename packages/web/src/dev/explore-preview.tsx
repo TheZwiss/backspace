@@ -271,6 +271,7 @@ const INSTANCE_INFO: InstanceInfoResponse = {
   instanceId: 'workbench',
   sourceCodeUrl: 'https://github.com/TheZwiss/backspace',
   commit: null,
+  directoryConfigured: true,
   directoryAvailable: true,
   directoryEnabled: true,
 };

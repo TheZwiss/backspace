@@ -62,6 +62,10 @@ export function ExplorePage() {
   // the Outer Space header; the store's own status starts idle and cannot
   // answer this before its first fetch.
   const [directoryAvailable, setDirectoryAvailable] = useState(false);
+  // Whether this instance has a DIRECTORY_ENDPOINT at all, reported on its own
+  // so a client can tell a missing endpoint from an admin's switch. Null until
+  // the answer arrives; the hint below offers nothing off an unknown.
+  const [directoryConfigured, setDirectoryConfigured] = useState<boolean | null>(null);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -74,7 +78,11 @@ export function ExplorePage() {
   useEffect(() => {
     let cancelled = false;
     api.instance.info()
-      .then((info) => { if (!cancelled) setDirectoryAvailable(info.directoryAvailable === true); })
+      .then((info) => {
+        if (cancelled) return;
+        setDirectoryAvailable(info.directoryAvailable === true);
+        setDirectoryConfigured(info.directoryConfigured === true);
+      })
       .catch(() => {
         // Unreachable: the section stays absent. An older server without the
         // field lands in the strict comparison above and stays absent too.
@@ -239,7 +247,10 @@ export function ExplorePage() {
             <ConnectionChips onRecovered={handleConnectionRecovered} />
 
             {/* Why this instance shows what it shows, and the admin's way to change it */}
-            <InstanceDiscoveryHint onDiscoveryEnabled={handleDiscoveryEnabled} />
+            <InstanceDiscoveryHint
+              directoryConfigured={directoryConfigured}
+              onDiscoveryEnabled={handleDiscoveryEnabled}
+            />
 
             {isLoading && spaces.length === 0 ? (
               <div className="flex items-center justify-center h-64">

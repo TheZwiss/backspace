@@ -29,18 +29,32 @@ type DiscoveryHintRow = 'none' | 'discoveryOffMember' | 'discoveryOffAdmin' | 'n
  * rather than substituting defaults that assert `directoryEnabled: false`),
  * but the rule stands on its own: this surface offers writes, and it must
  * never offer one off a guessed value.
+ *
+ * `directoryConfigured` is the operator's `DIRECTORY_ENDPOINT`, reported by
+ * the public instance info and null until it arrives. Without one, listing is
+ * a setting that does nothing: no pinger runs and no hub is ever told. The
+ * `notListed` row is the one that offers to change it, so it is withheld
+ * unless the endpoint is known to exist. Offering "List them" there wrote the
+ * flag, took the row away as though it had worked, and left the spaces
+ * exactly as unlisted as before.
  */
 function discoveryHintRow(state: {
   limits: { discoveryEnabled: boolean; directoryEnabled: boolean } | null;
+  directoryConfigured: boolean | null;
   isAdmin: boolean;
 }): DiscoveryHintRow {
   if (state.limits === null) return 'none';
   if (!state.limits.discoveryEnabled) return state.isAdmin ? 'discoveryOffAdmin' : 'discoveryOffMember';
-  if (!state.limits.directoryEnabled && state.isAdmin) return 'notListed';
+  if (!state.limits.directoryEnabled && state.isAdmin && state.directoryConfigured === true) return 'notListed';
   return 'none';
 }
 
 interface InstanceDiscoveryHintProps {
+  /**
+   * Whether this instance has a `DIRECTORY_ENDPOINT`, from the same
+   * `GET /api/instance/info` the page already reads; null until it arrives.
+   */
+  directoryConfigured: boolean | null;
   /**
    * Called once space discovery has been turned on, so the page can refill
    * Inner Space without a reload. The hint does not fetch anything itself.
@@ -63,7 +77,7 @@ interface InstanceDiscoveryHintProps {
  * instance into Explore, and the second, offered in the same place once the
  * first has landed, lists it globally.
  */
-export function InstanceDiscoveryHint({ onDiscoveryEnabled }: InstanceDiscoveryHintProps) {
+export function InstanceDiscoveryHint({ directoryConfigured, onDiscoveryEnabled }: InstanceDiscoveryHintProps) {
   const { t } = useTranslation(['spaces']);
   const isAdmin = useSettingsStore((s) => s.isAdmin);
   const streamingLimits = useSettingsStore((s) => s.streamingLimits);
@@ -75,7 +89,7 @@ export function InstanceDiscoveryHint({ onDiscoveryEnabled }: InstanceDiscoveryH
   // it was on screen.
   const [failure, setFailure] = useState<{ row: DiscoveryHintRow; message: string } | null>(null);
 
-  const row = discoveryHintRow({ limits: streamingLimits, isAdmin });
+  const row = discoveryHintRow({ limits: streamingLimits, directoryConfigured, isAdmin });
   const error = failure !== null && failure.row === row ? failure.message : '';
 
   // The row as of the last render, readable from a callback that started in an

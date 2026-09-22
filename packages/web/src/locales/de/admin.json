@@ -23,7 +23,8 @@
           "label": "Globales Entdecken von Spaces",
           "description": "Spaces, die sich eintragen, erscheinen zusätzlich im öffentlichen Backspace-Verzeichnis, auf jeder Instanz."
         }
-      }
+      },
+      "unconfigured": "Diese Instanz ist nicht so eingerichtet, dass sie ein Verzeichnis erreicht; nichts von hier kann global eingetragen werden."
     },
     "directory": {
       "registrationClosed": "Neue Konten von anderen Instanzen sind geschlossen, eingetragene Spaces werden deshalb als „Keine neuen Konten“ angezeigt.",
