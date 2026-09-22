@@ -14,7 +14,7 @@ RETIRED = "0"
 [[d1_databases]]
 binding = "DB"
 database_name = "backspace-directory"
-database_id = "REPLACE-AT-ROLLOUT"
+database_id = "bc719031-5ab1-4249-a62c-fc8856e754f8"
 migrations_dir = "migrations"
 
 [[ratelimits]]
