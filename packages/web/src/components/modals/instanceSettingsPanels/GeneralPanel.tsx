@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { useUIStore } from '../../../stores/uiStore';
-import { Toggle } from '../../ui/Toggle';
 import { describeError } from '../../../i18n/errors';
 import { useFormatters } from '../../../i18n/formatters';
 import type { DirectoryPingError, InstanceAdminSettings } from '@backspace/shared';
@@ -55,6 +54,51 @@ function pingReasonKey(error: DirectoryPingError): PingReasonKey | null {
   return `admin:general.directory.reasons.${error.status}`;
 }
 
+/**
+ * How far spaces on this instance can be found. One ladder with three rungs,
+ * each a superset of the one above, standing in for the two stored booleans:
+ * an admin never has to work out which pair of switches means what, and the
+ * pair the server refuses (`directory_requires_discovery`) cannot be
+ * expressed here at all.
+ */
+type DiscoveryLevel = 'invite' | 'local' | 'global';
+
+/** The rungs in ladder order, with the catalog keys that name each one. */
+const DISCOVERY_LEVELS = [
+  {
+    level: 'invite',
+    labelKey: 'admin:general.discovery.levels.invite.label',
+    descriptionKey: 'admin:general.discovery.levels.invite.description',
+  },
+  {
+    level: 'local',
+    labelKey: 'admin:general.discovery.levels.local.label',
+    descriptionKey: 'admin:general.discovery.levels.local.description',
+  },
+  {
+    level: 'global',
+    labelKey: 'admin:general.discovery.levels.global.label',
+    descriptionKey: 'admin:general.discovery.levels.global.description',
+  },
+] as const;
+
+/** What each rung stores. The invalid pair has no rung, so no save can send it. */
+const LEVEL_FLAGS: Record<DiscoveryLevel, { discoveryEnabled: boolean; directoryEnabled: boolean }> = {
+  invite: { discoveryEnabled: false, directoryEnabled: false },
+  local: { discoveryEnabled: true, directoryEnabled: false },
+  global: { discoveryEnabled: true, directoryEnabled: true },
+};
+
+/**
+ * The rung the draft currently sits on. Derived, never stored: a third piece
+ * of state would be one more thing that can disagree with the two booleans
+ * the save actually sends.
+ */
+function levelOf(draft: { discoveryEnabled: boolean; directoryEnabled: boolean }): DiscoveryLevel {
+  if (!draft.discoveryEnabled) return 'invite';
+  return draft.directoryEnabled ? 'global' : 'local';
+}
+
 export function GeneralPanel() {
   const { t } = useTranslation(['admin', 'common']);
   const f = useFormatters();
@@ -69,6 +113,7 @@ export function GeneralPanel() {
   const [saveError, setSaveError] = useState('');
   const [gifKeyDirty, setGifKeyDirty] = useState(false);
   const [gifKeyDraft, setGifKeyDraft] = useState('');
+  const [openingRegistration, setOpeningRegistration] = useState(false);
 
   // The settings the draft was last seeded from. A background refresh only
   // reseeds the draft while it still equals this, so an unsaved edit survives
@@ -143,10 +188,33 @@ export function GeneralPanel() {
     }
   };
 
-  // The server clears the directory when discovery goes off; the draft does
-  // the same so the switch below never shows a state the save would refuse.
-  const setDiscovery = (enabled: boolean) => {
-    setDraft({ ...draft, discoveryEnabled: enabled, directoryEnabled: enabled && draft.directoryEnabled });
+  const level = levelOf(draft);
+
+  // Picking a rung writes both booleans from that rung's row. There is no
+  // combination left that the server would refuse, so no clearing special
+  // case either.
+  const selectLevel = (next: DiscoveryLevel) => {
+    setDraft({ ...draft, ...LEVEL_FLAGS[next] });
+  };
+
+  /**
+   * Opens federated account creation straight away, outside the draft.
+   *
+   * Deliberately a click and not a side effect of picking the global rung:
+   * letting strangers create accounts here is a security decision of its own,
+   * and a listing that silently opened sign-ups would be the kind of surprise
+   * an admin never forgives.
+   */
+  const handleOpenFederatedRegistration = async () => {
+    setOpeningRegistration(true);
+    setSaveError('');
+    try {
+      await updateInstanceSettings({ federatedRegistrationOpen: true });
+    } catch (err) {
+      setSaveError(err instanceof Error ? describeError(err) : t('common:states.saveFailed'));
+    } finally {
+      setOpeningRegistration(false);
+    }
   };
 
   const lastError = instanceSettings.directoryLastError;
@@ -190,60 +258,69 @@ export function GeneralPanel() {
         </div>
       </div>
 
-      {/* Discovery */}
+      {/* Space discovery: one ladder, three rungs */}
       <div>
         <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:general.discovery.label')}</div>
+        <p className="text-xs text-txt-tertiary mb-2">{t('admin:general.discovery.description')}</p>
         <div className="rounded-lg bg-white/[0.02] p-3.5">
-          <label className="flex items-center justify-between cursor-pointer">
-            <div>
-              <div className="text-sm font-medium text-txt-primary">{t('admin:general.discovery.toggleLabel')}</div>
-              <div className="text-xs text-txt-tertiary mt-0.5">{t('admin:general.discovery.toggleDescription')}</div>
-            </div>
-            <Toggle
-              enabled={draft.discoveryEnabled}
-              onChange={setDiscovery}
-              ariaLabel={t('admin:general.discovery.toggleLabel')}
-            />
-          </label>
-        </div>
-      </div>
-
-      {/* Directory */}
-      <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:general.directory.label')}</div>
-        <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-3">
-          <label className={`flex items-center justify-between gap-4 ${draft.discoveryEnabled ? 'cursor-pointer' : 'cursor-default'}`}>
-            <div>
-              <div className="text-sm font-medium text-txt-primary">{t('admin:general.directory.toggleLabel')}</div>
-              <div className="text-xs text-txt-tertiary mt-0.5">{t('admin:general.directory.toggleDescription')}</div>
-            </div>
-            <Toggle
-              enabled={draft.directoryEnabled}
-              onChange={(v) => setDraft({ ...draft, directoryEnabled: v })}
-              disabled={!draft.discoveryEnabled}
-              ariaLabel={t('admin:general.directory.toggleLabel')}
-            />
-          </label>
-          {!draft.discoveryEnabled && (
-            <p className="text-xs text-txt-secondary">{t('admin:general.directory.needsDiscovery')}</p>
-          )}
-          {!instanceSettings.federatedRegistrationOpen && (
-            <div className="p-2.5 bg-accent-amber/10 border border-accent-amber/30 rounded text-[13px] text-accent-amber">
-              {t('admin:general.directory.registrationClosed')}
-            </div>
-          )}
-          {/* What the pinger last did, the same shape as the telemetry panel's line */}
-          <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3 space-y-1">
-            <div className="text-xs text-txt-tertiary">{pingLabel}</div>
-            {lastError !== null && (
-              <div className="text-xs text-txt-danger">
-                {t('admin:general.directory.status.lastError', {
-                  status: lastErrorReasonKey === null ? lastError.status : t(lastErrorReasonKey),
-                })}
+          <fieldset role="radiogroup" aria-label={t('admin:general.discovery.label')} className="min-w-0 space-y-1.5">
+            {DISCOVERY_LEVELS.map((option) => (
+              <div key={option.level}>
+                <label
+                  className={`flex items-start gap-3 p-2.5 rounded cursor-pointer transition-colors ${
+                    level === option.level ? 'bg-interactive-selected' : 'hover:bg-interactive-hover'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="instance-discovery-level"
+                    value={option.level}
+                    checked={level === option.level}
+                    onChange={() => selectLevel(option.level)}
+                    aria-label={t(option.labelKey)}
+                    aria-describedby={`discovery-level-${option.level}-description`}
+                    className="mt-0.5 accent-accent-primary"
+                  />
+                  <div>
+                    <div className="text-sm font-medium text-txt-primary">{t(option.labelKey)}</div>
+                    <div id={`discovery-level-${option.level}-description`} className="text-xs text-txt-tertiary">
+                      {t(option.descriptionKey)}
+                    </div>
+                  </div>
+                </label>
+                {/* Everything the global rung brings with it hangs under the global rung */}
+                {option.level === 'global' && level === 'global' && (
+                  <div className="ml-9 mr-2.5 mt-1.5 mb-1 space-y-3">
+                    {!instanceSettings.federatedRegistrationOpen && (
+                      <div className="p-2.5 bg-accent-amber/10 border border-accent-amber/30 rounded text-[13px] text-accent-amber space-y-2">
+                        <p>{t('admin:general.directory.registrationClosed')}</p>
+                        <button
+                          type="button"
+                          onClick={handleOpenFederatedRegistration}
+                          disabled={openingRegistration}
+                          className="px-2.5 py-1 rounded bg-accent-amber/20 hover:bg-accent-amber/30 text-[13px] font-medium transition-colors disabled:opacity-50"
+                        >
+                          {t('admin:general.directory.openFederatedRegistration')}
+                        </button>
+                      </div>
+                    )}
+                    {/* What the pinger last did, the same shape as the telemetry panel's line */}
+                    <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3 space-y-1">
+                      <div className="text-xs text-txt-tertiary">{pingLabel}</div>
+                      {lastError !== null && (
+                        <div className="text-xs text-txt-danger">
+                          {t('admin:general.directory.status.lastError', {
+                            status: lastErrorReasonKey === null ? lastError.status : t(lastErrorReasonKey),
+                          })}
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-xs text-txt-tertiary">{t('admin:general.directory.disclosure')}</p>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-          <p className="text-xs text-txt-tertiary">{t('admin:general.directory.disclosure')}</p>
+            ))}
+          </fieldset>
         </div>
       </div>
 

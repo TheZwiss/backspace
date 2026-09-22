@@ -8,16 +8,26 @@
       "counter": "{{length}}/{{max}}"
     },
     "discovery": {
-      "label": "发现功能",
-      "toggleLabel": "空间发现",
-      "toggleDescription": "允许空间出现在公开的“探索”页面中"
+      "label": "空间发现",
+      "description": "本实例上的空间可以被发现到多远的范围。",
+      "levels": {
+        "invite": {
+          "label": "仅限邀请",
+          "description": "此处的空间不会出现在任何列表中。邀请链接仍然有效。"
+        },
+        "local": {
+          "label": "本地空间发现",
+          "description": "空间会出现在本实例以及与之连接的实例的“探索”页面中。"
+        },
+        "global": {
+          "label": "全局空间发现",
+          "description": "选择加入的空间还会出现在公开的 Backspace 目录中，在每个实例上都能看到。"
+        }
+      }
     },
     "directory": {
-      "label": "目录",
-      "toggleLabel": "将空间列入 Backspace 目录",
-      "toggleDescription": "选择加入的空间会出现在每个 Backspace 实例的外部空间中",
-      "needsDiscovery": "请先开启空间发现功能。",
       "registrationClosed": "已关闭来自其他实例的新账户注册，因此列入目录的空间会显示为不接受新账户。",
+      "openFederatedRegistration": "允许联邦账户注册",
       "disclosure": "对于每个列入目录的空间，以下信息将公开：名称、描述、图标、横幅、成员数量以及本实例的地址。浏览目录的人会从本实例加载图标和横幅。",
       "status": {
         "never": "从未上报",

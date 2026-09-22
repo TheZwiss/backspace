@@ -1,6 +1,6 @@
-// Dev-only workbench for the two directory switches. Nothing in the app
-// imports this file; `dev-directory-settings.html` is its only entry. It
-// exists so the admin toggle (General panel) and the per-space listing switch
+// Dev-only workbench for the directory settings. Nothing in the app imports
+// this file; `dev-directory-settings.html` is its only entry. It exists so the
+// admin space-discovery ladder (General panel) and the per-space listing switch
 // (space settings, Discovery panel) can be looked at and screenshotted in each
 // of their designed states without an admin session, a listed space, or a hub.
 //
@@ -8,10 +8,11 @@
 // no-ops, so the harness needs no server. The panels read the same store
 // slices they read in the app.
 //
-//   admin-discovery-off   discovery off: the directory toggle is disabled with its reason
-//   admin-on              directory on, last ping shown, registration open
-//   admin-closed          directory on, federated registration closed (amber), a fetch error with reason
-//   admin-origin          never reported, the hub refused the instance's address
+//   admin-invite          the invite-only rung: nothing hangs under it
+//   admin-local           the local rung: still nothing hangs under it
+//   admin-global          the global rung, last ping shown, federated accounts open
+//   admin-closed          the global rung with federated accounts closed: the amber note and its button, and a fetch error with reason
+//   admin-origin          the global rung, never reported, the hub refused the instance's address
 //   space-admin-off       public space, the instance has the directory off
 //   space-private         private space, the instance allows the directory
 //   space-listed          public space, listed
@@ -26,8 +27,9 @@ import { initializeInterfaceScale } from '../platform/interfaceScale';
 import '../styles/globals.css';
 
 type Scene =
-  | 'admin-discovery-off'
-  | 'admin-on'
+  | 'admin-invite'
+  | 'admin-local'
+  | 'admin-global'
   | 'admin-closed'
   | 'admin-origin'
   | 'space-admin-off'
@@ -35,8 +37,9 @@ type Scene =
   | 'space-listed';
 
 const SCENES: ReadonlySet<string> = new Set<Scene>([
-  'admin-discovery-off',
-  'admin-on',
+  'admin-invite',
+  'admin-local',
+  'admin-global',
   'admin-closed',
   'admin-origin',
   'space-admin-off',
@@ -50,7 +53,7 @@ function isScene(value: string | null): value is Scene {
 
 function readScene(search: string): Scene {
   const value = new URLSearchParams(search).get('scene');
-  return isScene(value) ? value : 'admin-on';
+  return isScene(value) ? value : 'admin-global';
 }
 
 const LAST_PING_AT = Date.UTC(2026, 8, 21, 14, 19);
@@ -72,8 +75,9 @@ const ADMIN_BASE: InstanceAdminSettings = {
 };
 
 const ADMIN_SCENES: Record<Extract<Scene, `admin-${string}`>, InstanceAdminSettings> = {
-  'admin-discovery-off': { ...ADMIN_BASE, discoveryEnabled: false, directoryEnabled: false, directoryLastPingAt: null },
-  'admin-on': ADMIN_BASE,
+  'admin-invite': { ...ADMIN_BASE, discoveryEnabled: false, directoryEnabled: false, directoryLastPingAt: null },
+  'admin-local': { ...ADMIN_BASE, directoryEnabled: false, directoryLastPingAt: null },
+  'admin-global': ADMIN_BASE,
   'admin-closed': {
     ...ADMIN_BASE,
     federatedRegistrationOpen: false,

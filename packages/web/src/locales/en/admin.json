@@ -8,16 +8,26 @@
       "counter": "{{length}}/{{max}}"
     },
     "discovery": {
-      "label": "Discovery",
-      "toggleLabel": "Space Discovery",
-      "toggleDescription": "Allow spaces to appear in the public Explore page"
+      "label": "Space discovery",
+      "description": "How far spaces on this instance can be found.",
+      "levels": {
+        "invite": {
+          "label": "Invite only",
+          "description": "Spaces here are listed nowhere. Invite links still work."
+        },
+        "local": {
+          "label": "Local space discovery",
+          "description": "Spaces appear in Explore for people on this instance and on instances connected to it."
+        },
+        "global": {
+          "label": "Global space discovery",
+          "description": "Spaces that opt in also appear in the public Backspace directory, on every instance."
+        }
+      }
     },
     "directory": {
-      "label": "Directory",
-      "toggleLabel": "List spaces in the Backspace directory",
-      "toggleDescription": "Spaces that opt in appear in Outer Space on every Backspace instance",
-      "needsDiscovery": "Turn on space discovery first.",
       "registrationClosed": "New accounts from other instances are closed, so listed spaces will show as closed to new accounts.",
+      "openFederatedRegistration": "Open federated accounts",
       "disclosure": "For each listed space this makes public: its name, description, icon, banner, member count and this instance's address. People browsing the directory load the icon and banner from this instance.",
       "status": {
         "never": "Never reported",

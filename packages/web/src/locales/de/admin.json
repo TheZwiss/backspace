@@ -8,16 +8,26 @@
       "counter": "{{length}}/{{max}}"
     },
     "discovery": {
-      "label": "Entdecken",
-      "toggleLabel": "Spaces entdecken",
-      "toggleDescription": "Spaces dürfen auf der öffentlichen Seite „Entdecken“ erscheinen"
+      "label": "Spaces entdecken",
+      "description": "Wie weit Spaces auf dieser Instanz gefunden werden können.",
+      "levels": {
+        "invite": {
+          "label": "Nur per Einladung",
+          "description": "Spaces sind hier nirgends gelistet. Einladungslinks funktionieren weiterhin."
+        },
+        "local": {
+          "label": "Lokales Entdecken von Spaces",
+          "description": "Spaces erscheinen unter „Entdecken“ für Leute auf dieser Instanz und auf Instanzen, die mit ihr verbunden sind."
+        },
+        "global": {
+          "label": "Globales Entdecken von Spaces",
+          "description": "Spaces, die sich eintragen, erscheinen zusätzlich im öffentlichen Backspace-Verzeichnis, auf jeder Instanz."
+        }
+      }
     },
     "directory": {
-      "label": "Verzeichnis",
-      "toggleLabel": "Spaces im Backspace-Verzeichnis eintragen",
-      "toggleDescription": "Spaces, die sich eintragen, erscheinen auf jeder Backspace-Instanz im Äußeren Space",
-      "needsDiscovery": "Schalte zuerst das Entdecken von Spaces ein.",
       "registrationClosed": "Neue Konten von anderen Instanzen sind geschlossen, eingetragene Spaces werden deshalb als „Keine neuen Konten“ angezeigt.",
+      "openFederatedRegistration": "Föderierte Konten erlauben",
       "disclosure": "Für jeden eingetragenen Space wird öffentlich: Name, Beschreibung, Icon, Banner, Mitgliederzahl und die Adresse dieser Instanz. Wer das Verzeichnis durchstöbert, lädt Icon und Banner von dieser Instanz.",
       "status": {
         "never": "Noch nie gemeldet",

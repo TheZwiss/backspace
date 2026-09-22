@@ -26,7 +26,7 @@ Source files:
 - `packages/web/src/stores/instanceStore.ts` - `connectToInstance`, the shared connect path
 - `packages/web/src/components/chat/ExplorePage.tsx`, `OuterSpaceSection.tsx`, `SpaceCard.tsx` - the two sections and the card
 - `packages/web/src/components/modals/ConnectAndJoinModal.tsx`, `RemotePasswordStep.tsx` - the connect-from-card dialog and the password step it shares with the Connections panel
-- `packages/web/src/components/modals/instanceSettingsPanels/GeneralPanel.tsx` - the admin toggle and status line
+- `packages/web/src/components/modals/instanceSettingsPanels/GeneralPanel.tsx` - the admin space-discovery ladder and the directory status line
 - `packages/web/src/components/modals/SpaceSettings.tsx` - the per-space switch in `DiscoveryPanel`
 - Design spec: `docs/superpowers/specs/2026-09-21-space-directory-design.md`
 
@@ -69,7 +69,7 @@ the user is not connected to.
 ## 2. The model
 
 ```
-space owner flips "List in the Backspace directory"  (or admin toggle, delete, visibility)
+space owner flips "List in the Backspace directory"  (or admin ladder rung, delete, visibility)
         |
         v  markDirectoryDirty(): bumps the document version, drops the endpoint cache, change ping 3 s later
 instance server pinger  --POST { origin }-->  explore.backspacechat.com  (Worker + D1)
@@ -795,16 +795,39 @@ whatever that session holds as inner.
 
 ## 10. Settings UI
 
-**Admin, General panel** (`GeneralPanel.tsx`), under the discovery setting, a
-"Directory" group with the toggle "List spaces in the Backspace directory":
+**Admin, General panel** (`GeneralPanel.tsx`), one radio group named "Space
+discovery" with the line "How far spaces on this instance can be found." It
+replaces the two coupled toggles (space discovery, list in the directory) that
+used to sit here. Three mutually exclusive rungs, each a superset of the one
+above, each writing both stored flags:
 
-- Disabled with "Turn on space discovery first." while `discoveryEnabled` is
-  off in the draft; switching discovery off in the draft also switches the
-  directory off in the draft, so the switch never shows a state the save
-  would refuse.
-- An amber note while `federatedRegistrationOpen` is off: "New accounts from
+| Rung | Label | `discoveryEnabled` | `directoryEnabled` |
+|------|-------|--------------------|--------------------|
+| `invite` | Invite only. Spaces here are listed nowhere. Invite links still work. | false | false |
+| `local` | Local space discovery. Spaces appear in Explore for people on this instance and on instances connected to it. | true | false |
+| `global` | Global space discovery. Spaces that opt in also appear in the public Backspace directory, on every instance. | true | true |
+
+The selected rung is derived from the draft, not stored, so nothing can drift
+out of step with the two booleans the save sends. The combination the server
+refuses has no rung, which is why the panel no longer needs a "turn on space
+discovery first" reason or a clearing special case when discovery goes off.
+The server-side invariant did not change: `applyDiscoveryAndDirectory` still
+runs on both PATCH routes, still answers `400 directory_requires_discovery`
+for `directoryEnabled: true` with discovery off, and still clears
+`directoryEnabled` in the same write when discovery is off (section 3).
+
+Under the `global` rung, indented beneath it and nowhere else:
+
+- While `federatedRegistrationOpen` is off, the amber note "New accounts from
   other instances are closed, so listed spaces will show as closed to new
-  accounts."
+  accounts." with an "Open federated accounts" button next to it. The button
+  calls `updateInstanceSettings({ federatedRegistrationOpen: true })` straight
+  away, outside the draft and outside the save bar, disables itself while the
+  call is in flight, and reports a failure through the panel's error line. The
+  flag is never flipped as a side effect of picking the rung: letting
+  strangers create accounts here is a separate security decision. The note
+  appears as soon as the rung is picked in the draft, before any save, since
+  that is the moment the admin is deciding.
 - A status line of the same shape as the telemetry panel's, fed by
   `directoryLastPingAt` and `directoryLastError` from `GET
   /api/settings/instance`: "Never reported" or "Last reported <date>", and
@@ -813,8 +836,9 @@ whatever that session holds as inner.
   own sentence (the `origin` one names `DOMAIN` and `PUBLIC_ORIGIN`), and a
   plain HTTP status is shown as the number it is. The line reads the store,
   not the panel's draft, and the panel re-reads the settings every 10 seconds
-  while open, so the change ping's result appears a few seconds after a save
-  without reopening the panel; an unsaved edit survives the refresh.
+  while open whatever rung is selected, so the change ping's result appears a
+  few seconds after a save without reopening the panel; an unsaved edit
+  survives the refresh.
 - One sentence naming what becomes public for each listed space: its name,
   description, icon, banner, member count and this instance's address, and
   that people browsing the directory load the icon and banner from this
@@ -822,8 +846,8 @@ whatever that session holds as inner.
 
 `settingsStore.updateInstanceSettings` mirrors `discoveryEnabled` and
 `directoryEnabled` from the server's answer into `streamingLimits`, so the
-space settings panel below sees the cleared directory flag after discovery
-was switched off.
+space settings panel below sees the cleared directory flag after the ladder
+dropped to a lower rung.
 
 **Space settings, Discovery panel** (`SpaceSettings.tsx:DiscoveryPanel`), an
 "Outer Space" group with the switch "List in the Backspace directory", always
