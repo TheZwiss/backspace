@@ -192,7 +192,9 @@
     "inner": {
       "title": "Innerer Space",
       "subtitle": "Spaces auf deinen Instanzen",
-      "noneAnswered": "Keine Instanz hat geantwortet. Der innere Space bleibt leer, bis eine antwortet."
+      "noneAnswered": "Keine Instanz hat geantwortet. Der innere Space bleibt leer, bis eine antwortet.",
+      "unreachable_one": "{{hosts}} ist nicht erreichbar. Spaces auf dieser Instanz werden nicht angezeigt.",
+      "unreachable_other": "{{hosts}} sind nicht erreichbar. Spaces auf diesen Instanzen werden nicht angezeigt."
     },
     "outer": {
       "title": "Äußerer Space",

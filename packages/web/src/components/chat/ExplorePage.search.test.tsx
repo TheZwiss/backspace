@@ -51,6 +51,7 @@ vi.mock('../../stores/exploreStore', async () => {
     discoveryEnabled: boolean;
     totalAll: number;
     error: ExploreFetchFailure | null;
+    unansweredOrigins: string[];
     fetchSpaces: typeof fetchSpaces;
     fetchMyRequests: typeof fetchMyRequests;
     setSearchQuery: (q: string) => void;
@@ -63,6 +64,7 @@ vi.mock('../../stores/exploreStore', async () => {
     discoveryEnabled: true,
     totalAll: 0,
     error: null,
+    unansweredOrigins: [],
     fetchSpaces,
     fetchMyRequests,
     setSearchQuery: (q) => set({ searchQuery: q }),
@@ -134,7 +136,7 @@ function renderPage() {
 describe('ExplorePage search and the Outer Space gate', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    useExploreStore.setState({ searchQuery: '', resultsQuery: '', error: null });
+    useExploreStore.setState({ spaces: [], searchQuery: '', resultsQuery: '', error: null, unansweredOrigins: [] });
     // The hint under the chips reads this store directly. Its resting state is
     // a member whose settings have not arrived, which is the hint's silent row.
     useSettingsStore.setState({ isAdmin: false, streamingLimits: null });
@@ -249,6 +251,56 @@ describe('ExplorePage search and the Outer Space gate', () => {
     expect(screen.queryByText('Failed to reach any instance for discovery')).not.toBeInTheDocument();
   });
 
+  it('names the instance that did not answer, beside the spaces that did', async () => {
+    // The defect: one instance of several down, its rejection dropped, the
+    // survivors' spaces on screen and nothing said about the rest.
+    renderPage();
+    act(() => {
+      useExploreStore.setState({
+        spaces: [{ id: 's1', name: 'Nebula', _instanceOrigin: '', joined: false }],
+        unansweredOrigins: ['https://kobold.example.net'],
+      });
+    });
+
+    expect(screen.getByText('Could not reach kobold.example.net. Spaces on that instance are not shown.')).toBeInTheDocument();
+    // The list is still the list: the notice qualifies it, it does not replace it.
+    expect(screen.getByText('Nebula')).toBeInTheDocument();
+  });
+
+  it('names every instance that did not answer, home by the host this client is served from', async () => {
+    renderPage();
+    act(() => {
+      useExploreStore.setState({
+        spaces: [{ id: 's1', name: 'Nebula', _instanceOrigin: 'https://orbit.example', joined: false }],
+        unansweredOrigins: ['', 'https://kobold.example.net'],
+      });
+    });
+
+    expect(screen.getByText(
+      `Could not reach ${window.location.host}, kobold.example.net. Spaces on those instances are not shown.`,
+    )).toBeInTheDocument();
+  });
+
+  it('says nothing about unanswered instances when every one of them answered', () => {
+    renderPage();
+    act(() => {
+      useExploreStore.setState({
+        spaces: [{ id: 's1', name: 'Nebula', _instanceOrigin: '', joined: false }],
+        unansweredOrigins: [],
+      });
+    });
+
+    expect(screen.queryByText(/Could not reach/)).not.toBeInTheDocument();
+  });
+
+  it('never shows the partial notice beside the fan-out nobody answered', async () => {
+    renderPage();
+    act(() => { useExploreStore.setState({ error: { kind: 'none_answered' }, unansweredOrigins: [] }); });
+
+    expect(screen.getByText('No instance answered. Inner Space is empty until one does.')).toBeInTheDocument();
+    expect(screen.queryByText(/Could not reach/)).not.toBeInTheDocument();
+  });
+
   it('describes a fan-out that could not run through the error catalog', async () => {
     renderPage();
     const cause = new HttpError(503, 'peer_unreachable', { error: 'Instance unreachable', code: 'peer_unreachable', statusCode: 503 }, 'peer_unreachable');
@@ -272,7 +324,7 @@ describe('ExplorePage search and the Outer Space gate', () => {
 describe('ExplorePage connection chips', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    useExploreStore.setState({ searchQuery: '', resultsQuery: '', error: null });
+    useExploreStore.setState({ spaces: [], searchQuery: '', resultsQuery: '', error: null, unansweredOrigins: [] });
     useInstanceStore.setState({ registry: new Map(), instances: [] });
   });
 
@@ -345,7 +397,7 @@ describe('ExplorePage keeps an expired origin out of Outer Space through a faile
 
   beforeEach(() => {
     vi.clearAllMocks();
-    useExploreStore.setState({ searchQuery: '', resultsQuery: '', error: null });
+    useExploreStore.setState({ spaces: [], searchQuery: '', resultsQuery: '', error: null, unansweredOrigins: [] });
     useDirectoryStore.setState({ entries: [zwissEntry, farEntry], status: 'ok' });
   });
 

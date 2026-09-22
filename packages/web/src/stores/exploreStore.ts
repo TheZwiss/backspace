@@ -41,6 +41,16 @@ export type ExploreFetchFailure =
   /** The fan-out could not be run at all. */
   | { kind: 'failed'; cause: unknown };
 
+/** What one client answers the Explore fan-out with. */
+type ExploreListResult = Awaited<ReturnType<typeof api.explore.list>>;
+
+/**
+ * One instance's slot in the fan-out, carrying its origin whether or not it
+ * answered, so an unanswered instance can be named rather than counted.
+ */
+type AnsweredFanOut = { answered: true; origin: string; value: ExploreListResult };
+type FanOutResult = AnsweredFanOut | { answered: false; origin: string };
+
 interface ExploreState {
   spaces: TaggedExploreSpace[];
   myRequests: TaggedJoinRequest[];
@@ -58,6 +68,20 @@ interface ExploreState {
   discoveryEnabled: boolean;
   totalAll: number;
   error: ExploreFetchFailure | null;
+  /**
+   * The origins whose client did not answer the fan-out that produced the
+   * `spaces` above, `''` for home exactly as `_instanceOrigin` encodes it,
+   * empty when every client answered. Written by the same `set` as `spaces`,
+   * so a notice built from it can never describe a different fan-out than
+   * the list beside it.
+   *
+   * Exclusive with `error: { kind: 'none_answered' }`: that branch publishes
+   * no list, so it has nothing to qualify and leaves this empty. One
+   * instance out of several is the case this exists for, which used to be
+   * dropped on the floor and read, to anyone who knew a space was there, as
+   * that space having been deleted.
+   */
+  unansweredOrigins: string[];
 
   fetchSpaces: (query?: string) => Promise<void>;
   fetchMyRequests: () => Promise<void>;
@@ -96,9 +120,9 @@ function getConnectedInstances() {
  * `directoryStore` runs on the other half of the Explore page, and the page
  * needs both: one search box drives the two stores, and without this the
  * Inner list could settle on the previous query while Outer showed the
- * current one. The fan-out is a `Promise.allSettled` over one client per
- * instance, so its duration is the slowest instance in the set, which is
- * exactly when this overtakes.
+ * current one. The fan-out asks one client per instance in parallel, so its
+ * duration is the slowest instance in the set, which is exactly when this
+ * overtakes.
  *
  * There is one store per process, so the counter lives beside it rather than
  * in a factory closure. `reset()` bumps it too, so an in-flight fan-out is
@@ -128,29 +152,44 @@ export const useExploreStore = create<ExploreState>((set, get) => ({
   discoveryEnabled: true,
   totalAll: 0,
   error: null,
+  unansweredOrigins: [],
 
   fetchSpaces: async (query?: string) => {
     const seq = ++fetchSeq;
-    set({ isLoading: true, error: null });
+    set({ isLoading: true, error: null, unansweredOrigins: [] });
 
     await waitForAutoConnect();
 
     try {
       const connectedInstances = getConnectedInstances();
 
-      // Fetch from home + all connected remote instances in parallel
-      const results = await Promise.allSettled([
-        api.explore.list(query).then(res => ({ ...res, origin: '' })),
-        ...connectedInstances.map(inst =>
-          inst.api.explore.list(query).then(res => ({ ...res, origin: inst.origin }))
-        ),
-      ]);
+      // Home plus every connected remote instance, asked in parallel. Each
+      // call settles into a tagged result instead of rejecting, so a client
+      // that did not answer carries its own origin: `Promise.allSettled`
+      // gives a rejected slot no identity beyond its index, and the page has
+      // to name the host it could not reach.
+      const fanOut: { origin: string; list: () => Promise<ExploreListResult> }[] = [
+        { origin: '', list: () => api.explore.list(query) },
+        ...connectedInstances.map(inst => ({
+          origin: inst.origin,
+          list: () => inst.api.explore.list(query),
+        })),
+      ];
 
-      const fulfilled = results.filter(r => r.status === 'fulfilled') as PromiseFulfilledResult<{ spaces: ExploreSpace[]; total: number; totalAll?: number; discoveryEnabled: boolean; origin: string }>[];
-      const rejected = results.filter(r => r.status === 'rejected');
+      const results = await Promise.all(
+        fanOut.map(({ origin, list }) =>
+          list().then(
+            (value): FanOutResult => ({ answered: true, origin, value }),
+            (): FanOutResult => ({ answered: false, origin }),
+          )
+        ),
+      );
+
+      const fulfilled = results.filter((r): r is AnsweredFanOut => r.answered);
+      const unansweredOrigins = results.filter(r => !r.answered).map(r => r.origin);
 
       // If ALL instances failed, surface an error
-      if (fulfilled.length === 0 && rejected.length > 0) {
+      if (fulfilled.length === 0 && unansweredOrigins.length > 0) {
         // A superseded fan-out says nothing, and leaves `isLoading` to the
         // one that superseded it: clearing it here would take the spinner off
         // a list that is still being fetched.
@@ -164,8 +203,8 @@ export const useExploreStore = create<ExploreState>((set, get) => ({
       let homeDiscoveryEnabled = true;
       let totalAllSum = 0;
 
-      for (const result of fulfilled) {
-        const { spaces, discoveryEnabled, totalAll, origin } = result.value;
+      for (const { origin, value } of fulfilled) {
+        const { spaces, discoveryEnabled, totalAll } = value;
 
         // Track home instance discovery state
         if (!origin) {
@@ -194,6 +233,7 @@ export const useExploreStore = create<ExploreState>((set, get) => ({
         resultsQuery: query ?? '',
         discoveryEnabled: homeDiscoveryEnabled,
         totalAll: totalAllSum,
+        unansweredOrigins,
         isLoading: false,
       });
     } catch (err) {
@@ -285,6 +325,7 @@ export const useExploreStore = create<ExploreState>((set, get) => ({
       discoveryEnabled: true,
       totalAll: 0,
       error: null,
+      unansweredOrigins: [],
     });
   },
 }));

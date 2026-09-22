@@ -287,7 +287,7 @@ One page, one search box, two sections in fixed order. **Inner Space** is the li
 `fetchSpaces()` queries home + all connected remote instances in parallel:
 1. Takes a sequence number, so a reply for an older query cannot land on a newer one (see below)
 2. Waits for `instanceStore._autoConnectDone` to avoid querying with incomplete instance list
-3. `Promise.allSettled` across home API + all connected instance APIs
+3. Asks home + every connected instance in parallel, each call settling into a result tagged with its origin, so a client that did not answer is named rather than counted
 4. Deduplicates by `spaceId:origin` key
 5. Normalizes remote asset URLs via `resolveAssetUrl`
 6. Merges into `TaggedExploreSpace[]` with `_instanceOrigin`, and records `resultsQuery`
@@ -322,6 +322,20 @@ the first from `spaces:explore.inner.noneAnswered` and the second through
 `describeError(cause)`; the store keeping English text was English on screen
 for every reader of the other three languages. `JoinSpace` reads the same
 field as a boolean and has copy of its own.
+
+**One instance short is also reported.** `error` covers the fan-out nobody
+answered; `unansweredOrigins` covers the rest. It is the list of origins
+whose client did not answer the fan-out that produced the current `spaces`
+(`''` for home, as `_instanceOrigin` encodes it), written by the same `set`
+that publishes the list, cleared when a fetch starts and on `reset()`, and
+dropped by a superseded fan-out along with everything else it would have
+written. `ExplorePage` renders it above the Inner grid as
+`spaces:explore.inner.unreachable`, naming the hosts. The two are exclusive:
+the `none_answered` branch publishes no list, so it leaves this empty and the
+page never shows both. Before this, one instance of several rejecting was
+dropped on the floor and the page showed the survivors' spaces in silence.
+`fetchMyRequests` still reports nothing when a client does not answer: it
+keeps the rows it has and says nothing about the rest.
 
 ### Public Join
 

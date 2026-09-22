@@ -13,6 +13,7 @@ import { Mascot } from '../ui/Mascot';
 import { MemberListToggleButton } from '../layout/MemberListToggleButton';
 import { useFormatters } from '../../i18n/formatters';
 import { describeError } from '../../i18n/errors';
+import { hostOf } from '../../utils/identity';
 import { SpaceCard } from './SpaceCard';
 import { OuterSpaceSection } from './OuterSpaceSection';
 import { ConnectionChips } from './ConnectionChips';
@@ -40,6 +41,10 @@ export function ExplorePage() {
   const spaces = useExploreStore((s) => s.spaces);
   const isLoading = useExploreStore((s) => s.isLoading);
   const error = useExploreStore((s) => s.error);
+  // The instances that did not answer the fan-out the spaces above came from.
+  // Exclusive with `error`: a fan-out nobody answered publishes no list and
+  // leaves this empty, so the two notices can never both be on screen.
+  const unansweredOrigins = useExploreStore((s) => s.unansweredOrigins);
   const searchQuery = useExploreStore((s) => s.searchQuery);
   // What the spaces on screen were fetched for. The search box is live and
   // the fetch behind it waits out the debounce, so the empty copy has to be
@@ -204,6 +209,14 @@ export function ExplorePage() {
     fetchMyRequests();
   }, [fetchSpaces, fetchMyRequests]);
 
+  // The hosts behind those origins, for the notice. Home is the empty
+  // sentinel, which `hostOf` returns unchanged, so it is named by the host
+  // this client is served from: the same instance its home client talks to.
+  const unansweredHosts = useMemo(
+    () => unansweredOrigins.map((origin) => hostOf(origin) || window.location.host),
+    [unansweredOrigins],
+  );
+
   const unjoinedSpaces = useMemo(
     () => spaces.filter(s => !s.joined),
     [spaces],
@@ -278,6 +291,18 @@ export function ExplorePage() {
               onDiscoveryEnabled={handleDiscoveryEnabled}
               onBrowseEnabled={readInstanceInfo}
             />
+
+            {/* One instance of several did not answer. Without this the page
+                renders the survivors' spaces and says nothing, and a user who
+                knows a space is on the missing instance reads it as deleted. */}
+            {unansweredHosts.length > 0 && (
+              <div className="mb-4 p-2.5 bg-accent-amber/10 border border-accent-amber/30 rounded text-[13px] text-accent-amber">
+                {t('spaces:explore.inner.unreachable', {
+                  count: unansweredHosts.length,
+                  hosts: unansweredHosts.join(', '),
+                })}
+              </div>
+            )}
 
             {isLoading && spaces.length === 0 ? (
               <div className="flex items-center justify-center h-64">

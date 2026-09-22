@@ -192,7 +192,9 @@
     "inner": {
       "title": "Inner Space",
       "subtitle": "Spaces on your instances",
-      "noneAnswered": "No instance answered. Inner Space is empty until one does."
+      "noneAnswered": "No instance answered. Inner Space is empty until one does.",
+      "unreachable_one": "Could not reach {{hosts}}. Spaces on that instance are not shown.",
+      "unreachable_other": "Could not reach {{hosts}}. Spaces on those instances are not shown."
     },
     "outer": {
       "title": "Outer Space",
