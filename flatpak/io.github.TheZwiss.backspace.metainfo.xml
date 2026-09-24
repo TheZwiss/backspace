@@ -64,7 +64,7 @@
   <releases>
     <release version="1.5.2" date="2026-09-25">
       <description>
-        <p>Backspace 1.5.2 release.</p>
+        <p>The Coming Soon item in the direct messages sidebar is now a Backspace page with the release notes, bug reports, feature requests, the install guide and a link to support the project on Ko-fi. Connecting to an instance with closed federated registration no longer says an account already exists there.</p>
       </description>
     </release>
     <release version="1.5.1" date="2026-09-24">
