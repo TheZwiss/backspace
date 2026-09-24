@@ -731,6 +731,7 @@ describe('GeneralPanel discovery ladder without a directory endpoint', () => {
 describe('GeneralPanel listing note', () => {
   const NOTE = 'Turning this on does not list any spaces by itself. Each space still has to switch on "List in the global Backspace directory" in its Discovery settings.';
   const SHOW = 'Show me where';
+  const SAVE_AND_SHOW = 'Save and show me where';
   const MANAGE = permissionsToString(PermissionBits.MANAGE_SPACE);
 
   function space(id: string, overrides: Partial<TaggedSpace> = {}): TaggedSpace {
@@ -795,14 +796,40 @@ describe('GeneralPanel listing note', () => {
     expect(screen.queryByText(/spaces? listed$/)).not.toBeInTheDocument();
   });
 
-  it('appears as soon as the rung is picked, without the button until the pick is saved', () => {
+  it('appears as soon as the rung is picked, offering to save before leaving', () => {
     seedSpaces([space('a')], ['a']);
     seed({ discoveryEnabled: true, directoryEnabled: false, directoryListedSpaceCount: 0 });
     renderPanel();
     fireEvent.click(rung(GLOBAL));
     expect(screen.getByText(NOTE)).toBeInTheDocument();
-    // Leaving for a space's settings would drop the unsaved pick.
+    // Leaving plainly would drop the unsaved pick.
     expect(screen.queryByRole('button', { name: SHOW })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: SAVE_AND_SHOW })).toBeInTheDocument();
+  });
+
+  it('saves the draft, then opens the space', async () => {
+    seedSpaces([space('a')], ['a']);
+    const update = seed({ discoveryEnabled: true, directoryEnabled: false, directoryListedSpaceCount: 0 });
+    renderPanel();
+    fireEvent.click(rung(GLOBAL));
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: SAVE_AND_SHOW })); });
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ discoveryEnabled: true, directoryEnabled: true }));
+    expect(useSpaceStore.getState().currentSpaceId).toBe('a');
+    expect(useUIStore.getState().activeModal).toBe('spaceSettings');
+    expect(useUIStore.getState().modalData).toEqual({ tab: 'discovery' });
+  });
+
+  it('stays on the panel when the save fails', async () => {
+    seedSpaces([space('a')], ['a']);
+    const update = seed({ discoveryEnabled: true, directoryEnabled: false, directoryListedSpaceCount: 0 });
+    update.mockRejectedValueOnce(new Error('boom'));
+    renderPanel();
+    fireEvent.click(rung(GLOBAL));
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: SAVE_AND_SHOW })); });
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(useSpaceStore.getState().currentSpaceId).toBeNull();
+    expect(useUIStore.getState().activeModal).toBe('userSettings');
+    expect(screen.getByText('boom')).toBeInTheDocument();
   });
 
   it('is not shown on an instance with no directory endpoint', async () => {

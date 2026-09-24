@@ -184,7 +184,8 @@ export function GeneralPanel() {
 
   const hasChanges = gifKeyDirty || !sameDraft(draft, draftFrom(instanceSettings));
 
-  const handleSave = async () => {
+  /** Saves the draft; resolves true when the server took it. */
+  const handleSave = async (): Promise<boolean> => {
     setSaving(true);
     setSaveError('');
     try {
@@ -210,8 +211,10 @@ export function GeneralPanel() {
       setGifKeyDirty(false);
       setGifKeyDraft('');
       addToast(t('common:states.settingsSaved'), 'success', 2000);
+      return true;
     } catch (err) {
       setSaveError(err instanceof Error ? describeError(err) : t('common:states.saveFailed'));
+      return false;
     } finally {
       setSaving(false);
     }
@@ -380,7 +383,7 @@ export function GeneralPanel() {
                 endpoint for the same reason as the note after it.
               */}
               {instanceSettings.directoryListedSpaceCount === 0 && !noDirectoryEndpoint && (
-                <DirectoryListingHint canLeave={!hasChanges} />
+                <DirectoryListingHint saveFirst={hasChanges ? handleSave : null} saving={saving} />
               )}
               {!instanceSettings.federatedRegistrationOpen && !noDirectoryEndpoint && (
                 <div className="p-2.5 bg-accent-amber/10 border border-accent-amber/30 rounded text-[13px] text-accent-amber space-y-2">

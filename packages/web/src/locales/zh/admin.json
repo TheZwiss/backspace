@@ -29,6 +29,7 @@
     "directory": {
       "listingHint": "仅开启此项不会让任何空间列入目录。每个空间仍需在其“发现”设置中开启“{{setting}}”。",
       "showMeWhere": "带我去看",
+      "saveAndShowMeWhere": "保存并带我去看",
       "listedCount_other": "已列入 {{count}} 个空间",
       "registrationClosed": "已关闭来自其他实例的新账户注册，因此列入目录的空间会显示为不接受新账户。",
       "openFederatedRegistration": "允许联邦账户注册",

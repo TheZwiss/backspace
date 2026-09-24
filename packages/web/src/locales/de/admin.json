@@ -29,6 +29,7 @@
     "directory": {
       "listingHint": "Das allein trägt noch keinen Space ein. Jeder Space muss in seinen Einstellungen unter „Entdecken“ selbst „{{setting}}“ einschalten.",
       "showMeWhere": "Zeig mir, wo",
+      "saveAndShowMeWhere": "Speichern und zeigen, wo",
       "listedCount_one": "{{count}} Space eingetragen",
       "listedCount_other": "{{count}} Spaces eingetragen",
       "registrationClosed": "Neue Konten von anderen Instanzen sind geschlossen, eingetragene Spaces werden deshalb als „Keine neuen Konten“ angezeigt.",

@@ -29,6 +29,7 @@
     "directory": {
       "listingHint": "Turning this on does not list any spaces by itself. Each space still has to switch on \"{{setting}}\" in its Discovery settings.",
       "showMeWhere": "Show me where",
+      "saveAndShowMeWhere": "Save and show me where",
       "listedCount_one": "{{count}} space listed",
       "listedCount_other": "{{count}} spaces listed",
       "registrationClosed": "New accounts from other instances are closed, so listed spaces will show as closed to new accounts.",

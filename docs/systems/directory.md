@@ -1131,9 +1131,12 @@ own only radios:
   `resolveSpaceLayout` in `utils/spaceLayout.ts` draws the rail. It takes the
   same steps as picking the space in the rail (current space, route, and on
   mobile the Spaces tab) and then opens `spaceSettings` with
-  `{ tab: 'discovery' }`, replacing the settings modal. The button is absent
-  while the panel has unsaved changes, since leaving would drop them, and when
-  no space qualifies; the sentence stays either way.
+  `{ tab: 'discovery' }`, replacing the settings modal. While the panel has
+  unsaved changes (typically the rung just picked) the button reads "Save and
+  show me where": it runs the panel's save and leaves only if that succeeded,
+  so nothing is dropped and a failed save stays on the panel with its error
+  line. The button is absent only when no space qualifies; the sentence stays
+  either way.
 - While `federatedRegistrationOpen` is off, the amber note "New accounts from
   other instances are closed, so listed spaces will show as closed to new
   accounts." with an "Open federated accounts" button next to it. The button
