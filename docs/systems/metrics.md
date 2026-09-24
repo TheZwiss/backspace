@@ -565,11 +565,11 @@ One case worth naming explicitly: `error` can be non-null while `last_success` i
 
 `site/insights/index.html` is the public read side of the archive, published by GitHub Pages at `https://backspacechat.com/insights/`. It is **one HTML file** with its CSS and JavaScript inline, plus two vendored uPlot files next to it (§10.4). No framework, no bundler, no build step, no network request of any kind except the single relative, same-origin `fetch("data.json")` — which is aborted at 15 seconds.
 
-Six sections, each registered against a slot and re-rendered on every range change: **lead figures** (the row of four at the top of the page), **reach** (page views as the hero, repository clones beside it, and the two ranked dimension cards, referring sites and popular paths, in the detail band below them), **following** (stars as the hero, with forks and watchers beside it), **adoption** (app downloads, update checks, and the opt-in fleet figures behind their threshold), **delivery** (CI activity with the release markers, contributors, and a dated list of every release), and **method coverage** (the archive coverage line, in `#method`). Their slots are `lead-figures`, `reach-body`, `following-body`, `adoption-body`, `delivery-body` and `method-coverage`; the four group slots carry the `-body` suffix because the anchors `#reach`, `#following`, `#adoption` and `#delivery` belong to the sections that contain them. The range control offers `30d`, `90d`, `1y` and `all`, defaulting to `all`, the only one that cannot imply a window wider than what was actually measured.
+Six sections, each registered against a slot and re-rendered on every range change: **lead figures** (the row of four at the top of the page), **reach** (page views and repository clones as two hero cards stacked at the same size, and the two ranked dimension cards, referring sites and popular paths, in the detail band below them), **following** (stars as the hero, with forks and watchers beside it), **adoption** (app downloads as the hero, then a row of three: update checks, registered users and messages in the trailing week, and the rest of the opt-in fleet figures behind their threshold), **delivery** (CI activity with the release markers, contributors, and a dated list of every release), and **method coverage** (the archive coverage line, in `#method`). Their slots are `lead-figures`, `reach-body`, `following-body`, `adoption-body`, `delivery-body` and `method-coverage`; the four group slots carry the `-body` suffix because the anchors `#reach`, `#following`, `#adoption` and `#delivery` belong to the sections that contain them. The range control offers `30d`, `90d`, `1y` and `all`, defaulting to `all`, the only one that cannot imply a window wider than what was actually measured.
 
 **The lead figure row is the page's table of contents.** Four figures, in page order: page views linking to `#reach`, stars to `#following`, app downloads to `#adoption` and releases shipped to `#delivery`. Each is an `<a>` rather than a div, so it is keyboard reachable and announced as a link, and each is printed a second time as its group's own headline above that group's hero. Both printings come out of one `INSIGHTS_FIGURES.figure` call per figure per render, which is why that surface exists: the row and a group head printing different numbers for the same series is a failure nothing else on the page would catch. Each value is all-time, every measured day of its series; the 30-day delta printed beside it is a fixed window ending on the archive's newest measured day rather than the selected range. Neither half answers to the range control, so the four stay comparable to each other whatever it shows, and the row sits **above** it for that reason. Nothing is curated: a figure is printed at whatever value it holds and at full precision, and a refused trend never suppresses the figure beside it.
 
-**The at-a-glance grid is gone and none of its eight cards went with it.** Three are lead figures now (views, stars, app downloads) and five are compact card heads (forks and watchers in following, clones in reach with its standing CI-checkout note, contributors in delivery, update checks in adoption). Releases shipped is the fourth lead figure and was never one of the eight: it is a count of rows in an array the page already carried. The grid's `.window-note` line moved into `#method` as the archive coverage line, and the rule its standing paragraph stated moved into `#method` under "Provenance and coverage": a 30-day change is shown only when the archive covers the window it describes, otherwise the chip is a dash that says why, and a figure assembled from a different span is labelled with the span it actually covers. That paragraph's opening was an inventory of the eight cards, so what moved is the rule and not the sentence; the rule is also carried per chip, in its `title` and in a visually hidden span, but a rule that exists only inside a tooltip is not a statement a reader or a crawler meets.
+**The at-a-glance grid is gone and none of its eight cards went with it.** Three are lead figures now (views, stars, app downloads) and five are chart card heads: forks and watchers in following, contributors in delivery and update checks in adoption on compact cards, and clones in reach, with its standing CI-checkout note, on a hero card. Releases shipped is the fourth lead figure and was never one of the eight: it is a count of rows in an array the page already carried. The grid's `.window-note` line moved into `#method` as the archive coverage line, and the rule its standing paragraph stated moved into `#method` under "Provenance and coverage": a 30-day change is shown only when the archive covers the window it describes, otherwise the chip is a dash that says why, and a figure assembled from a different span is labelled with the span it actually covers. That paragraph's opening was an inventory of the eight cards, so what moved is the rule and not the sentence; the rule is also carried per chip, in its `title` and in a visually hidden span, but a rule that exists only inside a tooltip is not a statement a reader or a crawler meets.
 
 **Referring sites and popular paths are detail cards inside reach, not sections of their own.** They were `#referrers` and `#paths` until they moved, and nothing about how they render changed with the move: all three states are intact (a movement chart when the archive holds two differenceable snapshots or more, signed bars when it holds exactly one difference, and a stated reason when it holds neither), every conditional hint is emitted as before, and the figures are still one snapshot's trailing 14-day totals that do not move with the range control. Each card is one `.chart-card` carrying the ranked list, the movement chart or its stated reason, and every hint, under a single `<h3>`; the movement chart inside it is drawn at the `compact` profile because it is a subordinate reading of the list above it. The block that builds them registers no section and exports `window.INSIGHTS_DIMENSIONS`, and it sits above the reach block in the file because the reach block reads that global at IIFE scope. The trailing-14-day basis that stood in the two section headers is now stated once for both under "Referrers and paths" in `#method`.
 
@@ -797,7 +797,7 @@ There is a third, per-chart case worth stating because it is the normal state of
 
 A card whose series carries exactly one measured step also states its reading instead of drawing: one point has no direction and no rate, and where the window holds nothing else uPlot invents an x range of its own, measured here as an axis running two and a half years past the last recorded day. `contributors` is the live case rather than a hypothetical, because it records a row when its total changes and the archive holds one.
 
-**Both refusals are page-wide, and every card decides by counting measured positions against the same threshold of two.** Two functions implement that count: the toolkit exports `C.measuredPositions(axis, offset)`, which the shared builder and the fleet cards read, and the dimensions block declares a private `measuredPositions(axis, lines)` for the movement charts, taking a list of lines rather than one offset. The rule is one rule; the shared name across two signatures is a hazard worth retiring. That includes the two fleet cards in Adoption, which are built outside `chartCard` (§10.8) and for one branch of this project's history guarded only against zero: with a single archived telemetry day at or above the threshold, both drew a plot whose meta line said one measured day of one and whose axis ran to 2029. The one difference between the two builders is what they count across. `chartCard` counts positions on its first declared line, which is the card's subject with the rest as context; a fleet card counts the largest across its three, because there the three lines are the same quantity over three windows and are peers.
+**Both refusals are page-wide, and every card decides by counting measured positions against the same threshold of two.** Two functions implement that count: the toolkit exports `C.measuredPositions(axis, offset)`, which the shared builder and the fleet cards read, and the dimensions block declares a private `measuredPositions(axis, lines)` for the movement charts, taking a list of lines rather than one offset. The rule is one rule; the shared name across two signatures is a hazard worth retiring. That includes the four fleet cards in Adoption, which are built outside `chartCard` (§10.8) and for one branch of this project's history guarded only against zero: with a single archived telemetry day at or above the threshold, both drew a plot whose meta line said one measured day of one and whose axis ran to 2029. The one difference between the two builders is what they count across. `chartCard` counts positions on its first declared line, which is the card's subject with the rest as context; a fleet card counts the largest across every line it declares, because on the two cards that carry three the three are the same quantity over three windows and are peers, and on the two that carry one the two rules coincide.
 
 | Page status | Cause | What it says |
 |---|---|---|
@@ -879,7 +879,7 @@ traffic series, so a telemetry date can never lie outside the traffic history
 and can never be clipped by a window the traffic anchored. Trap 1 does not
 apply here, and adding it would be the change that makes it apply.
 
-**The two time-series cards do not go through `bind`.** `bind` resolves a
+**The four time-series cards do not go through `bind`.** `bind` resolves a
 card's declared columns out of `data.series[...]`, and `telemetry.network` is a
 sibling of `series` rather than a member of it. The section builds its
 `[{ series, field }]` array directly and hands it to `expand`, which takes that
@@ -888,22 +888,97 @@ each card names its own columns in its own declaration and the lines are built
 from that same declaration in the same loop, so a card cannot be drawn from a
 column it does not name.
 
+**The same mismatch reaches the figure layer, and is answered the same way.**
+The two series-band cards carry a headline figure, and `F.figure` resolves
+`spec.series` out of `data.series` exactly as `bind` does. So `figure` takes a
+fourth argument, the series object itself, which `resolveSeries` returns in
+place of the name lookup; the fleet cards pass their `telemetry.network` block
+and leave `spec.series` unset. The alternative was a second implementation of
+`pointCard`'s arithmetic inside the Adoption section, which is precisely the
+failure `INSIGHTS_FIGURES` exists to prevent. `flowCard`, `pointCard` and
+`stepCard` now take the resolved series rather than `data`, so the lookup
+happens in exactly one place. `releasesCard` still takes `data`, because it
+counts rows in `data.releases` and has no single series behind it.
+
+**The chip on those two heads is `pointDelta`'s, and on today's archive it
+refuses.** The telemetry history is younger than the 30 days the chip
+describes, so it prints a dash and states that the window is not covered, which
+is the same refusal Update checks prints beside it. Verified against a
+synthesised 40-day telemetry history that it becomes a real signed change once
+the archive covers the window: the refusal is a coverage answer, not a dead
+path. Nothing fakes a figure in the meantime, and a refused chip never
+suppresses the value beside it.
+
 Each card is expanded on its own columns, so its axis spans the days that card
-was measured on. In practice both cards share a history, since a network row
+was measured on. In practice all four share a history, since a network row
 carries every gauge or none, but the per-card expansion costs nothing and keeps
 the section on the same rule as Reach (section 10.7).
 
-**Both fleet cards are drawn at the `compact` profile and sit in the detail
-band's own tracks**, beside the three rankings, exactly like the detail cards in
-Reach. They were hero-profile cards in a full-width stack until the whole-branch
-review measured them: 280 pixels of plot on a 1072-pixel panel, the same height,
-width and surface as the App downloads hero above them, which left the group's
-two most detailed charts reading as its headline. Every other group carries its
-hierarchy in the plot height, 280 against 150, and this was the one that did
-not. The stack the cards used to sit in is gone with them, and so is the CSS
-rule that had to span it across every track: a compact plot's 240-pixel floor
-fits a 420-pixel track, where a hero's 520 did not and scrolled sideways inside
-its own card.
+**The four cards sit in two bands, and the split is the reading.**
+`SERIES_CARDS` are the two one-line cards, registered users on reporting
+instances (`users_registered`) and messages in the last 7 days (`messages7d`),
+and they sit in the **series** band beside Update checks, which makes that band
+a row of three equal thirds at full width. `DETAIL_CARDS` are the two
+three-line cards, instances reporting and active users, and they sit in the
+**detail** band beside the three rankings. Both pairs draw their plots at the
+`compact` profile.
+
+The two new series exist on the page because the instance counts and the
+active-user counts cannot separate a fleet that grew by gaining instances from
+a fleet whose instances grew. The instance counts move only on the first;
+registered users and messages move on both, so the two readings together answer
+a question neither answers alone. Both were carried in `telemetry.network` from
+the first bundle and charted by nothing, so adding them needed no collector or
+bundler change.
+
+Neither pair is a hero. All four were hero-profile cards in a full-width stack
+until the whole-branch review measured them: 280 pixels of plot on a 1072-pixel
+panel, the same height, width and surface as the App downloads hero above them,
+which left the group's most detailed charts reading as its headline. Every
+other group carries its hierarchy in the plot height, 280 against 150, and this
+was the one that did not. The stack is gone, and so is the CSS rule that had to
+span it across every track: a compact plot's 240-pixel floor fits a 420-pixel
+detail track and a 345-pixel series track, where a hero's 520 fits neither and
+scrolled sideways inside its own card.
+
+**The series-band pair carries the page's compact card treatment and the
+detail-band pair does not**, which is a statement about neighbours rather than
+about size. `cardHost` takes the flag. In the series band the neighbour is
+Update checks, built by `G.chartCard` as `is-compact`, so a plain card beside it
+would read as the heavier of the two for no reason a reader could name. In the
+detail band the neighbours are the three rankings, which are plain.
+
+**A row of three needs a flat bottom edge, which is why `.series-band` no
+longer declares `align-items`.** The grid default is `stretch`, so its cards
+take the height of the tallest and carry the spare room as panel below the
+note. Three different heights side by side read as three loose cards rather
+than as one row, and the fix has to come from the layout rather than from a
+fixed height, a clipped note or a scrolling one. `.detail-band` keeps
+`align-items: start`: its cards are separate readings, one may carry a movement
+chart the other does not, and stretching a ranking to a chart's height puts an
+empty block under the last ranked row. At a single column the rule does nothing
+either way, since each card is then alone in its row.
+
+**The rounding caveat is a meta pair, not prose.** Every figure in this band is
+a sum of counts each instance rounded to two significant digits before sending,
+so `chartMeta` states it on all four cards as `rounding 2 significant digits
+per instance, before summing`, beside the span and the measured-step count
+where a card's other measured facts already are. It was a sentence at the end
+of both new notes first, verbatim in both, which is how a shared fact reads
+when it is written per card. The full statement, with the two-separate-days
+rule beside it, is in the "Opt-in pings" paragraph of `#method`, which is where
+this band's shared semantics already live.
+
+**One gate, one loop, read by both bands.** `gateCleared` is the threshold test
+and `buildFleetCards` is the build loop; the series band calls them through
+`buildFleetSeriesCards` and the detail band through `buildTelemetryBand`. Two
+copies of a fail-closed comparison would be two places for the mark to drift,
+and one band drawing a fleet line the band below it declines to draw is the
+worst possible way to find that out. Every refusal is stated in the detail band
+only: below the mark, with no dated measurement to anchor a window to, and on
+an impossible archive date, the series band builds nothing and says nothing,
+because both bands fail together and the same paragraph printed twice on one
+page is worse than the paragraph printed once.
 
 **The three rankings render `latest` only, with no trajectory chart.** They use
 the same `.rank-*` markup as the referrer and path sections, and every bar takes

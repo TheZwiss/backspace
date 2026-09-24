@@ -557,15 +557,31 @@ h2 {
 
 .hero-band { display: grid; gap: 22px; }
 /*
- * `auto-fill`, not `auto-fit`. Three of the four series bands hold exactly one
- * compact card: Reach's clones, Adoption's update checks, Delivery's
- * contributors. `auto-fit` collapses the empty tracks and stretches that
- * single card across the whole row, where it reads as a second hero.
- * `auto-fill` keeps the empty tracks, so a lone compact card stays the width
- * of one column and stays compact.
+ * `auto-fill`, not `auto-fit`. Delivery's series band holds exactly one
+ * compact card, contributors, and `auto-fit` collapses the empty tracks and
+ * stretches that single card across the whole row, where it reads as a second
+ * hero. `auto-fill` keeps the empty tracks, so a lone compact card stays the
+ * width of one column and stays compact. The other two bands fill their row
+ * either way: Following holds two cards, Adoption holds three, and at the
+ * widths this band lays out at, three is the whole row. Reach has no series
+ * band at all, because both of its traffic charts are heroes.
  *
- * `align-items: start` keeps a taller card, such as a dimension card carrying
- * a movement chart, from stretching its neighbours to match.
+ * The two bands part company on `align-items`, and the reason is what a row
+ * of them is.
+ *
+ * The detail band keeps `start`: its cards are separate readings that happen
+ * to sit side by side, one of them may carry a movement chart the other does
+ * not, and stretching a ranking to the height of a chart would put a block of
+ * empty panel under the last ranked row for no reason a reader could name.
+ *
+ * The series band stretches, which is the grid default and is why no
+ * `align-items` is declared on it. Its cards are a row of peers at one third
+ * of the width each, and Adoption now puts three of them side by side, so
+ * three different heights read as three loose cards rather than as one row.
+ * A stretched card carries its spare room as panel below the note, which is
+ * the cheapest way to a flat bottom edge and needs no fixed height, no
+ * clipping and no scrolling note. At a single column the rule does nothing at
+ * all, because each card is then the only item in its own row.
  */
 /*
  * `min(300px, 100%)` rather than a bare `300px`, and the same for the detail
@@ -585,7 +601,6 @@ h2 {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
   gap: 18px;
-  align-items: start;
   margin-top: 22px;
 }
 .detail-band {
@@ -609,13 +624,14 @@ h2 {
  * left empty.
  *
  * The Adoption group's fleet cards were spanned the same way, because they
- * were drawn at the hero profile and a hero plot has a 520px floor. Their
- * plots take the compact profile now; the cards themselves are not
- * `is-compact` and do not carry that card treatment. In a
- * 506px track it scrolled sideways inside its own card. They are compact
- * cards now, with a 240px floor, so they sit in the band's tracks beside the
- * rankings like every other detail card on the page and need no rule of
- * their own.
+ * were drawn at the hero profile and a hero plot has a 520px floor, which in a
+ * 506px track scrolled sideways inside its own card. Every fleet card draws at
+ * the compact profile now, with a 240px floor, so the two that stayed in this
+ * band sit in its tracks beside the rankings like any other detail card and
+ * need no rule of their own. Whether a fleet card also takes the `is-compact`
+ * card treatment is a separate question from the profile its plot is drawn at,
+ * and `cardHost` answers it: the two in the series band take it because their
+ * neighbour there does, and these two do not because theirs do not.
  */
 .detail-band > .slot-note { grid-column: 1 / -1; }
 
@@ -952,9 +968,11 @@ footer a:hover { color: var(--txt); }
         Adoption group measure something else: the Backspace instances people actually run.
         A self-hosted instance can choose to send one small ping a day, and most do not, so
         <strong>every one of those figures is a lower bound</strong> rather than a total. An instance
-        that never opts in is invisible, counts arrive rounded to two significant digits, and
-        an instance is counted only once it has reported on two separate days inside the last
-        thirty. A ping carries no domain, no instance or account name, no message content, no
+        that never opts in is invisible, and an instance is counted only once it has reported
+        on two separate days inside the last thirty. Counts arrive already rounded to two
+        significant digits, per instance, before anything here adds them up, so an instance
+        under a hundred contributes an exact figure and a larger one contributes a rounded
+        one. Every chart in the Adoption group states that on its own meta line as well. A ping carries no domain, no instance or account name, no message content, no
         file names and no address. The receiver does see the connecting address, as any server
         does, and turns it into a two-letter country code before the ping is stored; the
         address itself is never written down or published, which is where the country ranking
@@ -2494,8 +2512,7 @@ footer a:hover { color: var(--txt); }
    * three days is three daily uniques and one person, so a sum of them is not
    * a count of anything.
    */
-  function flowCard(card, data, win, step) {
-    var series = data.series[card.series];
+  function flowCard(card, series, win, step) {
     var first = oldestMeasured(series, card.field);
     var body = { valueText: DASH, unmeasured: true, sub: "No measurement recorded." };
     if (first !== null) {
@@ -2518,8 +2535,7 @@ footer a:hover { color: var(--txt); }
     return body;
   }
 
-  function pointCard(card, data, win, step) {
-    var series = data.series[card.series];
+  function pointCard(card, series, win, step) {
     var current = newestMeasured(series, card.field, null);
     var body = { valueText: DASH, unmeasured: true, sub: "No measurement recorded." };
     if (current !== null) {
@@ -2536,8 +2552,7 @@ footer a:hover { color: var(--txt); }
   /* The caption says when the total last CHANGED, not "as of": a step series'
    * newest row is an event date, and reading it as the date of the last
    * measurement is the same mistake stepDelta exists to avoid. */
-  function stepCard(card, data, win) {
-    var series = data.series[card.series];
+  function stepCard(card, series, win) {
     var current = newestMeasured(series, card.field, null);
     var body = { valueText: DASH, unmeasured: true, sub: "No change recorded." };
     if (current !== null) {
@@ -2683,22 +2698,54 @@ footer a:hover { color: var(--txt); }
   }
 
   /*
+   * The parallel-array series a figure is computed from.
+   *
+   * `spec.series` names a member of `data.series`, which is where every dated
+   * series on this page lives except one: `telemetry.network` is a SIBLING of
+   * `series` in the bundle, not a member of it, so the Adoption fleet cards
+   * pass their block in as `override` and leave `spec.series` unset. It is the
+   * same shape mismatch `C.bind` has with the same block (metrics.md section
+   * 10.8), answered the same way, by handing the resolved object in rather
+   * than by teaching the name lookup about a second namespace.
+   *
+   * A spec that resolves to nothing throws here, with the name in the message,
+   * rather than further down inside the arithmetic on `undefined.dates`. Every
+   * caller is inside a card's own containment, so the throw costs that card
+   * and nothing else.
+   */
+  function resolveSeries(spec, data, override) {
+    if (override !== undefined && override !== null) return override;
+    var series = data.series[spec.series];
+    if (series === undefined || series === null) {
+      throw new Error("figure: the bundle carries no series named " + spec.series);
+    }
+    return series;
+  }
+
+  /*
    * One figure, computed. `spec` is `{ label, kind, series, field, note }`
    * with `kind` one of "flow", "point" or "step"; `wins` is `windows(data)`
-   * or null.
+   * or null. `override` is the series object itself, for a caller whose
+   * series is not under `data.series`; see `resolveSeries`.
    *
    * The three `*Card` functions it dispatches to are the ones the at-a-glance
    * section used before this page had groups, so a figure printed by a
    * compact card head and the same figure printed by the lead row come out of
-   * one code path.
+   * one code path. The override keeps the fleet cards on that path too: the
+   * alternative was a second implementation of `pointCard`'s arithmetic inside
+   * the Adoption section, which is the failure this whole surface exists to
+   * prevent.
    */
-  function figure(spec, data, wins) {
+  function figure(spec, data, wins, override) {
     var step = I.resolutionStepDays();
     var body;
     if (spec.kind === "releases") {
+      /* The one kind with no single series behind it: it counts rows in
+       * `data.releases`, so it takes `data` and never a resolved series. */
       body = releasesCard(data, wins);
     } else if (spec.kind === "flow") {
-      body = flowCard(spec, data, wins === null ? null : wins.flow, step);
+      body = flowCard(spec, resolveSeries(spec, data, override),
+        wins === null ? null : wins.flow, step);
       /* Every flow chip on the page prints a signed change (spec section 4.3),
        * so all three of this page's flow specs set the flag: Reach's group
        * head, its clones card head, and the Page views figure in the lead row.
@@ -2709,12 +2756,14 @@ footer a:hover { color: var(--txt); }
        * `flowDelta`, in a traffic card's meta line: two quantities, and a spec
        * that says which one it means. */
       if (spec.trend === "compare") {
-        body.delta = flowTrend(data.series[spec.series], spec.field, wins, step);
+        body.delta = flowTrend(resolveSeries(spec, data, override), spec.field, wins, step);
       }
     } else if (spec.kind === "step") {
-      body = stepCard(spec, data, wins === null ? null : wins.step);
+      body = stepCard(spec, resolveSeries(spec, data, override),
+        wins === null ? null : wins.step);
     } else {
-      body = pointCard(spec, data, wins === null ? null : wins.point, step);
+      body = pointCard(spec, resolveSeries(spec, data, override),
+        wins === null ? null : wins.point, step);
     }
     body.label = spec.label;
     body.note = spec.note === undefined ? null : spec.note;
@@ -6263,10 +6312,14 @@ footer a:hover { color: var(--txt); }
 /*
  * Group "reach" -- who is finding this.
  *
- * Hero: page views, with unique visitors as the second dashed line. Views is
- * the direct answer to the group's question, it is the widest funnel the
- * archive measures, and it is the one traffic series the CI clone confound
- * does not touch: a checkout loads no page.
+ * Two hero cards, stacked: page views, then repository clones, each with its
+ * unique count as a second dashed line. Views leads because it is the direct
+ * answer to the group's question, it is the widest funnel the archive
+ * measures, and it is the one traffic series the CI clone confound does not
+ * touch: a checkout loads no page. Clones follows at the same size rather than
+ * beside it at a third of one, because reading it means reading a confound off
+ * its shape against the CI chart its caveat links to, and that is not
+ * something a 150-pixel plot supports.
  *
  * Stars, forks and watchers are NOT here. They are people who chose to follow
  * the repository rather than people finding it, which is a different question,
@@ -6413,9 +6466,26 @@ footer a:hover { color: var(--txt); }
     return note;
   }
 
+  /*
+   * Clones is drawn at the hero profile, in the hero band, at the same size as
+   * page views above it.
+   *
+   * It was a compact card in the series band, which made it a detail reading
+   * of the views chart. It is not one. The two are the group's two traffic
+   * series, measured the same way over the same days, and the whole reason the
+   * clones card carries a standing caveat and a link to the CI chart is that
+   * its shape has to be read rather than glanced at. A 150-pixel plot in a
+   * third of a row is not a surface anybody reads a confound off.
+   *
+   * The area fill comes with the size, and the two are one decision: a fill
+   * reads as area measured from zero, so it belongs only on a card with a zero
+   * floor, and this one has `yPolicy: "zero"` for the same reason the views
+   * hero does. Every hero on this page is filled except Following's, which is
+   * fitted and therefore cannot be.
+   */
   function clonesSpec(ctx) {
     return {
-      profile: "compact",
+      profile: "hero",
       title: "Repository clones",
       /* `trend: "compare"` for the same reason the group head carries it: this
        * is a flow chip on the charted page, and spec section 4.3 gives every
@@ -6431,10 +6501,13 @@ footer a:hover { color: var(--txt); }
         uniques: { series: "clones", field: "uniques" }
       },
       lines: [
-        { column: "count", label: "Clones", token: "--mint", fallback: "#86efac" },
+        {
+          column: "count", label: "Clones", token: "--mint", fallback: "#86efac",
+          fill: "rgba(134, 239, 172, 0.10)", width: 2
+        },
         {
           column: "uniques", label: uniquesLabel("Unique cloners", ctx.downsampled),
-          token: "--amber", fallback: "#fcd34d", dash: [5, 4]
+          token: "--amber", fallback: "#fcd34d", width: 1.5, dash: [5, 4]
         }
       ],
       yPolicy: "zero",
@@ -6467,13 +6540,17 @@ footer a:hover { color: var(--txt); }
     G.groupHead(slot, LEAD, ctx);
 
     var hero = G.band("hero");
-    var series = G.band("series");
     var detail = G.band("detail");
-    /* In the slot before a single card is built into them. Appending here
+    /* No series band. Both traffic charts are hero cards in the hero band and
+     * the two ranked dimension cards are detail cards, so this group has
+     * nothing in the middle tier and builds no element for it rather than
+     * leaving an empty one for CSS to collapse.
+     *
+     * In the slot before a single card is built into them. Appending here
      * rather than at the end of the render is the load-bearing part; see
      * G.attach. A band that ends up holding no card is collapsed by CSS
      * rather than left out here. */
-    G.attach(slot, [hero, series, detail]);
+    G.attach(slot, [hero, detail]);
 
     /* Declared above the early return below, not beside the `try`. `var`
      * hoists the declaration and not the assignment, so a `created` declared
@@ -6518,8 +6595,12 @@ footer a:hover { color: var(--txt); }
       G.keep(created, G.buildCardSafely(hero, function () {
         return G.chartCard(hero, heroSpec(ctx), ctx);
       }));
-      G.keep(created, G.buildCardSafely(series, function () {
-        return G.chartCard(series, clonesSpec(ctx), ctx);
+      /* Into the hero band, under page views rather than beside it. The band
+       * is a single-column grid, so the two cards stack at the same width and
+       * the same plot height, which is what the two series being peers looks
+       * like. */
+      G.keep(created, G.buildCardSafely(hero, function () {
+        return G.chartCard(hero, clonesSpec(ctx), ctx);
       }));
     } catch (error) {
       /* On this path `live` is assigned only once every card is built, so a
@@ -6812,21 +6893,60 @@ footer a:hover { color: var(--txt); }
   var live = [];
 
   /*
-   * The two time-series cards, and the columns each one draws.
+   * The four time-series cards, and the columns each one draws.
    *
-   * Both cards are counts with a true floor at zero and all three lines in a
-   * card are the same kind of thing measured over three windows, so they share
-   * one y scale honestly. Colours come from the Aether Drift tokens, read at
-   * draw time, so the canvas stroke is the same resolved value the page uses
-   * everywhere else.
+   * They are declared in two arrays because they sit in two bands, and the
+   * band is the reading. `SERIES_CARDS` sits in the series band beside Update
+   * checks, one line to a card, so the three compact cards read as one row.
+   * `DETAIL_CARDS` sits in the detail band beside the rankings, three lines to
+   * a card, where there is room for three keys in a legend.
+   *
+   * The split is there because the instance counts and the active-user counts
+   * cannot separate a fleet that grew by gaining instances from a fleet whose
+   * instances grew. Registered users and messages move on the second and the
+   * instance counts do not, so the two readings side by side answer a question
+   * neither answers alone.
+   *
+   * Every line in one card is the same kind of thing, so a card shares one y
+   * scale honestly, and every line on all four is a count with a true floor at
+   * zero. Colours come from the Aether Drift tokens, read at draw time, so the
+   * canvas stroke is the same resolved value the page uses everywhere else.
    *
    * Every column here is a GAUGE describing the fleet on its date, never a
    * per-day event count. `users_active7d` and `messages7d` read like daily
    * totals and are not: they are trailing-window figures the instances
    * computed themselves. The card captions say so, because a reader who adds
    * two of these rows together gets a number that means nothing.
+   *
+   * Every figure on all four cards is a sum over one snapshot: the latest ping
+   * from each instance that reported inside the seven days ending on that
+   * date, and only from instances that have reported on two separate days
+   * inside the last thirty. It is never a sum over the instances that happened
+   * to ping that day, which is why a total can move on a day nothing arrived.
    */
-  var CARDS = [
+  var SERIES_CARDS = [
+    {
+      title: "Registered users on reporting instances",
+      figure: { label: "Registered users", kind: "point", field: "users_registered" },
+      note: "Accounts on instances that opted in, not people online. Each date sums the latest ping from every instance " +
+        "in that date's snapshot, so the figure can move on a day no ping arrived.",
+      lines: [
+        { field: "users_registered", label: "Registered users", token: "--lavender", fallback: "#c4b5fd" }
+      ]
+    },
+    {
+      title: "Messages in the last 7 days",
+      figure: { label: "Messages in 7 days", kind: "point", field: "messages7d" },
+      note: "Each instance counts the messages sent on it in the seven days ending on its own ping, and this line sums " +
+        "that across the same snapshot. Consecutive dates cover overlapping weeks, so two of these dates are not two " +
+        "weeks of messages.",
+      lines: [
+        { field: "messages7d", label: "Messages in 7 days", token: "--peach", fallback: "#fca5a5" }
+      ]
+    }
+  ];
+
+  var DETAIL_CARDS = [
     {
       title: "Instances reporting",
       note: "Each line counts instances that sent a ping inside the window it names, ending on that date. " +
@@ -6988,17 +7108,34 @@ footer a:hover { color: var(--txt); }
    * the body left to the caller. Returned unfinished so a chart card and a
    * ranked card can share the top of it.
    *
+   * `compact` adds the page's compact card treatment, the lighter surface and
+   * the smaller title. It is set for the two cards in the series band and left
+   * off everywhere else, and that is a statement about neighbours rather than
+   * about size: a card takes the treatment of the row it sits in. In the
+   * series band the neighbour is Update checks, which `G.chartCard` builds as
+   * `is-compact`, so a plain card beside it reads as the heavier of the two
+   * for no reason a reader could name. In the detail band the neighbours are
+   * the three rankings, which are plain, so the fleet cards stay plain there.
+   * The plot inside is drawn at the compact profile either way.
+   *
+   * `figureNode` is a rendered figure head, or null. It goes directly under
+   * the title, exactly where `G.chartCard` puts one, so a fleet card and the
+   * Update checks card beside it present their headline the same way. The node
+   * is built by the caller rather than here, because building it can throw on
+   * a series the bundle does not carry and the shell is wanted either way.
+   *
    * The card is appended to the band BEFORE it is returned, because uPlot is
    * given an explicit pixel size and that size is measured from a container
    * that has to already be in the document.
    */
-  function cardHost(band, title, metaNodes) {
-    var card = el("div", "chart-card");
+  function cardHost(band, title, metaNodes, compact, figureNode) {
+    var card = el("div", "chart-card" + (compact === true ? " is-compact" : ""));
     /* An h3, not a p. Spec section 10 makes every card title a heading so a
      * screen reader gets a real outline of the page, and G.detailCard and
      * G.chartCard both emit one. The h3.chart-title rule carries the same
      * styling the p had. */
     card.appendChild(el("h3", "chart-title", title));
+    if (figureNode !== undefined && figureNode !== null) card.appendChild(figureNode);
     if (metaNodes.length > 0) {
       var meta = el("p", "chart-meta");
       for (var i = 0; i < metaNodes.length; i++) meta.appendChild(metaNodes[i]);
@@ -7017,8 +7154,20 @@ footer a:hover { color: var(--txt); }
     return columns;
   }
 
-  /* How much of the window this card was actually measured on, stated on the
-   * card rather than only in the section copy. */
+  /*
+   * How much of the window this card was actually measured on, stated on the
+   * card rather than only in the section copy.
+   *
+   * The `rounding` pair is on all four fleet cards and says the same thing on
+   * each, because it is true of every figure in this band: an instance rounds
+   * its own counts to two significant digits before it sends them, so a sum
+   * over the fleet is exact only where every instance in it was under a
+   * hundred. It is a measured fact about the card's own numbers, which is what
+   * this line is for, and stating it here rather than in each card's prose
+   * keeps it out of four notes that would otherwise carry the same sentence
+   * twice over. The full statement, with the two-separate-days rule beside it,
+   * is in the "Opt-in pings" paragraph of #method.
+   */
   function chartMeta(axis) {
     var measured = 0;
     for (var i = 0; i < axis.measured.length; i++) {
@@ -7030,7 +7179,8 @@ footer a:hover { color: var(--txt); }
       pair("span", I.formatDay(axis.startMs) + " → " + I.formatDay(axis.endMs)),
       pair("measured", I.formatCount(measured) + " of " + I.formatCount(steps) + " " +
         unit + (steps === 1 ? "" : "s")),
-      pair("reading", "a gauge on each date, never a total to add up")
+      pair("reading", "a gauge on each date, never a total to add up"),
+      pair("rounding", "2 significant digits per instance, before summing")
     ];
   }
 
@@ -7087,8 +7237,23 @@ footer a:hover { color: var(--txt); }
    * same quantity over three windows, so a line any one of them can carry is
    * a line worth drawing.
    */
-  function buildCard(band, card, axis) {
-    var shell = cardHost(band, card.title, chartMeta(axis));
+  function buildCard(band, card, axis, compact, ctx, network) {
+    /*
+     * The headline, through the page's one figure surface rather than a second
+     * reading of the same column. `telemetry.network` is a sibling of `series`
+     * in the bundle, so the block goes in as `F.figure`'s override argument.
+     *
+     * The chip beside it is `pointDelta`'s, and on this archive it refuses:
+     * the telemetry history is younger than the 30 days the chip describes, so
+     * it prints a dash and says why, exactly as Update checks' chip does
+     * beside it. That is the honest answer rather than a missing chip, and it
+     * becomes a real signed change on its own once the archive covers the
+     * window. Nothing here fakes one in the meantime.
+     */
+    var head = card.figure === undefined || card.figure === null
+      ? null
+      : F.renderFigure(F.figure(card.figure, ctx.data, ctx.wins, network), "card");
+    var shell = cardHost(band, card.title, chartMeta(axis), compact, head);
 
     var positions = 0;
     var i;
@@ -7255,9 +7420,9 @@ footer a:hover { color: var(--txt); }
   /* One fleet card, contained. A throw inside one of these is the card's own
    * failure and not the group's, so it is reported in place of that card and
    * the rest of the band still builds. */
-  function safeCard(band, card, axis) {
+  function safeCard(band, card, axis, compact, ctx, network) {
     return G.buildCardSafely(band, function () {
-      return buildCard(band, card, axis);
+      return buildCard(band, card, axis, compact, ctx, network);
     });
   }
 
@@ -7268,24 +7433,94 @@ footer a:hover { color: var(--txt); }
   }
 
   /*
+   * The gate, stated as the condition that OPENS it rather than as the one
+   * that closes it. Written the other way round, as "below the threshold,
+   * return", the drawing path becomes whatever the negation happens to let
+   * through: a value that is neither a number nor below ten, such as a NaN
+   * reaching `instances7d`, passes on to the charts because `NaN < 10` is
+   * false. Here the only way to reach a chart is to be a number at or above
+   * the mark, so the fail-closed property is readable on this line alone and
+   * does not depend on what a validator upstream happens to reject.
+   *
+   * One function rather than one test per band, now that fleet cards sit in
+   * two of them. Two copies of a fail-closed comparison is two places for the
+   * mark to drift, and a band drawing a fleet line the band below it declines
+   * to draw would be the worst possible way to find out.
+   */
+  function gateCleared(block) {
+    return block !== null && typeof block.instances7d === "number" &&
+      block.instances7d >= THRESHOLD;
+  }
+
+  /*
+   * Build a list of fleet cards into a band.
+   *
+   * Returns `{ plots, overrun }`: the uPlot instances it mounted, and the
+   * offending axis when one of them would need more steps than the toolkit
+   * will build. The overrun is reported back rather than written into the
+   * band, because whether it is worth a sentence depends on where the band is
+   * on the page, and this function cannot see that. Every fleet card expands
+   * the same `block.network`, so an overrun is a property of the archive's
+   * dates and both bands hit it together; saying so twice would be the same
+   * paragraph printed twice on one page.
+   *
+   * The loop holds its own plots and releases them on any exit that is not a
+   * clean return, because until this returns the caller's list does not
+   * contain them and nothing else can reach them to call `destroy()`.
+   */
+  function buildFleetCards(band, cards, block, ctx, stepDays, compact) {
+    var created = [];
+    var win = ctx.win;
+    try {
+      for (var i = 0; i < cards.length; i++) {
+        var axis = C.expand(columnsFor(block.network, cards[i]), win, stepDays);
+        /* Before the `empty` branch: an overrun sets `empty` too, as a
+         * fail-safe, and the specific reason is the more useful of the two.
+         * An impossible date is a fault in the ARCHIVE, so it stops the
+         * band rather than being reported as a page bug. */
+        if (axis.overrun) {
+          /* Today the first card is the one that overruns and nothing has
+           * been built yet. Released anyway: the day a card reads a different
+           * series, this return would otherwise strand whatever the loop
+           * already mounted. */
+          releaseAll(created);
+          return { plots: [], overrun: axis };
+        }
+        var plot = safeCard(band, cards[i], axis, compact, ctx, block.network);
+        if (plot !== null) created.push(plot);
+      }
+    } catch (error) {
+      releaseAll(created);
+      throw error;
+    }
+    return { plots: created, overrun: null };
+  }
+
+  /*
+   * The two fleet cards that share the series band with Update checks: how
+   * many accounts the reporting instances hold, and how many messages were
+   * sent on them in the trailing week. They are the two series that separate a
+   * fleet gaining instances from instances gaining people.
+   *
+   * Silent on every refusal, and that is the point of putting them here. The
+   * gate, an archive with no time axis and an impossible date are all stated
+   * in full by the detail band a few hundred pixels below, which is the band
+   * the telemetry state note has always belonged to. Repeating any of the
+   * three here would put the same paragraph on the page twice.
+   */
+  function buildFleetSeriesCards(band, data, ctx) {
+    var block = telemetryOf(data);
+    if (!gateCleared(block) || ctx.win === null) return [];
+    return buildFleetCards(band, SERIES_CARDS, block, ctx, I.resolutionStepDays(), true).plots;
+  }
+
+  /*
    * The Adoption group's detail band: the opt-in fleet figures, or the reason
    * there are none. Returns the plots it mounted, for the caller to hold.
    */
   function buildTelemetryBand(band, data, ctx) {
     var block = telemetryOf(data);
-    /*
-     * The gate, stated as the condition that OPENS it rather than as the one
-     * that closes it. Written the other way round, as "below the threshold,
-     * return", the drawing path becomes whatever the negation happens to let
-     * through: a value that is neither a number nor below ten, such as a NaN
-     * reaching `instances7d`, passes on to the charts because `NaN < 10` is
-     * false. Here the only way to reach a chart is to be a number at or above
-     * the mark, so the fail-closed property is readable on this line alone and
-     * does not depend on what a validator upstream happens to reject.
-     */
-    var cleared = block !== null && typeof block.instances7d === "number" &&
-      block.instances7d >= THRESHOLD;
-    if (!cleared) {
+    if (!gateCleared(block)) {
       band.appendChild(belowThresholdNote(block));
       return [];
     }
@@ -7298,36 +7533,25 @@ footer a:hover { color: var(--txt); }
      * dimension snapshots has no dated series row to anchor a window to. */
     if (win === null) {
       band.appendChild(el("p", "slot-note",
-        "The archive holds no dated measurement, so there is no time axis to draw the instance or " +
-        "active-user charts on."));
+        "The archive holds no dated measurement, so there is no time axis to draw the fleet " +
+        "charts on."));
       return [];
     }
 
     var stepDays = I.resolutionStepDays();
 
-    var created = [];
+    var built = buildFleetCards(band, DETAIL_CARDS, block, ctx, stepDays, false);
+    if (built.overrun !== null) {
+      band.appendChild(el("p", "slot-note slot-note-detail",
+        "The telemetry series would run from " + I.formatDay(built.overrun.startMs) + " to " +
+        I.formatDay(built.overrun.endMs) + ", which needs " +
+        I.formatCount(built.overrun.overrunSteps) +
+        " points on the time axis. That is far longer than this archive can cover, so a date in the archive itself is wrong and no chart is drawn."));
+      return [];
+    }
+
+    var created = built.plots;
     try {
-      for (var i = 0; i < CARDS.length; i++) {
-        var axis = C.expand(columnsFor(block.network, CARDS[i]), win, stepDays);
-        /* Before the `empty` branch: an overrun sets `empty` too, as a
-         * fail-safe, and the specific reason is the more useful of the two.
-         * An impossible date is a fault in the ARCHIVE, so it stops the
-         * band rather than being reported as a page bug. */
-        if (axis.overrun) {
-          /* Every card expands the same `block.network`, so today the first
-           * card is the one that overruns and nothing has been built yet.
-           * Released anyway: the day a card reads a different series, this
-           * return would otherwise strand whatever the loop already mounted. */
-          releaseAll(created);
-          band.appendChild(el("p", "slot-note slot-note-detail",
-            "The telemetry series would run from " + I.formatDay(axis.startMs) + " to " +
-            I.formatDay(axis.endMs) + ", which needs " + I.formatCount(axis.overrunSteps) +
-            " points on the time axis. That is far longer than this archive can cover, so a date in the archive itself is wrong and no chart is drawn."));
-          return [];
-        }
-        var plot = safeCard(band, CARDS[i], axis);
-        if (plot !== null) created.push(plot);
-      }
       /*
        * INSIDE the try, unlike the section this band comes from.
        *
@@ -7383,8 +7607,14 @@ footer a:hover { color: var(--txt); }
         G.keep(created, G.buildCardSafely(series, function () {
           return G.chartCard(series, UPDATES, ctx);
         }));
+        /* After Update checks, so the row reads left to right as the page
+         * declares it: the one series that comes from GitHub's download
+         * counter, then the two that come from the instances themselves.
+         * These three are the whole of the series band, and the band lays
+         * them out as equal thirds. */
+        created = created.concat(buildFleetSeriesCards(series, data, ctx));
       }
-      /* The telemetry band, whatever the two cards above did. It is the only
+      /* The telemetry band, whatever the cards above did. It is the only
        * part of this group that can be absent from the bundle entirely. */
       created = created.concat(buildTelemetryBand(detail, data, ctx));
     } catch (error) {
