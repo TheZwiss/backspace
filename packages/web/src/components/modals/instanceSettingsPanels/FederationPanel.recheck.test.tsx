@@ -38,7 +38,7 @@ describe('FederationPanel — Check now', () => {
     recheckPeer.mockResolvedValue({ recovered: true, status: 'active' });
     render(<FederationPanel />);
     // PeerRow collapses its action buttons; expand the card by clicking its header first.
-    const header = await screen.findByText('Peer');
+    const header = await screen.findByText('peer.example');
     fireEvent.click(header);
     const btn = await screen.findByText('Check now');
     fireEvent.click(btn);

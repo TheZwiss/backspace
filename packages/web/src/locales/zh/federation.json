@@ -171,6 +171,7 @@
     "filter": {
       "statusHeading": "状态",
       "sort": {
+        "domain": "按域名 (A-Z)",
         "lastSeen": "最后在线",
         "dateAdded": "添加日期",
         "failures": "失败次数",
@@ -182,6 +183,7 @@
       "revoked": "已撤销"
     },
     "peer": {
+      "instanceName": "实例名称",
       "revokedMeta": "撤销于：{{revoked}} · 建立对等于：{{peered}}",
       "unreachableMeta": "最后在线：{{lastSeen}} · {{failures}}",
       "activeMeta": "最后在线：{{lastSeen}} · 同步于：{{synced}}",

@@ -147,7 +147,7 @@ describe('FederationPanel — Reset cleanup', () => {
     await waitFor(() => expect(initiatePeering).toHaveBeenCalled());
     await waitFor(() =>
       expect(addToast).toHaveBeenCalledWith(
-        'Re-peer incomplete — Peer still holds stale peering for you. Its admin must reset their side, then Re-peer again.',
+        'Re-peer incomplete — peer.example still holds stale peering for you. Its admin must reset their side, then Re-peer again.',
         'warning',
       ),
     );
@@ -200,7 +200,7 @@ describe('FederationPanel — Reset cleanup', () => {
 
     await waitFor(() => expect(initiatePeering).toHaveBeenCalled());
     await waitFor(() =>
-      expect(addToast).toHaveBeenCalledWith('Re-peering initiated with Peer', 'success', 3000),
+      expect(addToast).toHaveBeenCalledWith('Re-peering initiated with peer.example', 'success', 3000),
     );
     expect(addToast).not.toHaveBeenCalledWith(
       expect.stringContaining('still holds stale peering'),

@@ -172,6 +172,7 @@
     "filter": {
       "statusHeading": "Status",
       "sort": {
+        "domain": "Domain (A bis Z)",
         "lastSeen": "Zuletzt gesehen",
         "dateAdded": "Hinzugefügt am",
         "failures": "Fehlschläge",
@@ -183,6 +184,7 @@
       "revoked": "Widerrufen"
     },
     "peer": {
+      "instanceName": "Instanzname",
       "revokedMeta": "Widerrufen: {{revoked}} · Gepeert: {{peered}}",
       "unreachableMeta": "Zuletzt gesehen: {{lastSeen}} · {{failures}}",
       "activeMeta": "Zuletzt gesehen: {{lastSeen}} · Synchronisiert: {{synced}}",

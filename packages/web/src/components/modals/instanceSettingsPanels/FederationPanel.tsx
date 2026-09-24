@@ -159,6 +159,19 @@ function FederationGlobalSettings() {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+/**
+ * The label a peer is shown under everywhere in this panel. The domain, not the
+ * instance name: the name defaults to "Backspace" and few admins change it, so
+ * it rarely tells two peers apart, while the domain always does.
+ */
+function originHost(origin: string): string {
+  try {
+    return new URL(origin).host;
+  } catch {
+    return origin;
+  }
+}
+
 /** "Never" for a missing timestamp, "Just now" under a minute, otherwise the elapsed time. */
 function formatRelativeTime(t: FederationT, formatters: Formatters, timestamp: number | null): string {
   if (!timestamp) return t('common:time.never');
@@ -205,7 +218,7 @@ function peerStatusLabel(t: FederationT, status: string): string {
 }
 
 type PeerView = 'active' | 'revoked';
-type SortBy = 'name' | 'lastSeen' | 'dateAdded' | 'failures';
+type SortBy = 'domain' | 'lastSeen' | 'dateAdded' | 'failures';
 type StatusFilter = 'active' | 'unreachable' | 'pending' | 'rejected' | 'awaiting_approval' | 'needs_attention';
 
 /** The short form for the filter menu; the badge label spells out why a peer is rejected. */
@@ -243,13 +256,13 @@ function FilterDropdown({
 
   const sortOptions: Array<{ key: SortBy; label: string }> = view === 'active'
     ? [
-        { key: 'name', label: t('common:labels.nameAZ') },
+        { key: 'domain', label: t('federation:admin.filter.sort.domain') },
         { key: 'lastSeen', label: t('federation:admin.filter.sort.lastSeen') },
         { key: 'dateAdded', label: t('federation:admin.filter.sort.dateAdded') },
         { key: 'failures', label: t('federation:admin.filter.sort.failures') },
       ]
     : [
-        { key: 'name', label: t('common:labels.nameAZ') },
+        { key: 'domain', label: t('federation:admin.filter.sort.domain') },
         { key: 'dateAdded', label: t('federation:admin.filter.sort.revokedDate') },
       ];
 
@@ -370,11 +383,8 @@ function PeerListControls({
 function sortPeers(peers: FederationPeer[], sortBy: SortBy, view: PeerView): FederationPeer[] {
   return [...peers].sort((a, b) => {
     switch (sortBy) {
-      case 'name': {
-        const nameA = (a.instanceName || new URL(a.origin).host).toLowerCase();
-        const nameB = (b.instanceName || new URL(b.origin).host).toLowerCase();
-        return nameA.localeCompare(nameB);
-      }
+      case 'domain':
+        return originHost(a.origin).localeCompare(originHost(b.origin));
       case 'lastSeen':
         return (b.lastSeenAt ?? 0) - (a.lastSeenAt ?? 0);
       case 'dateAdded':
@@ -408,7 +418,7 @@ function PeerRow({ peer, view, expanded, onToggleExpand, onAction, onRecheck, on
   const [intervalError, setIntervalError] = useState('');
   const addToast = useUIStore((s) => s.addToast);
 
-  const name = peer.instanceName || new URL(peer.origin).host;
+  const host = originHost(peer.origin);
   const isRevoked = view === 'revoked' || peer.status === 'rejected';
   const isDefault = peer.autoRotateIntervalDays === defaultAutoRotateIntervalDays;
 
@@ -462,7 +472,7 @@ function PeerRow({ peer, view, expanded, onToggleExpand, onAction, onRecheck, on
           <div className={`w-2 h-2 rounded-full shrink-0 ${isRevoked ? 'bg-txt-tertiary' : peerStatusDotColor(peer.status)}`} />
           <div className="min-w-0">
             <div className={`text-sm font-medium truncate ${isRevoked ? 'text-txt-tertiary line-through' : 'text-txt-primary'}`}>
-              {name}
+              {host}
             </div>
             <div className="text-[11px] text-txt-tertiary truncate">
               {metaText}
@@ -481,6 +491,12 @@ function PeerRow({ peer, view, expanded, onToggleExpand, onAction, onRecheck, on
       {expanded && (
         <div className="px-3 pb-3">
           <div className="border-t border-white/[0.05] pt-3">
+            {peer.instanceName && (
+              <div className="mb-3 min-w-0">
+                <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">{t('federation:admin.peer.instanceName')}</div>
+                <div className="text-xs text-txt-secondary truncate">{peer.instanceName}</div>
+              </div>
+            )}
             {isRevoked ? (
               /* Revoked peer actions */
               <div className="flex gap-2">
@@ -692,12 +708,12 @@ function PendingApprovals({ onCountChange }: { onCountChange?: (count: number) =
         await api.federation.approveRequest(req.id);
         setRequests((prev) => prev.filter((r) => r.id !== req.id));
         onCountChange?.(requests.length - 1);
-        addToast(t('federation:admin.approvals.established', { name: req.instanceName || req.origin }), 'success', 3000);
+        addToast(t('federation:admin.approvals.established', { name: originHost(req.origin) }), 'success', 3000);
       } else {
         await api.federation.denyRequest(req.id);
         setRequests((prev) => prev.filter((r) => r.id !== req.id));
         onCountChange?.(requests.length - 1);
-        addToast(t('federation:admin.approvals.deniedToast', { name: req.instanceName || req.origin }), 'success', 3000);
+        addToast(t('federation:admin.approvals.deniedToast', { name: originHost(req.origin) }), 'success', 3000);
       }
     } catch (err) {
       const msg = describeError(err);
@@ -724,14 +740,7 @@ function PendingApprovals({ onCountChange }: { onCountChange?: (count: number) =
         )}
         {requests.map((req) => {
           const isOutbound = req.direction === 'outbound';
-          let name = req.instanceName || '';
-          if (!name) {
-            try {
-              name = new URL(req.origin).host;
-            } catch {
-              name = req.origin;
-            }
-          }
+          const name = originHost(req.origin);
           const subCount = req.subscribers?.length ?? 0;
           const titleText = isOutbound
             ? t('federation:admin.approvals.outboundTitle', { name, count: subCount })
@@ -741,7 +750,9 @@ function PendingApprovals({ onCountChange }: { onCountChange?: (count: number) =
               <div className="flex items-center justify-between">
                 <div className="min-w-0">
                   <div className="text-sm font-medium text-txt-primary truncate">{titleText}</div>
-                  <div className="text-[11px] text-txt-tertiary truncate">{req.origin}</div>
+                  {req.instanceName && (
+                    <div className="text-[11px] text-txt-tertiary truncate">{req.instanceName}</div>
+                  )}
                   <div className="text-[11px] text-txt-tertiary mt-0.5">
                     {t('federation:admin.approvals.requested', { time: formatRelativeTime(t, formatters, req.requestedAt) })}
                   </div>
@@ -800,7 +811,7 @@ function PendingApprovals({ onCountChange }: { onCountChange?: (count: number) =
 
       {confirmAction && (() => {
         const isOutbound = confirmAction.request.direction === 'outbound';
-        const targetName = confirmAction.request.instanceName || confirmAction.request.origin;
+        const targetName = originHost(confirmAction.request.origin);
         const subCount = confirmAction.request.subscribers?.length ?? 0;
         const description =
           confirmAction.type === 'approve'
@@ -848,23 +859,6 @@ function PendingApprovals({ onCountChange }: { onCountChange?: (count: number) =
 //      admin delete) for the ones that truly are abandoned. Neutral tier styling —
 //      no urgency. Acknowledged events are filtered out client-side (the endpoint
 //      keeps returning them for audit).
-
-function peerName(peer: FederationPeer): string {
-  if (peer.instanceName) return peer.instanceName;
-  try {
-    return new URL(peer.origin).host;
-  } catch {
-    return peer.origin;
-  }
-}
-
-function originHost(origin: string): string {
-  try {
-    return new URL(origin).host;
-  } catch {
-    return origin;
-  }
-}
 
 type ResetConfirmAction =
   | { kind: 'repeer'; peer: FederationPeer }
@@ -937,11 +931,11 @@ function ResetCleanup() {
         const result = await api.federation.initiatePeering({ remoteOrigin: peer.origin });
         if (result.verified === false || result.peer?.status === 'needs_attention') {
           addToast(
-            t('federation:admin.resetCleanup.repeerIncomplete', { name: peerName(peer) }),
+            t('federation:admin.resetCleanup.repeerIncomplete', { name: originHost(peer.origin) }),
             'warning',
           );
         } else {
-          addToast(t('federation:admin.resetCleanup.repeerInitiated', { name: peerName(peer) }), 'success', 3000);
+          addToast(t('federation:admin.resetCleanup.repeerInitiated', { name: originHost(peer.origin) }), 'success', 3000);
         }
         await fetchAll();
       } else {
@@ -1025,9 +1019,11 @@ function ResetCleanup() {
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="text-sm font-semibold text-txt-primary">
-                    {t('federation:admin.resetCleanup.peerReset', { name: peerName(peer) })}
+                    {t('federation:admin.resetCleanup.peerReset', { name: originHost(peer.origin) })}
                   </div>
-                  <div className="text-[11px] text-txt-tertiary truncate">{peer.origin}</div>
+                  {peer.instanceName && (
+                    <div className="text-[11px] text-txt-tertiary truncate">{peer.instanceName}</div>
+                  )}
                   <p className="text-xs text-txt-secondary mt-1.5 leading-relaxed">
                     {t('federation:admin.resetCleanup.peerResetDescription')}
                   </p>
@@ -1153,7 +1149,7 @@ export function FederationPanel({ onApprovalCountChange }: { onApprovalCountChan
   const [statusFilter, setStatusFilter] = useState<Set<StatusFilter>>(
     new Set(['active', 'unreachable', 'pending', 'rejected', 'awaiting_approval', 'needs_attention']),
   );
-  const [sortBy, setSortBy] = useState<SortBy>('name');
+  const [sortBy, setSortBy] = useState<SortBy>('domain');
   const [expandedPeerId, setExpandedPeerId] = useState<string | null>(null);
 
   // Confirm dialog state (used in Task 10)
@@ -1216,7 +1212,7 @@ export function FederationPanel({ onApprovalCountChange }: { onApprovalCountChan
     setRecheckingId(peer.id);
     try {
       const result = await api.federation.recheckPeer(peer.id);
-      const name = peer.instanceName || new URL(peer.origin).host;
+      const name = originHost(peer.origin);
       if (result.recovered) {
         setPeers((prev) => prev.map((p) =>
           p.id === peer.id ? { ...p, status: 'active' } : p
@@ -1281,7 +1277,7 @@ export function FederationPanel({ onApprovalCountChange }: { onApprovalCountChan
         case 'reset': {
           await api.federation.resetPeer(peer.id);
           setPeers((prev) => prev.filter((p) => p.id !== peer.id));
-          addToast(t('federation:admin.peers.resetDone', { name: peer.instanceName || peer.origin }), 'success', 3000);
+          addToast(t('federation:admin.peers.resetDone', { name: originHost(peer.origin) }), 'success', 3000);
           break;
         }
       }
@@ -1294,7 +1290,7 @@ export function FederationPanel({ onApprovalCountChange }: { onApprovalCountChan
   };
 
   const confirmDialogProps = confirmAction ? (() => {
-    const name = confirmAction.peer.instanceName || new URL(confirmAction.peer.origin).host;
+    const name = originHost(confirmAction.peer.origin);
     switch (confirmAction.type) {
       case 'rotate': return {
         title: t('federation:admin.peers.confirm.rotate.title'),
