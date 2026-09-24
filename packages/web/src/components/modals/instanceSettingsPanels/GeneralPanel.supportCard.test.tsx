@@ -11,7 +11,14 @@ vi.mock('../../../audio/AudioManager', () => ({
     }),
   },
 }));
-import { render, screen, within } from '@testing-library/react';
+// The page's shared reader of GET /api/instance/info. Stubbed so the test can
+// see whether a save tells it to reread; the real module is covered by its own test.
+const { invalidateHomeInstanceInfo } = vi.hoisted(() => ({ invalidateHomeInstanceInfo: vi.fn() }));
+vi.mock('../../../hooks/useHomeInstanceInfo', () => ({
+  invalidateHomeInstanceInfo,
+  useHomeInstanceInfo: () => null,
+}));
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { InstanceAdminSettings, InstanceInfoResponse } from '@backspace/shared';
 import { MemoryRouter } from 'react-router-dom';
@@ -63,6 +70,7 @@ beforeEach(() => {
   // it, and no state update lands outside the test's control.
   vi.spyOn(api.instance, 'info').mockReturnValue(new Promise<InstanceInfoResponse>(() => {}));
   useSettingsStore.setState({ instanceSettings: null, fetchInstanceSettings: vi.fn().mockResolvedValue(undefined) });
+  invalidateHomeInstanceInfo.mockClear();
 });
 
 afterEach(() => {
@@ -141,5 +149,31 @@ describe('GeneralPanel Support card switch', () => {
       directoryBrowseEnabled: false,
       supportCardEnabled: false,
     });
+  });
+});
+
+describe('GeneralPanel save and the Backspace page', () => {
+  it('tells the shared instance info reader to reread after a successful save', async () => {
+    const update = seed({ supportCardEnabled: true });
+    renderPanel();
+
+    await userEvent.click(supportSwitch());
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(update).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(invalidateHomeInstanceInfo).toHaveBeenCalledTimes(1));
+  });
+
+  it('leaves the reader alone when the save fails', async () => {
+    const update = seed({ supportCardEnabled: true });
+    update.mockRejectedValue(new Error('server said no'));
+    renderPanel();
+
+    await userEvent.click(supportSwitch());
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(update).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled());
+    expect(invalidateHomeInstanceInfo).not.toHaveBeenCalled();
   });
 });

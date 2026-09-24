@@ -7,6 +7,7 @@ import { useSettingsStore } from '../../../stores/settingsStore';
 import { useUIStore } from '../../../stores/uiStore';
 import { describeError } from '../../../i18n/errors';
 import { useFormatters } from '../../../i18n/formatters';
+import { invalidateHomeInstanceInfo } from '../../../hooks/useHomeInstanceInfo';
 import type { DirectoryPingError, InstanceAdminSettings } from '@backspace/shared';
 
 const INSTANCE_NAME_MAX_LENGTH = 32;
@@ -203,6 +204,10 @@ export function GeneralPanel() {
         payload.gifApiKey = gifKeyDraft;
       }
       await updateInstanceSettings(payload);
+      // The Backspace page reads the instance name and the Support card
+      // switch from its own cached copy of the public info; reread it so the
+      // change shows there without a reload.
+      invalidateHomeInstanceInfo();
       // The server's answer is the new baseline, whatever it normalised. A
       // poll dispatched before the save and answered after it can reseed the
       // pre-save values for one interval; the next poll corrects it.
