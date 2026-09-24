@@ -96,6 +96,14 @@ export function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/backspace"
+            element={
+              <ProtectedRoute>
+                <AppLayout />
+              </ProtectedRoute>
+            }
+          />
           <Route path="/" element={<Navigate to="/channels/@me" replace />} />
           <Route path="*" element={<Navigate to="/channels/@me" replace />} />
         </Routes>

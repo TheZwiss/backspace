@@ -1,0 +1,24 @@
+import React, { type JSX } from 'react';
+
+/**
+ * The Backspace mark as an inline icon that takes the text colour, in the
+ * 24px box the other navigation icons use. The path is the one in
+ * `assets/brand/mark-mono-light.svg` (and `public/icons/logo-mark.svg`); its
+ * 133x180 artwork is centred in a square view box so it sits like the square
+ * icons beside it. Decorative: the label next to it names the destination.
+ */
+export function BackspaceMark(props: { size?: number; className?: string }): JSX.Element {
+  const { size = 24, className } = props;
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="28.5 28 200 200"
+      fill="currentColor"
+      aria-hidden="true"
+      className={className}
+    >
+      <path d="M151.191 38C175.386 38 195 57.5367 195 81.6364C195 103.651 177.153 121.498 155.138 121.498H121.104C119.429 121.498 118.269 120.983 117.625 119.953C116.981 118.795 117.432 117.443 118.978 115.899L149.516 85.5845C151.32 83.7826 151.32 81.9809 149.516 80.179L144.684 75.3519C142.88 73.5498 141.076 73.5498 139.272 75.3519L89.0206 125.553C87.2168 127.355 87.2168 129.222 89.0206 131.152L139.659 181.739C141.463 183.541 143.267 183.541 145.071 181.739L149.516 177.106C151.32 175.304 151.32 173.501 149.516 171.699L118.978 141.192C117.432 139.648 116.981 138.36 117.625 137.33C118.269 136.172 119.429 135.593 121.104 135.593H156.229C177.642 135.593 195 152.951 195 174.364C195 198.463 175.386 218 151.191 218H105.809C81.614 218 62 198.463 62 174.364V81.6364C62 57.5367 81.614 38 105.809 38L151.191 38Z" />
+    </svg>
+  );
+}

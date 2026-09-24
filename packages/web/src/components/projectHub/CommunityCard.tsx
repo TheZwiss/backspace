@@ -15,7 +15,7 @@ import { canonicalOrigin } from '../../utils/directory';
 import type { CommunityTarget } from '../../utils/projectLinks';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { REQUEST_MESSAGE_MAX_LENGTH } from '../chat/SpaceCard';
-import { HubCard } from './HubCard';
+import { HUB_ACTION, HubCard } from './HubCard';
 
 // ─── Pure parts ─────────────────────────────────────────────────────────────
 
@@ -160,9 +160,6 @@ async function loadListing(target: CommunityTarget): Promise<ListingResult> {
 
 // ─── Presentation ───────────────────────────────────────────────────────────
 
-const primaryButton =
-  'inline-flex items-center justify-center gap-2 px-4 py-2 bg-accent-primary hover:bg-accent-primary-hover text-white text-sm font-medium rounded transition-colors disabled:opacity-50 disabled:cursor-default';
-
 const noteClass = 'w-full text-[12px] text-txt-danger';
 
 function CommunityIcon() {
@@ -179,7 +176,7 @@ function PendingButton() {
     <button
       type="button"
       disabled
-      className="px-4 py-2 bg-interactive-muted text-txt-tertiary text-sm font-medium rounded cursor-default"
+      className={HUB_ACTION.waiting}
     >
       {t('community.pending')}
     </button>
@@ -189,7 +186,7 @@ function PendingButton() {
 function JoiningButton() {
   const { t } = useTranslation('project');
   return (
-    <button type="button" disabled aria-busy="true" className={primaryButton}>
+    <button type="button" disabled aria-busy="true" className={HUB_ACTION.primary}>
       <LoadingSpinner size={16} />
       {t('community.join')}
     </button>
@@ -246,7 +243,7 @@ function HomeCommunityJoin({
     joinError && !joining ? (
       <>
         <p className={noteClass}>{joinError}</p>
-        <button type="button" onClick={() => void runJoin()} className={primaryButton}>
+        <button type="button" onClick={() => void runJoin()} className={HUB_ACTION.primary}>
           {t('project:community.retry')}
         </button>
       </>
@@ -394,7 +391,7 @@ export function CommunityCard(props: { target: CommunityTarget }): JSX.Element {
       <button
         type="button"
         onClick={() => landOnSpace(target.spaceId)}
-        className="px-4 py-2 bg-accent-mint/15 hover:bg-accent-mint/25 text-accent-mint text-sm font-medium rounded transition-colors"
+        className={HUB_ACTION.quiet}
       >
         {t('community.open')}
       </button>
@@ -411,14 +408,14 @@ export function CommunityCard(props: { target: CommunityTarget }): JSX.Element {
         <p className={noteClass}>
           {phase.reason === 'notListed' ? t('community.notListed') : t('community.unreachable')}
         </p>
-        <button type="button" onClick={() => void handleJoin()} className={primaryButton}>
+        <button type="button" onClick={() => void handleJoin()} className={HUB_ACTION.primary}>
           {t('community.retry')}
         </button>
       </>
     );
   } else {
     action = (
-      <button type="button" onClick={() => void handleJoin()} className={primaryButton}>
+      <button type="button" onClick={() => void handleJoin()} className={HUB_ACTION.primary}>
         {t('community.join')}
       </button>
     );

@@ -12,6 +12,7 @@ import { VoiceControlBar } from '../voice/VoiceControlBar';
 import { VoiceChatPanel } from '../voice/VoiceChatPanel';
 import { FriendsPage } from '../chat/FriendsPage';
 import { ExplorePage } from '../chat/ExplorePage';
+import { ProjectHubPage } from '../projectHub/ProjectHubPage';
 import { Avatar } from '../ui/Avatar';
 import { AvatarStack } from '../ui/AvatarStack';
 import { useVoiceStore } from '../../stores/voiceStore';
@@ -69,6 +70,7 @@ export function MainContent() {
   const showDms = useUIStore((s) => s.showDms);
   const location = useLocation();
   const isExplorePage = location.pathname === '/explore';
+  const isProjectHubPage = location.pathname === '/backspace';
   const activeDmCall = useVoiceStore((s) => s.activeDmCall);
   const outgoingCall = useVoiceStore((s) => s.outgoingCall);
   const dmChannels = useSpaceStore((s) => s.dmChannels);
@@ -182,11 +184,15 @@ export function MainContent() {
   const channel = channels.find(c => c.id === currentChannelId);
   const isVoiceChannel = channel?.type === 'voice';
 
-  if (showDms || isExplorePage || !currentSpaceId) {
+  if (showDms || isExplorePage || isProjectHubPage || !currentSpaceId) {
     if (!currentChannelId) {
-      // i18n-check: allow-literal (the "; return" between two JSX returns is code, not text)
-      if (isExplorePage) return <ExplorePage />;
-      return <FriendsPage />;
+      return isExplorePage ? (
+        <ExplorePage />
+      ) : isProjectHubPage ? (
+        <ProjectHubPage />
+      ) : (
+        <FriendsPage />
+      );
     }
 
     const dmChannel = dmChannels.find(dm => dm.id === currentChannelId);
