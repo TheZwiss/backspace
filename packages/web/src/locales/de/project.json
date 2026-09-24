@@ -10,8 +10,8 @@
   "whatsNew": {
     "title": "Neuigkeiten",
     "updated": "Aktualisiert auf {{version}}",
-    "current": "Du nutzt {{version}}",
-    "noVersion": "Versionshinweise zu jeder Version",
+    "current": "Du nutzt Version {{version}}",
+    "noVersion": "Versionshinweise für alle Versionen",
     "action": "Versionshinweise lesen"
   },
   "community": {

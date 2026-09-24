@@ -10,7 +10,7 @@
   "whatsNew": {
     "title": "更新内容",
     "updated": "已更新至 {{version}}",
-    "current": "您当前使用的是 {{version}}",
+    "current": "您当前使用的是 {{version}} 版本",
     "noVersion": "所有版本的发布说明",
     "action": "阅读发布说明"
   },
@@ -26,7 +26,7 @@
   },
   "support": {
     "title": "支持本项目",
-    "body": "Backspace 公开开发，经费来自使用它的人。",
+    "body": "Backspace 以开放方式开发，由使用它的人资助。",
     "action": "在 Ko-fi 上支持"
   },
   "insights": {
