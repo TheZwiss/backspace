@@ -39,9 +39,9 @@ instance info and is shown only in "This instance".
 `funding` holds the project's Ko-fi page; `community` ships as `null`. A null
 value hides its card, so no card renders a dead link. `.github/FUNDING.yml`
 names the same Ko-fi page for the repository's Sponsor button.
-`projectLinks.test.ts` runs `projectLinksProblems`
-over the real constant: every URL must parse and be `https:`, and
-`community.origin` must be a bare origin with a non-empty `spaceId`.
+`projectLinks.test.ts` runs `projectLinksProblems` over the real constant:
+every URL must parse and be `https:`, and `community.origin` must be a bare
+origin with a non-empty `spaceId`.
 
 ---
 
