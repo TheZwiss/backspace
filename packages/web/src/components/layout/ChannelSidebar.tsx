@@ -27,6 +27,7 @@ import { useInstanceUpdateBadge } from '../../hooks/useInstanceUpdateBadge';
 import { useHubUpdateState } from '../../hooks/useHubUpdateState';
 import { activeHomeNavItem } from '../../utils/homeNav';
 import { BackspaceMark } from '../projectHub/BackspaceMark';
+import { HubUpdateDot } from '../projectHub/HubUpdateDot';
 import { DropdownItem } from '../modals/settingsPanels/_shared/SettingsPickerPrimitives';
 
 export function ChannelSidebar() {
@@ -490,13 +491,7 @@ export function ChannelSidebar() {
           >
             <BackspaceMark className={`flex-shrink-0 ${activeHomeItem === 'backspace' ? 'text-white' : 'opacity-70 group-hover:opacity-100'}`} />
             <span className="font-medium text-[16px]">{t('project:nav.label')}</span>
-            {hubUpdate.state === 'updated' && (
-              <span
-                role="img"
-                aria-label={t('project:nav.updatedDot')}
-                className="ml-auto w-2 h-2 rounded-full bg-accent-primary flex-shrink-0"
-              />
-            )}
+            {hubUpdate.state === 'updated' && <HubUpdateDot className="ml-auto" />}
           </div>
 
           <div className="mt-[18px] px-2 mb-1 flex items-center justify-between group">

@@ -56,6 +56,7 @@
       "unavailable": "This instance is not configured to reach a directory, so there is nothing to show."
     },
     "supportCard": {
+      "label": "Backspace page",
       "toggleLabel": "Show the Support card",
       "toggleDescription": "Shows a card on the Backspace page that links to the project's Ko-fi page. Turning it off hides only that card."
     },

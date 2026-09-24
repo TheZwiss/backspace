@@ -102,20 +102,58 @@ describe('useHomeInstanceInfo', () => {
     expect(spy).toHaveBeenCalledTimes(1);
   });
 
-  it('refetches at once on invalidate while subscribed', async () => {
+  it('keeps the last value visible while an invalidate rereads, then replaces it', async () => {
     const spy = vi.spyOn(api.instance, 'info').mockResolvedValueOnce(info({ supportCardEnabled: true }));
 
     const hook = renderHook(() => useHomeInstanceInfo());
     await waitFor(() => expect(hook.result.current?.supportCardEnabled).toBe(true));
 
-    spy.mockResolvedValueOnce(info({ supportCardEnabled: false }));
+    const reread = deferred<InstanceInfoResponse>();
+    spy.mockReturnValueOnce(reread.promise);
     act(() => { invalidateHomeInstanceInfo(); });
 
-    await waitFor(() => expect(hook.result.current?.supportCardEnabled).toBe(false));
     expect(spy).toHaveBeenCalledTimes(2);
+    expect(hook.result.current?.supportCardEnabled).toBe(true);
+
+    await act(async () => { reread.resolve(info({ supportCardEnabled: false })); await reread.promise; });
+    expect(hook.result.current?.supportCardEnabled).toBe(false);
   });
 
-  it('only drops the cache on invalidate when nothing is subscribed; the next mount fetches', async () => {
+  it('keeps the last value when the reread after an invalidate fails', async () => {
+    const spy = vi.spyOn(api.instance, 'info').mockResolvedValueOnce(info({ version: '1.5.1' }));
+
+    const hook = renderHook(() => useHomeInstanceInfo());
+    await waitFor(() => expect(hook.result.current?.version).toBe('1.5.1'));
+
+    const reread = deferred<InstanceInfoResponse>();
+    spy.mockReturnValueOnce(reread.promise);
+    act(() => { invalidateHomeInstanceInfo(); });
+    await act(async () => { reread.reject(new Error('offline')); await reread.promise.catch(() => {}); });
+
+    expect(spy).toHaveBeenCalledTimes(2);
+    expect(hook.result.current?.version).toBe('1.5.1');
+  });
+
+  it('rereads a stale value on the next mount after a failed reread', async () => {
+    const spy = vi.spyOn(api.instance, 'info')
+      .mockResolvedValueOnce(info({ version: '1.5.1' }))
+      .mockRejectedValueOnce(new Error('offline'));
+
+    const first = renderHook(() => useHomeInstanceInfo());
+    await waitFor(() => expect(first.result.current?.version).toBe('1.5.1'));
+    act(() => { invalidateHomeInstanceInfo(); });
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(2));
+    await act(async () => { await Promise.resolve(); });
+
+    spy.mockResolvedValueOnce(info({ version: '1.5.2' }));
+    const second = renderHook(() => useHomeInstanceInfo());
+    expect(second.result.current?.version).toBe('1.5.1');
+    await waitFor(() => expect(second.result.current?.version).toBe('1.5.2'));
+    expect(first.result.current?.version).toBe('1.5.2');
+    expect(spy).toHaveBeenCalledTimes(3);
+  });
+
+  it('only marks the value stale on invalidate when nothing is subscribed; the next mount shows it and rereads', async () => {
     const spy = vi.spyOn(api.instance, 'info').mockResolvedValueOnce(info({ supportCardEnabled: true }));
 
     const first = renderHook(() => useHomeInstanceInfo());
@@ -127,9 +165,25 @@ describe('useHomeInstanceInfo', () => {
 
     spy.mockResolvedValueOnce(info({ supportCardEnabled: false }));
     const again = renderHook(() => useHomeInstanceInfo());
-    expect(again.result.current).toBeNull();
+    expect(again.result.current?.supportCardEnabled).toBe(true);
     await waitFor(() => expect(again.result.current?.supportCardEnabled).toBe(false));
     expect(spy).toHaveBeenCalledTimes(2);
+  });
+
+  it('shares one reread between mounts while a stale value is being refreshed', async () => {
+    const spy = vi.spyOn(api.instance, 'info').mockResolvedValueOnce(info());
+
+    const first = renderHook(() => useHomeInstanceInfo());
+    await waitFor(() => expect(first.result.current).not.toBeNull());
+
+    const reread = deferred<InstanceInfoResponse>();
+    spy.mockReturnValueOnce(reread.promise);
+    act(() => { invalidateHomeInstanceInfo(); });
+    renderHook(() => useHomeInstanceInfo());
+
+    expect(spy).toHaveBeenCalledTimes(2);
+    await act(async () => { reread.resolve(info({ version: '1.5.2' })); await reread.promise; });
+    expect(first.result.current?.version).toBe('1.5.2');
   });
 
   it('ignores an answer that was in flight when the cache was invalidated', async () => {

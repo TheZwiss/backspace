@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   AVATAR_COLORS,
-  type DirectoryDocument,
   type DirectoryDocumentSpace,
   type DirectoryEntry,
 } from '@backspace/shared';
@@ -86,60 +85,62 @@ function parseSpace(raw: unknown): DirectoryDocumentSpace | null {
   };
 }
 
+type ListingFailure = 'unreachable' | 'notListed';
+
+/** The part of a directory document's `instance` the join entry is built from. */
+export interface DirectoryListingInstance {
+  name: string;
+  federatedRegistrationOpen: boolean;
+}
+
+/** What a directory document says about one space. */
+export type DirectoryListing =
+  | { ok: true; instance: DirectoryListingInstance; space: DirectoryDocumentSpace }
+  | { ok: false; reason: ListingFailure };
+
 /**
- * The directory document another instance serves on
- * `GET /api/directory/spaces`, validated, or null when it is not one.
+ * Reads the community space out of the directory document another instance
+ * serves on `GET /api/directory/spaces`.
  *
- * The answer is remote input, so every field the card or the connect-and-join
- * dialog reads is checked for its type and copied into a fresh object;
- * unknown fields never pass through. Any malformed space fails the whole
- * document, the rule the directory hub applies to the same document: an
- * instance's own endpoint never produces one, so it means a broken or foreign
- * server. The document's `origin` is returned as sent and never trusted; the
- * card uses its configured origin.
+ * The answer is remote input. The envelope is validated (`schema === 1`, an
+ * `instance` object with a string `name` and a boolean
+ * `federatedRegistrationOpen`, a `spaces` array); then only the element whose
+ * `id` is `spaceId` is parsed, so a malformed space the card never shows
+ * cannot keep the user out of the one it does. Every field the card or the
+ * connect-and-join dialog reads is checked for its type and copied into a
+ * fresh object; unknown fields never pass through, and the document's own
+ * `origin` is not read at all (the card uses its configured origin).
+ *
+ * An invalid envelope or a malformed matching space is `unreachable`: an
+ * instance's own endpoint produces neither, so it means a broken or foreign
+ * server. A valid envelope without the space is `notListed`.
  */
-export function parseDirectoryDocument(payload: unknown): DirectoryDocument | null {
-  if (!isRecord(payload)) return null;
-  const { schema, origin, instance, spaces } = payload;
-  if (schema !== 1 || typeof origin !== 'string') return null;
+export function parseDirectoryListing(payload: unknown, spaceId: string): DirectoryListing {
+  const unreachable: DirectoryListing = { ok: false, reason: 'unreachable' };
+  if (!isRecord(payload)) return unreachable;
+  const { schema, instance, spaces } = payload;
+  if (schema !== 1 || !isRecord(instance) || !Array.isArray(spaces)) return unreachable;
 
-  if (!isRecord(instance)) return null;
-  const { name, federatedRegistrationOpen, version } = instance;
-  if (typeof name !== 'string' || typeof federatedRegistrationOpen !== 'boolean') return null;
-  if (version !== undefined && !isNullableString(version)) return null;
+  const { name, federatedRegistrationOpen } = instance;
+  if (typeof name !== 'string' || typeof federatedRegistrationOpen !== 'boolean') return unreachable;
 
-  if (!Array.isArray(spaces)) return null;
-  const parsedSpaces: DirectoryDocumentSpace[] = [];
-  for (const raw of spaces) {
-    const space = parseSpace(raw);
-    if (space === null) return null;
-    parsedSpaces.push(space);
-  }
+  const raw: unknown = spaces.find((element: unknown) => isRecord(element) && element.id === spaceId);
+  if (raw === undefined) return { ok: false, reason: 'notListed' };
+  const space = parseSpace(raw);
+  if (space === null) return unreachable;
 
-  return {
-    schema: 1,
-    origin,
-    instance: { name, federatedRegistrationOpen, version: version ?? null },
-    spaces: parsedSpaces,
-  };
+  return { ok: true, instance: { name, federatedRegistrationOpen }, space };
 }
 
 /** How long the listing request may take before the card calls the instance unreachable. */
 const LISTING_TIMEOUT_MS = 10_000;
 
-type ListingFailure = 'unreachable' | 'notListed';
-
-type ListingResult =
-  | { ok: true; document: DirectoryDocument; space: DirectoryDocumentSpace }
-  | { ok: false; reason: ListingFailure };
-
 /**
  * Read the community instance's directory document and find the space in it.
- * A network error, the timeout, a non-2xx status, a body that is not JSON or
- * JSON that is not a directory document all say `unreachable`; a valid
- * document without the space says `notListed`.
+ * A network error, the timeout, a non-2xx status or a body that is not JSON
+ * say `unreachable`; the rest is `parseDirectoryListing`.
  */
-async function loadListing(target: CommunityTarget): Promise<ListingResult> {
+async function loadListing(target: CommunityTarget): Promise<DirectoryListing> {
   let payload: unknown;
   try {
     const response = await fetch(`${target.origin}/api/directory/spaces`, {
@@ -150,12 +151,7 @@ async function loadListing(target: CommunityTarget): Promise<ListingResult> {
   } catch {
     return { ok: false, reason: 'unreachable' };
   }
-
-  const document = parseDirectoryDocument(payload);
-  if (document === null) return { ok: false, reason: 'unreachable' };
-  const space = document.spaces.find((s) => s.id === target.spaceId);
-  if (space === undefined) return { ok: false, reason: 'notListed' };
-  return { ok: true, document, space };
+  return parseDirectoryListing(payload, target.spaceId);
 }
 
 // ─── Presentation ───────────────────────────────────────────────────────────
@@ -377,8 +373,8 @@ export function CommunityCard(props: { target: CommunityTarget }): JSX.Element {
     const entry: DirectoryEntry = {
       ...result.space,
       origin: target.origin,
-      instanceName: result.document.instance.name,
-      federatedRegistrationOpen: result.document.instance.federatedRegistrationOpen,
+      instanceName: result.instance.name,
+      federatedRegistrationOpen: result.instance.federatedRegistrationOpen,
     };
     setPhase({ kind: 'idle' });
     awaitingDialog.current = true;

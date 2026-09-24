@@ -24,6 +24,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { useAuthStore } from '../../stores/authStore';
 import { useUIStore } from '../../stores/uiStore';
 import { MobileYouScreen } from './MobileYouScreen';
+import { HubUpdateDot } from '../projectHub/HubUpdateDot';
 
 const DOT = 'Backspace was updated';
 
@@ -85,14 +86,14 @@ describe('MobileYouScreen: Backspace row', () => {
     expect(screen.getAllByRole('img', { name: DOT })).toHaveLength(1);
   });
 
-  it('draws the same informational dot as the desktop sidebar, not the red "needs you" dot', () => {
+  it('draws HubUpdateDot, the same informational dot as the desktop sidebar', () => {
     hubState.state = 'updated';
 
     render(<MobileYouScreen />);
-
     const dot = screen.getByRole('img', { name: DOT });
-    expect(dot).toHaveClass('w-2', 'h-2', 'rounded-full', 'bg-accent-primary', 'flex-shrink-0');
-    expect(dot).not.toHaveClass('bg-notification');
+
+    const { container } = render(<HubUpdateDot />);
+    expect(dot.outerHTML).toBe(container.innerHTML);
   });
 
   it.each<HubUpdateState>(['unknown', 'first-run', 'current'])('shows no dot when the state is %s', (state) => {

@@ -278,7 +278,6 @@ function seedStores(state: HubState, width: FrameWidth): void {
     isMobile: width === 'phone',
     // The You row and the page's phone entry are reached from the You tab.
     mobileScreen: 'you',
-    memberListOpen: false,
   });
 }
 

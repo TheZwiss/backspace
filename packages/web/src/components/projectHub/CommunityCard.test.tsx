@@ -19,7 +19,7 @@ vi.mock('react-router-dom', async () => {
   return { ...actual, useNavigate: () => mockNavigate };
 });
 
-import { CommunityCard, communityStatus, parseDirectoryDocument } from './CommunityCard';
+import { CommunityCard, communityStatus, parseDirectoryListing } from './CommunityCard';
 import type { CommunityTarget } from '../../utils/projectLinks';
 import { useExploreStore, type TaggedExploreSpace, type TaggedJoinRequest } from '../../stores/exploreStore';
 import { useSpaceStore, type TaggedSpace } from '../../stores/spaceStore';
@@ -89,61 +89,99 @@ function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 }
 
-// ── parseDirectoryDocument ───────────────────────────────────────────────────
+// ── parseDirectoryListing ────────────────────────────────────────────────────
 
-describe('parseDirectoryDocument', () => {
-  it('accepts a well-formed document', () => {
-    expect(parseDirectoryDocument(doc())).toEqual(doc());
+const INSTANCE = { name: 'Backspace Community', federatedRegistrationOpen: true };
+
+function listed(space: DirectoryDocumentSpace = docSpace()) {
+  return { ok: true, instance: INSTANCE, space };
+}
+
+const unreachable = { ok: false, reason: 'unreachable' };
+const notListed = { ok: false, reason: 'notListed' };
+
+describe('parseDirectoryListing', () => {
+  it('finds the space in a well-formed document', () => {
+    expect(parseDirectoryListing(doc(), 'space-1')).toEqual(listed());
   });
 
-  it('reads a missing instance version as null', () => {
+  it('reads the instance without a version', () => {
     const raw = { ...doc(), instance: { name: 'Backspace Community', federatedRegistrationOpen: true } };
-    expect(parseDirectoryDocument(raw)?.instance.version).toBeNull();
+    expect(parseDirectoryListing(raw, 'space-1')).toEqual(listed());
   });
 
   it('copies known fields only, so nothing unexpected reaches the join entry', () => {
-    const raw = { ...doc(), extra: 'x', spaces: [{ ...docSpace(), injected: true }] };
-    const parsed = parseDirectoryDocument(raw);
-    expect(parsed).toEqual(doc());
-    expect(parsed?.spaces[0]).not.toHaveProperty('injected');
+    const raw = {
+      ...doc(),
+      extra: 'x',
+      instance: { ...INSTANCE, version: '1.5.1', injected: true },
+      spaces: [{ ...docSpace(), injected: true }],
+    };
+    const parsed = parseDirectoryListing(raw, 'space-1');
+    expect(parsed).toEqual(listed());
+    expect(parsed.ok && parsed.space).not.toHaveProperty('injected');
+    expect(parsed.ok && parsed.instance).not.toHaveProperty('injected');
   });
 
-  it('reads an unknown avatar colour as null rather than failing the document', () => {
+  it('reads an unknown avatar colour as null rather than failing the space', () => {
     const raw = { ...doc(), spaces: [{ ...docSpace(), avatarColor: 'chartreuse' }] };
-    expect(parseDirectoryDocument(raw)?.spaces[0].avatarColor).toBeNull();
+    expect(parseDirectoryListing(raw, 'space-1')).toEqual(listed(docSpace({ avatarColor: null })));
   });
 
-  it('rejects a document with another schema', () => {
-    expect(parseDirectoryDocument({ ...doc(), schema: 2 })).toBeNull();
+  it('says notListed when the document does not carry the space', () => {
+    expect(parseDirectoryListing(doc({ spaces: [docSpace({ id: 'another' })] }), 'space-1')).toEqual(notListed);
+    expect(parseDirectoryListing(doc({ spaces: [] }), 'space-1')).toEqual(notListed);
   });
 
-  it('rejects a document without an instance object', () => {
+  it('ignores a malformed space that is not the one asked for', () => {
+    const raw = {
+      ...doc(),
+      spaces: [
+        { ...docSpace({ id: 'broken' }), memberCount: 'many', visibility: 'private' },
+        'not a space',
+        null,
+        docSpace(),
+      ],
+    };
+    expect(parseDirectoryListing(raw, 'space-1')).toEqual(listed());
+  });
+
+  it('says unreachable for a document with another schema', () => {
+    expect(parseDirectoryListing({ ...doc(), schema: 2 }, 'space-1')).toEqual(unreachable);
+  });
+
+  it('says unreachable for a document without an instance object', () => {
     const rest: Partial<DirectoryDocument> = doc();
     delete rest.instance;
-    expect(parseDirectoryDocument(rest)).toBeNull();
-    expect(parseDirectoryDocument({ ...rest, instance: 'Backspace' })).toBeNull();
+    expect(parseDirectoryListing(rest, 'space-1')).toEqual(unreachable);
+    expect(parseDirectoryListing({ ...rest, instance: 'Backspace' }, 'space-1')).toEqual(unreachable);
   });
 
-  it('rejects an instance with a missing name or a non-boolean registration flag', () => {
-    expect(parseDirectoryDocument({ ...doc(), instance: { federatedRegistrationOpen: true, version: null } })).toBeNull();
-    expect(parseDirectoryDocument({ ...doc(), instance: { name: 'X', federatedRegistrationOpen: 'yes', version: null } })).toBeNull();
+  it('says unreachable for an instance with a missing name or a non-boolean registration flag', () => {
+    expect(parseDirectoryListing({ ...doc(), instance: { federatedRegistrationOpen: true, version: null } }, 'space-1'))
+      .toEqual(unreachable);
+    expect(parseDirectoryListing({ ...doc(), instance: { name: 'X', federatedRegistrationOpen: 'yes', version: null } }, 'space-1'))
+      .toEqual(unreachable);
   });
 
-  it('rejects a space whose visibility is not public or request', () => {
-    expect(parseDirectoryDocument({ ...doc(), spaces: [{ ...docSpace(), visibility: 'private' }] })).toBeNull();
+  it('says unreachable when the matching space has a visibility other than public or request', () => {
+    expect(parseDirectoryListing({ ...doc(), spaces: [{ ...docSpace(), visibility: 'private' }] }, 'space-1'))
+      .toEqual(unreachable);
   });
 
-  it('rejects a space with a wrongly typed field', () => {
-    expect(parseDirectoryDocument({ ...doc(), spaces: [{ ...docSpace(), memberCount: '42' }] })).toBeNull();
-    expect(parseDirectoryDocument({ ...doc(), spaces: [{ ...docSpace(), id: 7 }] })).toBeNull();
+  it('says unreachable when the matching space has a wrongly typed field', () => {
+    expect(parseDirectoryListing({ ...doc(), spaces: [{ ...docSpace(), memberCount: '42' }] }, 'space-1'))
+      .toEqual(unreachable);
+    expect(parseDirectoryListing({ ...doc(), spaces: [{ ...docSpace(), name: 7 }] }, 'space-1'))
+      .toEqual(unreachable);
   });
 
-  it('rejects a document whose spaces are not an array', () => {
-    expect(parseDirectoryDocument({ ...doc(), spaces: {} })).toBeNull();
+  it('says unreachable for a document whose spaces are not an array', () => {
+    expect(parseDirectoryListing({ ...doc(), spaces: {} }, 'space-1')).toEqual(unreachable);
   });
 
-  it.each([null, undefined, 'document', 42, [], true])('rejects the non-object %j', (value) => {
-    expect(parseDirectoryDocument(value)).toBeNull();
+  it.each([null, undefined, 'document', 42, [], true])('says unreachable for the non-object %j', (value) => {
+    expect(parseDirectoryListing(value, 'space-1')).toEqual(unreachable);
   });
 });
 
@@ -325,6 +363,33 @@ describe('CommunityCard', () => {
     expect(await screen.findByText('The community space is not available right now.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Try again' })).toBeEnabled();
     expect(openModal).not.toHaveBeenCalled();
+  });
+
+  it('says the instance is unreachable when the space it lists is malformed', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ...doc(), spaces: [{ ...docSpace(), memberCount: '42' }] }));
+    render(<CommunityCard target={remoteTarget} />);
+    fireEvent.click(joinButton());
+    expect(await screen.findByText('The community instance could not be reached.')).toBeInTheDocument();
+    expect(openModal).not.toHaveBeenCalled();
+  });
+
+  it('joins when another space in the document is malformed', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({
+      ...doc(),
+      spaces: [{ ...docSpace({ id: 'broken' }), visibility: 'private', memberCount: null }, docSpace()],
+    }));
+    render(<CommunityCard target={remoteTarget} />);
+    fireEvent.click(joinButton());
+
+    await waitFor(() => expect(openModal).toHaveBeenCalledTimes(1));
+    expect(openModal).toHaveBeenCalledWith('connectAndJoin', {
+      entry: {
+        ...docSpace(),
+        origin: REMOTE,
+        instanceName: 'Backspace Community',
+        federatedRegistrationOpen: true,
+      },
+    });
   });
 
   it('hands a remote space to the connect-and-join dialog under the configured origin', async () => {

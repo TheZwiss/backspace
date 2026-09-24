@@ -56,8 +56,9 @@
       "unavailable": "Diese Instanz ist nicht so eingerichtet, dass sie ein Verzeichnis erreicht; es gibt also nichts anzuzeigen."
     },
     "supportCard": {
+      "label": "Backspace-Seite",
       "toggleLabel": "Karte zur Unterstützung des Projekts anzeigen",
-      "toggleDescription": "Zeigt auf der Backspace-Seite eine Karte, die auf die Ko-fi-Seite des Projekts verlinkt. Ausgeschaltet wird nur diese Karte ausgeblendet."
+      "toggleDescription": "Zeigt auf der Backspace-Seite eine Karte, die auf die Ko-fi-Seite des Projekts verlinkt. Wenn ausgeschaltet, wird nur diese Karte ausgeblendet."
     },
     "gif": {
       "label": "GIF-Suche",

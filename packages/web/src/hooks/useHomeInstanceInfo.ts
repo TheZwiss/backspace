@@ -8,13 +8,18 @@ import { api } from '../api/client';
  * tab and the page itself. They read the version and `supportCardEnabled`
  * only through this hook, so they never disagree about either.
  *
- * Fetch rule: whenever a subscriber mounts while there is no cached value and
+ * Fetch rule: whenever a subscriber mounts while there is no fresh value and
  * no request in flight, one request starts on the home API client and every
  * concurrent subscriber shares it. A success is cached for the session. A
- * failure leaves null and nothing in flight, and nothing retries on a timer:
- * the next subscriber mount (opening the page, for example) tries again. On
- * desktop the sidebar stays mounted, so after a failure its dot stays off
- * until a page mount or a reload; losing a dot is the safe failure.
+ * failure leaves the value as it was (null, or the stale value) and nothing
+ * in flight, and nothing retries on a timer: the next subscriber mount
+ * (opening the page, for example) tries again. On desktop the sidebar stays
+ * mounted, so after a first failure its dot stays off until a page mount or a
+ * reload; losing a dot is the safe failure.
+ *
+ * Invalidation is stale-while-revalidate: the last value stays on screen,
+ * marked stale, until the reread replaces it, so the Support card, the
+ * instance name and the sidebar dot do not blink out after an admin save.
  *
  * The older ad-hoc readers of this endpoint (`UserSettings`, `ExplorePage`,
  * the auth pages, the admin panels) keep their own requests; `ExplorePage`
@@ -22,7 +27,9 @@ import { api } from '../api/client';
  */
 
 let cached: InstanceInfoResponse | null = null;
-let inFlight: Promise<void> | null = null;
+/** Set by an invalidation; the cached value is still shown but is reread. */
+let stale = false;
+let inFlight = false;
 /**
  * Bumped by every invalidation. A request remembers the generation it started
  * in and drops its answer if that has moved on, so a response already in
@@ -36,18 +43,20 @@ function emit(): void {
 }
 
 function fetchIfNeeded(): void {
-  if (cached !== null || inFlight !== null) return;
+  if (inFlight || (cached !== null && !stale)) return;
   const startedIn = generation;
-  inFlight = api.instance.info().then(
+  inFlight = true;
+  api.instance.info().then(
     (info) => {
       if (startedIn !== generation) return;
       cached = info;
-      inFlight = null;
+      stale = false;
+      inFlight = false;
       emit();
     },
     () => {
       if (startedIn !== generation) return;
-      inFlight = null;
+      inFlight = false;
     },
   );
 }
@@ -72,15 +81,16 @@ export function useHomeInstanceInfo(): InstanceInfoResponse | null {
 }
 
 /**
- * Drops the cached info and, if anything is subscribed, rereads it at once.
- * `GeneralPanel` calls this after a successful save, so turning the Support
- * card off shows on the page without a reload.
+ * Marks the cached info stale and, if anything is subscribed, rereads it at
+ * once. The stale value stays visible until the reread succeeds, and stays if
+ * it fails; with nothing subscribed the next mount rereads. `GeneralPanel`
+ * calls this after a successful save, so turning the Support card off shows
+ * on the page without a reload.
  */
 export function invalidateHomeInstanceInfo(): void {
   generation += 1;
-  cached = null;
-  inFlight = null;
-  emit();
+  stale = true;
+  inFlight = false;
   if (listeners.size > 0) fetchIfNeeded();
 }
 
@@ -88,6 +98,7 @@ export function invalidateHomeInstanceInfo(): void {
 export function __resetHomeInstanceInfoForTests(): void {
   generation += 1;
   cached = null;
-  inFlight = null;
+  stale = false;
+  inFlight = false;
   listeners.clear();
 }

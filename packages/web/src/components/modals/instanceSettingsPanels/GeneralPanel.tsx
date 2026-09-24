@@ -501,18 +501,21 @@ export function GeneralPanel() {
         page's other links stay, and the card is also absent until the
         project has a Ko-fi link to point it at.
       */}
-      <div className="rounded-lg bg-white/[0.02] p-3.5">
-        <label className="flex items-center justify-between gap-3 cursor-pointer">
-          <div className="min-w-0">
-            <div className="text-sm font-medium text-txt-primary">{t('admin:general.supportCard.toggleLabel')}</div>
-            <div className="text-xs text-txt-tertiary mt-0.5">{t('admin:general.supportCard.toggleDescription')}</div>
-          </div>
-          <Toggle
-            enabled={draft.supportCardEnabled}
-            onChange={(value) => setDraft({ ...draft, supportCardEnabled: value })}
-            ariaLabel={t('admin:general.supportCard.toggleLabel')}
-          />
-        </label>
+      <div>
+        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:general.supportCard.label')}</div>
+        <div className="rounded-lg bg-white/[0.02] p-3.5">
+          <label className="flex items-center justify-between gap-3 cursor-pointer">
+            <div className="min-w-0">
+              <div className="text-sm font-medium text-txt-primary">{t('admin:general.supportCard.toggleLabel')}</div>
+              <div className="text-xs text-txt-tertiary mt-0.5">{t('admin:general.supportCard.toggleDescription')}</div>
+            </div>
+            <Toggle
+              enabled={draft.supportCardEnabled}
+              onChange={(value) => setDraft({ ...draft, supportCardEnabled: value })}
+              ariaLabel={t('admin:general.supportCard.toggleLabel')}
+            />
+          </label>
+        </div>
       </div>
 
       {/* Status messages */}

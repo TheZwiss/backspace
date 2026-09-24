@@ -85,6 +85,15 @@ describe('GeneralPanel Support card switch', () => {
     expect(screen.getByText(SUPPORT_DESCRIPTION)).toBeInTheDocument();
   });
 
+  it('sits in its own "Backspace page" section, not under GIF search', () => {
+    seed({});
+    renderPanel();
+    const section = screen.getByText('Backspace page').parentElement as HTMLElement;
+    expect(within(section).getByRole('switch', { name: SUPPORT })).toBeInTheDocument();
+    const gifSection = screen.getByText('GIF Search').parentElement as HTMLElement;
+    expect(within(gifSection).queryByRole('switch', { name: SUPPORT })).not.toBeInTheDocument();
+  });
+
   it('is outside the discovery radiogroup', () => {
     seed({});
     renderPanel();

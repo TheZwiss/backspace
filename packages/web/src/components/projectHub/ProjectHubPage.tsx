@@ -155,7 +155,10 @@ export function ProjectHubPage(props: { links?: ProjectLinks; showTopBar?: boole
       <div className="flex-1 overflow-y-auto">
         <div className="p-6 space-y-10">
           <header className="flex items-center gap-4">
-            <img src="/icons/logo-mark.svg" alt="" className="w-9 h-auto flex-shrink-0" />
+            {/* The space rail's home tile, scaled up: the white mark on the brand lavender. */}
+            <div className="w-12 h-12 rounded-2xl bg-accent-primary text-white flex items-center justify-center flex-shrink-0">
+              <img src="/icons/logo-mark.svg" alt="" className="w-6 h-auto" />
+            </div>
             <div className="min-w-0">
               <h1 className="text-2xl font-bold text-txt-primary">{t('header.title')}</h1>
               <p className="text-sm text-txt-secondary">{t('header.tagline')}</p>

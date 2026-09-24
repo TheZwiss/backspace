@@ -8,16 +8,19 @@ import { parseFederatedUsername } from '../../utils/identity';
 import { useInstanceUpdateBadge } from '../../hooks/useInstanceUpdateBadge';
 import { useHubUpdateState } from '../../hooks/useHubUpdateState';
 import { BackspaceMark } from '../projectHub/BackspaceMark';
+import { HubUpdateDot } from '../projectHub/HubUpdateDot';
 
 /**
- * A row on the You screen. `badge` shows a dot at the trailing edge; a row
- * that can show one must say what it means, so `badgeLabel` comes with it.
+ * A row on the You screen. `badge` is drawn at the trailing edge, before the
+ * chevron; a badge must name itself (the Backspace row passes `HubUpdateDot`,
+ * which carries its own label).
  */
-type ActionRow = {
+interface ActionRow {
   label: string;
   icon: React.ReactNode;
   action: () => void;
-} & ({ badge?: undefined } | { badge: boolean; badgeLabel: string });
+  badge?: React.ReactNode;
+}
 
 export function MobileYouScreen() {
   const { t } = useTranslation(['mobile', 'settings', 'common', 'admin', 'project']);
@@ -74,8 +77,7 @@ export function MobileYouScreen() {
       label: t('project:nav.label'),
       icon: <BackspaceMark size={20} className="w-5 h-5" />,
       action: () => pushMobileScreen('backspace'),
-      badge: hubUpdate.state === 'updated',
-      badgeLabel: t('project:nav.updatedDot'),
+      badge: hubUpdate.state === 'updated' ? <HubUpdateDot /> : null,
     },
   ];
 
@@ -154,13 +156,7 @@ export function MobileYouScreen() {
           >
             <span className="text-txt-secondary">{row.icon}</span>
             <span className="text-sm text-txt-primary flex-1">{row.label}</span>
-            {row.badge && (
-              <span
-                role="img"
-                aria-label={row.badgeLabel}
-                className="w-2 h-2 rounded-full bg-accent-primary flex-shrink-0"
-              />
-            )}
+            {row.badge}
             <svg className="w-4 h-4 text-txt-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
             </svg>
