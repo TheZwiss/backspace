@@ -192,7 +192,7 @@ Public route at `/join/:inviteCode`. Handles five phases:
 |-------|---------|-----|
 | `preview` | Initial load | Space preview card + join button (auth) or login/register links (unauth) |
 | `connect` | `NotConnectedError` on join attempt | Password prompt for federation connect |
-| `fallback` | `DifferentPasswordError` on connect | Username + password for existing remote account |
+| `fallback` | `RemoteLoginRequiredError` on connect | Username + password for an account on the remote, under the `FallbackNotice` its `reason` selects |
 | `other-instance` | User clicks "I use another instance" | Domain input for federation redirect |
 | `already-member` | Join returns "already a member" | Green checkmark + auto-redirect (2s timer) |
 
@@ -789,7 +789,7 @@ Used for self-leave (`leaveSpace` calls `removeMember` with the correct user ID 
 4. If not connected → NotConnectedError thrown
 5. JoinSpaceModal/JoinPage enters 'connect' phase
 6. User provides password → connectToRemote(origin, password)
-7. If password mismatch → DifferentPasswordError → 'fallback' phase
+7. If only the account's own credentials can get in → RemoteLoginRequiredError → 'fallback' phase (reasons: client-federation.md, connect flow step 7)
 8. On success: joinByCode retried, space added to store with _instanceOrigin
 ```
 

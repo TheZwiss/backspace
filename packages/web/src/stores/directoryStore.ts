@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { DirectoryEntry } from '@backspace/shared';
 import { api, HttpError } from '../api/client';
-import { useInstanceStore, connectToInstance } from './instanceStore';
+import { useInstanceStore, connectToInstance, type RemoteLoginReason } from './instanceStore';
 import { useExploreStore, type TaggedExploreSpace } from './exploreStore';
 import { isAlreadyMemberError } from '../utils/joinErrors';
 
@@ -17,7 +17,7 @@ export type ConnectAndJoinResult =
   | { kind: 'requested' }
   /** Nothing was typed and no cached session could be resumed: the dialog asks for the password. */
   | { kind: 'needs-password' }
-  | { kind: 'needs-remote-password'; remoteUsername: string };
+  | { kind: 'needs-remote-password'; remoteUsername: string; reason: RemoteLoginReason };
 
 interface DirectoryState {
   /**

@@ -146,7 +146,6 @@
       "submitting": "正在连接…"
     },
     "fallback": {
-      "notice": "{{host}} 上已存在一个同名账号，且无法识别主实例颁发的凭据。请使用您在该实例上设置的密码登录；之后将切换为该凭据。",
       "usernamePlaceholder": "您在此实例上的用户名",
       "passwordLabel": "此实例的密码",
       "passwordPlaceholder": "远端实例上的密码",

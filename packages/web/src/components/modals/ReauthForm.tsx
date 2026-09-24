@@ -1,8 +1,8 @@
 import React, { useId, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useInstanceStore, DifferentPasswordError } from '../../stores/instanceStore';
+import { useInstanceStore, RemoteLoginRequiredError, type RemoteLoginReason } from '../../stores/instanceStore';
 import { describeError } from '../../i18n/errors';
-import { FallbackForm } from './RemotePasswordStep';
+import { FallbackForm, safeHost } from './RemotePasswordStep';
 
 /**
  * The field a finished request hands the keyboard back to: the first input
@@ -46,15 +46,17 @@ export interface ReauthFormProps {
  * The error sits under the field, inside the same block, so it lines up
  * with what it is about and wraps instead of widening the host.
  *
- * **The different-password way out.** An instance that has an account for
- * this user which does not accept the credential the home issued answers
- * with `DifferentPasswordError`, and no home password can fix that. The
- * surface then moves to the second phase, the same `FallbackForm` the
- * Connections add flow and the connect-and-join dialog use, prefilled with
- * the username the error carries; `loginToRemote` restores the connection
- * from the password that account has of its own, exactly as the add flow
- * restores it. There is no Back, because the password the first phase asks
- * for is not what the instance refused.
+ * **The own-password way out.** An instance whose account for this user
+ * does not accept the credential the home issued, or which is closed to
+ * accounts from other instances and let the issued credential sign nothing
+ * in, answers with `RemoteLoginRequiredError`, and no home password can fix
+ * that. The surface then moves to the second phase, the same `FallbackForm`
+ * the Connections add flow and the connect-and-join dialog use, prefilled
+ * with the username the error carries and worded by its reason;
+ * `loginToRemote` restores the connection from the password that account
+ * has of its own, exactly as the add flow restores it. There is no Back,
+ * because the password the first phase asks for is not what the instance
+ * refused.
  *
  * Escape cancels while the surface is idle, in either phase. It never
  * travels past this surface, in any state, because the settings modal behind
@@ -75,6 +77,7 @@ export function ReauthForm({ origin, username, onDone, onCancel, className = '' 
   /** `password` asks the home password; `fallback` asks the account's own password on this instance. */
   const [phase, setPhase] = useState<'password' | 'fallback'>('password');
   const [remoteUsername, setRemoteUsername] = useState('');
+  const [fallbackReason, setFallbackReason] = useState<RemoteLoginReason>('credential-refused');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -86,9 +89,10 @@ export function ReauthForm({ origin, username, onDone, onCancel, className = '' 
       setPassword('');
       onDone();
     } catch (err) {
-      if (err instanceof DifferentPasswordError) {
+      if (err instanceof RemoteLoginRequiredError) {
         setPassword('');
         setRemoteUsername(err.remoteUsername);
+        setFallbackReason(err.reason);
         setPhase('fallback');
         return;
       }
@@ -219,6 +223,8 @@ export function ReauthForm({ origin, username, onDone, onCancel, className = '' 
       ) : (
         <>
           <FallbackForm
+            host={safeHost(origin)}
+            reason={fallbackReason}
             remoteUsername={remoteUsername}
             isLoading={loading}
             onLogin={(remoteName, remotePassword) => { void handleLogin(remoteName, remotePassword); }}

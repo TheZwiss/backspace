@@ -277,7 +277,7 @@ describe('ConnectAndJoinModal submit', () => {
     const user = userEvent.setup();
     probeOk();
     const e = entry({ visibility: 'request' });
-    connectAndJoin.mockResolvedValue({ kind: 'needs-remote-password', remoteUsername: 'jannis-old' });
+    connectAndJoin.mockResolvedValue({ kind: 'needs-remote-password', remoteUsername: 'jannis-old', reason: 'credential-refused' });
     loginAndJoin.mockResolvedValue({ kind: 'requested' });
     open(e);
     renderModal();
@@ -287,7 +287,7 @@ describe('ConnectAndJoinModal submit', () => {
     await user.click(screen.getByRole('button', { name: 'Connect and request' }));
 
     // The fallback form, with the remote username prefilled.
-    expect(await screen.findByText(/An account already exists on this instance/)).toBeInTheDocument();
+    expect(await screen.findByText(/An account already exists on [^ ]+ and it does not accept/)).toBeInTheDocument();
     expect(screen.getByDisplayValue('jannis-old')).toBeInTheDocument();
     expect(screen.queryByText(/This space lives on/)).not.toBeInTheDocument();
 

@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import type { FederationRegistryEntry, User } from '@backspace/shared';
 import { HttpError } from '../../api/client';
 import { ConnectionChips } from './ConnectionChips';
-import { useInstanceStore, DifferentPasswordError, type ConnectedInstance } from '../../stores/instanceStore';
+import { useInstanceStore, RemoteLoginRequiredError, type ConnectedInstance } from '../../stores/instanceStore';
 import { describeError } from '../../i18n/errors';
 import { useAuthStore } from '../../stores/authStore';
 
@@ -462,7 +462,7 @@ describe('ConnectionChips', () => {
 
   it('a different password on the instance moves to the per-instance login instead of a dead end', async () => {
     seed([registryEntry('https://zwiss.example', 'auth_expired', 'Zwiss')]);
-    reauthenticateInstance.mockRejectedValueOnce(new DifferentPasswordError('jannis@home.example'));
+    reauthenticateInstance.mockRejectedValueOnce(new RemoteLoginRequiredError('jannis@home.example', 'credential-refused'));
     const user = userEvent.setup();
     render(<ConnectionChips onRecovered={onRecovered} />);
 
@@ -482,7 +482,7 @@ describe('ConnectionChips', () => {
 
   it('the account being restored is shown but not editable', async () => {
     seed([registryEntry('https://zwiss.example', 'auth_expired', 'Zwiss')]);
-    reauthenticateInstance.mockRejectedValueOnce(new DifferentPasswordError('jannis@home.example'));
+    reauthenticateInstance.mockRejectedValueOnce(new RemoteLoginRequiredError('jannis@home.example', 'credential-refused'));
     const user = userEvent.setup();
     render(<ConnectionChips onRecovered={onRecovered} />);
 
@@ -516,7 +516,7 @@ describe('ConnectionChips', () => {
 
   it('a success on the per-instance login restores the connection like any other path', async () => {
     seed([registryEntry('https://zwiss.example', 'auth_expired', 'Zwiss')]);
-    reauthenticateInstance.mockRejectedValueOnce(new DifferentPasswordError('jannis@home.example'));
+    reauthenticateInstance.mockRejectedValueOnce(new RemoteLoginRequiredError('jannis@home.example', 'credential-refused'));
     loginToRemote.mockImplementationOnce(async (origin: string) => {
       const registry = new Map(useInstanceStore.getState().registry);
       registry.set(origin, registryEntry(origin, 'connected', 'Zwiss'));
@@ -539,7 +539,7 @@ describe('ConnectionChips', () => {
 
   it('a refused per-instance login shows its own error and keeps the second phase', async () => {
     seed([registryEntry('https://zwiss.example', 'auth_expired', 'Zwiss')]);
-    reauthenticateInstance.mockRejectedValueOnce(new DifferentPasswordError('jannis@home.example'));
+    reauthenticateInstance.mockRejectedValueOnce(new RemoteLoginRequiredError('jannis@home.example', 'credential-refused'));
     loginToRemote.mockRejectedValueOnce(
       new HttpError(401, 'invalid_credentials', { error: 'x', code: 'invalid_credentials', statusCode: 401 }, 'invalid_credentials'),
     );
@@ -585,7 +585,7 @@ describe('ConnectionChips', () => {
 
   it('Escape collapses the second phase too', async () => {
     seed([registryEntry('https://zwiss.example', 'auth_expired', 'Zwiss')]);
-    reauthenticateInstance.mockRejectedValueOnce(new DifferentPasswordError('jannis@home.example'));
+    reauthenticateInstance.mockRejectedValueOnce(new RemoteLoginRequiredError('jannis@home.example', 'credential-refused'));
     const user = userEvent.setup();
     render(<ConnectionChips onRecovered={onRecovered} />);
 
@@ -601,12 +601,15 @@ describe('ConnectionChips', () => {
   });
 });
 
-describe('DifferentPasswordError', () => {
+describe('RemoteLoginRequiredError', () => {
   // The class passes its code to super(); a wrong argument there would leave
   // every surface showing the English message with nothing else failing.
   it('describes itself from the catalog rather than from its own message', () => {
-    expect(describeError(new DifferentPasswordError('jannis@home.example'))).toBe(
+    expect(describeError(new RemoteLoginRequiredError('jannis@home.example', 'credential-refused'))).toBe(
       'Your account on that instance has a password of its own. Sign in with it to reconnect.',
+    );
+    expect(describeError(new RemoteLoginRequiredError('jannis@home.example', 'registration-closed'))).toBe(
+      'This instance is not accepting accounts from other instances.',
     );
   });
 });

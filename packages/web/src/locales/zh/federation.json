@@ -25,7 +25,10 @@
       "passwordLabel": "输入您的密码以连接到 {{host}}",
       "passwordPlaceholder": "与登录时相同",
       "passwordHint": "您的密码由主实例校验，绝不会发送给 {{host}}。该实例将获得为其专有的凭据。",
-      "fallbackNotice": "此实例上已存在一个同名账号，且无法识别主实例颁发的凭据。请使用您在该实例上设置的密码登录，之后将切换为该凭据。",
+      "fallbackNotice": {
+        "credentialRefused": "{{host}} 上已存在一个同名账号，且无法识别主实例颁发的凭据。请使用您在该实例上设置的密码登录，之后将切换为该凭据。",
+        "registrationClosed": "{{host}} 不接受来自其他实例的新账号，因此无法在该实例上为您创建账号。如果您在 {{host}} 上已有账号，请在下方登录。"
+      },
       "usernamePlaceholder": "您在此实例上的用户名",
       "remotePasswordLabel": "此实例的密码",
       "remotePasswordPlaceholder": "远端实例上的密码",

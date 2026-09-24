@@ -432,11 +432,11 @@ describe('directoryStore.connectAndJoin', () => {
   it('returns needs-remote-password as is without joining', async () => {
     const target = entry(ORIGIN, 'pub');
     await seed(target);
-    connectToInstance.mockResolvedValueOnce({ kind: 'needs-remote-password', remoteUsername: 'erin@nova.example' });
+    connectToInstance.mockResolvedValueOnce({ kind: 'needs-remote-password', remoteUsername: 'erin@nova.example', reason: 'credential-refused' });
 
     const result = await useDirectoryStore.getState().connectAndJoin(target, 'home-pw');
 
-    expect(result).toEqual({ kind: 'needs-remote-password', remoteUsername: 'erin@nova.example' });
+    expect(result).toEqual({ kind: 'needs-remote-password', remoteUsername: 'erin@nova.example', reason: 'credential-refused' });
     expect(publicJoin).not.toHaveBeenCalled();
     expect(requestJoin).not.toHaveBeenCalled();
     expect(fetchMyRequests).not.toHaveBeenCalled();

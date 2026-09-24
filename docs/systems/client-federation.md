@@ -94,7 +94,14 @@ When a user adds a remote instance via the Connections settings:
    - Password: **the issued secret**
    - `homeInstance`: `nova.ddns.net` (bare domain)
    - `homeUserId`: user's Snowflake ID on home instance
-7. **If registration fails** (account already exists) — log in with the issued secret. There is deliberately **no** retry with the entered password; an account that rejects the issued secret surfaces `DifferentPasswordError` and the explicit per-instance login form, where the user chooses what to send.
+7. **If registration is refused** because the username is taken or because the instance is closed to new accounts, log in with the issued secret. A migrated account on a closed instance still gets in this way. There is deliberately **no** retry with the entered password. If that login fails, `connectToRemote` throws `RemoteLoginRequiredError` and the caller offers the explicit per-instance login form, where the user chooses what to send. The error's `reason` records which refusal came first, and it is the only thing that decides what the form's notice may claim:
+
+   | Registration answered | `reason` | Code (`describeError`) | What the notice says |
+   |---|---|---|---|
+   | 409 (`username_taken`, or no code from an older remote) | `credential-refused` | `federation_different_password` | An account exists there and refused the issued credential; sign in with the password set on that instance |
+   | 403 (`federated_registration_closed`; `registration_closed`, `invite_required` or no code from an older remote) | `registration-closed` | `federated_registration_closed` | The instance takes no new accounts from other instances; *if* the user has an account there, sign in with it |
+
+   Only the first may say an account exists. On a closed instance the client cannot know: the server's closed gate answers before any username check (`routes/auth.ts`), and a refused login says `invalid_credentials` whether the account is missing or has another password. Any other registration failure is rethrown. `FallbackNotice` in `RemotePasswordStep.tsx` is the one place the notice is worded; all five surfaces that offer the login render it.
 8. **On success** — mark the credential provisioned, store JWT token, create API client, open WebSocket, sync profile
 
 Password changes on the home instance are **not** propagated to remote instances — there is nothing to propagate, since no remote holds the home password.
@@ -373,7 +380,7 @@ The **Connections** panel (in user settings) allows managing remote instance con
 | `error` or `disconnected` | `reauthenticateInstance(origin, password)` in place | `{ kind: 'connected', how: 'reconnect' }` |
 | unknown | `connectToRemote(origin, password, displayName)`, the flow above | `{ kind: 'connected', how: 'new' }` |
 | any, called with an empty password | a resumable origin (a live instance in `error`/`disconnected` that kept its token, or a registry entry in `disconnected`) is resumed with `reconnectInstance` | `{ kind: 'connected', how: 'resumed' }`, or `{ kind: 'needs-password' }` when there was nothing to resume or the token was refused, or a thrown `peer_unreachable` |
-| any, and the remote refused the home-issued credential | `DifferentPasswordError` is caught | `{ kind: 'needs-remote-password', remoteUsername }`, so the caller can offer the explicit per-instance login form |
+| any, and only the account's own credentials can get in (step 7 of the flow above) | `RemoteLoginRequiredError` is caught | `{ kind: 'needs-remote-password', remoteUsername, reason }`, so the caller can offer the explicit per-instance login form under the notice `reason` selects |
 
 Every other failure is thrown as is. It does not validate a typed URL: a caller that wants the self and duplicate checks for user input still runs `probeInstance` first, as the Connections flow does.
 
@@ -475,20 +482,20 @@ each host places it on the panel or row it already has:
    under the field it is about. Submitting calls `reauthenticateInstance`,
    which drops the stale session and re-runs the standard connect flow.
 2. **The account's own password on that instance.** Reached only when phase 1
-   throws `DifferentPasswordError`, which means the instance has an account
-   for this user that does not accept the credential the home issued, and no
-   home password can fix it. The phase renders `FallbackForm`, exported from
-   `RemotePasswordStep.tsx` and shared with the Connections add flow and the
-   connect-and-join dialog, prefilled with the username the error carries;
-   its submit calls `loginToRemote`, which restores the connection exactly as
-   the add flow restores it. There is no Back: the password phase 1 asks for
-   is not what the instance refused.
+   throws `RemoteLoginRequiredError` (step 7 of the connect flow gives the two
+   reasons), and no home password can fix that. The phase renders
+   `FallbackForm`, exported from `RemotePasswordStep.tsx` and shared with the
+   Connections add flow and the connect-and-join dialog, prefilled with the
+   username the error carries and worded by its `reason`; its submit calls
+   `loginToRemote`, which restores the connection exactly as the add flow
+   restores it. There is no Back: the password phase 1 asks for is not what
+   the instance refused.
 
-`DifferentPasswordError` is an `HttpError` (409) carrying the registered code
-`federation_different_password`, minted by the client rather than by a route,
-so `describeError` says it in the user's language anywhere it does surface as
-a message. Its English text is the log line and the last-resort fallback
-only.
+`RemoteLoginRequiredError` is an `HttpError` carrying a registered code
+(`federation_different_password`, 409, or `federated_registration_closed`,
+403, by reason), minted by the client rather than by a route, so
+`describeError` says it in the user's language anywhere it does surface as a
+message. Its English text is the log line and the last-resort fallback only.
 
 The chips host keeps an open chip mounted. `ConnectionChips` hides a chip
 whose live instance is `connecting` on its own, but it holds the set of
@@ -505,7 +512,7 @@ Escape cancels the surface in either phase, and never travels past it in any
 state. That containment is load-bearing: `Modal.tsx` closes the settings
 modal from a document-level Escape listener, so an Escape let through during
 a submit would close the modal around a running reconnect and leave a
-`DifferentPasswordError` with no surface to arrive in. The handler therefore
+`RemoteLoginRequiredError` with no surface to arrive in. The handler therefore
 stops the event first and judges it after; while a submit is in flight the
 key is swallowed and does nothing, as Cancel does. In the chips host the collapsed pill
 becomes a small matte panel on a line of its own, bounded by the form rather

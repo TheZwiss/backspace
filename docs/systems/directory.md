@@ -1052,10 +1052,11 @@ Clicking an Outer card opens `ConnectAndJoinModal` with the entry. The dialog:
    `disconnected` is re-authenticated in place; an unknown origin runs
    `connectToRemote`, so the typed password is verified against the home
    instance and the home mints the per-remote secret; the remote never sees
-   what was typed (see [client-federation.md](client-federation.md)). A remote
-   account that refuses the home-issued credential reports
-   `needs-remote-password`, and the dialog switches to the fallback phase, an
-   explicit login on that instance, then `loginAndJoin`.
+   what was typed (see [client-federation.md](client-federation.md)). When
+   only the account's own credentials can get in, the answer is
+   `needs-remote-password` with a `reason`, and the dialog switches to the
+   fallback phase, an explicit login on that instance under the notice the
+   reason selects, then `loginAndJoin`.
 4. Joins: the origin's entries leave Outer Space (they belong to Inner Space
    now), then `exploreStore.publicJoin` or `requestJoin` for the entry against
    that origin. A `409 already_member` (a federated account there that was in

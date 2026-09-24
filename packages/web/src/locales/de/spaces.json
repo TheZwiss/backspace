@@ -147,7 +147,6 @@
       "submitting": "Verbindung wird hergestellt…"
     },
     "fallback": {
-      "notice": "Auf {{host}} gibt es bereits ein Konto, das die von deiner Heimatinstanz ausgestellten Zugangsdaten nicht akzeptiert. Melde dich mit dem Passwort an, das du auf dieser Instanz gesetzt hast. Danach wird es auf die ausgestellten Zugangsdaten umgestellt.",
       "usernamePlaceholder": "Dein Benutzername auf dieser Instanz",
       "passwordLabel": "Passwort für diese Instanz",
       "passwordPlaceholder": "Passwort auf der anderen Instanz",

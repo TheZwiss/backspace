@@ -17,11 +17,13 @@
 // unauthenticated call the page makes itself (`GET /api/instance/info`, the
 // directory gate) is answered locally so the harness needs no server.
 //
-// `?scene=connect-password|connect-closed|connect-fallback` opens the
-// connect-and-join modal over the `both` page: the password phase for a
-// request space, the same for an instance closed to new accounts, and the
-// fallback phase, reached the way a user reaches it (the harness submits a
-// password and the stubbed connect answers `needs-remote-password`).
+// `?scene=connect-password|connect-closed|connect-fallback|connect-closed-fallback`
+// opens the connect-and-join modal over the `both` page: the password phase
+// for a request space, the same for an instance closed to new accounts, and
+// the fallback phase for each of the two, reached the way a user reaches it
+// (the harness submits a password and the stubbed connect answers
+// `needs-remote-password`, with `credential-refused` on the open instance
+// and `registration-closed` on the closed one).
 //
 // `?width=400` constrains the workbench to that many CSS pixels, for phone
 // widths a headless browser window cannot go down to (Chrome's floor is
@@ -73,7 +75,7 @@ import { ConnectedInstances } from '../components/modals/ConnectedInstances';
 import { HttpError } from '../api/client';
 import { useExploreStore, type TaggedExploreSpace } from '../stores/exploreStore';
 import { useDirectoryStore } from '../stores/directoryStore';
-import { useInstanceStore, DifferentPasswordError, type ConnectedInstance } from '../stores/instanceStore';
+import { useInstanceStore, RemoteLoginRequiredError, type ConnectedInstance } from '../stores/instanceStore';
 import { useAuthStore } from '../stores/authStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useUIStore } from '../stores/uiStore';
@@ -93,6 +95,7 @@ type Scene =
   | 'connect-password'
   | 'connect-closed'
   | 'connect-fallback'
+  | 'connect-closed-fallback'
   | 'home-sidebar'
   | 'connections'
   | 'connections-open'
@@ -123,6 +126,7 @@ const SCENES: ReadonlySet<string> = new Set<Scene>([
   'connect-password',
   'connect-closed',
   'connect-fallback',
+  'connect-closed-fallback',
   'home-sidebar',
   'connections',
   'connections-open',
@@ -447,7 +451,8 @@ const HOME_USER: User = {
 /** Opens the modal for `entry` with the probe and the connect actions answered locally. */
 function seedConnectScene(scene: Scene): void {
   if (!scene.startsWith('connect-')) return;
-  const entry = scene === 'connect-closed' ? OUTER_ENTRIES[2] : OUTER_ENTRIES[1];
+  const closed = scene === 'connect-closed' || scene === 'connect-closed-fallback';
+  const entry = closed ? OUTER_ENTRIES[2] : OUTER_ENTRIES[1];
   if (!entry) throw new Error('the connect scenes need the fixture entries');
   useAuthStore.setState({ user: HOME_USER });
   useInstanceStore.setState({
@@ -460,7 +465,11 @@ function seedConnectScene(scene: Scene): void {
     }),
   });
   useDirectoryStore.setState({
-    connectAndJoin: async () => ({ kind: 'needs-remote-password', remoteUsername: 'jannis' }),
+    connectAndJoin: async () => ({
+      kind: 'needs-remote-password',
+      remoteUsername: 'jannis@home.example',
+      reason: closed ? 'registration-closed' : 'credential-refused',
+    }),
     loginAndJoin: async () => ({ kind: 'requested' }),
   });
   useUIStore.setState({ activeModal: 'connectAndJoin', modalData: { entry } });
@@ -566,7 +575,7 @@ function reauthFor(scene: Scene): (origin: string, password: string) => Promise<
         new HttpError(401, 'invalid_credentials', { error: 'invalid_credentials', code: 'invalid_credentials', statusCode: 401 }, 'invalid_credentials'),
       );
     case 'connections-other-password':
-      return () => Promise.reject(new DifferentPasswordError('jannis@home.example'));
+      return () => Promise.reject(new RemoteLoginRequiredError('jannis@home.example', 'credential-refused'));
     case 'connections-peer-down':
       return () => Promise.reject(
         new HttpError(503, 'peer_unreachable', { error: 'peer_unreachable', code: 'peer_unreachable', statusCode: 503 }, 'peer_unreachable'),
@@ -706,7 +715,7 @@ async function start(): Promise<void> {
       <Workbench scene={scene} width={width} />
     </MemoryRouter>,
   );
-  if (scene === 'connect-fallback') await driveToFallback();
+  if (scene === 'connect-fallback' || scene === 'connect-closed-fallback') await driveToFallback();
   await driveConnectionsScene(scene);
 }
 

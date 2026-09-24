@@ -87,7 +87,7 @@ vi.mock('./authStore', () => ({
   ),
 }));
 
-import { useInstanceStore, ensureRemoteCredential, DifferentPasswordError } from './instanceStore';
+import { useInstanceStore, ensureRemoteCredential, RemoteLoginRequiredError } from './instanceStore';
 import type { ConnectedInstance } from './instanceStore';
 
 const REMOTE = 'https://orbit.example';
@@ -181,9 +181,83 @@ describe('connectToRemote never hands the home password to a remote instance', (
 
     await expect(
       useInstanceStore.getState().connectToRemote(REMOTE, HOME_PASSWORD, 'Erin'),
-    ).rejects.toBeInstanceOf(DifferentPasswordError);
+    ).rejects.toBeInstanceOf(RemoteLoginRequiredError);
 
     expect(passwordsSentToRemote()).not.toContain(HOME_PASSWORD);
+  });
+
+  // Which refusal came before the failed login decides what the user is
+  // told: only a taken username says an account exists. A closed instance
+  // answers before any username check, so there it is unknown.
+  describe('says why the explicit login is needed', () => {
+    async function refusalAfter(registerError: HttpError): Promise<RemoteLoginRequiredError> {
+      remoteRegister.mockRejectedValue(registerError);
+      remoteLogin.mockRejectedValue(
+        new HttpError(401, 'Invalid credentials', { error: 'invalid_credentials', code: 'invalid_credentials', statusCode: 401 }, 'invalid_credentials'),
+      );
+      const err: unknown = await useInstanceStore.getState()
+        .connectToRemote(REMOTE, HOME_PASSWORD, 'Erin')
+        .then(() => null, (e: unknown) => e);
+      expect(err).toBeInstanceOf(RemoteLoginRequiredError);
+      return err as RemoteLoginRequiredError;
+    }
+
+    it('a taken username is an account that refused the issued credential', async () => {
+      const err = await refusalAfter(
+        new HttpError(409, 'Username is already taken', { error: 'Username is already taken', code: 'username_taken', statusCode: 409 }, 'username_taken'),
+      );
+      expect(err.reason).toBe('credential-refused');
+      expect(err.code).toBe('federation_different_password');
+      expect(err.remoteUsername).toBe('erin@nova.example');
+    });
+
+    it('a closed federated registration is not reported as an existing account', async () => {
+      const err = await refusalAfter(
+        new HttpError(403, 'Federated registration is closed on this instance', { error: 'federated_registration_closed', code: 'federated_registration_closed', statusCode: 403 }, 'federated_registration_closed'),
+      );
+      expect(err.reason).toBe('registration-closed');
+      expect(err.code).toBe('federated_registration_closed');
+      expect(err.remoteUsername).toBe('erin@nova.example');
+    });
+
+    it('a closed registration from an instance that gates federation on it is the same', async () => {
+      const err = await refusalAfter(
+        new HttpError(403, 'Registration is closed', { error: 'registration_closed', code: 'registration_closed', statusCode: 403 }, 'registration_closed'),
+      );
+      expect(err.reason).toBe('registration-closed');
+    });
+
+    it('reads a gate a remote names differently as closed', async () => {
+      const err = await refusalAfter(
+        new HttpError(403, 'Invite required', { error: 'invite_required', code: 'invite_required', statusCode: 403 }, 'invite_required'),
+      );
+      expect(err.reason).toBe('registration-closed');
+    });
+
+    it('reads the status alone from a remote that sends no code', async () => {
+      expect((await refusalAfter(new HttpError(403, 'Forbidden'))).reason).toBe('registration-closed');
+      remoteRegister.mockReset();
+      remoteLogin.mockReset();
+      expect((await refusalAfter(new HttpError(409, 'Conflict'))).reason).toBe('credential-refused');
+    });
+
+    it('rethrows a registration refusal no login can get past', async () => {
+      const refusal = new HttpError(400, 'Username is invalid', { error: 'username_invalid', code: 'username_invalid', statusCode: 400 }, 'username_invalid');
+      remoteRegister.mockRejectedValue(refusal);
+      await expect(
+        useInstanceStore.getState().connectToRemote(REMOTE, HOME_PASSWORD, 'Erin'),
+      ).rejects.toBe(refusal);
+      expect(remoteLogin).not.toHaveBeenCalled();
+    });
+
+    it('a closed instance still signs in an account that accepts the issued credential', async () => {
+      remoteRegister.mockRejectedValue(
+        new HttpError(403, 'Federated registration is closed on this instance', { error: 'federated_registration_closed', code: 'federated_registration_closed', statusCode: 403 }, 'federated_registration_closed'),
+      );
+      remoteLogin.mockResolvedValue(authResponse());
+      await useInstanceStore.getState().connectToRemote(REMOTE, HOME_PASSWORD, 'Erin');
+      expect(remoteLogin).toHaveBeenCalledWith(REMOTE, { username: 'erin@nova.example', password: ISSUED_SECRET });
+    });
   });
 
   it('marks the credential provisioned once the remote account uses it', async () => {

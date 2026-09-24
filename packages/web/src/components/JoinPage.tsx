@@ -3,13 +3,14 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Trans, useTranslation } from 'react-i18next';
 import { useAuthStore } from '../stores/authStore';
 import { useSpaceStore, NotConnectedError } from '../stores/spaceStore';
-import { useInstanceStore, DifferentPasswordError } from '../stores/instanceStore';
+import { useInstanceStore, RemoteLoginRequiredError, type RemoteLoginReason } from '../stores/instanceStore';
 import { api, createApiClient } from '../api/client';
 import { parseInviteInput, buildInstanceJoinUrl } from '../utils/inviteParser';
 import { Avatar } from './ui/Avatar';
 import type { InvitePreview } from '@backspace/shared';
 import { describeError } from '../i18n/errors';
 import { isAlreadyMemberError } from '../utils/joinErrors';
+import { FallbackNotice } from './modals/RemotePasswordStep';
 
 type JoinPhase = 'preview' | 'connect' | 'fallback' | 'other-instance' | 'already-member';
 
@@ -45,6 +46,7 @@ export function JoinPage() {
   // Federation connect state
   const [password, setPassword] = useState('');
   const [fallbackUsername, setFallbackUsername] = useState('');
+  const [fallbackReason, setFallbackReason] = useState<RemoteLoginReason>('credential-refused');
   const [fallbackPassword, setFallbackPassword] = useState('');
 
   // Other instance state
@@ -133,9 +135,10 @@ export function JoinPage() {
       const space = await joinByCode(parsed.code, parsed.origin);
       navigate(`/channels/${space.id}`);
     } catch (err) {
-      if (err instanceof DifferentPasswordError) {
+      if (err instanceof RemoteLoginRequiredError) {
         setPhase('fallback');
         setFallbackUsername(err.remoteUsername);
+        setFallbackReason(err.reason);
         setFallbackPassword('');
         setError('');
       } else {
@@ -479,12 +482,10 @@ export function JoinPage() {
           <AlreadyMemberCard spaceName={preview.spaceName} spaceId={preview.spaceId} navigate={navigate} />
         )}
 
-        {/* Phase: fallback — different password on remote */}
+        {/* Phase: fallback — the account's own credentials on the remote */}
         {phase === 'fallback' && (
           <form onSubmit={handleFallbackLogin}>
-            <div className="mb-3 p-2 bg-accent-amber/10 border border-accent-amber/30 rounded text-xs text-accent-amber">
-              {t('auth:join.fallback.notice', { host: hostDisplay })}
-            </div>
+            <FallbackNotice reason={fallbackReason} host={hostDisplay} className="mb-3" />
             <div className="mb-4 space-y-3">
               <div>
                 <label className="block text-xs font-bold text-txt-secondary uppercase mb-1.5">{t('common:labels.username')}</label>

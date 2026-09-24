@@ -5,7 +5,7 @@ import type { DirectoryEntry } from '@backspace/shared';
 import { Modal } from '../ui/Modal';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { useUIStore } from '../../stores/uiStore';
-import { useInstanceStore, connectToInstance, resumableOrigin } from '../../stores/instanceStore';
+import { useInstanceStore, connectToInstance, resumableOrigin, type RemoteLoginReason } from '../../stores/instanceStore';
 import { useDirectoryStore, type ConnectAndJoinResult } from '../../stores/directoryStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useSpaceStore } from '../../stores/spaceStore';
@@ -95,6 +95,7 @@ function ConnectAndJoinDialog({ entry }: { entry: DirectoryEntry }) {
   const [probe, setProbe] = useState<ProbeState>(() => initialProbeState(entry));
   const [phase, setPhase] = useState<RemotePasswordPhase>('password');
   const [remoteUsername, setRemoteUsername] = useState('');
+  const [fallbackReason, setFallbackReason] = useState<RemoteLoginReason>('credential-refused');
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -115,6 +116,7 @@ function ConnectAndJoinDialog({ entry }: { entry: DirectoryEntry }) {
     } else if (result.kind === 'needs-remote-password') {
       setPhase('fallback');
       setRemoteUsername(result.remoteUsername);
+      setFallbackReason(result.reason);
     } else {
       // The store found nothing to resume. Only the resume path asks with an
       // empty password, and it reads that answer itself, so this is the
@@ -297,6 +299,7 @@ function ConnectAndJoinDialog({ entry }: { entry: DirectoryEntry }) {
               instance={probe.instance}
               homeUsername={user?.username || ''}
               remoteUsername={remoteUsername}
+              fallbackReason={fallbackReason}
               isLoading={isLoading}
               error={error}
               onConnect={handleConnect}

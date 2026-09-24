@@ -40,7 +40,7 @@ vi.mock('./authStore', () => ({
   ),
 }));
 
-import { useInstanceStore, connectToInstance, DifferentPasswordError } from './instanceStore';
+import { useInstanceStore, connectToInstance, RemoteLoginRequiredError } from './instanceStore';
 import type { ConnectedInstance } from './instanceStore';
 
 const REMOTE = 'https://orbit.example';
@@ -147,21 +147,21 @@ describe('connectToInstance', () => {
     expect(reauthenticateInstance).not.toHaveBeenCalled();
   });
 
-  it('maps DifferentPasswordError to needs-remote-password', async () => {
-    connectToRemote.mockRejectedValueOnce(new DifferentPasswordError('erin@nova.example'));
+  it('maps RemoteLoginRequiredError to needs-remote-password', async () => {
+    connectToRemote.mockRejectedValueOnce(new RemoteLoginRequiredError('erin@nova.example', 'credential-refused'));
 
     const outcome = await connectToInstance(REMOTE, 'pw');
 
-    expect(outcome).toEqual({ kind: 'needs-remote-password', remoteUsername: 'erin@nova.example' });
+    expect(outcome).toEqual({ kind: 'needs-remote-password', remoteUsername: 'erin@nova.example', reason: 'credential-refused' });
   });
 
-  it('maps DifferentPasswordError from the reconnect path too', async () => {
+  it('maps RemoteLoginRequiredError from the reconnect path too', async () => {
     useInstanceStore.setState({ instances: [makeInstance({ status: 'error' })] });
-    reauthenticateInstance.mockRejectedValueOnce(new DifferentPasswordError('erin@nova.example'));
+    reauthenticateInstance.mockRejectedValueOnce(new RemoteLoginRequiredError('erin@nova.example', 'credential-refused'));
 
     const outcome = await connectToInstance(REMOTE, 'pw');
 
-    expect(outcome).toEqual({ kind: 'needs-remote-password', remoteUsername: 'erin@nova.example' });
+    expect(outcome).toEqual({ kind: 'needs-remote-password', remoteUsername: 'erin@nova.example', reason: 'credential-refused' });
   });
 
   it('rethrows every other error', async () => {

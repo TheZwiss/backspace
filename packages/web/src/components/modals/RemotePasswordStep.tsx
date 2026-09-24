@@ -1,6 +1,7 @@
 import React, { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { StatusDot } from '../ui/StatusDot';
+import type { RemoteLoginReason } from '../../stores/instanceStore';
 
 /**
  * The two phases of establishing a session on another instance:
@@ -27,6 +28,8 @@ export interface RemotePasswordStepProps {
   homeUsername: string;
   /** The username the remote reported when it refused the home credential; prefills the fallback form. */
   remoteUsername: string;
+  /** Why the fallback phase was entered; words its notice. Ignored in the password phase. */
+  fallbackReason: RemoteLoginReason;
   isLoading: boolean;
   /** An already described error, rendered under the form; empty for none. */
   error: string;
@@ -39,7 +42,7 @@ export interface RemotePasswordStepProps {
   connectingLabel?: string;
 }
 
-function safeHost(origin: string): string {
+export function safeHost(origin: string): string {
   try { return new URL(origin).host; } catch { return origin; }
 }
 
@@ -102,10 +105,36 @@ function PasswordForm({
 }
 
 /**
+ * Why the user is being asked for an account's own credentials on another
+ * instance, above every form that asks for them. It is the one place the
+ * wording is chosen, so the five surfaces that offer that login cannot say
+ * different things; `JoinPage` and `JoinSpace` lay out their own forms and
+ * render this notice directly.
+ *
+ * Only `credential-refused` may say an account exists: the instance told us
+ * so. `registration-closed` cannot know, so it states the closed gate and
+ * offers the sign-in as a conditional.
+ */
+export function FallbackNotice({ reason, host, className = '' }: {
+  reason: RemoteLoginReason;
+  host: string;
+  className?: string;
+}) {
+  const { t } = useTranslation(['federation']);
+  return (
+    <div className={`p-2 bg-accent-amber/10 border border-accent-amber/30 rounded text-xs text-accent-amber ${className}`}>
+      {reason === 'credential-refused'
+        ? t('federation:connections.add.fallbackNotice.credentialRefused', { host })
+        : t('federation:connections.add.fallbackNotice.registrationClosed', { host })}
+    </div>
+  );
+}
+
+/**
  * The account's own credentials on the remote instance: the way in when
- * that instance refused the credential the home issued. It carries its own
- * notice, because the form only makes sense with the reason above it, and
- * every host that shows it shows the same reason.
+ * that instance refused the credential the home issued, or could not take a
+ * new account and the issued credential signed nothing in. It carries its
+ * own notice, because the form only makes sense with the reason above it.
  *
  * Three hosts render it: the Connections panel's add-instance flow, the
  * directory's connect-and-join dialog, and the reconnect surface
@@ -122,6 +151,8 @@ function PasswordForm({
  * password manager keys on it.
  */
 export function FallbackForm({
+  host,
+  reason,
   remoteUsername,
   isLoading,
   onLogin,
@@ -129,6 +160,8 @@ export function FallbackForm({
   secondaryAction,
   usernameLocked = false,
 }: {
+  host: string;
+  reason: RemoteLoginReason;
   remoteUsername: string;
   isLoading: boolean;
   onLogin: (username: string, remotePassword: string) => void;
@@ -148,9 +181,7 @@ export function FallbackForm({
       onSubmit={(e) => { e.preventDefault(); if (username && remotePassword) onLogin(username, remotePassword); }}
       className="space-y-2"
     >
-      <div className="p-2 bg-accent-amber/10 border border-accent-amber/30 rounded text-xs text-accent-amber">
-        {t('federation:connections.add.fallbackNotice')}
-      </div>
+      <FallbackNotice reason={reason} host={host} />
       <div>
         <label htmlFor={usernameId} className="block text-xs text-txt-tertiary mb-1">{t('common:labels.username')}</label>
         <input
@@ -226,6 +257,7 @@ export function RemotePasswordStep({
   instance,
   homeUsername,
   remoteUsername,
+  fallbackReason,
   isLoading,
   error,
   onConnect,
@@ -259,6 +291,8 @@ export function RemotePasswordStep({
         />
       ) : (
         <FallbackForm
+          host={host}
+          reason={fallbackReason}
           remoteUsername={remoteUsername}
           isLoading={isLoading}
           onLogin={onLogin}

@@ -103,28 +103,64 @@ function isNetworkError(err: unknown): boolean {
 // ─── Error types ────────────────────────────────────────────────────────────
 
 /**
- * Thrown when the instance already has an account for this user and it does
- * not accept the credential the home instance issued for it: the account
- * predates per-remote credentials, or was made by hand there. The way out is
- * the explicit per-instance login, so every surface that can offer it catches
- * this class by name.
+ * Why an instance has to be signed into with an account's own credentials
+ * instead of the credential the home instance issued for it.
+ *
+ * - `credential-refused`: the instance said the account exists (registration
+ *   answered `username_taken`) and the account refused the issued credential.
+ *   It predates per-remote credentials, or was made by hand there.
+ * - `registration-closed`: the instance does not accept accounts from other
+ *   instances, and signing in with the issued credential failed. Whether an
+ *   account exists there is unknown: the closed gate answers before any
+ *   username check, and a refused login says `invalid_credentials` either way.
+ *   Nothing may tell the user they have an account in this case.
+ */
+export type RemoteLoginReason = 'credential-refused' | 'registration-closed';
+
+/**
+ * Thrown when a session on another instance can only be had with the
+ * account's own credentials on it; `reason` says why. The way out is the
+ * explicit per-instance login, so every surface that can offer it catches
+ * this class by name and words its notice from `reason`.
  *
  * It is an `HttpError` carrying a registered code, minted by the client
  * rather than by a route, so `describeError` says it in the user's language
- * wherever it does escape to a message. The English text stays as the log
- * line and the last-resort fallback, never as what a Russian or German user
- * reads.
+ * wherever it does escape to a message: `federation_different_password` for
+ * a refused credential, `federated_registration_closed` for a closed
+ * instance. The English text stays as the log line and the last-resort
+ * fallback, never as what a Russian or German user reads.
  */
-export class DifferentPasswordError extends HttpError {
-  constructor(public remoteUsername: string) {
+export class RemoteLoginRequiredError extends HttpError {
+  constructor(public remoteUsername: string, public reason: RemoteLoginReason) {
+    const code = reason === 'credential-refused' ? 'federation_different_password' : 'federated_registration_closed';
+    const status = reason === 'credential-refused' ? 409 : 403;
     super(
-      409,
-      'Account exists with a different password on this instance',
-      { error: 'federation_different_password', code: 'federation_different_password', statusCode: 409 },
-      'federation_different_password',
+      status,
+      reason === 'credential-refused'
+        ? 'Account exists with a different password on this instance'
+        : 'Instance is closed to accounts from other instances and refused the issued credential',
+      { error: code, code, statusCode: status },
+      code,
     );
-    this.name = 'DifferentPasswordError';
+    this.name = 'RemoteLoginRequiredError';
   }
+}
+
+/**
+ * Why a federated registration on another instance was refused, when it is
+ * a refusal a login can still get past; null for every other failure, which
+ * the caller rethrows. The status is what decides, so a remote on a version
+ * that sends no code, or a different one, is still read: a federated
+ * registration answers 409 only for a taken username, and 403 only for a
+ * gate (`federated_registration_closed` today; `registration_closed` or
+ * `invite_required` on a remote that does not yet tell federated
+ * registration from local).
+ */
+function registrationRefusal(err: unknown): RemoteLoginReason | null {
+  if (!(err instanceof HttpError)) return null;
+  if (err.status === 409) return 'credential-refused';
+  if (err.status === 403) return 'registration-closed';
+  return null;
 }
 
 // ─── URL normalization ───────────────────────────────────────────────────────
@@ -654,7 +690,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
             password,
           });
         } catch {
-          throw new DifferentPasswordError(bareUsername);
+          throw new RemoteLoginRequiredError(bareUsername, 'credential-refused');
         }
       } else {
         // Target is a remote/third-party instance. The entered password is
@@ -677,6 +713,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
         finalUsername = `${bareUsername}@${trueHomeHost}`;
 
         // 2a: Attempt registration with namespaced username
+        let refusal: RemoteLoginReason | null = null;
         try {
           response = await tempClient.auth.register({
             username: finalUsername,
@@ -686,17 +723,10 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
             homeUserId: trueHomeUserId,
           });
         } catch (err) {
-          // Already registered, or registration closed: fall through to login.
-          // The status fallback covers a remote instance on a version that
-          // sends no code yet.
-          const registeredOrClosed = err instanceof HttpError && (
-            err.code === 'username_taken' ||
-            err.code === 'registration_closed' ||
-            err.code === 'federated_registration_closed' ||
-            err.status === 409 ||
-            err.status === 403
-          );
-          if (!registeredOrClosed) {
+          // Already registered, or registration closed: fall through to login,
+          // remembering which, because only the first says an account exists.
+          refusal = registrationRefusal(err);
+          if (!refusal) {
             throw err;
           }
         }
@@ -712,7 +742,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
               password: credential.secret,
             });
           } catch {
-            throw new DifferentPasswordError(finalUsername);
+            throw new RemoteLoginRequiredError(finalUsername, refusal ?? 'credential-refused');
           }
         }
       }
@@ -1447,7 +1477,8 @@ export type ConnectOutcome =
   | { kind: 'connected'; how: 'new' | 'reconnect' | 'already' | 'resumed' }
   /** No password was typed and no cached session could be resumed: ask for one. */
   | { kind: 'needs-password' }
-  | { kind: 'needs-remote-password'; remoteUsername: string };
+  /** The instance needs the account's own credentials; `reason` words the notice the login form carries. */
+  | { kind: 'needs-remote-password'; remoteUsername: string; reason: RemoteLoginReason };
 
 /**
  * The origin, as the store spells it, that a cached token could still carry
@@ -1490,10 +1521,11 @@ function registryStatusFor(state: InstanceState, canonical: string): FederationR
  * origin: `error` or `disconnected` is re-authenticated in place;
  * `connected` or `connecting` is usable already and short-circuits without
  * touching the store (`connectToRemote` has no duplicate check of its own
- * and would append a second entry); an unknown origin connects. A remote
- * account that does not accept the home-issued credential is reported as
- * `needs-remote-password` so the caller can offer the explicit per-instance
- * login form; every other failure is thrown as is.
+ * and would append a second entry); an unknown origin connects. An instance
+ * that can only be signed into with the account's own credentials
+ * (`RemoteLoginRequiredError`) is reported as `needs-remote-password` with
+ * its reason, so the caller can offer the explicit per-instance login form
+ * under the right notice; every other failure is thrown as is.
  *
  * Called with an empty password it asks nothing of the user yet: an origin
  * a cached token could carry back is resumed through `reconnectInstance`
@@ -1541,8 +1573,8 @@ export async function connectToInstance(
     await store.connectToRemote(canonical, password, displayName);
     return { kind: 'connected', how: 'new' };
   } catch (err) {
-    if (err instanceof DifferentPasswordError) {
-      return { kind: 'needs-remote-password', remoteUsername: err.remoteUsername };
+    if (err instanceof RemoteLoginRequiredError) {
+      return { kind: 'needs-remote-password', remoteUsername: err.remoteUsername, reason: err.reason };
     }
     throw err;
   }

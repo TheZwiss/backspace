@@ -3,13 +3,14 @@ import { Trans, useTranslation } from 'react-i18next';
 import { Modal } from '../ui/Modal';
 import { useUIStore } from '../../stores/uiStore';
 import { useSpaceStore, NotConnectedError } from '../../stores/spaceStore';
-import { useInstanceStore, DifferentPasswordError } from '../../stores/instanceStore';
+import { useInstanceStore, RemoteLoginRequiredError, type RemoteLoginReason } from '../../stores/instanceStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useExploreStore } from '../../stores/exploreStore';
 import { useNavigate } from 'react-router-dom';
 import { parseInviteInput } from '../../utils/inviteParser';
 import { ExploreSpacePreviewCard } from './ExploreSpacePreviewCard';
 import { describeError } from '../../i18n/errors';
+import { FallbackNotice } from './RemotePasswordStep';
 
 type JoinPhase = 'input' | 'connect' | 'fallback';
 
@@ -23,6 +24,7 @@ export function JoinSpaceModal() {
   const [parsedOrigin, setParsedOrigin] = useState('');
   const [password, setPassword] = useState('');
   const [fallbackUsername, setFallbackUsername] = useState('');
+  const [fallbackReason, setFallbackReason] = useState<RemoteLoginReason>('credential-refused');
   const [fallbackPassword, setFallbackPassword] = useState('');
 
   const activeModal = useUIStore((s) => s.activeModal);
@@ -130,9 +132,10 @@ export function JoinSpaceModal() {
       await connectToRemote(parsedOrigin, password, user?.displayName || undefined);
       await joinAndNavigate(parsedCode, parsedOrigin);
     } catch (err) {
-      if (err instanceof DifferentPasswordError) {
+      if (err instanceof RemoteLoginRequiredError) {
         setPhase('fallback');
         setFallbackUsername(err.remoteUsername);
+        setFallbackReason(err.reason);
         setFallbackPassword('');
         setError('');
       } else {
@@ -335,12 +338,10 @@ export function JoinSpaceModal() {
         </form>
       )}
 
-      {/* Phase: fallback — different password on remote instance */}
+      {/* Phase: fallback — the account's own credentials on the remote instance */}
       {phase === 'fallback' && (
         <form onSubmit={handleFallbackLogin}>
-          <div className="mb-3 p-2 bg-accent-amber/10 border border-accent-amber/30 rounded text-xs text-accent-amber">
-            {t('spaces:join.fallback.notice', { host: hostDisplay })}
-          </div>
+          <FallbackNotice reason={fallbackReason} host={hostDisplay} className="mb-3" />
           <div className="mb-4 space-y-3">
             <div>
               <label className="block text-xs text-txt-tertiary mb-1">{t('common:labels.username')}</label>
