@@ -54,6 +54,10 @@
       "toggleDescription": "本实例的用户会在外部空间看到来自其他实例的空间。他们的浏览器会从拥有这些空间的实例加载其图标和横幅。",
       "unavailable": "本实例未配置可访问的目录，因此没有内容可显示。"
     },
+    "supportCard": {
+      "toggleLabel": "显示项目支持卡片",
+      "toggleDescription": "在 Backspace 页面上显示一张链接到本项目 Ko-fi 页面的卡片。关闭后只隐藏这张卡片。"
+    },
     "gif": {
       "label": "GIF 搜索",
       "description": "启用由 Klipy 提供支持的 GIF 搜索。可从 Klipy 开发者后台免费获取 API 密钥。",

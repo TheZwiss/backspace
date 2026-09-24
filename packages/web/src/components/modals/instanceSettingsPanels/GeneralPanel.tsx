@@ -24,6 +24,7 @@ interface InstanceDraft {
   discoveryEnabled: boolean;
   directoryEnabled: boolean;
   directoryBrowseEnabled: boolean;
+  supportCardEnabled: boolean;
 }
 
 function draftFrom(settings: InstanceAdminSettings): InstanceDraft {
@@ -32,6 +33,7 @@ function draftFrom(settings: InstanceAdminSettings): InstanceDraft {
     discoveryEnabled: settings.discoveryEnabled,
     directoryEnabled: settings.directoryEnabled,
     directoryBrowseEnabled: settings.directoryBrowseEnabled,
+    supportCardEnabled: settings.supportCardEnabled,
   };
 }
 
@@ -39,7 +41,8 @@ function sameDraft(a: InstanceDraft, b: InstanceDraft): boolean {
   return a.instanceName === b.instanceName
     && a.discoveryEnabled === b.discoveryEnabled
     && a.directoryEnabled === b.directoryEnabled
-    && a.directoryBrowseEnabled === b.directoryBrowseEnabled;
+    && a.directoryBrowseEnabled === b.directoryBrowseEnabled
+    && a.supportCardEnabled === b.supportCardEnabled;
 }
 
 type PingReasonKey =
@@ -194,6 +197,7 @@ export function GeneralPanel() {
         discoveryEnabled: draft.discoveryEnabled,
         directoryEnabled: draft.directoryEnabled,
         directoryBrowseEnabled: draft.directoryBrowseEnabled,
+        supportCardEnabled: draft.supportCardEnabled,
       };
       if (gifKeyDirty) {
         payload.gifApiKey = gifKeyDraft;
@@ -485,6 +489,25 @@ export function GeneralPanel() {
             )}
           </div>
         </div>
+      </div>
+
+      {/*
+        The Support card on the Backspace page. Hides only that card: the
+        page's other links stay, and the card is also absent until the
+        project has a Ko-fi link to point it at.
+      */}
+      <div className="rounded-lg bg-white/[0.02] p-3.5">
+        <label className="flex items-center justify-between gap-3 cursor-pointer">
+          <div className="min-w-0">
+            <div className="text-sm font-medium text-txt-primary">{t('admin:general.supportCard.toggleLabel')}</div>
+            <div className="text-xs text-txt-tertiary mt-0.5">{t('admin:general.supportCard.toggleDescription')}</div>
+          </div>
+          <Toggle
+            enabled={draft.supportCardEnabled}
+            onChange={(value) => setDraft({ ...draft, supportCardEnabled: value })}
+            ariaLabel={t('admin:general.supportCard.toggleLabel')}
+          />
+        </label>
       </div>
 
       {/* Status messages */}

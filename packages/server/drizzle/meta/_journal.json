@@ -120,6 +120,13 @@
       "when": 1790083597831,
       "tag": "0016_whole_loki",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1790283423706,
+      "tag": "0017_fat_rafael_vega",
+      "breakpoints": true
     }
   ]
 }

@@ -354,6 +354,8 @@ export const instanceSettings = sqliteTable('instance_settings', {
   directoryLastError: text('directory_last_error'),
   /** People on this instance see spaces from other instances in Explore. */
   directoryBrowseEnabled: integer('directory_browse_enabled').notNull().default(1),
+  /** The web client's Backspace page shows the Support card. Hides only that card; the server does nothing else with it. */
+  supportCardEnabled: integer('support_card_enabled', { mode: 'boolean' }).notNull().default(true),
   /** First-boot timestamp (ms); backfilled by ensureDefaults, so non-null after boot. */
   installedAt: integer('installed_at'),
   updatedAt: integer('updated_at').notNull(),

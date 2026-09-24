@@ -55,6 +55,10 @@
       "toggleDescription": "Leute hier sehen im Äußeren Space Spaces von anderen Instanzen. Ihre Browser laden Icon und Banner dieser Spaces von den Instanzen, denen sie gehören.",
       "unavailable": "Diese Instanz ist nicht so eingerichtet, dass sie ein Verzeichnis erreicht; es gibt also nichts anzuzeigen."
     },
+    "supportCard": {
+      "toggleLabel": "Karte zur Unterstützung des Projekts anzeigen",
+      "toggleDescription": "Zeigt auf der Backspace-Seite eine Karte, die auf die Ko-fi-Seite des Projekts verlinkt. Ausgeschaltet wird nur diese Karte ausgeblendet."
+    },
     "gif": {
       "label": "GIF-Suche",
       "description": "Aktiviere die GIF-Suche über Klipy. Einen kostenlosen API-Schlüssel gibt es im Klipy-Entwicklerportal.",

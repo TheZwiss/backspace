@@ -41,6 +41,9 @@ export async function instanceRoutes(app: FastifyInstance): Promise<void> {
       // Listing is the other axis entirely, and its own opt-in below.
       directoryAvailable: config.directory.endpoint !== '' && readDirectoryBrowseEnabled(getRawDb()),
       directoryEnabled: settings?.directoryEnabled === 1,
+      // Read by the web client alone, to hide the Support card. A missing row
+      // falls back to the column default.
+      supportCardEnabled: settings?.supportCardEnabled ?? true,
     };
 
     return reply.code(200).send(response);

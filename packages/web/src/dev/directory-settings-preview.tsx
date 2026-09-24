@@ -82,6 +82,7 @@ const ADMIN_BASE: InstanceAdminSettings = {
   directoryLastPingAt: LAST_PING_AT,
   directoryLastError: null,
   directoryListedSpaceCount: 2,
+  supportCardEnabled: true,
 };
 
 const ADMIN_SCENES: Record<Extract<Scene, `admin-${string}`>, InstanceAdminSettings> = {
@@ -129,6 +130,7 @@ function stubInstanceInfo(scene: Scene): void {
     // What the server computes from it: the endpoint and the setting together.
     directoryAvailable: !NO_ENDPOINT_SCENES.has(scene) && (settings?.directoryBrowseEnabled ?? true),
     directoryEnabled: settings?.directoryEnabled ?? false,
+    supportCardEnabled: settings?.supportCardEnabled ?? true,
   };
   const passThrough = window.fetch.bind(window);
   window.fetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {

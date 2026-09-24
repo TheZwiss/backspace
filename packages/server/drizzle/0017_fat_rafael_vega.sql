@@ -1,0 +1,1 @@
+ALTER TABLE `instance_settings` ADD `support_card_enabled` integer DEFAULT true NOT NULL;

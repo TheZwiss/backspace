@@ -47,7 +47,7 @@ function rowToLimits(row: typeof schema.instanceSettings.$inferSelect): Instance
 }
 
 type SettingsRow = typeof schema.instanceSettings.$inferSelect;
-type SettingsUpdate = Record<string, number | string | null>;
+type SettingsUpdate = Record<string, number | string | boolean | null>;
 
 function rowToAdminSettings(row: SettingsRow, sqlite: Database.Database): InstanceAdminSettings {
   const gifKey = row.gifApiKey as string | null;
@@ -70,6 +70,7 @@ function rowToAdminSettings(row: SettingsRow, sqlite: Database.Database): Instan
     directoryLastPingAt: directory.lastPingAt,
     directoryLastError: directory.lastError,
     directoryListedSpaceCount: countListedSpaces(sqlite),
+    supportCardEnabled: row.supportCardEnabled,
   };
 }
 
@@ -320,6 +321,15 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
         return sendError(reply, 400, 'field_not_boolean', { field: 'directoryBrowseEnabled' });
       }
       updateData.directoryBrowseEnabled = body.directoryBrowseEnabled ? 1 : 0;
+    }
+
+    // Only the web client reads it, to hide the Support card. Nowhere in the
+    // directory document, so it never owes a ping either.
+    if (body.supportCardEnabled !== undefined) {
+      if (typeof body.supportCardEnabled !== 'boolean') {
+        return sendError(reply, 400, 'field_not_boolean', { field: 'supportCardEnabled' });
+      }
+      updateData.supportCardEnabled = body.supportCardEnabled;
     }
 
     if (body.gifApiKey !== undefined) {

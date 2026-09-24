@@ -231,6 +231,19 @@ describe('GET /api/instance/info', () => {
     expect(body).toMatchObject({ directoryConfigured: true, directoryAvailable: false });
   });
 
+  it('reports supportCardEnabled=true on a fresh database', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/instance/info' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().supportCardEnabled).toBe(true);
+  });
+
+  it('reports supportCardEnabled=false once the admin hid the card', async () => {
+    sqlite.prepare('UPDATE instance_settings SET support_card_enabled = 0 WHERE id = 1').run();
+    const res = await app.inject({ method: 'GET', url: '/api/instance/info' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().supportCardEnabled).toBe(false);
+  });
+
   it('browses by default: a fresh row has the setting on', async () => {
     const row = testDb.select().from(schema.instanceSettings).where(eq(schema.instanceSettings.id, 1)).get();
     expect(row?.directoryBrowseEnabled).toBe(1);
