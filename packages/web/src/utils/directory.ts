@@ -1,4 +1,6 @@
 import type { DirectoryEntry, FederationRegistryEntry } from '@backspace/shared';
+import type { TaggedSpace } from '../stores/spaceStore';
+import { hasPermissionBit, PermissionBits } from './permissions';
 
 /**
  * Canonical origin of a value (`new URL(x).origin`), or null when it does not
@@ -81,4 +83,27 @@ export function isDirectoryEntry(value: unknown): value is DirectoryEntry {
     typeof v.name === 'string' &&
     (v.visibility === 'public' || v.visibility === 'request')
   );
+}
+
+/**
+ * The space an admin is taken to when asked where a space gets listed, or
+ * null when there is none to show.
+ *
+ * Only a space hosted on the home instance qualifies: the instance switch
+ * the admin just set governs those, and a space joined from a peer is listed
+ * by its own instance. The user must hold MANAGE_SPACE there, or the space's
+ * settings have no Discovery tab to land on. Among those, a space that can
+ * be listed as it stands (public or request to join) beats a private one,
+ * which would open on a switch locked behind its visibility. Ties go to the
+ * order of `ordered`, which callers pass in sidebar order so the pick is the
+ * one the admin sees highest in their own rail.
+ */
+export function spaceToShowForListing(
+  ordered: readonly TaggedSpace[],
+  spacePermissions: ReadonlyMap<string, string>,
+): TaggedSpace | null {
+  const manageable = ordered.filter((space) =>
+    space._instanceOrigin === ''
+    && hasPermissionBit(spacePermissions.get(space.id), PermissionBits.MANAGE_SPACE));
+  return manageable.find((space) => space.visibility !== 'private') ?? manageable[0] ?? null;
 }

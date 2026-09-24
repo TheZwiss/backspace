@@ -1,14 +1,30 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+// Stub AudioManager to avoid AudioWorkletNode reference error in jsdom.
+// Reached transitively via the listing note's spaceStore -> chatStore ->
+// useWebSocket -> voiceStore.
+vi.mock('../../../audio/AudioManager', () => ({
+  AudioManager: {
+    getInstance: vi.fn().mockReturnValue({
+      setOutputDevice: vi.fn(),
+      setVolume: vi.fn(),
+    }),
+  },
+}));
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { InstanceAdminSettings, InstanceInfoResponse } from '@backspace/shared';
+import { MemoryRouter } from 'react-router-dom';
 import { GeneralPanel } from './GeneralPanel';
 import { api } from '../../../api/client';
 import { useSettingsStore } from '../../../stores/settingsStore';
+import { useSpaceStore, type TaggedSpace } from '../../../stores/spaceStore';
+import { useUIStore } from '../../../stores/uiStore';
+import { PermissionBits, permissionsToString } from '../../../utils/permissions';
 
 const INVITE = 'Invite only';
 const LOCAL = 'Local space discovery';
-const GLOBAL = 'Global space discovery';
+const GLOBAL = 'Allow global listing';
 const OPEN_ACCOUNTS = 'Open federated accounts';
 const DISCLOSURE = /its name, description, icon, banner, member count and this instance's address/;
 const BROWSE = 'Show global spaces in Explore';
@@ -51,7 +67,15 @@ const base: InstanceAdminSettings = {
   directoryBrowseEnabled: true,
   directoryLastPingAt: null,
   directoryLastError: null,
+  // One space already listed, so the note that nothing is listed stays out
+  // of the tests that are not about it.
+  directoryListedSpaceCount: 1,
 };
+
+/** The panel as the app mounts it: inside the router its listing note navigates with. */
+function renderPanel(): ReturnType<typeof render> {
+  return render(<MemoryRouter><GeneralPanel /></MemoryRouter>);
+}
 
 function seed(overrides: Partial<InstanceAdminSettings>): ReturnType<typeof vi.fn> {
   const updateInstanceSettings = vi.fn().mockResolvedValue(undefined);
@@ -83,19 +107,19 @@ afterEach(() => {
 describe('GeneralPanel discovery ladder', () => {
   it('offers the three rungs with their descriptions', () => {
     seed({});
-    render(<GeneralPanel />);
+    renderPanel();
     expect(rung(INVITE)).toBeInTheDocument();
     expect(rung(LOCAL)).toBeInTheDocument();
     expect(rung(GLOBAL)).toBeInTheDocument();
     expect(screen.getByText('Spaces here are listed nowhere. Invite links still work.')).toBeInTheDocument();
     expect(screen.getByText('Spaces appear in Explore for people on this instance and on instances connected to it.')).toBeInTheDocument();
-    expect(screen.getByText('Spaces that opt in also appear in the public Backspace directory, on every instance.')).toBeInTheDocument();
+    expect(screen.getByText('Each space can then be manually listed in the global Backspace directory from its own Discovery settings.')).toBeInTheDocument();
     expect(screen.getAllByRole('radio')).toHaveLength(3);
   });
 
   it('groups the three rungs and nothing else', () => {
     seed({ discoveryEnabled: true, directoryEnabled: true, federatedRegistrationOpen: false });
-    render(<GeneralPanel />);
+    renderPanel();
     const group = screen.getByRole('radiogroup', { name: 'Space discovery' });
     expect(within(group).getAllByRole('radio')).toHaveLength(3);
 
@@ -114,7 +138,7 @@ describe('GeneralPanel discovery ladder', () => {
 
   it('checks the invite rung when discovery is off', () => {
     seed({ discoveryEnabled: false, directoryEnabled: false });
-    render(<GeneralPanel />);
+    renderPanel();
     expect(rung(INVITE)).toBeChecked();
     expect(rung(LOCAL)).not.toBeChecked();
     expect(rung(GLOBAL)).not.toBeChecked();
@@ -122,7 +146,7 @@ describe('GeneralPanel discovery ladder', () => {
 
   it('checks the local rung when discovery is on and the directory is off', () => {
     seed({ discoveryEnabled: true, directoryEnabled: false });
-    render(<GeneralPanel />);
+    renderPanel();
     expect(rung(LOCAL)).toBeChecked();
     expect(rung(INVITE)).not.toBeChecked();
     expect(rung(GLOBAL)).not.toBeChecked();
@@ -130,7 +154,7 @@ describe('GeneralPanel discovery ladder', () => {
 
   it('checks the global rung when both flags are on', () => {
     seed({ discoveryEnabled: true, directoryEnabled: true });
-    render(<GeneralPanel />);
+    renderPanel();
     expect(rung(GLOBAL)).toBeChecked();
     expect(rung(INVITE)).not.toBeChecked();
     expect(rung(LOCAL)).not.toBeChecked();
@@ -138,7 +162,7 @@ describe('GeneralPanel discovery ladder', () => {
 
   it('sends both flags off when the global rung drops to invite only', async () => {
     const update = seed({ discoveryEnabled: true, directoryEnabled: true });
-    render(<GeneralPanel />);
+    renderPanel();
 
     await userEvent.click(rung(INVITE));
     expect(rung(INVITE)).toBeChecked();
@@ -149,7 +173,7 @@ describe('GeneralPanel discovery ladder', () => {
 
   it('sends both flags on when invite only climbs to the global rung', async () => {
     const update = seed({ discoveryEnabled: false, directoryEnabled: false });
-    render(<GeneralPanel />);
+    renderPanel();
 
     await userEvent.click(rung(GLOBAL));
     expect(rung(GLOBAL)).toBeChecked();
@@ -160,7 +184,7 @@ describe('GeneralPanel discovery ladder', () => {
 
   it('keeps discovery on and drops the directory when the global rung steps down to local', async () => {
     const update = seed({ discoveryEnabled: true, directoryEnabled: true });
-    render(<GeneralPanel />);
+    renderPanel();
 
     await userEvent.click(rung(LOCAL));
     expect(rung(LOCAL)).toBeChecked();
@@ -171,7 +195,7 @@ describe('GeneralPanel discovery ladder', () => {
 
   it('hangs the status line and the disclosure under the global rung only', async () => {
     seed({ discoveryEnabled: true, directoryEnabled: false });
-    render(<GeneralPanel />);
+    renderPanel();
     expect(screen.queryByText('Never reported')).not.toBeInTheDocument();
     expect(screen.queryByText(DISCLOSURE)).not.toBeInTheDocument();
 
@@ -188,14 +212,14 @@ describe('GeneralPanel discovery ladder', () => {
 describe('GeneralPanel federated accounts warning', () => {
   it('warns under the global rung while federated accounts are closed', () => {
     seed({ directoryEnabled: true, federatedRegistrationOpen: false });
-    render(<GeneralPanel />);
+    renderPanel();
     expect(screen.getByText(/listed spaces will show as closed to new accounts/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: OPEN_ACCOUNTS })).toBeInTheDocument();
   });
 
   it('says nothing while federated accounts are open', () => {
     seed({ directoryEnabled: true, federatedRegistrationOpen: true });
-    render(<GeneralPanel />);
+    renderPanel();
     expect(screen.queryByText(/closed to new accounts/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: OPEN_ACCOUNTS })).not.toBeInTheDocument();
   });
@@ -209,7 +233,7 @@ describe('GeneralPanel federated accounts warning', () => {
   it('says nothing with no directory endpoint, under a rung that has already said so', async () => {
     withInfo(false);
     seed({ discoveryEnabled: true, directoryEnabled: true, federatedRegistrationOpen: false });
-    render(<GeneralPanel />);
+    renderPanel();
     await act(async () => {});
 
     expect(screen.getByText(/nothing here can be listed globally/)).toBeInTheDocument();
@@ -223,7 +247,7 @@ describe('GeneralPanel federated accounts warning', () => {
   it('says it again once an endpoint is configured', async () => {
     withInfo(true);
     seed({ discoveryEnabled: true, directoryEnabled: true, federatedRegistrationOpen: false });
-    render(<GeneralPanel />);
+    renderPanel();
     await act(async () => {});
 
     expect(screen.getByText(/listed spaces will show as closed to new accounts/)).toBeInTheDocument();
@@ -232,20 +256,20 @@ describe('GeneralPanel federated accounts warning', () => {
 
   it('says nothing on the rungs below global', () => {
     seed({ discoveryEnabled: true, directoryEnabled: false, federatedRegistrationOpen: false });
-    const { unmount } = render(<GeneralPanel />);
+    const { unmount } = renderPanel();
     expect(screen.queryByText(/closed to new accounts/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: OPEN_ACCOUNTS })).not.toBeInTheDocument();
     unmount();
 
     seed({ discoveryEnabled: false, directoryEnabled: false, federatedRegistrationOpen: false });
-    render(<GeneralPanel />);
+    renderPanel();
     expect(screen.queryByText(/closed to new accounts/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: OPEN_ACCOUNTS })).not.toBeInTheDocument();
   });
 
   it('warns the moment the global rung is picked, before any save', async () => {
     const update = seed({ discoveryEnabled: false, directoryEnabled: false, federatedRegistrationOpen: false });
-    render(<GeneralPanel />);
+    renderPanel();
     expect(screen.queryByText(/closed to new accounts/)).not.toBeInTheDocument();
 
     await userEvent.click(rung(GLOBAL));
@@ -262,7 +286,7 @@ describe('GeneralPanel federated accounts warning', () => {
       instanceSettings: { ...base, directoryEnabled: true, federatedRegistrationOpen: false },
       updateInstanceSettings: update,
     });
-    render(<GeneralPanel />);
+    renderPanel();
 
     const button = screen.getByRole('button', { name: OPEN_ACCOUNTS });
     await act(async () => { fireEvent.click(button); });
@@ -275,7 +299,7 @@ describe('GeneralPanel federated accounts warning', () => {
 
   it('picking the global rung never opens federated accounts by itself', async () => {
     const update = seed({ discoveryEnabled: true, directoryEnabled: false, federatedRegistrationOpen: false });
-    render(<GeneralPanel />);
+    renderPanel();
 
     await userEvent.click(rung(GLOBAL));
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
@@ -290,7 +314,7 @@ describe('GeneralPanel federated accounts warning', () => {
       instanceSettings: { ...base, directoryEnabled: true, federatedRegistrationOpen: false },
       updateInstanceSettings: update,
     });
-    render(<GeneralPanel />);
+    renderPanel();
 
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: OPEN_ACCOUNTS })); });
     expect(screen.getByText('nope')).toBeInTheDocument();
@@ -301,14 +325,14 @@ describe('GeneralPanel federated accounts warning', () => {
 describe('GeneralPanel directory status line', () => {
   it('says the directory was never reported before the first ping', () => {
     seed({ directoryEnabled: true, directoryLastPingAt: null, directoryLastError: null });
-    render(<GeneralPanel />);
+    renderPanel();
     expect(screen.getByText('Never reported')).toBeInTheDocument();
     expect(screen.queryByText(/Last attempt failed/)).not.toBeInTheDocument();
   });
 
   it('shows the last successful ping as a date and time', () => {
     seed({ directoryEnabled: true, directoryLastPingAt: Date.UTC(2023, 10, 14, 22, 13) });
-    render(<GeneralPanel />);
+    renderPanel();
     const line = screen.getByText(/^Last reported /);
     expect(line).toHaveTextContent(/2023/);
     expect(screen.queryByText('Never reported')).not.toBeInTheDocument();
@@ -320,26 +344,26 @@ describe('GeneralPanel directory status line', () => {
       directoryLastPingAt: Date.UTC(2023, 10, 14, 22, 13),
       directoryLastError: { at: Date.UTC(2023, 10, 15, 22, 13), status: 502 },
     });
-    render(<GeneralPanel />);
+    renderPanel();
     expect(screen.getByText('Last attempt failed (502)')).toBeInTheDocument();
     expect(screen.getByText(/^Last reported /)).toBeInTheDocument();
   });
 
   it('spells out a fetch error through its reason', () => {
     seed({ directoryEnabled: true, directoryLastError: { at: 1, status: 'fetch', reason: 'unreachable' } });
-    render(<GeneralPanel />);
+    renderPanel();
     expect(screen.getByText('Last attempt failed (the directory could not reach this instance)')).toBeInTheDocument();
   });
 
   it('explains an origin refusal and what to set', () => {
     seed({ directoryEnabled: true, directoryLastError: { at: 1, status: 'origin' } });
-    render(<GeneralPanel />);
+    renderPanel();
     expect(screen.getByText(/Last attempt failed \(the directory refused this instance's address; it must be an https domain with no port \(set DOMAIN or PUBLIC_ORIGIN\)\)/)).toBeInTheDocument();
   });
 
   it('carries the disclosure sentence', () => {
     seed({ directoryEnabled: true });
-    render(<GeneralPanel />);
+    renderPanel();
     expect(screen.getByText(DISCLOSURE)).toBeInTheDocument();
   });
 });
@@ -355,7 +379,7 @@ describe('GeneralPanel directory status refresh', () => {
     });
     useSettingsStore.setState({ fetchInstanceSettings });
 
-    const { unmount } = render(<GeneralPanel />);
+    const { unmount } = renderPanel();
     expect(screen.getByText('Never reported')).toBeInTheDocument();
     expect(fetchInstanceSettings).not.toHaveBeenCalled();
 
@@ -379,7 +403,7 @@ describe('GeneralPanel directory status refresh', () => {
     });
     useSettingsStore.setState({ fetchInstanceSettings });
 
-    render(<GeneralPanel />);
+    renderPanel();
     const name = screen.getByRole('textbox', { name: 'Instance Name' });
     await act(async () => { fireEvent.change(name, { target: { value: 'Renamed' } }); });
     await act(async () => { fireEvent.click(rung(GLOBAL)); });
@@ -407,7 +431,7 @@ describe('GeneralPanel directory status refresh', () => {
     });
     useSettingsStore.setState({ fetchInstanceSettings });
 
-    render(<GeneralPanel />);
+    renderPanel();
     const name = screen.getByRole('textbox', { name: 'Instance Name' });
     await act(async () => { fireEvent.change(name, { target: { value: 'Workbench 2' } }); });
     expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
@@ -433,7 +457,7 @@ describe('GeneralPanel directory status refresh', () => {
     });
     useSettingsStore.setState({ fetchInstanceSettings });
 
-    render(<GeneralPanel />);
+    renderPanel();
     await act(async () => { vi.advanceTimersByTime(10_000); });
     expect(screen.getByRole('textbox', { name: 'Instance Name' })).toHaveValue('Renamed elsewhere');
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
@@ -443,32 +467,32 @@ describe('GeneralPanel directory status refresh', () => {
 describe('GeneralPanel global browsing toggle', () => {
   it('renders under the ladder with its label and description', () => {
     seed({});
-    render(<GeneralPanel />);
+    renderPanel();
     expect(screen.getByRole('switch', { name: BROWSE })).toBeInTheDocument();
     expect(screen.getByText(/People here see spaces from other instances in Outer Space/)).toBeInTheDocument();
   });
 
   it('is outside the discovery radiogroup, which owns only its rungs', () => {
     seed({});
-    render(<GeneralPanel />);
+    renderPanel();
     const group = screen.getByRole('radiogroup', { name: 'Space discovery' });
     expect(within(group).queryByRole('switch')).not.toBeInTheDocument();
   });
 
   it('reflects the loaded value', () => {
     seed({ directoryBrowseEnabled: true });
-    const { unmount } = render(<GeneralPanel />);
+    const { unmount } = renderPanel();
     expect(screen.getByRole('switch', { name: BROWSE })).toBeChecked();
     unmount();
 
     seed({ directoryBrowseEnabled: false });
-    render(<GeneralPanel />);
+    renderPanel();
     expect(screen.getByRole('switch', { name: BROWSE })).not.toBeChecked();
   });
 
   it('is a draft field: nothing is written until the panel is saved', async () => {
     const update = seed({ directoryBrowseEnabled: true });
-    render(<GeneralPanel />);
+    renderPanel();
 
     await userEvent.click(screen.getByRole('switch', { name: BROWSE }));
     expect(screen.getByRole('switch', { name: BROWSE })).not.toBeChecked();
@@ -480,7 +504,7 @@ describe('GeneralPanel global browsing toggle', () => {
 
   it('turns browsing back on through the same save path', async () => {
     const update = seed({ directoryBrowseEnabled: false });
-    render(<GeneralPanel />);
+    renderPanel();
 
     await userEvent.click(screen.getByRole('switch', { name: BROWSE }));
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
@@ -489,7 +513,7 @@ describe('GeneralPanel global browsing toggle', () => {
 
   it('leaves the ladder alone: the rung does not move and both its flags are sent unchanged', async () => {
     const update = seed({ discoveryEnabled: true, directoryEnabled: true, directoryBrowseEnabled: true });
-    render(<GeneralPanel />);
+    renderPanel();
 
     await userEvent.click(screen.getByRole('switch', { name: BROWSE }));
     expect(rung(GLOBAL)).toBeChecked();
@@ -506,7 +530,7 @@ describe('GeneralPanel global browsing toggle', () => {
 
   it('moving the ladder leaves browsing where it was', async () => {
     const update = seed({ discoveryEnabled: true, directoryEnabled: false, directoryBrowseEnabled: false });
-    render(<GeneralPanel />);
+    renderPanel();
 
     await userEvent.click(rung(GLOBAL));
     expect(screen.getByRole('switch', { name: BROWSE })).not.toBeChecked();
@@ -522,7 +546,7 @@ describe('GeneralPanel global browsing toggle', () => {
   it('says there is no directory to reach, and disables the row, when the instance has no endpoint', async () => {
     withInfo(false);
     seed({ directoryBrowseEnabled: true });
-    render(<GeneralPanel />);
+    renderPanel();
 
     expect(await screen.findByText(NO_ENDPOINT)).toBeInTheDocument();
     expect(screen.getByRole('switch', { name: BROWSE })).toBeDisabled();
@@ -535,7 +559,7 @@ describe('GeneralPanel global browsing toggle', () => {
   it('shows the switch off with no endpoint, whatever the stored setting says', async () => {
     withInfo(false);
     const update = seed({ directoryBrowseEnabled: true });
-    render(<GeneralPanel />);
+    renderPanel();
 
     await screen.findByText(NO_ENDPOINT);
     expect(screen.getByRole('switch', { name: BROWSE })).not.toBeChecked();
@@ -547,7 +571,7 @@ describe('GeneralPanel global browsing toggle', () => {
   it('says nothing while the instance can reach a directory', async () => {
     withInfo(true);
     seed({ directoryBrowseEnabled: true });
-    render(<GeneralPanel />);
+    renderPanel();
 
     await screen.findByRole('switch', { name: BROWSE });
     expect(screen.queryByText(NO_ENDPOINT)).not.toBeInTheDocument();
@@ -565,7 +589,7 @@ describe('GeneralPanel global browsing toggle', () => {
   it('says there is no directory to reach even while browsing is off', async () => {
     withInfo(false);
     seed({ directoryBrowseEnabled: false });
-    render(<GeneralPanel />);
+    renderPanel();
 
     expect(await screen.findByText(NO_ENDPOINT)).toBeInTheDocument();
     expect(screen.getByRole('switch', { name: BROWSE })).toBeDisabled();
@@ -575,7 +599,7 @@ describe('GeneralPanel global browsing toggle', () => {
   it('says nothing when the instance info cannot be read', async () => {
     vi.spyOn(api.instance, 'info').mockRejectedValue(new Error('offline'));
     seed({ directoryBrowseEnabled: true });
-    render(<GeneralPanel />);
+    renderPanel();
     await act(async () => {});
 
     expect(screen.queryByText(NO_ENDPOINT)).not.toBeInTheDocument();
@@ -609,7 +633,7 @@ describe('GeneralPanel global browsing toggle', () => {
       fetchInstanceSettings,
     });
 
-    render(<GeneralPanel />);
+    renderPanel();
     await act(async () => {});
     expect(infoSpy).toHaveBeenCalledTimes(1);
 
@@ -635,12 +659,12 @@ describe('GeneralPanel discovery ladder without a directory endpoint', () => {
   it('does not offer the global rung and replaces its promise with the reason', async () => {
     withInfo(false);
     seed({ discoveryEnabled: true, directoryEnabled: false });
-    render(<GeneralPanel />);
+    renderPanel();
     await act(async () => {});
 
     expect(rung(GLOBAL)).toBeDisabled();
     expect(screen.getByText(/nothing here can be listed globally/)).toBeInTheDocument();
-    expect(screen.queryByText('Spaces that opt in also appear in the public Backspace directory, on every instance.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Each space can then be manually listed in the global Backspace directory from its own Discovery settings.')).not.toBeInTheDocument();
     // The rungs that still do something stay available.
     expect(rung(INVITE)).toBeEnabled();
     expect(rung(LOCAL)).toBeEnabled();
@@ -657,14 +681,14 @@ describe('GeneralPanel discovery ladder without a directory endpoint', () => {
     const infoSpy = vi.spyOn(api.instance, 'info').mockResolvedValue(info(false));
     useSettingsStore.setState({ instanceSettings: null, updateInstanceSettings: vi.fn() });
 
-    const { rerender } = render(<GeneralPanel />);
+    const { rerender } = renderPanel();
     await act(async () => {});
     expect(infoSpy).toHaveBeenCalledTimes(1);
 
     act(() => {
       useSettingsStore.setState({ instanceSettings: { ...base, directoryBrowseEnabled: true } });
     });
-    rerender(<GeneralPanel />);
+    rerender(<MemoryRouter><GeneralPanel /></MemoryRouter>);
 
     expect(screen.getByText(NO_ENDPOINT)).toBeInTheDocument();
     expect(rung(GLOBAL)).toBeDisabled();
@@ -674,11 +698,11 @@ describe('GeneralPanel discovery ladder without a directory endpoint', () => {
   it('offers the global rung and its description once an endpoint is configured', async () => {
     withInfo(true);
     seed({ discoveryEnabled: true, directoryEnabled: false });
-    render(<GeneralPanel />);
+    renderPanel();
     await act(async () => {});
 
     expect(rung(GLOBAL)).toBeEnabled();
-    expect(screen.getByText('Spaces that opt in also appear in the public Backspace directory, on every instance.')).toBeInTheDocument();
+    expect(screen.getByText('Each space can then be manually listed in the global Backspace directory from its own Discovery settings.')).toBeInTheDocument();
     expect(screen.queryByText(/nothing here can be listed globally/)).not.toBeInTheDocument();
   });
 
@@ -691,7 +715,7 @@ describe('GeneralPanel discovery ladder without a directory endpoint', () => {
   it('leaves an already-selected global rung checked, and lets the admin step down', async () => {
     withInfo(false);
     const update = seed({ discoveryEnabled: true, directoryEnabled: true });
-    render(<GeneralPanel />);
+    renderPanel();
     await act(async () => {});
 
     expect(rung(GLOBAL)).toBeChecked();
@@ -701,5 +725,114 @@ describe('GeneralPanel discovery ladder without a directory endpoint', () => {
     expect(rung(LOCAL)).toBeChecked();
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Save' })); });
     expect(update).toHaveBeenCalledWith(expect.objectContaining({ discoveryEnabled: true, directoryEnabled: false }));
+  });
+});
+
+describe('GeneralPanel listing note', () => {
+  const NOTE = 'Turning this on does not list any spaces by itself. Each space still has to switch on "List in the global Backspace directory" in its Discovery settings.';
+  const SHOW = 'Show me where';
+  const MANAGE = permissionsToString(PermissionBits.MANAGE_SPACE);
+
+  function space(id: string, overrides: Partial<TaggedSpace> = {}): TaggedSpace {
+    return {
+      id,
+      name: id,
+      icon: null,
+      banner: null,
+      avatarColor: null,
+      ownerId: 'admin-1',
+      inviteCode: null,
+      visibility: 'public',
+      directoryListed: false,
+      description: null,
+      createdAt: 1,
+      _instanceOrigin: '',
+      ...overrides,
+    };
+  }
+
+  function seedSpaces(spaces: TaggedSpace[], managed: string[]): void {
+    useSpaceStore.setState({
+      spaces,
+      spaceLayout: null,
+      folders: [],
+      currentSpaceId: null,
+      spacePermissions: new Map(managed.map((id) => [id, MANAGE])),
+    });
+  }
+
+  beforeEach(() => {
+    seedSpaces([], []);
+    useUIStore.setState({ activeModal: 'userSettings', modalData: { tab: 'instance' }, isMobile: false, showDms: true });
+  });
+
+  it('says listing is per space while the global rung is stored and nothing is listed', () => {
+    seedSpaces([space('a')], ['a']);
+    seed({ discoveryEnabled: true, directoryEnabled: true, directoryListedSpaceCount: 0 });
+    renderPanel();
+    expect(screen.getByText(NOTE)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: SHOW })).toBeInTheDocument();
+  });
+
+  it('is absent under the lower rungs', () => {
+    seedSpaces([space('a')], ['a']);
+    seed({ discoveryEnabled: true, directoryEnabled: false, directoryListedSpaceCount: 0 });
+    renderPanel();
+    expect(screen.queryByText(NOTE)).not.toBeInTheDocument();
+  });
+
+  it('gives way to the count once a space is listed', () => {
+    seedSpaces([space('a')], ['a']);
+    seed({ discoveryEnabled: true, directoryEnabled: true, directoryListedSpaceCount: 3 });
+    renderPanel();
+    expect(screen.queryByText(NOTE)).not.toBeInTheDocument();
+    expect(screen.getByText('3 spaces listed')).toBeInTheDocument();
+  });
+
+  it('shows no count while nothing is listed', () => {
+    seed({ discoveryEnabled: true, directoryEnabled: true, directoryListedSpaceCount: 0 });
+    renderPanel();
+    expect(screen.queryByText(/spaces? listed$/)).not.toBeInTheDocument();
+  });
+
+  it('appears as soon as the rung is picked, without the button until the pick is saved', () => {
+    seedSpaces([space('a')], ['a']);
+    seed({ discoveryEnabled: true, directoryEnabled: false, directoryListedSpaceCount: 0 });
+    renderPanel();
+    fireEvent.click(rung(GLOBAL));
+    expect(screen.getByText(NOTE)).toBeInTheDocument();
+    // Leaving for a space's settings would drop the unsaved pick.
+    expect(screen.queryByRole('button', { name: SHOW })).not.toBeInTheDocument();
+  });
+
+  it('is not shown on an instance with no directory endpoint', async () => {
+    withInfo(false);
+    seedSpaces([space('a')], ['a']);
+    seed({ discoveryEnabled: true, directoryEnabled: true, directoryListedSpaceCount: 0 });
+    renderPanel();
+    await act(async () => {});
+    expect(screen.queryByText(NOTE)).not.toBeInTheDocument();
+  });
+
+  it('offers no button when the admin manages no space hosted here', () => {
+    seedSpaces(
+      [space('unmanaged'), space('remote', { _instanceOrigin: 'https://peer.test' })],
+      ['remote'],
+    );
+    seed({ discoveryEnabled: true, directoryEnabled: true, directoryListedSpaceCount: 0 });
+    renderPanel();
+    expect(screen.getByText(NOTE)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: SHOW })).not.toBeInTheDocument();
+  });
+
+  it('opens the Discovery tab of the chosen space and makes it the current space', () => {
+    seedSpaces([space('private-one', { visibility: 'private' }), space('public-one')], ['private-one', 'public-one']);
+    seed({ discoveryEnabled: true, directoryEnabled: true, directoryListedSpaceCount: 0 });
+    renderPanel();
+    fireEvent.click(screen.getByRole('button', { name: SHOW }));
+    expect(useSpaceStore.getState().currentSpaceId).toBe('public-one');
+    expect(useUIStore.getState().activeModal).toBe('spaceSettings');
+    expect(useUIStore.getState().modalData).toEqual({ tab: 'discovery' });
+    expect(useUIStore.getState().showDms).toBe(false);
   });
 });

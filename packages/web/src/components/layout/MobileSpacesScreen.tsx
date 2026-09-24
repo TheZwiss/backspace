@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useUIStore } from '../../stores/uiStore';
 import { useSpaceStore, getMyUserIdForOrigin } from '../../stores/spaceStore';
 import type { TaggedSpace } from '../../stores/spaceStore';
+import { resolveSpaceLayout } from '../../utils/spaceLayout';
 import { useChatStore } from '../../stores/chatStore';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useAuthStore } from '../../stores/authStore';
@@ -10,7 +11,7 @@ import { useContextMenuStore, type ContextMenuItem } from '../../stores/contextM
 import { useNavigate } from 'react-router-dom';
 import { getSpaceGradient } from '../../utils/gradients';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
-import type { Channel, SpaceFolder } from '@backspace/shared';
+import type { Channel } from '@backspace/shared';
 import { Mascot } from '../ui/Mascot';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { TransferOwnershipModal } from '../modals/TransferOwnershipModal';
@@ -21,10 +22,6 @@ import { MobileVoiceJoinSheet } from '../voice/MobileVoiceJoinSheet';
 import { buildVoiceModMenuItems, VolumeSliderItem } from '../voice/voiceMenuItems';
 import { joinVoiceChannel } from '../../utils/voice';
 import { useDelayedLoading } from '../../hooks/useDelayedLoading';
-
-type ResolvedItem =
-  | { type: 'space'; space: TaggedSpace }
-  | { type: 'folder'; folder: SpaceFolder; spaces: TaggedSpace[] };
 
 export function MobileSpacesScreen() {
   const { t } = useTranslation(['spaces', 'common']);
@@ -163,44 +160,10 @@ export function MobileSpacesScreen() {
 
   // ─── Folder-aware layout resolution ─────────────────────────────────
 
-  const spaceMap = useMemo(() => new Map(spaces.map(s => [s.id, s])), [spaces]);
-  const folderMap = useMemo(() => new Map(folders.map(f => [f.id, f])), [folders]);
-
-  const resolvedLayout = useMemo((): ResolvedItem[] => {
-    const result: ResolvedItem[] = [];
-    const accountedSpaceIds = new Set<string>();
-
-    if (spaceLayout && spaceLayout.length > 0) {
-      for (const item of spaceLayout) {
-        if (item.t === 's') {
-          const space = spaceMap.get(item.id);
-          if (space) {
-            result.push({ type: 'space', space });
-            accountedSpaceIds.add(item.id);
-          }
-        } else if (item.t === 'f') {
-          const folder = folderMap.get(item.id);
-          if (folder) {
-            const folderSpaces = folder.spaceIds
-              .map(sid => spaceMap.get(sid))
-              .filter((s): s is TaggedSpace => !!s);
-            if (folderSpaces.length > 0) {
-              result.push({ type: 'folder', folder, spaces: folderSpaces });
-              for (const s of folderSpaces) accountedSpaceIds.add(s.id);
-            }
-          }
-        }
-      }
-    }
-
-    for (const space of spaces) {
-      if (!accountedSpaceIds.has(space.id)) {
-        result.push({ type: 'space', space });
-      }
-    }
-
-    return result;
-  }, [spaceLayout, spaces, spaceMap, folderMap]);
+  const resolvedLayout = useMemo(
+    () => resolveSpaceLayout(spaces, spaceLayout, folders),
+    [spaces, spaceLayout, folders],
+  );
 
   const handleSpaceSelect = (spaceId: string) => {
     setSelectedSpaceId(spaceId);

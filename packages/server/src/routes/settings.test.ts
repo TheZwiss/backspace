@@ -278,6 +278,53 @@ describe('directory fields on GET /api/settings/instance', () => {
   });
 });
 
+describe('directoryListedSpaceCount on GET /api/settings/instance', () => {
+  function addSpace(id: string, visibility: 'private' | 'request' | 'public', directoryListed: 0 | 1): void {
+    testDb.insert(schema.spaces).values({
+      id,
+      name: id,
+      ownerId: ADMIN_ID,
+      visibility,
+      directoryListed,
+      createdAt: Date.now(),
+    }).run();
+  }
+
+  it('is zero on an instance with no spaces', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/settings/instance' });
+    expect(res.json().directoryListedSpaceCount).toBe(0);
+  });
+
+  it('counts the spaces the directory document would carry, and no others', async () => {
+    addSpace('public-listed', 'public', 1);
+    addSpace('request-listed', 'request', 1);
+    addSpace('public-unlisted', 'public', 0);
+    // The spaces route clears the flag when a space goes private; a row that
+    // still carries it is not listable and is not counted.
+    addSpace('private-flagged', 'private', 1);
+    const res = await app.inject({ method: 'GET', url: '/api/settings/instance' });
+    expect(res.json().directoryListedSpaceCount).toBe(2);
+  });
+
+  it('counts opted-in spaces while the instance switch is off', async () => {
+    setSettings({ discoveryEnabled: 0, directoryEnabled: 0 });
+    addSpace('public-listed', 'public', 1);
+    const res = await app.inject({ method: 'GET', url: '/api/settings/instance' });
+    expect(res.json()).toMatchObject({ directoryEnabled: false, directoryListedSpaceCount: 1 });
+  });
+
+  it('ignores the count in a PATCH body', async () => {
+    addSpace('public-listed', 'public', 1);
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/settings/instance',
+      payload: { directoryListedSpaceCount: 40 },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().directoryListedSpaceCount).toBe(1);
+  });
+});
+
 describe('directoryBrowseEnabled on the instance settings routes', () => {
   it('is on by default, so an upgrade changes nothing for anyone', async () => {
     expect(readSettings().directoryBrowseEnabled).toBe(1);

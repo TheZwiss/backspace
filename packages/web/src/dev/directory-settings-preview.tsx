@@ -10,19 +10,22 @@
 //
 //   admin-invite          the invite-only rung: nothing hangs under it
 //   admin-local           the local rung: still nothing hangs under it
-//   admin-global          the global rung, last ping shown, federated accounts open
-//   admin-closed          the global rung with federated accounts closed: the amber note and its button, and a fetch error with reason
+//   admin-global          the global rung, last ping shown, two spaces listed, federated accounts open
+//   admin-unlisted        the global rung with no space listed yet: the listing note and its "Show me where" button
+//   admin-closed          the global rung with federated accounts closed and nothing listed: both amber notes, and a fetch error with reason
 //   admin-origin          the global rung, never reported, the hub refused the instance's address
 //   admin-no-directory    the local rung on an instance with no DIRECTORY_ENDPOINT: the browse row reads off, is inert, and says why
 //   space-admin-off       public space, the instance has the directory off
 //   space-private         private space, the instance allows the directory
 //   space-listed          public space, listed
 import { createRoot } from 'react-dom/client';
+import { MemoryRouter } from 'react-router-dom';
 import type { InstanceAdminSettings, InstanceInfoResponse, InstanceStreamingLimits } from '@backspace/shared';
 import { GeneralPanel } from '../components/modals/instanceSettingsPanels/GeneralPanel';
 import { DiscoveryPanel } from '../components/modals/SpaceSettings';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useSpaceStore, type TaggedSpace } from '../stores/spaceStore';
+import { ALL_PERMISSIONS, permissionsToString } from '../utils/permissions';
 import { initI18n } from '../i18n';
 import { initializeInterfaceScale } from '../platform/interfaceScale';
 import '../styles/globals.css';
@@ -31,6 +34,7 @@ type Scene =
   | 'admin-invite'
   | 'admin-local'
   | 'admin-global'
+  | 'admin-unlisted'
   | 'admin-closed'
   | 'admin-origin'
   | 'admin-no-directory'
@@ -42,6 +46,7 @@ const SCENES: ReadonlySet<string> = new Set<Scene>([
   'admin-invite',
   'admin-local',
   'admin-global',
+  'admin-unlisted',
   'admin-closed',
   'admin-origin',
   'admin-no-directory',
@@ -76,15 +81,18 @@ const ADMIN_BASE: InstanceAdminSettings = {
   directoryBrowseEnabled: true,
   directoryLastPingAt: LAST_PING_AT,
   directoryLastError: null,
+  directoryListedSpaceCount: 2,
 };
 
 const ADMIN_SCENES: Record<Extract<Scene, `admin-${string}`>, InstanceAdminSettings> = {
   'admin-invite': { ...ADMIN_BASE, discoveryEnabled: false, directoryEnabled: false, directoryLastPingAt: null },
   'admin-local': { ...ADMIN_BASE, directoryEnabled: false, directoryLastPingAt: null },
   'admin-global': ADMIN_BASE,
+  'admin-unlisted': { ...ADMIN_BASE, directoryListedSpaceCount: 0 },
   'admin-closed': {
     ...ADMIN_BASE,
     federatedRegistrationOpen: false,
+    directoryListedSpaceCount: 0,
     directoryLastError: { at: LAST_PING_AT + 86_400_000, status: 'fetch', reason: 'unreachable' },
   },
   'admin-origin': {
@@ -177,6 +185,11 @@ function isAdminScene(scene: Scene): scene is Extract<Scene, `admin-${string}`> 
 
 function seedStores(scene: Scene): void {
   if (isAdminScene(scene)) {
+    // A space the admin manages, so the listing note has one to point at.
+    useSpaceStore.setState({
+      spaces: [SPACE],
+      spacePermissions: new Map([[SPACE.id, permissionsToString(ALL_PERMISSIONS)]]),
+    });
     useSettingsStore.setState({
       instanceSettings: ADMIN_SCENES[scene],
       streamingLimits: { ...LIMITS, directoryEnabled: ADMIN_SCENES[scene].directoryEnabled },
@@ -194,7 +207,10 @@ function Workbench({ scene }: { scene: Scene }) {
   return (
     <div className="min-h-screen py-6">
       <div className="px-6 max-w-[640px] mx-auto">
-        {isAdminScene(scene) ? <GeneralPanel /> : <DiscoveryPanel spaceId={SPACE.id} />}
+        {/* The listing note's "Show me where" navigates, so the panel needs a router. */}
+        <MemoryRouter>
+          {isAdminScene(scene) ? <GeneralPanel /> : <DiscoveryPanel spaceId={SPACE.id} />}
+        </MemoryRouter>
       </div>
     </div>
   );

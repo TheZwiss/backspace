@@ -600,16 +600,25 @@ function JoinRequestsSection({ spaceId }: { spaceId: string }) {
   );
 }
 
+type SpaceSettingsTab = 'overview' | 'discovery' | 'members' | 'roles' | 'bans';
+
+const SPACE_SETTINGS_TABS: readonly SpaceSettingsTab[] = ['overview', 'discovery', 'members', 'roles', 'bans'];
+
+function isSpaceSettingsTab(value: unknown): value is SpaceSettingsTab {
+  return typeof value === 'string' && (SPACE_SETTINGS_TABS as readonly string[]).includes(value);
+}
+
 export function SpaceSettingsModal() {
   const { t } = useTranslation(['spaces', 'common']);
   const activeModal = useUIStore((s) => s.activeModal);
+  const modalData = useUIStore((s) => s.modalData);
   const closeModal = useUIStore((s) => s.closeModal);
   const isMobile = useUIStore((s) => s.isMobile);
   const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
   const spaces = useSpaceStore((s) => s.spaces);
   const spacePermissions = useSpaceStore((s) => s.spacePermissions);
 
-  const [tab, setTab] = useState<'overview' | 'discovery' | 'members' | 'roles' | 'bans'>('overview');
+  const [tab, setTab] = useState<SpaceSettingsTab>('overview');
   const [mobileView, setMobileView] = useState<'tabs' | 'content'>('tabs');
 
   const isOpen = activeModal === 'spaceSettings';
@@ -619,13 +628,27 @@ export function SpaceSettingsModal() {
   const canManageRoles = hasPermissionBit(mySpacePerms, PermissionBits.MANAGE_ROLES);
   const canBanMembers = hasPermissionBit(mySpacePerms, PermissionBits.BAN_MEMBERS);
 
-  // Reset tab and mobile view when modal opens
+  // Reset tab and mobile view when modal opens. A caller may name the tab
+  // to open on (`openModal('spaceSettings', { tab: 'discovery' })`); a tab
+  // this user cannot see falls back to the overview, and on mobile a named
+  // tab opens straight on its content, as user settings does.
+  const requestedTab = isOpen ? modalData.tab : undefined;
   useEffect(() => {
-    if (isOpen) {
-      setTab('overview');
-      setMobileView('tabs');
-    }
-  }, [isOpen]);
+    if (!isOpen) return;
+    const allowed: Record<SpaceSettingsTab, boolean> = {
+      overview: true,
+      discovery: canManageSpace,
+      members: true,
+      roles: canManageRoles,
+      bans: canBanMembers,
+    };
+    const deepLinked = isSpaceSettingsTab(requestedTab) && allowed[requestedTab];
+    setTab(deepLinked ? requestedTab : 'overview');
+    setMobileView(deepLinked ? 'content' : 'tabs');
+    // Only the opening decides the tab: a permission that changes while the
+    // modal is open must not throw the user back to where they came in.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, requestedTab]);
 
   if (!space || !currentSpaceId) return null;
 

@@ -20,13 +20,17 @@
           "description": "Spaces erscheinen unter „Entdecken“ für Leute auf dieser Instanz und auf Instanzen, die mit ihr verbunden sind."
         },
         "global": {
-          "label": "Globales Entdecken von Spaces",
-          "description": "Spaces, die sich eintragen, erscheinen zusätzlich im öffentlichen Backspace-Verzeichnis, auf jeder Instanz."
+          "label": "Globales Eintragen erlauben",
+          "description": "Jeder Space kann dann in seinen Einstellungen unter „Entdecken“ von Hand ins globale Backspace-Verzeichnis eingetragen werden."
         }
       },
       "unconfigured": "Diese Instanz ist nicht so eingerichtet, dass sie ein Verzeichnis erreicht; nichts von hier kann global eingetragen werden."
     },
     "directory": {
+      "listingHint": "Das allein trägt noch keinen Space ein. Jeder Space muss in seinen Einstellungen unter „Entdecken“ selbst „{{setting}}“ einschalten.",
+      "showMeWhere": "Zeig mir, wo",
+      "listedCount_one": "{{count}} Space eingetragen",
+      "listedCount_other": "{{count}} Spaces eingetragen",
       "registrationClosed": "Neue Konten von anderen Instanzen sind geschlossen, eingetragene Spaces werden deshalb als „Keine neuen Konten“ angezeigt.",
       "openFederatedRegistration": "Föderierte Konten erlauben",
       "disclosure": "Für jeden eingetragenen Space wird öffentlich: Name, Beschreibung, Icon, Banner, Mitgliederzahl und die Adresse dieser Instanz. Wer das Verzeichnis durchstöbert, lädt Icon und Banner von dieser Instanz.",

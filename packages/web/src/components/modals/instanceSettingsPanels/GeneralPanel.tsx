@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../../../api/client';
 import { Toggle } from '../../ui/Toggle';
+import { DirectoryListingHint } from './DirectoryListingHint';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { useUIStore } from '../../../stores/uiStore';
 import { describeError } from '../../../i18n/errors';
@@ -371,6 +372,16 @@ export function GeneralPanel() {
                 the comment on the rung), so what it discloses is public and
                 the pinger's own history is worth reading.
               */}
+              {/*
+                The rung allows listing and lists nothing by itself, which is
+                the one thing admins picking it kept missing. Said only while
+                no space here has opted in: once one has, the count in the
+                status line below answers the same question. Gated on the
+                endpoint for the same reason as the note after it.
+              */}
+              {instanceSettings.directoryListedSpaceCount === 0 && !noDirectoryEndpoint && (
+                <DirectoryListingHint canLeave={!hasChanges} />
+              )}
               {!instanceSettings.federatedRegistrationOpen && !noDirectoryEndpoint && (
                 <div className="p-2.5 bg-accent-amber/10 border border-accent-amber/30 rounded text-[13px] text-accent-amber space-y-2">
                   <p>{t('admin:general.directory.registrationClosed')}</p>
@@ -387,6 +398,11 @@ export function GeneralPanel() {
               {/* What the pinger last did, the same shape as the telemetry panel's line */}
               <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3 space-y-1">
                 <div className="text-xs text-txt-tertiary">{pingLabel}</div>
+                {instanceSettings.directoryListedSpaceCount > 0 && (
+                  <div className="text-xs text-txt-tertiary">
+                    {t('admin:general.directory.listedCount', { count: instanceSettings.directoryListedSpaceCount })}
+                  </div>
+                )}
                 {lastError !== null && (
                   <div className="text-xs text-txt-danger">
                     {t('admin:general.directory.status.lastError', {

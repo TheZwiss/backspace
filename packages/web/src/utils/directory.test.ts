@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import type { DirectoryEntry } from '@backspace/shared';
 import type { FederationRegistryEntry } from '@backspace/shared';
-import { dedupeAgainstConnected, innerOrigins, isDirectoryEntry } from './directory';
+import type { TaggedSpace } from '../stores/spaceStore';
+import { dedupeAgainstConnected, innerOrigins, isDirectoryEntry, spaceToShowForListing } from './directory';
+import { PermissionBits, permissionsToString } from './permissions';
 
 const e = (origin: string, id: string): DirectoryEntry => ({
   origin,
@@ -103,5 +105,64 @@ describe('innerOrigins', () => {
   it('lists an origin once', () => {
     const out = innerOrigins([reg('https://a.test', 'connected')], [{ origin: 'https://a.test', status: 'connected' }]);
     expect(out).toEqual(['https://a.test']);
+  });
+});
+
+describe('spaceToShowForListing', () => {
+  const MANAGE = permissionsToString(PermissionBits.MANAGE_SPACE);
+  const NONE = '0';
+
+  function space(id: string, overrides: Partial<TaggedSpace> = {}): TaggedSpace {
+    return {
+      id,
+      name: id,
+      icon: null,
+      banner: null,
+      avatarColor: null,
+      ownerId: 'u',
+      inviteCode: null,
+      visibility: 'public',
+      directoryListed: false,
+      description: null,
+      createdAt: 1,
+      _instanceOrigin: '',
+      ...overrides,
+    };
+  }
+
+  it('picks the first manageable home space in the order given', () => {
+    const pick = spaceToShowForListing([space('a'), space('b')], new Map([['a', MANAGE], ['b', MANAGE]]));
+    expect(pick?.id).toBe('a');
+  });
+
+  it('skips spaces the user cannot manage', () => {
+    const pick = spaceToShowForListing([space('a'), space('b')], new Map([['a', NONE], ['b', MANAGE]]));
+    expect(pick?.id).toBe('b');
+  });
+
+  it('skips spaces hosted on another instance', () => {
+    const pick = spaceToShowForListing(
+      [space('remote', { _instanceOrigin: 'https://peer.test' }), space('home')],
+      new Map([['remote', MANAGE], ['home', MANAGE]]),
+    );
+    expect(pick?.id).toBe('home');
+  });
+
+  it('prefers a listable space over a private one earlier in the order', () => {
+    const pick = spaceToShowForListing(
+      [space('private', { visibility: 'private' }), space('request', { visibility: 'request' })],
+      new Map([['private', MANAGE], ['request', MANAGE]]),
+    );
+    expect(pick?.id).toBe('request');
+  });
+
+  it('falls back to a private space when that is all there is', () => {
+    const pick = spaceToShowForListing([space('private', { visibility: 'private' })], new Map([['private', MANAGE]]));
+    expect(pick?.id).toBe('private');
+  });
+
+  it('is null when nothing qualifies', () => {
+    expect(spaceToShowForListing([space('a')], new Map())).toBeNull();
+    expect(spaceToShowForListing([], new Map())).toBeNull();
   });
 });

@@ -20,13 +20,16 @@
           "description": "空间会出现在本实例以及与之连接的实例的“探索”页面中。"
         },
         "global": {
-          "label": "全局空间发现",
-          "description": "选择加入的空间还会出现在公开的 Backspace 目录中，在每个实例上都能看到。"
+          "label": "允许列入全局目录",
+          "description": "之后可以在每个空间自己的“发现”设置中，手动将其列入全局 Backspace 目录。"
         }
       },
       "unconfigured": "本实例未配置可访问的目录，因此这里的空间无法列入全局目录。"
     },
     "directory": {
+      "listingHint": "仅开启此项不会让任何空间列入目录。每个空间仍需在其“发现”设置中开启“{{setting}}”。",
+      "showMeWhere": "带我去看",
+      "listedCount_other": "已列入 {{count}} 个空间",
       "registrationClosed": "已关闭来自其他实例的新账户注册，因此列入目录的空间会显示为不接受新账户。",
       "openFederatedRegistration": "允许联邦账户注册",
       "disclosure": "对于每个列入目录的空间，以下信息将公开：名称、描述、图标、横幅、成员数量以及本实例的地址。浏览目录的人会从本实例加载图标和横幅。",

@@ -832,6 +832,13 @@ export interface InstanceAdminSettings {
   /** Read-only on the wire; the server ignores them on PATCH. */
   directoryLastPingAt: number | null;
   directoryLastError: DirectoryPingError | null;
+  /**
+   * Spaces here that have opted in to the directory and are not private,
+   * counted whatever `directoryEnabled` says. Read-only, ignored on PATCH.
+   * The instance switch lists nothing by itself; this is how the admin sees
+   * whether any space has taken it up.
+   */
+  directoryListedSpaceCount: number;
 }
 
 export interface InstanceStreamingLimits {

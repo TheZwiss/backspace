@@ -63,6 +63,13 @@ function sameOrigin(value: string, origin: string): boolean {
   }
 }
 
+// Which spaces the document carries while the instance publishes at all. The
+// admin panel counts through the same predicate, so "N spaces listed" there
+// is the number of spaces the document would carry, before the cap.
+const LISTED_SPACES_WHERE = `
+  s.visibility IN ('public', 'request')
+    AND s.directory_listed = 1`;
+
 // The Explore query (routes/explore.ts) with the two extra predicates, so a
 // member count here means the same thing it means on the Explore page.
 const SPACES_SQL = `
@@ -70,12 +77,24 @@ const SPACES_SQL = `
          COUNT(sm.user_id) AS member_count
   FROM spaces s
   LEFT JOIN space_members sm ON sm.space_id = s.id
-  WHERE s.visibility IN ('public', 'request')
-    AND s.directory_listed = 1
+  WHERE ${LISTED_SPACES_WHERE}
   GROUP BY s.id
   ORDER BY member_count DESC, s.created_at DESC
   LIMIT ?
 `;
+
+const LISTED_COUNT_SQL = `SELECT COUNT(*) AS n FROM spaces s WHERE ${LISTED_SPACES_WHERE}`;
+
+/**
+ * How many spaces here have opted in and could be listed, whatever the
+ * instance-wide switches say. It answers the admin's question "has anyone
+ * listed a space yet", which the instance switch alone does not: turning
+ * the directory on lists nothing until a space opts in.
+ */
+export function countListedSpaces(sqlite: Database.Database): number {
+  const row = sqlite.prepare(LISTED_COUNT_SQL).get() as { n: number };
+  return row.n;
+}
 
 const SETTINGS_SQL =
   'SELECT instance_name, federated_registration_open, discovery_enabled, directory_enabled FROM instance_settings WHERE id = 1';

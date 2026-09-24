@@ -345,7 +345,7 @@
   },
   "packages/web/src/components/layout/SpaceSidebar.tsx": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 2
+      "count": 1
     }
   },
   "packages/web/src/components/modals/AddDmMemberModal.tsx": {

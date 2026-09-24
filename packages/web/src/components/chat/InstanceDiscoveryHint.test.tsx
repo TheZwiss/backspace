@@ -703,7 +703,7 @@ describe('InstanceDiscoveryHint', () => {
     const LIST_OPT_IN = 'Only spaces whose owners turn listing on are sent, so this switch lists no space on its own.';
     // The extra first line the dialog takes when the write also turns on
     // local discovery.
-    const RUNG_INTRO = 'This turns on global space discovery for the whole instance: spaces here become discoverable in Explore, and the instance starts reporting itself to the public directory.';
+    const RUNG_INTRO = 'This allows global listing for the whole instance: spaces here become discoverable in Explore, and the instance starts reporting itself to the public directory.';
     const LIST_OFF = 'To stop listing later: Settings, Instance, General, the space discovery choice.';
     const BROWSE_LOADS = "People here see spaces from other instances in Outer Space. Their browsers load those spaces' icons and banners from the instances that own them.";
     const BROWSE_EXPOSURE = "Those instances see the IP address of every browser that loads one, and this instance's administrator does not control them.";

@@ -71,7 +71,7 @@ the user is not connected to.
 ## 2. The model
 
 ```
-space owner flips "List in the Backspace directory"  (or admin ladder rung, delete, visibility)
+space owner flips "List in the global Backspace directory"  (or admin ladder rung, delete, visibility)
         |
         v  markDirectoryDirty(): bumps the document version, drops the endpoint cache, change ping 3 s later
 instance server pinger  --POST { origin }-->  explore.backspacechat.com  (Worker + D1)
@@ -232,8 +232,12 @@ everywhere a space is serialised: the spaces routes, the explore routes, and
 the WebSocket ready payload.
 
 On the wire: `GET /api/settings/instance` carries `directoryEnabled`,
-`directoryBrowseEnabled`, `directoryLastPingAt` and `directoryLastError` (the
-last two are read-only; the PATCH ignores them in the body).
+`directoryBrowseEnabled`, `directoryLastPingAt`, `directoryLastError` and
+`directoryListedSpaceCount` (the last three are read-only; the PATCH ignores
+them in the body). The count is taken through the same predicate the document
+uses (`LISTED_SPACES_WHERE` in `directory/document.ts`: public or request, and
+`directory_listed = 1`) but ignores the instance switches, so it answers "has
+any space opted in" whatever rung is stored.
 `PATCH /api/settings/instance` accepts `directoryBrowseEnabled` as a strict
 boolean (`400 field_not_boolean` otherwise) and writes it on its own: it is
 not part of the discovery invariant and nothing clears it. `GET /api/settings/streaming`
@@ -1090,7 +1094,7 @@ above, each writing both stored flags:
 |------|-------|--------------------|--------------------|
 | `invite` | Invite only. Spaces here are listed nowhere. Invite links still work. | false | false |
 | `local` | Local space discovery. Spaces appear in Explore for people on this instance and on instances connected to it. | true | false |
-| `global` | Global space discovery. Spaces that opt in also appear in the public Backspace directory, on every instance. | true | true |
+| `global` | Allow global listing. Each space can then be manually listed in the global Backspace directory from its own Discovery settings. | true | true |
 
 The selected rung is derived from the draft, not stored, so nothing can drift
 out of step with the two booleans the save sends. The combination the server
@@ -1101,10 +1105,35 @@ runs on both PATCH routes, still answers `400 directory_requires_discovery`
 for `directoryEnabled: true` with discovery off, and still clears
 `directoryEnabled` in the same write when discovery is off (section 3).
 
+The rung was called "Global space discovery" until admins kept picking it
+and then asking why none of their spaces showed up: the name promised a
+result, and the rung is a permission. It lists nothing on its own; each space
+still opts in through its own switch. The label and description now say so,
+and the first note below says it again at the moment of choosing.
+
 Under the `global` rung, indented beneath it and nowhere else, and rendered
 as a sibling of the radiogroup rather than inside it, since a radiogroup may
 own only radios:
 
+- While `directoryListedSpaceCount` is 0 and the endpoint is not known to be
+  missing, the amber note "Turning this on does not list any spaces by itself.
+  Each space still has to switch on "List in the global Backspace directory"
+  in its Discovery settings." The switch's name is interpolated from the
+  space-settings catalog key, so a rename there reaches the note. It appears as
+  soon as the rung is picked in the draft. Once any space is listed the note is
+  gone and the status line below gains "N spaces listed" instead. Its "Show me
+  where" button (`DirectoryListingHint.tsx`) opens the Discovery tab of one
+  space, picked by `spaceToShowForListing` in `utils/directory.ts`: hosted on
+  this instance (`_instanceOrigin === ''`, because a peer's space is listed by
+  its own instance), with MANAGE_SPACE (otherwise there is no Discovery tab),
+  public or request before private (a private space opens on a switch locked
+  behind its visibility), then the first in sidebar order as
+  `resolveSpaceLayout` in `utils/spaceLayout.ts` draws the rail. It takes the
+  same steps as picking the space in the rail (current space, route, and on
+  mobile the Spaces tab) and then opens `spaceSettings` with
+  `{ tab: 'discovery' }`, replacing the settings modal. The button is absent
+  while the panel has unsaved changes, since leaving would drop them, and when
+  no space qualifies; the sentence stays either way.
 - While `federatedRegistrationOpen` is off, the amber note "New accounts from
   other instances are closed, so listed spaces will show as closed to new
   accounts." with an "Open federated accounts" button next to it. The button
@@ -1186,7 +1215,7 @@ space settings panel below sees the cleared directory flag after the ladder
 dropped to a lower rung.
 
 **Space settings, Discovery panel** (`SpaceSettings.tsx:DiscoveryPanel`), an
-"Outer Space" group with the switch "List in the Backspace directory", always
+"Outer Space" group with the switch "List in the global Backspace directory", always
 rendered:
 
 - Enabled when the instance allows it and the draft visibility is public or
@@ -1202,11 +1231,11 @@ rendered:
   gated on the two discovery flags and never on the endpoint, so an
   endpoint-less instance with the rung stored does serve a populated document
   that no hub fetches.
-- Disabled with "Your instance administrator has to turn on global space
-  discovery." when `streamingLimits.directoryEnabled` is false. Never hidden:
+- Disabled with "Your instance administrator has to allow global listing."
+  when `streamingLimits.directoryEnabled` is false. Never hidden:
   the reason under a disabled switch is what tells an owner what to do.
 - **That reason has a second voice, and an action, for the administrator
-  reading their own instance's panel**: "Global space discovery is off on this
+  reading their own instance's panel**: "Global listing is not allowed on this
   instance.", with "Turn it on" beside it. The sentence naming an absent
   administrator, read by the administrator, was a dead end for the one person
   who could change it. The action opens the same `ListInDirectoryConfirm` the

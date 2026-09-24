@@ -21,12 +21,12 @@ import { useInstanceStore, type ConnectedInstance } from '../../stores/instanceS
 import { api, HttpError, type BackspaceApiClient } from '../../api/client';
 import { describeError } from '../../i18n/errors';
 
-const SWITCH = 'List in the Backspace directory';
-const ADMIN_OFF = 'Your instance administrator has to turn on global space discovery.';
+const SWITCH = 'List in the global Backspace directory';
+const ADMIN_OFF = 'Your instance administrator has to allow global listing.';
 // The same fact in the administrator's own voice, with the way out of it.
-const ADMIN_OFF_SELF = 'Global space discovery is off on this instance.';
+const ADMIN_OFF_SELF = 'Global listing is not allowed on this instance.';
 const RUNG_ACTION = 'Turn it on';
-const RUNG_INTRO = 'This turns on global space discovery for the whole instance: spaces here become discoverable in Explore, and the instance starts reporting itself to the public directory.';
+const RUNG_INTRO = 'This allows global listing for the whole instance: spaces here become discoverable in Explore, and the instance starts reporting itself to the public directory.';
 const CONFIRM_TITLE = 'List spaces from this instance publicly?';
 const CONFIRM_LABEL = 'List spaces';
 const CONFIRM_DISCLOSURE = "For each listed space this makes public: its name, description, icon, banner, member count and this instance's address. People browsing the directory load the icon and banner from this instance.";

@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useSpaceStore, getMyUserIdForOrigin } from '../../stores/spaceStore';
 import type { TaggedSpace } from '../../stores/spaceStore';
+import { resolveSpaceLayout, type ResolvedSpaceLayoutItem } from '../../utils/spaceLayout';
 import { useChatStore } from '../../stores/chatStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useInstanceStore } from '../../stores/instanceStore';
@@ -19,9 +20,6 @@ import { useFloatingPosition } from '../../hooks/useFloatingPosition';
 
 // ─── Resolved layout types ─────────────────────────────────────────────────
 
-type ResolvedItem =
-  | { type: 'space'; space: TaggedSpace }
-  | { type: 'folder'; folder: SpaceFolder; spaces: TaggedSpace[] };
 
 // ─── Folder color presets ─────────────────────────────────────────────────
 
@@ -704,56 +702,11 @@ export function SpaceSidebar() {
     return map;
   }, [spaces]);
 
-  // Build folder lookup map
-  const folderMap = useMemo(() => {
-    const map = new Map<string, SpaceFolder>();
-    for (const f of folders) map.set(f.id, f);
-    return map;
-  }, [folders]);
-
   // Reconciled layout: merge spaceLayout with actual spaces and folders
-  const resolvedLayout = useMemo((): ResolvedItem[] => {
-    const memberSpaceIds = new Set(spaces.map(s => s.id));
-    const result: ResolvedItem[] = [];
-    const accountedSpaceIds = new Set<string>();
-
-    if (spaceLayout && spaceLayout.length > 0) {
-      for (const item of spaceLayout) {
-        if (item.t === 's') {
-          const space = spaceMap.get(item.id);
-          if (space) {
-            result.push({ type: 'space', space });
-            accountedSpaceIds.add(item.id);
-          }
-        } else if (item.t === 'f') {
-          const folder = folderMap.get(item.id);
-          if (folder) {
-            const folderSpaces = folder.spaceIds
-              .map(sid => spaceMap.get(sid))
-              .filter((s): s is TaggedSpace => !!s);
-            if (folderSpaces.length > 0) {
-              result.push({
-                type: 'folder',
-                folder,
-                spaces: folderSpaces,
-              });
-              for (const s of folderSpaces) accountedSpaceIds.add(s.id);
-            }
-          }
-        }
-      }
-    }
-
-    // Append any spaces not in the layout (newly joined, etc.)
-    for (const space of spaces) {
-      if (!accountedSpaceIds.has(space.id)) {
-        result.push({ type: 'space', space });
-        accountedSpaceIds.add(space.id);
-      }
-    }
-
-    return result;
-  }, [spaceLayout, spaces, spaceMap, folderMap]);
+  const resolvedLayout = useMemo(
+    () => resolveSpaceLayout(spaces, spaceLayout, folders),
+    [spaces, spaceLayout, folders],
+  );
 
   // Compute which spaces have unread channels
   const unreadSpaceIds = useMemo(() => {
@@ -863,7 +816,7 @@ export function SpaceSidebar() {
   }, []);
 
   // Build layout items and folder payload from resolvedLayout for persistence
-  const buildLayoutPayload = useCallback((resolved: ResolvedItem[]) => {
+  const buildLayoutPayload = useCallback((resolved: ResolvedSpaceLayoutItem[]) => {
     const items: SpaceLayoutItem[] = [];
     const folderPayload: Record<string, { name: string | null; color: string | null; spaceIds: string[] }> = {};
 
@@ -883,7 +836,7 @@ export function SpaceSidebar() {
     return { items, folderPayload };
   }, []);
 
-  const persistLayout = useCallback((resolved: ResolvedItem[]) => {
+  const persistLayout = useCallback((resolved: ResolvedSpaceLayoutItem[]) => {
     const { items, folderPayload } = buildLayoutPayload(resolved);
     updateSpaceLayout(items, folderPayload);
   }, [buildLayoutPayload, updateSpaceLayout]);
@@ -901,7 +854,7 @@ export function SpaceSidebar() {
         };
       }
       return item;
-    }) as ResolvedItem[];
+    }) as ResolvedSpaceLayoutItem[];
     persistLayout(newLayout);
   }, [resolvedLayout, persistLayout]);
 
@@ -929,7 +882,7 @@ export function SpaceSidebar() {
         return { ...item, spaces: [...item.spaces], folder: { ...item.folder } };
       }
       return { ...item };
-    }) as ResolvedItem[];
+    }) as ResolvedSpaceLayoutItem[];
 
     if (dragType === 'space') {
       const dragSpace = spaceMap.get(dragId);
@@ -938,7 +891,7 @@ export function SpaceSidebar() {
       // Remove from source
       if (sourceFolderId) {
         // Remove from folder
-        const folderItem = newLayout.find(i => i.type === 'folder' && i.folder.id === sourceFolderId) as (ResolvedItem & { type: 'folder' }) | undefined;
+        const folderItem = newLayout.find(i => i.type === 'folder' && i.folder.id === sourceFolderId) as (ResolvedSpaceLayoutItem & { type: 'folder' }) | undefined;
         if (folderItem) {
           folderItem.spaces = folderItem.spaces.filter(s => s.id !== dragId);
           folderItem.folder = { ...folderItem.folder, spaceIds: folderItem.spaces.map(s => s.id) };
@@ -962,7 +915,7 @@ export function SpaceSidebar() {
         if (targetItem.type === 'space') {
           // Create new folder with both spaces
           const tempId = `new:${Date.now()}`;
-          const newFolder: ResolvedItem = {
+          const newFolder: ResolvedSpaceLayoutItem = {
             type: 'folder',
             folder: {
               id: tempId,
@@ -989,7 +942,7 @@ export function SpaceSidebar() {
         if (targetIdx === -1) { handleDragEnd(); return; }
 
         const insertIdx = position === 'before' ? targetIdx : targetIdx + 1;
-        const newItem: ResolvedItem = { type: 'space', space: dragSpace };
+        const newItem: ResolvedSpaceLayoutItem = { type: 'space', space: dragSpace };
         newLayout.splice(insertIdx, 0, newItem);
       }
 
@@ -1289,7 +1242,7 @@ export function SpaceSidebar() {
 
       {openFolderId && (() => {
         const folderItem = resolvedLayout.find(
-          (i): i is ResolvedItem & { type: 'folder' } =>
+          (i): i is ResolvedSpaceLayoutItem & { type: 'folder' } =>
             i.type === 'folder' && i.folder.id === openFolderId
         );
         const anchor = folderAnchorRefs.current.get(openFolderId);

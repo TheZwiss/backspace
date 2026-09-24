@@ -6,6 +6,7 @@ import { authenticate, requireAdmin } from '../utils/auth.js';
 import { config } from '../config.js';
 import { sendError } from '../utils/httpErrors.js';
 import { markDirectoryDirty, readDirectoryState } from '../directory/state.js';
+import { countListedSpaces } from '../directory/document.js';
 import type { InstanceStreamingLimits, InstanceAdminSettings } from '@backspace/shared';
 import { STANDARD_RESOLUTIONS, STANDARD_FRAMERATES, BITRATE_MATRIX_KBPS } from '@backspace/shared/src/constants.js';
 
@@ -68,6 +69,7 @@ function rowToAdminSettings(row: SettingsRow, sqlite: Database.Database): Instan
     directoryBrowseEnabled: row.directoryBrowseEnabled === 1,
     directoryLastPingAt: directory.lastPingAt,
     directoryLastError: directory.lastError,
+    directoryListedSpaceCount: countListedSpaces(sqlite),
   };
 }
 
@@ -370,7 +372,8 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
     }
 
     // directoryLastPingAt and directoryLastError are read-only on the wire:
-    // the pinger owns them, so the body's copies are never read.
+    // the pinger owns them, so the body's copies are never read. The same
+    // holds for directoryListedSpaceCount, which is counted from `spaces`.
     if (!applyDiscoveryAndDirectory(body, updateData, currentRow, reply)) {
       return reply;
     }
