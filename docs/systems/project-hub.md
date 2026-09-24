@@ -36,8 +36,10 @@ it there; this document does not copy them. Links always point upstream. The
 instance's own source offer (a fork's `BACKSPACE_SOURCE_URL`) comes from the
 instance info and is shown only in "This instance".
 
-`funding` and `community` ship as `null`. A null value hides its card, so no
-card renders a dead link. `projectLinks.test.ts` runs `projectLinksProblems`
+`funding` holds the project's Ko-fi page; `community` ships as `null`. A null
+value hides its card, so no card renders a dead link. `.github/FUNDING.yml`
+names the same Ko-fi page for the repository's Sponsor button.
+`projectLinks.test.ts` runs `projectLinksProblems`
 over the real constant: every URL must parse and be `https:`, and
 `community.origin` must be a bare origin with a non-empty `spaceId`.
 
@@ -139,16 +141,15 @@ shows the message field inline.
 
 ## What the maintainer has to do
 
-1. Create the Ko-fi page and set `PROJECT_LINKS.funding` to its URL.
-2. Create the community instance and space, then set
-   `PROJECT_LINKS.community` to its `origin` and `spaceId`. The directory
-   document carries the space only when all three hold:
-   - the instance has space discovery on and allows listing in the directory (`discovery_enabled` and `directory_enabled`);
-   - the space is public or by request and is listed (`directory_listed`), which whoever may edit the space sets with `PATCH /api/spaces/:id` (the owner or a member with `MANAGE_SPACE`, see [directory.md](directory.md));
-   - it is among the first 200 listed spaces by member count (`DIRECTORY_MAX_SPACES` in `directory/document.ts`).
+`PROJECT_LINKS.funding` is set, so one step remains: create the community
+instance and space, then set `PROJECT_LINKS.community` to its `origin` and
+`spaceId`. The directory document carries the space only when all three hold:
+- the instance has space discovery on and allows listing in the directory (`discovery_enabled` and `directory_enabled`);
+- the space is public or by request and is listed (`directory_listed`), which whoever may edit the space sets with `PATCH /api/spaces/:id` (the owner or a member with `MANAGE_SPACE`, see [directory.md](directory.md));
+- it is among the first 200 listed spaces by member count (`DIRECTORY_MAX_SPACES` in `directory/document.ts`).
 
-   Otherwise the card says "not available right now". See
-   [directory.md](directory.md) for the document.
+Otherwise the card says "not available right now". See
+[directory.md](directory.md) for the document.
 
 ---
 

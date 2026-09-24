@@ -498,8 +498,7 @@ export function GeneralPanel() {
 
       {/*
         The Support card on the Backspace page. Hides only that card: the
-        page's other links stay, and the card is also absent until the
-        project has a Ko-fi link to point it at.
+        page's other links stay.
       */}
       <div>
         <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:general.supportCard.label')}</div>

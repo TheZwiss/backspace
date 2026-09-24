@@ -25,8 +25,8 @@
 //                           says "Updated to". Opening the page marks it
 //                           seen, which is why the sidebar dot next to it is
 //                           already gone.
-//   shipping                the real PROJECT_LINKS: funding and community are
-//                           null, so both cards are hidden.
+//   shipping                the real PROJECT_LINKS: funding is set, community
+//                           is null, so the community card is hidden.
 //   support-off             funding set, the admin turned the card off.
 //   info-failed             GET /api/instance/info fails: no version, no
 //                           Support card, the domain alone under This
@@ -69,7 +69,7 @@ import '../styles/globals.css';
 const STATES = {
   current: 'Version already seen, Support on, community idle (Join).',
   updated: 'Seen version is older: What\'s new says "Updated to". The page marks it seen, so the sidebar dot is gone.',
-  shipping: 'The real PROJECT_LINKS: funding and community null, both cards hidden.',
+  shipping: 'The real PROJECT_LINKS: funding set, community null, community card hidden.',
   'support-off': 'Funding set, the admin turned the Support card off.',
   'info-failed': 'Instance info request fails: no version, no Support card, domain only.',
   'community-loading': 'Join clicked, the listing never answers.',
@@ -112,7 +112,7 @@ const PREVIOUS_VERSION = '1.5.0';
 const COMMUNITY_ORIGIN = 'https://community.example.org';
 const COMMUNITY_SPACE_ID = 'example';
 
-/** The brief's test values for the two constants that ship as null. */
+/** Test values for the two optional links, so every card state can be shown. */
 const FILLED_LINKS: ProjectLinks = {
   ...PROJECT_LINKS,
   funding: 'https://ko-fi.com/example',

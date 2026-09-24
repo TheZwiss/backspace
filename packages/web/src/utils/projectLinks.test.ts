@@ -30,7 +30,7 @@ describe('PROJECT_LINKS', () => {
       license: `${REPO}/blob/main/LICENSE`,
       security: `${REPO}/blob/main/SECURITY.md`,
       contributors: `${REPO}/graphs/contributors`,
-      funding: null,
+      funding: 'https://ko-fi.com/backspacechat',
       community: null,
     });
   });

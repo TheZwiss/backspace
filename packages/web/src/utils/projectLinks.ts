@@ -8,8 +8,9 @@
  * fork's `BACKSPACE_SOURCE_URL`) comes from `GET /api/instance/info`, never
  * from here.
  *
- * `funding` and `community` ship as null. A null value hides its card, so no
- * card ever renders a dead link; filling one in is a one-line change here.
+ * `community` ships as null. A null `funding` or `community` hides its card,
+ * so no card ever renders a dead link; filling one in is a one-line change
+ * here.
  * `projectLinks.test.ts` runs `projectLinksProblems` over the real constant,
  * so a malformed value fails CI rather than shipping.
  */
@@ -30,7 +31,7 @@ export interface ProjectLinks {
   license: string;
   security: string;
   contributors: string;
-  /** Ko-fi page; null until it exists. */
+  /** Ko-fi page; null hides the Support card. */
   funding: string | null;
   /** The community space; null until the instance exists. */
   community: CommunityTarget | null;
@@ -46,7 +47,7 @@ export const PROJECT_LINKS: ProjectLinks = {
   license: `${REPOSITORY}/blob/main/LICENSE`,
   security: `${REPOSITORY}/blob/main/SECURITY.md`,
   contributors: `${REPOSITORY}/graphs/contributors`,
-  funding: null,
+  funding: 'https://ko-fi.com/backspacechat',
   community: null,
 };
 
