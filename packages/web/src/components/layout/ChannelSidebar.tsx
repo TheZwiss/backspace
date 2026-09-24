@@ -24,10 +24,13 @@ import { useDragManager, type DropTarget, type LayoutItem } from '../../hooks/us
 import { useDelayedLoading } from '../../hooks/useDelayedLoading';
 import { useAudioDevices } from '../../hooks/useAudioDevices';
 import { useInstanceUpdateBadge } from '../../hooks/useInstanceUpdateBadge';
+import { useHubUpdateState } from '../../hooks/useHubUpdateState';
+import { activeHomeNavItem } from '../../utils/homeNav';
+import { BackspaceMark } from '../projectHub/BackspaceMark';
 import { DropdownItem } from '../modals/settingsPanels/_shared/SettingsPickerPrimitives';
 
 export function ChannelSidebar() {
-  const { t } = useTranslation(['spaces', 'common']);
+  const { t } = useTranslation(['spaces', 'common', 'project']);
   const spaces = useSpaceStore((s) => s.spaces);
   const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
   const loadingSpaceId = useSpaceStore((s) => s.loadingSpaceId);
@@ -56,6 +59,8 @@ export function ChannelSidebar() {
   const isPermissionMuted = !!(myOriginId && spaceId && permissionMutedUserIds.has(`${spaceId}:${myOriginId}`));
   const navigate = useNavigate();
   const location = useLocation();
+  const activeHomeItem = activeHomeNavItem(location.pathname, currentChannelId);
+  const hubUpdate = useHubUpdateState();
 
   const [floatingPanelEl, setFloatingPanelEl] = useState<HTMLDivElement | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
@@ -448,12 +453,12 @@ export function ChannelSidebar() {
           <div
             onClick={handleHomeClick}
             className={`flex items-center gap-3 px-2 h-[42px] rounded-[6px] cursor-pointer mb-[2px] transition-colors group ${
-              !currentChannelId && location.pathname !== '/explore'
+              activeHomeItem === 'friends'
                 ? 'bg-interactive-selected text-white'
                 : 'text-txt-tertiary hover:bg-interactive-hover hover:text-txt-secondary'
             }`}
           >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className={`flex-shrink-0 ${!currentChannelId && location.pathname !== '/explore' ? 'text-white' : 'opacity-70 group-hover:opacity-100'}`}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className={`flex-shrink-0 ${activeHomeItem === 'friends' ? 'text-white' : 'opacity-70 group-hover:opacity-100'}`}>
               <path d="M13 10a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-2-4a2 2 0 1 1 4 0 2 2 0 0 1-4 0Z" />
               <path d="M3 18a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1v-1c0-2.76-5.37-4-8-4s-8 1.24-8 4v1Z" />
               <path d="M3.5 13.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" opacity=".5" />
@@ -464,25 +469,34 @@ export function ChannelSidebar() {
           <div
             onClick={() => navigate('/explore')}
             className={`flex items-center gap-3 px-2 h-[42px] rounded-[6px] cursor-pointer mb-[2px] transition-colors group ${
-              location.pathname === '/explore'
+              activeHomeItem === 'explore'
                 ? 'bg-interactive-selected text-white'
                 : 'text-txt-tertiary hover:bg-interactive-hover hover:text-txt-secondary'
             }`}
           >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className={`flex-shrink-0 ${location.pathname === '/explore' ? 'text-white' : 'opacity-70 group-hover:opacity-100'}`}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className={`flex-shrink-0 ${activeHomeItem === 'explore' ? 'text-white' : 'opacity-70 group-hover:opacity-100'}`}>
               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-5.5-2.5l7.51-3.49L17.5 6.5 9.99 9.99 6.5 17.5zm5.5-6.6c.61 0 1.1.49 1.1 1.1s-.49 1.1-1.1 1.1-1.1-.49-1.1-1.1.49-1.1 1.1-1.1z" />
             </svg>
             <span className="font-medium text-[16px]">{t('spaces:sidebar.dmList.explore')}</span>
           </div>
 
-          {/* Placeholder nav item */}
           <div
-            className="flex items-center gap-3 px-2 h-[42px] rounded-[6px] mb-[2px] text-txt-tertiary cursor-default opacity-50"
+            onClick={() => navigate('/backspace')}
+            className={`flex items-center gap-3 px-2 h-[42px] rounded-[6px] cursor-pointer mb-[2px] transition-colors group ${
+              activeHomeItem === 'backspace'
+                ? 'bg-interactive-selected text-white'
+                : 'text-txt-tertiary hover:bg-interactive-hover hover:text-txt-secondary'
+            }`}
           >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0">
-              <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z" />
-            </svg>
-            <span className="font-medium text-[16px]">{t('spaces:sidebar.dmList.comingSoon')}</span>
+            <BackspaceMark className={`flex-shrink-0 ${activeHomeItem === 'backspace' ? 'text-white' : 'opacity-70 group-hover:opacity-100'}`} />
+            <span className="font-medium text-[16px]">{t('project:nav.label')}</span>
+            {hubUpdate.state === 'updated' && (
+              <span
+                role="img"
+                aria-label={t('project:nav.updatedDot')}
+                className="ml-auto w-2 h-2 rounded-full bg-accent-primary flex-shrink-0"
+              />
+            )}
           </div>
 
           <div className="mt-[18px] px-2 mb-1 flex items-center justify-between group">

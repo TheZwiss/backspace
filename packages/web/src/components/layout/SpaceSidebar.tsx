@@ -5,6 +5,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useSpaceStore, getMyUserIdForOrigin } from '../../stores/spaceStore';
 import type { TaggedSpace } from '../../stores/spaceStore';
 import { resolveSpaceLayout, type ResolvedSpaceLayoutItem } from '../../utils/spaceLayout';
+import { activeHomeNavItem } from '../../utils/homeNav';
 import { useChatStore } from '../../stores/chatStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useInstanceStore } from '../../stores/instanceStore';
@@ -109,7 +110,7 @@ function SidebarItem({ id, name, icon, avatarColor, active, onClick, onContextMe
   };
 
   const buttonContent = (
-    <button onClick={onClick} className={`${getButtonClasses()} ${dimmed ? 'opacity-40 saturate-50' : ''}`} style={backgroundStyle} title={tooltipText ? undefined : name}>
+    <button onClick={onClick} className={`${getButtonClasses()} ${dimmed ? 'opacity-40 saturate-50' : ''}`} style={backgroundStyle} title={tooltipText ? undefined : name} aria-current={active ? 'page' : undefined}>
       {type === 'dm' ? (
         <img src="/icons/logo-mark.svg" alt={t('common:appName')} className="w-5 h-auto" />
       ) : type === 'action' ? (
@@ -604,6 +605,7 @@ export function SpaceSidebar() {
   const openModal = useUIStore((s) => s.openModal);
   const addToast = useUIStore((s) => s.addToast);
   const floatingPanelHeight = useUIStore((s) => s.floatingPanelHeight);
+  const currentChannelId = useChatStore((s) => s.currentChannelId);
   const setCurrentChannel = useChatStore((s) => s.setCurrentChannel);
   const unreadChannels = useChatStore((s) => s.unreadChannels);
   const instances = useInstanceStore((s) => s.instances);
@@ -1053,7 +1055,9 @@ export function SpaceSidebar() {
       <SidebarItem
         id="@me"
         name={t('spaces:sidebar.directMessages')}
-        active={showDms}
+        // The Backspace page is reached from the DM sidebar, so `@me` stays
+        // lit there; `showDms` alone is only set on the `@me` route.
+        active={showDms || activeHomeNavItem(location.pathname, currentChannelId) === 'backspace'}
         onClick={handleDmClick}
         type="dm"
         hasUnread={hasDmUnread}
