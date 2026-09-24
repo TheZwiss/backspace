@@ -7,7 +7,7 @@ import { hasPermissionBit, PermissionBits } from './permissions';
  * parse. Origins are compared this way on both sides so that a trailing
  * slash, a path or a differently cased host never defeat the match.
  */
-function canonicalOrigin(value: string): string | null {
+export function canonicalOrigin(value: string): string | null {
   try {
     return new URL(value).origin;
   } catch {
