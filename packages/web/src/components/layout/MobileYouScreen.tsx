@@ -6,21 +6,34 @@ import { Avatar } from '../ui/Avatar';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { parseFederatedUsername } from '../../utils/identity';
 import { useInstanceUpdateBadge } from '../../hooks/useInstanceUpdateBadge';
+import { useHubUpdateState } from '../../hooks/useHubUpdateState';
+import { BackspaceMark } from '../projectHub/BackspaceMark';
+
+/**
+ * A row on the You screen. `badge` shows a dot at the trailing edge; a row
+ * that can show one must say what it means, so `badgeLabel` comes with it.
+ */
+type ActionRow = {
+  label: string;
+  icon: React.ReactNode;
+  action: () => void;
+} & ({ badge?: undefined } | { badge: boolean; badgeLabel: string });
 
 export function MobileYouScreen() {
-  const { t } = useTranslation(['mobile', 'settings', 'common', 'admin']);
+  const { t } = useTranslation(['mobile', 'settings', 'common', 'admin', 'project']);
   const pushMobileScreen = useUIStore((s) => s.pushMobileScreen);
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const updateBadge = useInstanceUpdateBadge();
+  const hubUpdate = useHubUpdateState();
 
   if (!user) return null;
 
   const avatarUrl = user.avatar ? `/api/uploads/${user.avatar}` : null;
   const bannerUrl = user.banner ? `/api/uploads/${user.banner}` : null;
 
-  const actionRows = [
+  const actionRows: ActionRow[] = [
     {
       label: t('mobile:you.editProfile'),
       icon: (
@@ -56,6 +69,13 @@ export function MobileYouScreen() {
         </svg>
       ),
       action: () => pushMobileScreen('settings-voice'),
+    },
+    {
+      label: t('project:nav.label'),
+      icon: <BackspaceMark size={20} className="w-5 h-5" />,
+      action: () => pushMobileScreen('backspace'),
+      badge: hubUpdate.state === 'updated',
+      badgeLabel: t('project:nav.updatedDot'),
     },
   ];
 
@@ -134,6 +154,13 @@ export function MobileYouScreen() {
           >
             <span className="text-txt-secondary">{row.icon}</span>
             <span className="text-sm text-txt-primary flex-1">{row.label}</span>
+            {row.badge && (
+              <span
+                role="img"
+                aria-label={row.badgeLabel}
+                className="w-2.5 h-2.5 rounded-full bg-notification flex-shrink-0"
+              />
+            )}
             <svg className="w-4 h-4 text-txt-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
             </svg>

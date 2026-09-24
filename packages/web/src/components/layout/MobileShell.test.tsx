@@ -1,0 +1,46 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { InstanceInfoResponse } from '@backspace/shared';
+
+// Stub AudioManager to avoid AudioWorkletNode reference error in jsdom.
+// Reached transitively via the voice screens and stores.
+vi.mock('../../audio/AudioManager', () => ({
+  AudioManager: {
+    getInstance: vi.fn().mockReturnValue({
+      setOutputDevice: vi.fn(),
+      setVolume: vi.fn(),
+    }),
+  },
+}));
+
+import { render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { api } from '../../api/client';
+import { __resetHomeInstanceInfoForTests } from '../../hooks/useHomeInstanceInfo';
+import { mobileScreenMap } from './MobileShell';
+
+beforeEach(() => {
+  __resetHomeInstanceInfoForTests();
+  vi.spyOn(api.instance, 'info').mockReturnValue(new Promise<InstanceInfoResponse>(() => {}));
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  __resetHomeInstanceInfoForTests();
+});
+
+describe('MobileShell: backspace screen', () => {
+  it('renders the Backspace page under the mobile header, without the page top bar', () => {
+    const renderScreen = mobileScreenMap['backspace'];
+    expect(renderScreen).toBeDefined();
+
+    render(<MemoryRouter>{renderScreen?.()}</MemoryRouter>);
+
+    const headings = screen.getAllByRole('heading', { level: 1, name: 'Backspace' });
+    // The mobile header's title, then the page's own heading.
+    expect(headings).toHaveLength(2);
+    expect(headings[0]?.closest('header')?.querySelector('button')).not.toBeNull();
+    expect(screen.getByText('Open-source chat you can host yourself.')).toBeInTheDocument();
+    // The page's top bar is the only place the member-list toggle lives.
+    expect(screen.queryByRole('button', { name: 'Toggle Member List' })).toBeNull();
+  });
+});

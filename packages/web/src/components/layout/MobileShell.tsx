@@ -23,6 +23,7 @@ import { MobileVoiceFullScreen } from './MobileVoiceFullScreen';
 import { MobileMembersScreen } from './MobileMembersScreen';
 import { MobileGroupDmInfo } from './MobileGroupDmInfo';
 import { FriendsPage } from '../chat/FriendsPage';
+import { ProjectHubPage } from '../projectHub/ProjectHubPage';
 import { ExplorePage } from '../chat/ExplorePage';
 import { UserProfileModal } from '../modals/UserProfileModal';
 import { GeneralPanel } from '../modals/instanceSettingsPanels/GeneralPanel';
@@ -53,7 +54,7 @@ function MobileFederationPanelWrapper() {
   );
 }
 
-const screenMap: Record<string, (params?: Record<string, string>) => React.ReactNode> = {
+export const mobileScreenMap: Record<string, (params?: Record<string, string>) => React.ReactNode> = {
   'channel-chat': (params) => <MobileChatScreen params={params} />,
   'friends': () => <FriendsPage mobile />,
   'settings': () => <MobileSettingsScreen />,
@@ -112,6 +113,12 @@ const screenMap: Record<string, (params?: Record<string, string>) => React.React
   'group-dm-info': (params) => <MobileGroupDmInfo params={params} />,
   'voice-full': () => <MobileVoiceFullScreen />,
   'explore': () => <ExplorePage />,
+  'backspace': () => (
+    <div className="flex flex-col h-full bg-surface-base">
+      <MobileScreenHeader title={i18n.t('project:nav.label')} />
+      <ProjectHubPage showTopBar={false} />
+    </div>
+  ),
   'user-profile': (params) => {
     // Open the user profile modal with the userId from params
     if (params?.userId) {
@@ -173,7 +180,7 @@ export function MobileShell() {
     <div className="flex flex-col" style={{ height: shellHeight }}>
       <MobileScreenStack
         rootScreen={rootScreens[mobileScreen]}
-        screenMap={screenMap}
+        screenMap={mobileScreenMap}
       />
 
       {/* Voice mini-bar — shown when in a voice call */}
