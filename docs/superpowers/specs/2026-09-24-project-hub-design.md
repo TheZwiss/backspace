@@ -2,6 +2,7 @@
 
 **Date:** 2026-09-24
 **Status:** Design, approved in conversation; spec reviewed by an agent at the maintainer's request and corrected
+**Note:** §9's listing conditions (and §14's matching step) were corrected after implementation to match `directory/document.ts`; §4 and §5 were made precise at the same time.
 **Scope:** The "Coming Soon" slot in the DM sidebar becomes a "Backspace" page with project information
 
 ---
@@ -151,9 +152,13 @@ That is one piece of shared state with one derived view.
 `utils/updateAck.ts` exactly in shape: key `backspace_hub_seen_version_<userId>`
 (per user id, so two accounts in one browser do not clear each other's dot;
 localStorage is already per origin), `readHubSeenVersion(storage, userId)` and
-`writeHubSeenVersion(storage, userId, version)`, every access in `try/catch`, a
-null `userId` or a throwing or corrupt storage reads as `null` and writes
-nothing. Losing the value costs at most one extra dot.
+`writeHubSeenVersion(storage, userId, version)`, every access in `try/catch`. A
+null `userId` reads as `null` and writes nothing. A storage that throws reads
+as `null` and writes nothing, so the value lives in memory for the session. A
+corrupt record (not JSON, or no non-empty `seenVersion`) reads as `null`; that
+is `first-run`, so the hook's `first-run` `markSeen` overwrites it with the
+running version as soon as the version is known. Losing the value costs at
+most one extra dot.
 
 **Store.** `packages/web/src/stores/projectHubStore.ts`, Zustand:
 
@@ -209,17 +214,21 @@ clear at once.
 `invalidateHomeInstanceInfo(): void`, backed by a small module-level store
 (Zustand, or a module cache with `useSyncExternalStore`; either, one of them).
 
-- **Fetch rule:** whenever a subscriber mounts while there is no cached value
+- **Fetch rule:** whenever a subscriber mounts while there is no fresh value
   and no request in flight, one `GET /api/instance/info` starts on the home API
   client. Concurrent subscribers share it. A success is cached for the session.
-  A failure leaves `null` and nothing in flight, so the next subscriber mount
-  (for example opening the page) tries again. On desktop the sidebar stays
-  mounted, so after a failure its dot stays off until a page mount or reload
-  refetches; that is acceptable.
-- **`invalidateHomeInstanceInfo()`** drops the cache and refetches at once if
-  anything is subscribed. `GeneralPanel` calls it after a successful
-  `PATCH /api/settings/instance`, so toggling the Support card is reflected on
-  the page without a reload.
+  A failure leaves the value as it was (`null`, or a stale value) and nothing
+  in flight, so the next subscriber mount (for example opening the page) tries
+  again. On desktop the sidebar stays mounted, so after a first failure its
+  dot stays off until a page mount or reload refetches; that is acceptable.
+- **`invalidateHomeInstanceInfo()`** is stale-while-revalidate: it marks the
+  cached value stale and rereads at once if anything is subscribed (otherwise
+  the next mount rereads). The stale value stays visible until the reread
+  replaces it, and stays if the reread fails, so the Support card, instance
+  name and sidebar dot do not blink out. A generation counter drops an answer
+  that was already in flight when the invalidation happened. `GeneralPanel`
+  calls it after a successful `PATCH /api/settings/instance`, so toggling the
+  Support card is reflected on the page without a reload.
 
 The sidebar item, the mobile row, the You tab and the page read the version and
 `supportCardEnabled` only through this hook (the version via
@@ -433,10 +442,11 @@ After a successful join the space appears in `spaceStore`, so `communityStatus`
 becomes `member` with no extra bookkeeping.
 
 **Operational requirement.** The directory document lists a space only when
-the instance allows listing (`directory_enabled`), the space is listed
-(`discovery_enabled`), and it is among the first 200 listed spaces by member
-count (`directory/document.ts`). The community space must meet all three. This
-goes into the project-hub doc (section 12).
+all of these hold (`directory/document.ts`): the instance has both
+`directory_enabled` and `discovery_enabled` on; the space's visibility is
+`public` or `request`; the space is `directory_listed`; and it is among the
+first 200 listed spaces by member count (`DIRECTORY_MAX_SPACES`). The community
+space must meet all four. This goes into the project-hub doc (section 12).
 
 ---
 
@@ -551,6 +561,8 @@ the end.
 ## 14. What only the maintainer can do later
 
 1. Create the Ko-fi page and put its URL in `PROJECT_LINKS.funding`.
-2. Create the community instance and space, allow listing on the instance,
-   list the space, and put `origin` and `spaceId` in
-   `PROJECT_LINKS.community`.
+2. Create the community instance and space; on the instance turn on both
+   space discovery (`discovery_enabled`) and directory listing
+   (`directory_enabled`); make the space public or by request and list it
+   (`directory_listed`); keep it among the first 200 listed spaces by member
+   count; and put `origin` and `spaceId` in `PROJECT_LINKS.community`.

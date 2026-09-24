@@ -8,9 +8,11 @@ footer links. On desktop it is reached from the "Backspace" item in the DM
 sidebar; on mobile from the "Backspace" row on the You screen, which pushes the
 `backspace` screen.
 
-The page links out and never fetches project data: release notes are the
-GitHub release page, so an instance nobody administers still never contacts
-github.com.
+The page links out and fetches no project data when it is viewed: release
+notes are the GitHub release page, so an instance nobody administers still
+never contacts github.com. The one outside request it can make is the
+community card's Join, which reads the community instance's directory listing
+after the click (see "Community card").
 
 Source files:
 - `packages/web/src/utils/projectLinks.ts` - `PROJECT_LINKS`, every outbound project URL, and the builders `releaseNotesUrl`, `bugReportUrl`, `featureRequestUrl`; `projectLinksProblems` checks the constant in CI
@@ -18,9 +20,9 @@ Source files:
 - `packages/web/src/utils/hubSeenVersion.ts` - the per-user seen-version record in localStorage
 - `packages/web/src/stores/projectHubStore.ts` - `useProjectHubStore` and `hubUpdateState`, the one derived view
 - `packages/web/src/hooks/useHubUpdateState.ts` - the hook every dot and the What's new card read
-- `packages/web/src/hooks/useHomeInstanceInfo.ts` - the shared reader of `GET /api/instance/info` (version, `supportCardEnabled`); `invalidateHomeInstanceInfo` after an admin save
+- `packages/web/src/hooks/useHomeInstanceInfo.ts` - the shared reader of `GET /api/instance/info` (version, `supportCardEnabled`); `invalidateHomeInstanceInfo` after an admin save marks the value stale and rereads it, keeping the old value on screen until the answer replaces it (and keeping it if the reread fails)
 - `packages/web/src/utils/homeNav.ts` - `activeHomeNavItem`, which of Friends, Explore and Backspace is selected
-- `packages/web/src/components/projectHub/` - `ProjectHubPage`, `HubCard`, `WhatsNewCard`, `CommunityCard`, `ReportCard`, `InstanceSection`, `BackspaceMark`
+- `packages/web/src/components/projectHub/` - `ProjectHubPage`, `HubCard`, `WhatsNewCard`, `CommunityCard`, `ReportCard`, `InstanceSection`, `BackspaceMark`, `HubUpdateDot`
 - `packages/web/src/components/layout/ChannelSidebar.tsx` - the sidebar item; `MobileYouScreen.tsx` - the row; `MobileShell.tsx` - `MobileBackspaceScreen`; `MobileBottomNav.tsx` - the You tab dot
 - `packages/web/src/locales/*/project.json` - the `project` namespace
 - `packages/web/dev-project-hub.html`, `packages/web/src/dev/project-hub-preview.tsx` - the design workbench
@@ -73,8 +75,11 @@ Card conventions in `HubCard.tsx`, for any card added later:
 The page, the sidebar item, the mobile row and the You tab agree on one
 question: has the instance updated since this user last opened the page. The
 record is stored per user id (`backspace_hub_seen_version_<userId>`), so two
-accounts in one browser do not clear each other's dot. A throwing or corrupt
-storage reads as "none" and writes nothing.
+accounts in one browser do not clear each other's dot. A storage that throws
+reads as "none" and writes nothing, so the value lives in memory for the
+session. A corrupt record (not JSON, or no non-empty `seenVersion`) also reads
+as "none"; that is `first-run`, so the hook's `markSeen` overwrites it with
+the running version as soon as the version is known.
 
 | `version` (instance info) | `seenVersion` | `hubUpdateState` | Dot | What's new says |
 |---|---|---|---|---|
@@ -92,10 +97,12 @@ Opening the page takes a snapshot of the state on arrival and then records the
 version as seen. The card keeps saying "Updated to" for that visit while every
 dot clears at once.
 
-The dot is the brand primary 8px dot (`w-2 h-2 bg-accent-primary`) on both the
-desktop sidebar item and the mobile You-screen row. The mobile You tab in the
-bottom nav keeps its red aggregate dot, which also lights for pending friend
-requests and instance updates.
+The dot is the brand primary 8px dot (`w-2 h-2 bg-accent-primary`), drawn by
+one component, `HubUpdateDot` (it carries its own `nav.updatedDot` label and
+takes a `className` for placement), on both the desktop sidebar item and the
+mobile You-screen row. The mobile You tab in the bottom nav keeps its red
+aggregate dot, which also lights for pending friend requests and instance
+updates.
 
 ---
 
@@ -114,15 +121,19 @@ is already connected to.
 | pending | "Request sent", disabled | a pending request in `exploreStore.myRequests` with the target's (origin, id) |
 | idle | Join | neither |
 | loading | Join, disabled, spinner | Join clicked, the listing request is out |
-| unreachable | Try again, with `community.unreachable` | network error, 10 s timeout, non-2xx, or a body that is not a valid directory document |
-| notListed | Try again, with `community.notListed` | a valid document without the space |
+| unreachable | Try again, with `community.unreachable` | network error, 10 s timeout, non-2xx, a body that is not JSON, an invalid envelope, or a malformed entry for the space |
+| notListed | Try again, with `community.notListed` | a valid envelope without the space |
 
-Join reads `GET <origin>/api/directory/spaces` and validates it. For a remote
-target it opens the connect-and-join dialog with the configured origin (never
-the document's own claim); after the dialog closes the card asks for its join
-requests again, which is how a sent request shows as pending. For a target on
-the home instance it runs `useSpaceJoin` inside the card: a public space is
-joined, a request space shows the message field inline.
+Join reads `GET <origin>/api/directory/spaces` and validates it with
+`parseDirectoryListing`: the envelope (`schema` 1, `instance.name`,
+`instance.federatedRegistrationOpen`, a `spaces` array), then only the element
+whose `id` is the target space, so a malformed space the card never shows
+cannot block the join. For a remote target it opens the connect-and-join
+dialog with the configured origin (never the document's own claim); after the
+dialog closes the card asks for its join requests again, which is how a sent
+request shows as pending. For a target on the home instance it runs
+`useSpaceJoin` inside the card: a public space is joined, a request space
+shows the message field inline.
 
 ---
 
@@ -133,7 +144,7 @@ joined, a request space shows the message field inline.
    `PROJECT_LINKS.community` to its `origin` and `spaceId`. The directory
    document carries the space only when all three hold:
    - the instance has space discovery on and allows listing in the directory (`discovery_enabled` and `directory_enabled`);
-   - the space is public or by request and its owner listed it (`directory_listed`);
+   - the space is public or by request and is listed (`directory_listed`), which whoever may edit the space sets with `PATCH /api/spaces/:id` (the owner or a member with `MANAGE_SPACE`, see [directory.md](directory.md));
    - it is among the first 200 listed spaces by member count (`DIRECTORY_MAX_SPACES` in `directory/document.ts`).
 
    Otherwise the card says "not available right now". See
