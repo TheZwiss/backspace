@@ -104,6 +104,7 @@ Rules:
 | `uploads` | Transfer indicator, upload errors, crop dialog |
 | `desktop` | Renderer-side desktop strings: update banner, recovery notices, keybind setup |
 | `mobile` | Mobile shell, bottom navigation, screen titles |
+| `project` | The Backspace project hub page (`/backspace`) and its sidebar entry: header, the What's new, community, support, insights, report, host and desktop cards, the This instance section and the footer links |
 | `telemetry` | The one-time "say hi" ask and the instance-settings section for the optional daily usage ping |
 | `errors` | Localized messages for every `ErrorCode` in `packages/shared` |
 

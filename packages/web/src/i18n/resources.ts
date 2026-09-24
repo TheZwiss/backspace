@@ -16,6 +16,7 @@ import dm from '../locales/en/dm.json';
 import errors from '../locales/en/errors.json';
 import federation from '../locales/en/federation.json';
 import mobile from '../locales/en/mobile.json';
+import project from '../locales/en/project.json';
 import search from '../locales/en/search.json';
 import settings from '../locales/en/settings.json';
 import social from '../locales/en/social.json';
@@ -37,6 +38,7 @@ export const resources = {
     errors,
     federation,
     mobile,
+    project,
     search,
     settings,
     social,

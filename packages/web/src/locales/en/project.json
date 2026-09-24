@@ -1,0 +1,62 @@
+{
+  "nav": {
+    "label": "Backspace",
+    "updatedDot": "Backspace was updated"
+  },
+  "header": {
+    "title": "Backspace",
+    "tagline": "Open-source chat you can host yourself."
+  },
+  "whatsNew": {
+    "title": "What's new",
+    "updated": "Updated to {{version}}",
+    "current": "You're on {{version}}",
+    "noVersion": "Release notes for every version",
+    "action": "Read the release notes"
+  },
+  "community": {
+    "title": "Join the Backspace community",
+    "body": "Talk to the people who build Backspace, ask questions and share feedback.",
+    "join": "Join",
+    "open": "Open",
+    "pending": "Request sent",
+    "retry": "Try again",
+    "unreachable": "The community instance could not be reached.",
+    "notListed": "The community space is not available right now."
+  },
+  "support": {
+    "title": "Support the project",
+    "body": "Backspace is built in the open and funded by the people who use it.",
+    "action": "Support on Ko-fi"
+  },
+  "insights": {
+    "title": "Insights",
+    "body": "Public numbers on downloads, instances and activity.",
+    "action": "Open insights"
+  },
+  "report": {
+    "title": "Report a bug or request a feature",
+    "body": "Your version and browser are filled in for you.",
+    "bug": "Report a bug",
+    "feature": "Request a feature"
+  },
+  "host": {
+    "title": "Host your own instance",
+    "body": "Run Backspace on your own server and invite who you want.",
+    "action": "Read the install guide"
+  },
+  "desktop": {
+    "title": "Get the desktop app",
+    "body": "Push to talk, global keybinds and activity status.",
+    "action": "Download"
+  },
+  "instance": {
+    "title": "This instance"
+  },
+  "footer": {
+    "license": "License (AGPL-3.0)",
+    "security": "Report a security issue",
+    "contributors": "Contributors",
+    "source": "Source code on GitHub"
+  }
+}

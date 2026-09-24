@@ -1,0 +1,62 @@
+{
+  "nav": {
+    "label": "Backspace",
+    "updatedDot": "Backspace 已更新"
+  },
+  "header": {
+    "title": "Backspace",
+    "tagline": "可以自行托管的开源聊天应用。"
+  },
+  "whatsNew": {
+    "title": "更新内容",
+    "updated": "已更新至 {{version}}",
+    "current": "您当前使用的是 {{version}}",
+    "noVersion": "所有版本的发布说明",
+    "action": "阅读发布说明"
+  },
+  "community": {
+    "title": "加入 Backspace 社区",
+    "body": "与 Backspace 的开发者交流，提出问题并分享反馈。",
+    "join": "加入",
+    "open": "打开",
+    "pending": "申请已发送",
+    "retry": "重试",
+    "unreachable": "无法连接到社区实例。",
+    "notListed": "社区空间当前不可用。"
+  },
+  "support": {
+    "title": "支持本项目",
+    "body": "Backspace 公开开发，经费来自使用它的人。",
+    "action": "在 Ko-fi 上支持"
+  },
+  "insights": {
+    "title": "统计见解",
+    "body": "有关下载量、实例和活跃度的公开数据。",
+    "action": "打开统计见解"
+  },
+  "report": {
+    "title": "报告错误或提出功能建议",
+    "body": "您的版本和浏览器信息会自动填写。",
+    "bug": "报告错误",
+    "feature": "提出功能建议"
+  },
+  "host": {
+    "title": "托管您自己的实例",
+    "body": "在您自己的服务器上运行 Backspace，并邀请您想邀请的人。",
+    "action": "阅读安装指南"
+  },
+  "desktop": {
+    "title": "获取桌面端应用",
+    "body": "按键发言、全局快捷键和活动状态。",
+    "action": "下载"
+  },
+  "instance": {
+    "title": "本实例"
+  },
+  "footer": {
+    "license": "许可证 (AGPL-3.0)",
+    "security": "报告安全问题",
+    "contributors": "贡献者",
+    "source": "GitHub 上的源代码"
+  }
+}

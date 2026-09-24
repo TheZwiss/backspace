@@ -1,0 +1,62 @@
+{
+  "nav": {
+    "label": "Backspace",
+    "updatedDot": "Backspace wurde aktualisiert"
+  },
+  "header": {
+    "title": "Backspace",
+    "tagline": "Open-Source-Chat, den du selbst hosten kannst."
+  },
+  "whatsNew": {
+    "title": "Neuigkeiten",
+    "updated": "Aktualisiert auf {{version}}",
+    "current": "Du nutzt {{version}}",
+    "noVersion": "Versionshinweise zu jeder Version",
+    "action": "Versionshinweise lesen"
+  },
+  "community": {
+    "title": "Der Backspace-Community beitreten",
+    "body": "Sprich mit den Leuten, die Backspace entwickeln, stell Fragen und gib Feedback.",
+    "join": "Beitreten",
+    "open": "Öffnen",
+    "pending": "Anfrage gesendet",
+    "retry": "Erneut versuchen",
+    "unreachable": "Die Community-Instanz war nicht erreichbar.",
+    "notListed": "Der Community-Space ist gerade nicht verfügbar."
+  },
+  "support": {
+    "title": "Das Projekt unterstützen",
+    "body": "Backspace wird offen entwickelt und von den Leuten finanziert, die es nutzen.",
+    "action": "Auf Ko-fi unterstützen"
+  },
+  "insights": {
+    "title": "Insights",
+    "body": "Öffentliche Zahlen zu Downloads, Instanzen und Aktivität.",
+    "action": "Insights öffnen"
+  },
+  "report": {
+    "title": "Fehler melden oder Funktion vorschlagen",
+    "body": "Deine Version und dein Browser werden automatisch eingetragen.",
+    "bug": "Fehler melden",
+    "feature": "Funktion vorschlagen"
+  },
+  "host": {
+    "title": "Eigene Instanz hosten",
+    "body": "Betreibe Backspace auf deinem eigenen Server und lade ein, wen du willst.",
+    "action": "Installationsanleitung lesen"
+  },
+  "desktop": {
+    "title": "Desktop-App herunterladen",
+    "body": "Push-to-Talk, globale Tastenkürzel und Aktivitätsstatus.",
+    "action": "Herunterladen"
+  },
+  "instance": {
+    "title": "Diese Instanz"
+  },
+  "footer": {
+    "license": "Lizenz (AGPL-3.0)",
+    "security": "Sicherheitsproblem melden",
+    "contributors": "Mitwirkende",
+    "source": "Quellcode auf GitHub"
+  }
+}
