@@ -3,7 +3,7 @@ import { useUIStore } from '../../stores/uiStore';
 
 interface MobileScreenStackProps {
   rootScreen: React.ReactNode;
-  screenMap: Record<string, (params?: Record<string, string>) => React.ReactNode>;
+  screenMap: Readonly<Record<string, (params?: Record<string, string>) => React.ReactNode>>;
 }
 
 export function MobileScreenStack({ rootScreen, screenMap }: MobileScreenStackProps) {

@@ -54,7 +54,7 @@ function MobileFederationPanelWrapper() {
   );
 }
 
-export const mobileScreenMap: Record<string, (params?: Record<string, string>) => React.ReactNode> = {
+export const mobileScreenMap: Readonly<Record<string, (params?: Record<string, string>) => React.ReactNode>> = {
   'channel-chat': (params) => <MobileChatScreen params={params} />,
   'friends': () => <FriendsPage mobile />,
   'settings': () => <MobileSettingsScreen />,
@@ -116,7 +116,10 @@ export const mobileScreenMap: Record<string, (params?: Record<string, string>) =
   'backspace': () => (
     <div className="flex flex-col h-full bg-surface-base">
       <MobileScreenHeader title={i18n.t('project:nav.label')} />
-      <ProjectHubPage showTopBar={false} />
+      {/* min-h-0 lets this fill only what the header leaves: the page's root
+          is h-full, which as a direct flex item would floor its height at the
+          whole screen and push its last 48px under the stack's clip. */}
+      <div className="flex-1 min-h-0 flex flex-col"><ProjectHubPage showTopBar={false} /></div>
     </div>
   ),
   'user-profile': (params) => {

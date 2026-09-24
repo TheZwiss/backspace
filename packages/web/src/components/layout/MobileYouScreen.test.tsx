@@ -85,6 +85,16 @@ describe('MobileYouScreen: Backspace row', () => {
     expect(screen.getAllByRole('img', { name: DOT })).toHaveLength(1);
   });
 
+  it('draws the same informational dot as the desktop sidebar, not the red "needs you" dot', () => {
+    hubState.state = 'updated';
+
+    render(<MobileYouScreen />);
+
+    const dot = screen.getByRole('img', { name: DOT });
+    expect(dot).toHaveClass('w-2', 'h-2', 'rounded-full', 'bg-accent-primary', 'flex-shrink-0');
+    expect(dot).not.toHaveClass('bg-notification');
+  });
+
   it.each<HubUpdateState>(['unknown', 'first-run', 'current'])('shows no dot when the state is %s', (state) => {
     hubState.state = state;
 

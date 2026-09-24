@@ -43,4 +43,16 @@ describe('MobileShell: backspace screen', () => {
     // The page's top bar is the only place the member-list toggle lives.
     expect(screen.queryByRole('button', { name: 'Toggle Member List' })).toBeNull();
   });
+
+  it('gives the page only the height the header leaves', () => {
+    render(<MemoryRouter>{mobileScreenMap['backspace']?.()}</MemoryRouter>);
+
+    // jsdom does no layout, so this pins the structure: the page's root is
+    // `h-full`, and only a `flex-1 min-h-0` parent keeps that from resolving
+    // to the whole screen and pushing the page's end under the stack's clip.
+    const pageHeading = screen.getAllByRole('heading', { level: 1, name: 'Backspace' })[1];
+    const pageRoot = pageHeading?.closest('.bg-surface-chat');
+    expect(pageRoot).not.toBeNull();
+    expect(pageRoot?.parentElement).toHaveClass('flex-1', 'min-h-0', 'flex', 'flex-col');
+  });
 });

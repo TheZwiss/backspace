@@ -158,7 +158,7 @@ export function MobileYouScreen() {
               <span
                 role="img"
                 aria-label={row.badgeLabel}
-                className="w-2.5 h-2.5 rounded-full bg-notification flex-shrink-0"
+                className="w-2 h-2 rounded-full bg-accent-primary flex-shrink-0"
               />
             )}
             <svg className="w-4 h-4 text-txt-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
