@@ -64,7 +64,7 @@
   <releases>
     <release version="1.5.1" date="2026-09-24">
       <description>
-        <p>Backspace 1.5.1 release.</p>
+        <p>The instance setting that allows spaces in the global directory is now called Allow global listing, and it says that each space is still listed from its own Discovery settings. While nothing is listed, a note under it links to a space's Discovery settings.</p>
       </description>
     </release>
     <release version="1.5.0" date="2026-09-22">
