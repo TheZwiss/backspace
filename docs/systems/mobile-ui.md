@@ -265,7 +265,7 @@ Returns `null` when `mobileStack.length > 0` — hidden whenever a pushed screen
 |-----|-----------|--------------|
 | Spaces | Dot (red) | `unreadChannels` has any non-voice channel |
 | DMs | Numeric count | Count of DM channels where `lastMessage.id > readStates[dmId]` |
-| You | Dot (red) | Pending incoming friend requests (`status === 'pending'` and `fromId !== authUser.id`) |
+| You | Dot (red) | Pending incoming friend requests (`status === 'pending'` and `fromId !== authUser.id`), an instance update badge (`useInstanceUpdateBadge`), or the Backspace page's `updated` state (`useHubUpdateState`) |
 
 Badge caps at `99+` for numeric badges.
 
@@ -360,6 +360,7 @@ Event options: `touchstart` is `{ passive: true }`, `touchmove` is `{ passive: f
 | `members` | `MobileMembersScreen` | `{ spaceId? }` |
 | `voice-full` | `MobileVoiceFullScreen` | — |
 | `explore` | `ExplorePage` | — |
+| `backspace` | `MobileBackspaceScreen`: `MobileScreenHeader` titled `project:nav.label` over `ProjectHubPage showTopBar={false}` (see [project-hub.md](project-hub.md)) | — |
 | `user-profile` | `UserProfileModal` | `{ userId }` (opens modal via `openModal('userProfile', ...)`) |
 
 Instance settings sub-panels (`settings-instance-*`) are wrapped inline with `MobileScreenHeader` + scrollable container + `bg-surface-base`.
@@ -411,7 +412,7 @@ Split-pane layout: 60px `glass-strip` space strip on the left + channel list on 
 
 - Settings gear in header (pushes `settings`)
 - Profile card: banner/accent background, avatar (-10 overlap), display name, username, custom status, bio
-- Action rows (each pushes a settings sub-screen): Edit Profile, Friends, Connections, Voice & Video
+- Action rows (each pushes a screen): Edit Profile, Friends, Connections, Voice & Video, Backspace (pushes `backspace`). A row can carry a `badge` dot at its trailing edge; the Backspace row shows the brand primary 8px dot while `useHubUpdateState().state === 'updated'`
 - Log Out button with `ConfirmDialog`
 
 ---
