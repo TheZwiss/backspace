@@ -767,17 +767,6 @@ rename.
 
 - [x] Repository is **public** (required for the Scorecard badge/publish and the
       CodeQL free tier).
-- [x] **Traffic token for `metrics.yml`.** The `backspace-release-bot` GitHub
-      App, installed on this repository only, holds **Administration: read**,
-      and `metrics.yml` mints a per-run installation token from the
-      `RELEASE_BOT_APP_ID` and `RELEASE_BOT_PRIVATE_KEY` repository secrets,
-      narrowed to this repository and to Administration, Contents and Metadata
-      read. Traffic endpoints are unreachable without Administration: read, and
-      there is no `administration` key in the Actions `permissions:`
-      vocabulary, so `GITHUB_TOKEN` cannot substitute. The token replaced a
-      fine-grained PAT stored as `METRICS_TOKEN`, which expired and had to be
-      renewed by hand. The endpoint-by-permission list and the key rotation
-      steps are in `docs/systems/metrics.md` §7.
 - [x] **Dependabot alerts** enabled (`PUT /repos/{owner}/{repo}/vulnerability-alerts`,
       confirmed by `GET` returning 204 where it previously returned 404). The
       repository had been running OSV-Scanner while GitHub's own advisory feed was
@@ -809,35 +798,51 @@ rename.
       make it only after a release has gone through the new workflow. Every
       job still declares its own `permissions:` block, so the setting widens
       nothing for jobs that do not ask for `pull-requests: write`.
-- [x] **Release bot GitHub App** (`backspace-release-bot`, installed
-      on this repository only, with Contents: read/write and Pull requests:
-      read/write). Two repository secrets: `RELEASE_BOT_APP_ID` (the numeric
-      App ID) and `RELEASE_BOT_PRIVATE_KEY` (its PEM private key). Only the
-      `update-flatpak-metadata` job of `flatpak-release-metadata.yml` reads
-      them: it mints an installation token with
-      `actions/create-github-app-token`, narrowed to this repository and to
-      `permission-contents: write` and `permission-pull-requests: write`,
-      revoked when the job ends. The job's own `GITHUB_TOKEN` is
-      `contents: read`. The app exists because pushes and pull requests made
-      with `GITHUB_TOKEN` start no workflows: the required `Build & test` check
-      never ran on the metadata pull request (measured on #278, where the bot
-      commit `8cc48c38` had 0 check runs and the human commit after it had 18),
-      so a human had to push to every one. The app's token starts CI, the job
-      updates the branch when main has moved past the tag (the ruleset's
-      up-to-date rule), and it turns on squash auto-merge (`allow_auto_merge` is
-      on for the repository). The workflow runs on `release: released`, or on
-      `workflow_dispatch` with a `tag` input to re-run a release. The
-      `Require CI on main` ruleset carries
+- [x] **Release bot GitHub App** (`backspace-release-bot`), installed on
+      this repository only. Its installation holds **Administration: read**,
+      **Contents: read/write** and **Pull requests: read/write**, plus the
+      **Metadata: read** every app holds. Two repository secrets:
+      `RELEASE_BOT_APP_ID` (the numeric App ID) and `RELEASE_BOT_PRIVATE_KEY`
+      (its PEM private key). The private key only ever goes to
+      `actions/create-github-app-token`, pinned by SHA
+      (`bcd2ba49218906704ab6c1aa796996da409d3eb1`, v3.2.0), which mints an
+      installation token narrowed to this repository and to the scopes the job
+      uses, and revokes it when the job ends. Two jobs do that, and no other
+      workflow reads the secrets.
+      **`update-flatpak-metadata` in `flatpak-release-metadata.yml`** mints
+      `permission-contents: write` and `permission-pull-requests: write`; the
+      job's own `GITHUB_TOKEN` is `contents: read`. The app exists for this job
+      because pushes and pull requests made with `GITHUB_TOKEN` start no
+      workflows: the required `Build & test` check never ran on the metadata
+      pull request (measured on #278, where the bot commit `8cc48c38` had 0
+      check runs and the human commit after it had 18), so a human had to push
+      to every one. The app's token starts CI, the job updates the branch when
+      main has moved past the tag (the ruleset's up-to-date rule), and it turns
+      on squash auto-merge (`allow_auto_merge` is on for the repository). The
+      workflow runs on `release: released`, or on `workflow_dispatch` with a
+      `tag` input to re-run a release. The `Require CI on main` ruleset carries
       `require_extra_approval_for_unattributed_changes: true`, which does not
       hold these pull requests: GitHub documents it as one extra approval for
       Copilot pull requests not attributed to a person, with no effect when the
       ruleset requires zero approvals, as this one does, and #278 and #283
       (opened by the github-actions app) merged with 0 reviews under it. The
       app's commits are attributed to `backspace-release-bot[bot]` in any case,
-      which is on the CLA allowlist in `cla.yml`. To rotate the key, generate a
-      new private key in the app's settings, replace `RELEASE_BOT_PRIVATE_KEY`,
-      then delete the old key there. See
+      which is on the CLA allowlist in `cla.yml`. See
       [desktop.md](desktop.md#release-publishing) for the release flow itself.
+      **`collect` in `metrics.yml`** mints `permission-administration: read`,
+      `permission-contents: read` and `permission-metadata: read` on every
+      run, to read repository traffic. The traffic endpoints need
+      Administration: read, and there is no `administration` key in the
+      Actions `permissions:` vocabulary, so `GITHUB_TOKEN` cannot substitute.
+      This replaced a fine-grained PAT stored as `METRICS_TOKEN`, which had an
+      expiry date and had to be renewed by hand. The endpoint-by-permission
+      list is in [metrics.md](metrics.md) §7.
+      **Rotating the key:** generate a new private key in the app's settings,
+      replace `RELEASE_BOT_PRIVATE_KEY`, then delete the old key there. Both
+      jobs pick up the new key on their next run. A permission withdrawn from
+      the installation makes minting fail in whichever job requests it: the
+      metrics collector then records a failure in `meta.json` before
+      collecting, and the Flatpak job stops before pushing.
 
 ### Outstanding
 

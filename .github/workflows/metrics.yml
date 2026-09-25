@@ -18,8 +18,8 @@ name: Metrics
 # "Mint the traffic token" step creates a read-only token from it on every run,
 # which the action revokes when the job ends. GITHUB_TOKEN writes. Neither alone
 # can both read traffic and modify the archive. The app token replaced a
-# fine-grained PAT stored as the METRICS_TOKEN secret, which expired and had to
-# be renewed by hand; the app's private key does not expire. The collector
+# fine-grained PAT stored as the METRICS_TOKEN secret, which had an expiry date
+# and had to be renewed by hand; the app's private key has none. The collector
 # still reads its token from the METRICS_TOKEN environment variable, which is
 # how a developer running it by hand passes a PAT.
 #
