@@ -319,6 +319,16 @@ describe('channel and message routes send error codes', () => {
       expect((JSON.parse(res.body) as ErrorBody).code).toBe('category_not_found');
     });
 
+    it('renaming a category with a non-string name → category_name_required', async () => {
+      currentUserId = 'owner';
+      const created = await app.inject({ method: 'POST', url: `/api/spaces/${SPACE}/categories`, payload: { name: 'Text' } });
+      expect(created.statusCode).toBe(201);
+      const { id } = JSON.parse(created.body) as { id: string };
+      const res = await app.inject({ method: 'PATCH', url: `/api/categories/${id}`, payload: { name: 42 } });
+      expect(res.statusCode).toBe(400);
+      expect((JSON.parse(res.body) as ErrorBody).code).toBe('category_name_required');
+    });
+
     it('override with a bad target type → override_target_invalid', async () => {
       currentUserId = 'owner';
       const res = await app.inject({

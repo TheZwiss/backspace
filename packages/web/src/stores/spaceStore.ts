@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Space, Channel, ChannelCategory, MemberWithUser, SpaceWithChannelsAndMembers, Role, SpaceFolder, SpaceLayoutItem, DmChannel, User, UpdateSpaceRequest, CreateSpaceRequest } from '@backspace/shared';
+import type { Space, Channel, ChannelCategory, MemberWithUser, SpaceWithChannelsAndMembers, Role, SpaceFolder, SpaceLayoutItem, DmChannel, User, UpdateSpaceRequest, CreateSpaceRequest, UpdateChannelRequest } from '@backspace/shared';
 import { api, BackspaceApiClient } from '../api/client';
 import { resolveAssetUrl, normalizeUserAssets } from '../utils/assetUrls';
 import { isSelf, canonicalUserKey, isDeliveryFromHome } from '../utils/identity';
@@ -150,9 +150,13 @@ interface SpaceState {
   generateInvite: (spaceId: string) => Promise<string>;
   createChannel: (spaceId: string, name: string, type: 'text' | 'voice', topic?: string, categoryId?: string) => Promise<Channel>;
   upsertChannel: (channel: Channel, spaceId: string, origin: string) => void;
+  /** Updates a space channel on its own instance and applies the stored row,
+   *  which the server may have normalized (see `normalizeChannelName`). */
+  updateChannel: (channelId: string, data: UpdateChannelRequest) => Promise<Channel>;
   deleteChannel: (channelId: string) => Promise<void>;
   createCategory: (spaceId: string, name: string) => Promise<ChannelCategory>;
-  updateCategory: (categoryId: string, data: { name?: string; position?: number }) => Promise<void>;
+  /** Updates a category on its space's instance and applies the stored row. */
+  updateCategory: (categoryId: string, data: { name?: string; position?: number }) => Promise<ChannelCategory>;
   deleteCategory: (categoryId: string) => Promise<void>;
   updateChannelLayout: (spaceId: string, data: { channels: Array<{ id: string; position: number; categoryId: string | null }>; categories: Array<{ id: string; position: number }> }) => Promise<void>;
   addSpace: (space: Space) => void;
@@ -681,6 +685,15 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     });
   },
 
+  updateChannel: async (channelId: string, data: UpdateChannelRequest) => {
+    const origin = get().channelOriginMap.get(channelId) ?? '';
+    const channel = await getApiForOrigin(origin).channels.update(channelId, data);
+    // The channel_updated WS event carries the same row; applying the
+    // response too means the caller sees the stored value without waiting.
+    get().upsertChannel(channel, channel.spaceId, origin);
+    return channel;
+  },
+
   deleteChannel: async (channelId: string) => {
     const origin = get().channelOriginMap.get(channelId) ?? '';
     const channelApi = getApiForOrigin(origin);
@@ -704,13 +717,18 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
   },
 
   updateCategory: async (categoryId: string, data: { name?: string; position?: number }) => {
-    const cat = get().categories.find(c => c.id === categoryId);
-    if (!cat) return;
-    const space = get().spaces.find(s => s.id === cat.spaceId);
-    const origin = space?._instanceOrigin ?? '';
-    const client = getApiForOrigin(origin);
-    await client.categories.update(categoryId, data);
-    // WS event will update the store
+    const known = get().categories.find(c => c.id === categoryId);
+    const space = known ? get().spaces.find(s => s.id === known.spaceId) : undefined;
+    const origin = space?._instanceOrigin ?? get().categoryOriginMap.get(categoryId) ?? '';
+    const category = await getApiForOrigin(origin).categories.update(categoryId, data);
+    // The category_updated WS event carries the same row; applying the
+    // response too means the caller sees the stored value without waiting.
+    set((state) => ({
+      categories: state.categories
+        .map(c => (c.id === category.id ? category : c))
+        .sort((a, b) => a.position - b.position),
+    }));
+    return category;
   },
 
   deleteCategory: async (categoryId: string) => {

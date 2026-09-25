@@ -53,6 +53,14 @@ export function normalizeChannelName(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, '-');
 }
 
+export const CATEGORY_NAME_MIN_LENGTH = 1;
+export const CATEGORY_NAME_MAX_LENGTH = 100;
+
+/** The form a category name is stored in: trimmed, case and spacing kept. */
+export function normalizeCategoryName(name: string): string {
+  return name.trim();
+}
+
 // ─── Group DM Constants ──────────────────────────────────────────────────────
 
 export const GROUP_DM_NAME_MAX_LENGTH = 50;

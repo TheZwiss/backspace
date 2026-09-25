@@ -5,7 +5,14 @@ import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { isMember, hasPermission, getChannelSpaceId, PermissionBits, computePermissions } from '../utils/permissions.js';
 import { permissionsToString } from '@backspace/shared/src/permissions.js';
-import { CHANNEL_NAME_MAX_LENGTH, CHANNEL_NAME_MIN_LENGTH, normalizeChannelName } from '@backspace/shared/src/constants.js';
+import {
+  CATEGORY_NAME_MAX_LENGTH,
+  CATEGORY_NAME_MIN_LENGTH,
+  CHANNEL_NAME_MAX_LENGTH,
+  CHANNEL_NAME_MIN_LENGTH,
+  normalizeCategoryName,
+  normalizeChannelName,
+} from '@backspace/shared/src/constants.js';
 import { connectionManager } from '../ws/handler.js';
 import { checkVoicePermissions } from '../ws/events.js';
 import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
@@ -732,9 +739,9 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, 400, 'category_name_required');
     }
 
-    const trimmedName = name.trim();
-    if (trimmedName.length > 100) {
-      return sendError(reply, 400, 'category_name_length', { min: 1, max: 100 });
+    const trimmedName = normalizeCategoryName(name);
+    if (trimmedName.length > CATEGORY_NAME_MAX_LENGTH) {
+      return sendError(reply, 400, 'category_name_length', { min: CATEGORY_NAME_MIN_LENGTH, max: CATEGORY_NAME_MAX_LENGTH });
     }
 
     const existing = db.select().from(schema.channelCategories)
@@ -790,9 +797,12 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
     const updates: Partial<typeof schema.channelCategories.$inferInsert> = {};
 
     if (name !== undefined) {
-      const trimmedName = name.trim();
-      if (!trimmedName || trimmedName.length > 100) {
-        return sendError(reply, 400, 'category_name_length', { min: 1, max: 100 });
+      if (typeof name !== 'string') {
+        return sendError(reply, 400, 'category_name_required');
+      }
+      const trimmedName = normalizeCategoryName(name);
+      if (trimmedName.length < CATEGORY_NAME_MIN_LENGTH || trimmedName.length > CATEGORY_NAME_MAX_LENGTH) {
+        return sendError(reply, 400, 'category_name_length', { min: CATEGORY_NAME_MIN_LENGTH, max: CATEGORY_NAME_MAX_LENGTH });
       }
       updates.name = trimmedName;
     }

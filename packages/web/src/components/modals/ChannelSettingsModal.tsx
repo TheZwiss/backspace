@@ -6,9 +6,11 @@ import { useUIStore } from '../../stores/uiStore';
 import { useSpaceStore, getApiForOrigin } from '../../stores/spaceStore';
 import { PermissionBits, permissionsToString, stringToPermissions, hasPermissionBit } from '../../utils/permissions';
 import { Toggle } from '../ui/Toggle';
+import { InlineNameEditor } from '../ui/InlineNameEditor';
 import { PermissionsEditor } from '../ui/PermissionsEditor';
 import type { PermissionDef } from '../ui/OverrideEntry';
 import { describeError } from '../../i18n/errors';
+import { CHANNEL_NAME_MAX_LENGTH, normalizeChannelName } from '@backspace/shared/src/constants';
 
 // ─── Permission Definitions for Channel Overrides ──────────────────────────────
 
@@ -31,6 +33,9 @@ const VOICE_CHANNEL_PERMISSIONS: PermissionDef[] = [
   { key: 'MOVE_MEMBERS', bit: PermissionBits.MOVE_MEMBERS },
   { key: 'DISCONNECT_MEMBERS', bit: PermissionBits.DISCONNECT_MEMBERS },
 ];
+
+const CHANNEL_ICON_PRIVATE = 'M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z';
+const CHANNEL_ICON_PUBLIC = 'M5.88657 21C5.57547 21 5.3399 20.7189 5.39427 20.4126L6.00001 17H2.59511C2.28449 17 2.04905 16.7198 2.10259 16.4138L2.27759 15.4138C2.31946 15.1746 2.52722 15 2.77011 15H6.35001L7.41001 9H4.00511C3.69449 9 3.45905 8.71977 3.51259 8.41381L3.68759 7.41381C3.72946 7.17456 3.93722 7 4.18011 7H7.76001L8.39677 3.41262C8.43914 3.17391 8.64664 3 8.88907 3H9.87344C10.1845 3 10.4201 3.28107 10.3657 3.58738L9.76001 7H15.76L16.3968 3.41262C16.4391 3.17391 16.6466 3 16.8891 3H17.8734C18.1845 3 18.4201 3.28107 18.3657 3.58738L17.76 7H21.1649C21.4755 7 21.711 7.28023 21.6574 7.58619L21.4824 8.58619C21.4406 8.82544 21.2328 9 20.9899 9H17.41L16.35 15H19.7549C20.0655 15 20.301 15.2802 20.2474 15.5862L20.0724 16.5862C20.0306 16.8254 19.8228 17 19.5799 17H16L15.3632 20.5874C15.3209 20.8261 15.1134 21 14.8709 21H13.8866C13.5755 21 13.3399 20.7189 13.3943 20.4126L14 17H8.00001L7.36325 20.5874C7.32088 20.8261 7.11337 21 6.87094 21H5.88657ZM9.41001 9L8.35001 15H14.35L15.41 9H9.41001Z';
 
 // ─── Overview Tab ───────────────────────────────────────────────────────────────
 
@@ -59,120 +64,29 @@ function OverviewTab({
   canManageRoles: boolean;
   onTogglePrivate: () => void;
   onDeleteChannel: () => void;
-  onRename: (name: string) => Promise<string>;
+  onRename: (name: string) => Promise<void>;
 }) {
   const { t } = useTranslation(['spaces', 'common']);
-  const [editName, setEditName] = useState(channelName);
-  const [isEditingName, setIsEditingName] = useState(false);
-  const [isSavingName, setIsSavingName] = useState(false);
-
-  // The store is the source of truth: resync whenever the name changes there
-  // (the server normalizes what we sent, or someone else renames the channel)
-  // — but never while the user is typing, that would clobber their edit.
-  useEffect(() => {
-    if (!isEditingName) setEditName(channelName);
-  }, [channelName, isEditingName]);
-
-  const startEditingName = () => {
-    setEditName(channelName);
-    setIsEditingName(true);
-  };
-
-  const cancelEditingName = () => {
-    setEditName(channelName);
-    setIsEditingName(false);
-  };
-
-  // Only the save button commits. Blur deliberately does nothing (a stray
-  // click must not rename the channel) and Enter is not a submit either;
-  // Esc abandons the edit.
-  const saveName = async () => {
-    const trimmed = editName.trim();
-    if (!trimmed || trimmed === channelName) {
-      setEditName(channelName);
-      setIsEditingName(false);
-      return;
-    }
-    setIsSavingName(true);
-    try {
-      // Resolves with the stored name, i.e. the value after server-side
-      // normalization (trimmed, lowercased, whitespace → dashes).
-      setEditName(await onRename(trimmed));
-      setIsEditingName(false);
-    } catch {
-      // The parent renders the error; keep the editor open so the typed
-      // value can be retried.
-    } finally {
-      setIsSavingName(false);
-    }
-  };
-
-  const handleNameKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Escape') cancelEditingName();
-  };
-
   return (
     <div className="space-y-4">
       <div>
         <label className="block text-xs font-bold text-txt-secondary uppercase mb-2">
           {t('spaces:channel.settings.channelLabel')}
         </label>
-        {canManageChannels ? (
-          <div className="flex items-center gap-2 text-txt-primary">
-            {isPrivate ? (
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="opacity-60 flex-shrink-0">
-                <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z" />
-              </svg>
-            ) : (
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="opacity-60 flex-shrink-0">
-                <path d="M5.88657 21C5.57547 21 5.3399 20.7189 5.39427 20.4126L6.00001 17H2.59511C2.28449 17 2.04905 16.7198 2.10259 16.4138L2.27759 15.4138C2.31946 15.1746 2.52722 15 2.77011 15H6.35001L7.41001 9H4.00511C3.69449 9 3.45905 8.71977 3.51259 8.41381L3.68759 7.41381C3.72946 7.17456 3.93722 7 4.18011 7H7.76001L8.39677 3.41262C8.43914 3.17391 8.64664 3 8.88907 3H9.87344C10.1845 3 10.4201 3.28107 10.3657 3.58738L9.76001 7H15.76L16.3968 3.41262C16.4391 3.17391 16.6466 3 16.8891 3H17.8734C18.1845 3 18.4201 3.28107 18.3657 3.58738L17.76 7H21.1649C21.4755 7 21.711 7.28023 21.6574 7.58619L21.4824 8.58619C21.4406 8.82544 21.2328 9 20.9899 9H17.41L16.35 15H19.7549C20.0655 15 20.301 15.2802 20.2474 15.5862L20.0724 16.5862C20.0306 16.8254 19.8228 17 19.5799 17H16L15.3632 20.5874C15.3209 20.8261 15.1134 21 14.8709 21H13.8866C13.5755 21 13.3399 20.7189 13.3943 20.4126L14 17H8.00001L7.36325 20.5874C7.32088 20.8261 7.11337 21 6.87094 21H5.88657ZM9.41001 9L8.35001 15H14.35L15.41 9H9.41001Z" />
-              </svg>
-            )}
-            {isEditingName ? (
-              <>
-                <input
-                  type="text"
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  onKeyDown={handleNameKeyDown}
-                  disabled={isSavingName}
-                  autoFocus
-                  className="input-standard w-48 max-w-full py-1.5 px-2 text-sm"
-                  maxLength={100}
-                />
-                <button
-                  type="button"
-                  onClick={saveName}
-                  disabled={isSavingName}
-                  className="flex-shrink-0 px-2.5 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
-                >
-                  {isSavingName ? t('common:states.saving') : t('common:actions.save')}
-                </button>
-              </>
-            ) : (
-              <button
-                type="button"
-                onClick={startEditingName}
-                className="-mx-1 min-w-0 truncate rounded px-1 text-left text-sm font-medium transition-colors hover:bg-interactive-hover"
-              >
-                {channelName}
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 text-txt-primary">
-            {isPrivate ? (
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="opacity-60 flex-shrink-0">
-                <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z" />
-              </svg>
-            ) : (
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="opacity-60 flex-shrink-0">
-                <path d="M5.88657 21C5.57547 21 5.3399 20.7189 5.39427 20.4126L6.00001 17H2.59511C2.28449 17 2.04905 16.7198 2.10259 16.4138L2.27759 15.4138C2.31946 15.1746 2.52722 15 2.77011 15H6.35001L7.41001 9H4.00511C3.69449 9 3.45905 8.71977 3.51259 8.41381L3.68759 7.41381C3.72946 7.17456 3.93722 7 4.18011 7H7.76001L8.39677 3.41262C8.43914 3.17391 8.64664 3 8.88907 3H9.87344C10.1845 3 10.4201 3.28107 10.3657 3.58738L9.76001 7H15.76L16.3968 3.41262C16.4391 3.17391 16.6466 3 16.8891 3H17.8734C18.1845 3 18.4201 3.28107 18.3657 3.58738L17.76 7H21.1649C21.4755 7 21.711 7.28023 21.6574 7.58619L21.4824 8.58619C21.4406 8.82544 21.2328 9 20.9899 9H17.41L16.35 15H19.7549C20.0655 15 20.301 15.2802 20.2474 15.5862L20.0724 16.5862C20.0306 16.8254 19.8228 17 19.5799 17H16L15.3632 20.5874C15.3209 20.8261 15.1134 21 14.8709 21H13.8866C13.5755 21 13.3399 20.7189 13.3943 20.4126L14 17H8.00001L7.36325 20.5874C7.32088 20.8261 7.11337 21 6.87094 21H5.88657ZM9.41001 9L8.35001 15H14.35L15.41 9H9.41001Z" />
-              </svg>
-            )}
-            <span className="text-sm font-medium">{channelName}</span>
-          </div>
-        )}
+        <InlineNameEditor
+          name={channelName}
+          icon={
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="opacity-60 flex-shrink-0">
+              <path d={isPrivate ? CHANNEL_ICON_PRIVATE : CHANNEL_ICON_PUBLIC} />
+            </svg>
+          }
+          canEdit={canManageChannels}
+          editLabel={t('spaces:channel.settings.rename')}
+          fieldLabel={t('spaces:channel.settings.nameLabel')}
+          maxLength={CHANNEL_NAME_MAX_LENGTH}
+          normalize={normalizeChannelName}
+          onSave={onRename}
+        />
       </div>
 
       {error && (
@@ -237,7 +151,6 @@ export function ChannelSettingsModal() {
   const spaces = useSpaceStore((s) => s.spaces);
   const spacePermissions = useSpaceStore((s) => s.spacePermissions);
   const channelPermissions = useSpaceStore((s) => s.channelPermissions);
-  const upsertChannel = useSpaceStore((s) => s.upsertChannel);
 
   const [tab, setTab] = useState<'overview' | 'permissions'>('overview');
   const [isPrivate, setIsPrivate] = useState(false);
@@ -352,16 +265,10 @@ export function ChannelSettingsModal() {
     }
   };
 
-  const handleRenameChannel = async (name: string): Promise<string> => {
-    if (!channelId || !currentSpaceId) return name;
+  const handleRenameChannel = async (name: string): Promise<void> => {
     setError('');
-    const origin = space?._instanceOrigin ?? '';
-    const channelApi = getApiForOrigin(origin);
     try {
-      const updated = await channelApi.channels.update(channelId, { name });
-      upsertChannel(updated, currentSpaceId, origin);
-      // Resolve with the stored name so the input shows the normalized value.
-      return updated.name;
+      await useSpaceStore.getState().updateChannel(channelId, { name });
     } catch (err) {
       setError(describeError(err));
       throw err;

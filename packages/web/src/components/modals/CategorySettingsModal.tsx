@@ -6,9 +6,11 @@ import { useUIStore } from '../../stores/uiStore';
 import { useSpaceStore, getApiForOrigin } from '../../stores/spaceStore';
 import { PermissionBits, permissionsToString, stringToPermissions, hasPermissionBit } from '../../utils/permissions';
 import { Toggle } from '../ui/Toggle';
+import { InlineNameEditor } from '../ui/InlineNameEditor';
 import { PermissionsEditor } from '../ui/PermissionsEditor';
 import type { PermissionDef } from '../ui/OverrideEntry';
 import { describeError } from '../../i18n/errors';
+import { CATEGORY_NAME_MAX_LENGTH, normalizeCategoryName } from '@backspace/shared/src/constants';
 
 // ─── Permission Definitions for Category Overrides ──────────────────────────────
 
@@ -53,108 +55,29 @@ function OverviewTab({
   canManageRoles: boolean;
   onTogglePrivate: () => void;
   onDeleteCategory: () => void;
-  onRename: (name: string) => Promise<string>;
+  onRename: (name: string) => Promise<void>;
 }) {
   const { t } = useTranslation(['spaces', 'common']);
-  const [editName, setEditName] = useState(categoryName);
-  const [isEditingName, setIsEditingName] = useState(false);
-  const [isSavingName, setIsSavingName] = useState(false);
-
-  // The store is the source of truth: resync whenever the name changes there
-  // (the server normalizes what we sent, or someone else renames the category)
-  // — but never while the user is typing, that would clobber their edit.
-  useEffect(() => {
-    if (!isEditingName) setEditName(categoryName);
-  }, [categoryName, isEditingName]);
-
-  const startEditingName = () => {
-    setEditName(categoryName);
-    setIsEditingName(true);
-  };
-
-  const cancelEditingName = () => {
-    setEditName(categoryName);
-    setIsEditingName(false);
-  };
-
-  // Only the save button commits. Blur deliberately does nothing (a stray
-  // click must not rename the category) and Enter is not a submit either;
-  // Esc abandons the edit.
-  const saveName = async () => {
-    const trimmed = editName.trim();
-    if (!trimmed || trimmed === categoryName) {
-      setEditName(categoryName);
-      setIsEditingName(false);
-      return;
-    }
-    setIsSavingName(true);
-    try {
-      // Resolves with the stored name, i.e. the value after server-side
-      // normalization (trimmed, length bounded).
-      setEditName(await onRename(trimmed));
-      setIsEditingName(false);
-    } catch {
-      // The parent renders the error; keep the editor open so the typed
-      // value can be retried.
-    } finally {
-      setIsSavingName(false);
-    }
-  };
-
-  const handleNameKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Escape') cancelEditingName();
-  };
-
   return (
     <div className="space-y-4">
       <div>
         <label className="block text-xs font-bold text-txt-secondary uppercase mb-2">
           {t('spaces:category.settings.categoryLabel')}
         </label>
-        {canManageChannels ? (
-          <div className="flex items-center gap-2 text-txt-primary">
+        <InlineNameEditor
+          name={categoryName}
+          icon={
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="opacity-60 flex-shrink-0">
               <path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" />
             </svg>
-            {isEditingName ? (
-              <>
-                <input
-                  type="text"
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  onKeyDown={handleNameKeyDown}
-                  disabled={isSavingName}
-                  autoFocus
-                  className="input-standard w-48 max-w-full py-1.5 px-2 text-sm"
-                  maxLength={100}
-                />
-                <button
-                  type="button"
-                  onClick={saveName}
-                  disabled={isSavingName}
-                  className="flex-shrink-0 px-2.5 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
-                >
-                  {isSavingName ? t('common:states.saving') : t('common:actions.save')}
-                </button>
-              </>
-            ) : (
-              <button
-                type="button"
-                onClick={startEditingName}
-                className="-mx-1 min-w-0 truncate rounded px-1 text-left text-sm font-medium transition-colors hover:bg-interactive-hover"
-              >
-                {categoryName}
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 text-txt-primary">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="opacity-60 flex-shrink-0">
-              <path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" />
-            </svg>
-            <span className="text-sm font-medium">{categoryName}</span>
-          </div>
-        )}
+          }
+          canEdit={canManageChannels}
+          editLabel={t('spaces:category.settings.rename')}
+          fieldLabel={t('spaces:category.settings.nameLabel')}
+          maxLength={CATEGORY_NAME_MAX_LENGTH}
+          normalize={normalizeCategoryName}
+          onSave={onRename}
+        />
       </div>
 
       {error && (
@@ -317,18 +240,10 @@ export function CategorySettingsModal() {
     }
   };
 
-  const handleRename = async (name: string): Promise<string> => {
-    if (!categoryId || !currentSpaceId) return name;
+  const handleRename = async (name: string): Promise<void> => {
     setError('');
-    const origin = space?._instanceOrigin ?? '';
-    const catApi = getApiForOrigin(origin);
     try {
-      const updated = await catApi.categories.update(categoryId, { name });
-      useSpaceStore.setState((state) => ({
-        categories: state.categories.map((c) => (c.id === categoryId ? { ...c, ...updated } : c)),
-      }));
-      // Resolve with the stored name so the input shows the normalized value.
-      return updated.name;
+      await useSpaceStore.getState().updateCategory(categoryId, { name });
     } catch (err) {
       setError(describeError(err));
       throw err;

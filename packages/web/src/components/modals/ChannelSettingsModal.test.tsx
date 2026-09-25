@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type { Channel } from '@backspace/shared';
 
 // Stub AudioManager to avoid an AudioWorkletNode reference error in jsdom.
@@ -14,10 +15,16 @@ vi.mock('../../audio/AudioManager', () => ({
 }));
 
 const mockGetOverrides = vi.fn();
-vi.mock('../../stores/spaceStore', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../stores/spaceStore')>()),
+const mockUpdateChannel = vi.fn();
+// Mocked where it is defined, so the modal and the store's own actions both
+// reach the stub.
+vi.mock('../../utils/crossStoreResolvers', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../utils/crossStoreResolvers')>()),
   getApiForOrigin: () => ({
-    channels: { getOverrides: (...args: unknown[]) => mockGetOverrides(...args) },
+    channels: {
+      getOverrides: (...args: unknown[]) => mockGetOverrides(...args),
+      update: (...args: unknown[]) => mockUpdateChannel(...args),
+    },
   }),
 }));
 
@@ -25,6 +32,7 @@ import { ChannelSettingsModal } from './ChannelSettingsModal';
 import { useSpaceStore, type TaggedSpace } from '../../stores/spaceStore';
 import { useUIStore } from '../../stores/uiStore';
 import { PermissionBits, permissionsToString } from '../../utils/permissions';
+import { HttpError } from '../../api/client';
 
 const space: TaggedSpace = {
   id: 'space-1',
@@ -68,6 +76,7 @@ function seed(spacePerms: string, channelPerms: string): void {
 beforeEach(() => {
   mockGetOverrides.mockReset();
   mockGetOverrides.mockResolvedValue([]);
+  mockUpdateChannel.mockReset();
 });
 
 // Each control reads the permissions at the scope its server route checks:
@@ -101,5 +110,38 @@ describe('ChannelSettingsModal permission scope', () => {
     render(<ChannelSettingsModal />);
     expect(screen.getByText('Private Channel')).toBeTruthy();
     await waitFor(() => expect(mockGetOverrides).toHaveBeenCalledWith('channel-1'));
+  });
+});
+
+describe('ChannelSettingsModal rename', () => {
+  const manage = bits(PermissionBits.VIEW_CHANNEL, PermissionBits.MANAGE_CHANNELS);
+
+  it('saves through the store and shows the name the server stored', async () => {
+    seed(manage, manage);
+    useSpaceStore.getState().channelOriginMap.set('channel-1', '');
+    mockUpdateChannel.mockImplementation((_id: string, data: { name: string }) =>
+      Promise.resolve({ ...channel, name: data.name.toLowerCase().replace(/\s+/g, '-') }));
+    const user = userEvent.setup();
+    render(<ChannelSettingsModal />);
+    await user.click(screen.getByRole('button', { name: /Rename Channel/ }));
+    const field = screen.getByRole('textbox', { name: 'Channel Name' });
+    await user.clear(field);
+    await user.type(field, 'Game Night{Enter}');
+    expect(mockUpdateChannel).toHaveBeenCalledWith('channel-1', { name: 'Game Night' });
+    await waitFor(() => expect(screen.getByRole('button', { name: /Rename Channel/ }).textContent).toContain('game-night'));
+    expect(useSpaceStore.getState().channels[0].name).toBe('game-night');
+  });
+
+  it('shows the server error and keeps the editor open', async () => {
+    seed(manage, manage);
+    mockUpdateChannel.mockRejectedValue(new HttpError(403, 'Missing MANAGE_CHANNELS permission', undefined, 'missing_permission', { permission: 'MANAGE_CHANNELS' }));
+    const user = userEvent.setup();
+    render(<ChannelSettingsModal />);
+    await user.click(screen.getByRole('button', { name: /Rename Channel/ }));
+    const field = screen.getByRole('textbox', { name: 'Channel Name' });
+    await user.clear(field);
+    await user.type(field, 'renamed{Enter}');
+    await waitFor(() => expect(screen.getByText(/permission to do that/)).toBeTruthy());
+    expect((screen.getByRole('textbox', { name: 'Channel Name' }) as HTMLInputElement).value).toBe('renamed');
   });
 });

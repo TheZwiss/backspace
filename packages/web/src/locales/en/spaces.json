@@ -49,6 +49,8 @@
     },
     "settings": {
       "title": "Channel Settings",
+      "rename": "Rename Channel",
+      "nameLabel": "Channel Name",
       "channelLabel": "Channel",
       "private": {
         "label": "Private Channel",
@@ -76,6 +78,8 @@
     },
     "settings": {
       "title": "Category Settings",
+      "rename": "Rename Category",
+      "nameLabel": "Category Name",
       "categoryLabel": "Category",
       "private": {
         "label": "Private Category",

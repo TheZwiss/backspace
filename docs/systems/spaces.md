@@ -522,7 +522,7 @@ Updates `spaces.ownerId`, broadcasts `space_updated` WS event.
 
 | Field | Validation |
 |-------|------------|
-| name | Required, trimmed, lowercased, spaces→hyphens, 1-100 chars |
+| name | Required, a string; stored as `normalizeChannelName(name)` from `@backspace/shared` (trimmed, lowercased, each whitespace run → one hyphen), 1-100 chars |
 | type | Required, `'text'` or `'voice'` |
 | topic | Optional, trimmed |
 | categoryId | Optional, validated against space's categories |
@@ -541,7 +541,7 @@ Position: `max(existing positions) + 1`.
 **Permission:** `MANAGE_CHANNELS` (checked with channel-level override context)
 **Body:** `{ name?, topic?, position?, categoryId? }`
 
-- Name: same normalization as create
+- Name: same normalization as create; a non-string answers `channel_name_required`
 - Position: non-negative number
 - categoryId: `null` to unassign, or valid category ID in same space
 
@@ -549,10 +549,12 @@ Position: `max(existing positions) + 1`.
 - If `categoryId` changed: calls `broadcastOverrideChange` (per-user VIEW_CHANNEL recheck, may send `channel_deleted` to users who lost access)
 - Otherwise: simple `channel_updated` broadcast to channel viewers
 
+**Client:** the Overview tab of channel settings renames through the `updateChannel` store action, which sends the request to the space's own instance and applies the returned row, so the editor shows the stored (normalized) name at once. The editor is the shared `InlineNameEditor` (`components/ui/`): Save or Enter commits, Cancel or Escape abandons, blur does nothing, and Escape never reaches the settings modal's own close handler. It compares edits with `normalizeChannelName` and sends nothing when the stored name would not change. The control shows when the user holds `MANAGE_CHANNELS` on that channel (see "Client gating" in permissions.md).
+
 ### Delete Channel
 
 **Endpoint:** `DELETE /api/channels/:id`
-**Permission:** `MANAGE_CHANNELS`
+**Permission:** `MANAGE_CHANNELS` (checked with channel-level override context)
 
 **Cleanup sequence:**
 1. Disconnect all voice participants (if voice channel)
@@ -568,7 +570,7 @@ Position: `max(existing positions) + 1`.
 
 **Create:** `POST /api/spaces/:id/categories` — permission: `MANAGE_CHANNELS`, name 1-100 chars, auto-position. Broadcasts `category_created`.
 
-**Update:** `PATCH /api/categories/:id` — permission: `MANAGE_CHANNELS`, updatable: name, position. Broadcasts `category_updated` (includes `isPrivate` flag).
+**Update:** `PATCH /api/categories/:id` — permission: `MANAGE_CHANNELS`, updatable: name (a string, stored as `normalizeCategoryName(name)`, which trims and keeps case and spacing, 1-100 chars; a non-string answers `category_name_required`), position. Broadcasts `category_updated` (includes `isPrivate` flag). The category settings Overview renames through the `updateCategory` store action with the same `InlineNameEditor` as channels.
 
 **Delete:** `DELETE /api/categories/:id` — permission: `MANAGE_CHANNELS`. Transaction nulls `categoryId` on child channels, then deletes category. Broadcasts `category_deleted` then `channel_layout_updated` (per-user filtered).
 

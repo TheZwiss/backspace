@@ -49,6 +49,8 @@
     },
     "settings": {
       "title": "频道设置",
+      "rename": "重命名频道",
+      "nameLabel": "频道名称",
       "channelLabel": "频道",
       "private": {
         "label": "私密频道",
@@ -76,6 +78,8 @@
     },
     "settings": {
       "title": "分类设置",
+      "rename": "重命名分类",
+      "nameLabel": "分类名称",
       "categoryLabel": "分类",
       "private": {
         "label": "私密分类",
