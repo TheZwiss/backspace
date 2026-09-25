@@ -154,11 +154,13 @@ export interface CollectOptions {
    * The split exists because the two need opposite instruments. The traffic
    * endpoints require **Administration: read**, which has no key in the
    * Actions `permissions:` vocabulary at all, so no configuration of
-   * `GITHUB_TOKEN` can reach them and a PAT is forced. `/actions/runs` needs
-   * **`actions: read`**, which IS in that vocabulary — so the workflow's own
-   * built-in token can do it, and asking the PAT to carry the scope instead
-   * would widen a long-lived credential to buy nothing. Least privilege that
-   * still does the job, per endpoint rather than per run.
+   * `GITHUB_TOKEN` can reach them and a separate credential is forced (in
+   * `metrics.yml`, an installation token of the release bot GitHub App; run
+   * by hand, a PAT). `/actions/runs` needs **`actions: read`**, which IS in
+   * that vocabulary, so the workflow's own built-in token can do it, and
+   * asking the traffic credential to carry the scope instead would widen it
+   * to buy nothing. Least privilege that still does the job, per endpoint
+   * rather than per run.
    */
   actionsClient?: GitHubClient;
   store: Store;

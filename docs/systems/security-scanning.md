@@ -767,11 +767,17 @@ rename.
 
 - [x] Repository is **public** (required for the Scorecard badge/publish and the
       CodeQL free tier).
-- [x] Fine-grained PAT scoped to this repository only, with **Administration:
-      read** and **Contents: read**, stored as the `METRICS_TOKEN` repository
-      secret. Traffic endpoints are unreachable without it — there is no
-      `administration` key in the Actions `permissions:` vocabulary, so
-      `GITHUB_TOKEN` cannot substitute. See `docs/systems/metrics.md` §7.
+- [x] **Traffic token for `metrics.yml`.** The `backspace-release-bot` GitHub
+      App, installed on this repository only, holds **Administration: read**,
+      and `metrics.yml` mints a per-run installation token from the
+      `RELEASE_BOT_APP_ID` and `RELEASE_BOT_PRIVATE_KEY` repository secrets,
+      narrowed to this repository and to Administration, Contents and Metadata
+      read. Traffic endpoints are unreachable without Administration: read, and
+      there is no `administration` key in the Actions `permissions:`
+      vocabulary, so `GITHUB_TOKEN` cannot substitute. The token replaced a
+      fine-grained PAT stored as `METRICS_TOKEN`, which expired and had to be
+      renewed by hand. The endpoint-by-permission list and the key rotation
+      steps are in `docs/systems/metrics.md` §7.
 - [x] **Dependabot alerts** enabled (`PUT /repos/{owner}/{repo}/vulnerability-alerts`,
       confirmed by `GET` returning 204 where it previously returned 404). The
       repository had been running OSV-Scanner while GitHub's own advisory feed was
@@ -835,6 +841,11 @@ rename.
 
 ### Outstanding
 
+- [ ] Delete the **`METRICS_TOKEN` repository secret** and revoke the PAT
+      behind it. No workflow reads it since `metrics.yml` moved to the release
+      bot's app token. Do it after the first `metrics.yml` run on the app
+      token has written traffic data; `docs/systems/metrics.md` §7 says what
+      to check in that run.
 - [ ] Settings → Code security: enable **Secret scanning** + **Push protection**.
       Both currently disabled — note that `security.yml`'s gitleaks job scans full
       history on PR and push, but it is not push protection and cannot stop a

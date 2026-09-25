@@ -32,7 +32,7 @@ async function main(): Promise<void> {
 
   // Optional, and read with `??` rather than `requiredEnv`, because it is the
   // one credential this entrypoint can do without: unset, the runs fetch falls
-  // back to METRICS_TOKEN and either works (if that PAT happens to carry
+  // back to METRICS_TOKEN and either works (if that token happens to carry
   // Actions: read) or skips the series, which is already a handled outcome.
   // `metrics.yml` sets it to the workflow's own GITHUB_TOKEN — see
   // CollectOptions.actionsClient for why that is the right instrument for this

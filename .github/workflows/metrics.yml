@@ -13,14 +13,21 @@ name: Metrics
 # Why two tokens: the traffic endpoints require the "Administration: read"
 # permission, and there is no `administration` key in the Actions `permissions:`
 # vocabulary at all — so GITHUB_TOKEN cannot reach them under any configuration.
-# METRICS_TOKEN (a fine-grained, repo-scoped, read-only PAT) reads; GITHUB_TOKEN
-# writes. Neither alone can both read traffic and modify the archive.
+# An installation token of the backspace-release-bot GitHub App reads: the app
+# is installed on this repository only and holds Administration: read, and the
+# "Mint the traffic token" step creates a read-only token from it on every run,
+# which the action revokes when the job ends. GITHUB_TOKEN writes. Neither alone
+# can both read traffic and modify the archive. The app token replaced a
+# fine-grained PAT stored as the METRICS_TOKEN secret, which expired and had to
+# be renewed by hand; the app's private key does not expire. The collector
+# still reads its token from the METRICS_TOKEN environment variable, which is
+# how a developer running it by hand passes a PAT.
 #
-# Never runs on a fork: METRICS_TOKEN does not propagate to forks, so a fork's
-# scheduled run would fail every single day with nothing anyone could do about
-# it short of disabling the workflow. `github.event.repository.fork` gates the
-# job instead of a hardcoded repo slug, which stays correct if the project is
-# ever renamed or transferred.
+# Never runs on a fork: the release bot's secrets do not propagate to forks,
+# so a fork's token step would fail every single day with nothing anyone could
+# do about it short of disabling the workflow. `github.event.repository.fork`
+# gates the job instead of a hardcoded repo slug, which stays correct if the
+# project is ever renamed or transferred.
 #
 # Why `gh workflow enable`: GitHub disables scheduled workflows after 60 days
 # with no repository activity. This workflow's own commits go to a non-default
@@ -75,9 +82,10 @@ jobs:
   collect:
     name: Collect metrics
     # Skip entirely on forks. A fork's Actions run still resolves
-    # `github.repository` to its own slug, but it never has METRICS_TOKEN
-    # (secrets do not propagate to forks), so the job would otherwise fail
-    # loudly on a schedule the fork owner never opted into.
+    # `github.repository` to its own slug, but it never has the release bot's
+    # RELEASE_BOT_APP_ID and RELEASE_BOT_PRIVATE_KEY (secrets do not propagate
+    # to forks), so the token step would otherwise fail loudly on a schedule
+    # the fork owner never opted into.
     if: ${{ !github.event.repository.fork }}
     runs-on: ubuntu-latest
     # Both scopes are load-bearing, and Scorecard's Token-Permissions check
@@ -149,16 +157,66 @@ jobs:
           # nothing here installs pnpm the way ci.yml does.
           package-manager-cache: false
 
+      # Mints the token the "Collect" step reads with. The traffic endpoints
+      # need Administration: read, which GITHUB_TOKEN cannot carry (see the
+      # header), so this is an installation token of the backspace-release-bot
+      # GitHub App, installed on this repository only. A new one is minted on
+      # every run, it lives at most an hour, and the action revokes it when the
+      # job ends, so there is no long-lived credential to renew. Placed
+      # directly before its only consumer so no earlier step can see it.
+      #
+      # `repositories` names this repository explicitly. With neither `owner`
+      # nor `repositories` set the action already scopes the token to
+      # GITHUB_REPOSITORY, but the input keeps the scope readable here.
+      # `github.repository` (`owner/name`, which the action accepts) rather
+      # than `github.event.repository.name`, because it is set on every event
+      # this workflow runs on, `schedule` included.
+      #
+      # The permissions are exactly what the collector sends this token to
+      # (`collect()` in scripts/metrics/src/collect.ts), each justified by
+      # GitHub's "Permissions required for GitHub Apps" table:
+      #   administration: read   GET /repos/{owner}/{repo}/traffic/views,
+      #                          /traffic/clones, /traffic/popular/referrers
+      #                          and /traffic/popular/paths
+      #   contents: read         GET /repos/{owner}/{repo}/releases (paginated,
+      #                          for releases.csv and the download counters)
+      #   metadata: read         GET /repos/{owner}/{repo} (stars, forks,
+      #                          subscribers, open issues) and
+      #                          GET /repos/{owner}/{repo}/stats/contributors.
+      #                          GitHub adds it to every installation token
+      #                          anyway; it is listed so the set is complete.
+      # Nothing more. `/actions/runs` goes through METRICS_ACTIONS_TOKEN (this
+      # job's GITHUB_TOKEN, below) and the telemetry export has its own token.
+      # Every scope requested here must also be granted to the installation,
+      # or minting fails and the run records a failure before collecting.
+      #
+      # RELEASE_BOT_APP_ID holds the app's numeric App ID. The action passes
+      # `client-id` straight through as the JWT issuer, which GitHub accepts
+      # as either the client ID or the App ID.
+      - name: Mint the traffic token
+        id: traffic-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ secrets.RELEASE_BOT_APP_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+          repositories: ${{ github.repository }}
+          permission-administration: read
+          permission-contents: read
+          permission-metadata: read
+
       - name: Collect
         env:
-          METRICS_TOKEN: ${{ secrets.METRICS_TOKEN }}
+          # The collector's variable name predates the app token and is kept:
+          # it is also how a developer running the collector by hand passes a
+          # PAT (docs/systems/metrics.md, section 9).
+          METRICS_TOKEN: ${{ steps.traffic-token.outputs.token }}
           # `/actions/runs` (workflows.csv) only. It needs `actions: read`,
           # which this job already holds via the `actions: write` that the
           # schedule keep-alive step below requires. Unlike the traffic
           # endpoints' `administration` requirement, `actions` exists in the
           # Actions permissions vocabulary, so the built-in token reaches it.
-          # Keeping the scope here rather than on METRICS_TOKEN leaves the
-          # long-lived PAT no wider than the endpoints that force one.
+          # Keeping the scope here rather than on the app token leaves that
+          # token no wider than the endpoints that force it.
           METRICS_ACTIONS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Optional. Unset until the receiver is live; the step logs a skip.
           TELEMETRY_EXPORT_TOKEN: ${{ secrets.TELEMETRY_EXPORT_TOKEN }}

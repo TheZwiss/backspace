@@ -28,10 +28,11 @@ name: Metrics backfill
 # GitHub only ever exposes a trailing 14-day window for it — and this
 # workflow never touches it.
 #
-# Never runs on a fork: METRICS_TOKEN does not propagate to forks, so a
-# fork owner dispatching this would otherwise get a loud failure on every
-# attempt with nothing they could do about it, and there is no scenario
-# where a fork should be writing to this repo's archive anyway.
+# Never runs on a fork. This job reads with the fork's own GITHUB_TOKEN, so
+# the guard is not about a missing secret the way metrics.yml's is: it keeps
+# a fork owner's dispatch from building a second archive of the fork's own
+# stars and forks, which nothing reads, and keeps the two workflows that
+# write `metrics-data` gated on the same condition.
 
 on:
   workflow_dispatch:
@@ -51,8 +52,8 @@ jobs:
   backfill:
     name: Backfill history
     # Skip entirely on forks. A fork's dispatch still resolves
-    # `github.repository` to its own slug, but it never has METRICS_TOKEN
-    # (secrets do not propagate to forks) — see header.
+    # `github.repository` to its own slug and would reconstruct the fork's
+    # history into the fork's own `metrics-data`; see header.
     if: ${{ !github.event.repository.fork }}
     runs-on: ubuntu-latest
     # The stargazer list is the one genuinely long paginated call this
@@ -133,14 +134,15 @@ jobs:
 
       - name: Backfill
         env:
-          # GITHUB_TOKEN, deliberately, NOT the collector's PAT. This job
-          # reads no traffic, so it never needs the "Administration: read"
-          # permission that forces metrics.yml onto a PAT; it reads only
-          # stargazers, forks and releases. Sharing the collector's
-          # fine-grained PAT here was the original choice and it does not
-          # work: that token is refused by the stargazers endpoint with
-          # "Resource not accessible by personal access token" (HTTP 403),
-          # which failed the job before it wrote anything.
+          # GITHUB_TOKEN, deliberately, NOT the collector's traffic token.
+          # This job reads no traffic, so it never needs the "Administration:
+          # read" permission that forces metrics.yml onto the release bot's
+          # app token; it reads only stargazers, forks and releases. Sharing
+          # the collector's credential here was the original choice and it
+          # did not work: the fine-grained PAT metrics.yml used at the time
+          # was refused by the stargazers endpoint with "Resource not
+          # accessible by personal access token" (HTTP 403), which failed the
+          # job before it wrote anything.
           #
           # GITHUB_TOKEN's 1,000 requests/hour per-repository limit is not a
           # constraint at this size: the three paginated calls cost a handful
