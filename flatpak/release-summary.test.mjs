@@ -74,6 +74,12 @@ for (const [name, next] of [
   ['dash list', '- first change'],
   ['star list', '* first change'],
   ['table', '| Platform | Download |'],
+  ['plus list', '+ first change'],
+  ['block quote', '> quoted'],
+  ['code fence', '```sh'],
+  ['raw HTML block', '<details>'],
+  ['ordered list', '1. first change'],
+  ['ordered list with a parenthesis', '2) second change'],
 ]) {
   test(`ends the paragraph at a ${name} that follows it directly`, () => {
     const body = `# Backspace 1.0.0\n\nOne line of summary.\n${next}\n\nMore.`;
@@ -102,6 +108,34 @@ test('leaves underscores and asterisks that are not emphasis alone', () => {
   );
 });
 
+test('keeps backslash-escaped characters as the literal characters', () => {
+  const body = '# Backspace 1.6.0\n\nAdds \\*literal stars\\*, a \\[bracket\\](not a link), a \\_ mark, \\#7 and a \\\\ backslash.';
+  assert.equal(
+    releaseSummary(body, '1.6.0'),
+    'Adds *literal stars*, a [bracket](not a link), a _ mark, #7 and a \\ backslash.',
+  );
+});
+
+test('leaves a backslash before an ordinary character alone', () => {
+  const body = '# Backspace 1.6.0\n\nPaths like C:\\Users and 50\\% stay.';
+  assert.equal(releaseSummary(body, '1.6.0'), 'Paths like C:\\Users and 50\\% stay.');
+});
+
+test('keeps backslashes inside inline code', () => {
+  const body = '# Backspace 1.6.0\n\nType `\\*` to match.';
+  assert.equal(releaseSummary(body, '1.6.0'), 'Type \\* to match.');
+});
+
+test('reduces an image to its alt text', () => {
+  const body = '# Backspace 1.6.0\n\nSee ![the new logo](https://example.com/logo.png) on every **icon**.';
+  assert.equal(releaseSummary(body, '1.6.0'), 'See the new logo on every icon.');
+});
+
+test('reads a paragraph that opens with a version number as prose', () => {
+  const body = '# Backspace 1.6.0\n\n1.6.0 makes screen sharing faster.';
+  assert.equal(releaseSummary(body, '1.6.0'), '1.6.0 makes screen sharing faster.');
+});
+
 test('keeps emphasis markers inside inline code', () => {
   const body = '# Backspace 1.6.0\n\nRun `pnpm **bump**` to start.';
   assert.equal(releaseSummary(body, '1.6.0'), 'Run pnpm **bump** to start.');
@@ -118,6 +152,11 @@ for (const [name, body, version, error] of [
   ['a dash list straight after the title', '# Backspace 1.5.2\n\n- one\n- two\n', '1.5.2', /starts with "-"/],
   ['a star list straight after the title', '# Backspace 1.5.2\n\n* one\n* two\n', '1.5.2', /starts with "\*"/],
   ['a paragraph of markup only', '# Backspace 1.5.2\n\n** **\n', '1.5.2', /starts with "\*"/],
+  ['a block quote straight after the title', '# Backspace 1.5.2\n\n> quoted\n', '1.5.2', /starts with ">"/],
+  ['a plus list straight after the title', '# Backspace 1.5.2\n\n+ one\n+ two\n', '1.5.2', /starts with "\+"/],
+  ['a code fence straight after the title', '# Backspace 1.5.2\n\n```sh\npnpm bump\n```\n', '1.5.2', /starts with "```"/],
+  ['raw HTML straight after the title', '# Backspace 1.5.2\n\n<p>Hello</p>\n', '1.5.2', /starts with "</],
+  ['an ordered list straight after the title', '# Backspace 1.5.2\n\n1. one\n2. two\n', '1.5.2', /starts with "1\."/],
   ['a link with empty text', '# Backspace 1.5.2\n\n[](https://example.com)\n', '1.5.2', /empty once its Markdown is removed/],
 ]) {
   test(`rejects ${name}`, () => {

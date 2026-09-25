@@ -819,7 +819,7 @@ rename.
       so a human had to push to every one. The app's token starts CI, the job
       updates the branch when main has moved past the tag (the ruleset's
       up-to-date rule), and it turns on squash auto-merge (`allow_auto_merge` is
-      on for the repository). The workflow runs on `release: published`, or on
+      on for the repository). The workflow runs on `release: released`, or on
       `workflow_dispatch` with a `tag` input to re-run a release. The
       `Require CI on main` ruleset carries
       `require_extra_approval_for_unattributed_changes: true`, which does not

@@ -10,13 +10,15 @@ name: Flatpak release metadata
 #
 # Triggered by publishing the release rather than by the tag push, because the
 # AppStream entry's description is the first paragraph of the release notes,
-# and those are written between the tag and the publish. Re-run an existing
-# release with workflow_dispatch and its tag. Either way every checkout is the
-# tag, so a re-run regenerates exactly what the first run did.
+# and those are written between the tag and the publish. `released` fires when
+# a release is published as a full release and when a prerelease is promoted
+# to one, never for a prerelease itself. Re-run an existing release with
+# workflow_dispatch and its tag. Either way every checkout is the tag, so a
+# re-run regenerates exactly what the first run did.
 
 on:
   release:
-    types: [published]
+    types: [released]
   workflow_dispatch:
     inputs:
       tag:
@@ -47,10 +49,15 @@ jobs:
         with:
           egress-policy: audit
 
-      # A prerelease or a tag outside vX.Y.Z is a successful no-op, so the
-      # release page does not show a red run for something that was never
-      # meant to reach Flathub. A dispatched tag without a published release is
-      # an error instead: someone asked for it by name.
+      # On the release event, a tag outside vX.Y.Z or a prerelease (the
+      # `released` type should never deliver one; this is the backstop) is a
+      # successful no-op, so the release page does not show a red run for
+      # something that was never meant to reach Flathub. On dispatch, a
+      # malformed tag or a tag without a published release is an error
+      # instead: someone asked for it by name.
+      #
+      # A release whose AppStream entry is already on main is also a no-op, so
+      # a redundant re-dispatch stops here, before the two Flatpak builds.
       - name: Decide whether this release gets Flatpak metadata
         id: resolve
         env:
@@ -70,9 +77,13 @@ jobs:
           fi
 
           if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Skipping: '$tag' is not a vX.Y.Z release tag, so it gets no Flatpak metadata."
-            echo "proceed=false" >> "$GITHUB_OUTPUT"
-            exit 0
+            if [ "$EVENT_NAME" = release ]; then
+              echo "Skipping: '$tag' is not a vX.Y.Z release tag, so it gets no Flatpak metadata."
+              echo "proceed=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "::error::'$tag' is not a vX.Y.Z release tag. Dispatch the workflow with the tag of a published release, such as v1.5.3."
+            exit 1
           fi
 
           if [ "$EVENT_NAME" = release ]; then
@@ -93,6 +104,16 @@ jobs:
           fi
           if [ "$prerelease" = true ]; then
             echo "Skipping: $tag is a prerelease, which Flathub does not ship."
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          version="${tag#v}"
+          main_metainfo="$(mktemp)"
+          gh api "repos/$GH_REPO/contents/flatpak/io.github.TheZwiss.backspace.metainfo.xml?ref=main" \
+            --jq .content | base64 -d > "$main_metainfo"
+          if grep -qF "<release version=\"$version\"" "$main_metainfo"; then
+            echo "Skipping: main already carries the AppStream entry for $version, so there is nothing to open."
             echo "proceed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -310,8 +331,13 @@ jobs:
           branch="automation/flatpak-${TAG}"
           metainfo=flatpak/io.github.TheZwiss.backspace.metainfo.xml
 
-          # A re-run after the PR has merged must not open a second one that
-          # rewinds main to this tag's metadata.
+          # `resolve` already skipped a release whose entry was on main. This
+          # repeats the check for an entry that reached main during the builds:
+          # a run for the same tag queued behind another (the concurrency group
+          # holds it, it does not cancel it) passes `resolve` while the first
+          # run's pull request is still open, and that pull request can merge
+          # before this job starts. Opening a second one then would only
+          # re-add what main already has.
           git fetch origin +refs/heads/main:refs/remotes/origin/main
           main_metainfo="$(mktemp)"
           git show "origin/main:$metainfo" > "$main_metainfo"

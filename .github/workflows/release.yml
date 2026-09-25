@@ -55,18 +55,22 @@ jobs:
         # electron-builder would name the draft after the bare version instead,
         # because `releaseInfo.releaseName` is not set in electron-builder.yml.
         #
-        # The body starts as a Downloads table. GitHub sorts the asset list by
-        # name and offers no other order, which puts Linux first and Windows
-        # last; the table is what a visitor reads instead, in Windows, Linux,
-        # macOS order with plain labels. It is written before any asset exists
-        # (the draft is not visible until published) from the names
-        # electron-builder will produce, so it has to move with `artifactName`
-        # in packages/desktop/electron-builder.yml. The "What's new" notes are
-        # written by hand above it before the draft is published, as they have
-        # been for every release. Their first paragraph, under the
-        # "# Backspace X.Y.Z" title, is also the Flatpak "What's New" text:
-        # publishing the release starts flatpak-release-metadata.yml, which
-        # copies that paragraph into the AppStream release entry.
+        # The body starts as a "# Backspace X.Y.Z" heading followed by a
+        # Downloads table. GitHub sorts the asset list by name and offers no
+        # other order, which puts Linux first and Windows last; the table is
+        # what a visitor reads instead, in Windows, Linux, macOS order with
+        # plain labels. It is written before any asset exists (the draft is not
+        # visible until published) from the names electron-builder will
+        # produce, so it has to move with `artifactName` in
+        # packages/desktop/electron-builder.yml.
+        #
+        # The heading is the one flatpak/release-summary.mjs requires. The
+        # human step before publishing is to write the summary paragraph
+        # directly under it, and the "What's new" sections below that. That
+        # paragraph is the Flatpak "What's New" text: publishing the release
+        # starts flatpak-release-metadata.yml, which copies it into the
+        # AppStream release entry, and fails if the heading is followed by the
+        # Downloads table instead of a paragraph.
         run: |
           set -euo pipefail
 
@@ -90,6 +94,8 @@ jobs:
           asset() { printf '[%s](%s/%s)' "$1" "$base" "$1"; }
           notes="$(mktemp)"
           {
+            echo "# Backspace $version"
+            echo
             echo "## Downloads"
             echo
             echo "| Platform | Download |"

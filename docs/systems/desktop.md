@@ -529,21 +529,29 @@ it from their working-tree lockfile, and a contributor changing dependencies
 needs no Flatpak installation on any platform.
 
 **Flatpak release metadata.** Publishing a GitHub release starts
-`.github/workflows/flatpak-release-metadata.yml` (`release: published`). For a
-prerelease or a tag outside `vX.Y.Z` the run is a successful no-op that logs
-why. Otherwise, checked out at the tag, it:
+`.github/workflows/flatpak-release-metadata.yml` (`release: released`, which
+fires for a full release and for a prerelease promoted to one, never for a
+prerelease). A tag outside `vX.Y.Z`, a prerelease, or a release whose AppStream
+entry is already on main makes the run a successful no-op that logs why.
+Otherwise, checked out at the tag, it:
 
 1. Reads the release notes and takes the paragraph under the
    `# Backspace X.Y.Z` title as the AppStream release description, which is
    the "What's New" text in GNOME Software, KDE Discover and Flathub
-   (`flatpak/release-summary.mjs`: wrapped lines are joined, links become
-   their text, emphasis and code markers are dropped). Notes that do not open
-   with that title followed by a prose paragraph (a heading, table or list in
-   its place, or nothing) fail the job with the reason, so a placeholder never
-   ships. Fix the notes on the release page and re-run.
+   (`flatpak/release-summary.mjs`: wrapped lines are joined, links and images
+   become their text, emphasis and code markers are dropped, backslash escapes
+   become the literal character). Notes that do not open with that title
+   followed by a prose paragraph (a heading, table, list, quote, code block or
+   HTML in its place, or nothing) fail the job with the reason, so a
+   placeholder never ships. Fix the notes on the release page and dispatch a
+   new run.
 2. Runs `flatpak/update-release.mjs`, which updates the source pin, the
-   screenshot tag and the AppStream entry. An entry that already exists for
-   the version is left exactly as it is.
+   screenshot tag and the AppStream entry. The script reads the metainfo as it
+   is at the tag, so it keeps an entry for the version only when that entry
+   was committed to main before the tag was cut; it never replaces one there.
+   An entry written by hand on the metadata pull request's branch is not kept:
+   a re-run while that pull request is open force-pushes a fresh branch from
+   the tag over it.
 3. Regenerates `node-sources.json`, lints the manifest and AppStream file,
    uploads those exact files, and builds their published manifest natively on
    x86_64 and aarch64. The metadata pull request also runs `flatpak.yml`, but
@@ -557,13 +565,24 @@ why. Otherwise, checked out at the tag, it:
    merges itself once `Build & test` passes.
 
 To re-run a release, dispatch the workflow with its tag (`workflow_dispatch`,
-input `tag`). A tag cut before this workflow existed cannot be re-run, and a
-release whose AppStream entry is already on main opens nothing. The app and its
-two secrets are described in
+input `tag`); a malformed tag fails the dispatch. A re-run replaces the open
+pull request's branch, as described in step 2. A tag cut before this workflow
+existed cannot be re-run, and a release whose AppStream entry is already on
+main opens nothing. Use a fresh dispatch rather than "Re-run failed jobs" on
+the pull request job after the first day: the builds hand their files to that
+job as an artifact kept for one day, so a re-run after that fails to find it.
+
+When the pull request job goes red at the update-branch step, click "Update
+branch" on the pull request. Auto-merge is already on and finishes once CI
+passes on the updated branch.
+
+The app and its two secrets are described in
 [security-scanning.md](security-scanning.md#done).
 
-Because the first paragraph of the release notes is what Flathub shows, write
-it as the store-facing summary of the release.
+`create-release` writes the `# Backspace X.Y.Z` heading at the top of the
+draft, above the Downloads table. The one human step for Flatpak is to write
+the summary paragraph directly under that heading before publishing. Flathub
+shows that paragraph, so write it as the store-facing summary of the release.
 
 CI publishes via `.github/workflows/release.yml` (tag `v*` on the public repo).
 A `create-release` job runs first and creates the draft for the tag, then four

@@ -49,8 +49,8 @@ metainfo = metainfo.replace(
   `https://raw.githubusercontent.com/TheZwiss/backspace/${tag}/docs/screenshots/`,
 );
 
-// An existing entry for this version was either written by an earlier run or
-// by hand; a re-run must never replace it.
+// The workflow runs this on the tag's files, so an entry for this version here
+// was committed before the tag was cut, by hand; it is never replaced.
 if (metainfo.includes(`<release version="${version}"`)) {
   console.log(`AppStream already has a release entry for ${version}; leaving it untouched.`);
 } else {

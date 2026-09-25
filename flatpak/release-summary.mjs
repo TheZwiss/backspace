@@ -18,13 +18,21 @@ import { pathToFileURL } from 'node:url';
 const HINT = 'Write the summary as one plain paragraph directly under the title; it becomes the Flatpak "What\'s New" text.';
 
 // A line that opens a new Markdown block even without a blank line before it:
-// an ATX heading, a bullet list item, or a table row.
-const BLOCK_START = /^ {0,3}(?:#{1,6}(?:\s|$)|[-*+]\s|\|)/;
+// an ATX heading, a bullet or ordered list item, a table row, a block quote,
+// a code fence, or raw HTML.
+const BLOCK_START = /^ {0,3}(?:#{1,6}(?:\s|$)|[-*+]\s|\d+[.)]\s|[|><]|```|~~~)/;
+
+// What the summary paragraph must not open with: the same block starts, plus a
+// bare "-", "*" or "+" (a list marker or emphasis that leaves no prose lead).
+const NOT_PROSE = /^(?:```|~~~|\d+[.)](?=\s)|[#|\-*+><])/;
 
 // Characters in the Unicode private-use area never occur in release notes, so
-// they can stand in for inline code while the rest of the text is rewritten.
-const CODE_OPEN = '';
-const CODE_CLOSE = '';
+// they can stand in for inline code and escaped characters while the rest of
+// the text is rewritten.
+const CODE_OPEN = '\uE000';
+const CODE_CLOSE = '\uE001';
+const ESCAPE_OPEN = '\uE002';
+const ESCAPE_CLOSE = '\uE003';
 
 /**
  * @param {string} body The release notes, as `gh release view --json body` returns them.
@@ -60,11 +68,11 @@ export function releaseSummary(body, version) {
     paragraph.push(line.trim());
   }
 
-  const lead = paragraph[0][0];
-  if ('#|-*'.includes(lead)) {
+  const opener = NOT_PROSE.exec(paragraph[0]);
+  if (opener) {
     throw new Error(
-      `The first paragraph of the ${version} release notes starts with "${lead}", `
-      + `so it is a heading, table or list rather than the summary. ${HINT}`,
+      `The first paragraph of the ${version} release notes starts with "${opener[0]}", `
+      + `so it is a heading, table, list, quote, code block or HTML rather than the summary. ${HINT}`,
     );
   }
 
@@ -83,14 +91,28 @@ function toPlainText(markdown) {
     return `${CODE_OPEN}${code.length - 1}${CODE_CLOSE}`;
   });
 
-  // [text](url), allowing one level of parentheses inside the URL.
-  text = text.replace(/\[([^\]]*)\]\((?:[^()\s]|\([^()\s]*\))*\)/g, '$1');
+  // A backslash-escaped punctuation character is that character, literally:
+  // it is set aside here so no link or emphasis rule below can consume it,
+  // and put back without its backslash at the end. Inside code, a backslash
+  // is an ordinary character, which the code placeholders above preserve.
+  const escaped = [];
+  text = text.replace(/\\([\\`*_{}[\]()#+\-.!|>])/g, (_, character) => {
+    escaped.push(character);
+    return `${ESCAPE_OPEN}${escaped.length - 1}${ESCAPE_CLOSE}`;
+  });
+
+  // ![alt](url) and [text](url), allowing one level of parentheses inside the
+  // URL. Images first, or the link rule would leave their "!" behind.
+  const target = '\\((?:[^()\\s]|\\([^()\\s]*\\))*\\)';
+  text = text.replace(new RegExp(`!\\[([^\\]]*)\\]${target}`, 'g'), '$1');
+  text = text.replace(new RegExp(`\\[([^\\]]*)\\]${target}`, 'g'), '$1');
   // Strong emphasis first so its markers are not read as two single ones.
   text = text.replace(/\*\*(?=\S)(.+?)(?<=\S)\*\*/g, '$1');
   text = text.replace(/(?<!\w)__(?=\S)(.+?)(?<=\S)__(?!\w)/g, '$1');
   text = text.replace(/\*(?=\S)(.+?)(?<=\S)\*/g, '$1');
   text = text.replace(/(?<!\w)_(?=\S)(.+?)(?<=\S)_(?!\w)/g, '$1');
 
+  text = text.replace(new RegExp(`${ESCAPE_OPEN}(\\d+)${ESCAPE_CLOSE}`, 'g'), (_, i) => escaped[Number(i)]);
   text = text.replace(new RegExp(`${CODE_OPEN}(\\d+)${CODE_CLOSE}`, 'g'), (_, i) => code[Number(i)]);
   return text.replace(/\s+/g, ' ').trim();
 }

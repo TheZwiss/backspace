@@ -55,10 +55,13 @@ screenshot URLs, and `node-sources.json` automatically through
 `.github/workflows/flatpak-release-metadata.yml`. The AppStream release
 description is the first paragraph of the release notes, extracted by
 `release-summary.mjs`; notes without one fail the run instead of shipping a
-placeholder. The workflow builds the exact generated manifest on native x86_64
-and aarch64 runners, opens the metadata pull request only after both builds
-pass, and that pull request merges itself once CI passes. Re-run a release by
-dispatching the workflow with its tag. The full sequence is in
+placeholder. The draft release already carries the `# Backspace X.Y.Z` heading,
+so the human step is to write that paragraph directly under it. The workflow
+builds the exact generated manifest on native x86_64 and aarch64 runners, opens
+the metadata pull request only after both builds pass, and that pull request
+merges itself once CI passes. Re-run a release by dispatching the workflow with
+its tag; the re-run replaces the open pull request's branch. The full sequence,
+including what to do when the pull request job fails, is in
 `docs/systems/desktop.md` under "Release publishing".
 Ordinary dependency PRs must not regenerate the committed `node-sources.json`
 from their working-tree lockfile: it belongs to the pinned release. Release
