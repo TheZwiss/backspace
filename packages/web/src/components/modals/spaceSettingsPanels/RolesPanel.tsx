@@ -4,56 +4,10 @@ import { useSpaceStore } from '../../../stores/spaceStore';
 import { useUIStore } from '../../../stores/uiStore';
 import { api, HttpError } from '../../../api/client';
 import { PermissionBits, stringToPermissions, permissionsToString } from '../../../utils/permissions';
-import { usePermissionNames, type PermissionKey } from '../../ui/OverrideEntry';
+import { PERMISSION_GROUPS, type PermissionGroupId } from '../../../utils/permissionGroups';
+import { usePermissionNames } from '../../ui/OverrideEntry';
 import { describeError } from '../../../i18n/errors';
 import type { Role } from '@backspace/shared';
-
-// ─── Permission display groups ─────────────────────────────────────────────
-
-interface PermDef {
-  bit: bigint;
-  key: PermissionKey;
-}
-
-type PermissionGroupId = 'general' | 'text' | 'voice';
-
-const PERMISSION_GROUPS: { id: PermissionGroupId; perms: PermDef[] }[] = [
-  {
-    id: 'general',
-    perms: [
-      { bit: PermissionBits.ADMINISTRATOR, key: 'ADMINISTRATOR' },
-      { bit: PermissionBits.VIEW_CHANNEL, key: 'VIEW_CHANNEL' },
-      { bit: PermissionBits.MANAGE_CHANNELS, key: 'MANAGE_CHANNELS' },
-      { bit: PermissionBits.MANAGE_ROLES, key: 'MANAGE_ROLES' },
-      { bit: PermissionBits.MANAGE_SPACE, key: 'MANAGE_SPACE' },
-      { bit: PermissionBits.CREATE_INVITE, key: 'CREATE_INVITE' },
-      { bit: PermissionBits.KICK_MEMBERS, key: 'KICK_MEMBERS' },
-      { bit: PermissionBits.BAN_MEMBERS, key: 'BAN_MEMBERS' },
-    ],
-  },
-  {
-    id: 'text',
-    perms: [
-      { bit: PermissionBits.SEND_MESSAGES, key: 'SEND_MESSAGES' },
-      { bit: PermissionBits.MANAGE_MESSAGES, key: 'MANAGE_MESSAGES' },
-      { bit: PermissionBits.ATTACH_FILES, key: 'ATTACH_FILES' },
-      { bit: PermissionBits.READ_MESSAGE_HISTORY, key: 'READ_MESSAGE_HISTORY' },
-      { bit: PermissionBits.ADD_REACTIONS, key: 'ADD_REACTIONS' },
-    ],
-  },
-  {
-    id: 'voice',
-    perms: [
-      { bit: PermissionBits.CONNECT, key: 'CONNECT' },
-      { bit: PermissionBits.SPEAK, key: 'SPEAK' },
-      { bit: PermissionBits.MUTE_MEMBERS, key: 'MUTE_MEMBERS' },
-      { bit: PermissionBits.DEAFEN_MEMBERS, key: 'DEAFEN_MEMBERS' },
-      { bit: PermissionBits.MOVE_MEMBERS, key: 'MOVE_MEMBERS' },
-      { bit: PermissionBits.DISCONNECT_MEMBERS, key: 'DISCONNECT_MEMBERS' },
-      { bit: PermissionBits.STREAM, key: 'STREAM' },
-    ],
-  },
-];
 
 const PRESET_COLORS = [
   '#b9bbbe', '#a5f3c4', '#ffc9a9', '#c4b5fd', '#93c5fd',

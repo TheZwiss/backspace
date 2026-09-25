@@ -392,6 +392,13 @@
     "deleteFailed": "Rolle konnte nicht gelöscht werden",
     "copyFailed": "Rolle konnte nicht kopiert werden"
   },
+  "memberRoles": {
+    "title": "Rollen — {{name}}",
+    "viewProfile": "Profil ansehen",
+    "affectsAll": "Berechtigungsänderungen gelten für alle Mitglieder mit dieser Rolle.",
+    "selectRole": "Wähle eine Rolle aus, um ihre Berechtigungen zu bearbeiten.",
+    "saved": "Änderungen gespeichert"
+  },
   "permissions": {
     "title": "Berechtigungen",
     "names": {

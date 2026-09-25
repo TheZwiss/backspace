@@ -11,6 +11,8 @@ import { ActivityCard, hasRichActivity, getActivityAccentClass } from '../ui/Act
 import { getPrimaryActivity } from '@backspace/shared/src/activities.js';
 import { parseFederatedUsername, isFederationGlobeApplicable } from '../../utils/identity';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
+import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
+import { useAuthStore } from '../../stores/authStore';
 import { useDelayedLoading } from '../../hooks/useDelayedLoading';
 
 /**
@@ -81,7 +83,7 @@ function MemberSidebarRow({
   activities: Activity[];
   isRichActivity: boolean;
   accentClass: string;
-  onClickMember: (e: React.MouseEvent, user: MemberWithUser['user']) => void;
+  onClickMember: (e: React.MouseEvent, member: MemberWithUser, user: MemberWithUser['user']) => void;
 }) {
   const canonical = useCanonicalUserView(member.user);
   const { baseName } = parseFederatedUsername(canonical.username);
@@ -94,7 +96,7 @@ function MemberSidebarRow({
   return (
     <div
       key={member.userId}
-      onClick={(e) => onClickMember(e, canonical)}
+      onClick={(e) => onClickMember(e, member, canonical)}
       className={rowClass}
     >
       <Avatar
@@ -130,10 +132,15 @@ export function MemberSidebar() {
   const { formatNumber } = useFormatters();
   const members = useSpaceStore((s) => s.members);
   const spaces = useSpaceStore((s) => s.spaces);
+  const roles = useSpaceStore((s) => s.roles);
+  const spacePermissions = useSpaceStore((s) => s.spacePermissions);
   const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
   const loadingSpaceId = useSpaceStore((s) => s.loadingSpaceId);
   const memberListOpen = useUIStore((s) => s.memberListOpen);
   const openUserProfile = useUIStore((s) => s.openUserProfile);
+  const closeUserProfile = useUIStore((s) => s.closeUserProfile);
+  const openModal = useUIStore((s) => s.openModal);
+  const currentUser = useAuthStore((s) => s.user);
   const userActivities = useActivityStore((s) => s.userActivities);
 
   const space = spaces.find(s => s.id === currentSpaceId);
@@ -177,8 +184,22 @@ export function MemberSidebar() {
     return undefined;
   };
 
-  const handleMemberClick = (e: React.MouseEvent, user: MemberWithUser['user']) => {
+  const handleMemberClick = (e: React.MouseEvent, member: MemberWithUser, user: MemberWithUser['user']) => {
     e.stopPropagation();
+    // With MANAGE_ROLES, clicking someone else opens the role editor — the
+    // same thing space settings lets a moderator do, one click from the list.
+    // Own roles and the owner's roles are not editable, and a space with no
+    // assignable roles has nothing to edit, so those keep the profile card.
+    const canEditRoles = !!space
+      && hasPermissionBit(spacePermissions.get(space.id), PermissionBits.MANAGE_ROLES)
+      && roles.some((r) => r.id !== space.id)
+      && member.userId !== currentUser?.id
+      && member.userId !== space.ownerId;
+    if (canEditRoles) {
+      closeUserProfile();
+      openModal('memberRoles', { spaceId: space.id, userId: member.userId });
+      return;
+    }
     openUserProfile(user, e.currentTarget.getBoundingClientRect(), 'left');
   };
 

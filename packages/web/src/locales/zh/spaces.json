@@ -389,6 +389,13 @@
     "deleteFailed": "删除身份组失败",
     "copyFailed": "复制身份组失败"
   },
+  "memberRoles": {
+    "title": "身份组 — {{name}}",
+    "viewProfile": "查看资料",
+    "affectsAll": "权限修改会影响拥有该身份组的所有成员。",
+    "selectRole": "选择一个身份组以编辑其权限。",
+    "saved": "修改已保存"
+  },
   "permissions": {
     "title": "权限配置",
     "names": {

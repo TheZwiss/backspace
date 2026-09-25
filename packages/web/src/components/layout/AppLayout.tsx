@@ -23,6 +23,7 @@ import { AddDmMemberModal } from '../modals/AddDmMemberModal';
 import { GroupDmSettings } from '../modals/GroupDmSettings';
 import { UserProfileModal } from '../modals/UserProfileModal';
 import { ConnectAndJoinModal } from '../modals/ConnectAndJoinModal';
+import { MemberRolesModal } from '../modals/MemberRolesModal';
 import { IncomingCallModal } from '../voice/IncomingCallModal';
 import { PictureInPicture } from '../voice/PictureInPicture';
 import { SoundController } from '../voice/SoundController';
@@ -415,6 +416,7 @@ export function AppLayout() {
         <GroupDmSettings />
         <UserProfileModal />
         <ConnectAndJoinModal />
+        <MemberRolesModal />
         <IncomingCallModal />
         <ImagePreview />
         {/* PictureInPicture is desktop-only. Mobile has its own purpose-built
@@ -465,6 +467,7 @@ export function AppLayout() {
       <GroupDmSettings />
       <UserProfileModal />
       <ConnectAndJoinModal />
+      <MemberRolesModal />
       <IncomingCallModal />
       <ImagePreview />
       <PictureInPicture />

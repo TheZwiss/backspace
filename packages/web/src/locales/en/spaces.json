@@ -392,6 +392,13 @@
     "deleteFailed": "Failed to delete role",
     "copyFailed": "Failed to copy role"
   },
+  "memberRoles": {
+    "title": "Roles — {{name}}",
+    "viewProfile": "View Profile",
+    "affectsAll": "Permission changes apply to every member with this role.",
+    "selectRole": "Select a role to edit its permissions.",
+    "saved": "Changes saved"
+  },
   "permissions": {
     "title": "Permissions",
     "names": {
