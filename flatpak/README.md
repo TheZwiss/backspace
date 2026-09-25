@@ -50,13 +50,19 @@ flatpak-builder --user --install-deps-from=flathub --install --force-clean \
 flatpak run io.github.TheZwiss.backspace
 ```
 
-Release tags update the manifest commit, AppStream release and screenshot URLs,
-and `node-sources.json` automatically through `.github/workflows/release.yml`.
-That workflow builds the exact generated manifest on native x86_64 and aarch64
-runners and opens the metadata pull request only after both builds pass.
+Publishing a release updates the manifest commit, AppStream release and
+screenshot URLs, and `node-sources.json` automatically through
+`.github/workflows/flatpak-release-metadata.yml`. The AppStream release
+description is the first paragraph of the release notes, extracted by
+`release-summary.mjs`; notes without one fail the run instead of shipping a
+placeholder. The workflow builds the exact generated manifest on native x86_64
+and aarch64 runners, opens the metadata pull request only after both builds
+pass, and that pull request merges itself once CI passes. Re-run a release by
+dispatching the workflow with its tag. The full sequence is in
+`docs/systems/desktop.md` under "Release publishing".
 Ordinary dependency PRs must not regenerate the committed `node-sources.json`
 from their working-tree lockfile: it belongs to the pinned release. Release
-generation remains a maintainer/automation step and uses the release lockfile.
+generation remains an automation step and uses the release lockfile.
 
 The Flatpak CI workflow generates `node-sources.ci.json` automatically from the
 checked-out lockfile before building on both x86_64 and aarch64. Contributors on

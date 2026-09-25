@@ -523,23 +523,55 @@ an ignored manifest that swaps both the pinned application source for `type:
 dir` and the committed offline source list for that generated one, so both
 x86_64 and aarch64 jobs compile the actual checkout against its own
 dependencies. The committed `flatpak/node-sources.json` stays paired with the
-pinned release commit and is regenerated only by `release.yml`, so ordinary
-pull requests must not regenerate it from their working-tree lockfile, and a
-contributor changing dependencies needs no Flatpak installation on any
-platform. On each `v*` tag, `release.yml` updates the source pin, AppStream
-release and screenshot tag, regenerates `node-sources.json`, validates the
-metadata, uploads those exact generated files, and builds their published
-manifest natively on x86_64 and aarch64. Only after both builds pass does it
-open or update the dedicated Flatpak metadata pull request. This validation is
-part of the release workflow because pushes and pull requests created with its
-`GITHUB_TOKEN` do not trigger the normal `pull_request` workflow.
+pinned release commit and is regenerated only by
+`flatpak-release-metadata.yml`, so ordinary pull requests must not regenerate
+it from their working-tree lockfile, and a contributor changing dependencies
+needs no Flatpak installation on any platform.
+
+**Flatpak release metadata.** Publishing a GitHub release starts
+`.github/workflows/flatpak-release-metadata.yml` (`release: published`). For a
+prerelease or a tag outside `vX.Y.Z` the run is a successful no-op that logs
+why. Otherwise, checked out at the tag, it:
+
+1. Reads the release notes and takes the paragraph under the
+   `# Backspace X.Y.Z` title as the AppStream release description, which is
+   the "What's New" text in GNOME Software, KDE Discover and Flathub
+   (`flatpak/release-summary.mjs`: wrapped lines are joined, links become
+   their text, emphasis and code markers are dropped). Notes that do not open
+   with that title followed by a prose paragraph (a heading, table or list in
+   its place, or nothing) fail the job with the reason, so a placeholder never
+   ships. Fix the notes on the release page and re-run.
+2. Runs `flatpak/update-release.mjs`, which updates the source pin, the
+   screenshot tag and the AppStream entry. An entry that already exists for
+   the version is left exactly as it is.
+3. Regenerates `node-sources.json`, lints the manifest and AppStream file,
+   uploads those exact files, and builds their published manifest natively on
+   x86_64 and aarch64. The metadata pull request also runs `flatpak.yml`, but
+   that builds the working tree; this is the only build of the manifest as it
+   will be published.
+4. Only after both builds pass, pushes `automation/flatpak-<tag>` and opens (or
+   reuses) the metadata pull request as the release bot GitHub App. The app's
+   token, unlike `GITHUB_TOKEN`, starts CI on the pull request. The job updates
+   the branch when main has moved past the tag, because the ruleset requires
+   it to be up to date, and turns on squash auto-merge, so the pull request
+   merges itself once `Build & test` passes.
+
+To re-run a release, dispatch the workflow with its tag (`workflow_dispatch`,
+input `tag`). A tag cut before this workflow existed cannot be re-run, and a
+release whose AppStream entry is already on main opens nothing. The app and its
+two secrets are described in
+[security-scanning.md](security-scanning.md#done).
+
+Because the first paragraph of the release notes is what Flathub shows, write
+it as the store-facing summary of the release.
 
 CI publishes via `.github/workflows/release.yml` (tag `v*` on the public repo).
 A `create-release` job runs first and creates the draft for the tag, then four
 native build jobs fan out (mac arm64+x64, win x64+arm64, linux x64, linux
 arm64), each uploading its installers, `.blockmap`s, and platform `latest*.yml`
-manifest into that one draft. The draft must be published manually — drafts are
-invisible to electron-updater.
+manifest into that one draft. The draft must be published manually, because
+drafts are invisible to electron-updater. Publishing it also starts the Flatpak
+metadata workflow above.
 
 A release carries 16 assets, named
 `Backspace-<version>-<os>-<arch>.<ext>` (`artifactName` in

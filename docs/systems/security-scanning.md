@@ -792,12 +792,46 @@ rename.
 - [x] Settings → Actions → General: **Allow GitHub Actions to create and approve
       pull requests** enabled (`can_approve_pull_request_reviews: true` on
       `GET /repos/{owner}/{repo}/actions/permissions/workflow`; the default
-      workflow token permission stays **read**). The `update-flatpak-metadata`
-      job in `release.yml` opens the `automation/flatpak-<tag>` pull request
-      with `GITHUB_TOKEN`, which GitHub rejects while this is off. It was off
-      when the v1.0.6 chain first ran (2026-09-04) and was turned on before the
-      re-run. Every job still declares its own `permissions:` block, so this
-      widens nothing for jobs that do not ask for `pull-requests: write`.
+      workflow token permission stays **read**). It was turned on because the
+      `update-flatpak-metadata` job opened the `automation/flatpak-<tag>` pull
+      request with `GITHUB_TOKEN`, which GitHub rejects while this is off (it
+      was off when the v1.0.6 chain first ran on 2026-09-04 and was turned on
+      before the re-run). That job now lives in `flatpak-release-metadata.yml`
+      and opens the pull request with the release bot's token (next item), so
+      no workflow in the repository creates a pull request with `GITHUB_TOKEN`
+      any more. Whether to turn the setting off again is a separate decision;
+      make it only after a release has gone through the new workflow. Every
+      job still declares its own `permissions:` block, so the setting widens
+      nothing for jobs that do not ask for `pull-requests: write`.
+- [x] **Release bot GitHub App** (`backspace-release-bot`, installed
+      on this repository only, with Contents: read/write and Pull requests:
+      read/write). Two repository secrets: `RELEASE_BOT_APP_ID` (the numeric
+      App ID) and `RELEASE_BOT_PRIVATE_KEY` (its PEM private key). Only the
+      `update-flatpak-metadata` job of `flatpak-release-metadata.yml` reads
+      them: it mints an installation token with
+      `actions/create-github-app-token`, narrowed to this repository and to
+      `permission-contents: write` and `permission-pull-requests: write`,
+      revoked when the job ends. The job's own `GITHUB_TOKEN` is
+      `contents: read`. The app exists because pushes and pull requests made
+      with `GITHUB_TOKEN` start no workflows: the required `Build & test` check
+      never ran on the metadata pull request (measured on #278, where the bot
+      commit `8cc48c38` had 0 check runs and the human commit after it had 18),
+      so a human had to push to every one. The app's token starts CI, the job
+      updates the branch when main has moved past the tag (the ruleset's
+      up-to-date rule), and it turns on squash auto-merge (`allow_auto_merge` is
+      on for the repository). The workflow runs on `release: published`, or on
+      `workflow_dispatch` with a `tag` input to re-run a release. The
+      `Require CI on main` ruleset carries
+      `require_extra_approval_for_unattributed_changes: true`, which does not
+      hold these pull requests: GitHub documents it as one extra approval for
+      Copilot pull requests not attributed to a person, with no effect when the
+      ruleset requires zero approvals, as this one does, and #278 and #283
+      (opened by the github-actions app) merged with 0 reviews under it. The
+      app's commits are attributed to `backspace-release-bot[bot]` in any case,
+      which is on the CLA allowlist in `cla.yml`. To rotate the key, generate a
+      new private key in the app's settings, replace `RELEASE_BOT_PRIVATE_KEY`,
+      then delete the old key there. See
+      [desktop.md](desktop.md#release-publishing) for the release flow itself.
 
 ### Outstanding
 

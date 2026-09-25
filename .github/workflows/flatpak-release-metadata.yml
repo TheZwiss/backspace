@@ -1,0 +1,369 @@
+name: Flatpak release metadata
+
+# Points the Flatpak packaging at a published release and lands that change on
+# main without a human in the loop. For the release's tag it updates the
+# manifest's source pin, the AppStream release entry and the screenshot tag,
+# regenerates the offline dependency sources, builds the exact published
+# manifest on x86_64 and aarch64, and only then opens the
+# `automation/flatpak-<tag>` pull request, which merges itself once the
+# required CI check passes.
+#
+# Triggered by publishing the release rather than by the tag push, because the
+# AppStream entry's description is the first paragraph of the release notes,
+# and those are written between the tag and the publish. Re-run an existing
+# release with workflow_dispatch and its tag. Either way every checkout is the
+# tag, so a re-run regenerates exactly what the first run did.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to regenerate the Flatpak metadata for, such as v1.5.3
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+# Two runs for one tag would race on the same pull request branch.
+concurrency:
+  group: flatpak-release-metadata-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    name: Resolve the release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+      proceed: ${{ steps.resolve.outputs.proceed }}
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      # A prerelease or a tag outside vX.Y.Z is a successful no-op, so the
+      # release page does not show a red run for something that was never
+      # meant to reach Flathub. A dispatched tag without a published release is
+      # an error instead: someone asked for it by name.
+      - name: Decide whether this release gets Flatpak metadata
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_PRERELEASE: ${{ github.event.release.prerelease }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+
+          if [ "$EVENT_NAME" = release ]; then
+            tag="$RELEASE_TAG"
+          else
+            tag="$INPUT_TAG"
+          fi
+
+          if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Skipping: '$tag' is not a vX.Y.Z release tag, so it gets no Flatpak metadata."
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "$EVENT_NAME" = release ]; then
+            draft=false
+            prerelease="$RELEASE_PRERELEASE"
+          else
+            if ! state="$(gh release view "$tag" --json isDraft,isPrerelease \
+                --jq '"\(.isDraft) \(.isPrerelease)"' 2>&1)"; then
+              echo "::error::No release carries $tag: $state"
+              exit 1
+            fi
+            read -r draft prerelease <<< "$state"
+          fi
+
+          if [ "$draft" = true ]; then
+            echo "::error::The release for $tag is still a draft. Publish it first; publishing starts this workflow by itself."
+            exit 1
+          fi
+          if [ "$prerelease" = true ]; then
+            echo "Skipping: $tag is a prerelease, which Flathub does not ship."
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Generating Flatpak metadata for $tag."
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "proceed=true" >> "$GITHUB_OUTPUT"
+
+  prepare-flatpak-metadata:
+    name: Prepare Flatpak release metadata
+    needs: resolve
+    if: needs.resolve.outputs.proceed == 'true'
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions@sha256:68c521931eccf47dfa05c1c80f43be0993cce516417a633aa34913707da57cf2
+      options: --privileged
+    permissions:
+      contents: read
+    outputs:
+      commit: ${{ steps.regenerate.outputs.commit }}
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout the release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ needs.resolve.outputs.tag }}
+
+      # The job runs inside the Flatpak builder container as a different user
+      # than the one the runner used for the checkout. Git treats a repository
+      # owned by another user as untrusted and refuses every command with
+      # "detected dubious ownership", which is how the v1.0.6 run failed on the
+      # `git show` below before it produced anything.
+      - name: Trust the checked-out repository
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Install the pinned Node SDK extension
+        run: |
+          flatpak remote-add --user --if-not-exists flathub \
+            https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user --noninteractive -y flathub \
+            org.freedesktop.Sdk.Extension.node24//25.08
+
+      # The AppStream description is the first paragraph of the release notes
+      # (flatpak/release-summary.mjs). When the notes do not have that shape
+      # the job fails here with the reason, so a placeholder or a stray table
+      # can never ship as the store's "What's New" text. Fix the notes on the
+      # release page and re-run.
+      - name: Regenerate Flatpak release inputs
+        id: regenerate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.resolve.outputs.tag }}
+        run: |
+          set -euo pipefail
+
+          if [ ! -f flatpak/release-summary.mjs ]; then
+            echo "::error::$TAG predates flatpak/release-summary.mjs, so this workflow cannot regenerate its metadata. Only tags cut after the workflow was added can be re-run."
+            exit 1
+          fi
+
+          version="${TAG#v}"
+          release_commit="$(git rev-parse 'HEAD^{commit}')"
+          release_date="$(git show -s --format=%cs "$release_commit")"
+
+          notes="$(mktemp)"
+          reason="$(mktemp)"
+          gh release view "$TAG" --json body --jq .body > "$notes"
+          if ! description="$(node flatpak/release-summary.mjs "$version" < "$notes" 2> "$reason")"; then
+            message="$(cat "$reason")"
+            message="${message//'%'/%25}"
+            message="${message//$'\n'/%0A}"
+            echo "::error title=No store summary in the $TAG release notes::$message"
+            exit 1
+          fi
+          echo "What's New for $TAG: $description"
+
+          node flatpak/update-release.mjs "$TAG" "$release_commit" "$release_date" "$description"
+          flatpak-node-generator --electron-node-headers \
+            --node-sdk-extension org.freedesktop.Sdk.Extension.node24//25.08 \
+            -o flatpak/node-sources.json pnpm pnpm-lock.yaml
+          flatpak-builder-lint manifest io.github.TheZwiss.backspace.yml
+          flatpak-builder-lint appstream flatpak/io.github.TheZwiss.backspace.metainfo.xml
+
+          echo "commit=$release_commit" >> "$GITHUB_OUTPUT"
+
+      - name: Preserve generated metadata for validation
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: flatpak-release-metadata
+          retention-days: 1
+          if-no-files-found: error
+          path: |
+            io.github.TheZwiss.backspace.yml
+            flatpak/node-sources.json
+            flatpak/io.github.TheZwiss.backspace.metainfo.xml
+
+  validate-flatpak-metadata:
+    name: Build Flatpak release metadata (${{ matrix.arch }})
+    needs: [resolve, prepare-flatpak-metadata]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-latest
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions@sha256:68c521931eccf47dfa05c1c80f43be0993cce516417a633aa34913707da57cf2
+      options: --privileged
+    permissions:
+      contents: read
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout the release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ needs.resolve.outputs.tag }}
+
+      - name: Restore generated metadata
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: flatpak-release-metadata
+          path: .
+
+      # The metadata pull request does run flatpak.yml, but that workflow
+      # builds the working tree (prepare-ci-manifest.mjs swaps the pinned
+      # source for `type: dir` and the committed offline sources for freshly
+      # generated ones). This is the only build of the manifest exactly as it
+      # will be published: the pinned release commit with the committed
+      # node-sources.json. Both architectures pass before the PR opens.
+      - name: Build generated release manifest
+        uses: flatpak/flatpak-github-actions/flatpak-builder@79327416609af08178ad73b352877e51450790b3 # v6
+        with:
+          manifest-path: io.github.TheZwiss.backspace.yml
+          arch: ${{ matrix.arch }}
+          build-bundle: false
+          upload-artifact: false
+          mirror-screenshots-url: https://dl.flathub.org/media/
+          cache-key: flatpak-release-${{ matrix.arch }}-${{ needs.prepare-flatpak-metadata.outputs.commit }}
+
+  update-flatpak-metadata:
+    name: Open Flatpak metadata update PR
+    needs: [resolve, validate-flatpak-metadata]
+    runs-on: ubuntu-latest
+    # The release bot's token below does all the writing. GITHUB_TOKEN is
+    # only used by checkout's own setup, which reads.
+    permissions:
+      contents: read
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      # A push or pull request made with GITHUB_TOKEN starts no workflows, so
+      # the required `Build & test` check never ran on the metadata PR and a
+      # human had to push to it before it could merge. The release bot is a
+      # GitHub App installed on this repository only; its installation token
+      # does start workflows. The token is narrowed here to this repository
+      # and to the two scopes the step below uses, and the action revokes it
+      # when the job ends.
+      #
+      # RELEASE_BOT_APP_ID holds the app's numeric App ID. The action passes
+      # `client-id` straight through as the JWT issuer, which GitHub accepts
+      # as either the client ID or the App ID; `app-id` is the deprecated
+      # spelling of the same input.
+      - name: Mint the release bot token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ secrets.RELEASE_BOT_APP_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Checkout the release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ needs.resolve.outputs.tag }}
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Restore validated metadata
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: flatpak-release-metadata
+          path: .
+
+      # The ruleset on main requires `Build & test` on a branch that is up to
+      # date with main, and a pull request with no approvals. So the PR is
+      # brought up to date when main has moved past the tag, and auto-merge
+      # squashes it once the check passes. No --subject: GitHub then appends
+      # "(#N)" to the title itself.
+      - name: Open the Flatpak metadata update PR and queue its merge
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.resolve.outputs.tag }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          branch="automation/flatpak-${TAG}"
+          metainfo=flatpak/io.github.TheZwiss.backspace.metainfo.xml
+
+          # A re-run after the PR has merged must not open a second one that
+          # rewinds main to this tag's metadata.
+          git fetch origin +refs/heads/main:refs/remotes/origin/main
+          main_metainfo="$(mktemp)"
+          git show "origin/main:$metainfo" > "$main_metainfo"
+          if grep -qF "<release version=\"$version\"" "$main_metainfo"; then
+            echo "main already carries the AppStream entry for $version; there is nothing to open."
+            exit 0
+          fi
+
+          bot="${APP_SLUG}[bot]"
+          bot_id="$(gh api "/users/${bot}" --jq .id)"
+          git config user.name "$bot"
+          git config user.email "${bot_id}+${bot}@users.noreply.github.com"
+
+          git switch -c "$branch"
+          git add io.github.TheZwiss.backspace.yml \
+            flatpak/node-sources.json \
+            "$metainfo"
+
+          if git diff --cached --quiet; then
+            echo "Flatpak metadata already matches $TAG."
+            exit 0
+          fi
+
+          git commit -m "chore(flatpak): update metadata for $TAG"
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+            git fetch origin "refs/heads/$branch:refs/remotes/origin/$branch"
+          fi
+          git push --force-with-lease origin "HEAD:refs/heads/$branch"
+
+          number="$(gh pr list --state open --head "$branch" \
+            --json number --jq '.[0].number // empty')"
+          if [ -z "$number" ]; then
+            url="$(gh pr create \
+              --base main \
+              --head "$branch" \
+              --title "chore(flatpak): update metadata for $TAG" \
+              --body "Automated by flatpak-release-metadata.yml from $TAG. Updates the pinned source commit, offline dependency sources, AppStream release entry and screenshot tag. The release entry's description, the \"What's New\" text on Flathub, is the first paragraph of the $TAG release notes. This pull request merges itself once CI passes.")"
+            number="${url##*/}"
+            echo "Opened PR #$number for $branch."
+          else
+            echo "PR #$number already tracks $branch."
+          fi
+
+          if ! git merge-base --is-ancestor origin/main HEAD; then
+            echo "$branch is behind main; updating it so the up-to-date rule can pass."
+            if ! gh api -X PUT "repos/$GH_REPO/pulls/$number/update-branch" \
+                -f expected_head_sha="$(git rev-parse HEAD)" >/dev/null; then
+              echo "::error::Could not update $branch with main. Use \"Update branch\" on PR #$number; auto-merge is enabled below either way."
+              gh pr merge "$number" --auto --squash
+              exit 1
+            fi
+          fi
+
+          gh pr merge "$number" --auto --squash
+          echo "Auto-merge is on for PR #$number; it squash-merges when Build & test passes."

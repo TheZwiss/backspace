@@ -50,8 +50,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Test manifest preparation
-        run: node --test flatpak/prepare-ci-manifest.test.mjs
+      - name: Test the Flatpak scripts
+        run: |
+          node --test flatpak/prepare-ci-manifest.test.mjs \
+            flatpak/release-summary.test.mjs \
+            flatpak/update-release.test.mjs
 
       - name: Install the pinned Node SDK extension
         run: |

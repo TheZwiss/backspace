@@ -68,7 +68,9 @@ jobs:
           path-to-document: 'https://github.com/TheZwiss/backspace/blob/main/CLA.md'
           branch: 'cla-signatures'
           # Accounts that never need to sign (maintainer + automation).
-          allowlist: 'TheZwiss,dependabot[bot],github-actions[bot]'
+          # backspace-release-bot[bot] is the GitHub App that opens the Flatpak
+          # metadata pull request (flatpak-release-metadata.yml).
+          allowlist: 'TheZwiss,dependabot[bot],github-actions[bot],backspace-release-bot[bot]'
           # The exact phrase a contributor comments to sign.
           custom-allsigned-prcomment: 'All contributors have signed the CLA. Thank you!'
           custom-pr-sign-comment: 'I have read the CLA Document and I hereby sign the CLA'
