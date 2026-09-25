@@ -151,10 +151,11 @@ describe('canonicalizeHomeInstance timing on a long run of slashes', () => {
     // Guards against a vacuous bound above. Measured locally on the same input:
     // regex 2250ms, scan 0.013ms. The assertion is deliberately loose (300ms)
     // so a fast CI runner cannot flake it, while still being ~7x below what the
-    // regex form actually costs here.
+    // regex form actually costs here. The slow side needs room too: this test
+    // is slow by design, and a slow runner took it past vitest's 5s default.
     canonicalizeHomeInstanceRegex('https://nova.ddns.net/');
 
     const elapsed = measure(() => canonicalizeHomeInstanceRegex(PATHOLOGICAL));
     expect(elapsed).toBeGreaterThan(300);
-  });
+  }, 60_000);
 });
