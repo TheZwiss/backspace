@@ -49,6 +49,15 @@ jobs:
         with:
           egress-policy: audit
 
+      # Only for flatpak/manifest-pin.mjs, which reads main's manifest pin
+      # below. This is the workflow's own commit: the tag on a release event,
+      # the dispatched branch otherwise.
+      - name: Checkout the Flatpak scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: flatpak
+
       # On the release event, a tag outside vX.Y.Z or a prerelease (the
       # `released` type should never deliver one; this is the backstop) is a
       # successful no-op, so the release page does not show a red run for
@@ -56,8 +65,14 @@ jobs:
       # malformed tag or a tag without a published release is an error
       # instead: someone asked for it by name.
       #
-      # A release whose AppStream entry is already on main is also a no-op, so
-      # a redundant re-dispatch stops here, before the two Flatpak builds.
+      # A release that has already landed is also a no-op, so a redundant
+      # re-dispatch stops here, before the two Flatpak builds. "Landed" means
+      # main's manifest pins the Backspace source to the tag's commit, which
+      # only the merged metadata pull request does. It is not "main has an
+      # AppStream entry for this version": an entry written by hand and
+      # committed before the tag is on main too, and update-release.mjs keeps
+      # it while the pin, the screenshot tag and node-sources.json still have
+      # to move.
       - name: Decide whether this release gets Flatpak metadata
         id: resolve
         env:
@@ -108,15 +123,29 @@ jobs:
             exit 0
           fi
 
-          version="${tag#v}"
-          main_metainfo="$(mktemp)"
-          gh api "repos/$GH_REPO/contents/flatpak/io.github.TheZwiss.backspace.metainfo.xml?ref=main" \
-            --jq .content | base64 -d > "$main_metainfo"
-          if grep -qF "<release version=\"$version\"" "$main_metainfo"; then
-            echo "Skipping: main already carries the AppStream entry for $version, so there is nothing to open."
+          # An annotated tag points at a tag object; follow it (and a tag of a
+          # tag) down to the commit.
+          object="$(gh api "repos/$GH_REPO/git/ref/tags/$tag" --jq '.object.type + " " + .object.sha')"
+          read -r object_type object_sha <<< "$object"
+          while [ "$object_type" = tag ]; do
+            object="$(gh api "repos/$GH_REPO/git/tags/$object_sha" --jq '.object.type + " " + .object.sha')"
+            read -r object_type object_sha <<< "$object"
+          done
+          if [ "$object_type" != commit ]; then
+            echo "::error::The tag $tag points at a $object_type, not a commit."
+            exit 1
+          fi
+
+          main_manifest="$(mktemp)"
+          gh api "repos/$GH_REPO/contents/io.github.TheZwiss.backspace.yml?ref=main" \
+            --jq .content | base64 -d > "$main_manifest"
+          main_pin="$(node flatpak/manifest-pin.mjs < "$main_manifest")"
+          if [ "$main_pin" = "$object_sha" ]; then
+            echo "Skipping: main's Flatpak manifest already pins $tag's commit $object_sha, so this release has landed."
             echo "proceed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          echo "main pins $main_pin; $tag is $object_sha."
 
           echo "Generating Flatpak metadata for $tag."
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
@@ -327,22 +356,23 @@ jobs:
           APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
         run: |
           set -euo pipefail
-          version="${TAG#v}"
           branch="automation/flatpak-${TAG}"
           metainfo=flatpak/io.github.TheZwiss.backspace.metainfo.xml
 
-          # `resolve` already skipped a release whose entry was on main. This
-          # repeats the check for an entry that reached main during the builds:
-          # a run for the same tag queued behind another (the concurrency group
-          # holds it, it does not cancel it) passes `resolve` while the first
-          # run's pull request is still open, and that pull request can merge
-          # before this job starts. Opening a second one then would only
-          # re-add what main already has.
+          # `resolve` already skipped a release that had landed (main's
+          # manifest pinning the tag's commit). This repeats the check for one
+          # that landed during the builds: a run for the same tag queued behind
+          # another (the concurrency group holds it, it does not cancel it)
+          # passes `resolve` while the first run's pull request is still open,
+          # and that pull request can merge before this job starts. Opening a
+          # second one then would only re-add what main already has.
           git fetch origin +refs/heads/main:refs/remotes/origin/main
-          main_metainfo="$(mktemp)"
-          git show "origin/main:$metainfo" > "$main_metainfo"
-          if grep -qF "<release version=\"$version\"" "$main_metainfo"; then
-            echo "main already carries the AppStream entry for $version; there is nothing to open."
+          main_manifest="$(mktemp)"
+          git show origin/main:io.github.TheZwiss.backspace.yml > "$main_manifest"
+          main_pin="$(node flatpak/manifest-pin.mjs < "$main_manifest")"
+          tag_commit="$(git rev-parse 'HEAD^{commit}')"
+          if [ "$main_pin" = "$tag_commit" ]; then
+            echo "main's Flatpak manifest already pins $TAG's commit $tag_commit; there is nothing to open."
             exit 0
           fi
 

@@ -53,6 +53,7 @@ jobs:
       - name: Test the Flatpak scripts
         run: |
           node --test flatpak/prepare-ci-manifest.test.mjs \
+            flatpak/manifest-pin.test.mjs \
             flatpak/release-summary.test.mjs \
             flatpak/update-release.test.mjs
 

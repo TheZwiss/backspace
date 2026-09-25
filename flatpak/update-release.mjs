@@ -9,6 +9,8 @@
 
 import { readFileSync, writeFileSync } from 'node:fs';
 
+import { writeManifestPin } from './manifest-pin.mjs';
+
 const [tag, commit, date, description] = process.argv.slice(2);
 if (!/^v\d+\.\d+\.\d+$/.test(tag ?? '')) {
   throw new Error(`Expected a release tag such as v1.0.5, got ${tag ?? '<missing>'}`);
@@ -38,9 +40,7 @@ function escapeXml(text) {
 }
 
 const manifestPath = 'io.github.TheZwiss.backspace.yml';
-const manifest = readFileSync(manifestPath, 'utf8');
-const pinPattern = /(        commit: )[0-9a-f]{40}/;
-if (!pinPattern.test(manifest)) throw new Error('Flatpak manifest commit pin not found');
+const manifest = writeManifestPin(readFileSync(manifestPath, 'utf8'), commit);
 
 const metainfoPath = 'flatpak/io.github.TheZwiss.backspace.metainfo.xml';
 let metainfo = readFileSync(metainfoPath, 'utf8');
@@ -67,5 +67,5 @@ if (metainfo.includes(`<release version="${version}"`)) {
   metainfo = metainfo.replace(marker, marker + release);
 }
 
-writeFileSync(manifestPath, manifest.replace(pinPattern, `$1${commit}`));
+writeFileSync(manifestPath, manifest);
 writeFileSync(metainfoPath, metainfo);

@@ -70,7 +70,7 @@ jobs:
         # paragraph is the Flatpak "What's New" text: publishing the release
         # starts flatpak-release-metadata.yml, which copies it into the
         # AppStream release entry, and fails if the heading is followed by the
-        # Downloads table instead of a paragraph.
+        # `## Downloads` heading instead of a paragraph.
         run: |
           set -euo pipefail
 

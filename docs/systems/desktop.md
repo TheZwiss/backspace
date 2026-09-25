@@ -531,9 +531,12 @@ needs no Flatpak installation on any platform.
 **Flatpak release metadata.** Publishing a GitHub release starts
 `.github/workflows/flatpak-release-metadata.yml` (`release: released`, which
 fires for a full release and for a prerelease promoted to one, never for a
-prerelease). A tag outside `vX.Y.Z`, a prerelease, or a release whose AppStream
-entry is already on main makes the run a successful no-op that logs why.
-Otherwise, checked out at the tag, it:
+prerelease). A tag outside `vX.Y.Z`, a prerelease, or a release that has
+already landed makes the run a successful no-op that logs why. A release has
+landed when main's manifest pins the Backspace source to the tag's commit
+(read with `flatpak/manifest-pin.mjs`), which only its merged metadata pull
+request does. An AppStream entry for the version on main does not count as
+landed: see step 2. Otherwise, checked out at the tag, it:
 
 1. Reads the release notes and takes the paragraph under the
    `# Backspace X.Y.Z` title as the AppStream release description, which is
@@ -547,11 +550,14 @@ Otherwise, checked out at the tag, it:
    new run.
 2. Runs `flatpak/update-release.mjs`, which updates the source pin, the
    screenshot tag and the AppStream entry. The script reads the metainfo as it
-   is at the tag, so it keeps an entry for the version only when that entry
-   was committed to main before the tag was cut; it never replaces one there.
-   An entry written by hand on the metadata pull request's branch is not kept:
-   a re-run while that pull request is open force-pushes a fresh branch from
-   the tag over it.
+   is at the tag. To write the entry by hand instead of taking the notes'
+   paragraph, commit it to main before cutting the tag: the script then keeps
+   it and never replaces it, while the pin, the screenshot tag and
+   `node-sources.json` still move and the pull request still opens. The notes
+   still need their summary paragraph, because step 1 runs either way. An entry
+   written by hand on the metadata pull request's branch is not kept: a re-run
+   while that pull request is open force-pushes a fresh branch from the tag
+   over it.
 3. Regenerates `node-sources.json`, lints the manifest and AppStream file,
    uploads those exact files, and builds their published manifest natively on
    x86_64 and aarch64. The metadata pull request also runs `flatpak.yml`, but
@@ -567,8 +573,8 @@ Otherwise, checked out at the tag, it:
 To re-run a release, dispatch the workflow with its tag (`workflow_dispatch`,
 input `tag`); a malformed tag fails the dispatch. A re-run replaces the open
 pull request's branch, as described in step 2. A tag cut before this workflow
-existed cannot be re-run, and a release whose AppStream entry is already on
-main opens nothing. Use a fresh dispatch rather than "Re-run failed jobs" on
+existed cannot be re-run, and a release that has already landed opens nothing.
+Use a fresh dispatch rather than "Re-run failed jobs" on
 the pull request job after the first day: the builds hand their files to that
 job as an artifact kept for one day, so a re-run after that fails to find it.
 
