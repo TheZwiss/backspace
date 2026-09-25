@@ -39,6 +39,20 @@ export const BITRATE_MATRIX_KBPS: Record<number, Record<number, number>> = {
   2160: { 30: 20000, 45: 24000, 60: 28000, 75: 32000, 90: 38000, 120: 45000 },
 };
 
+// ─── Channel Constants ───────────────────────────────────────────────────────
+
+export const CHANNEL_NAME_MIN_LENGTH = 1;
+export const CHANNEL_NAME_MAX_LENGTH = 100;
+
+/**
+ * The form a space channel name is stored in: trimmed, lowercased, each run of
+ * whitespace replaced by one dash. The server applies it on create and rename,
+ * and the client applies it to tell whether an edited name changes anything.
+ */
+export function normalizeChannelName(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, '-');
+}
+
 // ─── Group DM Constants ──────────────────────────────────────────────────────
 
 export const GROUP_DM_NAME_MAX_LENGTH = 50;

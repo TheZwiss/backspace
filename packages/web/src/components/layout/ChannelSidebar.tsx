@@ -194,7 +194,10 @@ export function ChannelSidebar() {
     return items;
   }, [uncategorizedChannels, sortedCategories, channelsByCategory, collapsedCategories]);
 
-  const canMoveMembers = hasPermissionBit(mySpacePerms, PermissionBits.MOVE_MEMBERS);
+  const canMoveMembersFrom = useCallback(
+    (channelId: string) => hasPermissionBit(channelPermissions.get(channelId), PermissionBits.MOVE_MEMBERS),
+    [channelPermissions],
+  );
 
   const handleChannelDrop = useCallback((dragId: string, target: DropTarget) => {
     if (!currentSpaceId) return;
@@ -311,7 +314,7 @@ export function ChannelSidebar() {
   } = useDragManager({
     scrollContainerRef,
     canManage: canManageChannels,
-    canMoveMembers,
+    canMoveMembersFrom,
     orderedItems,
     onChannelDrop: handleChannelDrop,
     onCategoryDrop: handleCategoryDrop,
@@ -646,7 +649,6 @@ export function ChannelSidebar() {
                   channel={channel}
                   isActive={currentChannelId === channel.id}
                   isUnread={unreadChannels.has(channel.id) && currentChannelId !== channel.id}
-                  canManage={canManageChannels}
                   isDragging={activeDrag?.type === 'channel' && activeDrag.dragId === channel.id}
                   dropIndicator={dropTarget?.targetId === channel.id ? dropTarget.position : null}
                   onChannelClick={channel.type === 'voice' ? (() => {
@@ -761,7 +763,6 @@ export function ChannelSidebar() {
                       channel={channel}
                       isActive={currentChannelId === channel.id}
                       isUnread={unreadChannels.has(channel.id) && currentChannelId !== channel.id}
-                      canManage={canManageChannels}
                       isDragging={activeDrag?.type === 'channel' && activeDrag.dragId === channel.id}
                       dropIndicator={dropTarget?.targetId === channel.id ? dropTarget.position : null}
                       onChannelClick={channel.type === 'voice' ? (() => {
@@ -1249,7 +1250,6 @@ function ChannelItem({
   channel,
   isActive,
   isUnread,
-  canManage,
   isDragging,
   dropIndicator,
   onChannelClick,
@@ -1263,7 +1263,6 @@ function ChannelItem({
   channel: Channel;
   isActive: boolean;
   isUnread: boolean;
-  canManage: boolean;
   isDragging: boolean;
   dropIndicator: 'before' | 'after' | null;
   onChannelClick: () => void;
@@ -1291,8 +1290,11 @@ function ChannelItem({
   channelPermissions: Map<string, string>;
   handleVoiceJoin: (channelId: string) => void;
 }) {
+  const chPerms = channelPermissions.get(channel.id);
+  // Editing and deleting a channel check MANAGE_CHANNELS with its overrides,
+  // so the settings gear reads this channel's permissions, not the space's.
+  const canManage = hasPermissionBit(chPerms, PermissionBits.MANAGE_CHANNELS);
   if (channel.type === 'voice') {
-    const chPerms = channelPermissions.get(channel.id);
     const canConnect = hasPermissionBit(chPerms, PermissionBits.CONNECT);
     return (
       <div

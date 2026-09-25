@@ -107,6 +107,41 @@ if channelOverride:  base = (base & ~deny) | allow
 
 ---
 
+## Client gating
+
+The client hides or disables a control when the user lacks the permission for
+it. It must read that permission at the **same scope the server route checks**,
+or the two disagree: a channel override that grants a bit leaves the control
+hidden although the server would allow the action, and one that denies it shows
+a control that fails with `missing_permission`.
+
+The rule follows from the `hasPermission` call in the route:
+
+| Server check | Client reads |
+|---|---|
+| `hasPermission(userId, spaceId, bit, channelId)` | `channelPermissions.get(channelId)` (the channel's `myPermissions`, overrides applied) |
+| `hasPermission(userId, spaceId, bit)` | `spacePermissions.get(spaceId)` |
+
+The scope belongs to the action, not the bit. `MANAGE_CHANNELS` is space-wide
+for creating a channel, reordering the layout and managing categories, and
+channel-scoped for editing or deleting one channel. The current split:
+
+| Scope | Actions |
+|---|---|
+| Channel | view, send, attach, react, read history, manage messages; connect, speak, stream; edit or delete the channel (`MANAGE_CHANNELS`); mute, deafen, move, disconnect a voice user (checked on the channel the target is in) |
+| Space | create a channel; reorder channels and categories; create, rename or delete a category; read or write any channel or category override (`MANAGE_ROLES`); invites, kick, ban, space settings |
+
+A control that needs two permissions at different scopes checks each at its own.
+Channel settings is the example: the delete button reads the channel's
+`MANAGE_CHANNELS`, and the privacy row, which reads and writes the @everyone
+override, is shown only with space-wide `MANAGE_ROLES`.
+
+Covered by `ChannelSettingsModal.test.tsx` and `voiceMenuItems.test.ts`, which
+grant a bit only through the channel map and deny it only there, and assert the
+control follows the channel.
+
+---
+
 ## Broadcast audience
 
 Space membership and channel access are not the same thing, so the two

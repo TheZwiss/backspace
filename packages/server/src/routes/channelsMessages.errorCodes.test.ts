@@ -285,6 +285,20 @@ describe('channel and message routes send error codes', () => {
       expect(body.details).toEqual({ min: 1, max: 100 });
     });
 
+    it('renaming a channel with a non-string name → channel_name_required', async () => {
+      currentUserId = 'owner';
+      const res = await app.inject({ method: 'PATCH', url: `/api/channels/${GENERAL}`, payload: { name: 42 } });
+      expect(res.statusCode).toBe(400);
+      expect((JSON.parse(res.body) as ErrorBody).code).toBe('channel_name_required');
+    });
+
+    it('renaming a channel stores the normalized name', async () => {
+      currentUserId = 'owner';
+      const res = await app.inject({ method: 'PATCH', url: `/api/channels/${GENERAL}`, payload: { name: '  Game   Night ' } });
+      expect(res.statusCode).toBe(200);
+      expect((JSON.parse(res.body) as { name: string }).name).toBe('game-night');
+    });
+
     it('creating a channel in a category of another space → category_not_in_space with the id', async () => {
       currentUserId = 'owner';
       const res = await app.inject({

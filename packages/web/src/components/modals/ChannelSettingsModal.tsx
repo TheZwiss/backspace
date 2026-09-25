@@ -43,6 +43,7 @@ function OverviewTab({
   isLoading,
   error,
   canManageChannels,
+  canManageRoles,
   onTogglePrivate,
   onDeleteChannel,
   onRename,
@@ -55,6 +56,7 @@ function OverviewTab({
   isLoading: boolean;
   error: string;
   canManageChannels: boolean;
+  canManageRoles: boolean;
   onTogglePrivate: () => void;
   onDeleteChannel: () => void;
   onRename: (name: string) => Promise<string>;
@@ -179,21 +181,25 @@ function OverviewTab({
         </div>
       )}
 
-      <div className="pt-2 border-t border-border-soft">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-sm font-medium text-txt-primary">{t('spaces:channel.settings.private.label')}</div>
-            <div className="text-xs text-txt-tertiary mt-0.5">
-              {t('spaces:channel.settings.private.description')}
+      {/* Privacy is an @everyone override: reading and writing it both need
+          MANAGE_ROLES, so without it the row would only show a guess. */}
+      {canManageRoles && (
+        <div className="pt-2 border-t border-border-soft">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm font-medium text-txt-primary">{t('spaces:channel.settings.private.label')}</div>
+              <div className="text-xs text-txt-tertiary mt-0.5">
+                {t('spaces:channel.settings.private.description')}
+              </div>
+            </div>
+            <div className={`flex-shrink-0 ml-4 ${(isLoading || isFetching) ? 'opacity-50 pointer-events-none' : ''}`}>
+              <Toggle enabled={isPrivate} onChange={onTogglePrivate} />
             </div>
           </div>
-          <div className={`flex-shrink-0 ml-4 ${(isLoading || isFetching) ? 'opacity-50 pointer-events-none' : ''}`}>
-            <Toggle enabled={isPrivate} onChange={onTogglePrivate} />
-          </div>
         </div>
-      </div>
+      )}
 
-      {isPrivate && !isFetching && (
+      {canManageRoles && isPrivate && !isFetching && (
         <div className="flex items-start gap-2 p-2 bg-surface-input/50 rounded text-xs text-txt-tertiary">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0 mt-0.5 text-txt-secondary">
             <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z" />
@@ -230,6 +236,7 @@ export function ChannelSettingsModal() {
   const channels = useSpaceStore((s) => s.channels);
   const spaces = useSpaceStore((s) => s.spaces);
   const spacePermissions = useSpaceStore((s) => s.spacePermissions);
+  const channelPermissions = useSpaceStore((s) => s.channelPermissions);
   const upsertChannel = useSpaceStore((s) => s.upsertChannel);
 
   const [tab, setTab] = useState<'overview' | 'permissions'>('overview');
@@ -244,9 +251,11 @@ export function ChannelSettingsModal() {
   const channelId = modalData?.channelId as string | undefined;
   const channel = channels.find(c => c.id === channelId);
 
-  const myPerms = currentSpaceId ? spacePermissions.get(currentSpaceId) : undefined;
-  const canManageChannels = myPerms !== undefined && hasPermissionBit(myPerms, PermissionBits.MANAGE_CHANNELS);
-  const canManageRoles = myPerms !== undefined && hasPermissionBit(myPerms, PermissionBits.MANAGE_ROLES);
+  // Each flag reads the scope its server route checks (permissions.md, "Client
+  // gating"): editing or deleting this channel resolves MANAGE_CHANNELS with the
+  // channel's overrides, the override routes check MANAGE_ROLES space-wide.
+  const canManageChannels = hasPermissionBit(channelId ? channelPermissions.get(channelId) : undefined, PermissionBits.MANAGE_CHANNELS);
+  const canManageRoles = hasPermissionBit(currentSpaceId ? spacePermissions.get(currentSpaceId) : undefined, PermissionBits.MANAGE_ROLES);
 
   // Reset state when modal closes
   useEffect(() => {
@@ -289,12 +298,12 @@ export function ChannelSettingsModal() {
   }, [channelId, currentSpaceId, spaces]);
 
   useEffect(() => {
-    if (isOpen && channelId && currentSpaceId) {
+    if (isOpen && channelId && currentSpaceId && canManageRoles) {
       fetchPrivateState();
     } else {
       setIsFetching(false);
     }
-  }, [isOpen, channelId, currentSpaceId, fetchPrivateState]);
+  }, [isOpen, channelId, currentSpaceId, canManageRoles, fetchPrivateState]);
 
   if (!isOpen || !channel || !channelId || !currentSpaceId) return null;
 
@@ -395,6 +404,7 @@ export function ChannelSettingsModal() {
                   isLoading={isLoading}
                   error={error}
                   canManageChannels={canManageChannels}
+                  canManageRoles={canManageRoles}
                   onTogglePrivate={handleToggle}
                   onDeleteChannel={() => setShowDeleteConfirm(true)}
                   onRename={handleRenameChannel}
@@ -432,6 +442,7 @@ export function ChannelSettingsModal() {
             isLoading={isLoading}
             error={error}
             canManageChannels={canManageChannels}
+            canManageRoles={canManageRoles}
             onTogglePrivate={handleToggle}
             onDeleteChannel={() => setShowDeleteConfirm(true)}
             onRename={handleRenameChannel}

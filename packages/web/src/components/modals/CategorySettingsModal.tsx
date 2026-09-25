@@ -163,21 +163,25 @@ function OverviewTab({
         </div>
       )}
 
-      <div className="pt-2 border-t border-border-soft">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-sm font-medium text-txt-primary">{t('spaces:category.settings.private.label')}</div>
-            <div className="text-xs text-txt-tertiary mt-0.5">
-              {t('spaces:category.settings.private.description')}
+      {/* Privacy is an @everyone override: reading and writing it both need
+          MANAGE_ROLES, so without it the row would only show a guess. */}
+      {canManageRoles && (
+        <div className="pt-2 border-t border-border-soft">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm font-medium text-txt-primary">{t('spaces:category.settings.private.label')}</div>
+              <div className="text-xs text-txt-tertiary mt-0.5">
+                {t('spaces:category.settings.private.description')}
+              </div>
+            </div>
+            <div className={`flex-shrink-0 ml-4 ${(isLoading || isFetching) ? 'opacity-50 pointer-events-none' : ''}`}>
+              <Toggle enabled={isPrivate} onChange={onTogglePrivate} />
             </div>
           </div>
-          <div className={`flex-shrink-0 ml-4 ${(isLoading || isFetching || !canManageRoles) ? 'opacity-50 pointer-events-none' : ''}`}>
-            <Toggle enabled={isPrivate} onChange={onTogglePrivate} />
-          </div>
         </div>
-      </div>
+      )}
 
-      {isPrivate && !isFetching && (
+      {canManageRoles && isPrivate && !isFetching && (
         <div className="flex items-start gap-2 p-2 bg-surface-input/50 rounded text-xs text-txt-tertiary">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0 mt-0.5 text-txt-secondary">
             <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z" />
@@ -272,12 +276,12 @@ export function CategorySettingsModal() {
   }, [categoryId, currentSpaceId, spaces]);
 
   useEffect(() => {
-    if (isOpen && categoryId && currentSpaceId) {
+    if (isOpen && categoryId && currentSpaceId && canManageRoles) {
       fetchPrivateState();
     } else {
       setIsFetching(false);
     }
-  }, [isOpen, categoryId, currentSpaceId, fetchPrivateState]);
+  }, [isOpen, categoryId, currentSpaceId, canManageRoles, fetchPrivateState]);
 
   if (!isOpen || !category || !categoryId || !currentSpaceId) return null;
 

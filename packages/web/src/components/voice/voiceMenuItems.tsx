@@ -11,15 +11,20 @@ import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 /**
  * Build moderation context menu items for a voice user.
  * Called imperatively at right-click time (not during render).
+ *
+ * `channelId` is the voice channel the target is in. The server checks every
+ * moderation bit against that channel, overrides included, so the menu reads
+ * the same channel's permissions: a voice channel can grant or deny
+ * MUTE_MEMBERS and the rest on its own.
  */
 export function buildVoiceModMenuItems(targetUserId: string, channelId: string): ContextMenuItem[] {
-  const { spacePermissions, channels, channelToSpaceMap } = useSpaceStore.getState();
+  const { channelPermissions, channels, channelToSpaceMap } = useSpaceStore.getState();
   const { spaceMutedUserIds, spaceDeafenedUserIds } = useVoiceStore.getState();
 
   // Derive spaceId from the voice channel, NOT from UI navigation state.
   // On mobile, the user can navigate away from the space while still in voice.
   const derivedSpaceId = channelToSpaceMap.get(channelId);
-  const myPerms = derivedSpaceId ? spacePermissions.get(derivedSpaceId) : undefined;
+  const myPerms = channelPermissions.get(channelId);
   const canMuteMembers = hasPermissionBit(myPerms, PermissionBits.MUTE_MEMBERS);
   const canDeafenMembers = hasPermissionBit(myPerms, PermissionBits.DEAFEN_MEMBERS);
   const canMoveMembers = hasPermissionBit(myPerms, PermissionBits.MOVE_MEMBERS);
