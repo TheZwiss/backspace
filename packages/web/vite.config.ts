@@ -10,7 +10,9 @@ export default defineConfig({
     devCspPreamble(),
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // 'prompt' keeps a new build waiting until SwAutoUpdate applies it, so an
+      // update never reloads the page out from under a live voice session.
+      registerType: 'prompt',
       includeAssets: ['icons/favicon-32.png', 'icons/favicon-16.png', 'icons/apple-touch-icon.png'],
       manifest: {
         name: 'Backspace',
@@ -29,7 +31,9 @@ export default defineConfig({
       workbox: {
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api/, /^\/ws/, /^\/uploads/],
-        skipWaiting: true,
+        // No skipWaiting: a new worker activates only on SwAutoUpdate's
+        // SKIP_WAITING message. clientsClaim only matters on the first install,
+        // where there is no older worker to replace.
         clientsClaim: true,
         cleanupOutdatedCaches: true,
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
