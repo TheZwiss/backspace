@@ -127,6 +127,7 @@ export function PictureInPicture() {
   const focusedParticipantId = useVoiceStore((s) => s.focusedParticipantId);
   const watchingStreams = useVoiceStore((s) => s.watchingStreams);
   const speakingParticipantIds = useVoiceStore((s) => s.speakingParticipantIds);
+  const pipEnabled = useVoiceStore((s) => s.pipEnabled);
   const currentChannelId = useChatStore((s) => s.currentChannelId);
   const voiceFullscreen = useUIStore((s) => s.voiceFullscreen);
   const pipCollapsed = useUIStore((s) => s.pipCollapsed);
@@ -157,7 +158,7 @@ export function PictureInPicture() {
   // Visibility — split into wouldShow (ignores collapsed) and shouldShow (full check)
   const isInServerVoice = currentVoiceChannelId !== null && currentChannelId !== currentVoiceChannelId;
   const isInDmCall = activeDmCall !== null && currentChannelId !== activeDmCall.dmChannelId;
-  const wouldShow = (isInServerVoice || isInDmCall) && !voiceFullscreen;
+  const wouldShow = (isInServerVoice || isInDmCall) && !voiceFullscreen && pipEnabled;
   const shouldShow = wouldShow && !pipCollapsed;
 
   // Reset pipCollapsed when wouldShow transitions false → true

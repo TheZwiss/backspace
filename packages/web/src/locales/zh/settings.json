@@ -95,6 +95,13 @@
         "description": "关闭（默认）：仅对私信及提及您的消息播放。开启：对所有频道的消息播放。"
       }
     },
+    "pip": {
+      "sectionTitle": "悬浮窗",
+      "showOnSwitch": {
+        "label": "切换到其他频道时显示悬浮窗",
+        "description": "在语音频道或通话中切换到其他频道时，用悬浮窗保持通话可见。关闭后将不再显示。"
+      }
+    },
     "processing": {
       "sectionTitle": "语音处理",
       "noiseSuppression": {

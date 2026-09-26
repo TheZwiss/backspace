@@ -95,6 +95,13 @@
         "description": "Off (default): only DMs and messages that mention you. On: every channel."
       }
     },
+    "pip": {
+      "sectionTitle": "Floating Window",
+      "showOnSwitch": {
+        "label": "Show floating window when switching channels",
+        "description": "While you are in a voice channel or call, a floating window keeps it visible when you open another channel. Turn off to hide it."
+      }
+    },
     "processing": {
       "sectionTitle": "Voice Processing",
       "noiseSuppression": {

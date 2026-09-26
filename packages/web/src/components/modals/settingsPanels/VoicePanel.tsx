@@ -19,6 +19,8 @@ export function VoicePanel() {
   const setSoundEffectVolume = useVoiceStore((s) => s.setSoundEffectVolume);
   const messageSoundAllChannels = useVoiceStore((s) => s.messageSoundAllChannels);
   const setMessageSoundAllChannels = useVoiceStore((s) => s.setMessageSoundAllChannels);
+  const pipEnabled = useVoiceStore((s) => s.pipEnabled);
+  const setPipEnabled = useVoiceStore((s) => s.setPipEnabled);
 
   return (
     <div className="space-y-5">
@@ -57,6 +59,21 @@ export function VoicePanel() {
               </div>
             </div>
             <Toggle enabled={messageSoundAllChannels} onChange={setMessageSoundAllChannels} />
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
+          {t('settings:voice.pip.sectionTitle')}
+        </div>
+        <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5">
+          <div className="flex items-center justify-between py-2">
+            <div>
+              <div className="text-sm text-txt-primary">{t('settings:voice.pip.showOnSwitch.label')}</div>
+              <div className="text-xs text-txt-tertiary">{t('settings:voice.pip.showOnSwitch.description')}</div>
+            </div>
+            <Toggle enabled={pipEnabled} onChange={setPipEnabled} />
           </div>
         </div>
       </div>

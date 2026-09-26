@@ -95,6 +95,13 @@
         "description": "Aus (Standard): nur Direktnachrichten und Nachrichten, die dich erwähnen. An: jeder Kanal."
       }
     },
+    "pip": {
+      "sectionTitle": "Schwebefenster",
+      "showOnSwitch": {
+        "label": "Schwebefenster beim Kanalwechsel anzeigen",
+        "description": "Während du in einem Sprachkanal oder Anruf bist, bleibt dieser in einem Schwebefenster sichtbar, wenn du einen anderen Kanal öffnest. Schalte dies aus, um es auszublenden."
+      }
+    },
     "processing": {
       "sectionTitle": "Sprachverarbeitung",
       "noiseSuppression": {
