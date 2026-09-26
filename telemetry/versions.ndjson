@@ -41,3 +41,9 @@
 {"snapshot_date":"2026-09-24","dimension":"1.4.0","title":"","count":6,"uniques":6}
 {"snapshot_date":"2026-09-24","dimension":"1.2.2","title":"","count":3,"uniques":3}
 {"snapshot_date":"2026-09-24","dimension":"other","title":"","count":2,"uniques":2}
+{"snapshot_date":"2026-09-25","dimension":"1.3.0","title":"","count":9,"uniques":9}
+{"snapshot_date":"2026-09-25","dimension":"1.5.0","title":"","count":9,"uniques":9}
+{"snapshot_date":"2026-09-25","dimension":"1.4.0","title":"","count":6,"uniques":6}
+{"snapshot_date":"2026-09-25","dimension":"1.5.2","title":"","count":4,"uniques":4}
+{"snapshot_date":"2026-09-25","dimension":"1.2.2","title":"","count":3,"uniques":3}
+{"snapshot_date":"2026-09-25","dimension":"other","title":"","count":2,"uniques":2}
