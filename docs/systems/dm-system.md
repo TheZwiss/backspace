@@ -495,7 +495,7 @@ Users tombstoned **before** this fix already had their 1-on-1 `dm_members` row d
 5. Broadcast `dm_message_deleted` to all members
 6. Federation: `queueDmMessageDeleteRelay(id, dmChannelId)`
 
-**Note:** `queueDmMessageDeleteRelay()` (`federationOutbox.ts`) is the single source of truth for the delete relay and is shared with the WebSocket delete path (`ws/events.ts`). It appends the mutation log entry and enqueues the outbox event with `getGroupDmTargetOrigins(dmChannelId)`, so a delete reaches exactly the peers that host a participant -- the same targeting create/update use.
+**Note:** `queueDmMessageDeleteRelay(messageId, dmChannelId, target)` (`federationOutbox.ts`) is the single source of truth for the delete relay and is shared with the WebSocket delete path (`ws/events.ts`). Both callers build `target` with `dmMessageMutationTarget` before deleting the row (see "Relayed edits and deletes"). It appends the mutation log entry and enqueues the outbox event with `getGroupDmTargetOrigins(dmChannelId)`, so a delete reaches exactly the peers that host a participant -- the same targeting create/update use.
 
 ---
 
@@ -581,11 +581,34 @@ The full event includes `participants` (all channel members with their federated
 **Broadcast filtering:**
 - Skip members whose `homeInstance === sourceInstance` (they already have the message from their home instance)
 
+### Relayed edits and deletes
+
+This is the one place the rule is written; other specs point here.
+
+DM edits and deletes are author-only on every path (REST `PATCH`/`DELETE /api/dm/messages/:id`, WS `dm_message_edit`/`dm_message_delete`). There is no moderation delete in DMs, group owners included, so a relayed edit or delete is authorized by authorship alone.
+
+**Outbound.** `update` and `delete` events carry `target: FederationMessageTarget` (`@backspace/shared`), built by `dmMessageMutationTarget(row, actorUserId)` (`federationOutbox.ts`):
+
+- `message`: the message as a `FederationMessageRef` (`dmMessageFederationRef`, see "Naming a message across instances"). A row that is itself a relayed copy is named by the id and origin it arrived with, never by this instance's id.
+- `federatedId`: the conversation's `federatedId` (1-on-1 and group alike).
+- `actor`: the editing or deleting user's federated identity (`relayActorOfUser`).
+
+The event's `messageId` stays the sender's local id: it is the outbox coalescing key and what older receivers match on. Deletes build the target before removing the row and store it in the mutation log payload, so the sync endpoint can replay it. A conversation without a `federatedId`, or an actor without a comparable identity, gets no target and the event goes out in the old shape.
+
+**Inbound** (`resolveRelayedMutationTarget`, `federation/events/dmMessages.ts`), for an event with a `target`:
+
+1. Malformed target: rejected `invalid_target` (terminal).
+2. `attributionRefusal(target.actor, sourceInstance)`, the same check every relay event runs (direct, or homeward via `localUserActsOnPeer`): a refusal is returned as its reason, `attribution_mismatch` (terminal) or `attribution_unproven` (retried: the homeward proof has not reached this instance yet). See `federation.md` §3.
+3. Resolve `target.message` with `resolveLocalDmMessage`, and require it to be in this instance's copy of `target.federatedId`: else `unknown_message`. Not terminal: the create may not have arrived yet, and the sender retries on the outbox backoff schedule.
+4. The actor must be the message's author, compared as federated identities (`sameRelayActor(relayActorOfUser(author), target.actor)`: equal home user id, same home domain), never as local ids: else `not_message_author` (terminal). Nothing is modified.
+
+An event **without** a `target` (an older sender) is matched as `(sourceInstance, messageId)`. That only finds a message the sending instance created and relayed here, so the lookup is its own authorization, as before. An older receiver ignores `target` and keeps doing exactly that, so for it an edit or delete of a message the sender did not create still fails as `unknown_message`.
+
 ### Inbound: Message Update
 
 **Function:** `federation.ts:processUpdateEvent()`
 
-1. Find local message by `sourceInstance` + `sourceMessageId`
+1. Find and authorize the local message ("Relayed edits and deletes")
 2. Update content and `editedAt`
 3. Broadcast `dm_message_updated` to all local members
 
@@ -593,7 +616,7 @@ The full event includes `participants` (all channel members with their federated
 
 **Function:** `federation.ts:processDeleteEvent()`
 
-1. Find local message by `sourceInstance` + `sourceMessageId`
+1. Find and authorize the local message ("Relayed edits and deletes")
 2. Delete attachments, reactions, and message atomically
 3. Clean up attachment files from disk
 4. Broadcast `dm_message_deleted` to all local members

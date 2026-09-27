@@ -80,6 +80,8 @@ const TERMINAL_REJECTION_REASONS = new Set<string>([
   'attribution_mismatch', // the source can never speak for this actor (third-instance, malformed, or no such user)
   'unknown_event_type',   // peer doesn't understand this eventType — never will
   'self_target_invalid',  // payload's from-identity equals to-identity (sender's self-check should have caught this)
+  'not_message_author',   // relayed edit/delete names a message the actor did not write
+  'invalid_target',       // relayed edit/delete carries a malformed target
 ]);
 
 /**
@@ -229,6 +231,7 @@ export async function processOutboxTick(): Promise<void> {
       if (parsed.message) evt.message = parsed.message;
       if (parsed.reactions) evt.reactions = parsed.reactions;
       if (parsed.reaction) evt.reaction = parsed.reaction;
+      if (parsed.target) evt.target = parsed.target;
       if (parsed.membership) evt.membership = parsed.membership;
       if (parsed.ownership) evt.ownership = parsed.ownership;
       if (parsed.group) evt.group = parsed.group;

@@ -4,13 +4,13 @@ import { getDb, getRawDb, schema } from '../../../db/index.js';
 import { getOurOrigin, normalizeOriginForCompare, parseFederationHeaders, verifyPeerSignature } from '../../../utils/federationAuth.js';
 import { sendSignedJson } from './signedResponse.js';
 import { getInstanceId } from '../../../utils/federationEpoch.js';
-import { dmReplyRefForRelay, getDmParticipants } from '../../../utils/federationOutbox.js';
+import { dmMessageMutationTarget, dmReplyRefForRelay, getDmParticipants } from '../../../utils/federationOutbox.js';
 import { deleteAttachmentFiles } from '../../../utils/fileCleanup.js';
 import { sanitizeUser } from '../../../utils/sanitize.js';
 import { collectDeletionBroadcastTargets, tombstoneUser } from '../../../utils/userDeletion.js';
 import { connectionManager } from '../../../ws/handler.js';
 import { and, eq, isNull, or } from 'drizzle-orm';
-import type { FederationIdentityDeleteS2SRequest, FederationRelayAttachment, FederationRelayEvent, FederationRelayRequest, FederationRelayResponse, FederationSyncRequest, FederationSyncResponse } from '@backspace/shared';
+import type { FederationIdentityDeleteS2SRequest, FederationMessageTarget, FederationRelayAttachment, FederationRelayEvent, FederationRelayRequest, FederationRelayResponse, FederationSyncRequest, FederationSyncResponse } from '@backspace/shared';
 import type { FastifyInstance } from 'fastify';
 import { processRelayEvents } from '../events/dispatch.js';
 import { extractDomain } from '../identity.js';
@@ -574,13 +574,23 @@ export function registerRelayRoutes(app: FastifyInstance): void {
         }
 
         if (mutationType === 'delete') {
-          // For deletes, we don't need the message content — just the ID and channel
+          // For deletes, we don't need the message content — just the ID and
+          // channel, plus the target the delete path logged (the row is gone).
+          let deleteTarget: FederationMessageTarget | undefined;
+          if (mutation.payload) {
+            try {
+              deleteTarget = (JSON.parse(mutation.payload) as { target?: FederationMessageTarget }).target;
+            } catch {
+              deleteTarget = undefined;
+            }
+          }
           events.push({
             eventType: 'delete',
             dmChannelId: mutation.context_id,
             messageId: mutation.entity_id,
             encryptionVersion: 0,
             timestamp: mutation.mutated_at,
+            ...(deleteTarget ? { target: deleteTarget } : {}),
           });
           continue;
         }
@@ -758,6 +768,9 @@ export function registerRelayRoutes(app: FastifyInstance): void {
           .get();
 
         const replyRef = dmReplyRefForRelay(mutation.context_id, message.replyToId);
+        const updateTarget = mutationType === 'update'
+          ? dmMessageMutationTarget(message, message.userId)
+          : null;
 
         events.push({
           eventType: mutationType,
@@ -767,6 +780,7 @@ export function registerRelayRoutes(app: FastifyInstance): void {
           encryptionVersion: 0,
           timestamp: mutation.mutated_at,
           participants: getDmParticipants(mutation.context_id),
+          ...(updateTarget ? { target: updateTarget } : {}),
           message: {
             userId: message.userId,
             homeUserId,

@@ -42,6 +42,7 @@ import {
   queueOutboxEvent,
   queueDmRelay,
   queueDmMessageDeleteRelay,
+  dmMessageMutationTarget,
   queueDmCloseRelay,
   queueGroupMetadataRelay,
   getDmParticipants,
@@ -2657,6 +2658,10 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, 403, 'recipient_deleted');
     }
 
+    // The relay names the message by its shared coordinates, read from the
+    // row before it is gone.
+    const relayTarget = dmMessageMutationTarget(msg, request.userId);
+
     // Collect attachment filenames before deleting
     const attachmentRows = db.select({ filename: schema.attachments.filename })
       .from(schema.attachments)
@@ -2696,7 +2701,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     }
 
     // Federation: log mutation and queue for relay
-    queueDmMessageDeleteRelay(id, msg.dmChannelId);
+    queueDmMessageDeleteRelay(id, msg.dmChannelId, relayTarget);
 
     return reply.code(200).send({ success: true });
   });

@@ -525,6 +525,39 @@ describe('outbox worker — terminal rejection reasons + rollback invocation', (
     expect(sentBody).toMatchObject({ capabilities: ['attribution_unproven'] });
   });
 
+  it('sends the target of an edit or delete, and treats not_message_author as terminal', async () => {
+    seedPeer('peer-r11');
+    const target = {
+      message: { messageId: 'orig-11', messageHomeInstance: 'https://peer.example' },
+      federatedId: 'fid-11',
+      actor: { homeUserId: 'u', homeInstance: 'https://test.example' },
+    };
+    testDb.insert(schema.federationOutbox).values({
+      id: 'entry-r11', peerId: 'peer-r11', contextId: 'ch-1', entityId: 'local-11',
+      contextType: 'dm', eventType: 'delete', payload: JSON.stringify({ deleted: true, target }),
+      encryptionVersion: 0, attempts: 0, nextRetryAt: Date.now() - 1000,
+      expiresAt: Date.now() + 30 * 86_400_000, createdAt: Date.now(),
+    }).run();
+
+    let sentBody = '';
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_url, init) => {
+      sentBody = String(init?.body ?? '');
+      return new Response(JSON.stringify({
+        accepted: [],
+        rejected: [{ messageId: 'local-11', reason: 'not_message_author' }],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+
+    const { processOutboxTick } = await import('./federationWorker.js');
+    await processOutboxTick();
+
+    const sent = JSON.parse(sentBody) as { events: Array<{ messageId: string; target?: unknown }> };
+    expect(sent.events.find(e => e.messageId === 'local-11')?.target).toEqual(target);
+    const remaining = testDb.select().from(schema.federationOutbox)
+      .where(eq(schema.federationOutbox.id, 'entry-r11')).get();
+    expect(remaining).toBeUndefined();
+  });
+
   it('an unknown_message rejection is backed off and leaves the peer healthy (#295)', async () => {
     seedPeer('peer-r10');
     seedOutboxEntry('entry-r10', 'peer-r10', 'reaction-10', 'reaction_add');

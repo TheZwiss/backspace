@@ -238,7 +238,7 @@ describe('DM relay targeting — local-only conversations', () => {
     seedUser('remote-b', 'https://remote.example');
     seedDmChannel('dm-mixed', ['local-a', 'remote-b']);
 
-    queueDmMessageDeleteRelay('msg-4', 'dm-mixed');
+    queueDmMessageDeleteRelay('msg-4', 'dm-mixed', null);
 
     expect(countOutbox('peer-remote')).toBe(1);
     expect(countOutbox('peer-bystander')).toBe(0);
@@ -250,7 +250,7 @@ describe('DM relay targeting — local-only conversations', () => {
     seedUser('local-b', null);
     seedDmChannel('dm-local', ['local-a', 'local-b']);
 
-    queueDmMessageDeleteRelay('msg-5', 'dm-local');
+    queueDmMessageDeleteRelay('msg-5', 'dm-local', null);
 
     expect(countOutbox('peer-bystander')).toBe(0);
   });

@@ -15,7 +15,7 @@ import { sanitizeUser } from '../utils/sanitize.js';
 import { collectProfileBroadcastTargetIds } from '../utils/userDeletion.js';
 import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
 import { resolveEmbeds, reResolveEmbeds, embedRowToEmbed } from '../utils/embedResolver.js';
-import { appendMutationLog, dmMessageFederationRef, queueOutboxEvent, queueDmRelay, queueDmMessageDeleteRelay, getGroupDmTargetOrigins, sendCallRelay, computeFederatedId, sendTypingRelay, queueReadStateRelay } from '../utils/federationOutbox.js';
+import { appendMutationLog, dmMessageFederationRef, dmMessageMutationTarget, queueOutboxEvent, queueDmRelay, queueDmMessageDeleteRelay, getGroupDmTargetOrigins, sendCallRelay, computeFederatedId, sendTypingRelay, queueReadStateRelay } from '../utils/federationOutbox.js';
 import { canonicalizeHomeInstance, getOurOrigin, normalizeOriginForCompare } from '../utils/federationAuth.js';
 import { generateFederatedCallToken } from '../routes/livekit.js';
 import { config } from '../config.js';
@@ -1071,6 +1071,10 @@ function handleDmMessageDelete(event: Record<string, unknown>, userId: string): 
     return;
   }
 
+  // The relay names the message by its shared coordinates, read from the row
+  // before it is gone.
+  const relayTarget = dmMessageMutationTarget(msg, userId);
+
   // Collect attachment filenames before deletion
   const dmAttachmentRows = db.select({ filename: schema.attachments.filename })
     .from(schema.attachments).where(eq(schema.attachments.dmMessageId, messageId)).all();
@@ -1105,7 +1109,7 @@ function handleDmMessageDelete(event: Record<string, unknown>, userId: string): 
   }
 
   // Federation: log mutation and queue for relay
-  queueDmMessageDeleteRelay(messageId, msg.dmChannelId);
+  queueDmMessageDeleteRelay(messageId, msg.dmChannelId, relayTarget);
 }
 
 // ─── Reaction Handlers ─────────────────────────────────────────────────────

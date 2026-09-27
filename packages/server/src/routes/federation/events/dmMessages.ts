@@ -7,9 +7,9 @@ import { generateSnowflake } from '../../../utils/snowflake.js';
 import { connectionManager } from '../../../ws/handler.js';
 import { getDmMessageWithUser } from '../../dm.js';
 import { and, eq, isNull, or } from 'drizzle-orm';
-import type { FederationRelayEvent } from '@backspace/shared';
+import type { FederationMessageTarget, FederationRelayEvent } from '@backspace/shared';
 import { buildDmChannelPayload, buildDmMessagePayload, findOrCreateDmChannel, isUrlFromPeer, resolveLocalDmMessage, resolveRelayedReplyTarget } from '../dmChannels.js';
-import { extractDomain, resolveLocalUser, resolveOrCreateReplicatedUser, attributionRefusal } from '../identity.js';
+import { attributionRefusal, extractDomain, relayActorOfUser, resolveLocalUser, resolveOrCreateReplicatedUser, sameRelayActor } from '../identity.js';
 import { hydrateReplicatedUserProfile } from '../profile.js';
 
 export async function processCreateEvent(
@@ -261,6 +261,97 @@ export async function processCreateEvent(
 }
 
 
+type RelayedMutationResolution =
+  | { ok: true; localMsg: typeof schema.dmMessages.$inferSelect }
+  | {
+    ok: false;
+    reason: 'unknown_message' | 'invalid_target' | 'attribution_mismatch' | 'attribution_unproven' | 'not_message_author';
+  };
+
+function isMessageTarget(value: unknown): value is FederationMessageTarget {
+  if (!value || typeof value !== 'object') return false;
+  const t = value as Partial<FederationMessageTarget>;
+  return typeof t.federatedId === 'string' && t.federatedId.length > 0
+    && typeof t.message?.messageId === 'string' && t.message.messageId.length > 0
+    && typeof t.message.messageHomeInstance === 'string' && t.message.messageHomeInstance.length > 0
+    && typeof t.actor?.homeUserId === 'string' && typeof t.actor.homeInstance === 'string';
+}
+
+/**
+ * Find the local message a relayed `update` or `delete` changes, and decide
+ * whether the actor may change it. The rule is documented in
+ * docs/systems/dm-system.md, "Relayed edits and deletes":
+ *
+ * - With a `target`, `attributionRefusal` must find nothing to refuse for the
+ *   actor against the signing peer (`attribution_unproven` is retried, as for
+ *   every relay event), the message is resolved in shared coordinates inside this
+ *   instance's copy of the conversation `target.federatedId`, and the actor
+ *   must be the message's author, compared as federated identities. A target
+ *   that does not resolve (yet) is `unknown_message`, which the sender retries
+ *   with backoff. A message by someone else is `not_message_author`, terminal,
+ *   and nothing is changed.
+ * - Without one (an older sender), the event's `messageId` is the sender's
+ *   local id and only matches a message the sender itself created and relayed
+ *   here, so the lookup `(sourceInstance, messageId)` is its own authorization.
+ */
+function resolveRelayedMutationTarget(
+  event: FederationRelayEvent,
+  sourceInstance: string,
+  db: ReturnType<typeof getDb>,
+): RelayedMutationResolution {
+  if (event.target === undefined) {
+    const legacy = db
+      .select()
+      .from(schema.dmMessages)
+      .where(
+        and(
+          eq(schema.dmMessages.sourceInstance, sourceInstance),
+          eq(schema.dmMessages.sourceMessageId, event.messageId),
+        ),
+      )
+      .get();
+    return legacy ? { ok: true, localMsg: legacy } : { ok: false, reason: 'unknown_message' };
+  }
+
+  const target: unknown = event.target;
+  if (!isMessageTarget(target)) return { ok: false, reason: 'invalid_target' };
+
+  const refusal = attributionRefusal(target.actor, sourceInstance, db);
+  if (refusal) {
+    console.warn(`[federation] Attribution refused (${refusal}) in ${event.eventType}: actor homeInstance=${extractDomain(target.actor.homeInstance)} source=${extractDomain(sourceInstance)}`);
+    return { ok: false, reason: refusal };
+  }
+
+  const channel = db
+    .select({ id: schema.dmChannels.id })
+    .from(schema.dmChannels)
+    .where(and(eq(schema.dmChannels.federatedId, target.federatedId), isNull(schema.dmChannels.deletedAt)))
+    .get();
+  if (!channel) return { ok: false, reason: 'unknown_message' };
+
+  const localMsg = resolveLocalDmMessage(
+    target.message.messageId,
+    target.message.messageHomeInstance,
+    sourceInstance,
+    db,
+  );
+  if (!localMsg || localMsg.dmChannelId !== channel.id) return { ok: false, reason: 'unknown_message' };
+
+  const author = db
+    .select({ id: schema.users.id, homeUserId: schema.users.homeUserId, homeInstance: schema.users.homeInstance })
+    .from(schema.users)
+    .where(eq(schema.users.id, localMsg.userId))
+    .get();
+  const authorIdentity = author ? relayActorOfUser(author) : null;
+  if (!authorIdentity || !sameRelayActor(authorIdentity, target.actor)) {
+    console.warn(`[federation] Refused ${event.eventType} of message ${localMsg.id}: the relayed actor is not its author`);
+    return { ok: false, reason: 'not_message_author' };
+  }
+
+  return { ok: true, localMsg };
+}
+
+
 export function processUpdateEvent(
   event: FederationRelayEvent,
   sourceInstance: string,
@@ -278,21 +369,12 @@ export function processUpdateEvent(
     }
   }
 
-  const localMsg = db
-    .select()
-    .from(schema.dmMessages)
-    .where(
-      and(
-        eq(schema.dmMessages.sourceInstance, sourceInstance),
-        eq(schema.dmMessages.sourceMessageId, event.messageId),
-      ),
-    )
-    .get();
-
-  if (!localMsg) {
-    rejected.push({ messageId: event.messageId, reason: 'unknown_message' });
+  const resolved = resolveRelayedMutationTarget(event, sourceInstance, db);
+  if (!resolved.ok) {
+    rejected.push({ messageId: event.messageId, reason: resolved.reason });
     return;
   }
+  const localMsg = resolved.localMsg;
 
   const content = event.message?.content ?? null;
   const editedAt = event.message?.editedAt ?? Date.now();
@@ -376,22 +458,12 @@ export function processDeleteEvent(
   accepted: string[],
   rejected: Array<{ messageId: string; reason: string }>,
 ): void {
-  // FED-010: delete is safe by design — lookup scoped to sourceInstance+sourceMessageId
-  const localMsg = db
-    .select()
-    .from(schema.dmMessages)
-    .where(
-      and(
-        eq(schema.dmMessages.sourceInstance, sourceInstance),
-        eq(schema.dmMessages.sourceMessageId, event.messageId),
-      ),
-    )
-    .get();
-
-  if (!localMsg) {
-    rejected.push({ messageId: event.messageId, reason: 'unknown_message' });
+  const resolved = resolveRelayedMutationTarget(event, sourceInstance, db);
+  if (!resolved.ok) {
+    rejected.push({ messageId: event.messageId, reason: resolved.reason });
     return;
   }
+  const localMsg = resolved.localMsg;
 
   // Collect attachment filenames before deletion for disk cleanup
   const attachmentRows = db

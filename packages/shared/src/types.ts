@@ -1121,6 +1121,12 @@ export interface FederationRelayEvent {
   };
   reactions?: FederationRelayReaction[];
   reaction?: FederationRelayReaction;
+  /**
+   * `update` / `delete`: the message being changed and who is changing it.
+   * Optional: older senders omit it and are matched by `messageId` alone. See
+   * `FederationMessageTarget` for how a receiver applies it.
+   */
+  target?: FederationMessageTarget;
   membership?: FederationMembershipPayload;
   ownership?: FederationOwnershipPayload;
   group?: FederationGroupPayload;
@@ -1263,6 +1269,25 @@ export interface FederationFriendshipPayload {
 export interface FederationMessageRef {
   messageId: string;
   messageHomeInstance: string;
+}
+
+/**
+ * The message an `update` or `delete` relay changes.
+ *
+ * `messageId` on the event is the sender's local id, which only identifies the
+ * message when the sender created it. A receiver given a target instead
+ * resolves `message` inside its copy of the conversation `federatedId`, and
+ * applies the change only when `actor` is that message's author, compared as
+ * federated identities, and `actor` passes the relay attribution check. The
+ * rule is written out in docs/systems/dm-system.md, "Relayed edits and
+ * deletes".
+ */
+export interface FederationMessageTarget {
+  message: FederationMessageRef;
+  /** The conversation's `federatedId` (1-on-1 and group alike). */
+  federatedId: string;
+  /** The user editing or deleting, as a federated identity. */
+  actor: { homeUserId: string; homeInstance: string };
 }
 
 export interface FederationRelayReaction {

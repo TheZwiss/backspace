@@ -19,7 +19,7 @@ import { registerAttachRoutes } from './federation/handlers/attach.js';
 export { processRelayEvents } from './federation/events/dispatch.js';
 export { processPresenceUpdateEvent } from './federation/events/dmState.js';
 export { processGroupMetadataUpdateEvent, processMemberAddEvent, processMemberRemoveEvent, processOwnershipTransferEvent } from './federation/events/membership.js';
-export { extractDomain, findFederatedUser, getOurIdentityDomain, resolveLocalUser, resolveOrCreateReplicatedUser, attributionRefusal } from './federation/identity.js';
+export { attributionRefusal, extractDomain, findFederatedUser, getOurIdentityDomain, relayActorOfUser, resolveLocalUser, resolveOrCreateReplicatedUser, sameRelayActor } from './federation/identity.js';
 export { validateOrigin } from './federation/origin.js';
 export { backfillReplicatedProfileAssets, hydrateReplicatedUserProfile, processProfileUpdateEvent } from './federation/profile.js';
 export { _resetLookupRateBuckets } from './federation/rateLimits.js';

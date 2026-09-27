@@ -3,9 +3,9 @@ import * as schema from '../db/schema.js';
 import { eq, and, inArray } from 'drizzle-orm';
 import { generateSnowflake } from './snowflake.js';
 import crypto from 'node:crypto';
-import type { FederationRelayEvent, FederationRelayParticipant, FederationRelayAttachment, DmMessageWithUser, FederationRelayRequest, DmCallUndeliverableReason, FederationMessageRef } from '@backspace/shared';
+import type { FederationRelayEvent, FederationRelayParticipant, FederationRelayAttachment, DmMessageWithUser, FederationRelayRequest, DmCallUndeliverableReason, FederationMessageRef, FederationMessageTarget } from '@backspace/shared';
 import { getOurOrigin, buildFederationHeaders } from './federationAuth.js';
-import { extractDomain } from '../routes/federation.js';
+import { extractDomain, relayActorOfUser } from '../routes/federation.js';
 import { racePeering, ensurePeered, createAutoPlaceholderPeer } from './federationPeering.js';
 import { federationFetch } from './federationFetch.js';
 
@@ -478,9 +478,21 @@ export function queueDmRelay(
     .where(eq(schema.dmChannels.id, dmChannelId))
     .get();
 
+  // An edit names the message it changes; the editor is its author (the
+  // edit paths are author-only).
+  const target = eventType === 'update'
+    ? dmMessageMutationTarget({
+      id: message.id,
+      dmChannelId,
+      sourceInstance: message.sourceInstance ?? null,
+      sourceMessageId: message.sourceMessageId ?? null,
+    }, message.userId)
+    : null;
+
   appendMutationLog(message.id, dmChannelId, eventType);
   queueOutboxEvent(message.id, dmChannelId, eventType, JSON.stringify({
     ...(channel?.federatedId && channel.ownerId ? { federatedId: channel.federatedId } : {}),
+    ...(target ? { target } : {}),
     message: {
       ...buildRelayPayload(message, message.user, dmReplyRefForRelay(dmChannelId, message.replyToId)),
       attachments: attachments.length > 0 ? attachments : undefined,
@@ -497,15 +509,51 @@ export function queueDmRelay(
  * targeting (a delete carries the channel and message coordinates, which are
  * only ever another participant instance's business).
  */
-export function queueDmMessageDeleteRelay(messageId: string, dmChannelId: string): void {
-  appendMutationLog(messageId, dmChannelId, 'delete');
+export function queueDmMessageDeleteRelay(
+  messageId: string,
+  dmChannelId: string,
+  target: FederationMessageTarget | null,
+): void {
+  // The mutation log keeps the target too: the row is gone by the time the
+  // sync endpoint replays this delete, so it cannot be rebuilt then.
+  appendMutationLog(messageId, dmChannelId, 'delete', target ? JSON.stringify({ target }) : undefined);
   queueOutboxEvent(
     messageId,
     dmChannelId,
     'delete',
-    JSON.stringify({ deleted: true }),
+    JSON.stringify({ deleted: true, ...(target ? { target } : {}) }),
     getGroupDmTargetOrigins(dmChannelId),
   );
+}
+
+/**
+ * The `target` an edit or delete relay carries (`FederationMessageTarget`):
+ * the message in shared coordinates, the conversation's `federatedId`, and the
+ * acting user's federated identity. Null when the conversation has no
+ * `federatedId` or the actor has no comparable identity; the event then goes
+ * out in the old shape, matched by the sender's local id.
+ *
+ * Callers that delete must build it before removing the row.
+ */
+export function dmMessageMutationTarget(
+  row: { id: string; dmChannelId: string; sourceInstance: string | null; sourceMessageId: string | null },
+  actorUserId: string,
+): FederationMessageTarget | null {
+  const db = getDb();
+  const channel = db
+    .select({ federatedId: schema.dmChannels.federatedId })
+    .from(schema.dmChannels)
+    .where(eq(schema.dmChannels.id, row.dmChannelId))
+    .get();
+  if (!channel?.federatedId) return null;
+  const actorRow = db
+    .select({ id: schema.users.id, homeUserId: schema.users.homeUserId, homeInstance: schema.users.homeInstance })
+    .from(schema.users)
+    .where(eq(schema.users.id, actorUserId))
+    .get();
+  const actor = actorRow ? relayActorOfUser(actorRow) : null;
+  if (!actor) return null;
+  return { message: dmMessageFederationRef(row), federatedId: channel.federatedId, actor };
 }
 
 /**

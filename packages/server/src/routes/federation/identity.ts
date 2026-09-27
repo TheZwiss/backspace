@@ -199,6 +199,36 @@ export function attributionRefusal(
 
 
 /**
+ * The federated identity a local user row stands for, or null when the row
+ * does not carry one. A native row is homed here: its identity is its own id
+ * on this instance. A federated account or replicated stub carries its home
+ * pair; one without a `homeUserId` has no identity that can be compared.
+ */
+export function relayActorOfUser(user: {
+  id: string;
+  homeUserId: string | null;
+  homeInstance: string | null;
+}): RelayActor | null {
+  if (!user.homeInstance) return { homeUserId: user.id, homeInstance: getOurOrigin() };
+  if (!user.homeUserId) return null;
+  return { homeUserId: user.homeUserId, homeInstance: user.homeInstance };
+}
+
+/**
+ * Whether two federated identities are the same person: the same home user id
+ * on the same home instance. Instances are compared by domain, the way
+ * `attributionRefusal` compares them, because stored `homeInstance` values are
+ * bare domains while origins on the wire are full URLs.
+ */
+export function sameRelayActor(a: RelayActor, b: RelayActor): boolean {
+  if (a.homeUserId !== b.homeUserId) return false;
+  const domainA = extractDomain(a.homeInstance).toLowerCase();
+  const domainB = extractDomain(b.homeInstance).toLowerCase();
+  return domainA.length > 0 && domainA === domainB;
+}
+
+
+/**
  * Resolve a home user ID to a local user.
  * Matches users where home_user_id = homeUserId, or where
  * the user's own id equals homeUserId and they have no home_instance set (local user).

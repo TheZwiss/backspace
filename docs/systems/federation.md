@@ -813,7 +813,7 @@ A peer cannot forge either record, so it cannot manufacture standing to speak fo
 
 | Handler file | Events guarded | Actor field |
 |---|---|---|
-| `events/dmMessages.ts` | `create`, `update`, `reaction_add`, `reaction_remove` | `message`, `reaction` |
+| `events/dmMessages.ts` | `create`, `update`, `delete`, `reaction_add`, `reaction_remove` | `message`, `target.actor` (`update`/`delete` with a target; an old-shape `delete` has no actor and is scoped by its lookup instead, see `dm-system.md` "Relayed edits and deletes"), `reaction` |
 | `events/membership.ts` | `member_add` (bootstrap + add), `member_remove` (self-leave), `ownership_transfer` | `group.owner`, `membership.addedBy`, `membership.user`, `ownership.previousOwner` |
 | `events/friends.ts` | `friend_request_create/update/cancel`, `friend_add`, `friend_remove` | `friendship.from` / `.to` (`friend_remove` accepts either side; when both are refused, the reason is `attribution_unproven` if either side was unproven) |
 | `events/calls.ts` | `dm_call_start/accept/reject/end`, `dm_typing_start/stop` | `call.caller` / `.acceptor` / `.rejector` / `.endedBy`, `typing` |
@@ -972,7 +972,7 @@ Trigger (API/WS handler)
 2. Group by peer
 3. For each peer, reconstruct `FederationRelayEvent[]` from stored payloads:
    - Parse JSON payload
-   - Copy fields: `federatedId`, `participants`, `message`, `reactions`, `reaction`, `membership`, `ownership`, `group`, `friendship`, file_rejected fields
+   - Copy fields: `federatedId`, `participants`, `message`, `reactions`, `reaction`, `target`, `membership`, `ownership`, `group`, `friendship`, file_rejected fields
    - Set `eventType`, `contextType`, `messageId`, `dmChannelId`, `encryptionVersion`, `timestamp`
 4. Build `FederationRelayRequest` with `version: 1`, `sourceInstance: ourOrigin`
 5. Sign with `buildFederationHeaders(body, peerHmacSecret, ourOrigin)`
@@ -992,10 +992,11 @@ Trigger (API/WS handler)
 
 #### Terminal rejection reasons
 
-`processOutboxTick` recognizes a configurable set of receiver-acknowledged **terminal rejection reasons** (constant `TERMINAL_REJECTION_REASONS` in `federationWorker.ts`): `duplicate`, `recipient_not_found`, `attribution_mismatch`, `unknown_event_type`, `self_target_invalid`. Outbox entries with these reasons are deleted with no retry. Every other reason is retryable and follows the [retry backoff schedule](#retry-backoff-schedule) until the entry's `expiresAt` (relay TTL, 30 days by default), when the storage janitor deletes it. No rollback callback runs at TTL expiry.
+`processOutboxTick` recognizes a configurable set of receiver-acknowledged **terminal rejection reasons** (constant `TERMINAL_REJECTION_REASONS` in `federationWorker.ts`): `duplicate`, `recipient_not_found`, `attribution_mismatch`, `unknown_event_type`, `self_target_invalid`, `not_message_author`, `invalid_target`. Outbox entries with these reasons are deleted with no retry. Every other reason is retryable and follows the [retry backoff schedule](#retry-backoff-schedule) until the entry's `expiresAt` (relay TTL, 30 days by default), when the storage janitor deletes it. No rollback callback runs at TTL expiry.
 
 - `duplicate` — the receiving instance already has the row (same `(sourceInstance, sourceMessageId)`); retrying will fail identically until TTL.
 - `recipient_not_found`, `attribution_mismatch`, `unknown_event_type` — structural mismatches that cannot be resolved by retrying.
+- `not_message_author`, `invalid_target` — a relayed `update`/`delete` whose `target` names a message the actor did not write, or is malformed. See `dm-system.md` "Relayed edits and deletes" for the rule.
 - `attribution_unproven` is **not** terminal: the receiver lacks the proof that one of its users holds an account here, and that proof arrives from the user's client. See [the two refusal reasons](#3-identity-resolution).
 - `self_target_invalid` — emitted by `processFriendRequestCreateEvent` when an inbound `friend_request_create`'s `from`-identity equals its `to`-identity (after origin normalization). Defense-in-depth: the sender's local `cannot_friend_self` check should catch this, but the receiver does not trust upstream validation. Retrying will not change the payload. The friend-create rollback callback maps this to client-facing `peer_rejected`.
 
@@ -1119,8 +1120,8 @@ Body limit: 10 MB. Max 50 events per batch. Rate-limited to 90 requests/min per 
 | eventType | Processor | contextType |
 |-----------|-----------|-------------|
 | `create` | `processCreateEvent` | dm |
-| `update` | `processUpdateEvent` | dm |
-| `delete` | `processDeleteEvent` | dm |
+| `update` | `processUpdateEvent` (message resolution and authorship: `dm-system.md` "Relayed edits and deletes") | dm |
+| `delete` | `processDeleteEvent` (same) | dm |
 | `reaction_add` | `processReactionAddEvent` | dm |
 | `reaction_remove` | `processReactionRemoveEvent` | dm |
 | `member_add` | `processMemberAddEvent` | dm |
