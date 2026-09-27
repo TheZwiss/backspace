@@ -653,6 +653,7 @@ Not stored in the outbox or mutation log — fire-and-forget, missed deliveries 
 **Functions:** `federation.ts:processReactionAddEvent()`, `processReactionRemoveEvent()`
 
 - Uses `resolveLocalDmMessage()` for cross-instance message resolution (handles messages originating on this instance vs relayed messages)
+- **Scope:** the resolved message must pass the peer check of "Relayed edits and deletes" (step 4, `isPeerOfMessage`): the signing peer is one of the origins this instance relays the message's conversation to, or the instance the message came from. Else `invalid_target` (terminal) and no reaction is added or removed. A message id alone never reaches a conversation the sender is not part of, including one of this instance's own messages named by `messageHomeInstance = our origin`.
 - Reaction add is idempotent (existing reaction accepted silently)
 - Broadcasts `reaction_added` / `reaction_removed` to local members
 

@@ -571,6 +571,14 @@ export function processReactionAddEvent(
     db,
   );
 
+  // The same scope as relayed edits and deletes: the sender must be a peer of
+  // the message's conversation ("Inbound: Reaction Add/Remove" in dm-system.md).
+  if (localMsg && !isPeerOfMessage(localMsg, sourceInstance)) {
+    console.warn(`[federation] Refused reaction_add on message ${localMsg.id}: ${extractDomain(sourceInstance)} is not a peer of its conversation`);
+    rejected.push({ messageId: event.messageId, reason: 'invalid_target' });
+    return;
+  }
+
   if (!localMsg) {
     rejected.push({ messageId: event.messageId, reason: 'unknown_message' });
     return;
@@ -667,6 +675,14 @@ export function processReactionRemoveEvent(
     sourceInstance,
     db,
   );
+
+  // The same scope as relayed edits and deletes: the sender must be a peer of
+  // the message's conversation ("Inbound: Reaction Add/Remove" in dm-system.md).
+  if (localMsg && !isPeerOfMessage(localMsg, sourceInstance)) {
+    console.warn(`[federation] Refused reaction_remove on message ${localMsg.id}: ${extractDomain(sourceInstance)} is not a peer of its conversation`);
+    rejected.push({ messageId: event.messageId, reason: 'invalid_target' });
+    return;
+  }
 
   if (!localMsg) {
     rejected.push({ messageId: event.messageId, reason: 'unknown_message' });
