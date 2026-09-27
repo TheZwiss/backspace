@@ -195,10 +195,11 @@ async function main(): Promise<void> {
   // Initialize database
   getDb();
 
-  // Reset orphaned `users.status` rows for locally-homed users. The previous
-  // process's in-memory disconnect timers are gone, so any non-offline row
-  // is stale by construction. Replicated (federated) rows are skipped — their
-  // status is a projection of remote presence, not local WS state. Must run
+  // Reset orphaned `users.status` rows this instance owns (native and detached
+  // accounts). The previous process's in-memory disconnect timers are gone, so
+  // any non-offline owned row is stale by construction. Replicated rows are
+  // skipped — their status is a projection of remote presence, not local WS
+  // state. Must run
   // before WS auth is accepted so the first connection broadcasts the correct
   // online transition. See utils/presenceBoot.ts.
   resetStalePresenceOnBoot();

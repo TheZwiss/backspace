@@ -122,6 +122,33 @@ describe('resetStalePresenceOnBoot', () => {
     expect(getStatus(remoteDndId)).toBe('dnd');
   });
 
+  it('resets a detached account, whose status is local connection state like a native one', async () => {
+    // Detached: homeInstance kept for provenance, but the home was reset and
+    // this instance now owns the account's status (ownsChosenStatus).
+    const detachedId = insertUser({
+      username: 'dave@reset.example',
+      status: 'dnd',
+      chosenStatus: 'dnd',
+      homeInstance: 'reset.example',
+      homeUserId: 'dead-home-1',
+      federationHomeOrphaned: 1,
+    });
+    const replicatedId = insertUser({
+      username: 'erin@home.example',
+      status: 'dnd',
+      homeInstance: 'home.example',
+      homeUserId: 'home-1',
+      federationHomeOrphaned: 0,
+    });
+    const { resetStalePresenceOnBoot } = await import('./presenceBoot.js');
+
+    const changed = resetStalePresenceOnBoot();
+
+    expect(changed).toBe(1);
+    expect(getStatus(detachedId)).toBe('offline');
+    expect(getStatus(replicatedId)).toBe('dnd');
+  });
+
   it('does not modify soft-deleted (tombstoned) users', async () => {
     const tombstonedId = insertUser({
       username: 'gone',

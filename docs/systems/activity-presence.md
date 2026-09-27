@@ -131,7 +131,7 @@ The rules live in `utils/presenceStatus.ts` (pure) and `ws/presence.ts`:
 - **On connect:** WebSocket auth (`ws/handler.ts`, after `authenticated = true`) writes `status = statusOnConnect(row)` and publishes the same value in the `ready` payload's `user`, the local `presence_update` broadcast and the S2S relay. For a row that owns its choice (native or detached, see below) that is `chosen_status`. For a replicated row it is the row's current `status` (the home instance's projection) unless that is `'offline'`, in which case `'online'`; the replicated row's own `chosen_status` is never used. The REST `/api/auth/login` route does **not** set status — login alone does not imply a live socket; the WS handshake is the single source of truth.
 - **On manual change:** REST `PATCH /api/users/@me { status }` and the WS `presence_update` client event both call `applyChosenStatus`. It writes `chosen_status` (only on rows that own their choice) and, while the user is connected, `status`, the in-memory `userStatuses` cache, a `presence_update` to friends, DM and space co-members and the user's own sessions, and an S2S relay. Without a connection only `chosen_status` changes. `'offline'` is rejected (`status_invalid` over REST, an error event over WS).
 - **On disconnect:** After 5s grace period, server sets `status = 'offline'` in DB (`ws/handler.ts:finalizeDisconnect`). `chosen_status` is untouched.
-- **On boot:** Server resets stale `status` rows for locally-homed, non-deleted users (see "Boot Reset" below). `chosen_status` is untouched.
+- **On boot:** Server resets stale `status` rows for non-deleted accounts that own their status (native or detached; see "Boot Reset" below). `chosen_status` is untouched.
 
 ### The client's copy of the user's own status
 
@@ -153,27 +153,19 @@ This is the one statement of the rule; `utils/selfStatus.ts`, `utils/alerts.ts` 
 
 `users.status` is only flipped back to `'offline'` by `ConnectionManager.finalizeDisconnect()` after a real WS close + 5s grace timer. Those timers live in process memory, so a server restart (deploy, crash, OOM, kill) loses them and any row currently set to `'online'`, `'idle'`, or `'dnd'` stays frozen at that value forever — making the user appear permanently online to friends and space co-members until they next connect.
 
-`resetStalePresenceOnBoot()` runs once during server boot in `index.ts`, after `getDb()`/`seedDatabase()` and before WebSocket route registration. It executes a single update:
+`resetStalePresenceOnBoot()` runs once during server boot in `index.ts`, after `getDb()`/`seedDatabase()` and before WebSocket route registration. It sets `status = 'offline'` on every row that passes three guards:
 
-```
-UPDATE users
-   SET status = 'offline'
- WHERE home_instance IS NULL
-   AND is_deleted = 0
-   AND status != 'offline'
-```
-
-Three guards on the WHERE clause:
-
-1. **`home_instance IS NULL`** — replicated user stubs (federated identities homed elsewhere) have their status projected to us by the home instance via S2S `presence_update` relay events (see `federation.md` §10 — Presence Sync). Their status must not be touched on our boot. On peer deactivation, `markPeerStubsOffline` flips them to `offline`; on peer (re)activation, the home instance re-emits a fresh snapshot for relationship-related online natives.
+1. **The account owns its status** (`ownsChosenStatus`: native, or detached from a reset home). Such a row's live `status` is this instance's WebSocket state, so it is stale after a restart. A replicated row (home instance elsewhere, not detached) has its status projected to us by the home instance via S2S `presence_update` relay events (see `federation.md` §10 — Presence Sync) and is not touched on our boot. On peer deactivation, `markPeerStubsOffline` flips those rows to `offline`; on peer (re)activation, the home instance re-emits a fresh snapshot for relationship-related online natives.
 2. **`is_deleted = 0`** — tombstoned users are excluded from presence broadcasts already; their stored status is left alone as a maintenance courtesy (no behavioral effect either way, but avoids silent rewrites).
 3. **`status != 'offline'`** — keeps the operation a no-op once steady-state is reached; `changes` is logged only when non-zero.
+
+The candidate rows (guards 2 and 3) are selected in SQL and filtered with `ownsChosenStatus` in code, so the boot reset uses the same rule as `statusOnConnect` and `applyChosenStatus` rather than a copy of it.
 
 Because the in-memory `ConnectionManager` is empty at boot by construction, no live connection can be misrepresented by this reset.
 
 ### Connect/Disconnect Flow
 
-1. **Server boot** → `resetStalePresenceOnBoot()` flips any locally-homed, non-deleted `online`/`idle`/`dnd` rows to `offline`. Federated rows untouched.
+1. **Server boot** → `resetStalePresenceOnBoot()` flips any non-deleted `online`/`idle`/`dnd` row that owns its status (native or detached) to `offline`. Replicated rows untouched.
 2. **Auth succeeds** → `status` set to the connect status (`chosen_status` for an account that owns its choice) in DB → local `presence_update` broadcast to friends + DM members + space co-members via `collectProfileBroadcastTargetIds` → S2S `presence_update` queued to all active peers via `queuePresenceRelay` (mirrors profile_update fanout).
 3. **Last socket closes** → 5-second grace period (`scheduleDisconnect`) to allow tab refresh/reconnect.
 4. **Grace period expires** → `finalizeDisconnect`: sets DB status to `'offline'`, clears in-memory activities, broadcasts local `presence_update` to friends/DM/space co-members, queues S2S `presence_update` to peers.
