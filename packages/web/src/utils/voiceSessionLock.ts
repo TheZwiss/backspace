@@ -22,45 +22,49 @@ function isAbortError(error: unknown): boolean {
 
 /**
  * Takes the shared voice-session lock for this tab and keeps it until the
- * returned function is called. That function withdraws the request if it is
- * still queued, releases the lock if it is held, and resolves once the lock
- * is gone. Returns null when the Web Locks API is unavailable.
+ * returned function is called, which releases it (or withdraws the request if
+ * it is still queued). Returns null when the Web Locks API is unavailable.
  */
-export function holdVoiceSessionLock(): (() => Promise<void>) | null {
+export function holdVoiceSessionLock(): (() => void) | null {
   const locks = lockManager();
   if (!locks) return null;
   const controller = new AbortController();
   let release: () => void = () => {};
   const held = new Promise<void>((resolve) => { release = resolve; });
-  const gone = locks
+  locks
     .request(VOICE_SESSION_LOCK, { mode: 'shared', signal: controller.signal }, () => held)
-    .then(() => undefined, () => undefined);
+    .catch((error: unknown) => {
+      if (!isAbortError(error)) console.warn('[voiceSessionLock] Shared lock request failed', error);
+    });
   return () => {
     controller.abort();
     release();
-    return gone;
   };
 }
+
+type ExclusiveOutcome =
+  | { kind: 'ran' }
+  | { kind: 'yielded' }
+  | { kind: 'aborted' }
+  | { kind: 'failed'; error: unknown };
 
 /**
  * Runs `task` while holding the exclusive voice-session lock, which is only
  * granted when no tab holds the shared lock. Resolves true once the task has
- * run, false if `signal` aborted first.
+ * run, false if `signal` aborted first. Rejects only if `task` itself throws.
  *
  * Lock requests are granted in order, so a tab that starts a session while
  * this request is queued has its shared request queued behind it and does not
  * hold the lock yet. The task therefore also yields to any shared request
  * still pending when the exclusive lock is granted, and queues again behind it.
  *
- * `after` is awaited before the lock is requested. The caller passes the
- * release of its own shared lock there, so a tab never queues behind itself.
+ * If the lock manager itself fails, the task runs anyway under the calling
+ * tab's own check, the same as without the Web Locks API.
  */
 export async function runWhenNoVoiceSession(
   task: () => Promise<void>,
   signal: AbortSignal,
-  after?: Promise<void>,
 ): Promise<boolean> {
-  if (after) await after;
   if (signal.aborted) return false;
 
   const locks = lockManager();
@@ -70,27 +74,35 @@ export async function runWhenNoVoiceSession(
   }
 
   while (!signal.aborted) {
-    let outcome: 'ran' | 'yielded' | 'aborted';
+    let outcome: ExclusiveOutcome;
     try {
       outcome = await locks.request(
         VOICE_SESSION_LOCK,
         { mode: 'exclusive', signal },
-        async (): Promise<'ran' | 'yielded' | 'aborted'> => {
+        async (): Promise<ExclusiveOutcome> => {
           const { pending = [] } = await locks.query();
-          if (signal.aborted) return 'aborted';
+          if (signal.aborted) return { kind: 'aborted' };
           if (pending.some((request) => request.name === VOICE_SESSION_LOCK && request.mode === 'shared')) {
-            return 'yielded';
+            return { kind: 'yielded' };
           }
-          await task();
-          return 'ran';
+          try {
+            await task();
+          } catch (error) {
+            return { kind: 'failed', error };
+          }
+          return { kind: 'ran' };
         },
       );
     } catch (error) {
       if (isAbortError(error)) return false;
-      throw error;
+      console.warn('[voiceSessionLock] Lock manager failed, applying without the cross-tab check', error);
+      if (signal.aborted) return false;
+      await task();
+      return true;
     }
-    if (outcome === 'ran') return true;
-    if (outcome === 'aborted') return false;
+    if (outcome.kind === 'ran') return true;
+    if (outcome.kind === 'aborted') return false;
+    if (outcome.kind === 'failed') throw outcome.error;
   }
   return false;
 }

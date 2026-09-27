@@ -16,9 +16,10 @@ vi.mock('../../audio/AudioManager', () => ({
 }));
 
 // ── virtual:pwa-register/react ─────────────────────────────────────────────
-// The real hook drives workbox-window. The fake exposes the two things the
-// component reads (the needRefresh flag and updateServiceWorker) and lets the
-// test raise needRefresh the way a waiting worker would.
+// The real hook drives workbox-window. The fake exposes what the component
+// reads (the needRefresh flag and updateServiceWorker), lets the test raise
+// needRefresh the way a waiting worker would, and keeps the options so the
+// test can fire the plugin's own "controlling" handling.
 
 interface RegisterOptions {
   onNeedReload?: () => void;
@@ -28,6 +29,7 @@ interface RegisterOptions {
 const pwa = vi.hoisted(() => ({
   updateServiceWorker: vi.fn<(reloadPage?: boolean) => Promise<void>>(),
   setNeedRefresh: null as ((value: boolean) => void) | null,
+  options: undefined as RegisterOptions | undefined,
 }));
 
 vi.mock('virtual:pwa-register/react', () => ({
@@ -35,7 +37,7 @@ vi.mock('virtual:pwa-register/react', () => ({
     const [needRefresh, setNeedRefresh] = useState(false);
     const [offlineReady, setOfflineReady] = useState(false);
     pwa.setNeedRefresh = setNeedRefresh;
-    void options;
+    pwa.options = options;
     return {
       needRefresh: [needRefresh, setNeedRefresh],
       offlineReady: [offlineReady, setOfflineReady],
@@ -79,8 +81,8 @@ interface HeldLock {
 class FakeLockManager {
   held: HeldLock[] = [];
   queue: QueuedRequest[] = [];
-  /** Every request, with the locks that were held at the moment it was made. */
-  log: { mode: LockMode; heldAtRequest: HeldLock[] }[] = [];
+  /** When set, query() rejects with it, as a broken lock manager would. */
+  queryError: Error | null = null;
 
   request(
     name: string,
@@ -90,9 +92,13 @@ class FakeLockManager {
     const options: LockOptions = typeof optionsOrCallback === 'function' ? {} : optionsOrCallback;
     const callback = typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
     if (!callback) throw new TypeError('callback required');
+    // The code under test must never use these: ifAvailable would skip the
+    // queue the cross-tab rule depends on, and steal would break another
+    // tab's lock.
+    if (options.ifAvailable) throw new Error('FakeLockManager: ifAvailable is not supported');
+    if (options.steal) throw new Error('FakeLockManager: steal is not supported');
     const signal = options.signal ?? undefined;
     if (signal?.aborted) return Promise.reject(new DOMException('aborted', 'AbortError'));
-    this.log.push({ mode: options.mode ?? 'exclusive', heldAtRequest: [...this.held] });
     return new Promise((resolve, reject) => {
       const entry: QueuedRequest = {
         name,
@@ -115,6 +121,7 @@ class FakeLockManager {
   }
 
   query(): Promise<LockManagerSnapshot> {
+    if (this.queryError) return Promise.reject(this.queryError);
     return Promise.resolve({
       held: this.held.map((l) => ({ name: l.name, mode: l.mode, clientId: 'fake' })),
       pending: this.queue.map((r) => ({ name: r.name, mode: r.mode, clientId: 'fake' })),
@@ -212,8 +219,22 @@ async function changeController(next: ServiceWorker): Promise<void> {
   await flush();
 }
 
+/**
+ * What vite-plugin-pwa does on workbox's "controlling" event for a page that
+ * was controlled at load: call onNeedReload, or reload itself if none is set.
+ */
+async function firePluginControlling(): Promise<void> {
+  await act(async () => {
+    const onNeedReload = pwa.options?.onNeedReload;
+    if (onNeedReload) onNeedReload();
+    else window.location.reload();
+  });
+  await flush();
+}
+
 beforeEach(() => {
   useVoiceStore.getState().resetSession();
+  pwa.options = undefined;
   pwa.updateServiceWorker.mockReset();
   pwa.updateServiceWorker.mockResolvedValue(undefined);
   pwa.setNeedRefresh = null;
@@ -278,11 +299,10 @@ describe('SwAutoUpdate: applying a waiting build', () => {
     expect(pwa.updateServiceWorker).toHaveBeenCalledTimes(1);
   });
 
-  it('holds the update after an exhausted reconnect that kept the channel', async () => {
+  it('holds the update for an accepted DM call that has not reached LiveKit yet', async () => {
     render(<SwAutoUpdate />);
-    // LiveKit gave up: the status is back to disconnected, but the channel
-    // stays so VoiceControls can offer a retry.
-    await setVoice({ voiceConnectionStatus: 'disconnected', currentVoiceChannelId: 'voice-1' });
+    // The caller between dm_call_accepted and connect() setting 'connecting'.
+    await setVoice({ activeDmCall: { dmChannelId: 'dm-1' }, voiceConnectionStatus: 'disconnected', connectionError: null });
 
     await raiseNeedRefresh();
     expect(pwa.updateServiceWorker).not.toHaveBeenCalled();
@@ -291,10 +311,44 @@ describe('SwAutoUpdate: applying a waiting build', () => {
     expect(pwa.updateServiceWorker).toHaveBeenCalledTimes(1);
   });
 
+  it('does not hold the update for a space channel LiveKit gave up on', async () => {
+    render(<SwAutoUpdate />);
+    // The channel is kept only so VoiceControls can offer a retry.
+    await setVoice({
+      voiceConnectionStatus: 'disconnected',
+      currentVoiceChannelId: 'voice-1',
+      connectionError: 'network_disconnect',
+    });
+
+    await raiseNeedRefresh();
+    expect(pwa.updateServiceWorker).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not hold the update for a DM call LiveKit gave up on', async () => {
+    render(<SwAutoUpdate />);
+    await setVoice({
+      voiceConnectionStatus: 'disconnected',
+      activeDmCall: { dmChannelId: 'dm-1' },
+      connectionError: 'network_disconnect',
+    });
+
+    await raiseNeedRefresh();
+    expect(pwa.updateServiceWorker).toHaveBeenCalledTimes(1);
+  });
+
   it('applies the update at once when no tab is in a call', async () => {
     render(<SwAutoUpdate />);
     await raiseNeedRefresh();
     expect(pwa.updateServiceWorker).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not let the plugin reload the page mid-call', async () => {
+    container.controller = fakeWorker('old');
+    render(<SwAutoUpdate />);
+    await setVoice({ voiceConnectionStatus: 'connected', currentVoiceChannelId: 'voice-1' });
+
+    await firePluginControlling();
+    expect(reload).not.toHaveBeenCalled();
   });
 
   it('falls back to the per-tab rule when the Web Locks API is missing', async () => {
@@ -441,18 +495,46 @@ describe('SwAutoUpdate: cross-tab voice-session lock', () => {
     expect(pwa.updateServiceWorker).toHaveBeenCalledTimes(1);
   });
 
-  it('never queues its update behind its own shared lock', async () => {
+  it('re-reads the store when a call starts just as the lock is granted', async () => {
+    const otherTab = otherTabJoinsCall(locks);
+    await flush();
     render(<SwAutoUpdate />);
-    await setVoice({ voiceConnectionStatus: 'connected', currentVoiceChannelId: 'voice-1' });
     await raiseNeedRefresh();
-    expect(locks.count(LOCK_NAME, 'exclusive').pending).toBe(0);
+
+    // The other tab leaves and this tab joins in the same turn: the exclusive
+    // lock is granted before React has run the effect cleanup that would
+    // withdraw the request.
+    await act(async () => {
+      otherTab.leave();
+      useVoiceStore.setState({ voiceConnectionStatus: 'connecting', currentVoiceChannelId: 'voice-1' });
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+    });
+    await flush();
+    expect(pwa.updateServiceWorker).not.toHaveBeenCalled();
 
     await endSession();
     expect(pwa.updateServiceWorker).toHaveBeenCalledTimes(1);
-    const exclusiveRequests = locks.log.filter((entry) => entry.mode === 'exclusive');
-    expect(exclusiveRequests).toHaveLength(1);
-    expect(exclusiveRequests[0].heldAtRequest).toEqual([]);
-    expect(locks.held).toHaveLength(0);
-    expect(locks.queue).toHaveLength(0);
+  });
+
+  it('applies the update under the per-tab rule when the lock manager fails', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    locks.queryError = new Error('lock manager unavailable');
+    render(<SwAutoUpdate />);
+
+    await raiseNeedRefresh();
+    expect(pwa.updateServiceWorker).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it('does not retry outside the lock when applying the update fails', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    pwa.updateServiceWorker.mockRejectedValueOnce(new Error('postMessage failed'));
+    render(<SwAutoUpdate />);
+
+    await raiseNeedRefresh();
+    expect(pwa.updateServiceWorker).toHaveBeenCalledTimes(1);
+    expect(error).toHaveBeenCalled();
+    error.mockRestore();
   });
 });

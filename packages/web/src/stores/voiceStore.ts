@@ -202,23 +202,26 @@ interface VoiceState {
 }
 
 /**
- * True while this client has any voice session that a page reload or a
- * dropped socket would end: a LiveKit room that is live or being joined, a
- * space channel kept after LiveKit gave up reconnecting (VoiceControls still
- * offers the retry), a DM call, or a DM call ringing in either direction.
- * Connection status alone misses the ringing states: the caller is not in
- * LiveKit until `dm_call_accepted` and the server tears the ringing room down
- * when the caller's socket goes away, while the callee's ring prompt lives
- * only in this store and is not replayed after a reload.
+ * True while this client is in a voice session that a page reload would end:
+ * - a LiveKit room that is live, being joined or reconnecting;
+ * - a DM call ringing in either direction. The caller is not in LiveKit until
+ *   `dm_call_accepted`, and the server tears the ringing room down when the
+ *   caller's socket goes away; the callee's ring prompt lives only in this
+ *   store and is not replayed after a reload;
+ * - an accepted DM call on its way into LiveKit (the caller between
+ *   `dm_call_accepted` and the connect setting 'connecting').
+ *
+ * Not a session: a space channel or DM call kept after LiveKit gave up
+ * reconnecting (status 'disconnected' with a `connectionError`). The store
+ * keeps them only so the UI can offer a retry, nothing is live, and a laptop
+ * that slept in a call would otherwise count as in one for days.
  */
 export function hasVoiceSession(
-  state: Pick<VoiceState, 'voiceConnectionStatus' | 'currentVoiceChannelId' | 'activeDmCall' | 'outgoingCall' | 'incomingCall'>,
+  state: Pick<VoiceState, 'voiceConnectionStatus' | 'connectionError' | 'activeDmCall' | 'outgoingCall' | 'incomingCall'>,
 ): boolean {
-  return state.voiceConnectionStatus !== 'disconnected'
-    || state.currentVoiceChannelId !== null
-    || state.activeDmCall !== null
-    || state.outgoingCall !== null
-    || state.incomingCall !== null;
+  if (state.voiceConnectionStatus !== 'disconnected') return true;
+  if (state.outgoingCall !== null || state.incomingCall !== null) return true;
+  return state.activeDmCall !== null && state.connectionError === null;
 }
 
 export const useVoiceStore = create<VoiceState>()(
