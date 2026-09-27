@@ -48,6 +48,8 @@ export function ReactionPill({ emoji, reactions, onToggle }: ReactionPillProps) 
   const isMobile = useUIStore((s) => s.isMobile);
   const descriptionId = useId();
   const [open, setOpen] = useState(false);
+  // A show is scheduled but its delay has not run out yet.
+  const [pending, setPending] = useState(false);
   const showTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const anchorRef = useRef<HTMLButtonElement>(null);
   const floatingRef = useRef<HTMLDivElement>(null);
@@ -79,27 +81,35 @@ export function ReactionPill({ emoji, reactions, onToggle }: ReactionPillProps) 
 
   const show = () => {
     clearTimeout(showTimerRef.current);
-    showTimerRef.current = setTimeout(() => setOpen(true), SHOW_DELAY_MS);
+    setPending(true);
+    showTimerRef.current = setTimeout(() => {
+      setPending(false);
+      setOpen(true);
+    }, SHOW_DELAY_MS);
   };
   const hide = () => {
     clearTimeout(showTimerRef.current);
+    setPending(false);
     setOpen(false);
   };
 
-  // Escape dismisses the tooltip however it opened (WCAG 1.4.13). A hovered
-  // pill does not have focus, so its own keydown never sees the key; listen
-  // on the document while the tooltip shows. It stays closed until the
-  // pointer or focus leaves and comes back.
+  // Escape dismisses the tooltip however it opened (WCAG 1.4.13), and cancels
+  // one still waiting out its delay. A hovered pill does not have focus, so
+  // its own keydown never sees the key; listen on the document while a show
+  // is pending or the tooltip is open. It stays closed until the pointer or
+  // focus leaves and comes back.
+  const escapeArmed = pending || tooltipOpen;
   useEffect(() => {
-    if (!tooltipOpen) return;
+    if (!escapeArmed) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       clearTimeout(showTimerRef.current);
+      setPending(false);
       setOpen(false);
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [tooltipOpen]);
+  }, [escapeArmed]);
 
   return (
     <>

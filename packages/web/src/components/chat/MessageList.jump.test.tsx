@@ -200,6 +200,34 @@ describe('reply preview jump', () => {
     expect(target).not.toHaveAttribute('tabindex');
   });
 
+  it('leaves focus alone when the user moved it while the jump was loading (issue #313)', async () => {
+    const original = msg('3', 'an old question');
+    const reply = msg('60', 'answering that old question', { replyToId: '3', replyTo: original });
+    useChatStore.setState({
+      messages: new Map([[CHANNEL, [msg('59', 'recent'), reply]]]),
+      hasMore: new Map([[CHANNEL, true]]),
+    });
+    let resolveLoad: (messages: MessageWithUser[]) => void = () => {};
+    messagesAround.mockReturnValue(new Promise<MessageWithUser[]>((resolve) => { resolveLoad = resolve; }));
+    const composer = document.createElement('textarea');
+    document.body.appendChild(composer);
+    try {
+      renderList();
+
+      await userEvent.click(screen.getByRole('button', { name: /jump to the original message/i }));
+      expect(messagesAround).toHaveBeenCalled();
+      // The user starts typing while the window loads.
+      composer.focus();
+
+      await act(async () => { resolveLoad([msg('2', 'older'), original, msg('4', 'newer')]); });
+      await waitFor(() => expect(document.getElementById('msg-3')).toHaveClass('message-jump-highlight'));
+
+      expect(composer).toHaveFocus();
+    } finally {
+      composer.remove();
+    }
+  });
+
   it('is reachable and activated from the keyboard', async () => {
     const original = msg('10', 'where is the release checklist?');
     const reply = msg('11', 'in the wiki', { replyToId: '10', replyTo: original });

@@ -586,26 +586,37 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
   // outright: a target already on screen near the bottom may not move the
   // list at all, no scroll event follows, and a closed gate would never
   // reopen, so the list would stop following new messages.
-  const scrollToRenderedMessage = useCallback((messageId: string): boolean => {
+  // Returns the row it scrolled to, or null when the row is not rendered.
+  const scrollToRenderedMessage = useCallback((messageId: string): HTMLElement | null => {
     const container = containerRef.current;
     const el = container?.querySelector<HTMLElement>(`[id="msg-${messageId}"]`);
-    if (!container || !el) return false;
+    if (!container || !el) return null;
     cancelBottomPinning();
     const destination = centredScrollTop(container, el);
     setBottomFlags(container.scrollHeight - container.clientHeight - destination);
     beginSmoothScrollIntent('message');
     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
     flashMessage(el);
-    focusJumpTarget(el);
-    return true;
+    return el;
   }, [cancelBottomPinning, setBottomFlags, beginSmoothScrollIntent]);
 
   const jumpToMessage = useCallback(async (messageId: string): Promise<void> => {
     const seq = ++jumpSeqRef.current;
     const requestChannelId = channelId;
     const isCurrent = () => jumpSeqRef.current === seq && currentChannelIdRef.current === requestChannelId;
+    // Focus follows the jump only if nobody moved it meanwhile: a jump that
+    // waits on the network must not pull focus out of the composer the user
+    // clicked into while it loaded.
+    const focusAtStart = document.activeElement;
+    const land = (): boolean => {
+      const el = isMessageLoaded(requestChannelId, messageId) ? scrollToRenderedMessage(messageId) : null;
+      if (!el) return false;
+      const active = document.activeElement;
+      if (active === focusAtStart || active === null || active === document.body) focusJumpTarget(el);
+      return true;
+    };
 
-    if (isMessageLoaded(requestChannelId, messageId) && scrollToRenderedMessage(messageId)) return;
+    if (land()) return;
 
     // Not loaded: replace the cache with the window around the target on the
     // channel's origin. Close the at-bottom gate first: Effect A would
@@ -622,7 +633,7 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
       await nextFrame();
       await nextFrame();
       if (!isCurrent()) return;
-      if (isMessageLoaded(requestChannelId, messageId) && scrollToRenderedMessage(messageId)) return;
+      if (land()) return;
     }
 
     syncBottomStateFromLayout();

@@ -86,6 +86,29 @@ describe('ReactionPill', () => {
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
   });
 
+  it('cancels a pending keyboard tooltip on Escape within the show delay (issue #313)', () => {
+    const pill = renderPill([reaction(MIRA, 1)]);
+    vi.spyOn(pill, 'matches').mockImplementation((selector) => selector === ':focus-visible');
+
+    fireEvent.focus(pill);
+    act(() => { vi.advanceTimersByTime(100); });
+    fireEvent.keyDown(pill, { key: 'Escape' });
+    act(() => { vi.advanceTimersByTime(1000); });
+
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+  });
+
+  it('cancels a pending hover tooltip on Escape within the show delay (issue #313)', () => {
+    const pill = renderPill([reaction(MIRA, 1)]);
+
+    fireEvent.mouseEnter(pill);
+    act(() => { vi.advanceTimersByTime(100); });
+    fireEvent.keyDown(document, { key: 'Escape' });
+    act(() => { vi.advanceTimersByTime(1000); });
+
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+  });
+
   it('does not open on the focus a mouse click leaves behind', () => {
     const pill = renderPill([reaction(MIRA, 1)]);
     // Pointer focus: :focus-visible does not match.
