@@ -11,6 +11,19 @@
     },
     "actions": {
       "confirmDelete": "Подтвердить удаление"
+    },
+    "reply": {
+      "jump": "Перейти к исходному сообщению"
+    },
+    "reactions": {
+      "you": "Вы",
+      "others_one": "ещё {{count}} человек",
+      "others_few": "ещё {{count}} человека",
+      "others_many": "ещё {{count}} человек",
+      "others_other": "ещё {{count}} человека",
+      "bySelf": "Вы отреагировали",
+      "byOne": "Реакция: {{name}}",
+      "byMany": "{{names}} отреагировали"
     }
   },
   "list": {
@@ -18,6 +31,10 @@
     "loading": "Загрузка сообщений",
     "loadingOlder": "Загрузка предыдущих сообщений",
     "jumpToPresent": "К новым сообщениям",
+    "jump": {
+      "unavailable": "Это сообщение больше недоступно",
+      "failed": "Не удалось загрузить сообщение"
+    },
     "welcome": {
       "channel": {
         "title": "Добро пожаловать в канал!",

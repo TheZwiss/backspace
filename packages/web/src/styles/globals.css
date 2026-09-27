@@ -499,11 +499,13 @@
 .skeleton-bar    { height: 12px; border-radius: 6px; }
 .skeleton-block  { border-radius: 8px; }
 
-@keyframes search-flash {
+/* Jump-to-message flash: the row a search result or a reply preview jumped to.
+   MessageList adds the class and removes it on animationend. */
+@keyframes message-jump-flash {
   0% { background-color: rgb(var(--accent-primary) / 0.2); }
   100% { background-color: transparent; }
 }
-.search-highlight { animation: search-flash 2s ease-out; }
+.message-jump-highlight { animation: message-jump-flash 2s ease-out; }
 
 @keyframes stepForward {
   from { transform: translateX(24px); opacity: 0; }

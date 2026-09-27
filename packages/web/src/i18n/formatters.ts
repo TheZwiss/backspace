@@ -37,6 +37,8 @@ export interface Formatters {
   formatBytes: (bytes: number) => string;
   /** `05:08` / `2:05:08`: elapsed whole seconds with locale-native digits. */
   formatDuration: (elapsedSeconds: number) => string;
+  /** `You, Mira, and 3 others` / `Du, Mira und 3 weitere`: an "and" list with the language's separators. */
+  formatList: (items: readonly string[]) => string;
 }
 
 type DateTimeOptions = Intl.DateTimeFormatOptions;
@@ -56,6 +58,7 @@ export function createFormatters(getLocale: () => string): Formatters {
   const dateCache = new Map<string, Intl.DateTimeFormat>();
   const numberCache = new Map<string, Intl.NumberFormat>();
   const relativeCache = new Map<string, Intl.RelativeTimeFormat>();
+  const listCache = new Map<string, Intl.ListFormat>();
 
   function dateFormat(options: DateTimeOptions): Intl.DateTimeFormat {
     const locale = getLocale();
@@ -85,6 +88,16 @@ export function createFormatters(getLocale: () => string): Formatters {
     if (!formatter) {
       formatter = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
       relativeCache.set(locale, formatter);
+    }
+    return formatter;
+  }
+
+  function listFormat(): Intl.ListFormat {
+    const locale = getLocale();
+    let formatter = listCache.get(locale);
+    if (!formatter) {
+      formatter = new Intl.ListFormat(locale, { style: 'long', type: 'conjunction' });
+      listCache.set(locale, formatter);
     }
     return formatter;
   }
@@ -162,6 +175,8 @@ export function createFormatters(getLocale: () => string): Formatters {
         ? `${numberFormat({ maximumFractionDigits: 0, useGrouping: false }).format(hours)}:${tail}`
         : tail;
     },
+
+    formatList: (items) => listFormat().format(items),
   };
 }
 

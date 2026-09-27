@@ -5,9 +5,9 @@ Source files:
 - `packages/web/src/components/chat/SearchPopover.tsx` — Client-side search UI (filter bar, result rendering, jump-to-message)
 - `packages/web/src/api/client.ts` — API client `search` namespace and `messagesAround` methods
 - `packages/web/src/stores/chatStore.ts` — `loadMessagesAround()` store action
-- `packages/web/src/components/chat/MessageList.tsx` — Jump-to-message scroll + highlight logic
+- `packages/web/src/components/chat/MessageList.tsx` — Jump-to-message scroll + highlight logic (shared with reply previews)
 - `packages/web/src/components/layout/MainContent.tsx` — Search button + popover wiring
-- `packages/web/src/styles/globals.css` — `.search-highlight` animation
+- `packages/web/src/styles/globals.css` — `.message-jump-highlight` animation
 
 ---
 
@@ -111,7 +111,7 @@ Both types are defined in `packages/shared/src/types.ts`. See database.md for un
 
 ## Messages-Around Endpoint
 
-Used for jump-to-message navigation (from search results and deep links). Loads a window of messages centered on a target message.
+Used for jump-to-message navigation (from search results and reply previews). Loads a window of messages centered on a target message.
 
 ### Parameters
 
@@ -224,7 +224,7 @@ Each result shows:
 
 ## Client-Side: Jump-to-Message
 
-The jump-to-message flow spans three components.
+Search results and reply previews share one jump path in `MessageList.tsx`. [message-list.md](message-list.md), "Jump to message", is the full description: the two entry points, the at-bottom gate, detached windows and Jump to Present.
 
 ### Flow
 
@@ -233,40 +233,41 @@ The jump-to-message flow spans three components.
      → onJumpToMessage(messageId) callback fires
      → MainContent: setJumpToMessageId(id), setSearchOpen(false)
 
-2. MessageList receives jumpToMessageId prop
-     → Check if message element exists in DOM: document.getElementById(`msg-${jumpToMessageId}`)
-     → If found: scroll + highlight immediately
-     → If not found: call loadMessagesAround(channelId, messageId)
-         → chatStore.loadMessagesAround() replaces the channel's message cache entirely
-         → After React render (double requestAnimationFrame), scroll + highlight
+2. MessageList takes the request once (onJumpHandled clears it in MainContent)
+     → jumpToMessage(id)
+     → Loaded and rendered: scroll + highlight
+     → Otherwise: loadMessagesAround(channelId, id) on the channel's origin
+         → 'loaded': after two frames, scroll + highlight
+         → 'not_found' / 'failed': info toast, view stays put
 
 3. Scroll + Highlight:
+     → at-bottom gate set from where the jump lands (no auto-scroll back to the bottom)
      → el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-     → el.classList.add('search-highlight')
-     → setTimeout 2000ms → el.classList.remove('search-highlight')
-     → onJumpComplete() → resets jumpToMessageId to null
+     → el.classList.add('message-jump-highlight'), removed on animationend
 ```
 
 ### loadMessagesAround (chatStore)
 
-`search.ts:chatStore.loadMessagesAround(channelId, messageId)`:
+`chatStore.loadMessagesAround(channelId, messageId)`:
 
-- Routes to `client.channels.messagesAround()` or `client.dm.messagesAround()` based on `isDmChannel()`
+- Routes to `client.channels.messagesAround()` or `client.dm.messagesAround()` based on `isDmChannel()`, on the channel's origin, with `limit` 50 sent explicitly
 - Normalizes remote asset URLs for federated channels
 - **Replaces** the entire message cache for that channel (not append/prepend)
 - Sets `hasMore` to `true` (enables upward scroll loading from the new position)
+- Adds the channel to `detachedChannels` when 25 or more messages after the target came back (the window stops short of the newest message), and removes it otherwise
 - Updates `channelAccessTimes`
+- Returns `'loaded'`, `'not_found'` (any 404; older peers send it without a code) or `'failed'`
 
-### search-highlight CSS
+### message-jump-highlight CSS
 
 Defined in `globals.css`:
 
 ```css
-@keyframes search-flash {
+@keyframes message-jump-flash {
   0% { background-color: rgb(var(--accent-primary) / 0.2); }
   100% { background-color: transparent; }
 }
-.search-highlight { animation: search-flash 2s ease-out; }
+.message-jump-highlight { animation: message-jump-flash 2s ease-out; }
 ```
 
 Primary-coloured flash (accent color at 20% opacity) that fades to transparent over 2 seconds.

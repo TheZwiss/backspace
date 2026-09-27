@@ -11,6 +11,16 @@
     },
     "actions": {
       "confirmDelete": "确认删除"
+    },
+    "reply": {
+      "jump": "跳转到原消息"
+    },
+    "reactions": {
+      "you": "您",
+      "others_other": "另外 {{count}} 人",
+      "bySelf": "您做出了反应",
+      "byOne": "{{name}} 做出了反应",
+      "byMany": "{{names}} 做出了反应"
     }
   },
   "list": {
@@ -18,6 +28,10 @@
     "loading": "正在加载消息",
     "loadingOlder": "正在加载更早的消息",
     "jumpToPresent": "跳转至最新",
+    "jump": {
+      "unavailable": "该消息已不可用",
+      "failed": "无法加载该消息"
+    },
     "welcome": {
       "channel": {
         "title": "欢迎来到本频道！",

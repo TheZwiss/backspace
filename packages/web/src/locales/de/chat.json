@@ -11,6 +11,17 @@
     },
     "actions": {
       "confirmDelete": "Löschen bestätigen"
+    },
+    "reply": {
+      "jump": "Zur ursprünglichen Nachricht springen"
+    },
+    "reactions": {
+      "you": "Du",
+      "others_one": "{{count}} weitere Person",
+      "others_other": "{{count}} weitere",
+      "bySelf": "Du hast reagiert",
+      "byOne": "{{name}} hat reagiert",
+      "byMany": "{{names}} haben reagiert"
     }
   },
   "list": {
@@ -18,6 +29,10 @@
     "loading": "Nachrichten werden geladen",
     "loadingOlder": "Ältere Nachrichten werden geladen",
     "jumpToPresent": "Zu den neuesten Nachrichten",
+    "jump": {
+      "unavailable": "Diese Nachricht ist nicht mehr verfügbar",
+      "failed": "Die Nachricht konnte nicht geladen werden"
+    },
     "welcome": {
       "channel": {
         "title": "Willkommen im Kanal!",

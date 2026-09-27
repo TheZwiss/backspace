@@ -298,8 +298,8 @@ Any new card list uses this class rather than its own template.
 ### Core
 `fadeIn`, `slideUp`, `slideDown`, `typingFadeIn`, `gradientPulse`, `shimmer` (skeleton loading)
 
-### Search
-`search-flash`, `stepForward`, `stepBack`
+### Search and jump
+`message-jump-flash` (class `.message-jump-highlight`: the row a search result or reply preview jumped to), `stepForward`, `stepBack`
 
 ### Call
 `callRippleLiquid`, `callGlowSoft`, `callRefraction`, `callButtonBreath`

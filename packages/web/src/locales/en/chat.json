@@ -11,6 +11,17 @@
     },
     "actions": {
       "confirmDelete": "Confirm delete"
+    },
+    "reply": {
+      "jump": "Jump to the original message"
+    },
+    "reactions": {
+      "you": "You",
+      "others_one": "{{count}} other",
+      "others_other": "{{count}} others",
+      "bySelf": "You reacted",
+      "byOne": "{{name}} reacted",
+      "byMany": "{{names}} reacted"
     }
   },
   "list": {
@@ -18,6 +29,10 @@
     "loading": "Loading messages",
     "loadingOlder": "Loading older messages",
     "jumpToPresent": "Jump to Present",
+    "jump": {
+      "unavailable": "That message is no longer available",
+      "failed": "Couldn't load that message"
+    },
     "welcome": {
       "channel": {
         "title": "Welcome to the channel!",

@@ -86,6 +86,7 @@ export function MainContent() {
   const searchButtonRef = useRef<HTMLButtonElement>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [jumpToMessageId, setJumpToMessageId] = useState<string | null>(null);
+  const clearJumpRequest = useCallback(() => setJumpToMessageId(null), []);
 
   // Resolve the DM header's "first other" member through the canonical view
   // cache. The hook must be called unconditionally at the component top, so we
@@ -410,7 +411,7 @@ export function MainContent() {
             <MemberListToggleButton />
           </div>
         </div>
-        <MessageList channelId={currentChannelId} jumpToMessageId={jumpToMessageId} onJumpComplete={() => setJumpToMessageId(null)} />
+        <MessageList channelId={currentChannelId} jumpToMessageId={jumpToMessageId} onJumpHandled={clearJumpRequest} />
         {dmPartnerDeleted
           ? <DmDeletedNotice />
           : <MessageInput channelId={currentChannelId} channelName={`@${dmName}`} placeholder={dmInputPlaceholder} />}
@@ -557,7 +558,7 @@ export function MainContent() {
           <MemberListToggleButton />
         </div>
       </div>
-      <MessageList channelId={currentChannelId} jumpToMessageId={jumpToMessageId} onJumpComplete={() => setJumpToMessageId(null)} />
+      <MessageList channelId={currentChannelId} jumpToMessageId={jumpToMessageId} onJumpHandled={clearJumpRequest} />
       <MessageInput channelId={currentChannelId} channelName={channel.name} />
       <SearchPopover
         open={searchOpen}

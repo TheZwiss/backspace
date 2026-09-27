@@ -103,6 +103,14 @@ describe('createFormatters', () => {
     expect(createFormatters(() => 'ar-EG-u-nu-arab').formatDuration(65)).toBe('٠١:٠٥');
   });
 
+  it('joins a list with the language\'s conjunction and separators', () => {
+    expect(createFormatters(() => 'en').formatList(['You', 'Mira', '3 others'])).toBe('You, Mira, and 3 others');
+    expect(createFormatters(() => 'de').formatList(['Du', 'Mira'])).toBe('Du und Mira');
+    expect(createFormatters(() => 'ru').formatList(['Вы', 'Mira', 'Oskar'])).toBe('Вы, Mira и Oskar');
+    expect(createFormatters(() => 'zh').formatList(['您', 'Mira', 'Oskar'])).toBe('您、Mira和Oskar');
+    expect(createFormatters(() => 'en').formatList(['Mira'])).toBe('Mira');
+  });
+
   it('re-reads the language on every call so a language change takes effect', () => {
     let language = 'en';
     const formatters = createFormatters(() => language);

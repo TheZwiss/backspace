@@ -194,6 +194,7 @@ formatter reads `i18n.resolvedLanguage` at call time; components use the
 | `formatNumber(n)` | Counts shown as bare numbers | `Intl.NumberFormat` |
 | `formatPercent(p)` | Sliders that show `150%` | `Intl.NumberFormat` `style: 'percent'` |
 | `formatBytes(n)` | Storage panel, transfer indicator | `Intl.NumberFormat` with `style: 'unit'` and the right byte unit |
+| `formatList(items)` | Reaction tooltip ("You, Mira, and 3 others"): an "and" list with the language's separators | `Intl.ListFormat` `{ style: 'long', type: 'conjunction' }` |
 
 `formatDmTimestamp` in `dmFormatters.ts` keeps its today/yesterday/this-year
 branching but delegates every branch to these formatters, and the "Yesterday"
