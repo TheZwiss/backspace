@@ -489,7 +489,7 @@ Per-user "I want this peering relationship" subscriber rows attached to outbound
 | id | text PK | Snowflake |
 | requestId | text NOT NULL | FK → peer_approval_requests.id CASCADE — parent deletion (admin approve→active fanout, admin deny, last-subscriber cancel, expiry) automatically clears subscriber rows. |
 | userId | text NOT NULL | FK → users.id CASCADE |
-| triggerReason | text NOT NULL | `'friend_add'` \| `'space_join'` \| `'direct_message'` \| `'instance_connect'` (`PeeringTriggerReason` enum in `packages/shared/src/types.ts`). Rows written by `/peer/ensure` before `instance_connect` existed say `friend_add` with an origin URL as target; they expire with their parent within 30 days. |
+| triggerReason | text NOT NULL | `'friend_add'` \| `'space_join'` \| `'direct_message'` \| `'instance_connect'` (`PeeringTriggerReason` enum in `packages/shared/src/types.ts`). Rows written by `/peer/ensure` before `instance_connect` existed said `friend_add` with an origin URL as target; migration `0018_peering_reason_instance_connect` relabels them (see [peer_approval_notifications](#peer_approval_notifications)). |
 | triggerTarget | text NOT NULL | Action target — for `friend_add` this is `username@instance`; for `space_join` an invite code or space ID; for `direct_message` a recipient handle; for `instance_connect` the remote instance's origin. Never stores message bodies, attachments, or user content. |
 | createdAt | integer NOT NULL | Epoch ms |
 
@@ -513,6 +513,8 @@ Terminal-state notifications for peering events (approved / denied / expired). S
 **Index:** `idx_peer_approval_notifications_user_id` on `(user_id)` — supports the user-facing list and unread-filter queries.
 
 Inserted by `onPeerActivated` (`'approved'`), the outbound `/deny` handler (`'denied'`), and the storage janitor outbound expiry pass (`'expired'`). Read rows older than 30 days are auto-cleaned by the janitor; unread rows are never auto-cleaned.
+
+**Migration `0018_peering_reason_instance_connect` (data only).** Before `instance_connect` existed, `POST /api/federation/peer/ensure` stored every call as `trigger_reason = 'friend_add'` with the remote's `URL.origin` as `trigger_target`, although only connection flows called it. The migration relabels those rows in both `peer_approval_subscribers` and `peer_approval_notifications` to `'instance_connect'`, keeping the target, which is already the shape the current code writes. It matches a `friend_add` row only when the target starts with `http://` or `https://` and contains no `@`; a genuine friend-add target is `name@domain` with a `[a-z0-9_]` username, so it never matches. On subscribers it first deletes a legacy row whose `instance_connect` twin (same request, user and target) already exists, which would otherwise break the unique key. It is idempotent. Unread notifications are never auto-cleaned, which is why this is a migration and not left to expiry: an unmigrated approved row keeps offering to retry a friend request prefilled with a URL.
 
 ### federation_outbox
 UNIQUE: (peerId, entityId)

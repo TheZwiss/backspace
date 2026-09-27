@@ -424,3 +424,43 @@ describe('peering waits and outcomes started by a connection', () => {
     expect(screen.queryByRole('button', { name: /Retry/ })).not.toBeInTheDocument();
   });
 });
+
+describe('an approved notification written by the old /peer/ensure', () => {
+  // The old endpoint stored connections as friend_add with the origin as
+  // target. Migration 0018_peering_reason_instance_connect relabels exactly
+  // those rows to instance_connect and keeps the target. Both shapes are
+  // rendered here: the row as it was, and the row as the migration leaves it.
+  const legacy = {
+    id: 'n-legacy',
+    kind: 'approved' as const,
+    peerOrigin: 'https://orbit.example',
+    triggerReason: 'friend_add' as const,
+    triggerTarget: 'https://orbit.example',
+    createdAt: 1,
+    readAt: null,
+  };
+
+  function renderPanel() {
+    render(
+      <MemoryRouter>
+        <ConnectedInstances />
+      </MemoryRouter>,
+    );
+  }
+
+  it('as it was: offered to retry a friend request to a URL', async () => {
+    useFederationStore.setState({ peeringNotifications: [legacy] });
+    renderPanel();
+
+    expect(await screen.findByText('Original action: Friend request to https://orbit.example')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retry your friend request' })).toBeInTheDocument();
+  });
+
+  it('as the migration leaves it: a connection, with no friend-request retry', async () => {
+    useFederationStore.setState({ peeringNotifications: [{ ...legacy, triggerReason: 'instance_connect' }] });
+    renderPanel();
+
+    expect(await screen.findByText('Original action: Connect to orbit.example')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Retry/ })).not.toBeInTheDocument();
+  });
+});
