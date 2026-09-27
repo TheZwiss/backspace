@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
     getStreamGeneration: () => 1, getFreshTrack: () => null,
   },
   scheduleScreenShareOverdrive: vi.fn(),
+  syncScreenShareAudio: vi.fn(),
 }));
 vi.mock('livekit-client', async importOriginal => {
   const sdk = await importOriginal<typeof import('livekit-client')>();
@@ -32,7 +33,11 @@ vi.mock('../utils/voice', () => ({ broadcastVoiceStatus: vi.fn(), clearSpaceVoic
 vi.mock('../utils/hwOverdrive', () => ({ deactivate: vi.fn() }));
 vi.mock('../utils/screenShare', async importOriginal => {
   const original = await importOriginal<typeof import('../utils/screenShare')>();
-  return { ...original, scheduleScreenShareOverdrive: mocks.scheduleScreenShareOverdrive };
+  return {
+    ...original,
+    scheduleScreenShareOverdrive: mocks.scheduleScreenShareOverdrive,
+    syncScreenShareAudio: mocks.syncScreenShareAudio,
+  };
 });
 vi.mock('../stores/spaceStore', () => ({
   getApiForOrigin: () => ({ livekit: { token: mocks.token, dmToken: mocks.token } }),
@@ -245,5 +250,45 @@ describe('voice capture teardown', () => {
     expect(mocks.audio.releaseInputStream).toHaveBeenCalledTimes(1);
     expect(result.current.isConnected).toBe(true);
     expect(result.current.connectedChannelId).toBe('second');
+  });
+});
+
+describe('screen-share audio published mid-stream', () => {
+  // A streamer can turn System Audio on after starting (#301). Stream tracks
+  // are only subscribed while watching, and the watch click subscribed the
+  // publications that existed then, so an audio track published later stayed
+  // unsubscribed and a viewer already watching never heard it.
+  function publishFromRemote(room: Room, source: Track.Source, watching: boolean) {
+    useVoiceStore.setState({ watchingStreams: new Set(watching ? ['u2'] : []) });
+    const publication = { source, setSubscribed: vi.fn() };
+    const participant = { identity: 'u2:Bob' };
+    act(() => { room.emit(RoomEvent.TrackPublished, publication as never, participant as never); });
+    return publication;
+  }
+
+  it('subscribes the audio for a viewer already watching that stream', async () => {
+    const { result } = renderHook(() => useLiveKit());
+    await act(async () => { await result.current.connect('channel'); });
+    const publication = publishFromRemote(result.current.room!, Track.Source.ScreenShareAudio, true);
+    expect(publication.setSubscribed).toHaveBeenCalledWith(true);
+  });
+
+  it('applies a System Audio change to the live share', async () => {
+    mocks.syncScreenShareAudio.mockResolvedValue(undefined);
+    const { result } = renderHook(() => useLiveKit());
+    await act(async () => { await result.current.connect('channel'); });
+    await act(async () => { useVoiceStore.setState({ isScreenSharing: true }); });
+    mocks.syncScreenShareAudio.mockClear();
+
+    await act(async () => { useVoiceStore.getState().setScreenShareConfig({ shareAudio: false }); });
+
+    expect(mocks.syncScreenShareAudio).toHaveBeenCalledWith(result.current.room);
+  });
+
+  it('leaves it alone for someone not watching', async () => {
+    const { result } = renderHook(() => useLiveKit());
+    await act(async () => { await result.current.connect('channel'); });
+    const publication = publishFromRemote(result.current.room!, Track.Source.ScreenShareAudio, false);
+    expect(publication.setSubscribed).not.toHaveBeenCalled();
   });
 });

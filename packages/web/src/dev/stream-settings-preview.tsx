@@ -7,6 +7,7 @@ import { createRoot } from 'react-dom/client';
 import type { InstanceStreamingLimits } from '@backspace/shared';
 import { StreamQualityControls, StreamSummary } from '../components/voice/StreamQualityControls';
 import { useVoiceStore } from '../stores/voiceStore';
+import type { ScreenShareAudioState } from '../stores/voiceStore';
 import { useSpaceStore } from '../stores/spaceStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import i18n, { initI18n } from '../i18n';
@@ -44,6 +45,8 @@ interface Scene {
   voiceChannelId: string;
   origin: string;
   hostLimits: InstanceStreamingLimits;
+  /** System audio of a live share; absent = not sharing (the setup screen's view). */
+  live?: { audio: ScreenShareAudioState; preference: boolean };
 }
 
 const SCENES: Record<string, Scene> = {
@@ -65,6 +68,34 @@ const SCENES: Record<string, Scene> = {
     origin: 'https://voice-and-streaming.a-rather-long-community-instance-name.example.org',
     hostLimits: { ...STRICT_LIMITS, allowCustomBitrate: true },
   },
+  'live-published': {
+    caption: 'Live share sending system audio: the switch is on and can be turned off',
+    voiceChannelId: 'vc-home',
+    origin: '',
+    hostLimits: HOME_LIMITS,
+    live: { audio: 'published', preference: true },
+  },
+  'live-held': {
+    caption: 'Live share, audio turned off mid-stream: capture held, the switch can turn it back on',
+    voiceChannelId: 'vc-home',
+    origin: '',
+    hostLimits: HOME_LIMITS,
+    live: { audio: 'held', preference: false },
+  },
+  'live-acquiring': {
+    caption: 'Desktop app adding loopback audio to a running share',
+    voiceChannelId: 'vc-home',
+    origin: '',
+    hostLimits: HOME_LIMITS,
+    live: { audio: 'acquiring', preference: true },
+  },
+  'live-unavailable': {
+    caption: 'Browser share started without audio: cannot be added mid-stream, switch disabled and explained',
+    voiceChannelId: 'vc-home',
+    origin: '',
+    hostLimits: HOME_LIMITS,
+    live: { audio: 'unavailable', preference: true },
+  },
 };
 
 function seed(scene: Scene): void {
@@ -75,7 +106,12 @@ function seed(scene: Scene): void {
   });
   useVoiceStore.setState({
     currentVoiceChannelId: scene.voiceChannelId,
-    screenShareConfig: { height: 1080, fps: 60, mode: 'gaming', customBitrateKbps: null, shareAudio: true, codec: 'vp9' },
+    isScreenSharing: scene.live !== undefined,
+    screenShareAudio: scene.live?.audio ?? null,
+    screenShareConfig: {
+      height: 1080, fps: 60, mode: 'gaming', customBitrateKbps: null,
+      shareAudio: scene.live?.preference ?? true, codec: 'vp9',
+    },
   });
 }
 

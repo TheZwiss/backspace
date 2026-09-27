@@ -79,3 +79,59 @@ describe('StreamQualityControls in a federated voice channel', () => {
     expect(screen.queryByText(/Limits set by/)).not.toBeInTheDocument();
   });
 });
+
+describe('StreamQualityControls System Audio while live', () => {
+  function audioSwitch() {
+    return screen.getByRole('switch', { name: 'System Audio' });
+  }
+
+  beforeEach(() => {
+    useVoiceStore.setState({ currentVoiceChannelId: 'vc-home' });
+  });
+
+  it('shows what the share sends, not the preference', () => {
+    // Chrome's picker let the user untick audio: the preference is on, the share has none.
+    useVoiceStore.setState({
+      isScreenSharing: true,
+      screenShareAudio: 'unavailable',
+      screenShareConfig: { ...useVoiceStore.getState().screenShareConfig, shareAudio: true },
+    });
+    render(<StreamQualityControls />);
+    expect(audioSwitch()).toHaveAttribute('aria-checked', 'false');
+  });
+
+  it('is disabled and explains itself where audio cannot be added mid-stream', () => {
+    useVoiceStore.setState({ isScreenSharing: true, screenShareAudio: 'unavailable' });
+    render(<StreamQualityControls />);
+    expect(audioSwitch()).toBeDisabled();
+    expect(screen.getByText(/System audio can only be added when a stream starts/)).toBeInTheDocument();
+  });
+
+  it('can be turned back on when the capture is held', () => {
+    useVoiceStore.setState({ isScreenSharing: true, screenShareAudio: 'held' });
+    render(<StreamQualityControls />);
+    expect(audioSwitch()).toBeEnabled();
+    expect(audioSwitch()).toHaveAttribute('aria-checked', 'false');
+    expect(screen.queryByText(/can only be added when a stream starts/)).not.toBeInTheDocument();
+  });
+
+  it('can be turned on where the desktop app can add loopback audio', () => {
+    useVoiceStore.setState({ isScreenSharing: true, screenShareAudio: 'acquirable' });
+    render(<StreamQualityControls />);
+    expect(audioSwitch()).toBeEnabled();
+  });
+
+  it('reads as on and waits while the audio is being captured', () => {
+    useVoiceStore.setState({ isScreenSharing: true, screenShareAudio: 'acquiring' });
+    render(<StreamQualityControls />);
+    expect(audioSwitch()).toHaveAttribute('aria-checked', 'true');
+    expect(audioSwitch()).toBeDisabled();
+  });
+
+  it('can always be turned off while audio is published', () => {
+    useVoiceStore.setState({ isScreenSharing: true, screenShareAudio: 'published' });
+    render(<StreamQualityControls />);
+    expect(audioSwitch()).toHaveAttribute('aria-checked', 'true');
+    expect(audioSwitch()).toBeEnabled();
+  });
+});

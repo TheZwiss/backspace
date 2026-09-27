@@ -802,6 +802,7 @@ The main process intercepts `getDisplayMedia()` via `session.defaultSession.setD
 2. User clicks a tile → renderer sends `screen-share-preselect` with `sourceId` + `shareAudio` → main stores `pendingScreenSelection` (30 s TTL)
 3. Renderer calls `getDisplayMedia()` → handler takes the pending selection (one-shot), resolves the id against the cache (re-enumerating if missing) and calls `callback({ video: source, audio: 'loopback' })` (audio only when `shareAudio`). No prompt round-trip.
 4. The stream is previewed in the setup screen and published on "Start stream".
+5. Turning System Audio on during a share that has no audio runs steps 2 and 3 again for the same `sourceId` with `shareAudio = true`; the renderer keeps only the new capture's loopback audio track and stops its video (`syncScreenShareAudio`, voice.md "Changing the toggle mid-stream"). The handler re-enumerates to resolve the id, since the caches were dropped after the first request. No main-process or preload change was needed for this.
 
 ### Who may enumerate
 

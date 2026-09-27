@@ -35,6 +35,7 @@ import {
   handleScreenShareUnpublished,
   isScreenShareRepublishing,
   resolveNativeOverdrive,
+  syncScreenShareAudio,
 } from '../utils/screenShare';
 import { parseStreamWatch } from '../utils/streamWatchProtocol';
 import { getMediaStreamTrack } from '../utils/livekitInternals';
@@ -808,6 +809,12 @@ export function useLiveKit() {
           publication.source !== Track.Source.ScreenShareAudio
         ) {
           publication.setSubscribed(true);
+        } else if (publication.source === Track.Source.ScreenShareAudio) {
+          // Stream tracks follow the watch state, and the watch click only
+          // subscribed what was published then. System Audio can be turned on
+          // mid-stream, so audio arriving for a stream being watched joins it.
+          const { userId } = parseIdentity(participant.identity);
+          if (useVoiceStore.getState().watchingStreams.has(userId)) publication.setSubscribed(true);
         }
         guardedUpdate();
       });
@@ -986,6 +993,9 @@ export function useLiveKit() {
     const updateActiveTracks = async () => {
       if (superseded) return;
       if (isScreenSharing) {
+        // System Audio first: a toggle change publishes or withdraws only the
+        // audio track, never the video.
+        await syncScreenShareAudio(room);
         const opts = buildScreenShareOptions(screenShareConfig);
         // Codec changed mid-stream — the codec is baked into SDP negotiation,
         // so republish the same track under the new options (no re-capture).

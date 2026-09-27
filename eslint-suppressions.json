@@ -491,7 +491,7 @@
       "count": 3
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 6
+      "count": 5
     }
   },
   "packages/web/src/hooks/useMascotAnimation.ts": {

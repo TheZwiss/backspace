@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useVoiceStore } from '../../stores/voiceStore';
-import type { ScreenShareConfig } from '../../stores/voiceStore';
+import type { ScreenShareConfig, ScreenShareAudioState } from '../../stores/voiceStore';
 import { buildScreenShareOptions } from '../../utils/screenShare';
 import { useStreamHostLimits } from '../../utils/streamHostLimits';
 import { hostOf } from '../../utils/identity';
@@ -71,6 +71,31 @@ export function StreamSummary({ className = '' }: { className?: string }) {
   );
 }
 
+/**
+ * What the System Audio switch shows and allows.
+ *
+ * Before a share it is the preference, read when the capture is taken. While
+ * a share is live it is what the share sends (`screenShareAudio`): the
+ * preference can be on while nothing goes out (a browser capture without
+ * audio), and a switch reading "on" there would be claiming audio viewers do
+ * not get. Turning it off always works; turning it on is offered only where
+ * `syncScreenShareAudio` can act on it.
+ */
+export function systemAudioSwitch(
+  isScreenSharing: boolean,
+  liveAudio: ScreenShareAudioState | null,
+  preference: boolean,
+): { checked: boolean; disabled: boolean; cannotAddLive: boolean } {
+  if (!isScreenSharing || liveAudio === null) return { checked: preference, disabled: false, cannotAddLive: false };
+  switch (liveAudio) {
+    case 'published': return { checked: true, disabled: false, cannotAddLive: false };
+    case 'acquiring': return { checked: true, disabled: true, cannotAddLive: false };
+    case 'held':
+    case 'acquirable': return { checked: false, disabled: false, cannotAddLive: false };
+    case 'unavailable': return { checked: false, disabled: true, cannotAddLive: true };
+  }
+}
+
 const pillBase = 'px-2.5 py-1.5 rounded-full text-[13px] font-medium transition-colors cursor-pointer select-none text-center';
 const pillSelected = 'bg-accent-primary text-white';
 const pillUnselected = 'bg-surface-elevated text-txt-secondary hover:bg-interactive-hover';
@@ -81,6 +106,9 @@ export function StreamQualityControls() {
   const setConfig = useVoiceStore((s) => s.setScreenShareConfig);
   const { origin: hostOrigin, limits } = useStreamHostLimits();
   const electronPlatform = isElectron() ? window.backspace?.platform : null;
+  const isScreenSharing = useVoiceStore((s) => s.isScreenSharing);
+  const liveAudio = useVoiceStore((s) => s.screenShareAudio);
+  const audioSwitch = systemAudioSwitch(isScreenSharing, liveAudio, config.shareAudio);
 
   const BITRATE_MIN = limits?.minBitrateKbps ?? 500;
   const BITRATE_MAX = limits?.maxBitrateKbps ?? 20000;
@@ -275,12 +303,17 @@ export function StreamQualityControls() {
 
       {/* System Audio */}
       <div>
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0 flex-1 pt-1">
             <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider">
               {t('voice:streamSettings.systemAudio')}
             </div>
-            {config.shareAudio && (
+            {audioSwitch.cannotAddLive && (
+              <div className="text-[10px] text-txt-tertiary mt-0.5">
+                {t('voice:streamSettings.systemAudioLiveUnavailable')}
+              </div>
+            )}
+            {audioSwitch.checked && (
               <div className="text-[10px] text-accent-amber/80 mt-0.5">
                 {electronPlatform === 'win32'
                   ? t('voice:streamSettings.electronWindowsAudioNote')
@@ -293,7 +326,8 @@ export function StreamQualityControls() {
             )}
           </div>
           <Toggle
-            enabled={config.shareAudio}
+            enabled={audioSwitch.checked}
+            disabled={audioSwitch.disabled}
             onChange={(enabled) => setConfig({ shareAudio: enabled })}
             ariaLabel={t('voice:streamSettings.systemAudio')}
           />

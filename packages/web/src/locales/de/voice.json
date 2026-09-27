@@ -129,6 +129,8 @@
     "electronMacAudioNote": "macOS 13+ benötigt die Berechtigung für Bildschirm- und Systemaudioaufnahmen",
     "electronLinuxAudioNote": "Linux benötigt PulseAudio-Kompatibilität; Backspace-Audio kann ebenfalls aufgenommen werden",
     "systemAudioStartFailed": "Der Stream konnte nicht mit Systemaudio gestartet werden. Deaktiviere Systemaudio, wenn die Plattform es nicht unterstützt.",
+    "systemAudioAddFailed": "Systemaudio konnte dem Stream nicht hinzugefügt werden.",
+    "systemAudioLiveUnavailable": "Systemaudio lässt sich nur beim Start eines Streams hinzufügen. Starte den Stream neu, um es einzuschließen.",
     "softwareH264Fallback": "Hardware-H264-Kodierung ist nicht verfügbar. OpenH264 wird als Software-Encoder verwendet; VP9 kann schneller sein.",
     "degradation": {
       "maintainResolution": "Auflösung halten",

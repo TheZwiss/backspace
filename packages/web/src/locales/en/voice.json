@@ -129,6 +129,8 @@
     "electronMacAudioNote": "macOS 13+ requires Screen & System Audio Recording permission",
     "electronLinuxAudioNote": "Linux requires PulseAudio compatibility; Backspace audio may also be captured",
     "systemAudioStartFailed": "Could not start the stream with system audio. Disable Share system audio if this platform does not support it.",
+    "systemAudioAddFailed": "Could not add system audio to the stream.",
+    "systemAudioLiveUnavailable": "System audio can only be added when a stream starts. Restart the stream to include it.",
     "softwareH264Fallback": "Hardware H264 encoding is unavailable. Software OpenH264 is in use; VP9 may perform better.",
     "degradation": {
       "maintainResolution": "hold resolution",

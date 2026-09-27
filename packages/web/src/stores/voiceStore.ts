@@ -15,6 +15,22 @@ export interface ScreenShareConfig {
   codec: 'vp9' | 'h264';
 }
 
+/**
+ * What the live screen share has in the way of system audio. Kept apart from
+ * `ScreenShareConfig.shareAudio`, which is the user's preference: a share can
+ * want audio and have none (a browser capture without it, a failed loopback).
+ *
+ * - `published`: the audio track is on the publication.
+ * - `held`: captured, but withdrawn by the toggle; turning it on republishes it.
+ * - `acquiring`: a loopback capture for the running share is being taken.
+ * - `acquirable`: nothing captured, and the desktop app can add loopback audio
+ *   for the same source without a prompt.
+ * - `unavailable`: nothing captured and no silent way to add it (browsers
+ *   grant audio only with the capture; portal and prompted desktop pickers
+ *   would ask again).
+ */
+export type ScreenShareAudioState = 'published' | 'held' | 'acquiring' | 'acquirable' | 'unavailable';
+
 export type VoiceConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'reconnecting';
 export type VoiceConnectionQuality = 'excellent' | 'good' | 'poor' | 'lost' | 'unknown';
 
@@ -33,6 +49,8 @@ interface VoiceState {
   isDeafened: boolean;
   isCameraOn: boolean;
   isScreenSharing: boolean;
+  /** System audio of the live share; null while not sharing. Not persisted. */
+  screenShareAudio: ScreenShareAudioState | null;
   participants: ParticipantInfo[];
   speakingParticipantIds: Set<string>;
   speakingUserIds: Set<string>;
@@ -186,6 +204,7 @@ export const useVoiceStore = create<VoiceState>()(
       isDeafened: false,
       isCameraOn: false,
       isScreenSharing: false,
+      screenShareAudio: null,
       micPermissionDenied: false,
       participants: [],
       speakingParticipantIds: new Set(),

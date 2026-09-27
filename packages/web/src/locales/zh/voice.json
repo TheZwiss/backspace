@@ -129,6 +129,8 @@
     "electronMacAudioNote": "macOS 13+ 需要“屏幕与系统音频录制”权限",
     "electronLinuxAudioNote": "Linux 需要 PulseAudio 兼容性；Backspace 音频也可能会被捕获",
     "systemAudioStartFailed": "无法携带系统音频启动推流。如果此平台不支持，请关闭共享系统音频。",
+    "systemAudioAddFailed": "无法将系统音频添加到直播中。",
+    "systemAudioLiveUnavailable": "系统音频只能在开始直播时添加。请重新开始直播以包含系统音频。",
     "softwareH264Fallback": "硬件 H264 编码不可用。正在使用软件 OpenH264；切换为 VP9 可能会获得更好的性能。",
     "degradation": {
       "maintainResolution": "保持分辨率",

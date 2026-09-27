@@ -14,6 +14,7 @@ import {
   publishScreenShare,
   isScreenCaptureSupported,
   isCaptureCancellation,
+  canAddScreenShareAudioLater,
 } from '../../utils/screenShare';
 import { StreamQualityControls, StreamSummary } from './StreamQualityControls';
 import { pickAutoStageSource, type ScreenSourceTab } from '../../utils/screenShareSources';
@@ -387,7 +388,7 @@ export function ScreenShareSetup() {
     if (!stream || !room) { setError('startFailed'); return; }
     setStarting(true);
     setError(null);
-    const ok = await publishScreenShare(room, stream);
+    const ok = await publishScreenShare(room, stream, { sourceId: selectedId });
     if (!ok) {
       // publishScreenShare stopped the tracks on failure
       stagedRef.current = null;
@@ -423,7 +424,11 @@ export function ScreenShareSetup() {
   const showGrid = electron && (canListSources || promptInFlight || sources.length > 0);
   const activeSources = activeTab === 'windows' ? windows : screens;
   const supported = isScreenCaptureSupported();
-  const audioNeedsRepick = !!staged && stagedShareAudio !== config.shareAudio;
+  // Turning System Audio off after picking is honoured at Start (the audio is
+  // held back). Turning it on is too where the desktop app can add loopback
+  // audio to the running share; elsewhere audio comes only with a new pick.
+  const audioNeedsRepick = !!staged && config.shareAudio && !stagedShareAudio
+    && !canAddScreenShareAudioLater(selectedId);
   const canStart = !!staged && !staging && !starting;
   const chooseHint = !electron
     ? t('voice:screenPicker.chooseHint')
