@@ -63,6 +63,13 @@ jobs:
       - name: Build shared, server & web
         run: pnpm build
 
+      # Workbox leaves any file over the precache limit out of the service
+      # worker with only a build warning, so the main chunk outgrowing it would
+      # silently break offline start. Fails once a precached file passes 90%
+      # of the limit. See docs/systems/deployment.md.
+      - name: Check precache sizes
+        run: node scripts/check-precache-size.mjs
+
       # Desktop is not part of `pnpm build` (that produces an Electron installer,
       # which release.yml owns). Type-check its source here so desktop TS errors
       # surface on PRs rather than only at release-tag time.
