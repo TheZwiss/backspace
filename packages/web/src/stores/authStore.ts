@@ -21,7 +21,9 @@ interface AuthState {
   /**
    * The chosen status as the true home last reported it, when the session
    * account is a replicated row (`statusAuthority(user).kind === 'trueHome'`);
-   * null otherwise or while unknown. Read through `myChosenStatus`
+   * null otherwise or while unknown. Until the true home's first report in
+   * this page it holds the last report this device kept for the same home
+   * account (`lastTrueHomeStatus`). Read through `myChosenStatus`
    * (utils/selfStatus.ts), never directly.
    */
   trueHomeStatus: ChosenUserStatus | null;
@@ -71,6 +73,48 @@ function resetUserStores() {
   useSettingsStore.getState().resetUpdateState();
 }
 
+const TRUE_HOME_STATUS_KEY_PREFIX = 'backspace_true_home_status';
+
+/**
+ * Where this device keeps the last status a true home reported, keyed by the
+ * home account (host and user id there), so every session of that account on
+ * any instance starts from it. Null for a session that owns its own choice.
+ */
+function trueHomeStatusStorageKey(user: User | null): string | null {
+  const authority = statusAuthority(user);
+  if (authority?.kind !== 'trueHome') return null;
+  return `${TRUE_HOME_STATUS_KEY_PREFIX}:${authority.host}:${authority.userId}`;
+}
+
+/**
+ * The last status the true home reported to this device, or null when there is
+ * none (or storage cannot be read). It stands in until the true home's first
+ * report in this page arrives, so Do Not Disturb holds from page load instead
+ * of from the moment the home connection is up (activity-presence.md, "The
+ * client's copy of the user's own status").
+ */
+function lastTrueHomeStatus(user: User | null): ChosenUserStatus | null {
+  const key = trueHomeStatusStorageKey(user);
+  if (!key) return null;
+  try {
+    const stored = localStorage.getItem(key);
+    return isChosenUserStatus(stored) ? stored : null;
+  } catch {
+    return null;
+  }
+}
+
+function rememberTrueHomeStatus(user: User | null, status: ChosenUserStatus): void {
+  const key = trueHomeStatusStorageKey(user);
+  if (!key) return;
+  try {
+    localStorage.setItem(key, status);
+  } catch {
+    // Storage unavailable (private window, quota): the next page load starts
+    // unknown until the true home reports, as it did before this was kept.
+  }
+}
+
 /**
  * The user's chosen status, from whichever account owns it (utils/selfStatus.ts).
  * The one read used by the alert gate, the ringing loop and the settings panel.
@@ -89,7 +133,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   initSession: (token: string, user: User) => {
     resetUserStores();
     localStorage.setItem('backspace_token', token);
-    set({ token, user, trueHomeStatus: null, isLoading: false });
+    set({ token, user, trueHomeStatus: lastTrueHomeStatus(user), isLoading: false });
     useInstanceStore.getState().autoConnectAll().catch(() => {});
   },
 
@@ -128,7 +172,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isLoading: true });
     try {
       const user = await api.users.me();
-      set({ user, isLoading: false });
+      // A report the true home already made in this page is newer than the kept one.
+      set({ user, trueHomeStatus: get().trueHomeStatus ?? lastTrueHomeStatus(user), isLoading: false });
       // Auto-connect to remote instances (fire-and-forget)
       useInstanceStore.getState().autoConnectAll().catch(() => {});
     } catch {
@@ -190,6 +235,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   applyOwnStatus: ({ owner, status }) => {
     if (owner === 'trueHome') {
+      rememberTrueHomeStatus(get().user, status);
       if (get().trueHomeStatus !== status) set({ trueHomeStatus: status });
       return;
     }

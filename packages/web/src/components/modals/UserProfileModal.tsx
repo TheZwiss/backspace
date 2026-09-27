@@ -18,6 +18,7 @@ import { loadFederatedMutuals, type TaggedMutualFriend, type MutualSpace } from 
 import { presenceLabel } from '../../i18n/presence';
 import { replaceEmojiShortcodes } from '../../utils/emojiShortcodes';
 import { getProfileMember, useProfileMemberRoles } from '../../hooks/useProfileMember';
+import { useShownStatus } from '../../hooks/useShownStatus';
 import { ProfileRoles } from '../ui/ProfileRoles';
 
 type Tab = 'about' | 'friends' | 'spaces';
@@ -163,6 +164,8 @@ export function UserProfileModal() {
     return () => document.removeEventListener('keydown', handleKey);
   }, [isOpen, closeModal]);
 
+  const shownStatus = useShownStatus(user, user?.status);
+
   if (!isOpen || !user) return null;
 
   const { baseName, domain } = parseFederatedUsername(user.username);
@@ -296,7 +299,7 @@ export function UserProfileModal() {
             src={user.avatar}
             name={displayName}
             size={96}
-            status={user.status as 'online' | 'idle' | 'dnd' | 'offline' | null}
+            status={shownStatus}
             userId={user.homeUserId ?? user.id}
             user={user}
             ring={{ width: 4, color: 'rgba(20,20,26,0.82)' }}

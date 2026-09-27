@@ -21,6 +21,8 @@ vi.mock('../../utils/mutuals', () => ({
   loadFederatedMutuals: vi.fn().mockResolvedValue({ mutualFriends: [], mutualSpaces: [] }),
 }));
 vi.mock('../../utils/userViewLookup', () => ({ useCanonicalUserView: (u: User) => u }));
+// Which status the dot shows for the signed-in user has its own tests (useShownStatus).
+vi.mock('../../hooks/useShownStatus', () => ({ useShownStatus: (_u: User, status: User['status']) => status }));
 
 import { UserProfilePopout } from './UserProfilePopout';
 import { useUIStore } from '../../stores/uiStore';

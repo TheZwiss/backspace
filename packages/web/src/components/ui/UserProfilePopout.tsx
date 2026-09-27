@@ -16,6 +16,7 @@ import { loadFederatedMutuals } from '../../utils/mutuals';
 import { replaceEmojiShortcodes } from '../../utils/emojiShortcodes';
 import { computeFloatingPosition, type AnchorRect, type Placement } from '../../hooks/useFloatingPosition';
 import { useProfileMemberRoles } from '../../hooks/useProfileMember';
+import { useShownStatus } from '../../hooks/useShownStatus';
 import { ProfileRoles } from './ProfileRoles';
 
 /** Gap between the card and the element it was opened from. */
@@ -46,6 +47,7 @@ export function UserProfilePopout({ user: propUser, onClose, anchor, placement =
   const user = useCanonicalUserView(propUser);
   const { baseName, domain } = parseFederatedUsername(user.username);
   const displayName = user.displayName ?? baseName;
+  const shownStatus = useShownStatus(user, user.status);
 
   const origin = resolveUserOrigin(user);
   const userApi = getApiForOrigin(origin);
@@ -167,7 +169,7 @@ export function UserProfilePopout({ user: propUser, onClose, anchor, placement =
           src={user.avatar}
           name={displayName}
           size={80}
-          status={user.status as 'online' | 'idle' | 'dnd' | 'offline' | null}
+          status={shownStatus}
           userId={user.homeUserId ?? user.id}
           user={user}
           onClick={handleAvatarClick}
