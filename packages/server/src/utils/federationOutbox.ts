@@ -421,12 +421,23 @@ export function getDmParticipants(dmChannelId: string): FederationRelayParticipa
  * hand a local-only conversation to unrelated instances.
  */
 export function getGroupDmTargetOrigins(dmChannelId: string): string[] {
-  const participants = getDmParticipants(dmChannelId);
+  return relayTargetOrigins(getDmParticipants(dmChannelId));
+}
+
+/**
+ * The peer origins a conversation among `members` is relayed to: every
+ * instance that hosts one of them, minus our own origin. A member without a
+ * `homeInstance` is homed here. `getGroupDmTargetOrigins` is this applied to a
+ * stored conversation's members; the relay receiver also applies it to the two
+ * people a 1-on-1 is between before any local copy of it exists.
+ */
+export function relayTargetOrigins(members: ReadonlyArray<{ homeInstance: string | null }>): string[] {
   const ourOrigin = getOurOrigin();
 
   const origins = new Set<string>();
-  for (const p of participants) {
-    const normalized = p.homeInstance.startsWith('http') ? p.homeInstance : `https://${p.homeInstance}`;
+  for (const m of members) {
+    const home = m.homeInstance || ourOrigin;
+    const normalized = home.startsWith('http') ? home : `https://${home}`;
     if (normalized !== ourOrigin) {
       origins.add(normalized);
     }

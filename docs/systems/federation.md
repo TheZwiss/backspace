@@ -866,7 +866,7 @@ All origin comparisons use `extractDomain()` or `getOurOrigin()` with normalizat
 1. Validate: `event.message` and `event.participants` (>= 2) required
 2. Dedup: check `(sourceInstance, sourceMessageId)` -- reject if exists
 3. Resolve ALL participants via `resolveOrCreateReplicatedUser`, hydrate profiles
-4. No `event.federatedId` -> 1-on-1 path
+4. No `event.federatedId` -> 1-on-1 path. The author must be one of the first two participants and the signing peer one of their home origins, else `invalid_target` (see `dm-system.md` "Relayed message creates")
 5. Compute deterministic `federatedId = SHA256(sorted([homeUserIdA, homeUserIdB])).slice(0, 32)`
 6. `findOrCreateDmChannel(federatedId, [localUserA.id, localUserB.id], db)`:
    - Find by `federatedId` in `dm_channels`
@@ -888,7 +888,8 @@ Same as 1-on-1 except:
 1. `event.federatedId` present -> group DM path
 2. Find channel by `federatedId` -- must already exist (bootstrapped by prior `member_add`)
 3. If not found -> reject with `channel_not_found`
-4. Insert message, broadcast to local members
+4. The author must be a member of the channel and the signing peer one of its relay target origins, else `invalid_target` (see `dm-system.md` "Relayed message creates")
+5. Insert message, broadcast to local members
 
 ### Federated ID Generation (`federationOutbox.ts:computeFederatedId`)
 
@@ -1012,7 +1013,7 @@ Trigger (API/WS handler)
 
 - `duplicate` — the receiving instance already has the row (same `(sourceInstance, sourceMessageId)`); retrying will fail identically until TTL.
 - `recipient_not_found`, `attribution_mismatch`, `unknown_event_type` — structural mismatches that cannot be resolved by retrying.
-- `not_message_author`, `invalid_target` — a relayed `update`/`delete` whose `target` names a message the actor did not write, is malformed, or comes from a peer that is neither a relay target of the message's conversation nor the instance the message came from. See `dm-system.md` "Relayed edits and deletes" for the rule.
+- `not_message_author`, `invalid_target` — a relayed `update`/`delete` whose `target` names a message the actor did not write, is malformed, or comes from a peer that is neither a relay target of the message's conversation nor the instance the message came from. See `dm-system.md` "Relayed edits and deletes" for the rule. `invalid_target` is also a relayed `create` whose author is not in the conversation or whose sender is not a relay target of it; see `dm-system.md` "Relayed message creates".
 - `attribution_unproven` is **not** terminal: the receiver lacks the proof that one of its users holds an account here, and that proof arrives from the user's client. See [the two refusal reasons](#3-identity-resolution).
 - `self_target_invalid` — emitted by `processFriendRequestCreateEvent` when an inbound `friend_request_create`'s `from`-identity equals its `to`-identity (after origin normalization). Defense-in-depth: the sender's local `cannot_friend_self` check should catch this, but the receiver does not trust upstream validation. Retrying will not change the payload. The friend-create rollback callback maps this to client-facing `peer_rejected`.
 

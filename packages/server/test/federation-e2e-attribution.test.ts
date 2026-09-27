@@ -62,6 +62,8 @@ let secret: string;
 
 /** Native on B. Used as the second participant so batches are well-formed. */
 let bob: TestUser;
+/** Native on A. The second participant when the author is one of B's users. */
+let alice: TestUser;
 /** Native on B, WITH a federated account recorded on A → homeward standing. */
 let erin: TestUser;
 /** Native on B, WITHOUT any federated account on A → no homeward standing. */
@@ -119,11 +121,11 @@ function createEvent(opts: {
         homeInstance: opts.authorHomeInstance,
         profile: { username: opts.authorUsername },
       },
-      {
-        homeUserId: bob.id,
-        homeInstance: B.domain,
-        profile: { username: bob.username },
-      },
+      // A 1-on-1 is only relayed between the instances its two people live
+      // on, so a homeward author (one of B's users) talks to someone on A.
+      opts.authorHomeInstance === B.domain
+        ? { homeUserId: alice.id, homeInstance: A.domain, profile: { username: alice.username } }
+        : { homeUserId: bob.id, homeInstance: B.domain, profile: { username: bob.username } },
     ],
     message: {
       userId: opts.authorHomeUserId,
@@ -187,6 +189,7 @@ beforeAll(async () => {
   secret = peerSecretOn(B, identityOrigin(A));
 
   bob = await registerLocal(B, 'bob');
+  alice = await registerLocal(A, 'alice');
   erin = await registerLocal(B, 'erin');
   frank = await registerLocal(B, 'frank');
   await grantHomewardStanding(erin);

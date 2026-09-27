@@ -180,7 +180,9 @@ function makeCreateEvent(messageId: string): FederationRelayEvent {
     timestamp: 1_700_000_000_000,
     participants: [
       { homeUserId: 'alice-local', homeInstance: HOME_DOMAIN, profile: { username: 'alice' } },
-      { homeUserId: 'bob-local', homeInstance: HOME_DOMAIN, profile: { username: 'bob' } },
+      // alice's partner lives on the signing peer: a 1-on-1 is only relayed
+      // between the instances its two people live on.
+      { homeUserId: 'bob-orbit', homeInstance: 'orbit.test', profile: { username: 'bob' } },
     ],
     message: {
       userId: 'alice-local',
@@ -204,7 +206,6 @@ function countRows(): { channels: number; messages: number } {
 describe('processRelayEvents — homeward attribution requires peer involvement', () => {
   beforeEach(() => {
     seedLocalUser('alice-local', 'alice');
-    seedLocalUser('bob-local', 'bob');
   });
 
   // Positive control for every "nothing was written" assertion below.
@@ -325,7 +326,6 @@ describe('POST /api/federation/relay — the unproven reason is negotiated per r
 
   beforeEach(async () => {
     seedLocalUser('alice-local', 'alice');
-    seedLocalUser('bob-local', 'bob');
     app = await buildApp();
   });
   afterEach(async () => { await app.close(); });
@@ -360,7 +360,6 @@ describe('POST /api/federation/relay — the unproven reason is negotiated per r
 describe('processRelayEvents — refuses a batch whose source is not the authenticated peer', () => {
   it('rejects every event when sourceInstance and peerOrigin disagree', async () => {
     seedLocalUser('alice-local', 'alice');
-    seedLocalUser('bob-local', 'bob');
     seedRegistryEntry('alice-local', SIGNING_PEER);
 
     const { processRelayEvents } = await import('./federation.js');

@@ -566,8 +566,19 @@ The full event includes `participants` (all channel members with their federated
 
 | Has `federatedId`? | Path |
 |---------------------|------|
-| Yes (group DM) | Lookup by `federatedId`. If not found, reject (`channel_not_found`) -- channel must exist from prior `member_add` bootstrap |
-| No (1-on-1 DM) | Compute deterministic `federatedId` from the two participants' home user IDs, then `findOrCreateDmChannel()` |
+| Yes (group DM) | Lookup by `federatedId`. If not found, reject (`channel_not_found`) -- channel must exist from prior `member_add` bootstrap. Then the "Relayed message creates" check against the channel's members |
+| No (1-on-1 DM) | The "Relayed message creates" check against the first two participants, then compute deterministic `federatedId` from their home user IDs and `findOrCreateDmChannel()` |
+
+### Relayed message creates
+
+This is the one place the rule is written; other specs point here.
+
+A relayed `create` is written into a conversation only when the sending peer and the author both belong to it (`mayRelayInto`, `federation/events/dmMessages.ts`):
+
+1. The author (resolved from `event.message` among the participants, after `attributionRefusal`) must be one of the conversation's members: for a group, its `dm_members` rows on this instance; for a 1-on-1, one of the two participants whose home user ids its `federatedId` is computed from. The pair is the whole membership of a 1-on-1, so it is checked before `findOrCreateDmChannel` creates or re-adds anything.
+2. The signing peer must be one of `relayTargetOrigins(<those members>)` (`federationOutbox.ts`), the origins this instance relays the conversation to, compared by domain as `attributionRefusal` compares instances (stored `homeInstance` values are bare domains). `getGroupDmTargetOrigins(channelId)` is the same function applied to a stored channel. Only those instances hold a copy of the conversation a message could have been written in: a 1-on-1 between two users of this instance, reached through their accounts on another instance, is not relayed home.
+
+Either failing is `invalid_target` (terminal) and nothing is written. The check reads no new wire field, so events from older senders are judged the same way. A group message whose author's `member_add` from a third instance has not arrived yet is refused the same way; membership is only known as this instance currently holds it.
 
 **`findOrCreateDmChannel()`:**
 - Lookup by `federatedId`: if found, ensure both users are members (re-add if removed)
@@ -601,7 +612,7 @@ The event's `messageId` stays the sender's local id: it is the outbox coalescing
 1. Malformed target: rejected `invalid_target` (terminal).
 2. `attributionRefusal(target.actor, sourceInstance)`, the same check every relay event runs (direct, or homeward via `localUserActsOnPeer`): a refusal is returned as its reason, `attribution_mismatch` (terminal) or `attribution_unproven` (retried: the homeward proof has not reached this instance yet). See `federation.md` §3.
 3. Resolve `target.message` with `resolveLocalDmMessage`, and require it to be in this instance's copy of `target.federatedId`: else `unknown_message`. Not terminal: the create may not have arrived yet, and the sender retries on the outbox backoff schedule.
-4. The signing peer must be one of `getGroupDmTargetOrigins(<the message's conversation>)`, the origins this instance relays that conversation to, or the instance the message itself arrived from (`dm_messages.sourceInstance`), compared with `normalizeOriginForCompare`: else `invalid_target` (terminal). A peer the conversation never reached cannot address its messages, whatever actor it names.
+4. The signing peer must be one of `getGroupDmTargetOrigins(<the message's conversation>)`, the origins this instance relays that conversation to, or the instance the message itself arrived from (`dm_messages.sourceInstance`, compared with `normalizeOriginForCompare`; the relay targets are compared by domain, as in "Relayed message creates"): else `invalid_target` (terminal). A peer the conversation never reached cannot address its messages, whatever actor it names.
 5. The actor must be the message's author, compared as federated identities (`sameRelayActor(relayActorOfUser(author), target.actor)`: equal home user id, same home domain), never as local ids: else `not_message_author` (terminal). Nothing is modified.
 
 An event **without** a `target` (an older sender) is matched as `(sourceInstance, messageId)`. That only finds a message the sending instance created and relayed here, so the lookup is its own authorization, as before. An older receiver ignores `target` and keeps doing exactly that, so for it an edit or delete of a message the sender did not create still fails as `unknown_message`.
