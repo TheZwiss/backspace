@@ -131,7 +131,7 @@ export function MobileSettingsScreen({ initialPanel }: MobileSettingsScreenProps
       <div className="flex flex-col h-full bg-surface-base">
         <MobileScreenHeader title={t(panel.titleKey)} rightActions={<TransferIndicator />} />
         <div className="flex-1 overflow-y-auto p-4">
-          <SettingsPanelSuspense>{panel.body(instanceVersion)}</SettingsPanelSuspense>
+          <SettingsPanelSuspense key={initialPanel}>{panel.body(instanceVersion)}</SettingsPanelSuspense>
         </div>
       </div>
     );

@@ -277,7 +277,7 @@ export function UserSettingsModal() {
                   {t('common:labels.settings')}
                 </button>
               )}
-              <SettingsPanelSuspense>
+              <SettingsPanelSuspense key={tab}>
                 {tab === 'account' && <AccountPanel />}
                 {tab === 'appearance' && <AppearancePanel />}
                 {tab === 'voice' && <VoicePanel />}

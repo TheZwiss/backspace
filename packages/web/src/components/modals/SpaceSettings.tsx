@@ -750,7 +750,7 @@ export function SpaceSettingsModal() {
                   {t('spaces:settings.title')}
                 </button>
               )}
-              <SettingsPanelSuspense>
+              <SettingsPanelSuspense key={tab}>
                 {tab === 'overview' && <OverviewPanel spaceId={currentSpaceId} />}
                 {tab === 'discovery' && canManageSpace && <DiscoveryPanel spaceId={currentSpaceId} />}
                 {tab === 'members' && <MembersPanel spaceId={currentSpaceId} />}

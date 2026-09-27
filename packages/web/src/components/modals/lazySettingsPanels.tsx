@@ -1,4 +1,4 @@
-import { lazy, Suspense, type ReactNode } from 'react';
+import { Component, lazy, Suspense, type ComponentType, type LazyExoticComponent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { useDelayedLoading } from '../../hooks/useDelayedLoading';
@@ -14,50 +14,56 @@ import { useDelayedLoading } from '../../hooks/useDelayedLoading';
 // and the mobile screens alike. A static import of a panel anywhere else in
 // the main chunk's import graph would pull it back into that chunk.
 
-export const AccountPanel = lazy(() =>
-  import('./settingsPanels/AccountPanel').then((m) => ({ default: m.AccountPanel })));
-export const AppearancePanel = lazy(() =>
-  import('./settingsPanels/AppearancePanel').then((m) => ({ default: m.AppearancePanel })));
-export const VoicePanel = lazy(() =>
-  import('./settingsPanels/VoicePanel').then((m) => ({ default: m.VoicePanel })));
-export const PrivacyPanel = lazy(() =>
-  import('./settingsPanels/PrivacyPanel').then((m) => ({ default: m.PrivacyPanel })));
-export const ConnectionsPanel = lazy(() =>
-  import('./settingsPanels/ConnectionsPanel').then((m) => ({ default: m.ConnectionsPanel })));
-export const KeybindsPanel = lazy(() =>
-  import('./settingsPanels/KeybindsPanel').then((m) => ({ default: m.KeybindsPanel })));
-export const DesktopPanel = lazy(() =>
-  import('./settingsPanels/DesktopPanel').then((m) => ({ default: m.DesktopPanel })));
-export const DesktopDownloadPanel = lazy(() =>
-  import('./settingsPanels/DesktopDownloadPanel').then((m) => ({ default: m.DesktopDownloadPanel })));
-export const InstancePanel = lazy(() =>
-  import('./settingsPanels/InstancePanel').then((m) => ({ default: m.InstancePanel })));
+/**
+ * A panel chunk that could not be fetched: after a redeploy removed the old
+ * build's files, on a page no service worker serves, or offline before the
+ * chunk was cached. Tagged so the panel boundary can tell it apart from a bug
+ * in a panel, which must still reach the app's own error boundary.
+ */
+export class PanelLoadError extends Error {
+  constructor(cause: unknown) {
+    super('A settings panel failed to load', { cause });
+    this.name = 'PanelLoadError';
+  }
+}
 
-export const GeneralPanel = lazy(() =>
-  import('./instanceSettingsPanels/GeneralPanel').then((m) => ({ default: m.GeneralPanel })));
-export const RegistrationPanel = lazy(() =>
-  import('./instanceSettingsPanels/RegistrationPanel').then((m) => ({ default: m.RegistrationPanel })));
-export const FederationPanel = lazy(() =>
-  import('./instanceSettingsPanels/FederationPanel').then((m) => ({ default: m.FederationPanel })));
-export const StreamingPanel = lazy(() =>
-  import('./instanceSettingsPanels/StreamingPanel').then((m) => ({ default: m.StreamingPanel })));
-export const StoragePanel = lazy(() =>
-  import('./instanceSettingsPanels/StoragePanel').then((m) => ({ default: m.StoragePanel })));
-export const UsersPanel = lazy(() =>
-  import('./instanceSettingsPanels/UsersPanel').then((m) => ({ default: m.UsersPanel })));
-export const UpdatesPanel = lazy(() =>
-  import('./instanceSettingsPanels/UpdatesPanel').then((m) => ({ default: m.UpdatesPanel })));
-export const TelemetryPanel = lazy(() =>
-  import('./instanceSettingsPanels/TelemetryPanel').then((m) => ({ default: m.TelemetryPanel })));
+/**
+ * `React.lazy` for a named export. A rejected import is rethrown as a
+ * {@link PanelLoadError}.
+ */
+export function lazyPanel<M, P extends object>(
+  load: () => Promise<M>,
+  pick: (module: M) => ComponentType<P>,
+): LazyExoticComponent<ComponentType<P>> {
+  return lazy(() => load().then(
+    (module) => ({ default: pick(module) }),
+    (error: unknown) => { throw new PanelLoadError(error); },
+  ));
+}
 
-export const OverviewPanel = lazy(() =>
-  import('./spaceSettingsPanels/OverviewPanel').then((m) => ({ default: m.OverviewPanel })));
-export const MembersPanel = lazy(() =>
-  import('./spaceSettingsPanels/MembersPanel').then((m) => ({ default: m.MembersPanel })));
-export const RolesPanel = lazy(() =>
-  import('./spaceSettingsPanels/RolesPanel').then((m) => ({ default: m.RolesPanel })));
-export const BansPanel = lazy(() =>
-  import('./spaceSettingsPanels/BansPanel').then((m) => ({ default: m.BansPanel })));
+export const AccountPanel = lazyPanel(() => import('./settingsPanels/AccountPanel'), (m) => m.AccountPanel);
+export const AppearancePanel = lazyPanel(() => import('./settingsPanels/AppearancePanel'), (m) => m.AppearancePanel);
+export const VoicePanel = lazyPanel(() => import('./settingsPanels/VoicePanel'), (m) => m.VoicePanel);
+export const PrivacyPanel = lazyPanel(() => import('./settingsPanels/PrivacyPanel'), (m) => m.PrivacyPanel);
+export const ConnectionsPanel = lazyPanel(() => import('./settingsPanels/ConnectionsPanel'), (m) => m.ConnectionsPanel);
+export const KeybindsPanel = lazyPanel(() => import('./settingsPanels/KeybindsPanel'), (m) => m.KeybindsPanel);
+export const DesktopPanel = lazyPanel(() => import('./settingsPanels/DesktopPanel'), (m) => m.DesktopPanel);
+export const DesktopDownloadPanel = lazyPanel(() => import('./settingsPanels/DesktopDownloadPanel'), (m) => m.DesktopDownloadPanel);
+export const InstancePanel = lazyPanel(() => import('./settingsPanels/InstancePanel'), (m) => m.InstancePanel);
+
+export const GeneralPanel = lazyPanel(() => import('./instanceSettingsPanels/GeneralPanel'), (m) => m.GeneralPanel);
+export const RegistrationPanel = lazyPanel(() => import('./instanceSettingsPanels/RegistrationPanel'), (m) => m.RegistrationPanel);
+export const FederationPanel = lazyPanel(() => import('./instanceSettingsPanels/FederationPanel'), (m) => m.FederationPanel);
+export const StreamingPanel = lazyPanel(() => import('./instanceSettingsPanels/StreamingPanel'), (m) => m.StreamingPanel);
+export const StoragePanel = lazyPanel(() => import('./instanceSettingsPanels/StoragePanel'), (m) => m.StoragePanel);
+export const UsersPanel = lazyPanel(() => import('./instanceSettingsPanels/UsersPanel'), (m) => m.UsersPanel);
+export const UpdatesPanel = lazyPanel(() => import('./instanceSettingsPanels/UpdatesPanel'), (m) => m.UpdatesPanel);
+export const TelemetryPanel = lazyPanel(() => import('./instanceSettingsPanels/TelemetryPanel'), (m) => m.TelemetryPanel);
+
+export const OverviewPanel = lazyPanel(() => import('./spaceSettingsPanels/OverviewPanel'), (m) => m.OverviewPanel);
+export const MembersPanel = lazyPanel(() => import('./spaceSettingsPanels/MembersPanel'), (m) => m.MembersPanel);
+export const RolesPanel = lazyPanel(() => import('./spaceSettingsPanels/RolesPanel'), (m) => m.RolesPanel);
+export const BansPanel = lazyPanel(() => import('./spaceSettingsPanels/BansPanel'), (m) => m.BansPanel);
 
 /**
  * Holds the panel's place while its chunk loads. The block has a fixed height
@@ -75,7 +81,58 @@ function SettingsPanelFallback() {
   );
 }
 
-/** The boundary every lazily loaded settings panel renders inside. */
+/**
+ * What a panel shows when its chunk could not be fetched: the failed-load
+ * treatment the settings panels already use. `React.lazy` keeps the rejected
+ * import, so trying again in place cannot succeed; a reload fetches the
+ * current build.
+ */
+function SettingsPanelLoadFailed() {
+  const { t } = useTranslation('common');
+  return (
+    <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm flex flex-wrap items-center gap-3">
+      <span>{t('states.loadSettingsFailed')}</span>
+      <button
+        type="button"
+        onClick={() => window.location.reload()}
+        className="font-medium underline underline-offset-2 hover:no-underline transition-all"
+      >
+        {t('crash.reload')}
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Keeps a failed panel chunk inside the panel area, so the rest of the app,
+ * and a call in progress, stays up. Any other error is rethrown to the app's
+ * error boundary.
+ */
+class PanelLoadBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+
+  static getDerivedStateFromError(error: unknown): { failed: boolean } {
+    if (error instanceof PanelLoadError) return { failed: true };
+    throw error;
+  }
+
+  componentDidCatch(error: unknown): void {
+    console.warn('[settings] panel failed to load:', error instanceof PanelLoadError ? error.cause : error);
+  }
+
+  render() {
+    return this.state.failed ? <SettingsPanelLoadFailed /> : this.props.children;
+  }
+}
+
+/**
+ * The boundary every lazily loaded settings panel renders inside. Callers key
+ * it by the open tab, so a failed tab does not block the others.
+ */
 export function SettingsPanelSuspense({ children }: { children: ReactNode }) {
-  return <Suspense fallback={<SettingsPanelFallback />}>{children}</Suspense>;
+  return (
+    <PanelLoadBoundary>
+      <Suspense fallback={<SettingsPanelFallback />}>{children}</Suspense>
+    </PanelLoadBoundary>
+  );
 }
