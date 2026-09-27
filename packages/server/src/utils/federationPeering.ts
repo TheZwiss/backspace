@@ -277,6 +277,14 @@ export function settledPeeringResult(origin: string): EnsurePeeredResult | null 
 const inFlightPeering = new Map<string, Promise<EnsurePeeredResult>>();
 
 /**
+ * Whether ensurePeered has a handshake with `origin` in flight. `origin` must
+ * be normalized (validateOrigin), as the map is keyed by the normalized origin.
+ */
+export function isHandshakeInFlight(origin: string): boolean {
+  return inFlightPeering.has(origin);
+}
+
+/**
  * Ensure we have an active peering relationship with the given origin.
  * If no peer exists, creates a pending record and runs the handshake.
  * Deduplicates concurrent calls for the same origin.
