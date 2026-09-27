@@ -21,6 +21,10 @@ import { sortDmChannels } from './dmSorting';
  * origin for its DM list, which carries the `federatedId`. If that does not
  * place it, the message gets an entry of its own. It is never assigned to a
  * conversation by guessing.
+ *
+ * Only the pinned copy's messages enter the conversation's message list, so
+ * every message id in it is one the pinned origin knows (see
+ * `deliverToConversation`).
  */
 
 const HOME_ORIGIN = '';
@@ -65,11 +69,22 @@ function recordLastMessage(origin: string, channelId: string, message: DmMessage
   }
 }
 
-/** Deliver `message` into the known conversation `primaryId`. */
+/**
+ * Deliver `message` into the known conversation `primaryId`, if this is the
+ * pinned copy.
+ *
+ * A mirrored copy (the channel id is one of `dmAlternatives`, not the pinned
+ * entry) is not added. Its message id is the mirroring instance's local id,
+ * while every action on a message (reply, reaction, edit, delete) is sent to
+ * the pinned origin, which knows only its own ids: a reply to a mirrored copy
+ * was refused as an invalid reply target and a reaction was silently dropped
+ * (#295). The pinned origin receives the same message over the S2S relay and
+ * delivers its own copy, which sets the preview and unread state.
+ */
 function deliverToConversation(origin: string, primaryId: string, message: DmMessageWithUser): void {
-  const routed = primaryId === message.dmChannelId ? message : { ...message, dmChannelId: primaryId };
-  useChatStore.getState().addRealtimeMessage(primaryId, asChatMessage(routed));
-  recordLastMessage(origin, primaryId, routed);
+  if (primaryId !== message.dmChannelId) return;
+  useChatStore.getState().addRealtimeMessage(primaryId, asChatMessage(message));
+  recordLastMessage(origin, primaryId, message);
 }
 
 /** A conversation no list placed: give it its own entry under the origin that sent it. */

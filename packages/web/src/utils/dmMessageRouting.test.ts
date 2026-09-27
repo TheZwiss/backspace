@@ -222,6 +222,47 @@ describe('applyIncomingDmMessage: a message never lands in another conversation 
   });
 });
 
+describe('applyIncomingDmMessage: the list holds only ids the pinned origin knows (#295)', () => {
+  beforeEach(() => {
+    // Both copies of the bob conversation are known; home is the pinned one.
+    useSpaceStore.setState({
+      dmAlternatives: new Map([['fid-alice-bob', new Map([['', 'dm-bob-home'], [REMOTE, 'dm-bob-remote']])]]),
+    });
+  });
+
+  // bob's message as REMOTE (its home) pushes it, and as home pushes its relayed copy.
+  const bobOnRemoteCopy = (): DmMessageWithUser => message({
+    id: 'm-bob-remote', dmChannelId: 'dm-bob-remote', userId: 'bob-remote', user: bobOnRemote,
+    content: 'question from bob',
+  });
+  const bobOnHomeCopy = (): DmMessageWithUser => message({
+    id: 'm-bob-home', dmChannelId: 'dm-bob-home', userId: 'bob-stub-on-home', user: bobOnHome,
+    content: 'question from bob', sourceInstance: REMOTE, sourceMessageId: 'm-bob-remote',
+  });
+
+  it('when the other instance delivers first, the conversation still ends up holding the pinned origin\'s id', async () => {
+    await applyIncomingDmMessage(REMOTE, bobOnRemoteCopy());
+    await applyIncomingDmMessage('', bobOnHomeCopy());
+
+    // Replies and reactions are sent to home with this id; REMOTE's id means nothing there.
+    expect((useChatStore.getState().messages.get('dm-bob-home') ?? []).map(m => m.id)).toEqual(['m-bob-home']);
+  });
+
+  it('a mirrored copy leaves the conversation\'s list, preview and unread state to the pinned copy', async () => {
+    useChatStore.setState({ currentChannelId: 'dm-carol' });
+    await applyIncomingDmMessage(REMOTE, bobOnRemoteCopy());
+
+    expect(useChatStore.getState().messages.get('dm-bob-home') ?? []).toEqual([]);
+    expect(dmById('dm-bob-home')?.lastMessage).toBeNull();
+    expect(useChatStore.getState().unreadChannels.has('dm-bob-home')).toBe(false);
+
+    await applyIncomingDmMessage('', bobOnHomeCopy());
+    expect(contentsOf('dm-bob-home')).toEqual(['question from bob']);
+    expect(dmById('dm-bob-home')?.lastMessage?.id).toBe('m-bob-home');
+    expect(useChatStore.getState().unreadChannels.has('dm-bob-home')).toBe(true);
+  });
+});
+
 describe('applyIncomingDmChannel: alternates are recorded when the copy is skipped (#296)', () => {
   it('a dm_channel_created for a conversation already listed records the alternate instead of dropping it', async () => {
     applyIncomingDmChannel(REMOTE, bobDmOnRemote);
