@@ -342,3 +342,72 @@ describe('performHandshake — a remote that has revoked us is a settled answer'
     expect(result).toEqual({ status: 'active', peerId: row?.id });
   });
 });
+
+describe('performHandshake — only the two known Backspace refusals are settled', () => {
+  beforeEach(async () => {
+    sqlite = new Database(':memory:');
+    sqlite.pragma('foreign_keys = ON');
+    testDb = drizzle(sqlite, { schema });
+    applyMigrations(sqlite);
+    seedInstanceSettings();
+    const { _clearInFlightPeering } = await import('./federationPeering.js');
+    _clearInFlightPeering();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    sqlite.close();
+  });
+
+  it('403 PEERING_REQUIRES_APPROVAL settles the row as rejected', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      queueAgainstPendingRow('msg-7');
+      return new Response(JSON.stringify({
+        error: 'This instance requires manual peering approval',
+        code: 'PEERING_REQUIRES_APPROVAL',
+        statusCode: 403,
+      }), { status: 403, headers: { 'content-type': 'application/json' } });
+    }));
+
+    const { ensurePeered } = await import('./federationPeering.js');
+    const result = await ensurePeered(REMOTE, { kind: 'system' });
+
+    expect(result).toEqual({ status: 'rejected', error: 'This instance requires manual peering approval' });
+    expect(peerRow()?.status).toBe('rejected');
+  });
+
+  it('an HTML 403 from something in front of the remote stays transient', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      queueAgainstPendingRow('msg-8');
+      return new Response('<html><body><h1>403 Forbidden</h1></body></html>', {
+        status: 403,
+        headers: { 'content-type': 'text/html' },
+      });
+    }));
+
+    const { ensurePeered } = await import('./federationPeering.js');
+    const result = await ensurePeered(REMOTE, { kind: 'system' });
+
+    expect(result.status).toBe('failed');
+    expect(peerRow()?.status).toBe('pending');
+    expect(outboxEntityIds()).toEqual(['msg-8']);
+  });
+
+  it('a foreign-shaped JSON 403 stays transient', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      queueAgainstPendingRow('msg-9');
+      return new Response(JSON.stringify({ error: 'Access denied', code: 'WAF_BLOCK' }), {
+        status: 403,
+        headers: { 'content-type': 'application/json' },
+      });
+    }));
+
+    const { ensurePeered } = await import('./federationPeering.js');
+    const result = await ensurePeered(REMOTE, { kind: 'system' });
+
+    expect(result.status).toBe('failed');
+    expect(peerRow()?.status).toBe('pending');
+    expect(outboxEntityIds()).toEqual(['msg-9']);
+  });
+});

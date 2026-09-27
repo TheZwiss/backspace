@@ -212,6 +212,16 @@ export function createAutoPlaceholderPeer(
     .get() ?? null;
 }
 
+/**
+ * The `error` a Backspace `/peer/accept` answers with when its row for us is
+ * `revoked` (`routes/federation/handlers/peerHandshake.ts`, the `revoked`
+ * branch). That 403 carries no `code`, so this exact string is the only way to
+ * tell it from a 403 sent by something in front of the remote. It has not
+ * changed since the handshake was introduced, so every released version sends
+ * it.
+ */
+const REMOTE_REVOKED_ERROR = 'Peering with this instance has been revoked';
+
 // ─── Settled peer rows ──────────────────────────────────────────────────────
 
 /**
@@ -517,24 +527,30 @@ async function performHandshake(
       return { status: 'active', peerId };
     }
 
-    // Check for explicit rejection (autoAcceptPeering = 0)
     let code: string | undefined;
+    let remoteError: string | undefined;
     let errorMessage = `Remote rejected peering (HTTP ${response.status})`;
     try {
       const body = (await response.json()) as { error?: string; code?: string };
       if (body.error) errorMessage = body.error;
+      remoteError = body.error;
       code = body.code;
     } catch {
-      // Ignore parse failures
+      // Non-JSON body (an HTML error page from something in front of the remote)
     }
 
-    if (response.status === 403) {
-      // A 403 is the remote refusing us, not a failure to reach it, and both
-      // 403s `/peer/accept` sends are permanent: `PEERING_REQUIRES_APPROVAL`
-      // (its admin denied us) and the codeless revoked answer (its row for us
-      // is `revoked`). Retrying either only repeats the refusal, so the row
-      // settles as `rejected` (sticky) and the caller hears it.
-      console.warn(`[federation] handshake with ${origin} refused (${code ?? 'HTTP 403'}): ${errorMessage}`);
+    // Settle only on the two refusals a Backspace `/peer/accept` sends, both
+    // permanent: `PEERING_REQUIRES_APPROVAL` (its admin denied us) and the
+    // revoked answer (its row for us is `revoked`). Retrying either only
+    // repeats the refusal, so the row settles as `rejected` (sticky) and the
+    // caller hears it. Any other 403 (a WAF, an IP block, a proxy deny rule, a
+    // default vhost during a redeploy) is not the remote's answer and stays
+    // transient below.
+    if (
+      response.status === 403 &&
+      (code === 'PEERING_REQUIRES_APPROVAL' || remoteError === REMOTE_REVOKED_ERROR)
+    ) {
+      console.warn(`[federation] handshake with ${origin} refused (${code ?? 'revoked'}): ${errorMessage}`);
       return settleRejectedHandshake(peerId, errorMessage);
     }
 
