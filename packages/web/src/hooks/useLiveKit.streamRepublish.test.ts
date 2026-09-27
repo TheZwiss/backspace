@@ -90,6 +90,22 @@ function unpublish(room: Room, sharer: Sharer, pub: FakePublication): void {
   act(() => { room.emit(RoomEvent.TrackUnpublished, pub as never, sharer as never); });
 }
 
+/**
+ * A participant leaving, in livekit-client's order (Room.handleParticipantDisconnected):
+ * dropped from remoteParticipants, then TrackUnpublished for each remaining
+ * publication, then ParticipantDisconnected. The first TrackUnpublished's
+ * update already removes the participant from the store's participant list.
+ */
+function leave(room: Room, sharer: Sharer): void {
+  (room.remoteParticipants as Map<string, unknown>).delete(sharer.identity);
+  for (const pub of [...sharer.trackPublications.values()]) unpublish(room, sharer, pub);
+  act(() => { room.emit(RoomEvent.ParticipantDisconnected, sharer as never); });
+}
+
+function addMicrophone(sharer: Sharer): void {
+  sharer.trackPublications.set('TR_MIC', makePublication(Track.Source.Microphone, 'TR_MIC'));
+}
+
 function announceRepublish(room: Room, sharer: Sharer): void {
   const payload = new TextEncoder().encode(JSON.stringify({ type: 'stream_republish' }));
   act(() => { room.emit(RoomEvent.DataReceived, payload, sharer as never); });
@@ -231,6 +247,72 @@ describe('a viewer watching a share that is republished', () => {
   });
 });
 
+describe('a second republish announced before the first one\'s new track arrives', () => {
+  // The codec pill toggled twice quickly: the second announcement can reach the
+  // viewer while it is still waiting for the first republish's new track.
+
+  it('keeps watching through both republishes', async () => {
+    const room = await connectedRoom();
+    const sharer = makeSharer(room);
+    const first = publish(room, sharer, 'TR_1');
+    useVoiceStore.getState().watchStream('bob');
+    const seen = recordSharingFlag();
+
+    announceRepublish(room, sharer);
+    unpublish(room, sharer, first);
+    announceRepublish(room, sharer);
+    const second = publish(room, sharer, 'TR_2');
+
+    expect(second.setSubscribed).toHaveBeenCalledWith(true);
+    expect(seen).not.toContain(false);
+
+    // The second announcement's removal bridges too.
+    unpublish(room, sharer, second);
+    const third = publish(room, sharer, 'TR_3');
+    expect(third.setSubscribed).toHaveBeenCalledWith(true);
+    expect(seen).not.toContain(false);
+    expect(useVoiceStore.getState().watchingStreams.has('bob')).toBe(true);
+  });
+
+  it('ends the share cleanly when no new track follows', async () => {
+    const room = await connectedRoom();
+    const sharer = makeSharer(room);
+    const first = publish(room, sharer, 'TR_1');
+    useVoiceStore.getState().watchStream('bob');
+    vi.useFakeTimers();
+
+    announceRepublish(room, sharer);
+    unpublish(room, sharer, first);
+    announceRepublish(room, sharer);
+    act(() => { vi.advanceTimersByTime(STREAM_REPUBLISH_WINDOW_MS); });
+
+    expect(sharerIsListedAsSharing()).toBe(false);
+    expect(useVoiceStore.getState().watchingStreams.has('bob')).toBe(false);
+    const later = publish(room, sharer, 'TR_3');
+    expect(later.setSubscribed).not.toHaveBeenCalled();
+  });
+
+  it('ends the share cleanly when the second republish never removes the new track', async () => {
+    const room = await connectedRoom();
+    const sharer = makeSharer(room);
+    const first = publish(room, sharer, 'TR_1');
+    useVoiceStore.getState().watchStream('bob');
+    vi.useFakeTimers();
+
+    announceRepublish(room, sharer);
+    unpublish(room, sharer, first);
+    announceRepublish(room, sharer);
+    const second = publish(room, sharer, 'TR_2');
+    act(() => { vi.advanceTimersByTime(STREAM_REPUBLISH_WINDOW_MS); });
+
+    // The share goes on under TR_2; a later stop is a plain end.
+    expect(sharerIsListedAsSharing()).toBe(true);
+    unpublish(room, sharer, second);
+    expect(sharerIsListedAsSharing()).toBe(false);
+    expect(useVoiceStore.getState().watchingStreams.has('bob')).toBe(false);
+  });
+});
+
 describe('a sharer that does not announce the republish (older client)', () => {
   it('ends the share and does not watch the new track, as before', async () => {
     const room = await connectedRoom();
@@ -284,6 +366,32 @@ describe('federated DM call: the stream is keyed by the local id of the sharer',
 
     expect(second.setSubscribed).toHaveBeenCalledWith(true);
     expect(useVoiceStore.getState().watchingStreams.has('local-bob')).toBe(true);
+  });
+
+  it('leaves no watch behind when the sharer leaves mid-share', async () => {
+    const room = await connectedRoom();
+    const sharer = makeSharer(room);
+    addMicrophone(sharer);
+    publish(room, sharer, 'TR_1');
+    useVoiceStore.getState().watchStream('local-bob');
+
+    leave(room, sharer);
+
+    expect(useVoiceStore.getState().watchingStreams.has('local-bob')).toBe(false);
+  });
+
+  it('leaves no watch behind when the sharer leaves between a republish\'s tracks', async () => {
+    const room = await connectedRoom();
+    const sharer = makeSharer(room);
+    addMicrophone(sharer);
+    const first = publish(room, sharer, 'TR_1');
+    useVoiceStore.getState().watchStream('local-bob');
+
+    announceRepublish(room, sharer);
+    unpublish(room, sharer, first);
+    leave(room, sharer);
+
+    expect(useVoiceStore.getState().watchingStreams.has('local-bob')).toBe(false);
   });
 
   it('ends the watch the tile started under the local id when the share ends', async () => {

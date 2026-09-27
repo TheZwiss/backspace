@@ -366,7 +366,8 @@ Exactly one broadcast per stop. `unpublishTrack` emits `LocalTrackUnpublished` *
 | `stream_republish` received | `announced` (window starts) | none yet |
 | `TrackUnpublished` (ScreenShare) while announced | `bridging` (window restarts) | the watch, stream volume and stream mute are kept; `updateParticipants` keeps `isScreenSharing` true for the sharer, so the tile stays and no `stream_ended` / `stream_started` cue fires |
 | `TrackUnpublished` (ScreenShare) with no announcement | none | the share ends: unwatch, clear volume and mute, as before the message existed |
-| `TrackPublished` (ScreenShare) while bridging | cleared | subscribed when the viewer is watching; the `ScreenShareAudio` that follows is subscribed by the existing watch-state branch |
+| another `stream_republish` while bridging (codec toggled again before the new track arrived) | stays `bridging`, window restarts, the further republish is remembered | none yet |
+| `TrackPublished` (ScreenShare) while bridging | cleared, or back to `announced` when a further republish was remembered | subscribed when the viewer is watching; the `ScreenShareAudio` that follows is subscribed by the existing watch-state branch |
 | `STREAM_REPUBLISH_WINDOW_MS` (15 s) passes while bridging | cleared | the share ends, with its `stream_ended` cue |
 | the window passes while only announced, or a new publication arrives first | cleared | nothing |
 | `ParticipantDisconnected` while bridging | cleared | the share ends |
@@ -375,7 +376,7 @@ The window is 15 s because livekit-client fails a publication the server has not
 
 Only a removal that follows the announcement bridges, which keeps mixed versions safe. An older viewer does not recognise the message (it matches neither `stream_watch` nor `deafen`) and loses the stream as before. A newer viewer watching an older sharer never gets an announcement, so every removal ends the share. If the announcement arrives after the removal (the data channel and the signal channel are separate paths), the share has already ended and the late announcement lapses with its window. The viewer is not re-subscribed and no state is left stuck. The resume sends no `stream_watch` ping, so the viewer plays no cue of its own.
 
-Stream state for a remote sharer is keyed by `streamUserIdFor(identity)`: the userId `updateParticipants` resolved (a federated DM member's local id) and the one `StreamTile` watches by. The raw id inside the LiveKit identity is used only as the fallback.
+Stream state for a remote sharer is keyed by `resolveParticipantUserId(identity)`, the same function `updateParticipants` lists participants under and so the id `StreamTile` watches by. In a federated DM call it resolves the home id in the LiveKit identity to the DM member's local id. It reads the DM membership, not the participant list, because a sharer who leaves is dropped from that list by the first `TrackUnpublished` of the teardown, before the screen share's own removal and `ParticipantDisconnected` arrive.
 
 `StreamQualityControls` is the shared quality panel (resolution, frame rate, content mode, codec, bitrate, system audio; it shows the effective config and saves only on click); `ScreenShareSetup` and `ScreenShareSettingsPopover` both render it.
 

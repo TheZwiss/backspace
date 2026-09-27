@@ -164,20 +164,26 @@ export function parseIdentity(identity: string): { userId: string; username: str
 }
 
 /**
- * The userId a remote participant's stream state (`watchingStreams`, stream
- * volume and mute) is keyed by: the one `updateParticipants` resolved and
- * `StreamTile` uses. In a federated DM call that is the DM member's local id,
- * not the home id inside the LiveKit identity. Falls back to the identity's
- * own id for a participant not listed yet.
+ * The userId this client knows a LiveKit participant by. In a federated DM call
+ * the identity carries the member's home id, which is resolved to the DM
+ * member's local id; otherwise it is the identity's own id. `updateParticipants`
+ * lists participants under it, and stream state (`watchingStreams`, stream
+ * volume and mute) is keyed by it, since `StreamTile` watches by the listed id.
+ * Reads only the DM membership, never the participant list, so it still
+ * resolves while a participant who is leaving has already been dropped from it.
  */
-function streamUserIdFor(identity: string): string {
-  return useVoiceStore.getState().participants.find((p) => p.identity === identity)?.userId
-    ?? parseIdentity(identity).userId;
+function resolveParticipantUserId(identity: string): string {
+  const rawId = parseIdentity(identity).userId;
+  const activeDmCall = useVoiceStore.getState().activeDmCall;
+  if (!activeDmCall) return rawId;
+  const dmChannel = useSpaceStore.getState().dmChannels.find((d) => d.id === activeDmCall.dmChannelId);
+  const match = dmChannel?.members.find((m) => m.homeUserId === rawId || m.id === rawId);
+  return match?.id ?? rawId;
 }
 
 /** A remote screen share ended: drop the watch and the per-stream audio settings. */
 function endRemoteStream(identity: string): void {
-  const userId = streamUserIdFor(identity);
+  const userId = resolveParticipantUserId(identity);
   const state = useVoiceStore.getState();
   state.unwatchStream(userId);
   state.clearStreamVolume(userId);
@@ -285,20 +291,8 @@ export function useLiveKit() {
     const allParticipants: ParticipantInfo[] = [];
     const processParticipant = (p: Participant, isLocal: boolean) => {
       if (!p.identity) return;
-      const { userId: rawId, username } = parseIdentity(p.identity);
-
-      // Resolve identity: for federated calls rawId may be homeUserId from another instance.
-      // Check DM members for a user whose homeUserId matches.
-      let userId = rawId;
-      const activeDmCall = useVoiceStore.getState().activeDmCall;
-      if (activeDmCall) {
-        const dmChannels = useSpaceStore.getState().dmChannels;
-        const dmChannel = dmChannels.find(d => d.id === activeDmCall.dmChannelId);
-        if (dmChannel) {
-          const match = dmChannel.members.find(m => m.homeUserId === rawId || m.id === rawId);
-          if (match) userId = match.id;
-        }
-      }
+      const { username } = parseIdentity(p.identity);
+      const userId = resolveParticipantUserId(p.identity);
 
       const memberMatch = useSpaceStore.getState().members.find(m => m.userId === userId);
       let cachedUser: User | null;
@@ -866,14 +860,14 @@ export function useLiveKit() {
           // Stream tracks follow the watch state, and the watch click only
           // subscribed what was published then. System Audio can be turned on
           // mid-stream, so audio arriving for a stream being watched joins it.
-          if (useVoiceStore.getState().watchingStreams.has(streamUserIdFor(participant.identity))) {
+          if (useVoiceStore.getState().watchingStreams.has(resolveParticipantUserId(participant.identity))) {
             publication.setSubscribed(true);
           }
         } else if (republishRef.current?.completeWithPublication(participant.identity)) {
           // The new track of an announced republish: a viewer who was watching
           // keeps watching without clicking Watch again. Its audio, published
           // after the video, is picked up by the branch above.
-          if (useVoiceStore.getState().watchingStreams.has(streamUserIdFor(participant.identity))) {
+          if (useVoiceStore.getState().watchingStreams.has(resolveParticipantUserId(participant.identity))) {
             publication.setSubscribed(true);
           }
         }

@@ -9,6 +9,12 @@
  * | `announced` | `stream_republish` received                  | the old publication's removal (→ `bridging`), a new publication, or the window running out (dropped silently) |
  * | `bridging`  | the old publication removed while announced  | a new publication (resumed), the sharer leaving, or the window running out (`onBridgeExpired`: the share ended) |
  *
+ * A further announcement while `bridging` (the codec toggled again before the
+ * first republish's new track arrived) keeps the entry `bridging`, restarts
+ * the window and is remembered: the new publication then resumes the watch
+ * and re-arms the entry as `announced`, so the removal the second republish
+ * makes bridges as well.
+ *
  * Only a removal that follows an announcement bridges. A removal with no
  * announcement (a sharer that predates the message, or an announcement that
  * arrived late) ends the share at once, exactly as before the message existed.
@@ -26,6 +32,8 @@ type Phase = 'announced' | 'bridging';
 
 interface Entry {
   phase: Phase;
+  /** While bridging: a further republish was announced before the new track arrived. */
+  nextAnnounced: boolean;
   timer: ReturnType<typeof setTimeout>;
 }
 
@@ -36,6 +44,12 @@ export class StreamRepublishTracker {
 
   /** The sharer announced that its next unpublish is a republish. */
   announce(identity: string): void {
+    if (this.entries.get(identity)?.phase === 'bridging') {
+      // Still waiting for the previous republish's track: stay bridging, so
+      // that track resumes the watch, and remember this one for after it.
+      this.arm(identity, 'bridging', true);
+      return;
+    }
     this.arm(identity, 'announced');
   }
 
@@ -60,6 +74,11 @@ export class StreamRepublishTracker {
    * bridged share, i.e. a viewer who was watching should be subscribed to it.
    */
   completeWithPublication(identity: string): boolean {
+    const entry = this.entries.get(identity);
+    if (entry?.phase === 'bridging' && entry.nextAnnounced) {
+      this.arm(identity, 'announced');
+      return true;
+    }
     return this.drop(identity) === 'bridging';
   }
 
@@ -74,7 +93,7 @@ export class StreamRepublishTracker {
     this.entries.clear();
   }
 
-  private arm(identity: string, phase: Phase): void {
+  private arm(identity: string, phase: Phase, nextAnnounced = false): void {
     const existing = this.entries.get(identity);
     if (existing) clearTimeout(existing.timer);
     const timer = setTimeout(() => {
@@ -82,7 +101,7 @@ export class StreamRepublishTracker {
       this.entries.delete(identity);
       if (phase === 'bridging') this.onBridgeExpired(identity);
     }, STREAM_REPUBLISH_WINDOW_MS);
-    this.entries.set(identity, { phase, timer });
+    this.entries.set(identity, { phase, nextAnnounced, timer });
   }
 
   private drop(identity: string): Phase | null {
