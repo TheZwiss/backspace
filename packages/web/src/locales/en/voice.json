@@ -27,7 +27,9 @@
     "userVolume": "User Volume"
   },
   "incomingCall": {
-    "status": "Incoming Voice Call..."
+    "status": "Incoming Voice Call...",
+    "notificationTitle": "Incoming Call",
+    "notificationBody": "{{name}} is calling you"
   },
   "grid": {
     "waitingForOthers": "Waiting for others to join...",

@@ -174,7 +174,8 @@
     "details": {
       "sectionTitle": "Account",
       "status": {
-        "label": "Status"
+        "label": "Status",
+        "homeUnavailable": "Your status is kept on {{host}}. Connect to {{host}} to change it."
       },
       "customStatus": {
         "label": "Custom Status",

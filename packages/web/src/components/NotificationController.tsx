@@ -1,10 +1,12 @@
 import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useChatStore } from '../stores/chatStore';
+import { useChatStore, addedRealtimeMessageEvents } from '../stores/chatStore';
 import { useVoiceStore } from '../stores/voiceStore';
 import { useAuthStore } from '../stores/authStore';
 import { isElectron } from '../platform/platform';
-import { onNotificationClick, sendNotification, updateBadgeCount } from '../platform/notifications';
+import { onNotificationClick, updateBadgeCount } from '../platform/notifications';
+import { showAlertNotification } from '../utils/alerts';
+import i18n from '../i18n';
 import { useSpaceStore, getMyUserIdForOrigin } from '../stores/spaceStore';
 import { useUIStore } from '../stores/uiStore';
 import { replaceEmojiShortcodesInMarkdownSource } from '../utils/emojiShortcodes';
@@ -12,6 +14,9 @@ import { replaceEmojiShortcodesInMarkdownSource } from '../utils/emojiShortcodes
 /**
  * Headless component that bridges store events to native OS notifications and badge counts.
  * Renders nothing — lives alongside SoundController in AppLayout.
+ *
+ * Notifications go through `showAlertNotification`, which applies the Do Not
+ * Disturb rule; the badge does not, because it is silent (sounds.md).
  */
 export function NotificationController() {
   const navigate = useNavigate();
@@ -75,16 +80,17 @@ export function NotificationController() {
       if (windowFocused.current) return;
 
       if (state.realtimeMessageEvents !== prevState.realtimeMessageEvents) {
-        // The store keeps only 50 events; its length stops growing after that.
-        const newEvents = state.realtimeMessageEvents.filter(event => !prevState.realtimeMessageEvents.includes(event));
+        const newEvents = addedRealtimeMessageEvents(prevState.realtimeMessageEvents, state.realtimeMessageEvents);
         for (const { message } of newEvents) {
           const { channelToSpaceMap, channelOriginMap } = useSpaceStore.getState();
           if (message.userId !== getMyUserIdForOrigin(channelOriginMap.get(message.channelId) ?? '')) {
-            const displayName = message.user?.displayName || message.user?.username || 'Someone';
+            // i18n.t, not a hook: read at notification time, in the language
+            // selected now rather than when this subscription was made.
+            const displayName = message.user?.displayName || message.user?.username || i18n.t('chat:notification.unknownSender');
             const body = message.content
               ? replaceEmojiShortcodesInMarkdownSource(message.content).replace(/[*_~`>#\-\[\]]/g, '').slice(0, 100)
-              : 'Sent an attachment';
-            sendNotification(displayName, body, {
+              : i18n.t('chat:notification.attachmentOnly');
+            showAlertNotification('message', displayName, body, {
               channelId: message.channelId,
               spaceId: channelToSpaceMap.get(message.channelId),
               userId: currentUser?.id,
@@ -115,10 +121,15 @@ export function NotificationController() {
 
     const unsubscribe = useVoiceStore.subscribe((state) => {
       if (state.incomingCall && !prevIncoming && !windowFocused.current) {
-        sendNotification('Incoming Call', `${state.incomingCall.callerName} is calling you`, {
-          channelId: state.incomingCall.dmChannelId ?? undefined,
-          userId: useAuthStore.getState().user?.id,
-        });
+        showAlertNotification(
+          'incoming_call',
+          i18n.t('voice:incomingCall.notificationTitle'),
+          i18n.t('voice:incomingCall.notificationBody', { name: state.incomingCall.callerName }),
+          {
+            channelId: state.incomingCall.dmChannelId ?? undefined,
+            userId: useAuthStore.getState().user?.id,
+          },
+        );
       }
       prevIncoming = state.incomingCall;
     });

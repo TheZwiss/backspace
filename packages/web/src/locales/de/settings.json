@@ -174,7 +174,8 @@
     "details": {
       "sectionTitle": "Konto",
       "status": {
-        "label": "Status"
+        "label": "Status",
+        "homeUnavailable": "Dein Status wird auf {{host}} gespeichert. Verbinde dich mit {{host}}, um ihn zu ändern."
       },
       "customStatus": {
         "label": "Eigener Status",

@@ -6,8 +6,9 @@ import { getDb, schema } from '../db/index.js';
 import { authenticate, verifyPassword, hashPassword, signJwt } from '../utils/auth.js';
 import { connectionManager } from '../ws/handler.js';
 import type { UpdateUserRequest, VerifyPasswordRequest, VerifyPasswordResponse, ChangePasswordRequest, ChangePasswordResponse, DeleteAccountRequest, FederationCredentialRequest, FederationCredentialResponse, ReplicatedInstance, SpaceLayoutItem, SpaceFolder, Activity, FederationIdentityDeleteRequest, FederationIdentityDeleteResponse, FederationIdentityDeleteResult, FederationProfileUpdatePayload } from '@backspace/shared';
-import { AVATAR_COLORS } from '@backspace/shared';
+import { AVATAR_COLORS, isChosenUserStatus, type ChosenUserStatus } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
+import { applyChosenStatus } from '../ws/presence.js';
 import { deleteUploadFile, deleteAttachmentByFilename } from '../utils/fileCleanup.js';
 import { tombstoneUser, collectDeletionBroadcastTargets, collectProfileBroadcastTargetIds } from '../utils/userDeletion.js';
 import { queueOutboxEvent, isFederationRelayEnabled, appendMutationLog } from '../utils/federationOutbox.js';
@@ -336,11 +337,15 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       }
     }
 
+    // A status is a choice among online/idle/dnd; 'offline' only ever means
+    // "no connection" and is not something a user can pick. It is applied
+    // after the row update below, through applyChosenStatus.
+    let chosenStatus: ChosenUserStatus | undefined;
     if (status !== undefined) {
-      if (!['online', 'idle', 'dnd', 'offline'].includes(status)) {
+      if (!isChosenUserStatus(status)) {
         return sendError(reply, 400, 'status_invalid');
       }
-      updateData.status = status;
+      chosenStatus = status;
     }
 
     if (replicatedInstances !== undefined) {
@@ -454,7 +459,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       (updateData as Record<string, unknown>).showActivity = showActivity ? 1 : 0;
     }
 
-    if (Object.keys(updateData).length === 0) {
+    if (Object.keys(updateData).length === 0 && chosenStatus === undefined) {
       return sendError(reply, 400, 'no_fields_to_update');
     }
 
@@ -465,7 +470,12 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       (updateData as Record<string, unknown>).profileUpdatedAt = Date.now();
     }
 
-    db.update(schema.users).set(updateData).where(eq(schema.users.id, request.userId)).run();
+    if (Object.keys(updateData).length > 0) {
+      db.update(schema.users).set(updateData).where(eq(schema.users.id, request.userId)).run();
+    }
+    // Writes chosen_status (and the live status while connected), then tells
+    // local observers and peers.
+    if (chosenStatus !== undefined) applyChosenStatus(request.userId, chosenStatus);
 
     // Update activity visibility cache and broadcast clear when toggled off
     if (showActivity !== undefined) {
@@ -529,18 +539,6 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const sanitized = sanitizeUser(updatedUser, true);
-
-    // Broadcast presence update if status changed
-    if (status !== undefined) {
-      const statusPayload = {
-        type: 'presence_update' as const,
-        userId: sanitized.id,
-        status: status,
-      };
-      const statusTargets = collectProfileBroadcastTargetIds(sanitized.id);
-      for (const uid of statusTargets) connectionManager.sendToUser(uid, statusPayload);
-      connectionManager.sendToUser(sanitized.id, statusPayload);
-    }
 
     // Broadcast user_updated for profile field changes
     if (hasProfileChange) {

@@ -771,6 +771,8 @@ channel-origin routing selects the API instance. Browser notifications use the
 same navigation handler and close on click. Mobile navigation also brings the
 chat screen to the top when the URL already points at that chat.
 
+Do Not Disturb and the badge: see sounds.md ("Do Not Disturb").
+
 Badge count: `set-badge-count` IPC calls `app.setBadgeCount()` (macOS dock badge, Windows taskbar overlay).
 
 **Win32 attribution:** `app.setAppUserModelId('com.backspace.desktop')` set early in startup so notifications attribute to "Backspace" in Windows Action Center.

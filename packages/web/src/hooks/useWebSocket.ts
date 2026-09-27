@@ -12,6 +12,7 @@ import { applySpaceVoiceState } from '../utils/voiceStateSync';
 import { applyIncomingDmMessage, applyIncomingDmChannel } from '../utils/dmMessageRouting';
 import { repinDmsToHomeCopies } from '../utils/dmOriginFailover';
 import { registerSelfId } from '../utils/identity';
+import { ownStatusReport, statusToAssertOnRemote } from '../utils/selfStatus';
 import { getActiveRoom } from './useLiveKit';
 import { useUIStore } from '../stores/uiStore';
 import { useActivityStore } from '../stores/activityStore';
@@ -213,6 +214,20 @@ function handleEvent(origin: string, event: ServerEvent): void {
       // Cache authoritative identity for this origin (federation-safe)
       if (!isHome) {
         setMyUserIdForOrigin(origin, event.user.id);
+      }
+
+      // The user's own chosen status (utils/selfStatus.ts): take it from this
+      // socket when it is the owner's report (the true home, for a session on
+      // a replicated row), and re-send it to this remote when this session owns
+      // the choice and the remote account is the same federated identity.
+      {
+        const authUser = useAuthStore.getState().user;
+        const report = ownStatusReport(authUser, { origin, isHome }, { userId: event.user.id, status: event.user.status });
+        if (report) useAuthStore.getState().applyOwnStatus(report);
+        if (!isHome) {
+          const status = statusToAssertOnRemote(authUser, event.user, window.location.host);
+          if (status) wsSend({ type: 'presence_update', status }, origin);
+        }
       }
 
       // Mark remote instance as connected in instanceStore
@@ -578,13 +593,18 @@ function handleEvent(origin: string, event: ServerEvent): void {
       break;
     }
 
-    case 'presence_update':
+    case 'presence_update': {
+      // The owner's report of the user's own status, e.g. a change made on
+      // another device (utils/selfStatus.ts); feeds the alert gate.
+      const report = ownStatusReport(useAuthStore.getState().user, { origin, isHome }, event);
+      if (report) useAuthStore.getState().applyOwnStatus(report);
       updateMemberPresence(event.userId, event.status);
       useSocialStore.getState().updateFriendPresence(event.userId, event.status);
       if (event.activities) {
         useActivityStore.getState().setUserActivities(event.userId, event.activities);
       }
       break;
+    }
 
     case 'user_updated': {
       if (!isHome) normalizeUserAssets(event.user, origin);
@@ -603,6 +623,11 @@ function handleEvent(origin: string, event: ServerEvent): void {
           break;
         }
         setUser(event.user);
+      }
+      {
+        // The true home's row of a replicated session carries the choice too.
+        const report = ownStatusReport(useAuthStore.getState().user, { origin, isHome }, { userId: event.user.id, status: event.user.status });
+        if (report) useAuthStore.getState().applyOwnStatus(report);
       }
 
       // Deleted user cleanup: remove from caches the existing pipeline doesn't cover

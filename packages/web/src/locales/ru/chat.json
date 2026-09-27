@@ -140,5 +140,9 @@
     "join": "Присоединиться",
     "joining": "Присоединение…",
     "joinFailed": "Не удалось присоединиться"
+  },
+  "notification": {
+    "unknownSender": "Кто-то",
+    "attachmentOnly": "Отправлено вложение"
   }
 }

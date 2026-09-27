@@ -22,6 +22,7 @@ import type {
 } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { collectProfileBroadcastTargetIds } from '../utils/userDeletion.js';
+import { statusOnConnect } from '../utils/presenceStatus.js';
 import { touchUserActivity, parseClientKind } from '../telemetry/activity.js';
 import { utcDay } from '../telemetry/day.js';
 
@@ -1808,8 +1809,12 @@ export async function registerWebSocket(app: FastifyInstance): Promise<void> {
           isFederated = !!userRow.homeInstance;
           clearTimeout(authTimeout);
 
-          // Update user status to online
-          db.update(schema.users).set({ status: 'online' }).where(eq(schema.users.id, userId)).run();
+          // Publish the user's chosen status as their live presence. For a
+          // native row that is chosen_status (idle and dnd survive reconnects
+          // and restarts); for a replicated row it is the home instance's last
+          // projection. See utils/presenceStatus.ts.
+          const connectStatus = statusOnConnect(userRow);
+          db.update(schema.users).set({ status: connectStatus }).where(eq(schema.users.id, userId)).run();
 
           // Add connection
           connectionManager.addConnection(userId, ws);
@@ -1835,15 +1840,16 @@ export async function registerWebSocket(app: FastifyInstance): Promise<void> {
             ...readyData,
           }));
 
-          // Broadcast online to friends + DM co-members + space co-members.
-          const onlinePayload = { type: 'presence_update' as const, userId, status: 'online' as const };
-          const onlineTargets = collectProfileBroadcastTargetIds(userId);
-          for (const uid of onlineTargets) connectionManager.sendToUser(uid, onlinePayload);
+          // Broadcast the connect status to friends + DM co-members + space co-members.
+          const connectPayload = { type: 'presence_update' as const, userId, status: connectStatus };
+          const connectTargets = collectProfileBroadcastTargetIds(userId);
+          for (const uid of connectTargets) connectionManager.sendToUser(uid, connectPayload);
 
-          // S2S: project online to all active peers (mirrors profile_update fanout).
+          // S2S: project it to all active peers (mirrors profile_update fanout).
+          // No-op for a replicated row: its home instance owns the projection.
           const _uid = userId;
           void import('../utils/federationPresence.js').then(({ queuePresenceRelay }) => {
-            try { queuePresenceRelay(_uid, 'online', []); } catch (e) { console.warn('[ws] queuePresenceRelay(online) failed', e); }
+            try { queuePresenceRelay(_uid, connectStatus, []); } catch (e) { console.warn('[ws] queuePresenceRelay(connect) failed', e); }
           });
         } catch {
           ws.send(JSON.stringify({ type: 'error', message: 'Invalid token' }));

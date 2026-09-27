@@ -21,7 +21,7 @@ import { connectInstance, disconnectInstance as disconnectWs, disconnectAllRemot
 // so a static import here does not create an import-time cycle.
 import { failoverDmOriginsFromDisconnected, repinDmsToHomeCopies } from '../utils/dmOriginFailover';
 import { useUIStore } from './uiStore';
-import { parseFederatedUsername } from '../utils/identity';
+import { homeHostOf, parseFederatedUsername } from '../utils/identity';
 // The registry's `errorMessage` carries one of these codes, never a sentence:
 // the Connections row is what turns it into words, in the user's language.
 import { registryReason } from '../i18n/registryErrors';
@@ -198,12 +198,6 @@ export function isSelfOrigin(origin: string): boolean {
 
 // ─── Home-session resolution ─────────────────────────────────────────────────
 
-/** Bare, lowercased hostname of an origin / homeInstance value (no scheme, no port). */
-function homeHostOf(value: string): string {
-  const stripped = value.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
-  return (stripped.split('/')[0] ?? '').split(':')[0]!.toLowerCase();
-}
-
 /**
  * The authenticated API client for a given home domain, or null when this
  * client holds no session there: the primary connection when we are browsing
@@ -213,7 +207,7 @@ function homeHostOf(value: string): string {
  * (per-remote credential issuance) so both agree on what "a session on the home
  * instance" means.
  */
-function resolveSessionApiForHome(homeDomain: string): { api: BackspaceApiClient; username: string } | null {
+export function resolveSessionApiForHome(homeDomain: string): { api: BackspaceApiClient; username: string } | null {
   const primaryUser = useAuthStore.getState().user;
   if (primaryUser && !primaryUser.homeInstance && window.location.hostname.toLowerCase() === homeDomain) {
     return { api, username: primaryUser.username };

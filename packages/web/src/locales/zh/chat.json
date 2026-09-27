@@ -131,5 +131,9 @@
     "join": "加入",
     "joining": "正在加入…",
     "joinFailed": "加入失败"
+  },
+  "notification": {
+    "unknownSender": "有人",
+    "attachmentOnly": "发送了一个附件"
   }
 }

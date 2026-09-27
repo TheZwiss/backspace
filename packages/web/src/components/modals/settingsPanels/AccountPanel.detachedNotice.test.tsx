@@ -22,17 +22,22 @@ interface AuthState {
   setUser: (user: User) => void;
 }
 
-vi.mock('../../../stores/authStore', () => ({
-  useAuthStore: Object.assign(
-    (selector: (s: AuthState) => unknown) =>
-      selector({ user: currentUser, updateProfile: noop, changePassword: noop, setUser: setUserMock }),
-    {
-      getState: (): AuthState => ({ user: currentUser, updateProfile: noop, changePassword: noop, setUser: setUserMock }),
-      setState: vi.fn(),
-      subscribe: vi.fn(),
-    },
-  ),
-}));
+vi.mock('../../../stores/authStore', async () => {
+  const { myChosenStatus } = await vi.importActual<typeof import('../../../utils/selfStatus')>('../../../utils/selfStatus');
+  return {
+    // The real derivation, over this fixture's user (no true-home report here).
+    selectMyChosenStatus: (s: { user: User | null }) => myChosenStatus(s.user, null),
+    useAuthStore: Object.assign(
+      (selector: (s: AuthState) => unknown) =>
+        selector({ user: currentUser, updateProfile: noop, changePassword: noop, setUser: setUserMock }),
+      {
+        getState: (): AuthState => ({ user: currentUser, updateProfile: noop, changePassword: noop, setUser: setUserMock }),
+        setState: vi.fn(),
+        subscribe: vi.fn(),
+      },
+    ),
+  };
+});
 
 vi.mock('../../../stores/uiStore', () => ({
   useUIStore: Object.assign(

@@ -7,7 +7,16 @@ export const users = sqliteTable('users', {
   displayName: text('display_name'),
   passwordHash: text('password_hash').notNull(),
   avatar: text('avatar'),
+  /** Live presence: the chosen status while connected, 'offline' with no connection. */
   status: text('status').default('offline'),
+  /**
+   * The status the user picked ('online' | 'idle' | 'dnd'). Survives disconnects
+   * and restarts; published as `status` when a connection authenticates.
+   * Meaningful only on rows that own their choice (native or detached,
+   * `ownsChosenStatus` in @backspace/shared): a replicated row's copy is never
+   * read or written.
+   */
+  chosenStatus: text('chosen_status').notNull().default('online'),
   customStatus: text('custom_status'),
   isAdmin: integer('is_admin').default(0),
   homeInstance: text('home_instance'),

@@ -52,6 +52,30 @@ export interface FederationRegistryEntry {
 }
 
 export type UserStatus = 'online' | 'idle' | 'dnd' | 'offline';
+/** A status a user can pick. 'offline' is never chosen: it means "no connection". */
+export type ChosenUserStatus = Exclude<UserStatus, 'offline'>;
+
+export const CHOSEN_USER_STATUSES: readonly ChosenUserStatus[] = ['online', 'idle', 'dnd'];
+
+export function isChosenUserStatus(value: unknown): value is ChosenUserStatus {
+  return typeof value === 'string' && (CHOSEN_USER_STATUSES as readonly string[]).includes(value);
+}
+
+/**
+ * Whether an account owns its chosen status, so its own row is where the choice
+ * is stored and read (`users.chosen_status`). True for a native account and for
+ * a detached one (its home instance was reset, so it is sovereign here); false
+ * for a replicated account, whose choice lives on its home instance. The same
+ * authority rule the server applies to profile edits and credential issuance.
+ * Accepts the server row (integer flag) and the client `User` (boolean flag).
+ * activity-presence.md, "DB Persistence".
+ */
+export function ownsChosenStatus(account: {
+  homeInstance?: string | null;
+  federationHomeOrphaned?: number | boolean | null;
+}): boolean {
+  return !account.homeInstance || account.federationHomeOrphaned === 1 || account.federationHomeOrphaned === true;
+}
 
 export interface UserWithPassword extends User {
   passwordHash: string;
@@ -442,7 +466,7 @@ export type ClientEvent =
   | { type: 'message_edit'; messageId: string; content: string }
   | { type: 'message_delete'; messageId: string }
   | { type: 'typing_start'; channelId: string }
-  | { type: 'presence_update'; status: 'online' | 'idle' | 'dnd' }
+  | { type: 'presence_update'; status: ChosenUserStatus }
   | { type: 'voice_join'; channelId: string }
   | { type: 'voice_leave' }
   | { type: 'dm_message_create'; dmChannelId: string; content?: string; attachments?: string[]; replyToId?: string }
@@ -613,7 +637,7 @@ export interface UpdateUserRequest {
   avatarColor?: string;
   bio?: string;
   customStatus?: string;
-  status?: UserStatus;
+  status?: ChosenUserStatus;
   replicatedInstances?: ReplicatedInstance[];
   homeUserId?: string;
   profileUpdatedAt?: number;

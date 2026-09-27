@@ -27,7 +27,9 @@
     "userVolume": "用户音量"
   },
   "incomingCall": {
-    "status": "收到语音通话来电…"
+    "status": "收到语音通话来电…",
+    "notificationTitle": "来电",
+    "notificationBody": "{{name}} 正在呼叫您"
   },
   "grid": {
     "waitingForOthers": "正在等待其他人加入…",

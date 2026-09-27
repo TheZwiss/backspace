@@ -87,6 +87,16 @@ export function hostOf(origin: string): string {
   try { return new URL(origin).host; } catch { return origin; }
 }
 
+/**
+ * Bare, lowercased hostname of an origin or `homeInstance` value (no scheme, no
+ * port). The comparison used to decide whether two values name the same home
+ * instance.
+ */
+export function homeHostOf(value: string): string {
+  const stripped = value.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+  return (stripped.split('/')[0] ?? '').split(':')[0]!.toLowerCase();
+}
+
 export function normalizeOriginToHost(input: string | null | undefined): string {
   if (!input) return '';
   if (input.includes('://')) {

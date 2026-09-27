@@ -134,5 +134,9 @@
     "join": "Join",
     "joining": "Joining…",
     "joinFailed": "Failed to join"
+  },
+  "notification": {
+    "unknownSender": "Someone",
+    "attachmentOnly": "Sent an attachment"
   }
 }

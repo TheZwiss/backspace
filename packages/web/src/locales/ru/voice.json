@@ -27,7 +27,9 @@
     "userVolume": "Громкость пользователя"
   },
   "incomingCall": {
-    "status": "Входящий голосовой звонок…"
+    "status": "Входящий голосовой звонок…",
+    "notificationTitle": "Входящий звонок",
+    "notificationBody": "{{name}} звонит вам"
   },
   "grid": {
     "waitingForOthers": "Ждём, пока присоединятся другие…",

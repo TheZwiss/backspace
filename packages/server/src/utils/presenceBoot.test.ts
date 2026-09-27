@@ -157,6 +157,21 @@ describe('resetStalePresenceOnBoot', () => {
     expect(resetStalePresenceOnBoot()).toBe(0);
   });
 
+  it('leaves the chosen status alone, so the next connection publishes it again', async () => {
+    const dndId = insertUser({ username: 'chose-dnd', status: 'dnd', chosenStatus: 'dnd' });
+    const { resetStalePresenceOnBoot } = await import('./presenceBoot.js');
+
+    resetStalePresenceOnBoot();
+
+    expect(getStatus(dndId)).toBe('offline');
+    const row = testDb
+      .select({ chosenStatus: schema.users.chosenStatus })
+      .from(schema.users)
+      .where(eq(schema.users.id, dndId))
+      .get();
+    expect(row?.chosenStatus).toBe('dnd');
+  });
+
   it('handles a mixed population correctly', async () => {
     // Locally-homed: should reset 'online' and 'dnd'
     const localOnline = insertUser({ username: 'lo', status: 'online' });

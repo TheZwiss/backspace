@@ -27,7 +27,9 @@
     "userVolume": "Nutzerlautstärke"
   },
   "incomingCall": {
-    "status": "Eingehender Sprachanruf…"
+    "status": "Eingehender Sprachanruf…",
+    "notificationTitle": "Eingehender Anruf",
+    "notificationBody": "{{name}} ruft dich an"
   },
   "grid": {
     "waitingForOthers": "Warten auf weitere Teilnehmer…",

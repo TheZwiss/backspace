@@ -174,7 +174,8 @@
     "details": {
       "sectionTitle": "账号",
       "status": {
-        "label": "状态"
+        "label": "状态",
+        "homeUnavailable": "您的状态保存在 {{host}} 上。请连接到 {{host}} 后再更改。"
       },
       "customStatus": {
         "label": "自定义状态",

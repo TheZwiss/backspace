@@ -8,6 +8,8 @@ import { useAuthStore } from '../stores/authStore';
 import { useSpaceStore } from '../stores/spaceStore';
 import { useChatStore } from '../stores/chatStore';
 import { useUIStore } from '../stores/uiStore';
+import { useVoiceStore } from '../stores/voiceStore';
+import { setLanguage } from '../i18n';
 
 vi.mock('../audio/AudioManager', () => ({ AudioManager: { getInstance: () => ({}) } }));
 
@@ -16,7 +18,11 @@ class BrowserNotification {
   static instances: BrowserNotification[] = [];
   onclick?: () => void;
   close = vi.fn();
-  constructor(public title: string, public options?: { body?: string }) { BrowserNotification.instances.push(this); }
+  body: string | undefined;
+  constructor(public title: string, public options?: { body?: string }) {
+    this.body = options?.body;
+    BrowserNotification.instances.push(this);
+  }
 }
 
 function Location() {
@@ -145,5 +151,117 @@ describe('notification clicks', () => {
     }] }));
     // The notification strips Markdown punctuation (backticks, underscores) after conversion.
     expect(BrowserNotification.instances[0]!.options?.body).toBe('type :smile: for 😄');
+  });
+});
+
+describe('Do Not Disturb', () => {
+  const incoming = (id: string, channelId = 'dm') => ({
+    channelId,
+    message: { id, channelId, userId: 'other', content: 'Hello' } as MessageWithUser,
+  });
+
+  function mountSettled() {
+    const view = mount();
+    act(() => vi.advanceTimersByTime(1000));
+    return view;
+  }
+
+  it.each([
+    ['online', 1],
+    ['idle', 1],
+    ['dnd', 0],
+  ] as const)('raises %s message notifications: %i', (status, expected) => {
+    useAuthStore.setState({ user: { id: 'me', status } as User });
+    mountSettled();
+    act(() => useChatStore.setState({ realtimeMessageEvents: [incoming('m1')] }));
+    expect(BrowserNotification.instances).toHaveLength(expected);
+  });
+
+  it('reads the status the user set on the home account, not a remote copy', () => {
+    // A message on a remote instance's channel: the remote holds its own
+    // replicated view of this user, but the decision follows the home account.
+    useAuthStore.setState({ user: { id: 'me', status: 'dnd' } as User });
+    useSpaceStore.setState({
+      userViews: new Map([['me', {
+        user: { id: 'remote-me', homeUserId: 'me', status: 'online' } as User,
+        deliveredBy: 'https://remote.example',
+        isHome: false,
+        updatedAt: 1,
+      }]]),
+    });
+    mountSettled();
+    act(() => useChatStore.setState({ realtimeMessageEvents: [incoming('m1', 'remote-chat')] }));
+    expect(BrowserNotification.instances).toHaveLength(0);
+  });
+
+  it('follows a status change made while the app is running', () => {
+    useAuthStore.setState({ user: { id: 'me', status: 'dnd' } as User });
+    mountSettled();
+    act(() => useChatStore.setState({ realtimeMessageEvents: [incoming('m1')] }));
+    expect(BrowserNotification.instances).toHaveLength(0);
+    act(() => useAuthStore.setState({ user: { id: 'me', status: 'online' } as User }));
+    act(() => useChatStore.setState({ realtimeMessageEvents: [incoming('m1'), incoming('m2')] }));
+    expect(BrowserNotification.instances).toHaveLength(1);
+  });
+
+  it('suppresses the incoming call notification on dnd and raises it otherwise', () => {
+    useAuthStore.setState({ user: { id: 'me', status: 'dnd' } as User });
+    mountSettled();
+    const call = { dmChannelId: 'dm', callerId: 'other', callerName: 'Other' };
+    act(() => useVoiceStore.setState({ incomingCall: call }));
+    expect(BrowserNotification.instances).toHaveLength(0);
+    act(() => useVoiceStore.setState({ incomingCall: null }));
+    act(() => useAuthStore.setState({ user: { id: 'me', status: 'online' } as User }));
+    act(() => useVoiceStore.setState({ incomingCall: { ...call } }));
+    expect(BrowserNotification.instances).toHaveLength(1);
+    act(() => useVoiceStore.setState({ incomingCall: null }));
+  });
+
+  it('keeps the unread badge counting on dnd', () => {
+    useAuthStore.setState({ user: { id: 'me', status: 'dnd' } as User });
+    const setBadgeCount = vi.fn();
+    window.backspace = {
+      onNotificationClick: vi.fn(() => () => {}), onWindowFocusChange: vi.fn(),
+      showNotification: vi.fn(), setBadgeCount,
+    } as unknown as NonNullable<Window['backspace']>;
+    mountSettled();
+    act(() => useChatStore.setState({
+      realtimeMessageEvents: [incoming('m1')], unreadChannels: new Set(['dm']),
+    }));
+    expect(window.backspace.showNotification).not.toHaveBeenCalled();
+    expect(setBadgeCount).toHaveBeenLastCalledWith(1);
+  });
+});
+
+describe('notification text follows the selected language', () => {
+  afterEach(async () => {
+    await setLanguage('en');
+  });
+
+  async function mountInGerman() {
+    await setLanguage('de');
+    useAuthStore.setState({ user: { id: 'me', status: 'online' } as User });
+    mount();
+    act(() => vi.advanceTimersByTime(1000));
+  }
+
+  it('names an unknown sender and an attachment-only message in German', async () => {
+    await mountInGerman();
+    act(() => useChatStore.setState({ realtimeMessageEvents: [{
+      channelId: 'dm',
+      message: { id: 'm1', channelId: 'dm', userId: 'other', content: '' } as MessageWithUser,
+    }] }));
+    expect(BrowserNotification.instances.map(n => [n.title, n.body])).toEqual([
+      ['Jemand', 'Hat einen Anhang gesendet'],
+    ]);
+  });
+
+  it('announces an incoming call in German', async () => {
+    await mountInGerman();
+    act(() => useVoiceStore.setState({ incomingCall: { dmChannelId: 'dm', callerId: 'other', callerName: 'Olle' } }));
+    expect(BrowserNotification.instances.map(n => [n.title, n.body])).toEqual([
+      ['Eingehender Anruf', 'Olle ruft dich an'],
+    ]);
+    act(() => useVoiceStore.setState({ incomingCall: null }));
   });
 });

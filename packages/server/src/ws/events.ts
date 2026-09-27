@@ -7,12 +7,13 @@ import type { VoiceRoom, DmRoomMeta, SpaceRoomMeta } from './handler.js';
 import { isMember, getChannelSpaceId, isDmMember, isDeadOneOnOne, hasPermission, computePermissions, PermissionBits } from '../utils/permissions.js';
 import { broadcastDmMessage, getDmMessageWithUser, isDmReplyTargetInChannel } from '../routes/dm.js';
 import { fetchReplyToMessages, isReplyTargetInChannel } from '../routes/messages.js';
-import { MAX_MESSAGE_LENGTH, type MessageWithUser, type Attachment, type DmMessageWithUser, type Embed, type Activity, type ActivityType, type ActivityTimestamps, type ActivityAssets, type ServerEvent, type DmCallUndeliverableFailure, type DmCallUndeliverableReason } from '@backspace/shared';
+import { MAX_MESSAGE_LENGTH, isChosenUserStatus, type MessageWithUser, type Attachment, type DmMessageWithUser, type Embed, type Activity, type ActivityType, type ActivityTimestamps, type ActivityAssets, type ServerEvent, type DmCallUndeliverableFailure, type DmCallUndeliverableReason } from '@backspace/shared';
 import type { CallRelayResult, CallFanoutFailure } from '../utils/federationOutbox.js';
 import { mapCallReasonToEventReason } from '../utils/federationOutbox.js';
 import { ACTIVITY_LIMITS } from '@backspace/shared/src/activities.js';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { collectProfileBroadcastTargetIds } from '../utils/userDeletion.js';
+import { applyChosenStatus } from './presence.js';
 import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
 import { resolveEmbeds, reResolveEmbeds, embedRowToEmbed } from '../utils/embedResolver.js';
 import { appendMutationLog, dmMessageFederationRef, dmMessageMutationTarget, queueOutboxEvent, queueDmRelay, queueDmMessageDeleteRelay, getGroupDmTargetOrigins, sendCallRelay, computeFederatedId, sendTypingRelay, queueReadStateRelay } from '../utils/federationOutbox.js';
@@ -477,36 +478,11 @@ function validateActivities(raw: unknown): Activity[] | null {
 }
 
 function handlePresenceUpdate(event: Record<string, unknown>, userId: string): void {
-  const status = event.status as string;
-
-  if (!status || !['online', 'idle', 'dnd'].includes(status)) {
+  if (!isChosenUserStatus(event.status)) {
     connectionManager.sendToUser(userId, { type: 'error', message: 'Status must be "online", "idle", or "dnd"' });
     return;
   }
-
-  const db = getDb();
-  db.update(schema.users).set({ status }).where(eq(schema.users.id, userId)).run();
-
-  connectionManager.setUserStatus(userId, status);
-  const activities = connectionManager.getUserActivities(userId);
-
-  // Broadcast to friends + DM co-members + space co-members.
-  const payload = {
-    type: 'presence_update' as const,
-    userId,
-    status,
-    ...(activities.length > 0 ? { activities } : {}),
-  };
-  const targets = collectProfileBroadcastTargetIds(userId);
-  for (const uid of targets) connectionManager.sendToUser(uid, payload);
-
-  // Also send to self (other tabs)
-  connectionManager.sendToUser(userId, payload);
-
-  // S2S: project to all active peers
-  void import('../utils/federationPresence.js').then(({ queuePresenceRelay }) => {
-    try { queuePresenceRelay(userId, status as 'online' | 'idle' | 'dnd', activities); } catch (e) { console.warn('[ws] queuePresenceRelay(manual) failed', e); }
-  });
+  applyChosenStatus(userId, event.status);
 }
 
 function handleActivityUpdate(event: Record<string, unknown>, userId: string): void {

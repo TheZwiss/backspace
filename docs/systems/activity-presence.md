@@ -115,18 +115,39 @@ function getPrimaryActivity(activities: Activity[]): Activity | null {
 | Status | Meaning |
 |--------|---------|
 | `online` | Active connection |
-| `idle` | User-set idle |
-| `dnd` | Do not disturb |
+| `idle` | User-set idle (no automatic idle detection exists) |
+| `dnd` | Do not disturb. Withholds the user's own message and incoming-call alerts (sounds and OS notifications); see sounds.md ("Do Not Disturb") |
 | `offline` | No active connections |
 
 ### DB Persistence
 
-The `users.status` column (see database.md) stores the current presence status. Default: `'offline'`.
+Two columns (see database.md):
 
-- **On connect:** Server sets `status = 'online'` in DB at WebSocket auth (`ws/handler.ts`, the line after `authenticated = true`). The REST `/api/auth/login` route does **not** set status — login alone does not imply a live socket; the WS handshake is the single source of truth.
-- **On manual change:** Client sends `presence_update` with `status` field; server persists to DB (`ws/events.ts`)
-- **On disconnect:** After 5s grace period, server sets `status = 'offline'` in DB (`ws/handler.ts:finalizeDisconnect`)
-- **On boot:** Server resets stale rows for locally-homed, non-deleted users (see "Boot Reset" below).
+- `users.chosen_status` — what the user picked (`online`/`idle`/`dnd`, default `online`). Never `offline`. Survives disconnects, restarts and the boot reset.
+- `users.status` — live presence (default `'offline'`). The chosen status while the user has a connection, `'offline'` without one.
+
+The rules live in `utils/presenceStatus.ts` (pure) and `ws/presence.ts`:
+
+- **On connect:** WebSocket auth (`ws/handler.ts`, after `authenticated = true`) writes `status = statusOnConnect(row)` and publishes the same value in the `ready` payload's `user`, the local `presence_update` broadcast and the S2S relay. For a row that owns its choice (native or detached, see below) that is `chosen_status`. For a replicated row it is the row's current `status` (the home instance's projection) unless that is `'offline'`, in which case `'online'`; the replicated row's own `chosen_status` is never used. The REST `/api/auth/login` route does **not** set status — login alone does not imply a live socket; the WS handshake is the single source of truth.
+- **On manual change:** REST `PATCH /api/users/@me { status }` and the WS `presence_update` client event both call `applyChosenStatus`. It writes `chosen_status` (only on rows that own their choice) and, while the user is connected, `status`, the in-memory `userStatuses` cache, a `presence_update` to friends, DM and space co-members and the user's own sessions, and an S2S relay. Without a connection only `chosen_status` changes. `'offline'` is rejected (`status_invalid` over REST, an error event over WS).
+- **On disconnect:** After 5s grace period, server sets `status = 'offline'` in DB (`ws/handler.ts:finalizeDisconnect`). `chosen_status` is untouched.
+- **On boot:** Server resets stale `status` rows for locally-homed, non-deleted users (see "Boot Reset" below). `chosen_status` is untouched.
+
+### The client's copy of the user's own status
+
+This is the one statement of the rule; `utils/selfStatus.ts`, `utils/alerts.ts` and sounds.md point here.
+
+**Who owns the choice.** An account owns its chosen status when it is native or detached (`ownsChosenStatus` in `@backspace/shared`: `!homeInstance || federationHomeOrphaned`), the same authority rule as profile edits and credential issuance. The server stores and reads `chosen_status` only on such rows (`statusOnConnect`, `applyChosenStatus`, the `0018` backfill).
+
+**Where the client reads it.** `statusAuthority(authStore.user)` names the owner:
+- `session`: the page's own account owns the choice. Its status is `authStore.user.status`, written only from the page's own socket (`ready`, `user_updated`, and a `presence_update` about that account, which is how a change on another device arrives).
+- `trueHome`: the page's account is a replicated row, e.g. `erin@nova` signed in directly on orbit. The page instance's view of her is a projection that falls back to `'online'`, so it is ignored. The choice is `authStore.trueHomeStatus`, written only from the true home's secondary connection (its `ready`, `user_updated` and `presence_update` about the user's row there, id `homeUserId`).
+
+`ownStatusReport` applies exactly this for every `ready`, `user_updated` and `presence_update`, whatever the origin; anything else (other users, another instance's view of the user, `'offline'`) is ignored. `selectMyChosenStatus` in `authStore.ts` is the only read: the alert gate (sounds.md, "Do Not Disturb"), the ringing loop and the settings panel all use it.
+
+**Where a change goes.** `authStore.updateProfile({ status })` sends the status to the owner: the page's instance for `session`, the true home's API for `trueHome` (refused with `settings:account.details.status.homeUnavailable` while that connection is down, never written to the page's instance).
+
+**Re-sending to remotes.** On a remote instance's `ready`, a `session` owner re-sends its status as a `presence_update` when the remote's view differs, because a remote that saw the client disconnect falls back to `'online'`. Only when the remote account is this user's federated identity (`isMyFederatedIdentity`: its home host and home user id name the user's home account, the check `ensureRemoteCredential` uses); never from a `trueHome` session, and never to a separate account that happens to be signed in on that remote.
 
 ### Boot Reset (`utils/presenceBoot.ts`)
 
@@ -153,7 +174,7 @@ Because the in-memory `ConnectionManager` is empty at boot by construction, no l
 ### Connect/Disconnect Flow
 
 1. **Server boot** → `resetStalePresenceOnBoot()` flips any locally-homed, non-deleted `online`/`idle`/`dnd` rows to `offline`. Federated rows untouched.
-2. **Auth succeeds** → `status` set to `'online'` in DB → local `presence_update` broadcast to friends + DM members + space co-members via `collectProfileBroadcastTargetIds` → S2S `presence_update` queued to all active peers via `queuePresenceRelay` (mirrors profile_update fanout).
+2. **Auth succeeds** → `status` set to the connect status (`chosen_status` for an account that owns its choice) in DB → local `presence_update` broadcast to friends + DM members + space co-members via `collectProfileBroadcastTargetIds` → S2S `presence_update` queued to all active peers via `queuePresenceRelay` (mirrors profile_update fanout).
 3. **Last socket closes** → 5-second grace period (`scheduleDisconnect`) to allow tab refresh/reconnect.
 4. **Grace period expires** → `finalizeDisconnect`: sets DB status to `'offline'`, clears in-memory activities, broadcasts local `presence_update` to friends/DM/space co-members, queues S2S `presence_update` to peers.
 5. **Reconnect during grace** → `cancelDisconnect` prevents offline broadcast; new connection proceeds normally.
@@ -413,7 +434,7 @@ See websocket.md for full wire format. Summary of activity-related events:
 
 | Event | Fields | Notes |
 |-------|--------|-------|
-| `presence_update` | `status: 'online' \| 'idle' \| 'dnd'` | Persisted to DB |
+| `presence_update` | `status: 'online' \| 'idle' \| 'dnd'` | Persisted as the chosen status (`applyChosenStatus`) |
 | `activity_update` | `activities: Activity[]` | Rate-limited 3s server-side; rejected if `showActivity=false` |
 
 ### Server to Client

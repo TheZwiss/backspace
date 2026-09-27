@@ -174,7 +174,8 @@
     "details": {
       "sectionTitle": "Учётная запись",
       "status": {
-        "label": "Статус"
+        "label": "Статус",
+        "homeUnavailable": "Ваш статус хранится на {{host}}. Подключитесь к {{host}}, чтобы изменить его."
       },
       "customStatus": {
         "label": "Пользовательский статус",

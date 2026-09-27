@@ -48,9 +48,27 @@ interface TypingUser {
   timestamp: number;
 }
 
-interface RealtimeMessageEvent {
+export interface RealtimeMessageEvent {
   channelId: string;
   message: MessageWithUser;
+}
+
+/** How many realtime message events the store keeps (oldest dropped first). */
+export const REALTIME_MESSAGE_EVENT_CAP = 50;
+
+/**
+ * The events `next` gained over `prev`. The buffer is capped, so once it is full
+ * its length stops growing; comparing lengths or slicing by the old length would
+ * find nothing new. Events are compared by identity, which `addRealtimeMessage`
+ * guarantees by always appending a fresh object.
+ */
+export function addedRealtimeMessageEvents(
+  prev: readonly RealtimeMessageEvent[],
+  next: readonly RealtimeMessageEvent[],
+): RealtimeMessageEvent[] {
+  if (prev === next) return [];
+  const seen = new Set(prev);
+  return next.filter((event) => !seen.has(event));
 }
 
 interface ChatState {
@@ -539,9 +557,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
         updated = updated.slice(updated.length - MAX_MESSAGES_PER_CHANNEL);
       }
       newMessages.set(channelId, updated);
-      // Append to realtimeMessageEvents (capped at 50)
+      // Append to realtimeMessageEvents (capped; see addedRealtimeMessageEvents)
       const newEvents = [...state.realtimeMessageEvents, { channelId, message: normalizedMessage }];
-      if (newEvents.length > 50) newEvents.splice(0, newEvents.length - 50);
+      if (newEvents.length > REALTIME_MESSAGE_EVENT_CAP) {
+        newEvents.splice(0, newEvents.length - REALTIME_MESSAGE_EVENT_CAP);
+      }
       return { messages: newMessages, realtimeMessageEvents: newEvents };
     });
   },

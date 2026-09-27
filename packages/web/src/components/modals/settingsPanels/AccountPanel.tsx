@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useAuthStore } from '../../../stores/authStore';
+import { selectMyChosenStatus, useAuthStore } from '../../../stores/authStore';
 import { useUIStore } from '../../../stores/uiStore';
 import { useInstanceStore } from '../../../stores/instanceStore';
 import { useSpaceStore } from '../../../stores/spaceStore';
@@ -12,7 +12,7 @@ import { useTransferStore } from '../../../stores/transferStore';
 import { waitForTransferAttachment } from '../../../utils/waitForTransfer';
 import { getAvatarGradient, adjustColor, mutedGradient, AVATAR_GRADIENT_MAP, BANNER_COLOR_PRESETS } from '../../../utils/gradients';
 import { AVATAR_COLORS } from '@backspace/shared';
-import type { User, UserStatus, AvatarColor } from '@backspace/shared';
+import type { User, ChosenUserStatus, AvatarColor } from '@backspace/shared';
 import { describeError } from '../../../i18n/errors';
 
 const BIO_MAX_LENGTH = 190;
@@ -21,11 +21,14 @@ const PASSWORD_MIN_LENGTH = 8;
 export function AccountPanel() {
   const { t } = useTranslation(['settings', 'common']);
   const user = useAuthStore((s) => s.user);
+  // The chosen status lives on the account that owns it, which is not this
+  // page's account when it is a replicated row (utils/selfStatus.ts).
+  const savedStatus: ChosenUserStatus = useAuthStore(selectMyChosenStatus) ?? 'online';
   const updateProfile = useAuthStore((s) => s.updateProfile);
 
   const [displayName, setDisplayName] = useState(user?.displayName ?? '');
   const [customStatus, setCustomStatus] = useState(user?.customStatus ?? '');
-  const [status, setStatus] = useState<UserStatus>(user?.status ?? 'online');
+  const [status, setStatus] = useState<ChosenUserStatus>(savedStatus);
   const [bio, setBio] = useState(user?.bio ?? '');
   const [accentColor, setAccentColor] = useState<string | null>(user?.accentColor ?? null);
   const [avatarColorState, setAvatarColorState] = useState<AvatarColor | null>(user?.avatarColor ?? null);
@@ -53,7 +56,7 @@ export function AccountPanel() {
     if (user) {
       setDisplayName(user.displayName ?? '');
       setCustomStatus(user.customStatus ?? '');
-      setStatus(user.status ?? 'online');
+      setStatus(savedStatus);
       setBio(user.bio ?? '');
       setAccentColor(user.accentColor ?? null);
       setAvatarColorState(user.avatarColor ?? null);
@@ -66,7 +69,7 @@ export function AccountPanel() {
       setBannerPreview(null);
       setBannerFilename(null);
     }
-  }, [user?.displayName, user?.customStatus, user?.status, user?.bio, user?.accentColor, user?.avatarColor, user?.avatar, user?.banner]);
+  }, [user?.displayName, user?.customStatus, savedStatus, user?.bio, user?.accentColor, user?.avatarColor, user?.avatar, user?.banner]);
 
   // Password change state
   const [currentPassword, setCurrentPassword] = useState('');
@@ -139,7 +142,7 @@ export function AccountPanel() {
   const hasChanges =
     displayName !== (user.displayName ?? '') ||
     customStatus !== (user.customStatus ?? '') ||
-    status !== (user.status ?? 'online') ||
+    status !== savedStatus ||
     bio !== (user.bio ?? '') ||
     accentColor !== (user.accentColor ?? null) ||
     avatarColorState !== (user.avatarColor ?? null) ||
@@ -245,7 +248,7 @@ export function AccountPanel() {
       const updates: Record<string, string | undefined> = {};
       if (displayName !== (user.displayName ?? '')) updates.displayName = displayName.trim();
       if (customStatus !== (user.customStatus ?? '')) updates.customStatus = customStatus.trim();
-      if (status !== (user.status ?? 'online')) updates.status = status;
+      if (status !== savedStatus) updates.status = status;
       if (bio !== (user.bio ?? '')) updates.bio = bio.trim();
       if (accentColor !== (user.accentColor ?? null)) updates.accentColor = accentColor ?? '';
       if (avatarColorState !== (user.avatarColor ?? null)) updates.avatarColor = avatarColorState ?? '';
@@ -290,7 +293,7 @@ export function AccountPanel() {
   const handleReset = () => {
     setDisplayName(user.displayName ?? '');
     setCustomStatus(user.customStatus ?? '');
-    setStatus(user.status ?? 'online');
+    setStatus(savedStatus);
     setBio(user.bio ?? '');
     setAccentColor(user.accentColor ?? null);
     setAvatarColorState(user.avatarColor ?? null);
@@ -616,7 +619,7 @@ export function AccountPanel() {
             <label className="block text-xs text-txt-secondary mb-1.5">{t('settings:account.details.status.label')}</label>
             <select
               value={status}
-              onChange={(e) => setStatus(e.target.value as UserStatus)}
+              onChange={(e) => setStatus(e.target.value as ChosenUserStatus)}
               className="input-standard w-full appearance-none"
             >
               <option value="online">{t('common:states.online')}</option>

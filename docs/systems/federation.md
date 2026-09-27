@@ -1648,9 +1648,9 @@ Native users' status (and optional rich activities) is projected to peers via th
 **Outbox-only — never written to mutation log.** Presence is ephemeral. Replaying old presence on peer activation would be wrong (stale state). The outbox queues directly without `appendMutationLog`. Stale entries that fail delivery beyond retry budget are dropped.
 
 **Sender call sites** (all in `utils/federationPresence.ts:queuePresenceRelay`):
-- `ws/handler.ts` (auth path) — `online`
+- `ws/handler.ts` (auth path) — the user's chosen status (`users.chosen_status`)
 - `ws/handler.ts` (`finalizeDisconnect`) — `offline`
-- `ws/events.ts` (`handlePresenceUpdate`) — manual `online`/`idle`/`dnd`
+- `ws/presence.ts` (`applyChosenStatus`) — manual `online`/`idle`/`dnd`, from REST `PATCH /api/users/@me` and the WS `presence_update` client event
 - `ws/events.ts` (`handleActivityUpdate`) — when activities change
 - `routes/users.ts` (showActivity-toggle clear) — cleared activities
 

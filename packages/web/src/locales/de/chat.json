@@ -134,5 +134,9 @@
     "join": "Beitreten",
     "joining": "Beitritt läuft…",
     "joinFailed": "Beitritt fehlgeschlagen"
+  },
+  "notification": {
+    "unknownSender": "Jemand",
+    "attachmentOnly": "Hat einen Anhang gesendet"
   }
 }

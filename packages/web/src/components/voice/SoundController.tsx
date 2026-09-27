@@ -1,12 +1,13 @@
 import { useEffect, useRef } from 'react';
 import { useVoiceStore } from '../../stores/voiceStore';
-import { useChatStore } from '../../stores/chatStore';
-import { useAuthStore } from '../../stores/authStore';
+import { useChatStore, addedRealtimeMessageEvents } from '../../stores/chatStore';
+import { selectMyChosenStatus, useAuthStore } from '../../stores/authStore';
 import { useSpaceStore, isDmChannel, getChannelOrigin, getMyUserIdForOrigin } from '../../stores/spaceStore';
 import { AudioManager } from '../../audio/AudioManager';
 import { shouldPlayMessageSound } from '../../utils/notificationFilters';
 import { selectVoiceStateSound } from '../../utils/voiceSoundTransitions';
 import { getSfxVolume } from '../../utils/sfx';
+import { alertsAllowed, playAlertSound } from '../../utils/alerts';
 
 /**
  * Replicates the `useLiveKit` effective-mute formula on demand. Returns whether
@@ -62,6 +63,8 @@ export function SoundController() {
 
   const incomingCallLoop = useRef<AudioBufferSourceNode | null>(null);
   const incomingCallLoading = useRef(false);
+  /** Bumped when a pending ring load is abandoned, so its late result is discarded. */
+  const incomingCallAttempt = useRef(0);
   const outgoingCallLoop = useRef<AudioBufferSourceNode | null>(null);
   const outgoingCallLoading = useRef(false);
 
@@ -69,6 +72,50 @@ export function SoundController() {
     const timer = setTimeout(() => {
       isInitialMount.current = false;
     }, 1000);
+
+    // The ring is a state, not an event: it plays exactly while a call is
+    // waiting AND incoming-call alerts are allowed (Do Not Disturb, sounds.md).
+    // Re-evaluated on every voice tick and on every change of the user's own
+    // status, so switching to dnd mid-ring silences it and leaving dnd while the
+    // call still rings starts it. The in-app incoming-call card is unaffected.
+    const shouldRing = () => !!useVoiceStore.getState().incomingCall && alertsAllowed('incoming_call');
+    const syncIncomingRing = () => {
+      if (shouldRing()) {
+        if (incomingCallLoop.current || incomingCallLoading.current) return;
+        const attempt = ++incomingCallAttempt.current;
+        incomingCallLoading.current = true;
+        playAlertSound('incoming_call', { loop: true })
+          .then((source) => {
+            if (attempt !== incomingCallAttempt.current) {
+              // Abandoned by the stop branch: another load may own the loop now.
+              source?.stop();
+              return;
+            }
+            incomingCallLoading.current = false;
+            if (!source) return;
+            if (shouldRing()) {
+              incomingCallLoop.current = source;
+            } else {
+              source.stop();
+            }
+          })
+          .catch((err: unknown) => {
+            if (attempt === incomingCallAttempt.current) incomingCallLoading.current = false;
+            console.warn('[SoundController] ringing failed to start', err);
+          });
+        return;
+      }
+      if (incomingCallLoop.current) {
+        incomingCallLoop.current.stop();
+        incomingCallLoop.current = null;
+      }
+      // Abandon a load still in flight, so a playSound that never settles
+      // cannot block every later ring.
+      if (incomingCallLoading.current) {
+        incomingCallAttempt.current++;
+        incomingCallLoading.current = false;
+      }
+    };
 
     const unsubscribeVoice = useVoiceStore.subscribe((state) => {
       if (isInitialMount.current) return;
@@ -191,25 +238,7 @@ export function SoundController() {
       }
 
       // -------- Incoming Call (Ringing) --------
-      if (state.incomingCall && !incomingCallLoop.current && !incomingCallLoading.current) {
-        incomingCallLoading.current = true;
-        audioManager
-          .playSound('call_ringing', { loop: true, volume: getSfxVolume() })
-          .then((source) => {
-            if (!useVoiceStore.getState().incomingCall) {
-              source?.stop();
-            } else {
-              incomingCallLoop.current = source;
-            }
-            incomingCallLoading.current = false;
-          });
-      } else if (!state.incomingCall) {
-        if (incomingCallLoop.current) {
-          incomingCallLoop.current.stop();
-          incomingCallLoop.current = null;
-        }
-        incomingCallLoading.current = false;
-      }
+      syncIncomingRing();
 
       // -------- Outgoing Call (Calling) --------
       if (state.outgoingCall && !outgoingCallLoop.current && !outgoingCallLoading.current) {
@@ -237,8 +266,8 @@ export function SoundController() {
     const unsubscribeChat = useChatStore.subscribe((state, prevState) => {
       if (isInitialMount.current) return;
 
-      if (state.realtimeMessageEvents.length > prevState.realtimeMessageEvents.length) {
-        const newEvents = state.realtimeMessageEvents.slice(prevState.realtimeMessageEvents.length);
+      const newEvents = addedRealtimeMessageEvents(prevState.realtimeMessageEvents, state.realtimeMessageEvents);
+      if (newEvents.length > 0) {
         const allChannels = useVoiceStore.getState().messageSoundAllChannels;
         // Use the wrapper-level channelId from RealtimeMessageEvent — set by
         // addRealtimeMessage(channelId, message). It's authoritative for both
@@ -256,17 +285,23 @@ export function SoundController() {
               allChannels,
             })
           ) {
-            audioManager.playSound('message', { volume: getSfxVolume() });
+            void playAlertSound('message');
             break;
           }
         }
       }
     });
 
+    const unsubscribeAuth = useAuthStore.subscribe((state, prevState) => {
+      if (isInitialMount.current) return;
+      if (selectMyChosenStatus(state) !== selectMyChosenStatus(prevState)) syncIncomingRing();
+    });
+
     return () => {
       clearTimeout(timer);
       unsubscribeVoice();
       unsubscribeChat();
+      unsubscribeAuth();
       if (incomingCallLoop.current) incomingCallLoop.current.stop();
       if (outgoingCallLoop.current) outgoingCallLoop.current.stop();
     };

@@ -17,7 +17,8 @@ IDs: Snowflake text, permissions: bigint decimal strings
 | displayName | text | | |
 | passwordHash | text NOT NULL | | bcrypt; `'!federation-replicated'` for stubs |
 | avatar | text | | Upload filename |
-| status | text | `'offline'` | online/idle/dnd/offline |
+| status | text | `'offline'` | Live presence: online/idle/dnd/offline. On a row that owns its choice, the user's `chosenStatus` while they have a connection and `'offline'` without one (written at socket auth, by a status change while connected, by `finalizeDisconnect` and by the boot reset). On a replicated row, the home instance's S2S projection, plus this instance's own connect/disconnect writes. See activity-presence.md "DB Persistence" |
+| chosenStatus | text NOT NULL | `'online'` | The status the user picked: online/idle/dnd, never offline. Written by `PATCH /api/users/@me` and the WS `presence_update` client event (`ws/presence.ts:applyChosenStatus`); read at socket auth (`utils/presenceStatus.ts:statusOnConnect`) and published as `status`, so idle and dnd survive disconnects, restarts and the boot reset. Meaningful only on rows that own their choice, native or detached (`ownsChosenStatus` in `@backspace/shared`: `home_instance IS NULL OR federation_home_orphaned = 1`); a replicated row's copy is never written or read. Migration `0019_chosen_status`, which also copies `status` into it, under the same rule, for accounts that are idle or dnd at upgrade time |
 | customStatus | text | | |
 | isAdmin | integer | 0 | First registered user = 1 |
 | homeInstance | text | | Federation origin URL (null = local) |

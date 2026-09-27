@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { shouldPlayMessageSound } from './notificationFilters';
+import { isAlertAllowed, shouldPlayMessageSound } from './notificationFilters';
 
 describe('shouldPlayMessageSound', () => {
   const myIds = new Set(['local-snowflake', 'home-uid-42']);
@@ -131,5 +131,25 @@ describe('shouldPlayMessageSound', () => {
         allChannels: false,
       }),
     ).toBe(false);
+  });
+});
+
+describe('isAlertAllowed (Do Not Disturb gate)', () => {
+  it.each(['message', 'incoming_call'] as const)('suppresses %s alerts while the user is on dnd', (kind) => {
+    expect(isAlertAllowed(kind, 'dnd')).toBe(false);
+  });
+
+  it.each([
+    ['message', 'online'],
+    ['message', 'idle'],
+    ['incoming_call', 'online'],
+    ['incoming_call', 'idle'],
+  ] as const)('allows %s alerts while the user is %s', (kind, status) => {
+    expect(isAlertAllowed(kind, status)).toBe(true);
+  });
+
+  it('allows alerts while the status is not known yet (no user loaded)', () => {
+    expect(isAlertAllowed('message', null)).toBe(true);
+    expect(isAlertAllowed('message', undefined)).toBe(true);
   });
 });
