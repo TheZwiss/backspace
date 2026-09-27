@@ -161,6 +161,19 @@ module.exports = tseslint.config(
   },
 
   {
+    // Scripts the generated service worker imports (vite.config.ts,
+    // `workbox.importScripts`). Classic worker scripts, no bundler.
+    files: ['packages/web/public/**/*.js'],
+    languageOptions: {
+      sourceType: 'script',
+      globals: { self: 'readonly', console: 'readonly' },
+    },
+    rules: {
+      'no-undef': 'error',
+    },
+  },
+
+  {
     // React code. packages/desktop holds only main-process and preload code
     // today; the glob is here so renderer code added later is covered.
     files: ['packages/web/**/*.{ts,tsx}', 'packages/desktop/**/*.tsx'],

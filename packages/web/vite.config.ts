@@ -32,8 +32,11 @@ export default defineConfig({
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api/, /^\/ws/, /^\/uploads/],
         // No skipWaiting: a new worker activates only on SwAutoUpdate's
-        // SKIP_WAITING message. clientsClaim only matters on the first install,
-        // where there is no older worker to replace.
+        // SKIP_WAITING message. The one exception is replacing a worker from
+        // before that flow, which public/sw-rollover.js handles.
+        // clientsClaim only matters on the first install, where there is no
+        // older worker to replace.
+        importScripts: ['sw-rollover.js'],
         clientsClaim: true,
         cleanupOutdatedCaches: true,
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
