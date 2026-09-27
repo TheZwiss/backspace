@@ -141,4 +141,28 @@ describe('MarkdownRenderer', () => {
     expect(link.getAttribute('href')).toBe('https://example.com/:smile:/x');
     expect(link.textContent).toBe('https://example.com/:smile:/x');
   });
+
+  it('keeps backslash-escaped colons literal', () => {
+    const { container } = render(<MarkdownRenderer content={'\\:smile\\: but :smile:'} />);
+    expect(container.textContent).toBe(':smile: but 😄');
+  });
+
+  it('keeps a colon written as an entity literal', () => {
+    const { container } = render(<MarkdownRenderer content={'&#58;smile: but :smile:'} />);
+    expect(container.textContent).toBe(':smile: but 😄');
+  });
+
+  it('converts shortcodes in a labelled link but not in an angle-bracket autolink', () => {
+    const { container } = render(
+      <MarkdownRenderer content={'[:tada: party](https://example.com) <https://example.com/:smile:>'} />,
+    );
+    const [labelled, autolink] = Array.from(container.querySelectorAll('a'));
+    expect(labelled!.textContent).toBe('🎉 party');
+    expect(autolink!.textContent).toBe('https://example.com/:smile:');
+  });
+
+  it('does not treat clock times or addresses as shortcodes', () => {
+    const { container } = render(<MarkdownRenderer content={'at 10:30:00 on fe80::a:b:c:d'} />);
+    expect(container.textContent).toBe('at 10:30:00 on fe80::a:b:c:d');
+  });
 });

@@ -208,7 +208,7 @@ The client always sends `limit: 25` (hardcoded in SearchPopover).
 - **Filter panel:** 2-column grid — `From` (text), `Has` (select), `Before` (date), `After` (date) — all `input-search` tier
 - **Results list:** Scrollable area with result count header
 - **Result items:** Avatar + display name + timestamp + content snippet (2-line clamp) + attachment count
-- **Query highlighting:** `highlightMatch()` wraps matches in `<mark>` tags with `bg-accent-primary/30` styling
+- **Query highlighting:** `highlightMatch()` (`components/chat/searchHighlight.tsx`) wraps matches in `<mark>` tags with `bg-accent-primary/30` styling. Shortcodes in the snippet show as emoji; the query is matched against the stored text, and an emoji is marked whole when the match touches its shortcode
 - **Load more:** Shows remaining count, disabled while loading
 
 ### Result Rendering
@@ -217,7 +217,7 @@ Each result shows:
 - User avatar (via `<Avatar>` component)
 - Display name (falls back to username, then "Unknown")
 - Timestamp via `formatTime()`: "Today at HH:MM", "Yesterday at HH:MM", or "MM/DD/YYYY HH:MM"
-- Content with query term highlighting (case-insensitive regex split)
+- Content with query term highlighting (case-insensitive match on the stored text) and `:shortcode:` emoji
 - Attachment count badge (paperclip icon) if `msg.attachments.length > 0`
 
 ---

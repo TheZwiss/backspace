@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm';
 import { Highlight, themes } from 'prism-react-renderer';
 import type { Components } from 'react-markdown';
 import { MentionBadge } from './MentionBadge';
-import { remarkEmojiShortcodes } from '../../utils/emojiShortcodes';
+import { remarkEmojiShortcodes } from '../../utils/remarkEmojiShortcodes';
 
 // ─── Remark Plugin: Tag Bare Fenced Blocks ─────────────────────────────────
 // react-markdown v9 removed the `inline` prop from <code>. Fenced blocks

@@ -135,4 +135,15 @@ describe('notification clicks', () => {
     }] }));
     expect(BrowserNotification.instances[0]!.options?.body).toBe('on fire ❤️‍🔥');
   });
+
+  it('leaves shortcodes inside code spans unconverted in the notification text', () => {
+    mount();
+    act(() => vi.advanceTimersByTime(1000));
+    act(() => useChatStore.setState({ realtimeMessageEvents: [{
+      channelId: 'remote-chat',
+      message: { id: 'code', channelId: 'remote-chat', userId: 'other', content: 'type `:smile:` for :smile:' } as MessageWithUser,
+    }] }));
+    // The notification strips Markdown punctuation (backticks, underscores) after conversion.
+    expect(BrowserNotification.instances[0]!.options?.body).toBe('type :smile: for 😄');
+  });
 });

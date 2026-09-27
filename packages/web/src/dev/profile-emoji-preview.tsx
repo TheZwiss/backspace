@@ -38,6 +38,7 @@ import { MarkdownRenderer } from '../components/chat/MarkdownRenderer';
 import { useAuthStore } from '../stores/authStore';
 import { useUIStore } from '../stores/uiStore';
 import { initI18n } from '../i18n';
+import { loadDiscordEmojiAliases } from '../utils/emojiShortcodes';
 import { initializeInterfaceScale } from '../platform/interfaceScale';
 import '../styles/globals.css';
 
@@ -145,7 +146,8 @@ async function main(): Promise<void> {
   const host = document.getElementById('root');
   if (!host) throw new Error('missing #root');
   initializeInterfaceScale();
-  await initI18n();
+  // As main.tsx does: Discord's shortcode names load before the first render.
+  await Promise.all([initI18n(), loadDiscordEmojiAliases()]);
 
   const view = readView(window.location.search);
   const user = PROFILES[readProfile(window.location.search)];

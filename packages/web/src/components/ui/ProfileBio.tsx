@@ -1,14 +1,16 @@
 import ReactMarkdown from 'react-markdown';
 import type { Components } from 'react-markdown';
-import { remarkEmojiShortcodes } from '../../utils/emojiShortcodes';
+import remarkGfm from 'remark-gfm';
+import { remarkEmojiShortcodes } from '../../utils/remarkEmojiShortcodes';
 
-// A bio is short profile prose: paragraphs, bold, italics and links. Anything
-// else it contains (headings, lists, code) is unwrapped to its text, so a bio
-// never breaks the card's layout. `:shortcode:` text renders as emoji, the same
-// way it does in chat messages.
+// A bio is short profile prose: paragraphs, bold, italics, strikethrough and
+// links. Anything else it contains (headings, lists, code, tables) is
+// unwrapped to its text, so a bio never breaks the card's layout. It is parsed
+// the way a chat message is (GFM, so a bare URL becomes a link), and
+// `:shortcode:` text renders as emoji the same way it does in chat.
 
-const ALLOWED_ELEMENTS = ['p', 'strong', 'em', 'a', 'br'];
-const REMARK_PLUGINS = [remarkEmojiShortcodes];
+const ALLOWED_ELEMENTS = ['p', 'strong', 'em', 'del', 'a', 'br'];
+const REMARK_PLUGINS = [remarkGfm, remarkEmojiShortcodes];
 const COMPONENTS: Components = {
   a: ({ href, children }) => (
     <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>

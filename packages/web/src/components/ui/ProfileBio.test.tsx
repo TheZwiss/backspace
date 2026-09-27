@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
 import { ProfileBio } from './ProfileBio';
+import { loadDiscordEmojiAliases } from '../../utils/emojiShortcodes';
 
 // A bio renders newlines the way a chat message does: the container is
 // `whitespace-pre-wrap` and paragraphs carry no margin, so
@@ -51,5 +52,22 @@ describe('ProfileBio', () => {
     const many = render(<ProfileBio bio={'line one\n\n\n\n\nline two'} />).container.innerHTML;
 
     expect(many).toBe(one);
+  });
+
+  it('renders Discord shortcode names once they are loaded (issue #252)', async () => {
+    await loadDiscordEmojiAliases();
+    const { container } = render(<ProfileBio bio={'est.:cross: :heart_on_fire:\n\n-Catholic :cross: :flag_va: :orthodox_cross:'} />);
+    expect(paragraphs(container).map((p) => p.textContent)).toEqual([
+      'est.✝️ ❤️‍🔥',
+      '-Catholic ✝️ 🇻🇦 ☦️',
+    ]);
+  });
+
+  it('turns a bare URL into a link and leaves its text unconverted, as chat does', () => {
+    const { container } = render(<ProfileBio bio={'blog https://x.com/:smile:/y :smile:'} />);
+    const link = container.querySelector('a')!;
+    expect(link.getAttribute('href')).toBe('https://x.com/:smile:/y');
+    expect(link.textContent).toBe('https://x.com/:smile:/y');
+    expect(container.textContent).toBe('blog https://x.com/:smile:/y 😄');
   });
 });

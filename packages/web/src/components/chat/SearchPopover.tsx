@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom';
 import { useFloatingPosition } from '../../hooks/useFloatingPosition';
 import { isDmChannel, getChannelOrigin, getApiForOrigin } from '../../stores/spaceStore';
 import { Avatar } from '../ui/Avatar';
+import { highlightMatch } from './searchHighlight';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import type { MessageWithUser, DmMessageWithUser, User } from '@backspace/shared';
 
@@ -31,17 +32,6 @@ function formatTime(timestamp: number): string {
   if (isToday) return i18n.t('common:time.today', { time });
   if (isYesterday) return i18n.t('common:time.yesterday', { time });
   return formatters.formatDateTime(timestamp);
-}
-
-function highlightMatch(text: string, query: string): React.ReactNode {
-  if (!query.trim() || !text) return text;
-  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const parts = text.split(new RegExp(`(${escaped})`, 'gi'));
-  return parts.map((part, i) =>
-    part.toLowerCase() === query.toLowerCase()
-      ? <mark key={i} className="bg-accent-primary/30 text-txt-primary rounded-sm px-0.5">{part}</mark>
-      : part
-  );
 }
 
 const _FALLBACK_USER = { id: '', username: '', createdAt: 0, isAdmin: false, replicatedInstances: [] } as unknown as User;

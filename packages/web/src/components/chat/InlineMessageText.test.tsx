@@ -29,4 +29,9 @@ describe('InlineMessageText', () => {
     const { container } = render(<InlineMessageText content={'on fire :heart_on_fire: <@U1>'} />);
     expect(container.textContent).toBe('on fire ❤️‍🔥 @Unknown User');
   });
+
+  it('leaves shortcodes inside code spans as written', () => {
+    const { container } = render(<InlineMessageText content={'use `:smile:` for :smile:'} />);
+    expect(container.textContent).toBe('use `:smile:` for 😄');
+  });
 });

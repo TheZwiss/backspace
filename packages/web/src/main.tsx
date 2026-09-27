@@ -6,6 +6,7 @@ import { startPendingMessageOrchestrator } from './stores/pendingMessageRehydrat
 import i18n, { initI18n } from './i18n';
 import './styles/globals.css';
 import { initializeInterfaceScale } from './platform/interfaceScale';
+import { loadDiscordEmojiAliases } from './utils/emojiShortcodes';
 
 const stopInterfaceScale = initializeInterfaceScale();
 if (import.meta.hot) import.meta.hot.dispose(stopInterfaceScale);
@@ -134,6 +135,8 @@ function render(): void {
 // The selected language's catalogs are loaded before the first paint, so
 // nothing flashes English first. English itself is bundled, so if loading a
 // language fails the app still renders, in English, rather than not at all.
-initI18n()
-  .catch((err) => { console.error('[i18n] Failed to initialise, rendering in English:', err); })
-  .finally(render);
+// Discord's emoji shortcode names (a chunk of their own) load alongside, so
+// text renders with them from the first paint; that load never rejects.
+const i18nReady = initI18n()
+  .catch((err) => { console.error('[i18n] Failed to initialise, rendering in English:', err); });
+Promise.all([i18nReady, loadDiscordEmojiAliases()]).finally(render);
