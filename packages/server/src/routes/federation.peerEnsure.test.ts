@@ -153,3 +153,53 @@ describe('POST /api/federation/peer/ensure — the rate limit only counts calls 
     expect(statuses).toEqual([200, 200, 200, 429]);
   });
 });
+
+describe('POST /api/federation/peer/ensure — the reason the local admin is shown', () => {
+  // With auto-accept off, the call queues an outbound approval request and a
+  // subscriber row per user. The admin's queue and the user's pending list
+  // are rendered from that row's reason and target.
+  function subscribers(): Array<{ triggerReason: string; triggerTarget: string }> {
+    return testDb
+      .select({
+        triggerReason: schema.peerApprovalSubscribers.triggerReason,
+        triggerTarget: schema.peerApprovalSubscribers.triggerTarget,
+      })
+      .from(schema.peerApprovalSubscribers)
+      .all();
+  }
+
+  beforeEach(() => {
+    seedSettings(0);
+  });
+
+  it('records a connection as instance_connect, with the origin as its target', async () => {
+    seedUser('u-connect');
+    const res = await ensure('u-connect', { remoteOrigin: UNKNOWN, reason: 'instance_connect' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.peeringStatus).toBe('admin_required');
+    expect(subscribers()).toEqual([{ triggerReason: 'instance_connect', triggerTarget: UNKNOWN }]);
+  });
+
+  it('reads a request with no reason, from a client that predates it, as a connection and never as a friend add', async () => {
+    seedUser('u-legacy');
+    const res = await ensure('u-legacy', { remoteOrigin: UNKNOWN });
+
+    expect(res.status).toBe(200);
+    expect(subscribers()).toEqual([{ triggerReason: 'instance_connect', triggerTarget: UNKNOWN }]);
+  });
+
+  it.each([
+    ['friend_add, which only the server-side friend-add path may state', 'friend_add'],
+    ['a reason no client caller exists for', 'space_join'],
+    ['an unknown reason', 'bogus'],
+    ['a reason that is not a string', 42],
+  ])('refuses %s', async (_label, reason) => {
+    seedUser('u-refused');
+    const res = await ensure('u-refused', { remoteOrigin: UNKNOWN, reason });
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('validation_failed');
+    expect(subscribers()).toEqual([]);
+  });
+});

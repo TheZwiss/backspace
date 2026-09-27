@@ -114,7 +114,9 @@
       "directMessage": "direct message",
       "friendRequestTo": "Friend request to {{target}}",
       "joinSpace": "Join {{target}}",
-      "directMessageTo": "Direct message to {{target}}"
+      "directMessageTo": "Direct message to {{target}}",
+      "instanceConnect": "connection",
+      "connectTo": "Connect to {{target}}"
     },
     "pending": {
       "title": "Pending Peering Approvals",
@@ -226,7 +228,8 @@
       "subscriber": {
         "friendAdd": "friend-add to {{target}}",
         "spaceJoin": "wants to join {{target}}",
-        "directMessage": "wants to DM {{target}}"
+        "directMessage": "wants to DM {{target}}",
+        "instanceConnect": "connected an account on {{target}}"
       },
       "approve": "Approve",
       "deny": "Deny",
@@ -238,8 +241,8 @@
         "approveOutbound_one": "This will initiate a peering handshake with {{name}} on behalf of the {{count}} requesting user. The remote instance must be reachable.",
         "approveOutbound_other": "This will initiate a peering handshake with {{name}} on behalf of the {{count}} requesting users. The remote instance must be reachable.",
         "approveInbound": "This will initiate a peering handshake with {{name}}. The remote instance must be reachable.",
-        "denyOutbound_one": "This will deny the outbound peering request and notify the requesting user. They can re-trigger the request from their friend list.",
-        "denyOutbound_other": "This will deny the outbound peering request and notify the requesting users. They can re-trigger the request from their friend list.",
+        "denyOutbound_one": "This will deny the outbound peering request and notify the requesting user. They can ask again by repeating what they did.",
+        "denyOutbound_other": "This will deny the outbound peering request and notify the requesting users. They can ask again by repeating what they did.",
         "denyInbound": "This will deny the request and block future auto-peering requests from {{name}}. You can unblock them later from the rejected peers list.",
         "approveAndPeer": "Approve & Peer",
         "approve": "Approve",

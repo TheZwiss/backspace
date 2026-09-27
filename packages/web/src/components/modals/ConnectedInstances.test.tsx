@@ -378,3 +378,49 @@ describe('RegistryRow reason', () => {
     expect(screen.getByText('Token expired')).toBeInTheDocument();
   });
 });
+
+describe('peering waits and outcomes started by a connection', () => {
+  const CONNECT_SUBSCRIPTION = {
+    id: 'sub-1',
+    requestId: 'req-1',
+    peerOrigin: 'https://orbit.example',
+    peerInstanceName: 'Orbit',
+    triggerReason: 'instance_connect' as const,
+    triggerTarget: 'https://orbit.example',
+    createdAt: 1,
+  };
+
+  function renderPanel() {
+    render(
+      <MemoryRouter>
+        <ConnectedInstances />
+      </MemoryRouter>,
+    );
+  }
+
+  it('lists a pending connection as a connection to the host', async () => {
+    useFederationStore.setState({ peeringSubscriptions: [CONNECT_SUBSCRIPTION] });
+    renderPanel();
+
+    expect(await screen.findByText('Connect to orbit.example')).toBeInTheDocument();
+    expect(screen.queryByText(/Friend request to/)).not.toBeInTheDocument();
+  });
+
+  it('offers no friend-request retry once a connection is approved', async () => {
+    useFederationStore.setState({
+      peeringNotifications: [{
+        id: 'n-1',
+        kind: 'approved',
+        peerOrigin: 'https://orbit.example',
+        triggerReason: 'instance_connect',
+        triggerTarget: 'https://orbit.example',
+        createdAt: 1,
+        readAt: null,
+      }],
+    });
+    renderPanel();
+
+    expect(await screen.findByText('Original action: Connect to orbit.example')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Retry/ })).not.toBeInTheDocument();
+  });
+});

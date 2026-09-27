@@ -1433,8 +1433,32 @@ export interface FederationResetEventsResponse {
  * Recorded on `peer_approval_subscribers.trigger_reason` so admins can see
  * the human-readable cause and the user can recover their original action
  * after approval. Persisted as a string column with this exact set of values.
+ *
+ * `instance_connect`: the user opened a session on the remote instance
+ * (connect, explicit login, token resume, or app start), and the client asked
+ * its home instance to peer so DMs written there can be relayed home.
  */
-export type PeeringTriggerReason = 'friend_add' | 'space_join' | 'direct_message';
+export type PeeringTriggerReason = 'friend_add' | 'space_join' | 'direct_message' | 'instance_connect';
+
+/**
+ * The trigger reasons a client may state in `POST /api/federation/peer/ensure`.
+ * The server refuses any other value with `validation_failed`, and derives the
+ * target itself for each one. `friend_add` is deliberately absent: friend-add
+ * peers server-side with a target it has checked, so a client stating it
+ * could only put a friend request the admin cannot verify into the queue.
+ */
+export const PEER_ENSURE_REASONS = ['instance_connect'] as const satisfies readonly PeeringTriggerReason[];
+export type PeerEnsureReason = (typeof PEER_ENSURE_REASONS)[number];
+
+/**
+ * Body of `POST /api/federation/peer/ensure`. `reason` is optional for clients
+ * that predate it; the server reads a missing reason as `instance_connect`,
+ * the only thing those clients called the endpoint for.
+ */
+export interface PeerEnsureRequest {
+  remoteOrigin: string;
+  reason?: PeerEnsureReason;
+}
 
 /**
  * Caller intent passed into `ensurePeered()`. The gate (when
@@ -1447,7 +1471,8 @@ export type PeeringTriggerReason = 'friend_add' | 'space_join' | 'direct_message
  *
  * `target` is the human-readable target identifier the user acted on
  * (e.g. `username@instance.example` for friend_add, the space invite code
- * for space_join, the federated DM channel id for direct_message).
+ * for space_join, the federated DM channel id for direct_message, the remote
+ * origin for instance_connect).
  */
 export type EnsurePeeredCallerIntent =
   | { kind: 'user_action'; userId: string; reason: PeeringTriggerReason; target: string }

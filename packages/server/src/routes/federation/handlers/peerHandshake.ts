@@ -13,6 +13,31 @@ import { queueApprovalRequest } from './approvals.js';
 import { resolveLocalOrigin, sanitizePeer, validateOrigin } from '../origin.js';
 import { isAcceptRateLimited, isEnsureRateLimited } from '../rateLimits.js';
 import { federationFetch } from '../../../utils/federationFetch.js';
+import { sendError } from '../../../utils/httpErrors.js';
+import { PEER_ENSURE_REASONS, type PeerEnsureReason } from '@backspace/shared';
+
+/**
+ * The reason a `/peer/ensure` request states, or `null` when it states one a
+ * client may not. A request with no reason comes from a client that predates
+ * the field, and those only ever called the endpoint when opening a session
+ * on a remote, so it reads as `instance_connect`.
+ */
+function parsePeerEnsureReason(raw: unknown): PeerEnsureReason | null {
+  if (raw === undefined) return 'instance_connect';
+  return PEER_ENSURE_REASONS.find((reason) => reason === raw) ?? null;
+}
+
+/**
+ * The target the admin's approval queue shows for a reason a client stated.
+ * Derived here and never read from the request, so the queue only shows what
+ * this instance can vouch for.
+ */
+function peerEnsureTarget(reason: PeerEnsureReason, remoteOrigin: string): string {
+  switch (reason) {
+    case 'instance_connect':
+      return remoteOrigin;
+  }
+}
 
 export function registerPeerHandshakeRoutes(app: FastifyInstance): void {
   // ─── POST /api/federation/peer/initiate ────────────────────────────────────
@@ -575,11 +600,11 @@ export function registerPeerHandshakeRoutes(app: FastifyInstance): void {
   // JWT-authenticated (any user): trigger auto-peering with a remote instance.
   // Rate-limited per user (3 requests per 15 minutes) when the call can start a
   // handshake; confirming a settled peering is not counted.
-  app.post<{ Body: { remoteOrigin: string } }>(
+  app.post<{ Body: { remoteOrigin?: unknown; reason?: unknown } }>(
     '/api/federation/peer/ensure',
     { preHandler: [authenticate] },
     async (request, reply) => {
-      const { remoteOrigin: rawOrigin } = request.body ?? {};
+      const { remoteOrigin: rawOrigin, reason: rawReason } = request.body ?? {};
       if (!rawOrigin || typeof rawOrigin !== 'string') {
         return reply.code(400).send({ error: 'remoteOrigin is required', statusCode: 400 });
       }
@@ -590,6 +615,11 @@ export function registerPeerHandshakeRoutes(app: FastifyInstance): void {
           error: 'remoteOrigin must be a valid HTTPS URL (HTTP is only allowed for localhost)',
           statusCode: 400,
         });
+      }
+
+      const reason = parsePeerEnsureReason(rawReason);
+      if (!reason) {
+        return sendError(reply, 400, 'validation_failed');
       }
 
       const { ensurePeered, settledPeeringResult } = await import('../../../utils/federationPeering.js');
@@ -605,17 +635,15 @@ export function registerPeerHandshakeRoutes(app: FastifyInstance): void {
         });
       }
 
-      // NOTE: /peer/ensure is currently only invoked from friend-add client paths
-      // (see packages/web/src/stores/instanceStore.ts ensurePeered references).
-      // The hardcoded reason here is correct TODAY but will become wrong when
-      // DM-to-stranger or space-join grow into the gate. When that happens,
-      // surface the reason and target through the request body instead. Do NOT
-      // silently leave the hardcoding in place when adding a new caller.
+      // The reason is what the local admin's approval queue and the user's
+      // pending list show when the outbound gate fires. It is the caller's
+      // stated reason, checked against PEER_ENSURE_REASONS; a new client
+      // caller adds its reason there and its target to peerEnsureTarget.
       const result = await ensurePeered(remoteOrigin, {
         kind: 'user_action',
         userId: request.userId,
-        reason: 'friend_add',
-        target: remoteOrigin,
+        reason,
+        target: peerEnsureTarget(reason, remoteOrigin),
       });
 
       // NOTE: The internal EnsurePeeredResult status names differ from the client-facing

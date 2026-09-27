@@ -9,7 +9,7 @@ import { Toggle } from '../../ui/Toggle';
 import { ConfirmDialog } from '../../ui/ConfirmDialog';
 import { api, HttpError } from '../../../api/client';
 import { onFederationPeersChanged, onFederationPeerResetDetected } from '../../../hooks/useWebSocket';
-import type { InstanceAdminSettings } from '@backspace/shared';
+import type { ApprovalRequestSubscriberSummary, InstanceAdminSettings } from '@backspace/shared';
 import type { FederationPeer, ApprovalRequest, FederationResetEvent, FederationOrphanedAccount } from '../../../api/client';
 
 type FederationT = TFunction<['federation', 'common']>;
@@ -169,6 +169,22 @@ function originHost(origin: string): string {
     return new URL(origin).host;
   } catch {
     return origin;
+  }
+}
+
+/**
+ * What a user waiting on an outbound request did, as the admin reads it.
+ * Exhaustive over the reason, so a new trigger reason cannot render as an
+ * empty line in the queue.
+ */
+function subscriberAction(t: FederationT, sub: ApprovalRequestSubscriberSummary): string {
+  switch (sub.triggerReason) {
+    case 'friend_add': return t('federation:admin.approvals.subscriber.friendAdd', { target: sub.triggerTarget });
+    case 'space_join': return t('federation:admin.approvals.subscriber.spaceJoin', { target: sub.triggerTarget });
+    case 'direct_message': return t('federation:admin.approvals.subscriber.directMessage', { target: sub.triggerTarget });
+    // The target is the remote's origin, which the row's title already names
+    // by host; the host reads the same here.
+    case 'instance_connect': return t('federation:admin.approvals.subscriber.instanceConnect', { target: originHost(sub.triggerTarget) });
   }
 }
 
@@ -765,9 +781,7 @@ function PendingApprovals({ onCountChange }: { onCountChange?: (count: number) =
                         >
                           <span className="font-medium text-txt-secondary">{sub.username}</span>
                           {' — '}
-                          {sub.triggerReason === 'friend_add' && t('federation:admin.approvals.subscriber.friendAdd', { target: sub.triggerTarget })}
-                          {sub.triggerReason === 'space_join' && t('federation:admin.approvals.subscriber.spaceJoin', { target: sub.triggerTarget })}
-                          {sub.triggerReason === 'direct_message' && t('federation:admin.approvals.subscriber.directMessage', { target: sub.triggerTarget })}
+                          {subscriberAction(t, sub)}
                         </div>
                       ))}
                     </div>

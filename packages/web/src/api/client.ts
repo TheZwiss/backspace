@@ -1,6 +1,7 @@
 import { isErrorCode, type ErrorCode, type ErrorDetails } from '@backspace/shared/src/errors';
 import type {
   AuthResponse,
+  PeerEnsureRequest,
   RegisterRequest,
   LoginRequest,
   User,
@@ -348,7 +349,7 @@ export class BackspaceApiClient {
 
   readonly federation: {
     initiatePeering: (data: { remoteOrigin: string }) => Promise<{ peer: FederationPeer; verified?: boolean }>;
-    ensurePeered: (data: { remoteOrigin: string }) => Promise<{ peeringStatus: string; peerId?: string; error?: string }>;
+    ensurePeered: (data: PeerEnsureRequest) => Promise<{ peeringStatus: string; peerId?: string; error?: string }>;
     peers: () => Promise<{ peers: FederationPeer[] }>;
     resetEvents: () => Promise<FederationResetEventsResponse>;
     acknowledgeResetEvent: (origin: string) => Promise<{ success: boolean }>;
@@ -792,7 +793,7 @@ export class BackspaceApiClient {
         request<{ peer: FederationPeer; verified?: boolean }>(
           'POST', '/federation/peer/initiate', data
         ),
-      ensurePeered: (data: { remoteOrigin: string }) =>
+      ensurePeered: (data: PeerEnsureRequest) =>
         request<{ peeringStatus: string; peerId?: string; error?: string }>(
           'POST', '/federation/peer/ensure', data
         ),

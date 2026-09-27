@@ -489,8 +489,8 @@ Per-user "I want this peering relationship" subscriber rows attached to outbound
 | id | text PK | Snowflake |
 | requestId | text NOT NULL | FK → peer_approval_requests.id CASCADE — parent deletion (admin approve→active fanout, admin deny, last-subscriber cancel, expiry) automatically clears subscriber rows. |
 | userId | text NOT NULL | FK → users.id CASCADE |
-| triggerReason | text NOT NULL | `'friend_add'` \| `'space_join'` \| `'direct_message'` (`PeeringTriggerReason` enum in `packages/shared/src/types.ts`). |
-| triggerTarget | text NOT NULL | Action target — for `friend_add` this is `username@instance`; for `space_join` an invite code or space ID; for `direct_message` a recipient handle. Never stores message bodies, attachments, or user content. |
+| triggerReason | text NOT NULL | `'friend_add'` \| `'space_join'` \| `'direct_message'` \| `'instance_connect'` (`PeeringTriggerReason` enum in `packages/shared/src/types.ts`). Rows written by `/peer/ensure` before `instance_connect` existed say `friend_add` with an origin URL as target; they expire with their parent within 30 days. |
+| triggerTarget | text NOT NULL | Action target — for `friend_add` this is `username@instance`; for `space_join` an invite code or space ID; for `direct_message` a recipient handle; for `instance_connect` the remote instance's origin. Never stores message bodies, attachments, or user content. |
 | createdAt | integer NOT NULL | Epoch ms |
 
 **UNIQUE:** `(request_id, user_id, trigger_reason, trigger_target)` — same user retriggering the gate with the same reason+target updates rather than duplicates.

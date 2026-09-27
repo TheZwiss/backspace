@@ -114,7 +114,9 @@
       "directMessage": "Direktnachricht",
       "friendRequestTo": "Freundschaftsanfrage an {{target}}",
       "joinSpace": "{{target}} beitreten",
-      "directMessageTo": "Direktnachricht an {{target}}"
+      "directMessageTo": "Direktnachricht an {{target}}",
+      "instanceConnect": "Verbindung",
+      "connectTo": "Mit {{target}} verbinden"
     },
     "pending": {
       "title": "Ausstehende Peering-Freigaben",
@@ -226,7 +228,8 @@
       "subscriber": {
         "friendAdd": "Freundschaftsanfrage an {{target}}",
         "spaceJoin": "möchte {{target}} beitreten",
-        "directMessage": "möchte {{target}} eine Direktnachricht schicken"
+        "directMessage": "möchte {{target}} eine Direktnachricht schicken",
+        "instanceConnect": "hat ein Konto auf {{target}} verbunden"
       },
       "approve": "Freigeben",
       "deny": "Ablehnen",
@@ -238,8 +241,8 @@
         "approveOutbound_one": "Startet den Peering-Handshake mit {{name}} im Namen des {{count}} anfragenden Benutzers. Die entfernte Instanz muss erreichbar sein.",
         "approveOutbound_other": "Startet den Peering-Handshake mit {{name}} im Namen der {{count}} anfragenden Benutzer. Die entfernte Instanz muss erreichbar sein.",
         "approveInbound": "Startet den Peering-Handshake mit {{name}}. Die entfernte Instanz muss erreichbar sein.",
-        "denyOutbound_one": "Lehnt die ausgehende Peering-Anfrage ab und benachrichtigt den anfragenden Benutzer. Er kann die Anfrage aus seiner Freundesliste erneut auslösen.",
-        "denyOutbound_other": "Lehnt die ausgehende Peering-Anfrage ab und benachrichtigt die anfragenden Benutzer. Sie können die Anfrage aus ihrer Freundesliste erneut auslösen.",
+        "denyOutbound_one": "Lehnt die ausgehende Peering-Anfrage ab und benachrichtigt den anfragenden Benutzer. Er kann erneut anfragen, indem er seine Aktion wiederholt.",
+        "denyOutbound_other": "Lehnt die ausgehende Peering-Anfrage ab und benachrichtigt die anfragenden Benutzer. Sie können erneut anfragen, indem sie ihre Aktion wiederholen.",
         "denyInbound": "Lehnt die Anfrage ab und blockiert künftige Auto-Peering-Anfragen von {{name}}. Du kannst die Blockierung später in der Liste der abgelehnten Peers aufheben.",
         "approveAndPeer": "Freigeben und peeren",
         "approve": "Freigeben",

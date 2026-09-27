@@ -854,6 +854,7 @@ function actionLabel(t: FederationT, reason: PeeringTriggerReason): string {
     case 'friend_add': return t('federation:connections.action.friendRequest');
     case 'space_join': return t('federation:connections.action.spaceJoin');
     case 'direct_message': return t('federation:connections.action.directMessage');
+    case 'instance_connect': return t('federation:connections.action.instanceConnect');
   }
 }
 
@@ -862,6 +863,8 @@ function actionVerbPhrase(t: FederationT, reason: PeeringTriggerReason, target: 
     case 'friend_add': return t('federation:connections.action.friendRequestTo', { target });
     case 'space_join': return t('federation:connections.action.joinSpace', { target });
     case 'direct_message': return t('federation:connections.action.directMessageTo', { target });
+    // The target is the remote's origin; the host is what the user typed.
+    case 'instance_connect': return t('federation:connections.action.connectTo', { target: safeHost(target) });
   }
 }
 

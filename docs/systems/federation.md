@@ -236,7 +236,7 @@ Spec: `docs/superpowers/specs/2026-04-26-outbound-peering-gate-design.md`.
 **Required caller intent.** Every call site MUST pass an explicit `EnsurePeeredCallerIntent` (declared in `packages/shared/src/types.ts`). The argument is required at the type level so a future caller cannot silently fall through to system behavior:
 
 ```ts
-export type PeeringTriggerReason = 'friend_add' | 'space_join' | 'direct_message';
+export type PeeringTriggerReason = 'friend_add' | 'space_join' | 'direct_message' | 'instance_connect';
 
 export type EnsurePeeredCallerIntent =
   | { kind: 'user_action'; userId: string; reason: PeeringTriggerReason; target: string }
@@ -285,7 +285,7 @@ The other lifecycle exits write notifications and cascade-delete the parent at t
 | Site | Intent | On `'admin_required'` |
 |---|---|---|
 | `routes/social.ts` (friend-add) | `user_action` reason `friend_add` target `name@domain` | 409 `peer_pending_local_admin` |
-| `routes/federation.ts` (`/peer/ensure`) | `user_action` reason `friend_add` (default; client-supplied reason is ignored today) | response `peeringStatus: 'admin_required'` |
+| `handlers/peerHandshake.ts` (`/peer/ensure`) | `user_action` with the request's `reason` (one of `PEER_ENSURE_REASONS`, default `instance_connect`) and a target the server derives for it | response `peeringStatus: 'admin_required'` |
 | `utils/federationOutbox.ts` (`sendCallRelay` no-active-peer) | `system` | `CallRelayFailureReason.peer_admin_required` |
 | `utils/federationWorker.ts` (`resolvePendingPeers`) | `system` | operates on already-existing pending rows; reaches the gate only for a row with non-admin provenance, which it refuses |
 
@@ -330,7 +330,11 @@ Admin-initiated paths (`/peer/initiate`, `/approve`) do NOT call `ensurePeered`.
 | `/api/federation/approval-requests/:id/approve` | POST | JWT + admin | Approve request — direction-branched (see Approval flow above) |
 | `/api/federation/approval-requests/:id/deny` | POST | JWT + admin | Deny request — direction-branched (see Denial flow above) |
 
-**`POST /api/federation/peer/ensure`** — Wraps `ensurePeered()`. Accepts `{ remoteOrigin: string }` in body. Returns `{ peeringStatus, peerId?, error? }` where `peeringStatus` is one of `active`, `pending`, `awaiting_approval`, `rejected`, `unreachable`, or `revoked`.
+**`POST /api/federation/peer/ensure`** — Wraps `ensurePeered()`. Body is `PeerEnsureRequest`: `{ remoteOrigin: string; reason?: PeerEnsureReason }`.
+
+`reason` is what the local admin's approval queue and the user's pending list show when the [outbound gate](#outbound-peering-gate) fires. It is checked against `PEER_ENSURE_REASONS` (`packages/shared/src/types.ts`), today `['instance_connect']`; anything else, including `friend_add`, is `400 validation_failed`. `friend_add` is excluded on purpose: friend-add peers server-side (`routes/social.ts`) with a target it has checked, so a client stating it could only queue a friend request the admin cannot verify. A missing `reason` reads as `instance_connect`, because clients that predate the field only called the endpoint when opening a session on a remote. The target is never read from the request: `peerEnsureTarget` derives it per reason (for `instance_connect`, the normalized remote origin), so the queue only shows what this instance can vouch for. Before this the handler recorded every call as `friend_add` with the origin as target, and a Connections click reached the admin as a friend add.
+
+The response is `{ peeringStatus, peerId?, error? }` where `peeringStatus` is one of `active`, `pending`, `awaiting_approval`, `rejected`, `unreachable`, `revoked`, or `admin_required`.
 
 The client calls it on every remote session it opens (see [client-federation.md](client-federation.md#home-instance-peering-on-every-session-peerhomewithremote)). The rate limit exists to bound the handshakes a user can make this instance start, so it is only charged when the call can start one: `settledPeeringResult(origin)` (`utils/federationPeering.ts`, the same settled-row switch `ensurePeered` uses) answers an `active`, `unreachable`, `awaiting_approval`, `rejected`, `revoked` or `needs_attention` row from the row alone, with no network and no writes, and such a call is not counted. A missing or `pending` row is counted.
 

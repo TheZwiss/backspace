@@ -297,7 +297,9 @@ describe('every path that opens a session on a remote asks the home instance to 
   // Relaying the DMs written there home needs an S2S peering between the two
   // instances, and the home instance only starts one when asked. A session
   // opened without asking works, and its DMs silently never leave the remote.
-  const peeredWith = (origin: string) => expect.objectContaining({ remoteOrigin: origin });
+  // The reason is what the home admin's approval queue shows when auto-accept
+  // is off, so it names a connection, never a friend add.
+  const peeredWith = (origin: string) => ({ remoteOrigin: origin, reason: 'instance_connect' });
 
   it('connectToRemote', async () => {
     remoteRegister.mockResolvedValue({ token: 'new-token', user: remoteUser() });

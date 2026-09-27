@@ -307,7 +307,9 @@ export async function ensureRemoteCredential(
  */
 async function peerHomeWithRemote(origin: string, announceAs: string | null): Promise<void> {
   try {
-    const { peeringStatus } = await api.federation.ensurePeered({ remoteOrigin: origin });
+    // `instance_connect` is what the home admin's approval queue shows when
+    // auto-accept is off there, so it must say this is a connection.
+    const { peeringStatus } = await api.federation.ensurePeered({ remoteOrigin: origin, reason: 'instance_connect' });
     if (announceAs === null) return;
     const { addToast } = useUIStore.getState();
     if (peeringStatus === 'rejected') {

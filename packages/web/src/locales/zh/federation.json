@@ -113,7 +113,9 @@
       "directMessage": "私信",
       "friendRequestTo": "向 {{target}} 发送好友申请",
       "joinSpace": "加入 {{target}}",
-      "directMessageTo": "向 {{target}} 发送私信"
+      "directMessageTo": "向 {{target}} 发送私信",
+      "instanceConnect": "连接",
+      "connectTo": "连接到 {{target}}"
     },
     "pending": {
       "title": "待处理的对等审批",
@@ -222,7 +224,8 @@
       "subscriber": {
         "friendAdd": "添加 {{target}} 为好友",
         "spaceJoin": "希望加入 {{target}}",
-        "directMessage": "希望私信 {{target}}"
+        "directMessage": "希望私信 {{target}}",
+        "instanceConnect": "已连接 {{target}} 上的账户"
       },
       "approve": "批准",
       "deny": "拒绝",
@@ -233,7 +236,7 @@
         "denyTitle": "拒绝对等请求",
         "approveOutbound_other": "将代表发起请求的 {{count}} 位用户与 {{name}} 建立对等握手。远端实例必须可访问。",
         "approveInbound": "将与 {{name}} 建立对等握手。远端实例必须可访问。",
-        "denyOutbound_other": "将拒绝向外对等请求并通知发起请求的用户。他们可在好友列表中重新触发请求。",
+        "denyOutbound_other": "将拒绝向外对等请求并通知发起请求的用户。他们可以重复原来的操作再次发起请求。",
         "denyInbound": "将拒绝该请求并屏蔽未来来自 {{name}} 的自动对等请求。您日后可在被拒对等列表中解除屏蔽。",
         "approveAndPeer": "批准并建立对等",
         "approve": "批准",
