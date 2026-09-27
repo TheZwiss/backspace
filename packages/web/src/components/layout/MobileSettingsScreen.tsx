@@ -3,14 +3,17 @@ import { useTranslation } from 'react-i18next';
 import { useUIStore } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
 import { api } from '../../api/client';
-import { AccountPanel } from '../modals/settingsPanels/AccountPanel';
-import { AppearancePanel } from '../modals/settingsPanels/AppearancePanel';
-import { VoicePanel } from '../modals/settingsPanels/VoicePanel';
-import { ConnectionsPanel } from '../modals/settingsPanels/ConnectionsPanel';
-import { PrivacyPanel } from '../modals/settingsPanels/PrivacyPanel';
-import { KeybindsPanel } from '../modals/settingsPanels/KeybindsPanel';
-import { DesktopPanel } from '../modals/settingsPanels/DesktopPanel';
-import { DesktopDownloadPanel } from '../modals/settingsPanels/DesktopDownloadPanel';
+import {
+  AccountPanel,
+  AppearancePanel,
+  VoicePanel,
+  ConnectionsPanel,
+  PrivacyPanel,
+  KeybindsPanel,
+  DesktopPanel,
+  DesktopDownloadPanel,
+  SettingsPanelSuspense,
+} from '../modals/lazySettingsPanels';
 import { MobileScreenHeader } from './MobileScreenHeader';
 import { TransferIndicator } from './TransferIndicator';
 import { isElectron } from '../../platform/platform';
@@ -128,7 +131,7 @@ export function MobileSettingsScreen({ initialPanel }: MobileSettingsScreenProps
       <div className="flex flex-col h-full bg-surface-base">
         <MobileScreenHeader title={t(panel.titleKey)} rightActions={<TransferIndicator />} />
         <div className="flex-1 overflow-y-auto p-4">
-          {panel.body(instanceVersion)}
+          <SettingsPanelSuspense>{panel.body(instanceVersion)}</SettingsPanelSuspense>
         </div>
       </div>
     );

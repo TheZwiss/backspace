@@ -7,15 +7,18 @@ import { api } from '../../api/client';
 import type { InstanceInfoResponse } from '@backspace/shared';
 import { useUIStore } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
-import { AccountPanel } from './settingsPanels/AccountPanel';
-import { AppearancePanel } from './settingsPanels/AppearancePanel';
-import { VoicePanel } from './settingsPanels/VoicePanel';
-import { PrivacyPanel } from './settingsPanels/PrivacyPanel';
-import { ConnectionsPanel } from './settingsPanels/ConnectionsPanel';
-import { DesktopPanel } from './settingsPanels/DesktopPanel';
-import { DesktopDownloadPanel } from './settingsPanels/DesktopDownloadPanel';
-import { InstancePanel } from './settingsPanels/InstancePanel';
-import { KeybindsPanel } from './settingsPanels/KeybindsPanel';
+import {
+  AccountPanel,
+  AppearancePanel,
+  VoicePanel,
+  PrivacyPanel,
+  ConnectionsPanel,
+  DesktopPanel,
+  DesktopDownloadPanel,
+  InstancePanel,
+  KeybindsPanel,
+  SettingsPanelSuspense,
+} from './lazySettingsPanels';
 import { isElectron } from '../../platform/platform';
 import { useInstanceUpdateBadge } from '../../hooks/useInstanceUpdateBadge';
 import { SettingsSectionsProvider, useSettingsSectionsContext } from './SettingsSectionsContext';
@@ -274,18 +277,20 @@ export function UserSettingsModal() {
                   {t('common:labels.settings')}
                 </button>
               )}
-              {tab === 'account' && <AccountPanel />}
-              {tab === 'appearance' && <AppearancePanel />}
-              {tab === 'voice' && <VoicePanel />}
-              {tab === 'privacy' && <PrivacyPanel />}
-              {tab === 'connections' && <ConnectionsPanel />}
-              {tab === 'keybinds' && <KeybindsPanel />}
-              {tab === 'desktop' && (
-                isElectron()
-                  ? <DesktopPanel />
-                  : <DesktopDownloadPanel version={instanceInfo?.version ?? null} />
-              )}
-              {tab === 'instance' && isAdmin && <InstancePanel />}
+              <SettingsPanelSuspense>
+                {tab === 'account' && <AccountPanel />}
+                {tab === 'appearance' && <AppearancePanel />}
+                {tab === 'voice' && <VoicePanel />}
+                {tab === 'privacy' && <PrivacyPanel />}
+                {tab === 'connections' && <ConnectionsPanel />}
+                {tab === 'keybinds' && <KeybindsPanel />}
+                {tab === 'desktop' && (
+                  isElectron()
+                    ? <DesktopPanel />
+                    : <DesktopDownloadPanel version={instanceInfo?.version ?? null} />
+                )}
+                {tab === 'instance' && isAdmin && <InstancePanel />}
+              </SettingsPanelSuspense>
             </div>
           </SettingsScrollContainer>
         )}
