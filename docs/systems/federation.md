@@ -6,7 +6,7 @@ Source files:
 - `packages/server/src/routes/federation.ts` -- **Barrel** for the federation route subsystem. Re-exports the public API (identity resolution, event processors, reconciliation, `validateOrigin`) so `from '.../routes/federation.js'` imports resolve unchanged, and composes the HTTP registrars into `federationRoutes()`. The implementation lives in `routes/federation/` (split out of the former single 7.6k-line file; see `docs/superpowers/specs/2026-07-10-federation-ts-split-design.md`):
   - `routes/federation/rateLimits.ts` -- In-memory sliding-window rate limiters (accept/relay/lookup/ensure) + replay-nonce store + eviction timers
   - `routes/federation/origin.ts` -- `validateOrigin`, `resolveLocalOrigin`, `sanitizePeer` (+ `SanitizedPeer` shape)
-  - `routes/federation/identity.ts` -- Federated identity resolution: `extractDomain`, `getOurIdentityDomain`, `verifyAttribution`, `resolveLocalUser`, `findFederatedUser`, `resolveOrCreateReplicatedUser`, `backfillHomeUserId`
+  - `routes/federation/identity.ts` -- Federated identity resolution: `extractDomain`, `getOurIdentityDomain`, `attributionRefusal`, `localUserStandingOnPeer`, `resolveLocalUser`, `findFederatedUser`, `resolveOrCreateReplicatedUser`, `backfillHomeUserId`
   - `routes/federation/dmChannels.ts` -- DM channel/message payload builders, `findOrCreateDmChannel`, `resolveLocalDmMessage`, `isUrlFromPeer`
   - `routes/federation/profile.ts` -- Replicated-profile hydration + asset download, `processProfileUpdateEvent`, `backfillReplicatedProfileAssets`
   - `routes/federation/reconciliation.ts` -- DM federated-id reconciliation + dead-incarnation artifact sweeps (worker-facing maintenance)
@@ -760,23 +760,37 @@ Locations where normalization is applied:
 - `dm.ts:655` -- `isLocalMember` broadcast filter checks both formats
 - `dm.ts:743` -- normalizes target homeInstance before peer origin comparison
 
-**Attribution verification (`verifyAttribution`):**
+**Attribution verification (`attributionRefusal`):**
 
 ```typescript
-verifyAttribution(actor: RelayActor | null | undefined, sourceInstance: string, db): boolean
+attributionRefusal(actor: RelayActor | null | undefined, sourceInstance: string, db): AttributionRefusal | null
 // RelayActor = { homeUserId: string; homeInstance: string }
+// AttributionRefusal = 'attribution_mismatch' | 'attribution_unproven'
 ```
+
+Returns `null` when the signing peer may speak for the actor, otherwise the reason the handler pushes into `rejected`. Handlers never write a reason of their own for this check.
 
 The actor is passed as a **pair**. A `homeUserId` on its own is not an identity — the column is only unique within one instance — so the signature makes it impossible to attribute an event from an id alone. `sourceInstance` is the HMAC-authenticated peer (bound at the relay boundary, §2), so this is a check against *who actually signed the batch*, never against a self-declared origin.
 
 Two valid cases:
 
 1. **Direct**: `authorDomain === sourceDomain`. A peer is the identity authority for its own users.
-2. **Homeward relay**: `authorDomain === extractDomain(getOurOrigin())` — a client-federation user (e.g. `erin@nova` logged into `orbit`) acted on the remote and the relay carries the event back to their home instance. Accepted **only** when `localUserActsOnPeer(homeUserId, sourceInstance, db)` holds.
+2. **Homeward relay**: `authorDomain === extractDomain(getOurOrigin())` — a client-federation user (e.g. `erin@nova` logged into `orbit`) acted on the remote and the relay carries the event back to their home instance. Accepted **only** when `localUserStandingOnPeer(homeUserId, sourceInstance, db)` returns `proven`.
 
 An actor homed on a third instance is always rejected: the signing peer is neither that instance's identity authority nor delegated by it.
 
-**`localUserActsOnPeer(homeUserId, peerOrigin, db)`** — does the natively-homed local user hold a federated account on the signing peer? This is the whole content of a legitimate homeward relay: such an event can only genuinely exist if the user connected to that peer and acted there. Two records are consulted, both written *exclusively by the user themselves* over an authenticated session on this instance:
+**The two refusal reasons.**
+
+| Reason | When | Sender |
+|---|---|---|
+| `attribution_mismatch` | Malformed actor; actor homed on a third instance; homeward claim for a user id with no live native row (`no_such_user`: never existed, deleted, or only a replicated stub) | Terminal. Nothing that arrives later can make the claim true. |
+| `attribution_unproven` | Homeward claim for a live native user with no registry row and no `replicated_instances` entry for the signing peer yet (`unproven`) | Retryable on the normal backoff, until the outbox TTL |
+
+`unproven` exists because the proof is written by the user's own client, after the remote session is open (`syncRegistry` in `instanceStore.ts` runs at the end of the connect flow, and not at all until `autoConnectAll` has read the server registry once). A DM the user writes on the remote in that window reaches home before the proof does. From the receiver's side that is indistinguishable from a peer forging a claim for one of its users, so the event is refused either way and nothing is written; the reason only tells the sender whether a retry can succeed. A peer that really is forging gains nothing from the retry: its own outbox carries the cost (about 36 attempts over the 30-day TTL), and a retry is only accepted once the user has connected to that peer, which is exactly the standing that would let it speak for the user anyway.
+
+`attribution_unproven` is a wire addition and is negotiated per request, see [Relay capabilities](#relay-capabilities). A sender that does not list it receives `attribution_mismatch` for the unproven case too.
+
+**`localUserStandingOnPeer(homeUserId, peerOrigin, db)`** returns `'proven' | 'unproven' | 'no_such_user'`: does the natively-homed local user hold a federated account on the signing peer? This is the whole content of a legitimate homeward relay: such an event can only genuinely exist if the user connected to that peer and acted there. Two records are consulted, both written *exclusively by the user themselves* over an authenticated session on this instance:
 
 | Record | Written by | Notes |
 |---|---|---|
@@ -795,7 +809,7 @@ A peer cannot forge either record, so it cannot manufacture standing to speak fo
 |---|---|---|
 | `events/dmMessages.ts` | `create`, `update`, `reaction_add`, `reaction_remove` | `message`, `reaction` |
 | `events/membership.ts` | `member_add` (bootstrap + add), `member_remove` (self-leave), `ownership_transfer` | `group.owner`, `membership.addedBy`, `membership.user`, `ownership.previousOwner` |
-| `events/friends.ts` | `friend_request_create/update/cancel`, `friend_add`, `friend_remove` | `friendship.from` / `.to` (`friend_remove` accepts either side) |
+| `events/friends.ts` | `friend_request_create/update/cancel`, `friend_add`, `friend_remove` | `friendship.from` / `.to` (`friend_remove` accepts either side; when both are refused, the reason is `attribution_unproven` if either side was unproven) |
 | `events/calls.ts` | `dm_call_start/accept/reject/end`, `dm_typing_start/stop` | `call.caller` / `.acceptor` / `.rejector` / `.endedBy`, `typing` |
 | `events/dmState.ts` | `read_state_update`, `dm_close`, `dm_reopen` | `readState.user`, `dmCloseReopen` |
 
@@ -960,7 +974,8 @@ Trigger (API/WS handler)
 7. On success (200):
    - Compute the **terminal entity set** = accepted entries ∪ duplicate-rejected entries
    - Delete all terminal entries from outbox (matched by `entityId` -> `outboxId`)
-   - Log remaining (non-duplicate) rejected entries at `console.warn` (they stay in outbox for retry)
+   - Every other entry in the batch (non-terminal rejections, and any entry the response does not mention) stays in the outbox and moves to its next backoff step (`attempts + 1`, `nextRetryAt = now + backoff`). Before this, such entries kept their `nextRetryAt` and were resent on every 10-second tick; a run of them at the head of the `createdAt`-ordered batch could crowd newer events out of it
+   - Log non-terminal rejected entries at `console.warn`
    - Store `result.maxUploadSize` on peer record
    - Update peer: `lastSeenAt = now`, `consecutiveFailures = 0`
 8. On failure (non-200 or network error):
@@ -971,10 +986,11 @@ Trigger (API/WS handler)
 
 #### Terminal rejection reasons
 
-`processOutboxTick` recognizes a configurable set of receiver-acknowledged **terminal rejection reasons** (constant `TERMINAL_REJECTION_REASONS` in `federationWorker.ts`): `duplicate`, `recipient_not_found`, `attribution_mismatch`, `unknown_event_type`, `self_target_invalid`. Outbox entries with these reasons are deleted with no retry.
+`processOutboxTick` recognizes a configurable set of receiver-acknowledged **terminal rejection reasons** (constant `TERMINAL_REJECTION_REASONS` in `federationWorker.ts`): `duplicate`, `recipient_not_found`, `attribution_mismatch`, `unknown_event_type`, `self_target_invalid`. Outbox entries with these reasons are deleted with no retry. Every other reason is retryable and follows the [retry backoff schedule](#retry-backoff-schedule) until the entry's `expiresAt` (relay TTL, 30 days by default), when the storage janitor deletes it. No rollback callback runs at TTL expiry.
 
 - `duplicate` — the receiving instance already has the row (same `(sourceInstance, sourceMessageId)`); retrying will fail identically until TTL.
 - `recipient_not_found`, `attribution_mismatch`, `unknown_event_type` — structural mismatches that cannot be resolved by retrying.
+- `attribution_unproven` is **not** terminal: the receiver lacks the proof that one of its users holds an account here, and that proof arrives from the user's client. See [the two refusal reasons](#3-identity-resolution).
 - `self_target_invalid` — emitted by `processFriendRequestCreateEvent` when an inbound `friend_request_create`'s `from`-identity equals its `to`-identity (after origin normalization). Defense-in-depth: the sender's local `cannot_friend_self` check should catch this, but the receiver does not trust upstream validation. Retrying will not change the payload. The friend-create rollback callback maps this to client-facing `peer_rejected`.
 
 For non-`duplicate` terminals, the worker invokes a registered permanent-failure callback via `invokePermanentFailureCallback(eventType, messageId, reason)` from `utils/federationRollback.ts`. Currently registered: `friend_request_create` → `rollbackFriendRequestCreate` (deletes the local `friend_requests` row by `relay_message_id` and emits WS `friend_request_relay_failed` to the sender). Other event types may register their own callbacks. See `social.md` §6 "Failure Handling" for the friend-specific rollback contract.
@@ -1019,9 +1035,32 @@ Network failures (timeouts, non-401/403 non-2xx responses) are tracked separatel
 interface FederationRelayRequest {
   version: 1;
   sourceInstance: string;          // Full URL, e.g., "https://nova.ddns.net"
+  sourceInstanceId?: string;       // Sender's epoch, see reset detection
+  capabilities?: FederationRelayCapability[];  // Optional, see below
   events: FederationRelayEvent[];  // Max 50 per batch
 }
 ```
+
+#### Relay capabilities
+
+`capabilities` lists relay behaviours the sender implements beyond plain v1. Each capability gates something the receiver would otherwise not send, so an instance that predates it is never handed an answer it was not built for. The receiver reads the field from an untrusted body: anything other than an array counts as empty.
+
+| Capability | Receiver behaviour when listed | When not listed |
+|---|---|---|
+| `attribution_unproven` | May reject a homeward claim whose proof it does not hold yet with `attribution_unproven` | Answers the same case with `attribution_mismatch` |
+
+The outbox worker (`RELAY_CAPABILITIES` in `federationWorker.ts`) sends `['attribution_unproven']`. `sendCallRelay` sends none: call signalling is not retried from the outbox, so it keeps the v1 answer. The mapping happens once, at the HTTP boundary (`rejectionsForSender` in `handlers/relay.ts`); `processRelayEvents` always reports the precise reason, which the sync-pull path discards anyway.
+
+Mixed versions:
+
+| Sender | Receiver | Unproven homeward claim |
+|---|---|---|
+| new | new | `attribution_unproven`, retried on backoff, accepted once the proof lands |
+| new | old | `attribution_mismatch`, terminal (unchanged from before) |
+| old | new | `attribution_mismatch`, terminal (unchanged: the old sender does not list the capability) |
+| old | old | `attribution_mismatch`, terminal |
+
+The capability is needed for the old-sender case: an older worker keeps a rejection it does not recognise in the outbox without backoff, so an unsolicited `attribution_unproven` would be resent every tick until the TTL.
 
 **Response:**
 ```typescript
@@ -1048,7 +1087,7 @@ non-overlapping: each messageId appears in exactly one of the three arrays.
 | Bucket | Meaning | Retry? |
 |---|---|---|
 | `accepted` | Processed cleanly, ≥1 recipient reached. | No |
-| `rejected` | Refused at data/protocol layer (schema, attribution, channel-not-found, etc.). | Terminal. |
+| `rejected` | Refused at data/protocol layer (schema, attribution, channel-not-found, etc.). | Per reason: terminal reasons are dropped, the rest retried on backoff (see [Terminal rejection reasons](#terminal-rejection-reasons)). |
 | `undeliverable` | Processed cleanly, zero recipients reachable. | No — call-signaling specific. |
 
 Currently used only for `dm_call_start`:
@@ -1132,7 +1171,7 @@ interface FederationGroupPayload {
 Older peers that omit these fields fall back to safe defaults (null name/icon, `metadataUpdatedAt = 0`). Receivers never re-relay these fields — only the owner's home instance authors `group_metadata_update` events.
 
 **Incremental path** (channel already exists):
-1. Validates authority: any HMAC-verified peer is accepted (relaxed — the `sourceInstance === channel.ownerHomeInstance` check was removed to support cross-instance access). The per-user attribution check (`verifyAttribution`) still applies.
+1. Validates authority: any HMAC-verified peer is accepted (relaxed — the `sourceInstance === channel.ownerHomeInstance` check was removed to support cross-instance access). The per-user attribution check (`attributionRefusal`) still applies.
 2. Cancels soft-delete if channel was pending GC
 3. Resolves added user via `resolveOrCreateReplicatedUser`
 4. Enforces max 10 members
@@ -1815,7 +1854,7 @@ Four relay event types are processed in `processRelayEvents()`:
 | `dm_call_reject` | Participant → Host, then Host → All Peers | `federatedId`, `rejector: { homeUserId, homeInstance }` |
 | `dm_call_end` | Any → Host (if not host), then Host → All Peers | `federatedId`, `endedBy: { homeUserId, homeInstance }` |
 
-All events carry standard relay fields: `eventType`, `messageId`, `encryptionVersion: 0`, `timestamp`. All events pass through `verifyAttribution()` before any DB or state mutations.
+All events carry standard relay fields: `eventType`, `messageId`, `encryptionVersion: 0`, `timestamp`. All events pass through `attributionRefusal()` before any DB or state mutations.
 
 ### Direct Delivery (No Outbox)
 

@@ -12,7 +12,7 @@ import { connectionManager } from '../ws/handler.js';
 import { generateThumbnail } from './thumbnail.js';
 import { safeFetch } from './ssrf.js';
 import { federationFetch } from './federationFetch.js';
-import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent } from '@backspace/shared';
+import type { FederationRelayCapability, FederationRelayRequest, FederationRelayResponse, FederationRelayEvent } from '@backspace/shared';
 import { startupBootstrapSync, onPeerDeactivated } from './federationPeerActivation.js';
 import { probePeerReachable, recoverOrDetectReset, detectResetOnNeedsAttentionPeers, detectResetForPeer } from './federationRecovery.js';
 import { backfillReplicatedProfileAssets, sweepDeadIncarnationArtifacts, reconcileDriftedDmFederatedIds } from '../routes/federation.js';
@@ -65,16 +65,29 @@ const PEER_UNREACHABLE_THRESHOLD = 10;
  * 'duplicate' is treated as terminal-but-no-rollback (the receiver already has
  * the event; nothing to roll back locally).
  *
+ * Every other rejection is retryable: the entry stays and waits out the next
+ * step of BACKOFF_SCHEDULE_MS, until the janitor drops it at its TTL. That
+ * includes `attribution_unproven` (the receiver does not hold the proof that
+ * our user has an account here yet; it arrives from the user's client) and
+ * reasons such as `channel_not_found` that resolve once an earlier event lands.
+ *
  * 5xx responses, network errors, and timeouts are NOT in this set — they are
  * transient and retried via the existing backoff schedule.
  */
 const TERMINAL_REJECTION_REASONS = new Set<string>([
   'duplicate',            // peer already has it (existing behavior)
   'recipient_not_found',  // receiver doesn't know the target user
-  'attribution_mismatch', // payload claims a homeInstance the source can't authoritatively speak for
+  'attribution_mismatch', // the source can never speak for this actor (third-instance, malformed, or no such user)
   'unknown_event_type',   // peer doesn't understand this eventType — never will
   'self_target_invalid',  // payload's from-identity equals to-identity (sender's self-check should have caught this)
 ]);
+
+/**
+ * What this sender tells receivers it handles (`FederationRelayRequest.capabilities`).
+ * `attribution_unproven` is listed because the reason is not in
+ * TERMINAL_REJECTION_REASONS, so it is retried on the backoff schedule.
+ */
+const RELAY_CAPABILITIES: FederationRelayCapability[] = ['attribution_unproven'];
 
 // ─── Worker State ───────────────────────────────────────────────────────────
 
@@ -242,6 +255,7 @@ export async function processOutboxTick(): Promise<void> {
       // populate-if-null baseline (design §3.2). A reset instance cannot sign a
       // valid relay, so this never carries a *new* epoch post-reset.
       sourceInstanceId: getInstanceId(),
+      capabilities: RELAY_CAPABILITIES,
       events,
     };
 
@@ -297,6 +311,16 @@ export async function processOutboxTick(): Promise<void> {
               .where(inArray(schema.federationOutbox.id, terminalOutboxIds))
               .run();
           }
+        }
+
+        // Everything else in the batch was not delivered and may be retried:
+        // non-terminal rejections, and any entry the receiver did not mention.
+        // It moves to the next step of the backoff schedule. Leaving it due
+        // would resend it on every tick, and a run of such rows at the head of
+        // the createdAt-ordered batch would crowd newer events out of it.
+        const retryable = peerEntries.filter((e) => !terminalEntityIds.has(e.entityId));
+        if (retryable.length > 0) {
+          applyOutboxEntryBackoff(db, retryable, now);
         }
 
         // Invoke registered rollback callbacks AFTER deleting the outbox row,

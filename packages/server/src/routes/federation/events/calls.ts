@@ -8,7 +8,7 @@ import { and, eq, isNull, or, sql } from 'drizzle-orm';
 import type { CallFanoutFailure } from '../../../utils/federationOutbox.js';
 import type { DmRoomMeta, FederatedCallEntry } from '../../../ws/handler.js';
 import type { DmCallUndeliverableFailure, FederationRelayEvent, ServerEvent } from '@backspace/shared';
-import { extractDomain, resolveLocalUser, resolveOrCreateReplicatedUser, verifyAttribution } from '../identity.js';
+import { extractDomain, resolveLocalUser, resolveOrCreateReplicatedUser, attributionRefusal } from '../identity.js';
 
 export function processDmCallStartEvent(
   event: FederationRelayEvent,
@@ -24,9 +24,10 @@ export function processDmCallStartEvent(
   }
 
   // Attribution: caller must belong to source instance
-  if (!verifyAttribution(event.call.caller, sourceInstance, db)) {
-    console.warn(`[federation] Attribution mismatch in dm_call_start: caller=${extractDomain(event.call.caller.homeInstance)} source=${extractDomain(sourceInstance)}`);
-    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+  const refusal = attributionRefusal(event.call.caller, sourceInstance, db);
+  if (refusal) {
+    console.warn(`[federation] Attribution refused (${refusal}) in dm_call_start: caller=${extractDomain(event.call.caller.homeInstance)} source=${extractDomain(sourceInstance)}`);
+    rejected.push({ messageId: event.messageId, reason: refusal });
     return;
   }
 
@@ -218,8 +219,9 @@ export function processDmCallAcceptEvent(
     return;
   }
 
-  if (!verifyAttribution(event.call.acceptor, sourceInstance, db)) {
-    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+  const refusal = attributionRefusal(event.call.acceptor, sourceInstance, db);
+  if (refusal) {
+    rejected.push({ messageId: event.messageId, reason: refusal });
     return;
   }
 
@@ -302,8 +304,9 @@ export function processDmCallRejectEvent(
     return;
   }
 
-  if (!verifyAttribution(event.call.rejector, sourceInstance, db)) {
-    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+  const refusal = attributionRefusal(event.call.rejector, sourceInstance, db);
+  if (refusal) {
+    rejected.push({ messageId: event.messageId, reason: refusal });
     return;
   }
 
@@ -362,8 +365,9 @@ export function processDmCallEndEvent(
     return;
   }
 
-  if (!verifyAttribution(event.call.endedBy, sourceInstance, db)) {
-    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+  const refusal = attributionRefusal(event.call.endedBy, sourceInstance, db);
+  if (refusal) {
+    rejected.push({ messageId: event.messageId, reason: refusal });
     return;
   }
 
@@ -427,8 +431,9 @@ export function processDmTypingStartEvent(
   }
 
   // Attribution: the peer must be entitled to speak for the typing identity.
-  if (!verifyAttribution(event.typing, sourceInstance, db)) {
-    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+  const refusal = attributionRefusal(event.typing, sourceInstance, db);
+  if (refusal) {
+    rejected.push({ messageId: event.messageId, reason: refusal });
     return;
   }
 
@@ -489,8 +494,9 @@ export function processDmTypingStopEvent(
   }
 
   // Attribution: the peer must be entitled to speak for the typing identity.
-  if (!verifyAttribution(event.typing, sourceInstance, db)) {
-    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+  const refusal = attributionRefusal(event.typing, sourceInstance, db);
+  if (refusal) {
+    rejected.push({ messageId: event.messageId, reason: refusal });
     return;
   }
 

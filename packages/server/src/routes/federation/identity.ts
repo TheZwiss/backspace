@@ -49,14 +49,24 @@ export interface RelayActor {
 
 
 /**
- * Does the natively-homed local user `homeUserId` have an established federated
- * presence on `peerOrigin`?
+ * What this instance can say about a homeward claim: a peer asserting an event
+ * authored by one of OUR natively-homed users.
  *
- * This is the ONLY thing that makes a homeward relay (a peer asserting an event
- * authored by one of OUR users) legitimate: such an event can only genuinely
- * exist if the user holds an account on that peer and acted there. Both records
- * consulted here are written exclusively by the user themselves, over an
- * authenticated session on this instance:
+ *   - `proven`   — the user has an established federated presence on the peer.
+ *   - `unproven` — the user exists here, but no presence on the peer is on file
+ *                  yet. Either the peer is forging, or the user's client has
+ *                  not yet pushed the registry entry that records the
+ *                  connection (it is written after the session opens, so a
+ *                  relay the user causes can arrive first). The two cannot be
+ *                  told apart from here, so the claim is refused without being
+ *                  called a forgery.
+ *   - `no_such_user` — there is no live native user with that id. Nothing that
+ *                  arrives later can make the claim true.
+ *
+ * Presence is the ONLY thing that makes a homeward relay legitimate: such an
+ * event can only genuinely exist if the user holds an account on that peer and
+ * acted there. Both records consulted here are written exclusively by the user
+ * themselves, over an authenticated session on this instance:
  *
  *   - `user_federation_registry` — `PUT /api/users/@me/federation-registry`,
  *     scoped to `request.userId`. Every lifecycle state counts (a connection
@@ -66,14 +76,13 @@ export interface RelayActor {
  * A peer cannot forge either one, so it cannot manufacture standing to speak
  * for a user who never connected to it.
  */
-export function localUserActsOnPeer(
+export type HomewardStanding = 'proven' | 'unproven' | 'no_such_user';
+
+export function localUserStandingOnPeer(
   homeUserId: string,
   peerOrigin: string,
   db: ReturnType<typeof getDb>,
-): boolean {
-  const peerHost = normalizeOriginForCompare(peerOrigin);
-  if (!peerHost) return false;
-
+): HomewardStanding {
   // Homeward means "homed HERE", so the actor must resolve to a NATIVE row
   // (home_instance IS NULL). Matching a replicated stub that merely carries the
   // same home_user_id would reintroduce the cross-instance id collision the
@@ -87,14 +96,17 @@ export function localUserActsOnPeer(
       eq(schema.users.isDeleted, 0),
     ))
     .get();
-  if (!nativeUser) return false;
+  if (!nativeUser) return 'no_such_user';
+
+  const peerHost = normalizeOriginForCompare(peerOrigin);
+  if (!peerHost) return 'unproven';
 
   const registryRows = db
     .select({ origin: schema.userFederationRegistry.origin })
     .from(schema.userFederationRegistry)
     .where(eq(schema.userFederationRegistry.userId, nativeUser.id))
     .all();
-  if (registryRows.some(r => normalizeOriginForCompare(r.origin) === peerHost)) return true;
+  if (registryRows.some(r => normalizeOriginForCompare(r.origin) === peerHost)) return 'proven';
 
   if (nativeUser.replicatedInstances) {
     try {
@@ -103,7 +115,7 @@ export function localUserActsOnPeer(
         for (const entry of parsed) {
           if (typeof entry !== 'object' || entry === null) continue;
           const origin = (entry as { origin?: unknown }).origin;
-          if (typeof origin === 'string' && normalizeOriginForCompare(origin) === peerHost) return true;
+          if (typeof origin === 'string' && normalizeOriginForCompare(origin) === peerHost) return 'proven';
         }
       }
     } catch {
@@ -111,13 +123,31 @@ export function localUserActsOnPeer(
     }
   }
 
-  return false;
+  return 'unproven';
 }
 
 
 /**
- * Verify that an inbound relay event's acting identity is one the signing peer
- * is entitled to speak for.
+ * Why an inbound relay event's acting identity was refused, as it goes into the
+ * relay response's `rejected[].reason`.
+ *
+ *   - `attribution_mismatch` — permanent. The signing peer can never speak for
+ *     this actor: it is homed on a third instance, is malformed, or claims to
+ *     be one of our users who does not exist (or no longer does).
+ *   - `attribution_unproven` — the actor is one of our live users and the peer
+ *     may well be carrying their event home, but the proof that they hold an
+ *     account there has not reached us. A retry can succeed once it does.
+ *
+ * The HTTP relay boundary only puts `attribution_unproven` on the wire for a
+ * sender that lists it in `FederationRelayRequest.capabilities`; every other
+ * sender receives `attribution_mismatch` for both (see `handlers/relay.ts`).
+ */
+export type AttributionRefusal = 'attribution_mismatch' | 'attribution_unproven';
+
+/**
+ * Check that an inbound relay event's acting identity is one the signing peer
+ * is entitled to speak for. Returns `null` when it is, otherwise the refusal
+ * reason the handler reports.
  *
  * The only trustworthy fact about an inbound relay is the HMAC-authenticated
  * peer. `sourceInstance` is bound to that peer at the relay boundary (see
@@ -131,36 +161,40 @@ export function localUserActsOnPeer(
  *    federation user (e.g. erin@nova logged into orbit) acted on the remote and
  *    the relay carries it back home. This is only accepted when the local user
  *    actually holds a federated account on the signing peer
- *    (`localUserActsOnPeer`). Without that binding, any approved peer could
+ *    (`localUserStandingOnPeer`). Without that binding, any approved peer could
  *    forge events attributed to any of our users.
  *
  * An actor homed on a third instance is never accepted: the signing peer is not
  * that instance's identity authority and has no delegation from it.
  */
-export function verifyAttribution(
+export function attributionRefusal(
   actor: RelayActor | null | undefined,
   sourceInstance: string,
   db: ReturnType<typeof getDb>,
-): boolean {
-  if (!actor) return false;
+): AttributionRefusal | null {
+  if (!actor) return 'attribution_mismatch';
   const { homeUserId, homeInstance } = actor;
-  if (typeof homeUserId !== 'string' || homeUserId.length === 0) return false;
-  if (typeof homeInstance !== 'string' || homeInstance.length === 0) return false;
+  if (typeof homeUserId !== 'string' || homeUserId.length === 0) return 'attribution_mismatch';
+  if (typeof homeInstance !== 'string' || homeInstance.length === 0) return 'attribution_mismatch';
 
   const authorDomain = extractDomain(homeInstance).toLowerCase();
   const sourceDomain = extractDomain(sourceInstance).toLowerCase();
-  if (!authorDomain || !sourceDomain) return false;
+  if (!authorDomain || !sourceDomain) return 'attribution_mismatch';
 
   // Case 1: the actor belongs to the signing peer.
-  if (authorDomain === sourceDomain) return true;
+  if (authorDomain === sourceDomain) return null;
 
   // Case 2: homeward relay — the actor belongs to THIS instance.
   const ourDomain = extractDomain(getOurOrigin()).toLowerCase();
   if (ourDomain && authorDomain === ourDomain) {
-    return localUserActsOnPeer(homeUserId, sourceInstance, db);
+    switch (localUserStandingOnPeer(homeUserId, sourceInstance, db)) {
+      case 'proven': return null;
+      case 'unproven': return 'attribution_unproven';
+      case 'no_such_user': return 'attribution_mismatch';
+    }
   }
 
-  return false;
+  return 'attribution_mismatch';
 }
 
 

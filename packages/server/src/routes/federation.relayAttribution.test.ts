@@ -230,23 +230,130 @@ describe('processRelayEvents — homeward attribution requires peer involvement'
     expect(countRows()).toEqual({ channels: 1, messages: 1 });
   });
 
-  it('rejects a homeward relay from a peer the acting user has never connected to', async () => {
+  // A homeward relay with no proof on file is refused as `attribution_unproven`:
+  // the proof is written by the user's own client and can land after the relay
+  // it explains. Nothing is written either way; only the reason tells the
+  // sender that a later retry can succeed.
+  it('refuses, as unproven, a homeward relay from a peer the acting user has never connected to', async () => {
     const { processRelayEvents } = await import('./federation.js');
     const result = await processRelayEvents([makeCreateEvent('m-forged')], OTHER_PEER, OTHER_PEER, testDb);
 
     expect(result.accepted).toEqual([]);
-    expect(result.rejected).toEqual([{ messageId: 'm-forged', reason: 'attribution_mismatch' }]);
+    expect(result.rejected).toEqual([{ messageId: 'm-forged', reason: 'attribution_unproven' }]);
     expect(countRows()).toEqual({ channels: 0, messages: 0 });
   });
 
-  it('rejects a homeward relay for a user connected to a DIFFERENT peer', async () => {
+  it('refuses, as unproven, a homeward relay for a user connected to a DIFFERENT peer', async () => {
     // alice is connected to orbit; vault signs the batch and claims her.
     seedRegistryEntry('alice-local', SIGNING_PEER);
     const { processRelayEvents } = await import('./federation.js');
     const result = await processRelayEvents([makeCreateEvent('m-forged-2')], OTHER_PEER, OTHER_PEER, testDb);
 
-    expect(result.rejected).toEqual([{ messageId: 'm-forged-2', reason: 'attribution_mismatch' }]);
+    expect(result.rejected).toEqual([{ messageId: 'm-forged-2', reason: 'attribution_unproven' }]);
     expect(countRows()).toEqual({ channels: 0, messages: 0 });
+  });
+
+  it('accepts the same relay on retry once the proof has arrived', async () => {
+    const { processRelayEvents } = await import('./federation.js');
+    const first = await processRelayEvents([makeCreateEvent('m-late-proof')], SIGNING_PEER, SIGNING_PEER, testDb);
+    expect(first.rejected).toEqual([{ messageId: 'm-late-proof', reason: 'attribution_unproven' }]);
+
+    seedRegistryEntry('alice-local', SIGNING_PEER);
+    const retry = await processRelayEvents([makeCreateEvent('m-late-proof')], SIGNING_PEER, SIGNING_PEER, testDb);
+    expect(retry.rejected).toEqual([]);
+    expect(retry.accepted).toEqual(['m-late-proof']);
+    expect(countRows()).toEqual({ channels: 1, messages: 1 });
+  });
+
+  it('still refuses an author homed on a THIRD instance as a terminal mismatch', async () => {
+    const event = makeCreateEvent('m-third');
+    event.message = { ...event.message!, homeUserId: 'mallory', userId: 'mallory', homeInstance: 'vault.test' };
+    const { processRelayEvents } = await import('./federation.js');
+    const result = await processRelayEvents([event], SIGNING_PEER, SIGNING_PEER, testDb);
+
+    expect(result.rejected).toEqual([{ messageId: 'm-third', reason: 'attribution_mismatch' }]);
+  });
+});
+
+describe('processRelayEvents — friend_remove needs only one attributable side', () => {
+  beforeEach(() => {
+    seedLocalUser('alice-local', 'alice');
+  });
+
+  function removeEvent(messageId: string, from: { homeUserId: string; homeInstance: string }): FederationRelayEvent {
+    return {
+      eventType: 'friend_remove',
+      contextType: 'friend',
+      messageId,
+      encryptionVersion: 0,
+      timestamp: 1_700_000_000_000,
+      friendship: {
+        from,
+        to: { homeUserId: 'mallory', homeInstance: 'vault.test' },
+        createdAt: 1_700_000_000_000,
+      },
+    };
+  }
+
+  it('is unproven when one side is a local user whose proof has not arrived', async () => {
+    const { processRelayEvents } = await import('./federation.js');
+    const result = await processRelayEvents(
+      [removeEvent('fr-unproven', { homeUserId: 'alice-local', homeInstance: HOME_DOMAIN })],
+      SIGNING_PEER, SIGNING_PEER, testDb,
+    );
+    expect(result.rejected).toEqual([{ messageId: 'fr-unproven', reason: 'attribution_unproven' }]);
+  });
+
+  it('is a mismatch when neither side can ever be attributed to the peer', async () => {
+    const { processRelayEvents } = await import('./federation.js');
+    const result = await processRelayEvents(
+      [removeEvent('fr-mismatch', { homeUserId: 'ghost', homeInstance: HOME_DOMAIN })],
+      SIGNING_PEER, SIGNING_PEER, testDb,
+    );
+    expect(result.rejected).toEqual([{ messageId: 'fr-mismatch', reason: 'attribution_mismatch' }]);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Layer 3: `attribution_unproven` is only put on the wire for a sender that says
+// it retries it. Every other sender gets the v1 answer, `attribution_mismatch`,
+// so an older instance keeps the behaviour it was built for.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('POST /api/federation/relay — the unproven reason is negotiated per request', () => {
+  let app: FastifyInstance;
+
+  beforeEach(async () => {
+    seedLocalUser('alice-local', 'alice');
+    seedLocalUser('bob-local', 'bob');
+    app = await buildApp();
+  });
+  afterEach(async () => { await app.close(); });
+
+  async function relay(messageId: string, extra: Record<string, unknown>): Promise<{ status: number; rejected: Array<{ messageId: string; reason: string }> }> {
+    const body = JSON.stringify({ version: 1, sourceInstance: SIGNING_PEER, ...extra, events: [makeCreateEvent(messageId)] });
+    const headers = buildFederationHeaders(body, SIGNING_SECRET, SIGNING_PEER);
+    const res = await app.inject({ method: 'POST', url: '/api/federation/relay', headers, payload: body });
+    const parsed = res.json() as { rejected: Array<{ messageId: string; reason: string }> };
+    return { status: res.statusCode, rejected: parsed.rejected };
+  }
+
+  it('answers attribution_unproven to a sender that lists the capability', async () => {
+    const res = await relay('m-cap', { capabilities: ['attribution_unproven'] });
+    expect(res.status).toBe(200);
+    expect(res.rejected).toEqual([{ messageId: 'm-cap', reason: 'attribution_unproven' }]);
+  });
+
+  it('answers attribution_mismatch to a sender that does not list it', async () => {
+    const res = await relay('m-nocap', {});
+    expect(res.status).toBe(200);
+    expect(res.rejected).toEqual([{ messageId: 'm-nocap', reason: 'attribution_mismatch' }]);
+  });
+
+  it('ignores a capabilities field that is not a list of strings', async () => {
+    const res = await relay('m-badcap', { capabilities: 'attribution_unproven' });
+    expect(res.status).toBe(200);
+    expect(res.rejected).toEqual([{ messageId: 'm-badcap', reason: 'attribution_mismatch' }]);
   });
 });
 

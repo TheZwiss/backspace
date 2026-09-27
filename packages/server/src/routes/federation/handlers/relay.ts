@@ -18,6 +18,29 @@ import { resolveLocalOrigin } from '../origin.js';
 import { isRelayRateLimited } from '../rateLimits.js';
 import { authenticateS2SPeer } from './s2sAuth.js';
 
+/**
+ * The rejection list as it goes on the wire to the sender of this batch.
+ *
+ * `attribution_unproven` is only sent to a sender that listed it in
+ * `FederationRelayRequest.capabilities`. Any other sender receives v1's
+ * `attribution_mismatch` for the same case, which it already treats as final.
+ * Sending it the new reason instead would be worse than the old answer: a
+ * sender that predates it does not recognise it, keeps the outbox row, and
+ * (having no backoff for rejections it does not recognise) resends it on every
+ * outbox tick until the row expires.
+ *
+ * `capabilities` comes from the request body and is untrusted; anything other
+ * than an array counts as an empty list.
+ */
+function rejectionsForSender(
+  rejected: Array<{ messageId: string; reason: string }>,
+  capabilities: unknown,
+): Array<{ messageId: string; reason: string }> {
+  const retriesUnproven = Array.isArray(capabilities) && capabilities.includes('attribution_unproven');
+  if (retriesUnproven) return rejected;
+  return rejected.map(r => (r.reason === 'attribution_unproven' ? { ...r, reason: 'attribution_mismatch' } : r));
+}
+
 export function registerRelayRoutes(app: FastifyInstance): void {
   // ─── DELETE /api/federation/identity ──────────────────────────────────────
   // S2S endpoint: delete a federated user's identity on this instance.
@@ -197,7 +220,7 @@ export function registerRelayRoutes(app: FastifyInstance): void {
 
       const response: FederationRelayResponse = {
         accepted,
-        rejected,
+        rejected: rejectionsForSender(rejected, body.capabilities),
         maxUploadSize: settings?.maxUploadSizeBytes ?? config.maxUploadSize,
         ...(undeliverable.length > 0 ? { undeliverable } : {}),
       };

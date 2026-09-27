@@ -329,7 +329,7 @@ describe('processMemberRemoveEvent — kick authority', () => {
     const accepted: string[] = [];
     const rejected: Array<{ messageId: string; reason: string }> = [];
     // sourceInstance == leaver's home instance (RANDOM_ORIGIN), which is NOT
-    // the owner's home instance — verifyAttribution still passes because the
+    // the owner's home instance — attributionRefusal still passes because the
     // leaving user belongs to the source.
     fed.processMemberRemoveEvent(event, RANDOM_ORIGIN, testDb, accepted, rejected);
 

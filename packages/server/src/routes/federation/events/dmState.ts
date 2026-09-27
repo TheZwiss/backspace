@@ -6,7 +6,7 @@ import { getDmMessageWithUser } from '../../dm.js';
 import { and, eq, isNull } from 'drizzle-orm';
 import type { FederationRelayEvent } from '@backspace/shared';
 import { buildDmChannelPayload } from '../dmChannels.js';
-import { extractDomain, resolveLocalUser, verifyAttribution } from '../identity.js';
+import { extractDomain, resolveLocalUser, attributionRefusal } from '../identity.js';
 
 export function processFileRejectedEvent(
   event: FederationRelayEvent,
@@ -238,9 +238,10 @@ export function processReadStateUpdateEvent(
   }
 
   // Attribution: the peer must be entitled to speak for the acking identity.
-  if (!verifyAttribution(event.readState.user, sourceInstance, db)) {
-    console.warn(`[federation] Attribution mismatch in read_state_update: user homeInstance=${extractDomain(event.readState.user.homeInstance)} source=${extractDomain(sourceInstance)}`);
-    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+  const refusal = attributionRefusal(event.readState.user, sourceInstance, db);
+  if (refusal) {
+    console.warn(`[federation] Attribution refused (${refusal}) in read_state_update: user homeInstance=${extractDomain(event.readState.user.homeInstance)} source=${extractDomain(sourceInstance)}`);
+    rejected.push({ messageId: event.messageId, reason: refusal });
     return;
   }
 
@@ -343,9 +344,10 @@ export function processDmCloseEvent(
   }
 
   // Attribution: the peer must be entitled to speak for the closing identity.
-  if (!verifyAttribution(event.dmCloseReopen, sourceInstance, db)) {
-    console.warn(`[federation] Attribution mismatch in dm_close: user homeInstance=${extractDomain(event.dmCloseReopen.homeInstance)} source=${extractDomain(sourceInstance)}`);
-    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+  const refusal = attributionRefusal(event.dmCloseReopen, sourceInstance, db);
+  if (refusal) {
+    console.warn(`[federation] Attribution refused (${refusal}) in dm_close: user homeInstance=${extractDomain(event.dmCloseReopen.homeInstance)} source=${extractDomain(sourceInstance)}`);
+    rejected.push({ messageId: event.messageId, reason: refusal });
     return;
   }
 
@@ -419,9 +421,10 @@ export function processDmReopenEvent(
   }
 
   // Attribution: the peer must be entitled to speak for the reopening identity.
-  if (!verifyAttribution(event.dmCloseReopen, sourceInstance, db)) {
-    console.warn(`[federation] Attribution mismatch in dm_reopen: user homeInstance=${extractDomain(event.dmCloseReopen.homeInstance)} source=${extractDomain(sourceInstance)}`);
-    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+  const refusal = attributionRefusal(event.dmCloseReopen, sourceInstance, db);
+  if (refusal) {
+    console.warn(`[federation] Attribution refused (${refusal}) in dm_reopen: user homeInstance=${extractDomain(event.dmCloseReopen.homeInstance)} source=${extractDomain(sourceInstance)}`);
+    rejected.push({ messageId: event.messageId, reason: refusal });
     return;
   }
 

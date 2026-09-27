@@ -9,7 +9,7 @@ import { getDmMessageWithUser } from '../../dm.js';
 import { and, eq, isNull, or } from 'drizzle-orm';
 import type { FederationRelayEvent } from '@backspace/shared';
 import { buildDmChannelPayload, buildDmMessagePayload, findOrCreateDmChannel, isUrlFromPeer, resolveLocalDmMessage } from '../dmChannels.js';
-import { extractDomain, resolveLocalUser, resolveOrCreateReplicatedUser, verifyAttribution } from '../identity.js';
+import { extractDomain, resolveLocalUser, resolveOrCreateReplicatedUser, attributionRefusal } from '../identity.js';
 import { hydrateReplicatedUserProfile } from '../profile.js';
 
 export async function processCreateEvent(
@@ -31,9 +31,10 @@ export async function processCreateEvent(
   }
 
   // Attribution: message author must belong to source instance (FED-010)
-  if (!verifyAttribution(event.message, sourceInstance, db)) {
-    console.warn(`[federation] Attribution mismatch in create: message homeInstance=${extractDomain(event.message.homeInstance)} source=${extractDomain(sourceInstance)}`);
-    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+  const refusal = attributionRefusal(event.message, sourceInstance, db);
+  if (refusal) {
+    console.warn(`[federation] Attribution refused (${refusal}) in create: message homeInstance=${extractDomain(event.message.homeInstance)} source=${extractDomain(sourceInstance)}`);
+    rejected.push({ messageId: event.messageId, reason: refusal });
     return;
   }
 
@@ -264,10 +265,13 @@ export function processUpdateEvent(
   rejected: Array<{ messageId: string; reason: string }>,
 ): void {
   // Attribution: if homeInstance present, verify it matches source (FED-010)
-  if (event.message?.homeInstance && !verifyAttribution(event.message, sourceInstance, db)) {
-    console.warn(`[federation] Attribution mismatch in update: message homeInstance=${extractDomain(event.message.homeInstance)} source=${extractDomain(sourceInstance)}`);
-    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
-    return;
+  if (event.message?.homeInstance) {
+    const refusal = attributionRefusal(event.message, sourceInstance, db);
+    if (refusal) {
+      console.warn(`[federation] Attribution refused (${refusal}) in update: message homeInstance=${extractDomain(event.message.homeInstance)} source=${extractDomain(sourceInstance)}`);
+      rejected.push({ messageId: event.messageId, reason: refusal });
+      return;
+    }
   }
 
   const localMsg = db
@@ -432,9 +436,10 @@ export function processReactionAddEvent(
   }
 
   // Attribution: reacting user must belong to source instance (FED-010)
-  if (!event.reaction.homeInstance || !verifyAttribution(event.reaction, sourceInstance, db)) {
-    console.warn(`[federation] Attribution mismatch in reaction_add: reaction homeInstance=${event.reaction.homeInstance ? extractDomain(event.reaction.homeInstance) : 'missing'} source=${extractDomain(sourceInstance)}`);
-    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+  const refusal = attributionRefusal(event.reaction, sourceInstance, db);
+  if (refusal) {
+    console.warn(`[federation] Attribution refused (${refusal}) in reaction_add: reaction homeInstance=${event.reaction.homeInstance ? extractDomain(event.reaction.homeInstance) : 'missing'} source=${extractDomain(sourceInstance)}`);
+    rejected.push({ messageId: event.messageId, reason: refusal });
     return;
   }
 
@@ -521,9 +526,10 @@ export function processReactionRemoveEvent(
   }
 
   // Attribution: reacting user must belong to source instance (FED-010)
-  if (!event.reaction.homeInstance || !verifyAttribution(event.reaction, sourceInstance, db)) {
-    console.warn(`[federation] Attribution mismatch in reaction_remove: reaction homeInstance=${event.reaction.homeInstance ? extractDomain(event.reaction.homeInstance) : 'missing'} source=${extractDomain(sourceInstance)}`);
-    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+  const refusal = attributionRefusal(event.reaction, sourceInstance, db);
+  if (refusal) {
+    console.warn(`[federation] Attribution refused (${refusal}) in reaction_remove: reaction homeInstance=${event.reaction.homeInstance ? extractDomain(event.reaction.homeInstance) : 'missing'} source=${extractDomain(sourceInstance)}`);
+    rejected.push({ messageId: event.messageId, reason: refusal });
     return;
   }
 

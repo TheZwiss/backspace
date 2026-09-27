@@ -343,7 +343,7 @@ The wire format of the queued event is identical to the pre-2026-04-25 flow; onl
 
 ### Failure Handling: Async Rollback
 
-When the outbox worker receives a relay response from the remote instance, it classifies each rejected entry. A configurable set of **terminal rejection reasons** (`TERMINAL_REJECTION_REASONS` in `federationWorker.ts`) causes an outbox entry to be deleted with no retry: `duplicate`, `recipient_not_found`, `attribution_mismatch`, `unknown_event_type`, `self_target_invalid`.
+When the outbox worker receives a relay response from the remote instance, it classifies each rejected entry. A configurable set of **terminal rejection reasons** (`TERMINAL_REJECTION_REASONS` in `federationWorker.ts`) causes an outbox entry to be deleted with no retry: `duplicate`, `recipient_not_found`, `attribution_mismatch`, `unknown_event_type`, `self_target_invalid`. Any other reason (for example `attribution_unproven`, see [federation.md §3](federation.md#3-identity-resolution)) keeps the request pending while the outbox retries it on backoff.
 
 For non-`duplicate` terminals, the worker invokes the registered permanent-failure callback via `invokePermanentFailureCallback(eventType, messageId, reason)` from `utils/federationRollback.ts`. For `friend_request_create`, this is **`rollbackFriendRequestCreate`**:
 

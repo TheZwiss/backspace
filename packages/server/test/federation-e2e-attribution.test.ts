@@ -334,6 +334,45 @@ describe('federation e2e — relay attribution is bound to the authenticated pee
     expect(dmMessageContents(B)).not.toContain(content);
   });
 
+  it('tells a sender that retries it that the same homeward relay is unproven, not forged', async () => {
+    const messageId = nextId();
+    const content = `attr-homeward-unproven-${messageId}`;
+
+    // Same claim as above, from a sender that lists the capability. frank's
+    // proof could still be on its way from his client, so the receiver answers
+    // with the retryable reason. Nothing is written.
+    const res = await postSignedRelay(B, identityOrigin(A), secret, [
+      createEvent({
+        messageId,
+        content,
+        authorHomeUserId: frank.id,
+        authorHomeInstance: B.domain,
+        authorUsername: frank.username,
+      }),
+    ], { capabilities: ['attribution_unproven'] });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.accepted).toEqual([]);
+    expect(rejectionReason(res, messageId)).toBe('attribution_unproven');
+    expect(dmMessageContents(B)).not.toContain(content);
+  });
+
+  it('keeps a third-instance author terminal even for a sender that retries unproven claims', async () => {
+    const messageId = nextId();
+    const res = await postSignedRelay(B, identityOrigin(A), secret, [
+      createEvent({
+        messageId,
+        content: `attr-third-cap-${messageId}`,
+        authorHomeUserId: '900000000000000107',
+        authorHomeInstance: THIRD_INSTANCE,
+        authorUsername: 'mallory2',
+      }),
+    ], { capabilities: ['attribution_unproven'] });
+
+    expect(res.status).toBe(200);
+    expect(rejectionReason(res, messageId)).toBe('attribution_mismatch');
+  });
+
   it('POSITIVE CONTROL: accepts the same homeward relay once the user holds an account on the peer', async () => {
     const messageId = nextId();
     const content = `attr-homeward-standing-${messageId}`;

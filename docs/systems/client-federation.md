@@ -589,7 +589,7 @@ Client-driven LWW whole-registry push (same pattern as `profileSync.ts`):
 
 ### Load-bearing for inbound attribution
 
-Both records are now read by the **home** instance's S2S attribution check (`localUserActsOnPeer`, see [federation.md §3](federation.md#3-identity-resolution)). A homeward relay — a peer asserting an event authored by one of *our* users — is only accepted when that user has a registry row or a `replicatedInstances` entry for the signing peer. Either record satisfies the check, so a failed `PUT` on one path does not lock the user out.
+Both records are now read by the **home** instance's S2S attribution check (`localUserStandingOnPeer`, see [federation.md §3](federation.md#3-identity-resolution)). A homeward relay — a peer asserting an event authored by one of *our* users — is only accepted when that user has a registry row or a `replicatedInstances` entry for the signing peer. Either record satisfies the check, so a failed `PUT` on one path does not lock the user out. A relay that arrives before either record is refused as `attribution_unproven`, which the sending instance retries on backoff, so a DM written in the moments before `syncRegistry` lands is delivered once it does.
 
 Consequences to keep in mind when touching this code:
 

@@ -188,11 +188,12 @@ export async function postSignedRelay(
   signerOrigin: string,
   secret: string,
   events: FederationRelayEvent[],
-  opts: { sourceInstance?: string } = {},
+  opts: { sourceInstance?: string; capabilities?: string[] } = {},
 ): Promise<RelayPostResult> {
   const payload = JSON.stringify({
     version: 1,
     sourceInstance: opts.sourceInstance ?? signerOrigin,
+    ...(opts.capabilities ? { capabilities: opts.capabilities } : {}),
     events,
   });
   const headers = buildHeadersForOrigin(payload, secret, signerOrigin);

@@ -5,7 +5,7 @@ import { generateSnowflake } from '../../../utils/snowflake.js';
 import { connectionManager } from '../../../ws/handler.js';
 import { and, eq, or } from 'drizzle-orm';
 import type { FederationRelayEvent } from '@backspace/shared';
-import { extractDomain, resolveLocalUser, resolveOrCreateReplicatedUser, verifyAttribution } from '../identity.js';
+import { extractDomain, resolveLocalUser, resolveOrCreateReplicatedUser, attributionRefusal } from '../identity.js';
 import { hydrateReplicatedUserProfile } from '../profile.js';
 
 export async function processFriendRequestCreateEvent(
@@ -23,9 +23,10 @@ export async function processFriendRequestCreateEvent(
   const { from, to } = event.friendship;
 
   // Attribution: sender must belong to source instance (FED-010)
-  if (!verifyAttribution(from, sourceInstance, db)) {
-    console.warn(`[federation] Attribution mismatch in friend_request_create: from homeInstance=${extractDomain(from.homeInstance)} source=${extractDomain(sourceInstance)}`);
-    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+  const refusal = attributionRefusal(from, sourceInstance, db);
+  if (refusal) {
+    console.warn(`[federation] Attribution refused (${refusal}) in friend_request_create: from homeInstance=${extractDomain(from.homeInstance)} source=${extractDomain(sourceInstance)}`);
+    rejected.push({ messageId: event.messageId, reason: refusal });
     return;
   }
 
@@ -146,9 +147,10 @@ export function processFriendRequestUpdateEvent(
   const { from, to, status } = event.friendship;
 
   // Attribution: recipient (acceptor/decliner) must belong to source instance (FED-010)
-  if (!verifyAttribution(to, sourceInstance, db)) {
-    console.warn(`[federation] Attribution mismatch in friend_request_update: to homeInstance=${extractDomain(to.homeInstance)} source=${extractDomain(sourceInstance)}`);
-    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+  const refusal = attributionRefusal(to, sourceInstance, db);
+  if (refusal) {
+    console.warn(`[federation] Attribution refused (${refusal}) in friend_request_update: to homeInstance=${extractDomain(to.homeInstance)} source=${extractDomain(sourceInstance)}`);
+    rejected.push({ messageId: event.messageId, reason: refusal });
     return;
   }
 
@@ -229,9 +231,10 @@ export function processFriendRequestCancelEvent(
   const { from, to } = event.friendship;
 
   // Attribution: sender must belong to source instance (FED-010)
-  if (!verifyAttribution(from, sourceInstance, db)) {
-    console.warn(`[federation] Attribution mismatch in friend_request_cancel: from homeInstance=${extractDomain(from.homeInstance)} source=${extractDomain(sourceInstance)}`);
-    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+  const refusal = attributionRefusal(from, sourceInstance, db);
+  if (refusal) {
+    console.warn(`[federation] Attribution refused (${refusal}) in friend_request_cancel: from homeInstance=${extractDomain(from.homeInstance)} source=${extractDomain(sourceInstance)}`);
+    rejected.push({ messageId: event.messageId, reason: refusal });
     return;
   }
 
@@ -295,9 +298,10 @@ export async function processFriendAddEvent(
   const { from, to } = event.friendship;
 
   // Attribution: acceptor must belong to source instance (FED-010)
-  if (!verifyAttribution(to, sourceInstance, db)) {
-    console.warn(`[federation] Attribution mismatch in friend_add: to homeInstance=${extractDomain(to.homeInstance)} source=${extractDomain(sourceInstance)}`);
-    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+  const refusal = attributionRefusal(to, sourceInstance, db);
+  if (refusal) {
+    console.warn(`[federation] Attribution refused (${refusal}) in friend_add: to homeInstance=${extractDomain(to.homeInstance)} source=${extractDomain(sourceInstance)}`);
+    rejected.push({ messageId: event.messageId, reason: refusal });
     return;
   }
 
@@ -392,9 +396,17 @@ export function processFriendRemoveEvent(
   const { from, to } = event.friendship;
 
   // Attribution: at least one side must belong to source instance (FED-010)
-  if (!verifyAttribution(from, sourceInstance, db) && !verifyAttribution(to, sourceInstance, db)) {
-    console.warn(`[federation] Attribution mismatch in friend_remove: from homeInstance=${extractDomain(from.homeInstance)} to homeInstance=${extractDomain(to.homeInstance)} source=${extractDomain(sourceInstance)}`);
-    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+  // Either side may end the friendship, so the peer only has to be able to
+  // speak for one of them. When neither is attributable, the refusal is only
+  // permanent if both are: a side whose proof is still on its way may yet pass.
+  const fromRefusal = attributionRefusal(from, sourceInstance, db);
+  const toRefusal = fromRefusal ? attributionRefusal(to, sourceInstance, db) : null;
+  if (fromRefusal && toRefusal) {
+    const refusal = fromRefusal === 'attribution_unproven' || toRefusal === 'attribution_unproven'
+      ? 'attribution_unproven'
+      : 'attribution_mismatch';
+    console.warn(`[federation] Attribution refused (${refusal}) in friend_remove: from homeInstance=${extractDomain(from.homeInstance)} to homeInstance=${extractDomain(to.homeInstance)} source=${extractDomain(sourceInstance)}`);
+    rejected.push({ messageId: event.messageId, reason: refusal });
     return;
   }
 

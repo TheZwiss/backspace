@@ -1279,8 +1279,28 @@ export interface FederationRelayRequest {
   // with peers that predate epoch self-healing; when present, the receiver can
   // detect that the source instance has been re-provisioned.
   sourceInstanceId?: string;
+  /**
+   * Relay behaviours the sender implements beyond plain v1. Optional for wire
+   * compatibility: a receiver treats a missing or malformed list as empty and
+   * answers with v1 behaviour only. See `FederationRelayCapability`.
+   */
+  capabilities?: FederationRelayCapability[];
   events: FederationRelayEvent[];
 }
+
+/**
+ * A relay behaviour a sender opts into by listing it in
+ * `FederationRelayRequest.capabilities`. Each one gates something the receiver
+ * would otherwise not send, so an older sender is never handed an answer it was
+ * not built to handle.
+ *
+ * - `attribution_unproven`: the sender retries an event rejected with the
+ *   reason `attribution_unproven` on its normal backoff, until the outbox TTL.
+ *   A receiver may then use that reason for a homeward claim whose proof it
+ *   does not hold yet; for any other sender it answers the same case with the
+ *   terminal `attribution_mismatch`.
+ */
+export type FederationRelayCapability = 'attribution_unproven';
 
 export interface FederationEpochResponse {
   instanceId: string;

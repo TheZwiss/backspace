@@ -8,7 +8,7 @@ import { connectionManager } from '../../../ws/handler.js';
 import { GROUP_DM_NAME_MAX_LENGTH, GROUP_DM_NAME_MIN_LENGTH } from '@backspace/shared/src/constants.js';
 import { and, eq, inArray, or } from 'drizzle-orm';
 import type { DmChannel, DmMessageWithUser, FederationRelayEvent } from '@backspace/shared';
-import { extractDomain, resolveLocalUser, resolveOrCreateReplicatedUser, verifyAttribution } from '../identity.js';
+import { extractDomain, resolveLocalUser, resolveOrCreateReplicatedUser, attributionRefusal } from '../identity.js';
 import { downloadProfileAsset, processProfileUpdateEvent } from '../profile.js';
 
 export async function processMemberAddEvent(
@@ -53,9 +53,10 @@ export async function processMemberAddEvent(
   // Bootstrap: channel doesn't exist yet — create from group metadata
   if (!channel && event.group) {
     // Attribution: only the owner's instance can bootstrap a group (FED-010)
-    if (event.group.owner && !verifyAttribution(event.group.owner, sourceInstance, db)) {
-      console.warn(`[federation] Attribution mismatch in member_add bootstrap: owner homeInstance=${extractDomain(event.group.owner.homeInstance)} source=${extractDomain(sourceInstance)}`);
-      rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+    const refusal = event.group.owner ? attributionRefusal(event.group.owner, sourceInstance, db) : null;
+    if (refusal) {
+      console.warn(`[federation] Attribution refused (${refusal}) in member_add bootstrap: owner homeInstance=${extractDomain(event.group.owner.homeInstance)} source=${extractDomain(sourceInstance)}`);
+      rejected.push({ messageId: event.messageId, reason: refusal });
       return;
     }
 
@@ -137,10 +138,13 @@ export async function processMemberAddEvent(
   // The attribution check below still validates that addedBy belongs to the source instance.
 
   // Attribution: adder must belong to source instance (FED-010)
-  if (event.membership.addedBy && !verifyAttribution(event.membership.addedBy, sourceInstance, db)) {
-    console.warn(`[federation] Attribution mismatch in member_add: addedBy homeInstance=${extractDomain(event.membership.addedBy.homeInstance)} source=${extractDomain(sourceInstance)}`);
-    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
-    return;
+  if (event.membership.addedBy) {
+    const refusal = attributionRefusal(event.membership.addedBy, sourceInstance, db);
+    if (refusal) {
+      console.warn(`[federation] Attribution refused (${refusal}) in member_add: addedBy homeInstance=${extractDomain(event.membership.addedBy.homeInstance)} source=${extractDomain(sourceInstance)}`);
+      rejected.push({ messageId: event.messageId, reason: refusal });
+      return;
+    }
   }
 
   // Cancel soft-delete if channel was pending GC
@@ -300,9 +304,10 @@ export function processMemberRemoveEvent(
   }
 
   // Attribution: for self-leave, user must belong to source instance (FED-010)
-  if (event.membership.reason === 'leave' && !verifyAttribution(event.membership.user, sourceInstance, db)) {
-    console.warn(`[federation] Attribution mismatch in member_remove: user homeInstance=${extractDomain(event.membership.user.homeInstance)} source=${extractDomain(sourceInstance)}`);
-    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+  const refusal = event.membership.reason === 'leave' ? attributionRefusal(event.membership.user, sourceInstance, db) : null;
+  if (refusal) {
+    console.warn(`[federation] Attribution refused (${refusal}) in member_remove: user homeInstance=${extractDomain(event.membership.user.homeInstance)} source=${extractDomain(sourceInstance)}`);
+    rejected.push({ messageId: event.messageId, reason: refusal });
     return;
   }
 
@@ -454,9 +459,10 @@ export function processOwnershipTransferEvent(
   }
 
   // Attribution: previous owner must belong to source instance (FED-010)
-  if (event.ownership.previousOwner && !verifyAttribution(event.ownership.previousOwner, sourceInstance, db)) {
-    console.warn(`[federation] Attribution mismatch in ownership_transfer: previousOwner homeInstance=${extractDomain(event.ownership.previousOwner.homeInstance)} source=${extractDomain(sourceInstance)}`);
-    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+  const refusal = event.ownership.previousOwner ? attributionRefusal(event.ownership.previousOwner, sourceInstance, db) : null;
+  if (refusal) {
+    console.warn(`[federation] Attribution refused (${refusal}) in ownership_transfer: previousOwner homeInstance=${extractDomain(event.ownership.previousOwner.homeInstance)} source=${extractDomain(sourceInstance)}`);
+    rejected.push({ messageId: event.messageId, reason: refusal });
     return;
   }
 
