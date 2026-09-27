@@ -36,10 +36,14 @@ vi.setConfig({ testTimeout: 30_000 });
  * `reaction_add` or `reaction_remove` only when the sending instance is one of
  * the origins it relays that message's conversation to, or the instance the
  * message itself came from: the rule relayed edits and deletes follow
- * (`isPeerOfMessage`). Otherwise it is `invalid_target` and nothing changes.
+ * (`isPeerOfMessage`), else `invalid_target`. The reactor must also be a
+ * member of that conversation, as the local reaction handlers require: else
+ * `unauthorized_source` in a group (retried, since the reactor's add can land
+ * later) and `invalid_target` in a 1-on-1. Nothing changes on a refusal.
  *
  * Topology (IDENTITY profile, A peered with B and with C):
  *   alice — native on A
+ *   carol — native on A, in neither conversation below
  *   bob   — native on B
  *   erin  — native on B
  *   cora  — native on C
@@ -57,6 +61,7 @@ let B: SpawnedInstance;
 let secretOnB: string;
 
 let alice: TestUser;
+let carol: TestUser;
 let bob: TestUser;
 let erin: TestUser;
 let cora: TestUser;
@@ -66,6 +71,8 @@ let groupOnA: string;
 let bobMsgOnB: string;
 let bobMsgOnA: string;
 let bobErinMsg: string;
+/** alice's opener in her 1-on-1 with bob, as A's id (B holds it relayed). */
+let aliceBobMsgOnA: string;
 /** The real events A queued for alice's reaction, reused as templates. */
 let addTemplate: FederationRelayEvent;
 let removeTemplate: FederationRelayEvent;
@@ -96,6 +103,19 @@ async function aliceReactsOnA(type: 'reaction_add' | 'reaction_remove'): Promise
   return queued()!;
 }
 
+/** The same event, made by carol instead of alice. */
+function byCarol(event: FederationRelayEvent): FederationRelayEvent {
+  return { ...event, reaction: { ...event.reaction!, userId: carol.id, homeUserId: carol.id, homeInstance: identityOrigin(A) } };
+}
+
+/** Deliver the create A queued for a message and require B to accept it. */
+async function deliverCreate(dmOnA: string, messageId: string): Promise<void> {
+  const create = queuedOnce(A, dmOnA, 'create').find(e => e.messageId === messageId);
+  if (!create) throw new Error(`A queued no create for ${messageId}`);
+  const res = await relayToB([create]);
+  if (!res.body?.accepted.includes(create.messageId)) throw new Error(`create not accepted: ${res.raw}`);
+}
+
 /** The same event, aimed at another message on B. */
 function aimedAt(template: FederationRelayEvent, messageId: string): FederationRelayEvent {
   return reaimed(template, { reaction: { ...template.reaction!, messageId, messageHomeInstance: identityOrigin(B) } });
@@ -109,11 +129,12 @@ beforeAll(async () => {
   secretOnB = peerSecretOn(B, identityOrigin(A));
 
   alice = await registerLocal(A, 'alice');
+  carol = await registerLocal(A, 'carol');
   bob = await registerLocal(B, 'bob');
   erin = await registerLocal(B, 'erin');
   cora = await registerLocal(C, 'cora');
 
-  await dmWithHomeUser(A, alice.token, bob, B);
+  const aliceBob = await dmWithHomeUser(A, alice.token, bob, B);
   await dmWithHomeUser(A, alice.token, cora, C);
   let fid: string;
   [groupOnA, fid] = await groupDelivered(A, alice, [
@@ -139,6 +160,16 @@ beforeAll(async () => {
   const other = await sendDmMessage(B, bob.token, bobErin, { content: 'bob to erin' });
   if (other.status !== 201 || !other.id) throw new Error(`bob to erin failed: ${other.status}`);
   bobErinMsg = other.id;
+
+  // alice's 1-on-1 with bob, and one carol has with bob so B holds a row for her.
+  const opener = await sendDmMessage(A, alice.token, aliceBob, { content: 'alice to bob' });
+  if (opener.status !== 201 || !opener.id) throw new Error(`alice to bob failed: ${opener.status}`);
+  aliceBobMsgOnA = opener.id;
+  await deliverCreate(aliceBob, aliceBobMsgOnA);
+  const carolBob = await dmWithHomeUser(A, carol.token, bob, B);
+  const carolOpener = await sendDmMessage(A, carol.token, carolBob, { content: 'carol to bob' });
+  if (carolOpener.status !== 201 || !carolOpener.id) throw new Error(`carol to bob failed: ${carolOpener.status}`);
+  await deliverCreate(carolBob, carolOpener.id);
 
   aliceWs = await connectWs(A.origin, alice.token);
 }, 120_000);
@@ -181,5 +212,40 @@ describe('federation e2e — a reaction is refused unless the sender is part of 
     const res = await relayToB([event]);
     expect(rejectionReason(res, event.messageId)).toBe('invalid_target');
     expect(reactionsOnB(bobErinMsg)).toEqual([{ userId: rowFor(B, alice.id), emoji: EMOJI }]);
+  });
+});
+
+describe('federation e2e — a reaction is refused unless the reactor is a member of the message\'s conversation', () => {
+  it('refuses a reaction to a group message by someone who is not in the group, for retry', async () => {
+    const event = byCarol(aimedAt(addTemplate, bobMsgOnB));
+
+    const res = await relayToB([event]);
+    expect(rejectionReason(res, event.messageId)).toBe('unauthorized_source');
+    expect(reactionsOnB(bobMsgOnB)).toEqual([]);
+  });
+
+  it('refuses a reaction removal on a group message by someone who is not in the group', async () => {
+    withWritableDb(B, db => {
+      db.prepare('INSERT INTO dm_reactions (id, dm_message_id, user_id, emoji, created_at) VALUES (?, ?, ?, ?, ?)')
+        .run(`e2e-reaction-carol-${Date.now()}`, bobMsgOnB, rowFor(B, carol.id), EMOJI, Date.now());
+    });
+    const event = byCarol(aimedAt(removeTemplate, bobMsgOnB));
+
+    const res = await relayToB([event]);
+    expect(rejectionReason(res, event.messageId)).toBe('unauthorized_source');
+    expect(reactionsOnB(bobMsgOnB)).toEqual([{ userId: rowFor(B, carol.id), emoji: EMOJI }]);
+  });
+
+  it('refuses a reaction to a 1-on-1 message by someone who is not one of its two people', async () => {
+    const onB = readDb(B, db =>
+      (db.prepare('SELECT id FROM dm_messages WHERE source_message_id = ?').get(aliceBobMsgOnA) as { id: string }).id,
+    );
+    const event = byCarol(reaimed(addTemplate, {
+      reaction: { ...addTemplate.reaction!, messageId: aliceBobMsgOnA, messageHomeInstance: identityOrigin(A) },
+    }));
+
+    const res = await relayToB([event]);
+    expect(rejectionReason(res, event.messageId)).toBe('invalid_target');
+    expect(reactionsOnB(onB)).toEqual([]);
   });
 });

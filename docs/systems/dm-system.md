@@ -576,9 +576,14 @@ This is the one place the rule is written; other specs point here.
 A relayed `create` is written into a conversation only when the sending peer and the author both belong to it (`mayRelayInto`, `federation/dmChannels.ts`):
 
 1. The author (resolved from `event.message` among the participants, after `attributionRefusal`) must be one of the conversation's members: for a group, its `dm_members` rows on this instance; for a 1-on-1, one of the two participants whose home user ids its `federatedId` is computed from. The pair is the whole membership of a 1-on-1, so it is checked before `findOrCreateDmChannel` creates or re-adds anything.
-2. The signing peer must be one of `relayTargetOrigins(<those members>)` (`federationOutbox.ts`), the origins this instance relays the conversation to, compared by domain as `attributionRefusal` compares instances (stored `homeInstance` values are bare domains). `getGroupDmTargetOrigins(channelId)` is the same function applied to a stored channel. Only those instances hold a copy of the conversation a message could have been written in: a 1-on-1 between two users of this instance, reached through their accounts on another instance, is not relayed home.
+2. The signing peer must be one of `relayTargetOrigins(<those members>)` (`federationOutbox.ts`), the origins this instance relays the conversation to, compared by domain as `attributionRefusal` compares instances (stored `homeInstance` values are bare domains). `getGroupDmTargetOrigins(channelId)` is the same function applied to a stored channel. Only those instances hold a copy of the conversation a message could have been written in. A 1-on-1 between two users of this instance has no relay targets here, so a create for it from another instance (where the two talk through their accounts there, and which does queue it) is refused.
 
-Either failing is `invalid_target` (terminal) and nothing is written. The check reads no new wire field, so events from older senders are judged the same way. A group message whose author's `member_add` from a third instance has not arrived yet is refused the same way; membership is only known as this instance currently holds it.
+Nothing is written when either fails. The reason depends on the conversation (`nonMemberRefusal`, `federation/dmChannels.ts`):
+
+- **Group:** `unauthorized_source`, which the sender retries. This instance knows a group's membership only as its copy currently holds it, and that copy changes through relayed `member_add` events. A member added through a third instance can post before their add reaches this instance; the create is refused until the add lands, and the retry then writes it.
+- **1-on-1:** `invalid_target` (terminal). The pair never changes, so a retry cannot succeed. This includes a `federatedId` that names a 1-on-1 here, which senders never send for one.
+
+The check reads no new wire field, so events from older senders are judged the same way; every sender version retries `unauthorized_source`.
 
 **`findOrCreateDmChannel()`:**
 - Lookup by `federatedId`: if found, ensure both users are members (re-add if removed)
@@ -653,7 +658,9 @@ Not stored in the outbox or mutation log — fire-and-forget, missed deliveries 
 **Functions:** `federation.ts:processReactionAddEvent()`, `processReactionRemoveEvent()`
 
 - Uses `resolveLocalDmMessage()` for cross-instance message resolution (handles messages originating on this instance vs relayed messages)
-- **Scope:** the resolved message must pass the peer check of "Relayed edits and deletes" (step 4, `isPeerOfMessage`): the signing peer is one of the origins this instance relays the message's conversation to, or the instance the message came from. Else `invalid_target` (terminal) and no reaction is added or removed. A message id alone never reaches a conversation the sender is not part of, including one of this instance's own messages named by `messageHomeInstance = our origin`.
+- **Scope** (`reactionScopeRefusal`), checked on the resolved message before anything changes:
+  1. The signing peer must pass the peer check of "Relayed edits and deletes" (step 4, `isPeerOfMessage`): one of the origins this instance relays the message's conversation to, or the instance the message came from. Else `invalid_target` (terminal). This holds for every message the event can name, including one that originated on this instance.
+  2. The reactor must be a member of the message's conversation here, matched by federated identity (`memberWithIdentity` over `dmChannelMembers`), as the local reaction handlers require (`isDmMember`). Else `nonMemberRefusal`, as for "Relayed message creates": `unauthorized_source` (retried) in a group, whose roster here may not yet hold a member added through a third instance; `invalid_target` in a 1-on-1.
 - Reaction add is idempotent (existing reaction accepted silently)
 - Broadcasts `reaction_added` / `reaction_removed` to local members
 
@@ -692,7 +699,7 @@ This is the one place the rule is written; other specs point here.
 
 What decides the path is whether this instance holds a channel with the event's `federatedId` (soft-deleted or not):
 
-- **Bootstrap** (no such channel): the event must carry `group`, and `attributionRefusal(group.owner, sourceInstance)` must pass. The sender speaks for the group's owner, and the roster it sends becomes this instance's copy. This is how a brand-new group, or a group this instance has never held, arrives.
+- **Bootstrap** (no such channel): the event must carry `group`, which must name an owner, and `attributionRefusal(group.owner, sourceInstance)` must pass: the sender speaks for the group's owner. The owner and roster are then resolved (`resolveOrCreateReplicatedUser`; tombstoned identities are dropped) and `mayRelayInto(<roster>, <owner>, sourceInstance)` must pass: the owner is in the roster and the signing peer is one of the instances the roster lives on. A missing owner or a failed roster check is `invalid_target` (terminal; the event carries everything it is judged on, so a retry cannot change the answer) and no channel is created. The roster it sends becomes this instance's copy. This is how a brand-new group, or a group this instance has never held, arrives.
 - **Incremental** (the channel exists): the add is judged against this instance's copy, mirroring `POST /api/dm/:id/members`:
   1. `attributionRefusal(membership.addedBy, sourceInstance)`, as for every relay event.
   2. The channel must be a group (`ownerId` set). A 1-on-1 has a fixed pair: else `invalid_target` (terminal).
@@ -710,7 +717,7 @@ When a group DM is created with multiple remote members, the origin instance que
 
 **Function:** `federation.ts:processMemberRemoveEvent()`
 
-1. Find channel by `federatedId`. If not found, accept silently (idempotent).
+1. Find channel by `federatedId`. If not found, accept silently (idempotent). A kick (`reason` other than `leave`) on a channel without an owner, a 1-on-1, is refused `invalid_target` (terminal): a 1-on-1 has a fixed pair and no one who may kick.
 2. Authority check: for kicks, `sourceInstance` must match `ownerHomeInstance`. For self-leave (`reason === 'leave'`), any instance is accepted.
 3. Resolve user by `homeUserId` + `homeInstance` via `resolveRelayActor()` (they should already exist). If not found, accept silently.
 4. Insert `member_removed` system message (before deletion so broadcast includes leaving user)
@@ -724,7 +731,7 @@ When a group DM is created with multiple remote members, the origin instance que
 **Function:** `federation.ts:processOwnershipTransferEvent()`
 
 1. Find channel by `federatedId`. If not found, accept silently.
-2. Authority check: `sourceInstance` must match `channel.ownerHomeInstance`
+2. The channel must be a group (`ownerId` set): a 1-on-1 has no owner to transfer, so the event is refused `invalid_target` (terminal). Then the authority check: `sourceInstance` must match `channel.ownerHomeInstance`
 3. Resolve new owner via `resolveOrCreateReplicatedUser()` -- **MUST guarantee non-null** (see invariant above)
 4. Update `dm_channels`: `ownerId`, `ownerHomeUserId`, `ownerHomeInstance`
 5. Broadcast `dm_owner_updated` to local members

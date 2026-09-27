@@ -86,7 +86,7 @@ const TERMINAL_REJECTION_REASONS = new Set<string>([
   'unknown_event_type',   // peer doesn't understand this eventType — never will
   'self_target_invalid',  // payload's from-identity equals to-identity (sender's self-check should have caught this)
   'not_message_author',   // relayed edit/delete names a message the actor did not write
-  'invalid_target',       // edit/delete/reaction target malformed or from a non-peer; create the author or sender is not part of; member_add into a 1-on-1
+  'invalid_target',       // edit/delete/reaction target malformed or from a non-peer; 1-on-1 create or reaction by a non-member; group op on a 1-on-1; unacceptable bootstrap
 ]);
 
 /**

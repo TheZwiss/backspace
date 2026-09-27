@@ -9,10 +9,9 @@ import { connectionManager } from '../../../ws/handler.js';
 import { getDmMessageWithUser } from '../../dm.js';
 import { and, eq, isNull, or } from 'drizzle-orm';
 import type { FederationMessageTarget, FederationRelayEvent } from '@backspace/shared';
-import { buildDmChannelPayload, buildDmMessagePayload, findOrCreateDmChannel, isUrlFromPeer, resolveLocalDmMessage, resolveRelayedReplyTarget } from '../dmChannels.js';
+import { buildDmChannelPayload, buildDmMessagePayload, dmChannelMembers, findOrCreateDmChannel, isRelayTarget, isUrlFromPeer, mayRelayInto, memberWithIdentity, nonMemberRefusal, resolveLocalDmMessage, resolveRelayedReplyTarget } from '../dmChannels.js';
 import { attributionRefusal, extractDomain, relayActorOfUser, resolveOrCreateReplicatedUser, resolveRelayActor, sameRelayActor } from '../identity.js';
 import { hydrateReplicatedUserProfile } from '../profile.js';
-import { dmChannelMembers, isRelayTarget, mayRelayInto } from '../dmChannels.js';
 
 export async function processCreateEvent(
   event: FederationRelayEvent,
@@ -115,8 +114,9 @@ export async function processCreateEvent(
       return;
     }
     if (!mayRelayInto(dmChannelMembers(channel.id, db), authorUser.id, sourceInstance)) {
-      console.warn(`[federation] Refused create in group DM ${channel.id}: the author is not a member, or ${extractDomain(sourceInstance)} is not a peer of the conversation`);
-      rejected.push({ messageId: event.messageId, reason: 'invalid_target' });
+      const reason = nonMemberRefusal(channel);
+      console.warn(`[federation] Refused create in DM ${channel.id} (${reason}): the author is not a member, or ${extractDomain(sourceInstance)} is not a peer of the conversation`);
+      rejected.push({ messageId: event.messageId, reason });
       return;
     }
     localDmChannelId = channel.id;
@@ -312,6 +312,29 @@ function isPeerOfMessage(
   if (!source) return false;
   if (normalizeOriginForCompare(localMsg.sourceInstance) === source) return true;
   return isRelayTarget(getGroupDmTargetOrigins(localMsg.dmChannelId), sourceInstance);
+}
+
+/**
+ * Why a relayed reaction on `localMsg` is refused, or null. The sender must be
+ * a peer of the message's conversation (`isPeerOfMessage`, else
+ * `invalid_target`), and the reactor a member of it, matched by federated
+ * identity, as the local reaction handlers require of a reacting user (else
+ * `nonMemberRefusal`).
+ */
+function reactionScopeRefusal(
+  localMsg: typeof schema.dmMessages.$inferSelect,
+  reactor: { homeUserId: string; homeInstance: string },
+  sourceInstance: string,
+  db: ReturnType<typeof getDb>,
+): 'invalid_target' | 'unauthorized_source' | null {
+  if (!isPeerOfMessage(localMsg, sourceInstance)) return 'invalid_target';
+  if (memberWithIdentity(dmChannelMembers(localMsg.dmChannelId, db), reactor)) return null;
+  const channel = db
+    .select({ ownerId: schema.dmChannels.ownerId })
+    .from(schema.dmChannels)
+    .where(eq(schema.dmChannels.id, localMsg.dmChannelId))
+    .get();
+  return channel ? nonMemberRefusal(channel) : 'invalid_target';
 }
 
 /**
@@ -571,11 +594,12 @@ export function processReactionAddEvent(
     db,
   );
 
-  // The same scope as relayed edits and deletes: the sender must be a peer of
-  // the message's conversation ("Inbound: Reaction Add/Remove" in dm-system.md).
-  if (localMsg && !isPeerOfMessage(localMsg, sourceInstance)) {
-    console.warn(`[federation] Refused reaction_add on message ${localMsg.id}: ${extractDomain(sourceInstance)} is not a peer of its conversation`);
-    rejected.push({ messageId: event.messageId, reason: 'invalid_target' });
+  // The sender must be a peer of the message's conversation and the reactor
+  // a member of it ("Inbound: Reaction Add/Remove" in dm-system.md).
+  const scopeRefusal = localMsg ? reactionScopeRefusal(localMsg, event.reaction, sourceInstance, db) : null;
+  if (localMsg && scopeRefusal) {
+    console.warn(`[federation] Refused reaction_add on message ${localMsg.id} (${scopeRefusal}): ${extractDomain(sourceInstance)} is not a peer of its conversation, or the reactor is not a member`);
+    rejected.push({ messageId: event.messageId, reason: scopeRefusal });
     return;
   }
 
@@ -676,11 +700,12 @@ export function processReactionRemoveEvent(
     db,
   );
 
-  // The same scope as relayed edits and deletes: the sender must be a peer of
-  // the message's conversation ("Inbound: Reaction Add/Remove" in dm-system.md).
-  if (localMsg && !isPeerOfMessage(localMsg, sourceInstance)) {
-    console.warn(`[federation] Refused reaction_remove on message ${localMsg.id}: ${extractDomain(sourceInstance)} is not a peer of its conversation`);
-    rejected.push({ messageId: event.messageId, reason: 'invalid_target' });
+  // The sender must be a peer of the message's conversation and the reactor
+  // a member of it ("Inbound: Reaction Add/Remove" in dm-system.md).
+  const scopeRefusal = localMsg ? reactionScopeRefusal(localMsg, event.reaction, sourceInstance, db) : null;
+  if (localMsg && scopeRefusal) {
+    console.warn(`[federation] Refused reaction_remove on message ${localMsg.id} (${scopeRefusal}): ${extractDomain(sourceInstance)} is not a peer of its conversation, or the reactor is not a member`);
+    rejected.push({ messageId: event.messageId, reason: scopeRefusal });
     return;
   }
 

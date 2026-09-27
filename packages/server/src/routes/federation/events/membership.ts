@@ -51,25 +51,41 @@ export async function processMemberAddEvent(
 
   let bootstrapped = false;
 
-  // Bootstrap: channel doesn't exist yet — create from group metadata
+  // Bootstrap: channel doesn't exist yet — create from group metadata.
+  // The sender speaks for the group's owner (FED-010), the owner is in the
+  // roster, and the sender is one of the instances the roster lives on
+  // ("Relayed member adds" in dm-system.md). The roster and owner arrive in
+  // this event, so a refusal here is terminal.
   if (!channel && event.group) {
-    // Attribution: only the owner's instance can bootstrap a group (FED-010)
-    const refusal = event.group.owner ? attributionRefusal(event.group.owner, sourceInstance, db) : null;
+    const owner = event.group.owner;
+    if (!owner) {
+      console.warn(`[federation] Refused member_add bootstrap of ${event.federatedId}: the group names no owner`);
+      rejected.push({ messageId: event.messageId, reason: 'invalid_target' });
+      return;
+    }
+    const refusal = attributionRefusal(owner, sourceInstance, db);
     if (refusal) {
-      console.warn(`[federation] Attribution refused (${refusal}) in member_add bootstrap: owner homeInstance=${extractDomain(event.group.owner.homeInstance)} source=${extractDomain(sourceInstance)}`);
+      console.warn(`[federation] Attribution refused (${refusal}) in member_add bootstrap: owner homeInstance=${extractDomain(owner.homeInstance)} source=${extractDomain(sourceInstance)}`);
       rejected.push({ messageId: event.messageId, reason: refusal });
+      return;
+    }
+
+    // Resolve owner and roster, creating replicated stubs for users not seen
+    // before. Tombstoned identities are skipped: they can't be added to a DM.
+    const ownerLocal = resolveOrCreateReplicatedUser(owner.homeUserId, owner.homeInstance, db, { username: owner.profile?.username, status: owner.profile?.status, deleted: owner.profile?.deleted });
+    const roster: Array<typeof schema.users.$inferSelect> = [];
+    for (const member of event.group.members) {
+      const rosterUser = resolveOrCreateReplicatedUser(member.homeUserId, member.homeInstance, db, { username: member.profile?.username, status: member.profile?.status, deleted: member.profile?.deleted });
+      if (rosterUser && !roster.some(r => r.id === rosterUser.id)) roster.push(rosterUser);
+    }
+    if (!ownerLocal || !mayRelayInto(roster, ownerLocal.id, sourceInstance)) {
+      console.warn(`[federation] Refused member_add bootstrap of ${event.federatedId}: the owner is not in the roster, or ${extractDomain(sourceInstance)} is not one of its instances`);
+      rejected.push({ messageId: event.messageId, reason: 'invalid_target' });
       return;
     }
 
     const channelId = generateSnowflake();
     const now = Date.now();
-
-    // Resolve owner — create a replicated stub if unknown
-    let ownerId: string | null = null;
-    if (event.group.owner) {
-      const ownerLocal = resolveOrCreateReplicatedUser(event.group.owner.homeUserId, event.group.owner.homeInstance, db, { username: event.group.owner.profile?.username, status: event.group.owner.profile?.status, deleted: event.group.owner.profile?.deleted });
-      ownerId = ownerLocal?.id ?? null;
-    }
 
     // Group metadata snapshot. Older peers omit these fields — fall back
     // to safe defaults (null name/icon, metadataUpdatedAt=0). When an icon
@@ -88,12 +104,12 @@ export async function processMemberAddEvent(
       .values({
         id: channelId,
         federatedId: event.federatedId,
-        ownerId,
-        ownerHomeUserId: event.group.owner?.homeUserId ?? null,
+        ownerId: ownerLocal.id,
+        ownerHomeUserId: owner.homeUserId,
         // Canonicalize on storage so future authority comparisons against
         // `sourceInstance` (always a full URL) match cleanly. Defensive: older
         // peers may have sent a bare host on the wire.
-        ownerHomeInstance: canonicalizeHomeInstance(event.group.owner?.homeInstance) ?? null,
+        ownerHomeInstance: canonicalizeHomeInstance(owner.homeInstance) ?? null,
         createdAt: now,
         name: bootstrapName,
         icon: bootstrapResolvedIcon,
@@ -101,24 +117,12 @@ export async function processMemberAddEvent(
       })
       .run();
 
-    // Add all roster members — create replicated user stubs for any
-    // participants from remote instances that haven't been seen before.
-    for (const member of event.group.members) {
-      const rosterUser = resolveOrCreateReplicatedUser(member.homeUserId, member.homeInstance, db, { username: member.profile?.username, status: member.profile?.status, deleted: member.profile?.deleted });
-      // Skip deleted identities — tombstoned users can't be added to a DM
-      if (!rosterUser) continue;
-      const existing = db.select().from(schema.dmMembers)
-        .where(and(
-          eq(schema.dmMembers.dmChannelId, channelId),
-          eq(schema.dmMembers.userId, rosterUser.id),
-        )).get();
-      if (!existing) {
-        db.insert(schema.dmMembers).values({
-          dmChannelId: channelId,
-          userId: rosterUser.id,
-          closed: 0,
-        }).run();
-      }
+    for (const rosterUser of roster) {
+      db.insert(schema.dmMembers).values({
+        dmChannelId: channelId,
+        userId: rosterUser.id,
+        closed: 0,
+      }).run();
     }
 
     channel = db.select().from(schema.dmChannels)
@@ -361,6 +365,13 @@ export function processMemberRemoveEvent(
     return;
   }
 
+  // A kick is a group operation: a 1-on-1 has no owner and a fixed pair.
+  if (event.membership.reason !== 'leave' && !channel.ownerId) {
+    console.warn(`[federation] Refused member_remove kick in 1-on-1 ${channel.id}`);
+    rejected.push({ messageId: event.messageId, reason: 'invalid_target' });
+    return;
+  }
+
   // Validate authority: owner's instance for kicks, any instance for self-leave.
   //
   // `sourceInstance` arrives as a full URL from `federationWorker.ts` (always
@@ -522,6 +533,13 @@ export function processOwnershipTransferEvent(
 
   if (!channel) {
     accepted.push(event.messageId);
+    return;
+  }
+
+  // Ownership is a group's: a 1-on-1 has no owner to transfer.
+  if (!channel.ownerId) {
+    console.warn(`[federation] Refused ownership_transfer of 1-on-1 ${channel.id}`);
+    rejected.push({ messageId: event.messageId, reason: 'invalid_target' });
     return;
   }
 

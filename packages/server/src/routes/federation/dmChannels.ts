@@ -314,3 +314,16 @@ export function mayRelayInto(
   if (!members.some(m => m.id === actorId)) return false;
   return isRelayTarget(relayTargetOrigins(members), sourceInstance);
 }
+
+
+/**
+ * The refusal for a relayed action by someone who is not a member of this
+ * instance's copy of a conversation (or from a sender that copy is not
+ * relayed to). A group's roster here changes through relayed member adds, and
+ * an add made through a third instance can land after the new member's first
+ * action, so a group refusal is `unauthorized_source`, which senders retry. A
+ * 1-on-1 (no owner) is its fixed pair: `invalid_target`, terminal.
+ */
+export function nonMemberRefusal(channel: { ownerId: string | null }): 'unauthorized_source' | 'invalid_target' {
+  return channel.ownerId ? 'unauthorized_source' : 'invalid_target';
+}

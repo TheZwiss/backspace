@@ -888,7 +888,7 @@ Same as 1-on-1 except:
 1. `event.federatedId` present -> group DM path
 2. Find channel by `federatedId` -- must already exist (bootstrapped by prior `member_add`)
 3. If not found -> reject with `channel_not_found`
-4. The author must be a member of the channel and the signing peer one of its relay target origins, else `invalid_target` (see `dm-system.md` "Relayed message creates")
+4. The author must be a member of the channel and the signing peer one of its relay target origins, else `unauthorized_source` (retried; `invalid_target` if the channel is a 1-on-1). See `dm-system.md` "Relayed message creates"
 5. Insert message, broadcast to local members
 
 ### Federated ID Generation (`federationOutbox.ts:computeFederatedId`)
@@ -1013,7 +1013,7 @@ Trigger (API/WS handler)
 
 - `duplicate` — the receiving instance already has the row (same `(sourceInstance, sourceMessageId)`); retrying will fail identically until TTL.
 - `recipient_not_found`, `attribution_mismatch`, `unknown_event_type` — structural mismatches that cannot be resolved by retrying.
-- `not_message_author`, `invalid_target` — a relayed `update`/`delete` whose `target` names a message the actor did not write, is malformed, or comes from a peer that is neither a relay target of the message's conversation nor the instance the message came from. See `dm-system.md` "Relayed edits and deletes" for the rule. `invalid_target` is also a relayed `create` whose author is not in the conversation or whose sender is not a relay target of it (`dm-system.md` "Relayed message creates"), a `member_add` into a 1-on-1 (`dm-system.md` "Relayed member adds"), and a `reaction_add`/`reaction_remove` on a message in a conversation the sender is not a peer of (`dm-system.md` "Inbound: Reaction Add/Remove").
+- `not_message_author`, `invalid_target` — a relayed `update`/`delete` whose `target` names a message the actor did not write, is malformed, or comes from a peer that is neither a relay target of the message's conversation nor the instance the message came from. See `dm-system.md` "Relayed edits and deletes" for the rule. `invalid_target` is also a relayed 1-on-1 `create` whose author is not one of the pair or whose sender is not a relay target of it (`dm-system.md` "Relayed message creates"; the group case is the retried `unauthorized_source`), a `member_add` into a 1-on-1 or a bootstrap without an owner, with the owner outside the roster, or from a sender none of the roster lives on (`dm-system.md` "Relayed member adds"), a kick or `ownership_transfer` aimed at a 1-on-1, and a `reaction_add`/`reaction_remove` on a message in a conversation the sender is not a peer of, or by a reactor outside a 1-on-1 (`dm-system.md` "Inbound: Reaction Add/Remove").
 - `attribution_unproven` is **not** terminal: the receiver lacks the proof that one of its users holds an account here, and that proof arrives from the user's client. See [the two refusal reasons](#3-identity-resolution).
 - `self_target_invalid` — emitted by `processFriendRequestCreateEvent` when an inbound `friend_request_create`'s `from`-identity equals its `to`-identity (after origin normalization). Defense-in-depth: the sender's local `cannot_friend_self` check should catch this, but the receiver does not trust upstream validation. Retrying will not change the payload. The friend-create rollback callback maps this to client-facing `peer_rejected`.
 
@@ -1170,7 +1170,7 @@ After processing all events, the relay endpoint updates the peer's `lastSeenAt` 
 **Two paths:**
 
 **Bootstrap path** (channel does not exist locally by `federatedId`):
-1. Requires `event.group` metadata (owner + full member roster + group metadata snapshot)
+1. Requires `event.group` metadata (owner + full member roster + group metadata snapshot). The owner is required, must pass `attributionRefusal`, must be in the resolved roster, and the signing peer must be one of the roster's instances (`mayRelayInto`); else `invalid_target` and nothing is created. See `dm-system.md` "Relayed member adds"
 2. Creates `dm_channels` row with `federatedId`, `ownerId` (resolved via `resolveOrCreateReplicatedUser`), `ownerHomeUserId`, `ownerHomeInstance`, plus the bootstrap `name`, `icon`, and `metadataUpdatedAt` from `event.group`
 3. When `event.group.icon` is non-null, mirrors `processGroupMetadataUpdateEvent` and calls `downloadProfileAsset(icon, sourceInstance)` — stores the local bare filename on success or the absolute URL on failure
 4. Adds ALL roster members from `event.group.members` (each resolved via `resolveOrCreateReplicatedUser`)
@@ -1204,7 +1204,7 @@ Older peers that omit these fields fall back to safe defaults (null name/icon, `
 
 ### member_remove (`processMemberRemoveEvent` -- `federation.ts:1825`)
 
-1. Find channel by `federatedId` -- if not found, accept idempotently
+1. Find channel by `federatedId` -- if not found, accept idempotently. A kick (`reason !== 'leave'`) on a 1-on-1 (no `ownerId`) is refused `invalid_target`
 2. Validate authority: owner's instance for kicks (`reason !== 'leave'`), any instance for self-leave
 3. Resolve user via `resolveRelayActor` -- if not found, accept idempotently
 4. Insert system message (before deletion, so broadcast includes the leaving user)
@@ -1214,7 +1214,7 @@ Older peers that omit these fields fall back to safe defaults (null name/icon, `
 
 ### ownership_transfer (`processOwnershipTransferEvent` -- `federation.ts:1938`)
 
-1. Find channel by `federatedId` -- if not found, accept idempotently
+1. Find channel by `federatedId` -- if not found, accept idempotently. A 1-on-1 (no `ownerId`) is refused `invalid_target`: it has no owner to transfer
 2. Validate authority: `normalizeOriginForCompare(sourceInstance) === normalizeOriginForCompare(channel.ownerHomeInstance)`. Both sides are normalized to handle the bare-vs-full storage convention (see `dm-system.md` historical bugs for why this matters).
 3. Resolve the previous owner (the attributed actor) via `resolveRelayActor` before any change: unknown → the system message falls back to the channel's recorded owner
 4. Resolve new owner via `resolveOrCreateReplicatedUser` (**never** `resolveLocalUser` -- must guarantee valid ID)
