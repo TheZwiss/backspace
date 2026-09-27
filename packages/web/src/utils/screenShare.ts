@@ -4,6 +4,7 @@ import type { ScreenShareConfig, ScreenShareAudioState } from '../stores/voiceSt
 import { getStreamHostLimits } from './streamHostLimits';
 import { getPublisherPC, getMediaStreamTrack } from './livekitInternals';
 import { broadcastVoiceStatus } from './voice';
+import { encodeStreamRepublish } from './streamWatchProtocol';
 import { activate as activateHwOverdrive, deactivate as deactivateHwOverdrive } from './hwOverdrive';
 import { useUIStore } from '../stores/uiStore';
 import { openScreenShareSetup } from '../stores/screenShareSetupStore';
@@ -524,6 +525,16 @@ export async function republishScreenShare(room: Room): Promise<void> {
   if (!videoPub?.track || !videoTrack) return;
   const audioTrack = audioPub?.track?.mediaStreamTrack ?? null;
   const stream = new MediaStream([videoTrack, ...(audioTrack ? [audioTrack] : [])]);
+
+  // Tell viewers first, so they read the unpublish below as this swap and pick
+  // up the next publication, rather than as the share ending. Sent before the
+  // unpublish because that is the order viewers must see; if it cannot be sent
+  // the swap still goes ahead and viewers see the share end, as before.
+  try {
+    await room.localParticipant.publishData(encodeStreamRepublish(), { reliable: true });
+  } catch (err) {
+    console.warn('[ScreenShare] Could not announce the republish to viewers:', err);
+  }
 
   _republishing = true;
   try {

@@ -152,3 +152,53 @@ describe('a republish that fails to land tells the room the share is gone', () =
     expect(broadcastVoiceStatus).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('a republish announces itself before it unpublishes', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useVoiceStore.setState({ isScreenSharing: true });
+    (globalThis as { MediaStream?: unknown }).MediaStream = class {
+      tracks: { kind: string; readyState: string; stop: () => void }[];
+      constructor(tracks: { kind: string; readyState: string; stop: () => void }[]) { this.tracks = tracks; }
+      getTracks() { return this.tracks; }
+      getVideoTracks() { return this.tracks.filter((t) => t.kind === 'video'); }
+      getAudioTracks() { return this.tracks.filter((t) => t.kind === 'audio'); }
+    };
+  });
+
+  function makeSharingRoom(publishData: ReturnType<typeof vi.fn>) {
+    const calls: string[] = [];
+    const mediaStreamTrack = { kind: 'video', readyState: 'live', contentHint: '', stop: vi.fn() };
+    const videoPub = { track: { mediaStreamTrack } };
+    const localParticipant = {
+      getTrackPublication: vi.fn((source: string) => (source === 'screen_share' ? videoPub : undefined)),
+      publishData: vi.fn(async (...args: unknown[]) => { calls.push('publishData'); return publishData(...args); }),
+      unpublishTrack: vi.fn(async () => { calls.push('unpublishTrack'); }),
+      publishTrack: vi.fn(async () => { calls.push('publishTrack'); }),
+      // Read by the sender-parameter scheduler a successful publish starts.
+      getTrackPublications: vi.fn(() => []),
+    };
+    return { room: { localParticipant } as never, localParticipant, calls };
+  }
+
+  it('sends stream_republish on the reliable channel before the unpublish', async () => {
+    const { room, localParticipant, calls } = makeSharingRoom(vi.fn(async () => {}));
+
+    await republishScreenShare(room);
+
+    expect(calls.slice(0, 2)).toEqual(['publishData', 'unpublishTrack']);
+    const [payload, options] = localParticipant.publishData.mock.calls[0] as [Uint8Array, { reliable: boolean }];
+    expect(JSON.parse(new TextDecoder().decode(payload))).toEqual({ type: 'stream_republish' });
+    expect(options).toEqual({ reliable: true });
+  });
+
+  it('still republishes when the announcement cannot be sent', async () => {
+    const { room, calls } = makeSharingRoom(vi.fn(async () => { throw new Error('data channel closed'); }));
+
+    await republishScreenShare(room);
+
+    expect(calls).toContain('unpublishTrack');
+    expect(calls).toContain('publishTrack');
+    expect(useVoiceStore.getState().isScreenSharing).toBe(true);
+  });
+});

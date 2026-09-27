@@ -359,6 +359,24 @@ Exactly one broadcast per stop. `unpublishTrack` emits `LocalTrackUnpublished` *
 
 `useLiveKit` also drops the local stream from the watched set on `LocalTrackUnpublished`, and that half honours `isScreenShareRepublishing()` as well, or a codec toggle makes your own tile flicker (only `LocalTrackPublished` puts it back).
 
+**Viewers across a republish.** A viewer sees a republish as one publication removed and another added, the same shape as a share ending and a new one starting. Before it unpublishes, `republishScreenShare` sends `{ type: 'stream_republish' }` on the reliable data channel (wire format in `utils/streamWatchProtocol.ts`, listed with `stream_watch` in `docs/systems/sounds.md`). A send failure is logged and the swap goes ahead. The viewer side is `StreamRepublishTracker` (`utils/streamRepublish.ts`), one per room, held in `useLiveKit`'s `republishRef` and keyed by the sharer's LiveKit identity:
+
+| Viewer event | Tracker | Effect |
+|---|---|---|
+| `stream_republish` received | `announced` (window starts) | none yet |
+| `TrackUnpublished` (ScreenShare) while announced | `bridging` (window restarts) | the watch, stream volume and stream mute are kept; `updateParticipants` keeps `isScreenSharing` true for the sharer, so the tile stays and no `stream_ended` / `stream_started` cue fires |
+| `TrackUnpublished` (ScreenShare) with no announcement | none | the share ends: unwatch, clear volume and mute, as before the message existed |
+| `TrackPublished` (ScreenShare) while bridging | cleared | subscribed when the viewer is watching; the `ScreenShareAudio` that follows is subscribed by the existing watch-state branch |
+| `STREAM_REPUBLISH_WINDOW_MS` (15 s) passes while bridging | cleared | the share ends, with its `stream_ended` cue |
+| the window passes while only announced, or a new publication arrives first | cleared | nothing |
+| `ParticipantDisconnected` while bridging | cleared | the share ends |
+
+The window is 15 s because livekit-client fails a publication the server has not accepted within 10 s. A republish that fails therefore leaves viewers with a stalled tile for up to 15 s before the share ends.
+
+Only a removal that follows the announcement bridges, which keeps mixed versions safe. An older viewer does not recognise the message (it matches neither `stream_watch` nor `deafen`) and loses the stream as before. A newer viewer watching an older sharer never gets an announcement, so every removal ends the share. If the announcement arrives after the removal (the data channel and the signal channel are separate paths), the share has already ended and the late announcement lapses with its window. The viewer is not re-subscribed and no state is left stuck. The resume sends no `stream_watch` ping, so the viewer plays no cue of its own.
+
+Stream state for a remote sharer is keyed by `streamUserIdFor(identity)`: the userId `updateParticipants` resolved (a federated DM member's local id) and the one `StreamTile` watches by. The raw id inside the LiveKit identity is used only as the fallback.
+
 `StreamQualityControls` is the shared quality panel (resolution, frame rate, content mode, codec, bitrate, system audio; it shows the effective config and saves only on click); `ScreenShareSetup` and `ScreenShareSettingsPopover` both render it.
 
 ### Control-bar entry point (`VoiceControlBar`, `VoiceControls`)

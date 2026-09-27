@@ -210,14 +210,28 @@ unsubscribe twin; there is no public `numSubscribers` API. Backspace uses a
 small data-channel ping instead, mirroring the existing `deafen` pattern in
 `useLiveKit.ts`.
 
-**Wire format** (`streamWatchProtocol.ts`):
+**Wire format** (`streamWatchProtocol.ts`), two message types:
 ```ts
 interface StreamWatchPayload {
   type: 'stream_watch';
   target: string;   // streamer userId
   watching: boolean;
 }
+
+interface StreamRepublishPayload {
+  type: 'stream_republish';   // sender is the sharer; no other fields
+}
 ```
+
+`stream_republish` is sent by a sharer right before a codec change unpublishes
+its screen share to publish the same capture again (`republishScreenShare`).
+It does not touch the watcher sets. It tells viewers that the removal that
+follows is not the share ending. They keep watching, the sharer stays in the
+`participants[].isScreenSharing` set across the gap, and so **neither
+`stream_ended` nor `stream_started` plays for anyone but the sharer**. If no
+new publication arrives within 15 s, the share ends and `stream_ended` plays
+then. The receiving state machine and the mixed-version rules are in
+`docs/systems/voice.md` (Screen Sharing → "Viewers across a republish").
 
 **Senders.** `StreamTile.tsx` is the **only** broadcast site, and only on
 explicit user actions:

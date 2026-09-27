@@ -3,6 +3,8 @@ import {
   encodeStreamWatch,
   parseStreamWatch,
   isStreamWatchPayload,
+  encodeStreamRepublish,
+  isStreamRepublish,
 } from './streamWatchProtocol';
 
 describe('streamWatchProtocol', () => {
@@ -33,5 +35,28 @@ describe('streamWatchProtocol', () => {
     expect(isStreamWatchPayload({ type: 'other', target: 'u', watching: true })).toBe(false);
     expect(isStreamWatchPayload(null)).toBe(false);
     expect(isStreamWatchPayload('string')).toBe(false);
+  });
+});
+
+describe('stream_republish', () => {
+  it('encodes the wire format the viewer checks', () => {
+    const encoded = encodeStreamRepublish();
+    expect(Object.prototype.toString.call(encoded)).toBe('[object Uint8Array]');
+    expect(JSON.parse(new TextDecoder().decode(encoded))).toEqual({ type: 'stream_republish' });
+    expect(isStreamRepublish(encoded)).toBe(true);
+  });
+
+  it('is ignored by the receivers older clients run', () => {
+    // An older viewer tries stream_watch, then looks for `deafen`; neither may match.
+    const encoded = encodeStreamRepublish();
+    expect(parseStreamWatch(encoded)).toBeNull();
+    const msg = JSON.parse(new TextDecoder().decode(encoded)) as { type: string };
+    expect(msg.type).not.toBe('deafen');
+  });
+
+  it('rejects other payloads', () => {
+    expect(isStreamRepublish(encodeStreamWatch({ type: 'stream_watch', target: 'u', watching: true }))).toBe(false);
+    expect(isStreamRepublish(new TextEncoder().encode('not json'))).toBe(false);
+    expect(isStreamRepublish(new TextEncoder().encode('null'))).toBe(false);
   });
 });

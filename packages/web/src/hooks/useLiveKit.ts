@@ -38,7 +38,8 @@ import {
   resolveNativeOverdrive,
   syncScreenShareAudio,
 } from '../utils/screenShare';
-import { parseStreamWatch } from '../utils/streamWatchProtocol';
+import { isStreamRepublish, parseStreamWatch } from '../utils/streamWatchProtocol';
+import { StreamRepublishTracker } from '../utils/streamRepublish';
 import { getMediaStreamTrack } from '../utils/livekitInternals';
 import { deactivate as deactivateHwOverdrive } from '../utils/hwOverdrive';
 
@@ -162,6 +163,27 @@ export function parseIdentity(identity: string): { userId: string; username: str
   return { userId: parts[0] ?? identity, username: parts[1] ?? identity };
 }
 
+/**
+ * The userId a remote participant's stream state (`watchingStreams`, stream
+ * volume and mute) is keyed by: the one `updateParticipants` resolved and
+ * `StreamTile` uses. In a federated DM call that is the DM member's local id,
+ * not the home id inside the LiveKit identity. Falls back to the identity's
+ * own id for a participant not listed yet.
+ */
+function streamUserIdFor(identity: string): string {
+  return useVoiceStore.getState().participants.find((p) => p.identity === identity)?.userId
+    ?? parseIdentity(identity).userId;
+}
+
+/** A remote screen share ended: drop the watch and the per-stream audio settings. */
+function endRemoteStream(identity: string): void {
+  const userId = streamUserIdFor(identity);
+  const state = useVoiceStore.getState();
+  state.unwatchStream(userId);
+  state.clearStreamVolume(userId);
+  state.clearStreamMute(userId);
+}
+
 let _connectGeneration = 0;
 
 /** Null-safe Room.disconnect() wrapper — lets the SDK tear down its own internals cleanly. */
@@ -221,6 +243,8 @@ export function useLiveKit() {
   const [connectedChannelId, setConnectedChannelId] = useState<string | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const roomRef = useRef<Room | null>(null);
+  /** Screen shares being republished by their sharers, for the current room. */
+  const republishRef = useRef<StreamRepublishTracker | null>(null);
   const connectedChannelRef = useRef<string | null>(null);
   const switchCameraGenRef = useRef(0);
   
@@ -350,7 +374,11 @@ export function useLiveKit() {
         isMuted: isPartMuted,
         isDeafened: isPartDeafened,
         isCameraOn: hasCameraPublication && p.isCameraEnabled, // True even when unsubscribed
-        isScreenSharing: hasScreenSharePublication, // True even when unsubscribed
+        // True even when unsubscribed, and across a sharer's announced
+        // republish, so the gap between the two publications is not a share
+        // ending and starting again (no tile loss, no stream_ended/started cue).
+        isScreenSharing: hasScreenSharePublication
+          || (!isLocal && (republishRef.current?.isBridging(p.identity) ?? false)),
         isLocal,
         audioTrack,
         videoTrack,
@@ -375,6 +403,11 @@ export function useLiveKit() {
         // viewer's full LiveKit identity ("userId:username"); we key by identity
         // so ParticipantDisconnected can evict cleanly.
         useVoiceStore.getState().recordStreamWatch(sw.target, participant.identity, sw.watching);
+        return;
+      }
+      if (isStreamRepublish(payload)) {
+        // The sender's next screen-share unpublish is a codec swap, not the end.
+        republishRef.current?.announce(participant.identity);
         return;
       }
     }
@@ -692,6 +725,13 @@ export function useLiveKit() {
       if (hostOrigin) void refreshStreamHostLimits(hostOrigin);
       const newRoom = new Room({ adaptiveStream: true, dynacast: true, publishDefaults: { videoCodec: 'h264', simulcast: true } });
       roomRef.current = newRoom;
+      republishRef.current?.clear();
+      republishRef.current = new StreamRepublishTracker((identity) => {
+        // The announced republish never produced a new track: the share ended.
+        if (roomRef.current !== newRoom) return;
+        endRemoteStream(identity);
+        updateParticipants();
+      });
       let initialConnectPending = true;
 
       const guardedUpdate = () => { if (roomRef.current === newRoom) updateParticipants(); };
@@ -715,6 +755,8 @@ export function useLiveKit() {
       });
       newRoom.on(RoomEvent.ParticipantDisconnected, (participant: RemoteParticipant) => {
         useVoiceStore.getState().evictWatcher(participant.identity);
+        // Left between a republish's two publications: its share ends with it.
+        if (republishRef.current?.cancel(participant.identity)) endRemoteStream(participant.identity);
         guardedUpdate();
         // Clean up stale WS-based voice status for the departed participant
         const { userId } = parseIdentity(participant.identity);
@@ -824,18 +866,27 @@ export function useLiveKit() {
           // Stream tracks follow the watch state, and the watch click only
           // subscribed what was published then. System Audio can be turned on
           // mid-stream, so audio arriving for a stream being watched joins it.
-          const { userId } = parseIdentity(participant.identity);
-          if (useVoiceStore.getState().watchingStreams.has(userId)) publication.setSubscribed(true);
+          if (useVoiceStore.getState().watchingStreams.has(streamUserIdFor(participant.identity))) {
+            publication.setSubscribed(true);
+          }
+        } else if (republishRef.current?.completeWithPublication(participant.identity)) {
+          // The new track of an announced republish: a viewer who was watching
+          // keeps watching without clicking Watch again. Its audio, published
+          // after the video, is picked up by the branch above.
+          if (useVoiceStore.getState().watchingStreams.has(streamUserIdFor(participant.identity))) {
+            publication.setSubscribed(true);
+          }
         }
         guardedUpdate();
       });
       newRoom.on(RoomEvent.TrackUnpublished, (publication: RemoteTrackPublication, participant: RemoteParticipant) => {
-        if (publication.source === Track.Source.ScreenShare) {
-          const { userId } = parseIdentity(participant.identity);
-          const state = useVoiceStore.getState();
-          state.unwatchStream(userId);
-          state.clearStreamVolume(userId);
-          state.clearStreamMute(userId);
+        // An announced republish keeps the watch and the stream's audio
+        // settings for the next publication; anything else ends the share.
+        if (
+          publication.source === Track.Source.ScreenShare
+          && !republishRef.current?.bridgeRemoval(participant.identity)
+        ) {
+          endRemoteStream(participant.identity);
         }
         guardedUpdate();
       });
@@ -880,6 +931,7 @@ export function useLiveKit() {
       });
       newRoom.on(RoomEvent.Disconnected, (reason?: DisconnectReason) => {
         if (roomRef.current !== newRoom) return;
+        republishRef.current?.clear();
         // The SDK emits Disconnected before rejecting an initial connect.
         // Keep that attempt current so its catch can report the failure.
         if (!initialConnectPending) _connectGeneration++;
@@ -975,6 +1027,7 @@ export function useLiveKit() {
       const roomToDestroy = roomRef.current;
       roomRef.current = null;
       _activeRoom = null;
+      republishRef.current?.clear();
       await destroyRoom(roomToDestroy);
       if (gen !== _connectGeneration) return;
     }
