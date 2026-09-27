@@ -1,6 +1,6 @@
 import { getDb } from '../db/index.js';
 import * as schema from '../db/schema.js';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, notExists } from 'drizzle-orm';
 import { generateSnowflake } from './snowflake.js';
 import { getOurOrigin, generateHmacSecret } from './federationAuth.js';
 import { validateOrigin } from '../routes/federation.js';
@@ -543,25 +543,57 @@ async function performHandshake(
     }
 
     // Other errors (4xx, 5xx) — transient, clean up pending peer
-    if (!existingPeerId) {
-      db.delete(schema.federationPeers)
-        .where(eq(schema.federationPeers.id, peerId))
-        .run();
-    }
+    if (!existingPeerId) discardCreatedPendingPeer(peerId, origin);
     return { status: 'failed', error: errorMessage };
   } catch (err: unknown) {
     // Network or timeout error — transient, clean up pending peer
-    if (!existingPeerId) {
-      db.delete(schema.federationPeers)
-        .where(eq(schema.federationPeers.id, peerId))
-        .run();
-    }
+    if (!existingPeerId) discardCreatedPendingPeer(peerId, origin);
 
     const message = err instanceof Error ? err.message : 'Unknown error';
     if (err instanceof DOMException && err.name === 'TimeoutError') {
       return { status: 'failed', error: 'Remote instance did not respond within 10 seconds' };
     }
     return { status: 'failed', error: `Failed to reach remote instance: ${message}` };
+  }
+}
+
+/**
+ * Remove the `pending` row a failed handshake created, unless local traffic has
+ * queued outbox entries against it in the meantime.
+ *
+ * The row is inserted before the handshake's first await, so it is visible to
+ * everything that runs while the request is in flight. In the DM send path
+ * that is the normal order: the typing-stop relay's warm-up starts the
+ * handshake, and `queueOutboxEvent` then finds this `pending` row and queues
+ * the message against it instead of creating a placeholder of its own.
+ * Deleting the row would cascade those entries away and leave nothing for the
+ * outbox worker to retry, so the first messages to an instance that was
+ * briefly unreachable would wait for some later event to bring peering up.
+ * A row with entries is exactly what `createAutoPlaceholderPeer` would have
+ * produced (`pending`, `initiatedBy: 'auto'`, created behind the same gate),
+ * and `resolvePendingPeers` retries it on the next tick.
+ *
+ * One statement, so no entry can be queued between the check and the delete.
+ */
+function discardCreatedPendingPeer(peerId: string, origin: string): void {
+  const db = getDb();
+  const result = db.delete(schema.federationPeers)
+    .where(and(
+      eq(schema.federationPeers.id, peerId),
+      notExists(
+        db.select({ id: schema.federationOutbox.id })
+          .from(schema.federationOutbox)
+          .where(eq(schema.federationOutbox.peerId, peerId)),
+      ),
+    ))
+    .run();
+  const kept = result.changes === 0 && db
+    .select({ id: schema.federationPeers.id })
+    .from(schema.federationPeers)
+    .where(eq(schema.federationPeers.id, peerId))
+    .get() !== undefined;
+  if (kept) {
+    console.log(`[federation] handshake with ${origin} failed; keeping its pending row for the queued outbox entries`);
   }
 }
 
