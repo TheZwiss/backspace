@@ -133,49 +133,6 @@ export function PermissionsEditor({
     return map;
   }, [overrides]);
 
-  // Roles that already have overrides
-  const existingRoleIds = useMemo(() => {
-    const set = new Set<string>();
-    for (const o of overrides) {
-      if (o.targetType === 'role') set.add(o.targetId);
-    }
-    for (const [key] of newOverrides) {
-      if (key.startsWith('role:')) set.add(key.slice(5));
-    }
-    return set;
-  }, [overrides, newOverrides]);
-
-  // Members that already have overrides
-  const existingMemberIds = useMemo(() => {
-    const set = new Set<string>();
-    for (const o of overrides) {
-      if (o.targetType === 'member') set.add(o.targetId);
-    }
-    for (const [key] of newOverrides) {
-      if (key.startsWith('member:')) set.add(key.slice(7));
-    }
-    return set;
-  }, [overrides, newOverrides]);
-
-  // Available roles to add (not already in overrides)
-  const availableRoles = useMemo(() =>
-    roles.filter(r => !existingRoleIds.has(r.id) && !pendingRemovals.has(`role:${r.id}`)),
-    [roles, existingRoleIds, pendingRemovals]);
-
-  // Available members to add (not already in overrides), filtered by search
-  const availableMembers = useMemo(() => {
-    const filtered = members.filter(m =>
-      !existingMemberIds.has(m.userId) &&
-      !pendingRemovals.has(`member:${m.userId}`)
-    );
-    if (!memberSearch.trim()) return filtered.slice(0, 20);
-    const q = memberSearch.toLowerCase();
-    return filtered.filter(m =>
-      m.user.username.toLowerCase().includes(q) ||
-      (m.user.displayName?.toLowerCase().includes(q))
-    ).slice(0, 20);
-  }, [members, existingMemberIds, pendingRemovals, memberSearch]);
-
   // Get effective allow/deny for a key — considers drafts, new overrides, and originals
   const getEffective = useCallback((key: string): { allow: bigint; deny: bigint } => {
     if (newOverrides.has(key)) {
@@ -206,28 +163,30 @@ export function PermissionsEditor({
     }
   }, [newOverrides]);
 
-  // Remove handler
+  // Remove handler. Whatever the row held in this edit (a staged addition or
+  // edited bits) is dropped, and a row the server already stores is marked for
+  // deletion, so removing works the same after a remove-and-re-add.
   const handleRemove = useCallback((key: string) => {
-    if (newOverrides.has(key)) {
-      setNewOverrides(prev => {
-        const next = new Map(prev);
-        next.delete(key);
-        return next;
-      });
-    } else {
+    setNewOverrides(prev => {
+      if (!prev.has(key)) return prev;
+      const next = new Map(prev);
+      next.delete(key);
+      return next;
+    });
+    setDraftOverrides(prev => {
+      if (!prev.has(key)) return prev;
+      const next = new Map(prev);
+      next.delete(key);
+      return next;
+    });
+    if (existingOverrideMap.has(key)) {
       setPendingRemovals(prev => {
         const next = new Set(prev);
         next.add(key);
         return next;
       });
-      // Remove from drafts too
-      setDraftOverrides(prev => {
-        const next = new Map(prev);
-        next.delete(key);
-        return next;
-      });
     }
-  }, [newOverrides]);
+  }, [existingOverrideMap]);
 
   // Add role override
   const handleAddRole = useCallback((roleId: string) => {
@@ -386,6 +345,29 @@ export function PermissionsEditor({
     return items;
   }, [overrides, newOverrides, pendingRemovals, members]);
 
+  // The add pickers offer exactly what has no row right now. They read the
+  // same staged rows the lists above render, so a staged removal puts its
+  // target back in the picker at once and a staged addition takes it out.
+  const stagedKeys = useMemo(() => new Set([
+    ...roleOverrides.map((item) => item.key),
+    ...memberOverrides.map((item) => item.key),
+  ]), [roleOverrides, memberOverrides]);
+
+  const availableRoles = useMemo(() =>
+    roles.filter(r => !stagedKeys.has(`role:${r.id}`)),
+    [roles, stagedKeys]);
+
+  // Filtered by the search box, capped at 20 rows.
+  const availableMembers = useMemo(() => {
+    const filtered = members.filter(m => !stagedKeys.has(`member:${m.userId}`));
+    if (!memberSearch.trim()) return filtered.slice(0, 20);
+    const q = memberSearch.toLowerCase();
+    return filtered.filter(m =>
+      m.user.username.toLowerCase().includes(q) ||
+      (m.user.displayName?.toLowerCase().includes(q))
+    ).slice(0, 20);
+  }, [members, stagedKeys, memberSearch]);
+
   return (
     <div className="space-y-4 relative pb-14">
       {/* Fetch error */}
@@ -416,7 +398,6 @@ export function PermissionsEditor({
                 deny={eff.deny}
                 onChange={(a, d) => handleChange(key, a, d)}
                 onRemove={() => handleRemove(key)}
-                isEveryone={role.id === spaceId}
               />
             );
           })}

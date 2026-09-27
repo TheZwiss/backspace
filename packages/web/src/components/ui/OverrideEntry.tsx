@@ -52,7 +52,6 @@ export function OverrideEntry({
   deny,
   onChange,
   onRemove,
-  isEveryone,
 }: {
   label: string;
   color?: string;
@@ -61,7 +60,6 @@ export function OverrideEntry({
   deny: bigint;
   onChange: (allow: bigint, deny: bigint) => void;
   onRemove?: () => void;
-  isEveryone?: boolean;
 }) {
   const { t } = useTranslation(['spaces']);
   const permissionNames = usePermissionNames();
@@ -84,7 +82,7 @@ export function OverrideEntry({
   // Compact summary of non-neutral permissions
   const summary = permDefs.filter(p => getState(p.bit) !== 'neutral');
   const panelId = useId();
-  const removable = !!onRemove && !isEveryone;
+  const removable = !!onRemove;
 
   return (
     <div className="rounded-lg bg-white/[0.02] overflow-hidden">

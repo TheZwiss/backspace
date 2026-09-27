@@ -11,6 +11,12 @@
 //   removed    the same, after Remove override on Moderators (staged, the
 //              save pill is up).
 //   empty      no overrides at all on the channel.
+//   everyone   the same as many, with the @everyone row opened.
+//   picker     Moderators removed (staged), then the Add Role picker opened:
+//              Moderators is offered again.
+//   full       every role has an override and the Add Role picker is open.
+//   members    the Add Member picker open.
+//   no-match   the Add Member picker with a search that matches nobody.
 import { createRoot } from 'react-dom/client';
 import type { Channel, MemberWithUser, Role, User } from '@backspace/shared';
 import { ChannelSettingsModal } from '../components/modals/ChannelSettingsModal';
@@ -21,8 +27,8 @@ import { initI18n } from '../i18n';
 import { initializeInterfaceScale } from '../platform/interfaceScale';
 import '../styles/globals.css';
 
-type Scene = 'many' | 'expanded' | 'removed' | 'empty';
-const SCENES: readonly Scene[] = ['many', 'expanded', 'removed', 'empty'];
+type Scene = 'many' | 'expanded' | 'removed' | 'empty' | 'everyone' | 'picker' | 'full' | 'members' | 'no-match';
+const SCENES: readonly Scene[] = ['many', 'expanded', 'removed', 'empty', 'everyone', 'picker', 'full', 'members', 'no-match'];
 
 const SPACE_ID = 'space-1';
 const CHANNEL_ID = 'channel-1';
@@ -76,6 +82,8 @@ function user(id: string, username: string, displayName: string | null): User {
 const MEMBERS: MemberWithUser[] = [
   { spaceId: SPACE_ID, userId: 'u-owner', nickname: null, joinedAt: 1, user: user('u-owner', 'jannis', 'Jannis'), roles: [] },
   { spaceId: SPACE_ID, userId: 'u-mira', nickname: null, joinedAt: 1, user: user('u-mira', 'mira', 'Mira'), roles: [ROLES[1]!] },
+  { spaceId: SPACE_ID, userId: 'u-theo', nickname: null, joinedAt: 1, user: user('u-theo', 'theo.from.orbit', 'Theodora Blackwood-Winterbourne'), roles: [] },
+  { spaceId: SPACE_ID, userId: 'u-kai', nickname: null, joinedAt: 1, user: user('u-kai', 'kai', null), roles: [] },
 ];
 
 interface StoredOverride { channelId: string; targetType: string; targetId: string; allow: string; deny: string }
@@ -85,7 +93,9 @@ function seededOverrides(scene: Scene): StoredOverride[] {
   const o = (targetType: string, targetId: string, allow: bigint, deny: bigint): StoredOverride => ({
     channelId: CHANNEL_ID, targetType, targetId, allow: permissionsToString(allow), deny: permissionsToString(deny),
   });
+  const everyRole = scene === 'full' ? [o('role', 'r-member', PermissionBits.ADD_REACTIONS, 0n)] : [];
   return [
+    ...everyRole,
     o('role', SPACE_ID, 0n, PermissionBits.SEND_MESSAGES),
     o('role', 'r-mod', PermissionBits.SEND_MESSAGES | PermissionBits.MANAGE_MESSAGES, 0n),
     o('role', 'r-dj', PermissionBits.SEND_MESSAGES, 0n),
@@ -148,15 +158,45 @@ function buttonByText(text: string): HTMLButtonElement | null {
   return Array.from(document.querySelectorAll('button')).find((b) => b.textContent?.trim() === text) ?? null;
 }
 
+function rowButton(label: string): HTMLButtonElement | null {
+  return Array.from(document.querySelectorAll('button')).find((b) => b.getAttribute('aria-expanded') !== null && b.textContent?.startsWith(label)) ?? null;
+}
+
+/** Types into a React-controlled input the way a keystroke would. */
+function typeInto(input: HTMLInputElement, value: string): void {
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+  setter?.call(input, value);
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
 async function drive(scene: Scene): Promise<void> {
   const tab = await waitFor(() => buttonByText('Permissions'));
   tab.click();
   if (scene === 'empty' || scene === 'many') return;
-  const row = await waitFor(() => Array.from(document.querySelectorAll('button')).find((b) => b.textContent?.startsWith('Moderators')) ?? null);
+  if (scene === 'everyone') {
+    (await waitFor(() => rowButton('@everyone'))).click();
+    return;
+  }
+  if (scene === 'full') {
+    await waitFor(() => rowButton('Members'));
+    (await waitFor(() => buttonByText('Add Role'))).click();
+    return;
+  }
+  if (scene === 'members' || scene === 'no-match') {
+    await waitFor(() => rowButton('Moderators'));
+    (await waitFor(() => buttonByText('Add Member'))).click();
+    if (scene === 'no-match') {
+      const input = await waitFor(() => document.querySelector<HTMLInputElement>('input.input-search'));
+      typeInto(input, 'nobody here');
+    }
+    return;
+  }
+  const row = await waitFor(() => rowButton('Moderators'));
   row.click();
   if (scene === 'expanded') return;
   const remove = await waitFor(() => buttonByText('Remove override'));
   remove.click();
+  if (scene === 'picker') (await waitFor(() => buttonByText('Add Role'))).click();
 }
 
 async function start(): Promise<void> {

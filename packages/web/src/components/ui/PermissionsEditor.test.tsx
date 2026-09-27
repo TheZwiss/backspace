@@ -38,6 +38,21 @@ function override(targetId: string, allow: bigint, deny: bigint): Override {
   return { targetType: 'role', targetId, allow: permissionsToString(allow), deny: permissionsToString(deny) };
 }
 
+function memberOverride(targetId: string, allow: bigint, deny: bigint): Override {
+  return { targetType: 'member', targetId, allow: permissionsToString(allow), deny: permissionsToString(deny) };
+}
+
+function member(userId: string, username: string, displayName: string | null): MemberWithUser {
+  return {
+    spaceId: SPACE_ID, userId, nickname: null, joinedAt: 1, roles: [],
+    user: {
+      id: userId, username, displayName, avatar: null, banner: null, accentColor: null, avatarColor: null,
+      bio: null, status: 'online', customStatus: null, isAdmin: false, createdAt: 1,
+      homeInstance: null, homeUserId: null, replicatedInstances: [],
+    },
+  };
+}
+
 function renderEditor(overrides: Override[]) {
   const deleteOverride = vi.fn().mockResolvedValue({ success: true });
   const putOverride = vi.fn().mockResolvedValue({ success: true });
@@ -72,8 +87,7 @@ describe('PermissionsEditor: removing a role override (#290)', () => {
     // as its own control; the expand toggle and the remove action are siblings.
     expect(remove.parentElement?.closest('button')).toBeNull();
     expect(screen.getByRole('button', { name: 'Remove override for Guests' })).toBeInTheDocument();
-    // @everyone is the base row of every channel and carries the private flag.
-    expect(screen.queryByRole('button', { name: 'Remove override for @everyone' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Remove override for @everyone' })).toBeInTheDocument();
   });
 
   it('offers a labelled Remove override action inside the opened row, which deletes the row on save', async () => {
@@ -99,5 +113,103 @@ describe('PermissionsEditor: removing a role override (#290)', () => {
     renderEditor([]);
     expect(await screen.findByText('No role overrides. Every role uses its space-wide permissions here.')).toBeInTheDocument();
     expect(screen.getByText('No member overrides.')).toBeInTheDocument();
+  });
+});
+
+describe('PermissionsEditor: removing the @everyone override (#314)', () => {
+  it('stages the @everyone removal like any role and deletes the role:<spaceId> row on save', async () => {
+    const user = userEvent.setup();
+    const { deleteOverride, putOverride } = renderEditor([
+      override(SPACE_ID, 0n, PermissionBits.SEND_MESSAGES),
+      override('r-mod', PermissionBits.SEND_MESSAGES, 0n),
+    ]);
+
+    await user.click(await screen.findByRole('button', { name: 'Remove override for @everyone' }));
+    expect(screen.queryByRole('button', { name: /^@everyone/ })).toBeNull();
+    // Staged, not sent: nothing reaches the server before Save.
+    expect(deleteOverride).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(deleteOverride).toHaveBeenCalledWith('role', SPACE_ID));
+    expect(deleteOverride).toHaveBeenCalledTimes(1);
+    expect(putOverride).not.toHaveBeenCalled();
+  });
+
+  it('offers the labelled Remove override action inside the opened @everyone row', async () => {
+    const user = userEvent.setup();
+    renderEditor([override(SPACE_ID, 0n, PermissionBits.SEND_MESSAGES)]);
+
+    await user.click(await screen.findByRole('button', { name: /^@everyone/ }));
+    const panel = screen.getByRole('region', { name: '@everyone' });
+    expect(within(panel).getByRole('button', { name: 'Remove override' })).toBeInTheDocument();
+  });
+});
+
+describe('PermissionsEditor: the add pickers follow the staged rows (#314)', () => {
+  it('offers a role again in Add Role right after its override is removed, before saving', async () => {
+    const user = userEvent.setup();
+    const { deleteOverride, putOverride } = renderEditor([
+      override(SPACE_ID, 0n, PermissionBits.SEND_MESSAGES),
+      override('r-mod', PermissionBits.SEND_MESSAGES, 0n),
+      override('r-guest', 0n, PermissionBits.ADD_REACTIONS),
+    ]);
+
+    await user.click(await screen.findByRole('button', { name: 'Remove override for Moderators' }));
+    await user.click(screen.getByRole('button', { name: 'Add Role' }));
+    // Roles that still have a row stay out of the picker.
+    expect(screen.queryByRole('button', { name: 'Guests' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Moderators' }));
+
+    // Re-added as a fresh, empty override in the same edit.
+    expect(screen.getByRole('button', { name: 'Remove override for Moderators' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(putOverride).toHaveBeenCalledWith({ targetType: 'role', targetId: 'r-mod', allow: '0', deny: '0' }));
+    expect(deleteOverride).not.toHaveBeenCalled();
+  });
+
+  it('removes a saved role that was removed, re-added and removed again in one edit', async () => {
+    const user = userEvent.setup();
+    const { deleteOverride, putOverride } = renderEditor([
+      override('r-mod', PermissionBits.SEND_MESSAGES, 0n),
+      override('r-guest', 0n, PermissionBits.ADD_REACTIONS),
+    ]);
+
+    await user.click(await screen.findByRole('button', { name: 'Remove override for Moderators' }));
+    await user.click(screen.getByRole('button', { name: 'Add Role' }));
+    await user.click(screen.getByRole('button', { name: 'Moderators' }));
+    await user.click(screen.getByRole('button', { name: 'Remove override for Moderators' }));
+
+    expect(screen.queryByRole('button', { name: /^Moderators/ })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(deleteOverride).toHaveBeenCalledWith('role', 'r-mod'));
+    expect(putOverride).not.toHaveBeenCalled();
+  });
+
+  it('offers @everyone in Add Role after its override is removed', async () => {
+    const user = userEvent.setup();
+    renderEditor([
+      override(SPACE_ID, 0n, PermissionBits.SEND_MESSAGES),
+      override('r-mod', PermissionBits.SEND_MESSAGES, 0n),
+      override('r-guest', 0n, PermissionBits.ADD_REACTIONS),
+    ]);
+
+    await user.click(await screen.findByRole('button', { name: 'Add Role' }));
+    expect(screen.getByText('No more roles to add')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    await user.click(screen.getByRole('button', { name: 'Remove override for @everyone' }));
+    await user.click(screen.getByRole('button', { name: 'Add Role' }));
+    expect(screen.getByRole('button', { name: '@everyone' })).toBeInTheDocument();
+  });
+
+  it('offers a member again in Add Member right after their override is removed, before saving', async () => {
+    const user = userEvent.setup();
+    useSpaceStore.setState({ members: [member('u-mira', 'mira', 'Mira'), member('u-kai', 'kai', null)] });
+    renderEditor([memberOverride('u-mira', PermissionBits.ATTACH_FILES, 0n)]);
+
+    await user.click(await screen.findByRole('button', { name: 'Remove override for Mira' }));
+    await user.click(screen.getByRole('button', { name: 'Add Member' }));
+    expect(screen.getByRole('button', { name: /^Mira/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'kai' })).toBeInTheDocument();
   });
 });
