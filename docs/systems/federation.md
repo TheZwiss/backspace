@@ -318,7 +318,7 @@ Admin-initiated paths (`/peer/initiate`, `/approve`) do NOT call `ensurePeered`.
 |----------|--------|------|---------|
 | `/api/federation/peer/initiate` | POST | JWT + admin | Start peering handshake |
 | `/api/federation/peer/accept` | POST | None (rate-limited) | Accept incoming handshake |
-| `/api/federation/peer/ensure` | POST | JWT (any user), rate-limited 3/15min/user | Trigger auto-peering to a remote instance |
+| `/api/federation/peer/ensure` | POST | JWT (any user), rate-limited 3/15min/user for calls that can start a handshake | Trigger auto-peering to a remote instance |
 | `/api/federation/peers` | GET | JWT + admin | List all peers (secret excluded) |
 | `/api/federation/peers/:id` | PATCH | JWT + admin | Update peer settings (auto-rotation interval) |
 | `/api/federation/peers/:id` | DELETE | JWT + admin | Revoke peer, purge outbox |
@@ -331,6 +331,8 @@ Admin-initiated paths (`/peer/initiate`, `/approve`) do NOT call `ensurePeered`.
 | `/api/federation/approval-requests/:id/deny` | POST | JWT + admin | Deny request — direction-branched (see Denial flow above) |
 
 **`POST /api/federation/peer/ensure`** — Wraps `ensurePeered()`. Accepts `{ remoteOrigin: string }` in body. Returns `{ peeringStatus, peerId?, error? }` where `peeringStatus` is one of `active`, `pending`, `awaiting_approval`, `rejected`, `unreachable`, or `revoked`.
+
+The client calls it on every remote session it opens (see [client-federation.md](client-federation.md#home-instance-peering-on-every-session-peerhomewithremote)). The rate limit exists to bound the handshakes a user can make this instance start, so it is only charged when the call can start one: `settledPeeringResult(origin)` (`utils/federationPeering.ts`, the same settled-row switch `ensurePeered` uses) answers an `active`, `unreachable`, `awaiting_approval`, `rejected`, `revoked` or `needs_attention` row from the row alone, with no network and no writes, and such a call is not counted. A missing or `pending` row is counted.
 
 ### S2S Endpoints
 

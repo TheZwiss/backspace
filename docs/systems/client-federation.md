@@ -102,7 +102,20 @@ When a user adds a remote instance via the Connections settings:
    | 403 (`federated_registration_closed`; `registration_closed`, `invite_required` or no code from an older remote) | `registration-closed` | `federated_registration_closed` | The instance takes no new accounts from other instances; *if* the user has an account there, sign in with it |
 
    Only the first may say an account exists. On a closed instance the client cannot know: the server's closed gate answers before any username check (`routes/auth.ts`), and a refused login says `invalid_credentials` whether the account is missing or has another password. Any other registration failure is rethrown. `FallbackNotice` in `RemotePasswordStep.tsx` is the one place the notice is worded; all five surfaces that offer the login render it.
-8. **On success** — mark the credential provisioned, store JWT token, create API client, open WebSocket, sync profile
+8. **On success** — mark the credential provisioned, store JWT token, create API client, open WebSocket, ask the home instance to peer (below), sync profile
+
+### Home-instance peering on every session (`peerHomeWithRemote`)
+
+DMs a user writes on a remote reach their home instance over the S2S peering between the two, and the home instance only starts one when asked (`POST /api/federation/peer/ensure`). `peerHomeWithRemote(origin, announceAs)` in `instanceStore.ts` is the one place that asks, and every path that opens a session on a remote calls it once the session is live:
+
+| Path | `announceAs` |
+|---|---|
+| `connectToRemote` (and `reauthenticateInstance`, which runs it) | instance label |
+| `loginToRemote`, the explicit per-instance login; `directoryStore.loginAndJoin` reaches it through this | instance label |
+| `reconnectInstance`, a token resume | `null` |
+| `autoConnectAll`, each cached session that verifies | `null` |
+
+With a label, a `rejected` answer shows a warning toast (`federation:connections.peering.unavailable`) and a transient `pending` an info toast (`…peering.inProgress`); with `null` the call is silent. It never throws: a session is usable without peering. The server answers an already-settled peering from its peer row without charging the per-user limit on that endpoint (see [federation.md](federation.md#admin-endpoints)), which is what makes asking on every session affordable. Before this, `loginToRemote` and `reconnectInstance` did not ask, so a session reached through the different-password fallback (including the directory's join) had no peering until the next app start, and the rate limit meant a user with more than three connections was not peered for all of them even then.
 
 Password changes on the home instance are **not** propagated to remote instances — there is nothing to propagate, since no remote holds the home password.
 
@@ -160,7 +173,7 @@ Called once per session after login:
 
 1. Read `currentUser.replicatedInstances` from the home server (list of known remote origins)
 2. Load cached tokens from `localStorage`
-3. For instances **with cached tokens**: attempt reconnection in parallel — verify token, open WebSocket, sync profile
+3. For instances **with cached tokens**: attempt reconnection in parallel — verify token, open WebSocket, ask the home instance to peer (`peerHomeWithRemote`, silent), sync profile
 4. For instances **without cached tokens**: create error placeholders (visible in Connections UI with "re-authenticate" prompt)
 5. Set `_autoConnectDone = true` to unblock topology sync
 

@@ -134,6 +134,10 @@
       "dismissing": "Wird ausgeblendet…",
       "dismissFailed": "Ausblenden fehlgeschlagen: {{error}}",
       "dismissAllFailed": "Alle ausblenden fehlgeschlagen: {{error}}"
+    },
+    "peering": {
+      "unavailable": "Nachrichten mit Leuten auf {{name}} können erst weitergeleitet werden, wenn ein Admin das Peering freigibt.",
+      "inProgress": "Peering mit {{name}} wird eingerichtet. Nachrichten mit Leuten dort werden in Kürze weitergeleitet."
     }
   },
   "admin": {

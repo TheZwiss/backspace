@@ -573,7 +573,8 @@ export function registerPeerHandshakeRoutes(app: FastifyInstance): void {
 
   // ─── POST /api/federation/peer/ensure ──────────────────────────────────────
   // JWT-authenticated (any user): trigger auto-peering with a remote instance.
-  // Rate-limited per user (3 requests per 15 minutes).
+  // Rate-limited per user (3 requests per 15 minutes) when the call can start a
+  // handshake; confirming a settled peering is not counted.
   app.post<{ Body: { remoteOrigin: string } }>(
     '/api/federation/peer/ensure',
     { preHandler: [authenticate] },
@@ -591,14 +592,19 @@ export function registerPeerHandshakeRoutes(app: FastifyInstance): void {
         });
       }
 
-      if (isEnsureRateLimited(request.userId)) {
+      const { ensurePeered, settledPeeringResult } = await import('../../../utils/federationPeering.js');
+
+      // The limit bounds handshakes a user can make this instance start. A
+      // client asks on every session it opens, including one per connection
+      // at app start, so confirming a peering that already exists (no network,
+      // no writes) must not use up the allowance a new connection needs.
+      if (!settledPeeringResult(remoteOrigin) && isEnsureRateLimited(request.userId)) {
         return reply.code(429).send({
           error: 'Too many peering requests — try again later',
           statusCode: 429,
         });
       }
 
-      const { ensurePeered } = await import('../../../utils/federationPeering.js');
       // NOTE: /peer/ensure is currently only invoked from friend-add client paths
       // (see packages/web/src/stores/instanceStore.ts ensurePeered references).
       // The hardcoded reason here is correct TODAY but will become wrong when

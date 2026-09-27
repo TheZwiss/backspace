@@ -212,6 +212,56 @@ export function createAutoPlaceholderPeer(
     .get() ?? null;
 }
 
+// ─── Settled peer rows ──────────────────────────────────────────────────────
+
+/**
+ * The answer `ensurePeered` gives for a peer row whose status is settled, or
+ * `null` for a `pending` row, which still needs a handshake (or the gate).
+ * Settled answers are read from the row alone: no network, no writes.
+ */
+function settledResultFor(
+  peer: Pick<typeof schema.federationPeers.$inferSelect, 'id' | 'status'>,
+): EnsurePeeredResult | null {
+  switch (peer.status) {
+    case 'active':
+      return { status: 'active', peerId: peer.id };
+    case 'rejected':
+      return { status: 'rejected', error: 'Remote instance requires manual peering approval' };
+    case 'revoked':
+      return { status: 'rejected', error: 'Peer was revoked by admin' };
+    case 'unreachable':
+      // Unreachable peers were previously active — treat as active for peering
+      // (the health check will restore them; don't re-handshake)
+      return { status: 'active', peerId: peer.id };
+    case 'needs_attention':
+      // Admin intervention required — do not auto-heal via performHandshake
+      return { status: 'rejected', error: 'Peer in needs_attention — admin Reset required' };
+    case 'awaiting_approval':
+      return { status: 'pending', error: 'Awaiting admin approval on remote instance' };
+    default:
+      // `pending` (and any status this code does not know, which the column
+      // does not constrain) still needs a handshake or the gate.
+      return null;
+  }
+}
+
+/**
+ * What `ensurePeered(origin)` would answer without doing any work, or `null`
+ * when it would have to handshake or run the outbound gate. Lets
+ * `POST /api/federation/peer/ensure` confirm an existing peering without
+ * charging the caller's rate limit, which exists to bound handshakes.
+ */
+export function settledPeeringResult(origin: string): EnsurePeeredResult | null {
+  const normalized = validateOrigin(origin);
+  if (!normalized) return null;
+  const peer = getDb()
+    .select({ id: schema.federationPeers.id, status: schema.federationPeers.status })
+    .from(schema.federationPeers)
+    .where(eq(schema.federationPeers.origin, normalized))
+    .get();
+  return peer ? settledResultFor(peer) : null;
+}
+
 // ─── In-flight deduplication ─────────────────────────────────────────────────
 
 const inFlightPeering = new Map<string, Promise<EnsurePeeredResult>>();
@@ -251,26 +301,8 @@ export async function ensurePeered(
     .get();
 
   if (existing) {
-    switch (existing.status) {
-      case 'active':
-        return { status: 'active', peerId: existing.id };
-      case 'rejected':
-        return { status: 'rejected', error: 'Remote instance requires manual peering approval' };
-      case 'revoked':
-        return { status: 'rejected', error: 'Peer was revoked by admin' };
-      case 'unreachable':
-        // Unreachable peers were previously active — treat as active for peering
-        // (the health check will restore them; don't re-handshake)
-        return { status: 'active', peerId: existing.id };
-      case 'needs_attention':
-        // Admin intervention required — do not auto-heal via performHandshake
-        return { status: 'rejected', error: 'Peer in needs_attention — admin Reset required' };
-      case 'awaiting_approval':
-        return { status: 'pending', error: 'Awaiting admin approval on remote instance' };
-      case 'pending':
-        // Fall through to dedup logic below
-        break;
-    }
+    const settled = settledResultFor(existing);
+    if (settled) return settled;
   }
 
   // Pre-handshake gate: refuse if we have an unresolved inbound approval-request

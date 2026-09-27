@@ -11,7 +11,9 @@ const federationCredential = vi.fn(async (data: { origin: string; markProvisione
 }));
 const getFederationRegistry = vi.fn(async () => ({ registry: [] as FederationRegistryEntry[], updatedAt: 0 }));
 const putFederationRegistry = vi.fn(async () => ({ ok: true, updatedAt: 1 }));
-const ensurePeered = vi.fn(async () => ({ peeringStatus: 'active' }));
+const ensurePeered = vi.fn<(data: { remoteOrigin: string; reason?: string }) => Promise<{ peeringStatus: string }>>(
+  async () => ({ peeringStatus: 'active' }),
+);
 
 // ── Remote-instance API (what `createApiClient` hands back) ─────────────────
 const remoteRegister = vi.fn();
@@ -32,7 +34,7 @@ vi.mock('../api/client', async (importOriginal) => ({
       putFederationRegistry: (data: unknown) => putFederationRegistry(data),
       me: vi.fn(),
     },
-    federation: { ensurePeered: () => ensurePeered() },
+    federation: { ensurePeered: (data: { remoteOrigin: string; reason?: string }) => ensurePeered(data) },
   },
   createApiClient: (origin: string) => ({
     auth: {
@@ -81,6 +83,7 @@ vi.mock('./authStore', () => ({
 }));
 
 import { useInstanceStore, connectToInstance } from './instanceStore';
+import { useUIStore } from './uiStore';
 import type { ConnectedInstance } from './instanceStore';
 
 const REMOTE = 'https://orbit.example';
@@ -195,7 +198,9 @@ beforeEach(() => {
   getFederationRegistry.mockReset();
   getFederationRegistry.mockResolvedValue({ registry: [], updatedAt: 0 });
   putFederationRegistry.mockClear();
-  ensurePeered.mockClear();
+  ensurePeered.mockReset();
+  ensurePeered.mockResolvedValue({ peeringStatus: 'active' });
+  useUIStore.setState({ toasts: [] });
   connectInstance.mockClear();
   remoteRegister.mockReset();
   remoteLogin.mockReset();
@@ -285,6 +290,98 @@ describe('a connection moves both of its projections together', () => {
 
     expect(agreedStatuses(REMOTE)).toEqual({ live: 'error', registry: 'auth_expired' });
     expect(useInstanceStore.getState().registry.get(REMOTE)?.errorMessage).toBe('session_expired');
+  });
+});
+
+describe('every path that opens a session on a remote asks the home instance to peer with it', () => {
+  // Relaying the DMs written there home needs an S2S peering between the two
+  // instances, and the home instance only starts one when asked. A session
+  // opened without asking works, and its DMs silently never leave the remote.
+  const peeredWith = (origin: string) => expect.objectContaining({ remoteOrigin: origin });
+
+  it('connectToRemote', async () => {
+    remoteRegister.mockResolvedValue({ token: 'new-token', user: remoteUser() });
+
+    await useInstanceStore.getState().connectToRemote(REMOTE, 'home-password', 'Erin');
+
+    expect(ensurePeered).toHaveBeenCalledWith(peeredWith(REMOTE));
+  });
+
+  it('loginToRemote, the explicit per-instance login the directory join also falls back to', async () => {
+    remoteLogin.mockResolvedValue({ token: 'new-token', user: remoteUser({ username: 'erin' }) });
+
+    await useInstanceStore.getState().loginToRemote(REMOTE, 'erin', 'their-own-password');
+
+    expect(ensurePeered).toHaveBeenCalledTimes(1);
+    expect(ensurePeered).toHaveBeenCalledWith(peeredWith(REMOTE));
+  });
+
+  it('reconnectInstance, resuming a session from its token', async () => {
+    seed('disconnected', 'unreachable');
+    remoteMe.mockResolvedValue(remoteUser());
+
+    await useInstanceStore.getState().reconnectInstance(REMOTE);
+
+    expect(ensurePeered).toHaveBeenCalledWith(peeredWith(REMOTE));
+  });
+
+  it('autoConnectAll, for each cached session that still works', async () => {
+    session.user = { ...HOME_USER, replicatedInstances: [{ origin: REMOTE, username: 'erin@nova.example' }] };
+    getFederationRegistry.mockResolvedValue({ registry: [registryEntry('connected')], updatedAt: 500 });
+    cacheToken('cached-token');
+    remoteMe.mockResolvedValue(remoteUser());
+
+    await useInstanceStore.getState().autoConnectAll();
+
+    expect(ensurePeered).toHaveBeenCalledWith(peeredWith(REMOTE));
+  });
+
+  it('not for a login the remote refuses', async () => {
+    remoteLogin.mockRejectedValue(refused());
+
+    await expect(useInstanceStore.getState().loginToRemote(REMOTE, 'erin', 'wrong')).rejects.toThrow();
+
+    expect(ensurePeered).not.toHaveBeenCalled();
+  });
+
+  it('not for a reconnect the remote refuses', async () => {
+    seed('disconnected', 'connected');
+    remoteMe.mockRejectedValue(refused());
+
+    await useInstanceStore.getState().reconnectInstance(REMOTE);
+
+    expect(ensurePeered).not.toHaveBeenCalled();
+  });
+
+  it('a peering request that fails does not fail the login', async () => {
+    remoteLogin.mockResolvedValue({ token: 'new-token', user: remoteUser({ username: 'erin' }) });
+    ensurePeered.mockRejectedValue(unreachable());
+
+    await useInstanceStore.getState().loginToRemote(REMOTE, 'erin', 'their-own-password');
+
+    expect(agreedStatuses(REMOTE)).toEqual({ live: 'connected', registry: 'connected' });
+  });
+
+  it('an explicit login says so when the peering is refused, as a connect does', async () => {
+    remoteLogin.mockResolvedValue({ token: 'new-token', user: remoteUser({ username: 'erin' }) });
+    ensurePeered.mockResolvedValue({ peeringStatus: 'rejected' });
+
+    await useInstanceStore.getState().loginToRemote(REMOTE, 'erin', 'their-own-password');
+
+    const toasts = useUIStore.getState().toasts;
+    expect(toasts).toHaveLength(1);
+    expect(toasts[0]!.type).toBe('warning');
+    expect(toasts[0]!.message).toContain('Orbit');
+  });
+
+  it('a background resume never toasts about peering', async () => {
+    seed('disconnected', 'unreachable');
+    remoteMe.mockResolvedValue(remoteUser());
+    ensurePeered.mockResolvedValue({ peeringStatus: 'rejected' });
+
+    await useInstanceStore.getState().reconnectInstance(REMOTE);
+
+    expect(useUIStore.getState().toasts).toEqual([]);
   });
 });
 

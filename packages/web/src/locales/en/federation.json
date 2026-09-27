@@ -134,6 +134,10 @@
       "dismissing": "Dismissing…",
       "dismissFailed": "Failed to dismiss: {{error}}",
       "dismissAllFailed": "Failed to dismiss all: {{error}}"
+    },
+    "peering": {
+      "unavailable": "Messages with people on {{name}} can't be relayed until an admin approves peering with it.",
+      "inProgress": "Setting up peering with {{name}}. Messages with people there will be relayed shortly."
     }
   },
   "admin": {

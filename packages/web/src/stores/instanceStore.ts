@@ -25,6 +25,7 @@ import { parseFederatedUsername } from '../utils/identity';
 // The registry's `errorMessage` carries one of these codes, never a sentence:
 // the Connections row is what turns it into words, in the user's language.
 import { registryReason } from '../i18n/registryErrors';
+import i18n from '../i18n';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -284,6 +285,39 @@ export async function ensureRemoteCredential(
   const rotated = await instance.api.users.changePassword({ newPassword: credential.secret });
   useInstanceStore.getState().updateInstanceToken(instance.origin, rotated.token);
   await homeApi.users.federationCredential({ origin: instance.origin, markProvisioned: true });
+}
+
+// ─── Home-instance peering for a remote session ──────────────────────────────
+
+/**
+ * Ask the home instance to peer with `origin`. DMs the user writes on a remote
+ * reach home through that S2S peering, and the home instance only starts one
+ * when asked, so every path that opens a session on a remote calls this once
+ * the session is live: a connect, an explicit per-instance login (which the
+ * directory's join also falls back to), a token resume, and each connection
+ * `autoConnectAll` resumes at app start. A session opened without it works,
+ * and its DMs silently stay on the remote.
+ *
+ * The server answers an existing peering from its peer row without charging
+ * the per-user rate limit, so asking on every session is cheap.
+ *
+ * `announceAs` is the instance label for a session the user just opened by
+ * hand, who is told when relay will not work yet. A background resume passes
+ * null and stays quiet. Never throws: the session is usable without peering.
+ */
+async function peerHomeWithRemote(origin: string, announceAs: string | null): Promise<void> {
+  try {
+    const { peeringStatus } = await api.federation.ensurePeered({ remoteOrigin: origin });
+    if (announceAs === null) return;
+    const { addToast } = useUIStore.getState();
+    if (peeringStatus === 'rejected') {
+      addToast(i18n.t('federation:connections.peering.unavailable', { name: announceAs }), 'warning', 10000);
+    } else if (peeringStatus === 'pending') {
+      addToast(i18n.t('federation:connections.peering.inProgress', { name: announceAs }), 'info');
+    }
+  } catch (err) {
+    console.warn(`[federation] Peering with ${origin} could not be requested (non-fatal):`, err);
+  }
 }
 
 // ─── Automatic re-attach (re-attach spec §3.4) ────────────────────────────────
@@ -792,26 +826,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       // Automatic re-attach for detached accounts (re-attach spec §3.4).
       maybeAutoReattach(instance).catch(() => {});
 
-      // Ensure server-to-server peering for DM relay (non-fatal)
-      try {
-        const peerResult = await api.federation.ensurePeered({ remoteOrigin: origin });
-        if (peerResult.peeringStatus === 'rejected') {
-          const { addToast } = useUIStore.getState();
-          addToast(
-            `Cross-instance messaging unavailable — ${instance.label} requires manual peering approval`,
-            'warning',
-            10000,
-          );
-        } else if (peerResult.peeringStatus === 'pending') {
-          const { addToast } = useUIStore.getState();
-          addToast(
-            `Peering with ${instance.label} in progress — cross-instance messaging will be available shortly`,
-            'info',
-          );
-        }
-      } catch (err) {
-        console.warn('[federation] Peering attempt failed (non-fatal):', err);
-      }
+      await peerHomeWithRemote(origin, instance.label);
 
       // Sync instance list to all instances (fire-and-forget)
       get().syncInstanceList().catch(() => {});
@@ -868,6 +883,8 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       ensureRemoteCredential(instance, { force: true }).catch((err) =>
         console.warn('[federation] Could not reconcile remote credential:', err),
       );
+
+      await peerHomeWithRemote(origin, instance.label);
 
       // Sync instance list to all instances (fire-and-forget)
       get().syncInstanceList().catch(() => {});
@@ -979,6 +996,8 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
           console.warn(`[federation] Credential migration deferred for ${origin}:`, err2),
         );
       }
+
+      void peerHomeWithRemote(origin, null);
     } catch (err) {
       if (isNetworkError(err)) {
         writeConnectionState(origin, 'unreachable');
@@ -1408,8 +1427,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
               );
             }
 
-            // Initiate server-to-server peering for DM relay (non-fatal, idempotent)
-            api.federation.ensurePeered({ remoteOrigin: origin }).catch(() => {});
+            void peerHomeWithRemote(origin, null);
           } catch (err) {
             if (isNetworkError(err)) {
               // Instance unreachable (NAT hairpinning, DNS, server down) — token may still be valid

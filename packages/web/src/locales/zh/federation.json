@@ -133,6 +133,10 @@
       "dismissing": "正在忽略…",
       "dismissFailed": "忽略失败：{{error}}",
       "dismissAllFailed": "全部忽略失败：{{error}}"
+    },
+    "peering": {
+      "unavailable": "在管理员批准与 {{name}} 的对等连接之前，无法与该实例上的用户互通消息。",
+      "inProgress": "正在与 {{name}} 建立对等连接，稍后即可与该实例上的用户互通消息。"
     }
   },
   "admin": {
