@@ -3,7 +3,7 @@ import * as schema from '../db/schema.js';
 import { eq, and, inArray } from 'drizzle-orm';
 import { generateSnowflake } from './snowflake.js';
 import crypto from 'node:crypto';
-import type { FederationRelayEvent, FederationRelayParticipant, FederationRelayAttachment, DmMessageWithUser, FederationRelayRequest, DmCallUndeliverableReason } from '@backspace/shared';
+import type { FederationRelayEvent, FederationRelayParticipant, FederationRelayAttachment, DmMessageWithUser, FederationRelayRequest, DmCallUndeliverableReason, FederationMessageRef } from '@backspace/shared';
 import { getOurOrigin, buildFederationHeaders } from './federationAuth.js';
 import { extractDomain } from '../routes/federation.js';
 import { racePeering, ensurePeered, createAutoPlaceholderPeer } from './federationPeering.js';
@@ -482,7 +482,7 @@ export function queueDmRelay(
   queueOutboxEvent(message.id, dmChannelId, eventType, JSON.stringify({
     ...(channel?.federatedId && channel.ownerId ? { federatedId: channel.federatedId } : {}),
     message: {
-      ...buildRelayPayload(message, message.user),
+      ...buildRelayPayload(message, message.user, dmReplyRefForRelay(dmChannelId, message.replyToId)),
       attachments: attachments.length > 0 ? attachments : undefined,
     },
     participants,
@@ -542,8 +542,54 @@ export function getFriendEventTargets(
 }
 
 /**
+ * Name a DM message row in federation coordinates (`FederationMessageRef`).
+ *
+ * Each instance holds its own copy of a federated message under its own local
+ * id. A row this instance created is named by its id and our origin; a relayed
+ * copy is named by the id and origin it arrived with, which is the message's
+ * id on the instance that created it. Every relay event that points at an
+ * existing message (reply, reaction) names it this way, and the receiver turns
+ * it back into its own row with `resolveLocalDmMessage`.
+ */
+export function dmMessageFederationRef(row: {
+  id: string;
+  sourceInstance: string | null;
+  sourceMessageId: string | null;
+}): FederationMessageRef {
+  if (row.sourceInstance && row.sourceMessageId) {
+    return { messageId: row.sourceMessageId, messageHomeInstance: row.sourceInstance };
+  }
+  return { messageId: row.id, messageHomeInstance: getOurOrigin() };
+}
+
+/**
+ * The reply reference a relayed message carries: the replied-to message in
+ * federation coordinates, or null when the message is not a reply or its
+ * target is not in `dmChannelId` (the create paths refuse that, and a row
+ * predating the check is not relayed as one).
+ */
+export function dmReplyRefForRelay(
+  dmChannelId: string,
+  replyToId: string | null | undefined,
+): FederationMessageRef | null {
+  if (!replyToId) return null;
+  const target = getDb()
+    .select({
+      id: schema.dmMessages.id,
+      sourceInstance: schema.dmMessages.sourceInstance,
+      sourceMessageId: schema.dmMessages.sourceMessageId,
+    })
+    .from(schema.dmMessages)
+    .where(and(eq(schema.dmMessages.id, replyToId), eq(schema.dmMessages.dmChannelId, dmChannelId)))
+    .get();
+  return target ? dmMessageFederationRef(target) : null;
+}
+
+/**
  * Build the relay payload object for a DM message.
- * Used internally by queueDmRelay and the sync endpoint.
+ * Used internally by queueDmRelay; the sync endpoint builds the same shape.
+ * `replyTo` comes from `dmReplyRefForRelay`: `replyToId` is this instance's
+ * local id and only `replyTo` means anything to the receiver.
  */
 export function buildRelayPayload(
   message: {
@@ -559,6 +605,7 @@ export function buildRelayPayload(
     homeUserId: string | null;
     homeInstance: string | null;
   },
+  replyTo: FederationMessageRef | null = null,
 ): NonNullable<FederationRelayEvent['message']> {
   return {
     userId: user.id,
@@ -567,6 +614,7 @@ export function buildRelayPayload(
     ...(message.type === 'system' ? { type: 'system' as const } : {}),
     content: message.content,
     replyToId: message.replyToId ?? null,
+    ...(replyTo ? { replyTo } : {}),
     editedAt: message.editedAt ?? null,
     createdAt: message.createdAt,
   };

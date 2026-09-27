@@ -837,7 +837,7 @@ All origin comparisons use `extractDomain()` or `getOurOrigin()` with normalizat
 **Outbound (origin instance):**
 1. Message created via REST (`POST /api/dm/:id/messages`) or WS (`dm_message_create`)
 2. `queueDmRelay(message, channelId, 'create')` called from `dm.ts` / `events.ts`
-3. `buildRelayPayload()` constructs the message portion with `homeUserId`, `homeInstance`, `content`, `replyToId`, `editedAt`, `createdAt`
+3. `buildRelayPayload()` constructs the message portion with `homeUserId`, `homeInstance`, `content`, `replyToId` (sender-local, never adopted by a receiver), `replyTo` (the replied-to message as a `FederationMessageRef`, replies only), `editedAt`, `createdAt`
 4. `getDmParticipants(channelId)` resolves all members to `(homeUserId, homeInstance)` pairs with profile snapshots
 5. `getGroupDmTargetOrigins(channelId)` returns the participants' instances minus our own -- `[]` when both participants are local
 6. `queueOutboxEvent(messageId, channelId, 'create', payload, targetOrigins)` -> queued only to those peers; a `[]` target list matches no peer, so a conversation between two local users is never relayed
@@ -856,7 +856,7 @@ All origin comparisons use `extractDomain()` or `getOurOrigin()` with normalizat
    - Find by `federatedId` in `dm_channels`
    - If exists: ensure both users are members (idempotent insert)
    - If not: create channel with `federatedId`, add both members
-7. Insert `dm_messages` with `sourceInstance` and `sourceMessageId`
+7. Insert `dm_messages` with `sourceInstance` and `sourceMessageId`; `replyToId` is `resolveRelayedReplyTarget(message.replyTo)`, which resolves the reference with `resolveLocalDmMessage` and keeps it only when the target is in the same local channel (else `null`)
 8. Process attachments (see File Replication)
 9. Broadcast `dm_message_created` to local members, **skipping** members whose `homeInstance === sourceInstance` (they already have the original)
 
@@ -1690,7 +1690,9 @@ Reactions are queued by WS event handlers in `events.ts`:
 - `dm_reaction_add` -> `queueOutboxEvent(reactionId, channelId, 'reaction_add', payload, targetOrigins)`
 - `dm_reaction_remove` -> `queueOutboxEvent(messageId, channelId, 'reaction_remove', payload, targetOrigins)`
 
-Payload includes `userId`, `homeUserId`, `emoji`, `createdAt`, plus `messageId` and `messageHomeInstance` for cross-instance message resolution.
+Payload includes `userId`, `homeUserId`, `emoji`, `createdAt`, plus `messageId` and `messageHomeInstance` for cross-instance message resolution: the reacted-to message as a `FederationMessageRef`, built by `dmMessageFederationRef` (see `dm-system.md` "Naming a message across instances").
+
+The WS reaction handlers accept a federated account (a user whose `homeInstance` is another instance) like any DM member. Until #295 they silently dropped its DM reactions: a leftover of the `isFederated` gate that `662143bf` lifted for every other DM operation, so a client whose DM was pinned to a remote origin could not react at all.
 
 The mutation log entry for reactions stores a simpler payload (no `messageId`/`messageHomeInstance`), while the outbox entry carries the full reaction payload including those fields.
 

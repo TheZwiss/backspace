@@ -463,7 +463,7 @@ Users tombstoned **before** this fix already had their 1-on-1 `dm_members` row d
 - Attachment ownership verified (must be unlinked and owned by caller)
 - `replyToId`, when present, must name a message in this same DM channel (`isDmReplyTargetInChannel`) -- otherwise `400 Invalid reply target` and nothing is inserted. The WebSocket `dm_message_create` path applies the same rule and answers with an `error` event instead.
 
-**Reply hydration:** every DM read path resolves `replyTo` through `fetchDmReplyToMessages(dmChannelId, rows)` (`dm.ts`), which scopes the reply lookup to the channel being read -- `getDmMessageWithUser`, `GET /api/dm/:id/messages`, `GET /api/dm/:id/search` and `GET /api/dm/:id/messages/around`. A `replyToId` pointing outside the channel hydrates as `replyTo: null` rather than surfacing the other conversation's message, so rows predating the create-time check stay contained. Inbound federated DM messages are stored with `replyToId: null` (`federation/events/dmMessages.ts`), so relay never introduces a cross-channel target.
+**Reply hydration:** every DM read path resolves `replyTo` through `fetchDmReplyToMessages(dmChannelId, rows)` (`dm.ts`), which scopes the reply lookup to the channel being read -- `getDmMessageWithUser`, `GET /api/dm/:id/messages`, `GET /api/dm/:id/search` and `GET /api/dm/:id/messages/around`. A `replyToId` pointing outside the channel hydrates as `replyTo: null` rather than surfacing the other conversation's message, so rows predating the create-time check stay contained. Relay never introduces a cross-channel target either: an inbound federated DM message never adopts the wire's `replyToId` (the sender's local id). Its reply target comes from `message.replyTo`, a `FederationMessageRef` resolved by `resolveRelayedReplyTarget` (`federation/dmChannels.ts`) and kept only when it names a message in the channel the reply is stored in; otherwise the reply is stored with `replyToId: null`. See "Outbound: Relay Payload Structure" below.
 
 **Flow:**
 1. Insert message + link attachments in a single transaction
@@ -540,11 +540,14 @@ Single source of truth for message relay payload construction:
   homeUserId: user.homeUserId || user.id,
   homeInstance: user.homeInstance || getOurOrigin(),
   content: message.content,
-  replyToId: message.replyToId ?? null,
+  replyToId: message.replyToId ?? null,          // sender-local; receivers ignore it
+  replyTo?: { messageId, messageHomeInstance },  // only on replies; see below
   editedAt: message.editedAt ?? null,
   createdAt: message.createdAt,
 }
 ```
+
+**Naming a message across instances.** Each instance holds its own copy of a federated message under its own local id, so a relay event that points at another message names it with `FederationMessageRef { messageId, messageHomeInstance }`: the message's id on the instance that created it, and that instance's origin. `dmMessageFederationRef(row)` (`federationOutbox.ts`) builds it from a row: a row this instance created is `(row.id, getOurOrigin())`, a relayed copy is `(row.sourceMessageId, row.sourceInstance)`. The receiver turns it back into its own row with `resolveLocalDmMessage`. Replies (`message.replyTo`, filled by `dmReplyRefForRelay` in `queueDmRelay` and in the sync endpoint) and reactions (`reaction.messageId` + `reaction.messageHomeInstance`) both use it. `replyTo` is an optional field: an older sender omits it and its replies arrive without a quote, an older receiver ignores it.
 
 The full event includes `participants` (all channel members with their federated identities and profile snapshots) and optionally `federatedId` (for group DMs).
 

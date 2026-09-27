@@ -8,7 +8,7 @@ import { connectionManager } from '../../../ws/handler.js';
 import { getDmMessageWithUser } from '../../dm.js';
 import { and, eq, isNull, or } from 'drizzle-orm';
 import type { FederationRelayEvent } from '@backspace/shared';
-import { buildDmChannelPayload, buildDmMessagePayload, findOrCreateDmChannel, isUrlFromPeer, resolveLocalDmMessage } from '../dmChannels.js';
+import { buildDmChannelPayload, buildDmMessagePayload, findOrCreateDmChannel, isUrlFromPeer, resolveLocalDmMessage, resolveRelayedReplyTarget } from '../dmChannels.js';
 import { extractDomain, resolveLocalUser, resolveOrCreateReplicatedUser, attributionRefusal } from '../identity.js';
 import { hydrateReplicatedUserProfile } from '../profile.js';
 
@@ -123,6 +123,10 @@ export async function processCreateEvent(
     );
   }
 
+  // The wire's `replyToId` is the sender's local id and is never adopted; the
+  // shared-coordinate `replyTo` is resolved inside this conversation instead.
+  const replyToId = resolveRelayedReplyTarget(event.message.replyTo, sourceInstance, localDmChannelId, db);
+
   // Insert the message
   const localMessageId = generateSnowflake();
   db.insert(schema.dmMessages)
@@ -132,7 +136,7 @@ export async function processCreateEvent(
       userId: authorUser.id,
       content: event.message.content,
       type: event.message.type === 'system' ? 'system' : 'user',
-      replyToId: null,
+      replyToId,
       createdAt: event.message.createdAt,
       editedAt: null,
       sourceInstance,

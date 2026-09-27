@@ -1106,7 +1106,15 @@ export interface FederationRelayEvent {
     homeInstance: string;
     type?: 'user' | 'system';
     content: string | null;
+    /** The sender's local id of the replied-to message. Meaningless to a receiver, which never adopts it; see `replyTo`. */
     replyToId: string | null;
+    /**
+     * The replied-to message in coordinates every instance shares. Optional:
+     * absent from older senders and on messages that are not replies. The
+     * receiver resolves it inside the conversation the message lands in and
+     * stores no reply target when it does not resolve there.
+     */
+    replyTo?: FederationMessageRef | null;
     editedAt: number | null;
     createdAt: number;
     attachments?: FederationRelayAttachment[];
@@ -1244,6 +1252,17 @@ export interface FederationFriendshipPayload {
   toProfile?: FederationRelayProfileSnapshot;
   status?: 'pending' | 'accepted' | 'declined';
   createdAt: number;
+}
+
+/**
+ * A DM message named across instances. Every instance holds its own copy of a
+ * federated message under its own local id, so a reference that crosses
+ * instances uses the id the message has on the instance it was created on,
+ * together with that instance's origin (as its `getOurOrigin()` reports it).
+ */
+export interface FederationMessageRef {
+  messageId: string;
+  messageHomeInstance: string;
 }
 
 export interface FederationRelayReaction {

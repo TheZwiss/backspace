@@ -6,7 +6,7 @@ import { connectionManager } from '../../ws/handler.js';
 import { getDmMessageWithUser } from '../dm.js';
 import { and, desc, eq, inArray, isNull, or } from 'drizzle-orm';
 import type { FederatedCallEntry } from '../../ws/handler.js';
-import type { DmChannel, DmMessageWithUser } from '@backspace/shared';
+import type { DmChannel, DmMessageWithUser, FederationMessageRef } from '@backspace/shared';
 
 /**
  * Build the full DM channel payload used by `dm_channel_created` events.
@@ -220,4 +220,27 @@ export function resolveLocalDmMessage(
       ),
     )
     .get();
+}
+
+
+/**
+ * The local reply target for a relayed message's `replyTo` reference, or null.
+ *
+ * The reference names the replied-to message in federation coordinates and is
+ * resolved like a reaction target. It is only adopted when it resolves to a
+ * message in `dmChannelId`, the conversation the reply is being stored in, so
+ * a relay can never point a local reply at another conversation. A target not
+ * held here (yet) leaves the reply without a quote rather than rejecting it.
+ */
+export function resolveRelayedReplyTarget(
+  ref: FederationMessageRef | null | undefined,
+  sourceInstance: string,
+  dmChannelId: string,
+  db: ReturnType<typeof getDb>,
+): string | null {
+  if (!ref || typeof ref.messageId !== 'string' || typeof ref.messageHomeInstance !== 'string') {
+    return null;
+  }
+  const target = resolveLocalDmMessage(ref.messageId, ref.messageHomeInstance, sourceInstance, db);
+  return target && target.dmChannelId === dmChannelId ? target.id : null;
 }

@@ -4,7 +4,7 @@ import { getDb, getRawDb, schema } from '../../../db/index.js';
 import { getOurOrigin, normalizeOriginForCompare, parseFederationHeaders, verifyPeerSignature } from '../../../utils/federationAuth.js';
 import { sendSignedJson } from './signedResponse.js';
 import { getInstanceId } from '../../../utils/federationEpoch.js';
-import { getDmParticipants } from '../../../utils/federationOutbox.js';
+import { dmReplyRefForRelay, getDmParticipants } from '../../../utils/federationOutbox.js';
 import { deleteAttachmentFiles } from '../../../utils/fileCleanup.js';
 import { sanitizeUser } from '../../../utils/sanitize.js';
 import { collectDeletionBroadcastTargets, tombstoneUser } from '../../../utils/userDeletion.js';
@@ -757,6 +757,8 @@ export function registerRelayRoutes(app: FastifyInstance): void {
           .where(eq(schema.dmChannels.id, mutation.context_id))
           .get();
 
+        const replyRef = dmReplyRefForRelay(mutation.context_id, message.replyToId);
+
         events.push({
           eventType: mutationType,
           ...(syncChannel?.federatedId && syncChannel.ownerId ? { federatedId: syncChannel.federatedId } : {}),
@@ -771,6 +773,7 @@ export function registerRelayRoutes(app: FastifyInstance): void {
             homeInstance,
             content: message.content,
             replyToId: message.replyToId ?? null,
+            ...(replyRef ? { replyTo: replyRef } : {}),
             editedAt: message.editedAt ?? null,
             createdAt: message.createdAt,
             attachments: attachments.length > 0 ? attachments : undefined,
