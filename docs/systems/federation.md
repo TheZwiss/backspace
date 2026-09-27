@@ -1697,7 +1697,7 @@ Payload includes `userId`, `homeUserId`, `emoji`, `createdAt`, plus `messageId` 
 
 The WS reaction handlers accept a federated account (a user whose `homeInstance` is another instance) like any DM member. Until #295 they silently dropped its DM reactions: a leftover of the `isFederated` gate that `662143bf` lifted for every other DM operation, so a client whose DM was pinned to a remote origin could not react at all.
 
-The mutation log entry for reactions stores a simpler payload (no `messageId`/`messageHomeInstance`), while the outbox entry carries the full reaction payload including those fields.
+The mutation log entry for reactions stores a simpler payload (no `messageId`/`messageHomeInstance`), while the outbox entry carries the full reaction payload including those fields. The sync endpoint (`POST /api/federation/sync`) fills them when it replays a reaction: it reads the reacted-to row (the log's `entity_id`) and names it with the same `dmMessageFederationRef`, so a replayed reaction resolves on the receiver exactly like a live one. A reaction whose message row is gone by the time of the sync is not replayed.
 
 ### Inbound
 

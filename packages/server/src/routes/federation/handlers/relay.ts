@@ -4,7 +4,7 @@ import { getDb, getRawDb, schema } from '../../../db/index.js';
 import { getOurOrigin, normalizeOriginForCompare, parseFederationHeaders, verifyPeerSignature } from '../../../utils/federationAuth.js';
 import { sendSignedJson } from './signedResponse.js';
 import { getInstanceId } from '../../../utils/federationEpoch.js';
-import { dmMessageMutationTarget, dmReplyRefForRelay, getDmParticipants } from '../../../utils/federationOutbox.js';
+import { dmMessageFederationRef, dmMessageMutationTarget, dmReplyRefForRelay, getDmParticipants } from '../../../utils/federationOutbox.js';
 import { deleteAttachmentFiles } from '../../../utils/fileCleanup.js';
 import { sanitizeUser } from '../../../utils/sanitize.js';
 import { collectDeletionBroadcastTargets, tombstoneUser } from '../../../utils/userDeletion.js';
@@ -606,6 +606,21 @@ export function registerRelayRoutes(app: FastifyInstance): void {
               continue;
             }
 
+            // Name the message in shared coordinates, as the live relay does:
+            // `entity_id` is this instance's local id, which the peer does not
+            // hold when our row is a relayed copy.
+            const reactedMessage = db
+              .select({
+                id: schema.dmMessages.id,
+                sourceInstance: schema.dmMessages.sourceInstance,
+                sourceMessageId: schema.dmMessages.sourceMessageId,
+              })
+              .from(schema.dmMessages)
+              .where(eq(schema.dmMessages.id, mutation.entity_id))
+              .get();
+            if (!reactedMessage) continue;
+            const target = dmMessageFederationRef(reactedMessage);
+
             events.push({
               eventType: mutationType,
               dmChannelId: mutation.context_id,
@@ -613,6 +628,8 @@ export function registerRelayRoutes(app: FastifyInstance): void {
               encryptionVersion: 0,
               timestamp: mutation.mutated_at,
               reaction: {
+                messageId: target.messageId,
+                messageHomeInstance: target.messageHomeInstance,
                 userId: reactionData.userId,
                 homeUserId: reactionData.homeUserId,
                 homeInstance: reactionData.homeInstance || getOurOrigin(),
