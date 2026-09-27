@@ -37,7 +37,7 @@ describe('ProfileAvatar', () => {
   beforeEach(() => {
     useUIStore.setState({
       isMobile: false,
-      userProfilePopout: { user: null, anchor: null, placement: 'right' },
+      userProfilePopout: { user: null, anchor: null, placement: 'right', member: null },
     });
   });
 

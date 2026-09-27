@@ -79,7 +79,7 @@ function MobileMemberRow({
   activities: Activity[];
   isRichActivity: boolean;
   accentClass: string;
-  onClickMember: (userId: string) => void;
+  onClickMember: (member: MemberWithUser) => void;
 }) {
   const canonical = useCanonicalUserView(member.user);
   const { baseName } = parseFederatedUsername(canonical.username);
@@ -91,7 +91,7 @@ function MobileMemberRow({
 
   return (
     <div
-      onClick={() => onClickMember(member.userId)}
+      onClick={() => onClickMember(member)}
       className={rowClass}
     >
       <Avatar
@@ -105,7 +105,7 @@ function MobileMemberRow({
       <div className="flex-1 min-w-0">
         <Username
           username={displayName}
-          className={`text-[13.5px] leading-[1.2] font-medium truncate ${isOffline ? 'text-txt-tertiary' : (!colorStyle ? 'text-txt-primary' : '')}`}
+          className={`text-[13.5px] leading-[1.2] font-medium truncate ${colorStyle ? (isOffline ? 'opacity-60' : '') : (isOffline ? 'text-txt-tertiary' : 'text-txt-primary')}`}
           style={colorStyle}
         />
         {!isOffline && isFederationGlobeApplicable(canonical) && (
@@ -178,8 +178,8 @@ export function MobileMembersScreen({ params }: MobileMembersScreenProps) {
     return undefined;
   };
 
-  const handleMemberClick = (userId: string) => {
-    pushMobileScreen('user-profile', { userId });
+  const handleMemberClick = (member: MemberWithUser) => {
+    pushMobileScreen('user-profile', { userId: member.userId, spaceId: member.spaceId, memberUserId: member.userId });
   };
 
   const groupHeading = (kind: MemberGroupKind, label: string | null): string => {
@@ -189,7 +189,9 @@ export function MobileMembersScreen({ params }: MobileMembersScreenProps) {
   };
 
   const renderMember = (member: MemberWithUser, isOffline = false) => {
-    const colorStyle = isOffline ? undefined : getMemberColor(member);
+    // Roles do not depend on presence: an offline member keeps their colour,
+    // dimmed with the rest of the row.
+    const colorStyle = getMemberColor(member);
     const activities = userActivities.get(member.userId) ?? [];
     const isRichActivity = !isOffline && hasRichActivity(activities);
     const primary = getPrimaryActivity(activities);

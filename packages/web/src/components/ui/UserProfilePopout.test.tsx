@@ -61,7 +61,7 @@ describe('UserProfilePopout', () => {
       isMobile: false,
       activeModal: null,
       modalData: {},
-      userProfilePopout: { user: null, anchor: null, placement: 'right' },
+      userProfilePopout: { user: null, anchor: null, placement: 'right', member: null },
     });
     // jsdom has no layout: give every element the card's real measured size so
     // the popout can place itself off its own dimensions.

@@ -8,13 +8,15 @@ import { Username } from '../ui/Username';
 import { ProfileBio } from './ProfileBio';
 import { useSpaceStore, getApiForOrigin, resolveUserOrigin } from '../../stores/spaceStore';
 import { api } from '../../api/client';
-import { useUIStore } from '../../stores/uiStore';
+import { useUIStore, type ProfileMemberContext } from '../../stores/uiStore';
 import { getAvatarGradient, adjustColor, mutedGradient } from '../../utils/gradients';
 import { parseFederatedUsername } from '../../utils/identity';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { loadFederatedMutuals } from '../../utils/mutuals';
 import { replaceEmojiShortcodes } from '../../utils/emojiShortcodes';
 import { computeFloatingPosition, type AnchorRect, type Placement } from '../../hooks/useFloatingPosition';
+import { useProfileMemberRoles } from '../../hooks/useProfileMember';
+import { ProfileRoles } from './ProfileRoles';
 
 /** Gap between the card and the element it was opened from. */
 const ANCHOR_OFFSET = 8;
@@ -25,9 +27,11 @@ interface UserProfilePopoutProps {
   /** Rect of the element the card was opened from. */
   anchor: AnchorRect;
   placement?: Placement;
+  /** The space member the card was opened for; shows their roles in that space. */
+  member?: ProfileMemberContext | null;
 }
 
-export function UserProfilePopout({ user: propUser, onClose, anchor, placement = 'right' }: UserProfilePopoutProps) {
+export function UserProfilePopout({ user: propUser, onClose, anchor, placement = 'right', member = null }: UserProfilePopoutProps) {
   const { t } = useTranslation(['social', 'common']);
   const navigate = useNavigate();
   const f = useFormatters();
@@ -45,6 +49,7 @@ export function UserProfilePopout({ user: propUser, onClose, anchor, placement =
 
   const origin = resolveUserOrigin(user);
   const userApi = getApiForOrigin(origin);
+  const roles = useProfileMemberRoles(member);
 
   const [mutualCounts, setMutualCounts] = useState<{ friends: number; spaces: number } | null>(null);
 
@@ -112,7 +117,7 @@ export function UserProfilePopout({ user: propUser, onClose, anchor, placement =
 
   const handleViewFullProfile = () => {
     onClose();
-    openModal('userProfile', { userId: user.id, user, origin });
+    openModal('userProfile', { userId: user.id, user, origin, member });
   };
 
   const handleAvatarClick = (event: React.MouseEvent) => {
@@ -196,6 +201,13 @@ export function UserProfilePopout({ user: propUser, onClose, anchor, placement =
               </span>
               <ProfileBio bio={user.bio} />
             </div>
+          </>
+        )}
+
+        {roles.length > 0 && (
+          <>
+            <div className="border-t border-white/[0.06] my-3" />
+            <ProfileRoles roles={roles} />
           </>
         )}
 

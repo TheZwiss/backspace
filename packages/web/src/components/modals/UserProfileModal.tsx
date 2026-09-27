@@ -7,7 +7,7 @@ import type { User } from '@backspace/shared';
 import { Avatar } from '../ui/Avatar';
 import { Username } from '../ui/Username';
 import { ProfileBio } from '../ui/ProfileBio';
-import { useUIStore } from '../../stores/uiStore';
+import { useUIStore, type ProfileMemberContext } from '../../stores/uiStore';
 import { useSpaceStore, getApiForOrigin, resolveUserOrigin } from '../../stores/spaceStore';
 import { api } from '../../api/client';
 import { useSocialStore, type TaggedFriend, type TaggedFriendRequest } from '../../stores/socialStore';
@@ -17,6 +17,8 @@ import { parseFederatedUsername, isSelf, canonicalUserMatch } from '../../utils/
 import { loadFederatedMutuals, type TaggedMutualFriend, type MutualSpace } from '../../utils/mutuals';
 import { presenceLabel } from '../../i18n/presence';
 import { replaceEmojiShortcodes } from '../../utils/emojiShortcodes';
+import { getProfileMember, useProfileMemberRoles } from '../../hooks/useProfileMember';
+import { ProfileRoles } from '../ui/ProfileRoles';
 
 type Tab = 'about' | 'friends' | 'spaces';
 
@@ -82,6 +84,10 @@ export function UserProfileModal() {
   const userId = modalData?.userId as string | undefined;
   const passedUser = modalData?.user as User | undefined;
   const passedOrigin = (modalData?.origin as string | undefined) ?? '';
+  const memberContext = (modalData?.member as ProfileMemberContext | null | undefined) ?? null;
+  const memberSpaceId = memberContext?.spaceId;
+  const memberUserId = memberContext?.userId;
+  const roles = useProfileMemberRoles(memberContext);
 
   // Determine friendship status (federation-safe canonical matching)
   const friendship: FriendshipStatus = user
@@ -116,17 +122,26 @@ export function UserProfileModal() {
   useEffect(() => {
     if (isOpen && userId) {
       setActiveTab('about');
-      const origin = passedOrigin || (passedUser ? resolveUserOrigin(passedUser) : '');
+      // Opened with ids only (the mobile profile screen): a space member's
+      // user comes from the space it was opened in, whose instance is the one
+      // that id belongs to. Looking it up on the home instance would miss for
+      // any member of a federated space.
+      const fromSpace = !passedUser && memberSpaceId && memberUserId
+        ? getProfileMember({ spaceId: memberSpaceId, userId: memberUserId })
+        : undefined;
+      const knownUser = passedUser ?? fromSpace?.row.user;
+      const origin = passedOrigin
+        || (passedUser ? resolveUserOrigin(passedUser) : fromSpace?.origin ?? '');
       setUserOrigin(origin);
-      // Use the passed user directly (avoids 404 for federated users on local API)
-      if (passedUser) {
-        setUser(passedUser);
+      // Use a user already in hand (avoids 404 for federated users on local API)
+      if (knownUser) {
+        setUser(knownUser);
       } else {
         loadUser(userId, origin);
       }
-      loadMutuals(userId, passedUser);
+      loadMutuals(userId, knownUser);
     }
-  }, [isOpen, userId, passedUser, passedOrigin, loadUser, loadMutuals]);
+  }, [isOpen, userId, passedUser, passedOrigin, memberSpaceId, memberUserId, loadUser, loadMutuals]);
 
   // Reset on close
   useEffect(() => {
@@ -342,6 +357,8 @@ export function UserProfileModal() {
                   <ProfileBio bio={user.bio} />
                 </div>
               )}
+
+              <ProfileRoles roles={roles} />
 
               {/* Member Since */}
               <div>

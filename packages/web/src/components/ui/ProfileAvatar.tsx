@@ -1,7 +1,7 @@
 import React from 'react';
 import type { User } from '@backspace/shared';
 import { Avatar } from './Avatar';
-import { useUIStore } from '../../stores/uiStore';
+import { useUIStore, type ProfileMemberContext } from '../../stores/uiStore';
 import type { Placement } from '../../hooks/useFloatingPosition';
 
 type AvatarProps = React.ComponentProps<typeof Avatar>;
@@ -12,6 +12,8 @@ interface ProfileAvatarProps extends Omit<AvatarProps, 'onClick' | 'user'> {
   user?: User;
   /** Preferred side for the card; it flips automatically when there's no room. */
   placement?: Placement;
+  /** The space member this avatar depicts, when it sits in a space surface. */
+  member?: ProfileMemberContext;
 }
 
 /**
@@ -24,7 +26,7 @@ interface ProfileAvatarProps extends Omit<AvatarProps, 'onClick' | 'user'> {
  * `Avatar` made every one of those a trigger by accident, which is what let the
  * profile card re-anchor to its own picture and walk across the screen.
  */
-export function ProfileAvatar({ user, placement = 'right', ...avatarProps }: ProfileAvatarProps) {
+export function ProfileAvatar({ user, placement = 'right', member, ...avatarProps }: ProfileAvatarProps) {
   const openUserProfile = useUIStore((s) => s.openUserProfile);
 
   const handleClick = user
@@ -32,7 +34,7 @@ export function ProfileAvatar({ user, placement = 'right', ...avatarProps }: Pro
         // Rows that hold an avatar usually have their own click target (open the
         // DM, select the member). Opening the profile is the more specific intent.
         e.stopPropagation();
-        openUserProfile(user, e.currentTarget.getBoundingClientRect(), placement);
+        openUserProfile(user, e.currentTarget.getBoundingClientRect(), placement, member);
       }
     : undefined;
 

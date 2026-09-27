@@ -43,7 +43,7 @@ export const MentionBadge = React.memo(function MentionBadge({ userId }: Mention
   const handleClick = (e: React.MouseEvent) => {
     if (!member || !memberUser) return;
     e.stopPropagation();
-    openUserProfile(memberUser, e.currentTarget.getBoundingClientRect());
+    openUserProfile(memberUser, e.currentTarget.getBoundingClientRect(), undefined, { spaceId: member.spaceId, userId: member.userId });
   };
 
   // Build inline styles: role-colored text with tinted background

@@ -284,12 +284,6 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
     setShowReactionPicker(false);
   }, [addReaction, message.id]);
 
-  const handleUsernameClick = (e: React.MouseEvent) => {
-    if (!message.user) return;
-    e.stopPropagation();
-    openUserProfile(message.user, e.currentTarget.getBoundingClientRect());
-  };
-
   const handleContextMenu = (e: React.MouseEvent) => {
     if (pending) {
       e.preventDefault();
@@ -399,6 +393,19 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
 
   const roleColor = getMemberDisplayColor(message.userId);
 
+  // A space message's author is a member of the space it was posted in; the
+  // profile opened from it shows their roles there. message.userId is the id
+  // on the space's instance, the same id the loaded member list carries.
+  const authorMember = !isDmMessage && currentSpaceId
+    ? { spaceId: currentSpaceId, userId: message.userId }
+    : undefined;
+
+  const handleUsernameClick = (e: React.MouseEvent) => {
+    if (!message.user) return;
+    e.stopPropagation();
+    openUserProfile(message.user, e.currentTarget.getBoundingClientRect(), undefined, authorMember);
+  };
+
   const replyRoleColor = (msg: { userId: string }) => getMemberDisplayColor(msg.userId);
 
   // Self-mention highlighting
@@ -435,6 +442,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
               name={displayName}
               size={40}
               user={displayIdentity}
+              member={authorMember}
               className="hover:drop-shadow-md transition-all active:translate-y-[1px]"
             />
           </div>

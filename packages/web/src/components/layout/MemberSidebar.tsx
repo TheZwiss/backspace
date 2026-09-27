@@ -81,7 +81,7 @@ function MemberSidebarRow({
   activities: Activity[];
   isRichActivity: boolean;
   accentClass: string;
-  onClickMember: (e: React.MouseEvent, user: MemberWithUser['user']) => void;
+  onClickMember: (e: React.MouseEvent, member: MemberWithUser, user: MemberWithUser['user']) => void;
 }) {
   const canonical = useCanonicalUserView(member.user);
   const { baseName } = parseFederatedUsername(canonical.username);
@@ -94,7 +94,7 @@ function MemberSidebarRow({
   return (
     <div
       key={member.userId}
-      onClick={(e) => onClickMember(e, canonical)}
+      onClick={(e) => onClickMember(e, member, canonical)}
       className={rowClass}
     >
       <Avatar
@@ -108,7 +108,7 @@ function MemberSidebarRow({
       <div className="flex-1 min-w-0">
         <Username
           username={displayName}
-          className={`text-[13.5px] leading-[1.2] font-medium truncate ${isOffline ? 'text-txt-tertiary' : (!colorStyle ? 'text-txt-primary' : '')}`}
+          className={`text-[13.5px] leading-[1.2] font-medium truncate ${colorStyle ? (isOffline ? 'opacity-60' : '') : (isOffline ? 'text-txt-tertiary' : 'text-txt-primary')}`}
           style={colorStyle}
         />
         {!isOffline && isFederationGlobeApplicable(canonical) && (
@@ -177,9 +177,9 @@ export function MemberSidebar() {
     return undefined;
   };
 
-  const handleMemberClick = (e: React.MouseEvent, user: MemberWithUser['user']) => {
+  const handleMemberClick = (e: React.MouseEvent, member: MemberWithUser, user: MemberWithUser['user']) => {
     e.stopPropagation();
-    openUserProfile(user, e.currentTarget.getBoundingClientRect(), 'left');
+    openUserProfile(user, e.currentTarget.getBoundingClientRect(), 'left', { spaceId: member.spaceId, userId: member.userId });
   };
 
   const groupHeading = (kind: MemberGroupKind, label: string | null): string => {
@@ -189,7 +189,9 @@ export function MemberSidebar() {
   };
 
   const renderMember = (member: MemberWithUser, isOffline = false) => {
-    const colorStyle = isOffline ? undefined : getMemberColor(member);
+    // Roles do not depend on presence: an offline member keeps their colour,
+    // dimmed with the rest of the row.
+    const colorStyle = getMemberColor(member);
     const activities = userActivities.get(member.userId) ?? [];
     const isRichActivity = !isOffline && hasRichActivity(activities);
     const primary = getPrimaryActivity(activities);
