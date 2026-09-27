@@ -1658,6 +1658,8 @@ Native users' status (and optional rich activities) is projected to peers via th
 
 No-op for replicated users (we don't own their presence).
 
+**Detached accounts have no status on other instances.** `queuePresenceRelay` and `snapshotPresenceForPeer` skip every row with `home_instance` set, detached ones included, although a detached account owns its chosen status locally (`ownsChosenStatus`). This is deliberate: a detached account's outbound identity is still its old home identity (`relayActorOfUser`, the DM message builder and client registration on other instances all send `homeUserId` + the reset `homeInstance`), and the receiver below only accepts a `presence_update` from the identity's home instance. A relay under the old identity would be rejected by every peer as `attribution_mismatch`; one under this instance's own id would match no row anywhere. Changing that means giving detached accounts a new outbound identity or a new attribution rule (#310).
+
 **Targeting:** broadcast to all active peers (mirrors `profile_update`). Peers without a stub silently no-op. Privacy: status is already public to anyone authorized to see the user via friend/DM/space relationships, so broadcast-fanout adds no new disclosure surface.
 
 **Coalescing:** `entityId = userId`, `contextId = userId`. Rapid status flaps coalesce to the latest queued event per peer.
