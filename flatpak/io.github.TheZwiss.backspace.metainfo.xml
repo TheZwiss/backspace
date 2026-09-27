@@ -48,20 +48,25 @@
 
   <screenshots>
     <screenshot type="default">
-      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.6.0/docs/screenshots/chat.webp</image>
+      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.6.1/docs/screenshots/chat.webp</image>
       <caption>Text channels with replies, reactions, and typing indicators</caption>
     </screenshot>
     <screenshot>
-      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.6.0/docs/screenshots/voice-video-grid.webp</image>
+      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.6.1/docs/screenshots/voice-video-grid.webp</image>
       <caption>Voice and video calls with screen sharing</caption>
     </screenshot>
     <screenshot>
-      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.6.0/docs/screenshots/user-discovery.webp</image>
+      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.6.1/docs/screenshots/user-discovery.webp</image>
       <caption>Discover users across federated instances</caption>
     </screenshot>
   </screenshots>
 
   <releases>
+    <release version="1.6.1" date="2026-09-27">
+      <description>
+        <p>Fixes two security issues in how an instance accepts events from the instances it is connected to, and a round of follow-ups to 1.6.0: quieter notifications, screen sharing that survives a codec change, a faster start, and fixes for connections between instances.</p>
+      </description>
+    </release>
     <release version="1.6.0" date="2026-09-27">
       <description>
         <p>Replies jump to the message they answer, reactions show who reacted, channels can be renamed, Do Not Disturb silences notifications, and a round of fixes for direct messages and screen sharing between instances.</p>
