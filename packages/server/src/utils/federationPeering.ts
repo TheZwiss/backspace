@@ -277,11 +277,38 @@ export function settledPeeringResult(origin: string): EnsurePeeredResult | null 
 const inFlightPeering = new Map<string, Promise<EnsurePeeredResult>>();
 
 /**
- * Whether ensurePeered has a handshake with `origin` in flight. `origin` must
- * be normalized (validateOrigin), as the map is keyed by the normalized origin.
+ * Origins an admin's `POST /peer/initiate` is handshaking with right now. That
+ * route runs its own exchange instead of going through ensurePeered, so it
+ * claims the origin here; while the claim is held ensurePeered starts no
+ * handshake of its own for that origin. Two `/peer/accept` requests in flight
+ * with the same origin race on the remote, and the loser's answer (409
+ * PEER_EXISTS_RESET_REQUIRED) makes /peer/initiate discard its row.
+ */
+const adminHandshakes = new Set<string>();
+
+/**
+ * Whether a handshake with `origin` is in flight on this instance, from
+ * ensurePeered or from an admin's /peer/initiate. `origin` must be normalized
+ * (validateOrigin), as both maps are keyed by the normalized origin.
  */
 export function isHandshakeInFlight(origin: string): boolean {
-  return inFlightPeering.has(origin);
+  return inFlightPeering.has(origin) || adminHandshakes.has(origin);
+}
+
+/**
+ * Claim `origin` for an admin-initiated handshake. Returns false, claiming
+ * nothing, when a handshake with it is already in flight. A successful claim
+ * must be released with releaseAdminHandshake once the exchange has settled.
+ */
+export function claimAdminHandshake(origin: string): boolean {
+  if (isHandshakeInFlight(origin)) return false;
+  adminHandshakes.add(origin);
+  return true;
+}
+
+/** Release a claim taken with claimAdminHandshake. */
+export function releaseAdminHandshake(origin: string): void {
+  adminHandshakes.delete(origin);
 }
 
 /**
@@ -321,6 +348,13 @@ export async function ensurePeered(
   if (existing) {
     const settled = settledResultFor(existing);
     if (settled) return settled;
+  }
+
+  // An admin's /peer/initiate owns this origin's handshake right now. Its
+  // outcome settles the row; a second exchange would only race it, and
+  // neither gate below may act on the row while the admin's exchange runs.
+  if (adminHandshakes.has(normalized)) {
+    return { status: 'failed', error: 'An admin-initiated handshake with this instance is in progress' };
   }
 
   // Pre-handshake gate: refuse if we have an unresolved inbound approval-request
@@ -663,9 +697,10 @@ function discardCreatedPendingPeer(peerId: string, origin: string): void {
   }
 }
 
-/** Clear in-flight peering map (for tests). */
+/** Clear in-flight peering state (for tests). */
 export function _clearInFlightPeering(): void {
   inFlightPeering.clear();
+  adminHandshakes.clear();
 }
 
 /**

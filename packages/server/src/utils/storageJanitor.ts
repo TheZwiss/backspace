@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { and, eq, inArray, isNotNull, isNull, lt, lte } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull, lt, lte, notExists, notInArray } from 'drizzle-orm';
 import { FileStore } from '@tus/file-store';
 import { config } from '../config.js';
 import { getDb, getRawDb, schema } from '../db/index.js';
@@ -423,6 +423,88 @@ export function cleanupFederationOutbox(): number {
     .where(lt(schema.federationOutbox.expiresAt, Date.now()))
     .run();
   return result.changes;
+}
+
+/**
+ * How old an `initiatedBy = 'auto'` pending peer row must be before
+ * cleanupUnusedAutoPendingPeers may remove it. One hour, the same grace
+ * UNLINKED_AGE_MS gives an upload that was never attached to a message, and the
+ * janitor's own interval: a row that local traffic has just created is never
+ * swept on the sweep that first sees it, and the worker has made several
+ * handshake attempts on it (immediately, then 1m, 5m, 15m later) before it can go.
+ */
+export const AUTO_PENDING_PEER_GRACE_MS = 60 * 60 * 1000;
+
+/**
+ * Outbox event types an unused auto pending row may still carry. A row is kept
+ * for the entries that are waiting on its handshake, but untargeted presence
+ * broadcasts (`queueOutboxEvent` with no targets reaches `pending` peers too)
+ * keep landing on every row, so they cannot be what keeps one alive. Dropping
+ * them loses nothing: presence never goes into the mutation log, a presence
+ * event for a user the receiver has no copy of is a no-op there, and every
+ * activation sends the peer a fresh snapshot (`snapshotPresenceForPeer` from
+ * `onPeerActivated`). Every other entry, including a `profile_update`
+ * broadcast, keeps the row until the entry's own TTL.
+ */
+const DISPOSABLE_PENDING_PEER_EVENT_TYPES = ['presence_update'] as const;
+
+/**
+ * Remove `pending` peer rows with `initiatedBy = 'auto'` that nothing is
+ * waiting on: older than AUTO_PENDING_PEER_GRACE_MS, with no outbox entry other
+ * than presence broadcasts, and no handshake with the origin in flight (that
+ * handshake still writes to the row). Such a row is what local traffic leaves
+ * behind once its messages have expired at the relay TTL; left alone it lives
+ * forever and makes an admin's `/peer/initiate` for the origin a takeover of a
+ * dead row. Rows an admin or the remote created, and auto rows that have left
+ * `pending`, are never touched.
+ *
+ * The presence entries are deleted explicitly with the row, without relying
+ * on the outbox foreign key's cascade. Returns the number of rows removed.
+ */
+export function cleanupUnusedAutoPendingPeers(
+  isHandshakeInFlight: (origin: string) => boolean,
+  now: number = Date.now(),
+): number {
+  const db = getDb();
+  const unusedRowConditions = and(
+    eq(schema.federationPeers.status, 'pending'),
+    eq(schema.federationPeers.initiatedBy, 'auto'),
+    lt(schema.federationPeers.createdAt, now - AUTO_PENDING_PEER_GRACE_MS),
+    notExists(
+      db.select({ id: schema.federationOutbox.id })
+        .from(schema.federationOutbox)
+        .where(and(
+          eq(schema.federationOutbox.peerId, schema.federationPeers.id),
+          notInArray(schema.federationOutbox.eventType, [...DISPOSABLE_PENDING_PEER_EVENT_TYPES]),
+        )),
+    ),
+  );
+
+  const candidates = db
+    .select({ id: schema.federationPeers.id, origin: schema.federationPeers.origin })
+    .from(schema.federationPeers)
+    .where(unusedRowConditions)
+    .all()
+    .filter((peer) => !isHandshakeInFlight(peer.origin));
+
+  let removed = 0;
+  for (const peer of candidates) {
+    const deleted = db.transaction((tx) => {
+      const row = tx.delete(schema.federationPeers)
+        .where(and(eq(schema.federationPeers.id, peer.id), unusedRowConditions))
+        .run();
+      if (row.changes === 0) return false;
+      tx.delete(schema.federationOutbox)
+        .where(eq(schema.federationOutbox.peerId, peer.id))
+        .run();
+      return true;
+    });
+    if (deleted) {
+      removed += 1;
+      console.log(`[storage-janitor] Removed unused auto-created pending peer row for ${peer.origin}`);
+    }
+  }
+  return removed;
 }
 
 /**
@@ -885,6 +967,7 @@ let lastStorageCleanupAt = 0;
  *  - Old mutation log entries
  *  - Stale file queue entries
  *  - Soft-deleted DM channels past grace period
+ *  - Unused auto-created pending peer rows (cleanupUnusedAutoPendingPeers)
  *  - Once-per-day: cleanupStorage (orphan files + unlinked + dangling)
  */
 export async function runFederationJanitor(): Promise<void> {
@@ -894,10 +977,19 @@ export async function runFederationJanitor(): Promise<void> {
     const fileQ = cleanupFederationFileQueue();
     const dmGc = cleanupSoftDeletedDmChannels();
 
-    const total = outbox + mutLog + fileQ + dmGc;
+    // After the outbox expiry above, so a row whose last real entry just hit
+    // its TTL goes in the same sweep.
+    const { isHandshakeInFlight } = await import('./federationPeering.js');
+    const pendingPeers = cleanupUnusedAutoPendingPeers(isHandshakeInFlight);
+    if (pendingPeers > 0) {
+      const { connectionManager } = await import('../ws/handler.js');
+      connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
+    }
+
+    const total = outbox + mutLog + fileQ + dmGc + pendingPeers;
     if (total > 0) {
       console.log(
-        `[storage-janitor] Federation GC sweep: outbox=${outbox} mutationLog=${mutLog} fileQueue=${fileQ} dmChannels=${dmGc}`,
+        `[storage-janitor] Federation GC sweep: outbox=${outbox} mutationLog=${mutLog} fileQueue=${fileQ} dmChannels=${dmGc} pendingPeers=${pendingPeers}`,
       );
     }
 

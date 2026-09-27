@@ -611,8 +611,8 @@ function resolvePendingPeers(now: number): void {
 async function resolvePendingPeer(peerId: string, peerOrigin: string, startedAt: number): Promise<void> {
   const db = getDb();
 
-  // Another caller (a DM send, a friend add) is already handshaking with this
-  // origin through ensurePeered. Its outcome settles the row; starting
+  // Another caller (a DM send, a friend add, an admin's /peer/initiate) is
+  // already handshaking with this origin. Its outcome settles the row; starting
   // a second exchange would only race it. Not an attempt, so pacing is untouched.
   if (isHandshakeInFlight(peerOrigin)) return;
 

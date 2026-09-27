@@ -127,7 +127,7 @@ Both instances store the **same** HMAC secret. The initiating instance generates
 | Status | Outbox delivery | Health check | Relay accepts | Re-initiation | Admin clear |
 |--------|----------------|--------------|---------------|---------------|-------------|
 | `active` | Yes | No | Yes | No (returns existing) | N/A |
-| `pending` | No (handshake retried on the recovery backoff while entries are queued) | No | No | No (returns 409) | N/A |
+| `pending` | No (handshake retried on the recovery backoff while entries are queued) | No | No | `'auto'` row: taken over by `/peer/initiate`; `'admin'`/`'remote'` row or a handshake in flight: 409 | `'auto'` row with nothing but presence queued: janitor removes it after 1h |
 | `awaiting_approval` | No | No | No | Returns pending; no re-handshake | Yes (admin deletes) |
 | `unreachable` | No (entries wait) | Yes — demand-driven probe (backoff while mail queued; 15-min backstop when silent) | Yes (resets to active) | No | N/A |
 | `needs_attention` | No (entries bounded by TTL) | No | Yes (200 no-update, same as active) | No (admin must Reset first) | Yes (admin Reset deletes record) |
@@ -295,13 +295,17 @@ The other lifecycle exits write notifications and cascade-delete the parent at t
 
 Admin-initiated paths (`/peer/initiate`, `/approve`) do NOT call `ensurePeered`. They issue their own `fetch` and run their own activation logic. The gate does not affect admin power; admins retain full ability to pre-peer or approve outbound regardless of the setting.
 
+**`/peer/initiate` and an existing `pending` row.** A row with `initiated_by = 'auto'` is taken over instead of refused: the route keeps the row, its `hmac_secret` and its queued outbox entries, sets `initiated_by = 'admin'` and runs its handshake with that secret. On `202` the row becomes the admin-initiated `awaiting_approval` row; on `200` it activates (or parks in `needs_attention` if `/epoch` does not verify) as a fresh row would. On a failure (network error, timeout, non-2xx, `409 PEER_EXISTS_RESET_REQUIRED`) the row is handed back unchanged apart from the attempt: `initiated_by = 'auto'`, `probe_attempts + 1`, `last_probe_at` = the attempt's start, so the outbox worker resumes its paced retries; a row the request created itself is still deleted. A `pending` row an admin or the remote created still answers `409`.
+
+**One handshake per origin.** `/peer/initiate` claims the origin with `claimAdminHandshake` (`utils/federationPeering.ts`) before it touches any row, and releases it when the request settles. The claim fails, and the route answers `409 "already in progress"`, while `ensurePeered` has a handshake with the origin in flight; while the claim is held, `ensurePeered` returns `failed` for the origin without sending anything, and the outbox worker and the janitor leave the row alone (`isHandshakeInFlight`). Without it, two `/peer/accept` requests for one origin raced on the remote, and the loser's `409 PEER_EXISTS_RESET_REQUIRED` made `/peer/initiate` delete the row the winner had just activated.
+
 ### Peer-row provenance
 
 `federation_peers.initiated_by` records **who caused a peer row to exist**. It is the fact both peering gates consult when `autoAcceptPeering=0`, because a bare `pending` row is not evidence of anything on its own — several paths create one.
 
 | Value | Written by | Meaning |
 |-------|-----------|---------|
-| `'admin'` | `POST /peer/initiate`; the inbound, outbound, and deny handlers in `routes/federation/handlers/approvals.ts` | A local admin explicitly authorized (or refused) peering with this origin. |
+| `'admin'` | `POST /peer/initiate` (a fresh row, or an `'auto'` pending row it takes over; a takeover whose handshake fails goes back to `'auto'`); the inbound, outbound, and deny handlers in `routes/federation/handlers/approvals.ts` | A local admin explicitly authorized (or refused) peering with this origin. |
 | `'auto'` | `createAutoPlaceholderPeer` (the outbox placeholder), `performHandshake` inside `ensurePeered` | Local traffic brought the origin up. No admin ruled on it. |
 | `'remote'` | the new-peer branch of `POST /peer/accept` | The remote instance introduced itself and we accepted (only reachable with `autoAcceptPeering=1`). |
 
@@ -1989,8 +1993,11 @@ All workers are started by `startFederationWorkers()` on server boot and stopped
 | `federation_file_queue` (completed) | `createdAt < (now - 7 days)` | 7 days |
 | `federation_file_queue` (any) | `expiresAt < now` | 30 days (set at queue time) |
 | `dm_channels` (soft-deleted) | `deletedAt < (now - 24h)` | 24-hour grace period |
+| `federation_peers` (unused auto rows) | `status = 'pending'`, `initiated_by = 'auto'`, `created_at < (now - 1h)`, no outbox entry other than `presence_update`, no handshake with the origin in flight | 1-hour grace (`AUTO_PENDING_PEER_GRACE_MS`) |
 
 DM channel hard-delete cascades: reactions, embeds, attachments (DB rows + disk files), messages, members, outbox entries, mutation log entries, file queue entries.
+
+**Unused auto pending peer rows (`cleanupUnusedAutoPendingPeers`).** A `pending` row that local traffic created is kept for the entries waiting on its handshake. Once those are gone (typically expired at the relay TTL while the origin never answered) nothing removed the row, because untargeted broadcasts (`queueOutboxEvent` with no targets reaches `pending` peers) keep queueing `presence_update` onto it, and while it existed `/peer/initiate` for the origin answered `409`. The sweep runs after the outbox expiry in the same janitor pass and deletes such a row together with its presence entries (explicitly, not via the foreign-key cascade), then sends `federation_peers_changed` to admins. Only `presence_update` entries are disposable: presence never enters the mutation log, a presence event for a user the receiver has no copy of is a no-op there, and every activation sends a fresh snapshot (`snapshotPresenceForPeer` in `onPeerActivated`), so a later peering loses nothing. Any other entry, including a `profile_update` broadcast, keeps the row until that entry's own TTL. The one-hour grace equals `UNLINKED_AGE_MS` and the janitor interval, so a row is never removed by the sweep that first sees it and the worker has made several paced attempts on it first. Rows an admin or the remote created, and auto rows that left `pending`, are never touched.
 
 ### Worker Startup Gate
 
