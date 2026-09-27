@@ -123,6 +123,7 @@
     "custom": "Manuell",
     "auto": "Auto",
     "customBitrateDisabled": "Eigene Bitrate vom Administrator deaktiviert",
+    "customBitrateDisabledByHost": "Eigene Bitrate von {{host}} deaktiviert",
     "systemAudio": "Systemaudio",
     "chromeEchoNote": "Chrome kann Backspace-Audio ausschließen, wenn die Aufnahmeart dies unterstützt",
     "electronWindowsAudioNote": "Windows-Loopback kann Anrufaudio erfassen, wenn restrictOwnAudio nicht unterstützt wird",

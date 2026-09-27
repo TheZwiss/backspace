@@ -123,6 +123,7 @@
     "custom": "Вручную",
     "auto": "Авто",
     "customBitrateDisabled": "Пользовательский битрейт отключён администратором",
+    "customBitrateDisabledByHost": "Пользовательский битрейт отключён на {{host}}",
     "systemAudio": "Системный звук",
     "chromeEchoNote": "Chrome может исключить звук Backspace, если это поддерживает выбранный тип захвата",
     "electronWindowsAudioNote": "Windows loopback может захватить звук звонка, если restrictOwnAudio не поддерживается",

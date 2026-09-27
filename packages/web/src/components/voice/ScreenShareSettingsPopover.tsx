@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useFloatingPosition } from '../../hooks/useFloatingPosition';
 import { usePortalContainer } from '../../hooks/usePortalContainer';
-import { StreamQualityControls, StreamSummary } from './StreamQualityControls';
+import { StreamQualityControls, StreamSummary, StreamHostSubtitle } from './StreamQualityControls';
 
 interface ScreenShareSettingsPopoverProps {
   open: boolean;
@@ -53,7 +53,8 @@ export function ScreenShareSettingsPopover({ open, onClose, anchorRef, onStopSha
       className="w-[260px] glass rounded-lg overflow-hidden"
     >
       <div className="px-3 py-2 border-b border-border-hard">
-        <span className="text-[14px] font-bold text-txt-primary">{t('voice:streamSettings.title')}</span>
+        <div className="text-[14px] font-bold text-txt-primary">{t('voice:streamSettings.title')}</div>
+        <StreamHostSubtitle className="mt-0.5" />
       </div>
 
       <div className="px-3 py-3">

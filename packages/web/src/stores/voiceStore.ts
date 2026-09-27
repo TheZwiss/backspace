@@ -49,6 +49,14 @@ interface VoiceState {
   isDeafened: boolean;
   isCameraOn: boolean;
   isScreenSharing: boolean;
+  /**
+   * Origin of the instance that issued the current LiveKit token (`''` = home),
+   * recorded by `useLiveKit.connect`. That instance hosts the room, so its
+   * streaming limits are the ones a screen share obeys. Null when the token was
+   * relayed from an instance this client holds no session with (a federated DM
+   * call hosted elsewhere): its limits cannot be asked for. Not persisted.
+   */
+  livekitHostOrigin: string | null;
   /** System audio of the live share; null while not sharing. Not persisted. */
   screenShareAudio: ScreenShareAudioState | null;
   participants: ParticipantInfo[];
@@ -205,6 +213,7 @@ export const useVoiceStore = create<VoiceState>()(
       isCameraOn: false,
       isScreenSharing: false,
       screenShareAudio: null,
+      livekitHostOrigin: '',
       micPermissionDenied: false,
       participants: [],
       speakingParticipantIds: new Set(),

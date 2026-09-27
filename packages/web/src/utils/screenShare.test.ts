@@ -23,6 +23,8 @@ vi.mock('./streamHostLimits', () => ({
     maxBitrateKbps: 20_000,
     allowCustomBitrate: true,
     bitrateMatrixOverrides: null,
+    allowedResolutions: [540, 720, 1080, 1440, 2160, 'native'],
+    allowedFramerates: [30, 45, 60, 75, 90, 120],
   }),
 }));
 vi.mock('./livekitInternals', () => internals);

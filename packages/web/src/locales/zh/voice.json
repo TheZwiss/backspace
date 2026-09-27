@@ -123,6 +123,7 @@
     "custom": "自定义",
     "auto": "自动",
     "customBitrateDisabled": "管理员已禁用自定义码率",
+    "customBitrateDisabledByHost": "{{host}} 已禁用自定义码率",
     "systemAudio": "系统音频",
     "chromeEchoNote": "当捕获类型支持时，Chrome 可以排除 Backspace 自身的音频",
     "electronWindowsAudioNote": "当不支持 restrictOwnAudio 时，Windows 环回可能会捕获通话音频",

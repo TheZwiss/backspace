@@ -123,6 +123,7 @@
     "custom": "Custom",
     "auto": "Auto",
     "customBitrateDisabled": "Custom bitrate disabled by administrator",
+    "customBitrateDisabledByHost": "Custom bitrate turned off by {{host}}",
     "systemAudio": "System Audio",
     "chromeEchoNote": "Chrome can exclude Backspace audio when the capture type supports it",
     "electronWindowsAudioNote": "Windows loopback may capture call audio when restrictOwnAudio is unsupported",

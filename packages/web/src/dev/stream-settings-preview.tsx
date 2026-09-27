@@ -5,10 +5,9 @@
 // per `?scene=` so every state can be screenshotted without a voice call.
 import { createRoot } from 'react-dom/client';
 import type { InstanceStreamingLimits } from '@backspace/shared';
-import { StreamQualityControls, StreamSummary } from '../components/voice/StreamQualityControls';
+import { StreamQualityControls, StreamSummary, StreamHostSubtitle } from '../components/voice/StreamQualityControls';
 import { useVoiceStore } from '../stores/voiceStore';
 import type { ScreenShareAudioState } from '../stores/voiceStore';
-import { useSpaceStore } from '../stores/spaceStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import i18n, { initI18n } from '../i18n';
 import { initializeInterfaceScale } from '../platform/interfaceScale';
@@ -42,7 +41,6 @@ const STRICT_LIMITS: InstanceStreamingLimits = {
 
 interface Scene {
   caption: string;
-  voiceChannelId: string;
   origin: string;
   hostLimits: InstanceStreamingLimits;
   /** System audio of a live share; absent = not sharing (the setup screen's view). */
@@ -52,46 +50,39 @@ interface Scene {
 const SCENES: Record<string, Scene> = {
   home: {
     caption: 'Home voice channel: home limits, no host line',
-    voiceChannelId: 'vc-home',
     origin: '',
     hostLimits: HOME_LIMITS,
   },
   remote: {
-    caption: 'Federated space: the host allows 540p/720p, 30 fps, 3 Mbps, no custom bitrate',
-    voiceChannelId: 'vc-remote',
+    caption: 'Federated space, saved 1080p60: the host allows 540p/720p, 30 fps, 3 Mbps, no custom bitrate',
     origin: 'https://orbit.ddns.net',
     hostLimits: STRICT_LIMITS,
   },
   'remote-long': {
-    caption: 'Federated space on a host with a long name',
-    voiceChannelId: 'vc-remote',
+    caption: 'Federated space on a host with a long name (wraps), saved 1080p60',
     origin: 'https://voice-and-streaming.a-rather-long-community-instance-name.example.org',
     hostLimits: { ...STRICT_LIMITS, allowCustomBitrate: true },
   },
   'live-published': {
     caption: 'Live share sending system audio: the switch is on and can be turned off',
-    voiceChannelId: 'vc-home',
     origin: '',
     hostLimits: HOME_LIMITS,
     live: { audio: 'published', preference: true },
   },
   'live-held': {
     caption: 'Live share, audio turned off mid-stream: capture held, the switch can turn it back on',
-    voiceChannelId: 'vc-home',
     origin: '',
     hostLimits: HOME_LIMITS,
     live: { audio: 'held', preference: false },
   },
   'live-acquiring': {
     caption: 'Desktop app adding loopback audio to a running share',
-    voiceChannelId: 'vc-home',
     origin: '',
     hostLimits: HOME_LIMITS,
     live: { audio: 'acquiring', preference: true },
   },
   'live-unavailable': {
     caption: 'Browser share started without audio: cannot be added mid-stream, switch disabled and explained',
-    voiceChannelId: 'vc-home',
     origin: '',
     hostLimits: HOME_LIMITS,
     live: { audio: 'unavailable', preference: true },
@@ -99,13 +90,12 @@ const SCENES: Record<string, Scene> = {
 };
 
 function seed(scene: Scene): void {
-  useSpaceStore.setState({ channelOriginMap: new Map([[scene.voiceChannelId, scene.origin]]) });
   useSettingsStore.setState({
     streamingLimits: scene.origin ? HOME_LIMITS : scene.hostLimits,
     streamingLimitsByOrigin: scene.origin ? { [scene.origin]: scene.hostLimits } : {},
   });
   useVoiceStore.setState({
-    currentVoiceChannelId: scene.voiceChannelId,
+    livekitHostOrigin: scene.origin,
     isScreenSharing: scene.live !== undefined,
     screenShareAudio: scene.live?.audio ?? null,
     screenShareConfig: {
@@ -120,7 +110,8 @@ function Popover() {
   return (
     <div className="w-[260px] glass rounded-lg overflow-hidden">
       <div className="px-3 py-2 border-b border-border-hard">
-        <span className="text-[14px] font-bold text-txt-primary">{i18n.t('voice:streamSettings.title')}</span>
+        <div className="text-[14px] font-bold text-txt-primary">{i18n.t('voice:streamSettings.title')}</div>
+        <StreamHostSubtitle className="mt-0.5" />
       </div>
       <div className="px-3 py-3">
         <StreamQualityControls />
@@ -136,8 +127,11 @@ function Popover() {
 function Drawer() {
   return (
     <div className="w-[340px] glass border-l border-border-hard flex flex-col shadow-2xl rounded-r-lg">
-      <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-border-hard">
-        <span className="text-[15px] font-bold text-txt-primary">{i18n.t('voice:streamSettings.title')}</span>
+      <div className="flex items-start justify-between gap-3 px-5 pt-4 pb-3 border-b border-border-hard">
+        <div className="min-w-0">
+          <div className="text-[15px] font-bold text-txt-primary">{i18n.t('voice:streamSettings.title')}</div>
+          <StreamHostSubtitle className="mt-0.5" />
+        </div>
       </div>
       <div className="px-5 py-4">
         <StreamQualityControls />

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Room, RoomEvent, DisconnectReason, ConnectionState, Track, TrackEvent } from 'livekit-client';
 import { useLiveKit } from './useLiveKit';
 import { useVoiceStore } from '../stores/voiceStore';
+import { useSettingsStore } from '../stores/settingsStore';
 
 const mocks = vi.hoisted(() => ({
   token: vi.fn(),
@@ -16,6 +17,8 @@ const mocks = vi.hoisted(() => ({
   },
   scheduleScreenShareOverdrive: vi.fn(),
   syncScreenShareAudio: vi.fn(),
+  applyOverdrive: vi.fn(),
+  channelOrigin: vi.fn<(channelId: string) => string>(() => ''),
 }));
 vi.mock('livekit-client', async importOriginal => {
   const sdk = await importOriginal<typeof import('livekit-client')>();
@@ -37,11 +40,12 @@ vi.mock('../utils/screenShare', async importOriginal => {
     ...original,
     scheduleScreenShareOverdrive: mocks.scheduleScreenShareOverdrive,
     syncScreenShareAudio: mocks.syncScreenShareAudio,
+    applyOverdrive: mocks.applyOverdrive,
   };
 });
 vi.mock('../stores/spaceStore', () => ({
   getApiForOrigin: () => ({ livekit: { token: mocks.token, dmToken: mocks.token } }),
-  getChannelOrigin: () => '', getMyUserIdForOrigin: () => 'me',
+  getChannelOrigin: (channelId: string) => mocks.channelOrigin(channelId), getMyUserIdForOrigin: () => 'me',
   useSpaceStore: { getState: () => ({ channelToSpaceMap: new Map(), members: [], dmChannels: [] }) },
 }));
 
@@ -53,6 +57,9 @@ beforeEach(() => {
   mocks.audio.setInputDevice.mockResolvedValue(null);
   useVoiceStore.setState({ ...useVoiceStore.getInitialState(), isMuted: false });
   mocks.connect.mockResolvedValue(undefined);
+  mocks.channelOrigin.mockReturnValue('');
+  mocks.syncScreenShareAudio.mockResolvedValue(undefined);
+  mocks.applyOverdrive.mockResolvedValue(true);
   mocks.disconnect.mockImplementation(async function (this: Room) {
     this.emit(RoomEvent.Disconnected, DisconnectReason.CLIENT_INITIATED);
   });
@@ -290,5 +297,61 @@ describe('screen-share audio published mid-stream', () => {
     await act(async () => { await result.current.connect('channel'); });
     const publication = publishFromRemote(result.current.room!, Track.Source.ScreenShareAudio, false);
     expect(publication.setSubscribed).not.toHaveBeenCalled();
+  });
+});
+
+describe('the instance hosting the call', () => {
+  const REMOTE = 'https://remote.example';
+  const limits = (maxBitrateKbps: number) => ({
+    maxBitrateKbps, minBitrateKbps: 500, bitrateStepKbps: 500,
+    allowedResolutions: [540, 720, 1080], allowedFramerates: [30, 45, 60],
+    maxResolution: 1080, maxFramerate: 60, discoveryEnabled: true, directoryEnabled: false,
+    directoryConfigured: false, bitrateMatrixOverrides: null, allowCustomBitrate: true,
+  });
+
+  it('records the origin that issued the token and asks it for its limits', async () => {
+    mocks.channelOrigin.mockReturnValue(REMOTE);
+    const fetchFor = vi.spyOn(useSettingsStore.getState(), 'fetchStreamingLimitsFor').mockResolvedValue(undefined);
+    const { result } = renderHook(() => useLiveKit());
+    await act(async () => { await result.current.connect('channel'); });
+    expect(useVoiceStore.getState().livekitHostOrigin).toBe(REMOTE);
+    expect(fetchFor).toHaveBeenCalledWith(REMOTE);
+  });
+
+  it('records a DM call on a remote origin as hosted there', async () => {
+    mocks.channelOrigin.mockReturnValue(REMOTE);
+    vi.spyOn(useSettingsStore.getState(), 'fetchStreamingLimitsFor').mockResolvedValue(undefined);
+    const { result } = renderHook(() => useLiveKit());
+    await act(async () => { await result.current.connect('dm-1', true); });
+    expect(useVoiceStore.getState().livekitHostOrigin).toBe(REMOTE);
+  });
+
+  it('records an unknown host for a token relayed from another instance', async () => {
+    useVoiceStore.setState({ federatedCallToken: 'relayed', federatedCallUrl: 'wss://host.example/livekit' });
+    const { result } = renderHook(() => useLiveKit());
+    await act(async () => { await result.current.connect('dm-1', true); });
+    expect(useVoiceStore.getState().livekitHostOrigin).toBeNull();
+  });
+
+  it('re-applies the encoding when the host limits arrive after the share started', async () => {
+    mocks.channelOrigin.mockReturnValue(REMOTE);
+    vi.spyOn(useSettingsStore.getState(), 'fetchStreamingLimitsFor').mockResolvedValue(undefined);
+    useSettingsStore.setState({ streamingLimitsByOrigin: {} });
+    useVoiceStore.setState({
+      screenShareConfig: { height: 1080, fps: 60, mode: 'gaming', customBitrateKbps: null, shareAudio: false, codec: 'vp9' },
+    });
+    const { result } = renderHook(() => useLiveKit());
+    await act(async () => { await result.current.connect('channel'); });
+    const room = result.current.room!;
+    const mediaStreamTrack = { applyConstraints: vi.fn().mockResolvedValue(undefined), contentHint: '', getSettings: () => ({}) };
+    vi.spyOn(room.localParticipant, 'getTrackPublications').mockReturnValue([
+      { source: Track.Source.ScreenShare, videoTrack: { mediaStreamTrack } },
+    ] as never);
+    await act(async () => { useVoiceStore.setState({ isScreenSharing: true }); });
+    expect(mocks.applyOverdrive).toHaveBeenLastCalledWith(room, Track.Source.ScreenShare, expect.objectContaining({ maxBitrate: 8_000_000 }));
+
+    await act(async () => { useSettingsStore.setState({ streamingLimitsByOrigin: { [REMOTE]: limits(3000) } }); });
+
+    expect(mocks.applyOverdrive).toHaveBeenLastCalledWith(room, Track.Source.ScreenShare, expect.objectContaining({ maxBitrate: 3_000_000 }));
   });
 });

@@ -19,9 +19,8 @@ vi.mock('./crossStoreResolvers', async (importOriginal) => {
   };
 });
 
-import { getStreamHostLimits, refreshStreamHostLimits, voiceHostOrigin } from './streamHostLimits';
+import { getStreamHostLimits, refreshStreamHostLimits } from './streamHostLimits';
 import { useSettingsStore } from '../stores/settingsStore';
-import { useSpaceStore } from '../stores/spaceStore';
 import { useVoiceStore } from '../stores/voiceStore';
 
 const REMOTE = 'https://remote.example';
@@ -56,27 +55,34 @@ const CONFIG = { height: 1080, fps: 60, mode: 'gaming', customBitrateKbps: null,
 
 beforeEach(() => {
   vi.clearAllMocks();
-  useSpaceStore.setState({ channelOriginMap: new Map([['vc-home', ''], ['vc-remote', REMOTE]]) });
   useSettingsStore.setState({ streamingLimits: HOME_LIMITS, streamingLimitsByOrigin: {} });
-  useVoiceStore.setState({ currentVoiceChannelId: null, screenShareConfig: { ...CONFIG } });
+  useVoiceStore.setState({ livekitHostOrigin: '', screenShareConfig: { ...CONFIG } });
 });
 
 describe('getStreamHostLimits', () => {
   it('keeps using home limits for a home voice channel', () => {
     useSettingsStore.setState({ streamingLimitsByOrigin: { [REMOTE]: REMOTE_LIMITS } });
-    useVoiceStore.setState({ currentVoiceChannelId: 'vc-home' });
+    useVoiceStore.setState({ livekitHostOrigin: '' });
     expect(getStreamHostLimits()).toEqual(HOME_LIMITS);
   });
 
   it('falls back to the defaults, never to home, while the host has not answered', () => {
     useSettingsStore.setState({ streamingLimits: { ...HOME_LIMITS, maxBitrateKbps: 1000 } });
-    useVoiceStore.setState({ currentVoiceChannelId: 'vc-remote' });
+    useVoiceStore.setState({ livekitHostOrigin: REMOTE });
     // Home's 1 Mbps cap says nothing about the remote host.
     expect(getStreamHostLimits().maxBitrateKbps).toBe(20000);
   });
 
-  it('treats a DM call as hosted at home', () => {
-    expect(voiceHostOrigin(null, new Map([['vc-remote', REMOTE]]))).toBe('');
+  it('uses the recorded host for a DM call on a remote origin', () => {
+    useSettingsStore.setState({ streamingLimitsByOrigin: { [REMOTE]: REMOTE_LIMITS } });
+    useVoiceStore.setState({ currentVoiceChannelId: null, livekitHostOrigin: REMOTE });
+    expect(getStreamHostLimits()).toEqual(REMOTE_LIMITS);
+  });
+
+  it('claims nothing for a call whose token was relayed from an unknown host', () => {
+    useSettingsStore.setState({ streamingLimits: { ...HOME_LIMITS, maxBitrateKbps: 1000 } });
+    useVoiceStore.setState({ livekitHostOrigin: null });
+    expect(getStreamHostLimits().maxBitrateKbps).toBe(20000);
   });
 });
 

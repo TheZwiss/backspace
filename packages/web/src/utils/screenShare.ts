@@ -9,6 +9,7 @@ import { useUIStore } from '../stores/uiStore';
 import { openScreenShareSetup } from '../stores/screenShareSetupStore';
 import i18n from '../i18n';
 import { isElectron, getElectronAPI } from '../platform/platform';
+import type { InstanceStreamingLimits } from '@backspace/shared';
 import {
   STANDARD_RESOLUTIONS, STANDARD_FRAMERATES, WIDTH_MAP,
   BITRATE_MATRIX_KBPS,
@@ -108,19 +109,64 @@ function computeNativeBitrate(
   return Math.round(baseKbps * (capturedPixels / nearestPixels) * (fps / nearestFps));
 }
 
-export function buildScreenShareOptions(config: ScreenShareConfig): ScreenShareBuildResult {
+// ---------------------------------------------------------------------------
+// Effective config — the saved choice fitted to the host's limits at use time
+// ---------------------------------------------------------------------------
+
+function nearest(values: readonly number[], target: number): number {
+  return values.reduce((a, b) => (Math.abs(b - target) < Math.abs(a - target) ? b : a));
+}
+
+/**
+ * The saved config as the stream on this host will use it. Pure, and never
+ * written back: the saved choice is the user's, and a strict host (or a
+ * stricter home policy) must not overwrite it for every later stream. Only an
+ * explicit click in the quality controls saves.
+ *
+ * - height: nearest allowed numeric height; a disallowed `'native'` becomes the
+ *   highest allowed one; with only `'native'` allowed, `'native'`.
+ * - fps: nearest allowed frame rate.
+ * - customBitrateKbps: null where the host allows no custom bitrate, else
+ *   clamped to the host's range.
+ * An empty allowlist leaves its value alone. Returns `config` itself when
+ * nothing changes, so callers can compare by reference.
+ */
+export function effectiveScreenShareConfig(
+  config: ScreenShareConfig,
+  limits: InstanceStreamingLimits,
+): ScreenShareConfig {
+  let { height, fps, customBitrateKbps } = config;
+  if (limits.allowedResolutions.length > 0 && !limits.allowedResolutions.includes(height)) {
+    const numeric = limits.allowedResolutions.filter((r): r is number => r !== 'native');
+    if (numeric.length === 0) height = 'native';
+    else height = height === 'native' ? Math.max(...numeric) : nearest(numeric, height);
+  }
+  if (limits.allowedFramerates.length > 0 && !limits.allowedFramerates.includes(fps)) {
+    fps = nearest(limits.allowedFramerates, fps);
+  }
+  if (customBitrateKbps != null) {
+    customBitrateKbps = limits.allowCustomBitrate
+      ? Math.min(Math.max(customBitrateKbps, limits.minBitrateKbps), limits.maxBitrateKbps)
+      : null;
+  }
+  if (height === config.height && fps === config.fps && customBitrateKbps === config.customBitrateKbps) return config;
+  return { ...config, height, fps, customBitrateKbps };
+}
+
+export function buildScreenShareOptions(savedConfig: ScreenShareConfig): ScreenShareBuildResult {
+  const limits = getStreamHostLimits();
+  const config = effectiveScreenShareConfig(savedConfig, limits);
   const { height, fps, mode, customBitrateKbps } = config;
   const isNative = height === 'native';
-  const limits = getStreamHostLimits();
   const overrides = limits.bitrateMatrixOverrides;
 
   // Capture dimensions: sentinel 0 for native (caller skips resolution constraint)
   const captureWidth = isNative ? 0 : WIDTH_MAP[height as StandardResolution] ?? 1920;
   const captureHeight = isNative ? 0 : (height as number);
 
-  // Resolve bitrate in kbps: custom (if allowed) > override > default > native estimate
+  // Resolve bitrate in kbps: custom (already dropped if not allowed) > override > default > native estimate
   let rawKbps: number;
-  if (customBitrateKbps != null && limits.allowCustomBitrate) {
+  if (customBitrateKbps != null) {
     rawKbps = customBitrateKbps;
   } else if (isNative) {
     const nearestFps = STANDARD_FRAMERATES.reduce((a, b) =>
@@ -176,12 +222,12 @@ export function buildScreenShareOptions(config: ScreenShareConfig): ScreenShareB
 
 export function resolveNativeOverdrive(
   mediaTrack: MediaStreamTrack | null | undefined,
-  config: ScreenShareConfig,
+  savedConfig: ScreenShareConfig,
   opts: ScreenShareBuildResult,
 ): void {
   const limits = getStreamHostLimits();
-  const effectiveCustom = limits.allowCustomBitrate ? config.customBitrateKbps : null;
-  if (config.height !== 'native' || effectiveCustom != null || !mediaTrack) return;
+  const config = effectiveScreenShareConfig(savedConfig, limits);
+  if (config.height !== 'native' || config.customBitrateKbps != null || !mediaTrack) return;
   const settings = mediaTrack.getSettings();
   if (!settings.width || !settings.height) return;
 

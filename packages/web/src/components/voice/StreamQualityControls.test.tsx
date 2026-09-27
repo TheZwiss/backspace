@@ -1,9 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import type { InstanceStreamingLimits } from '@backspace/shared';
-import { StreamQualityControls } from './StreamQualityControls';
+import { StreamQualityControls, StreamHostSubtitle } from './StreamQualityControls';
 import { useVoiceStore } from '../../stores/voiceStore';
-import { useSpaceStore } from '../../stores/spaceStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 
 vi.mock('../../audio/AudioManager', () => ({
@@ -38,10 +37,9 @@ const REMOTE_LIMITS: InstanceStreamingLimits = {
 };
 
 beforeEach(() => {
-  useSpaceStore.setState({ channelOriginMap: new Map([['vc-home', ''], ['vc-remote', REMOTE]]) });
   useSettingsStore.setState({ streamingLimits: HOME_LIMITS, streamingLimitsByOrigin: { [REMOTE]: REMOTE_LIMITS } });
   useVoiceStore.setState({
-    currentVoiceChannelId: 'vc-remote',
+    livekitHostOrigin: REMOTE,
     isScreenSharing: false,
     screenShareConfig: { height: 720, fps: 30, mode: 'gaming', customBitrateKbps: null, shareAudio: false, codec: 'vp9' },
   });
@@ -57,26 +55,46 @@ describe('StreamQualityControls in a federated voice channel', () => {
     expect(screen.queryByRole('button', { name: 'Custom' })).not.toBeInTheDocument();
   });
 
-  it('names the host whose limits apply', () => {
+  it('names the host in the custom-bitrate line', () => {
     render(<StreamQualityControls />);
-    expect(screen.getByText('Limits set by remote.example')).toBeInTheDocument();
+    expect(screen.getByText('Custom bitrate turned off by remote.example')).toBeInTheDocument();
   });
 
-  it('clamps a persisted config to the host limits', () => {
+  it('highlights the effective values and leaves the saved settings alone', () => {
+    const saved = { height: 1080, fps: 60, mode: 'gaming', customBitrateKbps: null, shareAudio: false, codec: 'vp9' } as const;
+    useVoiceStore.setState({ screenShareConfig: { ...saved } });
+    render(<StreamQualityControls />);
+    expect(screen.getByRole('button', { name: '720p' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: '30' })).toHaveAttribute('aria-pressed', 'true');
+    expect(useVoiceStore.getState().screenShareConfig).toEqual(saved);
+  });
+
+  it('saves only what the user clicks', () => {
     useVoiceStore.setState({
       screenShareConfig: { height: 1080, fps: 60, mode: 'gaming', customBitrateKbps: null, shareAudio: false, codec: 'vp9' },
     });
     render(<StreamQualityControls />);
-    const { height, fps } = useVoiceStore.getState().screenShareConfig;
-    expect(height).toBe(720);
-    expect(fps).toBe(30);
+    fireEvent.click(screen.getByRole('button', { name: '540p' }));
+    expect(useVoiceStore.getState().screenShareConfig).toMatchObject({ height: 540, fps: 60 });
   });
 
-  it('uses home limits in a home channel and names no host', () => {
-    useVoiceStore.setState({ currentVoiceChannelId: 'vc-home' });
+  it('uses home limits in a home channel', () => {
+    useVoiceStore.setState({ livekitHostOrigin: '' });
     render(<StreamQualityControls />);
     expect(screen.getByRole('button', { name: '1440p' })).toBeInTheDocument();
-    expect(screen.queryByText(/Limits set by/)).not.toBeInTheDocument();
+  });
+});
+
+describe('StreamHostSubtitle', () => {
+  it('names the host whose limits apply', () => {
+    render(<StreamHostSubtitle />);
+    expect(screen.getByText('Limits set by remote.example')).toBeInTheDocument();
+  });
+
+  it('is absent at home', () => {
+    useVoiceStore.setState({ livekitHostOrigin: '' });
+    const { container } = render(<StreamHostSubtitle />);
+    expect(container).toBeEmptyDOMElement();
   });
 });
 
@@ -86,7 +104,7 @@ describe('StreamQualityControls System Audio while live', () => {
   }
 
   beforeEach(() => {
-    useVoiceStore.setState({ currentVoiceChannelId: 'vc-home' });
+    useVoiceStore.setState({ livekitHostOrigin: '' });
   });
 
   it('shows what the share sends, not the preference', () => {

@@ -5,7 +5,9 @@ import { Avatar } from '../ui/Avatar';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useContextMenuStore, type ContextMenuItem } from '../../stores/contextMenuStore';
 import { getActiveRoom, setStreamSubscription } from '../../hooks/useLiveKit';
-import { stopScreenShare, changeScreenShare } from '../../utils/screenShare';
+import { stopScreenShare, changeScreenShare, effectiveScreenShareConfig } from '../../utils/screenShare';
+import { useStreamHostLimits } from '../../utils/streamHostLimits';
+import { DEFAULT_STREAMING_LIMITS } from '../../stores/settingsStore';
 import { encodeStreamWatch } from '../../utils/streamWatchProtocol';
 import { AudioManager } from '../../audio/AudioManager';
 import { getSfxVolume } from '../../utils/sfx';
@@ -43,7 +45,10 @@ function StreamQualityItem() {
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
   const setCloseGuard = useContextMenuStore((s) => s.setCloseGuard);
-  const screenShareConfig = useVoiceStore((s) => s.screenShareConfig);
+  const savedConfig = useVoiceStore((s) => s.screenShareConfig);
+  const { limits } = useStreamHostLimits();
+  // The label names what the stream uses, not the saved choice a host may cap.
+  const screenShareConfig = effectiveScreenShareConfig(savedConfig, limits ?? DEFAULT_STREAMING_LIMITS);
 
   return (
     <div className="p-3">

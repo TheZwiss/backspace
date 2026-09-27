@@ -16,7 +16,7 @@ import {
   isCaptureCancellation,
   canAddScreenShareAudioLater,
 } from '../../utils/screenShare';
-import { StreamQualityControls, StreamSummary } from './StreamQualityControls';
+import { StreamQualityControls, StreamSummary, StreamHostSubtitle } from './StreamQualityControls';
 import { pickAutoStageSource, type ScreenSourceTab } from '../../utils/screenShareSources';
 
 /**
@@ -669,8 +669,11 @@ export function ScreenShareSetup() {
               settingsOpen ? 'translate-x-0' : 'translate-x-full'
             }`}
           >
-            <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-border-hard flex-shrink-0">
-              <span className="text-[15px] font-bold text-txt-primary">{t('voice:streamSettings.title')}</span>
+            <div className="flex items-start justify-between gap-3 px-5 pt-4 pb-3 border-b border-border-hard flex-shrink-0">
+              <div className="min-w-0">
+                <div className="text-[15px] font-bold text-txt-primary">{t('voice:streamSettings.title')}</div>
+                <StreamHostSubtitle className="mt-0.5" />
+              </div>
               <button
                 onClick={() => setSettingsOpen(false)}
                 className="text-txt-tertiary hover:text-txt-primary transition-colors p-1 -mr-1"

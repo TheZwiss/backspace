@@ -15,7 +15,7 @@ import {
   TrackEvent,
 } from 'livekit-client';
 import { getApiForOrigin, getChannelOrigin, getMyUserIdForOrigin, useSpaceStore } from '../stores/spaceStore';
-import { refreshStreamHostLimits } from '../utils/streamHostLimits';
+import { refreshStreamHostLimits, useStreamHostLimits } from '../utils/streamHostLimits';
 import { wsSend } from './useWebSocket';
 import { useVoiceStore, type VoiceConnectionQuality } from '../stores/voiceStore';
 import { useAuthStore } from '../stores/authStore';
@@ -228,6 +228,9 @@ export function useLiveKit() {
   const isCameraOn = useVoiceStore((s) => s.isCameraOn);
   const isScreenSharing = useVoiceStore((s) => s.isScreenSharing);
   const screenShareConfig = useVoiceStore((s) => s.screenShareConfig);
+  // The host's limits shape the effective config, so a document that arrives
+  // after the share started must reach the running encoder too.
+  const { limits: streamHostLimits } = useStreamHostLimits();
   const voiceUserStates = useVoiceStore((s) => s.voiceUserStates);
   const spaceMutedUserIds = useVoiceStore((s) => s.spaceMutedUserIds);
   const spaceDeafenedUserIds = useVoiceStore((s) => s.spaceDeafenedUserIds);
@@ -663,25 +666,29 @@ export function useLiveKit() {
     try {
       let token: string;
       let url: string;
+      // The instance that issues the token hosts the LiveKit room, so its
+      // streaming limits are the ones a screen share here obeys. Null when the
+      // token was relayed from a host this client has no session with.
+      let hostOrigin: string | null;
 
       // For federated calls, use the stored token from S2S relay
       const { federatedCallToken, federatedCallUrl, clearFederatedCallData } = useVoiceStore.getState();
       if (isDm && federatedCallToken && federatedCallUrl) {
         token = federatedCallToken;
         url = federatedCallUrl;
+        hostOrigin = null;
         clearFederatedCallData();
       } else {
-        const origin = getChannelOrigin(channelId);
-        const client = getApiForOrigin(origin);
-        // The instance issuing this token hosts the LiveKit room, so its
-        // streaming limits are the ones a screen share here obeys. Refreshed
-        // per join (a no-op for home, whose document arrives with `ready`).
-        if (!isDm) void refreshStreamHostLimits(origin);
+        hostOrigin = getChannelOrigin(channelId);
+        const client = getApiForOrigin(hostOrigin);
         const resp = isDm ? await client.livekit.dmToken(channelId) : await client.livekit.token(channelId);
         token = resp.token;
         url = resp.url;
       }
       if (gen !== _connectGeneration) return;
+      useVoiceStore.setState({ livekitHostOrigin: hostOrigin });
+      // Refreshed per join; home's document arrives with every home `ready`.
+      if (hostOrigin) void refreshStreamHostLimits(hostOrigin);
       const newRoom = new Room({ adaptiveStream: true, dynacast: true, publishDefaults: { videoCodec: 'h264', simulcast: true } });
       roomRef.current = newRoom;
       let initialConnectPending = true;
@@ -1027,7 +1034,7 @@ export function useLiveKit() {
     };
     _activeTrackUpdate = _activeTrackUpdate.then(updateActiveTracks).catch(() => {});
     return () => { superseded = true; };
-  }, [room, screenShareConfig, isScreenSharing, isCameraOn]);
+  }, [room, screenShareConfig, streamHostLimits, isScreenSharing, isCameraOn]);
 
   useEffect(() => {
     return () => {
