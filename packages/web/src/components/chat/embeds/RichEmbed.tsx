@@ -61,7 +61,7 @@ export function RichEmbed({ embed }: RichEmbedProps) {
             )}
             <div className="flex-1 min-w-0">
               {providerLabel && (
-                <div className="text-[12px] text-txt-muted font-medium mb-1">
+                <div className="text-[12px] text-txt-tertiary font-medium mb-1">
                   {providerLabel}
                 </div>
               )}
@@ -71,11 +71,11 @@ export function RichEmbed({ embed }: RichEmbedProps) {
                 </div>
               )}
               {embed.description && (
-                <div className="text-[13px] text-txt-muted mt-1 line-clamp-2">
+                <div className="text-[13px] text-txt-secondary mt-1 line-clamp-2">
                   {embed.description}
                 </div>
               )}
-              <div className="text-[12px] text-txt-muted mt-2 flex items-center gap-1.5">
+              <div className="text-[12px] text-txt-tertiary mt-2 flex items-center gap-1.5">
                 <svg viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5">
                   <path d="M8 5v14l11-7z" />
                 </svg>

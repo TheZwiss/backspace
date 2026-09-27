@@ -222,7 +222,7 @@ export function AttachmentRenderer({ attachment }: AttachmentRendererProps) {
   // Inline badge — sits next to file size or below media, never absolute-positioned
   const federationInlineBadge = federationTooltip ? (
     <Tooltip content={federationTooltip.text} position="top">
-      <div className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded glass-pill text-xs cursor-default ${federationTooltip.type === 'remote' ? 'text-txt-muted' : 'text-accent-amber'}`}>
+      <div className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded glass-pill text-xs cursor-default ${federationTooltip.type === 'remote' ? 'text-txt-tertiary' : 'text-accent-amber'}`}>
         <svg className="w-3 h-3 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           {federationTooltip.type === 'remote'
             ? <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />

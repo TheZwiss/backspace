@@ -16,7 +16,7 @@ export function TriStateToggle({
   const btnClass = (v: TriState, active: boolean) => {
     const base = 'w-6 h-6 flex items-center justify-center rounded-full transition-colors text-xs font-bold';
     if (disabled) return `${base} cursor-not-allowed opacity-40`;
-    if (!active) return `${base} cursor-pointer text-txt-muted hover:text-txt-tertiary`;
+    if (!active) return `${base} cursor-pointer text-txt-tertiary hover:text-txt-secondary`;
     switch (v) {
       case 'deny': return `${base} cursor-pointer bg-accent-rose/15 text-accent-rose`;
       case 'neutral': return `${base} cursor-pointer bg-white/[0.06] text-txt-tertiary`;

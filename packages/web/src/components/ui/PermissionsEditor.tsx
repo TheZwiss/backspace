@@ -438,7 +438,7 @@ export function PermissionsEditor({
             <div ref={roleDropdownRef} className="glass rounded-lg overflow-hidden">
               <div className="p-1.5 max-h-48 overflow-y-auto scrollbar-thin">
                 {availableRoles.length === 0 ? (
-                  <div className="px-2.5 py-1.5 text-xs text-txt-muted">{t('spaces:permissions.noMoreRoles')}</div>
+                  <div className="px-2.5 py-1.5 text-xs text-txt-tertiary">{t('spaces:permissions.noMoreRoles')}</div>
                 ) : (
                   availableRoles.map(role => (
                     <button
@@ -458,7 +458,7 @@ export function PermissionsEditor({
               <div className="border-t border-white/[0.04] p-1.5">
                 <button
                   onClick={() => setShowAddRole(false)}
-                  className="w-full text-xs text-txt-muted hover:text-txt-tertiary px-2.5 py-1 transition-colors"
+                  className="w-full text-xs text-txt-tertiary hover:text-txt-secondary px-2.5 py-1 transition-colors"
                 >
                   {t('common:actions.cancel')}
                 </button>
@@ -519,7 +519,7 @@ export function PermissionsEditor({
               </div>
               <div className="px-1.5 max-h-48 overflow-y-auto scrollbar-thin">
                 {availableMembers.length === 0 ? (
-                  <div className="px-2.5 py-1.5 text-xs text-txt-muted">{t('common:labels.noMembersFound')}</div>
+                  <div className="px-2.5 py-1.5 text-xs text-txt-tertiary">{t('common:labels.noMembersFound')}</div>
                 ) : (
                   availableMembers.map(member => (
                     <button
@@ -529,7 +529,7 @@ export function PermissionsEditor({
                     >
                       <span className="truncate">{member.user.displayName ?? member.user.username}</span>
                       {member.user.displayName && (
-                        <span className="text-txt-muted text-xs truncate">@{member.user.username}</span>
+                        <span className="text-txt-tertiary text-xs truncate">@{member.user.username}</span>
                       )}
                     </button>
                   ))
@@ -538,7 +538,7 @@ export function PermissionsEditor({
               <div className="border-t border-white/[0.04] p-1.5">
                 <button
                   onClick={() => { setShowAddMember(false); setMemberSearch(''); }}
-                  className="w-full text-xs text-txt-muted hover:text-txt-tertiary px-2.5 py-1 transition-colors"
+                  className="w-full text-xs text-txt-tertiary hover:text-txt-secondary px-2.5 py-1 transition-colors"
                 >
                   {t('common:actions.cancel')}
                 </button>

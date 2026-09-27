@@ -78,7 +78,7 @@ export function VideoEmbed({ embed }: VideoEmbedProps) {
       {(embed.title || providerLabel) && (
         <div className="px-3 py-2">
           {providerLabel && (
-            <div className="text-[12px] text-txt-muted font-medium mb-0.5">
+            <div className="text-[12px] text-txt-tertiary font-medium mb-0.5">
               {providerLabel}
             </div>
           )}
