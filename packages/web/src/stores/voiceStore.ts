@@ -201,6 +201,26 @@ interface VoiceState {
   reset: () => void;
 }
 
+/**
+ * True while this client has any voice session that a page reload or a
+ * dropped socket would end: a LiveKit room that is live or being joined, a
+ * space channel kept after LiveKit gave up reconnecting (VoiceControls still
+ * offers the retry), a DM call, or a DM call ringing in either direction.
+ * Connection status alone misses the ringing states: the caller is not in
+ * LiveKit until `dm_call_accepted` and the server tears the ringing room down
+ * when the caller's socket goes away, while the callee's ring prompt lives
+ * only in this store and is not replayed after a reload.
+ */
+export function hasVoiceSession(
+  state: Pick<VoiceState, 'voiceConnectionStatus' | 'currentVoiceChannelId' | 'activeDmCall' | 'outgoingCall' | 'incomingCall'>,
+): boolean {
+  return state.voiceConnectionStatus !== 'disconnected'
+    || state.currentVoiceChannelId !== null
+    || state.activeDmCall !== null
+    || state.outgoingCall !== null
+    || state.incomingCall !== null;
+}
+
 export const useVoiceStore = create<VoiceState>()(
   persist(
     (set, get) => ({
