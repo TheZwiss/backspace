@@ -183,7 +183,10 @@ describe('POST /api/users/@me/change-password — local rule for detached accoun
     const row = testDb.select().from(schema.users).where(eq(schema.users.id, DETACHED_ID)).get();
     expect(row?.passwordHash).not.toBe(detachedHash);
     await expect(verifyPassword('brand-new-password', row!.passwordHash)).resolves.toBe(true);
-  });
+    // Four bcrypt operations at the production cost (two compares in the
+    // route, one hash, one verify here): about a second alone and 3 to 4 s in a
+    // busy full-suite run, too close to vitest's 5 s default.
+  }, 30_000);
 
   it('non-detached federated account still gets the bypass (no currentPassword → 200)', async () => {
     const res = await app.inject({
