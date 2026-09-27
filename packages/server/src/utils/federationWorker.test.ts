@@ -524,6 +524,37 @@ describe('outbox worker — terminal rejection reasons + rollback invocation', (
 
     expect(sentBody).toMatchObject({ capabilities: ['attribution_unproven'] });
   });
+
+  it('an unknown_message rejection is backed off and leaves the peer healthy (#295)', async () => {
+    seedPeer('peer-r10');
+    seedOutboxEntry('entry-r10', 'peer-r10', 'reaction-10', 'reaction_add');
+    seedOutboxEntry('entry-r10b', 'peer-r10', 'msg-10b', 'create');
+
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
+      new Response(JSON.stringify({
+        accepted: ['msg-10b'],
+        rejected: [{ messageId: 'reaction-10', reason: 'unknown_message' }],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+    );
+
+    const { processOutboxTick } = await import('./federationWorker.js');
+    const before = Date.now();
+    await processOutboxTick();
+
+    const retained = testDb.select().from(schema.federationOutbox)
+      .where(eq(schema.federationOutbox.id, 'entry-r10')).get()!;
+    expect(retained.attempts).toBe(1);
+    expect(retained.nextRetryAt).toBeGreaterThanOrEqual(before + 30_000);
+
+    // The peer answered the request, so the peer itself is healthy.
+    const peer = testDb.select().from(schema.federationPeers)
+      .where(eq(schema.federationPeers.id, 'peer-r10')).get()!;
+    expect(peer.consecutiveFailures).toBe(0);
+
+    fetchSpy.mockClear();
+    await processOutboxTick();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
 });
 
 describe('unreachable transition resets probe pacing', () => {
