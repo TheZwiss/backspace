@@ -144,6 +144,7 @@ describe('StreamQualityControls System Audio while live', () => {
     render(<StreamQualityControls />);
     expect(audioSwitch()).toHaveAttribute('aria-checked', 'true');
     expect(audioSwitch()).toBeDisabled();
+    expect(screen.getByText('Adding system audio…')).toBeInTheDocument();
   });
 
   it('can always be turned off while audio is published', () => {

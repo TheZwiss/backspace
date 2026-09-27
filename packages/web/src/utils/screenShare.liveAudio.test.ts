@@ -6,6 +6,7 @@ import {
   publishScreenShare,
   stopScreenShare,
   handleScreenShareUnpublished,
+  handleScreenShareAudioUnpublished,
   syncScreenShareAudio,
   canAddScreenShareAudioLater,
 } from './screenShare';
@@ -93,6 +94,13 @@ function setShareAudio(shareAudio: boolean): void {
 }
 
 const getDisplayMedia = vi.fn();
+const DESKTOP_SOURCE = { sourceId: 'screen:0:0', pickerMode: 'app' } as const;
+
+function installDesktop(): ReturnType<typeof vi.fn> {
+  const preselectScreenSource = vi.fn().mockResolvedValue(undefined);
+  installElectron({ preselectScreenSource } as Partial<BackspaceElectronAPI>);
+  return preselectScreenSource;
+}
 
 function installElectron(api: Partial<BackspaceElectronAPI> | null): void {
   if (api) (window as { backspace?: unknown }).backspace = api;
@@ -175,11 +183,10 @@ describe('turning System Audio off mid-stream', () => {
 
 describe('turning System Audio on for a share that started without it', () => {
   it('captures loopback audio for the same source on the desktop app and publishes it', async () => {
-    const preselectScreenSource = vi.fn().mockResolvedValue(undefined);
-    installElectron({ preselectScreenSource } as Partial<BackspaceElectronAPI>);
+    const preselectScreenSource = installDesktop();
     const { room, pubs } = fakeRoom();
     setShareAudio(false);
-    await publishScreenShare(room, makeStream(makeTrack('video')), { sourceId: 'screen:0:0' });
+    await publishScreenShare(room, makeStream(makeTrack('video')), DESKTOP_SOURCE);
     expect(useVoiceStore.getState().screenShareAudio).toBe('acquirable');
 
     const extraVideo = makeTrack('video', 'video-2');
@@ -199,10 +206,10 @@ describe('turning System Audio on for a share that started without it', () => {
   });
 
   it('turns the toggle back off and says so when the capture fails', async () => {
-    installElectron({ preselectScreenSource: vi.fn().mockResolvedValue(undefined) } as Partial<BackspaceElectronAPI>);
+    installDesktop();
     const { room, pubs } = fakeRoom();
     setShareAudio(false);
-    await publishScreenShare(room, makeStream(makeTrack('video')), { sourceId: 'screen:0:0' });
+    await publishScreenShare(room, makeStream(makeTrack('video')), DESKTOP_SOURCE);
 
     getDisplayMedia.mockRejectedValue(new DOMException('loopback unsupported', 'NotReadableError'));
     setShareAudio(true);
@@ -217,7 +224,7 @@ describe('turning System Audio on for a share that started without it', () => {
   it('does not prompt again in a browser, where audio is granted only with the capture', async () => {
     const { room, localParticipant } = fakeRoom();
     setShareAudio(false);
-    await publishScreenShare(room, makeStream(makeTrack('video')), { sourceId: null });
+    await publishScreenShare(room, makeStream(makeTrack('video')), { sourceId: null, pickerMode: null });
     expect(useVoiceStore.getState().screenShareAudio).toBe('unavailable');
 
     setShareAudio(true);
@@ -228,11 +235,11 @@ describe('turning System Audio on for a share that started without it', () => {
     expect(useVoiceStore.getState().screenShareAudio).toBe('unavailable');
   });
 
-  it('holds a capture that arrives after the toggle was turned off again', async () => {
-    installElectron({ preselectScreenSource: vi.fn().mockResolvedValue(undefined) } as Partial<BackspaceElectronAPI>);
+  it('drops a capture that arrives after the toggle was turned off again', async () => {
+    installDesktop();
     const { room, pubs } = fakeRoom();
     setShareAudio(false);
-    await publishScreenShare(room, makeStream(makeTrack('video')), { sourceId: 'screen:0:0' });
+    await publishScreenShare(room, makeStream(makeTrack('video')), DESKTOP_SOURCE);
 
     const loopback = makeTrack('audio', 'audio-2');
     getDisplayMedia.mockImplementation(async () => {
@@ -243,8 +250,81 @@ describe('turning System Audio on for a share that started without it', () => {
     await syncScreenShareAudio(room);
 
     expect(pubs.has(Track.Source.ScreenShareAudio)).toBe(false);
-    expect(loopback.stop).not.toHaveBeenCalled();
-    expect(useVoiceStore.getState().screenShareAudio).toBe('held');
+    // The desktop app can take it again silently, so it keeps nothing captured.
+    expect(loopback.stop).toHaveBeenCalled();
+    expect(useVoiceStore.getState().screenShareAudio).toBe('acquirable');
+  });
+
+  it('gives up on a capture that hangs, and stops it if it arrives late', async () => {
+    vi.useFakeTimers();
+    try {
+      installDesktop();
+      const { room, pubs } = fakeRoom();
+      setShareAudio(false);
+      await publishScreenShare(room, makeStream(makeTrack('video')), DESKTOP_SOURCE);
+
+      let deliver!: (stream: MediaStream) => void;
+      getDisplayMedia.mockReturnValue(new Promise<MediaStream>((resolve) => { deliver = resolve; }));
+      setShareAudio(true);
+      const syncing = syncScreenShareAudio(room);
+      await vi.advanceTimersByTimeAsync(10_000);
+      await syncing;
+
+      expect(useVoiceStore.getState().screenShareConfig.shareAudio).toBe(false);
+      expect(useVoiceStore.getState().screenShareAudio).toBe('acquirable');
+      expect(useUIStore.getState().toasts.map((t) => t.message)).toContain('Could not add system audio to the stream.');
+
+      const late = makeTrack('audio', 'audio-late');
+      deliver(makeStream(makeTrack('video', 'video-late'), late));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(late.stop).toHaveBeenCalled();
+      expect(pubs.has(Track.Source.ScreenShareAudio)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('turning System Audio off on the desktop app', () => {
+  it('stops the capture rather than keeping it, and captures again when turned on', async () => {
+    installDesktop();
+    const { room, localParticipant, pubs } = fakeRoom();
+    const audio = makeTrack('audio');
+    await publishScreenShare(room, makeStream(makeTrack('video'), audio), DESKTOP_SOURCE);
+
+    setShareAudio(false);
+    await syncScreenShareAudio(room);
+
+    expect(localParticipant.unpublishTrack).toHaveBeenCalledWith(expect.objectContaining({ mediaStreamTrack: audio }), true);
+    expect(audio.stop).toHaveBeenCalled();
+    expect(useVoiceStore.getState().screenShareAudio).toBe('acquirable');
+
+    const loopback = makeTrack('audio', 'audio-2');
+    getDisplayMedia.mockResolvedValue(makeStream(makeTrack('video', 'video-2'), loopback));
+    setShareAudio(true);
+    await syncScreenShareAudio(room);
+    expect(pubs.get(Track.Source.ScreenShareAudio)?.track.mediaStreamTrack).toBe(loopback);
+  });
+
+  it('does not keep audio captured before Start when the toggle is off at Start', async () => {
+    installDesktop();
+    const { room } = fakeRoom();
+    const audio = makeTrack('audio');
+    setShareAudio(false);
+    await publishScreenShare(room, makeStream(makeTrack('video'), audio), DESKTOP_SOURCE);
+    expect(audio.stop).toHaveBeenCalled();
+    expect(useVoiceStore.getState().screenShareAudio).toBe('acquirable');
+  });
+});
+
+describe('audio that leaves the publication by itself', () => {
+  it('turns the switch off when LiveKit unpublishes the audio', async () => {
+    const { room, pubs } = fakeRoom();
+    await publishScreenShare(room, makeStream(makeTrack('video'), makeTrack('audio')));
+    // livekit-client unpublishes a ScreenShareAudio track whose source ended.
+    pubs.delete(Track.Source.ScreenShareAudio);
+    handleScreenShareAudioUnpublished();
+    expect(useVoiceStore.getState().screenShareAudio).toBe('unavailable');
   });
 });
 
@@ -267,30 +347,76 @@ describe('a withdrawn capture ends with the share', () => {
     setShareAudio(false);
     await publishScreenShare(room, makeStream(makeTrack('video'), audio));
 
-    handleScreenShareUnpublished();
+    handleScreenShareUnpublished(room);
 
     expect(audio.stop).toHaveBeenCalled();
     expect(useVoiceStore.getState().screenShareAudio).toBeNull();
   });
 });
 
+describe('published audio ends with the share when the video ends by itself', () => {
+  // The shared window closes or the display goes away: livekit-client
+  // unpublishes the ended video and useLiveKit calls handleScreenShareUnpublished.
+  // Audio added mid-stream comes from a second capture that does not end with
+  // it, so it used to stay published with no control left to stop it.
+  it('unpublishes and stops audio added mid-stream', async () => {
+    installDesktop();
+    const { room, localParticipant, pubs } = fakeRoom();
+    setShareAudio(false);
+    await publishScreenShare(room, makeStream(makeTrack('video')), DESKTOP_SOURCE);
+    const loopback = makeTrack('audio', 'audio-2');
+    getDisplayMedia.mockResolvedValue(makeStream(makeTrack('video', 'video-2'), loopback));
+    setShareAudio(true);
+    await syncScreenShareAudio(room);
+    expect(pubs.has(Track.Source.ScreenShareAudio)).toBe(true);
+
+    pubs.delete(Track.Source.ScreenShare);
+    handleScreenShareUnpublished(room);
+    await Promise.resolve();
+
+    expect(pubs.has(Track.Source.ScreenShareAudio)).toBe(false);
+    expect(localParticipant.unpublishTrack).toHaveBeenLastCalledWith(expect.objectContaining({ mediaStreamTrack: loopback }), true);
+    expect(loopback.stop).toHaveBeenCalled();
+    expect(useVoiceStore.getState().isScreenSharing).toBe(false);
+    expect(useVoiceStore.getState().screenShareAudio).toBeNull();
+  });
+
+  it('unpublishes audio that came with the capture too', async () => {
+    const { room, pubs } = fakeRoom();
+    const audio = makeTrack('audio');
+    await publishScreenShare(room, makeStream(makeTrack('video'), audio));
+
+    pubs.delete(Track.Source.ScreenShare);
+    handleScreenShareUnpublished(room);
+
+    expect(pubs.has(Track.Source.ScreenShareAudio)).toBe(false);
+    expect(audio.stop).toHaveBeenCalled();
+  });
+});
+
 describe('canAddScreenShareAudioLater (the setup screen asks it before Start)', () => {
   it('is true for a source the desktop app listed and can preselect', () => {
     installElectron({ preselectScreenSource: vi.fn() } as Partial<BackspaceElectronAPI>);
-    expect(canAddScreenShareAudioLater('window:42:0')).toBe(true);
+    expect(canAddScreenShareAudioLater('window:42:0', 'app')).toBe(true);
   });
 
   it('is false without a listed source (portal or prompted capture)', () => {
     installElectron({ preselectScreenSource: vi.fn() } as Partial<BackspaceElectronAPI>);
-    expect(canAddScreenShareAudioLater(null)).toBe(false);
+    expect(canAddScreenShareAudioLater(null, 'app')).toBe(false);
   });
 
   it('is false on a desktop build too old to preselect', () => {
     installElectron({} as Partial<BackspaceElectronAPI>);
-    expect(canAddScreenShareAudioLater('screen:0:0')).toBe(false);
+    expect(canAddScreenShareAudioLater('screen:0:0', 'app')).toBe(false);
+  });
+
+  it('is false when the system picker chose (Wayland, or a guess about XWayland)', () => {
+    installElectron({ preselectScreenSource: vi.fn() } as Partial<BackspaceElectronAPI>);
+    expect(canAddScreenShareAudioLater('screen:0:0', 'system')).toBe(false);
+    expect(canAddScreenShareAudioLater('screen:0:0', null)).toBe(false);
   });
 
   it('is false in a browser', () => {
-    expect(canAddScreenShareAudioLater('screen:0:0')).toBe(false);
+    expect(canAddScreenShareAudioLater('screen:0:0', 'app')).toBe(false);
   });
 });

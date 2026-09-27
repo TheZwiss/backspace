@@ -429,6 +429,8 @@ export interface PublishScreenShareOptions {
    * running share later without a prompt. Null for browser and portal captures.
    */
   sourceId?: string | null;
+  /** Who picked the source (`getScreenSharePickerMode`); only `'app'` can be preselected again. */
+  pickerMode?: ScreenSharePickerMode | null;
 }
 
 export async function publishScreenShare(
@@ -443,8 +445,11 @@ export async function publishScreenShare(
   if (!videoTrack || videoTrack.readyState !== 'live') return false;
   const capturedAudio = stream.getAudioTracks().find((t) => t.readyState === 'live') ?? null;
   // The toggle as it stands now, not as it stood at capture: audio captured
-  // before the user turned System Audio off is held back, not sent.
+  // before the user turned System Audio off is not sent.
   const audioToPublish = config.shareAudio ? capturedAudio : null;
+  const source: LiveSource | null = options.sourceId
+    ? { id: options.sourceId, pickerMode: options.pickerMode ?? null }
+    : null;
 
   // SDP profile override must be in place before the publish negotiation
   if (needsH264SdpPatch) activateHwOverdrive();
@@ -470,8 +475,8 @@ export async function publishScreenShare(
 
     _requestedPublishedScreenShareCodec = opts.publish.videoCodec;
     _publishedScreenShareCodec = null;
-    _liveSourceId = options.sourceId ?? null;
-    if (capturedAudio && !audioToPublish) holdScreenShareAudio(capturedAudio);
+    _liveSource = source;
+    if (capturedAudio && !audioToPublish) setAsideScreenShareAudio(capturedAudio);
     useVoiceStore.setState({
       isScreenSharing: true,
       screenShareAudio: audioToPublish ? 'published' : idleScreenShareAudioState(),
@@ -530,10 +535,13 @@ export async function republishScreenShare(room: Room): Promise<void> {
   _publishedScreenShareCodec = null;
   _requestedPublishedScreenShareCodec = null;
 
-  const ok = await publishScreenShare(room, stream, { sourceId: _liveSourceId });
+  const ok = await publishScreenShare(room, stream, {
+    sourceId: _liveSource?.id ?? null,
+    pickerMode: _liveSource?.pickerMode ?? null,
+  });
   if (!ok) {
     deactivateHwOverdrive();
-    releaseScreenShareAudio();
+    endScreenShareAudio(room);
     useVoiceStore.setState({ isScreenSharing: false });
     // The swap suppressed handleScreenShareUnpublished, and a video publish
     // that never landed emits no rollback unpublish either, so nothing else
@@ -552,22 +560,37 @@ export async function republishScreenShare(room: Room): Promise<void> {
 // it, driven by the screenShareConfig effect in useLiveKit, without touching
 // the video publication:
 //
-//   off: the ScreenShareAudio publication is withdrawn and its track held
-//        (still captured, sent nowhere) so turning it back on needs no prompt.
-//   on:  a held track is published again. With none, the desktop app takes a
-//        second capture of the same source for its loopback audio alone
-//        (preselected, so no picker) and drops that capture's video. Browsers
-//        grant audio only together with a capture's own prompt, and portal or
-//        prompted desktop pickers would ask again, so there the state is
-//        `unavailable` and the toggle says so instead of pretending.
+//   off: the ScreenShareAudio publication is withdrawn. On the desktop app,
+//        which can capture loopback audio again without a prompt, the track is
+//        stopped, so nothing stays captured. Where it cannot (browsers, portal
+//        and prompted pickers) the track is set aside: still captured, sent
+//        nowhere, so turning it back on does not need a new capture.
+//   on:  a set-aside track is published again. With none, the desktop app
+//        takes a second capture of the same source for its loopback audio
+//        alone (preselected, so no picker) and drops that capture's video.
+//        Elsewhere the state is `unavailable` and the switch says so.
+//
+// The audio's lifetime is the share's: every end of a share, including the
+// video ending by itself, unpublishes and stops every screen-share audio track
+// (`endScreenShareAudio`).
 // ---------------------------------------------------------------------------
 
-/** Desktop source id of the live share, when the app listed it. */
-let _liveSourceId: string | null = null;
-/** Audio captured for the live share but withdrawn by the toggle. */
+type ScreenSharePickerMode = 'app' | 'system';
+
+interface LiveSource {
+  id: string;
+  pickerMode: ScreenSharePickerMode | null;
+}
+
+/** Desktop source of the live share, when the app listed it. */
+let _liveSource: LiveSource | null = null;
+/** Audio captured for the live share, withdrawn by the toggle, kept only where it cannot be captured again. */
 let _heldAudio: MediaStreamTrack | null = null;
 /** Bumped when a share ends, so a capture that lands afterwards is dropped. */
 let _audioGeneration = 0;
+
+/** A loopback capture that has not answered by then is given up on. */
+export const SCREEN_SHARE_AUDIO_CAPTURE_TIMEOUT_MS = 10_000;
 
 function liveOrNull(track: MediaStreamTrack | null): MediaStreamTrack | null {
   return track && track.readyState === 'live' ? track : null;
@@ -575,11 +598,17 @@ function liveOrNull(track: MediaStreamTrack | null): MediaStreamTrack | null {
 
 /**
  * Whether loopback audio can be added later, without a prompt, to a share of
- * this source: only the desktop app can, and only for a source it listed and
- * can preselect. The setup screen asks the same question before Start.
+ * this source: only the desktop app can, only for a source it listed itself
+ * (picker mode `'app'`; a portal or an unknown mode would prompt again), and
+ * only on a build that can preselect. The setup screen asks the same question
+ * before Start.
  */
-export function canAddScreenShareAudioLater(sourceId: string | null): boolean {
+export function canAddScreenShareAudioLater(
+  sourceId: string | null,
+  pickerMode: ScreenSharePickerMode | null,
+): boolean {
   return sourceId !== null
+    && pickerMode === 'app'
     && isElectron()
     && isScreenCaptureSupported()
     && typeof getElectronAPI()?.preselectScreenSource === 'function';
@@ -587,7 +616,8 @@ export function canAddScreenShareAudioLater(sourceId: string | null): boolean {
 
 /** The live share's source, when audio can be added to it. */
 function acquirableSourceId(): string | null {
-  return canAddScreenShareAudioLater(_liveSourceId) ? _liveSourceId : null;
+  if (!_liveSource) return null;
+  return canAddScreenShareAudioLater(_liveSource.id, _liveSource.pickerMode) ? _liveSource.id : null;
 }
 
 /** The state of a share whose audio is not on the publication. */
@@ -596,7 +626,15 @@ function idleScreenShareAudioState(): ScreenShareAudioState {
   return acquirableSourceId() !== null ? 'acquirable' : 'unavailable';
 }
 
-function holdScreenShareAudio(track: MediaStreamTrack): void {
+/**
+ * Audio the toggle withdrew: stopped where it can be captured again silently,
+ * kept (captured, sent nowhere) only where it cannot.
+ */
+function setAsideScreenShareAudio(track: MediaStreamTrack): void {
+  if (acquirableSourceId() !== null) {
+    track.stop();
+    return;
+  }
   if (_heldAudio && _heldAudio !== track) _heldAudio.stop();
   _heldAudio = track;
 }
@@ -605,13 +643,25 @@ function setScreenShareAudioState(state: ScreenShareAudioState): void {
   useVoiceStore.setState({ screenShareAudio: state });
 }
 
-/** End of a share: stop what is held and forget the source. */
-function releaseScreenShareAudio(): void {
+/**
+ * End of a share: unpublish and stop the screen-share audio, whatever
+ * captured it, stop what was set aside, and forget the source. The state is
+ * cleared first so the unpublish this causes reads as part of the stop.
+ */
+function endScreenShareAudio(room: Room): void {
   _audioGeneration++;
   _heldAudio?.stop();
   _heldAudio = null;
-  _liveSourceId = null;
+  _liveSource = null;
   useVoiceStore.setState({ screenShareAudio: null });
+  const pub = room.localParticipant.getTrackPublication(Track.Source.ScreenShareAudio);
+  if (!pub?.track) return;
+  // Stopped here as well as by the unpublish, so the audio ends even if the
+  // unpublish fails.
+  pub.track.mediaStreamTrack?.stop();
+  room.localParticipant.unpublishTrack(pub.track, true).catch((err: unknown) => {
+    console.error('[ScreenShare] Failed to unpublish the screen-share audio:', err);
+  });
 }
 
 async function publishScreenShareAudioTrack(room: Room, track: MediaStreamTrack): Promise<void> {
@@ -622,6 +672,34 @@ async function publishScreenShareAudioTrack(room: Room, track: MediaStreamTrack)
     dtx: opts.publish.dtx,
     red: opts.publish.red,
     forceStereo: opts.publish.forceStereo,
+  });
+}
+
+/**
+ * Resolve with `promise` if it settles within `ms`, else reject with a
+ * TimeoutError; a result that arrives after that is handed to `discard`.
+ */
+function settleWithin<T>(promise: Promise<T>, ms: number, discard: (late: T) => void): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      settled = true;
+      reject(new DOMException('The capture did not answer in time', 'TimeoutError'));
+    }, ms);
+    promise.then(
+      (value) => {
+        if (settled) { discard(value); return; }
+        settled = true;
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err: unknown) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
   });
 }
 
@@ -670,9 +748,10 @@ export async function syncScreenShareAudio(room: Room): Promise<void> {
       return;
     }
     const mediaTrack = pub.track.mediaStreamTrack;
-    await room.localParticipant.unpublishTrack(pub.track, false);
-    const held = liveOrNull(mediaTrack);
-    if (held) holdScreenShareAudio(held);
+    const canCaptureAgain = acquirableSourceId() !== null;
+    await room.localParticipant.unpublishTrack(pub.track, canCaptureAgain);
+    const kept = canCaptureAgain ? null : liveOrNull(mediaTrack);
+    if (kept) setAsideScreenShareAudio(kept);
     setScreenShareAudioState(idleScreenShareAudioState());
     return;
   }
@@ -689,7 +768,7 @@ export async function syncScreenShareAudio(room: Room): Promise<void> {
       await publishScreenShareAudioTrack(room, held);
       setScreenShareAudioState('published');
     } catch (err) {
-      holdScreenShareAudio(held);
+      setAsideScreenShareAudio(held);
       failScreenShareAudio(err);
     }
     return;
@@ -705,7 +784,12 @@ export async function syncScreenShareAudio(room: Room): Promise<void> {
   setScreenShareAudioState('acquiring');
   let track: MediaStreamTrack;
   try {
-    track = await acquireScreenShareAudio(sourceId);
+    // Bounded: this runs on the queue every live-settings change waits on.
+    track = await settleWithin(
+      acquireScreenShareAudio(sourceId),
+      SCREEN_SHARE_AUDIO_CAPTURE_TIMEOUT_MS,
+      (late) => late.stop(),
+    );
   } catch (err) {
     if (generation === _audioGeneration) failScreenShareAudio(err);
     return;
@@ -715,19 +799,32 @@ export async function syncScreenShareAudio(room: Room): Promise<void> {
     track.stop();
     return;
   }
-  // Turned off again meanwhile: keep it ready instead of sending it.
+  // Turned off again meanwhile: not sent, and on the desktop app not kept.
   if (!useVoiceStore.getState().screenShareConfig.shareAudio) {
-    holdScreenShareAudio(track);
-    setScreenShareAudioState('held');
+    setAsideScreenShareAudio(track);
+    setScreenShareAudioState(idleScreenShareAudioState());
     return;
   }
   try {
     await publishScreenShareAudioTrack(room, track);
     setScreenShareAudioState('published');
   } catch (err) {
-    holdScreenShareAudio(track);
+    track.stop();
     failScreenShareAudio(err);
   }
+}
+
+/**
+ * `LocalTrackUnpublished` for ScreenShareAudio. The paths in this module set
+ * the state themselves; this catches the ones that do not go through them,
+ * such as livekit-client unpublishing an audio track whose source ended, so
+ * the switch never reads on while nothing is sent.
+ */
+export function handleScreenShareAudioUnpublished(): void {
+  if (_republishing || _stopping) return;
+  const { isScreenSharing, screenShareAudio } = useVoiceStore.getState();
+  if (!isScreenSharing || screenShareAudio !== 'published') return;
+  setScreenShareAudioState(idleScreenShareAudioState());
 }
 
 // ---------------------------------------------------------------------------
@@ -939,7 +1036,7 @@ export async function stopScreenShare(room: Room): Promise<void> {
     _stopping = false;
   }
   deactivateHwOverdrive();
-  releaseScreenShareAudio();
+  endScreenShareAudio(room);
   _publishedScreenShareCodec = null;
   _requestedPublishedScreenShareCodec = null;
   useVoiceStore.setState({ isScreenSharing: false });
@@ -962,7 +1059,14 @@ export async function changeScreenShare(room: Room): Promise<void> {
 // OS-level "Stop sharing" handler
 // ---------------------------------------------------------------------------
 
-export function handleScreenShareUnpublished(): void {
+/**
+ * The video publication went away without stopScreenShare: the OS or browser
+ * stop bar, or the source itself ending (the shared window closed, a display
+ * unplugged), after which livekit-client unpublishes the ended track. Takes the
+ * room so the screen-share audio ends with it: audio added mid-stream comes
+ * from a second capture that does not end with the video.
+ */
+export function handleScreenShareUnpublished(room: Room): void {
   if (_republishing) return;
   // The explicit stop path unpublishes synchronously, so this handler runs from
   // inside stopScreenShare(), which clears the same state and broadcasts once
@@ -970,7 +1074,7 @@ export function handleScreenShareUnpublished(): void {
   // `voice_status` fan-out instead of two.
   if (_stopping) return;
   deactivateHwOverdrive();
-  releaseScreenShareAudio();
+  endScreenShareAudio(room);
   _publishedScreenShareCodec = null;
   _requestedPublishedScreenShareCodec = null;
   useVoiceStore.setState({ isScreenSharing: false });

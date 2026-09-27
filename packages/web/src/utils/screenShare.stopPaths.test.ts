@@ -63,7 +63,7 @@ describe('screen-share stop paths broadcast voice status', () => {
   });
 
   it('handleScreenShareUnpublished broadcasts for the OS-level stop bar', () => {
-    handleScreenShareUnpublished();
+    handleScreenShareUnpublished(makeRoom());
     expect(useVoiceStore.getState().isScreenSharing).toBe(false);
     expect(broadcastVoiceStatus).toHaveBeenCalledTimes(1);
   });
@@ -78,13 +78,15 @@ describe('an explicit stop clears both publications and broadcasts once', () => 
   it('unpublishes the audio track even when the video track throws', async () => {
     const videoPub = { track: { kind: 'video' } };
     const audioPub = { track: { kind: 'audio' } };
+    let audioPublished = true;
     const unpublishTrack = vi.fn(async (track: { kind: string }) => {
       if (track.kind === 'video') throw new Error('gone');
+      audioPublished = false;
     });
     const room = {
       localParticipant: {
         getTrackPublication: vi.fn((source: string) =>
-          source === 'screen_share' ? videoPub : audioPub),
+          source === 'screen_share' ? videoPub : audioPublished ? audioPub : undefined),
         unpublishTrack,
       },
     } as never;
@@ -99,15 +101,14 @@ describe('an explicit stop clears both publications and broadcasts once', () => 
   });
 
   it('broadcasts once even though the unpublish reaches the OS-stop handler', async () => {
-    const room = {
-      localParticipant: {
-        getTrackPublication: vi.fn((source: string) =>
-          source === 'screen_share' ? { track: { kind: 'video' } } : undefined),
-        // livekit-client emits LocalTrackUnpublished synchronously inside
-        // unpublishTrack, and useLiveKit routes that to this handler.
-        unpublishTrack: vi.fn(async () => { handleScreenShareUnpublished(); }),
-      },
-    } as never;
+    const localParticipant = {
+      getTrackPublication: vi.fn((source: string) =>
+        source === 'screen_share' ? { track: { kind: 'video' } } : undefined),
+      // livekit-client emits LocalTrackUnpublished synchronously inside
+      // unpublishTrack, and useLiveKit routes that to this handler.
+      unpublishTrack: vi.fn(async () => { handleScreenShareUnpublished(room); }),
+    };
+    const room = { localParticipant } as never;
 
     await stopScreenShare(room);
 

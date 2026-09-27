@@ -33,6 +33,7 @@ import {
   republishScreenShare,
   getRequestedPublishedScreenShareCodec,
   handleScreenShareUnpublished,
+  handleScreenShareAudioUnpublished,
   isScreenShareRepublishing,
   resolveNativeOverdrive,
   syncScreenShareAudio,
@@ -803,7 +804,10 @@ export function useLiveKit() {
             useVoiceStore.getState().unwatchStream(userId);
           }
           // OS-level "Stop sharing" fires this without going through stopScreenShare
-          handleScreenShareUnpublished();
+          handleScreenShareUnpublished(newRoom);
+        }
+        if (publication.source === Track.Source.ScreenShareAudio) {
+          handleScreenShareAudioUnpublished();
         }
         guardedUpdate();
       });

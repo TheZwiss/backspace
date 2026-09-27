@@ -388,7 +388,7 @@ export function ScreenShareSetup() {
     if (!stream || !room) { setError('startFailed'); return; }
     setStarting(true);
     setError(null);
-    const ok = await publishScreenShare(room, stream, { sourceId: selectedId });
+    const ok = await publishScreenShare(room, stream, { sourceId: selectedId, pickerMode });
     if (!ok) {
       // publishScreenShare stopped the tracks on failure
       stagedRef.current = null;
@@ -409,7 +409,7 @@ export function ScreenShareSetup() {
     setStaged(null);
     setStarting(false);
     close();
-  }, [close, selectedId]);
+  }, [close, selectedId, pickerMode]);
 
   const screens = useMemo(() => sources.filter((s) => s.isScreen), [sources]);
   const windows = useMemo(() => {
@@ -428,7 +428,7 @@ export function ScreenShareSetup() {
   // held back). Turning it on is too where the desktop app can add loopback
   // audio to the running share; elsewhere audio comes only with a new pick.
   const audioNeedsRepick = !!staged && config.shareAudio && !stagedShareAudio
-    && !canAddScreenShareAudioLater(selectedId);
+    && !canAddScreenShareAudioLater(selectedId, pickerMode);
   const canStart = !!staged && !staging && !starting;
   const chooseHint = !electron
     ? t('voice:screenPicker.chooseHint')

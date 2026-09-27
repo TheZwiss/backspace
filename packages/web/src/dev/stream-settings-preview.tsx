@@ -45,6 +45,8 @@ interface Scene {
   hostLimits: InstanceStreamingLimits;
   /** System audio of a live share; absent = not sharing (the setup screen's view). */
   live?: { audio: ScreenShareAudioState; preference: boolean };
+  /** Render as the desktop app on this platform (a stub `window.backspace`, read for the platform notes). */
+  desktopPlatform?: 'win32' | 'darwin' | 'linux';
 }
 
 const SCENES: Record<string, Scene> = {
@@ -70,16 +72,24 @@ const SCENES: Record<string, Scene> = {
     live: { audio: 'published', preference: true },
   },
   'live-held': {
-    caption: 'Live share, audio turned off mid-stream: capture held, the switch can turn it back on',
+    caption: 'Browser share, audio turned off mid-stream: capture kept aside, the switch can turn it back on',
     origin: '',
     hostLimits: HOME_LIMITS,
     live: { audio: 'held', preference: false },
   },
   'live-acquiring': {
-    caption: 'Desktop app adding loopback audio to a running share',
+    caption: 'Desktop app (Windows), System Audio just turned on mid-stream: switch on and waiting while the loopback capture is taken',
     origin: '',
     hostLimits: HOME_LIMITS,
     live: { audio: 'acquiring', preference: true },
+    desktopPlatform: 'win32',
+  },
+  'live-published-desktop': {
+    caption: 'Desktop app (Windows), live share sending system audio',
+    origin: '',
+    hostLimits: HOME_LIMITS,
+    live: { audio: 'published', preference: true },
+    desktopPlatform: 'win32',
   },
   'live-unavailable': {
     caption: 'Browser share started without audio: cannot be added mid-stream, switch disabled and explained',
@@ -90,6 +100,9 @@ const SCENES: Record<string, Scene> = {
 };
 
 function seed(scene: Scene): void {
+  if (scene.desktopPlatform) {
+    (window as { backspace?: unknown }).backspace = { platform: scene.desktopPlatform };
+  }
   useSettingsStore.setState({
     streamingLimits: scene.origin ? HOME_LIMITS : scene.hostLimits,
     streamingLimitsByOrigin: scene.origin ? { [scene.origin]: scene.hostLimits } : {},

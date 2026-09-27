@@ -102,14 +102,15 @@ export function systemAudioSwitch(
   isScreenSharing: boolean,
   liveAudio: ScreenShareAudioState | null,
   preference: boolean,
-): { checked: boolean; disabled: boolean; cannotAddLive: boolean } {
-  if (!isScreenSharing || liveAudio === null) return { checked: preference, disabled: false, cannotAddLive: false };
+): { checked: boolean; disabled: boolean; cannotAddLive: boolean; adding: boolean } {
+  const idle = { cannotAddLive: false, adding: false };
+  if (!isScreenSharing || liveAudio === null) return { checked: preference, disabled: false, ...idle };
   switch (liveAudio) {
-    case 'published': return { checked: true, disabled: false, cannotAddLive: false };
-    case 'acquiring': return { checked: true, disabled: true, cannotAddLive: false };
+    case 'published': return { checked: true, disabled: false, ...idle };
+    case 'acquiring': return { checked: true, disabled: true, cannotAddLive: false, adding: true };
     case 'held':
-    case 'acquirable': return { checked: false, disabled: false, cannotAddLive: false };
-    case 'unavailable': return { checked: false, disabled: true, cannotAddLive: true };
+    case 'acquirable': return { checked: false, disabled: false, ...idle };
+    case 'unavailable': return { checked: false, disabled: true, cannotAddLive: true, adding: false };
   }
 }
 
@@ -300,7 +301,12 @@ export function StreamQualityControls() {
                 {t('voice:streamSettings.systemAudioLiveUnavailable')}
               </div>
             )}
-            {audioSwitch.checked && (
+            {audioSwitch.adding && (
+              <div className="text-[10px] text-txt-tertiary mt-0.5" role="status">
+                {t('voice:streamSettings.systemAudioAdding')}
+              </div>
+            )}
+            {audioSwitch.checked && !audioSwitch.adding && (
               <div className="text-[10px] text-accent-amber/80 mt-0.5">
                 {electronPlatform === 'win32'
                   ? t('voice:streamSettings.electronWindowsAudioNote')

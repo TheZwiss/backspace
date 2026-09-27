@@ -292,6 +292,17 @@ describe('screen-share audio published mid-stream', () => {
     expect(mocks.syncScreenShareAudio).toHaveBeenCalledWith(result.current.room);
   });
 
+  it('turns the switch off when the local screen-share audio is unpublished from outside', async () => {
+    const { result } = renderHook(() => useLiveKit());
+    await act(async () => { await result.current.connect('channel'); });
+    useVoiceStore.setState({ isScreenSharing: true, screenShareAudio: 'published' });
+    act(() => {
+      const room = result.current.room!;
+      room.emit(RoomEvent.LocalTrackUnpublished, { source: Track.Source.ScreenShareAudio } as never, room.localParticipant);
+    });
+    expect(useVoiceStore.getState().screenShareAudio).toBe('unavailable');
+  });
+
   it('leaves it alone for someone not watching', async () => {
     const { result } = renderHook(() => useLiveKit());
     await act(async () => { await result.current.connect('channel'); });
