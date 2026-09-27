@@ -207,3 +207,138 @@ describe('performHandshake — a transient failure keeps a row that local traffi
     expect(outboxEntityIds()).toEqual(['msg-3']);
   });
 });
+
+/**
+ * What the remote's own `/peer/accept` does to our row when it lands while our
+ * handshake is in flight (`peerHandshake.ts`, "Pending — update with new secret
+ * and activate"): the same row, now `active` under the remote's secret.
+ */
+function promotePendingRowAsRemoteAcceptWould(): void {
+  const peer = peerRow();
+  if (!peer) throw new Error('handshake created no pending row to promote');
+  testDb.update(schema.federationPeers)
+    .set({ status: 'active', hmacSecret: 'secret-from-remote-accept', lastSeenAt: Date.now() })
+    .where(eq(schema.federationPeers.id, peer.id))
+    .run();
+}
+
+describe('performHandshake — the remote activates our row while our handshake is in flight', () => {
+  beforeEach(async () => {
+    sqlite = new Database(':memory:');
+    sqlite.pragma('foreign_keys = ON');
+    testDb = drizzle(sqlite, { schema });
+    applyMigrations(sqlite);
+    seedInstanceSettings();
+    const { _clearInFlightPeering } = await import('./federationPeering.js');
+    _clearInFlightPeering();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    sqlite.close();
+  });
+
+  it('a failed request does not delete the row the remote promoted to active', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      promotePendingRowAsRemoteAcceptWould();
+      throw new TypeError('fetch failed');
+    }));
+
+    const { ensurePeered } = await import('./federationPeering.js');
+    await ensurePeered(REMOTE, { kind: 'system' });
+
+    const row = peerRow();
+    expect(row?.status).toBe('active');
+    expect(row?.hmacSecret).toBe('secret-from-remote-accept');
+  });
+
+  it('with entries queued, the kept-row log reports the row as active, not pending', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      queueAgainstPendingRow('msg-4');
+      promotePendingRowAsRemoteAcceptWould();
+      throw new TypeError('fetch failed');
+    }));
+
+    const { ensurePeered } = await import('./federationPeering.js');
+    await ensurePeered(REMOTE, { kind: 'system' });
+
+    expect(peerRow()?.status).toBe('active');
+    expect(outboxEntityIds()).toEqual(['msg-4']);
+    const lines = log.mock.calls.map(args => String(args[0]));
+    expect(lines.some(l => l.includes('pending row'))).toBe(false);
+    expect(lines.some(l => l.includes(REMOTE) && l.includes('active'))).toBe(true);
+  });
+});
+
+describe('performHandshake — a remote that has revoked us is a settled answer', () => {
+  beforeEach(async () => {
+    sqlite = new Database(':memory:');
+    sqlite.pragma('foreign_keys = ON');
+    testDb = drizzle(sqlite, { schema });
+    applyMigrations(sqlite);
+    seedInstanceSettings();
+    const { _clearInFlightPeering } = await import('./federationPeering.js');
+    _clearInFlightPeering();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    sqlite.close();
+  });
+
+  /** The remote's answer when its row for us is `revoked` (peerHandshake.ts). */
+  function revokedAnswer(): Response {
+    return new Response(JSON.stringify({ error: 'Peering with this instance has been revoked', statusCode: 403 }), {
+      status: 403,
+      headers: { 'content-type': 'application/json' },
+    });
+  }
+
+  it('settles the row as rejected, the way 403 PEERING_REQUIRES_APPROVAL does', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      queueAgainstPendingRow('msg-5');
+      return revokedAnswer();
+    }));
+
+    const { ensurePeered } = await import('./federationPeering.js');
+    const { onPeerDeactivated } = await import('./federationPeerActivation.js');
+    const result = await ensurePeered(REMOTE, { kind: 'system' });
+
+    expect(result).toEqual({ status: 'rejected', error: 'Peering with this instance has been revoked' });
+    const row = peerRow();
+    expect(row?.status).toBe('rejected');
+    expect(onPeerDeactivated).toHaveBeenCalledWith(row?.id, 'remote_rejected');
+  });
+
+  it('is not retried: the next ensurePeered answers from the row without a request', async () => {
+    const fetchMock = vi.fn(async () => {
+      queueAgainstPendingRow('msg-6');
+      return revokedAnswer();
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { ensurePeered } = await import('./federationPeering.js');
+    await ensurePeered(REMOTE, { kind: 'system' });
+    const second = await ensurePeered(REMOTE, { kind: 'system' });
+
+    expect(second.status).toBe('rejected');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not overwrite a row the remote promoted to active during the request', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      promotePendingRowAsRemoteAcceptWould();
+      return revokedAnswer();
+    }));
+
+    const { ensurePeered } = await import('./federationPeering.js');
+    const result = await ensurePeered(REMOTE, { kind: 'system' });
+
+    const row = peerRow();
+    expect(row?.status).toBe('active');
+    expect(result).toEqual({ status: 'active', peerId: row?.id });
+  });
+});

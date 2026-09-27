@@ -117,7 +117,7 @@ Both instances store the **same** HMAC secret. The initiating instance generates
       │  active    rejected   rejected     │
       │                                    │ health check OK
       │  auto-peer rejected                ▼
-      │  (403 PEERING_REQUIRES_APPROVAL) active
+      │  (any 403 from /peer/accept)     active
       └──────────────────────────── rejected
                                       │ admin revoke (active)
                                       ▼
@@ -156,9 +156,9 @@ When the server needs to relay events to an instance it has not yet peered with,
 - **Outbox worker** (`federationWorker.ts`) — after delivering active peers, calls `ensurePeered()` for any pending-placeholder entries whose peer has not yet been activated. The placeholders themselves are created by `createAutoPlaceholderPeer`, subject to the outbound gate — see [Peer-row provenance](#peer-row-provenance).
 - **Connection flow** (`POST /api/federation/peer/ensure`) — called by the client when establishing a cross-instance connection, ensuring the two instances are peered before any relay traffic is sent.
 
-**Transient handshake failure.** `performHandshake` inserts its `pending` row (`initiatedBy: 'auto'`) before the request goes out, so traffic queued while the request is in flight lands on that row. In the DM send path this is the usual order: the typing-stop relay's warm-up (`sendCallRelay` with `peeringTimeoutMs: 0`) starts the handshake, then `queueDmRelay` queues the message against the row it finds. On a network error, timeout or non-2xx answer the row is removed only when no `federation_outbox` entry references it (`discardCreatedPendingPeer`, one `DELETE ... WHERE NOT EXISTS`). A row with entries stays `pending`, the same shape `createAutoPlaceholderPeer` produces, and `resolvePendingPeers` retries it. Before this, the delete cascaded the queued messages away and nothing retried the peering until some later event.
+**Transient handshake failure.** `performHandshake` inserts its `pending` row (`initiatedBy: 'auto'`) before the request goes out, so traffic queued while the request is in flight lands on that row. In the DM send path this is the usual order: the typing-stop relay's warm-up (`sendCallRelay` with `peeringTimeoutMs: 0`) starts the handshake, then `queueDmRelay` queues the message against the row it finds. On a network error, timeout or non-2xx answer other than a `403` (see `rejected` below) the row is removed only when it is still `pending` and no `federation_outbox` entry references it (`discardCreatedPendingPeer`, one `DELETE ... WHERE status = 'pending' AND NOT EXISTS`). The status term matters because the remote's own `/peer/accept` can promote the same row to `active` while our request is in flight; a failure of our request afterwards must not delete that peering. A row with entries stays `pending`, the same shape `createAutoPlaceholderPeer` produces, and `resolvePendingPeers` retries it. Before this, the delete cascaded the queued messages away and nothing retried the peering until some later event.
 
-**`rejected` status** — Added to the peer lifecycle. Set when a remote instance explicitly rejects auto-peering with `403 PEERING_REQUIRES_APPROVAL`. This status is sticky: no automatic retry occurs. An admin can clear it by deleting the peer record (then re-initiating), or by manually initiating via `peer/initiate`. An incoming `peer/accept` from a remote admin can also override `rejected` → `active` (treated the same as a `pending` record).
+**`rejected` status** — Added to the peer lifecycle. Set when a remote instance refuses auto-peering with a `403`: either `PEERING_REQUIRES_APPROVAL` (its admin denied us) or the codeless `Peering with this instance has been revoked` (its row for us is `revoked`). Both are permanent answers, so neither is retried. The update is conditional on the row still being `pending`: if the remote's own `/peer/accept` promoted the row to `active` while our request was in flight, that row stands and `ensurePeered` answers `active`. This status is sticky: no automatic retry occurs. An admin can clear it by deleting the peer record (then re-initiating), or by manually initiating via `peer/initiate`. An incoming `peer/accept` from a remote admin can also override `rejected` → `active` (treated the same as a `pending` record).
 
 **`autoAcceptPeering` instance setting** — Controls whether `POST /api/federation/peer/accept` accepts unsolicited peering requests. Default: `true`. When `false`, a request with no matching **admin-initiated** local `pending`/`awaiting_approval` record is queued for review and answered `202` (see [Peer Approval Queue](#peer-approval-queue)); `403 PEERING_REQUIRES_APPROVAL` is reserved for an origin the admin previously denied (a `rejected` row). The determination is made from the local peer table — the row's status *and* its `initiated_by` provenance — never from a client-provided flag.
 
@@ -520,7 +520,7 @@ These S→C events are pushed to the acting user's connected clients by the fede
 
 | Event | Pushed when | Payload |
 |-------|-------------|---------|
-| `federation_peer_rejected` | Outbox worker receives `403 PEERING_REQUIRES_APPROVAL` from a remote instance during auto-peering | `{ peerId: string, origin: string }` |
+| `federation_peer_rejected` | Outbox worker's auto-peering gets a `403` from the remote (`PEERING_REQUIRES_APPROVAL`, or the codeless revoked answer) | `{ peerId: string, origin: string }` |
 | `federation_peer_active` | A previously `rejected` peer transitions to `active` (e.g., via manual `peer/initiate` or incoming `peer/accept`) | `{ peerId: string, origin: string }` |
 | `federation_peer_reset_detected` | A peer's advertised instance epoch differs from the trusted baseline (wipe-and-reinstall on the same domain) — emitted by `markPeerReset` after routing the peer to `needs_attention` | `{ origin: string }` (admin-only, via `sendToAdmins`) |
 
@@ -1755,7 +1755,7 @@ Mirror of `onPeerActivated` for the transition *out* of `active`. Invoked wherev
 - `utils/federationWorker.ts` auth-failure path when status flips to `needs_attention`
 - `utils/federationWorker.ts` resolvePendingPeers case `'rejected'`
 - `routes/federation.ts` admin revoke endpoint
-- `utils/federationPeering.ts` performHandshake 403 `PEERING_REQUIRES_APPROVAL` path
+- `utils/federationPeering.ts` performHandshake 403 path (`settleRejectedHandshake`, only when the row was still `pending`)
 
 Deduplicated by peerId using a **separate** `inFlightDeactivation` map (not shared with activation) so flapping peers retain clean activate-then-deactivate ordering.
 

@@ -528,18 +528,14 @@ async function performHandshake(
       // Ignore parse failures
     }
 
-    if (response.status === 403 && code === 'PEERING_REQUIRES_APPROVAL') {
-      // Explicit rejection — set rejected status (sticky)
-      db.update(schema.federationPeers)
-        .set({ status: 'rejected' })
-        .where(eq(schema.federationPeers.id, peerId))
-        .run();
-      const { connectionManager } = await import('../ws/handler.js');
-      connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
-      onPeerDeactivated(peerId, 'remote_rejected').catch(err =>
-        console.error('[federation] onPeerDeactivated from performHandshake rejected failed:', err)
-      );
-      return { status: 'rejected', error: errorMessage };
+    if (response.status === 403) {
+      // A 403 is the remote refusing us, not a failure to reach it, and both
+      // 403s `/peer/accept` sends are permanent: `PEERING_REQUIRES_APPROVAL`
+      // (its admin denied us) and the codeless revoked answer (its row for us
+      // is `revoked`). Retrying either only repeats the refusal, so the row
+      // settles as `rejected` (sticky) and the caller hears it.
+      console.warn(`[federation] handshake with ${origin} refused (${code ?? 'HTTP 403'}): ${errorMessage}`);
+      return settleRejectedHandshake(peerId, errorMessage);
     }
 
     // Other errors (4xx, 5xx) — transient, clean up pending peer
@@ -558,6 +554,41 @@ async function performHandshake(
 }
 
 /**
+ * Settle the row a handshake ran on as `rejected` after the remote refused us.
+ *
+ * Only a row that is still `pending` is settled. While our request is in
+ * flight the remote can run its own `/peer/accept` against us, which promotes
+ * this same row to `active`; that row is then the real outcome and is returned
+ * as it stands instead of being overwritten.
+ */
+async function settleRejectedHandshake(peerId: string, error: string): Promise<EnsurePeeredResult> {
+  const db = getDb();
+  const settled = db.update(schema.federationPeers)
+    .set({ status: 'rejected' })
+    .where(and(
+      eq(schema.federationPeers.id, peerId),
+      eq(schema.federationPeers.status, 'pending'),
+    ))
+    .run();
+
+  if (settled.changes === 0) {
+    const row = db
+      .select({ id: schema.federationPeers.id, status: schema.federationPeers.status })
+      .from(schema.federationPeers)
+      .where(eq(schema.federationPeers.id, peerId))
+      .get();
+    return (row ? settledResultFor(row) : null) ?? { status: 'failed', error };
+  }
+
+  const { connectionManager } = await import('../ws/handler.js');
+  connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
+  onPeerDeactivated(peerId, 'remote_rejected').catch(err =>
+    console.error('[federation] onPeerDeactivated from performHandshake rejected failed:', err)
+  );
+  return { status: 'rejected', error };
+}
+
+/**
  * Remove the `pending` row a failed handshake created, unless local traffic has
  * queued outbox entries against it in the meantime.
  *
@@ -573,13 +604,19 @@ async function performHandshake(
  * produced (`pending`, `initiatedBy: 'auto'`, created behind the same gate),
  * and `resolvePendingPeers` retries it on the next tick.
  *
- * One statement, so no entry can be queued between the check and the delete.
+ * Only a row that is still `pending` is removed. The remote's own
+ * `/peer/accept` can promote this row to `active` while our request is in
+ * flight, and our request failing afterwards says nothing about that peering.
+ *
+ * One statement, so no entry can be queued and no status can change between
+ * the check and the delete.
  */
 function discardCreatedPendingPeer(peerId: string, origin: string): void {
   const db = getDb();
   const result = db.delete(schema.federationPeers)
     .where(and(
       eq(schema.federationPeers.id, peerId),
+      eq(schema.federationPeers.status, 'pending'),
       notExists(
         db.select({ id: schema.federationOutbox.id })
           .from(schema.federationOutbox)
@@ -587,13 +624,18 @@ function discardCreatedPendingPeer(peerId: string, origin: string): void {
       ),
     ))
     .run();
-  const kept = result.changes === 0 && db
-    .select({ id: schema.federationPeers.id })
+  if (result.changes > 0) return;
+
+  const kept = db
+    .select({ status: schema.federationPeers.status })
     .from(schema.federationPeers)
     .where(eq(schema.federationPeers.id, peerId))
-    .get() !== undefined;
-  if (kept) {
+    .get();
+  if (!kept) return;
+  if (kept.status === 'pending') {
     console.log(`[federation] handshake with ${origin} failed; keeping its pending row for the queued outbox entries`);
+  } else {
+    console.log(`[federation] handshake with ${origin} failed, but its row is now ${kept.status} (settled by the remote while the request was in flight); leaving it`);
   }
 }
 

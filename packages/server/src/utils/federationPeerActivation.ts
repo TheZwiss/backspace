@@ -348,7 +348,7 @@ export async function startupBootstrapSync(): Promise<void> {
 export type PeerDeactivationReason =
   | 'network_threshold'        // outbox worker hit PEER_UNREACHABLE_THRESHOLD
   | 'auth_threshold'           // outbox worker hit AUTH_FAILURE_THRESHOLD
-  | 'remote_rejected'          // auto-peer handshake got 403 PEERING_REQUIRES_APPROVAL
+  | 'remote_rejected'          // auto-peer handshake got a 403 (PEERING_REQUIRES_APPROVAL or revoked)
   | 'admin_revoked';           // admin revoked peering from this side
 
 // Dedup: concurrent deactivations for the same peerId share one promise.
@@ -368,7 +368,7 @@ const inFlightDeactivation = new Map<string, Promise<void>>();
  *   - utils/federationWorker.ts resolvePendingPeers case 'rejected'
  *   - routes/federation.ts admin revoke endpoint
  *   - routes/federation.ts admin reset endpoint (when it transitions to a non-active status)
- *   - utils/federationPeering.ts performHandshake 403 PEERING_REQUIRES_APPROVAL path
+ *   - utils/federationPeering.ts performHandshake 403 path (settleRejectedHandshake)
  *
  * Deduplicated by peerId — concurrent calls share one promise. Separate map from
  * onPeerActivated so flapping peers don't collapse transitions.
