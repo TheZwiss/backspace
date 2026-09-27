@@ -169,7 +169,7 @@ This ensures closed DMs resurface automatically when new activity occurs.
 
 Close and reopen are relayed to all peer instances that hold a copy of the DM:
 
-- **Close relay:** After setting `closed = 1` locally, `queueDmCloseRelay(channelId, userId, 'dm_close')` queues a `dm_close` outbox event. The receiving instance finds the channel by `federatedId`, resolves the acting user by `homeUserId` + `homeInstance` via `resolveRelayActor` (an id that names a local user of another identity is refused as `attribution_mismatch`), sets `closed = 1` on the local `dm_members` row, and broadcasts `dm_channel_closed`.
+- **Close relay:** After setting `closed = 1` locally, `queueDmCloseRelay(channelId, userId, 'dm_close')` queues a `dm_close` outbox event. The receiving instance finds the channel by `federatedId`, resolves the acting user by `homeUserId` + `homeInstance` via `resolveRelayActor`, sets `closed = 1` on the local `dm_members` row, and broadcasts `dm_channel_closed`.
 - **Reopen relay:** Explicit reopens (`POST /api/dm` when reopening a closed 1-on-1 DM) queue a `dm_reopen` event. The receiving instance sets `closed = 0` and broadcasts `dm_channel_created` with a full channel payload.
 - **Relayed-message reopen:** `processCreateEvent` (inbound message relay) also checks each recipient's `closed` flag and performs the same resurface sequence (`dm_channel_created` → `dm_message_created`) — mirroring `broadcastDmMessage`. This ensures messages relayed from a remote instance properly reopen closed DMs on the receiving instance.
 - Only fires for DMs with a `federatedId`. Legacy local-only DMs (no `federatedId`) are unaffected.
@@ -560,6 +560,7 @@ The full event includes `participants` (all channel members with their federated
 **Participant resolution:**
 - ALL participants resolved via `resolveOrCreateReplicatedUser()` (auto-creates stubs for unknown remote users)
 - Profile data from relay event hydrated onto replicated user stubs via `hydrateReplicatedUserProfile()`
+- The author is the resolved participant that IS `event.message`'s `homeUserId` + `homeInstance` (`resolveRelayActor`), not the first participant sharing its `homeUserId`: a participant bound by username can resolve to a row of another identity. No such participant: reject `author_not_found`
 
 **Channel resolution (group vs 1-on-1):**
 
@@ -629,7 +630,7 @@ An event **without** a `target` (an older sender) is matched as `(sourceInstance
 Triggered by a `read_state_update` relay event sent when a user on another instance acknowledges a DM channel.
 
 1. Resolve channel by `federatedId` — reject if not found
-2. Resolve user by `homeUserId` + `homeInstance` via `resolveRelayActor`: `attribution_mismatch` if the id names a local user of another identity, `user_not_found` if unknown
+2. Resolve user by `homeUserId` + `homeInstance` via `resolveRelayActor`: `user_not_found` if unknown
 3. Resolve message by `messageRef` (local ID or `source_instance + source_message_id`)
 4. Upsert `read_states` row for the resolved user and message
 5. Broadcast `channel_ack` to the user's local WebSocket connections for multi-tab sync
@@ -683,7 +684,7 @@ When a group DM is created with multiple remote members, the origin instance que
 
 1. Find channel by `federatedId`. If not found, accept silently (idempotent).
 2. Authority check: for kicks, `sourceInstance` must match `ownerHomeInstance`. For self-leave (`reason === 'leave'`), any instance is accepted.
-3. Resolve user by `homeUserId` + `homeInstance` via `resolveRelayActor()` (they should already exist). For a self-leave, an id that names a local user of another identity is refused as `attribution_mismatch`. If not found, accept silently.
+3. Resolve user by `homeUserId` + `homeInstance` via `resolveRelayActor()` (they should already exist). If not found, accept silently.
 4. Insert `member_removed` system message (before deletion so broadcast includes leaving user)
 5. Delete `dm_members` row
 6. Delete `read_states`

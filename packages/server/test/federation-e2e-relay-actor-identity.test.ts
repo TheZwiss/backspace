@@ -28,14 +28,15 @@ vi.setConfig({ testTimeout: 30_000 });
  * resolving it without its `homeInstance` can land on a different person, in
  * particular a native user of the receiver whose own id is that value.
  *
- * Each case below names a native user of the receiver (bob, carol) by id while
- * claiming the signing peer as their home. Attribution passes (the claimed home
- * IS the signing peer), so only the identity resolution decides the outcome:
- * the receiver must refuse the event as `attribution_mismatch` and change
- * nothing. Every refusal is paired with a positive control, the same event for
- * a user actually homed on the peer (or a homeward user with standing), which
- * must be accepted and have its effect, so a refusal cannot come from the
- * handler rejecting everything.
+ * The invariant under test: an event is applied only as a live, attached local
+ * user that is the actor's pair and is homed on the signing peer (or is a local
+ * user with an account there). Each refusal case names an actor for which no
+ * such user exists on the receiver; the receiver must refuse the event and
+ * change nothing (a profile or presence update is acked without effect, as for
+ * any user it holds no replica of). Every refusal is paired with a positive
+ * control, the same event for a user actually homed on the peer (or a homeward
+ * user with standing), which must be accepted and have its effect, so a
+ * refusal cannot come from the handler rejecting everything.
  *
  * Fixture rows written with `withWritableDb` (friendships, a pending request,
  * group DMs) only set up the state a handler acts on; the behaviour under test
@@ -231,6 +232,35 @@ function stubsCarrying(homeUserId: string): number {
   return readDb(B, db =>
     (db.prepare('SELECT COUNT(*) AS n FROM users WHERE home_user_id = ? AND home_instance IS NOT NULL').get(homeUserId) as { n: number }).n,
   );
+}
+
+/**
+ * A user row on B homed on another instance: a replicated stub by default, or
+ * a real federated account (`passwordHash`), optionally detached from its home.
+ */
+function seedRemoteRow(opts: {
+  username: string;
+  homeInstance: string;
+  homeUserId: string | null;
+  passwordHash?: string;
+  detached?: boolean;
+}): string {
+  const id = snowflakeish();
+  withWritableDb(B, db => {
+    db.prepare(`
+      INSERT INTO users (id, username, password_hash, status, home_instance, home_user_id, federation_home_orphaned, created_at)
+      VALUES (?, ?, ?, 'offline', ?, ?, ?, ?)
+    `).run(
+      id,
+      opts.username,
+      opts.passwordHash ?? '!federation-replicated',
+      opts.homeInstance,
+      opts.homeUserId,
+      opts.detached ? 1 : 0,
+      Date.now(),
+    );
+  });
+  return id;
 }
 
 function isGroupMember(dmChannelId: string, userId: string): boolean {
@@ -637,6 +667,168 @@ describe('federation e2e: a relayed actor is resolved by homeUserId + homeInstan
       expect(res.body?.accepted).toEqual([]);
       expect(rejectionReason(res, id)).toBe('attribution_mismatch');
       expect(pendingRequestExists(bob.id, dave.id)).toBe(false);
+    });
+  });
+
+  describe('create: the author is the participant that is its identity', () => {
+    const build = (
+      messageId: string,
+      author: Actor,
+      authorParticipant: Actor & { username: string },
+    ): FederationRelayEvent => ({
+      eventType: 'create',
+      contextType: 'dm',
+      messageId,
+      encryptionVersion: 0,
+      timestamp: Date.now(),
+      participants: [
+        {
+          homeUserId: authorParticipant.homeUserId,
+          homeInstance: authorParticipant.homeInstance,
+          profile: { username: authorParticipant.username },
+        },
+        { homeUserId: dave.id, homeInstance: B.domain, profile: { username: dave.username } },
+      ],
+      message: {
+        userId: author.homeUserId,
+        ...author,
+        content: `actor-identity ${messageId}`,
+        replyToId: null,
+        editedAt: null,
+        createdAt: Date.now(),
+      },
+    });
+    const authorOf = (messageId: string): string | null => readDb(B, db =>
+      (db.prepare('SELECT user_id AS userId FROM dm_messages WHERE source_message_id = ?').get(messageId) as
+        { userId: string } | undefined)?.userId ?? null,
+    );
+
+    it('stores a message from an author first matched by username as that user', async () => {
+      // A row for a user of A that does not carry a homeUserId yet; the first
+      // relay that names the user binds it by username.
+      const rowId = seedRemoteRow({ username: `hana@${A.domain}`, homeInstance: A.domain, homeUserId: null });
+      const homeId = snowflakeish();
+      const id = nextId('create-hana');
+      const author = { homeUserId: homeId, homeInstance: A.domain };
+      const res = await relay([build(id, author, { ...author, username: 'hana' })]);
+      expect(res.body?.accepted).toContain(id);
+      expect(authorOf(id)).toBe(rowId);
+    });
+
+    it('refuses a message whose author is not the identity of the participant it names', async () => {
+      // thea, homed on a third instance, is known here under her own
+      // homeUserId. The participant row the event names resolves to her by
+      // username; it is not the author's identity, so no participant is the
+      // author.
+      const theaId = seedRemoteRow({ username: 'thea@third.test.local', homeInstance: 'third.test.local', homeUserId: snowflakeish() });
+      const newId = snowflakeish();
+      const id = nextId('create-thea');
+      const res = await relay([build(
+        id,
+        { homeUserId: newId, homeInstance: A.domain },
+        { homeUserId: newId, homeInstance: 'third.test.local', username: 'thea' },
+      )]);
+      expect(res.status).toBe(200);
+      expect(res.body?.accepted).toEqual([]);
+      expect(rejectionReason(res, id)).toBe('author_not_found');
+      expect(authorOf(id)).toBeNull();
+      expect(readDb(B, db =>
+        (db.prepare('SELECT COUNT(*) AS n FROM dm_messages WHERE user_id = ?').get(theaId) as { n: number }).n,
+      )).toBe(0);
+    });
+  });
+
+  describe('profile_update / presence_update', () => {
+    /** bob's row carries his own id as home_user_id, as it does once a relay has named him. */
+    const markNamedByRelay = (user: TestUser): void => {
+      withWritableDb(B, db => {
+        db.prepare('UPDATE users SET home_user_id = id WHERE id = ?').run(user.id);
+      });
+    };
+    const profileOf = (userId: string): { displayName: string | null; bio: string | null; status: string | null } =>
+      readDb(B, db =>
+        db.prepare('SELECT display_name AS displayName, bio, status FROM users WHERE id = ?').get(userId) as
+          { displayName: string | null; bio: string | null; status: string | null },
+      );
+    const profileEvent = (id: string, actor: Actor, displayName: string): FederationRelayEvent => ({
+      eventType: 'profile_update',
+      contextType: 'profile',
+      messageId: id,
+      encryptionVersion: 0,
+      timestamp: Date.now(),
+      profileUpdate: {
+        ...actor,
+        profileUpdatedAt: Date.now(),
+        username: 'someone',
+        displayName,
+        avatar: null,
+        banner: null,
+        accentColor: null,
+        avatarColor: null,
+        bio: `bio of ${displayName}`,
+      },
+    });
+    const presenceEvent = (id: string, actor: Actor, status: 'online' | 'idle' | 'dnd' | 'offline'): FederationRelayEvent => ({
+      eventType: 'presence_update',
+      contextType: 'profile',
+      messageId: id,
+      encryptionVersion: 0,
+      timestamp: Date.now(),
+      presenceUpdate: { ...actor, status, ts: Date.now() },
+    });
+
+    it('applies a profile update of a user homed on the sending peer', async () => {
+      const id = nextId('profile-alice');
+      const res = await relay([profileEvent(id, aliceActor(), `Alice ${id}`)]);
+      expect(res.body?.accepted).toContain(id);
+      expect(profileOf(aliceOnB).displayName).toBe(`Alice ${id}`);
+    });
+
+    it('leaves a native user unchanged when a profile update names their id as homed on the sending peer', async () => {
+      markNamedByRelay(bob);
+      const before = profileOf(bob.id);
+      const id = nextId('profile-bob');
+      const res = await relay([profileEvent(id, claimedOnA(bob), `Bob ${id}`)]);
+      expect(res.status).toBe(200);
+      expect(res.body?.accepted).toContain(id);
+      expect(profileOf(bob.id)).toEqual(before);
+    });
+
+    it('applies a presence update of a user homed on the sending peer', async () => {
+      const id = nextId('presence-alice');
+      const target = profileOf(aliceOnB).status === 'idle' ? 'dnd' : 'idle';
+      const res = await relay([presenceEvent(id, aliceActor(), target)]);
+      expect(res.body?.accepted).toContain(id);
+      expect(profileOf(aliceOnB).status).toBe(target);
+    });
+
+    it('leaves a native user\'s presence unchanged when an update names their id as homed on the sending peer', async () => {
+      markNamedByRelay(bob);
+      const before = profileOf(bob.id).status;
+      const id = nextId('presence-bob');
+      const res = await relay([presenceEvent(id, claimedOnA(bob), before === 'dnd' ? 'idle' : 'dnd')]);
+      expect(res.status).toBe(200);
+      expect(res.body?.accepted).toContain(id);
+      expect(profileOf(bob.id).status).toBe(before);
+    });
+  });
+
+  describe('a detached account is not an actor of its old home', () => {
+    it('refuses a reaction whose reactor is a detached account homed on the sending peer', async () => {
+      const homeId = snowflakeish();
+      seedRemoteRow({
+        username: `olga@${A.domain}`,
+        homeInstance: A.domain,
+        homeUserId: homeId,
+        passwordHash: 'local-password-hash',
+        detached: true,
+      });
+      const id = nextId('react-detached');
+      const res = await relay([reactionEvent('reaction_add', id, M_BOB, { homeUserId: homeId, homeInstance: A.domain }, '🪨')]);
+      expect(res.status).toBe(200);
+      expect(res.body?.accepted).toEqual([]);
+      expect(rejectionReason(res, id)).toBe('attribution_mismatch');
+      expect(reactionUsers(M_BOB, '🪨')).toEqual([]);
     });
   });
 });

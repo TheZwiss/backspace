@@ -80,10 +80,13 @@ export async function processCreateEvent(
     return;
   }
 
-  // Find the author among the resolved participants
-  const authorEntry = resolvedParticipants.find(
-    p => p.homeUserId === event.message!.homeUserId,
-  );
+  // The author is the resolved participant that IS the message's identity
+  // (`resolveRelayActor`), not the first whose homeUserId matches: a
+  // participant bound by username can resolve to a row of another identity.
+  const author = resolveRelayActor(event.message, db);
+  const authorEntry = author.kind === 'found'
+    ? resolvedParticipants.find(p => p.localUser.id === author.user.id)
+    : undefined;
   if (!authorEntry) {
     rejected.push({ messageId: event.messageId, reason: 'author_not_found' });
     return;

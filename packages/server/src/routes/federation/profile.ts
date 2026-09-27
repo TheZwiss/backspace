@@ -12,7 +12,7 @@ import { and, eq, or, sql } from 'drizzle-orm';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { FederationRelayEvent, FederationRelayProfileSnapshot } from '@backspace/shared';
-import { extractDomain } from './identity.js';
+import { extractDomain, resolveRelayActor } from './identity.js';
 
 /**
  * Hydrate a replicated user stub with profile data from a relay event.
@@ -198,29 +198,16 @@ export async function processProfileUpdateEvent(
     return;
   }
 
-  // Look up the local replicated user by canonical identity
-  const localUser = db
-    .select()
-    .from(schema.users)
-    .where(
-      and(
-        eq(schema.users.homeUserId, payload.homeUserId),
-        eq(schema.users.isDeleted, 0),
-      ),
-    )
-    .get();
-
-  if (!localUser) {
-    // This peer has no replica of this user — silently accept
+  // The row updated is the one that IS the payload's identity, homed on the
+  // sending peer (`resolveRelayActor`). A native user of this instance is never
+  // one, so its profile is only ever changed here. No such row: accept as a
+  // no-op, this instance holds no replica of the user.
+  const identity = resolveRelayActor(payload, db);
+  if (identity.kind !== 'found' || !identity.user.homeInstance) {
     accepted.push(event.messageId);
     return;
   }
-
-  // Verify the homeInstance domain matches (guard against homeUserId collisions)
-  if (localUser.homeInstance && extractDomain(localUser.homeInstance) !== payloadDomain) {
-    accepted.push(event.messageId);
-    return;
-  }
+  const localUser = identity.user;
 
   // Detached accounts are sovereign: the domain now belongs to a different
   // incarnation, which must never overwrite the established account's profile

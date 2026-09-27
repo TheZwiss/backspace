@@ -160,6 +160,9 @@ export type AttributionRefusal = 'attribution_mismatch' | 'attribution_unproven'
  *    different identity here: when the `homeUserId` belongs only to local users
  *    homed elsewhere (`resolveRelayActor` reports `mismatch`), the event could
  *    never be applied as that actor, so it is refused before any handler acts.
+ *    The same holds when the identity is a detached account
+ *    (`federationHomeOrphaned = 1`): its home domain was reset, the account is
+ *    sovereign here, and the domain no longer speaks for it.
  * 2. **Homeward relay**: the actor is homed on THIS instance — a client-
  *    federation user (e.g. erin@nova logged into orbit) acted on the remote and
  *    the relay carries it back home. This is only accepted when the local user
@@ -186,7 +189,11 @@ export function attributionRefusal(
 
   // Case 1: the actor belongs to the signing peer.
   if (authorDomain === sourceDomain) {
-    return resolveRelayActor(actor, db).kind === 'mismatch' ? 'attribution_mismatch' : null;
+    const identity = resolveRelayActor(actor, db);
+    if (identity.kind === 'mismatch') return 'attribution_mismatch';
+    // A detached account no longer belongs to its old home domain.
+    if (identity.kind === 'found' && identity.user.federationHomeOrphaned === 1) return 'attribution_mismatch';
+    return null;
   }
 
   // Case 2: homeward relay — the actor belongs to THIS instance.
@@ -273,10 +280,13 @@ function isOwnDomain(domain: string): boolean {
  * compared the way `sameRelayActor` compares identities.
  *
  * Inbound relay handlers use it for the acting identity, after
- * `attributionRefusal` accepted the pair (which already refuses a `mismatch`).
- * Together they give the invariant every handler relies on: the user an event
- * is applied as is homed on the signing peer, or is one of our own users who
- * holds an account there (the homeward case). `findFederatedUser` uses it as its
+ * `attributionRefusal` accepted the pair (which already refuses a `mismatch`
+ * and a detached account). Together they give the invariant every handler
+ * relies on: the user an event is applied as is a live, attached user homed on
+ * the signing peer, or is one of our own users who holds an account there (the
+ * homeward case). `resolveRelayActor` itself still returns a detached row as
+ * `found`, since a lookup that is not an actor (a participant, a historical
+ * reference) may name one. `findFederatedUser` uses it as its
  * first step, so every `resolveOrCreateReplicatedUser` caller gets the same
  * rule. `resolveLocalUser` keeps its bare-id semantics for its other callers.
  */

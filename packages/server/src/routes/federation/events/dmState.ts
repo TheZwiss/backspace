@@ -173,24 +173,15 @@ export function processPresenceUpdateEvent(
     return;
   }
 
-  const localUser = db
-    .select()
-    .from(schema.users)
-    .where(and(
-      eq(schema.users.homeUserId, payload.homeUserId),
-      eq(schema.users.isDeleted, 0),
-    ))
-    .get();
-
-  if (!localUser) {
+  // The row updated is the one that IS the payload's identity, homed on the
+  // sending peer (`resolveRelayActor`). A native user of this instance is never
+  // one, so its presence is only ever set here. No such row: accept as a no-op.
+  const identity = resolveRelayActor(payload, db);
+  if (identity.kind !== 'found' || !identity.user.homeInstance) {
     accepted.push(event.messageId);
     return;
   }
-
-  if (localUser.homeInstance && extractDomain(localUser.homeInstance) !== payloadDomain) {
-    accepted.push(event.messageId);
-    return;
-  }
+  const localUser = identity.user;
 
   // Detached accounts are sovereign: the domain now belongs to a different
   // incarnation, which must never flip the established account's presence by

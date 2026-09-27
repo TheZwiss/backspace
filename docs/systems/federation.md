@@ -712,7 +712,7 @@ Two layers of replay protection:
 - Three-tier lookup: homeUserId match → domain + username hint match → not found
 - Tier 1: the identity itself, via `resolveRelayActor(homeUserId + homeInstance)`. When it reports `mismatch` (the `homeUserId` belongs only to local rows of another identity) the lookup stops: nothing is returned and tier 2 is not tried, so the id can neither reach those rows nor bind a stub by username
 - Tier 2: uses `extractDomain(homeInstance)` + `hints.username` to match stubs created by the auth registration path (which may have a different homeUserId)
-- **Tier 2 excludes detached accounts** (`federation_home_orphaned = 1`): a detached account is sovereign and must never be re-bound to the reset domain's new incarnation via username heuristics — that is exactly how a new same-name user would capture the established account. **Tier 1 (`homeUserId` match) is deliberately NOT excluded:** the new incarnation mints fresh `homeUserId`s, so a tier-1 hit on a detached row is a legitimate historical reference (e.g. an old group-DM attribution relayed by a third instance), not the new incarnation. Mutations are blocked at their own sites (profile_update handler, presence_update handler, `hydrateReplicatedUserProfile` fill-empty, S2S identity delete).
+- **Tier 2 excludes detached accounts** (`federation_home_orphaned = 1`): a detached account is sovereign and must never be re-bound to the reset domain's new incarnation via username heuristics — that is exactly how a new same-name user would capture the established account. **Tier 1 (`homeUserId` match) is deliberately NOT excluded:** the new incarnation mints fresh `homeUserId`s, so a tier-1 hit on a detached row is a legitimate historical reference (e.g. an old group-DM attribution relayed by a third instance), not the new incarnation. Mutations are blocked at their own sites (profile_update handler, presence_update handler, `hydrateReplicatedUserProfile` fill-empty, S2S identity delete), and `attributionRefusal` never accepts a detached identity as the actor of a relayed event from its old home domain (see "Attribution verification", case 1).
 - Side-effect-free — does not modify any records
 - When multiple candidates match in tier 2, prefers real accounts over stubs, then most profile data
 - **S2S-only.** Neither tier is proof of control over the named identity: tier 1 matches the `homeUserId` + `homeInstance` pair a caller names, and tier 2 matches a domain plus a username hint. Both are safe behind the HMAC-authenticated S2S channel, where the caller is an admin-approved peer and attribution is separately verified. **Never call this from an unauthenticated route.** In particular `POST /api/auth/register` does not — see `auth.md` "Federated Registration Never Claims an Existing Row".
@@ -724,14 +724,14 @@ Two layers of replay protection:
 - Excludes deleted users (`isDeleted = 0`)
 - When multiple candidates exist: prefers the one with `homeUserId` set (replicated stub) over a local ID match
 - Ignores `homeInstance`, so it is **not** an identity lookup: never use it to resolve the acting identity of an inbound relay event (use `resolveRelayActor`)
-- **Use when:** Optional lookups where null is acceptable and the id is not a relayed actor (e.g. a relayed friend request's local recipient)
+- **Use when:** Optional lookups where null is acceptable and the id is not a relayed actor (e.g. the original requester a relayed `friend_request_update` answers)
 
 **`resolveRelayActor(actor, db)`** -- `routes/federation/identity.ts`
 - Read-only. Resolves a federated identity (`RelayActor`, a `homeUserId` + `homeInstance` pair) to the local user that IS that identity: same candidate rows as `resolveLocalUser`; a native row is kept when its own id is the `homeUserId` and the `homeInstance` is one of this instance's own names (the host of `getOurOrigin()` or `DOMAIN`, which differ only under `PUBLIC_ORIGIN`); any other row when `sameRelayActor(relayActorOfUser(row), actor)` holds (equal home user id, same home domain)
-- Returns `{ kind: 'found', user }`, `{ kind: 'unknown' }` (no live row carries the `homeUserId`; each handler keeps its own not-found answer), or `{ kind: 'mismatch' }` (the `homeUserId` belongs to local rows of a different identity; `attributionRefusal` already refuses such an actor, and a handler that meets one refuses the event as `attribution_mismatch`, terminal, before changing anything)
+- Returns `{ kind: 'found', user }`, `{ kind: 'unknown' }` (no live row carries the `homeUserId`; each handler keeps its own not-found answer), or `{ kind: 'mismatch' }` (the `homeUserId` belongs to local rows of a different identity). A detached row (`federation_home_orphaned = 1`) is returned as `found`: a participant or a historical reference may name one
 - Also tier 1 of `findFederatedUser`, so every `resolveOrCreateReplicatedUser` caller (relay handlers and the client routes that take a `homeUserId` + `homeInstance` pair) resolves by the same rule
-- Called after `attributionRefusal` accepted the same pair. Together they hold the invariant: the user an inbound event is applied as is homed on the signing peer, or is one of our users with proven standing on it (homeward)
-- **Use when:** Any inbound relay handler that acts as the event's actor without creating a stub: `reaction_add`/`reaction_remove` (reactor), `dm_typing_start`/`dm_typing_stop`, `read_state_update`, `dm_close`/`dm_reopen`, `friend_request_cancel` (sender; recipient also resolved by pair), `friend_remove` (both sides; a mismatch on the attributed side is refused), `member_remove` (leaving or kicked user; a mismatch is refused only for a leave), `ownership_transfer` (previous owner, resolved before anything changes)
+- Called after `attributionRefusal` accepted the same pair. `attributionRefusal` refuses a `mismatch`, and a detached identity, as `attribution_mismatch` (terminal) before any handler runs, so a handler resolving its attributed actor only ever meets `found` or `unknown`; the `mismatch` checks some handlers keep on that actor are a backstop that cannot fire. Together they hold the invariant: the user an inbound event is applied as is a live, attached user homed on the signing peer, or is one of our users with proven standing on it (homeward)
+- **Use when:** Any inbound relay handler that acts as the event's actor without creating a stub: `reaction_add`/`reaction_remove` (reactor), `dm_typing_start`/`dm_typing_stop`, `read_state_update`, `dm_close`/`dm_reopen`, `friend_request_create` (the local recipient), `friend_request_cancel` (sender; recipient also resolved by pair), `friend_remove` (both sides), `member_remove` (leaving or kicked user), `ownership_transfer` (previous owner, resolved before anything changes), `create` (the author is the resolved participant that IS `message`'s pair), `profile_update`/`presence_update` (the replicated row updated; anything but a `found` row homed elsewhere is acked without effect)
 
 **`resolveOrCreateReplicatedUser(homeUserId, homeInstance, db, hints?)`** -- `federation.ts`
 - Calls `findFederatedUser` first. If found, backfills `homeUserId` for future fast-path lookups and returns. On a tier-1 `mismatch` it returns `null` and creates nothing: a stub would give one id two identities here.
@@ -796,7 +796,7 @@ The actor is passed as a **pair**. A `homeUserId` on its own is not an identity 
 
 Two valid cases:
 
-1. **Direct**: `authorDomain === sourceDomain`. A peer is the identity authority for its own users, but not for an id that is already a different identity here: when `resolveRelayActor` reports `mismatch` for the pair, the result is `attribution_mismatch`, before any handler resolves or creates a user.
+1. **Direct**: `authorDomain === sourceDomain`. A peer is the identity authority for its own users, but not for an id that is already a different identity here: when `resolveRelayActor` reports `mismatch` for the pair, the result is `attribution_mismatch`, before any handler resolves or creates a user. The same holds when the pair resolves to a detached account (`federation_home_orphaned = 1`): its home domain was reset and no longer speaks for it.
 2. **Homeward relay**: `authorDomain === extractDomain(getOurOrigin())` — a client-federation user (e.g. `erin@nova` logged into `orbit`) acted on the remote and the relay carries the event back to their home instance. Accepted **only** when `localUserStandingOnPeer(homeUserId, sourceInstance, db)` returns `proven`.
 
 An actor homed on a third instance is always rejected: the signing peer is neither that instance's identity authority nor delegated by it.
@@ -805,7 +805,7 @@ An actor homed on a third instance is always rejected: the signing peer is neith
 
 | Reason | When | Sender |
 |---|---|---|
-| `attribution_mismatch` | Malformed actor; actor homed on a third instance; homeward claim for a user id with no live native row (`no_such_user`: never existed, deleted, or only a replicated stub); direct claim whose `homeUserId` belongs only to local rows of a different identity (`resolveRelayActor` reports `mismatch`) | Terminal. Nothing that arrives later can make the claim true. |
+| `attribution_mismatch` | Malformed actor; actor homed on a third instance; homeward claim for a user id with no live native row (`no_such_user`: never existed, deleted, or only a replicated stub); direct claim whose `homeUserId` belongs only to local rows of a different identity (`resolveRelayActor` reports `mismatch`) or that names a detached account | Terminal. Nothing that arrives later can make the claim true. |
 | `attribution_unproven` | Homeward claim for a live native user with no registry row and no `replicated_instances` entry for the signing peer yet (`unproven`) | Retryable on the normal backoff, until the outbox TTL |
 
 `unproven` exists because the proof is written by the user's own client, after the remote session is open (`syncRegistry` in `instanceStore.ts` runs at the end of the connect flow, and not at all until `autoConnectAll` has read the server registry once). A DM the user writes on the remote in that window reaches home before the proof does. From the receiver's side that is indistinguishable from a peer forging a claim for one of its users, so the event is refused either way and nothing is written; the reason only tells the sender whether a retry can succeed. A peer that really is forging gains nothing from the retry: its own outbox carries the cost (about 36 attempts over the 30-day TTL), and a retry is only accepted once the user has connected to that peer, which is exactly the standing that would let it speak for the user anyway.
@@ -937,7 +937,7 @@ This permissiveness is **intentional** — the relay envelope is designed for ad
 - Calls `sendCallRelay(origin, [event], { peeringTimeoutMs: 0 })` for each remote peer origin — non-active peers are skipped and a background `ensurePeered` warm-up is kicked off instead
 
 **Inbound (`federation.ts`):**
-- `processDmTypingStartEvent` → look up channel by `federatedId`, resolve user via `resolveRelayActor()` (no stub creation for ephemeral events; `mismatch` → `attribution_mismatch`, unknown → accept silently), broadcast `dm_typing` to local members
+- `processDmTypingStartEvent` → look up channel by `federatedId`, resolve user via `resolveRelayActor()` (no stub creation for ephemeral events; unknown → accept silently), broadcast `dm_typing` to local members
 - `processDmTypingStopEvent` → same, broadcast `dm_typing_stop` to local members
 - **Implicit clear:** `processCreateEvent()` also emits `dm_typing_stop` for the message author after processing an inbound relay — primary typing clear mechanism for relayed messages
 
@@ -1205,7 +1205,7 @@ Older peers that omit these fields fall back to safe defaults (null name/icon, `
 
 1. Find channel by `federatedId` -- if not found, accept idempotently
 2. Validate authority: owner's instance for kicks (`reason !== 'leave'`), any instance for self-leave
-3. Resolve user via `resolveRelayActor` -- `mismatch` on a self-leave is refused as `attribution_mismatch`; otherwise, if not found, accept idempotently
+3. Resolve user via `resolveRelayActor` -- if not found, accept idempotently
 4. Insert system message (before deletion, so broadcast includes the leaving user)
 5. Delete `dm_members` row, clean up `read_states`
 6. Broadcast `dm_member_removed` to remaining local members
@@ -1215,7 +1215,7 @@ Older peers that omit these fields fall back to safe defaults (null name/icon, `
 
 1. Find channel by `federatedId` -- if not found, accept idempotently
 2. Validate authority: `normalizeOriginForCompare(sourceInstance) === normalizeOriginForCompare(channel.ownerHomeInstance)`. Both sides are normalized to handle the bare-vs-full storage convention (see `dm-system.md` historical bugs for why this matters).
-3. Resolve the previous owner (the attributed actor) via `resolveRelayActor` before any change: `mismatch` → `attribution_mismatch`, nothing is written; unknown → the system message falls back to the channel's recorded owner
+3. Resolve the previous owner (the attributed actor) via `resolveRelayActor` before any change: unknown → the system message falls back to the channel's recorded owner
 4. Resolve new owner via `resolveOrCreateReplicatedUser` (**never** `resolveLocalUser` -- must guarantee valid ID)
 5. Update `dm_channels`: `ownerId`, `ownerHomeUserId`, `ownerHomeInstance` (canonicalized to full URL on storage via `canonicalizeHomeInstance` so future authority checks stay stable)
 6. Broadcast `dm_owner_updated` WebSocket event with `newOwnerHomeUserId` + `newOwnerHomeInstance` so local clients can refresh their owner-routing cache without reconnecting
@@ -1438,7 +1438,7 @@ When a user marks a DM channel as read (`channel_ack`) or marks it unread (`mark
 
 **Inbound (`processReadStateUpdateEvent`):**
 1. Resolve channel by `federatedId` — reject if not found
-2. Resolve user via `resolveRelayActor`: `mismatch` → `attribution_mismatch`; reject `user_not_found` if unknown
+2. Resolve user via `resolveRelayActor`: reject `user_not_found` if unknown
 3. Translate `messageRef` to local message ID:
    - If `sourceInstance` matches our origin: `sourceMessageId` IS our local ID
    - Otherwise: look up `dm_messages` by `source_instance + source_message_id`
@@ -1495,14 +1495,14 @@ Called from `dm.ts` after the local close or reopen is committed.
 
 **`processDmCloseEvent` (`federation.ts`):**
 1. Look up channel by `federatedId` — if not found, accept silently (idempotent)
-2. Resolve acting user via `resolveRelayActor` (lookup-only; no stub creation for close/reopen): `mismatch` → `attribution_mismatch`; if unknown, accept silently
+2. Resolve acting user via `resolveRelayActor` (lookup-only; no stub creation for close/reopen): if unknown, accept silently
 3. If the user has no `dm_members` row in this channel, accept silently
 4. Set `dm_members.closed = 1` for the resolved local user
 5. Broadcast `dm_channel_closed` to the user's local WebSocket connections
 
 **`processDmReopenEvent` (`federation.ts`):**
 1. Look up channel by `federatedId` — if not found, accept silently
-2. Resolve acting user via `resolveRelayActor`: `mismatch` → `attribution_mismatch`; if unknown, accept silently
+2. Resolve acting user via `resolveRelayActor`: if unknown, accept silently
 3. If the user has no `dm_members` row, accept silently
 4. Set `dm_members.closed = 0`
 5. Build full `DmChannel` payload and broadcast `dm_channel_created` to the user's local WebSocket connections (mirrors the automatic reopen path in `broadcastDmMessage`)
@@ -1567,7 +1567,7 @@ The full event payload is stored in both `appendMutationLog` (for sync) and `que
 
 **`processFriendRequestCancelEvent` (`federation.ts:2254`):**
 - Authority check: `from.homeInstance !== sourceInstance` -> reject
-- Both users resolved via `resolveRelayActor`: a sender that names a local user of another identity → `attribution_mismatch`; otherwise both must exist locally, else accept idempotently.
+- Both users resolved via `resolveRelayActor`: both must exist locally, else accept idempotently.
 - Delete the pending friend request. Broadcast `friend_request_cancelled` to recipient.
 
 **`processFriendAddEvent` (`federation.ts:2318`):**
@@ -1579,7 +1579,7 @@ The full event payload is stored in both `appendMutationLog` (for sync) and `que
 
 **`processFriendRemoveEvent` (`federation.ts:2404`):**
 - Authority check: either `from.homeInstance` or `to.homeInstance` must be `sourceInstance`
-- Both users resolved via `resolveRelayActor`. A `mismatch` on the side attribution accepted (the actor) → `attribution_mismatch`; otherwise, if either is not found, accept idempotently.
+- Both users resolved via `resolveRelayActor`. If either is not found, accept idempotently.
 - Delete `friends` row in both directions
 - Determine local user (whose `homeInstance` is NOT the source) and broadcast `friend_removed`
 
@@ -1620,9 +1620,9 @@ Profile data is synced server-to-server. The home instance is authoritative — 
 
 **Coalescing:** `entityId = homeUserId`. Rapid successive edits coalesce to one delivery per peer.
 
-**Processing:** Remote overwrites all 6 mutable fields unconditionally; `displayName` falls back to `payload.displayName ?? payload.username`. Rejects if incoming `profileUpdatedAt ≤ stored`. Broadcasts `user_updated` to local WS clients.
+**Processing:** The row updated is the one that IS the payload's `homeUserId` + `homeInstance` (`resolveRelayActor`) and is homed elsewhere; a native user of this instance is never one, and anything else is acked without effect (no replica here). Remote overwrites all 6 mutable fields unconditionally; `displayName` falls back to `payload.displayName ?? payload.username`. Rejects if incoming `profileUpdatedAt ≤ stored`. Broadcasts `user_updated` to local WS clients.
 
-**Detached-account guard:** After the domain-collision check and before the version check, if the resolved `localUser` has `federation_home_orphaned = 1` (detached — home domain was reset, now a sovereign local account), the event is **acked (messageId pushed to `accepted`) and skipped without applying**. The reset domain's new incarnation must never overwrite an established account's profile by replaying its old `homeUserId`. Ack rather than reject because the sender legitimately considers the identity theirs to update; from this side the update simply no-ops.
+**Detached-account guard:** After the identity lookup and before the version check, if the resolved `localUser` has `federation_home_orphaned = 1` (detached — home domain was reset, now a sovereign local account), the event is **acked (messageId pushed to `accepted`) and skipped without applying**. The reset domain's new incarnation must never overwrite an established account's profile by replaying its old `homeUserId`. Ack rather than reject because the sender legitimately considers the identity theirs to update; from this side the update simply no-ops.
 
 #### Profile Image File Replication
 
@@ -1679,9 +1679,9 @@ No-op for replicated users (we don't own their presence).
 
 **Coalescing:** `entityId = userId`, `contextId = userId`. Rapid status flaps coalesce to the latest queued event per peer.
 
-**Receiver:** `processPresenceUpdateEvent` (`routes/federation.ts`). Strict attribution — `payload.homeInstance` domain MUST equal source peer's domain. Resolves the local stub by `homeUserId`, validates the stub's `homeInstance` matches the payload's domain, updates the stub's `status`, and broadcasts a WS `presence_update` to local users via `collectProfileBroadcastTargetIds(stub.id)` — friends, DM members, and space co-members.
+**Receiver:** `processPresenceUpdateEvent` (`routes/federation.ts`). Strict attribution — `payload.homeInstance` domain MUST equal source peer's domain. Resolves the local stub that IS the payload's `homeUserId` + `homeInstance` (`resolveRelayActor`; a native user of this instance is never one, and anything but a `found` row homed elsewhere is acked without effect), updates the stub's `status`, and broadcasts a WS `presence_update` to local users via `collectProfileBroadcastTargetIds(stub.id)` — friends, DM members, and space co-members.
 
-**Detached-account guard:** After the domain-collision check and before the status write, if the resolved stub has `federation_home_orphaned = 1` (detached — home domain was reset, now a sovereign local account), the event is **acked (messageId pushed to `accepted`) and skipped without applying**. The reset domain's new incarnation must never flip an established account's presence by replaying its old `homeUserId`. Ack (not reject) mirrors the `profile_update` guard rationale — the sender considers the identity theirs, so we no-op rather than trigger a retry loop.
+**Detached-account guard:** After the identity lookup and before the status write, if the resolved stub has `federation_home_orphaned = 1` (detached — home domain was reset, now a sovereign local account), the event is **acked (messageId pushed to `accepted`) and skipped without applying**. The reset domain's new incarnation must never flip an established account's presence by replaying its old `homeUserId`. Ack (not reject) mirrors the `profile_update` guard rationale — the sender considers the identity theirs, so we no-op rather than trigger a retry loop.
 
 **Peer lifecycle hooks** (`utils/federationPresence.ts`):
 - **`onPeerActivated`** invokes `snapshotPresenceForPeer(origin)` — emits a `presence_update` only for online natives that have an S2S relationship with the peer (friend/DM with a peer-stub, or `replicatedInstances` opt-in for the peer origin). Snapshot work scales with relationship count, not native count.
@@ -1722,7 +1722,7 @@ The mutation log entry for reactions stores a simpler payload (no `messageId`/`m
 1. Resolve message via `resolveLocalDmMessage(canonicalMessageId, messageHomeInstance, sourceInstance, db)`:
    - If `messageHomeInstance === getOurOrigin()` -> find by local ID (the message originated here)
    - Otherwise -> find by `(messageHomeInstance || sourceInstance, canonicalMessageId)` tracking -- uses `messageHomeInstance` when available (correct origin in 3-instance relay), falls back to `sourceInstance`
-2. Resolve reacting user via `resolveRelayActor` (must already exist): `mismatch` → `attribution_mismatch` (terminal), unknown → `user_not_found`
+2. Resolve reacting user via `resolveRelayActor` (must already exist): unknown → `user_not_found`
 3. Dedup: check existing reaction by `(dmMessageId, userId, emoji)`
 4. Insert `dm_reactions`, broadcast `reaction_added` to local clients
 

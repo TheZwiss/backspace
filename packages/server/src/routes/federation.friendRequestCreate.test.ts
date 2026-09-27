@@ -695,6 +695,30 @@ describe('processFriendRequestCreateEvent — branch coverage', () => {
     expect(sendToUser).not.toHaveBeenCalled();
   });
 
+  it('does not treat a shared homeUserId on different instances as a self-target', async () => {
+    // Two identities that share a homeUserId string but name different
+    // instances are different people, so the self-target guard (which compares
+    // the pair) must not fire. No user here carries the id, so the sender is
+    // accepted by attribution and the event reaches the guard and then the
+    // recipient lookup, which finds no user of this instance.
+    const event = makeEvent({
+      messageId: 'shared-id-guard',
+      friendship: {
+        from: { homeUserId: 'shared-id', homeInstance: 'https://orbit.test' },
+        to: { homeUserId: 'shared-id', homeInstance: 'https://home.test' },
+        fromProfile: { username: 'bob' },
+      },
+    });
+
+    const { processRelayEvents } = await import('./federation.js');
+    const result = await processRelayEvents([event], 'https://orbit.test', 'https://orbit.test', testDb);
+
+    expect(result.accepted).toEqual([]);
+    expect(result.rejected).toEqual([{ messageId: 'shared-id-guard', reason: 'recipient_not_found' }]);
+    expect(testDb.select().from(schema.friendRequests).all()).toHaveLength(0);
+    expect(sendToUser).not.toHaveBeenCalled();
+  });
+
   it('isolates per-event success/failure within a batch (mixed accepted/rejected)', async () => {
     seedLocalUser('alice-id', 'alice');
 

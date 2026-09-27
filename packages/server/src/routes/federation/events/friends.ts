@@ -50,8 +50,10 @@ export async function processFriendRequestCreateEvent(
   }
   let fromUser = await hydrateReplicatedUserProfile(fromUserResolved, event.friendship.fromProfile, db);
 
-  // Resolve the recipient — must be a local user on this instance
-  const toUser = resolveLocalUser(to.homeUserId, db);
+  // The recipient is the local user that IS the `to` identity, never a row
+  // that only shares its homeUserId (such as the sender resolved just above).
+  const recipient = resolveRelayActor(to, db);
+  const toUser = recipient.kind === 'found' ? recipient.user : undefined;
   if (!toUser) {
     rejected.push({ messageId: event.messageId, reason: 'recipient_not_found' });
     return;
