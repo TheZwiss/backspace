@@ -20,6 +20,9 @@
 //   mixed    Unicode emoji of every hard kind plus shortcodes, inline code
 //            that must stay literal, clock times that must not be touched,
 //            and a bio at the 190-character server limit.
+//   spaced   a bio with single newlines and a run of blank lines, for the
+//            newline rule: a newline breaks the line, any number of blank
+//            lines is one empty line, the same as in a chat message.
 //
 // The mutuals request fails without a server; both components already treat
 // that as "no mutuals", which is what a stranger's profile shows.
@@ -39,7 +42,7 @@ import { initializeInterfaceScale } from '../platform/interfaceScale';
 import '../styles/globals.css';
 
 type View = 'popout' | 'modal' | 'rows';
-type ProfileName = 'reporter' | 'mixed';
+type ProfileName = 'reporter' | 'mixed' | 'spaced';
 
 function readView(search: string): View {
   const value = new URLSearchParams(search).get('view');
@@ -47,7 +50,8 @@ function readView(search: string): View {
 }
 
 function readProfile(search: string): ProfileName {
-  return new URLSearchParams(search).get('profile') === 'mixed' ? 'mixed' : 'reporter';
+  const value = new URLSearchParams(search).get('profile');
+  return value === 'mixed' || value === 'spaced' ? value : 'reporter';
 }
 
 // ─── Fixtures ───────────────────────────────────────────────────────────────
@@ -86,6 +90,15 @@ const PROFILES: Record<ProfileName, User> = {
     customStatus: 'on call :pager: until 18:00 🏳️‍🌈',
     bio: 'Ops at a tiny ISP :satellite_antenna: 👨‍👩‍👧‍👦 🏴‍☠️ 🇩🇪🇯🇵\n**Ask me about** BGP :sparkles: or the `:smile:` syntax.\nStandup 09:30:00, :+1::skin-tone-4: :flag-no: :woman-running: :heart_on_fire:',
   },
+  spaced: {
+    ...BASE_USER,
+    id: 'profile-spaced',
+    username: 'lena',
+    displayName: 'Lena',
+    avatarColor: 'coral',
+    customStatus: 'moving flats :package:',
+    bio: 'Line one\nline two, same paragraph :sparkles:\n\n\n\n\nAfter four blank lines\n\nAfter one blank line\nand a last line',
+  },
 };
 
 const VIEWER: User = { ...BASE_USER, id: 'viewer', username: 'viewer', displayName: 'Viewer' };
@@ -105,9 +118,12 @@ function Rows({ user }: { user: User }) {
           </div>
         </div>
       </div>
-      <div className="w-[520px] bg-surface-chat rounded-lg p-4 text-[15px] leading-[1.375rem] text-txt-message">
+      <div className="w-[520px] bg-surface-chat rounded-lg p-4">
         <div className="text-[13px] text-txt-tertiary mb-1">{displayName}</div>
-        <MarkdownRenderer content={user.bio ?? ''} />
+        {/* The message body's own classes, from Message.tsx. */}
+        <div className="text-txt-message text-[15px] leading-[1.5] break-words whitespace-pre-wrap">
+          <MarkdownRenderer content={user.bio ?? ''} />
+        </div>
       </div>
     </div>
   );
