@@ -1013,7 +1013,7 @@ Trigger (API/WS handler)
 
 - `duplicate` — the receiving instance already has the row (same `(sourceInstance, sourceMessageId)`); retrying will fail identically until TTL.
 - `recipient_not_found`, `attribution_mismatch`, `unknown_event_type` — structural mismatches that cannot be resolved by retrying.
-- `not_message_author`, `invalid_target` — a relayed `update`/`delete` whose `target` names a message the actor did not write, is malformed, or comes from a peer that is neither a relay target of the message's conversation nor the instance the message came from. See `dm-system.md` "Relayed edits and deletes" for the rule. `invalid_target` is also a relayed `create` whose author is not in the conversation or whose sender is not a relay target of it; see `dm-system.md` "Relayed message creates".
+- `not_message_author`, `invalid_target` — a relayed `update`/`delete` whose `target` names a message the actor did not write, is malformed, or comes from a peer that is neither a relay target of the message's conversation nor the instance the message came from. See `dm-system.md` "Relayed edits and deletes" for the rule. `invalid_target` is also a relayed `create` whose author is not in the conversation or whose sender is not a relay target of it (`dm-system.md` "Relayed message creates"), and a `member_add` into a 1-on-1 (`dm-system.md` "Relayed member adds").
 - `attribution_unproven` is **not** terminal: the receiver lacks the proof that one of its users holds an account here, and that proof arrives from the user's client. See [the two refusal reasons](#3-identity-resolution).
 - `self_target_invalid` — emitted by `processFriendRequestCreateEvent` when an inbound `friend_request_create`'s `from`-identity equals its `to`-identity (after origin normalization). Defense-in-depth: the sender's local `cannot_friend_self` check should catch this, but the receiver does not trust upstream validation. Retrying will not change the payload. The friend-create rollback callback maps this to client-facing `peer_rejected`.
 
@@ -1195,7 +1195,7 @@ interface FederationGroupPayload {
 Older peers that omit these fields fall back to safe defaults (null name/icon, `metadataUpdatedAt = 0`). Receivers never re-relay these fields — only the owner's home instance authors `group_metadata_update` events.
 
 **Incremental path** (channel already exists):
-1. Validates authority: any HMAC-verified peer is accepted (relaxed — the `sourceInstance === channel.ownerHomeInstance` check was removed to support cross-instance access). The per-user attribution check (`attributionRefusal`) still applies.
+1. Validates authority: `attributionRefusal` on `membership.addedBy`, then the channel must be a group (`ownerId` set; else `invalid_target`), and the adder must be a current member of this instance's copy with the signing peer one of its relay target origins before the add (`mayRelayInto`); else `unauthorized_source`. Any member may add, from any instance the group is relayed to; the owner's instance is not required. See `dm-system.md` "Relayed member adds".
 2. Cancels soft-delete if channel was pending GC
 3. Resolves added user via `resolveOrCreateReplicatedUser`
 4. Enforces max 10 members

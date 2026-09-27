@@ -10,6 +10,7 @@ import { and, eq, inArray, or } from 'drizzle-orm';
 import type { DmChannel, DmMessageWithUser, FederationRelayEvent } from '@backspace/shared';
 import { extractDomain, resolveOrCreateReplicatedUser, resolveRelayActor, attributionRefusal } from '../identity.js';
 import { downloadProfileAsset, processProfileUpdateEvent } from '../profile.js';
+import { dmChannelMembers, mayRelayInto, memberWithIdentity } from '../dmChannels.js';
 
 export async function processMemberAddEvent(
   event: FederationRelayEvent,
@@ -143,6 +144,27 @@ export async function processMemberAddEvent(
     if (refusal) {
       console.warn(`[federation] Attribution refused (${refusal}) in member_add: addedBy homeInstance=${extractDomain(event.membership.addedBy.homeInstance)} source=${extractDomain(sourceInstance)}`);
       rejected.push({ messageId: event.messageId, reason: refusal });
+      return;
+    }
+  }
+
+  // Incremental add: this instance already holds the group, so the add is
+  // judged against its copy ("Relayed member adds" in dm-system.md). A 1-on-1
+  // has a fixed pair; otherwise, like the local add route, the adder must be a
+  // current member, and the signing peer one of the origins this copy is
+  // relayed to before the add. A bootstrap is authorized above instead, by the
+  // owner's attribution.
+  if (!bootstrapped) {
+    if (!channel.ownerId) {
+      console.warn(`[federation] Refused member_add into 1-on-1 ${channel.id}`);
+      rejected.push({ messageId: event.messageId, reason: 'invalid_target' });
+      return;
+    }
+    const members = dmChannelMembers(channel.id, db);
+    const adder = event.membership.addedBy ? memberWithIdentity(members, event.membership.addedBy) : undefined;
+    if (!adder || !mayRelayInto(members, adder.id, sourceInstance)) {
+      console.warn(`[federation] Refused member_add in group DM ${channel.id}: the adder is not a member, or ${extractDomain(sourceInstance)} is not a peer of the conversation`);
+      rejected.push({ messageId: event.messageId, reason: 'unauthorized_source' });
       return;
     }
   }

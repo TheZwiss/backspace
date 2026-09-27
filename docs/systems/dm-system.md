@@ -573,7 +573,7 @@ The full event includes `participants` (all channel members with their federated
 
 This is the one place the rule is written; other specs point here.
 
-A relayed `create` is written into a conversation only when the sending peer and the author both belong to it (`mayRelayInto`, `federation/events/dmMessages.ts`):
+A relayed `create` is written into a conversation only when the sending peer and the author both belong to it (`mayRelayInto`, `federation/dmChannels.ts`):
 
 1. The author (resolved from `event.message` among the participants, after `attributionRefusal`) must be one of the conversation's members: for a group, its `dm_members` rows on this instance; for a 1-on-1, one of the two participants whose home user ids its `federatedId` is computed from. The pair is the whole membership of a 1-on-1, so it is checked before `findOrCreateDmChannel` creates or re-adds anything.
 2. The signing peer must be one of `relayTargetOrigins(<those members>)` (`federationOutbox.ts`), the origins this instance relays the conversation to, compared by domain as `attributionRefusal` compares instances (stored `homeInstance` values are bare domains). `getGroupDmTargetOrigins(channelId)` is the same function applied to a stored channel. Only those instances hold a copy of the conversation a message could have been written in: a 1-on-1 between two users of this instance, reached through their accounts on another instance, is not relayed home.
@@ -677,13 +677,29 @@ Not stored in the outbox or mutation log — fire-and-forget, missed deliveries 
 **Trigger:** `processMemberAddEvent()` finds the channel by `federatedId`.
 
 **Sequence:**
-1. Validate authority: `sourceInstance` must match `channel.ownerHomeInstance`
+1. Validate authority ("Relayed member adds" below)
 2. Cancel soft-delete if channel was pending GC (`deletedAt` set)
 3. Resolve added user via `resolveOrCreateReplicatedUser()`
 4. Enforce 10-member cap
 5. Insert `dm_members` row (idempotent)
 6. Insert system message for member addition
 7. Broadcast `dm_message_created` (system) and `dm_member_added` to local members
+
+### Relayed member adds
+
+This is the one place the rule is written; other specs point here.
+
+What decides the path is whether this instance holds a channel with the event's `federatedId` (soft-deleted or not):
+
+- **Bootstrap** (no such channel): the event must carry `group`, and `attributionRefusal(group.owner, sourceInstance)` must pass. The sender speaks for the group's owner, and the roster it sends becomes this instance's copy. This is how a brand-new group, or a group this instance has never held, arrives.
+- **Incremental** (the channel exists): the add is judged against this instance's copy, mirroring `POST /api/dm/:id/members`:
+  1. `attributionRefusal(membership.addedBy, sourceInstance)`, as for every relay event.
+  2. The channel must be a group (`ownerId` set). A 1-on-1 has a fixed pair: else `invalid_target` (terminal).
+  3. The adder (`membership.addedBy`, required) must be a current member of this copy, matched by federated identity (`memberWithIdentity`: same home user id on the same home domain), and the signing peer one of `relayTargetOrigins(<the members before the add>)`, compared by domain (`mayRelayInto`, `federation/dmChannels.ts`, the same check "Relayed message creates" uses): else `unauthorized_source`. Nothing is added.
+
+`unauthorized_source` is retried by the sender. An add can legitimately arrive before the event that made its adder a member, when that member was added through a third instance; the retry applies it once that event has landed. The local route's friendship check is the adder's own instance's to make; the receiver cannot see that friendship.
+
+Known limit: a copy kept after all of this instance's members left keeps its roster from that time. An add by someone who joined later is refused until their own add reaches this instance, which it does not, since the group is no longer relayed here. Re-adding through the owner or any member still in that roster works.
 
 ### Bootstrap vs Incremental Batching
 

@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { getDb, schema } from '../../../db/index.js';
 import { normalizeOriginForCompare } from '../../../utils/federationAuth.js';
-import { computeFederatedId, getGroupDmTargetOrigins, relayTargetOrigins } from '../../../utils/federationOutbox.js';
+import { computeFederatedId, getGroupDmTargetOrigins } from '../../../utils/federationOutbox.js';
 import { deleteAttachmentFiles } from '../../../utils/fileCleanup.js';
 import { sanitizeUser } from '../../../utils/sanitize.js';
 import { generateSnowflake } from '../../../utils/snowflake.js';
@@ -12,6 +12,7 @@ import type { FederationMessageTarget, FederationRelayEvent } from '@backspace/s
 import { buildDmChannelPayload, buildDmMessagePayload, findOrCreateDmChannel, isUrlFromPeer, resolveLocalDmMessage, resolveRelayedReplyTarget } from '../dmChannels.js';
 import { attributionRefusal, extractDomain, relayActorOfUser, resolveOrCreateReplicatedUser, resolveRelayActor, sameRelayActor } from '../identity.js';
 import { hydrateReplicatedUserProfile } from '../profile.js';
+import { dmChannelMembers, isRelayTarget, mayRelayInto } from '../dmChannels.js';
 
 export async function processCreateEvent(
   event: FederationRelayEvent,
@@ -113,13 +114,7 @@ export async function processCreateEvent(
       rejected.push({ messageId: event.messageId, reason: 'channel_not_found' });
       return;
     }
-    const members = db
-      .select({ id: schema.users.id, homeInstance: schema.users.homeInstance })
-      .from(schema.dmMembers)
-      .innerJoin(schema.users, eq(schema.dmMembers.userId, schema.users.id))
-      .where(eq(schema.dmMembers.dmChannelId, channel.id))
-      .all();
-    if (!mayRelayInto(members, authorUser.id, sourceInstance)) {
+    if (!mayRelayInto(dmChannelMembers(channel.id, db), authorUser.id, sourceInstance)) {
       console.warn(`[federation] Refused create in group DM ${channel.id}: the author is not a member, or ${extractDomain(sourceInstance)} is not a peer of the conversation`);
       rejected.push({ messageId: event.messageId, reason: 'invalid_target' });
       return;
@@ -317,35 +312,6 @@ function isPeerOfMessage(
   if (!source) return false;
   if (normalizeOriginForCompare(localMsg.sourceInstance) === source) return true;
   return isRelayTarget(getGroupDmTargetOrigins(localMsg.dmChannelId), sourceInstance);
-}
-
-/**
- * Whether `sourceInstance` is one of `origins`. Compared by domain, the way
- * `attributionRefusal` compares instances: the origins are built from stored
- * `homeInstance` values, which are bare domains, while the signed source is a
- * full URL.
- */
-function isRelayTarget(origins: readonly string[], sourceInstance: string): boolean {
-  const source = extractDomain(sourceInstance).toLowerCase();
-  if (!source) return false;
-  return origins.some(origin => extractDomain(origin).toLowerCase() === source);
-}
-
-/**
- * Whether `sourceInstance` may write a message by `authorId` into the
- * conversation among `members` (local user rows). The author must be one of
- * the members, and the signing peer must be one of the origins this instance
- * relays the conversation to (`relayTargetOrigins`): only those instances hold
- * a copy of it that a message could have been written in. The rule is
- * documented in docs/systems/dm-system.md, "Relayed message creates".
- */
-function mayRelayInto(
-  members: ReadonlyArray<{ id: string; homeInstance: string | null }>,
-  authorId: string,
-  sourceInstance: string,
-): boolean {
-  if (!members.some(m => m.id === authorId)) return false;
-  return isRelayTarget(relayTargetOrigins(members), sourceInstance);
 }
 
 /**
