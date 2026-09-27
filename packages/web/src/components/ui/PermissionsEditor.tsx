@@ -386,6 +386,24 @@ export function PermissionsEditor({
     ).slice(0, 20);
   }, [members, stagedKeys, memberSearch]);
 
+  const savePill = (
+    <div className="glass-bubble rounded-full px-4 py-2 flex items-center gap-2 pointer-events-auto animate-slide-up">
+      <button
+        onClick={handleDiscard}
+        className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
+      >
+        {t('spaces:settings.discardChanges')}
+      </button>
+      <button
+        onClick={handleSave}
+        disabled={saving}
+        className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+      >
+        {saving ? t('common:states.saving') : t('common:actions.save')}
+      </button>
+    </div>
+  );
+
   return (
     <div className="space-y-4 relative pb-14">
       {/* Fetch error */}
@@ -554,38 +572,27 @@ export function PermissionsEditor({
         </div>
       )}
 
-      {/* Save/Discard pill */}
+      {/* Save/Discard pill, with the unhide note above it when a save would
+          make this channel or category visible to everyone. */}
       {hasChanges && (
         <div className="sticky bottom-0 z-10 pointer-events-none">
-          {/* Laid out like the Overview privacy note. It floats over the
-              scrolling rows with the pill, inside the modal's glass, where a
-              nested backdrop-filter does not blur, so it takes the bubble's
-              edge on a solid ground rather than a see-through fill. */}
-          {unhides && (
-            <div className="glass-bubble bg-surface-chat flex items-start gap-2 p-2 mt-3 rounded-lg text-xs text-txt-tertiary">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className="flex-shrink-0 mt-0.5 text-txt-secondary">
-                <path d={LOCK_ICON} />
-              </svg>
-              <span>{unhideNote}</span>
+          {unhides ? (
+            // Note and pill float over the scrolling rows as one group on one
+            // solid ground. Inside the modal's glass a nested backdrop-filter
+            // does not blur, so a see-through fill would let rows show through.
+            <div className="glass-bubble bg-surface-chat rounded-lg mt-3 mb-1 p-2 space-y-2 pointer-events-auto">
+              {/* Laid out like the Overview privacy note. */}
+              <div className="flex items-start gap-2 text-xs text-txt-tertiary">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className="flex-shrink-0 mt-0.5 text-txt-secondary">
+                  <path d={LOCK_ICON} />
+                </svg>
+                <span>{unhideNote}</span>
+              </div>
+              <div className="flex justify-center">{savePill}</div>
             </div>
+          ) : (
+            <div className="flex justify-center pt-3 pb-1">{savePill}</div>
           )}
-          <div className="flex justify-center pt-3 pb-1">
-            <div className="glass-bubble rounded-full px-4 py-2 flex items-center gap-2 pointer-events-auto animate-slide-up">
-              <button
-                onClick={handleDiscard}
-                className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
-              >
-                {t('spaces:settings.discardChanges')}
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
-              >
-                {saving ? t('common:states.saving') : t('common:actions.save')}
-              </button>
-            </div>
-          </div>
         </div>
       )}
     </div>

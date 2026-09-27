@@ -22,6 +22,8 @@
 //              the @everyone row removed (staged): the unhide note is up.
 //   private-cleared  the same private entity with @everyone opened and its
 //              View Channels deny set back to neutral.
+//   long-edit  @everyone opened and its Send Messages deny set back to
+//              neutral: a long list with a pending change and no note.
 import { createRoot } from 'react-dom/client';
 import type { Channel, ChannelCategory, MemberWithUser, Role, User } from '@backspace/shared';
 import { ChannelSettingsModal } from '../components/modals/ChannelSettingsModal';
@@ -33,8 +35,8 @@ import { initI18n } from '../i18n';
 import { initializeInterfaceScale } from '../platform/interfaceScale';
 import '../styles/globals.css';
 
-type Scene = 'many' | 'expanded' | 'removed' | 'empty' | 'everyone' | 'picker' | 'full' | 'members' | 'no-match' | 'private-removed' | 'private-cleared';
-const SCENES: readonly Scene[] = ['many', 'expanded', 'removed', 'empty', 'everyone', 'picker', 'full', 'members', 'no-match', 'private-removed', 'private-cleared'];
+type Scene = 'many' | 'expanded' | 'removed' | 'empty' | 'everyone' | 'picker' | 'full' | 'members' | 'no-match' | 'private-removed' | 'private-cleared' | 'long-edit';
+const SCENES: readonly Scene[] = ['many', 'expanded', 'removed', 'empty', 'everyone', 'picker', 'full', 'members', 'no-match', 'private-removed', 'private-cleared', 'long-edit'];
 type Entity = 'channel' | 'category';
 
 const SPACE_ID = 'space-1';
@@ -198,11 +200,12 @@ async function drive(scene: Scene): Promise<void> {
     (await waitFor(() => document.querySelector<HTMLButtonElement>('button[aria-label="Remove override for @everyone"]'))).click();
     return;
   }
-  if (scene === 'private-cleared') {
+  if (scene === 'private-cleared' || scene === 'long-edit') {
+    const permission = scene === 'private-cleared' ? 'View Channels' : 'Send Messages';
     (await waitFor(() => rowButton('@everyone'))).click();
-    const label = await waitFor(() => Array.from(document.querySelectorAll('span')).find((el) => el.textContent === 'View Channels') ?? null);
+    const label = await waitFor(() => Array.from(document.querySelectorAll('span')).find((el) => el.textContent === permission) ?? null);
     const neutral = label.parentElement?.querySelector<HTMLButtonElement>('button[title="Neutral (inherit)"]');
-    if (!neutral) throw new Error('harness: no neutral toggle on View Channels');
+    if (!neutral) throw new Error(`harness: no neutral toggle on ${permission}`);
     neutral.click();
     return;
   }
