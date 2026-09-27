@@ -1,25 +1,26 @@
 import type { UserStatus } from '@backspace/shared';
 
 /**
- * Decides whether a freshly-arrived chat message should fire the in-app
- * `message.ogg` cue. Pure, federation-aware (matches against any of the
- * caller's known self-ids).
+ * The rule that decides whether a freshly-arrived chat message alerts the user.
+ * Pure; the caller supplies every id the user has (see `messageAlertsUser` in
+ * utils/alerts.ts, which both outputs of the `message` alert kind go through).
  *
  * Rule (Discord-default):
- *   - Suppress messages authored by self (any id in myIds).
- *   - When allChannels=true, fire for every non-self message.
- *   - Otherwise, fire only if the channel is a DM, or if the content contains
- *     a `<@${id}>` mention for any id in myIds.
+ *   - Never for a message authored by self (any id in myIds).
+ *   - For a DM, or for content with a `<@${id}>` mention of any id in myIds.
+ *   - When allChannels=true, for every other message too. Only the in-app
+ *     cue passes it: the "Play sound for every message" preference is a sound
+ *     setting and does not widen the OS notification.
  */
-export interface ShouldPlayMessageSoundInput {
+export interface MessageAlertInput {
   authorUserId: string;
-  myIds: Set<string>;
+  myIds: ReadonlySet<string>;
   isDmChannel: boolean;
   content: string | null;
   allChannels: boolean;
 }
 
-export function shouldPlayMessageSound(input: ShouldPlayMessageSoundInput): boolean {
+export function isMessageAlert(input: MessageAlertInput): boolean {
   if (input.myIds.has(input.authorUserId)) return false;
   if (input.allChannels) return true;
   if (input.isDmChannel) return true;

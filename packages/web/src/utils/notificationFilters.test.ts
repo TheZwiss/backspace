@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { isAlertAllowed, shouldPlayMessageSound } from './notificationFilters';
+import { isAlertAllowed, isMessageAlert } from './notificationFilters';
 
-describe('shouldPlayMessageSound', () => {
+describe('isMessageAlert', () => {
   const myIds = new Set(['local-snowflake', 'home-uid-42']);
 
   it('suppresses messages authored by self (local id)', () => {
     expect(
-      shouldPlayMessageSound({
+      isMessageAlert({
         authorUserId: 'local-snowflake',
         myIds,
         isDmChannel: true,
@@ -18,7 +18,7 @@ describe('shouldPlayMessageSound', () => {
 
   it('suppresses messages authored by self (home id)', () => {
     expect(
-      shouldPlayMessageSound({
+      isMessageAlert({
         authorUserId: 'home-uid-42',
         myIds,
         isDmChannel: true,
@@ -30,7 +30,7 @@ describe('shouldPlayMessageSound', () => {
 
   it('plays for DM messages from others', () => {
     expect(
-      shouldPlayMessageSound({
+      isMessageAlert({
         authorUserId: 'someone-else',
         myIds,
         isDmChannel: true,
@@ -42,7 +42,7 @@ describe('shouldPlayMessageSound', () => {
 
   it('suppresses non-DM, non-mention messages from others', () => {
     expect(
-      shouldPlayMessageSound({
+      isMessageAlert({
         authorUserId: 'someone-else',
         myIds,
         isDmChannel: false,
@@ -54,7 +54,7 @@ describe('shouldPlayMessageSound', () => {
 
   it('plays when content mentions me by local id', () => {
     expect(
-      shouldPlayMessageSound({
+      isMessageAlert({
         authorUserId: 'someone-else',
         myIds,
         isDmChannel: false,
@@ -66,7 +66,7 @@ describe('shouldPlayMessageSound', () => {
 
   it('plays when content mentions me by home id (federated)', () => {
     expect(
-      shouldPlayMessageSound({
+      isMessageAlert({
         authorUserId: 'someone-else',
         myIds,
         isDmChannel: false,
@@ -78,7 +78,7 @@ describe('shouldPlayMessageSound', () => {
 
   it('does not play for mentions of someone else', () => {
     expect(
-      shouldPlayMessageSound({
+      isMessageAlert({
         authorUserId: 'someone-else',
         myIds,
         isDmChannel: false,
@@ -90,7 +90,7 @@ describe('shouldPlayMessageSound', () => {
 
   it('plays for any non-self message when allChannels=true', () => {
     expect(
-      shouldPlayMessageSound({
+      isMessageAlert({
         authorUserId: 'someone-else',
         myIds,
         isDmChannel: false,
@@ -102,7 +102,7 @@ describe('shouldPlayMessageSound', () => {
 
   it('still suppresses self-authored even when allChannels=true', () => {
     expect(
-      shouldPlayMessageSound({
+      isMessageAlert({
         authorUserId: 'local-snowflake',
         myIds,
         isDmChannel: false,
@@ -114,7 +114,7 @@ describe('shouldPlayMessageSound', () => {
 
   it('handles null content (attachment-only) gracefully', () => {
     expect(
-      shouldPlayMessageSound({
+      isMessageAlert({
         authorUserId: 'someone-else',
         myIds,
         isDmChannel: true,
@@ -123,7 +123,7 @@ describe('shouldPlayMessageSound', () => {
       }),
     ).toBe(true);
     expect(
-      shouldPlayMessageSound({
+      isMessageAlert({
         authorUserId: 'someone-else',
         myIds,
         isDmChannel: false,

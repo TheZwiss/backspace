@@ -43,7 +43,40 @@ Source files:
 | `stream_ended.ogg` | any participant stopped a screen share | everyone in call | a userId leaves the `participants[].isScreenSharing` set. |
 | `stream_user_joined.ogg` | (a) a viewer started watching **my** stream; (b) **I** started watching someone's stream | streamer **and** the acting viewer | (a) streamer-side: `streamWatchers[selfUserId]` gains a watcher identity. (b) viewer-side: local feedback played by `handleViewerWatchToggle(_, true)` on the explicit "Watch Stream" action. |
 | `stream_user_left.ogg` | (a) a viewer stopped watching **my** stream; (b) **I** stopped watching someone's stream | streamer **and** the acting viewer | (a) streamer-side: `streamWatchers[selfUserId]` loses a watcher identity (suppressed for the whole set when self-stream-end fires — see Mechanism Notes). (b) viewer-side: local feedback played by `handleViewerWatchToggle(_, false)` on the explicit "Stop Watching" action. |
-| `message.ogg` | new chat message arrived | self | `shouldPlayMessageSound` returns true (DM channel OR content mentions any of the user's self-ids). User can flip `messageSoundAllChannels` to fire on every channel. Alert: withheld on Do Not Disturb (see below). |
+| `message.ogg` | new chat message arrived | self | The message is a `message` alert (see "Which messages alert" below). User can flip `messageSoundAllChannels` to fire on every channel. Alert: withheld on Do Not Disturb (see below). |
+
+---
+
+## Which messages alert
+
+One predicate decides whether a newly arrived message alerts the user:
+`messageAlertsUser(event, { everyMessage })` in `utils/alerts.ts`, over the pure
+rule `isMessageAlert` in `utils/notificationFilters.ts`. `SoundController`
+calls it before `message.ogg` and `NotificationController` calls it before the
+new-message OS notification, so the two outputs cannot drift apart.
+
+**Rule.** Never for the user's own message. Otherwise yes for a DM, and yes for
+a message whose content mentions the user (`<@id>`). Every other message does
+not alert.
+
+**The user's ids.** The home account's `id`, its `homeUserId`, and the id the
+user holds on the channel's instance (`getMyUserIdForOrigin` of the channel's
+origin). On a remote instance's channel, the user's own messages carry that
+instance's id and mentions of the user are written with it, so without it the
+user's own messages there would alert and mentions there would not.
+
+**The every-message preference.** `messageSoundAllChannels` ("Play sound for
+every message") widens the sound only. `SoundController` passes it as
+`everyMessage`; `NotificationController` does not, so OS notifications stay on
+DMs and mentions whatever the preference says.
+
+**Per-channel and per-space settings.** There are none today: no channel or
+space mute and no notification level. When one is added it belongs in
+`messageAlertsUser`, so both outputs follow it.
+
+**Order.** The predicate decides first, then Do Not Disturb (below) withholds
+what it allowed. A batch of events raises at most one sound and at most one
+notification, for the first message that alerts.
 
 ---
 

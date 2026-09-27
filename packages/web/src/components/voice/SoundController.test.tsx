@@ -12,6 +12,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useVoiceStore } from '../../stores/voiceStore';
+import { clearMyUserIdCache, setMyUserIdForOrigin } from '../../utils/crossStoreResolvers';
 
 function loopSource() {
   return { stop: vi.fn() } as unknown as AudioBufferSourceNode;
@@ -51,6 +52,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  clearMyUserIdCache();
   vi.useRealTimers();
 });
 
@@ -72,6 +74,44 @@ describe('SoundController message sound', () => {
     useChatStore.setState({ realtimeMessageEvents: full });
     mountAs('online');
     act(() => useChatStore.setState({ realtimeMessageEvents: [...full.slice(1), incoming('new')] }));
+    expect(soundsPlayed()).toEqual(['message']);
+  });
+});
+
+describe('SoundController message sound on a remote instance\'s channels', () => {
+  function event(id: string, channelId: string, content: string, userId = 'other') {
+    return { channelId, message: { id, channelId, userId, content } as MessageWithUser };
+  }
+
+  beforeEach(() => {
+    useSpaceStore.setState({
+      dmChannels: [{ id: 'dm' } as DmChannel, { id: 'remote-dm' } as DmChannel],
+      channelOriginMap: new Map([['remote-chat', 'https://remote.example'], ['remote-dm', 'https://remote.example']]),
+    });
+    setMyUserIdForOrigin('https://remote.example', 'remote-me');
+  });
+
+  it('plays for a mention by the id the user has on that instance', () => {
+    mountAs('online');
+    act(() => useChatStore.setState({ realtimeMessageEvents: [event('m1', 'remote-chat', 'Look <@remote-me>')] }));
+    expect(soundsPlayed()).toEqual(['message']);
+  });
+
+  it('stays silent for the user\'s own message in a remote DM', () => {
+    mountAs('online');
+    act(() => useChatStore.setState({ realtimeMessageEvents: [event('m1', 'remote-dm', 'Hi', 'remote-me')] }));
+    expect(soundsPlayed()).toEqual([]);
+  });
+
+  it('plays for every other message when the every-message preference is on, but not for the user\'s own', () => {
+    useVoiceStore.setState({ messageSoundAllChannels: true });
+    mountAs('online');
+    act(() => useChatStore.setState({ realtimeMessageEvents: [event('m1', 'remote-chat', 'Hi', 'remote-me')] }));
+    expect(soundsPlayed()).toEqual([]);
+    act(() => useChatStore.setState({ realtimeMessageEvents: [
+      event('m1', 'remote-chat', 'Hi', 'remote-me'),
+      event('m2', 'remote-chat', 'Hello everyone'),
+    ] }));
     expect(soundsPlayed()).toEqual(['message']);
   });
 });

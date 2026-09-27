@@ -2,12 +2,11 @@ import { useEffect, useRef } from 'react';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useChatStore, addedRealtimeMessageEvents } from '../../stores/chatStore';
 import { selectMyChosenStatus, useAuthStore } from '../../stores/authStore';
-import { useSpaceStore, isDmChannel, getChannelOrigin, getMyUserIdForOrigin } from '../../stores/spaceStore';
+import { useSpaceStore, getChannelOrigin, getMyUserIdForOrigin } from '../../stores/spaceStore';
 import { AudioManager } from '../../audio/AudioManager';
-import { shouldPlayMessageSound } from '../../utils/notificationFilters';
 import { selectVoiceStateSound } from '../../utils/voiceSoundTransitions';
 import { getSfxVolume } from '../../utils/sfx';
-import { alertsAllowed, playAlertSound } from '../../utils/alerts';
+import { alertsAllowed, messageAlertsUser, playAlertSound } from '../../utils/alerts';
 
 /**
  * Replicates the `useLiveKit` effective-mute formula on demand. Returns whether
@@ -262,33 +261,15 @@ export function SoundController() {
       }
     });
 
-    // -------- Chat: message sound (DM + mention default, federation-aware) --------
+    // -------- Chat: message sound (the `message` alert rule, sounds.md) --------
     const unsubscribeChat = useChatStore.subscribe((state, prevState) => {
       if (isInitialMount.current) return;
 
       const newEvents = addedRealtimeMessageEvents(prevState.realtimeMessageEvents, state.realtimeMessageEvents);
-      if (newEvents.length > 0) {
-        const allChannels = useVoiceStore.getState().messageSoundAllChannels;
-        // Use the wrapper-level channelId from RealtimeMessageEvent — set by
-        // addRealtimeMessage(channelId, message). It's authoritative for both
-        // space and DM messages. Avoids reaching into the heterogeneous Message
-        // shape (where DM messages may carry dmChannelId at runtime).
-        for (const { channelId, message } of newEvents) {
-          if (!channelId) continue;
-          const isDm = isDmChannel(channelId);
-          if (
-            shouldPlayMessageSound({
-              authorUserId: message.userId,
-              myIds,
-              isDmChannel: isDm,
-              content: message.content,
-              allChannels,
-            })
-          ) {
-            void playAlertSound('message');
-            break;
-          }
-        }
+      if (newEvents.length === 0) return;
+      const everyMessage = useVoiceStore.getState().messageSoundAllChannels;
+      if (newEvents.some((event) => messageAlertsUser(event, { everyMessage }))) {
+        void playAlertSound('message');
       }
     });
 

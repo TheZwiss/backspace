@@ -1,8 +1,10 @@
 import type { ChosenUserStatus } from '@backspace/shared';
 import { selectMyChosenStatus, useAuthStore } from '../stores/authStore';
+import type { RealtimeMessageEvent } from '../stores/chatStore';
+import { getChannelOrigin, getMyUserIdForOrigin, isDmChannel } from '../stores/spaceStore';
 import { AudioManager } from '../audio/AudioManager';
 import { sendNotification, type NotificationOptions } from '../platform/notifications';
-import { isAlertAllowed, type AlertKind } from './notificationFilters';
+import { isAlertAllowed, isMessageAlert, type AlertKind } from './notificationFilters';
 import { getSfxVolume } from './sfx';
 
 /**
@@ -30,6 +32,43 @@ export function getSelfStatus(): ChosenUserStatus | null {
 /** Read at alert time, so a status change applies to the next alert without re-subscribing. */
 export function alertsAllowed(kind: AlertKind): boolean {
   return isAlertAllowed(kind, getSelfStatus());
+}
+
+/**
+ * Whether a message that just arrived is a `message` alert: the one predicate
+ * behind both of that kind's outputs, `message.ogg` (SoundController) and the
+ * OS notification (NotificationController). Do Not Disturb is applied after
+ * it, by `playAlertSound` and `showAlertNotification`.
+ *
+ * The user's ids are every id they have for this message: the home account's
+ * id, its `homeUserId`, and the id they hold on the channel's instance. On a
+ * remote instance's channel, messages the user wrote carry that instance's id
+ * for them, and mentions of them are written with it.
+ *
+ * The channel is the event's `channelId`, the id `addRealtimeMessage` filed the
+ * message under, which is authoritative for space and DM messages alike.
+ *
+ * `everyMessage` is the "Play sound for every message" preference. Only the
+ * sound passes it; the notification stays on DMs and mentions.
+ */
+export function messageAlertsUser(
+  event: RealtimeMessageEvent,
+  options: { everyMessage?: boolean } = {},
+): boolean {
+  if (!event.channelId) return false;
+  const user = useAuthStore.getState().user;
+  const myIds = new Set<string>();
+  if (user?.id) myIds.add(user.id);
+  if (user?.homeUserId) myIds.add(user.homeUserId);
+  const originId = getMyUserIdForOrigin(getChannelOrigin(event.channelId));
+  if (originId) myIds.add(originId);
+  return isMessageAlert({
+    authorUserId: event.message.userId,
+    myIds,
+    isDmChannel: isDmChannel(event.channelId),
+    content: event.message.content,
+    allChannels: options.everyMessage === true,
+  });
 }
 
 /**

@@ -5,9 +5,9 @@ import { useVoiceStore } from '../stores/voiceStore';
 import { useAuthStore } from '../stores/authStore';
 import { isElectron } from '../platform/platform';
 import { onNotificationClick, updateBadgeCount } from '../platform/notifications';
-import { showAlertNotification } from '../utils/alerts';
+import { messageAlertsUser, showAlertNotification } from '../utils/alerts';
 import i18n from '../i18n';
-import { useSpaceStore, getMyUserIdForOrigin } from '../stores/spaceStore';
+import { useSpaceStore } from '../stores/spaceStore';
 import { useUIStore } from '../stores/uiStore';
 import { replaceEmojiShortcodesInMarkdownSource } from '../utils/emojiShortcodes';
 
@@ -15,8 +15,10 @@ import { replaceEmojiShortcodesInMarkdownSource } from '../utils/emojiShortcodes
  * Headless component that bridges store events to native OS notifications and badge counts.
  * Renders nothing — lives alongside SoundController in AppLayout.
  *
- * Notifications go through `showAlertNotification`, which applies the Do Not
- * Disturb rule; the badge does not, because it is silent (sounds.md).
+ * A message raises a notification only when `messageAlertsUser` says it alerts
+ * the user, the same rule as `message.ogg`. Notifications go through
+ * `showAlertNotification`, which applies the Do Not Disturb rule; the badge
+ * does not, because it is silent (sounds.md).
  */
 export function NotificationController() {
   const navigate = useNavigate();
@@ -81,22 +83,21 @@ export function NotificationController() {
 
       if (state.realtimeMessageEvents !== prevState.realtimeMessageEvents) {
         const newEvents = addedRealtimeMessageEvents(prevState.realtimeMessageEvents, state.realtimeMessageEvents);
-        for (const { message } of newEvents) {
-          const { channelToSpaceMap, channelOriginMap } = useSpaceStore.getState();
-          if (message.userId !== getMyUserIdForOrigin(channelOriginMap.get(message.channelId) ?? '')) {
-            // i18n.t, not a hook: read at notification time, in the language
-            // selected now rather than when this subscription was made.
-            const displayName = message.user?.displayName || message.user?.username || i18n.t('chat:notification.unknownSender');
-            const body = message.content
-              ? replaceEmojiShortcodesInMarkdownSource(message.content).replace(/[*_~`>#\-\[\]]/g, '').slice(0, 100)
-              : i18n.t('chat:notification.attachmentOnly');
-            showAlertNotification('message', displayName, body, {
-              channelId: message.channelId,
-              spaceId: channelToSpaceMap.get(message.channelId),
-              userId: currentUser?.id,
-            });
-            break; // one notification per batch
-          }
+        // One notification per batch: the first message that alerts the user.
+        const alert = newEvents.find((event) => messageAlertsUser(event));
+        if (alert) {
+          const { message } = alert;
+          // i18n.t, not a hook: read at notification time, in the language
+          // selected now rather than when this subscription was made.
+          const displayName = message.user?.displayName || message.user?.username || i18n.t('chat:notification.unknownSender');
+          const body = message.content
+            ? replaceEmojiShortcodesInMarkdownSource(message.content).replace(/[*_~`>#\-\[\]]/g, '').slice(0, 100)
+            : i18n.t('chat:notification.attachmentOnly');
+          showAlertNotification('message', displayName, body, {
+            channelId: message.channelId,
+            spaceId: useSpaceStore.getState().channelToSpaceMap.get(message.channelId),
+            userId: currentUser?.id,
+          });
         }
       }
     });

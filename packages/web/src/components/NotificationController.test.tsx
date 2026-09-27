@@ -10,6 +10,7 @@ import { useChatStore } from '../stores/chatStore';
 import { useUIStore } from '../stores/uiStore';
 import { useVoiceStore } from '../stores/voiceStore';
 import { setLanguage } from '../i18n';
+import { clearMyUserIdCache, setMyUserIdForOrigin } from '../utils/crossStoreResolvers';
 
 vi.mock('../audio/AudioManager', () => ({ AudioManager: { getInstance: () => ({}) } }));
 
@@ -53,6 +54,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  clearMyUserIdCache();
   delete window.backspace;
   vi.useRealTimers();
   vi.restoreAllMocks();
@@ -125,7 +127,7 @@ describe('notification clicks', () => {
     act(() => vi.advanceTimersByTime(1000));
     act(() => useChatStore.setState({ realtimeMessageEvents: [...oldEvents.slice(1), {
       channelId: 'remote-chat',
-      message: { id: 'new', channelId: 'remote-chat', userId: 'other', content: 'Hello' } as MessageWithUser,
+      message: { id: 'new', channelId: 'remote-chat', userId: 'other', content: 'Hello <@me>' } as MessageWithUser,
     }] }));
     expect(BrowserNotification.instances).toHaveLength(1);
     act(() => BrowserNotification.instances[0]!.onclick?.());
@@ -136,8 +138,8 @@ describe('notification clicks', () => {
     mount();
     act(() => vi.advanceTimersByTime(1000));
     act(() => useChatStore.setState({ realtimeMessageEvents: [{
-      channelId: 'remote-chat',
-      message: { id: 'emoji', channelId: 'remote-chat', userId: 'other', content: 'on fire :heart_on_fire:' } as MessageWithUser,
+      channelId: 'dm',
+      message: { id: 'emoji', channelId: 'dm', userId: 'other', content: 'on fire :heart_on_fire:' } as MessageWithUser,
     }] }));
     expect(BrowserNotification.instances[0]!.options?.body).toBe('on fire ❤️‍🔥');
   });
@@ -146,11 +148,83 @@ describe('notification clicks', () => {
     mount();
     act(() => vi.advanceTimersByTime(1000));
     act(() => useChatStore.setState({ realtimeMessageEvents: [{
-      channelId: 'remote-chat',
-      message: { id: 'code', channelId: 'remote-chat', userId: 'other', content: 'type `:smile:` for :smile:' } as MessageWithUser,
+      channelId: 'dm',
+      message: { id: 'code', channelId: 'dm', userId: 'other', content: 'type `:smile:` for :smile:' } as MessageWithUser,
     }] }));
     // The notification strips Markdown punctuation (backticks, underscores) after conversion.
     expect(BrowserNotification.instances[0]!.options?.body).toBe('type :smile: for 😄');
+  });
+});
+
+describe('which messages raise a notification (#317)', () => {
+  const event = (id: string, channelId: string, content: string, userId = 'other') => ({
+    channelId,
+    message: { id, channelId, userId, content } as MessageWithUser,
+  });
+
+  function mountSettled(status: 'online' | 'dnd' = 'online') {
+    useAuthStore.setState({ user: { id: 'me', status } as User });
+    useSpaceStore.setState({
+      channelToSpaceMap: new Map([['general', 'home-space'], ['remote-chat', 'remote-space']]),
+      channelOriginMap: new Map([['remote-chat', 'https://remote.example'], ['remote-dm', 'https://remote.example']]),
+      dmChannels: [{ id: 'dm' } as DmChannel, { id: 'remote-dm' } as DmChannel],
+    });
+    setMyUserIdForOrigin('https://remote.example', 'remote-me');
+    mount();
+    act(() => vi.advanceTimersByTime(1000));
+  }
+
+  it('raises none for a space channel message that does not mention the user', () => {
+    mountSettled();
+    act(() => useChatStore.setState({ realtimeMessageEvents: [event('m1', 'general', 'Hello everyone')] }));
+    expect(BrowserNotification.instances).toHaveLength(0);
+  });
+
+  it('raises one for a DM', () => {
+    mountSettled();
+    act(() => useChatStore.setState({ realtimeMessageEvents: [event('m1', 'dm', 'Hello')] }));
+    expect(BrowserNotification.instances).toHaveLength(1);
+  });
+
+  it('raises one for a space channel message that mentions the user', () => {
+    mountSettled();
+    act(() => useChatStore.setState({ realtimeMessageEvents: [event('m1', 'general', 'Look <@me>')] }));
+    expect(BrowserNotification.instances).toHaveLength(1);
+  });
+
+  it('raises one for a mention by the id the user has on a remote instance', () => {
+    mountSettled();
+    act(() => useChatStore.setState({ realtimeMessageEvents: [event('m1', 'remote-chat', 'Look <@remote-me>')] }));
+    expect(BrowserNotification.instances).toHaveLength(1);
+  });
+
+  it('raises none for the user\'s own message in a remote DM', () => {
+    mountSettled();
+    act(() => useChatStore.setState({ realtimeMessageEvents: [event('m1', 'remote-dm', 'Hi', 'remote-me')] }));
+    expect(BrowserNotification.instances).toHaveLength(0);
+  });
+
+  it('looks past a non-alerting message to an alerting one in the same batch', () => {
+    mountSettled();
+    act(() => useChatStore.setState({ realtimeMessageEvents: [
+      event('m1', 'general', 'Hello everyone'),
+      event('m2', 'general', 'Look <@me>'),
+    ] }));
+    expect(BrowserNotification.instances).toHaveLength(1);
+  });
+
+  it('is not widened by the "play sound for every message" preference', () => {
+    useVoiceStore.setState({ messageSoundAllChannels: true });
+    mountSettled();
+    act(() => useChatStore.setState({ realtimeMessageEvents: [event('m1', 'general', 'Hello everyone')] }));
+    expect(BrowserNotification.instances).toHaveLength(0);
+    useVoiceStore.setState({ messageSoundAllChannels: false });
+  });
+
+  it('withholds a mention on Do Not Disturb, as the sound does', () => {
+    mountSettled('dnd');
+    act(() => useChatStore.setState({ realtimeMessageEvents: [event('m1', 'general', 'Look <@me>')] }));
+    expect(BrowserNotification.instances).toHaveLength(0);
   });
 });
 
