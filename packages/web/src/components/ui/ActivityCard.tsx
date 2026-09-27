@@ -2,6 +2,7 @@ import type { Activity } from '@backspace/shared';
 import { getPrimaryActivity } from '@backspace/shared/src/activities.js';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
+import { replaceEmojiShortcodes } from '../../utils/emojiShortcodes';
 
 interface ActivityCardProps {
   activities: Activity[];
@@ -45,14 +46,14 @@ export function ActivityCard({ activities, fallbackCustomStatus }: ActivityCardP
 
   if (!primary) {
     if (fallbackCustomStatus) {
-      return <div className="text-[11px] leading-[1.3] text-txt-tertiary truncate">{fallbackCustomStatus}</div>;
+      return <div className="text-[11px] leading-[1.3] text-txt-tertiary truncate">{replaceEmojiShortcodes(fallbackCustomStatus)}</div>;
     }
     return null;
   }
 
   // Custom status — plain text, no card treatment
   if (primary.type === 'custom') {
-    return <div className="text-[11px] leading-[1.3] text-txt-tertiary truncate">{primary.name}</div>;
+    return <div className="text-[11px] leading-[1.3] text-txt-tertiary truncate">{replaceEmojiShortcodes(primary.name)}</div>;
   }
 
   // Rich activity — app name + elapsed (card wrapper is on the parent row)

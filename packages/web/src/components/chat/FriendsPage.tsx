@@ -22,6 +22,7 @@ import { ActivityCard, hasRichActivity, getActivityAccentClass } from '../ui/Act
 import { getPrimaryActivity } from '@backspace/shared/src/activities.js';
 import { parseFederatedUsername, isFederationGlobeApplicable } from '../../utils/identity';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
+import { replaceEmojiShortcodes } from '../../utils/emojiShortcodes';
 import { Username } from '../ui/Username';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { presenceLabel } from '../../i18n/presence';
@@ -828,7 +829,7 @@ function UserDiscoverCard({
         </button>
 
         {user.bio && (
-          <p className="text-[12px] text-txt-secondary line-clamp-2 mt-1.5 flex-1">{user.bio}</p>
+          <p className="text-[12px] text-txt-secondary line-clamp-2 mt-1.5 flex-1">{replaceEmojiShortcodes(user.bio)}</p>
         )}
         {!user.bio && <div className="flex-1" />}
 

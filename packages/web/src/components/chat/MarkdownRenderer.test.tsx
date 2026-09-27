@@ -113,4 +113,32 @@ describe('MarkdownRenderer', () => {
     expect(code).not.toBeNull();
     expect(code!.textContent).toBe('<@U1>');
   });
+
+  it('renders emoji shortcodes in message text as emoji (issue #252)', () => {
+    const { container } = render(
+      <MarkdownRenderer content={'on fire :heart_on_fire: and **bold :sparkles:**'} />,
+    );
+
+    expect(container.textContent).toBe('on fire ❤️‍🔥 and bold ✨');
+    expect(container.querySelector('strong')!.textContent).toBe('bold ✨');
+  });
+
+  it('leaves shortcodes inside code spans and fenced blocks as typed', () => {
+    const { container } = render(
+      <MarkdownRenderer content={'`:smile:`\n\n```\n:smile:\n```'} />,
+    );
+
+    expect(Array.from(container.querySelectorAll('code')).map((el) => el.textContent))
+      .toEqual([':smile:', ':smile:']);
+  });
+
+  it('leaves shortcodes in link text and URLs alone', () => {
+    const { container } = render(
+      <MarkdownRenderer content={'see https://example.com/:smile:/x'} />,
+    );
+
+    const link = container.querySelector('a')!;
+    expect(link.getAttribute('href')).toBe('https://example.com/:smile:/x');
+    expect(link.textContent).toBe('https://example.com/:smile:/x');
+  });
 });

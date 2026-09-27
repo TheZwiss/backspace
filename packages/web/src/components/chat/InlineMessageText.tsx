@@ -1,0 +1,27 @@
+import { MentionBadge } from './MentionBadge';
+import { replaceEmojiShortcodes } from '../../utils/emojiShortcodes';
+
+const MENTION_SPLIT = /(<@[a-zA-Z0-9_-]+>)/g;
+const MENTION_TOKEN = /^<@([a-zA-Z0-9_-]+)>$/;
+
+interface InlineMessageTextProps {
+  content: string;
+}
+
+/**
+ * One line of message text without Markdown, as a reply preview shows it:
+ * `<@userId>` tokens become mention badges, `:shortcode:` text becomes emoji,
+ * and everything else is plain text.
+ */
+export function InlineMessageText({ content }: InlineMessageTextProps) {
+  const parts = content.split(MENTION_SPLIT);
+  return (
+    <>
+      {parts.map((part, i) => {
+        const match = part.match(MENTION_TOKEN);
+        if (match) return <MentionBadge key={i} userId={match[1]!} />;
+        return replaceEmojiShortcodes(part);
+      })}
+    </>
+  );
+}

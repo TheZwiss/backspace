@@ -2,10 +2,10 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useFormatters } from '../../i18n/formatters';
 import { useNavigate } from 'react-router-dom';
-import ReactMarkdown from 'react-markdown';
 import type { User } from '@backspace/shared';
 import { Avatar } from '../ui/Avatar';
 import { Username } from '../ui/Username';
+import { ProfileBio } from './ProfileBio';
 import { useSpaceStore, getApiForOrigin, resolveUserOrigin } from '../../stores/spaceStore';
 import { api } from '../../api/client';
 import { useUIStore } from '../../stores/uiStore';
@@ -13,6 +13,7 @@ import { getAvatarGradient, adjustColor, mutedGradient } from '../../utils/gradi
 import { parseFederatedUsername } from '../../utils/identity';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { loadFederatedMutuals } from '../../utils/mutuals';
+import { replaceEmojiShortcodes } from '../../utils/emojiShortcodes';
 import { computeFloatingPosition, type AnchorRect, type Placement } from '../../hooks/useFloatingPosition';
 
 /** Gap between the card and the element it was opened from. */
@@ -180,7 +181,7 @@ export function UserProfilePopout({ user: propUser, onClose, anchor, placement =
           </div>
           {user.customStatus && (
             <div className="text-[13px] text-txt-secondary italic mt-1">
-              {user.customStatus}
+              {replaceEmojiShortcodes(user.customStatus)}
             </div>
           )}
         </div>
@@ -193,19 +194,7 @@ export function UserProfilePopout({ user: propUser, onClose, anchor, placement =
               <span className="text-[11px] uppercase tracking-wide font-semibold text-txt-tertiary">
                 {t('social:profile.aboutMe')}
               </span>
-              <div className="text-[13px] text-txt-secondary mt-1 whitespace-pre-wrap break-words leading-relaxed [&_strong]:font-semibold [&_strong]:text-txt-primary [&_em]:italic [&_a]:text-accent-primary [&_a]:underline">
-                <ReactMarkdown
-                  allowedElements={['p', 'strong', 'em', 'a', 'br']}
-                  unwrapDisallowed
-                  components={{
-                    a: ({ href, children }) => (
-                      <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>
-                    ),
-                  }}
-                >
-                  {user.bio}
-                </ReactMarkdown>
-              </div>
+              <ProfileBio bio={user.bio} />
             </div>
           </>
         )}

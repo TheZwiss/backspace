@@ -6,7 +6,7 @@ import type { TFunction } from 'i18next';
 import { formatters, useFormatters } from '../../i18n/formatters';
 import type { MessageWithUser, Embed, User } from '@backspace/shared';
 import { MarkdownRenderer } from './MarkdownRenderer';
-import { MentionBadge } from './MentionBadge';
+import { InlineMessageText } from './InlineMessageText';
 import { Avatar } from '../ui/Avatar';
 import { ProfileAvatar } from '../ui/ProfileAvatar';
 import { useContextMenuStore } from '../../stores/contextMenuStore';
@@ -85,16 +85,6 @@ function formatMessageTimestamp(t: TFunction<['chat', 'common']>, fmt: typeof fo
 
 function formatHoverTime(timestamp: number): string {
   return formatters.formatTime(timestamp);
-}
-
-/** Lightweight inline renderer that resolves <@userId> mentions to MentionBadge components. */
-function renderInlineWithMentions(content: string): React.ReactNode {
-  const parts = content.split(/(<@[a-zA-Z0-9_-]+>)/g);
-  return parts.map((part, i) => {
-    const match = part.match(/^<@([a-zA-Z0-9_-]+)>$/);
-    if (match) return <MentionBadge key={i} userId={match[1]!} />;
-    return part;
-  });
 }
 
 const GIF_URL_REGEX = /^https:\/\/(?:media\.tenor\.com|static\.klipy\.com)\/.+$/;
@@ -472,7 +462,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
                 style={replyRoleColor(message.replyTo)}
               />
               <span className="text-[14px] text-txt-message truncate max-w-[400px] hover:text-txt-primary">
-                {message.replyTo.content ? renderInlineWithMentions(message.replyTo.content) : ''}
+                {message.replyTo.content ? <InlineMessageText content={message.replyTo.content} /> : ''}
               </span>
             </div>
           );

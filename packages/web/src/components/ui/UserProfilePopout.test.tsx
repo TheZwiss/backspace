@@ -126,4 +126,21 @@ describe('UserProfilePopout', () => {
     expect(top).toBeGreaterThanOrEqual(8);
     expect(top + CARD_H).toBeLessThanOrEqual(700 - 8);
   });
+
+  it('renders emoji shortcodes in the bio and custom status as emoji (issue #252)', () => {
+    const user: User = {
+      ...makeUser(),
+      customStatus: 'praying :pray:',
+      bio: '-Catholic :flag_va: :orthodox_cross: and `:smile:`',
+    };
+    const { getByText } = render(
+      <MemoryRouter>
+        <UserProfilePopout user={user} onClose={() => {}} anchor={anchorAt(300, 200)} />
+      </MemoryRouter>,
+    );
+
+    expect(getByText('praying 🙏')).toBeInTheDocument();
+    // Inline code stays literal: the bio shows what was typed between the backticks.
+    expect(getByText('-Catholic 🇻🇦 ☦️ and :smile:')).toBeInTheDocument();
+  });
 });

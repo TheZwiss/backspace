@@ -6,6 +6,7 @@ import { Username } from '../ui/Username';
 import { Tooltip } from '../ui/Tooltip';
 import { parseFederatedUsername, isFederationGlobeApplicable } from '../../utils/identity';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
+import { replaceEmojiShortcodes } from '../../utils/emojiShortcodes';
 import {
   useContextMenuStore,
   type ContextMenuItem,
@@ -224,7 +225,7 @@ export function DmMemberRow({
 
         {!isOffline && canonical.customStatus && (
           <div className="text-[11px] leading-[1.3] text-txt-tertiary truncate">
-            {canonical.customStatus}
+            {replaceEmojiShortcodes(canonical.customStatus)}
           </div>
         )}
       </div>

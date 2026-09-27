@@ -3,10 +3,10 @@ import { useTranslation } from 'react-i18next';
 import { useFormatters } from '../../i18n/formatters';
 import { describeError } from '../../i18n/errors';
 import { useNavigate } from 'react-router-dom';
-import ReactMarkdown from 'react-markdown';
 import type { User } from '@backspace/shared';
 import { Avatar } from '../ui/Avatar';
 import { Username } from '../ui/Username';
+import { ProfileBio } from '../ui/ProfileBio';
 import { useUIStore } from '../../stores/uiStore';
 import { useSpaceStore, getApiForOrigin, resolveUserOrigin } from '../../stores/spaceStore';
 import { api } from '../../api/client';
@@ -16,6 +16,7 @@ import { getAvatarGradient, getSpaceGradient, adjustColor, mutedGradient } from 
 import { parseFederatedUsername, isSelf, canonicalUserMatch } from '../../utils/identity';
 import { loadFederatedMutuals, type TaggedMutualFriend, type MutualSpace } from '../../utils/mutuals';
 import { presenceLabel } from '../../i18n/presence';
+import { replaceEmojiShortcodes } from '../../utils/emojiShortcodes';
 
 type Tab = 'about' | 'friends' | 'spaces';
 
@@ -297,7 +298,7 @@ export function UserProfileModal() {
             </div>
             {user.customStatus && (
               <div className="text-[13px] text-txt-secondary italic mt-1">
-                {user.customStatus}
+                {replaceEmojiShortcodes(user.customStatus)}
               </div>
             )}
           </div>
@@ -338,19 +339,7 @@ export function UserProfileModal() {
                   <span className="text-[11px] uppercase tracking-wide font-semibold text-txt-tertiary">
                     {t('social:profile.aboutMe')}
                   </span>
-                  <div className="text-[13px] text-txt-secondary mt-1 whitespace-pre-wrap break-words leading-relaxed [&_strong]:font-semibold [&_strong]:text-txt-primary [&_em]:italic [&_a]:text-accent-primary [&_a]:underline">
-                    <ReactMarkdown
-                      allowedElements={['p', 'strong', 'em', 'a', 'br']}
-                      unwrapDisallowed
-                      components={{
-                        a: ({ href, children }) => (
-                          <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>
-                        ),
-                      }}
-                    >
-                      {user.bio}
-                    </ReactMarkdown>
-                  </div>
+                  <ProfileBio bio={user.bio} />
                 </div>
               )}
 

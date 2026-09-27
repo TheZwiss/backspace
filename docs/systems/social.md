@@ -672,7 +672,7 @@ function getFriendshipStatus(viewedUser, currentUser, friends, requests): Friend
 
 | Tab | Content |
 |-----|---------|
-| About | Bio (rendered as Markdown: p, strong, em, a, br), Member Since date |
+| About | Bio (`ui/ProfileBio.tsx`, shared with the profile card: Markdown p, strong, em, a, br, and `:shortcode:` emoji as described in `utils/emojiShortcodes.ts`), Member Since date |
 | Mutual Friends | Grid of mutual friends (from `loadFederatedMutuals`), clickable to navigate to their profile |
 | Mutual Spaces | List of mutual spaces with icons, clickable to navigate to space |
 

@@ -28,4 +28,14 @@ describe('ActivityCard', () => {
     expect(screen.getByText('Escape from Tarkov')).toBeInTheDocument();
     expect(screen.getByText('Прошло 32 мин.')).toBeInTheDocument();
   });
+
+  it('renders emoji shortcodes in a custom status (issue #252)', () => {
+    render(<ActivityCard activities={[{ type: 'custom', name: 'on call :pager:' }]} />);
+    expect(screen.getByText('on call 📟')).toBeInTheDocument();
+  });
+
+  it('renders emoji shortcodes in the fallback custom status', () => {
+    render(<ActivityCard activities={[]} fallbackCustomStatus="on call :pager:" />);
+    expect(screen.getByText('on call 📟')).toBeInTheDocument();
+  });
 });

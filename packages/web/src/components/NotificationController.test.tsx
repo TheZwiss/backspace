@@ -16,7 +16,7 @@ class BrowserNotification {
   static instances: BrowserNotification[] = [];
   onclick?: () => void;
   close = vi.fn();
-  constructor(public title: string) { BrowserNotification.instances.push(this); }
+  constructor(public title: string, public options?: { body?: string }) { BrowserNotification.instances.push(this); }
 }
 
 function Location() {
@@ -124,5 +124,15 @@ describe('notification clicks', () => {
     expect(BrowserNotification.instances).toHaveLength(1);
     act(() => BrowserNotification.instances[0]!.onclick?.());
     expect(view.getByTestId('route')).toHaveTextContent('/channels/remote-space/remote-chat');
+  });
+
+  it('shows emoji shortcodes in the notification text as emoji (issue #252)', () => {
+    mount();
+    act(() => vi.advanceTimersByTime(1000));
+    act(() => useChatStore.setState({ realtimeMessageEvents: [{
+      channelId: 'remote-chat',
+      message: { id: 'emoji', channelId: 'remote-chat', userId: 'other', content: 'on fire :heart_on_fire:' } as MessageWithUser,
+    }] }));
+    expect(BrowserNotification.instances[0]!.options?.body).toBe('on fire ❤️‍🔥');
   });
 });

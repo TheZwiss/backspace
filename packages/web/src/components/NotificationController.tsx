@@ -7,6 +7,7 @@ import { isElectron } from '../platform/platform';
 import { onNotificationClick, sendNotification, updateBadgeCount } from '../platform/notifications';
 import { useSpaceStore, getMyUserIdForOrigin } from '../stores/spaceStore';
 import { useUIStore } from '../stores/uiStore';
+import { replaceEmojiShortcodes } from '../utils/emojiShortcodes';
 
 /**
  * Headless component that bridges store events to native OS notifications and badge counts.
@@ -81,7 +82,7 @@ export function NotificationController() {
           if (message.userId !== getMyUserIdForOrigin(channelOriginMap.get(message.channelId) ?? '')) {
             const displayName = message.user?.displayName || message.user?.username || 'Someone';
             const body = message.content
-              ? message.content.replace(/[*_~`>#\-\[\]]/g, '').slice(0, 100)
+              ? replaceEmojiShortcodes(message.content).replace(/[*_~`>#\-\[\]]/g, '').slice(0, 100)
               : 'Sent an attachment';
             sendNotification(displayName, body, {
               channelId: message.channelId,

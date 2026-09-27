@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm';
 import { Highlight, themes } from 'prism-react-renderer';
 import type { Components } from 'react-markdown';
 import { MentionBadge } from './MentionBadge';
+import { remarkEmojiShortcodes } from '../../utils/emojiShortcodes';
 
 // ─── Remark Plugin: Tag Bare Fenced Blocks ─────────────────────────────────
 // react-markdown v9 removed the `inline` prop from <code>. Fenced blocks
@@ -74,7 +75,7 @@ const aetherTheme = {
 
 // ─── Markdown Component Overrides ──────────────────────────────────────────
 
-const REMARK_PLUGINS = [remarkGfm, remarkDefaultCodeLang];
+const REMARK_PLUGINS = [remarkGfm, remarkDefaultCodeLang, remarkEmojiShortcodes];
 
 function CodeBlock({ language, code }: { language: string; code: string }) {
   // 'text' means a bare fenced block with no language — render without highlighting
