@@ -49,6 +49,21 @@ describe('useShownStatus', () => {
     expect(result.current).toBe('dnd');
   });
 
+  it('never takes a different user with the same name for the signed-in user', () => {
+    // The page's own native erin, as nova lists her: erin@<page host>, homed on
+    // the page's instance, a different person from the signed-in erin@nova.
+    const pageHost = window.location.host;
+    const otherErin = user({
+      id: 'erin-native-seen-on-nova', username: `erin@${pageHost}`,
+      homeInstance: pageHost, homeUserId: 'erin-native', status: 'online',
+    });
+    useAuthStore.setState({ user: erinHere, trueHomeStatus: 'dnd' });
+
+    const { result } = renderHook(() => useShownStatus(otherErin, otherErin.status));
+
+    expect(result.current).toBe('online');
+  });
+
   it('keeps the given status while the choice is not known', () => {
     useAuthStore.setState({ user: erinHere, trueHomeStatus: null });
 

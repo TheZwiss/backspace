@@ -24,7 +24,7 @@ function user(fields: Partial<User> & Pick<User, 'id'>): User {
 
 /** erin@nova signed in directly on this page's instance: a replicated row. */
 const erinHere = user({ id: 'erin-here', homeInstance: 'nova.example', homeUserId: 'erin-nova' });
-/** The same person's account seen from another instance: same true home account. */
+/** Another row on this page's instance with the same home identity (same origin, so the same storage). */
 const erinElsewhere = user({ id: 'erin-elsewhere', homeInstance: 'nova.example', homeUserId: 'erin-nova' });
 /** A different nova account signed in on this page's instance. */
 const tomHere = user({ id: 'tom-here', homeInstance: 'nova.example', homeUserId: 'tom-nova' });
@@ -57,7 +57,7 @@ describe("a replicated session's chosen status before the true home reports", ()
     expect(selectMyChosenStatus(useAuthStore.getState())).toBe('dnd');
   });
 
-  it('starts from it on a fresh sign-in on another instance of the same home account', () => {
+  it('starts from it on a fresh sign-in on the same origin with the same home identity', () => {
     useAuthStore.setState({ user: erinHere });
     useAuthStore.getState().applyOwnStatus({ owner: 'trueHome', status: 'idle' });
 

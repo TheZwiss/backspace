@@ -26,6 +26,15 @@ export function clearSelfIds(): void {
 }
 
 /**
+ * Whether `id` is one of the signed-in user's own rows, as a connected
+ * instance's `ready` reported it (`registerSelfId`). Proof by id only, with no
+ * username heuristic.
+ */
+export function isRegisteredSelfId(id: string): boolean {
+  return _knownSelfIds.has(id);
+}
+
+/**
  * Stateless check: is `user` a replicated alias of `homeUser`?
  * Uses the immutable (username, homeInstance) composite key —
  * no store lookups, no snowflake ID mapping.
