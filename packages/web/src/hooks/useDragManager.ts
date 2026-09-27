@@ -22,9 +22,10 @@ export interface LayoutItem {
 interface UseDragManagerOpts {
   scrollContainerRef: RefObject<HTMLElement | null>;
   canManage: boolean;
-  /** Whether a user sitting in this voice channel may be dragged out of it.
-   *  The server checks MOVE_MEMBERS against the channel the user is leaving. */
-  canMoveMembersFrom: (channelId: string) => boolean;
+  /** Whether this user, sitting in this voice channel, may be dragged out of it.
+   *  The server checks MOVE_MEMBERS against the channel the user is leaving,
+   *  and the role hierarchy against the user. */
+  canMoveMember: (userId: string, fromChannelId: string) => boolean;
   /** Flat ordered list of all visible items in sidebar order — used to normalize
    *  'before B' into 'after A' so only a single drop indicator line renders. */
   orderedItems: LayoutItem[];
@@ -34,7 +35,7 @@ interface UseDragManagerOpts {
 }
 
 export function useDragManager(opts: UseDragManagerOpts) {
-  const { scrollContainerRef, canManage, canMoveMembersFrom, orderedItems, onChannelDrop, onCategoryDrop, onVoiceUserDrop } = opts;
+  const { scrollContainerRef, canManage, canMoveMember, orderedItems, onChannelDrop, onCategoryDrop, onVoiceUserDrop } = opts;
 
   const [activeDrag, setActiveDrag] = useState<DragState | null>(null);
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
@@ -141,11 +142,11 @@ export function useDragManager(opts: UseDragManagerOpts) {
 
   const handleVoiceUserDragStart = useCallback((e: React.DragEvent, userId: string, fromChannelId: string) => {
     e.stopPropagation(); // Prevents bubbling to ChannelItem (fixes bug 1)
-    if (!canMoveMembersFrom(fromChannelId)) return;
+    if (!canMoveMember(userId, fromChannelId)) return;
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', userId); // Firefox requires setData for drag to work
     setActiveDrag({ type: 'voiceUser', dragId: userId, sourceId: fromChannelId });
-  }, [canMoveMembersFrom]);
+  }, [canMoveMember]);
 
   const handleVoiceUserDragEnd = useCallback((e: React.DragEvent) => {
     e.stopPropagation(); // Prevents bubbling to ChannelItem (fixes bug 6)
@@ -153,11 +154,11 @@ export function useDragManager(opts: UseDragManagerOpts) {
   }, [clearState]);
 
   const voiceUserHandlers = useCallback((userId: string, channelId: string) => ({
-    draggable: canMoveMembersFrom(channelId),
+    draggable: canMoveMember(userId, channelId),
     isBeingDragged: activeDrag?.type === 'voiceUser' && activeDrag.dragId === userId && activeDrag.sourceId === channelId,
     onDragStart: (e: React.DragEvent) => handleVoiceUserDragStart(e, userId, channelId),
     onDragEnd: handleVoiceUserDragEnd,
-  }), [canMoveMembersFrom, activeDrag, handleVoiceUserDragStart, handleVoiceUserDragEnd]);
+  }), [canMoveMember, activeDrag, handleVoiceUserDragStart, handleVoiceUserDragEnd]);
 
   const handleVoiceDropZoneDragOver = useCallback((e: React.DragEvent, channelId: string) => {
     if (activeDrag?.type !== 'voiceUser') return;

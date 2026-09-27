@@ -171,6 +171,7 @@
   "space_owner_cannot_leave": "拥有者不能退出空间。请先转让所有权或删除空间。",
   "cannot_target_owner": "无法移除或封禁空间拥有者。",
   "cannot_target_self": "您不能对自己执行此操作。",
+  "role_hierarchy": "您只能对排在您最高身份组之下的成员和身份组执行此操作。",
   "permissions_invalid": "该权限数值无效。",
   "role_name_taken": "已存在同名的身份组。",
   "role_name_required": "请输入身份组名称。",

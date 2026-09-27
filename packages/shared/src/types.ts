@@ -1,3 +1,5 @@
+import type { ErrorCode } from './errors.js';
+
 // ─── Constants ──────────────────────────────────────────────────────────────
 
 export const MAX_MESSAGE_LENGTH = 4000;
@@ -591,7 +593,9 @@ export type ServerEvent =
       newOwnerHomeInstance?: string | null;
     }
   | { type: 'pong' }
-  | { type: 'error'; message: string };
+  // `code` is set where the refusal has a stable ErrorCode (e.g. a voice
+  // moderation action refused by the role hierarchy); older senders omit it.
+  | { type: 'error'; message: string; code?: ErrorCode };
 
 // ─── API Request/Response Types ─────────────────────────────────────────────
 

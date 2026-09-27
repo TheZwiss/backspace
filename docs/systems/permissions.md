@@ -90,6 +90,54 @@ if channelOverride:  base = (base & ~deny) | allow
 
 ---
 
+## Role hierarchy
+
+A role's `position` ranks it: higher is more senior. `@everyone` (id = space
+id) is always 0; every other role has its own position from 1 up, so no two
+roles tie. A member's **rank** is the highest position among their roles, 0
+with none.
+
+Moderating another member needs a strictly higher rank than theirs:
+
+| Rule | Where |
+|---|---|
+| Nobody acts on the space owner | kick, ban, role changes, voice moderation |
+| The owner and instance admins (`isAdmin`) are exempt | everything below |
+| Actor's rank > target's rank | kick (`DELETE /members/:uid`, not leaving), ban, `PATCH /members/:uid`, `POST`/`DELETE /members/:uid/roles`, WS `voice_space_mute`, `voice_space_deafen`, `voice_move`, `voice_disconnect` |
+| Role position < actor's rank | assigning or removing that role (each role a `PATCH /members/:uid` adds or removes), editing or deleting it, moving it or moving another role to that position, creating a role (new roles start at 1) |
+
+`ADMINISTRATOR` does not exempt: a role with it still sits at its position.
+Acting on oneself is not moderation (leaving, moving oneself between
+channels). Unban has no target rank and needs only `BAN_MEMBERS`.
+
+A refusal is `403` with `ErrorCode` `role_hierarchy`; the WebSocket handlers
+send `{ type: 'error', code: 'role_hierarchy' }`.
+
+The rule is `canActOnMember` / `canManageRoleAt` / `topRolePosition` in
+`packages/shared/src/permissions.ts`, used by both sides. The server reads the
+facts in `utils/roleHierarchy.ts` (`getHierarchyStanding`); ids are ids on the
+space's own instance, so a moderator whose home is another instance is ranked
+as their local replicated user there. The client reads them in
+`web/src/utils/roleHierarchy.ts` from the loaded member list, finding the
+viewer through `getMyUserIdForOrigin` of the space's origin. When the space is
+not the loaded one or a member row is missing, the client leaves the control
+offered and the server decides.
+
+**Positions.** `db/rolePositions.ts` keeps them distinct.
+`normalizeRolePositions` orders a space's roles by position descending, then
+`created_at`, then rowid, and writes n..1 (and 0 for @everyone). It runs on
+every boot (`normalizeAllRolePositions`, a no-op once applied), after a role is
+created (inserted at 0, so it lands at 1 and the others move up) and after a
+role is deleted. `PATCH /roles/:rid { position }` moves the role to that
+position and renumbers the rest (`moveRoleToPosition`). Databases from before
+this rule had every role at 0; the boot pass turns the order the role list
+already showed (oldest role first) into positions.
+
+Covered by `routes/roleHierarchy.test.ts`, `ws/voiceModerationHierarchy.test.ts`,
+`voiceMenuItems.test.ts` and `spaceSettingsPanels/roleHierarchyGating.test.tsx`.
+
+---
+
 ## Helper Functions
 
 | Function | Purpose |
@@ -130,6 +178,12 @@ channel-scoped for editing or deleting one channel. The current split:
 |---|---|
 | Channel | view, send, attach, react, read history, manage messages; connect, speak, stream; edit or delete the channel (`MANAGE_CHANNELS`); mute, deafen, move, disconnect a voice user (checked on the channel the target is in) |
 | Space | create a channel; reorder channels and categories; create, rename or delete a category; read or write any channel or category override (`MANAGE_ROLES`); invites, kick, ban, space settings |
+
+Member and role actions also follow the role hierarchy (above). The client
+hides kick and ban for members ranked at or above the viewer, greys out roles
+at or above the viewer's own in the member role editor, shows such a role
+read-only in the role editor, and leaves the voice moderation menu and voice
+drag-to-move off for those members.
 
 A control that needs two permissions at different scopes checks each at its own.
 Channel settings is the example: the delete button reads the channel's

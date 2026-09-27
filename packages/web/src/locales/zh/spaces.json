@@ -374,6 +374,7 @@
     "copyName": "{{name}} 的副本",
     "backToList": "返回身份组列表",
     "created": "身份组已创建。请在下方进行个性化配置。",
+    "aboveYou": "此身份组与您的最高身份组同级或更高。您可以查看，但无法更改。",
     "identity": "身份信息",
     "nameLabel": "身份组名称",
     "colorLabel": "身份组颜色",

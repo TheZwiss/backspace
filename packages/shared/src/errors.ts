@@ -198,6 +198,7 @@ export const ERROR_CODES = [
   'space_owner_cannot_leave',
   'cannot_target_owner',
   'cannot_target_self',
+  'role_hierarchy',
   'permissions_invalid',
   'role_name_taken',
   'role_name_required',

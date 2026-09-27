@@ -13,6 +13,7 @@ vi.mock('../../audio/AudioManager', () => ({
 
 import { buildVoiceModMenuItems } from './voiceMenuItems';
 import { useSpaceStore } from '../../stores/spaceStore';
+import { useAuthStore } from '../../stores/authStore';
 import { PermissionBits, permissionsToString } from '../../utils/permissions';
 
 const bits = (...b: bigint[]) => permissionsToString(b.reduce((acc, x) => acc | x, 0n));
@@ -59,5 +60,59 @@ describe('buildVoiceModMenuItems permission scope', () => {
   it('offers only the granted subset', () => {
     seed(bits(PermissionBits.VIEW_CHANNEL), bits(PermissionBits.VIEW_CHANNEL, PermissionBits.MUTE_MEMBERS));
     expect(keys()).toEqual(['space-mute']);
+  });
+});
+
+// #299: the server refuses voice moderation of a member ranked at or above the
+// actor (permissions.md, "Role hierarchy"), so the menu does not offer it.
+describe('buildVoiceModMenuItems role hierarchy', () => {
+  function role(id: string, position: number) {
+    return { id, spaceId: 'space-1', name: id, color: '#c4b5fd', position, createdAt: 1 };
+  }
+  function user(id: string) {
+    return {
+      id, username: id, displayName: null, avatar: null, banner: null, accentColor: null, avatarColor: null,
+      bio: null, status: 'online' as const, customStatus: null, isAdmin: false, createdAt: 1,
+      homeInstance: null, homeUserId: null, replicatedInstances: [],
+    };
+  }
+  function member(id: string, roles: ReturnType<typeof role>[]) {
+    return { spaceId: 'space-1', userId: id, nickname: null, joinedAt: 1, user: user(id), roles };
+  }
+
+  beforeEach(() => {
+    seed(bits(PermissionBits.VIEW_CHANNEL), bits(PermissionBits.VIEW_CHANNEL, ...ALL_MOD));
+    useAuthStore.setState({ user: user('me') });
+    useSpaceStore.setState({
+      currentSpaceId: 'space-1',
+      spaces: [{
+        id: 'space-1', name: 'Space', icon: null, banner: null, avatarColor: null, ownerId: 'owner',
+        inviteCode: null, visibility: 'public', directoryListed: false, description: null, createdAt: 1, _instanceOrigin: '',
+      }],
+      members: [
+        member('me', [role('r-helper', 2)]),
+        member('senior', [role('r-mod', 3)]),
+        member('peer', [role('r-helper', 2)]),
+        member('junior', [role('r-member', 1)]),
+        member('owner', []),
+      ],
+    });
+  });
+
+  const keysFor = (target: string) => buildVoiceModMenuItems(target, 'voice-1').map((i) => i.key);
+
+  it('offers nothing against a member ranked above or level with the viewer, or the owner', () => {
+    expect(keysFor('senior')).toEqual([]);
+    expect(keysFor('peer')).toEqual([]);
+    expect(keysFor('owner')).toEqual([]);
+  });
+
+  it('offers the actions against a member ranked below the viewer', () => {
+    expect(keysFor('junior')).toEqual(expect.arrayContaining(['space-mute', 'space-deafen', 'disconnect', 'move-to']));
+  });
+
+  it('offers everything to the space owner', () => {
+    useAuthStore.setState({ user: user('owner') });
+    expect(keysFor('senior')).toEqual(expect.arrayContaining(['space-mute', 'disconnect']));
   });
 });

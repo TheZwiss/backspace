@@ -192,6 +192,7 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   space_owner_cannot_leave: 'Space owner cannot leave. Transfer ownership or delete the space.',
   cannot_target_owner: 'The space owner cannot be removed or banned',
   cannot_target_self: 'You cannot do that to yourself',
+  role_hierarchy: 'You can only do that to members and roles ranked below your highest role',
   permissions_invalid: 'Invalid permissions value',
   role_name_taken: 'A role with this name already exists',
   role_name_required: 'Role name cannot be empty',

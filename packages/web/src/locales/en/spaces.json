@@ -377,6 +377,7 @@
     "copyName": "Copy of {{name}}",
     "backToList": "Back to roles",
     "created": "Role created. Customize it below.",
+    "aboveYou": "This role ranks at or above your highest role. You can view it but not change it.",
     "identity": "Identity",
     "nameLabel": "Role Name",
     "colorLabel": "Role Color",

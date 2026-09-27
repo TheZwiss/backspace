@@ -69,6 +69,8 @@ Source: `packages/server/src/ws/handler.ts`, `packages/server/src/ws/events.ts`
 | `voice_move` | userId, targetChannelId | MOVE_MEMBERS |
 | `voice_disconnect` | userId | DISCONNECT_MEMBERS |
 
+All four also need the actor to outrank the target (permissions.md, "Role hierarchy"); a refusal is an `error` with `code: 'role_hierarchy'`.
+
 ### DM Calls
 | type | fields | notes |
 |------|--------|-------|
@@ -92,7 +94,7 @@ Source: `packages/server/src/ws/handler.ts`, `packages/server/src/ws/events.ts`
 |------|--------|-------|
 | `ready` | (see Ready Payload below) | user |
 | `pong` | — | user |
-| `error` | message | user |
+| `error` | message, code? | user |
 
 ### Messages
 | type | fields | scope |

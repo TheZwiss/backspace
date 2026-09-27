@@ -241,6 +241,7 @@ Three independent muting mechanisms:
 ### Move & Disconnect
 - `voice_move`: Requires MOVE_MEMBERS. Same space only. Preserves voice status.
 - `voice_disconnect`: Requires DISCONNECT_MEMBERS. Full teardown.
+- Space mute/deafen, move and disconnect of another member also require outranking them in the role hierarchy (permissions.md, "Role hierarchy"); a refusal is a WS `error` with `code: 'role_hierarchy'`.
 
 ---
 

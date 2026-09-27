@@ -146,6 +146,8 @@ DELETE /spaces/:id/roles/:rid                                                   
 POST   /spaces/:id/members/:uid/roles { roleId }                                 → { success }  [MANAGE_ROLES]
 DELETE /spaces/:id/members/:uid/roles/:rid                                        → { success }  [MANAGE_ROLES]
 ```
+Kick, ban, the member role routes and the role routes also enforce the role hierarchy, answering `403 role_hierarchy` (permissions.md, "Role hierarchy"). `PATCH /roles/:rid { position }` moves the role to that position (1 = just above @everyone) and renumbers the others; a new role is created at 1. The single-role routes refuse a role of another space with `400 role_not_in_space`.
+
 `DELETE /spaces/:id/roles/:rid` answers `404 role_not_in_space` for a role id that is not in the space, and otherwise deletes the role together with every channel and category override that names it (overrides carry no foreign key to the role).
 
 ## Channels (`routes/channels.ts`) — auth required

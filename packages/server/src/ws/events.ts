@@ -20,6 +20,8 @@ import { appendMutationLog, dmMessageFederationRef, dmMessageMutationTarget, que
 import { canonicalizeHomeInstance, getOurOrigin, normalizeOriginForCompare } from '../utils/federationAuth.js';
 import { generateFederatedCallToken } from '../routes/livekit.js';
 import { config } from '../config.js';
+import { canActOnMemberInSpace } from '../utils/roleHierarchy.js';
+import { ERROR_MESSAGES } from '../utils/httpErrors.js';
 
 /**
  * Re-evaluate SPEAK permission for all participants in voice channels
@@ -2178,6 +2180,19 @@ async function sendFederatedCallEnd(
 
 // ─── Voice Moderation Handlers ──────────────────────────────────────────────
 
+/**
+ * Voice moderation of another member follows the role hierarchy, like kick and
+ * ban (permissions.md, "Role hierarchy"). Sends the refusal and returns true
+ * when `actorId` does not outrank `targetId`; acting on oneself is not
+ * moderation and is left to each handler's own rules.
+ */
+function refusedByRoleHierarchy(spaceId: string, actorId: string, targetId: string): boolean {
+  if (actorId === targetId) return false;
+  if (canActOnMemberInSpace(spaceId, actorId, targetId)) return false;
+  connectionManager.sendToUser(actorId, { type: 'error', message: ERROR_MESSAGES.role_hierarchy, code: 'role_hierarchy' });
+  return true;
+}
+
 function handleVoiceSpaceMute(event: Record<string, unknown>, userId: string): void {
   const targetUserId = event.userId as string;
   const muted = event.muted === true;
@@ -2205,6 +2220,8 @@ function handleVoiceSpaceMute(event: Record<string, unknown>, userId: string): v
     connectionManager.sendToUser(userId, { type: 'error', message: 'Cannot space-mute yourself' });
     return;
   }
+
+  if (refusedByRoleHierarchy(meta.spaceId, userId, targetUserId)) return;
 
   connectionManager.setSpaceMuted(meta.spaceId, targetUserId, muted);
 
@@ -2264,6 +2281,8 @@ function handleVoiceSpaceDeafen(event: Record<string, unknown>, userId: string):
     return;
   }
 
+  if (refusedByRoleHierarchy(meta.spaceId, userId, targetUserId)) return;
+
   connectionManager.setSpaceDeafened(meta.spaceId, targetUserId, deafened);
 
   // Persist to DB
@@ -2320,6 +2339,8 @@ function handleVoiceMove(event: Record<string, unknown>, userId: string): void {
     connectionManager.sendToUser(userId, { type: 'error', message: 'Missing MOVE_MEMBERS permission' });
     return;
   }
+
+  if (refusedByRoleHierarchy(meta.spaceId, userId, targetUserId)) return;
 
   // Verify target channel exists and is a voice/video channel in the same space
   const db = getDb();
@@ -2417,6 +2438,8 @@ function handleVoiceDisconnect(event: Record<string, unknown>, userId: string): 
     connectionManager.sendToUser(userId, { type: 'error', message: 'Missing DISCONNECT_MEMBERS permission' });
     return;
   }
+
+  if (refusedByRoleHierarchy(meta.spaceId, userId, targetUserId)) return;
 
   const channelId = currentRoom.roomId;
 

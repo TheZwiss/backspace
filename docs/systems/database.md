@@ -232,7 +232,7 @@ PK: (userId, friendId)
 | spaceId | text NOT NULL | | FK → spaces.id CASCADE |
 | name | text NOT NULL | | |
 | color | text | `'#b9bbbe'` | Hex |
-| position | integer | 0 | Hierarchy position |
+| position | integer | 0 | Hierarchy rank: @everyone 0, other roles distinct from 1 up, higher is more senior (permissions.md, "Role hierarchy") |
 | permissions | text | | Bigint decimal string |
 | createdAt | integer NOT NULL | | |
 

@@ -7,6 +7,7 @@ import { useVoiceStore } from '../../stores/voiceStore';
 import { useSpaceStore, getChannelOrigin } from '../../stores/spaceStore';
 import { wsSend } from '../../hooks/useWebSocket';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
+import { viewerCanActOnUserInSpace } from '../../utils/roleHierarchy';
 
 /**
  * Build moderation context menu items for a voice user.
@@ -15,7 +16,8 @@ import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
  * `channelId` is the voice channel the target is in. The server checks every
  * moderation bit against that channel, overrides included, so the menu reads
  * the same channel's permissions: a voice channel can grant or deny
- * MUTE_MEMBERS and the rest on its own.
+ * MUTE_MEMBERS and the rest on its own. The target must also rank below the
+ * viewer in the role hierarchy.
  */
 export function buildVoiceModMenuItems(targetUserId: string, channelId: string): ContextMenuItem[] {
   const { channelPermissions, channels, channelToSpaceMap } = useSpaceStore.getState();
@@ -31,6 +33,9 @@ export function buildVoiceModMenuItems(targetUserId: string, channelId: string):
   const canDisconnectMembers = hasPermissionBit(myPerms, PermissionBits.DISCONNECT_MEMBERS);
 
   if (!canMuteMembers && !canDeafenMembers && !canMoveMembers && !canDisconnectMembers) return [];
+  // Every action below moderates the target, which the server refuses for a
+  // member ranked at or above the viewer (permissions.md, "Role hierarchy").
+  if (derivedSpaceId && !viewerCanActOnUserInSpace(derivedSpaceId, targetUserId)) return [];
 
   const voiceOrigin = getChannelOrigin(channelId);
   const spaceId = derivedSpaceId;

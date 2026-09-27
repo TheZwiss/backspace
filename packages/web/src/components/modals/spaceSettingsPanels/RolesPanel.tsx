@@ -7,6 +7,7 @@ import { PermissionBits, stringToPermissions, permissionsToString } from '../../
 import { usePermissionNames, type PermissionKey } from '../../ui/OverrideEntry';
 import { describeError } from '../../../i18n/errors';
 import type { Role } from '@backspace/shared';
+import { viewerCanManageRoleAt } from '../../../utils/roleHierarchy';
 
 // ─── Permission display groups ─────────────────────────────────────────────
 
@@ -82,6 +83,11 @@ export function RolesPanel({ spaceId }: RolesPanelProps) {
   const { t } = useTranslation(['spaces', 'common']);
   const roles = useSpaceStore((s) => s.roles);
   const loadSpaceDetail = useSpaceStore((s) => s.loadSpaceDetail);
+  const space = useSpaceStore((s) => s.spaces.find((sp) => sp.id === spaceId));
+  const members = useSpaceStore((s) => s.members);
+  // A new role starts at the bottom (position 1), so creating one needs a top
+  // role above that (permissions.md, "Role hierarchy").
+  const canCreateRole = !space || viewerCanManageRoleAt(space, members, 1);
 
   const [editingRoleId, setEditingRoleId] = useState<string | null>(null);
   const [isNewRole, setIsNewRole] = useState(false);
@@ -142,7 +148,7 @@ export function RolesPanel({ spaceId }: RolesPanelProps) {
       <div className="sticky top-0 z-10 pointer-events-none pb-3">
         <button
           onClick={handleCreateRole}
-          disabled={creating}
+          disabled={creating || !canCreateRole}
           className="glass-bubble rounded-full px-3 py-1.5 flex items-center gap-1.5 text-sm text-txt-primary hover:text-txt-secondary transition-colors pointer-events-auto disabled:opacity-50"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
@@ -211,14 +217,20 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
   const permissionNames = usePermissionNames();
   const loadSpaceDetail = useSpaceStore((s) => s.loadSpaceDetail);
   const roles = useSpaceStore((s) => s.roles);
+  const space = useSpaceStore((s) => s.spaces.find((sp) => sp.id === spaceId));
+  const members = useSpaceStore((s) => s.members);
   const isEveryone = role.id === spaceId;
+  // Roles at or above the viewer's top role can be looked at, not changed
+  // (permissions.md, "Role hierarchy"); the server refuses the change anyway.
+  const canEdit = !space || viewerCanManageRoleAt(space, members, role.position);
+  const canCopy = !space || viewerCanManageRoleAt(space, members, 1);
 
   const [draftName, setDraftName] = useState(role.name);
   const [nameError, setNameError] = useState('');
   const nameInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!isEveryone && nameInputRef.current) {
+    if (!isEveryone && canEdit && nameInputRef.current) {
       nameInputRef.current.focus();
       nameInputRef.current.select();
     }
@@ -249,6 +261,7 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
   const hasChanges = hasNameChange || hasColorChange || hasPermChange;
 
   const togglePermission = (bit: bigint) => {
+    if (!canEdit) return;
     setDraftPermissions((prev) => (prev & bit) !== 0n ? prev & ~bit : prev | bit);
   };
 
@@ -354,11 +367,18 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
         </div>
       )}
 
+      {!canEdit && (
+        <p className="px-3 py-2 rounded-lg bg-white/[0.03] text-[13px] text-txt-secondary">
+          {t('spaces:roles.aboveYou')}
+        </p>
+      )}
+
       {/* Identity card (Name + Color — not shown for @everyone) */}
       {!isEveryone && (
         <div>
           <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('spaces:roles.identity')}</div>
-          <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-4">
+          {/* A disabled fieldset disables every control inside it. */}
+          <fieldset disabled={!canEdit} className={`rounded-lg bg-white/[0.02] p-3.5 space-y-4 min-w-0 ${canEdit ? '' : 'opacity-60'}`}>
             <div>
               <label className="block text-xs text-txt-secondary mb-1.5">
                 {t('spaces:roles.nameLabel')}
@@ -414,7 +434,7 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
                 />
               </div>
             </div>
-          </div>
+          </fieldset>
         </div>
       )}
 
@@ -431,11 +451,12 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
                 const hasAdmin = (draftPermissions & PermissionBits.ADMINISTRATOR) !== 0n;
                 const isOn = isAdminBit ? hasAdmin : hasAdmin || (draftPermissions & perm.bit) !== 0n;
                 const isInherited = !isAdminBit && hasAdmin;
+                const isLocked = isInherited || !canEdit;
                 return (
                   <label
                     key={perm.key}
                     className={`flex items-center justify-between py-1.5 px-2 rounded cursor-pointer group/perm ${
-                      isInherited ? 'opacity-50 cursor-default' : 'hover:bg-interactive-hover'
+                      isLocked ? 'opacity-50 cursor-default' : 'hover:bg-interactive-hover'
                     }`}
                   >
                     <span className={`text-sm ${isAdminBit ? 'text-txt-danger font-medium' : 'text-txt-primary'}`}>
@@ -444,10 +465,10 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
                     <div
                       onClick={(e) => {
                         e.preventDefault();
-                        if (!isInherited) togglePermission(perm.bit);
+                        if (!isLocked) togglePermission(perm.bit);
                       }}
                       className={`relative w-9 h-5 rounded-full transition-colors ${
-                        isInherited ? 'cursor-default' : 'cursor-pointer'
+                        isLocked ? 'cursor-default' : 'cursor-pointer'
                       } ${isOn ? 'bg-accent-primary' : 'bg-interactive-muted'}`}
                     >
                       <div
@@ -494,12 +515,12 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
               )}
               <button
                 onClick={handleCopy}
-                disabled={copying}
+                disabled={copying || !canCopy}
                 className="px-3 py-1.5 text-sm font-medium rounded-full text-txt-secondary hover:bg-interactive-hover transition-colors disabled:opacity-50"
               >
                 {copying ? t('spaces:roles.copying') : t('spaces:roles.copy')}
               </button>
-              {!isEveryone && (
+              {!isEveryone && canEdit && (
                 <>
                   <div className="w-px h-5 bg-white/10" />
                   <button

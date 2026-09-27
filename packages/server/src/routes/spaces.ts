@@ -29,6 +29,9 @@ import { sanitizeUser } from '../utils/sanitize.js';
 import { checkVoicePermissions } from '../ws/events.js';
 import { getLocalInviteSnapshot } from '../utils/spaceInviteSnapshot.js';
 import { sendError } from '../utils/httpErrors';
+import { canActOnMemberInSpace, canManageRoleInSpace, getHierarchyStanding } from '../utils/roleHierarchy.js';
+import { canActOnMember, canManageRoleAt } from '@backspace/shared/src/permissions.js';
+import { moveRoleToPosition, normalizeRolePositions } from '../db/rolePositions.js';
 
 function rowToSpace(row: typeof schema.spaces.$inferSelect): Space {
   return {
@@ -67,6 +70,39 @@ function rowToChannel(row: typeof schema.channels.$inferSelect): Channel {
 
 function generateInviteCode(): string {
   return crypto.randomBytes(4).toString('hex');
+}
+
+type RoleChangeRefusal = {
+  status: 400 | 403 | 404;
+  code: 'missing_permission' | 'cannot_change_own_roles' | 'space_owner_only' | 'member_not_found' | 'role_not_in_space' | 'everyone_role_not_assignable' | 'role_hierarchy';
+  details?: Record<string, string>;
+};
+
+/**
+ * The checks shared by the two single-role routes (add one role to a member,
+ * take one away). They match what PATCH /members/:uid enforces for a whole
+ * role set: MANAGE_ROLES, not one's own roles, not the owner's, a member of
+ * this space, a role of this space other than @everyone, a member ranked
+ * below the actor and a role below the actor's top role.
+ */
+function checkSingleRoleChange(spaceId: string, actorId: string, targetId: string, roleId: string): RoleChangeRefusal | null {
+  const db = getDb();
+  if (!hasPermission(actorId, spaceId, PermissionBits.MANAGE_ROLES)) {
+    return { status: 403, code: 'missing_permission', details: { permission: 'MANAGE_ROLES' } };
+  }
+  if (targetId === actorId) return { status: 400, code: 'cannot_change_own_roles' };
+  if (isSpaceOwner(spaceId, targetId)) return { status: 403, code: 'space_owner_only' };
+  if (!isMember(spaceId, targetId)) return { status: 404, code: 'member_not_found' };
+  const role = typeof roleId === 'string'
+    ? db.select().from(schema.roles).where(and(eq(schema.roles.id, roleId), eq(schema.roles.spaceId, spaceId))).get()
+    : undefined;
+  if (!role) return { status: 400, code: 'role_not_in_space', details: { roleId: String(roleId) } };
+  if (role.id === spaceId) return { status: 400, code: 'everyone_role_not_assignable' };
+  const actor = getHierarchyStanding(spaceId, actorId);
+  if (!canActOnMember(actor, getHierarchyStanding(spaceId, targetId)) || !canManageRoleAt(actor, role.position ?? 0)) {
+    return { status: 403, code: 'role_hierarchy' };
+  }
+  return null;
 }
 
 export async function spaceRoutes(app: FastifyInstance): Promise<void> {
@@ -873,21 +909,42 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     }
 
     // Validate all roleIds belong to this server and are not @everyone
-    if (roleIds.length > 0) {
-      const spaceRoles = db.select()
-        .from(schema.roles)
-        .where(eq(schema.roles.spaceId, id))
-        .all();
+    const spaceRoles = db.select()
+      .from(schema.roles)
+      .where(eq(schema.roles.spaceId, id))
+      .all();
+    const spaceRolePositions = new Map(spaceRoles.map(r => [r.id, r.position ?? 0]));
 
-      const spaceRoleIds = new Set(spaceRoles.map(r => r.id));
+    for (const roleId of roleIds) {
+      if (!spaceRolePositions.has(roleId)) {
+        return sendError(reply, 400, 'role_not_in_space', { roleId });
+      }
+      if (roleId === id) {
+        return sendError(reply, 400, 'everyone_role_not_assignable');
+      }
+    }
 
-      for (const roleId of roleIds) {
-        if (!spaceRoleIds.has(roleId)) {
-          return sendError(reply, 400, 'role_not_in_space', { roleId });
-        }
-        if (roleId === id) {
-          return sendError(reply, 400, 'everyone_role_not_assignable');
-        }
+    // Role hierarchy: the member must rank below the actor, and every role
+    // this request adds or removes must sit below the actor's top role.
+    const actorStanding = getHierarchyStanding(id, request.userId);
+    if (!canActOnMember(actorStanding, getHierarchyStanding(id, uid))) {
+      return sendError(reply, 403, 'role_hierarchy');
+    }
+    const currentRoleIds = new Set(
+      db.select({ roleId: schema.memberRoles.roleId })
+        .from(schema.memberRoles)
+        .where(and(eq(schema.memberRoles.spaceId, id), eq(schema.memberRoles.userId, uid)))
+        .all()
+        .map(r => r.roleId),
+    );
+    const requestedRoleIds = new Set(roleIds);
+    const changedRoleIds = [
+      ...roleIds.filter(r => !currentRoleIds.has(r)),
+      ...[...currentRoleIds].filter(r => !requestedRoleIds.has(r)),
+    ];
+    for (const roleId of changedRoleIds) {
+      if (!canManageRoleAt(actorStanding, spaceRolePositions.get(roleId) ?? 0)) {
+        return sendError(reply, 403, 'role_hierarchy');
       }
     }
 
@@ -1013,6 +1070,11 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, 400, 'cannot_target_owner');
     }
 
+    // Kicking someone else needs a higher top role than theirs
+    if (!isSelf && !canActOnMemberInSpace(id, request.userId, uid)) {
+      return sendError(reply, 403, 'role_hierarchy');
+    }
+
     db.delete(schema.spaceMembers)
       .where(and(
         eq(schema.spaceMembers.spaceId, id),
@@ -1088,16 +1150,25 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, 409, 'role_name_taken');
     }
 
+    // A new role starts at the bottom, just above @everyone, so the actor
+    // must be able to manage a role there.
+    if (!canManageRoleInSpace(id, request.userId, 1)) {
+      return sendError(reply, 403, 'role_hierarchy');
+    }
+
     const roleId = generateSnowflake();
     db.insert(schema.roles).values({
       id: roleId,
       spaceId: id,
       name: roleName,
       color: color || '#b9bbbe',
+      // Position 0 ties with nothing but @everyone's slot; the normalisation
+      // below places the newest role last, at 1, and moves the others up.
       position: 0,
       permissions: permStr,
       createdAt: Date.now(),
     }).run();
+    normalizeRolePositions(rawDb, id);
 
     const role = db.select().from(schema.roles).where(eq(schema.roles.id, roleId)).get();
 
@@ -1123,6 +1194,29 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, 403, 'missing_permission', { permission: 'MANAGE_ROLES' });
     }
 
+    const role = db.select().from(schema.roles)
+      .where(and(eq(schema.roles.id, roleId), eq(schema.roles.spaceId, id)))
+      .get();
+    if (!role) {
+      return sendError(reply, 404, 'role_not_in_space', { roleId });
+    }
+
+    // Only roles below the actor's top role can be edited or moved, and only
+    // to a position that is still below it.
+    const actorStanding = getHierarchyStanding(id, request.userId);
+    if (!canManageRoleAt(actorStanding, role.position ?? 0)) {
+      return sendError(reply, 403, 'role_hierarchy');
+    }
+    if (position !== undefined) {
+      // @everyone is always at 0, and positions count from 1.
+      if (roleId === id || !Number.isInteger(position) || position < 1) {
+        return sendError(reply, 400, 'validation_failed');
+      }
+      if (!canManageRoleAt(actorStanding, position)) {
+        return sendError(reply, 403, 'role_hierarchy');
+      }
+    }
+
     const updates: Partial<typeof schema.roles.$inferInsert> = {};
     if (name !== undefined) {
       const trimmed = name.trim();
@@ -1140,7 +1234,6 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       updates.name = trimmed;
     }
     if (color !== undefined) updates.color = color;
-    if (position !== undefined) updates.position = position;
 
     if (permissions !== undefined) {
       try {
@@ -1151,11 +1244,17 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       }
     }
 
-    if (Object.keys(updates).length === 0) {
+    if (Object.keys(updates).length === 0 && position === undefined) {
       return sendError(reply, 400, 'no_fields_to_update');
     }
 
-    db.update(schema.roles).set(updates).where(and(eq(schema.roles.id, roleId), eq(schema.roles.spaceId, id))).run();
+    if (Object.keys(updates).length > 0) {
+      db.update(schema.roles).set(updates).where(and(eq(schema.roles.id, roleId), eq(schema.roles.spaceId, id))).run();
+    }
+    // A move renumbers the other roles too, so positions stay distinct.
+    if (position !== undefined) {
+      moveRoleToPosition(getRawDb(), id, roleId, position);
+    }
     const updated = db.select().from(schema.roles).where(eq(schema.roles.id, roleId)).get();
 
     // Broadcast updated state to all space members
@@ -1193,6 +1292,10 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, 404, 'role_not_in_space', { roleId });
     }
 
+    if (!canManageRoleInSpace(id, request.userId, role.position ?? 0)) {
+      return sendError(reply, 403, 'role_hierarchy');
+    }
+
     // Overrides name their target without a foreign key, so they would
     // outlive the role: invisible in the editor and impossible to remove.
     db.transaction((tx) => {
@@ -1204,6 +1307,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       ).run();
       tx.delete(schema.roles).where(and(eq(schema.roles.id, roleId), eq(schema.roles.spaceId, id))).run();
     });
+    normalizeRolePositions(getRawDb(), id);
 
     // Broadcast updated state to all space members
     const memberRows = db.select().from(schema.spaceMembers).where(eq(schema.spaceMembers.spaceId, id)).all();
@@ -1223,15 +1327,17 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     const { roleId } = request.body;
     const db = getDb();
 
-    if (!hasPermission(request.userId, id, PermissionBits.MANAGE_ROLES)) {
-      return sendError(reply, 403, 'missing_permission', { permission: 'MANAGE_ROLES' });
-    }
+    const refusal = checkSingleRoleChange(id, request.userId, uid, roleId);
+    if (refusal) return sendError(reply, refusal.status, refusal.code, refusal.details);
 
     db.insert(schema.memberRoles).values({
       spaceId: id,
       userId: uid,
       roleId,
-    }).run();
+    }).onConflictDoNothing().run();
+
+    connectionManager.pushReadyPayload(uid);
+    checkVoicePermissions(id);
 
     return reply.code(200).send({ success: true });
   });
@@ -1243,15 +1349,17 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     const { id, uid, roleId } = request.params;
     const db = getDb();
 
-    if (!hasPermission(request.userId, id, PermissionBits.MANAGE_ROLES)) {
-      return sendError(reply, 403, 'missing_permission', { permission: 'MANAGE_ROLES' });
-    }
+    const refusal = checkSingleRoleChange(id, request.userId, uid, roleId);
+    if (refusal) return sendError(reply, refusal.status, refusal.code, refusal.details);
 
     db.delete(schema.memberRoles).where(and(
       eq(schema.memberRoles.spaceId, id),
       eq(schema.memberRoles.userId, uid),
       eq(schema.memberRoles.roleId, roleId)
     )).run();
+
+    connectionManager.pushReadyPayload(uid);
+    checkVoicePermissions(id);
 
     return reply.code(200).send({ success: true });
   });
@@ -1382,6 +1490,11 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     // Cannot ban yourself
     if (targetId === request.userId) {
       return sendError(reply, 400, 'cannot_target_self');
+    }
+
+    // Banning needs a higher top role than the target's
+    if (!canActOnMemberInSpace(id, request.userId, targetId)) {
+      return sendError(reply, 403, 'role_hierarchy');
     }
 
     // Check if already banned

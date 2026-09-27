@@ -5,6 +5,7 @@ import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { config } from '../config.js';
 import * as schema from './schema.js';
 import { ensureDefaults, backfillOneOnOneDmMembership } from './migrate.js';
+import { normalizeAllRolePositions } from './rolePositions.js';
 import { setWorkerId } from '../utils/snowflake.js';
 import { backfillOneOnOneKeys } from '../utils/dmConversation.js';
 import { createSnapshot } from '../utils/backup.js';
@@ -75,6 +76,11 @@ export function initDatabase() {
       }
     },
   });
+
+  // Give every role its own position, in the order the role list already
+  // shows them, so the role hierarchy has something to compare. Roles created
+  // before positions were maintained all sit at 0. No-op once applied.
+  normalizeAllRolePositions(sqlite);
 
   // Initialize Snowflake worker ID from persisted value
   const settings = sqlite.prepare('SELECT worker_id FROM instance_settings WHERE id = 1').get() as { worker_id: number } | undefined;

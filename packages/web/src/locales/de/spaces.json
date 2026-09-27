@@ -377,6 +377,7 @@
     "copyName": "Kopie von {{name}}",
     "backToList": "Zurück zu den Rollen",
     "created": "Rolle erstellt. Passe sie unten an.",
+    "aboveYou": "Diese Rolle steht auf oder über deiner höchsten Rolle. Du kannst sie ansehen, aber nicht ändern.",
     "identity": "Erscheinungsbild",
     "nameLabel": "Rollenname",
     "colorLabel": "Rollenfarbe",

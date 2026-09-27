@@ -16,6 +16,7 @@ import { Mascot } from '../ui/Mascot';
 import { wsSend } from '../../hooks/useWebSocket';
 import { AudioManager } from '../../audio/AudioManager';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
+import { viewerCanActOn } from '../../utils/roleHierarchy';
 import { joinVoiceChannel, broadcastVoiceStatus, broadcastDeafenViaLiveKit } from '../../utils/voice';
 import { useContextMenuStore, type ContextMenuItem } from '../../stores/contextMenuStore';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -195,9 +196,15 @@ export function ChannelSidebar() {
     return items;
   }, [uncategorizedChannels, sortedCategories, channelsByCategory, collapsedCategories]);
 
-  const canMoveMembersFrom = useCallback(
-    (channelId: string) => hasPermissionBit(channelPermissions.get(channelId), PermissionBits.MOVE_MEMBERS),
-    [channelPermissions],
+  // MOVE_MEMBERS on the channel the user is leaving, and a user ranked below
+  // the viewer (permissions.md, "Role hierarchy"); the server checks both.
+  const canMoveMember = useCallback(
+    (userId: string, channelId: string) => {
+      if (!hasPermissionBit(channelPermissions.get(channelId), PermissionBits.MOVE_MEMBERS)) return false;
+      const target = members.find((m) => m.userId === userId);
+      return !space || !target || viewerCanActOn(space, members, target);
+    },
+    [channelPermissions, members, space],
   );
 
   const handleChannelDrop = useCallback((dragId: string, target: DropTarget) => {
@@ -315,7 +322,7 @@ export function ChannelSidebar() {
   } = useDragManager({
     scrollContainerRef,
     canManage: canManageChannels,
-    canMoveMembersFrom,
+    canMoveMember,
     orderedItems,
     onChannelDrop: handleChannelDrop,
     onCategoryDrop: handleCategoryDrop,

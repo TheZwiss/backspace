@@ -171,6 +171,7 @@
   "space_owner_cannot_leave": "Der Besitzer kann den Space nicht verlassen. Übertrage zuerst den Besitz oder lösche den Space.",
   "cannot_target_owner": "Der Besitzer des Space kann nicht entfernt oder gesperrt werden.",
   "cannot_target_self": "Das geht nicht bei dir selbst.",
+  "role_hierarchy": "Das geht nur bei Mitgliedern und Rollen, die unter deiner höchsten Rolle stehen.",
   "permissions_invalid": "Dieser Berechtigungswert ist ungültig.",
   "role_name_taken": "Eine Rolle mit diesem Namen gibt es schon.",
   "role_name_required": "Gib der Rolle einen Namen.",

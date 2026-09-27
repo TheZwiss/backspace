@@ -77,3 +77,51 @@ export function stringToPermissions(str: string | undefined | null): bigint {
     return 0n;
   }
 }
+
+// ─── Role Hierarchy ─────────────────────────────────────────────────────────
+// A role's `position` ranks it: higher is more senior. @everyone (id = space
+// id) sits at 0 and every other role at 1 or above, each at its own position.
+// A member's rank is the highest position among their roles, 0 with none.
+// The same rule runs on the server (enforcement) and in the client (gating),
+// so both sides read it from here. See docs/systems/permissions.md.
+
+/** Where a member stands in a space's role hierarchy. */
+export interface HierarchyStanding {
+  /** Owns the space: above every role, and never a target. */
+  isOwner: boolean;
+  /** Administers the instance: acts like the owner, but may still be a target. */
+  isInstanceAdmin: boolean;
+  /** Highest position among the member's roles, @everyone excluded; 0 with none. */
+  topPosition: number;
+}
+
+/** The highest position among `roles`, leaving out @everyone (id === spaceId). 0 when none remain. */
+export function topRolePosition(roles: readonly { id: string; position: number }[], spaceId: string): number {
+  let top = 0;
+  for (const role of roles) {
+    if (role.id !== spaceId && role.position > top) top = role.position;
+  }
+  return top;
+}
+
+/**
+ * Whether `actor` may moderate `target` (kick, ban, voice mute/deafen, move,
+ * disconnect, change their roles). Nobody acts on the owner; the owner and
+ * instance admins act on everyone else; anyone else needs a strictly higher
+ * top role than the target.
+ */
+export function canActOnMember(actor: HierarchyStanding, target: HierarchyStanding): boolean {
+  if (target.isOwner) return false;
+  if (actor.isOwner || actor.isInstanceAdmin) return true;
+  return actor.topPosition > target.topPosition;
+}
+
+/**
+ * Whether `actor` may create, edit, delete, assign, unassign or move a role
+ * at `rolePosition` (or move one to it): only below their own top role,
+ * unless they own the space or administer the instance.
+ */
+export function canManageRoleAt(actor: HierarchyStanding, rolePosition: number): boolean {
+  if (actor.isOwner || actor.isInstanceAdmin) return true;
+  return rolePosition < actor.topPosition;
+}

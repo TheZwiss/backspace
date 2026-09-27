@@ -171,6 +171,7 @@
   "space_owner_cannot_leave": "The owner cannot leave the space. Transfer ownership or delete the space first.",
   "cannot_target_owner": "The space owner cannot be removed or banned.",
   "cannot_target_self": "You cannot do that to yourself.",
+  "role_hierarchy": "You can only do that to members and roles ranked below your highest role.",
   "permissions_invalid": "That permissions value is not valid.",
   "role_name_taken": "A role with that name already exists.",
   "role_name_required": "Enter a name for the role.",
