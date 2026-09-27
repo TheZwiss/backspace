@@ -229,9 +229,70 @@ export function sameRelayActor(a: RelayActor, b: RelayActor): boolean {
 
 
 /**
+ * What resolving an inbound relay event's acting identity found.
+ *
+ *   - `found`: the live local user that IS this identity.
+ *   - `unknown`: no live local user carries this `homeUserId` at all. The
+ *     identity may simply not be known here yet; each handler keeps its own
+ *     answer for that case.
+ *   - `mismatch`: the `homeUserId` belongs to one or more local users, but none
+ *     of them is homed where the event says. The event names an identity that
+ *     is not the one those rows stand for, so it can never apply to them;
+ *     handlers refuse it as `attribution_mismatch`.
+ */
+export type RelayActorResolution =
+  | { kind: 'found'; user: typeof schema.users.$inferSelect }
+  | { kind: 'unknown' }
+  | { kind: 'mismatch' };
+
+/**
+ * Resolve the acting identity of an inbound relay event to the local user that
+ * stands for it, matching `homeUserId` AND `homeInstance` the way
+ * `sameRelayActor` compares identities. Never by `homeUserId` alone: that value
+ * is only unique on its home instance, so a bare-id lookup can land on a
+ * different person, such as a native user whose own id happens to equal it.
+ *
+ * Run after `attributionRefusal` has accepted the pair. Together they give the
+ * invariant every relay handler relies on: the user an event is applied as is
+ * homed on the signing peer, or is one of our own users who holds an account
+ * there (the homeward case).
+ *
+ * Relay-only. `resolveLocalUser` keeps its bare-id semantics for its other
+ * callers.
+ */
+export function resolveRelayActor(
+  actor: RelayActor,
+  db: ReturnType<typeof getDb>,
+): RelayActorResolution {
+  const candidates = db
+    .select()
+    .from(schema.users)
+    .where(
+      and(
+        or(
+          eq(schema.users.homeUserId, actor.homeUserId),
+          and(eq(schema.users.id, actor.homeUserId), isNull(schema.users.homeInstance)),
+        ),
+        eq(schema.users.isDeleted, 0),
+      ),
+    )
+    .all();
+  if (candidates.length === 0) return { kind: 'unknown' };
+  const user = candidates.find((candidate) => {
+    const identity = relayActorOfUser(candidate);
+    return identity !== null && sameRelayActor(identity, actor);
+  });
+  return user ? { kind: 'found', user } : { kind: 'mismatch' };
+}
+
+
+/**
  * Resolve a home user ID to a local user.
  * Matches users where home_user_id = homeUserId, or where
  * the user's own id equals homeUserId and they have no home_instance set (local user).
+ *
+ * Ignores `homeInstance`, so it must not be used to resolve the acting identity
+ * of an inbound relay event; use `resolveRelayActor` for that.
  */
 export function resolveLocalUser(
   homeUserId: string,

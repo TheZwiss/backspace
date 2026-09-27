@@ -6,7 +6,7 @@ Source files:
 - `packages/server/src/routes/federation.ts` -- **Barrel** for the federation route subsystem. Re-exports the public API (identity resolution, event processors, reconciliation, `validateOrigin`) so `from '.../routes/federation.js'` imports resolve unchanged, and composes the HTTP registrars into `federationRoutes()`. The implementation lives in `routes/federation/` (split out of the former single 7.6k-line file; see `docs/superpowers/specs/2026-07-10-federation-ts-split-design.md`):
   - `routes/federation/rateLimits.ts` -- In-memory sliding-window rate limiters (accept/relay/lookup/ensure) + replay-nonce store + eviction timers
   - `routes/federation/origin.ts` -- `validateOrigin`, `resolveLocalOrigin`, `sanitizePeer` (+ `SanitizedPeer` shape)
-  - `routes/federation/identity.ts` -- Federated identity resolution: `extractDomain`, `getOurIdentityDomain`, `attributionRefusal`, `localUserStandingOnPeer`, `resolveLocalUser`, `findFederatedUser`, `resolveOrCreateReplicatedUser`, `backfillHomeUserId`
+  - `routes/federation/identity.ts` -- Federated identity resolution: `extractDomain`, `getOurIdentityDomain`, `attributionRefusal`, `localUserStandingOnPeer`, `resolveRelayActor`, `resolveLocalUser`, `findFederatedUser`, `resolveOrCreateReplicatedUser`, `backfillHomeUserId`
   - `routes/federation/dmChannels.ts` -- DM channel/message payload builders, `findOrCreateDmChannel`, `resolveLocalDmMessage`, `isUrlFromPeer`
   - `routes/federation/profile.ts` -- Replicated-profile hydration + asset download, `processProfileUpdateEvent`, `backfillReplicatedProfileAssets`
   - `routes/federation/reconciliation.ts` -- DM federated-id reconciliation + dead-incarnation artifact sweeps (worker-facing maintenance)
@@ -723,7 +723,14 @@ Two layers of replay protection:
 - Matches: `(users.homeUserId = homeUserId)` OR `(users.id = homeUserId AND homeInstance IS NULL)`
 - Excludes deleted users (`isDeleted = 0`)
 - When multiple candidates exist: prefers the one with `homeUserId` set (replicated stub) over a local ID match
-- **Use when:** Optional lookups where null is acceptable (member_remove, reaction processing, friend_remove)
+- Ignores `homeInstance`, so it is **not** an identity lookup: never use it to resolve the acting identity of an inbound relay event (use `resolveRelayActor`)
+- **Use when:** Optional lookups where null is acceptable and the id is not a relayed actor (e.g. a relayed friend request's local recipient)
+
+**`resolveRelayActor(actor, db)`** -- `routes/federation/identity.ts`
+- Read-only. Resolves an inbound relay event's acting identity (`RelayActor`, a `homeUserId` + `homeInstance` pair) to the local user that IS that identity: same candidate rows as `resolveLocalUser`, kept only when `sameRelayActor(relayActorOfUser(row), actor)` holds (equal home user id, same home domain; a native row's identity is its own id on `getOurOrigin()`)
+- Returns `{ kind: 'found', user }`, `{ kind: 'unknown' }` (no live row carries the `homeUserId`; each handler keeps its own not-found answer), or `{ kind: 'mismatch' }` (the `homeUserId` belongs to local rows of a different identity; the handler refuses the event as `attribution_mismatch`, terminal, before changing anything)
+- Called after `attributionRefusal` accepted the same pair. Together they hold the invariant: the user an inbound event is applied as is homed on the signing peer, or is one of our users with proven standing on it (homeward)
+- **Use when:** Any inbound relay handler that acts as the event's actor without creating a stub: `reaction_add`/`reaction_remove` (reactor), `dm_typing_start`/`dm_typing_stop`, `read_state_update`, `dm_close`/`dm_reopen`, `friend_request_cancel` (sender; recipient also resolved by pair), `friend_remove` (both sides; a mismatch on the attributed side is refused), `member_remove` (leaving or kicked user; a mismatch is refused only for a leave), `ownership_transfer` (previous owner, resolved before anything changes)
 
 **`resolveOrCreateReplicatedUser(homeUserId, homeInstance, db, hints?)`** -- `federation.ts`
 - Calls `findFederatedUser` first. If found, backfills `homeUserId` for future fast-path lookups and returns.
@@ -797,7 +804,7 @@ An actor homed on a third instance is always rejected: the signing peer is neith
 
 | Reason | When | Sender |
 |---|---|---|
-| `attribution_mismatch` | Malformed actor; actor homed on a third instance; homeward claim for a user id with no live native row (`no_such_user`: never existed, deleted, or only a replicated stub) | Terminal. Nothing that arrives later can make the claim true. |
+| `attribution_mismatch` | Malformed actor; actor homed on a third instance; homeward claim for a user id with no live native row (`no_such_user`: never existed, deleted, or only a replicated stub); also written by handlers when `resolveRelayActor` finds the actor's `homeUserId` only on local rows of a different identity (`mismatch`) | Terminal. Nothing that arrives later can make the claim true. |
 | `attribution_unproven` | Homeward claim for a live native user with no registry row and no `replicated_instances` entry for the signing peer yet (`unproven`) | Retryable on the normal backoff, until the outbox TTL |
 
 `unproven` exists because the proof is written by the user's own client, after the remote session is open (`syncRegistry` in `instanceStore.ts` runs at the end of the connect flow, and not at all until `autoConnectAll` has read the server registry once). A DM the user writes on the remote in that window reaches home before the proof does. From the receiver's side that is indistinguishable from a peer forging a claim for one of its users, so the event is refused either way and nothing is written; the reason only tells the sender whether a retry can succeed. A peer that really is forging gains nothing from the retry: its own outbox carries the cost (about 36 attempts over the 30-day TTL), and a retry is only accepted once the user has connected to that peer, which is exactly the standing that would let it speak for the user anyway.
@@ -929,7 +936,7 @@ This permissiveness is **intentional** — the relay envelope is designed for ad
 - Calls `sendCallRelay(origin, [event], { peeringTimeoutMs: 0 })` for each remote peer origin — non-active peers are skipped and a background `ensurePeered` warm-up is kicked off instead
 
 **Inbound (`federation.ts`):**
-- `processDmTypingStartEvent` → look up channel by `federatedId`, resolve user via `resolveLocalUser()` (no stub creation for ephemeral events), broadcast `dm_typing` to local members
+- `processDmTypingStartEvent` → look up channel by `federatedId`, resolve user via `resolveRelayActor()` (no stub creation for ephemeral events; `mismatch` → `attribution_mismatch`, unknown → accept silently), broadcast `dm_typing` to local members
 - `processDmTypingStopEvent` → same, broadcast `dm_typing_stop` to local members
 - **Implicit clear:** `processCreateEvent()` also emits `dm_typing_stop` for the message author after processing an inbound relay — primary typing clear mechanism for relayed messages
 
@@ -1197,7 +1204,7 @@ Older peers that omit these fields fall back to safe defaults (null name/icon, `
 
 1. Find channel by `federatedId` -- if not found, accept idempotently
 2. Validate authority: owner's instance for kicks (`reason !== 'leave'`), any instance for self-leave
-3. Resolve user via `resolveLocalUser` -- if not found, accept idempotently
+3. Resolve user via `resolveRelayActor` -- `mismatch` on a self-leave is refused as `attribution_mismatch`; otherwise, if not found, accept idempotently
 4. Insert system message (before deletion, so broadcast includes the leaving user)
 5. Delete `dm_members` row, clean up `read_states`
 6. Broadcast `dm_member_removed` to remaining local members
@@ -1207,10 +1214,11 @@ Older peers that omit these fields fall back to safe defaults (null name/icon, `
 
 1. Find channel by `federatedId` -- if not found, accept idempotently
 2. Validate authority: `normalizeOriginForCompare(sourceInstance) === normalizeOriginForCompare(channel.ownerHomeInstance)`. Both sides are normalized to handle the bare-vs-full storage convention (see `dm-system.md` historical bugs for why this matters).
-3. Resolve new owner via `resolveOrCreateReplicatedUser` (**never** `resolveLocalUser` -- must guarantee valid ID)
-4. Update `dm_channels`: `ownerId`, `ownerHomeUserId`, `ownerHomeInstance` (canonicalized to full URL on storage via `canonicalizeHomeInstance` so future authority checks stay stable)
-5. Broadcast `dm_owner_updated` WebSocket event with `newOwnerHomeUserId` + `newOwnerHomeInstance` so local clients can refresh their owner-routing cache without reconnecting
-6. Insert system message with previous owner as actor
+3. Resolve the previous owner (the attributed actor) via `resolveRelayActor` before any change: `mismatch` → `attribution_mismatch`, nothing is written; unknown → the system message falls back to the channel's recorded owner
+4. Resolve new owner via `resolveOrCreateReplicatedUser` (**never** `resolveLocalUser` -- must guarantee valid ID)
+5. Update `dm_channels`: `ownerId`, `ownerHomeUserId`, `ownerHomeInstance` (canonicalized to full URL on storage via `canonicalizeHomeInstance` so future authority checks stay stable)
+6. Broadcast `dm_owner_updated` WebSocket event with `newOwnerHomeUserId` + `newOwnerHomeInstance` so local clients can refresh their owner-routing cache without reconnecting
+7. Insert system message with previous owner as actor
 
 Triggered by both auto-transfer-on-leave and the manual `POST /api/dm/:id/transfer` endpoint — the receiver path is the same.
 
@@ -1429,7 +1437,7 @@ When a user marks a DM channel as read (`channel_ack`) or marks it unread (`mark
 
 **Inbound (`processReadStateUpdateEvent`):**
 1. Resolve channel by `federatedId` — reject if not found
-2. Resolve user via `resolveLocalUser` — reject if not found
+2. Resolve user via `resolveRelayActor`: `mismatch` → `attribution_mismatch`; reject `user_not_found` if unknown
 3. Translate `messageRef` to local message ID:
    - If `sourceInstance` matches our origin: `sourceMessageId` IS our local ID
    - Otherwise: look up `dm_messages` by `source_instance + source_message_id`
@@ -1486,14 +1494,14 @@ Called from `dm.ts` after the local close or reopen is committed.
 
 **`processDmCloseEvent` (`federation.ts`):**
 1. Look up channel by `federatedId` — if not found, accept silently (idempotent)
-2. Resolve acting user via `resolveLocalUser` (lookup-only; no stub creation for close/reopen) — if not found, accept silently
+2. Resolve acting user via `resolveRelayActor` (lookup-only; no stub creation for close/reopen): `mismatch` → `attribution_mismatch`; if unknown, accept silently
 3. If the user has no `dm_members` row in this channel, accept silently
 4. Set `dm_members.closed = 1` for the resolved local user
 5. Broadcast `dm_channel_closed` to the user's local WebSocket connections
 
 **`processDmReopenEvent` (`federation.ts`):**
 1. Look up channel by `federatedId` — if not found, accept silently
-2. Resolve acting user via `resolveLocalUser` — if not found, accept silently
+2. Resolve acting user via `resolveRelayActor`: `mismatch` → `attribution_mismatch`; if unknown, accept silently
 3. If the user has no `dm_members` row, accept silently
 4. Set `dm_members.closed = 0`
 5. Build full `DmChannel` payload and broadcast `dm_channel_created` to the user's local WebSocket connections (mirrors the automatic reopen path in `broadcastDmMessage`)
@@ -1558,7 +1566,7 @@ The full event payload is stored in both `appendMutationLog` (for sync) and `que
 
 **`processFriendRequestCancelEvent` (`federation.ts:2254`):**
 - Authority check: `from.homeInstance !== sourceInstance` -> reject
-- Both users must exist locally. If not, accept idempotently.
+- Both users resolved via `resolveRelayActor`: a sender that names a local user of another identity → `attribution_mismatch`; otherwise both must exist locally, else accept idempotently.
 - Delete the pending friend request. Broadcast `friend_request_cancelled` to recipient.
 
 **`processFriendAddEvent` (`federation.ts:2318`):**
@@ -1570,7 +1578,7 @@ The full event payload is stored in both `appendMutationLog` (for sync) and `que
 
 **`processFriendRemoveEvent` (`federation.ts:2404`):**
 - Authority check: either `from.homeInstance` or `to.homeInstance` must be `sourceInstance`
-- Both users resolved via `resolveLocalUser`. If not found, accept idempotently.
+- Both users resolved via `resolveRelayActor`. A `mismatch` on the side attribution accepted (the actor) → `attribution_mismatch`; otherwise, if either is not found, accept idempotently.
 - Delete `friends` row in both directions
 - Determine local user (whose `homeInstance` is NOT the source) and broadcast `friend_removed`
 
@@ -1713,7 +1721,7 @@ The mutation log entry for reactions stores a simpler payload (no `messageId`/`m
 1. Resolve message via `resolveLocalDmMessage(canonicalMessageId, messageHomeInstance, sourceInstance, db)`:
    - If `messageHomeInstance === getOurOrigin()` -> find by local ID (the message originated here)
    - Otherwise -> find by `(messageHomeInstance || sourceInstance, canonicalMessageId)` tracking -- uses `messageHomeInstance` when available (correct origin in 3-instance relay), falls back to `sourceInstance`
-2. Resolve reacting user via `resolveLocalUser` (must already exist)
+2. Resolve reacting user via `resolveRelayActor` (must already exist): `mismatch` → `attribution_mismatch` (terminal), unknown → `user_not_found`
 3. Dedup: check existing reaction by `(dmMessageId, userId, emoji)`
 4. Insert `dm_reactions`, broadcast `reaction_added` to local clients
 

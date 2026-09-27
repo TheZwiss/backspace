@@ -5,7 +5,7 @@ import { generateSnowflake } from '../../../utils/snowflake.js';
 import { connectionManager } from '../../../ws/handler.js';
 import { and, eq, or } from 'drizzle-orm';
 import type { FederationRelayEvent } from '@backspace/shared';
-import { extractDomain, resolveLocalUser, resolveOrCreateReplicatedUser, attributionRefusal } from '../identity.js';
+import { extractDomain, resolveLocalUser, resolveOrCreateReplicatedUser, resolveRelayActor, attributionRefusal } from '../identity.js';
 import { hydrateReplicatedUserProfile } from '../profile.js';
 
 export async function processFriendRequestCreateEvent(
@@ -238,15 +238,24 @@ export function processFriendRequestCancelEvent(
     return;
   }
 
-  // Resolve both users — must both exist locally for there to be a pending request
-  const fromUser = resolveLocalUser(from.homeUserId, db);
-  const toUser = resolveLocalUser(to.homeUserId, db);
+  // Resolve both users by homeUserId + homeInstance; they must both exist
+  // locally for there to be a pending request. The sender is the attributed
+  // actor, so a sender id that names a local user of another identity is refused.
+  const fromResolved = resolveRelayActor(from, db);
+  if (fromResolved.kind === 'mismatch') {
+    console.warn('[federation] Refused friend_request_cancel: the sender homeUserId names a local user of another identity');
+    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+    return;
+  }
+  const toResolved = resolveRelayActor(to, db);
 
-  if (!fromUser || !toUser) {
+  if (fromResolved.kind !== 'found' || toResolved.kind !== 'found') {
     // Accept idempotently — if either user doesn't exist, there's nothing to cancel
     accepted.push(event.messageId);
     return;
   }
+  const fromUser = fromResolved.user;
+  const toUser = toResolved.user;
 
   // Find the pending request
   const pendingRequest = db
@@ -410,15 +419,25 @@ export function processFriendRemoveEvent(
     return;
   }
 
-  // Resolve both users — must both exist locally for there to be a friendship
-  const fromUser = resolveLocalUser(from.homeUserId, db);
-  const toUser = resolveLocalUser(to.homeUserId, db);
+  // Resolve both users by homeUserId + homeInstance; they must both exist
+  // locally for there to be a friendship. The side attribution accepted is the
+  // actor, so an actor id that names a local user of another identity is refused.
+  const fromResolved = resolveRelayActor(from, db);
+  const toResolved = resolveRelayActor(to, db);
+  const actorResolved = fromRefusal ? toResolved : fromResolved;
+  if (actorResolved.kind === 'mismatch') {
+    console.warn('[federation] Refused friend_remove: the actor homeUserId names a local user of another identity');
+    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+    return;
+  }
 
-  if (!fromUser || !toUser) {
+  if (fromResolved.kind !== 'found' || toResolved.kind !== 'found') {
     // Accept idempotently — if either user doesn't exist locally, nothing to remove
     accepted.push(event.messageId);
     return;
   }
+  const fromUser = fromResolved.user;
+  const toUser = toResolved.user;
 
   // Delete friendship in both directions
   db.delete(schema.friends)

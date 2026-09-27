@@ -8,7 +8,7 @@ import { and, eq, isNull, or, sql } from 'drizzle-orm';
 import type { CallFanoutFailure } from '../../../utils/federationOutbox.js';
 import type { DmRoomMeta, FederatedCallEntry } from '../../../ws/handler.js';
 import type { DmCallUndeliverableFailure, FederationRelayEvent, ServerEvent } from '@backspace/shared';
-import { extractDomain, resolveLocalUser, resolveOrCreateReplicatedUser, attributionRefusal } from '../identity.js';
+import { extractDomain, resolveOrCreateReplicatedUser, resolveRelayActor, attributionRefusal } from '../identity.js';
 
 export function processDmCallStartEvent(
   event: FederationRelayEvent,
@@ -452,13 +452,20 @@ export function processDmTypingStartEvent(
     return;
   }
 
-  // Resolve the typing user (read-only — don't create stubs for ephemeral events)
-  const typingUser = resolveLocalUser(event.typing.homeUserId, db);
-  if (!typingUser) {
+  // Resolve the typing user (read-only, no stubs for ephemeral events).
+  // Matched on homeUserId + homeInstance; see `resolveRelayActor`.
+  const typer = resolveRelayActor(event.typing, db);
+  if (typer.kind === 'mismatch') {
+    console.warn('[federation] Refused dm_typing_start: the typing homeUserId names a local user of another identity');
+    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+    return;
+  }
+  if (typer.kind === 'unknown') {
     // User stub doesn't exist — discard silently
     accepted.push(event.messageId);
     return;
   }
+  const typingUser = typer.user;
 
   // Broadcast dm_typing to local DM members (excluding the typer)
   const dmMembers = db.select()
@@ -514,12 +521,18 @@ export function processDmTypingStopEvent(
     return;
   }
 
-  // Resolve the typing user (read-only)
-  const typingUser = resolveLocalUser(event.typing.homeUserId, db);
-  if (!typingUser) {
+  // Resolve the typing user (read-only), matched on homeUserId + homeInstance
+  const typer = resolveRelayActor(event.typing, db);
+  if (typer.kind === 'mismatch') {
+    console.warn('[federation] Refused dm_typing_stop: the typing homeUserId names a local user of another identity');
+    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+    return;
+  }
+  if (typer.kind === 'unknown') {
     accepted.push(event.messageId);
     return;
   }
+  const typingUser = typer.user;
 
   // Broadcast dm_typing_stop to local DM members
   const dmMembers = db.select()

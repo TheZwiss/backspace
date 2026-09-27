@@ -6,7 +6,7 @@ import { getDmMessageWithUser } from '../../dm.js';
 import { and, eq, isNull } from 'drizzle-orm';
 import type { FederationRelayEvent } from '@backspace/shared';
 import { buildDmChannelPayload } from '../dmChannels.js';
-import { extractDomain, resolveLocalUser, attributionRefusal } from '../identity.js';
+import { extractDomain, resolveRelayActor, attributionRefusal } from '../identity.js';
 
 export function processFileRejectedEvent(
   event: FederationRelayEvent,
@@ -259,12 +259,18 @@ export function processReadStateUpdateEvent(
     return;
   }
 
-  // Resolve the user locally
-  const localUser = resolveLocalUser(event.readState.user.homeUserId, db);
-  if (!localUser) {
+  // Resolve the user locally, matched on homeUserId + homeInstance
+  const reader = resolveRelayActor(event.readState.user, db);
+  if (reader.kind === 'mismatch') {
+    console.warn('[federation] Refused read_state_update: the user homeUserId names a local user of another identity');
+    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+    return;
+  }
+  if (reader.kind === 'unknown') {
     rejected.push({ messageId: event.messageId, reason: 'user_not_found' });
     return;
   }
+  const localUser = reader.user;
 
   // Translate messageRef to a local message ID
   const { sourceInstance: refSource, sourceMessageId: refId } = event.readState.messageRef;
@@ -366,13 +372,19 @@ export function processDmCloseEvent(
     return;
   }
 
-  // Resolve the user locally
-  const localUser = resolveLocalUser(event.dmCloseReopen.homeUserId, db);
-  if (!localUser) {
+  // Resolve the user locally, matched on homeUserId + homeInstance
+  const actor = resolveRelayActor(event.dmCloseReopen, db);
+  if (actor.kind === 'mismatch') {
+    console.warn('[federation] Refused dm_close: the user homeUserId names a local user of another identity');
+    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+    return;
+  }
+  if (actor.kind === 'unknown') {
     // User not found locally — silently accept
     accepted.push(event.messageId);
     return;
   }
+  const localUser = actor.user;
 
   // Verify user is a DM member
   const membership = db.select()
@@ -443,13 +455,19 @@ export function processDmReopenEvent(
     return;
   }
 
-  // Resolve the user locally
-  const localUser = resolveLocalUser(event.dmCloseReopen.homeUserId, db);
-  if (!localUser) {
+  // Resolve the user locally, matched on homeUserId + homeInstance
+  const actor = resolveRelayActor(event.dmCloseReopen, db);
+  if (actor.kind === 'mismatch') {
+    console.warn('[federation] Refused dm_reopen: the user homeUserId names a local user of another identity');
+    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+    return;
+  }
+  if (actor.kind === 'unknown') {
     // User not found locally — silently accept
     accepted.push(event.messageId);
     return;
   }
+  const localUser = actor.user;
 
   // Verify user is a DM member
   const membership = db.select()

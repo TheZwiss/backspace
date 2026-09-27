@@ -254,4 +254,33 @@ describe('federation e2e — reactions from a federated account persist (#295)',
       bobWs.close();
     }
   });
+
+  it('a reaction alice makes on her home A reaches B as her account there', async () => {
+    // The event is the one A's real send path queued, so its reactor pair
+    // (alice's id, A's origin as a full URL) is what every sender emits. B
+    // resolves it by homeUserId + homeInstance to alice's account on B, whose
+    // home is stored as a bare domain.
+    const aliceWs = await connectWs(A.origin, alice.token);
+    try {
+      aliceWs.send({ type: 'reaction_add', messageId: bobMessageOnA, emoji: '🎉' });
+      const queued = await waitUntil(
+        () => queuedRelayEvents(A, dmOnA, 'reaction_add').some(e => e.reaction?.emoji === '🎉'),
+        8_000,
+      );
+      expect(queued).toBe(true);
+    } finally {
+      aliceWs.close();
+    }
+    const event = queuedRelayEvents(A, dmOnA, 'reaction_add').find(e => e.reaction?.emoji === '🎉')!;
+    expect(event.reaction?.homeUserId).toBe(alice.id);
+
+    const res = await postSignedRelay(B, identityOrigin(A), secretOnB, [event]);
+    expect(res.status).toBe(200);
+    expect(res.body?.accepted).toContain(event.messageId);
+    const rows = readDb(B, db =>
+      db.prepare('SELECT user_id AS userId FROM dm_reactions WHERE dm_message_id = ? AND emoji = ?')
+        .all(bobMessageOnB, '🎉') as { userId: string }[],
+    );
+    expect(rows.map(r => r.userId)).toEqual([aliceOnB.id]);
+  });
 });

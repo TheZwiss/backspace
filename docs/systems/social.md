@@ -381,7 +381,7 @@ The client handler in `useWebSocket.ts` removes the row from `socialStore` and s
 
 **Inbound (`federation.ts:processFriendRequestCancelEvent`):**
 1. **Authority:** `from.homeInstance === sourceInstance` -- the sender cancels their own request
-2. **Resolve both users:** `resolveLocalUser()` for both -- if either doesn't exist, accept idempotently
+2. **Resolve both users:** `resolveRelayActor()` for both, by `homeUserId` + `homeInstance` -- a sender id that names a local user of another identity is refused as `attribution_mismatch`; if either doesn't exist, accept idempotently
 3. Find and **delete** the pending request row
 4. **WS broadcast:** `friend_request_cancelled` to local recipient
 
@@ -406,7 +406,7 @@ The client handler in `useWebSocket.ts` removes the row from `socialStore` and s
 
 **Inbound (`federation.ts:processFriendRemoveEvent`):**
 1. **Authority:** Either `from.homeInstance === sourceInstance` OR `to.homeInstance === sourceInstance` (either side can unfriend)
-2. **Resolve both users:** `resolveLocalUser()` for both -- if either doesn't exist, accept idempotently
+2. **Resolve both users:** `resolveRelayActor()` for both, by `homeUserId` + `homeInstance` -- if the side attribution accepted (the actor) names a local user of another identity, refuse as `attribution_mismatch`; if either doesn't exist, accept idempotently
 3. Delete friendship row in both directions
 4. **Determine who was removed:** The removing user is on `sourceInstance`; broadcast `friend_removed` to the **other** (local) user
 

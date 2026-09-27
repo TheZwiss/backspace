@@ -10,7 +10,7 @@ import { getDmMessageWithUser } from '../../dm.js';
 import { and, eq, isNull, or } from 'drizzle-orm';
 import type { FederationMessageTarget, FederationRelayEvent } from '@backspace/shared';
 import { buildDmChannelPayload, buildDmMessagePayload, findOrCreateDmChannel, isUrlFromPeer, resolveLocalDmMessage, resolveRelayedReplyTarget } from '../dmChannels.js';
-import { attributionRefusal, extractDomain, relayActorOfUser, resolveLocalUser, resolveOrCreateReplicatedUser, sameRelayActor } from '../identity.js';
+import { attributionRefusal, extractDomain, relayActorOfUser, resolveOrCreateReplicatedUser, resolveRelayActor, sameRelayActor } from '../identity.js';
 import { hydrateReplicatedUserProfile } from '../profile.js';
 
 export async function processCreateEvent(
@@ -559,12 +559,19 @@ export function processReactionAddEvent(
     return;
   }
 
-  // Resolve the reacting user
-  const reactingUser = resolveLocalUser(event.reaction.homeUserId, db);
-  if (!reactingUser) {
+  // The reactor is the local user that IS the attributed identity, matched on
+  // homeUserId + homeInstance; see `resolveRelayActor`.
+  const reactor = resolveRelayActor(event.reaction, db);
+  if (reactor.kind === 'mismatch') {
+    console.warn('[federation] Refused reaction_add: the reactor homeUserId names a local user of another identity');
+    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+    return;
+  }
+  if (reactor.kind === 'unknown') {
     rejected.push({ messageId: event.messageId, reason: 'user_not_found' });
     return;
   }
+  const reactingUser = reactor.user;
 
   // Dedup: check if this user already reacted with this emoji
   const existingReaction = db
@@ -649,12 +656,19 @@ export function processReactionRemoveEvent(
     return;
   }
 
-  // Resolve the reacting user
-  const reactingUser = resolveLocalUser(event.reaction.homeUserId, db);
-  if (!reactingUser) {
+  // The reactor is the local user that IS the attributed identity, matched on
+  // homeUserId + homeInstance; see `resolveRelayActor`.
+  const reactor = resolveRelayActor(event.reaction, db);
+  if (reactor.kind === 'mismatch') {
+    console.warn('[federation] Refused reaction_remove: the reactor homeUserId names a local user of another identity');
+    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+    return;
+  }
+  if (reactor.kind === 'unknown') {
     rejected.push({ messageId: event.messageId, reason: 'user_not_found' });
     return;
   }
+  const reactingUser = reactor.user;
 
   const result = db
     .delete(schema.dmReactions)

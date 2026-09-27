@@ -8,7 +8,7 @@ import { connectionManager } from '../../../ws/handler.js';
 import { GROUP_DM_NAME_MAX_LENGTH, GROUP_DM_NAME_MIN_LENGTH } from '@backspace/shared/src/constants.js';
 import { and, eq, inArray, or } from 'drizzle-orm';
 import type { DmChannel, DmMessageWithUser, FederationRelayEvent } from '@backspace/shared';
-import { extractDomain, resolveLocalUser, resolveOrCreateReplicatedUser, attributionRefusal } from '../identity.js';
+import { extractDomain, resolveOrCreateReplicatedUser, resolveRelayActor, attributionRefusal } from '../identity.js';
 import { downloadProfileAsset, processProfileUpdateEvent } from '../profile.js';
 
 export async function processMemberAddEvent(
@@ -357,11 +357,21 @@ export function processMemberRemoveEvent(
     return;
   }
 
-  const localUser = resolveLocalUser(event.membership.user.homeUserId, db);
-  if (!localUser) {
+  // The leaving or kicked user, matched on homeUserId + homeInstance. For a
+  // leave that user is the attributed actor, so an id that names a local user
+  // of another identity is refused; a kick target that is not held here has
+  // nothing to remove.
+  const removed = resolveRelayActor(event.membership.user, db);
+  if (removed.kind === 'mismatch' && event.membership.reason === 'leave') {
+    console.warn('[federation] Refused member_remove: the leaving homeUserId names a local user of another identity');
+    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+    return;
+  }
+  if (removed.kind !== 'found') {
     accepted.push(event.messageId);
     return;
   }
+  const localUser = removed.user;
 
   // Insert system message for member leaving (before deletion so the broadcast
   // still reaches the departing user's connections). Tagged with source for dedup.
@@ -505,6 +515,20 @@ export function processOwnershipTransferEvent(
     return;
   }
 
+  // The previous owner is the attributed actor, matched on homeUserId +
+  // homeInstance. Resolved before anything changes, so an id that names a local
+  // user of another identity refuses the whole transfer. One not held here
+  // leaves the system message to the channel's recorded owner.
+  const prevOwner = event.ownership.previousOwner
+    ? resolveRelayActor(event.ownership.previousOwner, db)
+    : null;
+  if (prevOwner?.kind === 'mismatch') {
+    console.warn('[federation] Refused ownership_transfer: the previous owner homeUserId names a local user of another identity');
+    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+    return;
+  }
+  const prevOwnerLocal = prevOwner?.kind === 'found' ? prevOwner.user : null;
+
   // Resolve new owner to local user. If the new owner's identity has been
   // deleted, we cannot complete the transfer — reject so the event can be
   // retried or dropped by the sender.
@@ -544,9 +568,6 @@ export function processOwnershipTransferEvent(
     newOwnerHomeInstance: canonicalOwnerHome,
   });
 
-  const prevOwnerLocal = event.ownership.previousOwner
-    ? resolveLocalUser(event.ownership.previousOwner.homeUserId, db)
-    : null;
   const ownerSysMsgId = generateSnowflake();
   const ownerSysCreatedAt = Date.now();
   const newOwnerBaseName = newOwnerLocal?.username?.includes('@') ? newOwnerLocal.username.split('@')[0] : (newOwnerLocal?.username ?? 'Unknown');
