@@ -511,7 +511,7 @@
   },
   "packages/web/src/hooks/useWebSocket.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 23
+      "count": 20
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 4

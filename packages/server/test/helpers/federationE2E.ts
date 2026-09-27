@@ -250,6 +250,42 @@ export function readDb<T>(inst: SpawnedInstance, fn: (db: Database.Database) => 
   }
 }
 
+/**
+ * The relay events an instance's REAL send path queued in its outbox for one
+ * conversation, rebuilt the way the outbox worker rebuilds them, oldest first.
+ *
+ * In the IDENTITY profile an instance's outbox rows target the peer's identity
+ * origin, which no socket answers, so the worker cannot deliver them. A suite
+ * that needs a real sender and a real receiver reads the events here and posts
+ * them with `postSignedRelay`; only the worker's HTTP POST is stood in for.
+ */
+export function queuedRelayEvents(
+  inst: SpawnedInstance,
+  contextId: string,
+  eventType: string,
+): FederationRelayEvent[] {
+  const rows = readDb(inst, db =>
+    db.prepare(`
+      SELECT entity_id AS entityId, event_type AS eventType, context_id AS contextId,
+             created_at AS createdAt, payload
+      FROM federation_outbox
+      WHERE context_id = ? AND event_type = ?
+      ORDER BY created_at ASC
+    `).all(contextId, eventType) as {
+      entityId: string; eventType: string; contextId: string; createdAt: number; payload: string;
+    }[],
+  );
+  return rows.map(row => ({
+    ...(JSON.parse(row.payload) as Partial<FederationRelayEvent>),
+    eventType: row.eventType as FederationRelayEvent['eventType'],
+    contextType: 'dm',
+    dmChannelId: row.contextId,
+    messageId: row.entityId,
+    encryptionVersion: 0,
+    timestamp: row.createdAt,
+  }));
+}
+
 /** Every `dm_messages.content` on an instance. */
 export function dmMessageContents(inst: SpawnedInstance): string[] {
   return readDb(inst, db =>

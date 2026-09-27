@@ -231,7 +231,11 @@ When a remote instance's WebSocket drops mid-session, every DM pinned to that or
 
 **No re-home on reconnect:** when the originally pinned origin comes back, its `ready` re-adds its local id to `dmAlternatives` but leaves the new primary in place. Avoids flapping.
 
-**WS event routing contract:** every DM WS event handler either routes via the primary `dmChannels` id (using `resolveDmChannelId(rawId)`) or silently no-ops on unknown ids. Only `dm_channel_created` creates new `dmChannels` entries — and it dedups by `federatedId` first.
+**WS event routing contract:** every DM WS event handler either routes via the primary `dmChannels` id (using `resolveDmChannelId(rawId)`) or silently no-ops on unknown ids. `dm_channel_created` and `dm_message_created` are the two events that can add a `dmChannels` entry; both go through `utils/dmMessageRouting.ts`:
+
+- `applyIncomingDmChannel` dedups by `federatedId`, and records the delivering origin's id in `dmAlternatives` (`recordDmAlternative`) whether or not the copy was added, so the origin's later events for that conversation resolve.
+- `applyIncomingDmMessage` places a message by channel id only. An id `resolveDmChannelId` does not know is looked up by re-reading that origin's DM list (`reloadDmsForOrigin`, one in-flight load per origin), which records its `federatedId`. If the list still does not place it, the message gets its own entry under that origin.
+- **A message is never assigned to a conversation by its author.** The signed-in user is a member of all of their DMs, so an author match put a message the user sent to one person into whichever of their other DMs sorted first (unread DMs sort first). That was issue #296; it was a display fault in the sender's own client, and the server never stored or sent the message to the other conversation's members.
 
 Source: `utils/dmOriginFailover.ts` + extensions in `stores/spaceStore.ts`, `stores/chatStore.ts`, `stores/instanceStore.ts`, `hooks/useWebSocket.ts`. Design spec: `docs/superpowers/specs/2026-04-23-dm-origin-failover-design.md`.
 

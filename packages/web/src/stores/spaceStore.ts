@@ -126,6 +126,8 @@ interface SpaceState {
   setRoles: (roles: Role[]) => void;
   setDmChannels: (channels: DmChannel[]) => void;
   addDmChannel: (channel: DmChannel, origin?: string) => void;
+  /** Record that `origin` holds its own copy of the DM `federatedId` under `channelId` (see `dmAlternatives`). */
+  recordDmAlternative: (federatedId: string, origin: string, channelId: string) => void;
   reloadDmsForOrigin: (origin: string) => Promise<void>;
   removeDmChannel: (id: string) => void;
   addDmMember: (dmChannelId: string, user: User) => void;
@@ -290,12 +292,23 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     };
   }),
 
+  recordDmAlternative: (federatedId, origin, channelId) => set((state) => {
+    if (state.dmAlternatives.get(federatedId)?.get(origin) === channelId) return state;
+    const dmAlternatives = new Map(state.dmAlternatives);
+    const byOrigin = new Map(dmAlternatives.get(federatedId) ?? []);
+    byOrigin.set(origin, channelId);
+    dmAlternatives.set(federatedId, byOrigin);
+    return { dmAlternatives };
+  }),
+
   // Refetch and replace the DM list for a single origin, mirroring the DM
   // portion of populateFromReady (dedup vs other origins by federatedId, origin
   // map, last-message map, failover alternatives, userViews). Used after a
   // re-attach reconciles this connection's 1-on-1 federatedIds (merge/re-key)
-  // so the split conversation collapses without a full WS reconnect. Origin ''
-  // is the home instance. Non-fatal: the caller wraps it in try/catch.
+  // so the split conversation collapses without a full WS reconnect, and by
+  // `utils/dmMessageRouting` to learn which conversation an unknown channel id
+  // belongs to. Origin '' is the home instance. Throws on a failed fetch; both
+  // callers catch.
   reloadDmsForOrigin: async (origin: string) => {
     const client = getApiForOrigin(origin);
     const incomingDms = await client.dm.list();
