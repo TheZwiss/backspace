@@ -144,6 +144,7 @@ DELETE /spaces/:id/roles/:rid                                                   
 POST   /spaces/:id/members/:uid/roles { roleId }                                 → { success }  [MANAGE_ROLES]
 DELETE /spaces/:id/members/:uid/roles/:rid                                        → { success }  [MANAGE_ROLES]
 ```
+`DELETE /spaces/:id/roles/:rid` answers `404 role_not_in_space` for a role id that is not in the space, and otherwise deletes the role together with every channel and category override that names it (overrides carry no foreign key to the role).
 
 ## Channels (`routes/channels.ts`) — auth required
 ```
@@ -156,10 +157,11 @@ PATCH  /spaces/:id/channels/reorder  { order }           → reordered  [MANAGE_
 
 ### Channel Overrides
 ```
-GET    /channels/:id/overrides                                      → { overrides[] }  [MANAGE_CHANNELS]
-PUT    /channels/:id/overrides  { targetType, targetId, permissions } → { override }  [MANAGE_CHANNELS]
-DELETE /channels/:id/overrides/:targetType/:targetId                 → { success }  [MANAGE_CHANNELS]
+GET    /channels/:id/overrides                                   → { overrides[] }  [MANAGE_ROLES]
+PUT    /channels/:id/overrides  { targetType, targetId, allow, deny } → { success }  [MANAGE_ROLES]
+DELETE /channels/:id/overrides/:targetType/:targetId              → { success }  [MANAGE_ROLES]
 ```
+All three check `MANAGE_ROLES` space-wide (permissions.md, "Client gating"). `DELETE` removes the override row, so the target falls back to its space-wide permissions in that channel; the category routes below do the same for a category. A `PUT` or `DELETE` is followed by `channel_updated` (with the recipient's new `myPermissions`) or `channel_deleted` for each connected member of the space, and a category write also sends `category_updated`. The editor stages removals and sends them on Save.
 
 ### Categories
 ```
@@ -167,7 +169,7 @@ POST   /spaces/:id/categories        { name }              → { category }  [MA
 PATCH  /categories/:id               { name?, position? }  → { category }  [MANAGE_CHANNELS]
 DELETE /categories/:id                                      → { success }  [MANAGE_CHANNELS]
 GET    /categories/:id/overrides                            → { overrides[] }  [MANAGE_ROLES]
-PUT    /categories/:id/overrides     { targetType, targetId, permissions } → { success }  [MANAGE_ROLES]
+PUT    /categories/:id/overrides     { targetType, targetId, allow, deny } → { success }  [MANAGE_ROLES]
 DELETE /categories/:id/overrides/:tt/:tid                   → { success }  [MANAGE_ROLES]
 ```
 

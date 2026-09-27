@@ -1184,12 +1184,26 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, 400, 'everyone_role_not_deletable');
     }
 
-    // Delete channel overrides referencing this role
-    db.delete(schema.channelOverrides).where(
-      and(eq(schema.channelOverrides.targetType, 'role'), eq(schema.channelOverrides.targetId, roleId))
-    ).run();
+    // The overrides below are keyed by role id alone, so the role has to be
+    // proven to belong to this space before its id is used to delete them.
+    const role = db.select().from(schema.roles)
+      .where(and(eq(schema.roles.id, roleId), eq(schema.roles.spaceId, id)))
+      .get();
+    if (!role) {
+      return sendError(reply, 404, 'role_not_in_space', { roleId });
+    }
 
-    db.delete(schema.roles).where(and(eq(schema.roles.id, roleId), eq(schema.roles.spaceId, id))).run();
+    // Overrides name their target without a foreign key, so they would
+    // outlive the role: invisible in the editor and impossible to remove.
+    db.transaction((tx) => {
+      tx.delete(schema.channelOverrides).where(
+        and(eq(schema.channelOverrides.targetType, 'role'), eq(schema.channelOverrides.targetId, roleId))
+      ).run();
+      tx.delete(schema.categoryOverrides).where(
+        and(eq(schema.categoryOverrides.targetType, 'role'), eq(schema.categoryOverrides.targetId, roleId))
+      ).run();
+      tx.delete(schema.roles).where(and(eq(schema.roles.id, roleId), eq(schema.roles.spaceId, id))).run();
+    });
 
     // Broadcast updated state to all space members
     const memberRows = db.select().from(schema.spaceMembers).where(eq(schema.spaceMembers.spaceId, id)).all();

@@ -400,6 +400,9 @@ export function PermissionsEditor({
         <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">
           {t('spaces:permissions.roleOverrides')}
         </div>
+        {roleOverrides.length === 0 && (
+          <p className="text-[12.5px] text-txt-tertiary">{t('spaces:permissions.noRoleOverrides')}</p>
+        )}
         <div className="space-y-1.5">
           {roleOverrides.map(({ key, role }) => {
             const eff = getEffective(key);
@@ -470,6 +473,9 @@ export function PermissionsEditor({
         <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">
           {t('spaces:permissions.memberOverrides')}
         </div>
+        {memberOverrides.length === 0 && (
+          <p className="text-[12.5px] text-txt-tertiary">{t('spaces:permissions.noMemberOverrides')}</p>
+        )}
         <div className="space-y-1.5">
           {memberOverrides.map(({ key, member }) => {
             const eff = getEffective(key);

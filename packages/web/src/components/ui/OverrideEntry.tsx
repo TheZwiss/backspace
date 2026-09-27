@@ -1,7 +1,10 @@
-import React, { useMemo, useState } from 'react';
+import React, { useId, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { TriStateToggle, type TriState } from './TriStateToggle';
 import { PermissionBits } from '../../utils/permissions';
+import { Tooltip } from './Tooltip';
+
+const TRASH_ICON = 'M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z';
 
 export type PermissionKey = keyof typeof PermissionBits;
 
@@ -80,43 +83,63 @@ export function OverrideEntry({
 
   // Compact summary of non-neutral permissions
   const summary = permDefs.filter(p => getState(p.bit) !== 'neutral');
+  const panelId = useId();
+  const removable = !!onRemove && !isEveryone;
 
   return (
     <div className="rounded-lg bg-white/[0.02] overflow-hidden">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-interactive-hover transition-colors"
-      >
-        <span
-          className="w-3 h-3 rounded-full flex-shrink-0"
-          style={{ backgroundColor: color || '#b9bbbe' }}
-        />
-        <span className="text-sm font-medium text-txt-primary flex-1 text-left truncate">{label}</span>
-        {!expanded && summary.length > 0 && (
-          <span className="text-[11px] text-txt-tertiary flex-shrink-0">
-            {t('spaces:permissions.overrideCount', { count: summary.length })}
-          </span>
-        )}
-        {onRemove && !isEveryone && (
-          <button
-            onClick={(e) => { e.stopPropagation(); onRemove(); }}
-            className="p-0.5 text-txt-muted hover:text-accent-rose transition-colors"
-            title={t('spaces:permissions.removeOverride')}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
-            </svg>
-          </button>
-        )}
-        <svg
-          width="16" height="16" viewBox="0 0 24 24" fill="currentColor"
-          className={`text-txt-muted transition-transform flex-shrink-0 ${expanded ? 'rotate-180' : ''}`}
+      {/* The expand toggle and the remove action are siblings: a button inside
+          a button is invalid HTML and reads as one control. */}
+      <div className="flex items-center hover:bg-interactive-hover transition-colors">
+        <button
+          type="button"
+          onClick={() => setExpanded(!expanded)}
+          aria-expanded={expanded}
+          aria-controls={panelId}
+          className="flex-1 min-w-0 flex items-center gap-2 pl-3 pr-1.5 py-2 text-left"
         >
-          <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z" />
-        </svg>
-      </button>
+          <span
+            className="w-3 h-3 rounded-full flex-shrink-0"
+            style={{ backgroundColor: color || '#b9bbbe' }}
+          />
+          <span className="text-sm font-medium text-txt-primary flex-1 truncate">{label}</span>
+          {!expanded && summary.length > 0 && (
+            <span className="text-[11px] text-txt-tertiary flex-shrink-0">
+              {t('spaces:permissions.overrideCount', { count: summary.length })}
+            </span>
+          )}
+          <svg
+            width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"
+            className={`text-txt-tertiary transition-transform flex-shrink-0 ${expanded ? 'rotate-180' : ''}`}
+          >
+            <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z" />
+          </svg>
+        </button>
+        {removable ? (
+          <Tooltip content={t('spaces:permissions.removeOverride')} position="top">
+            <button
+              type="button"
+              onClick={onRemove}
+              aria-label={t('spaces:permissions.removeOverrideFor', { name: label })}
+              className="w-7 h-7 mr-1.5 flex items-center justify-center rounded text-txt-tertiary hover:text-accent-rose hover:bg-accent-rose/10 transition-colors"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d={TRASH_ICON} />
+              </svg>
+            </button>
+          </Tooltip>
+        ) : (
+          // Keeps every row's chevron in the same column as the removable rows.
+          <span className="w-7 h-7 mr-1.5 flex-shrink-0" aria-hidden="true" />
+        )}
+      </div>
       {expanded && (
-        <div className="px-3 pb-3 space-y-1.5 border-t border-white/[0.04] pt-2">
+        <div
+          id={panelId}
+          role="region"
+          aria-label={label}
+          className="px-3 pb-3 space-y-1.5 border-t border-white/[0.04] pt-2"
+        >
           {permDefs.map((perm) => (
             <div key={perm.key} className="flex items-center justify-between">
               <span className="text-[13px] text-txt-secondary">{permissionNames[perm.key]}</span>
@@ -126,6 +149,20 @@ export function OverrideEntry({
               />
             </div>
           ))}
+          {removable && (
+            <div className="flex items-center justify-between gap-3 pt-2.5 !mt-2.5 border-t border-white/[0.04]">
+              <span className="text-[12px] leading-snug text-txt-tertiary">
+                {t('spaces:permissions.removeOverrideHint')}
+              </span>
+              <button
+                type="button"
+                onClick={onRemove}
+                className="flex-shrink-0 px-2.5 py-1 rounded text-[12.5px] font-medium text-accent-rose hover:bg-accent-rose/10 transition-colors"
+              >
+                {t('spaces:permissions.removeOverride')}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
