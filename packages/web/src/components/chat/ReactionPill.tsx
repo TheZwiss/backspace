@@ -34,7 +34,7 @@ function truncateName(name: string): string {
  * mouse click leaves behind) shows who reacted in a `.glass` tooltip above
  * the pill, styled like the shared `Tooltip`; the same sentence is the
  * button's accessible description, so screen readers and touch users (who
- * get no hover tooltip) still have it.
+ * get no hover tooltip) still have it. Escape closes it either way.
  *
  * Reactor names come from the reaction rows the message already carries
  * (every read path and the `reaction_added` event attach the reacting user),
@@ -86,6 +86,21 @@ export function ReactionPill({ emoji, reactions, onToggle }: ReactionPillProps) 
     setOpen(false);
   };
 
+  // Escape dismisses the tooltip however it opened (WCAG 1.4.13). A hovered
+  // pill does not have focus, so its own keydown never sees the key; listen
+  // on the document while the tooltip shows. It stays closed until the
+  // pointer or focus leaves and comes back.
+  useEffect(() => {
+    if (!tooltipOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      clearTimeout(showTimerRef.current);
+      setOpen(false);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [tooltipOpen]);
+
   return (
     <>
       <button
@@ -98,9 +113,6 @@ export function ReactionPill({ emoji, reactions, onToggle }: ReactionPillProps) 
           if (e.currentTarget.matches(':focus-visible')) show();
         }}
         onBlur={hide}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') hide();
-        }}
         aria-pressed={mine}
         aria-describedby={descriptionId}
         className={`glass-pill flex items-center gap-1 rounded-[6px] cursor-pointer transition-all duration-[120ms] ease-out focus-visible:ring-2 focus-visible:ring-accent-primary/60 ${

@@ -90,6 +90,20 @@ function flashMessage(el: HTMLElement): void {
   el.addEventListener('animationend', onEnd);
 }
 
+/**
+ * Keyboard focus follows a jump to the row it landed on, so the next Tab
+ * continues from there rather than from a control that may now be off screen.
+ * The row is a tab stop only while it holds that focus. `preventScroll`: the
+ * smooth scroll is already under way.
+ */
+function focusJumpTarget(el: HTMLElement): void {
+  if (!el.hasAttribute('tabindex')) {
+    el.setAttribute('tabindex', '-1');
+    el.addEventListener('blur', () => el.removeAttribute('tabindex'), { once: true });
+  }
+  el.focus({ preventScroll: true });
+}
+
 function isSameGroup(prev: MessageWithUser, curr: MessageWithUser): boolean {
   if (prev.type === 'system' || curr.type === 'system') return false;
   if (prev.userId !== curr.userId) return false;
@@ -582,6 +596,7 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
     beginSmoothScrollIntent('message');
     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
     flashMessage(el);
+    focusJumpTarget(el);
     return true;
   }, [cancelBottomPinning, setBottomFlags, beginSmoothScrollIntent]);
 
@@ -653,8 +668,15 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
     // Open the gate first so Effects B/C pin the fresh page as it lays out.
     isAtBottomRef.current = true;
     setIsAtBottom(true);
-    await loadMessages(requestChannelId, true);
+    const loaded = await loadMessages(requestChannelId, true);
     if (currentChannelIdRef.current !== requestChannelId) return;
+    if (!loaded) {
+      // The window is still the cache. Its bottom is not the present, so
+      // stay where the user is, hand the flags back to the layout, and say so.
+      syncBottomStateFromLayout();
+      addToast(t('chat:list.jump.presentFailed'), 'info', 4000);
+      return;
+    }
     requestAnimationFrame(() => {
       if (currentChannelIdRef.current !== requestChannelId) return;
       const container = containerRef.current;
@@ -667,7 +689,7 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
       setIsNearBottom(true);
       visibleMsgIdRef.current = null;
     });
-  }, [channelId, beginSmoothScrollIntent, loadMessages]);
+  }, [channelId, beginSmoothScrollIntent, loadMessages, syncBottomStateFromLayout, addToast, t]);
 
   const handleScroll = useCallback(async () => {
     const container = containerRef.current;

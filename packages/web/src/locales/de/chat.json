@@ -15,6 +15,9 @@
     "reply": {
       "jump": "Zur ursprünglichen Nachricht springen"
     },
+    "mention": {
+      "unknownUser": "Unbekannter Nutzer"
+    },
     "reactions": {
       "you": "Du",
       "others_one": "{{count}} weitere Person",
@@ -31,7 +34,8 @@
     "jumpToPresent": "Zu den neuesten Nachrichten",
     "jump": {
       "unavailable": "Diese Nachricht ist nicht mehr verfügbar",
-      "failed": "Die Nachricht konnte nicht geladen werden"
+      "failed": "Die Nachricht konnte nicht geladen werden",
+      "presentFailed": "Die neuesten Nachrichten konnten nicht geladen werden"
     },
     "welcome": {
       "channel": {

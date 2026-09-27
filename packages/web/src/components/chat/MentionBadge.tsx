@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import type { User } from '@backspace/shared';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -6,9 +7,16 @@ import { useCanonicalUserView } from '../../utils/userViewLookup';
 
 interface MentionBadgeProps {
   userId: string;
+  /**
+   * False inside another control (a reply preview is a jump button): the badge
+   * keeps its look but is plain text, so it neither opens a profile nor nests
+   * interactive content in that control.
+   */
+  interactive?: boolean;
 }
 
-export const MentionBadge = React.memo(function MentionBadge({ userId }: MentionBadgeProps) {
+export const MentionBadge = React.memo(function MentionBadge({ userId, interactive = true }: MentionBadgeProps) {
+  const { t } = useTranslation('chat');
   const members = useSpaceStore((s) => s.members);
   const spaces = useSpaceStore((s) => s.spaces);
   const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
@@ -36,7 +44,7 @@ export const MentionBadge = React.memo(function MentionBadge({ userId }: Mention
       color = '#7c6cf6'; // accent-primary default
     }
   } else {
-    displayName = 'Unknown User';
+    displayName = t('message.mention.unknownUser');
     color = '#a0a0aa'; // text-secondary fallback
   }
 
@@ -48,11 +56,20 @@ export const MentionBadge = React.memo(function MentionBadge({ userId }: Mention
 
   // Build inline styles: role-colored text with tinted background
   const bgColor = color + '1a'; // ~10% opacity hex
+  const baseClass = 'inline-flex items-center rounded-[3px] px-[2px] font-medium';
+
+  if (!interactive) {
+    return (
+      <span className={baseClass} style={{ color, backgroundColor: bgColor }}>
+        @{displayName}
+      </span>
+    );
+  }
 
   return (
     <span
       onClick={handleClick}
-      className="inline-flex items-center rounded-[3px] px-[2px] font-medium cursor-pointer transition-colors hover:brightness-125"
+      className={`${baseClass} cursor-pointer transition-colors hover:brightness-125`}
       style={{ color, backgroundColor: bgColor }}
     >
       @{displayName}

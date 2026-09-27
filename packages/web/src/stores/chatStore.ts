@@ -39,7 +39,7 @@ const EVICT_TO_CHANNELS = 15;
 // hairpin'd LAN this means N hung TCP connections per channel mount, and the
 // pagination skeleton (driven by component-level `isLoadingMore`) sticks while
 // any of them are still waiting on the 30 s api-client timeout.
-const inFlightLoads = new Map<string, Promise<void>>();
+const inFlightLoads = new Map<string, Promise<boolean>>();
 const inFlightLoadMores = new Map<string, Promise<boolean>>();
 
 interface TypingUser {
@@ -96,7 +96,12 @@ interface ChatState {
   saveScrollPosition: (channelId: string, messageId: string) => void;
   setReplyTo: (message: MessageWithUser | null) => void;
   setEditingMessage: (messageId: string | null) => void;
-  loadMessages: (channelId: string, force?: boolean) => Promise<void>;
+  /**
+   * Load the channel's newest page. Resolves true when the cache holds the
+   * channel's messages (already loaded, or freshly fetched), false when they
+   * could not be loaded (unknown origin, or the request failed).
+   */
+  loadMessages: (channelId: string, force?: boolean) => Promise<boolean>;
   clearAllMessages: () => void;
   loadMoreMessages: (channelId: string) => Promise<boolean>;
   sendMessage: (channelId: string, content: string, attachmentIds?: string[]) => Promise<void>;
@@ -224,11 +229,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
   }),
 
   loadMessages: async (channelId: string, force?: boolean) => {
-    if (!force && get().hasMore.has(channelId)) return;
+    if (!force && get().hasMore.has(channelId)) return true;
     const isDm = isDmChannel(channelId);
     // For server channels, bail if we don't know which instance owns this channel yet.
     // The remote WS ready handler will call loadMessages once the map is populated.
-    if (!isDm && !useSpaceStore.getState().channelOriginMap.has(channelId)) return;
+    if (!isDm && !useSpaceStore.getState().channelOriginMap.has(channelId)) return false;
 
     // Parallel-call dedup: if a load for this channel is already in flight,
     // return that Promise instead of starting a second fetch. Applies to
@@ -272,14 +277,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
           }
           return { messages: newMessages, hasMore: newHasMore, channelAccessTimes: newAccessTimes, detachedChannels, isLoading: false, loadError: null };
         });
+        return true;
       } catch (err) {
         set({ isLoading: false, loadError: (err as Error).message || 'Failed to load messages' });
+        return false;
       }
     })();
 
     inFlightLoads.set(channelId, promise);
     try {
-      await promise;
+      return await promise;
     } finally {
       // Only clear the entry if it still points at our Promise — a force-reload
       // scheduled while we were in flight may have replaced it, and we don't

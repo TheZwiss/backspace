@@ -413,7 +413,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
   const content = (
     <div
       id={`msg-${message.id}`}
-      className={`group relative flex gap-4 px-5 py-[3px] transition-colors ${isFirstInGroup || message.replyTo ? 'mt-[1.0625rem]' : ''} ${
+      className={`group relative flex gap-4 px-5 py-[3px] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-primary/60 ${isFirstInGroup || message.replyTo ? 'mt-[1.0625rem]' : ''} ${
         isMentioned
           ? 'bg-accent-amber/10 border-l-2 border-l-accent-amber hover:bg-accent-amber/15'
           : 'hover:bg-[rgba(255,255,255,0.025)]'
@@ -466,7 +466,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
               <Avatar src={replyIdentity.avatar} name={replyDisplayName} size={16} user={replyIdentity} />
               <Username
                 username={replyDisplayName}
-                className="text-[14px] font-bold text-txt-primary hover:underline"
+                className="text-[14px] font-bold text-txt-primary"
                 style={replyRoleColor(replyTo)}
               />
               <span className="text-[14px] text-txt-message truncate max-w-[400px] group-hover/reply:text-txt-primary transition-colors">

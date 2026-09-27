@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import type { MessageWithUser, User } from '@backspace/shared';
@@ -91,6 +91,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
   useChatStore.setState({ messages: new Map(), hasMore: new Map(), detachedChannels: new Set() });
+  useSpaceStore.setState({ members: [], currentSpaceId: null });
 });
 
 interface Layout {
@@ -148,6 +149,55 @@ describe('reply preview jump', () => {
     expect(scrollIntoView.mock.contexts).toContain(target);
     expect(target).toHaveClass('message-jump-highlight');
     expect(messagesAround).not.toHaveBeenCalled();
+  });
+
+  it('jumps when the mention inside the preview is clicked, without opening a profile (issue #313)', async () => {
+    const original = msg('10', 'ask <@u-mira> about the checklist');
+    const reply = msg('11', 'in the wiki', { userId: me.id, user: me, replyToId: '10', replyTo: original });
+    useChatStore.setState({
+      messages: new Map([[CHANNEL, [original, reply]]]),
+      hasMore: new Map([[CHANNEL, false]]),
+    });
+    // Mira is a member, so the badge resolves her and could open her profile.
+    useSpaceStore.setState({
+      members: [{ spaceId: 'space-1', userId: mira.id, nickname: null, joinedAt: 1, user: mira, roles: [] }],
+      spaces: [],
+      currentSpaceId: 'space-1',
+    });
+    const openUserProfile = vi.spyOn(useUIStore.getState(), 'openUserProfile');
+    renderList();
+
+    const preview = screen.getByRole('button', { name: /jump to the original message/i });
+    const badge = within(preview).getByText('@mira');
+    await userEvent.click(badge);
+
+    expect(openUserProfile).not.toHaveBeenCalled();
+    expect(document.getElementById('msg-10')).toHaveClass('message-jump-highlight');
+  });
+
+  it('moves keyboard focus to the original without scrolling again (issue #313)', async () => {
+    const original = msg('10', 'where is the release checklist?');
+    const reply = msg('11', 'in the wiki', { replyToId: '10', replyTo: original });
+    useChatStore.setState({
+      messages: new Map([[CHANNEL, [original, reply]]]),
+      hasMore: new Map([[CHANNEL, false]]),
+    });
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus');
+    renderList();
+
+    const preview = screen.getByRole('button', { name: /jump to the original message/i });
+    preview.focus();
+    focus.mockClear();
+    await userEvent.keyboard('{Enter}');
+
+    const target = document.getElementById('msg-10');
+    expect(target).toHaveFocus();
+    expect(focus.mock.contexts).toContain(target);
+    expect(focus.mock.calls[focus.mock.contexts.indexOf(target)]?.[0]).toEqual({ preventScroll: true });
+
+    // Once focus moves on, the row goes back to not being a tab stop.
+    preview.focus();
+    expect(target).not.toHaveAttribute('tabindex');
   });
 
   it('is reachable and activated from the keyboard', async () => {
@@ -298,5 +348,34 @@ describe('reply preview jump', () => {
     await waitFor(() => expect(document.getElementById('msg-500')).toBeInTheDocument());
     expect(useChatStore.getState().detachedChannels.has(CHANNEL)).toBe(false);
     expect(document.getElementById('msg-100')).not.toBeInTheDocument();
+  });
+
+  it('tells the user and stays put when Jump to Present cannot load the newest page (issue #313)', async () => {
+    const original = msg('100', 'an old question');
+    const reply = msg('500', 'answering that old question', { replyToId: '100', replyTo: original });
+    useChatStore.setState({
+      messages: new Map([[CHANNEL, [msg('499', 'recent'), reply]]]),
+      hasMore: new Map([[CHANNEL, true]]),
+    });
+    const window: MessageWithUser[] = [];
+    for (let i = 75; i <= 125; i++) window.push(i === 100 ? original : msg(String(i), `history ${i}`));
+    messagesAround.mockResolvedValue(window);
+    latestMessages.mockRejectedValue(new Error('network down'));
+    // A tall detached window, read somewhere in its middle.
+    const layout = { scrollHeight: 5000, clientHeight: 500, scrollTop: 2000, rowTop: { '100': 0 } };
+    stubLayout(layout);
+    renderList();
+
+    await userEvent.click(screen.getByRole('button', { name: /jump to the original message/i }));
+    await waitFor(() => expect(document.getElementById('msg-100')).toHaveClass('message-jump-highlight'));
+    layout.scrollTop = 2000;
+
+    await userEvent.click(screen.getByRole('button', { name: /jump to present/i }));
+
+    await waitFor(() => expect(useUIStore.getState().toasts.map((t) => t.message)).toContain("Couldn't load the latest messages"));
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
+    expect(layout.scrollTop).toBe(2000);
+    expect(useChatStore.getState().detachedChannels.has(CHANNEL)).toBe(true);
+    expect(document.getElementById('msg-100')).toBeInTheDocument();
   });
 });

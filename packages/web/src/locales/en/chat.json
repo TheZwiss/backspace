@@ -15,6 +15,9 @@
     "reply": {
       "jump": "Jump to the original message"
     },
+    "mention": {
+      "unknownUser": "Unknown User"
+    },
     "reactions": {
       "you": "You",
       "others_one": "{{count}} other",
@@ -31,7 +34,8 @@
     "jumpToPresent": "Jump to Present",
     "jump": {
       "unavailable": "That message is no longer available",
-      "failed": "Couldn't load that message"
+      "failed": "Couldn't load that message",
+      "presentFailed": "Couldn't load the latest messages"
     },
     "welcome": {
       "channel": {

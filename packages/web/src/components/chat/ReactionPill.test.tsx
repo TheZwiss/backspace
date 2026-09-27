@@ -71,6 +71,21 @@ describe('ReactionPill', () => {
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
   });
 
+  it('closes a tooltip opened by hover on Escape, and keeps it closed while the pointer stays (issue #313)', () => {
+    const pill = renderPill([reaction(MIRA, 1)]);
+
+    fireEvent.mouseEnter(pill);
+    act(() => { vi.advanceTimersByTime(400); });
+    expect(screen.getByRole('tooltip')).toBeInTheDocument();
+
+    // The pill is hovered, not focused: Escape reaches the document.
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+
+    act(() => { vi.advanceTimersByTime(1000); });
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+  });
+
   it('does not open on the focus a mouse click leaves behind', () => {
     const pill = renderPill([reaction(MIRA, 1)]);
     // Pointer focus: :focus-visible does not match.

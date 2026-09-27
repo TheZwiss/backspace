@@ -10,7 +10,8 @@ interface InlineMessageTextProps {
 
 /**
  * One line of message text without Markdown, as a reply preview shows it:
- * `<@userId>` tokens become mention badges, `:shortcode:` text becomes emoji
+ * `<@userId>` tokens become non-interactive mention badges (the preview
+ * itself is the jump control), `:shortcode:` text becomes emoji
  * (not inside code, and not where a colon is escaped as `\:`), and everything
  * else is plain text.
  */
@@ -20,7 +21,7 @@ export function InlineMessageText({ content }: InlineMessageTextProps) {
     <>
       {parts.map((part, i) => {
         const match = part.match(MENTION_TOKEN);
-        if (match) return <MentionBadge key={i} userId={match[1]!} />;
+        if (match) return <MentionBadge key={i} userId={match[1]!} interactive={false} />;
         return replaceEmojiShortcodesInMarkdownSource(part);
       })}
     </>

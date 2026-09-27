@@ -73,7 +73,7 @@ The 5000px user-intent threshold matches the `nearBottom` band: distances larger
 Every jump goes through one function, `jumpToMessage(messageId)` in `MessageList.tsx`, with an id on the channel's origin. Two entry points feed it:
 
 - **Search results**: `MainContent` passes `jumpToMessageId`; an effect takes each request once (`handledJumpRequestRef`, so a parent that re-renders before clearing it, or passes a new `onJumpHandled` each render, does not start the load again), calls `onJumpHandled` and jumps.
-- **Reply previews**: `MessageList` provides `MessageJumpContext`; `Message.tsx` renders the preview as a `<button>` that calls it with `message.replyTo.id`. Outside a list (no context) the preview is inert.
+- **Reply previews**: `MessageList` provides `MessageJumpContext`; `Message.tsx` renders the preview as a `<button>` that calls it with `message.replyTo.id`. Outside a list (no context) the preview is inert. The preview holds no interactive content of its own: mentions in it render through `InlineMessageText` as `MentionBadge` with `interactive={false}` (same look, plain text, no profile click), so a click anywhere on the preview jumps.
 
 Order of work:
 
@@ -82,7 +82,7 @@ Order of work:
 3. On `'loaded'`, two frames later the target is looked up again and scrolled to.
 4. Anything else leaves the view where it was and shows an info toast: `chat:list.jump.unavailable` (the message is gone, or the origin never had that id) or `chat:list.jump.failed`.
 
-The scroll is `scrollIntoView({ behavior: 'smooth', block: 'center' })` under the `'message'` intent, and the row gets `.message-jump-highlight` (a 2 s primary-tint background fade, `message-jump-flash` in `globals.css`), removed on its own `animationend` and restartable when the same row is jumped to again. `jumpSeqRef` makes a newer jump (or Jump to Present) cancel one still waiting on its window, and the channel is re-checked after every await.
+The scroll is `scrollIntoView({ behavior: 'smooth', block: 'center' })` under the `'message'` intent, and the row gets `.message-jump-highlight` (a 2 s primary-tint background fade, `message-jump-flash` in `globals.css`), removed on its own `animationend` and restartable when the same row is jumped to again. Keyboard focus moves to the row (`focusJumpTarget`: `tabindex="-1"` for as long as it holds focus, removed on blur, `focus({ preventScroll: true })` so the smooth scroll is not cut short), so the next Tab continues from the target rather than from a preview that may be off screen. The row shows its ring only under `:focus-visible`, so a mouse-driven jump draws none. `jumpSeqRef` makes a newer jump (or Jump to Present) cancel one still waiting on its window, and the channel is re-checked after every await.
 
 **The at-bottom gate is set before anything moves.** `cancelBottomPinning` clears the sentinel and cancels a pending `'bottom'` intent, since a queued scroll event matching the sentinel would re-pin mid-animation. Then:
 
@@ -91,7 +91,7 @@ The scroll is `scrollIntoView({ behavior: 'smooth', block: 'center' })` under th
 
 A jump that ends without scrolling hands the flags back to the measured layout (`syncBottomStateFromLayout`).
 
-**Detached windows.** `loadMessagesAround` replaces the cache with a window. When that window stops short of the newest message (fewer than `limit / 2` messages after the target means the server ran out of newer rows; `MESSAGES_AROUND_LIMIT` is 50 and sent explicitly), the channel goes into `chatStore.detachedChannels`. While detached, Jump to Present is shown even near the window's end, and clicking it reloads the newest page (`loadMessages(channelId, true)`, which clears the flag) with the gate open, then pins to the bottom. A non-detached channel keeps the plain smooth scroll. Real-time messages still append to a detached cache, so a gap can sit between the window and them until Jump to Present; the server has no "messages after" query to fill it.
+**Detached windows.** `loadMessagesAround` replaces the cache with a window. When that window stops short of the newest message (fewer than `limit / 2` messages after the target means the server ran out of newer rows; `MESSAGES_AROUND_LIMIT` is 50 and sent explicitly), the channel goes into `chatStore.detachedChannels`. While detached, Jump to Present is shown even near the window's end, and clicking it reloads the newest page (`loadMessages(channelId, true)`, which clears the flag) with the gate open, then pins to the bottom. `loadMessages` resolves false when the page could not be loaded; the list then stays where it is (the window's bottom is not the present), hands the flags back to the layout, and shows the info toast `chat:list.jump.presentFailed`. A non-detached channel keeps the plain smooth scroll. Real-time messages still append to a detached cache, so a gap can sit between the window and them until Jump to Present; the server has no "messages after" query to fill it.
 
 ## Position memory
 
