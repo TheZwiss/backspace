@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { getDb, schema } from '../../../db/index.js';
-import { computeFederatedId } from '../../../utils/federationOutbox.js';
+import { normalizeOriginForCompare } from '../../../utils/federationAuth.js';
+import { computeFederatedId, getGroupDmTargetOrigins } from '../../../utils/federationOutbox.js';
 import { deleteAttachmentFiles } from '../../../utils/fileCleanup.js';
 import { sanitizeUser } from '../../../utils/sanitize.js';
 import { generateSnowflake } from '../../../utils/snowflake.js';
@@ -278,6 +279,25 @@ function isMessageTarget(value: unknown): value is FederationMessageTarget {
 }
 
 /**
+ * Whether `sourceInstance` may address `localMsg` by a relayed `target`: it is
+ * one of the origins this instance relays the message's conversation to, or it
+ * is the instance the message itself arrived from. Any other peer never
+ * received the conversation, so a target from it is refused whatever actor it
+ * names. Compared host to host, since participant origins and the signed
+ * source can differ in scheme.
+ */
+function isPeerOfMessage(
+  localMsg: typeof schema.dmMessages.$inferSelect,
+  sourceInstance: string,
+): boolean {
+  const source = normalizeOriginForCompare(sourceInstance);
+  if (!source) return false;
+  if (normalizeOriginForCompare(localMsg.sourceInstance) === source) return true;
+  return getGroupDmTargetOrigins(localMsg.dmChannelId)
+    .some(origin => normalizeOriginForCompare(origin) === source);
+}
+
+/**
  * Find the local message a relayed `update` or `delete` changes, and decide
  * whether the actor may change it. The rule is documented in
  * docs/systems/dm-system.md, "Relayed edits and deletes":
@@ -286,10 +306,12 @@ function isMessageTarget(value: unknown): value is FederationMessageTarget {
  *   actor against the signing peer (`attribution_unproven` is retried, as for
  *   every relay event), the message is resolved in shared coordinates inside this
  *   instance's copy of the conversation `target.federatedId`, and the actor
- *   must be the message's author, compared as federated identities. A target
- *   that does not resolve (yet) is `unknown_message`, which the sender retries
- *   with backoff. A message by someone else is `not_message_author`, terminal,
- *   and nothing is changed.
+ *   must be the message's author, compared as federated identities. The
+ *   signing peer must be one the conversation is relayed to, or the instance
+ *   the message came from (`isPeerOfMessage`); else `invalid_target`,
+ *   terminal. A target that does not resolve (yet) is `unknown_message`, which
+ *   the sender retries with backoff. A message by someone else is
+ *   `not_message_author`, terminal, and nothing is changed.
  * - Without one (an older sender), the event's `messageId` is the sender's
  *   local id and only matches a message the sender itself created and relayed
  *   here, so the lookup `(sourceInstance, messageId)` is its own authorization.
@@ -336,6 +358,11 @@ function resolveRelayedMutationTarget(
     db,
   );
   if (!localMsg || localMsg.dmChannelId !== channel.id) return { ok: false, reason: 'unknown_message' };
+
+  if (!isPeerOfMessage(localMsg, sourceInstance)) {
+    console.warn(`[federation] Refused ${event.eventType} of message ${localMsg.id}: ${extractDomain(sourceInstance)} is not a peer of its conversation`);
+    return { ok: false, reason: 'invalid_target' };
+  }
 
   const author = db
     .select({ id: schema.users.id, homeUserId: schema.users.homeUserId, homeInstance: schema.users.homeInstance })

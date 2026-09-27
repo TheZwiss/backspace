@@ -326,6 +326,134 @@ describe('federation e2e — a relayed edit or delete must come from the message
   });
 });
 
+describe('federation e2e — a relayed target is only accepted from the conversation\'s own peers', () => {
+  /**
+   * dave (native on B) and bob (native on B) in a conversation B never relays
+   * to A: no participant lives on A, so A is not one of its target origins.
+   * The federatedId stands in for a conversation B shares with some other
+   * instance (or one whose A participant has left): it is what makes the
+   * conversation addressable by `target` at all. A may act for dave (his
+   * proof is on file), and dave wrote the message, so attribution and the
+   * author check both pass. A still has no business changing it.
+   */
+  async function daveBobMessageOnB(content: string): Promise<string> {
+    const created = await fetch(`${B.origin}/api/dm`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${dave.token}` },
+      body: JSON.stringify({ userId: bob.id }),
+    });
+    if (created.status !== 201 && created.status !== 200) throw new Error(`dave-bob DM create failed: ${created.status}`);
+    const dmId = (await created.json() as { id: string }).id;
+    withWritableDb(B, db => {
+      db.prepare('UPDATE dm_channels SET federated_id = COALESCE(federated_id, ?) WHERE id = ?')
+        .run(`not-shared-with-a-${dmId}`, dmId);
+    });
+    const sent = await sendDmMessage(B, dave.token, dmId, { content });
+    if (sent.status !== 201 || !sent.id) throw new Error(`send on B failed: ${sent.status}`);
+    return sent.id;
+  }
+
+  function federatedIdOnB(messageId: string): string {
+    return readDb(B, db =>
+      db.prepare(`
+        SELECT c.federated_id AS fid FROM dm_messages m JOIN dm_channels c ON c.id = m.dm_channel_id WHERE m.id = ?
+      `).get(messageId) as { fid: string },
+    ).fid;
+  }
+
+  it('the instance a message came from may still edit and delete it after it stopped being a peer', async () => {
+    await putDaveProofOnFile();
+    // A message dave sent through his account on A, relayed to B while A was
+    // still a peer of the conversation. A no longer is (its participant left),
+    // but the message is A's: B holds it as (source A, A's id).
+    const anchorOnB = await daveBobMessageOnB('dave to bob, anchor');
+    const dmId = readDb(B, db =>
+      db.prepare('SELECT dm_channel_id AS ch FROM dm_messages WHERE id = ?').get(anchorOnB) as { ch: string },
+    ).ch;
+    const plant = (content: string): [string, string] => {
+      const idOnB = `e2e-from-a-${Math.floor(Math.random() * 1e9)}`;
+      const idOnA = `e2e-a-id-${Math.floor(Math.random() * 1e9)}`;
+      withWritableDb(B, db => {
+        db.prepare(`
+          INSERT INTO dm_messages (id, dm_channel_id, user_id, content, type, reply_to_id, created_at,
+                                   source_instance, source_message_id, encryption_version)
+          VALUES (?, ?, ?, ?, 'user', NULL, ?, ?, ?, 0)
+        `).run(idOnB, dmId, dave.id, content, Date.now(), identityOrigin(A), idOnA);
+      });
+      return [idOnB, idOnA];
+    };
+    const aimAt = (template: FederationRelayEvent, idOnA: string, idOnB: string): FederationRelayEvent => ({
+      ...template,
+      messageId: `own-source-${template.eventType}-${Date.now()}`,
+      target: {
+        ...template.target!,
+        federatedId: federatedIdOnB(idOnB),
+        message: { messageId: idOnA, messageHomeInstance: identityOrigin(A) },
+      },
+    });
+
+    const [editOnB, editIdOnA] = plant('dave via A, to edit');
+    const [, editMirror] = await createOnBMirroredToA(dave, daveOnA.id, 'dave, own-source edit template');
+    await editOnA(daveOnA.token, editMirror, 'dave via A, edited from A');
+    const edit = aimAt(queuedOnA('update', editMirror), editIdOnA, editOnB);
+    const editRes = await relayToB([edit]);
+    expect(editRes.body?.accepted).toContain(edit.messageId);
+    expect(rowOnB(editOnB)?.content).toBe('dave via A, edited from A');
+
+    const [delOnB, delIdOnA] = plant('dave via A, to delete');
+    const [, delMirror] = await createOnBMirroredToA(dave, daveOnA.id, 'dave, own-source delete template');
+    await deleteOnA(daveOnA.token, delMirror);
+    const del = aimAt(queuedOnA('delete', delMirror), delIdOnA, delOnB);
+    const delRes = await relayToB([del]);
+    expect(delRes.body?.accepted).toContain(del.messageId);
+    expect(rowOnB(delOnB)).toBeUndefined();
+  });
+
+  it('an edit of dave\'s message in a conversation A is not a peer of is refused and changes nothing', async () => {
+    await putDaveProofOnFile();
+    const targetOnB = await daveBobMessageOnB('dave to bob, not A\'s to edit');
+    const [, mirror] = await createOnBMirroredToA(dave, daveOnA.id, 'dave, edit template');
+    await editOnA(daveOnA.token, mirror, 'rewritten by A');
+    const template = queuedOnA('update', mirror);
+    expect(template.target).toBeDefined();
+    const aimed: FederationRelayEvent = {
+      ...template,
+      messageId: `outsider-edit-${Date.now()}`,
+      target: {
+        ...template.target!,
+        federatedId: federatedIdOnB(targetOnB),
+        message: { messageId: targetOnB, messageHomeInstance: identityOrigin(B) },
+      },
+    };
+
+    const res = await relayToB([aimed]);
+    expect(rejectionReason(res, aimed.messageId)).toBe('invalid_target');
+    expect(rowOnB(targetOnB)).toEqual({ content: 'dave to bob, not A\'s to edit', editedAt: null });
+  });
+
+  it('a delete of dave\'s message in a conversation A is not a peer of is refused and deletes nothing', async () => {
+    await putDaveProofOnFile();
+    const targetOnB = await daveBobMessageOnB('dave to bob, not A\'s to delete');
+    const [, mirror] = await createOnBMirroredToA(dave, daveOnA.id, 'dave, delete template');
+    await deleteOnA(daveOnA.token, mirror);
+    const template = queuedOnA('delete', mirror);
+    expect(template.target).toBeDefined();
+    const aimed: FederationRelayEvent = {
+      ...template,
+      messageId: `outsider-delete-${Date.now()}`,
+      target: {
+        ...template.target!,
+        federatedId: federatedIdOnB(targetOnB),
+        message: { messageId: targetOnB, messageHomeInstance: identityOrigin(B) },
+      },
+    };
+
+    const res = await relayToB([aimed]);
+    expect(rejectionReason(res, aimed.messageId)).toBe('invalid_target');
+    expect(rowOnB(targetOnB)?.content).toBe('dave to bob, not A\'s to delete');
+  });
+});
+
 describe('federation e2e — events from senders without `target` still apply', () => {
   it('an old-shape edit and delete (local id only) of a message the sender created are applied', async () => {
     const [idOnA, idOnB] = await createOnADeliveredToB('old shape, to edit');
