@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSpaceStore } from '../../stores/spaceStore';
-import { permissionsToString, stringToPermissions } from '../../utils/permissions';
+import { PermissionBits, permissionsToString, stringToPermissions } from '../../utils/permissions';
 import { OverrideEntry, type PermissionDef } from './OverrideEntry';
 import { describeError } from '../../i18n/errors';
 import type { Role, MemberWithUser } from '@backspace/shared';
+
+// The padlock the Overview privacy note uses; this note sits beside the same subject.
+const LOCK_ICON = 'M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z';
 
 export interface Override {
   targetType: string;
@@ -21,6 +24,8 @@ export interface PermissionsEditorProps {
   getOverrides: () => Promise<Override[]>;
   putOverride: (data: { targetType: string; targetId: string; allow: string; deny: string }) => Promise<unknown>;
   deleteOverride: (targetType: string, targetId: string) => Promise<unknown>;
+  /** Shown above Save while the staged edit would stop hiding this channel or category from @everyone. */
+  unhideNote: string;
 }
 
 export function PermissionsEditor({
@@ -31,6 +36,7 @@ export function PermissionsEditor({
   getOverrides,
   putOverride,
   deleteOverride,
+  unhideNote,
 }: PermissionsEditorProps) {
   const { t } = useTranslation(['spaces', 'common']);
   const roles = useSpaceStore((s) => s.roles);
@@ -353,6 +359,18 @@ export function PermissionsEditor({
     ...memberOverrides.map((item) => item.key),
   ]), [roleOverrides, memberOverrides]);
 
+  // Privacy is @everyone's VIEW_CHANNEL deny. Saving unhides the entity when
+  // the saved @everyone row denies it and the staged rows, read the way they
+  // render, no longer do: the row is staged for removal, or the bit cleared.
+  const everyoneKey = `role:${spaceId}`;
+  const unhides = useMemo(() => {
+    const saved = existingOverrideMap.get(everyoneKey);
+    if (!saved || (stringToPermissions(saved.deny) & PermissionBits.VIEW_CHANNEL) === 0n) return false;
+    const stagedHides = stagedKeys.has(everyoneKey)
+      && (getEffective(everyoneKey).deny & PermissionBits.VIEW_CHANNEL) !== 0n;
+    return !stagedHides;
+  }, [existingOverrideMap, everyoneKey, stagedKeys, getEffective]);
+
   const availableRoles = useMemo(() =>
     roles.filter(r => !stagedKeys.has(`role:${r.id}`)),
     [roles, stagedKeys]);
@@ -539,6 +557,18 @@ export function PermissionsEditor({
       {/* Save/Discard pill */}
       {hasChanges && (
         <div className="sticky bottom-0 z-10 pointer-events-none">
+          {/* Laid out like the Overview privacy note. It floats over the
+              scrolling rows with the pill, inside the modal's glass, where a
+              nested backdrop-filter does not blur, so it takes the bubble's
+              edge on a solid ground rather than a see-through fill. */}
+          {unhides && (
+            <div className="glass-bubble bg-surface-chat flex items-start gap-2 p-2 mt-3 rounded-lg text-xs text-txt-tertiary">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className="flex-shrink-0 mt-0.5 text-txt-secondary">
+                <path d={LOCK_ICON} />
+              </svg>
+              <span>{unhideNote}</span>
+            </div>
+          )}
           <div className="flex justify-center pt-3 pb-1">
             <div className="glass-bubble rounded-full px-4 py-2 flex items-center gap-2 pointer-events-auto animate-slide-up">
               <button

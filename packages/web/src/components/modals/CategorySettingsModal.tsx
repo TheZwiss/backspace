@@ -317,6 +317,7 @@ export function CategorySettingsModal() {
                     const catApi = getApiForOrigin(space?._instanceOrigin ?? '');
                     return catApi.categories.putOverride(categoryId, data);
                   }}
+                  unhideNote={t('spaces:category.settings.private.unhideOnSave')}
                   deleteOverride={(targetType, targetId) => {
                     const catApi = getApiForOrigin(space?._instanceOrigin ?? '');
                     return catApi.categories.deleteOverride(categoryId, targetType, targetId);

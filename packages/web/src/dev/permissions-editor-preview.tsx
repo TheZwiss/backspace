@@ -1,7 +1,8 @@
 // Dev-only workbench for the channel permissions editor. Nothing in the app
 // imports this file; `dev-permissions-editor.html` is its only entry.
 //
-// It renders the real ChannelSettingsModal on its Permissions tab. The edge is
+// It renders the real ChannelSettingsModal (or, with `?entity=category`, the
+// real CategorySettingsModal) on its Permissions tab. The edge is
 // replaced: the override routes are answered in memory by a stubbed `fetch`,
 // and the space store is seeded with a space, a channel, roles and members.
 //
@@ -17,9 +18,14 @@
 //   full       every role has an override and the Add Role picker is open.
 //   members    the Add Member picker open.
 //   no-match   the Add Member picker with a search that matches nobody.
+//   private-removed  a private entity (@everyone denies View Channels) with
+//              the @everyone row removed (staged): the unhide note is up.
+//   private-cleared  the same private entity with @everyone opened and its
+//              View Channels deny set back to neutral.
 import { createRoot } from 'react-dom/client';
-import type { Channel, MemberWithUser, Role, User } from '@backspace/shared';
+import type { Channel, ChannelCategory, MemberWithUser, Role, User } from '@backspace/shared';
 import { ChannelSettingsModal } from '../components/modals/ChannelSettingsModal';
+import { CategorySettingsModal } from '../components/modals/CategorySettingsModal';
 import { useSpaceStore, type TaggedSpace } from '../stores/spaceStore';
 import { useUIStore } from '../stores/uiStore';
 import { ALL_PERMISSIONS, PermissionBits, permissionsToString } from '../utils/permissions';
@@ -27,11 +33,15 @@ import { initI18n } from '../i18n';
 import { initializeInterfaceScale } from '../platform/interfaceScale';
 import '../styles/globals.css';
 
-type Scene = 'many' | 'expanded' | 'removed' | 'empty' | 'everyone' | 'picker' | 'full' | 'members' | 'no-match';
-const SCENES: readonly Scene[] = ['many', 'expanded', 'removed', 'empty', 'everyone', 'picker', 'full', 'members', 'no-match'];
+type Scene = 'many' | 'expanded' | 'removed' | 'empty' | 'everyone' | 'picker' | 'full' | 'members' | 'no-match' | 'private-removed' | 'private-cleared';
+const SCENES: readonly Scene[] = ['many', 'expanded', 'removed', 'empty', 'everyone', 'picker', 'full', 'members', 'no-match', 'private-removed', 'private-cleared'];
+type Entity = 'channel' | 'category';
 
 const SPACE_ID = 'space-1';
 const CHANNEL_ID = 'channel-1';
+const CATEGORY_ID = 'category-1';
+
+const CATEGORY: ChannelCategory = { id: CATEGORY_ID, spaceId: SPACE_ID, name: 'Staff only', position: 0, isPrivate: true, createdAt: 1 };
 
 const SPACE: TaggedSpace = {
   id: SPACE_ID,
@@ -94,9 +104,11 @@ function seededOverrides(scene: Scene): StoredOverride[] {
     channelId: CHANNEL_ID, targetType, targetId, allow: permissionsToString(allow), deny: permissionsToString(deny),
   });
   const everyRole = scene === 'full' ? [o('role', 'r-member', PermissionBits.ADD_REACTIONS, 0n)] : [];
+  const hidden = scene === 'private-removed' || scene === 'private-cleared';
+  const everyoneDeny = hidden ? PermissionBits.VIEW_CHANNEL | PermissionBits.SEND_MESSAGES : PermissionBits.SEND_MESSAGES;
   return [
     ...everyRole,
-    o('role', SPACE_ID, 0n, PermissionBits.SEND_MESSAGES),
+    o('role', SPACE_ID, 0n, everyoneDeny),
     o('role', 'r-mod', PermissionBits.SEND_MESSAGES | PermissionBits.MANAGE_MESSAGES, 0n),
     o('role', 'r-dj', PermissionBits.SEND_MESSAGES, 0n),
     o('role', 'r-guest', 0n, PermissionBits.ADD_REACTIONS | PermissionBits.ATTACH_FILES),
@@ -104,7 +116,8 @@ function seededOverrides(scene: Scene): StoredOverride[] {
   ];
 }
 
-function stubOverrideRoutes(scene: Scene): void {
+function stubOverrideRoutes(scene: Scene, entity: Entity): void {
+  const base = entity === 'category' ? `/api/categories/${CATEGORY_ID}/overrides` : `/api/channels/${CHANNEL_ID}/overrides`;
   let rows = seededOverrides(scene);
   const realFetch = window.fetch.bind(window);
   const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
@@ -112,14 +125,14 @@ function stubOverrideRoutes(scene: Scene): void {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
     const method = (init?.method ?? 'GET').toUpperCase();
     const path = new URL(url, window.location.href).pathname;
-    if (path === `/api/channels/${CHANNEL_ID}/overrides` && method === 'GET') return json(rows);
-    if (path === `/api/channels/${CHANNEL_ID}/overrides` && method === 'PUT') {
+    if (path === base && method === 'GET') return json(rows);
+    if (path === base && method === 'PUT') {
       const body = JSON.parse(String(init?.body)) as Omit<StoredOverride, 'channelId'>;
       rows = rows.filter((r) => !(r.targetType === body.targetType && r.targetId === body.targetId));
       rows.push({ channelId: CHANNEL_ID, ...body });
       return json({ success: true });
     }
-    const del = path.match(new RegExp(`^/api/channels/${CHANNEL_ID}/overrides/([^/]+)/([^/]+)$`));
+    const del = path.match(new RegExp(`^${base}/([^/]+)/([^/]+)$`));
     if (del && method === 'DELETE') {
       rows = rows.filter((r) => !(r.targetType === del[1] && r.targetId === del[2]));
       return json({ success: true });
@@ -128,17 +141,20 @@ function stubOverrideRoutes(scene: Scene): void {
   };
 }
 
-function seedStores(): void {
+function seedStores(entity: Entity): void {
   useSpaceStore.setState({
     spaces: [SPACE],
     currentSpaceId: SPACE_ID,
     channels: [CHANNEL],
+    categories: [CATEGORY],
     roles: ROLES,
     members: MEMBERS,
     spacePermissions: new Map([[SPACE_ID, permissionsToString(ALL_PERMISSIONS)]]),
     channelPermissions: new Map([[CHANNEL_ID, permissionsToString(ALL_PERMISSIONS)]]),
   });
-  useUIStore.setState({ activeModal: 'channelSettings', modalData: { channelId: CHANNEL_ID } });
+  useUIStore.setState(entity === 'category'
+    ? { activeModal: 'categorySettings', modalData: { categoryId: CATEGORY_ID } }
+    : { activeModal: 'channelSettings', modalData: { channelId: CHANNEL_ID } });
 }
 
 function waitFor<T>(find: () => T | null, timeoutMs = 3000): Promise<T> {
@@ -177,6 +193,19 @@ async function drive(scene: Scene): Promise<void> {
     (await waitFor(() => rowButton('@everyone'))).click();
     return;
   }
+  if (scene === 'private-removed') {
+    await waitFor(() => rowButton('@everyone'));
+    (await waitFor(() => document.querySelector<HTMLButtonElement>('button[aria-label="Remove override for @everyone"]'))).click();
+    return;
+  }
+  if (scene === 'private-cleared') {
+    (await waitFor(() => rowButton('@everyone'))).click();
+    const label = await waitFor(() => Array.from(document.querySelectorAll('span')).find((el) => el.textContent === 'View Channels') ?? null);
+    const neutral = label.parentElement?.querySelector<HTMLButtonElement>('button[title="Neutral (inherit)"]');
+    if (!neutral) throw new Error('harness: no neutral toggle on View Channels');
+    neutral.click();
+    return;
+  }
   if (scene === 'full') {
     await waitFor(() => rowButton('Members'));
     (await waitFor(() => buttonByText('Add Role'))).click();
@@ -202,13 +231,14 @@ async function drive(scene: Scene): Promise<void> {
 async function start(): Promise<void> {
   const raw = new URLSearchParams(window.location.search).get('scene');
   const scene: Scene = SCENES.find((s) => s === raw) ?? 'many';
+  const entity: Entity = new URLSearchParams(window.location.search).get('entity') === 'category' ? 'category' : 'channel';
   initializeInterfaceScale();
   await initI18n();
-  stubOverrideRoutes(scene);
-  seedStores();
+  stubOverrideRoutes(scene, entity);
+  seedStores(entity);
   const host = document.getElementById('root');
   if (!host) throw new Error('missing #root');
-  createRoot(host).render(<ChannelSettingsModal />);
+  createRoot(host).render(entity === 'category' ? <CategorySettingsModal /> : <ChannelSettingsModal />);
   await drive(scene);
 }
 

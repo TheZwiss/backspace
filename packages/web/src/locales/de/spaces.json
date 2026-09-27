@@ -55,7 +55,8 @@
       "private": {
         "label": "Privater Kanal",
         "description": "Nur ausgewählte Mitglieder und Rollen können diesen Kanal sehen.",
-        "note": "Dieser Kanal ist für Mitglieder ohne ausdrücklichen Zugriff verborgen. Wer die Administrator-Berechtigung hat oder den Space besitzt, sieht immer alle Kanäle."
+        "note": "Dieser Kanal ist für Mitglieder ohne ausdrücklichen Zugriff verborgen. Wer die Administrator-Berechtigung hat oder den Space besitzt, sieht immer alle Kanäle.",
+        "unhideOnSave": "Beim Speichern wird dieser Kanal für alle Mitglieder sichtbar."
       },
       "deleteButton": "Kanal löschen"
     },
@@ -84,7 +85,8 @@
       "private": {
         "label": "Private Kategorie",
         "description": "Nur ausgewählte Mitglieder und Rollen können die Kanäle in dieser Kategorie sehen.",
-        "note": "Diese Kategorie ist für Mitglieder ohne ausdrücklichen Zugriff verborgen. Die Kanäle darin erben diese Einschränkung, sofern sie sie nicht ausdrücklich überschreiben."
+        "note": "Diese Kategorie ist für Mitglieder ohne ausdrücklichen Zugriff verborgen. Die Kanäle darin erben diese Einschränkung, sofern sie sie nicht ausdrücklich überschreiben.",
+        "unhideOnSave": "Beim Speichern werden diese Kategorie und die Kanäle darin, die sich nicht selbst verbergen, für alle Mitglieder sichtbar."
       },
       "deleteButton": "Kategorie löschen"
     },

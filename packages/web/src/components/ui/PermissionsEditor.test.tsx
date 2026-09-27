@@ -53,7 +53,9 @@ function member(userId: string, username: string, displayName: string | null): M
   };
 }
 
-function renderEditor(overrides: Override[]) {
+const UNHIDE_NOTE = 'Saving makes this channel visible to every member.';
+
+function renderEditor(overrides: Override[], permDefs: PermissionDef[] = PERM_DEFS) {
   const deleteOverride = vi.fn().mockResolvedValue({ success: true });
   const putOverride = vi.fn().mockResolvedValue({ success: true });
   const getOverrides = vi.fn().mockResolvedValue(overrides);
@@ -61,7 +63,8 @@ function renderEditor(overrides: Override[]) {
     <PermissionsEditor
       entityId="channel-1"
       spaceId={SPACE_ID}
-      permDefs={PERM_DEFS}
+      permDefs={permDefs}
+      unhideNote={UNHIDE_NOTE}
       getOverrides={getOverrides}
       putOverride={putOverride}
       deleteOverride={deleteOverride}
@@ -211,5 +214,45 @@ describe('PermissionsEditor: the add pickers follow the staged rows (#314)', () 
     await user.click(screen.getByRole('button', { name: 'Add Member' }));
     expect(screen.getByRole('button', { name: /^Mira/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'kai' })).toBeInTheDocument();
+  });
+});
+
+describe('PermissionsEditor: saving that unhides a private channel says so', () => {
+  const WITH_VIEW: PermissionDef[] = [{ key: 'VIEW_CHANNEL', bit: PermissionBits.VIEW_CHANNEL }, ...PERM_DEFS];
+
+  it('shows the note when the @everyone row that denies View Channels is removed, and Discard hides it', async () => {
+    const user = userEvent.setup();
+    renderEditor([override(SPACE_ID, 0n, PermissionBits.VIEW_CHANNEL | PermissionBits.SEND_MESSAGES)], WITH_VIEW);
+
+    await screen.findByRole('button', { name: /^@everyone/ });
+    expect(screen.queryByText(UNHIDE_NOTE)).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Remove override for @everyone' }));
+    expect(screen.getByText(UNHIDE_NOTE)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Discard' }));
+    expect(screen.queryByText(UNHIDE_NOTE)).toBeNull();
+  });
+
+  it('shows the note when the View Channels deny on @everyone is cleared', async () => {
+    const user = userEvent.setup();
+    renderEditor([override(SPACE_ID, 0n, PermissionBits.VIEW_CHANNEL)], WITH_VIEW);
+
+    await user.click(await screen.findByRole('button', { name: /^@everyone/ }));
+    const row = screen.getByText('View Channels').parentElement!;
+    await user.click(within(row).getByTitle('Neutral (inherit)'));
+    expect(screen.getByText(UNHIDE_NOTE)).toBeInTheDocument();
+
+    await user.click(within(row).getByTitle('Deny'));
+    expect(screen.queryByText(UNHIDE_NOTE)).toBeNull();
+  });
+
+  it('stays quiet when the removed @everyone row did not hide the channel', async () => {
+    const user = userEvent.setup();
+    renderEditor([override(SPACE_ID, 0n, PermissionBits.SEND_MESSAGES)], WITH_VIEW);
+
+    await user.click(await screen.findByRole('button', { name: 'Remove override for @everyone' }));
+    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
+    expect(screen.queryByText(UNHIDE_NOTE)).toBeNull();
   });
 });

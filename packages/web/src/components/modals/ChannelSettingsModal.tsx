@@ -331,6 +331,7 @@ export function ChannelSettingsModal() {
                     const channelApi = getApiForOrigin(space?._instanceOrigin ?? '');
                     return channelApi.channels.putOverride(channelId, data);
                   }}
+                  unhideNote={t('spaces:channel.settings.private.unhideOnSave')}
                   deleteOverride={(targetType, targetId) => {
                     const channelApi = getApiForOrigin(space?._instanceOrigin ?? '');
                     return channelApi.channels.deleteOverride(channelId, targetType, targetId);

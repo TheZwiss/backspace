@@ -55,7 +55,8 @@
       "private": {
         "label": "Private Channel",
         "description": "Only selected members and roles will be able to view this channel.",
-        "note": "This channel is hidden from members without explicit access. Users with the Administrator permission or space owners can always see all channels."
+        "note": "This channel is hidden from members without explicit access. Users with the Administrator permission or space owners can always see all channels.",
+        "unhideOnSave": "Saving makes this channel visible to every member."
       },
       "deleteButton": "Delete Channel"
     },
@@ -84,7 +85,8 @@
       "private": {
         "label": "Private Category",
         "description": "Only selected members and roles will be able to view channels in this category.",
-        "note": "This category is hidden from members without explicit access. Channels inside inherit this restriction unless they explicitly override it."
+        "note": "This category is hidden from members without explicit access. Channels inside inherit this restriction unless they explicitly override it.",
+        "unhideOnSave": "Saving makes this category and the channels in it that don't hide themselves visible to every member."
       },
       "deleteButton": "Delete Category"
     },
