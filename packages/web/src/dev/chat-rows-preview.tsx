@@ -7,17 +7,23 @@
 // 760px chat column. The states (the `STATES` table below says the same on
 // screen):
 //   reply-rest      the conversation at the bottom, reply previews at rest.
-//   reply-hover     the newest reply preview in its hover state.
+//   reply-hover     the newest reply preview in its hover state; its
+//                   original mentions a member, shown as a plain badge.
 //   reply-focus     the newest reply preview with the keyboard focus ring.
 //   jump-landed     the newest reply preview clicked: the list has scrolled
 //                   to the original, which carries the jump flash, frozen
 //                   300 ms into its 2 s fade.
+//   jump-keyboard   the same jump from the keyboard: the original holds the
+//                   focus and shows the focus-visible ring.
+//   present-failed  a detached window, Jump to Present clicked while the
+//                   newest page cannot be loaded: the list stays, a toast says so.
 //   reactions-rest  a release thread with reaction pills, no tooltip.
 //   reaction-*      one pill hovered, its tooltip open: `you` (only you),
 //                   `two`, `three` (three others, one of them remote),
 //                   `twelve`, `long-names`, `remote` (a remote stub named
 //                   through the userViews cache), `focus` (keyboard focus
-//                   instead of hover).
+//                   instead of hover), `escaped` (opened by hover, then
+//                   Escape pressed with the pointer still on the pill).
 //
 // Hover and focus-visible cannot be produced by a headless screenshot, so the
 // harness copies every `:hover` / `:focus-visible` rule in the loaded
@@ -27,6 +33,7 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import type { MessageWithUser, Reaction, User } from '@backspace/shared';
 import { MessageList } from '../components/chat/MessageList';
+import { ToastContainer } from '../components/ui/ToastContainer';
 import { useAuthStore } from '../stores/authStore';
 import { useChatStore } from '../stores/chatStore';
 import { useSpaceStore } from '../stores/spaceStore';
@@ -41,6 +48,8 @@ const STATES = {
   'reply-hover': 'The newest reply preview in its hover state.',
   'reply-focus': 'The newest reply preview with the keyboard focus ring.',
   'jump-landed': 'Reply preview clicked: scrolled to the original, flash frozen 300 ms in.',
+  'jump-keyboard': 'Reply preview activated from the keyboard: the original holds the focus.',
+  'present-failed': 'Jump to Present clicked while the newest page cannot load.',
   'reactions-rest': 'A release thread with reaction pills, no tooltip.',
   'reaction-you': 'Tooltip: only you reacted.',
   'reaction-two': 'Tooltip: you and one other.',
@@ -49,6 +58,7 @@ const STATES = {
   'reaction-long-names': 'Tooltip: two very long display names.',
   'reaction-remote': 'Tooltip: a remote stub named through the userViews cache.',
   'reaction-focus': 'Tooltip opened by keyboard focus, with the focus ring.',
+  'reaction-escaped': 'Tooltip opened by hover, then closed with Escape.',
 } as const;
 type RowState = keyof typeof STATES;
 
@@ -61,9 +71,11 @@ const TOOLTIP_TARGETS: Partial<Record<RowState, { row: number; emoji: string; vi
   'reaction-long-names': { row: 21, emoji: '🙌', via: 'hover' },
   'reaction-remote': { row: 22, emoji: '👀', via: 'hover' },
   'reaction-focus': { row: 21, emoji: '✅', via: 'focus' },
+  'reaction-escaped': { row: 20, emoji: '❤️', via: 'hover' },
 };
 
 const CHANNEL = 'workbench-channel';
+const SPACE = 'workbench-space';
 const FRAME_WIDTH = 760;
 
 function readState(search: string): RowState {
@@ -128,7 +140,7 @@ function row(n: number, author: User, content: string, replyTo?: MessageWithUser
 }
 
 function conversation(): MessageWithUser[] {
-  const question = row(0, MIRA, 'Before we tag 1.6: is the migration for the reply index in, or does it wait for the next release?');
+  const question = row(0, MIRA, 'Before we tag 1.6: <@oskar> is the migration for the reply index in, or does it wait for the next release?');
   const filler: MessageWithUser[] = [
     row(1, OSKAR, 'I think it is in, the PR merged on Thursday.'),
     row(2, TOVE, 'It is, I ran it against a copy of the orbit database last night. Took about four seconds.'),
@@ -195,7 +207,9 @@ function seedStores(state: RowState): void {
     channelOriginMap: new Map([[CHANNEL, '']]),
     channelPermissions: new Map([[CHANNEL, permissionsToString(ALL_PERMISSIONS)]]),
     dmChannels: [],
-    members: [],
+    members: [MIRA, OSKAR, TOVE, ME].map((user) => ({ spaceId: SPACE, userId: user.id, nickname: null, joinedAt: 1, user, roles: [] })),
+    spaces: [],
+    currentSpaceId: SPACE,
     userViews: new Map([[canonicalUserKey(ALEKSANDR_STUB), {
       user: ALEKSANDR_HOME,
       deliveredBy: 'https://nova.example',
@@ -206,7 +220,8 @@ function seedStores(state: RowState): void {
   useChatStore.setState({
     messages: new Map([[CHANNEL, isReactionState(state) ? reactionConversation() : conversation()]]),
     hasMore: new Map([[CHANNEL, false]]),
-    detachedChannels: new Set(),
+    // present-failed starts in a window loaded by an earlier jump.
+    detachedChannels: new Set(state === 'present-failed' ? [CHANNEL] : []),
   });
 }
 
@@ -293,6 +308,23 @@ async function drive(state: RowState): Promise<void> {
   const tooltipTarget = TOOLTIP_TARGETS[state];
   if (tooltipTarget) {
     await openTooltip(tooltipTarget);
+    if (state === 'reaction-escaped') {
+      await waitFor(() => document.querySelector('[role="tooltip"]'), 'the tooltip did not open');
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    }
+    return;
+  }
+  if (state === 'present-failed') {
+    // The newest page cannot be fetched: every request fails at the network.
+    window.fetch = () => Promise.reject(new TypeError('Failed to fetch'));
+    const jumpToPresent = await waitFor(
+      () => Array.from(document.querySelectorAll('button')).find((b) => b.textContent === 'Jump to Present'),
+      'no Jump to Present button',
+    );
+    const toastSettle = document.createElement('style');
+    toastSettle.textContent = '* { animation: none !important; }';
+    document.head.appendChild(toastSettle);
+    jumpToPresent.click();
     return;
   }
   const preview = await newestReplyPreview();
@@ -317,6 +349,23 @@ async function drive(state: RowState): Promise<void> {
   freeze.textContent = '.message-jump-highlight { animation-delay: -300ms !important; animation-play-state: paused !important; }';
   document.head.appendChild(freeze);
   preview.click();
+  if (state === 'jump-landed') {
+    // A synthetic click has no pointer behind it, so Chrome treats the focus
+    // the jump moves as keyboard focus and draws the ring. A real mouse click
+    // leaves the row focused without :focus-visible; show that.
+    const pointerFocus = document.createElement('style');
+    pointerFocus.textContent = '[id^="msg-"]:focus-visible { --tw-ring-shadow: 0 0 #0000 !important; box-shadow: none !important; }';
+    document.head.appendChild(pointerFocus);
+  }
+  if (state === 'jump-keyboard') {
+    // The row the jump focused shows the ring a keyboard user gets.
+    const focused = await waitFor(
+      () => (document.activeElement?.id.startsWith('msg-') ? document.activeElement : null),
+      'the jump did not move the focus to the original',
+    );
+    mirrorPseudoClassRules();
+    focused.classList.add('wb-focus');
+  }
 }
 
 // ─── Frame ──────────────────────────────────────────────────────────────────
@@ -328,6 +377,7 @@ function Frame() {
       style={{ width: FRAME_WIDTH, height: 'calc(100 * var(--app-vh))', ['--composer-clearance' as string]: '20px' }}
     >
       <MessageList channelId={CHANNEL} />
+      <ToastContainer />
     </div>
   );
 }
