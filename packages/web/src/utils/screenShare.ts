@@ -1,7 +1,7 @@
 import { Room, Track, BackupCodecPolicy, AudioPresets } from 'livekit-client';
 import { useVoiceStore } from '../stores/voiceStore';
 import type { ScreenShareConfig } from '../stores/voiceStore';
-import { getStreamingLimits } from '../stores/settingsStore';
+import { getStreamHostLimits } from './streamHostLimits';
 import { getPublisherPC, getMediaStreamTrack } from './livekitInternals';
 import { broadcastVoiceStatus } from './voice';
 import { activate as activateHwOverdrive, deactivate as deactivateHwOverdrive } from './hwOverdrive';
@@ -110,7 +110,7 @@ function computeNativeBitrate(
 export function buildScreenShareOptions(config: ScreenShareConfig): ScreenShareBuildResult {
   const { height, fps, mode, customBitrateKbps } = config;
   const isNative = height === 'native';
-  const limits = getStreamingLimits();
+  const limits = getStreamHostLimits();
   const overrides = limits.bitrateMatrixOverrides;
 
   // Capture dimensions: sentinel 0 for native (caller skips resolution constraint)
@@ -178,7 +178,7 @@ export function resolveNativeOverdrive(
   config: ScreenShareConfig,
   opts: ScreenShareBuildResult,
 ): void {
-  const limits = getStreamingLimits();
+  const limits = getStreamHostLimits();
   const effectiveCustom = limits.allowCustomBitrate ? config.customBitrateKbps : null;
   if (config.height !== 'native' || effectiveCustom != null || !mediaTrack) return;
   const settings = mediaTrack.getSettings();

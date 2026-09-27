@@ -317,6 +317,12 @@ ScreenShareConfig {
 - `allowCustomBitrate` toggle
 - `bitrateMatrixOverrides` (JSON sparse overrides)
 
+**Whose limits apply.** The instance hosting the voice channel, not the user's home. A space channel's LiveKit token comes from `getApiForOrigin(getChannelOrigin(channelId))`, so in a federated space the stream rides the space instance's LiveKit and that instance's admin set the caps. `utils/streamHostLimits.ts` is the one derived view: `voiceHostOrigin(currentVoiceChannelId, channelOriginMap)` names the host (`''` = home), `getStreamHostLimits()` feeds `buildScreenShareOptions` / `resolveNativeOverdrive`, and `useStreamHostLimits()` feeds `StreamQualityControls`, which shows "Limits set by <host>" when the host is not home. Home's document stays in `settingsStore.streamingLimits` (it also carries home's discovery flags); other instances' documents live in `settingsStore.streamingLimitsByOrigin`, fetched by `fetchStreamingLimitsFor(origin)` from `useLiveKit.connect` on every join to a remote channel. A failed refresh keeps the last document that host sent; an origin never answered falls back to the defaults, never to home's document. The clamp effect in `StreamQualityControls` writes the clamped values into the persisted `screenShareConfig`, so a strict host lowers the preference for later streams too, the same as a strict home did before.
+
+A DM call has no `currentVoiceChannelId` and resolves to home. For a federated DM call hosted on another instance this is an approximation: the client may hold no session there, so there is no document to fetch.
+
+**Enforcement is client-side only.** LiveKit's `VideoGrant` has no bitrate, resolution or frame-rate field, and the publish goes from the client straight to the SFU without passing the Backspace server, so no instance can enforce these caps on a modified client. The host's server takes part only when it issues the token. Server-side enforcement would need a LiveKit feature, not a Backspace protocol change.
+
 ### Start flow — `ScreenShareSetup` (stage, then publish)
 
 Every screen share starts from one screen, `ScreenShareSetup` (mounted once in `App.tsx`, opened through `screenShareSetupStore`). The control-bar button, the keybind, the mobile call screen and "Change stream" on the local tile all open it; nothing calls capture directly.

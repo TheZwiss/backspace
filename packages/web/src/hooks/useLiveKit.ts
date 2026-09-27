@@ -15,6 +15,7 @@ import {
   TrackEvent,
 } from 'livekit-client';
 import { getApiForOrigin, getChannelOrigin, getMyUserIdForOrigin, useSpaceStore } from '../stores/spaceStore';
+import { refreshStreamHostLimits } from '../utils/streamHostLimits';
 import { wsSend } from './useWebSocket';
 import { useVoiceStore, type VoiceConnectionQuality } from '../stores/voiceStore';
 import { useAuthStore } from '../stores/authStore';
@@ -669,7 +670,12 @@ export function useLiveKit() {
         url = federatedCallUrl;
         clearFederatedCallData();
       } else {
-        const client = getApiForOrigin(getChannelOrigin(channelId));
+        const origin = getChannelOrigin(channelId);
+        const client = getApiForOrigin(origin);
+        // The instance issuing this token hosts the LiveKit room, so its
+        // streaming limits are the ones a screen share here obeys. Refreshed
+        // per join (a no-op for home, whose document arrives with `ready`).
+        if (!isDm) void refreshStreamHostLimits(origin);
         const resp = isDm ? await client.livekit.dmToken(channelId) : await client.livekit.token(channelId);
         token = resp.token;
         url = resp.url;

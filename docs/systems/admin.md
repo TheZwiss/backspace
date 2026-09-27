@@ -111,7 +111,7 @@ HIGH_END_FRAMERATE_THRESHOLD  = 75
 2160  20000 24000 28000 32000 38000 45000
 ```
 
-See [voice.md](voice.md) for how clients enforce these limits at the WebRTC encoding boundary.
+See [voice.md](voice.md) for how clients enforce these limits at the WebRTC encoding boundary. A screen share obeys the limits of the instance hosting the voice channel: in a federated space the client reads this document from the space's instance, not from the user's home (voice.md, "Whose limits apply").
 
 ---
 

@@ -106,6 +106,7 @@
   },
   "streamSettings": {
     "title": "推流设置",
+    "hostLimits": "限制由 {{host}} 设定",
     "resolution": "分辨率",
     "frameRate": "帧率",
     "contentMode": "内容模式",

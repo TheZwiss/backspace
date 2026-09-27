@@ -17,8 +17,8 @@ vi.mock('./hwOverdrive', () => sdp);
 vi.mock('../audio/AudioManager', () => ({
   AudioManager: { getInstance: () => ({ setInputVolume: vi.fn() }) },
 }));
-vi.mock('../stores/settingsStore', () => ({
-  getStreamingLimits: () => ({
+vi.mock('./streamHostLimits', () => ({
+  getStreamHostLimits: () => ({
     minBitrateKbps: 500,
     maxBitrateKbps: 20_000,
     allowCustomBitrate: true,

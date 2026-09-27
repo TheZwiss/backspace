@@ -2,8 +2,9 @@ import React, { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useVoiceStore } from '../../stores/voiceStore';
 import type { ScreenShareConfig } from '../../stores/voiceStore';
-import { useSettingsStore } from '../../stores/settingsStore';
 import { buildScreenShareOptions } from '../../utils/screenShare';
+import { useStreamHostLimits } from '../../utils/streamHostLimits';
+import { hostOf } from '../../utils/identity';
 import { Toggle } from '../ui/Toggle';
 import { isElectron } from '../../platform/platform';
 import { RESOLUTION_LABELS } from '@backspace/shared/src/constants';
@@ -17,7 +18,9 @@ import { formatters } from '../../i18n/formatters';
  * Shared by the two places a user tunes a stream: ScreenShareSetup before it
  * starts, and ScreenShareSettingsPopover while it is live. Presentation-only
  * apart from the clamp effect, which keeps a persisted config inside the
- * instance's admin limits.
+ * admin limits of the instance hosting the voice channel (see
+ * `utils/streamHostLimits.ts`): in a federated space that is the space's
+ * instance, whose LiveKit carries the stream, not the user's home.
  */
 
 const MODES: { value: ScreenShareConfig['mode']; labelKey: 'voice:streamSettings.mode.gaming' | 'voice:streamSettings.mode.text' }[] = [
@@ -76,7 +79,7 @@ export function StreamQualityControls() {
   const { t } = useTranslation(['voice', 'common']);
   const config = useVoiceStore((s) => s.screenShareConfig);
   const setConfig = useVoiceStore((s) => s.setScreenShareConfig);
-  const limits = useSettingsStore((s) => s.streamingLimits);
+  const { origin: hostOrigin, limits } = useStreamHostLimits();
   const electronPlatform = isElectron() ? window.backspace?.platform : null;
 
   const BITRATE_MIN = limits?.minBitrateKbps ?? 500;
@@ -130,6 +133,13 @@ export function StreamQualityControls() {
 
   return (
     <div className="flex flex-col gap-3">
+      {/* Whose caps these are, when they are not home's */}
+      {hostOrigin && (
+        <div className="text-[11px] text-txt-tertiary truncate" title={hostOf(hostOrigin)}>
+          {t('voice:streamSettings.hostLimits', { host: hostOf(hostOrigin) })}
+        </div>
+      )}
+
       {/* Resolution */}
       <div>
         <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-1.5">
