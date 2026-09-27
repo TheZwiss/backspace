@@ -3,6 +3,7 @@ import { useAuthStore } from '../stores/authStore';
 import { useChatStore } from '../stores/chatStore';
 import { useSpaceStore, getMyUserIdForOrigin, resolveDmChannelId } from '../stores/spaceStore';
 import { sortDmChannels } from './dmSorting';
+import { repinDmsToHomeCopies } from './dmOriginFailover';
 
 /**
  * Routing of DM WebSocket events to the conversation they belong to.
@@ -24,7 +25,9 @@ import { sortDmChannels } from './dmSorting';
  *
  * Only the pinned copy's messages enter the conversation's message list, so
  * every message id in it is one the pinned origin knows (see
- * `deliverToConversation`).
+ * `deliverToConversation`). The pinned copy is the home instance's whenever
+ * the client has seen it (`repinDmsToHomeCopies`), because home is the one
+ * copy every relay of the conversation is guaranteed to reach.
  */
 
 const HOME_ORIGIN = '';
@@ -41,7 +44,10 @@ function learnDmChannelsFromOrigin(origin: string): Promise<boolean> {
   const existing = inFlightDmListLoads.get(origin);
   if (existing) return existing;
   const load = useSpaceStore.getState().reloadDmsForOrigin(origin)
-    .then(() => true)
+    .then(() => {
+      repinDmsToHomeCopies();
+      return true;
+    })
     .catch((err: unknown) => {
       console.warn(`[dm] could not load the DM list from ${origin || 'home'}:`, err);
       return false;
@@ -139,7 +145,12 @@ export function applyIncomingDmChannel(origin: string, channel: DmChannel): void
   const fid = channel.federatedId;
   if (fid) {
     store.recordDmAlternative(fid, origin, channel.id);
-    if (store.dmChannels.some(dm => dm.federatedId === fid)) return;
+    if (store.dmChannels.some(dm => dm.federatedId === fid)) {
+      // Listed from another origin already; if this is the home copy, it
+      // takes over as the pinned one.
+      repinDmsToHomeCopies();
+      return;
+    }
   }
   store.addDmChannel(channel, origin);
 }

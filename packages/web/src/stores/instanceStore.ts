@@ -19,7 +19,7 @@ import { useSpaceStore } from './spaceStore';
 import { connectInstance, disconnectInstance as disconnectWs, disconnectAllRemote } from '../hooks/useWebSocket';
 // dmOriginFailover lazily reads useInstanceStore/useSpaceStore/useChatStore at call time,
 // so a static import here does not create an import-time cycle.
-import { failoverDmOriginsFromDisconnected } from '../utils/dmOriginFailover';
+import { failoverDmOriginsFromDisconnected, repinDmsToHomeCopies } from '../utils/dmOriginFailover';
 import { useUIStore } from './uiStore';
 import { parseFederatedUsername } from '../utils/identity';
 // The registry's `errorMessage` carries one of these codes, never a sentence:
@@ -368,7 +368,10 @@ export async function maybeAutoReattach(instance: ConnectedInstance): Promise<vo
     // on the server); refetch the DM list so the split conversation collapses
     // without a reload. Belt-and-suspenders for the connection that triggered it
     // — the server's dm_channel_closed/created events cover the live sidebar too.
-    try { await useSpaceStore.getState().reloadDmsForOrigin(instance.origin); } catch { /* non-fatal */ }
+    try {
+      await useSpaceStore.getState().reloadDmsForOrigin(instance.origin);
+      repinDmsToHomeCopies();
+    } catch { /* non-fatal */ }
   } catch (err) {
     // Non-fatal: the connection works either way; the explicit re-attach
     // action in AccountPanel remains available.

@@ -10,6 +10,7 @@ import { resolveAssetUrl, normalizeUserAssets, normalizeMessageAssets } from '..
 import { broadcastVoiceStatus, broadcastDeafenViaLiveKit } from '../utils/voice';
 import { applySpaceVoiceState } from '../utils/voiceStateSync';
 import { applyIncomingDmMessage, applyIncomingDmChannel } from '../utils/dmMessageRouting';
+import { repinDmsToHomeCopies } from '../utils/dmOriginFailover';
 import { registerSelfId } from '../utils/identity';
 import { getActiveRoom } from './useLiveKit';
 import { useUIStore } from '../stores/uiStore';
@@ -206,6 +207,8 @@ function handleEvent(origin: string, event: ServerEvent): void {
       }
 
       populateFromReady(origin, event.spaces, event.folders, event.dmChannels, event.spaceLayout, event.layoutUpdatedAt);
+      // A conversation first listed from a sibling moves to its home copy.
+      repinDmsToHomeCopies();
 
       // Cache authoritative identity for this origin (federation-safe)
       if (!isHome) {

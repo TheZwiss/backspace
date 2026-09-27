@@ -38,6 +38,7 @@ import { useSpaceStore, setApiForOriginResolver, setMyUserIdForOrigin } from '..
 import { useChatStore } from '../stores/chatStore';
 import { api, type BackspaceApiClient } from '../api/client';
 import { applyIncomingDmMessage, applyIncomingDmChannel } from './dmMessageRouting';
+import { repinDmsToHomeCopies } from './dmOriginFailover';
 import type { DmChannel, DmMessageWithUser, User } from '@backspace/shared';
 
 const REMOTE = 'https://remote.example';
@@ -290,5 +291,77 @@ describe('applyIncomingDmChannel: alternates are recorded when the copy is skipp
     expect(dmById('dm-new-remote')).toBeDefined();
     expect(useSpaceStore.getState().channelOriginMap.get('dm-new-remote')).toBe(REMOTE);
     expect(useSpaceStore.getState().dmAlternatives.get('fid-new')?.get(REMOTE)).toBe('dm-new-remote');
+  });
+});
+
+describe('the home copy of a conversation is the pinned one (#295 review)', () => {
+  // U = alice (home is this client's home instance). She creates a DM with
+  // vera, also homed here, through her account on C. C holds a copy but hosts
+  // no participant, so vera's replies are relayed only to home.
+  const C = 'https://c.example';
+  const aliceOnC = user('alice-on-c', 'alice-home', 'home.example');
+  const veraOnC = user('vera-stub-on-c', 'vera-home', 'home.example');
+  const veraHome = user('vera-home');
+  const dmOnC: DmChannel = {
+    id: 'dm-uv-c', federatedId: 'fid-alice-vera', createdAt: 10, members: [aliceOnC, veraOnC], lastMessage: null,
+  };
+  const dmOnHome: DmChannel = {
+    id: 'dm-uv-home', federatedId: 'fid-alice-vera', createdAt: 11, members: [aliceHome, veraHome], lastMessage: null,
+  };
+
+  beforeEach(() => {
+    useSpaceStore.setState({ dmChannels: [], channelOriginMap: new Map(), dmAlternatives: new Map() });
+    useChatStore.setState({ messages: new Map(), unreadChannels: new Set(), currentChannelId: null });
+  });
+
+  it('vera\'s reply appears live although C\'s copy was announced first', async () => {
+    // C's dm_channel_created reaches the client first.
+    applyIncomingDmChannel(C, dmOnC);
+    expect(useSpaceStore.getState().channelOriginMap.get('dm-uv-c')).toBe(C);
+
+    // Home created its copy from C's relay; vera's reply arrives from home.
+    const listSpy = vi.spyOn(api.dm, 'list').mockResolvedValue([dmOnHome]);
+    try {
+      await applyIncomingDmMessage('', message({
+        id: 'm-vera-1', dmChannelId: 'dm-uv-home', userId: 'vera-home', user: veraHome, content: 'reply from vera',
+      }));
+    } finally {
+      listSpy.mockRestore();
+    }
+
+    const entries = useSpaceStore.getState().dmChannels.filter(d => d.federatedId === 'fid-alice-vera');
+    expect(entries.map(d => d.id)).toEqual(['dm-uv-home']);
+    expect(useSpaceStore.getState().channelOriginMap.get('dm-uv-home')).toBe('');
+    expect(contentsOf('dm-uv-home')).toEqual(['reply from vera']);
+  });
+
+  it('a home dm_channel_created after the sibling\'s re-pins the conversation to home', () => {
+    applyIncomingDmChannel(C, dmOnC);
+    applyIncomingDmChannel('', dmOnHome);
+
+    expect(useSpaceStore.getState().dmChannels.map(d => d.id)).toEqual(['dm-uv-home']);
+    expect(useSpaceStore.getState().channelOriginMap.get('dm-uv-home')).toBe('');
+  });
+
+  it('a home ready payload after the sibling\'s re-pins the conversation to home', () => {
+    const { populateFromReady } = useSpaceStore.getState();
+    populateFromReady(C, [], [], [dmOnC]);
+    populateFromReady('', [], [], [dmOnHome]);
+    repinDmsToHomeCopies();
+
+    expect(useSpaceStore.getState().dmChannels.filter(d => d.federatedId === 'fid-alice-vera').map(d => d.id))
+      .toEqual(['dm-uv-home']);
+    expect(useSpaceStore.getState().channelOriginMap.get('dm-uv-home')).toBe('');
+  });
+
+  it('once pinned to home, C\'s copies of later messages stay out of the list', async () => {
+    applyIncomingDmChannel('', dmOnHome);
+    applyIncomingDmChannel(C, dmOnC);
+
+    await applyIncomingDmMessage(C, message({
+      id: 'm-c-1', dmChannelId: 'dm-uv-c', userId: 'alice-on-c', user: aliceOnC, content: 'mirrored',
+    }));
+    expect(useChatStore.getState().messages.get('dm-uv-home') ?? []).toEqual([]);
+    expect(useSpaceStore.getState().dmChannels.map(d => d.id)).toEqual(['dm-uv-home']);
   });
 });

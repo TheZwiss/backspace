@@ -1,4 +1,4 @@
-import { useSpaceStore } from '../stores/spaceStore';
+import { useSpaceStore, getLayoutHomeOrigin } from '../stores/spaceStore';
 import { useChatStore } from '../stores/chatStore';
 import { useInstanceStore } from '../stores/instanceStore';
 
@@ -123,5 +123,41 @@ export function rekeyDmChannel(
       const nextPath = path.slice(0, idx + marker.length) + newId;
       window.history.replaceState(window.history.state, '', nextPath + window.location.search);
     }
+  }
+}
+
+/**
+ * Pin every federated DM to the copy held by the user's home instance, when
+ * this client has seen that copy (it is in `dmAlternatives`).
+ *
+ * The first copy of a conversation to reach the client becomes the listed
+ * entry, and only that pinned copy's messages enter its message list (see
+ * `utils/dmMessageRouting.ts`). Relays only go to instances that host a
+ * participant, and the user's home always hosts one; a sibling instance the
+ * user merely has an account on may host nobody. A DM created through such a
+ * sibling was announced by it first and stayed pinned there, so the other
+ * person's replies, relayed to home only, never appeared live. Called after
+ * every path that records a copy: a `ready` payload, a DM-list reload, and
+ * `dm_channel_created`.
+ *
+ * The home is `getLayoutHomeOrigin()`: '' for a user native to the browsed
+ * instance, or the connected remote that is the account's true home.
+ */
+export function repinDmsToHomeCopies(): void {
+  const home = getLayoutHomeOrigin();
+  const { dmChannels, channelOriginMap, dmAlternatives } = useSpaceStore.getState();
+
+  const rekeys: Array<{ oldId: string; newId: string; federatedId: string }> = [];
+  for (const dm of dmChannels) {
+    if (!dm.federatedId) continue;
+    if ((channelOriginMap.get(dm.id) ?? '') === home) continue;
+    const homeId = dmAlternatives.get(dm.federatedId)?.get(home);
+    if (!homeId || homeId === dm.id) continue;
+    if (dmChannels.some(other => other.id === homeId)) continue;
+    rekeys.push({ oldId: dm.id, newId: homeId, federatedId: dm.federatedId });
+  }
+
+  for (const r of rekeys) {
+    rekeyDmChannel(r.oldId, r.newId, home, r.federatedId);
   }
 }
