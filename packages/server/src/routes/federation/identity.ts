@@ -156,7 +156,10 @@ export type AttributionRefusal = 'attribution_mismatch' | 'attribution_unproven'
  *
  * Two valid cases:
  * 1. **Direct**: the actor is homed on the signing peer. A peer is the identity
- *    authority for its own users.
+ *    authority for its own users, but only for ids that are not already a
+ *    different identity here: when the `homeUserId` belongs only to local users
+ *    homed elsewhere (`resolveRelayActor` reports `mismatch`), the event could
+ *    never be applied as that actor, so it is refused before any handler acts.
  * 2. **Homeward relay**: the actor is homed on THIS instance — a client-
  *    federation user (e.g. erin@nova logged into orbit) acted on the remote and
  *    the relay carries it back home. This is only accepted when the local user
@@ -182,7 +185,9 @@ export function attributionRefusal(
   if (!authorDomain || !sourceDomain) return 'attribution_mismatch';
 
   // Case 1: the actor belongs to the signing peer.
-  if (authorDomain === sourceDomain) return null;
+  if (authorDomain === sourceDomain) {
+    return resolveRelayActor(actor, db).kind === 'mismatch' ? 'attribution_mismatch' : null;
+  }
 
   // Case 2: homeward relay — the actor belongs to THIS instance.
   const ourDomain = extractDomain(getOurOrigin()).toLowerCase();
@@ -246,19 +251,34 @@ export type RelayActorResolution =
   | { kind: 'mismatch' };
 
 /**
- * Resolve the acting identity of an inbound relay event to the local user that
- * stands for it, matching `homeUserId` AND `homeInstance` the way
- * `sameRelayActor` compares identities. Never by `homeUserId` alone: that value
- * is only unique on its home instance, so a bare-id lookup can land on a
+ * Whether a bare domain is one of this instance's own names: the host of its
+ * origin (`getOurOrigin`, what it puts on the wire for its users) or its
+ * identity domain (`DOMAIN`). They differ only when `PUBLIC_ORIGIN` overrides
+ * the transport, and a reference to a native user may carry either.
+ */
+function isOwnDomain(domain: string): boolean {
+  if (!domain) return false;
+  return domain === extractDomain(getOurOrigin()).toLowerCase() || domain === getOurIdentityDomain();
+}
+
+/**
+ * Resolve a federated identity, a `homeUserId` + `homeInstance` pair, to the
+ * local user that IS that identity. Never by `homeUserId` alone: that value is
+ * only unique on its home instance, so a bare-id lookup can land on a
  * different person, such as a native user whose own id happens to equal it.
  *
- * Run after `attributionRefusal` has accepted the pair. Together they give the
- * invariant every relay handler relies on: the user an event is applied as is
- * homed on the signing peer, or is one of our own users who holds an account
- * there (the homeward case).
+ * A native row matches when its own id is the `homeUserId` and the
+ * `homeInstance` is one of this instance's own names (`isOwnDomain`); any other
+ * row matches when it carries the same home user id on the same home domain,
+ * compared the way `sameRelayActor` compares identities.
  *
- * Relay-only. `resolveLocalUser` keeps its bare-id semantics for its other
- * callers.
+ * Inbound relay handlers use it for the acting identity, after
+ * `attributionRefusal` accepted the pair (which already refuses a `mismatch`).
+ * Together they give the invariant every handler relies on: the user an event
+ * is applied as is homed on the signing peer, or is one of our own users who
+ * holds an account there (the homeward case). `findFederatedUser` uses it as its
+ * first step, so every `resolveOrCreateReplicatedUser` caller gets the same
+ * rule. `resolveLocalUser` keeps its bare-id semantics for its other callers.
  */
 export function resolveRelayActor(
   actor: RelayActor,
@@ -278,7 +298,9 @@ export function resolveRelayActor(
     )
     .all();
   if (candidates.length === 0) return { kind: 'unknown' };
+  const actorDomain = extractDomain(actor.homeInstance).toLowerCase();
   const user = candidates.find((candidate) => {
+    if (!candidate.homeInstance) return candidate.id === actor.homeUserId && isOwnDomain(actorDomain);
     const identity = relayActorOfUser(candidate);
     return identity !== null && sameRelayActor(identity, actor);
   });
@@ -325,9 +347,13 @@ export function resolveLocalUser(
  * created them (auth registration vs S2S relay stub).
  *
  * Three-tier matching:
- * 1. Fast path: homeUserId column match (existing resolveLocalUser logic)
+ * 1. Identity: the row that IS `homeUserId` + `homeInstance` (`resolveRelayActor`)
  * 2. Domain + username hint: normalized homeInstance domain + username base match
  * 3. Not found: returns undefined
+ *
+ * When tier 1 reports `mismatch` (the `homeUserId` belongs only to local users
+ * of another identity) the lookup ends there: no row is returned and tier 2 is
+ * not tried, so the id can neither reach those users nor bind a stub by name.
  *
  * Does NOT perform side effects (backfill). See `backfillHomeUserId` for that.
  */
@@ -337,12 +363,22 @@ export function findFederatedUser(
   db: ReturnType<typeof getDb>,
   hints?: { username?: string | null },
 ): typeof schema.users.$inferSelect | undefined {
-  // Tier 1: fast path — existing resolveLocalUser logic
-  const fastMatch = resolveLocalUser(homeUserId, db);
-  if (fastMatch) return fastMatch;
+  const lookup = lookupFederatedUser(homeUserId, homeInstance, db, hints);
+  return lookup.kind === 'found' ? lookup.user : undefined;
+}
+
+function lookupFederatedUser(
+  homeUserId: string,
+  homeInstance: string,
+  db: ReturnType<typeof getDb>,
+  hints?: { username?: string | null },
+): RelayActorResolution {
+  // Tier 1: the identity itself. A mismatch is final.
+  const identity = resolveRelayActor({ homeUserId, homeInstance }, db);
+  if (identity.kind !== 'unknown') return identity;
 
   // Tier 2: domain + username hint match
-  if (!hints?.username) return undefined;
+  if (!hints?.username) return { kind: 'unknown' };
 
   const domain = extractDomain(homeInstance);
   const hintLower = hints.username.toLowerCase();
@@ -372,12 +408,12 @@ export function findFederatedUser(
     )
     .all();
 
-  if (candidates.length === 0) return undefined;
+  if (candidates.length === 0) return { kind: 'unknown' };
 
   // Pick best candidate: prefer real accounts over stubs, then most profile data
-  if (candidates.length === 1) return candidates[0]!;
+  if (candidates.length === 1) return { kind: 'found', user: candidates[0]! };
 
-  return candidates.sort((a, b) => {
+  const best = candidates.sort((a, b) => {
     // Real account (not federation-replicated) wins
     const aReal = a.passwordHash !== '!federation-replicated' ? 1 : 0;
     const bReal = b.passwordHash !== '!federation-replicated' ? 1 : 0;
@@ -387,6 +423,7 @@ export function findFederatedUser(
       [u.displayName, u.avatar, u.banner, u.bio].filter(Boolean).length;
     return profileCount(b) - profileCount(a);
   })[0]!;
+  return { kind: 'found', user: best };
 }
 
 
@@ -425,6 +462,10 @@ export function backfillHomeUserId(
  * Instance A or B, those users won't have been pre-replicated via the
  * friend-connect flow.  We create a bare-bones row so the local DB
  * can reference them in dm_members / dm_messages.
+ *
+ * Returns null, and creates nothing, for a deleted identity, a dead incarnation
+ * of this instance, or a `homeUserId` that belongs only to local users of
+ * another identity (see `findFederatedUser`).
  */
 export function resolveOrCreateReplicatedUser(
   homeUserId: string,
@@ -432,8 +473,14 @@ export function resolveOrCreateReplicatedUser(
   db: ReturnType<typeof getDb>,
   hints?: { username?: string | null; status?: 'online' | 'idle' | 'dnd' | 'offline' | null; deleted?: boolean | null },
 ): typeof schema.users.$inferSelect | null {
-  const existing = findFederatedUser(homeUserId, homeInstance, db, hints);
-  if (existing) return backfillHomeUserId(existing, homeUserId, db);
+  const existing = lookupFederatedUser(homeUserId, homeInstance, db, hints);
+  if (existing.kind === 'found') return backfillHomeUserId(existing.user, homeUserId, db);
+  // The id belongs only to local users of another identity. It names no one
+  // here, and a stub for it would give one id two identities on this instance.
+  if (existing.kind === 'mismatch') {
+    console.warn(`[federation] Not resolving homeUserId=${homeUserId} (${extractDomain(homeInstance)}): the id belongs to a local user of another identity`);
+    return null;
+  }
 
   // A participant the sender marks as deleted must not materialize as a new
   // stub — mirror of the local-tombstone skip below. An existing row still

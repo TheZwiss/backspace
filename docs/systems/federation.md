@@ -710,12 +710,12 @@ Two layers of replay protection:
 
 **`findFederatedUser(homeUserId, homeInstance, db, hints?)`** -- `federation.ts`
 - Three-tier lookup: homeUserId match → domain + username hint match → not found
-- Tier 1: delegates to `resolveLocalUser` (fast path)
+- Tier 1: the identity itself, via `resolveRelayActor(homeUserId + homeInstance)`. When it reports `mismatch` (the `homeUserId` belongs only to local rows of another identity) the lookup stops: nothing is returned and tier 2 is not tried, so the id can neither reach those rows nor bind a stub by username
 - Tier 2: uses `extractDomain(homeInstance)` + `hints.username` to match stubs created by the auth registration path (which may have a different homeUserId)
 - **Tier 2 excludes detached accounts** (`federation_home_orphaned = 1`): a detached account is sovereign and must never be re-bound to the reset domain's new incarnation via username heuristics — that is exactly how a new same-name user would capture the established account. **Tier 1 (`homeUserId` match) is deliberately NOT excluded:** the new incarnation mints fresh `homeUserId`s, so a tier-1 hit on a detached row is a legitimate historical reference (e.g. an old group-DM attribution relayed by a third instance), not the new incarnation. Mutations are blocked at their own sites (profile_update handler, presence_update handler, `hydrateReplicatedUserProfile` fill-empty, S2S identity delete).
 - Side-effect-free — does not modify any records
 - When multiple candidates match in tier 2, prefers real accounts over stubs, then most profile data
-- **S2S-only.** Neither tier is proof of control over the named identity: tier 1 matches `homeUserId` *alone* (that column is only unique within an instance, so two peers can legitimately mint the same value), and tier 2 matches a domain plus a username hint. Both are safe behind the HMAC-authenticated S2S channel, where the caller is an admin-approved peer and attribution is separately verified. **Never call this from an unauthenticated route.** In particular `POST /api/auth/register` does not — see `auth.md` "Federated Registration Never Claims an Existing Row".
+- **S2S-only.** Neither tier is proof of control over the named identity: tier 1 matches the `homeUserId` + `homeInstance` pair a caller names, and tier 2 matches a domain plus a username hint. Both are safe behind the HMAC-authenticated S2S channel, where the caller is an admin-approved peer and attribution is separately verified. **Never call this from an unauthenticated route.** In particular `POST /api/auth/register` does not — see `auth.md` "Federated Registration Never Claims an Existing Row".
 - **Use when:** Read-only lookup, on an authenticated S2S path, that needs to find users created by either auth or relay path
 
 **`resolveLocalUser(homeUserId, db)`** -- `federation.ts`
@@ -727,13 +727,14 @@ Two layers of replay protection:
 - **Use when:** Optional lookups where null is acceptable and the id is not a relayed actor (e.g. a relayed friend request's local recipient)
 
 **`resolveRelayActor(actor, db)`** -- `routes/federation/identity.ts`
-- Read-only. Resolves an inbound relay event's acting identity (`RelayActor`, a `homeUserId` + `homeInstance` pair) to the local user that IS that identity: same candidate rows as `resolveLocalUser`, kept only when `sameRelayActor(relayActorOfUser(row), actor)` holds (equal home user id, same home domain; a native row's identity is its own id on `getOurOrigin()`)
-- Returns `{ kind: 'found', user }`, `{ kind: 'unknown' }` (no live row carries the `homeUserId`; each handler keeps its own not-found answer), or `{ kind: 'mismatch' }` (the `homeUserId` belongs to local rows of a different identity; the handler refuses the event as `attribution_mismatch`, terminal, before changing anything)
+- Read-only. Resolves a federated identity (`RelayActor`, a `homeUserId` + `homeInstance` pair) to the local user that IS that identity: same candidate rows as `resolveLocalUser`; a native row is kept when its own id is the `homeUserId` and the `homeInstance` is one of this instance's own names (the host of `getOurOrigin()` or `DOMAIN`, which differ only under `PUBLIC_ORIGIN`); any other row when `sameRelayActor(relayActorOfUser(row), actor)` holds (equal home user id, same home domain)
+- Returns `{ kind: 'found', user }`, `{ kind: 'unknown' }` (no live row carries the `homeUserId`; each handler keeps its own not-found answer), or `{ kind: 'mismatch' }` (the `homeUserId` belongs to local rows of a different identity; `attributionRefusal` already refuses such an actor, and a handler that meets one refuses the event as `attribution_mismatch`, terminal, before changing anything)
+- Also tier 1 of `findFederatedUser`, so every `resolveOrCreateReplicatedUser` caller (relay handlers and the client routes that take a `homeUserId` + `homeInstance` pair) resolves by the same rule
 - Called after `attributionRefusal` accepted the same pair. Together they hold the invariant: the user an inbound event is applied as is homed on the signing peer, or is one of our users with proven standing on it (homeward)
 - **Use when:** Any inbound relay handler that acts as the event's actor without creating a stub: `reaction_add`/`reaction_remove` (reactor), `dm_typing_start`/`dm_typing_stop`, `read_state_update`, `dm_close`/`dm_reopen`, `friend_request_cancel` (sender; recipient also resolved by pair), `friend_remove` (both sides; a mismatch on the attributed side is refused), `member_remove` (leaving or kicked user; a mismatch is refused only for a leave), `ownership_transfer` (previous owner, resolved before anything changes)
 
 **`resolveOrCreateReplicatedUser(homeUserId, homeInstance, db, hints?)`** -- `federation.ts`
-- Calls `findFederatedUser` first. If found, backfills `homeUserId` for future fast-path lookups and returns.
+- Calls `findFederatedUser` first. If found, backfills `homeUserId` for future fast-path lookups and returns. On a tier-1 `mismatch` it returns `null` and creates nothing: a stub would give one id two identities here.
 - Accepts optional `hints: { username?: string | null }` for tier-2 matching
 - If not found, creates a stub with `homeInstance` normalized to bare domain via `extractDomain`
 - Collision-safe: appends `_1`, `_2`, ..., `_10` suffix if username exists; after 10 attempts, uses `_<random hex>`
@@ -795,7 +796,7 @@ The actor is passed as a **pair**. A `homeUserId` on its own is not an identity 
 
 Two valid cases:
 
-1. **Direct**: `authorDomain === sourceDomain`. A peer is the identity authority for its own users.
+1. **Direct**: `authorDomain === sourceDomain`. A peer is the identity authority for its own users, but not for an id that is already a different identity here: when `resolveRelayActor` reports `mismatch` for the pair, the result is `attribution_mismatch`, before any handler resolves or creates a user.
 2. **Homeward relay**: `authorDomain === extractDomain(getOurOrigin())` — a client-federation user (e.g. `erin@nova` logged into `orbit`) acted on the remote and the relay carries the event back to their home instance. Accepted **only** when `localUserStandingOnPeer(homeUserId, sourceInstance, db)` returns `proven`.
 
 An actor homed on a third instance is always rejected: the signing peer is neither that instance's identity authority nor delegated by it.
@@ -804,7 +805,7 @@ An actor homed on a third instance is always rejected: the signing peer is neith
 
 | Reason | When | Sender |
 |---|---|---|
-| `attribution_mismatch` | Malformed actor; actor homed on a third instance; homeward claim for a user id with no live native row (`no_such_user`: never existed, deleted, or only a replicated stub); also written by handlers when `resolveRelayActor` finds the actor's `homeUserId` only on local rows of a different identity (`mismatch`) | Terminal. Nothing that arrives later can make the claim true. |
+| `attribution_mismatch` | Malformed actor; actor homed on a third instance; homeward claim for a user id with no live native row (`no_such_user`: never existed, deleted, or only a replicated stub); direct claim whose `homeUserId` belongs only to local rows of a different identity (`resolveRelayActor` reports `mismatch`) | Terminal. Nothing that arrives later can make the claim true. |
 | `attribution_unproven` | Homeward claim for a live native user with no registry row and no `replicated_instances` entry for the signing peer yet (`unproven`) | Retryable on the normal backoff, until the outbox TTL |
 
 `unproven` exists because the proof is written by the user's own client, after the remote session is open (`syncRegistry` in `instanceStore.ts` runs at the end of the connect flow, and not at all until `autoConnectAll` has read the server registry once). A DM the user writes on the remote in that window reaches home before the proof does. From the receiver's side that is indistinguishable from a peer forging a claim for one of its users, so the event is refused either way and nothing is written; the reason only tells the sender whether a retry can succeed. A peer that really is forging gains nothing from the retry: its own outbox carries the cost (about 36 attempts over the 30-day TTL), and a retry is only accepted once the user has connected to that peer, which is exactly the standing that would let it speak for the user anyway.

@@ -669,9 +669,12 @@ describe('processFriendRequestCreateEvent — branch coverage', () => {
     expect(sendToUser).not.toHaveBeenCalled();
   });
 
-  it('does not falsely flag self-target when only homeUserId matches across different instances', async () => {
-    // Two different users on different instances who happen to share a homeUserId string
-    // must NOT be treated as self-target. This protects against a too-aggressive guard.
+  it('refuses a sender whose homeUserId is a native user here, without calling it a self-target', async () => {
+    // The two sides share a homeUserId string but name different instances, so
+    // the self-target guard (which compares the pair) must not fire. The sender
+    // is still refused: its id is already a different identity on this
+    // instance (native alice), so no user here can stand for it, and resolving
+    // it would have made alice the sender of a request to herself.
     seedLocalUser('shared-id', 'alice');
 
     const event = makeEvent({
@@ -686,12 +689,10 @@ describe('processFriendRequestCreateEvent — branch coverage', () => {
     const { processRelayEvents } = await import('./federation.js');
     const result = await processRelayEvents([event], 'https://orbit.test', 'https://orbit.test', testDb);
 
-    expect(result.accepted).toEqual(['shared-id-cross-instance']);
-    expect(result.rejected).toEqual([]);
-    const reqs = testDb.select().from(schema.friendRequests).all();
-    expect(reqs).toHaveLength(1);
-    expect(reqs[0]!.toId).toBe('shared-id');
-    expect(sendToUser).toHaveBeenCalledOnce();
+    expect(result.accepted).toEqual([]);
+    expect(result.rejected).toEqual([{ messageId: 'shared-id-cross-instance', reason: 'attribution_mismatch' }]);
+    expect(testDb.select().from(schema.friendRequests).all()).toHaveLength(0);
+    expect(sendToUser).not.toHaveBeenCalled();
   });
 
   it('isolates per-event success/failure within a batch (mixed accepted/rejected)', async () => {

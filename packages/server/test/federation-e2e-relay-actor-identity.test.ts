@@ -53,6 +53,8 @@ let bob: TestUser;
 let carol: TestUser;
 /** Native on B, WITH a federated account recorded on A: homeward standing. */
 let erin: TestUser;
+/** Native on B; the target of the create and friend-request cases. */
+let dave: TestUser;
 
 /** alice is homed on A; B only knows her as a replicated stub. */
 const ALICE_HOME_ID = `9${Date.now()}301`;
@@ -221,6 +223,16 @@ function seedGroupDm(memberIds: string[]): { id: string; federatedId: string } {
   return { id, federatedId };
 }
 
+/**
+ * Rows homed on another instance that carry `homeUserId`. A native user's own
+ * row is not counted (it can carry its own id once a relay has named it).
+ */
+function stubsCarrying(homeUserId: string): number {
+  return readDb(B, db =>
+    (db.prepare('SELECT COUNT(*) AS n FROM users WHERE home_user_id = ? AND home_instance IS NOT NULL').get(homeUserId) as { n: number }).n,
+  );
+}
+
 function isGroupMember(dmChannelId: string, userId: string): boolean {
   return closedFlag(dmChannelId, userId) !== null;
 }
@@ -242,6 +254,7 @@ beforeAll(async () => {
   bob = await registerLocal(B, 'bob');
   carol = await registerLocal(B, 'carol');
   erin = await registerLocal(B, 'erin');
+  dave = await registerLocal(B, 'dave');
   await grantHomewardStanding(erin);
 
   const setup = await relay([createFromAlice(M_BOB, bob), createFromAlice(M_ERIN, erin)]);
@@ -446,7 +459,12 @@ describe('federation e2e: a relayed actor is resolved by homeUserId + homeInstan
     it('refuses to end a friendship for a user who is not one of the sending peer', async () => {
       befriend(bob.id, carol.id);
       const id = nextId('unfriend-bob');
-      const res = await relay([build(id, claimedOnA(bob), { homeUserId: carol.id, homeInstance: B.domain })]);
+      // Neither side is one the peer may speak for: bob's id is not A's to use,
+      // and carol has no account on A. Sent without the retry capability, so
+      // the refusal is the terminal one.
+      const res = await postSignedRelay(B, identityOrigin(A), secret, [
+        build(id, claimedOnA(bob), { homeUserId: carol.id, homeInstance: B.domain }),
+      ]);
       expect(res.body?.accepted).toEqual([]);
       expect(rejectionReason(res, id)).toBe('attribution_mismatch');
       expect(areFriends(bob.id, carol.id)).toBe(true);
@@ -544,5 +562,157 @@ describe('federation e2e: a relayed actor is resolved by homeUserId + homeInstan
       expect(ownerOf(group.id)).toBe(aliceOnB);
       expect(systemMessageAuthor(id)).toBeNull();
     });
+  });
+
+  describe('create', () => {
+    const build = (messageId: string, author: Actor, authorName: string): FederationRelayEvent => ({
+      eventType: 'create',
+      contextType: 'dm',
+      messageId,
+      encryptionVersion: 0,
+      timestamp: Date.now(),
+      participants: [
+        { ...author, profile: { username: authorName } },
+        { homeUserId: dave.id, homeInstance: B.domain, profile: { username: dave.username } },
+      ],
+      message: {
+        userId: author.homeUserId,
+        ...author,
+        content: `actor-identity ${messageId}`,
+        replyToId: null,
+        editedAt: null,
+        createdAt: Date.now(),
+      },
+    });
+    const authorOf = (messageId: string): string | null => readDb(B, db =>
+      (db.prepare('SELECT user_id AS userId FROM dm_messages WHERE source_message_id = ?').get(messageId) as
+        { userId: string } | undefined)?.userId ?? null,
+    );
+
+    it('stores a message from a user homed on the sending peer as that user', async () => {
+      const id = nextId('create-alice');
+      const res = await relay([build(id, aliceActor(), 'alice')]);
+      expect(res.body?.accepted).toContain(id);
+      expect(authorOf(id)).toBe(aliceOnB);
+    });
+
+    it('refuses a message whose author is not a user of the sending peer, and creates no user for it', async () => {
+      const id = nextId('create-bob');
+      const res = await relay([build(id, claimedOnA(bob), 'bob')]);
+      expect(res.status).toBe(200);
+      expect(res.body?.accepted).toEqual([]);
+      expect(rejectionReason(res, id)).toBe('attribution_mismatch');
+      expect(authorOf(id)).toBeNull();
+      expect(stubsCarrying(bob.id)).toBe(0);
+    });
+  });
+
+  describe('friend_request_create', () => {
+    const build = (id: string, from: Actor): FederationRelayEvent => ({
+      eventType: 'friend_request_create',
+      contextType: 'friend',
+      messageId: id,
+      encryptionVersion: 0,
+      timestamp: Date.now(),
+      friendship: {
+        from,
+        to: { homeUserId: dave.id, homeInstance: B.domain },
+        fromProfile: { username: 'someone' },
+        status: 'pending',
+        createdAt: Date.now(),
+      },
+    });
+
+    it('records a request from a user homed on the sending peer as theirs', async () => {
+      const id = nextId('request-alice');
+      const res = await relay([build(id, aliceActor())]);
+      expect(res.body?.accepted).toContain(id);
+      expect(pendingRequestExists(aliceOnB, dave.id)).toBe(true);
+    });
+
+    it('refuses a request whose sender is not a user of the sending peer', async () => {
+      const id = nextId('request-bob');
+      const res = await relay([build(id, claimedOnA(bob))]);
+      expect(res.status).toBe(200);
+      expect(res.body?.accepted).toEqual([]);
+      expect(rejectionReason(res, id)).toBe('attribution_mismatch');
+      expect(pendingRequestExists(bob.id, dave.id)).toBe(false);
+    });
+  });
+});
+
+/**
+ * The client routes that take a `homeUserId` + `homeInstance` pair resolve it
+ * through the same identity lookup. A client names a user native to this
+ * instance with this instance's own domain (the `homeInstance` its row has on
+ * any other instance), bare or as a URL; that must still reach the native user.
+ * The same id named as homed on another instance is a different identity and
+ * must not.
+ */
+describe('client routes: a homeUserId + homeInstance pair reaches the user it names', () => {
+  async function call(method: string, pathname: string, token: string, body?: unknown): Promise<Response> {
+    return fetch(`${B.origin}${pathname}`, {
+      method,
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+  }
+  const membersOf = (dmChannelId: string): string[] => readDb(B, db =>
+    (db.prepare('SELECT user_id AS userId FROM dm_members WHERE dm_channel_id = ?').all(dmChannelId) as { userId: string }[])
+      .map(r => r.userId).sort(),
+  );
+
+  it('POST /api/dm reaches a native user named with this instance\'s domain, bare or as a URL', async () => {
+    const bare = await call('POST', '/api/dm', carol.token, { homeUserId: bob.id, homeInstance: B.domain });
+    expect(bare.ok).toBe(true);
+    const dmId = (await bare.json() as { id: string }).id;
+    expect(membersOf(dmId)).toEqual([bob.id, carol.id].sort());
+
+    const url = await call('POST', '/api/dm', carol.token, { homeUserId: bob.id, homeInstance: identityOrigin(B) });
+    expect(url.ok).toBe(true);
+    expect((await url.json() as { id: string }).id).toBe(dmId);
+    expect(stubsCarrying(bob.id)).toBe(0);
+  });
+
+  it('POST /api/dm does not reach a native user when the id is named as homed on another instance', async () => {
+    const res = await call('POST', '/api/dm', carol.token, { homeUserId: bob.id, homeInstance: A.domain });
+    expect(res.status).toBe(404);
+    expect((await res.json() as { code?: string }).code).toBe('user_not_found');
+    expect(stubsCarrying(bob.id)).toBe(0);
+  });
+
+  it('group routes: create, add, kick and transfer reach native users named by pair', async () => {
+    befriend(carol.id, bob.id);
+    befriend(carol.id, dave.id);
+    befriend(carol.id, erin.id);
+
+    const created = await call('POST', '/api/dm/group', carol.token, {
+      users: [
+        { id: bob.id, homeUserId: bob.id, homeInstance: B.domain },
+        { id: dave.id, homeUserId: dave.id, homeInstance: identityOrigin(B) },
+      ],
+    });
+    expect(created.status).toBe(201);
+    const groupId = (await created.json() as { id: string }).id;
+    expect(membersOf(groupId)).toEqual([bob.id, carol.id, dave.id].sort());
+
+    const added = await call('POST', `/api/dm/${groupId}/members`, carol.token, { homeUserId: erin.id, homeInstance: B.domain });
+    expect(added.ok).toBe(true);
+    expect(membersOf(groupId)).toContain(erin.id);
+
+    const refusedAdd = await call('POST', `/api/dm/${groupId}/members`, carol.token, { homeUserId: erin.id, homeInstance: A.domain });
+    expect(refusedAdd.status).toBe(404);
+
+    const kicked = await call('DELETE', `/api/dm/${groupId}/members/${erin.id}?homeInstance=${encodeURIComponent(B.domain)}`, carol.token);
+    expect(kicked.ok).toBe(true);
+    expect(membersOf(groupId)).not.toContain(erin.id);
+
+    const transferred = await call('POST', `/api/dm/${groupId}/transfer`, carol.token, { homeUserId: bob.id, homeInstance: B.domain });
+    expect(transferred.ok).toBe(true);
+    expect(readDb(B, db =>
+      (db.prepare('SELECT owner_id AS ownerId FROM dm_channels WHERE id = ?').get(groupId) as { ownerId: string }).ownerId,
+    )).toBe(bob.id);
+    expect(stubsCarrying(bob.id)).toBe(0);
+    expect(stubsCarrying(erin.id)).toBe(0);
   });
 });
