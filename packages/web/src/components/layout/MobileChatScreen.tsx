@@ -6,7 +6,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { MessageList } from '../chat/MessageList';
 import { MessageInput } from '../chat/MessageInput';
 import { TransferIndicator } from './TransferIndicator';
-import { parseFederatedUsername } from '../../utils/identity';
+import { userDisplayName } from '../../utils/identity';
 import { formatDmHeaderName, formatDmInputLabel, isDeletedPartnerDm } from '../../utils/dmFormatters';
 import { DmDeletedNotice } from '../chat/DmDeletedNotice';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
@@ -62,10 +62,7 @@ export function MobileChatScreen({ params }: MobileChatScreenProps) {
       channelName = formatDmHeaderName(dm, authUser);
       inputPlaceholder = `Message ${formatDmInputLabel(dm, authUser)}`;
     } else if (rawMainOther) {
-      channelName =
-        canonicalMainOther.displayName ??
-        parseFederatedUsername(canonicalMainOther.username).baseName ??
-        'Direct Message';
+      channelName = userDisplayName(canonicalMainOther);
       // Use the canonical `channelName` directly so header + placeholder stay
       // aligned even when the raw partner and canonical view disagree.
       inputPlaceholder = `Message @${channelName}`;

@@ -19,7 +19,7 @@ import { useVoiceStore } from '../../stores/voiceStore';
 import { wsSend } from '../../hooks/useWebSocket';
 import { MemberListToggleButton } from './MemberListToggleButton';
 import { TransferIndicator } from './TransferIndicator';
-import { isSelf, parseFederatedUsername, isFederationGlobeApplicable } from '../../utils/identity';
+import { isSelf, isFederationGlobeApplicable, userDisplayName } from '../../utils/identity';
 import { formatDmHeaderName, formatDmInputLabel, isDeletedPartnerDm } from '../../utils/dmFormatters';
 import { DmDeletedNotice } from '../chat/DmDeletedNotice';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
@@ -202,13 +202,12 @@ export function MainContent() {
     // Use the canonicalized view of the 1-on-1 partner (resolved above the
     // conditional so the hook is called unconditionally).
     const firstOther = _rawFirstOther ? _canonicalFirstOther : (otherMembers[0] ?? null);
-    const { baseName: firstBaseName } = parseFederatedUsername(firstOther?.username ?? '');
     // Group DMs route through `formatDmHeaderName` (honors `dm.name`, falls
     // back to joined member names); 1-on-1 DMs keep the canonical-view path
     // so replicated aliases still surface the home-instance display name.
     const dmName = isGroupDm && dmChannel
       ? formatDmHeaderName(dmChannel, authUser)
-      : (firstOther?.displayName ?? (firstBaseName || t('spaces:main.dm.fallbackName')));
+      : ((firstOther && userDisplayName(firstOther)) || t('spaces:main.dm.fallbackName'));
     // Message-input placeholder — groups use `formatDmInputLabel` which
     // collapses unnamed groups to "the group" so the textarea doesn't render
     // "Message #Alice, Bob, Charlie, Dave". 1-on-1 reuses the canonical

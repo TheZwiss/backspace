@@ -385,6 +385,16 @@ describe('FriendsPage', () => {
     });
   });
 
+  describe('Friend names', () => {
+    it('names a friend with an empty display name by their username', async () => {
+      const user = userEvent.setup();
+      useSocialStore.setState({ friends: [makeFriend({ username: 'dmpal@orbit.test', displayName: '' })], requests: [] });
+      renderFriendsPage();
+      await user.click(screen.getByText('All'));
+      expect(screen.getByText('dmpal')).toBeInTheDocument();
+    });
+  });
+
   describe('Cancel outgoing friend request', () => {
     it('calls cancelFriendRequest when clicking cancel on an outgoing request', async () => {
       const user = userEvent.setup();

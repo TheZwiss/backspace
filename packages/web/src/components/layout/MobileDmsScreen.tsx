@@ -12,7 +12,7 @@ import { AvatarStack } from '../ui/AvatarStack';
 import { Mascot } from '../ui/Mascot';
 import { resolveAssetUrl } from '../../utils/assetUrls';
 import { useNavigate } from 'react-router-dom';
-import { parseFederatedUsername, isFederationGlobeApplicable, isSelf } from '../../utils/identity';
+import { parseFederatedUsername, isFederationGlobeApplicable, isSelf, userDisplayName } from '../../utils/identity';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { formatDmSidebarPreview, formatDmHeaderName } from '../../utils/dmFormatters';
 import type { DmChannel, User } from '@backspace/shared';
@@ -35,7 +35,7 @@ function MobileFriendBubble({
   const avatarUrl = canonical.avatar
     ? resolveAssetUrl(canonical.avatar, friend._instanceOrigin) ?? `/api/uploads/${canonical.avatar}`
     : null;
-  const displayName = canonical.displayName ?? parseFederatedUsername(canonical.username).baseName;
+  const displayName = userDisplayName(canonical);
 
   return (
     <button
@@ -96,7 +96,7 @@ function MobileDmRow({
   // keep the canonical view of the single other member.
   const name = isGroup
     ? formatDmHeaderName(dm, authUser ?? null)
-    : mainUser?.displayName ?? (parseFederatedUsername(mainUser?.username ?? '').baseName || t('common:states.unknown'));
+    : (mainUser && userDisplayName(mainUser)) || t('common:states.unknown');
 
   // Show a single federation globe next to the group name when any non-self
   // member is federated. No tooltip on mobile — the new `group-dm-info` screen
