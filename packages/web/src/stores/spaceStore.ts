@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { Space, Channel, ChannelCategory, MemberWithUser, SpaceWithChannelsAndMembers, Role, SpaceFolder, SpaceLayoutItem, DmChannel, User, UpdateSpaceRequest, CreateSpaceRequest, UpdateChannelRequest } from '@backspace/shared';
 import { api, BackspaceApiClient } from '../api/client';
 import { resolveAssetUrl, normalizeUserAssets } from '../utils/assetUrls';
-import { isSelf, canonicalUserKey, isDeliveryFromHome } from '../utils/identity';
+import { isSelf, canonicalUserKey, isDeliveryFromHome, activityKey, type PresenceSubject } from '../utils/identity';
 import { sortDmChannels } from '../utils/dmSorting';
 import { locateDmChannel } from '../utils/dmChannelLookup';
 import { deriveMissingOneOnOneKeys, type ListedDmChannel } from '../utils/dmConversationKey';
@@ -230,7 +230,12 @@ interface SpaceState {
   updateChannelLayout: (spaceId: string, data: { channels: Array<{ id: string; position: number; categoryId: string | null }>; categories: Array<{ id: string; position: number }> }) => Promise<void>;
   addSpace: (space: Space) => void;
   removeSpace: (spaceId: string) => void;
-  updateMemberPresence: (userId: string, status: string) => void;
+  /**
+   * Set the status of the person `subject` names, as `origin` delivered it,
+   * wherever the client shows them: roster rows and cached views, matched by
+   * `activityKey` (their home identity), never by a raw row id.
+   */
+  updateMemberPresence: (subject: PresenceSubject, origin: string, status: string) => void;
   updateUserEverywhere: (user: User) => void;
   addMember: (member: MemberWithUser) => void;
   removeMember: (userId: string) => void;
@@ -892,26 +897,35 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     }
   },
 
-  updateMemberPresence: (userId: string, status: string) => {
+  updateMemberPresence: (subject: PresenceSubject, origin: string, status: string) => {
+    const key = activityKey(subject, origin);
     set((state) => {
       const typedStatus = status as 'online' | 'idle' | 'dnd' | 'offline';
       // Mirror the status into the userViews cache so any component reading via
       // useCanonicalUserView (e.g. the FriendItem avatar dot) re-renders with
       // fresh status — not just spaceStore.members which only feeds space UIs.
-      // Match by user.id and user.homeUserId to catch both native rows and
-      // replicated stubs whose canonicalUserKey resolves to the canonical id.
+      // Each entry is keyed as the origin that delivered it saw the user.
       let nextUserViews = state.userViews;
-      for (const [key, entry] of state.userViews) {
-        const u = entry.user;
-        if (u.id === userId || u.homeUserId === userId) {
-          if (nextUserViews === state.userViews) nextUserViews = new Map(state.userViews);
-          nextUserViews.set(key, { ...entry, user: { ...u, status: typedStatus } });
-        }
+      for (const [viewKey, entry] of state.userViews) {
+        if (activityKey(entry.user, entry.deliveredBy) !== key) continue;
+        if (nextUserViews === state.userViews) nextUserViews = new Map(state.userViews);
+        nextUserViews.set(viewKey, { ...entry, user: { ...entry.user, status: typedStatus } });
       }
+
+      // A roster row is keyed as its space's origin issued it.
+      const spaceOrigins = new Map<string, string>();
+      const spaceOriginOf = (spaceId: string): string => {
+        let spaceOrigin = spaceOrigins.get(spaceId);
+        if (spaceOrigin === undefined) {
+          spaceOrigin = state.spaces.find(s => s.id === spaceId)?._instanceOrigin ?? '';
+          spaceOrigins.set(spaceId, spaceOrigin);
+        }
+        return spaceOrigin;
+      };
 
       return {
         members: state.members.map(m =>
-          m.userId === userId ? { ...m, user: { ...m.user, status: typedStatus } } : m
+          activityKey(m.user, spaceOriginOf(m.spaceId)) === key ? { ...m, user: { ...m.user, status: typedStatus } } : m
         ),
         userViews: nextUserViews,
       };

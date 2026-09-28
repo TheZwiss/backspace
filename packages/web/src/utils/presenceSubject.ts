@@ -1,7 +1,7 @@
 import type { Activity, DmChannel, PresenceIdentity, SpaceWithChannelsAndMembers } from '@backspace/shared';
 import { useSocialStore } from '../stores/socialStore';
 import { useSpaceStore } from '../stores/spaceStore';
-import type { ActivityEntry } from '../stores/activityStore';
+import { useActivityStore, type ActivityEntry } from '../stores/activityStore';
 import type { PresenceSubject } from './identity';
 
 /**
@@ -13,8 +13,10 @@ import type { PresenceSubject } from './identity';
  * A server that predates those fields sends only its own row id. For that
  * case the identity comes from a row the client already holds for the same
  * (id, origin): a friend, a member of a loaded space or a DM member delivered
- * by that origin. A row the client does not hold is taken as native to the
- * delivering instance, which is what an unannotated id there usually is.
+ * by that origin, or a member that origin's last `ready` listed (any of its
+ * spaces, open or not; `readyRowIndex`). A row the client does not hold is
+ * taken as native to the delivering instance, which is what an unannotated id
+ * there usually is.
  */
 
 /** The subject of a `presence_update`, from its fields or, for an older server, from known rows. */
@@ -45,6 +47,9 @@ function knownSubject(userId: string, origin: string): PresenceSubject {
     if (member) return member;
   }
 
+  const listed = useActivityStore.getState().originRows.get(origin)?.get(userId);
+  if (listed) return listed;
+
   return { id: userId };
 }
 
@@ -74,6 +79,21 @@ export function readyActivityEntries(event: {
     entries.push({ subject: payloadRows.get(id) ?? { id }, activities });
   }
   return entries;
+}
+
+/**
+ * The rows a `ready` from a server that predates the identity fields lists
+ * (every member of every space, every DM member), for `presenceSubjectOf` to
+ * name that server's later row-id-only presence by. Null for a current
+ * server: its events name the identity themselves.
+ */
+export function readyRowIndex(event: {
+  userActivityIdentities?: Record<string, PresenceIdentity>;
+  spaces: SpaceWithChannelsAndMembers[];
+  dmChannels: DmChannel[];
+}): Map<string, PresenceSubject> | null {
+  if (event.userActivityIdentities) return null;
+  return readyRows(event);
 }
 
 function readyRows(event: { spaces: SpaceWithChannelsAndMembers[]; dmChannels: DmChannel[] }): Map<string, PresenceSubject> {

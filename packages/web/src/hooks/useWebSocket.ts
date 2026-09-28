@@ -16,7 +16,7 @@ import { ownStatusReport, statusToAssertOnRemote } from '../utils/selfStatus';
 import { getActiveRoom } from './useLiveKit';
 import { useUIStore } from '../stores/uiStore';
 import { useActivityStore } from '../stores/activityStore';
-import { presenceSubjectOf, readyActivityEntries } from '../utils/presenceSubject';
+import { presenceSubjectOf, readyActivityEntries, readyRowIndex } from '../utils/presenceSubject';
 import { useDiscoverStore } from '../stores/discoverStore';
 import { useFederationStore } from '../stores/federationStore';
 import { detectClientKind } from '../platform/clientKind';
@@ -165,6 +165,18 @@ export function teardownDmCall(): void {
   voice.clearFederatedCallData();
   // Never tear down a space voice connection in response to a DM-call signal.
   if (voice.disconnectFn && !voice.currentVoiceChannelId) voice.disconnectFn();
+}
+
+/**
+ * Whether `spaceId`, as `origin` issued it, is the space whose roster
+ * `spaceStore.members` holds: the open space (`loadSpaceDetail` sets both).
+ * `members` is one space's roster, so a join or leave in any other space, or
+ * in a space of the same id on another instance, is not about it.
+ */
+function isLoadedRosterSpace(spaceId: string, origin: string): boolean {
+  const { currentSpaceId, spaces } = useSpaceStore.getState();
+  if (spaceId !== currentSpaceId) return false;
+  return (spaces.find(s => s.id === spaceId)?._instanceOrigin ?? '') === origin;
 }
 
 function handleEvent(origin: string, event: ServerEvent): void {
@@ -320,9 +332,14 @@ function handleEvent(origin: string, event: ServerEvent): void {
           setVoiceChannelElapsedSeconds(channelId, elapsedSeconds);
         }
       }
-      // Initialize activity data from ready payload
-      if (event.userActivities) {
-        useActivityStore.getState().initActivities(readyActivityEntries(event), origin);
+      // Activity data from the ready payload: this origin's full snapshot,
+      // replacing whatever it reported before the reconnect.
+      {
+        const olderServerRows = readyRowIndex(event);
+        useActivityStore.getState().setOriginRows(origin, olderServerRows);
+        if (event.userActivities) {
+          useActivityStore.getState().initActivities(readyActivityEntries(event), origin, olderServerRows);
+        }
       }
       if (event.user.showActivity !== undefined) {
         useActivityStore.setState({ showActivity: event.user.showActivity });
@@ -599,10 +616,12 @@ function handleEvent(origin: string, event: ServerEvent): void {
       // another device (utils/selfStatus.ts); feeds the alert gate.
       const report = ownStatusReport(useAuthStore.getState().user, { origin, isHome }, event);
       if (report) useAuthStore.getState().applyOwnStatus(report);
-      updateMemberPresence(event.userId, event.status);
-      // Friends and activities are keyed by the subject's home identity, so a
-      // replicated row's delivery and the home's native delivery agree (#340).
+      // Members, friends and activities are keyed by the subject's home
+      // identity, so a replicated row's delivery and the home's native
+      // delivery agree (#340), and a same-id row of another instance is not
+      // mistaken for them.
       const subject = presenceSubjectOf(event, origin);
+      updateMemberPresence(subject, origin, event.status);
       useSocialStore.getState().updateFriendPresence(subject, origin, event.status);
       if (event.activities) {
         useActivityStore.getState().setUserActivities(subject, origin, event.activities);
@@ -734,11 +753,11 @@ function handleEvent(origin: string, event: ServerEvent): void {
     case 'member_joined':
       if (!isHome) normalizeUserAssets(event.member.user, origin);
       upsertUserView(event.member.user, origin);
-      addMember(event.member);
+      if (isLoadedRosterSpace(event.spaceId, origin)) addMember(event.member);
       break;
 
     case 'member_left':
-      removeMember(event.userId);
+      if (isLoadedRosterSpace(event.spaceId, origin)) removeMember(event.userId);
       break;
 
     case 'member_banned': {
