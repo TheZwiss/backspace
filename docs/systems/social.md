@@ -357,7 +357,7 @@ The wire format of the queued event is identical to the pre-2026-04-25 flow; onl
 
 ### Failure Handling: Async Rollback
 
-When the outbox worker receives a relay response from the remote instance, it classifies each rejected entry. A configurable set of **terminal rejection reasons** (`TERMINAL_REJECTION_REASONS` in `federationWorker.ts`) causes an outbox entry to be deleted with no retry: `duplicate`, `recipient_not_found`, `attribution_mismatch`, `unknown_event_type`, `self_target_invalid`. Any other reason (for example `attribution_unproven`, see [federation.md §3](federation.md#3-identity-resolution)) keeps the request pending while the outbox retries it on backoff.
+When the outbox worker receives a relay response from the remote instance, it classifies each rejected entry. A configurable set of **terminal rejection reasons** (`TERMINAL_REJECTION_REASONS` in `federationWorker.ts`) causes an outbox entry to be deleted with no retry: `duplicate`, `recipient_not_found`, `attribution_mismatch`, `unknown_event_type`, `self_target_invalid`, `not_message_author`, `invalid_target` (a `friend_add` answering no pending request is `invalid_target`). Any other reason (for example `attribution_unproven`, see [federation.md §3](federation.md#3-identity-resolution)) keeps the request pending while the outbox retries it on backoff.
 
 For non-`duplicate` terminals, the worker invokes the registered permanent-failure callback via `invokePermanentFailureCallback(eventType, messageId, reason)` from `utils/federationRollback.ts`. For `friend_request_create`, this is **`rollbackFriendRequestCreate`**:
 
@@ -380,11 +380,11 @@ The client handler in `useWebSocket.ts` removes the row from `socialStore` and s
 
 **Inbound (`federation.ts:processFriendRequestUpdateEvent`):**
 1. **Authority:** `to.homeInstance === sourceInstance` -- the recipient's instance sends the update
-2. **Resolve sender:** `resolveLocalUser(from.homeUserId)` -- must be local (they sent the original request from this instance)
-3. **Resolve recipient:** `resolveOrCreateReplicatedUser(to.homeUserId, to.homeInstance)` -- create stub if needed
+2. **Resolve sender:** `resolveRelayActor(from)`, by `homeUserId` + `homeInstance` -- the user that IS that identity here (they sent the original request from this instance), never a row that only shares the `homeUserId`. Not found (or a `mismatch`) -> reject `sender_not_found`
+3. **Resolve recipient:** `resolveRelayActor(to)`, by pair; nothing is created. Not found -> accept without effect (no pending request can exist for a user this instance does not hold)
 4. **Find pending request:** Matches `fromId = fromUser.id`, `toId = toUser.id`, `status = 'pending'`
-5. If no pending request found -> accept idempotently (friend_add may have arrived first)
-6. Update request status
+5. If no pending request found -> accept idempotently (friend_add may have arrived first, or the request was cancelled); nothing changes
+6. Update request status. If `accepted`, insert the `friends` row in the same transaction (unless one exists): the acceptance answers the local sender's pending request, so the friendship forms here whether `friend_request_update` or `friend_add` arrives first
 7. **WS broadcast:** `friend_request_accepted` (with Friend payload) or `friend_request_declined` sent to local sender
 
 ### End-to-End Relay Flow: Friend Request Cancel
@@ -404,13 +404,17 @@ The client handler in `useWebSocket.ts` removes the row from `socialStore` and s
 **Outbound:** Queued alongside `friend_request_update` (accepted) from `social.ts:PATCH`.
 
 **Inbound (`federation.ts:processFriendAddEvent`):**
+
+**Rule:** a `friend_add` is the acceptor's answer to a request, so it forms a friendship only for a pair this instance holds a pending request for, from `from` (the requester) to `to` (the acceptor). The requester's home writes that row when the request is made, in the same transaction that queues `friend_request_create` (Section 6, step 9), so it exists before any answer can arrive, including when the peer was unreachable and the create waited in the outbox. The recipient's `PATCH` queues `friend_request_update` before `friend_add`, and the outbox delivers in that order; the update then forms the friendship (see above) and the `friend_add` is the idempotent case. When the `friend_add` arrives first it finds the pending row and forms it. A request in the other direction (`to` -> `from`), an answered request after the friendship was removed, or no request at all never satisfies the rule.
+
 1. **Authority:** `to.homeInstance === sourceInstance` -- the accepting side creates the friendship
-2. **Resolve both users:** `resolveOrCreateReplicatedUser()` for both, hydrate profiles from snapshots
+2. **Resolve both users:** `resolveRelayActor()` for both, by `homeUserId` + `homeInstance`. Nothing is created: a pair with a pending request already exists here
 3. **Idempotency:** If friendship row already exists, accept as no-op
-4. Insert `friends` row
-5. **Auto-resolve pending requests:** Updates any pending request between these users to `'accepted'` (handles friend_add arriving before friend_request_update due to delivery ordering)
-6. **Determine local user:** Compare `from.homeInstance` against `getOurOrigin()` to find who is local
-7. **WS broadcast:** `friend_request_accepted` sent to local user with remote user's profile (uses empty string for `requestId` since the original request may not exist locally yet)
+4. **Pending request:** a `friend_requests` row `fromId = fromUser.id`, `toId = toUser.id`, `status = 'pending'` must exist, else reject `invalid_target` (terminal; nothing changes, no stub is created)
+5. Hydrate both profiles from the snapshots
+6. **One transaction:** insert the `friends` row and set any pending request between the pair (either direction) to `'accepted'`
+7. **Determine local user:** Compare `from.homeInstance` against `getOurOrigin()` to find who is local
+8. **WS broadcast:** `friend_request_accepted` sent to local user with remote user's profile and the answered request's id as `requestId`
 
 ### End-to-End Relay Flow: Friend Remove
 

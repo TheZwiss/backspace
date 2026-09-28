@@ -90,7 +90,7 @@
   },
   "packages/server/src/routes/federation/events/friends.ts": {
     "prefer-const": {
-      "count": 3
+      "count": 1
     }
   },
   "packages/server/src/routes/federation/events/membership.ts": {
