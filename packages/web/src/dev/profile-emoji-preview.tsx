@@ -33,7 +33,6 @@ import { UserProfilePopout } from '../components/ui/UserProfilePopout';
 import { UserProfileModal } from '../components/modals/UserProfileModal';
 import { ActivityCard } from '../components/ui/ActivityCard';
 import { Avatar } from '../components/ui/Avatar';
-import { Username } from '../components/ui/Username';
 import { MarkdownRenderer } from '../components/chat/MarkdownRenderer';
 import { useAuthStore } from '../stores/authStore';
 import { useUIStore } from '../stores/uiStore';
@@ -114,7 +113,7 @@ function Rows({ user }: { user: User }) {
         <div className="flex items-center gap-2.5 px-2 py-1.5 rounded-[4px]">
           <Avatar src={null} name={displayName} size={32} status="online" user={user} />
           <div className="flex-1 min-w-0">
-            <Username username={displayName} className="text-[13.5px] leading-[1.2] font-medium truncate text-txt-primary" />
+            <span className="text-[13.5px] leading-[1.2] font-medium truncate text-txt-primary">{displayName}</span>
             <ActivityCard activities={[]} fallbackCustomStatus={user.customStatus} />
           </div>
         </div>

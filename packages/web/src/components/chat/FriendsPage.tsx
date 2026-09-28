@@ -24,7 +24,6 @@ import { parseFederatedUsername, isFederationGlobeApplicable } from '../../utils
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { friendRequestTarget } from '../../utils/friendRequestTarget';
 import { replaceEmojiShortcodes } from '../../utils/emojiShortcodes';
-import { Username } from '../ui/Username';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { presenceLabel } from '../../i18n/presence';
 
@@ -78,10 +77,7 @@ function ActivityFriendItem({
         avatarColor={canonical.avatarColor}
       />
       <div className="flex-1 min-w-0">
-        <Username
-          username={friendDisplayName}
-          className={`text-sm leading-[1.2] font-medium truncate ${isOffline ? 'text-txt-tertiary' : 'text-txt-primary'}`}
-        />
+        <span className={`text-sm leading-[1.2] font-medium truncate ${isOffline ? 'text-txt-tertiary' : 'text-txt-primary'}`}>{friendDisplayName}</span>
         {!isOffline && isFederationGlobeApplicable(canonical) && (
           <div className="text-[10px] leading-[1.3] text-txt-tertiary truncate opacity-60">@{parseFederatedUsername(canonical.username).domain}</div>
         )}

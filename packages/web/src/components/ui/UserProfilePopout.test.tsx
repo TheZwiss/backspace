@@ -101,6 +101,17 @@ describe('UserProfilePopout', () => {
     expect(closed).toBe(true);
   });
 
+  it('shows a display name that contains "@" in full, and splits only the username', () => {
+    const user: User = { ...makeUser(), displayName: 'ada@work', username: 'ada' };
+    const { container } = render(
+      <MemoryRouter>
+        <UserProfilePopout user={user} onClose={() => {}} anchor={anchorAt(300, 200)} />
+      </MemoryRouter>,
+    );
+    expect(container.textContent).toContain('ada@work');
+    expect(container.textContent).toContain('@ada');
+  });
+
   it('sits beside its anchor', () => {
     const { container } = renderCard(anchorAt(300, 200));
 

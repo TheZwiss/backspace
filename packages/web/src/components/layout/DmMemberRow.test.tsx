@@ -178,6 +178,12 @@ describe('DmMemberRow — visual markers', () => {
     expect(container.textContent).toContain('@orbit.example');
   });
 
+  it('shows a display name that contains "@" in full, without a globe', () => {
+    const { container } = renderRow({ member: makeUser({ displayName: 'kai@work' }) });
+    expect(container.textContent).toContain('kai@work');
+    expect(container.querySelector('svg')).toBeNull();
+  });
+
   it('does NOT render the globe for native members', () => {
     const { container } = renderRow({ member: makeUser() });
     expect(container.querySelector('[data-federation-globe]')).toBeFalsy();

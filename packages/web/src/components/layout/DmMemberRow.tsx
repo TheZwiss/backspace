@@ -2,7 +2,6 @@ import React, { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { User } from '@backspace/shared';
 import { ProfileAvatar } from '../ui/ProfileAvatar';
-import { Username } from '../ui/Username';
 import { Tooltip } from '../ui/Tooltip';
 import { parseFederatedUsername, isFederationGlobeApplicable } from '../../utils/identity';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
@@ -195,12 +194,13 @@ export function DmMemberRow({
 
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5 min-w-0">
-          <Username
-            username={displayName}
+          <span
             className={`text-[13.5px] leading-[1.2] font-medium truncate ${
               isOffline ? 'text-txt-tertiary' : 'text-txt-primary'
             }`}
-          />
+          >
+            {displayName}
+          </span>
           {showGlobe && (
             <Tooltip content={canonical.username} position="top">
               <span data-federation-globe className="inline-flex">

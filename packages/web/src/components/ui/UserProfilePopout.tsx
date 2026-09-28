@@ -179,10 +179,7 @@ export function UserProfilePopout({ user: propUser, onClose, anchor, placement =
 
         {/* Name & info */}
         <div>
-          <Username
-            username={user.displayName ?? baseName}
-            className="text-[16px] font-semibold leading-tight"
-          />
+          <span className="text-[16px] font-semibold leading-tight">{displayName}</span>
           <div className="text-[13px] text-txt-tertiary">
             <Username username={user.username} showAt className="text-[13px] text-txt-tertiary" />
           </div>

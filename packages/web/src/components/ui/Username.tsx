@@ -20,6 +20,12 @@ export function FederationGlobeIcon() {
   );
 }
 
+/**
+ * A username as its owner's instance issued it: a bare handle ("kai") or a
+ * federated one ("kai@orbit.example"), shown as the handle with a globe whose
+ * tooltip is the full name. Only for usernames: a display name is free text
+ * and may contain '@' itself, so callers render it as plain text.
+ */
 export function Username({ username, showAt, className, style }: UsernameProps) {
   const atIndex = username.indexOf('@');
   const prefix = showAt ? '@' : '';

@@ -308,10 +308,7 @@ export function UserProfileModal() {
           />
 
           <div className="mb-3">
-            <Username
-              username={displayName}
-              className="text-[20px] font-bold leading-tight"
-            />
+            <span className="text-[20px] font-bold leading-tight">{displayName}</span>
             <div className="text-[14px] text-txt-tertiary mt-0.5">
               <Username username={user.username} showAt className="text-[14px] text-txt-tertiary" />
             </div>
