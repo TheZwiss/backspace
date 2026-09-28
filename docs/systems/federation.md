@@ -18,9 +18,9 @@ Source files:
 - `packages/server/src/utils/federationOutbox.ts` -- Event queuing, coalescing, relay payload construction, mutation log, participant/target resolution
 - `packages/server/src/utils/federationLookup.ts` -- HMAC-signed remote-user lookups: `lookupRemoteUser` (by username) and `lookupRemoteUserByHomeId` (reverse lookup, used by the stub backfill and `resolveRemoteIdentityForClient`)
 - `packages/server/src/utils/federationPresence.ts` -- S2S presence relay: `queuePresenceRelay`, `snapshotPresenceForPeer` (relationship-scoped), `markPeerStubsOffline`
-- `packages/server/src/utils/federationStubBackfill.ts` -- Renames replicated stubs still named `<homeUserId>@<domain>` by reverse-looking-up the canonical username via the peer
+- `packages/server/src/utils/federationStubBackfill.ts` -- Renames replicated stubs that still carry a placeholder name by reverse-looking-up the canonical username via the peer
 - `packages/server/src/utils/federationClientIdentity.ts` -- `resolveRemoteIdentityForClient`: resolves a `homeUserId` + `homeInstance` pair a local client names in a DM route, asking the home for the username on first contact
-- `packages/server/src/routes/federation/stubName.ts` -- `isIdNamedStub` / `renameIdNamedStub`: the one-time rename of an id-named stub, used by identity resolution, hydration and the backfill
+- `packages/server/src/routes/federation/stubName.ts` -- `isPlaceholderNamedStub` / `renamePlaceholderNamedStub` / `applyPlaceholderRename` / `announceUserUpdated`: the one-time rename of a placeholder-named stub, used by identity resolution, hydration and the backfill; `firstFreeUsername`, the suffix rule creation and rename share
 - `packages/server/src/utils/federationWorker.ts` -- Background workers: outbox delivery, file download, health check, janitor, initial sync
 - `packages/server/src/utils/storageJanitor.ts` -- Federation GC: outbox expiry, mutation log retention, file queue cleanup, DM channel purge
 - `packages/server/src/routes/social.ts` -- Friend request/accept/cancel/remove endpoints that queue federation events
@@ -738,9 +738,9 @@ Two layers of replay protection:
 **`resolveOrCreateReplicatedUser(homeUserId, homeInstance, db, hints?)`** -- `federation.ts`
 - Calls `findFederatedUser` first. If found, backfills `homeUserId` for future fast-path lookups and returns. On a tier-1 `mismatch` it returns `null` and creates nothing: a stub would give one id two identities here.
 - Accepts optional `hints: { username?: string | null }` for tier-2 matching
-- If found and `hints.username` is set, renames a row still named `<homeUserId>@<domain>` (`renameIdNamedStub`, see "Stub Username Backfill")
+- If found and `hints.username` is set, renames a row that still carries a placeholder name (`renamePlaceholderNamedStub`, see "Stub Username Backfill")
 - If not found, creates a stub with `homeInstance` normalized to bare domain via `extractDomain`
-- Collision-safe: appends `_1`, `_2`, ..., `_10` suffix if username exists; after 10 attempts, uses `_<random hex>`
+- Collision-safe (`firstFreeUsername`): appends `_1`, `_2`, ..., `_10` suffix if username exists; after 10 attempts, uses `_<random hex>`
 - **Self-homed guard:** an instance never creates a replicated stub homed at its own identity domain (`getOurIdentityDomain()`, DOMAIN-derived). A live self-reference resolves at tier 1; a self-domain identity reaching the create path is a dead incarnation and resolves to `null`. Wire snapshots may carry `deleted: true` — such identities also resolve to `null` at the create path (existing rows still resolve for historical attribution).
 - **Use when:** You MUST have a valid user ID. Always pass `{ username: profile?.username }` when profile data is available.
 
@@ -750,7 +750,8 @@ Two layers of replay protection:
 - Exception: avatar/banner are overwritten if the current value is a bare filename (not an absolute URL)
 - Resolves bare filenames to `{homeInstance}/api/uploads/{filename}` absolute URLs
 - Sets `displayName` from `profile.displayName || profile.username` -- ensures federated users show a human-readable name instead of `user@instance`
-- Renames a row still named `<homeUserId>@<domain>` to `<profile.username>@<domain>` (`renameIdNamedStub`, see "Stub Username Backfill")
+- Renames a row that still carries a placeholder name to `<profile.username>@<domain>` (`applyPlaceholderRename`, see "Stub Username Backfill")
+- When it changed the row (renamed, or a field filled), sends one `user_updated` with the final row to `collectProfileBroadcastTargetIds` after every field is written (`announceUserUpdated`). A rename by `resolveOrCreateReplicatedUser` just before announced the row without the display name hydration fills; this is the event that carries it. `avatarColor` is written only when it differs, so a snapshot that changes nothing announces nothing
 
 ### Critical Rule
 
@@ -1582,13 +1583,13 @@ The full event payload is stored in both `appendMutationLog` (for sync) and `que
 - Resolve both users via `resolveOrCreateReplicatedUser` + hydrate profiles
 - Insert `friends` row (idempotent)
 - Auto-resolve any pending `friend_requests` to `'accepted'` (handles out-of-order delivery)
-- Determine which user is local (`from.homeInstance === ourOrigin`) and broadcast `friend_request_accepted`
+- Determine which user is local (`isOwnDomain` on `from`'s home domain, so a bare domain and a full origin both match) and broadcast `friend_request_accepted`
 
 **`processFriendRemoveEvent` (`federation.ts:2404`):**
 - Authority check: either `from.homeInstance` or `to.homeInstance` must be `sourceInstance`
 - Both users resolved via `resolveRelayActor`. If either is not found, accept idempotently.
 - Delete `friends` row in both directions
-- Determine local user (whose `homeInstance` is NOT the source) and broadcast `friend_removed`
+- Determine local user (the side whose home domain is ours, `isOwnDomain`) and broadcast `friend_removed`
 
 ---
 
@@ -1701,19 +1702,21 @@ No-op for replicated users (we don't own their presence).
 
 #### Stub Username Backfill
 
-A replicated stub is named `<realname>@<domain>` when a username for the identity is known at creation (`hints.username` in `resolveOrCreateReplicatedUser`), and `<homeUserId>@<domain>` when it is not. The id name is still minted today, not only by rows from before the realname scheme: a client route whose home lookup got no answer, a `dm_call_start` caller (the call payload carries only a display name, which is never used as a username), and any relay whose snapshot lacks a username. Such a row is renamed once, the first time a username for it arrives. Home usernames never change, so the rename is one-way.
+A replicated stub is named `<realname>@<domain>` when a username for the identity is known at creation (`hints.username` in `resolveOrCreateReplicatedUser`), and `<homeUserId>@<domain>` when it is not. The id name is still minted today, not only by rows from before the realname scheme: a client route whose home lookup got no answer, a `dm_call_start` caller (the call payload carries only a display name, which is never used as a username), and any relay whose snapshot lacks a username. Before the call relay stopped passing it, an incoming call from an unknown caller named the row after the caller's display name (`<display name>@<domain>`). Both are placeholder names, and such a row is renamed once, the first time a username for it arrives. Home usernames never change, so the rename is one-way.
 
-**The rename:** `renameIdNamedStub(user, username, db, seed?)` in `routes/federation/stubName.ts`. It applies only when `isIdNamedStub(user)` holds: a replicated row (`password_hash = '!federation-replicated'`, so a federated account's login name is never touched), with a `homeUserId`, not detached (`federation_home_orphaned = 0`), whose username is exactly `<homeUserId>@<homeInstance>`. Collision-safe: when another row holds `<username>@<domain>`, the stub keeps its id name. With a `seed` (the backfill passes the lookup answer) an empty `displayName` is filled with `displayName ?? username` and a differing `status` is taken over. After a rename it broadcasts `user_updated` to `collectProfileBroadcastTargetIds(user.id)`, as `processProfileUpdateEvent` does.
+**Placeholder names:** `isPlaceholderNamedStub(user)` in `routes/federation/stubName.ts` holds for a replicated row (`password_hash = '!federation-replicated'`, so a federated account's login name is never touched), with a `homeUserId`, not detached (`federation_home_orphaned = 0`), whose username ends with `@<homeInstance>` and whose local part is either the `homeUserId` or not shaped like a handle (`[a-z0-9_]+`; registration has accepted only `[a-zA-Z0-9_]` since the first release, so a space, dot, dash, non-ASCII letter or `@` proves it is not the home username). A display-name placeholder that happens to be handle-shaped (display name "kai" for the user `kai_dev`) cannot be told apart from a real handle and is not renamed.
+
+**The rename:** `applyPlaceholderRename(user, username, db, seed?)` writes it; `renamePlaceholderNamedStub` (same arguments) writes it and then announces it. Only a handle-shaped `username` renames a row, so a display name never does. When another row already holds `<username>@<domain>` (a stale replica of an account deleted on its home whose username was registered again, while the deletion never reached this instance), the stub takes the first free `<username>_<n>@<domain>` (`firstFreeUsername`, the rule creation uses), and is then no longer a placeholder: later hints neither retry nor warn. With a `seed` (the backfill passes the lookup answer) an empty `displayName` is filled with `displayName ?? username` and a differing `status` is taken over. The announcement is `announceUserUpdated`: `user_updated` to `collectProfileBroadcastTargetIds(user.id)`, as `processProfileUpdateEvent` does. Hydration renames with `applyPlaceholderRename` and announces once, after it has filled the profile.
 
 **Where it runs:**
 - **Identity resolution.** `resolveOrCreateReplicatedUser` renames the row it finds whenever the caller passes `hints.username`. That covers every relay handler that passes the snapshot's username (DM `create`, membership, friend events), the friend-add route (the hint is the home's lookup answer) and the client DM routes below, without a rename call at each site. The hint carries the same trust as at creation: a stub minted from the same event would have taken that name.
-- **Hydration.** `hydrateReplicatedUserProfile` renames the row when the snapshot carries `username`, after its native-row and detached-row guards.
-- **Client DM routes.** `resolveRemoteIdentityForClient` (`utils/federationClientIdentity.ts`), used by every `routes/dm.ts` route that takes a `homeUserId` + `homeInstance` pair, asks the home (`lookupRemoteUserByHomeId`) for an unknown identity or an id-named row, then resolves with the answer's username and hydrates the answer's profile. A row with its real name costs no network call. The client never supplies a username. A new row is created only for a snowflake-shaped `homeUserId`, and not when the home answers that the user does not exist. The lookup is made only when the domain is an active peer and waits at most `CLIENT_HOME_LOOKUP_TIMEOUT_MS` (2 s), since the client's request is open meanwhile. Without an answer (no active peer yet, unreachable, rate limited, timeout) the row gets the id name, as before, and the same home is not asked about the same id again for 60 s (in-memory, per process); the peer-activation backfill or the first relayed username renames it. See api.md "Naming a remote user".
-- **Backfill worker.** `utils/federationStubBackfill.ts:backfillStubUsernamesForPeer(peerOrigin)` enumerates id-named stubs whose `home_instance` matches the peer's domain, asks the peer via `lookupRemoteUserByHomeId`, and renames with the answer as seed. An answer about a different id is ignored. Idempotent. Hook points:
+- **Hydration.** `hydrateReplicatedUserProfile` renames the row when the snapshot carries `username`, after its native-row and detached-row guards, and announces the row once its fields are filled.
+- **Client DM routes.** `resolveRemoteIdentityForClient` (`utils/federationClientIdentity.ts`), used by every `routes/dm.ts` route that takes a `homeUserId` + `homeInstance` pair, asks the home (`lookupRemoteUserByHomeId`) for an unknown identity or a placeholder-named row, then resolves with the answer's username and hydrates the answer's profile. A row with its real name costs no network call. The client never supplies a username. A new row is created only for a snowflake-shaped `homeUserId`, and not when the home answers that the user does not exist. The lookup is made only when the domain is an active peer (the identity's bare host maps to the peer's stored origin through `resolveOriginFromHostname`, including a peer whose origin carries a port) and waits at most `CLIENT_HOME_LOOKUP_TIMEOUT_MS` (2 s), since the client's request is open meanwhile. Without an answer (no active peer yet, unreachable, rate limited, timeout) the row gets the id name, as before, and the same home is not asked about the same id again for 60 s (in-memory, per process); the peer-activation backfill or the first relayed username renames it. See api.md "Naming a remote user".
+- **Backfill worker.** `utils/federationStubBackfill.ts:backfillStubUsernamesForPeer(peerOrigin)` enumerates placeholder-named stubs whose `home_instance` matches the peer's domain, asks the peer via `lookupRemoteUserByHomeId`, and renames with the answer as seed. An answer about a different id is ignored, and a failed answer for one stub leaves it for the next pass without stopping the others. Idempotent. Hook points:
   - `onPeerActivated` — runs per-peer on every transition to `active` (catches stubs whose home was unreachable on a prior pass).
   - `startupBootstrapSync` — one-shot pass at boot for ALL currently-active peers (not just `lastSyncedAt = 0` first-time peers).
 
-**New endpoint: `POST /api/federation/users/by-home-id`** (HMAC-authenticated, rate-limited 60/min/peer). Body: `{ homeUserId: string }`. Response: `{ found: false }` or `{ found: true, user: { homeUserId, username, profile: { displayName, avatar, avatarColor, banner, bio } } }`. Native non-deleted users only.
+**New endpoint: `POST /api/federation/users/by-home-id`** (HMAC-authenticated, rate-limited 60/min/peer). Body: `{ homeUserId: string }`. Response: `{ found: false }` or `{ found: true, user: { homeUserId, username, profile: { displayName, avatar, avatarColor, banner, bio } } }`. Native non-deleted users only. `lookupRemoteUserByHomeId` reads only an explicit `{ found: false }` as `not_found`; 429 is `rate_limited`, and every other answer (network error, timeout, any other status such as 404 from a peer without the route, a body that is not JSON or not either shape) is `unreachable`. It throws only when the peer row is missing.
 
 ---
 
@@ -2030,6 +2033,8 @@ DM channel hard-delete cascades: reactions, embeds, attachments (DB rows + disk 
 ### Public Origin Override
 
 `PUBLIC_ORIGIN` env (read via `config.publicOrigin`, consumed by `getOurOrigin()` in `utils/federationAuth.ts`) overrides the federation transport URL verbatim, taking precedence over the default `https://${DOMAIN}`. When unset, behaviour is unchanged. Intended for reverse-proxy / dev-without-TLS deployments where the public origin must be advertised explicitly (typically `http://...`) and differs from the bare `DOMAIN` value used for federated identity. The seed-peer integration harness (`seedPeer.ts`) does NOT use this override — see it for why localhost-port instances cannot collapse to a single peer row. The **real-handshake** harness (`realHandshake.ts`) does the opposite: it sets `PUBLIC_ORIGIN` to each instance's ephemeral `http://127.0.0.1:<port>` so the advertised `sourceOrigin` matches the transport, exercising the same path as production.
+
+**A `PUBLIC_ORIGIN` on another hostname than `DOMAIN` is not supported for federation.** A peer keys this instance by the transport origin and cannot map an identity naming the `DOMAIN` host to that row (`resolveOriginFromHostname` matches only the host, or the one active peer on a port-less hostname), so first contact with this instance's users keeps the `<homeUserId>@<domain>` name until a username arrives by relay, and friend-add by that domain dials `https://DOMAIN` instead of the existing peering. A different scheme or a port on the same hostname is supported.
 
 **Handshake `sourceOrigin` honors this override.** `resolveLocalOrigin()` (`routes/federation.ts`) delegates to `getOurOrigin()`, so the origin advertised in the `/peer/accept` handshake body is identical to the `X-Federation-Origin` used for authenticated S2S requests. Using `https://${DOMAIN}` directly (the prior behavior) desynced the responder's peer-row key from the auth origin whenever `PUBLIC_ORIGIN != https://DOMAIN`, causing permanent `403 Not peered`. See "Trust re-establishment contract" (§1).
 
