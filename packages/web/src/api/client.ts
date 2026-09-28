@@ -30,6 +30,7 @@ import type {
   CreateDmMessageRequest,
   Friend,
   FriendRequest,
+  SendFriendRequest,
   DiscoverUser,
   InstanceStreamingLimits,
   InstanceAdminSettings,
@@ -292,7 +293,7 @@ export class BackspaceApiClient {
   readonly social: {
     friends: () => Promise<Friend[]>;
     requests: () => Promise<FriendRequest[]>;
-    sendRequest: (username: string) => Promise<{ success: boolean; requestId?: string }>;
+    sendRequest: (body: SendFriendRequest) => Promise<{ success: boolean; requestId?: string }>;
     updateRequest: (id: string, status: 'accepted' | 'declined') => Promise<{ success: boolean }>;
     removeFriend: (id: string) => Promise<{ success: boolean }>;
     cancelRequest: (id: string) => Promise<{ success: boolean }>;
@@ -666,7 +667,7 @@ export class BackspaceApiClient {
     this.social = {
       friends: () => request<Friend[]>('GET', '/social/friends'),
       requests: () => request<FriendRequest[]>('GET', '/social/requests'),
-      sendRequest: (username: string) => request<{ success: boolean; requestId?: string }>('POST', '/social/requests', { username }),
+      sendRequest: (body: SendFriendRequest) => request<{ success: boolean; requestId?: string }>('POST', '/social/requests', body),
       updateRequest: (id: string, status: 'accepted' | 'declined') =>
         request<{ success: boolean }>('PATCH', `/social/requests/${id}`, { status }),
       removeFriend: (id: string) => request<{ success: boolean }>('DELETE', `/social/friends/${id}`),

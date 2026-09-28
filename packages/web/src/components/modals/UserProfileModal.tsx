@@ -15,6 +15,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { getAvatarGradient, getSpaceGradient, adjustColor, mutedGradient } from '../../utils/gradients';
 import { parseFederatedUsername, isSelf, canonicalUserMatch } from '../../utils/identity';
 import { loadFederatedMutuals, type TaggedMutualFriend, type MutualSpace } from '../../utils/mutuals';
+import { friendRequestTarget } from '../../utils/friendRequestTarget';
 import { presenceLabel } from '../../i18n/presence';
 import { replaceEmojiShortcodes } from '../../utils/emojiShortcodes';
 import { getProfileMember, useProfileMemberRoles } from '../../hooks/useProfileMember';
@@ -209,7 +210,7 @@ export function UserProfileModal() {
   const handleAddFriend = async () => {
     setFriendActionLoading(true);
     try {
-      await sendFriendRequest(user.username);
+      await sendFriendRequest(friendRequestTarget(user, userOrigin));
     } catch (err) {
       addToast(describeError(err), 'warning');
     } finally {

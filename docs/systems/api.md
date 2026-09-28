@@ -212,7 +212,7 @@ DELETE /dm/messages/:id                                             → { succes
 ```
 GET    /social/friends                                    → { friends[] }
 GET    /social/requests                                   → { requests[] }
-POST   /social/requests        { username }               → { success, requestId }
+POST   /social/requests        { username } | { homeUserId, homeInstance, username? } → { success, requestId }
 PATCH  /social/requests/:id    { status: 'accepted'|'declined' } → { request }
 DELETE /social/requests/:id                               → { success } (cancel, sender-only)
 DELETE /social/friends/:id                                → { success }
@@ -222,24 +222,30 @@ GET    /social/search          ?q=                        → { users[] }
 
 ### POST /api/social/requests — routing & error codes
 
-`body.username` may be `bare` (local), `bare@<own host>` (also routed local — server normalizes), or `bare@<remote host>` (federated branch). The client sends the trimmed handle verbatim; all parsing, routing, peering, and remote lookup are server-side.
+The target is named one of two ways (`SendFriendRequest` in `packages/shared/src/types.ts`):
+
+- **By identity:** `homeUserId` + `homeInstance` (bare host or full origin), both required together, else 400 `validation_failed`. Takes precedence over `username`. A `homeInstance` that is this instance's host (port included) or one of its bare domain names (`isOwnDomain`: the origin's host or `DOMAIN`) names a native user here by id (`users.id`, or the `homeUserId` natives carry); anything else is the federated branch with the peer asked by `POST /api/federation/users/by-home-id` instead of `/users/lookup`. The web client uses this for every user it already holds (profile modal, discover and search cards), because a replicated row's `username` is only this instance's label and may be `<homeUserId>@<domain>`, which no peer can look up.
+- **By username:** `bare` (local), `bare@<own host>` (also routed local — server normalizes), or `bare@<remote host>` (federated branch). Used for a typed handle; the client sends it trimmed and verbatim.
+
+Clients that send an identity send `username` alongside: a server that predates the identity fields ignores them and reads `username`. All parsing, routing, peering, and remote lookup are server-side.
 
 | HTTP | error code | When |
 |---|---|---|
 | 200 | (success, idempotent) | Same-direction pending request already exists; returns existing `requestId` |
 | 201 | (success, created) | New friend request created |
-| 400 | `username_required` | Missing/empty/non-string username |
+| 400 | `username_required` | No identity, and a missing/empty/non-string username |
+| 400 | `validation_failed` | Only one of `homeUserId` / `homeInstance`, or either is empty or not a string (`homeUserId` at most 128 characters) |
 | 400 | `cannot_friend_self` | Looked-up identity matches sender |
 | 400 | `invalid_target_domain` | Scheme resolution failed (e.g., non-localhost HTTP target when our scheme is HTTPS) |
 | 403 | `peer_rejected` | Remote instance has rejected federation; admin must intervene |
 | 403 | `not_authoritative_for_sender` | Caller is a federated (replicated) user; should not have reached here |
-| 404 | `user_not_found` | Remote lookup returned 404 (no such user, or tombstoned) |
+| 404 | `user_not_found` | No such local user, or the remote lookup (by name or by home id) found no native user (also tombstoned) |
 | 409 | `already_friends` | Friendship row already exists |
 | 409 | `peer_pending_approval` | Remote admin needs to approve the peering relationship |
 | 409 | `peer_pending_local_admin` | Local instance has `autoAcceptPeering=0` and the user attempted to friend-add a never-peered remote target. The user's own admin must approve before any traffic reaches the wire. Distinct from `peer_pending_approval` (remote admin must approve). See [federation.md → Outbound Peering Gate](federation.md#outbound-peering-gate). |
 | 409 | `peer_pending` | Peer handshake in flight |
 | 409 | `incoming_request_exists` | Opposite-direction pending request exists; response includes `requestId` for deep-link |
-| 429 | `lookup_rate_limited` | Remote `/users/lookup` returned 429; `Retry-After` header forwarded |
+| 429 | `lookup_rate_limited` | Remote `/users/lookup` or `/users/by-home-id` returned 429; `Retry-After` header forwarded |
 | 503 | `peer_unreachable` | Remote instance unreachable (network/timeout/lookup-unreachable) |
 
 ## Search (`routes/search.ts`) — auth required

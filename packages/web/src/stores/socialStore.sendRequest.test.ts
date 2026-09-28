@@ -34,30 +34,35 @@ describe('socialStore.sendFriendRequest — server-side routing (post-S2S)', () 
   });
 
   it('sends bare handle to home API as-is', async () => {
-    const id = await useSocialStore.getState().sendFriendRequest('bob');
+    const id = await useSocialStore.getState().sendFriendRequest({ username: 'bob' });
     expect(homeSendRequest).toHaveBeenCalledOnce();
-    expect(homeSendRequest).toHaveBeenCalledWith('bob');
+    expect(homeSendRequest).toHaveBeenCalledWith({ username: 'bob' });
     expect(id).toBe('req-1');
   });
 
   it('sends @-handle to home API verbatim (server handles routing)', async () => {
-    await useSocialStore.getState().sendFriendRequest('bob@orbit.tld');
-    expect(homeSendRequest).toHaveBeenCalledWith('bob@orbit.tld');
+    await useSocialStore.getState().sendFriendRequest({ username: 'bob@orbit.tld' });
+    expect(homeSendRequest).toHaveBeenCalledWith({ username: 'bob@orbit.tld' });
   });
 
   it('sends @-handle for own host to home API verbatim', async () => {
-    await useSocialStore.getState().sendFriendRequest('bob@local.test');
-    expect(homeSendRequest).toHaveBeenCalledWith('bob@local.test');
+    await useSocialStore.getState().sendFriendRequest({ username: 'bob@local.test' });
+    expect(homeSendRequest).toHaveBeenCalledWith({ username: 'bob@local.test' });
   });
 
   it('trims whitespace before sending', async () => {
-    await useSocialStore.getState().sendFriendRequest('  bob  ');
-    expect(homeSendRequest).toHaveBeenCalledWith('bob');
+    await useSocialStore.getState().sendFriendRequest({ username: '  bob  ' });
+    expect(homeSendRequest).toHaveBeenCalledWith({ username: 'bob' });
+  });
+
+  it('sends an identity to the home API, with the username alongside', async () => {
+    await useSocialStore.getState().sendFriendRequest({ username: 'yoko@orbit.tld', homeUserId: 'yoko-home', homeInstance: 'orbit.tld' });
+    expect(homeSendRequest).toHaveBeenCalledWith({ username: 'yoko@orbit.tld', homeUserId: 'yoko-home', homeInstance: 'orbit.tld' });
   });
 
   it('propagates server errors and sets store.error', async () => {
     homeSendRequest.mockRejectedValueOnce(new Error('user_not_found'));
-    await expect(useSocialStore.getState().sendFriendRequest('nope')).rejects.toThrow('user_not_found');
+    await expect(useSocialStore.getState().sendFriendRequest({ username: 'nope' })).rejects.toThrow('user_not_found');
     expect(useSocialStore.getState().error).toBe('user_not_found');
   });
 });

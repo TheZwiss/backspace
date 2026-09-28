@@ -264,7 +264,7 @@ export type RelayActorResolution =
  * identity domain (`DOMAIN`). They differ only when `PUBLIC_ORIGIN` overrides
  * the transport, and a reference to a native user may carry either.
  */
-function isOwnDomain(domain: string): boolean {
+export function isOwnDomain(domain: string): boolean {
   if (!domain) return false;
   return domain === extractDomain(getOurOrigin()).toLowerCase() || domain === getOurIdentityDomain();
 }

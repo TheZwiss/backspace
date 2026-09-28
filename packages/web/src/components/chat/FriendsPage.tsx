@@ -22,6 +22,7 @@ import { ActivityCard, hasRichActivity, getActivityAccentClass } from '../ui/Act
 import { getPrimaryActivity } from '@backspace/shared/src/activities.js';
 import { parseFederatedUsername, isFederationGlobeApplicable } from '../../utils/identity';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
+import { friendRequestTarget } from '../../utils/friendRequestTarget';
 import { replaceEmojiShortcodes } from '../../utils/emojiShortcodes';
 import { Username } from '../ui/Username';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -542,7 +543,7 @@ function AddFriendTab({
   const handleDirectAdd = async () => {
     setDirectAddLoading(true);
     try {
-      await sendFriendRequest(query.trim());
+      await sendFriendRequest({ username: query.trim() });
       addToast(t('social:request.sent'), 'success');
       setQuery('');
     } catch (err) {
@@ -711,9 +712,8 @@ function UserDiscoverCard({
   const handleSendRequest = async () => {
     setActionLoading(true);
     setError('');
-    const username = user._instanceOrigin ? baseName + '@' + (originLabel ?? '') : baseName;
     try {
-      const requestId = await sendFriendRequest(username);
+      const requestId = await sendFriendRequest(friendRequestTarget(user, user._instanceOrigin));
       onRelationshipChange(user.id, user._instanceOrigin, 'outbound_pending', requestId);
     } catch (err) {
       setError(describeError(err));

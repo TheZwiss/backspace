@@ -7,9 +7,9 @@ import { connectionManager } from '../ws/handler.js';
 import { appendMutationLog, queueOutboxEvent, buildFriendContextId, getFriendEventTargets } from '../utils/federationOutbox.js';
 import { getOurOrigin, normalizeOriginForCompare } from '../utils/federationAuth.js';
 import { ensurePeered } from '../utils/federationPeering.js';
-import { lookupRemoteUser } from '../utils/federationLookup.js';
+import { lookupRemoteUser, lookupRemoteUserByHomeId, type LookupResult } from '../utils/federationLookup.js';
 import { resolveOriginFromHostname } from '../utils/federationOriginResolve.js';
-import { resolveOrCreateReplicatedUser, hydrateReplicatedUserProfile } from './federation.js';
+import { resolveOrCreateReplicatedUser, hydrateReplicatedUserProfile, isOwnDomain } from './federation.js';
 import type { FederationRelayEvent, FederationRelayProfileSnapshot } from '@backspace/shared';
 import type {
   Friend,
@@ -44,19 +44,40 @@ export function buildProfileSnapshot(user: typeof schema.users.$inferSelect): Fe
 
 // ─── Local friend request helper ─────────────────────────────────────────────
 
+/** A user of this instance named by its username (a typed handle's local part). */
+function findLocalUserByUsername(
+  db: ReturnType<typeof getDb>,
+  localUsername: string,
+): typeof schema.users.$inferSelect | undefined {
+  // Match the canonical-lowercase form used by auth (auth.ts:32, 211, 256).
+  return db.select().from(schema.users).where(eq(schema.users.username, localUsername.toLowerCase())).get();
+}
+
+/**
+ * A native user of this instance named by its federated id: the row's own id,
+ * or the `homeUserId` natives carry. The same match `/users/by-home-id` makes
+ * for a peer. Replicated rows are excluded: their local id is not an identity
+ * homed here.
+ */
+function findNativeUserByHomeId(
+  db: ReturnType<typeof getDb>,
+  homeUserId: string,
+): typeof schema.users.$inferSelect | undefined {
+  return db.select().from(schema.users).where(and(
+    eq(schema.users.isDeleted, 0),
+    isNull(schema.users.homeInstance),
+    or(eq(schema.users.id, homeUserId), eq(schema.users.homeUserId, homeUserId)),
+  )).get();
+}
+
 async function handleLocalFriendRequest(
   db: ReturnType<typeof getDb>,
   request: FastifyRequest,
   reply: FastifyReply,
-  localUsername: string,
+  targetUser: typeof schema.users.$inferSelect | undefined,
   sender: typeof schema.users.$inferSelect,
   ourOrigin: string,
 ): Promise<unknown> {
-  // Match the canonical-lowercase form used by auth (auth.ts:32, 211, 256).
-  const lookupUsername = localUsername.toLowerCase();
-
-  // Find the target user
-  const targetUser = db.select().from(schema.users).where(eq(schema.users.username, lookupUsername)).get();
   if (!targetUser) {
     return sendError(reply, 404, 'user_not_found');
   }
@@ -170,17 +191,32 @@ async function handleLocalFriendRequest(
 
 // ─── Federated friend request helper ─────────────────────────────────────────
 
+/**
+ * A user on another instance, as the request names it. `lookup` asks that
+ * instance for its native user: by username for a typed handle, by home id
+ * for an identity the client already holds. Everything after the lookup is
+ * the same for both.
+ */
+interface RemoteFriendTarget {
+  /** Host (and port, if any) of the target's home instance, lowercased. */
+  targetDomain: string;
+  /**
+   * The target's name on its instance, as far as the request tells it. With
+   * `targetDomain` it forms the `name@domain` peering trigger target, which
+   * the Connections panel's Retry puts back into the Add Friend input.
+   */
+  handle: string;
+  lookup: (peerOrigin: string) => Promise<LookupResult>;
+}
+
 async function handleFederatedFriendRequest(
   db: ReturnType<typeof getDb>,
-  request: FastifyRequest,
   reply: FastifyReply,
-  raw: string,
-  atIndex: number,
+  target: RemoteFriendTarget,
   sender: typeof schema.users.$inferSelect,
   ourOrigin: string,
 ): Promise<unknown> {
-  const baseName = raw.slice(0, atIndex).toLowerCase();
-  const targetDomain = raw.slice(atIndex + 1).toLowerCase();
+  const { targetDomain, handle } = target;
 
   // 1. Resolve scheme
   const peerOrigin = resolveOriginFromHostname(targetDomain);
@@ -219,7 +255,7 @@ async function handleFederatedFriendRequest(
     kind: 'user_action',
     userId: sender.id,
     reason: 'friend_add',
-    target: `${baseName}@${targetDomain}`,
+    target: `${handle}@${targetDomain}`,
   });
   if (peering.status === 'rejected') {
     return sendError(reply, 403, 'peer_rejected', { domain: targetDomain });
@@ -243,21 +279,21 @@ async function handleFederatedFriendRequest(
   // peering.status === 'active' — continue
 
   // 3. Lookup — a peer's HTTP/transport failure must never surface as a raw 500
-  // on a user action. lookupRemoteUser already maps peer HTTP failures (403/5xx,
-  // malformed body) to a structured `unreachable`; this try/catch is
-  // defense-in-depth so that any *unexpected* throw (e.g. a missing peer row) is
-  // still returned to the user as a graceful 503 rather than an Internal Server
-  // Error. (BUG-3, 2026-07-02: a desynced peer returned 403 → unhandled throw → 500.)
-  let lookup: Awaited<ReturnType<typeof lookupRemoteUser>>;
+  // on a user action. lookupRemoteUser maps peer HTTP failures (403/5xx,
+  // malformed body) to a structured `unreachable`; lookupRemoteUserByHomeId
+  // throws on them instead. This try/catch returns any throw (those, or e.g. a
+  // missing peer row) to the user as a graceful 503 rather than an Internal
+  // Server Error. (BUG-3, 2026-07-02: a desynced peer returned 403 → unhandled throw → 500.)
+  let lookup: LookupResult;
   try {
-    lookup = await lookupRemoteUser(peerOrigin, baseName);
+    lookup = await target.lookup(peerOrigin);
   } catch (err) {
     console.error(`[social] federated friend-add lookup failed for ${peerOrigin}:`, err);
     return sendError(reply, 503, 'peer_unreachable', { domain: targetDomain });
   }
   if (!lookup.ok) {
     if (lookup.reason === 'not_found') {
-      return sendError(reply, 404, 'user_not_found', { domain: targetDomain, handle: baseName });
+      return sendError(reply, 404, 'user_not_found', { domain: targetDomain, handle });
     }
     if (lookup.reason === 'unreachable') {
       return sendError(reply, 503, 'peer_unreachable', { domain: targetDomain });
@@ -284,7 +320,7 @@ async function handleFederatedFriendRequest(
   const stub = resolveOrCreateReplicatedUser(lookup.homeUserId, targetDomain, db, { username: lookup.username, status: lookup.profile.status });
   if (!stub) {
     // Tombstoned identity — refuse to resurrect.
-    return sendError(reply, 404, 'user_not_found', { domain: targetDomain, handle: baseName });
+    return sendError(reply, 404, 'user_not_found', { domain: targetDomain, handle });
   }
   const stubHydrated = await hydrateReplicatedUserProfile(stub, lookup.profile, db);
 
@@ -384,6 +420,59 @@ async function handleFederatedFriendRequest(
   return reply.code(201).send({ success: true, requestId });
 }
 
+// ─── Request body ─────────────────────────────────────────────────────────────
+
+/** Longest `homeUserId` accepted. Ids are snowflakes or UUIDs. */
+const MAX_HOME_USER_ID_LENGTH = 128;
+
+type ParsedSendFriendRequest =
+  | { kind: 'identity'; homeUserId: string; homeInstance: string; username: string | null }
+  | { kind: 'username'; username: string }
+  | { kind: 'invalid'; code: 'username_required' | 'validation_failed' };
+
+/**
+ * Read the target of `POST /api/social/requests` (`SendFriendRequest`). An
+ * identity (`homeUserId` + `homeInstance`, both required together) takes
+ * precedence over `username`: a client that sends one also sends the username
+ * so that a server predating the identity fields can still serve it.
+ * `homeInstance` is returned normalized (no scheme, lowercased).
+ */
+function parseSendFriendRequest(body: unknown): ParsedSendFriendRequest {
+  const fields: Partial<Record<keyof SendFriendRequest, unknown>> =
+    body !== null && typeof body === 'object' ? body : {};
+  const username = typeof fields.username === 'string' && fields.username.trim()
+    ? fields.username.trim()
+    : null;
+
+  if (fields.homeUserId != null || fields.homeInstance != null) {
+    const homeUserId = typeof fields.homeUserId === 'string' ? fields.homeUserId.trim() : '';
+    const homeInstance = typeof fields.homeInstance === 'string'
+      ? normalizeOriginForCompare(fields.homeInstance)
+      : null;
+    if (!homeUserId || homeUserId.length > MAX_HOME_USER_ID_LENGTH || !homeInstance) {
+      return { kind: 'invalid', code: 'validation_failed' };
+    }
+    return { kind: 'identity', homeUserId, homeInstance, username };
+  }
+
+  if (!username) return { kind: 'invalid', code: 'username_required' };
+  return { kind: 'username', username };
+}
+
+/**
+ * The name to record for an identity-addressed remote target before the peer
+ * has answered: the local part of the username sent alongside, when that
+ * username is on the same instance, else the home id.
+ */
+function handleForIdentity(target: { homeUserId: string; homeInstance: string; username: string | null }): string {
+  const typed = target.username?.toLowerCase() ?? '';
+  const atIndex = typed.lastIndexOf('@');
+  if (atIndex > 0 && normalizeOriginForCompare(typed.slice(atIndex + 1)) === target.homeInstance) {
+    return typed.slice(0, atIndex);
+  }
+  return target.homeUserId;
+}
+
 // ─── Route registration ───────────────────────────────────────────────────────
 
 export async function socialRoutes(app: FastifyInstance): Promise<void> {
@@ -475,15 +564,10 @@ export async function socialRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Body: SendFriendRequest }>('/api/social/requests', {
     preHandler: authenticate,
   }, async (request, reply) => {
-    const { username } = request.body;
     const db = getDb();
 
-    if (!username || typeof username !== 'string') {
-      return sendError(reply, 400, 'username_required');
-    }
-
-    const raw = username.trim();
-    if (!raw) return sendError(reply, 400, 'username_required');
+    const target = parseSendFriendRequest(request.body);
+    if (target.kind === 'invalid') return sendError(reply, 400, target.code);
 
     const sender = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
     if (!sender) return sendError(reply, 401, 'unauthorized');
@@ -498,6 +582,23 @@ export async function socialRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, 403, 'not_authoritative_for_sender');
     }
 
+    if (target.kind === 'identity') {
+      const { homeUserId, homeInstance } = target;
+      // Our host exactly (port included), or one of our own bare domain names.
+      // A host with a port only matches the first: example.com:8443 is not
+      // example.com.
+      const isOwnInstance = homeInstance === ourHost || isOwnDomain(homeInstance);
+      if (isOwnInstance) {
+        return handleLocalFriendRequest(db, request, reply, findNativeUserByHomeId(db, homeUserId), sender, ourOrigin);
+      }
+      return handleFederatedFriendRequest(db, reply, {
+        targetDomain: homeInstance,
+        handle: handleForIdentity(target),
+        lookup: (peerOrigin) => lookupRemoteUserByHomeId(peerOrigin, homeUserId),
+      }, sender, ourOrigin);
+    }
+
+    const raw = target.username;
     const atIndex = raw.lastIndexOf('@');
     const isFederated =
       atIndex > 0 &&
@@ -506,9 +607,14 @@ export async function socialRoutes(app: FastifyInstance): Promise<void> {
 
     if (!isFederated) {
       const localUsername = atIndex > 0 ? raw.slice(0, atIndex) : raw;
-      return handleLocalFriendRequest(db, request, reply, localUsername, sender, ourOrigin);
+      return handleLocalFriendRequest(db, request, reply, findLocalUserByUsername(db, localUsername), sender, ourOrigin);
     }
-    return handleFederatedFriendRequest(db, request, reply, raw, atIndex, sender, ourOrigin);
+    const baseName = raw.slice(0, atIndex).toLowerCase();
+    return handleFederatedFriendRequest(db, reply, {
+      targetDomain: raw.slice(atIndex + 1).toLowerCase(),
+      handle: baseName,
+      lookup: (peerOrigin) => lookupRemoteUser(peerOrigin, baseName),
+    }, sender, ourOrigin);
   });
 
   // PATCH /api/social/requests/:id - Accept/Decline a friend request

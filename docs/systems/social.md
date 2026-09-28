@@ -59,14 +59,13 @@ See `docs/systems/api.md` for full endpoint signatures.
 
 ### Send Friend Request (`POST /api/social/requests`)
 
-**Input:** `{ username: string }`
+**Input:** `SendFriendRequest`: `{ username }` for a typed handle, or `{ homeUserId, homeInstance, username? }` for a user the client already holds. The identity wins when present (both fields required together, else 400 `validation_failed`); the username is sent alongside only so that a server predating the identity fields can still serve the request. See "Addressing the target" below.
 
-**Validation chain:**
-1. Username must be non-empty
-2. Lookup target user by exact username match: `users.username = body.username`
-3. **Self-friendship prevention:** `targetUser.id === request.userId` returns 400
-4. **Already friends check:** Checks `friends` table in both directions (userId/friendId and friendId/userId)
-5. **Duplicate request check:** Checks `friend_requests` for any pending request between the two users in either direction
+**Routing:** a target on another instance goes to the federated flow in Section 6. A local target is found by lowercased username (`bare` or `bare@<own host>`), or, for an identity whose `homeInstance` is this instance, as the native user whose `id` (or native `homeUserId`) is `homeUserId`. Then:
+1. Not found → 404 `user_not_found`
+2. **Self-friendship prevention:** `targetUser.id === request.userId` returns 400 `cannot_friend_self`
+3. **Already friends check:** Checks `friends` table in both directions (userId/friendId and friendId/userId)
+4. **Duplicate request check:** Checks `friend_requests` for any pending request between the two users in either direction
 
 **On success:**
 1. Generates snowflake ID, inserts into `friend_requests` with `status='pending'`
@@ -289,9 +288,22 @@ The sorted join ensures the same pair always produces the same prefix regardless
 
 **Outbound (sender's home instance -- `social.ts:POST /api/social/requests`):**
 
-As of 2026-04-25, the sender's home server owns the entire federated friend-add flow. The client sends `{ username }` verbatim; all parsing, peering, remote lookup, and queueing happen server-side in this strict order:
+As of 2026-04-25, the sender's home server owns the entire federated friend-add flow. The client names the target and never routes it; all parsing, peering, remote lookup, and queueing happen server-side in this strict order.
 
-1. **Parse target.** If `body.username` contains no `@`, or the domain after `@` normalizes to this server's own host, fall through to the local-only path (unchanged).
+#### Addressing the target
+
+A request names its target by **identity** (`homeUserId` + `homeInstance`) or by **username**:
+
+- **Identity** is what the web client sends for every user it already holds: the profile modal's Add Friend and the discover/search cards on the Friends page (`friendRequestTarget` in `packages/web/src/utils/friendRequestTarget.ts`). A replicated row carries its home identity; a user native to the remote instance it was loaded from is that instance's user by its id there. A user native to the home instance is sent by username, which is their handle.
+- **Username** is for a handle the user typed (Add Friend input, and the Connections panel's Retry prefill).
+
+A user object's `username` is not a reliable name for the person: for a replicated stub it is only this instance's label, and a stub minted without a name hint is called `<homeUserId>@<domain>`. Sending that label made the peer's by-name lookup answer 404 `user_not_found`, so a removed federated friend could not be re-added from their profile (issue #339). The identity resolves whatever the stub is called.
+
+The client sends `username` alongside the identity (`name@host` for a federated target). A server that predates the identity fields has no body schema on the route, ignores the unknown fields and serves the username as before.
+
+#### Steps
+
+1. **Parse target.** An identity whose `homeInstance` normalizes to this server's own host (port included) or to one of its bare domain names (`isOwnDomain`), or a `username` with no `@` or whose domain after `@` normalizes to this server's own host, goes to the local-only path. Otherwise the target domain is the identity's `homeInstance` or the typed domain.
 2. **resolveOriginFromHostname(targetDomain)** — resolves the target peer's full origin URL. Prefers a stored `federation_peers` row matching the typed host; falls back to mirroring `getOurOrigin()`'s scheme. Returns null → 400 `invalid_target_domain`.
 2a. **Limbo-window guard → 409 `peer_reset_pending`.** O(1) point lookup on the `federation_reset_events` origin PRIMARY KEY: if an **unresolved** row exists for `peerOrigin` (`origin = peerOrigin AND resolved_at IS NULL`), the peer was reset-detected (wipe-and-reinstall) but the admin has not yet re-peered — the local friendship/stub graph is still bound to the dead incarnation. Return 409 `peer_reset_pending` instead of the confusing `already_friends` (stale friendship) or `peer_rejected` (the `needs_attention` peer would otherwise trip `ensurePeered`). `peerOrigin` is the exact string `markPeerReset` journals (the peer's `federation_peers.origin`), so the match is a single indexed lookup; no reset in progress → one indexed miss → the normal path proceeds unchanged. See `docs/systems/federation.md` (instance-epoch self-healing) and the design spec §5.3. The equivalent guard runs on federated DM-create (`POST /api/dm`, `dm.ts`).
 3. **Authority defense.** If the calling user's `homeInstance` is set and does not normalize to this server's own host (checked via `normalizeOriginForCompare`), return 403 `not_authoritative_for_sender`. Prevents replicated/federated users from queueing relay events the home server isn't authoritative for. Runs before peering to fail fast.
@@ -302,10 +314,12 @@ As of 2026-04-25, the sender's home server owns the entire federated friend-add 
    - `'rejected'` → 403 `peer_rejected`
    - `'failed'` → 503 `peer_unreachable`
    - `'admin_required'` (gate fired locally) → 409 `peer_pending_local_admin` — your own admin must approve before we reach out
-5. **lookupRemoteUser(peerOrigin, baseName)** — POSTs HMAC-signed `{ username }` to `peerOrigin/api/federation/users/lookup`. Result mapping:
+5. **Lookup.** For a username, **lookupRemoteUser(peerOrigin, baseName)** POSTs HMAC-signed `{ username }` to `peerOrigin/api/federation/users/lookup`. For an identity, **lookupRemoteUserByHomeId(peerOrigin, homeUserId)** POSTs `{ homeUserId }` to `peerOrigin/api/federation/users/by-home-id`. Both peer endpoints share the S2S auth preamble and the 60/min per-peer lookup rate limit, and answer only for a live native user. Result mapping:
    - `not_found` → 404 `user_not_found`
-   - `unreachable` → 503 `peer_unreachable`
+   - `unreachable`, or a thrown lookup (by-home-id throws on a non-2xx other than 429) → 503 `peer_unreachable`
    - `rate_limited` → 429 `lookup_rate_limited` (with `Retry-After` header)
+
+   The peering trigger target recorded in step 4 is `name@domain`. For an identity it is the local part of the `username` sent alongside when that username is on the same domain, else the `homeUserId`.
 6. **Self-friend pre-check.** If the looked-up `(homeUserId, peerOrigin)` matches the sender's canonical identity (using `normalizeOriginForCompare` for host comparison) → 400 `cannot_friend_self`.
 7. **resolveOrCreateReplicatedUser + hydrateReplicatedUserProfile** — creates or refreshes the local stub for the remote user. Tombstoned identities (resolveOrCreateReplicatedUser returns null) → 404 `user_not_found`.
 8. **Direction-aware idempotency:**

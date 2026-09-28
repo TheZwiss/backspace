@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import type { User } from '@backspace/shared';
 
@@ -26,6 +26,7 @@ vi.mock('../../utils/mutuals', () => ({
 
 import { UserProfileModal } from './UserProfileModal';
 import { useUIStore } from '../../stores/uiStore';
+import { useSocialStore } from '../../stores/socialStore';
 
 function makeUser(overrides: Partial<User>): User {
   return {
@@ -57,5 +58,34 @@ describe('UserProfileModal', () => {
 
     expect(screen.getByText('praying 🙏')).toBeInTheDocument();
     expect(screen.getByText('Christus aeternus est. ❤️‍🔥')).toBeInTheDocument();
+  });
+
+  it('Add Friend on a federated user sends their home identity, not only the stub username (issue #339)', async () => {
+    // A stub minted without a name hint is called <homeUserId>@<domain>; the
+    // peer cannot find anyone by that name.
+    const stub = makeUser({
+      id: 'stub-local-id',
+      username: '342939417492520960@orbit.test',
+      displayName: 'Yoko',
+      homeUserId: '342939417492520960',
+      homeInstance: 'orbit.test',
+    });
+    const sendFriendRequest = vi.fn().mockResolvedValue('req-1');
+    useSocialStore.setState({ friends: [], requests: [], sendFriendRequest });
+    useUIStore.getState().openModal('userProfile', { userId: stub.id, user: stub, origin: '' });
+
+    render(
+      <MemoryRouter>
+        <UserProfileModal />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByText('Add Friend'));
+
+    await waitFor(() => expect(sendFriendRequest).toHaveBeenCalledOnce());
+    expect(sendFriendRequest).toHaveBeenCalledWith({
+      username: '342939417492520960@orbit.test',
+      homeUserId: '342939417492520960',
+      homeInstance: 'orbit.test',
+    });
   });
 });

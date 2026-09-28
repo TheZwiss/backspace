@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Friend, FriendRequest, User } from '@backspace/shared';
+import type { Friend, FriendRequest, SendFriendRequest, User } from '@backspace/shared';
 import { api } from '../api/client';
 import { useInstanceStore, waitForAutoConnect } from './instanceStore';
 import { normalizeUserAssets } from '../utils/assetUrls';
@@ -32,7 +32,11 @@ interface SocialState {
   error: string | null;
   loadFriends: () => Promise<void>;
   loadRequests: () => Promise<void>;
-  sendFriendRequest: (username: string) => Promise<string | undefined>;
+  /**
+   * Send a friend request from the home instance. A typed handle is
+   * `{ username }`; a user the client holds is named by `friendRequestTarget`.
+   */
+  sendFriendRequest: (target: SendFriendRequest) => Promise<string | undefined>;
   updateFriendRequest: (id: string, status: 'accepted' | 'declined') => Promise<void>;
   cancelFriendRequest: (id: string) => Promise<void>;
   removeFriend: (id: string) => Promise<void>;
@@ -184,10 +188,13 @@ export const useSocialStore = create<SocialState>((set, get) => ({
     }
   },
 
-  sendFriendRequest: async (username: string) => {
+  sendFriendRequest: async (target: SendFriendRequest) => {
     set({ isLoading: true, error: null });
     try {
-      const res = await api.social.sendRequest(username.trim());
+      const body: SendFriendRequest = target.username === undefined
+        ? target
+        : { ...target, username: target.username.trim() };
+      const res = await api.social.sendRequest(body);
       set({ isLoading: false });
       // Server emits friend_request_sent over WS; useWebSocket appends the row
       // optimistically. As a safety net for tabs that race the WS event, refresh

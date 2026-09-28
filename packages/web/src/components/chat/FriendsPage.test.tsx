@@ -224,7 +224,39 @@ describe('FriendsPage', () => {
       await user.click(screen.getByText('Send Request'));
 
       await waitFor(() => {
-        expect(mockSendFriendRequest).toHaveBeenCalledWith('newbuddy@remote.example.com');
+        expect(mockSendFriendRequest).toHaveBeenCalledWith({ username: 'newbuddy@remote.example.com' });
+      });
+    });
+
+    it('sends the identity of a user found on a remote instance, with the handle for older servers', async () => {
+      const user = userEvent.setup();
+      const mockSendFriendRequest = vi.fn().mockResolvedValue('req-9');
+      // A native of orbit.test as the remote's search returns it after
+      // normalizeUserAssets: qualified username and home identity filled in.
+      const mockSearchUsers = vi.fn().mockResolvedValue([{
+        id: 'alice-id', username: 'alice@orbit.test', displayName: 'Alice', avatar: null, banner: null,
+        accentColor: null, avatarColor: null, bio: null, status: 'online', customStatus: null,
+        isAdmin: false, createdAt: 0, homeUserId: 'alice-id', homeInstance: 'orbit.test',
+        replicatedInstances: [], _instanceOrigin: 'https://orbit.test',
+      }]);
+      useSocialStore.setState({
+        friends: [],
+        requests: [],
+        sendFriendRequest: mockSendFriendRequest,
+        searchUsers: mockSearchUsers,
+      });
+
+      renderFriendsPage();
+      await user.click(screen.getByText('Add Friend'));
+      await user.type(screen.getByPlaceholderText(/Search or add by username/), 'alice');
+      await user.click(await screen.findByText('Send Friend Request'));
+
+      await waitFor(() => {
+        expect(mockSendFriendRequest).toHaveBeenCalledWith({
+          username: 'alice@orbit.test',
+          homeUserId: 'alice-id',
+          homeInstance: 'orbit.test',
+        });
       });
     });
 

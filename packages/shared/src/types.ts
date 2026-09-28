@@ -812,8 +812,21 @@ export interface FriendRequest {
   user?: User; // The other user (if it's an incoming request, the sender; if outgoing, the recipient)
 }
 
+/**
+ * Body of `POST /api/social/requests`. The target is named one of two ways:
+ *
+ * - By federated identity (`homeUserId` + `homeInstance`), when the client
+ *   already holds the user. Takes precedence over `username`; both fields are
+ *   required together. `homeInstance` is a bare domain or a full origin.
+ * - By `username`, for a handle the user typed (`name` or `name@domain`).
+ *
+ * Clients that send an identity also send `username`: a server that predates
+ * the identity fields ignores them and reads `username`.
+ */
 export interface SendFriendRequest {
-  username: string;
+  username?: string;
+  homeUserId?: string;
+  homeInstance?: string;
 }
 
 export interface UpdateFriendRequest {
