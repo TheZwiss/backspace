@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Avatar } from '../ui/Avatar';
 import { useFloatingPosition } from '../../hooks/useFloatingPosition';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
+import { userDisplayName } from '../../utils/identity';
 import { useUIStore } from '../../stores/uiStore';
 import type { ChannelUser } from '../../utils/channelUser';
 
@@ -22,7 +23,10 @@ function MentionMemberRow({
 }) {
   const canonical = useCanonicalUserView(candidate.user);
   const roleColor = candidate.nameColor;
-  const displayName = canonical.displayName ?? canonical.username;
+  const displayName = userDisplayName(canonical);
+  // The username is the second label whenever it says more than the name:
+  // a display name is set, or the name is the base of a federated username.
+  const showUsername = canonical.username !== displayName;
   // Mobile: ≥44 px tap target per Apple HIG; desktop: compact list.
   const rowSizing = mobile
     ? 'gap-3 px-3 py-2.5 min-h-[44px]'
@@ -43,17 +47,25 @@ function MentionMemberRow({
         userId={canonical.homeUserId ?? canonical.id}
         user={canonical}
       />
-      <span
-        className={`${mobile ? 'text-[15px]' : 'text-[14px]'} font-medium truncate`}
-        style={roleColor ? { color: roleColor } : undefined}
-      >
-        {displayName}
-      </span>
-      {canonical.displayName && (
-        <span className="text-[12px] text-txt-tertiary truncate">
-          @{canonical.username}
+      {/* The name keeps its width while the username has any to give: the
+          username truncates first, and the name only once it alone is wider
+          than the row. The spacing is padding inside the username's clipping
+          box, so a username squeezed to nothing takes its gap with it. */}
+      <div className="flex items-center min-w-0 flex-1">
+        <span
+          className={`${mobile ? 'text-[15px]' : 'text-[14px]'} font-medium shrink-0 max-w-full truncate`}
+          style={roleColor ? { color: roleColor } : undefined}
+        >
+          {displayName}
         </span>
-      )}
+        {showUsername && (
+          <span className="flex min-w-0 overflow-hidden">
+            <span className={`text-[12px] text-txt-tertiary min-w-0 truncate ${mobile ? 'pl-3' : 'pl-2.5'}`}>
+              @{canonical.username}
+            </span>
+          </span>
+        )}
+      </div>
     </div>
   );
 }
