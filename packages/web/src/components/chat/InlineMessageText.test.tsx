@@ -47,4 +47,9 @@ describe('InlineMessageText', () => {
     const { container } = render(<InlineMessageText channelId="chan-1" content={'use `:smile:` for :smile:'} />);
     expect(container.textContent).toBe('use `:smile:` for 😄');
   });
+
+  it('leaves a mention token inside a code span as written, as the full message does', () => {
+    const { container } = render(<InlineMessageText channelId="chan-1" content={'type `<@U1>` to ping <@U1>'} />);
+    expect(container.textContent).toBe('type `<@U1>` to ping @Unknown User');
+  });
 });

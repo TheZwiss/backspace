@@ -100,4 +100,10 @@ describe('Message mention highlight (#332)', () => {
     render(<Message message={message} isCompact={false} isFirstInGroup previousMessageId={null} />);
     expect(rowOf(message).className).not.toContain('border-l-accent-amber');
   });
+
+  it('does not highlight my token when it sits inside code', () => {
+    const message = dmMessage(`the syntax is \`<@${meOnOrbit.id}>\``);
+    render(<Message message={message} isCompact={false} isFirstInGroup previousMessageId={null} />);
+    expect(rowOf(message).className).not.toContain('border-l-accent-amber');
+  });
 });

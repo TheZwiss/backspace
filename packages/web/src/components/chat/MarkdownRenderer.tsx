@@ -5,6 +5,7 @@ import { Highlight, themes } from 'prism-react-renderer';
 import type { Components } from 'react-markdown';
 import { MentionBadge } from './MentionBadge';
 import { remarkEmojiShortcodes } from '../../utils/remarkEmojiShortcodes';
+import { replaceMentionTokens } from '../../utils/mentionTokens';
 
 // ─── Remark Plugin: Tag Bare Fenced Blocks ─────────────────────────────────
 // react-markdown v9 removed the `inline` prop from <code>. Fenced blocks
@@ -40,16 +41,12 @@ function walkTree(node: MdastNode) {
 // brackets) before remark plugins can see the text nodes. We solve this by
 // converting mention tokens to standard markdown links BEFORE the parser
 // runs. The `a` component override then detects the mention:// scheme.
-// Code spans and fenced blocks are matched first and preserved as-is.
+// Code spans and fenced blocks are kept as-is by the shared token scan
+// (utils/mentionTokens.ts), the same scan the reply preview, the mention
+// highlight and the alert rule use.
 
 function preprocessMentions(raw: string): string {
-  return raw.replace(
-    /(```[\s\S]*?```|`[^`]+`)|<@([a-zA-Z0-9_-]+)>/g,
-    (match, codeBlock: string | undefined, userId: string | undefined) => {
-      if (codeBlock) return codeBlock;
-      return `[@${userId}](mention://${userId})`;
-    },
-  );
+  return replaceMentionTokens(raw, (userId) => `[@${userId}](mention://${userId})`);
 }
 
 // ─── URL Transform: Allow mention:// Scheme ─────────────────────────────────

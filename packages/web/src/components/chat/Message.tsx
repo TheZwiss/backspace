@@ -26,6 +26,7 @@ import { isDeletedPartnerDm } from '../../utils/dmFormatters';
 import { isFederationGlobeApplicable, isSelf, resolveDisplayIdentity, userDisplayName } from '../../utils/identity';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { useSelfIdInChannel } from '../../utils/channelUser';
+import { contentMentionsAny } from '../../utils/mentionTokens';
 import {
   isPendingMessage,
   usePendingMessageStore,
@@ -437,8 +438,9 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
   const replyRoleColor = (msg: { userId: string }) => getMemberDisplayColor(msg.userId);
 
   // Self-mention highlighting. A token carries an id on the channel's origin,
-  // so "me" is my id there, not my home id (#332).
-  const isMentioned = !!selfIdHere && !!message.content?.includes(`<@${selfIdHere}>`);
+  // so "me" is my id there, not my home id (#332). Tokens inside code are not
+  // mentions (the shared scan in utils/mentionTokens.ts).
+  const isMentioned = !!selfIdHere && !!message.content && contentMentionsAny(message.content, new Set([selfIdHere]));
 
   const content = (
     <div

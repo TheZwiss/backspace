@@ -1,4 +1,5 @@
 import type { UserStatus } from '@backspace/shared';
+import { contentMentionsAny } from './mentionTokens';
 
 /**
  * The rule that decides whether a freshly-arrived chat message alerts the user.
@@ -7,7 +8,8 @@ import type { UserStatus } from '@backspace/shared';
  *
  * Rule (Discord-default):
  *   - Never for a message authored by self (any id in myIds).
- *   - For a DM, or for content with a `<@${id}>` mention of any id in myIds.
+ *   - For a DM, or for content with a `<@${id}>` mention of any id in myIds
+ *     outside code (the shared scan in utils/mentionTokens.ts).
  *   - When allChannels=true, for every other message too. Only the in-app
  *     cue passes it: the "Play sound for every message" preference is a sound
  *     setting and does not widen the OS notification.
@@ -25,10 +27,7 @@ export function isMessageAlert(input: MessageAlertInput): boolean {
   if (input.allChannels) return true;
   if (input.isDmChannel) return true;
   if (!input.content) return false;
-  for (const id of input.myIds) {
-    if (input.content.includes(`<@${id}>`)) return true;
-  }
-  return false;
+  return contentMentionsAny(input.content, input.myIds);
 }
 
 /**

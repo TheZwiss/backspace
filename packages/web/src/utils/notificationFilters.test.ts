@@ -2,6 +2,18 @@ import { describe, it, expect } from 'vitest';
 import { isAlertAllowed, isMessageAlert } from './notificationFilters';
 
 describe('isMessageAlert', () => {
+  it('does not alert for my token inside code in a space channel', () => {
+    expect(
+      isMessageAlert({
+        authorUserId: 'someone-else',
+        myIds: new Set(['local-snowflake']),
+        isDmChannel: false,
+        content: 'the syntax is `<@local-snowflake>`',
+        allChannels: false,
+      }),
+    ).toBe(false);
+  });
+
   const myIds = new Set(['local-snowflake', 'home-uid-42']);
 
   it('suppresses messages authored by self (local id)', () => {
