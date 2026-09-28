@@ -746,12 +746,11 @@ Two layers of replay protection:
 
 **`hydrateReplicatedUserProfile(user, profile, db)`** -- `federation.ts:2041`
 - Updates replicated stubs only (`homeInstance` must be set)
-- Only updates null/empty fields (preserves manually-set local values)
-- Exception: avatar/banner are overwritten if the current value is a bare filename (not an absolute URL)
+- Only fills null/empty fields and never rewrites a stored one, `avatarColor` included (see "S2S Profile Hydration")
 - Resolves bare filenames to `{homeInstance}/api/uploads/{filename}` absolute URLs
 - Sets `displayName` from `profile.displayName || profile.username` -- ensures federated users show a human-readable name instead of `user@instance`
 - Renames a row that still carries a placeholder name to `<profile.username>@<domain>` (`applyPlaceholderRename`, see "Stub Username Backfill")
-- When it changed the row (renamed, or a field filled), sends one `user_updated` with the final row to `collectProfileBroadcastTargetIds` after every field is written (`announceUserUpdated`). A rename by `resolveOrCreateReplicatedUser` just before announced the row without the display name hydration fills; this is the event that carries it. `avatarColor` is written only when it differs, so a snapshot that changes nothing announces nothing
+- When it changed the row (renamed, or a field filled), sends one `user_updated` with the final row to `collectProfileBroadcastTargetIds` after every field is written (`announceUserUpdated`). A rename by `resolveOrCreateReplicatedUser` just before announced the row without the display name hydration fills; this is the event that carries it. A snapshot that fills nothing announces nothing
 
 ### Critical Rule
 
@@ -1612,7 +1611,7 @@ When relay events carry `FederationRelayProfileSnapshot` data:
 
 Snapshots for tombstoned users carry `deleted: true` and no profile fields — the internal `!deleted:<id>` username marker never leaves the instance (`getDmParticipants`, `buildProfileSnapshot`).
 
-`hydrateReplicatedUserProfile` is **best-effort fill-empty only**: it never overwrites an existing avatar/banner/displayName/bio. This protects locally-downloaded bare filenames produced by `processProfileUpdateEvent` (which carries the monotonic `profileUpdatedAt` version) from being clobbered back to absolute URLs on the next DM/friend relay. Authoritative updates flow exclusively through the version-checked `profile_update` event.
+`hydrateReplicatedUserProfile` is **best-effort fill-empty only**: it never overwrites an existing displayName/avatar/avatarColor/banner/bio. A relayed snapshot carries no version, and a DM relayed by one instance carries snapshots of participants homed on other instances, built from its own replicas, which can be stale. Taking such a snapshot over a stored value let a stale third-party replica flip a field (it did so for `avatarColor`) and announce each flip. Fill-empty also protects locally-downloaded bare filenames produced by `processProfileUpdateEvent` (which carries the monotonic `profileUpdatedAt` version) from being clobbered back to absolute URLs on the next DM/friend relay. Authoritative updates flow exclusively through the version-checked `profile_update` event.
 
 **Detached-account guard:** Alongside the native-user skip (`!user.homeInstance → return`), the function also **no-ops on detached rows** (`federation_home_orphaned = 1 → return user`). A detached account retains its `homeInstance` for provenance (design §7), so the native-user skip alone would not catch it; without this guard a DM/friend relay from the reset domain's new incarnation, resolved via an old `homeUserId` tier-1 hit, could fill the sovereign account's empty fields. This is the same domain-keyed mutation class as `profile_update`/`presence_update`, guarded at its own site (design §4.3).
 

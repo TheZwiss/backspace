@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import * as schema from '../db/schema.js';
 import { eq } from 'drizzle-orm';
 import type { FederationRelayEvent } from '@backspace/shared';
+import { connectionManager } from '../ws/handler.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 type TestDb = ReturnType<typeof drizzle<typeof schema>>;
@@ -120,5 +121,102 @@ describe('processProfileUpdateEvent — displayName fallback', () => {
     await fed.processProfileUpdateEvent(event, 'orbit.ddns.net', testDb, [], []);
     const row = testDb.select().from(schema.users).where(eq(schema.users.id, 'stub-1')).get();
     expect(row!.displayName).toBe('Peter B.');
+  });
+});
+
+/**
+ * Profile fields of a remote user change only through the home's versioned
+ * `profile_update`. A snapshot relayed with a DM or friend event may be built
+ * by a third instance from its own replica, and it carries no version, so
+ * hydration only fills a field that is still empty and never flips one.
+ */
+describe('relayed profile snapshots never overwrite a stored field', () => {
+  function userUpdatedCount(): number {
+    return vi.mocked(connectionManager.sendToUser).mock.calls
+      .filter(([, event]) => (event as { type: string }).type === 'user_updated')
+      .length;
+  }
+
+  function stub(): typeof schema.users.$inferSelect {
+    return testDb.select().from(schema.users).where(eq(schema.users.id, 'stub-1')).get()!;
+  }
+
+  beforeEach(() => {
+    vi.mocked(connectionManager.sendToUser).mockClear();
+    testDb.insert(schema.users).values({ id: 'local-anna', username: 'anna', passwordHash: 'x', createdAt: Date.now() }).run();
+    testDb.insert(schema.friends).values({ userId: 'local-anna', friendId: 'stub-1', createdAt: Date.now() }).run();
+  });
+
+  it('a stale snapshot from a third instance does not flip avatarColor set by the home, and announces nothing', async () => {
+    const fed = await import('./federation.js');
+    await fed.processProfileUpdateEvent({
+      eventType: 'profile_update',
+      contextType: 'profile',
+      messageId: 'pu-mint',
+      encryptionVersion: 0,
+      timestamp: Date.now(),
+      profileUpdate: {
+        homeUserId: 'home-1',
+        homeInstance: 'orbit.ddns.net',
+        profileUpdatedAt: 5000,
+        username: 'pbtest3',
+        displayName: 'pbtest3',
+        avatar: null,
+        banner: null,
+        accentColor: null,
+        avatarColor: 'mint',
+        bio: null,
+      },
+    }, 'orbit.ddns.net', testDb, [], []);
+    expect(stub().avatarColor).toBe('mint');
+    vi.mocked(connectionManager.sendToUser).mockClear();
+
+    // Messages alternate between the home (current colour) and a third
+    // instance whose replica still holds the old one.
+    for (const colour of ['rose', 'mint', 'rose', 'mint']) {
+      await fed.hydrateReplicatedUserProfile(stub(), { username: 'pbtest3@orbit.ddns.net', avatarColor: colour }, testDb);
+      expect(stub().avatarColor).toBe('mint');
+    }
+    expect(userUpdatedCount()).toBe(0);
+  });
+
+  it('an empty avatarColor is filled once from a snapshot and announced once', async () => {
+    const fed = await import('./federation.js');
+    expect(stub().avatarColor).toBeNull();
+    await fed.hydrateReplicatedUserProfile(stub(), { avatarColor: 'rose' }, testDb);
+    expect(stub().avatarColor).toBe('rose');
+    expect(userUpdatedCount()).toBe(1);
+
+    await fed.hydrateReplicatedUserProfile(stub(), { avatarColor: 'mint' }, testDb);
+    await fed.hydrateReplicatedUserProfile(stub(), { avatarColor: 'rose' }, testDb);
+    expect(stub().avatarColor).toBe('rose');
+    expect(userUpdatedCount()).toBe(1);
+  });
+
+  it('the home\'s newer profile_update still replaces avatarColor and announces it', async () => {
+    const fed = await import('./federation.js');
+    await fed.hydrateReplicatedUserProfile(stub(), { avatarColor: 'rose' }, testDb);
+    vi.mocked(connectionManager.sendToUser).mockClear();
+    await fed.processProfileUpdateEvent({
+      eventType: 'profile_update',
+      contextType: 'profile',
+      messageId: 'pu-sky',
+      encryptionVersion: 0,
+      timestamp: Date.now(),
+      profileUpdate: {
+        homeUserId: 'home-1',
+        homeInstance: 'orbit.ddns.net',
+        profileUpdatedAt: 6000,
+        username: 'pbtest3',
+        displayName: 'pbtest3',
+        avatar: null,
+        banner: null,
+        accentColor: null,
+        avatarColor: 'sky',
+        bio: null,
+      },
+    }, 'orbit.ddns.net', testDb, [], []);
+    expect(stub().avatarColor).toBe('sky');
+    expect(userUpdatedCount()).toBeGreaterThan(0);
   });
 });

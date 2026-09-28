@@ -17,8 +17,12 @@ import { announceUserUpdated, applyPlaceholderRename } from './stubName.js';
 
 /**
  * Hydrate a replicated user stub with profile data from a relay event.
- * Only updates fields that are currently null/empty on the local row,
- * so manually-set local values are preserved. The one rewrite is the
+ * Only fills fields that are still null/empty on the local row and never
+ * rewrites one. The snapshot carries no version, and a DM or friend event may
+ * carry one that a third instance built from its own, possibly stale, replica
+ * of the user, so it cannot tell whether it is newer than what is stored.
+ * Stored profile fields change only through the home's version-checked
+ * `profile_update` (`processProfileUpdateEvent`). The one rewrite is the
  * username of a row that still carries a placeholder name
  * (`applyPlaceholderRename`).
  *
@@ -70,12 +74,14 @@ export async function hydrateReplicatedUserProfile(
   // "user@instance.example" federation username.
   const effectiveDisplayName = profile.displayName || profile.username || null;
   if (effectiveDisplayName && !user.displayName) updates.displayName = effectiveDisplayName;
-  // Hydrate is best-effort: only fill empty fields. Never overwrite existing
-  // avatar/banner values — that is exclusively processProfileUpdateEvent's job
-  // (which carries a monotonic version). In particular, locally-downloaded
-  // bare filenames produced by that path must not be clobbered back to URLs.
+  // Hydrate is best-effort: only fill empty fields. Never overwrite an
+  // existing value: that is exclusively processProfileUpdateEvent's job (it
+  // carries a monotonic version and comes from the home). Overwriting from an
+  // unversioned snapshot let a third instance's stale replica flip a field
+  // back and forth, announcing each flip. Locally-downloaded bare filenames
+  // produced by that path must not be clobbered back to URLs either.
   if (profile.avatar && !user.avatar) updates.avatar = await resolveAsset(profile.avatar);
-  if (profile.avatarColor && profile.avatarColor !== user.avatarColor) updates.avatarColor = profile.avatarColor;
+  if (profile.avatarColor && !user.avatarColor) updates.avatarColor = profile.avatarColor;
   if (profile.banner && !user.banner) updates.banner = await resolveAsset(profile.banner);
   if (profile.bio && !user.bio) updates.bio = profile.bio;
 
