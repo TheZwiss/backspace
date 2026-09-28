@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useChatStore } from '../../stores/chatStore';
 import { useFormatters } from '../../i18n/formatters';
 import { useChannelUser, useSelfIdInChannel, type ChannelUser } from '../../utils/channelUser';
-import { parseFederatedUsername } from '../../utils/identity';
+import { userDisplayName } from '../../utils/identity';
 
 interface TypingIndicatorProps {
   channelId: string;
@@ -33,10 +33,7 @@ function nameSlot(index: number): string {
  * username the typing event carried (the event has nothing better).
  */
 function typerName(resolved: ChannelUser | null, wireUsername: string): string {
-  if (resolved) {
-    return resolved.user.displayName ?? parseFederatedUsername(resolved.user.username).baseName;
-  }
-  return parseFederatedUsername(wireUsername).baseName;
+  return userDisplayName(resolved ? resolved.user : { username: wireUsername });
 }
 
 /**

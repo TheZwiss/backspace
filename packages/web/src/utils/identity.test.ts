@@ -5,6 +5,7 @@ import {
   isDeliveryFromHome,
   isFederationGlobeApplicable,
   hostOf,
+  userDisplayName,
 } from './identity';
 
 describe('normalizeOriginToHost', () => {
@@ -161,5 +162,20 @@ describe('hostOf', () => {
     expect(hostOf('https://chat.example.org')).toBe('chat.example.org');
     expect(hostOf('https://chat.example.org:8443/path')).toBe('chat.example.org:8443');
     expect(hostOf('not an origin')).toBe('not an origin');
+  });
+});
+
+describe('userDisplayName', () => {
+  it('is the display name when there is one', () => {
+    expect(userDisplayName({ displayName: 'Kai', username: 'kai@orbit.example' })).toBe('Kai');
+  });
+
+  it('is the base of the username without a display name, never the instance part', () => {
+    expect(userDisplayName({ displayName: null, username: 'kai@orbit.example' })).toBe('kai');
+    expect(userDisplayName({ displayName: null, username: 'kai' })).toBe('kai');
+  });
+
+  it('treats an empty display name as none', () => {
+    expect(userDisplayName({ displayName: '', username: 'kai@orbit.example' })).toBe('kai');
   });
 });

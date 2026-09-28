@@ -11,6 +11,16 @@ export function parseFederatedUsername(username: string): { baseName: string; do
   return { baseName: username.slice(0, atIndex), domain: username.slice(atIndex + 1) };
 }
 
+/**
+ * The name a user is shown by: their display name, else the base of their
+ * username ("erin@nova.ddns.net" is shown as "erin"). One rule for every
+ * place a person is named, so a row, its header and a mention of it agree.
+ * Callers that need a placeholder for an empty result add their own.
+ */
+export function userDisplayName(user: { displayName?: string | null; username: string }): string {
+  return user.displayName || parseFederatedUsername(user.username).baseName;
+}
+
 // ─── Cross-instance self-ID registry ─────────────────────────────────────────
 // Tracks all Snowflake IDs that belong to the current user across connected
 // instances (home + remotes). Populated from WS `ready` events.

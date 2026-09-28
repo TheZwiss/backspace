@@ -19,7 +19,8 @@ import { useUIStore } from '../../stores/uiStore';
 const MIRA = { id: 'u-mira', username: 'mira', displayName: null, avatar: null, createdAt: 1 } as unknown as User;
 const KAI = { id: 'u-kai', username: 'kai', displayName: 'Kai', avatar: null, createdAt: 1 } as unknown as User;
 const ME = { id: 'u-me', username: 'quddy', displayName: null, avatar: null, createdAt: 1 } as unknown as User;
-const DM = { id: 'dm-1', ownerId: null, createdAt: 1, members: [ME, KAI], lastMessage: null } as unknown as DmChannel;
+const ZED_STUB = { id: 'u-zed', username: 'zed@orbit.example', displayName: null, avatar: null, createdAt: 1 } as unknown as User;
+const DM = { id: 'dm-1', ownerId: null, createdAt: 1, members: [ME, KAI, ZED_STUB], lastMessage: null } as unknown as DmChannel;
 const RED_ROLE = { id: 'r-1', spaceId: 'space-1', name: 'Red', color: '#ff0000', position: 1 } as unknown as Role;
 
 function member(spaceId: string, user: User, roles: Role[] = []): MemberWithUser {
@@ -107,5 +108,11 @@ describe('MentionBadge in a space channel', () => {
     });
     render(<MentionBadge userId={KAI.id} channelId="chan-1" />);
     expect(screen.getByText('@Kai')).toHaveStyle({ color: '#ff0000' });
+  });
+
+  it("names a member without a display name by the base of the username, as the DM list and header do", () => {
+    useSpaceStore.setState({ dmChannels: [DM] });
+    render(<MentionBadge userId={ZED_STUB.id} channelId={DM.id} />);
+    expect(screen.getByText('@zed')).toBeInTheDocument();
   });
 });

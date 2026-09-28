@@ -2,6 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useUIStore } from '../../stores/uiStore';
 import { useChannelUser } from '../../utils/channelUser';
+import { userDisplayName } from '../../utils/identity';
 
 /** Resolved mention without a role colour (a DM, or a member with no role). */
 const ACCENT_COLOR = '#7c6cf6';
@@ -30,9 +31,7 @@ export const MentionBadge = React.memo(function MentionBadge({ userId, channelId
   const openUserProfile = useUIStore((s) => s.openUserProfile);
   const resolved = useChannelUser(channelId, userId);
 
-  const displayName = resolved
-    ? resolved.user.displayName ?? resolved.user.username
-    : t('message.mention.unknownUser');
+  const displayName = resolved ? userDisplayName(resolved.user) : t('message.mention.unknownUser');
   // Role colour and owner rose exist only in space channels (nameColor is null in a DM).
   const color = resolved ? resolved.nameColor ?? ACCENT_COLOR : UNRESOLVED_COLOR;
 
