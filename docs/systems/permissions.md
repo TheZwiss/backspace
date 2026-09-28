@@ -104,7 +104,8 @@ Moderating another member needs a strictly higher rank than theirs:
 | Nobody acts on the space owner | kick, ban, role changes, voice moderation |
 | The owner and instance admins (`isAdmin`) are exempt | everything below |
 | Actor's rank > target's rank | kick (`DELETE /members/:uid`, not leaving), ban, `PATCH /members/:uid`, `POST`/`DELETE /members/:uid/roles`, WS `voice_space_mute`, `voice_space_deafen`, `voice_move`, `voice_disconnect` |
-| Role position < actor's rank | assigning or removing that role (each role a `PATCH /members/:uid` adds or removes), editing or deleting it, moving it or moving another role to that position, creating a role (new roles start at 1) |
+| Role position < actor's rank | assigning or removing that role (each role a `PATCH /members/:uid` adds or removes), editing or deleting it, moving it or moving another role to that position, creating a role (new roles start at 1), writing or deleting a channel or category override on that role (`PUT`/`DELETE /channels/:id/overrides`, `/categories/:id/overrides`; @everyone is position 0) |
+| Actor's rank > target's rank | writing or deleting a channel or category override on another member (an override on oneself is not moderation) |
 
 `ADMINISTRATOR` does not exempt: a role with it still sits at its position.
 Acting on oneself is not moderation (leaving, moving oneself between
@@ -166,7 +167,8 @@ stores every role at 0 and would apply a position as given.
 Covered by `routes/roleHierarchy.test.ts`, `routes/heldPermissions.test.ts`,
 `utils/roleRules.test.ts` (the shared rules), `ws/voiceModerationHierarchy.test.ts`,
 `voiceMenuItems.test.ts`, `spaceSettingsPanels/roleHierarchyGating.test.tsx`,
-`utils/roleOrder.test.ts` and `spaceSettingsPanels/RolesPanel.reorder.test.tsx`.
+`ui/PermissionsEditor.hierarchy.test.tsx`, `utils/roleOrder.test.ts` and
+`spaceSettingsPanels/RolesPanel.reorder.test.tsx`.
 
 ## Held-bits rule
 
@@ -239,7 +241,11 @@ When an instance updates to this version:
    longer assign or remove roles at or above their own top role, change the
    roles of a member at or above them, edit, delete or move roles at or above
    their own top role, or create a role when their top role is the lowest one
-   (position 1) or they have none. Editing @everyone needs a role.
+   (position 1) or they have none. Editing @everyone needs a role. The same
+   rank applies to channel and category overrides: an override on a role at
+   or above their own, or on a member ranked at or above them, can no longer
+   be written or deleted, and an override on @everyone (which includes the
+   Private switch) needs a role.
 4. **`ADMINISTRATOR` does not exempt from the hierarchy.** A non-owner
    `ADMINISTRATOR` holder is ranked by their roles like anyone else, and a
    moderator ranked above an `ADMINISTRATOR` role can act on it and its
@@ -321,6 +327,7 @@ rule (above). Every gated surface:
 | Role editor: permission toggles | `spaceSettingsPanels/RolesPanel.tsx` | a toggle for a bit the viewer does not hold is locked in both directions, shows its state and a lock, and the `roles.unheldLocked` note says why |
 | Role editor: Copy Role | `spaceSettingsPanels/RolesPanel.tsx` | disabled when the viewer cannot create a role at 1, or the role carries a bit the viewer does not hold (`roles.copyUnheld`) |
 | Role editor: Delete Role | `spaceSettingsPanels/RolesPanel.tsx` | not offered for a role at or above the viewer's top role; disabled when the role carries a bit the viewer does not hold (`roles.copyDeleteUnheld`) |
+| Channel and category overrides: higher targets | `ui/OverrideEntry.tsx` via `ui/PermissionsEditor.tsx` | an override on a role at or above the viewer's top role, or on a member ranked at or above the viewer, is read-only with no remove (`permissions.aboveYouRole` / `aboveYouMember`); such roles and members are left out of Add Role and Add Member |
 | Channel and category overrides: toggles | `ui/OverrideEntry.tsx` via `ui/PermissionsEditor.tsx` | a tri-state toggle for a bit the viewer does not hold is locked, shows its state and a lock, and the `permissions.unheldLocked` note says why |
 | Channel and category overrides: remove | `ui/OverrideEntry.tsx` via `ui/PermissionsEditor.tsx` | disabled for a saved override that sets a bit the viewer does not hold (`permissions.removeUnheld`); a row added in the same edit can always be dropped |
 | Voice user menu: mute, deafen, move, disconnect | `voice/voiceMenuItems.tsx` | no moderation items for members ranked at or above the viewer |

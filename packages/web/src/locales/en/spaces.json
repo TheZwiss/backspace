@@ -462,7 +462,10 @@
     "unheldLocked": "You can only switch permissions you have yourself. The others are locked.",
     "unheldPermission": "You do not have this permission",
     "removeUnheld": "This override sets permissions you do not have. Only someone who has them can remove it.",
-    "removeUnheldShort": "Only someone with these permissions can remove it"
+    "removeUnheldShort": "Only someone with these permissions can remove it",
+    "aboveYouRole": "This role ranks at or above your highest role. You can view its override but not change or remove it.",
+    "aboveYouMember": "This member ranks at or above you. You can view their override but not change or remove it.",
+    "aboveYouShort": "Ranks at or above your highest role"
   },
   "sidebar": {
     "directMessages": "Direct Messages",

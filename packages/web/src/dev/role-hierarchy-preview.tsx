@@ -34,6 +34,11 @@
 //   held-overrides   channel overrides: Members opened with Manage Messages
 //                    allowed by the owner (locked, remove locked), @everyone
 //                    opened with only held bits (removable).
+//   members-held     the Members panel with Tobi's role editor open: roles
+//                    above the viewer and Members (which carries bits the
+//                    viewer lacks) locked, each reason under the list.
+//   overrides-higher channel overrides on Moderators (above the viewer) and
+//                    on Ada (ranked above the viewer): read-only, opened.
 // `?lang=de` (the app's dev-only switch) renders any scene in German.
 import { createRoot } from 'react-dom/client';
 import type { MemberWithUser, Role, User } from '@backspace/shared';
@@ -53,11 +58,13 @@ import '../styles/globals.css';
 type Scene =
   | 'members' | 'role-locked' | 'role-editable'
   | 'order-owner' | 'order-moderator' | 'order-keyboard' | 'order-error' | 'order-mobile' | 'order-mobile-moderator'
-  | 'held-role' | 'held-everyone' | 'held-owner' | 'held-mobile' | 'held-overrides';
+  | 'held-role' | 'held-everyone' | 'held-owner' | 'held-mobile' | 'held-overrides'
+  | 'members-held' | 'overrides-higher';
 const SCENES: readonly Scene[] = [
   'members', 'role-locked', 'role-editable',
   'order-owner', 'order-moderator', 'order-keyboard', 'order-error', 'order-mobile', 'order-mobile-moderator',
   'held-role', 'held-everyone', 'held-owner', 'held-mobile', 'held-overrides',
+  'members-held', 'overrides-higher',
 ];
 
 const SPACE_ID = 'space-1';
@@ -141,14 +148,20 @@ function seedHeld(scene: Scene): void {
   });
 }
 
-function OverridesBench() {
+const HIGHER_OVERRIDES: Override[] = [
+  { targetType: 'role', targetId: 'r-mod', allow: '0', deny: permissionsToString(PermissionBits.ATTACH_FILES) },
+  { targetType: 'role', targetId: 'r-member', allow: '0', deny: permissionsToString(PermissionBits.ADD_REACTIONS) },
+  { targetType: 'member', targetId: 'senior', allow: permissionsToString(PermissionBits.SEND_MESSAGES), deny: '0' },
+];
+
+function OverridesBench({ overrides }: { overrides: Override[] }) {
   return (
     <PermissionsEditor
       entityId="channel-1"
       spaceId={SPACE_ID}
       permDefs={TEXT_PERMS}
       unhideNote=""
-      getOverrides={async () => HELD_OVERRIDES}
+      getOverrides={async () => overrides}
       putOverride={async () => ({ success: true })}
       deleteOverride={async () => ({ success: true })}
     />
@@ -202,7 +215,9 @@ function Workbench({ scene }: { scene: Scene }) {
     <div className="min-h-screen py-6 bg-surface-chat">
       <div className={scene.startsWith('order-mobile') || scene === 'held-mobile' ? 'px-4 w-[390px]' : 'px-6 max-w-[640px] mx-auto'}>
         {scene === 'members' ? <MembersPanel spaceId={SPACE_ID} />
-          : scene === 'held-overrides' ? <OverridesBench />
+          : scene === 'held-overrides' ? <OverridesBench overrides={HELD_OVERRIDES} />
+            : scene === 'overrides-higher' ? <OverridesBench overrides={HIGHER_OVERRIDES} />
+            : scene === 'members-held' ? <MembersPanel spaceId={SPACE_ID} />
             : <RolesPanel spaceId={SPACE_ID} />}
       </div>
     </div>
@@ -233,7 +248,7 @@ async function start(): Promise<void> {
   initializeInterfaceScale();
   await initI18n();
   if (scene.startsWith('order-')) seedOrder(scene);
-  else if (scene.startsWith('held-')) seedHeld(scene);
+  else if (scene.startsWith('held-') || scene === 'members-held' || scene === 'overrides-higher') seedHeld(scene);
   else seed();
   const host = document.getElementById('root');
   if (!host) throw new Error('missing #root');
@@ -243,6 +258,11 @@ async function start(): Promise<void> {
   if (scene === 'role-editable') await clickText('Members', 'button');
   if (scene === 'held-role' || scene === 'held-owner' || scene === 'held-mobile') await clickText('Members', 'button');
   if (scene === 'held-everyone') await clickText('@everyone', 'button');
+  if (scene === 'members-held') await clickText('Tobi', '.text-sm.font-medium');
+  if (scene === 'overrides-higher') {
+    await clickText('Moderators', 'button[aria-expanded]');
+    await clickText('Ada', 'button[aria-expanded]');
+  }
   if (scene === 'held-overrides') {
     await clickText('Members', 'button[aria-expanded]');
     await clickText('@everyone', 'button[aria-expanded]');

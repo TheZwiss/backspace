@@ -17,6 +17,7 @@ import { connectionManager } from '../ws/handler.js';
 import { checkVoicePermissions } from '../ws/events.js';
 import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
 import { sendError } from '../utils/httpErrors.js';
+import { canActOnMemberInSpace, canManageRoleInSpace } from '../utils/roleHierarchy.js';
 import type {
   CreateChannelRequest,
   UpdateChannelRequest,
@@ -141,6 +142,34 @@ function broadcastCategoryOverrideChange(spaceId: string, categoryId: string): v
       spaceId,
     });
   }
+}
+
+/**
+ * Role hierarchy for an override write (permissions.md, "Role hierarchy"): an
+ * override on a role changes what its holders can do in that channel or
+ * category, and one on a member moderates that member. So a role target must
+ * rank below the actor's top role, and a member target other than the actor
+ * must rank below the actor. `mode` 'delete' lets an override on a role that
+ * no longer exists be cleaned up; a write needs the role to be in the space.
+ */
+function overrideTargetRefusal(
+  actorId: string,
+  spaceId: string,
+  targetType: string,
+  targetId: string,
+  mode: 'write' | 'delete',
+): { status: 400 | 403; code: 'role_not_in_space' | 'role_hierarchy' } | null {
+  if (targetType === 'role') {
+    const role = getDb().select({ position: schema.roles.position }).from(schema.roles)
+      .where(and(eq(schema.roles.id, targetId), eq(schema.roles.spaceId, spaceId)))
+      .get();
+    if (!role) return mode === 'write' ? { status: 400, code: 'role_not_in_space' } : null;
+    return canManageRoleInSpace(spaceId, actorId, role.position ?? 0) ? null : { status: 403, code: 'role_hierarchy' };
+  }
+  if (targetType === 'member' && targetId !== actorId && !canActOnMemberInSpace(spaceId, actorId, targetId)) {
+    return { status: 403, code: 'role_hierarchy' };
+  }
+  return null;
 }
 
 /** A stored override row as bits, or null when there is none. */
@@ -521,6 +550,11 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, 400, 'override_bits_invalid');
     }
 
+    const targetRefusal = overrideTargetRefusal(request.userId, channel.spaceId, targetType, targetId, 'write');
+    if (targetRefusal) {
+      return sendError(reply, targetRefusal.status, targetRefusal.code, targetRefusal.code === 'role_not_in_space' ? { roleId: targetId } : undefined);
+    }
+
     // Privilege escalation guard: only bits the caller holds may change
     const existingChannelOverride = db.select().from(schema.channelOverrides).where(and(
       eq(schema.channelOverrides.channelId, id),
@@ -573,6 +607,11 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
 
       if (!hasPermission(request.userId, channel.spaceId, PermissionBits.MANAGE_ROLES)) {
         return sendError(reply, 403, 'missing_permission', { permission: 'MANAGE_ROLES' });
+      }
+
+      const targetRefusal = overrideTargetRefusal(request.userId, channel.spaceId, targetType, targetId, 'delete');
+      if (targetRefusal) {
+        return sendError(reply, targetRefusal.status, targetRefusal.code);
       }
 
       // Deleting clears every bit the override sets; without this check a
@@ -676,6 +715,11 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, 400, 'override_bits_invalid');
     }
 
+    const targetRefusal = overrideTargetRefusal(request.userId, category.spaceId, targetType, targetId, 'write');
+    if (targetRefusal) {
+      return sendError(reply, targetRefusal.status, targetRefusal.code, targetRefusal.code === 'role_not_in_space' ? { roleId: targetId } : undefined);
+    }
+
     // Privilege escalation guard (matches channel override pattern)
     const existingCategoryOverride = db.select().from(schema.categoryOverrides).where(and(
       eq(schema.categoryOverrides.categoryId, id),
@@ -727,6 +771,11 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
 
       if (!hasPermission(request.userId, category.spaceId, PermissionBits.MANAGE_ROLES)) {
         return sendError(reply, 403, 'missing_permission', { permission: 'MANAGE_ROLES' });
+      }
+
+      const targetRefusal = overrideTargetRefusal(request.userId, category.spaceId, targetType, targetId, 'delete');
+      if (targetRefusal) {
+        return sendError(reply, targetRefusal.status, targetRefusal.code);
       }
 
       // Deleting clears every bit the override sets (see the channel route).

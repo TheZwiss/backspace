@@ -457,7 +457,10 @@
     "unheldLocked": "您只能切换自己拥有的权限，其他权限已锁定。",
     "unheldPermission": "您没有此权限",
     "removeUnheld": "此权限覆盖设置了您没有的权限。只有拥有这些权限的人才能移除它。",
-    "removeUnheldShort": "只有拥有这些权限的人才能移除它"
+    "removeUnheldShort": "只有拥有这些权限的人才能移除它",
+    "aboveYouRole": "此身份组与您的最高身份组同级或更高。您可以查看其权限覆盖，但无法更改或移除。",
+    "aboveYouMember": "此成员与您同级或更高。您可以查看其权限覆盖，但无法更改或移除。",
+    "aboveYouShort": "与您的最高身份组同级或更高"
   },
   "sidebar": {
     "directMessages": "私信列表",

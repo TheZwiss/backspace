@@ -462,7 +462,10 @@
     "unheldLocked": "Du kannst nur Berechtigungen umschalten, die du selbst hast. Die anderen sind gesperrt.",
     "unheldPermission": "Du hast diese Berechtigung nicht",
     "removeUnheld": "Diese Überschreibung setzt Berechtigungen, die du nicht hast. Nur wer sie hat, kann sie entfernen.",
-    "removeUnheldShort": "Nur wer diese Berechtigungen hat, kann diese Überschreibung entfernen"
+    "removeUnheldShort": "Nur wer diese Berechtigungen hat, kann diese Überschreibung entfernen",
+    "aboveYouRole": "Diese Rolle steht auf oder über deiner höchsten Rolle. Du kannst ihre Überschreibung ansehen, aber nicht ändern oder entfernen.",
+    "aboveYouMember": "Dieses Mitglied steht auf deiner Stufe oder darüber. Du kannst die Überschreibung ansehen, aber nicht ändern oder entfernen.",
+    "aboveYouShort": "Steht auf oder über deiner höchsten Rolle"
   },
   "sidebar": {
     "directMessages": "Direktnachrichten",

@@ -613,11 +613,11 @@ Override endpoints documented here for API completeness:
 | Endpoint | Permission | Notes |
 |----------|------------|-------|
 | `GET /api/channels/:id/overrides` | `MANAGE_ROLES` | List channel overrides |
-| `PUT /api/channels/:id/overrides` | `MANAGE_ROLES` | Upsert (delete+insert in tx). Held-bits rule against the stored row. |
-| `DELETE /api/channels/:id/overrides/:targetType/:targetId` | `MANAGE_ROLES` | Remove override; refused when it sets a bit the actor does not hold |
+| `PUT /api/channels/:id/overrides` | `MANAGE_ROLES` | Upsert (delete+insert in tx). Role hierarchy on the target, held-bits rule against the stored row. |
+| `DELETE /api/channels/:id/overrides/:targetType/:targetId` | `MANAGE_ROLES` | Remove override; refused for a target at or above the actor, or when it sets a bit the actor does not hold |
 | `GET /api/categories/:id/overrides` | `MANAGE_ROLES` | List category overrides |
-| `PUT /api/categories/:id/overrides` | `MANAGE_ROLES` | Upsert; held-bits rule against the stored row |
-| `DELETE /api/categories/:id/overrides/:targetType/:targetId` | `MANAGE_ROLES` | Remove override; refused when it sets a bit the actor does not hold |
+| `PUT /api/categories/:id/overrides` | `MANAGE_ROLES` | Upsert; role hierarchy on the target, held-bits rule against the stored row |
+| `DELETE /api/categories/:id/overrides/:targetType/:targetId` | `MANAGE_ROLES` | Remove override; refused for a target at or above the actor, or when it sets a bit the actor does not hold |
 
 All override mutations call `broadcastOverrideChange` (channel) or `broadcastCategoryOverrideChange` (category) which re-evaluates VIEW_CHANNEL per-user and sends `channel_updated` (gained access) or `channel_deleted` (lost access). Voice permission enforcement via `checkVoicePermissions` runs after every override change.
 

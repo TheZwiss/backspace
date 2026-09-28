@@ -464,3 +464,72 @@ describe('deleting a role: its bits must be held (review probe P3)', () => {
     expect((await deleteRole('r-admin')).statusCode).toBe(200);
   });
 });
+
+describe('overrides follow the role hierarchy (review probe P2)', () => {
+  const LOCKOUT = PermissionBits.VIEW_CHANNEL | PermissionBits.SEND_MESSAGES;
+
+  function putMemberOverride(targetId: string, allow: bigint, deny: bigint): Promise<Res> {
+    return app.inject({
+      method: 'PUT',
+      url: `/api/channels/${CHANNEL_ID}/overrides`,
+      payload: { targetType: 'member', targetId, allow: permissionsToString(allow), deny: permissionsToString(deny) },
+    });
+  }
+
+  it('refuses an override on a role at or above the actor\'s top role, on channels and categories', async () => {
+    as('mod');
+    expectRefusal(await putChannelOverride('r-lead', 0n, LOCKOUT), 'role_hierarchy');
+    expectRefusal(await putChannelOverride('r-mod', 0n, LOCKOUT), 'role_hierarchy');
+    expectRefusal(await putCategoryOverride('r-lead', 0n, LOCKOUT), 'role_hierarchy');
+    expect(channelOverride('r-lead')).toBeUndefined();
+    expect(categoryOverride('r-lead')).toBeUndefined();
+  });
+
+  it('refuses an override on a member ranked at or above the actor', async () => {
+    as('mod');
+    expectRefusal(await putMemberOverride('lead', 0n, LOCKOUT), 'role_hierarchy');
+    const rows = testDb.select().from(schema.channelOverrides).where(eq(schema.channelOverrides.targetType, 'member')).all();
+    expect(rows).toHaveLength(0);
+  });
+
+  it('refuses deleting an override on a higher role or member, on channels and categories', async () => {
+    as('owner');
+    expect((await putChannelOverride('r-lead', 0n, PermissionBits.SEND_MESSAGES)).statusCode).toBe(200);
+    expect((await putCategoryOverride('r-lead', 0n, PermissionBits.SEND_MESSAGES)).statusCode).toBe(200);
+    expect((await putMemberOverride('lead', 0n, PermissionBits.SEND_MESSAGES)).statusCode).toBe(200);
+
+    as('mod');
+    expectRefusal(await deleteChannelOverride('r-lead'), 'role_hierarchy');
+    expectRefusal(await deleteCategoryOverride('r-lead'), 'role_hierarchy');
+    expectRefusal(
+      await app.inject({ method: 'DELETE', url: `/api/channels/${CHANNEL_ID}/overrides/member/lead` }),
+      'role_hierarchy',
+    );
+    expect(channelOverride('r-lead')).toBeDefined();
+    expect(categoryOverride('r-lead')).toBeDefined();
+  });
+
+  it('allows overrides on @everyone, lower roles, lower members and oneself', async () => {
+    as('mod');
+    expect((await putChannelOverride(SPACE_ID, 0n, PermissionBits.SEND_MESSAGES)).statusCode).toBe(200);
+    expect((await putMemberOverride('alt', 0n, PermissionBits.SEND_MESSAGES)).statusCode).toBe(200);
+    expect((await putMemberOverride('mod', PermissionBits.SEND_MESSAGES, 0n)).statusCode).toBe(200);
+    as('lead');
+    expect((await putChannelOverride('r-admin', 0n, PermissionBits.SEND_MESSAGES)).statusCode).toBe(200);
+    expect((await putCategoryOverride('r-mod', 0n, PermissionBits.SEND_MESSAGES)).statusCode).toBe(200);
+  });
+
+  it('refuses a role override for a role that is not in the space', async () => {
+    as('owner');
+    const res = await putChannelOverride('r-nowhere', 0n, PermissionBits.SEND_MESSAGES);
+    expect(res.statusCode).toBe(400);
+    expect(res.json<{ code: string }>().code).toBe('role_not_in_space');
+  });
+
+  it('exempts the owner and instance admins', async () => {
+    as('instance-admin');
+    expect((await putChannelOverride('r-lead', 0n, LOCKOUT)).statusCode).toBe(200);
+    as('owner');
+    expect((await deleteChannelOverride('r-lead')).statusCode).toBe(200);
+  });
+});

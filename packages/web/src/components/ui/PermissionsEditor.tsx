@@ -4,7 +4,13 @@ import { useSpaceStore } from '../../stores/spaceStore';
 import { PermissionBits, permissionsToString, stringToPermissions } from '../../utils/permissions';
 import { OverrideEntry, type PermissionDef } from './OverrideEntry';
 import { describeError } from '../../i18n/errors';
-import { useViewerHeldPermissions, unswitchableBits, viewerCanRemoveOverride } from '../../utils/roleHierarchy';
+import {
+  useViewerHeldPermissions,
+  unswitchableBits,
+  viewerCanRemoveOverride,
+  viewerCanManageRoleAt,
+  viewerCanActOn,
+} from '../../utils/roleHierarchy';
 import type { Role, MemberWithUser } from '@backspace/shared';
 
 // The padlock the Overview privacy note uses; this note sits beside the same subject.
@@ -46,6 +52,19 @@ export function PermissionsEditor({
   // hold, and only remove a saved override whose bits are all ones they hold.
   const held = useViewerHeldPermissions(spaceId);
   const lockedBits = useMemo(() => unswitchableBits(held, permDefs.map((p) => p.bit)), [held, permDefs]);
+  // Role hierarchy (permissions.md): an override on a role or member at or
+  // above the viewer is theirs to look at, not to change.
+  const space = useSpaceStore((s) => s.spaces.find((sp) => sp.id === spaceId));
+  const isAboveViewer = useCallback((key: string): boolean => {
+    if (!space) return false;
+    const [targetType, targetId] = key.split(':');
+    if (targetType === 'role') {
+      const role = roles.find((r) => r.id === targetId);
+      return !!role && !viewerCanManageRoleAt(space, members, role.position);
+    }
+    const member = members.find((m) => m.userId === targetId);
+    return !!member && !viewerCanActOn(space, members, member);
+  }, [space, roles, members]);
 
   // Fetched overrides
   const [overrides, setOverrides] = useState<Override[]>([]);
@@ -147,10 +166,11 @@ export function PermissionsEditor({
   // A row staged in this edit can always be dropped; a saved one is deleted
   // on the server, which clears every bit it sets.
   const isRemoveLocked = useCallback((key: string): boolean => {
+    if (isAboveViewer(key)) return true;
     const saved = existingOverrideMap.get(key);
     if (!saved) return false;
     return !viewerCanRemoveOverride(held, { allow: stringToPermissions(saved.allow), deny: stringToPermissions(saved.deny) });
-  }, [existingOverrideMap, held]);
+  }, [existingOverrideMap, held, isAboveViewer]);
 
   // Get effective allow/deny for a key — considers drafts, new overrides, and originals
   const getEffective = useCallback((key: string): { allow: bigint; deny: bigint } => {
@@ -166,6 +186,7 @@ export function PermissionsEditor({
 
   // Update handler for an override entry
   const handleChange = useCallback((key: string, allow: bigint, deny: bigint) => {
+    if (isAboveViewer(key)) return;
     if (newOverrides.has(key)) {
       setNewOverrides(prev => {
         const next = new Map(prev);
@@ -180,7 +201,7 @@ export function PermissionsEditor({
         return next;
       });
     }
-  }, [newOverrides]);
+  }, [newOverrides, isAboveViewer]);
 
   // Remove handler. Whatever the row held in this edit (a staged addition or
   // edited bits) is dropped, and a row the server already stores is marked for
@@ -386,19 +407,19 @@ export function PermissionsEditor({
   }, [existingOverrideMap, everyoneKey, stagedKeys, getEffective]);
 
   const availableRoles = useMemo(() =>
-    roles.filter(r => !stagedKeys.has(`role:${r.id}`)),
-    [roles, stagedKeys]);
+    roles.filter(r => !stagedKeys.has(`role:${r.id}`) && !isAboveViewer(`role:${r.id}`)),
+    [roles, stagedKeys, isAboveViewer]);
 
   // Filtered by the search box, capped at 20 rows.
   const availableMembers = useMemo(() => {
-    const filtered = members.filter(m => !stagedKeys.has(`member:${m.userId}`));
+    const filtered = members.filter(m => !stagedKeys.has(`member:${m.userId}`) && !isAboveViewer(`member:${m.userId}`));
     if (!memberSearch.trim()) return filtered.slice(0, 20);
     const q = memberSearch.toLowerCase();
     return filtered.filter(m =>
       m.user.username.toLowerCase().includes(q) ||
       (m.user.displayName?.toLowerCase().includes(q))
     ).slice(0, 20);
-  }, [members, stagedKeys, memberSearch]);
+  }, [members, stagedKeys, memberSearch, isAboveViewer]);
 
   const savePill = (
     <div className="glass-bubble rounded-full px-4 py-2 flex items-center gap-2 pointer-events-auto animate-slide-up">
@@ -450,6 +471,7 @@ export function PermissionsEditor({
                 onRemove={() => handleRemove(key)}
                 lockedBits={lockedBits}
                 removeLocked={isRemoveLocked(key)}
+                readOnlyNote={isAboveViewer(key) ? t('spaces:permissions.aboveYouRole') : undefined}
               />
             );
           })}
@@ -523,6 +545,7 @@ export function PermissionsEditor({
                 onRemove={() => handleRemove(key)}
                 lockedBits={lockedBits}
                 removeLocked={isRemoveLocked(key)}
+                readOnlyNote={isAboveViewer(key) ? t('spaces:permissions.aboveYouMember') : undefined}
               />
             );
           })}
