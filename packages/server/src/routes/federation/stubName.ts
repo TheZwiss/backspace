@@ -19,6 +19,17 @@ const REPLICATED_PASSWORD_HASH = '!federation-replicated';
  */
 const HANDLE = /^[a-z0-9_]+$/;
 
+/**
+ * The replicated-name local part a username hint stands for: the hint
+ * trimmed and lowercased when it is handle-shaped (`HANDLE`), else null.
+ * Creation and rename both read hints through this, so a display name or any
+ * other non-handle never becomes a row's name.
+ */
+export function handleFromHint(username: string | null | undefined): string | null {
+  const handle = username?.trim().toLowerCase();
+  return handle && HANDLE.test(handle) ? handle : null;
+}
+
 /** Most `_<n>` suffixes tried before a random one (`firstFreeUsername`). */
 const MAX_NUMBERED_SUFFIX = 10;
 
@@ -130,8 +141,8 @@ export function applyPlaceholderRename(
   seed?: StubRenameSeed,
 ): UserRow {
   if (!isPlaceholderNamedStub(user) || !user.homeInstance) return user;
-  const handle = username?.trim().toLowerCase();
-  if (!handle || !HANDLE.test(handle)) return user;
+  const handle = handleFromHint(username);
+  if (!handle) return user;
 
   const newUsername = firstFreeUsername(handle, user.homeInstance, db, user.id);
   if (newUsername === user.username) return user;

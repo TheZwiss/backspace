@@ -4,7 +4,7 @@ import { getDb, schema } from '../../db/index.js';
 import { getOurOrigin, normalizeOriginForCompare } from '../../utils/federationAuth.js';
 import { generateSnowflake } from '../../utils/snowflake.js';
 import { and, eq, isNull, or, sql } from 'drizzle-orm';
-import { firstFreeUsername, renamePlaceholderNamedStub } from './stubName.js';
+import { firstFreeUsername, handleFromHint, renamePlaceholderNamedStub } from './stubName.js';
 
 /**
  * Extract bare domain from a homeInstance value.
@@ -541,9 +541,10 @@ export function resolveOrCreateReplicatedUser(
   // it, and the client routes ask the home first, see
   // `resolveRemoteIdentityForClient`). This makes the local stub's `username`
   // human-readable, so client-side `parseFederatedUsername(username).baseName`
-  // returns the real handle. Without a hint the stub is named
-  // `<homeUserId>@<domain>`, and the first later hint renames it (above).
-  const localPart = (hints?.username ?? homeUserId).toLowerCase();
+  // returns the real handle. Only a handle-shaped hint counts, as for the
+  // rename (`handleFromHint`). Without one the stub is named
+  // `<homeUserId>@<domain>`, and the first later handle renames it (above).
+  const localPart = handleFromHint(hints?.username) ?? homeUserId.toLowerCase();
   // A name another row already holds (a partial replication, or a handle
   // freed by an account deletion and registered again) gets a suffix.
   const username = firstFreeUsername(localPart, domain, db);

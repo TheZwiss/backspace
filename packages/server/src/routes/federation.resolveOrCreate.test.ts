@@ -88,6 +88,23 @@ describe('resolveOrCreateReplicatedUser — stub username', () => {
     );
     expect(created!.username).toBe('310002371434024960@orbit.ddns.net');
   });
+
+  it.each([
+    ['a display name', 'Kai Smith'],
+    ['a name with a domain', 'kai@orbit.ddns.net'],
+    ['a dotted name', 'kai.smith'],
+    ['a blank name', '   '],
+  ])('names the stub by its id when the hint is %s', async (_kind, hint) => {
+    const { resolveOrCreateReplicatedUser } = await import('./federation.js');
+    const created = resolveOrCreateReplicatedUser('310002371434024960', 'orbit.ddns.net', testDb, { username: hint });
+    expect(created!.username).toBe('310002371434024960@orbit.ddns.net');
+  });
+
+  it('takes a handle-shaped hint in any case, lowercased and trimmed', async () => {
+    const { resolveOrCreateReplicatedUser } = await import('./federation.js');
+    const created = resolveOrCreateReplicatedUser('310002371434024960', 'orbit.ddns.net', testDb, { username: ' Kai_Dev ' });
+    expect(created!.username).toBe('kai_dev@orbit.ddns.net');
+  });
 });
 
 describe('resolveOrCreateReplicatedUser — self-homed identity guard', () => {
