@@ -31,6 +31,11 @@ import { buildHeadersForOrigin } from './hmacSign.js';
  *     signature) — see `dumpPeerRows` output in the suites. Inbound relay is
  *     therefore fully real, and attribution can actually tell three instances
  *     apart. Used by the attribution and stub-claiming suites.
+ *     Because the initiator's row is keyed by the transport origin, a remote
+ *     identity domain (`remote0.test.local`) maps to no peer there
+ *     (`resolveOriginFromHostname`), so the initiator never asks the identity's
+ *     home: first contact falls back to the `<homeUserId>@<domain>` name. In
+ *     production the admin dials `https://DOMAIN` and the row is keyed by it.
  *
  *   TRANSPORT profile — `bootTransportPeered()`
  *     `PUBLIC_ORIGIN=http://127.0.0.1:<port>` on every instance, so identity,
@@ -40,6 +45,10 @@ import { buildHeadersForOrigin } from './hmacSign.js';
  *     `extractDomain` collapses every instance to `127.0.0.1`, so inbound
  *     attribution cannot discriminate — which is fine for suites that assert
  *     OUTBOUND addressing. Used by the relay-scoping and call-addressing suites.
+ *     An identity names a peer here by its bare host, as a stored replica does,
+ *     and that host maps to the peer's (ported) row, so the signed lookups an
+ *     instance makes of an identity's home are real: the first-contact suite
+ *     uses this profile with one remote.
  *
  * Both profiles peer through the real HMAC handshake
  * (`POST /api/federation/peer/initiate` → `/peer/accept` → signed `/epoch`
