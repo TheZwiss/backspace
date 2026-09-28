@@ -113,6 +113,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
   const [pendingUnfriend, setPendingUnfriend] = useState<{ id: string; name: string } | null>(null);
   const navigate = useNavigate();
   const addDmChannel = useSpaceStore((s) => s.addDmChannel);
+  const addToast = useUIStore((s) => s.addToast);
 
   // If the user clicked "Retry your friend request" in the Connections panel
   // and we just navigated here, the federation store carries the original
@@ -165,7 +166,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
       addDmChannel(dmChannel);
       navigate(`/channels/@me/${dmChannel.id}`);
     } catch (err) {
-      console.error('Failed to open DM:', err);
+      addToast(t('social:sendMessage.failed', { reason: describeError(err) }), 'warning');
     }
   };
 

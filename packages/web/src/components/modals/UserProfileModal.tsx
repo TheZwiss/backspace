@@ -203,7 +203,7 @@ export function UserProfileModal() {
       closeModal();
       navigate(`/channels/@me/${channel.id}`);
     } catch (err) {
-      console.error('Failed to create DM channel:', err);
+      addToast(t('social:sendMessage.failed', { reason: describeError(err) }), 'warning');
     }
   };
 

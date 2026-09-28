@@ -27,6 +27,7 @@ vi.mock('../../utils/mutuals', () => ({
 import { UserProfileModal } from './UserProfileModal';
 import { useUIStore } from '../../stores/uiStore';
 import { useSocialStore } from '../../stores/socialStore';
+import { api, HttpError } from '../../api/client';
 
 function makeUser(overrides: Partial<User>): User {
   return {
@@ -87,5 +88,24 @@ describe('UserProfileModal', () => {
       homeUserId: '342939417492520960',
       homeInstance: 'orbit.test',
     });
+  });
+
+  it('tells the user why Send Message failed', async () => {
+    const create = vi.spyOn(api.dm, 'create').mockRejectedValueOnce(new HttpError(404, 'User not found', null, 'user_not_found'));
+    const addToast = vi.fn();
+    useUIStore.setState({ addToast });
+    const user = makeUser({});
+    useUIStore.getState().openModal('userProfile', { userId: user.id, user, origin: '' });
+
+    render(
+      <MemoryRouter>
+        <UserProfileModal />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByText('Send Message'));
+
+    await waitFor(() => expect(addToast).toHaveBeenCalledWith('Could not open the conversation: No user with that name was found.', 'warning'));
+    expect(useUIStore.getState().activeModal).toBe('userProfile');
+    create.mockRestore();
   });
 });

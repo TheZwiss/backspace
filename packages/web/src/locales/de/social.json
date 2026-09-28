@@ -23,6 +23,9 @@
     "message": "Nachricht",
     "remove": "Freund entfernen"
   },
+  "sendMessage": {
+    "failed": "Die Unterhaltung konnte nicht geöffnet werden: {{reason}}"
+  },
   "request": {
     "incoming": "Eingehende Freundschaftsanfrage",
     "outgoing": "Ausgehende Freundschaftsanfrage",

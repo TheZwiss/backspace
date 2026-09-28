@@ -8,6 +8,7 @@ import { Username } from '../ui/Username';
 import { ProfileBio } from './ProfileBio';
 import { useSpaceStore, getApiForOrigin, resolveUserOrigin } from '../../stores/spaceStore';
 import { api } from '../../api/client';
+import { describeError } from '../../i18n/errors';
 import { useUIStore, type ProfileMemberContext } from '../../stores/uiStore';
 import { getAvatarGradient, adjustColor, mutedGradient } from '../../utils/gradients';
 import { parseFederatedUsername } from '../../utils/identity';
@@ -38,6 +39,7 @@ export function UserProfilePopout({ user: propUser, onClose, anchor, placement =
   const f = useFormatters();
   const addDmChannel = useSpaceStore((s) => s.addDmChannel);
   const openModal = useUIStore((s) => s.openModal);
+  const addToast = useUIStore((s) => s.addToast);
   // Resolve to the best-known view of this user from the userViews cache.
   // The prop frequently arrives as a federated stub (when the carrying DM
   // came from a sibling instance that won the populateFromReady dedup race);
@@ -113,7 +115,7 @@ export function UserProfilePopout({ user: propUser, onClose, anchor, placement =
       onClose();
       navigate(`/channels/@me/${channel.id}`);
     } catch (err) {
-      console.error('Failed to create DM channel:', err);
+      addToast(t('social:sendMessage.failed', { reason: describeError(err) }), 'warning');
     }
   };
 

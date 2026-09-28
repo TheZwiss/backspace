@@ -395,6 +395,24 @@ describe('FriendsPage', () => {
     });
   });
 
+  describe('Message button failure', () => {
+    it('tells the user why opening the DM failed', async () => {
+      const user = userEvent.setup();
+      useSocialStore.setState({ friends: [makeFriend({ id: 'friend-7' })], requests: [] });
+      const addToast = vi.fn();
+      useUIStore.setState({ addToast });
+      const { api, HttpError } = await import('../../api/client');
+      (api.dm.create as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new HttpError(404, 'User not found', null, 'user_not_found'));
+
+      renderFriendsPage();
+      await user.click(screen.getByText('All'));
+      await user.click(screen.getByTitle('Message'));
+
+      await waitFor(() => expect(addToast).toHaveBeenCalledWith('Could not open the conversation: No user with that name was found.', 'warning'));
+      expect(mockNavigate).not.toHaveBeenCalled();
+    });
+  });
+
   describe('Cancel outgoing friend request', () => {
     it('calls cancelFriendRequest when clicking cancel on an outgoing request', async () => {
       const user = userEvent.setup();

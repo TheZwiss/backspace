@@ -23,6 +23,9 @@
     "message": "发消息",
     "remove": "删除好友"
   },
+  "sendMessage": {
+    "failed": "无法打开私信会话：{{reason}}"
+  },
   "request": {
     "incoming": "收到的好友申请",
     "outgoing": "发出的好友申请",
