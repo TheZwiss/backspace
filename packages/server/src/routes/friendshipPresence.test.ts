@@ -132,6 +132,29 @@ function friendship(status?: 'accepted'): FederationRelayEvent['friendship'] {
   };
 }
 
+/** alice's pending request to bob, as her home holds it while it waits for bob's answer. */
+function alicesPendingRequest(id: string): void {
+  testDb.insert(schema.friendRequests).values({
+    id, fromId: 'alice', toId: 'stub-bob', status: 'pending', createdAt: 1,
+  }).run();
+}
+
+function presenceCountTo(userId: string, aboutId: string): number {
+  return sent.filter(s => s.userId === userId && s.payload.type === 'presence_update' && s.payload.userId === aboutId).length;
+}
+
+function presenceRelayCount(userId: string): number {
+  return queued.filter(q => q.eventType === 'presence_update' && q.entityId === userId).length;
+}
+
+function friendAdd(messageId: string): FederationRelayEvent {
+  return { eventType: 'friend_add', contextType: 'friend', messageId, encryptionVersion: 0, timestamp: 2, friendship: friendship() };
+}
+
+function acceptedUpdate(messageId: string): FederationRelayEvent {
+  return { eventType: 'friend_request_update', contextType: 'friend', messageId, encryptionVersion: 0, timestamp: 2, friendship: friendship('accepted') };
+}
+
 describe('friendship presence snapshot: local accept (PATCH /api/social/requests/:id)', () => {
   let app: FastifyInstance;
 
@@ -185,13 +208,11 @@ describe('friendship presence snapshot: relayed friend_add', () => {
   it("tells the local side the remote friend's kept activities and relays the local side's presence home", async () => {
     activities.set('stub-bob', playing);
     activities.set('alice', [{ type: 'watching', name: 'A film' }]);
+    alicesPendingRequest('req-fa');
     const fed = await import('./federation/events/friends.js');
     const accepted: string[] = [];
     const rejected: Array<{ messageId: string; reason: string }> = [];
-    await fed.processFriendAddEvent(
-      { eventType: 'friend_add', contextType: 'friend', messageId: 'fa-1', encryptionVersion: 0, timestamp: 2, friendship: friendship() },
-      `https://${ORBIT}`, testDb, accepted, rejected,
-    );
+    await fed.processFriendAddEvent(friendAdd('fa-1'), `https://${ORBIT}`, testDb, accepted, rejected);
     expect(rejected).toEqual([]);
 
     expect(presenceTo('alice', 'stub-bob')).toMatchObject({ status: 'online', activities: playing, homeUserId: 'bob-home', homeInstance: ORBIT });
@@ -199,19 +220,77 @@ describe('friendship presence snapshot: relayed friend_add', () => {
     expect(relay?.targets).toEqual([`https://${ORBIT}`]);
     expect(relay?.event.presenceUpdate?.activities).toEqual([{ type: 'watching', name: 'A film' }]);
   });
+
+  it('sends no presence for a friend_add that answers no pending request', async () => {
+    activities.set('stub-bob', playing);
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const fed = await import('./federation/events/friends.js');
+    const rejected: Array<{ messageId: string; reason: string }> = [];
+    await fed.processFriendAddEvent(friendAdd('fa-none'), `https://${ORBIT}`, testDb, [], rejected);
+    await vi.dynamicImportSettled();
+
+    expect(rejected).toEqual([{ messageId: 'fa-none', reason: 'invalid_target' }]);
+    expect(sent.filter(s => s.payload.type === 'presence_update')).toEqual([]);
+    expect(presenceRelayCount('alice')).toBe(0);
+  });
+});
+
+describe('friendship presence snapshot: one exchange per friendship', () => {
+  it('exchanges presence once when the accepted update is followed by its friend_add', async () => {
+    activities.set('stub-bob', playing);
+    alicesPendingRequest('req-seq');
+    const fed = await import('./federation/events/friends.js');
+    const accepted: string[] = [];
+    const rejected: Array<{ messageId: string; reason: string }> = [];
+    fed.processFriendRequestUpdateEvent(acceptedUpdate('fu-seq'), `https://${ORBIT}`, testDb, accepted, rejected);
+    await fed.processFriendAddEvent(friendAdd('fa-seq'), `https://${ORBIT}`, testDb, accepted, rejected);
+    await vi.dynamicImportSettled();
+
+    expect(rejected).toEqual([]);
+    expect(accepted).toEqual(['fu-seq', 'fa-seq']);
+    expect(presenceCountTo('alice', 'stub-bob')).toBe(1);
+    expect(presenceCountTo('stub-bob', 'alice')).toBe(1);
+    expect(presenceRelayCount('alice')).toBe(1);
+  });
+
+  it('exchanges presence once when the friend_add arrives before the accepted update', async () => {
+    alicesPendingRequest('req-rev');
+    const fed = await import('./federation/events/friends.js');
+    const accepted: string[] = [];
+    const rejected: Array<{ messageId: string; reason: string }> = [];
+    await fed.processFriendAddEvent(friendAdd('fa-rev'), `https://${ORBIT}`, testDb, accepted, rejected);
+    fed.processFriendRequestUpdateEvent(acceptedUpdate('fu-rev'), `https://${ORBIT}`, testDb, accepted, rejected);
+    await vi.dynamicImportSettled();
+
+    expect(rejected).toEqual([]);
+    expect(presenceCountTo('alice', 'stub-bob')).toBe(1);
+    expect(presenceRelayCount('alice')).toBe(1);
+  });
+
+  it('sends no presence for an accepted update when the two are already friends', async () => {
+    // A request left pending next to an existing friendship forms nothing new.
+    testDb.insert(schema.friends).values({ userId: 'alice', friendId: 'stub-bob', createdAt: 1 }).run();
+    alicesPendingRequest('req-old');
+    const fed = await import('./federation/events/friends.js');
+    const rejected: Array<{ messageId: string; reason: string }> = [];
+    fed.processFriendRequestUpdateEvent(acceptedUpdate('fu-old'), `https://${ORBIT}`, testDb, [], rejected);
+    await vi.dynamicImportSettled();
+
+    expect(rejected).toEqual([]);
+    expect(sent.filter(s => s.payload.type === 'presence_update')).toEqual([]);
+    expect(presenceRelayCount('alice')).toBe(0);
+  });
 });
 
 describe('friendship presence snapshot: failure isolation', () => {
   it('accepts a relayed friend_add when the presence snapshot fails', async () => {
     presenceBroken = true;
     vi.spyOn(console, 'warn').mockImplementation(() => {});
+    alicesPendingRequest('req-fx');
     const fed = await import('./federation/events/friends.js');
     const accepted: string[] = [];
     const rejected: Array<{ messageId: string; reason: string }> = [];
-    await fed.processFriendAddEvent(
-      { eventType: 'friend_add', contextType: 'friend', messageId: 'fa-x', encryptionVersion: 0, timestamp: 2, friendship: friendship() },
-      `https://${ORBIT}`, testDb, accepted, rejected,
-    );
+    await fed.processFriendAddEvent(friendAdd('fa-x'), `https://${ORBIT}`, testDb, accepted, rejected);
     expect(rejected).toEqual([]);
     expect(accepted).toEqual(['fa-x']);
   });

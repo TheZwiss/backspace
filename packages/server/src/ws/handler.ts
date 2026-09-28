@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { WebSocket } from 'ws';
 import { verifyJwt } from '../utils/auth.js';
 import { getDb, schema } from '../db/index.js';
-import { eq, and, inArray, desc, sql } from 'drizzle-orm';
+import { eq, and, or, inArray, desc, sql } from 'drizzle-orm';
 import { handleClientEvent } from './events.js';
 import { computePermissions, PermissionBits, permissionsToString } from '../utils/permissions.js';
 import type {

@@ -230,7 +230,7 @@ This synthetic injection only occurs in snapshots (ready, friendship), not in li
 
 ### Friendship Snapshot
 
-Presence events fire only on change, so a friend who was already in a game when the friendship formed would show no activity until it changed. When a friendship row is created (local `PATCH /api/social/requests/:id` accept, relayed `friend_request_update` accepted, relayed `friend_add`), `exchangeFriendPresence(a, b)` (`ws/presence.ts`):
+Presence events fire only on change, so a friend who was already in a game when the friendship formed would show no activity until it changed. When a friendship row is created, `exchangeFriendPresence(a, b)` (`ws/presence.ts`) runs once, at the step that inserted the row: the local `PATCH /api/social/requests/:id` accept, or on the requester's home whichever of the relayed `friend_request_update` (accepted) and `friend_add` formed it (the other then finds the friendship and does nothing). A refused `friend_add` sends nothing. It is best effort and never fails the friendship or its relay:
 
 1. sends each side's sessions a `presence_update` about the other with its current status and snapshot activities (`sendPresenceSnapshot`; an offline subject reports none);
 2. for each **native** side whose new friend is replicated, queues a targeted S2S `presence_update` (status + activities) to the friend's home (`snapshotPresenceForFriend`, `utils/federationPresence.ts`). The friend's home had no row for the native when the activity started, so it dropped that relay; this gives it the current state, which it keeps and forwards to the friend.

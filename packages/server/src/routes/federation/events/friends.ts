@@ -203,7 +203,7 @@ export function processFriendRequestUpdateEvent(
   // friend_add that follows it then finds the friendship and is a no-op (it
   // finds no pending request to answer any more).
   const now = event.friendship.createdAt || Date.now();
-  db.transaction((tx) => {
+  const formed = db.transaction((tx) => {
     tx.update(schema.friendRequests)
       .set({ status: status as string })
       .where(eq(schema.friendRequests.id, pendingRequest.id))
@@ -221,8 +221,10 @@ export function processFriendRequestUpdateEvent(
         .get();
       if (!existingFriend) {
         tx.insert(schema.friends).values({ userId: fromUser.id, friendId: toUser.id, createdAt: now }).run();
+        return true;
       }
     }
+    return false;
   });
 
   if (status === 'accepted') {
@@ -234,8 +236,9 @@ export function processFriendRequestUpdateEvent(
       },
       requestId: pendingRequest.id,
     });
-    // Each side sees the other's current status and activity now (#340).
-    exchangeFriendPresence(fromUser.id, toUser.id);
+    // Each side sees the other's current status and activity now (#340),
+    // once per friendship: only when this update is what formed it.
+    if (formed) exchangeFriendPresence(fromUser.id, toUser.id);
   } else if (status === 'declined') {
     connectionManager.sendToUser(fromUser.id, {
       type: 'friend_request_declined',
