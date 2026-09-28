@@ -5,6 +5,7 @@ import { getOurOrigin, normalizeOriginForCompare } from '../../utils/federationA
 import { generateSnowflake } from '../../utils/snowflake.js';
 import { and, eq, isNull, or, sql } from 'drizzle-orm';
 import { randomBytes } from 'node:crypto';
+import { renameIdNamedStub } from './stubName.js';
 
 /**
  * Extract bare domain from a homeInstance value.
@@ -484,7 +485,11 @@ export function resolveOrCreateReplicatedUser(
   hints?: { username?: string | null; status?: 'online' | 'idle' | 'dnd' | 'offline' | null; deleted?: boolean | null },
 ): typeof schema.users.$inferSelect | null {
   const existing = lookupFederatedUser(homeUserId, homeInstance, db, hints);
-  if (existing.kind === 'found') return backfillHomeUserId(existing.user, homeUserId, db);
+  if (existing.kind === 'found') {
+    // A row met before its username was known is still named
+    // `<homeUserId>@<domain>`; the first username hint renames it.
+    return renameIdNamedStub(backfillHomeUserId(existing.user, homeUserId, db), hints?.username, db);
+  }
   // The id belongs only to local users of another identity. It names no one
   // here, and a stub for it would give one id two identities on this instance.
   if (existing.kind === 'mismatch') {
@@ -528,9 +533,11 @@ export function resolveOrCreateReplicatedUser(
 
   // Use the home user's real username when the caller passes a hint (the wire
   // profile snapshot from friend_request_create / friend_add / DM relay carries
-  // it). This makes the local stub's `username` human-readable, so client-side
-  // `parseFederatedUsername(username).baseName` returns the real handle. Falls
-  // back to the snowflake-id scheme when no hint is available (legacy paths).
+  // it, and the client routes ask the home first, see
+  // `resolveRemoteIdentityForClient`). This makes the local stub's `username`
+  // human-readable, so client-side `parseFederatedUsername(username).baseName`
+  // returns the real handle. Without a hint the stub is named
+  // `<homeUserId>@<domain>`, and the first later hint renames it (above).
   const localPart = (hints?.username ?? homeUserId).toLowerCase();
   const baseUsername = `${localPart}@${domain}`.toLowerCase();
 

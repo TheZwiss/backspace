@@ -95,8 +95,16 @@ export async function lookupRemoteUser(peerOrigin: string, username: string): Pr
  * `not_found` here means "the peer does not host a native non-deleted user
  * with that homeUserId" — including the tombstone case. Caller should leave
  * the local stub untouched and retry on the next peer activation.
+ *
+ * `options.timeoutMs` shortens the default 10s wait for callers that hold a
+ * user's request open (`resolveRemoteIdentityForClient`); a timeout is
+ * `unreachable`.
  */
-export async function lookupRemoteUserByHomeId(peerOrigin: string, homeUserId: string): Promise<LookupResult> {
+export async function lookupRemoteUserByHomeId(
+  peerOrigin: string,
+  homeUserId: string,
+  options: { timeoutMs?: number } = {},
+): Promise<LookupResult> {
   const db = getDb();
   const peer = db
     .select()
@@ -117,7 +125,7 @@ export async function lookupRemoteUserByHomeId(peerOrigin: string, homeUserId: s
       method: 'POST',
       headers,
       body,
-      signal: AbortSignal.timeout(LOOKUP_TIMEOUT_MS),
+      signal: AbortSignal.timeout(options.timeoutMs ?? LOOKUP_TIMEOUT_MS),
     }, 'approved');
   } catch {
     return { ok: false, reason: 'unreachable' };

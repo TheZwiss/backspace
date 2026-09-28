@@ -280,7 +280,8 @@ describe('processFriendRequestCreateEvent — branch coverage', () => {
     seedLocalUser('alice-id', 'alice');
     seedReplicatedUser({
       id: 'bob-stub',
-      username: 'remote-bob@orbit.test',
+      // Already named: an id-named row would be renamed by the hint and announced.
+      username: 'bob@orbit.test',
       homeUserId: 'remote-bob',
       homeInstance: 'orbit.test',
     });
@@ -312,7 +313,8 @@ describe('processFriendRequestCreateEvent — branch coverage', () => {
     seedLocalUser('alice-id', 'alice');
     seedReplicatedUser({
       id: 'bob-stub',
-      username: 'remote-bob@orbit.test',
+      // Already named: an id-named row would be renamed by the hint and announced.
+      username: 'bob@orbit.test',
       homeUserId: 'remote-bob',
       homeInstance: 'orbit.test',
     });

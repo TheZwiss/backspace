@@ -13,27 +13,33 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { FederationRelayEvent, FederationRelayProfileSnapshot } from '@backspace/shared';
 import { extractDomain, resolveRelayActor } from './identity.js';
+import { renameIdNamedStub } from './stubName.js';
 
 /**
  * Hydrate a replicated user stub with profile data from a relay event.
  * Only updates fields that are currently null/empty on the local row,
- * so manually-set local values are preserved.
+ * so manually-set local values are preserved. The one rewrite is the
+ * username of a row still named `<homeUserId>@<domain>` (`renameIdNamedStub`).
  */
 export async function hydrateReplicatedUserProfile(
-  user: typeof schema.users.$inferSelect,
+  userIn: typeof schema.users.$inferSelect,
   profile: FederationRelayProfileSnapshot | undefined,
   db: ReturnType<typeof getDb>,
 ): Promise<typeof schema.users.$inferSelect> {
-  if (!profile) return user;
-  if (!user.homeInstance) return user; // Don't update native users
+  if (!profile) return userIn;
+  if (!userIn.homeInstance) return userIn; // Don't update native users
   // Detached accounts are sovereign local accounts: the home domain now belongs
   // to a different incarnation, so a relayed snapshot resolved via an old
   // homeUserId (tier-1 historical hit) must never fill this row's fields. No-op
   // return, mirroring the profile_update / presence_update / identity-delete
   // guards (detach spec §4.3).
-  if (user.federationHomeOrphaned === 1) return user;
+  if (userIn.federationHomeOrphaned === 1) return userIn;
 
-  const baseUrl = user.homeInstance.startsWith('http') ? user.homeInstance : `https://${user.homeInstance}`;
+  // A row still named `<homeUserId>@<domain>` takes the snapshot's username.
+  const user = renameIdNamedStub(userIn, profile.username, db);
+
+  const homeInstance = userIn.homeInstance;
+  const baseUrl = homeInstance.startsWith('http') ? homeInstance : `https://${homeInstance}`;
   const buildAbsoluteUrl = (value: string): string => {
     if (value.startsWith('http')) return value;
     const path = value.startsWith('/') ? value : `/api/uploads/${value}`;

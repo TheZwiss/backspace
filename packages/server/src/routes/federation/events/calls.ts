@@ -37,12 +37,13 @@ export function processDmCallStartEvent(
     .where(eq(schema.dmChannels.federatedId, event.federatedId))
     .get();
 
-  // Resolve caller to local stub
+  // Resolve caller to local stub. The call payload carries only a display
+  // name, which is not a handle, so no username hint: a caller met here first
+  // gets the `<homeUserId>@<domain>` name until a real username arrives.
   const callerStub = resolveOrCreateReplicatedUser(
     event.call.caller.homeUserId,
     event.call.caller.homeInstance,
     db,
-    { username: event.call.caller.displayName },
   );
   if (!callerStub) {
     rejected.push({ messageId: event.messageId, reason: 'participant_not_found' });

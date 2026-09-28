@@ -2,15 +2,21 @@ import { and, eq, like } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { lookupRemoteUserByHomeId } from './federationLookup.js';
 import { extractDomain } from '../routes/federation.js';
+import { isIdNamedStub, renameIdNamedStub } from '../routes/federation/stubName.js';
 
 /**
- * For each replicated stub on this instance whose username still matches the
- * legacy `<homeUserId>@<domain>` pattern AND whose home_instance equals the
- * given peer's domain, ask the peer for the canonical username via
- * lookupRemoteUserByHomeId and rewrite the stub.
+ * For each replicated stub on this instance still named `<homeUserId>@<domain>`
+ * (`isIdNamedStub`) whose home_instance equals the given peer's domain, ask the
+ * peer for the canonical username via lookupRemoteUserByHomeId and rename the
+ * stub (`renameIdNamedStub`, which also seeds an empty displayName and a
+ * differing status from the answer).
  *
- * Idempotent — stubs already migrated (username does not start with their
- * homeUserId) are skipped without a network call.
+ * Such stubs come from any first contact that happened without a username:
+ * the home could not be asked, or the row predates the realname scheme.
+ * Identity resolution and hydration rename them as soon as a username arrives;
+ * this pass catches the ones nothing has touched since.
+ *
+ * Idempotent: stubs already renamed are skipped without a network call.
  *
  * Gated on peer.status='active' — the lookup endpoint requires the requesting
  * peer to be active on the receiving side. We additionally check our local
@@ -31,8 +37,8 @@ export async function backfillStubUsernamesForPeer(peerOrigin: string): Promise<
   if (!peer || peer.status !== 'active') return;
 
   // Coarse SQL prefilter: stubs from this peer whose username ends with @peerDomain.
-  // We then narrow in JS to the legacy `<homeUserId>@<domain>` shape because Drizzle
-  // can't express that comparison portably.
+  // `isIdNamedStub` then narrows to the `<homeUserId>@<domain>` shape because
+  // Drizzle can't express that comparison portably.
   const candidates = db
     .select()
     .from(schema.users)
@@ -46,9 +52,7 @@ export async function backfillStubUsernamesForPeer(peerOrigin: string): Promise<
     .all();
 
   for (const stub of candidates) {
-    if (!stub.homeUserId) continue;
-    const expectedLegacy = `${stub.homeUserId}@${peerDomain}`.toLowerCase();
-    if (stub.username !== expectedLegacy) continue; // already migrated or non-legacy shape
+    if (!stub.homeUserId || !isIdNamedStub(stub)) continue;
 
     const result = await lookupRemoteUserByHomeId(peerOrigin, stub.homeUserId);
     if (!result.ok) {
@@ -56,41 +60,12 @@ export async function backfillStubUsernamesForPeer(peerOrigin: string): Promise<
       // Will retry on next onPeerActivated for this origin.
       continue;
     }
+    // The answer must be about the id we asked for.
+    if (result.homeUserId !== stub.homeUserId) continue;
 
-    const newUsername = `${result.username}@${peerDomain}`.toLowerCase();
-    if (newUsername === stub.username) continue; // already correct
-
-    // Collision check: another row at the target username (rare under the new
-    // scheme but possible from prior partial replication).
-    const collision = db
-      .select({ id: schema.users.id })
-      .from(schema.users)
-      .where(eq(schema.users.username, newUsername))
-      .get();
-    if (collision && collision.id !== stub.id) {
-      console.warn(`[stub-backfill] username collision on ${newUsername} — leaving stub ${stub.id} as ${stub.username}`);
-      continue;
-    }
-
-    // Fill displayName from result.profile if the stub has none, mirroring the
-    // displayName ?? username fallback applied at hydrate / profile_update time.
-    const updates: { username: string; displayName?: string; status?: 'online' | 'idle' | 'dnd' | 'offline' } = { username: newUsername };
-    if (!stub.displayName) {
-      updates.displayName = result.profile.displayName ?? result.username;
-    }
-    // Heal status too — same root issue (stub was seeded offline at creation
-    // because the wire snapshot pre-dated the status field). Only overwrite
-    // when the lookup tells us something specific; keep the stub's current
-    // value otherwise.
-    if (result.profile.status && result.profile.status !== stub.status) {
-      updates.status = result.profile.status;
-    }
-
-    db.update(schema.users)
-      .set(updates)
-      .where(eq(schema.users.id, stub.id))
-      .run();
-
-    console.log(`[stub-backfill] rewrote stub ${stub.id}: ${stub.username} → ${newUsername}`);
+    renameIdNamedStub(stub, result.username, db, {
+      displayName: result.profile.displayName,
+      status: result.profile.status ?? null,
+    });
   }
 }

@@ -56,7 +56,8 @@ import {
 import { getOurOrigin, canonicalizeHomeInstance } from '../utils/federationAuth.js';
 import { resolveOriginFromHostname } from '../utils/federationOriginResolve.js';
 import type { FederationRelayEvent } from '@backspace/shared';
-import { resolveLocalUser, resolveOrCreateReplicatedUser } from './federation.js';
+import { resolveLocalUser } from './federation.js';
+import { resolveRemoteIdentityForClient } from '../utils/federationClientIdentity.js';
 
 /**
  * Batch-fetch reactions for a set of DM message IDs.
@@ -914,8 +915,8 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
         }
       }
 
-      // Federated identity: resolve or create a replicated user stub
-      targetUser = resolveOrCreateReplicatedUser(homeUserId, homeInstance, db) ?? undefined;
+      // Federated identity: resolve it, named from its home on first contact
+      targetUser = (await resolveRemoteIdentityForClient(homeUserId, homeInstance, db)) ?? undefined;
     } else if (userId && typeof userId === 'string') {
       // Local ID: direct lookup (existing behavior)
       targetUser = db.select().from(schema.users).where(eq(schema.users.id, userId)).get();
@@ -1100,14 +1101,22 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
 
     const db = getDb();
 
+    // Federated users are resolved first, all at once: each may wait for its
+    // home to report the name (first contact), and those waits must not add up.
+    const federatedRows = await Promise.all(userIdentities.map((identity) =>
+      identity.homeUserId && identity.homeInstance
+        ? resolveRemoteIdentityForClient(identity.homeUserId, identity.homeInstance, db)
+        : Promise.resolve(null),
+    ));
+
     // Resolve each identity to a local user row
     const targetUsers: Array<typeof schema.users.$inferSelect> = [];
-    for (const identity of userIdentities) {
+    for (const [index, identity] of userIdentities.entries()) {
       let localUser: typeof schema.users.$inferSelect | undefined;
 
       if (identity.homeUserId && identity.homeInstance) {
-        // Federated user — resolve via homeUserId, creating a replicated stub if needed
-        localUser = resolveOrCreateReplicatedUser(identity.homeUserId, identity.homeInstance, db) ?? undefined;
+        // Federated user — resolved above, named from its home on first contact
+        localUser = federatedRows[index] ?? undefined;
       } else {
         // Local user — direct ID lookup
         localUser = db.select().from(schema.users).where(
@@ -1671,8 +1680,8 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     let targetUser: typeof schema.users.$inferSelect | undefined;
 
     if (homeUserId && homeInstance) {
-      // Federated identity: resolve or create a replicated user stub
-      targetUser = resolveOrCreateReplicatedUser(homeUserId, homeInstance, db) ?? undefined;
+      // Federated identity: resolve it, named from its home on first contact
+      targetUser = (await resolveRemoteIdentityForClient(homeUserId, homeInstance, db)) ?? undefined;
     } else if (targetUserIdRaw && typeof targetUserIdRaw === 'string') {
       // Local ID: direct lookup (existing behavior)
       targetUser = db.select().from(schema.users).where(eq(schema.users.id, targetUserIdRaw)).get();
@@ -1985,7 +1994,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
   // The `:targetUserId` URL segment carries either a local user id OR a
   // federated home user id. When the optional `homeInstance` query string is
   // present, the segment is interpreted as a home id and resolved via
-  // `resolveOrCreateReplicatedUser(targetUserId, homeInstance)` — same pattern
+  // `resolveRemoteIdentityForClient(targetUserId, homeInstance)` — same pattern
   // as POST /api/dm/:id/transfer and POST /api/dm/:id/members. This is
   // necessary when the client only knows the target's home identity (the
   // common case for federated members rendered through `useCanonicalUserView`,
@@ -2006,7 +2015,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     // user id and look it up directly.
     let targetUserRow: typeof schema.users.$inferSelect | undefined;
     if (typeof homeInstanceQuery === 'string' && homeInstanceQuery.length > 0) {
-      targetUserRow = resolveOrCreateReplicatedUser(rawTargetSegment, homeInstanceQuery, db) ?? undefined;
+      targetUserRow = (await resolveRemoteIdentityForClient(rawTargetSegment, homeInstanceQuery, db)) ?? undefined;
     } else {
       targetUserRow = db.select().from(schema.users).where(eq(schema.users.id, rawTargetSegment)).get();
     }
@@ -2105,11 +2114,11 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     // so the explicit federated args wins over a possibly-stale local id.
     let newOwnerRow: typeof schema.users.$inferSelect | undefined;
     if (hasFederatedArgs) {
-      newOwnerRow = resolveOrCreateReplicatedUser(
+      newOwnerRow = (await resolveRemoteIdentityForClient(
         rawHomeUserId as string,
         rawHomeInstance as string,
         db,
-      ) ?? undefined;
+      )) ?? undefined;
     } else {
       newOwnerRow = db.select().from(schema.users).where(eq(schema.users.id, rawNewOwnerId as string)).get();
     }
@@ -2261,7 +2270,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       targetUser = db.select().from(schema.users)
         .where(eq(schema.users.id, body.target.userId)).get() ?? null;
     } else if ('homeUserId' in body.target && 'homeInstance' in body.target) {
-      targetUser = resolveOrCreateReplicatedUser(
+      targetUser = await resolveRemoteIdentityForClient(
         body.target.homeUserId,
         body.target.homeInstance,
         db,

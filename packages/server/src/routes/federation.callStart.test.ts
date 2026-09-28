@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type WebSocket from 'ws';
+import { eq } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import { setWorkerId } from '../utils/snowflake.js';
 
@@ -244,5 +245,35 @@ describe('processRelayEvents → processDmCallStartEvent', () => {
     const entry = cm.getFederatedCall(federatedId);
     expect(entry).toBeDefined();
     expect(entry!.ringedUserIds).toEqual(['bob-local']);
+  });
+
+  it('a caller first met through a call is not named after their display name', async () => {
+    const { processRelayEvents } = await importSUT();
+    const event = {
+      eventType: 'dm_call_start' as const,
+      messageId: 'msg-name',
+      encryptionVersion: 0 as const,
+      timestamp: Date.now(),
+      federatedId: 'fed-call-caller-name',
+      call: {
+        livekitUrl: 'wss://lk.example',
+        tokens: { 'caller-home': 'tok-c' },
+        caller: {
+          homeUserId: 'caller-home',
+          homeInstance: 'https://remote.example',
+          displayName: 'Friendly Caller',
+        },
+        participants: [
+          { homeUserId: 'caller-home', homeInstance: 'https://remote.example', displayName: 'Friendly Caller' },
+        ],
+      },
+    };
+
+    await processRelayEvents([event], 'https://remote.example', 'https://remote.example', testDb);
+
+    // The display name is not a handle: the row keeps the id-based name until
+    // a real username for it arrives.
+    const caller = testDb.select().from(schema.users).where(eq(schema.users.homeUserId, 'caller-home')).get();
+    expect(caller?.username).toBe('caller-home@remote.example');
   });
 });
