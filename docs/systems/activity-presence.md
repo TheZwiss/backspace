@@ -177,7 +177,21 @@ Because the in-memory `ConnectionManager` is empty at boot by construction, no l
 
 ### Presence Broadcast Scope
 
-`presence_update` events are broadcast via `connectionManager.sendToSpace()` to all spaces the user belongs to, plus `sendToUser()` to the user's own connections (multi-tab sync). The user is excluded from the space broadcast to avoid duplicate delivery.
+A `presence_update` about a user goes to that user's **profile audience**: `collectProfileBroadcastTargetIds(userId)` (`utils/userDeletion.ts`), the same set `user_updated` uses. That is every co-member of every space the user is in, every co-member of every DM they are in, and every friend, never the user themselves. Each recipient gets it through `connectionManager.sendToUser()`, one send per user id, reaching all of that user's connections. There is no per-space broadcast (`sendToSpace` is not used for presence), so a recipient who shares several spaces with the user gets the event once.
+
+Every emitter builds the event with `presenceUpdateFor` / `presenceUpdateEvent` (`ws/presenceEvent.ts`) and sends it to that audience:
+
+| Trigger | Where | Also to the user's own connections |
+|---------|-------|------------------------------------|
+| Status change (REST or WS) | `applyChosenStatus` (`ws/presence.ts`) | yes |
+| `activity_update` | `handleActivityUpdate` (`ws/events.ts`) | yes |
+| `showActivity` turned off | `PATCH /api/users/@me` (`routes/users.ts`), `activities: []` | yes |
+| Connect | WS auth (`ws/handler.ts`) | no |
+| Disconnect after the grace period | `finalizeDisconnect` (`ws/handler.ts`), `offline` with `activities: []` | no (none left) |
+| Relayed S2S presence about a replicated user | `processPresenceUpdateEvent` (`routes/federation/events/dmState.ts`) | no |
+| Peer deactivated | `markPeerStubsOffline` (`utils/federationPresence.ts`), `offline` for each of the peer's rows | no |
+
+The one targeted send is the friendship snapshot (`sendPresenceSnapshot`, below): the new friend only.
 
 ---
 
@@ -194,7 +208,7 @@ Desktop Process Scanner (15s poll)
       → 5s debounce → wsSendAll('activity_update')
         → Server validates, rate-limits (3s)
           → Stores in ConnectionManager.userActivities
-            → Broadcasts 'presence_update' to all user's spaces
+            → Sends 'presence_update' to the user's profile audience (see Presence Broadcast Scope)
               → Client useWebSocket handler
                 → activityStore.setUserActivities()
                   → UI re-renders (ActivityCard, MemberSidebar, ActivityPanel)
@@ -258,7 +272,7 @@ After receiving a `ready` event, the client performs two re-push operations (`us
 3. Server updates `ConnectionManager.userShowActivity` cache (`routes/users.ts:357`)
 4. If toggled **off**, server immediately:
    - Clears `ConnectionManager.userActivities` for the user
-   - Broadcasts `presence_update` with `activities: []` to all user's spaces
+   - Sends `presence_update` with `activities: []` to the user's profile audience (see Presence Broadcast Scope)
    - Sends same to user's own connections
 5. Client calls `activityStore.setShowActivity(enabled)` (`PrivacyPanel.tsx:73`)
 6. If toggled **off**, client immediately:
@@ -315,6 +329,8 @@ This spec covers how detected activities enter the broadcast pipeline. The detec
 ```typescript
 interface ActivityState {
   userActivities: Map<string, Activity[]>;  // All users' activities, keyed by activityKey (never a raw row id)
+  activityWriters: Map<string, string>;     // activityKey → origin whose delivery set that entry last
+  originRows: Map<string, Map<string, PresenceSubject>>; // origin → (row id → subject), older servers' ready rows only
   showActivity: boolean;                     // Current user's visibility preference
   myActivities: Activity[] | null;           // Current user's own activities (cached locally)
 }
@@ -324,9 +340,10 @@ interface ActivityState {
 
 | Method | Behavior |
 |--------|----------|
-| `setUserActivities(subject, origin, activities)` | Updates the entry at `activityKey(subject, origin)`; deletes it if empty array |
-| `clearUserActivities(subject, origin)` | Removes that entry |
-| `initActivities(entries, origin)` | Bulk-set from a ready payload (`readyActivityEntries`); merges into existing map |
+| `setUserActivities(subject, origin, activities)` | Updates the entry at `activityKey(subject, origin)` and records `origin` as its writer; deletes both if empty array |
+| `clearUserActivities(subject, origin)` | Removes that entry and its writer |
+| `initActivities(entries, origin, coveredRows?)` | A `ready` is the origin's snapshot: removes the entries whose writer is `origin`, then sets the snapshot's entries (`readyActivityEntries`) with `origin` as writer. Entries another origin set last are left to that origin. A current server's snapshot covers everyone it reports on (space and DM members and friends), so all its entries are replaced (`coveredRows` null). An older server's covered only the space and DM members its `ready` lists (`readyRowIndex`, passed as `coveredRows`), so only those rows' entries are replaced; a friend it reports on only live keeps what it last reported |
+| `setOriginRows(origin, rows)` | Keeps the rows an older server's `ready` listed (`readyRowIndex`), or drops them (`null`, a current server) |
 | `setShowActivity(show)` | Sets flag; if `false`: cancels debounce, sends empty `activity_update` via `wsSendAll`, clears `myActivities` |
 | `pushActivities(activities)` | Guards on `showActivity`; sets `myActivities` immediately; starts/resets 5s debounce timer; on fire: sends `activity_update` via `wsSendAll` |
 | `reset()` | Cancels timer, clears all state |
@@ -336,9 +353,9 @@ interface ActivityState {
 Every instance delivers presence under its own row id: the viewer's home names a remote friend by its replicated row, the friend's home by the native row, a third instance by its own replicated row. One person must land on one key, whichever delivered it, or the friends views and member lists disagree (#340).
 
 - **Key:** `activityKey(subject, origin)` (`utils/identity.ts`) = `canonicalUserKey` of the person's home identity. A subject with a `homeInstance` names it itself; a subject without one is native to the delivering instance, so its home host is the delivering origin's (`''` = the page's instance, `window.location.host`) and its home id is its id.
-- **Writers:** the `presence_update` handler builds the subject with `presenceSubjectOf(event, origin)` and the ready handler with `readyActivityEntries(event)` (`utils/presenceSubject.ts`). `socialStore.updateFriendPresence(subject, origin, status)` matches friends by the same key.
+- **Writers:** the `presence_update` handler builds the subject with `presenceSubjectOf(event, origin)` and the ready handler with `readyActivityEntries(event)` (`utils/presenceSubject.ts`). `socialStore.updateFriendPresence(subject, origin, status)` matches friends by the same key, and `spaceStore.updateMemberPresence(subject, origin, status)` matches roster rows (each keyed with its space's `_instanceOrigin`) and `userViews` entries (each keyed with the origin that delivered it) by it too.
 - **Readers:** `activitiesFor(map, user, origin)` (`stores/activityStore.ts`). FriendsPage and ActivityPanel pass the friend and its `_instanceOrigin`; MemberSidebar and MobileMembersScreen pass `member.user` and the space's `_instanceOrigin`. Nothing looks an entry up by a raw id.
-- **Older servers.** A server without the identity fields sends only its row id. `presenceSubjectOf` then takes the identity from a row the client already holds for that (id, origin): a friend, a member of the loaded space from that origin, or a DM member from that origin; an unknown id is taken as native to the delivering instance. `readyActivityEntries` without `userActivityIdentities` takes it from the space and DM members of the same payload.
+- **Older servers.** A server without the identity fields sends only its row id. `presenceSubjectOf` then takes the identity from a row the client already holds for that (id, origin): a friend, a member of the loaded space from that origin, a DM member from that origin, or a member that origin's last `ready` listed in any of its spaces (`originRows`); an unknown id is taken as native to the delivering instance. `readyActivityEntries` without `userActivityIdentities` takes it from the space and DM members of the same payload. Without `originRows`, a member of a space that is not open was keyed as native on live updates, so the end of a game landed on another key than the ready snapshot's and the game stayed.
 - **Limit:** a native user of the page's instance is keyed by `window.location.host`, and a replicated row of that user elsewhere by its `homeInstance` (the instance's `DOMAIN`). The two agree only when the page is opened at exactly `DOMAIN`'s hostname on the default port. They do not when the page is opened by a LAN IP or another host alias, when the instance runs on a non-default port (`window.location.host` keeps the port, a stored `homeInstance` is the hostname only), or under the Vite dev server. Then that user's deliveries through their own home and through a peer land on two keys; deliveries through the home still reach the friends views.
 
 ### Module-Level State
