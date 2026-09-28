@@ -30,8 +30,27 @@ export function handleFromHint(username: string | null | undefined): string | nu
   return handle && HANDLE.test(handle) ? handle : null;
 }
 
-/** Most `_<n>` suffixes tried before a random one (`firstFreeUsername`). */
+/** Most `~<n>` suffixes tried before a random one (`firstFreeUsername`). */
 const MAX_NUMBERED_SUFFIX = 10;
+
+/**
+ * The separator between a handle and its collision suffix. It is outside the
+ * handle alphabet (`HANDLE`), so a suffixed name can never be the real handle
+ * of another user of the same instance, and a row carrying one is recognizable
+ * as suffixed. `_` was used before: `kai_1` could shadow a later real `kai_1`.
+ */
+const SUFFIX_SEPARATOR = '~';
+
+/**
+ * A suffixed local part: the handle, `SUFFIX_SEPARATOR`, then the number or
+ * random hex `firstFreeUsername` appended.
+ */
+const SUFFIXED_LOCAL_PART = /^([a-z0-9_]+)~([0-9a-f]+)$/;
+
+/** The handle a suffixed local part (`kai~1`) was named after, else null. */
+function suffixedHandleOf(localPart: string): string | null {
+  return SUFFIXED_LOCAL_PART.exec(localPart)?.[1] ?? null;
+}
 
 /**
  * The part of a replicated row's username before `@<homeInstance>`, or null
@@ -46,6 +65,22 @@ function localPartOf(user: UserRow): string | null {
 }
 
 /**
+ * Whether a row is a replicated row this instance names itself and may
+ * rename: it has a home id, no login credentials of its own, and is not
+ * detached.
+ *   - Native rows and rows without a home id have nothing to compare.
+ *   - A federated account signs in with its username, so renaming it would
+ *     change the login.
+ *   - A detached row (`federationHomeOrphaned = 1`): the home domain now
+ *     belongs to another incarnation, which never names an established account.
+ */
+function isRenameableReplica(user: UserRow): boolean {
+  if (!user.homeInstance || !user.homeUserId) return false;
+  if (user.passwordHash !== REPLICATED_PASSWORD_HASH) return false;
+  return user.federationHomeOrphaned !== 1;
+}
+
+/**
  * Whether a row is a replicated stub whose username is a placeholder, not
  * its home handle. Two kinds exist:
  *   - `<homeUserId>@<domain>`: the name `resolveOrCreateReplicatedUser` gives
@@ -53,40 +88,54 @@ function localPartOf(user: UserRow): string | null {
  *   - a local part that is not handle-shaped (`HANDLE`), such as
  *     `<display name>@<domain>`, which incoming calls created before the call
  *     relay stopped passing the caller's display name as the username.
- * Only such a row is ever renamed. A placeholder that happens to be shaped
- * like a handle (a display name such as "kai") cannot be told apart from a
- * real handle here and is left alone.
+ * A placeholder that happens to be shaped like a handle (a display name such
+ * as "kai") cannot be told apart from a real handle here and is left alone. A
+ * suffixed name (`kai~1`, see `firstFreeUsername`) is not a placeholder: the
+ * row's handle is known, and only a hint with that handle re-checks it
+ * (`applyPlaceholderRename`).
  *
- * Excluded, and so never renamed:
- *   - native rows and rows without a home id (nothing to compare);
- *   - rows with their own login credentials (a federated account signs in with
- *     its username, so renaming it would change the login);
- *   - detached rows (`federationHomeOrphaned = 1`): the home domain now belongs
- *     to another incarnation, which never names an established account.
+ * Only a row that may be renamed at all (`isRenameableReplica`: a replica
+ * with a home id, no login credentials, not detached) is ever a placeholder.
  */
 export function isPlaceholderNamedStub(user: UserRow): boolean {
-  if (!user.homeInstance || !user.homeUserId) return false;
-  if (user.passwordHash !== REPLICATED_PASSWORD_HASH) return false;
-  if (user.federationHomeOrphaned === 1) return false;
+  if (!isRenameableReplica(user) || !user.homeUserId) return false;
   const localPart = localPartOf(user);
   if (localPart === null) return false;
+  if (suffixedHandleOf(localPart) !== null) return false;
   return localPart === user.homeUserId.toLowerCase() || !HANDLE.test(localPart);
 }
 
 /**
+ * Whether a row carries a suffixed name (`<handle>~<n>@<domain>`) given for
+ * `handle` while another row held `<handle>@<domain>`. Such a row is
+ * re-checked when its home reports that handle again, and moves to an earlier
+ * free name once the holder is gone.
+ */
+function isSuffixedFor(user: UserRow, handle: string): boolean {
+  if (!isRenameableReplica(user)) return false;
+  const localPart = localPartOf(user);
+  return localPart !== null && suffixedHandleOf(localPart) === handle;
+}
+
+/**
  * The replicated username `<handle>@<domain>`, or, when another row holds it,
- * the first free `<handle>_<n>@<domain>` (n = 1..10), then a random suffix.
- * `ownerId` is the row the name is for; its own current name does not count
- * as taken. Creation and rename both name rows through this, so a handle
- * whose name is held (a username freed by an account deletion and registered
- * again, while this instance still holds the old replica) gets the same
- * suffixed name either way.
+ * the first free `<handle>~<n>@<domain>` (n = 1..10), then a random
+ * `<handle>~<hex>@<domain>`. The suffix separator is not a handle character
+ * (`SUFFIX_SEPARATOR`), so a suffixed name never shadows a real handle.
+ * `owner` is the row the name is for: its own current name does not count as
+ * taken, and when every numbered name is held it keeps a random name it
+ * already has for this handle instead of drawing a new one. So a row asked
+ * again only ever moves to an earlier name, which makes the rename stable.
+ * Creation and rename both name rows through this, so a handle whose name is
+ * held (a username freed by an account deletion and registered again, while
+ * this instance still holds the old replica) gets the same suffixed name
+ * either way.
  */
 export function firstFreeUsername(
   handle: string,
   domain: string,
   db: ReturnType<typeof getDb>,
-  ownerId?: string,
+  owner?: Pick<UserRow, 'id' | 'username'>,
 ): string {
   const isTaken = (candidate: string): boolean => {
     const holder = db
@@ -94,16 +143,23 @@ export function firstFreeUsername(
       .from(schema.users)
       .where(eq(schema.users.username, candidate))
       .get();
-    return holder !== undefined && holder.id !== ownerId;
+    return holder !== undefined && holder.id !== owner?.id;
   };
-  let username = `${handle}@${domain}`.toLowerCase();
+  const nameFor = (localPart: string): string => `${localPart}@${domain}`.toLowerCase();
+  let username = nameFor(handle);
   let attempt = 0;
   while (isTaken(username)) {
     attempt++;
     if (attempt > MAX_NUMBERED_SUFFIX) {
-      return `${handle}_${randomBytes(4).toString('hex')}@${domain}`.toLowerCase();
+      const ownName = owner?.username.toLowerCase();
+      const ownSuffix = `@${domain}`.toLowerCase();
+      if (ownName?.endsWith(ownSuffix)
+        && suffixedHandleOf(ownName.slice(0, ownName.length - ownSuffix.length)) === handle) {
+        return ownName;
+      }
+      return nameFor(`${handle}${SUFFIX_SEPARATOR}${randomBytes(4).toString('hex')}`);
     }
-    username = `${handle}_${attempt}@${domain}`.toLowerCase();
+    username = nameFor(`${handle}${SUFFIX_SEPARATOR}${attempt}`);
   }
   return username;
 }
@@ -120,13 +176,18 @@ export interface StubRenameSeed {
 }
 
 /**
- * Rename a placeholder-named stub (`isPlaceholderNamedStub`) to
- * `<username>@<domain>`, where `username` is the handle the row's home
- * reports, and return the row as written. Home usernames never change, so
- * this happens at most once per row. Every other row, and every `username`
- * that is not handle-shaped, is returned unchanged (the same object).
+ * Name a replicated row after the handle its home reports (`username`) and
+ * return the row as written. Two kinds of row are (re)named:
+ *   - a placeholder-named stub (`isPlaceholderNamedStub`), with any handle;
+ *   - a row with a suffixed name for this same handle (`isSuffixedFor`),
+ *     which moves to an earlier free name (the handle itself once its holder
+ *     is gone) and otherwise keeps its name.
+ * Every other row, and every `username` that is not handle-shaped, is
+ * returned unchanged (the same object). Home usernames never change, so a
+ * row's name only ever moves toward its handle, and no other row is touched:
+ * the rename cannot loop between two rows.
  *
- * When another row already holds the name, the stub takes the first free
+ * When another row already holds the name, the row takes the first free
  * suffixed name (`firstFreeUsername`), as creation does. With a `seed`, an
  * empty `displayName` is filled with `seed.displayName ?? username` and a
  * differing `status` is taken over.
@@ -140,11 +201,12 @@ export function applyPlaceholderRename(
   db: ReturnType<typeof getDb>,
   seed?: StubRenameSeed,
 ): UserRow {
-  if (!isPlaceholderNamedStub(user) || !user.homeInstance) return user;
+  if (!user.homeInstance) return user;
   const handle = handleFromHint(username);
   if (!handle) return user;
+  if (!isPlaceholderNamedStub(user) && !isSuffixedFor(user, handle)) return user;
 
-  const newUsername = firstFreeUsername(handle, user.homeInstance, db, user.id);
+  const newUsername = firstFreeUsername(handle, user.homeInstance, db, user);
   if (newUsername === user.username) return user;
 
   const updates: { username: string; displayName?: string; status?: UserStatus } = { username: newUsername };

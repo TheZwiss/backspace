@@ -492,7 +492,9 @@ export function resolveOrCreateReplicatedUser(
   const existing = lookupFederatedUser(homeUserId, homeInstance, db, hints);
   if (existing.kind === 'found') {
     // A row met before its username was known still carries a placeholder
-    // name (`isPlaceholderNamedStub`); the first username hint renames it.
+    // name (`isPlaceholderNamedStub`); the first username hint renames it. A
+    // row suffixed because its handle was held is re-checked by each hint
+    // with that handle (`applyPlaceholderRename`).
     return renamePlaceholderNamedStub(backfillHomeUserId(existing.user, homeUserId, db), hints?.username, db);
   }
   // The id belongs only to local users of another identity. It names no one
@@ -546,7 +548,8 @@ export function resolveOrCreateReplicatedUser(
   // `<homeUserId>@<domain>`, and the first later handle renames it (above).
   const localPart = handleFromHint(hints?.username) ?? homeUserId.toLowerCase();
   // A name another row already holds (a partial replication, or a handle
-  // freed by an account deletion and registered again) gets a suffix.
+  // freed by an account deletion and registered again) gets a suffix no
+  // handle can contain (`firstFreeUsername`).
   const username = firstFreeUsername(localPart, domain, db);
 
   const userId = generateSnowflake();

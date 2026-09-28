@@ -121,13 +121,13 @@ describe('renaming an id-named replicated row to its real handle', () => {
       homeInstance: 'friend.example', homeUserId: '999', createdAt: Date.now(),
     }).run();
     testDb.insert(schema.users).values({
-      id: 'other-kai-1', username: 'kai_1@friend.example', passwordHash: '!federation-replicated',
+      id: 'other-kai-1', username: 'kai~1@friend.example', passwordHash: '!federation-replicated',
       homeInstance: 'friend.example', homeUserId: '998', createdAt: Date.now(),
     }).run();
     const { resolveOrCreateReplicatedUser } = await import('./federation.js');
     const resolved = resolveOrCreateReplicatedUser(KAI_ID, 'friend.example', testDb, { username: 'kai' });
     expect(resolved?.id).toBe('stub-kai');
-    expect(row().username).toBe('kai_2@friend.example');
+    expect(row().username).toBe('kai~2@friend.example');
     expect(row('other-kai').username).toBe('kai@friend.example');
   });
 
@@ -141,7 +141,7 @@ describe('renaming an id-named replicated row to its real handle', () => {
     try {
       const { resolveOrCreateReplicatedUser } = await import('./federation.js');
       for (let i = 0; i < 3; i++) resolveOrCreateReplicatedUser(KAI_ID, 'friend.example', testDb, { username: 'kai' });
-      expect(row().username).toBe('kai_1@friend.example');
+      expect(row().username).toBe('kai~1@friend.example');
       expect(warn).not.toHaveBeenCalled();
       expect(userUpdatedRecipients()).toEqual([]);
     } finally {
@@ -251,5 +251,144 @@ describe('renaming an id-named replicated row to its real handle', () => {
     const { hydrateReplicatedUserProfile } = await import('./federation.js');
     await hydrateReplicatedUserProfile(row(), { username: 'kai', displayName: 'Kai', avatarColor: '#7c6cf6' }, testDb);
     expect(userUpdatedTo('local-anna')).toEqual([]);
+  });
+});
+
+/**
+ * A handle that another row already holds gets a suffix a handle cannot
+ * contain (`<handle>~<n>@<domain>`), so a suffixed row never takes a name a
+ * real user of that instance can have. A suffixed row is re-checked whenever
+ * its home reports its handle again, and moves to an earlier free name once
+ * the holder is gone. It never renames another row.
+ */
+describe('suffixed names of remote users', () => {
+  const DOMAIN = 'friend.example';
+  const X_ID = '1000000000000000001';
+  const H1_ID = '1000000000000000002';
+  const H2_ID = '1000000000000000003';
+
+  beforeEach(() => {
+    sqlite = new Database(':memory:');
+    testDb = drizzle(sqlite, { schema });
+    applyMigrations(sqlite);
+    vi.mocked(connectionManager.sendToUser).mockClear();
+    testDb.insert(schema.users).values({ id: 'local-anna', username: 'anna', passwordHash: 'x', createdAt: Date.now() }).run();
+  });
+
+  function seedReplica(id: string, homeUserId: string, username: string): void {
+    testDb.insert(schema.users).values({
+      id, username, passwordHash: '!federation-replicated',
+      homeInstance: DOMAIN, homeUserId, createdAt: Date.now(),
+    }).run();
+    testDb.insert(schema.friends).values({ userId: 'local-anna', friendId: id, createdAt: Date.now() }).run();
+  }
+
+  function nameOf(id: string): string {
+    return testDb.select().from(schema.users).where(eq(schema.users.id, id)).get()!.username;
+  }
+
+  function tombstone(id: string): void {
+    testDb.update(schema.users).set({ username: `!deleted:${id}`, isDeleted: 1 }).where(eq(schema.users.id, id)).run();
+  }
+
+  it('a suffixed name never shadows a later real user with that handle', async () => {
+    // X: a stale replica of an account deleted on its home, still holding `kai`.
+    seedReplica('stub-x', X_ID, `kai@${DOMAIN}`);
+    const { resolveOrCreateReplicatedUser } = await import('./federation.js');
+    const h1 = resolveOrCreateReplicatedUser(H1_ID, DOMAIN, testDb, { username: 'kai' });
+    expect(h1?.username).toBe(`kai~1@${DOMAIN}`);
+    const h2 = resolveOrCreateReplicatedUser(H2_ID, DOMAIN, testDb, { username: 'kai_1' });
+    expect(h2?.username).toBe(`kai_1@${DOMAIN}`);
+  });
+
+  it('a placeholder renamed while its handle is held gets a name no handle can have', async () => {
+    seedReplica('stub-x', X_ID, `kai@${DOMAIN}`);
+    seedReplica('stub-h1', H1_ID, `${H1_ID}@${DOMAIN}`);
+    const { resolveOrCreateReplicatedUser } = await import('./federation.js');
+    resolveOrCreateReplicatedUser(H1_ID, DOMAIN, testDb, { username: 'kai' });
+    expect(nameOf('stub-h1')).toBe(`kai~1@${DOMAIN}`);
+    const h2 = resolveOrCreateReplicatedUser(H2_ID, DOMAIN, testDb, { username: 'kai_1' });
+    expect(h2?.username).toBe(`kai_1@${DOMAIN}`);
+  });
+
+  it('once the holder is gone, the next hint moves the suffixed row to its handle and announces it', async () => {
+    seedReplica('stub-x', X_ID, `kai@${DOMAIN}`);
+    seedReplica('stub-h1', H1_ID, `kai~1@${DOMAIN}`);
+    tombstone('stub-x');
+    const { resolveOrCreateReplicatedUser } = await import('./federation.js');
+    const h1 = resolveOrCreateReplicatedUser(H1_ID, DOMAIN, testDb, { username: 'kai' });
+    expect(h1?.username).toBe(`kai@${DOMAIN}`);
+    expect(nameOf('stub-h1')).toBe(`kai@${DOMAIN}`);
+    expect(userUpdatedRecipients()).toContain('local-anna');
+  });
+
+  it('hydration re-checks a suffixed row as identity resolution does', async () => {
+    seedReplica('stub-x', X_ID, `kai@${DOMAIN}`);
+    seedReplica('stub-h1', H1_ID, `kai~1@${DOMAIN}`);
+    tombstone('stub-x');
+    const { hydrateReplicatedUserProfile } = await import('./federation.js');
+    const row = testDb.select().from(schema.users).where(eq(schema.users.id, 'stub-h1')).get()!;
+    const hydrated = await hydrateReplicatedUserProfile(row, { username: 'kai', displayName: 'Kai' }, testDb);
+    expect(hydrated.username).toBe(`kai@${DOMAIN}`);
+    expect(nameOf('stub-h1')).toBe(`kai@${DOMAIN}`);
+  });
+
+  it('a suffixed row takes no other handle than the one it was named after', async () => {
+    seedReplica('stub-h1', H1_ID, `kai~1@${DOMAIN}`);
+    const { resolveOrCreateReplicatedUser } = await import('./federation.js');
+    resolveOrCreateReplicatedUser(H1_ID, DOMAIN, testDb, { username: 'bob' });
+    expect(nameOf('stub-h1')).toBe(`kai~1@${DOMAIN}`);
+    expect(userUpdatedRecipients()).toEqual([]);
+  });
+
+  it('a suffixed row is not a placeholder', async () => {
+    seedReplica('stub-h1', H1_ID, `kai~1@${DOMAIN}`);
+    const { isPlaceholderNamedStub } = await import('./federation/stubName.js');
+    const row = testDb.select().from(schema.users).where(eq(schema.users.id, 'stub-h1')).get()!;
+    expect(isPlaceholderNamedStub(row)).toBe(false);
+  });
+
+  it('two rows with the same handle never trade names, whatever order the hints come in', async () => {
+    seedReplica('stub-x', X_ID, `kai@${DOMAIN}`);
+    seedReplica('stub-p', H1_ID, `kai~1@${DOMAIN}`);
+    seedReplica('stub-q', H2_ID, `kai~2@${DOMAIN}`);
+    const renames = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    try {
+      const { resolveOrCreateReplicatedUser } = await import('./federation.js');
+      for (let i = 0; i < 4; i++) {
+        resolveOrCreateReplicatedUser(H2_ID, DOMAIN, testDb, { username: 'kai' });
+        resolveOrCreateReplicatedUser(H1_ID, DOMAIN, testDb, { username: 'kai' });
+      }
+      expect(nameOf('stub-p')).toBe(`kai~1@${DOMAIN}`);
+      expect(nameOf('stub-q')).toBe(`kai~2@${DOMAIN}`);
+      expect(userUpdatedRecipients()).toEqual([]);
+
+      // The holder goes. Whichever row hears from its home first takes the
+      // handle; the other keeps its place and neither moves again.
+      tombstone('stub-x');
+      for (let i = 0; i < 4; i++) {
+        resolveOrCreateReplicatedUser(H2_ID, DOMAIN, testDb, { username: 'kai' });
+        resolveOrCreateReplicatedUser(H1_ID, DOMAIN, testDb, { username: 'kai' });
+      }
+      expect(nameOf('stub-q')).toBe(`kai@${DOMAIN}`);
+      expect(nameOf('stub-p')).toBe(`kai~1@${DOMAIN}`);
+      const renameLines = renames.mock.calls.filter(([line]) => String(line).startsWith('[federation] Renamed stub'));
+      expect(renameLines).toHaveLength(1);
+    } finally {
+      renames.mockRestore();
+    }
+  });
+
+  it('a row that got a random suffix keeps it on later hints', async () => {
+    seedReplica('stub-x', X_ID, `kai@${DOMAIN}`);
+    for (let n = 1; n <= 10; n++) seedReplica(`stub-n${n}`, `20000000000000000${String(n).padStart(2, '0')}`, `kai~${n}@${DOMAIN}`);
+    const { resolveOrCreateReplicatedUser } = await import('./federation.js');
+    const h1 = resolveOrCreateReplicatedUser(H1_ID, DOMAIN, testDb, { username: 'kai' });
+    expect(h1?.username).toMatch(new RegExp(`^kai~[0-9a-f]{8}@${DOMAIN.replace('.', '\\.')}$`));
+    const first = h1!.username;
+    vi.mocked(connectionManager.sendToUser).mockClear();
+    for (let i = 0; i < 3; i++) resolveOrCreateReplicatedUser(H1_ID, DOMAIN, testDb, { username: 'kai' });
+    expect(nameOf(h1!.id)).toBe(first);
+    expect(userUpdatedRecipients()).toEqual([]);
   });
 });
