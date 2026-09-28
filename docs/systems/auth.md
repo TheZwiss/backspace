@@ -25,10 +25,10 @@ DB tables: `users`, `instanceSettings`, `userFederationCredentials`. See `databa
 ## 1. Password Hashing
 
 **Library:** `bcryptjs`
-**Salt rounds:** 12 (constant `SALT_ROUNDS` in `auth.ts`)
+**Salt rounds:** 12 (`config.passwordHashCost` in `config.ts`). Under the test suite (`NODE_ENV=test`) it is 4, bcrypt's minimum, so cases that hash several times stay fast under load (#326). It is deliberately not an environment variable, so no deployment can lower it. `bcrypt.compare` reads the cost from the stored hash, so hashes of either cost verify.
 
 ```
-hashPassword(password: string): Promise<string>   -- bcrypt.hash(password, 12)
+hashPassword(password: string): Promise<string>   -- bcrypt.hash(password, config.passwordHashCost)
 verifyPassword(password: string, hash: string): Promise<boolean>  -- bcrypt.compare
 ```
 

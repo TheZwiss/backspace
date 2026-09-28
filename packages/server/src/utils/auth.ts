@@ -6,10 +6,8 @@ import { getDb, schema } from '../db/index.js';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import type { ErrorCode } from '@backspace/shared/src/errors';
 
-const SALT_ROUNDS = 12;
-
 export async function hashPassword(password: string): Promise<string> {
-  return bcrypt.hash(password, SALT_ROUNDS);
+  return bcrypt.hash(password, config.passwordHashCost);
 }
 
 export async function verifyPassword(password: string, hash: string): Promise<boolean> {

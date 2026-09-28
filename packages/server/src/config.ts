@@ -220,11 +220,23 @@ function readPackageVersion(): string {
 
 const version = readPackageVersion();
 
+/**
+ * bcrypt cost for new password hashes. 12 in every deployment. Under the test
+ * suite (NODE_ENV=test, set by vitest's setup file and by the two-instance
+ * harness for its children) it is bcrypt's minimum, 4: at 12 each hash or
+ * compare takes about 300 ms, so cases that hash a few times timed out under
+ * a loaded full-suite run (#326). Not an environment variable on purpose: no
+ * deployment should be able to lower it. `bcrypt.compare` reads the cost from
+ * the stored hash, so hashes made at either cost verify everywhere.
+ */
+const passwordHashCost = process.env.NODE_ENV === 'test' ? 4 : 12;
+
 export const config = {
   port: envInt('PORT', 3000),
   host: env('HOST', '0.0.0.0'),
   jwtSecret: env('JWT_SECRET'),
   jwtExpiresIn: env('JWT_EXPIRES_IN', '30d'),
+  passwordHashCost,
   domain: envOptional('DOMAIN'),
   publicOrigin,
   version,
