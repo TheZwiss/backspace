@@ -192,8 +192,10 @@ describe('POST /api/social/requests by identity: remote target', () => {
     expect(testDb.select().from(schema.friendRequests).all()).toHaveLength(0);
   });
 
-  it('answers peer_unreachable when the home id lookup fails in transport', async () => {
-    lookupRemoteUserByHomeIdMock.mockRejectedValue(new Error('peer returned HTTP 502'));
+  it('answers peer_unreachable when the peer cannot answer the home id lookup', async () => {
+    // What lookupRemoteUserByHomeId returns for an HTTP error, a transport
+    // failure or a malformed body; it throws only when the peer row is missing.
+    lookupRemoteUserByHomeIdMock.mockResolvedValue({ ok: false, reason: 'unreachable' });
     const app = await buildApp();
     const res = await app.inject({
       method: 'POST',

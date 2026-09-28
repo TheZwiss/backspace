@@ -21,6 +21,8 @@ let testDb: TestDb;
 
 const lookupCalls: Array<{ peerOrigin: string; homeUserId: string }> = [];
 const lookupResponses = new Map<string, unknown>();
+/** When set, the lookup is the real one, over a stubbed `fetch`. */
+let realLookup = false;
 
 vi.mock('../db/index.js', () => ({
   getDb: () => testDb,
@@ -28,14 +30,18 @@ vi.mock('../db/index.js', () => ({
   schema,
 }));
 
-vi.mock('./federationLookup.js', () => ({
-  lookupRemoteUserByHomeId: vi.fn(async (peerOrigin: string, homeUserId: string) => {
-    lookupCalls.push({ peerOrigin, homeUserId });
-    const r = lookupResponses.get(homeUserId);
-    if (!r) return { ok: false, reason: 'not_found' };
-    return r;
-  }),
-}));
+vi.mock('./federationLookup.js', async (importActual) => {
+  const actual = await importActual<typeof import('./federationLookup.js')>();
+  return {
+    lookupRemoteUserByHomeId: vi.fn(async (peerOrigin: string, homeUserId: string) => {
+      lookupCalls.push({ peerOrigin, homeUserId });
+      if (realLookup) return actual.lookupRemoteUserByHomeId(peerOrigin, homeUserId);
+      const r = lookupResponses.get(homeUserId);
+      if (!r) return { ok: false, reason: 'not_found' };
+      return r;
+    }),
+  };
+});
 
 function applyMigrations(db: Database.Database): void {
   const migrationsDir = path.resolve(__dirname, '../../drizzle');
@@ -55,6 +61,8 @@ beforeEach(() => {
   applyMigrations(sqlite);
   lookupCalls.length = 0;
   lookupResponses.clear();
+  realLookup = false;
+  vi.unstubAllGlobals();
   // Active peer
   testDb.insert(schema.federationPeers).values({
     id: 'peer-orbit',
@@ -165,7 +173,10 @@ describe('backfillStubUsernamesForPeer', () => {
     expect(row!.displayName).toBe('Kai Smith');
   });
 
-  it('keeps asking about the other stubs when the home fails for one', async () => {
+  it('keeps asking about the other stubs when the home answers an HTTP error for one', async () => {
+    // The real lookup over a stubbed transport: the home refuses the first id
+    // with 403, which the lookup reports as unreachable instead of throwing,
+    // so the pass goes on to the second stub.
     for (const [id, homeUserId] of [['stub-1', '111'], ['stub-2', '222']] as const) {
       testDb.insert(schema.users).values({
         id,
@@ -179,18 +190,25 @@ describe('backfillStubUsernamesForPeer', () => {
         createdAt: Date.now(),
       }).run();
     }
-    lookupResponses.set('111', { ok: false, reason: 'unreachable' });
-    lookupResponses.set('222', {
-      ok: true,
-      homeUserId: '222',
-      username: 'second',
-      profile: { displayName: null, avatar: null, avatarColor: null, banner: null, bio: null },
-    });
+    realLookup = true;
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {
+      const { homeUserId } = JSON.parse(String(init.body)) as { homeUserId: string };
+      if (homeUserId === '111') return new Response('forbidden', { status: 403 });
+      return new Response(JSON.stringify({
+        found: true,
+        user: {
+          homeUserId,
+          username: 'second',
+          profile: { displayName: null, avatar: null, avatarColor: null, banner: null, bio: null },
+        },
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }));
 
     const { backfillStubUsernamesForPeer } = await import('./federationStubBackfill.js');
     await backfillStubUsernamesForPeer('https://orbit.ddns.net');
 
     expect(lookupCalls.map(c => c.homeUserId)).toEqual(['111', '222']);
+    expect(testDb.select().from(schema.users).where(eq(schema.users.id, 'stub-1')).get()!.username).toBe('111@orbit.ddns.net');
     expect(testDb.select().from(schema.users).where(eq(schema.users.id, 'stub-2')).get()!.username).toBe('second@orbit.ddns.net');
   });
 
