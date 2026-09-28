@@ -3,6 +3,7 @@ import { ownsChosenStatus, type Activity, type ChosenUserStatus } from '@backspa
 import { getDb, schema } from '../db/index.js';
 import { connectionManager } from './handler.js';
 import { collectProfileBroadcastTargetIds } from '../utils/userDeletion.js';
+import { presenceUpdateEvent, presenceUpdateFor, snapshotActivities } from './presenceEvent.js';
 
 /**
  * The one path for a user changing their own status, shared by REST
@@ -45,16 +46,68 @@ export function applyChosenStatus(userId: string, status: ChosenUserStatus): voi
 
   connectionManager.setUserStatus(userId, status);
   const activities: Activity[] = connectionManager.getUserActivities(userId);
-  const payload = {
-    type: 'presence_update' as const,
-    userId,
-    status,
-    ...(activities.length > 0 ? { activities } : {}),
-  };
+  const payload = presenceUpdateFor(userId, status, activities.length > 0 ? activities : undefined);
   for (const uid of collectProfileBroadcastTargetIds(userId)) connectionManager.sendToUser(uid, payload);
   connectionManager.sendToUser(userId, payload);
 
   void import('../utils/federationPresence.js').then(({ queuePresenceRelay }) => {
     try { queuePresenceRelay(userId, status, activities); } catch (e) { console.warn('[presence] queuePresenceRelay(chosen) failed', e); }
   });
+}
+
+/**
+ * Send `recipientId`'s sessions the current presence of `subjectId`: status and
+ * the activity snapshot (live or relayed activities, else the custom status),
+ * as the ready payload would report them. An offline subject reports no
+ * activities.
+ */
+export function sendPresenceSnapshot(recipientId: string, subjectId: string): void {
+  const subject = getDb()
+    .select({
+      id: schema.users.id,
+      homeUserId: schema.users.homeUserId,
+      homeInstance: schema.users.homeInstance,
+      status: schema.users.status,
+      customStatus: schema.users.customStatus,
+    })
+    .from(schema.users)
+    .where(eq(schema.users.id, subjectId))
+    .get();
+  if (!subject) return;
+  const status = subject.status ?? 'offline';
+  const activities = status === 'offline'
+    ? []
+    : snapshotActivities(connectionManager.getUserActivities(subject.id), subject.customStatus);
+  connectionManager.sendToUser(recipientId, presenceUpdateEvent(subject, status, activities));
+}
+
+/**
+ * A friendship between two rows of this instance was just created. Presence
+ * events only fire on change, so without this a friend who was already in a
+ * game when the friendship formed would show none until it changed (#340).
+ *
+ * - Each side's sessions get the other's current presence.
+ * - For each native side whose new friend is replicated, the friend's home is
+ *   sent the native's current presence, so it can keep the activities and tell
+ *   the friend (`snapshotPresenceForFriend`).
+ */
+export function exchangeFriendPresence(userIdA: string, userIdB: string): void {
+  // Best effort: the friendship is already committed and its own relay still
+  // has to go out, so nothing here may throw into the caller.
+  try {
+    sendPresenceSnapshot(userIdA, userIdB);
+    sendPresenceSnapshot(userIdB, userIdA);
+    const activitiesA = connectionManager.getUserActivities(userIdA);
+    const activitiesB = connectionManager.getUserActivities(userIdB);
+    // Imported lazily: federationPresence reaches the federation routes, which
+    // import the WS handler that imports this module.
+    void import('../utils/federationPresence.js')
+      .then(({ snapshotPresenceForFriend }) => {
+        snapshotPresenceForFriend(userIdA, userIdB, activitiesA);
+        snapshotPresenceForFriend(userIdB, userIdA, activitiesB);
+      })
+      .catch((e: unknown) => { console.warn('[presence] snapshotPresenceForFriend failed', e); });
+  } catch (e) {
+    console.warn('[presence] exchangeFriendPresence failed', e);
+  }
 }

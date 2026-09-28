@@ -91,7 +91,7 @@ export async function onPeerActivated(
         // presence is outbox-only (no mutation-log replay), and any prior
         // markPeerStubsOffline ran on our side too.
         const { snapshotPresenceForPeer } = await import('./federationPresence.js');
-        try { snapshotPresenceForPeer(peerRow.origin); } catch (e) {
+        try { await snapshotPresenceForPeer(peerRow.origin); } catch (e) {
           console.warn(`[onPeerActivated] snapshotPresenceForPeer(${peerRow.origin}) failed`, e);
         }
       }

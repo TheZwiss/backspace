@@ -4,7 +4,7 @@ import type { MemberWithUser, Activity } from '@backspace/shared';
 import { useFormatters } from '../../i18n/formatters';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useUIStore } from '../../stores/uiStore';
-import { useActivityStore } from '../../stores/activityStore';
+import { useActivityStore, activitiesFor } from '../../stores/activityStore';
 import { Avatar } from '../ui/Avatar';
 import { Username } from '../ui/Username';
 import { ActivityCard, hasRichActivity, getActivityAccentClass } from '../ui/ActivityCard';
@@ -138,6 +138,7 @@ export function MemberSidebar() {
 
   const space = spaces.find(s => s.id === currentSpaceId);
   const ownerId = space?.ownerId;
+  const spaceOrigin = space?._instanceOrigin ?? '';
 
   const { roleGroups, offlineMembers } = useMemo(() => {
     const online = members.filter(m => m.user.status !== 'offline');
@@ -192,7 +193,7 @@ export function MemberSidebar() {
     // Roles do not depend on presence: an offline member keeps their colour,
     // dimmed with the rest of the row.
     const colorStyle = getMemberColor(member);
-    const activities = userActivities.get(member.userId) ?? [];
+    const activities = activitiesFor(userActivities, member.user, spaceOrigin);
     const isRichActivity = !isOffline && hasRichActivity(activities);
     const primary = getPrimaryActivity(activities);
     const accentClass = primary ? getActivityAccentClass(primary.type) : '';

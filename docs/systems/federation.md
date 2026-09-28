@@ -1666,7 +1666,7 @@ Native users' status (and optional rich activities) is projected to peers via th
 **Payload:** `FederationPresenceUpdatePayload`:
 - `homeUserId`, `homeInstance`
 - `status: 'online' | 'idle' | 'dnd' | 'offline'`
-- `activities?: Activity[]` (omitted when empty)
+- `activities?: Activity[]`. Current senders always include it (`[]` for none). The receiver reads a list as the full set and an absent field as "unchanged": peers that predate this send status-only relays on every connect and in their activation snapshot, also while the user is playing.
 - `ts: number` — emitter clock (last-write-wins per stub if needed)
 
 **Outbox-only — never written to mutation log.** Presence is ephemeral. Replaying old presence on peer activation would be wrong (stale state). The outbox queues directly without `appendMutationLog`. Stale entries that fail delivery beyond retry budget are dropped.
@@ -1678,7 +1678,11 @@ Native users' status (and optional rich activities) is projected to peers via th
 - `ws/events.ts` (`handleActivityUpdate`) — when activities change
 - `routes/users.ts` (showActivity-toggle clear) — cleared activities
 
+The auth-path relay carries the activities another session of the user already reported (none on a first connection), so a second device connecting does not clear the user's activity on peers.
+
 No-op for replicated users (we don't own their presence).
+
+**Friendship snapshot** (`snapshotPresenceForFriend`, called by `exchangeFriendPresence` in `ws/presence.ts` when a friendship row is created: local accept, relayed `friend_request_update` accepted, relayed `friend_add`): for a native side whose new friend is a replicated row, one `presence_update` with the native's current status and activities, targeted at the friend's home (`getFriendEventTargets`). Skipped when the native is offline. The friend's home usually had no row for the native when the native's current activity began, so it dropped that relay; without this, the friend saw no activity until it changed (#340).
 
 **Detached accounts have no status on other instances.** `queuePresenceRelay` and `snapshotPresenceForPeer` skip every row with `home_instance` set, detached ones included, although a detached account owns its chosen status locally (`ownsChosenStatus`). This is deliberate: a detached account's outbound identity is still its old home identity (`relayActorOfUser`, the DM message builder and client registration on other instances all send `homeUserId` + the reset `homeInstance`), and the receiver below only accepts a `presence_update` from the identity's home instance. A relay under the old identity would be rejected by every peer as `attribution_mismatch`; one under this instance's own id would match no row anywhere. Changing that means giving detached accounts a new outbound identity or a new attribution rule (#310).
 
@@ -1686,13 +1690,13 @@ No-op for replicated users (we don't own their presence).
 
 **Coalescing:** `entityId = userId`, `contextId = userId`. Rapid status flaps coalesce to the latest queued event per peer.
 
-**Receiver:** `processPresenceUpdateEvent` (`routes/federation.ts`). Strict attribution — `payload.homeInstance` domain MUST equal source peer's domain. Resolves the local stub that IS the payload's `homeUserId` + `homeInstance` (`resolveRelayActor`; a native user of this instance is never one, and anything but a `found` row homed elsewhere is acked without effect), updates the stub's `status`, and broadcasts a WS `presence_update` to local users via `collectProfileBroadcastTargetIds(stub.id)` — friends, DM members, and space co-members.
+**Receiver:** `processPresenceUpdateEvent` (`routes/federation.ts`). Strict attribution — `payload.homeInstance` domain MUST equal source peer's domain. Resolves the local stub that IS the payload's `homeUserId` + `homeInstance` (`resolveRelayActor`; a native user of this instance is never one, and anything but a `found` row homed elsewhere is acked without effect), updates the stub's `status`, keeps the activities for the stub in `ConnectionManager.userActivities` (a list replaces them after `validateActivities`, the local `activity_update` limits; `[]` or `offline` clears them; an absent field or a list that fails validation leaves them unchanged), and broadcasts a WS `presence_update` to local users via `collectProfileBroadcastTargetIds(stub.id)` — friends, DM members, and space co-members — with `activities` when they changed (empty clears on clients), without it otherwise, and with the stub's `homeUserId`/`homeInstance`. The kept activities are what the ready payload and the friendship snapshot report for the remote user.
 
 **Detached-account guard:** After the identity lookup and before the status write, if the resolved stub has `federation_home_orphaned = 1` (detached — home domain was reset, now a sovereign local account), the event is **acked (messageId pushed to `accepted`) and skipped without applying**. The reset domain's new incarnation must never flip an established account's presence by replaying its old `homeUserId`. Ack (not reject) mirrors the `profile_update` guard rationale — the sender considers the identity theirs, so we no-op rather than trigger a retry loop.
 
 **Peer lifecycle hooks** (`utils/federationPresence.ts`):
-- **`onPeerActivated`** invokes `snapshotPresenceForPeer(origin)` — emits a `presence_update` only for online natives that have an S2S relationship with the peer (friend/DM with a peer-stub, or `replicatedInstances` opt-in for the peer origin). Snapshot work scales with relationship count, not native count.
-- **`onPeerDeactivated`** invokes `markPeerStubsOffline(origin)` — flips every stub from that peer to `offline` and broadcasts a local `presence_update` so users see them go offline immediately.
+- **`onPeerActivated`** awaits `snapshotPresenceForPeer(origin)` — emits a `presence_update` (status and current activities) only for online natives that have an S2S relationship with the peer (friend/DM with a peer-stub, or `replicatedInstances` opt-in for the peer origin). Snapshot work scales with relationship count, not native count.
+- **`onPeerDeactivated`** invokes `markPeerStubsOffline(origin)` — flips every stub from that peer to `offline`, drops the activities kept for it, and broadcasts a local `presence_update` so users see them go offline immediately.
 - **Flap recovery semantics:** `onPeerActivated` re-runs on every transition into `active`, including the 15-minute health-check `unreachable → active` recovery. This is load-bearing for correctness: `markPeerStubsOffline` ran on the prior deactivation, presence is not in the mutation log, so a fresh snapshot is the only signal that re-establishes truth. The relationship-scoped query bounds the cost.
 
 #### Stub Username Backfill

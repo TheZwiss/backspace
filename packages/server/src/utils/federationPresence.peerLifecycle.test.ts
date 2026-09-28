@@ -14,6 +14,7 @@ let testDb: TestDb;
 
 const queueCalls: Array<{ entityId: string; eventType: string; targets: string[] | undefined; payload: string }> = [];
 const sentToUser: Array<{ userId: string; payload: any }> = [];
+const liveActivities = new Map<string, unknown[]>();
 
 vi.mock('../db/index.js', () => ({
   getDb: () => testDb,
@@ -44,6 +45,8 @@ vi.mock('../ws/handler.js', () => ({
     federatedCalls: new Map(),
     isUserOnline: vi.fn(),
     lateBindFederatedCall: vi.fn(),
+    getUserActivities: vi.fn((uid: string) => liveActivities.get(uid) ?? []),
+    clearUserActivities: vi.fn((uid: string) => { liveActivities.delete(uid); }),
   },
 }));
 
@@ -65,6 +68,7 @@ beforeEach(() => {
   applyMigrations(sqlite);
   queueCalls.length = 0;
   sentToUser.length = 0;
+  liveActivities.clear();
   // Stub from orbit (peer being activated)
   testDb.insert(schema.users).values({
     id: 'stub-pbtest3', username: 'pbtest3@orbit.ddns.net', passwordHash: '!fr',
@@ -116,7 +120,7 @@ beforeEach(() => {
 describe('snapshotPresenceForPeer — scope', () => {
   it('snapshots online natives that are friended with a peer stub', async () => {
     const { snapshotPresenceForPeer } = await import('./federationPresence.js');
-    snapshotPresenceForPeer('https://orbit.ddns.net');
+    await snapshotPresenceForPeer('https://orbit.ddns.net');
     const friendCall = queueCalls.find((c) => c.entityId === 'native-friend');
     expect(friendCall).toBeDefined();
     expect(friendCall!.targets).toEqual(['https://orbit.ddns.net']);
@@ -124,26 +128,38 @@ describe('snapshotPresenceForPeer — scope', () => {
 
   it('snapshots online natives that share a DM with a peer stub', async () => {
     const { snapshotPresenceForPeer } = await import('./federationPresence.js');
-    snapshotPresenceForPeer('https://orbit.ddns.net');
+    await snapshotPresenceForPeer('https://orbit.ddns.net');
     expect(queueCalls.find((c) => c.entityId === 'native-dm')).toBeDefined();
   });
 
   it('snapshots online natives that opted into client-federation (replicatedInstances)', async () => {
     const { snapshotPresenceForPeer } = await import('./federationPresence.js');
-    snapshotPresenceForPeer('https://orbit.ddns.net');
+    await snapshotPresenceForPeer('https://orbit.ddns.net');
     expect(queueCalls.find((c) => c.entityId === 'native-optin')).toBeDefined();
   });
 
   it('does NOT snapshot online natives with no relationship to the peer', async () => {
     const { snapshotPresenceForPeer } = await import('./federationPresence.js');
-    snapshotPresenceForPeer('https://orbit.ddns.net');
+    await snapshotPresenceForPeer('https://orbit.ddns.net');
     expect(queueCalls.find((c) => c.entityId === 'native-unrelated')).toBeUndefined();
   });
 
   it('does NOT snapshot offline natives even when they are related to the peer', async () => {
     const { snapshotPresenceForPeer } = await import('./federationPresence.js');
-    snapshotPresenceForPeer('https://orbit.ddns.net');
+    await snapshotPresenceForPeer('https://orbit.ddns.net');
     expect(queueCalls.find((c) => c.entityId === 'native-offline-friend')).toBeUndefined();
+  });
+});
+
+describe('snapshotPresenceForPeer — content (#340)', () => {
+  it("carries the native's current activities", async () => {
+    liveActivities.set('native-friend', [{ type: 'playing', name: 'Factorio' }]);
+    const { snapshotPresenceForPeer } = await import('./federationPresence.js');
+    await snapshotPresenceForPeer('https://orbit.ddns.net');
+    const friendCall = queueCalls.find((c) => c.entityId === 'native-friend');
+    const event = JSON.parse(friendCall!.payload) as { presenceUpdate: { status: string; activities?: unknown[] } };
+    expect(event.presenceUpdate.status).toBe('online');
+    expect(event.presenceUpdate.activities).toEqual([{ type: 'playing', name: 'Factorio' }]);
   });
 });
 
@@ -161,5 +177,14 @@ describe('markPeerStubsOffline', () => {
     expect(friendBroadcast).toBeDefined();
     expect(friendBroadcast!.payload.status).toBe('offline');
     expect(friendBroadcast!.payload.type).toBe('presence_update');
+    expect(friendBroadcast!.payload.homeUserId).toBe('remote-pbtest3');
+    expect(friendBroadcast!.payload.homeInstance).toBe('orbit.ddns.net');
+  });
+
+  it("drops the activities kept for the peer's users (#340)", async () => {
+    liveActivities.set('stub-pbtest3', [{ type: 'playing', name: 'Factorio' }]);
+    const { markPeerStubsOffline } = await import('./federationPresence.js');
+    await markPeerStubsOffline('https://orbit.ddns.net');
+    expect(liveActivities.has('stub-pbtest3')).toBe(false);
   });
 });

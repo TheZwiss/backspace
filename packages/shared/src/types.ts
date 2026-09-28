@@ -489,14 +489,26 @@ export type ClientEvent =
   | { type: 'activity_update'; activities: Activity[] }
   | { type: 'ping' };
 
+/**
+ * Who a presence snapshot is about, beyond the delivering instance's local row
+ * id: the row's `homeUserId` and `homeInstance`, both null for a user native to
+ * the delivering instance. The client keys activities by the federated identity
+ * this names (see activityStore), so every instance's view of one person lands
+ * on one key. Absent on servers that predate the fields.
+ */
+export interface PresenceIdentity {
+  homeUserId: string | null;
+  homeInstance: string | null;
+}
+
 // Server → Client Events
 export type ServerEvent =
-  | { type: 'ready'; user: User; spaces: SpaceWithChannelsAndMembers[]; dmChannels: DmChannel[]; folders?: SpaceFolder[]; spaceLayout?: SpaceLayoutItem[] | null; layoutUpdatedAt?: number; voiceStates?: Record<string, string[]>; voiceChannelElapsedSeconds?: Record<string, number>; voiceUserStates?: Record<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }>; readStates?: ReadState[]; activeCalls?: ActiveCallInfo[]; spaceVoiceStates?: Record<string, { spaceMuted: boolean; spaceDeafened: boolean }>; userActivities?: Record<string, Activity[]>; rejectedPeerOrigins?: string[]; awaitingApprovalPeerOrigins?: string[]; activePeerOrigins?: string[]; pendingApprovalCount?: number }
+  | { type: 'ready'; user: User; spaces: SpaceWithChannelsAndMembers[]; dmChannels: DmChannel[]; folders?: SpaceFolder[]; spaceLayout?: SpaceLayoutItem[] | null; layoutUpdatedAt?: number; voiceStates?: Record<string, string[]>; voiceChannelElapsedSeconds?: Record<string, number>; voiceUserStates?: Record<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }>; readStates?: ReadState[]; activeCalls?: ActiveCallInfo[]; spaceVoiceStates?: Record<string, { spaceMuted: boolean; spaceDeafened: boolean }>; userActivities?: Record<string, Activity[]>; userActivityIdentities?: Record<string, PresenceIdentity>; rejectedPeerOrigins?: string[]; awaitingApprovalPeerOrigins?: string[]; activePeerOrigins?: string[]; pendingApprovalCount?: number }
   | { type: 'message_created'; message: MessageWithUser }
   | { type: 'message_updated'; message: MessageWithUser }
   | { type: 'message_deleted'; messageId: string; channelId: string }
   | { type: 'typing'; channelId: string; userId: string; username: string }
-  | { type: 'presence_update'; userId: string; status: string; activities?: Activity[] }
+  | ({ type: 'presence_update'; userId: string; status: string; activities?: Activity[] } & Partial<PresenceIdentity>)
   | { type: 'voice_state_update'; channelId: string; userId: string; action: 'join' | 'leave'; channelElapsedSeconds?: number }
   | { type: 'member_joined'; spaceId: string; member: MemberWithUser }
   | { type: 'member_left'; spaceId: string; userId: string }

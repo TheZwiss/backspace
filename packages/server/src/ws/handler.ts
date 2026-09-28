@@ -19,12 +19,14 @@ import type {
   ReadState,
   ActiveCallInfo,
   Activity,
+  PresenceIdentity,
 } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { batchInArray } from '../utils/sqlBatch.js';
 import { loadOpenDmChannels } from '../utils/dmChannelWire.js';
 import { collectProfileBroadcastTargetIds } from '../utils/userDeletion.js';
 import { statusOnConnect } from '../utils/presenceStatus.js';
+import { presenceIdentityOf, presenceUpdateFor, snapshotActivities } from './presenceEvent.js';
 import { touchUserActivity, parseClientKind } from '../telemetry/activity.js';
 import { utcDay } from '../telemetry/day.js';
 
@@ -280,12 +282,7 @@ class ConnectionManager {
     // Mirrors collectProfileBroadcastTargetIds (the recipient set used by
     // user_updated). Two locally-friended users with no shared space now see
     // each other's offline transitions live, instead of being space-only.
-    const offlinePayload = {
-      type: 'presence_update' as const,
-      userId,
-      status: 'offline' as const,
-      activities: [] as Activity[],
-    };
+    const offlinePayload = presenceUpdateFor(userId, 'offline', []);
     const offlineTargets = collectProfileBroadcastTargetIds(userId);
     for (const uid of offlineTargets) this.sendToUser(uid, offlinePayload);
 
@@ -1188,6 +1185,7 @@ function buildReadyPayload(userId: string): {
   readStates: ReadState[];
   activeCalls: ActiveCallInfo[];
   userActivities: Record<string, Activity[]>;
+  userActivityIdentities: Record<string, PresenceIdentity>;
   rejectedPeerOrigins: string[];
   awaitingApprovalPeerOrigins: string[];
   activePeerOrigins: string[];
@@ -1568,32 +1566,63 @@ function buildReadyPayload(userId: string): {
       lastReadMessageId: rs.lastReadMessageId,
     }));
 
-  // Build user activities snapshot for all visible users
+  // Build user activities snapshot for all visible users: space members, DM
+  // members and friends (a friend may share neither with the user). Keys are
+  // this instance's row ids; userActivityIdentities names each key's federated
+  // identity so the client can key it like every other view of that person.
   // Auto-inject customStatus as a 'custom' activity for users with no ephemeral activities
   const userActivities: Record<string, Activity[]> = {};
+  const userActivityIdentities: Record<string, PresenceIdentity> = {};
   const seenUserIds = new Set<string>();
 
-  function collectUserActivities(uid: string, customStatus: string | null) {
-    if (seenUserIds.has(uid)) return;
-    seenUserIds.add(uid);
-    let acts = connectionManager.getUserActivities(uid);
-    if (acts.length === 0 && customStatus) {
-      acts = [{ type: 'custom', name: customStatus }];
-    }
+  function collectUserActivities(
+    subject: { id: string; homeUserId: string | null; homeInstance: string | null; customStatus: string | null },
+  ) {
+    if (seenUserIds.has(subject.id)) return;
+    seenUserIds.add(subject.id);
+    const acts = snapshotActivities(connectionManager.getUserActivities(subject.id), subject.customStatus);
     if (acts.length > 0) {
-      userActivities[uid] = acts;
+      userActivities[subject.id] = acts;
+      userActivityIdentities[subject.id] = presenceIdentityOf(subject);
     }
   }
 
   for (const space of spaces) {
     for (const member of space.members) {
-      collectUserActivities(member.userId, member.user?.customStatus ?? null);
+      collectUserActivities({
+        id: member.userId,
+        homeUserId: member.user?.homeUserId ?? null,
+        homeInstance: member.user?.homeInstance ?? null,
+        customStatus: member.user?.customStatus ?? null,
+      });
     }
   }
   for (const dm of dmChannels) {
     for (const member of dm.members) {
-      collectUserActivities(member.id, member.customStatus ?? null);
+      collectUserActivities({
+        id: member.id,
+        homeUserId: member.homeUserId ?? null,
+        homeInstance: member.homeInstance ?? null,
+        customStatus: member.customStatus ?? null,
+      });
     }
+  }
+  const friendIds = db.select({ userId: schema.friends.userId, friendId: schema.friends.friendId })
+    .from(schema.friends)
+    .where(or(eq(schema.friends.userId, userId), eq(schema.friends.friendId, userId)))
+    .all()
+    .map(f => (f.userId === userId ? f.friendId : f.userId));
+  if (friendIds.length > 0) {
+    const friendRows = db.select({
+      id: schema.users.id,
+      homeUserId: schema.users.homeUserId,
+      homeInstance: schema.users.homeInstance,
+      customStatus: schema.users.customStatus,
+    })
+      .from(schema.users)
+      .where(inArray(schema.users.id, friendIds))
+      .all();
+    for (const friend of friendRows) collectUserActivities(friend);
   }
 
   // Rejected peer origins for unreachable member indicators
@@ -1630,7 +1659,7 @@ function buildReadyPayload(userId: string): {
     pendingApprovalCount = countResult?.count ?? 0;
   }
 
-  return { user, spaces, dmChannels, folders, spaceLayout, layoutUpdatedAt, voiceStates, voiceChannelElapsedSeconds, voiceUserStates, spaceVoiceStates, readStates, activeCalls, userActivities, rejectedPeerOrigins, awaitingApprovalPeerOrigins, activePeerOrigins, pendingApprovalCount };
+  return { user, spaces, dmChannels, folders, spaceLayout, layoutUpdatedAt, voiceStates, voiceChannelElapsedSeconds, voiceUserStates, spaceVoiceStates, readStates, activeCalls, userActivities, userActivityIdentities, rejectedPeerOrigins, awaitingApprovalPeerOrigins, activePeerOrigins, pendingApprovalCount };
 }
 
 export async function registerWebSocket(app: FastifyInstance): Promise<void> {
@@ -1728,15 +1757,18 @@ export async function registerWebSocket(app: FastifyInstance): Promise<void> {
           }));
 
           // Broadcast the connect status to friends + DM co-members + space co-members.
-          const connectPayload = { type: 'presence_update' as const, userId, status: connectStatus };
+          const connectPayload = presenceUpdateFor(userId, connectStatus);
           const connectTargets = collectProfileBroadcastTargetIds(userId);
           for (const uid of connectTargets) connectionManager.sendToUser(uid, connectPayload);
 
           // S2S: project it to all active peers (mirrors profile_update fanout).
           // No-op for a replicated row: its home instance owns the projection.
+          // The relay is a full snapshot, so it carries the activities another
+          // session of this user already reported (none on a first connection).
           const _uid = userId;
+          const connectActivities = connectionManager.getUserActivities(_uid);
           void import('../utils/federationPresence.js').then(({ queuePresenceRelay }) => {
-            try { queuePresenceRelay(_uid, connectStatus, []); } catch (e) { console.warn('[ws] queuePresenceRelay(connect) failed', e); }
+            try { queuePresenceRelay(_uid, connectStatus, connectActivities); } catch (e) { console.warn('[ws] queuePresenceRelay(connect) failed', e); }
           });
         } catch {
           ws.send(JSON.stringify({ type: 'error', message: 'Invalid token' }));

@@ -7,13 +7,13 @@ import type { VoiceRoom, DmRoomMeta, SpaceRoomMeta } from './handler.js';
 import { isMember, getChannelSpaceId, isDmMember, isDeadOneOnOne, hasPermission, computePermissions, PermissionBits } from '../utils/permissions.js';
 import { broadcastDmMessage, getDmMessageWithUser, isDmReplyTargetInChannel } from '../routes/dm.js';
 import { fetchReplyToMessages, isReplyTargetInChannel } from '../routes/messages.js';
-import { MAX_MESSAGE_LENGTH, isChosenUserStatus, type MessageWithUser, type Attachment, type DmMessageWithUser, type Embed, type Activity, type ActivityType, type ActivityTimestamps, type ActivityAssets, type ServerEvent, type DmCallUndeliverableFailure, type DmCallUndeliverableReason } from '@backspace/shared';
+import { MAX_MESSAGE_LENGTH, isChosenUserStatus, type MessageWithUser, type Attachment, type DmMessageWithUser, type Embed, type ServerEvent, type DmCallUndeliverableFailure, type DmCallUndeliverableReason } from '@backspace/shared';
 import type { CallRelayResult, CallFanoutFailure } from '../utils/federationOutbox.js';
 import { mapCallReasonToEventReason } from '../utils/federationOutbox.js';
-import { ACTIVITY_LIMITS } from '@backspace/shared/src/activities.js';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { collectProfileBroadcastTargetIds } from '../utils/userDeletion.js';
 import { applyChosenStatus } from './presence.js';
+import { presenceUpdateFor, validateActivities } from './presenceEvent.js';
 import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
 import { resolveEmbeds, reResolveEmbeds, embedRowToEmbed } from '../utils/embedResolver.js';
 import { appendMutationLog, dmMessageFederationRef, dmMessageMutationTarget, queueOutboxEvent, queueDmRelay, queueDmMessageDeleteRelay, getGroupDmTargetOrigins, sendCallRelay, computeFederatedId, sendTypingRelay, queueReadStateRelay } from '../utils/federationOutbox.js';
@@ -429,54 +429,6 @@ function handleTypingStart(event: Record<string, unknown>, userId: string, usern
   typingTimeouts.set(key, timeout);
 }
 
-// ─── Activity Validation ──────────────────────────────────────────────────
-
-const VALID_ACTIVITY_TYPES = new Set<string>(['custom', 'playing', 'listening', 'watching', 'streaming']);
-const MAX_TIMESTAMP = 4102444800000;
-
-function validateActivities(raw: unknown): Activity[] | null {
-  if (!Array.isArray(raw)) return null;
-  if (raw.length > ACTIVITY_LIMITS.MAX_ACTIVITIES_PER_USER) return null;
-
-  const validated: Activity[] = [];
-  for (const item of raw) {
-    if (!item || typeof item !== 'object') return null;
-    const obj = item as Record<string, unknown>;
-    if (!VALID_ACTIVITY_TYPES.has(obj.type as string)) return null;
-    if (typeof obj.name !== 'string') return null;
-    if (obj.name.length === 0 || obj.name.length > ACTIVITY_LIMITS.MAX_NAME_LENGTH) return null;
-
-    const activity: Activity = { type: obj.type as ActivityType, name: (obj.name as string).trim() };
-
-    if (typeof obj.details === 'string' && obj.details.length <= ACTIVITY_LIMITS.MAX_DETAILS_LENGTH) activity.details = obj.details.trim();
-    if (typeof obj.state === 'string' && obj.state.length <= ACTIVITY_LIMITS.MAX_STATE_LENGTH) activity.state = obj.state.trim();
-    if (typeof obj.url === 'string' && obj.url.length <= ACTIVITY_LIMITS.MAX_URL_LENGTH) {
-      if (obj.url.startsWith('https://') || obj.url.startsWith('http://')) activity.url = obj.url;
-    }
-
-    if (obj.timestamps && typeof obj.timestamps === 'object') {
-      const tsObj = obj.timestamps as Record<string, unknown>;
-      const ts: ActivityTimestamps = {};
-      if (typeof tsObj.start === 'number' && tsObj.start >= 0 && tsObj.start <= MAX_TIMESTAMP) ts.start = tsObj.start;
-      if (typeof tsObj.end === 'number' && tsObj.end >= 0 && tsObj.end <= MAX_TIMESTAMP) ts.end = tsObj.end;
-      if (ts.start !== undefined || ts.end !== undefined) activity.timestamps = ts;
-    }
-
-    if (obj.assets && typeof obj.assets === 'object') {
-      const aObj = obj.assets as Record<string, unknown>;
-      const assets: ActivityAssets = {};
-      if (typeof aObj.largeImage === 'string' && aObj.largeImage.length <= ACTIVITY_LIMITS.MAX_URL_LENGTH) assets.largeImage = aObj.largeImage;
-      if (typeof aObj.largeText === 'string' && aObj.largeText.length <= ACTIVITY_LIMITS.MAX_ASSET_TEXT_LENGTH) assets.largeText = aObj.largeText;
-      if (typeof aObj.smallImage === 'string' && aObj.smallImage.length <= ACTIVITY_LIMITS.MAX_URL_LENGTH) assets.smallImage = aObj.smallImage;
-      if (typeof aObj.smallText === 'string' && aObj.smallText.length <= ACTIVITY_LIMITS.MAX_ASSET_TEXT_LENGTH) assets.smallText = aObj.smallText;
-      if (Object.keys(assets).length > 0) activity.assets = assets;
-    }
-
-    validated.push(activity);
-  }
-  return validated;
-}
-
 function handlePresenceUpdate(event: Record<string, unknown>, userId: string): void {
   if (!isChosenUserStatus(event.status)) {
     connectionManager.sendToUser(userId, { type: 'error', message: 'Status must be "online", "idle", or "dnd"' });
@@ -501,7 +453,7 @@ function handleActivityUpdate(event: Record<string, unknown>, userId: string): v
   connectionManager.setUserActivities(userId, activities);
   const status = connectionManager.getUserStatus(userId);
 
-  const payload = { type: 'presence_update' as const, userId, status, activities };
+  const payload = presenceUpdateFor(userId, status, activities);
   const targets = collectProfileBroadcastTargetIds(userId);
   for (const uid of targets) connectionManager.sendToUser(uid, payload);
   connectionManager.sendToUser(userId, payload);

@@ -3,6 +3,7 @@ import { getOurOrigin, normalizeOriginForCompare } from '../../../utils/federati
 import { sanitizeUser } from '../../../utils/sanitize.js';
 import { generateSnowflake } from '../../../utils/snowflake.js';
 import { connectionManager } from '../../../ws/handler.js';
+import { exchangeFriendPresence } from '../../../ws/presence.js';
 import { and, eq, or } from 'drizzle-orm';
 import type { FederationRelayEvent } from '@backspace/shared';
 import { extractDomain, resolveOrCreateReplicatedUser, resolveRelayActor, attributionRefusal } from '../identity.js';
@@ -233,6 +234,8 @@ export function processFriendRequestUpdateEvent(
       },
       requestId: pendingRequest.id,
     });
+    // Each side sees the other's current status and activity now (#340).
+    exchangeFriendPresence(fromUser.id, toUser.id);
   } else if (status === 'declined') {
     connectionManager.sendToUser(fromUser.id, {
       type: 'friend_request_declined',
@@ -434,6 +437,8 @@ export async function processFriendAddEvent(
     // The pending request this friend_add answered (the acceptance check above)
     requestId: pendingRequest.id,
   });
+  // Each side sees the other's current status and activity now (#340).
+  exchangeFriendPresence(fromUser.id, toUser.id);
 
   accepted.push(event.messageId);
 }

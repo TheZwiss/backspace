@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useSocialStore } from '../../stores/socialStore';
+import { useSocialStore, type TaggedFriend } from '../../stores/socialStore';
 import { useUIStore } from '../../stores/uiStore';
-import { useActivityStore } from '../../stores/activityStore';
+import { useActivityStore, activitiesFor } from '../../stores/activityStore';
 import { Avatar } from '../ui/Avatar';
 import { Username } from '../ui/Username';
 import { ActivityCard, hasRichActivity, getActivityAccentClass } from '../ui/ActivityCard';
@@ -80,16 +80,16 @@ export function ActivityPanel() {
   }, [loadFriends]);
 
   const { activeFriends, onlineFriends, offlineFriends } = useMemo(() => {
-    const active: Friend[] = [];
-    const online: Friend[] = [];
-    const offline: Friend[] = [];
+    const active: TaggedFriend[] = [];
+    const online: TaggedFriend[] = [];
+    const offline: TaggedFriend[] = [];
 
     for (const f of friends) {
       if (f.status === 'offline') {
         offline.push(f);
         continue;
       }
-      const activities = userActivities.get(f.homeUserId ?? f.id) ?? [];
+      const activities = activitiesFor(userActivities, f, f._instanceOrigin);
       const primary = getPrimaryActivity(activities);
       // Active = has a non-custom activity (playing, listening, watching, streaming)
       if (primary && primary.type !== 'custom') {
@@ -129,8 +129,8 @@ export function ActivityPanel() {
     );
   };
 
-  const renderFriend = (friend: Friend, isOffline = false) => {
-    const activities = userActivities.get(friend.homeUserId ?? friend.id) ?? [];
+  const renderFriend = (friend: TaggedFriend, isOffline = false) => {
+    const activities = activitiesFor(userActivities, friend, friend._instanceOrigin);
     const isRichActivity = !isOffline && hasRichActivity(activities);
     const primary = getPrimaryActivity(activities);
     const accentClass = primary ? getActivityAccentClass(primary.type) : '';

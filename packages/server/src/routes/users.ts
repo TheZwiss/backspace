@@ -5,10 +5,11 @@ import { randomBytes } from 'node:crypto';
 import { getDb, schema } from '../db/index.js';
 import { authenticate, verifyPassword, hashPassword, signJwt } from '../utils/auth.js';
 import { connectionManager } from '../ws/handler.js';
-import type { UpdateUserRequest, VerifyPasswordRequest, VerifyPasswordResponse, ChangePasswordRequest, ChangePasswordResponse, DeleteAccountRequest, FederationCredentialRequest, FederationCredentialResponse, ReplicatedInstance, SpaceLayoutItem, SpaceFolder, Activity, FederationIdentityDeleteRequest, FederationIdentityDeleteResponse, FederationIdentityDeleteResult, FederationProfileUpdatePayload } from '@backspace/shared';
+import type { UpdateUserRequest, VerifyPasswordRequest, VerifyPasswordResponse, ChangePasswordRequest, ChangePasswordResponse, DeleteAccountRequest, FederationCredentialRequest, FederationCredentialResponse, ReplicatedInstance, SpaceLayoutItem, SpaceFolder, FederationIdentityDeleteRequest, FederationIdentityDeleteResponse, FederationIdentityDeleteResult, FederationProfileUpdatePayload } from '@backspace/shared';
 import { AVATAR_COLORS, isChosenUserStatus, type ChosenUserStatus } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { applyChosenStatus } from '../ws/presence.js';
+import { presenceUpdateFor } from '../ws/presenceEvent.js';
 import { deleteUploadFile, deleteAttachmentByFilename } from '../utils/fileCleanup.js';
 import { tombstoneUser, collectDeletionBroadcastTargets, collectProfileBroadcastTargetIds } from '../utils/userDeletion.js';
 import { queueOutboxEvent, isFederationRelayEnabled, appendMutationLog } from '../utils/federationOutbox.js';
@@ -482,12 +483,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       connectionManager.setUserShowActivity(request.userId, showActivity);
       if (!showActivity) {
         connectionManager.clearUserActivities(request.userId);
-        const clearPayload = {
-          type: 'presence_update' as const,
-          userId: request.userId,
-          status: connectionManager.getUserStatus(request.userId),
-          activities: [] as Activity[],
-        };
+        const clearPayload = presenceUpdateFor(request.userId, connectionManager.getUserStatus(request.userId), []);
         const clearTargets = collectProfileBroadcastTargetIds(request.userId);
         for (const uid of clearTargets) connectionManager.sendToUser(uid, clearPayload);
         connectionManager.sendToUser(request.userId, clearPayload);

@@ -65,13 +65,13 @@ interface Activity {
 | `MAX_ASSET_TEXT_LENGTH` | 128 |
 | `MAX_URL_LENGTH` | 512 |
 
-### Server-Side Validation (`ws/events.ts:validateActivities()`)
+### Server-Side Validation (`ws/presenceEvent.ts:validateActivities()`)
 
-The server validates every incoming `activity_update` payload:
+The server validates every incoming `activity_update` payload, and the activities of every relayed S2S `presence_update` (when they fail, `processPresenceUpdateEvent` applies the status and leaves the kept activities unchanged). One function for both, so an activity a sender accepts is one every receiver accepts:
 
 1. Must be an array with at most `MAX_ACTIVITIES_PER_USER` items
 2. Each item must be an object with a valid `type` (one of: `custom`, `playing`, `listening`, `watching`, `streaming`)
-3. `name` is required, must be a non-empty string within `MAX_NAME_LENGTH`; trimmed on accept
+3. `name` is required, must be a string that is not empty after trimming and within `MAX_NAME_LENGTH`; trimmed on accept
 4. Optional fields (`details`, `state`) accepted if string and within length limits; trimmed
 5. `url` accepted only if it starts with `https://` or `http://` and is within `MAX_URL_LENGTH`
 6. `timestamps.start` and `timestamps.end` accepted if numbers in range `[0, 4102444800000]` (epoch ms cap ~2100)
@@ -183,7 +183,7 @@ Because the in-memory `ConnectionManager` is empty at boot by construction, no l
 
 ## Activity Lifecycle
 
-Activities are **ephemeral** — stored only in server memory (`ConnectionManager.userActivities: Map<string, Activity[]>`), never persisted to the database. They are cleared on disconnect.
+Activities are **ephemeral** — stored only in server memory (`ConnectionManager.userActivities: Map<string, Activity[]>`), never persisted to the database. A connected user's entry is cleared on disconnect. A replicated user's entry holds the activities their home instance last relayed (S2S `presence_update`); a relay with an `activities` list replaces it (`[]` clears), an `offline` relay clears it, and a relay without the field (a peer that predates always sending it) leaves it unchanged; it is also cleared when the home peer is deactivated (`markPeerStubsOffline`).
 
 ### Data Flow: Detection to Display
 
@@ -204,7 +204,7 @@ Desktop Process Scanner (15s poll)
 
 | Map | Key | Value | Lifecycle |
 |-----|-----|-------|-----------|
-| `userActivities` | userId | `Activity[]` | Set on `activity_update`, cleared on disconnect or `showActivity=false` |
+| `userActivities` | userId | `Activity[]` | Native/connected row: set on `activity_update`, cleared on disconnect or `showActivity=false`. Replicated row: set from each relayed `presence_update`, cleared by a `[]` or `offline` relay or peer deactivation; a relay without the field leaves it |
 | `userShowActivity` | userId | boolean | Cached from DB at auth, updated via REST `PATCH /users/me` |
 | `userStatuses` | userId | string | Cached from DB at auth, updated on `presence_update` |
 | `lastActivityUpdate` | userId | timestamp (ms) | Used for 3s rate limiting |
@@ -222,24 +222,18 @@ The client debounce is a trailing-edge timer: each new `pushActivities()` call r
 
 ### Ready Payload — Initial Activity Snapshot
 
-On WebSocket auth, `buildReadyPayload()` constructs a `userActivities` map for all visible users (space members + DM members). It auto-injects a synthetic `custom` activity for users who have a `customStatus` set but no ephemeral activities:
+On WebSocket auth, `buildReadyPayload()` constructs a `userActivities` map for all visible users: space members, DM members and **friends** (a friend may share neither a space nor a DM with the user). Keys are this instance's row ids. Next to it, `userActivityIdentities` maps each of those keys to the row's `{ homeUserId, homeInstance }` (both null for a native row), so the client can key the entry by the person's home identity (see "Keying" below). For a replicated friend the entry is the activity their home last relayed.
 
-```typescript
-// ws/handler.ts:collectUserActivities
-function collectUserActivities(uid: string, customStatus: string | null) {
-  if (seenUserIds.has(uid)) return;
-  seenUserIds.add(uid);
-  let acts = connectionManager.getUserActivities(uid);
-  if (acts.length === 0 && customStatus) {
-    acts = [{ type: 'custom', name: customStatus }];
-  }
-  if (acts.length > 0) {
-    userActivities[uid] = acts;
-  }
-}
-```
+`snapshotActivities(live, customStatus)` (`ws/presenceEvent.ts`) picks each entry: the user's live or relayed activities, else a synthetic `custom` activity from `customStatus`. The friendship snapshot (below) uses the same function.
 
-This synthetic injection only occurs in the ready payload snapshot, not in live `presence_update` broadcasts.
+This synthetic injection only occurs in snapshots (ready, friendship), not in live `presence_update` broadcasts.
+
+### Friendship Snapshot
+
+Presence events fire only on change, so a friend who was already in a game when the friendship formed would show no activity until it changed. When a friendship row is created (local `PATCH /api/social/requests/:id` accept, relayed `friend_request_update` accepted, relayed `friend_add`), `exchangeFriendPresence(a, b)` (`ws/presence.ts`):
+
+1. sends each side's sessions a `presence_update` about the other with its current status and snapshot activities (`sendPresenceSnapshot`; an offline subject reports none);
+2. for each **native** side whose new friend is replicated, queues a targeted S2S `presence_update` (status + activities) to the friend's home (`snapshotPresenceForFriend`, `utils/federationPresence.ts`). The friend's home had no row for the native when the activity started, so it dropped that relay; this gives it the current state, which it keeps and forwards to the friend.
 
 ### Reconnect Re-Push
 
@@ -320,7 +314,7 @@ This spec covers how detected activities enter the broadcast pipeline. The detec
 
 ```typescript
 interface ActivityState {
-  userActivities: Map<string, Activity[]>;  // All users' activities, keyed by userId
+  userActivities: Map<string, Activity[]>;  // All users' activities, keyed by activityKey (never a raw row id)
   showActivity: boolean;                     // Current user's visibility preference
   myActivities: Activity[] | null;           // Current user's own activities (cached locally)
 }
@@ -330,12 +324,22 @@ interface ActivityState {
 
 | Method | Behavior |
 |--------|----------|
-| `setUserActivities(userId, activities)` | Updates map; deletes entry if empty array |
-| `clearUserActivities(userId)` | Removes entry from map |
-| `initActivities(activityMap)` | Bulk-set from ready payload (merges into existing map) |
+| `setUserActivities(subject, origin, activities)` | Updates the entry at `activityKey(subject, origin)`; deletes it if empty array |
+| `clearUserActivities(subject, origin)` | Removes that entry |
+| `initActivities(entries, origin)` | Bulk-set from a ready payload (`readyActivityEntries`); merges into existing map |
 | `setShowActivity(show)` | Sets flag; if `false`: cancels debounce, sends empty `activity_update` via `wsSendAll`, clears `myActivities` |
 | `pushActivities(activities)` | Guards on `showActivity`; sets `myActivities` immediately; starts/resets 5s debounce timer; on fire: sends `activity_update` via `wsSendAll` |
 | `reset()` | Cancels timer, clears all state |
+
+### Keying
+
+Every instance delivers presence under its own row id: the viewer's home names a remote friend by its replicated row, the friend's home by the native row, a third instance by its own replicated row. One person must land on one key, whichever delivered it, or the friends views and member lists disagree (#340).
+
+- **Key:** `activityKey(subject, origin)` (`utils/identity.ts`) = `canonicalUserKey` of the person's home identity. A subject with a `homeInstance` names it itself; a subject without one is native to the delivering instance, so its home host is the delivering origin's (`''` = the page's instance, `window.location.host`) and its home id is its id.
+- **Writers:** the `presence_update` handler builds the subject with `presenceSubjectOf(event, origin)` and the ready handler with `readyActivityEntries(event)` (`utils/presenceSubject.ts`). `socialStore.updateFriendPresence(subject, origin, status)` matches friends by the same key.
+- **Readers:** `activitiesFor(map, user, origin)` (`stores/activityStore.ts`). FriendsPage and ActivityPanel pass the friend and its `_instanceOrigin`; MemberSidebar and MobileMembersScreen pass `member.user` and the space's `_instanceOrigin`. Nothing looks an entry up by a raw id.
+- **Older servers.** A server without the identity fields sends only its row id. `presenceSubjectOf` then takes the identity from a row the client already holds for that (id, origin): a friend, a member of the loaded space from that origin, or a DM member from that origin; an unknown id is taken as native to the delivering instance. `readyActivityEntries` without `userActivityIdentities` takes it from the space and DM members of the same payload.
+- **Limit:** a native user of the page's instance is keyed by `window.location.host`, and a replicated row of that user elsewhere by its `homeInstance` (the instance's `DOMAIN`). The two agree only when the page is opened at exactly `DOMAIN`'s hostname on the default port. They do not when the page is opened by a LAN IP or another host alias, when the instance runs on a non-default port (`window.location.host` keeps the port, a stored `homeInstance` is the hostname only), or under the Vite dev server. Then that user's deliveries through their own home and through a peer land on two keys; deliveries through the home still reach the friends views.
 
 ### Module-Level State
 
@@ -400,7 +404,7 @@ Friends are sorted into three groups using `useMemo`:
 
 ### User ID Resolution
 
-Activities are looked up by `friend.homeUserId ?? friend.id` — this handles federated users whose local ID differs from their home instance ID.
+Activities are read with `activitiesFor(userActivities, friend, friend._instanceOrigin)`; see "Keying" under `activityStore`.
 
 ### Empty State
 
@@ -414,7 +418,7 @@ Displayed in space views (right sidebar, 240px wide). Shows space members groupe
 
 ### Activity Integration
 
-Activities are looked up by `member.userId` from the `userActivities` map. Each member row renders an `ActivityCard` with `fallbackCustomStatus` from `member.user.customStatus`. Offline members do not display activities.
+Activities are read with `activitiesFor(userActivities, member.user, spaceOrigin)` (the space's `_instanceOrigin`); see "Keying". Each member row renders an `ActivityCard` with `fallbackCustomStatus` from `member.user.customStatus`. Offline members do not display activities.
 
 ### Role Grouping
 
@@ -437,10 +441,10 @@ See websocket.md for full wire format. Summary of activity-related events:
 
 | Event | Fields | Scope |
 |-------|--------|-------|
-| `presence_update` | `userId, status, activities?` | All spaces the user belongs to + self |
+| `presence_update` | `userId, status, activities?, homeUserId?, homeInstance?` | Friends + DM co-members + space co-members + self |
 
-Note: `activities` field is present only when non-empty. Both `presence_update` (status change) and `activity_update` (activity change) result in outbound `presence_update` events to clients — the server coalesces them into a single event type.
+Note: `activities` absent means unchanged; an empty array clears. A relayed presence about a replicated user always carries it. `homeUserId`/`homeInstance` name the subject row's federated identity (null for a native row); every emitter builds the event with `presenceUpdateFor`/`presenceUpdateEvent` (`ws/presenceEvent.ts`). Both `presence_update` (status change) and `activity_update` (activity change) result in outbound `presence_update` events to clients — the server coalesces them into a single event type.
 
 ### Ready Payload
 
-The `ready` event includes `userActivities: Record<userId, Activity[]>` containing activities for all visible users (space members + DM members), with synthetic `custom` activities injected for users with `customStatus` but no ephemeral activities.
+The `ready` event includes `userActivities: Record<userId, Activity[]>` containing activities for all visible users (space members + DM members + friends), with synthetic `custom` activities injected for users with `customStatus` but no ephemeral activities, and `userActivityIdentities: Record<userId, { homeUserId, homeInstance }>` for the same keys.

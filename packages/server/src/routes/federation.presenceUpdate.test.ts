@@ -14,6 +14,7 @@ let sqlite: Database.Database;
 let testDb: TestDb;
 
 const sentToUserCalls: Array<{ userId: string; payload: any }> = [];
+const retainedActivities = new Map<string, unknown[]>();
 
 vi.mock('../db/index.js', () => ({
   getDb: () => testDb,
@@ -32,6 +33,12 @@ vi.mock('../ws/handler.js', () => ({
     federatedCalls: new Map(),
     isUserOnline: vi.fn(),
     lateBindFederatedCall: vi.fn(),
+    setUserActivities: vi.fn((uid: string, acts: unknown[]) => {
+      if (acts.length === 0) retainedActivities.delete(uid);
+      else retainedActivities.set(uid, acts);
+    }),
+    getUserActivities: vi.fn((uid: string) => retainedActivities.get(uid) ?? []),
+    clearUserActivities: vi.fn((uid: string) => { retainedActivities.delete(uid); }),
   },
 }));
 
@@ -52,6 +59,7 @@ beforeEach(() => {
   testDb = drizzle(sqlite, { schema });
   applyMigrations(sqlite);
   sentToUserCalls.length = 0;
+  retainedActivities.clear();
   // Local user (erin) and replicated stub (pbtest3) — they're friends.
   testDb.insert(schema.users).values([
     {
@@ -162,5 +170,78 @@ describe('processPresenceUpdateEvent', () => {
     fed.processPresenceUpdateEvent(event, 'orbit.ddns.net', testDb, [], []);
     const broadcast = sentToUserCalls.find((c) => c.userId === 'local-erin');
     expect(broadcast!.payload.activities).toEqual([{ type: 'playing', name: 'Test' }]);
+  });
+});
+
+function relayed(messageId: string, fields: { status: 'online' | 'idle' | 'dnd' | 'offline'; activities?: Array<{ type: 'playing'; name: string }> }): FederationRelayEvent {
+  return {
+    eventType: 'presence_update', contextType: 'profile', messageId,
+    encryptionVersion: 0, timestamp: Date.now(),
+    presenceUpdate: { homeUserId: 'home-pbtest3', homeInstance: 'orbit.ddns.net', ts: Date.now(), ...fields },
+  };
+}
+
+describe('processPresenceUpdateEvent: the relayed activity snapshot (#340)', () => {
+  it("names the subject's federated identity in the WS broadcast", async () => {
+    const fed = await import('./federation.js');
+    fed.processPresenceUpdateEvent(relayed('i1', { status: 'online' }), 'orbit.ddns.net', testDb, [], []);
+    const broadcast = sentToUserCalls.find((c) => c.userId === 'local-erin');
+    expect(broadcast!.payload.homeUserId).toBe('home-pbtest3');
+    expect(broadcast!.payload.homeInstance).toBe('orbit.ddns.net');
+  });
+
+  it('keeps the relayed activities on the replicated row', async () => {
+    const fed = await import('./federation.js');
+    fed.processPresenceUpdateEvent(relayed('k1', { status: 'online', activities: [{ type: 'playing', name: 'Factorio' }] }), 'orbit.ddns.net', testDb, [], []);
+    expect(retainedActivities.get('stub-pbtest3')).toEqual([{ type: 'playing', name: 'Factorio' }]);
+  });
+
+  it('drops the kept activities on an explicit empty list, and tells local users', async () => {
+    const fed = await import('./federation.js');
+    fed.processPresenceUpdateEvent(relayed('c1', { status: 'online', activities: [{ type: 'playing', name: 'Factorio' }] }), 'orbit.ddns.net', testDb, [], []);
+    sentToUserCalls.length = 0;
+    fed.processPresenceUpdateEvent(relayed('c2', { status: 'online', activities: [] }), 'orbit.ddns.net', testDb, [], []);
+    expect(retainedActivities.has('stub-pbtest3')).toBe(false);
+    const broadcast = sentToUserCalls.find((c) => c.userId === 'local-erin');
+    expect(broadcast!.payload.activities).toEqual([]);
+  });
+
+  it('keeps the kept activities when a relay carries no activities field (an older sender)', async () => {
+    // A 1.6.1 home sends status-only relays on every connect and in its
+    // peer-activation snapshot, also while its user is playing.
+    const fed = await import('./federation.js');
+    fed.processPresenceUpdateEvent(relayed('u1', { status: 'online', activities: [{ type: 'playing', name: 'Factorio' }] }), 'orbit.ddns.net', testDb, [], []);
+    sentToUserCalls.length = 0;
+    fed.processPresenceUpdateEvent(relayed('u2', { status: 'idle' }), 'orbit.ddns.net', testDb, [], []);
+    expect(retainedActivities.get('stub-pbtest3')).toEqual([{ type: 'playing', name: 'Factorio' }]);
+    const broadcast = sentToUserCalls.find((c) => c.userId === 'local-erin');
+    expect(broadcast!.payload.status).toBe('idle');
+    expect(broadcast!.payload.activities).toBeUndefined();
+  });
+
+  it('drops the kept activities when the user goes offline', async () => {
+    const fed = await import('./federation.js');
+    fed.processPresenceUpdateEvent(relayed('o1', { status: 'online', activities: [{ type: 'playing', name: 'Factorio' }] }), 'orbit.ddns.net', testDb, [], []);
+    fed.processPresenceUpdateEvent(relayed('o2', { status: 'offline', activities: [{ type: 'playing', name: 'Factorio' }] }), 'orbit.ddns.net', testDb, [], []);
+    expect(retainedActivities.has('stub-pbtest3')).toBe(false);
+  });
+
+  it('applies the status but not activities over the limits a local client is held to', async () => {
+    const fed = await import('./federation.js');
+    fed.processPresenceUpdateEvent(relayed('v0', { status: 'online', activities: [{ type: 'playing', name: 'Factorio' }] }), 'orbit.ddns.net', testDb, [], []);
+    sentToUserCalls.length = 0;
+    const accepted: string[] = [];
+    const rejected: Array<{ messageId: string; reason: string }> = [];
+    const event = relayed('v1', { status: 'dnd' });
+    event.presenceUpdate!.activities = [{ type: 'playing', name: 'x'.repeat(10_000) }];
+    fed.processPresenceUpdateEvent(event, 'orbit.ddns.net', testDb, accepted, rejected);
+    expect(rejected).toEqual([]);
+    expect(accepted).toEqual(['v1']);
+    const row = testDb.select().from(schema.users).where(eq(schema.users.id, 'stub-pbtest3')).get();
+    expect(row!.status).toBe('dnd');
+    expect(retainedActivities.get('stub-pbtest3')).toEqual([{ type: 'playing', name: 'Factorio' }]);
+    const broadcast = sentToUserCalls.find((c) => c.userId === 'local-erin');
+    expect(broadcast!.payload.status).toBe('dnd');
+    expect(broadcast!.payload.activities).toBeUndefined();
   });
 });

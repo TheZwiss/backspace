@@ -89,11 +89,13 @@ describe('queuePresenceRelay', () => {
     expect(mutationLogCalls).toEqual([]);
   });
 
-  it('omits activities field when none are passed', async () => {
+  it('sends an explicit empty list when there are no activities, so receivers clear', async () => {
+    // An absent field means "unchanged" to a receiver (what a 1.6.1 sender's
+    // status-only relay means), so "none" must be said with [].
     const { queuePresenceRelay } = await import('./federationPresence.js');
-    queuePresenceRelay('native-1', 'offline', []);
+    queuePresenceRelay('native-1', 'online', []);
     const event = JSON.parse(queueCalls[0]!.payload);
-    expect(event.presenceUpdate.activities).toBeUndefined();
+    expect(event.presenceUpdate.activities).toEqual([]);
   });
 
   it('is a no-op for replicated users (homeInstance set)', async () => {

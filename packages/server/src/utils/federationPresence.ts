@@ -2,7 +2,8 @@ import { and, eq, inArray, isNull, or } from 'drizzle-orm';
 import type { Activity, FederationRelayEvent, FederationPresenceUpdatePayload, ReplicatedInstance } from '@backspace/shared';
 import { getDb, schema } from '../db/index.js';
 import { getOurOrigin } from './federationAuth.js';
-import { isFederationRelayEnabled, queueOutboxEvent } from './federationOutbox.js';
+import { getFriendEventTargets, isFederationRelayEnabled, queueOutboxEvent } from './federationOutbox.js';
+import { presenceUpdateEvent } from '../ws/presenceEvent.js';
 import { collectProfileBroadcastTargetIds } from './userDeletion.js';
 import { extractDomain } from '../routes/federation.js';
 
@@ -30,43 +31,80 @@ export function queuePresenceRelay(
   if (!user) return;
   if (user.homeInstance) return; // replicated — not our authority
 
+  // targetPeerOrigins = undefined → broadcast to all active peers.
+  queuePresenceEvent(user.id, status, activities, undefined, '');
+}
+
+/**
+ * Queue one presence_update about native `userId`, always with the full
+ * `activities` list (`[]` for none). Receivers read `[]` as "none" and an
+ * absent field as "unchanged", which is what a status-only relay from a peer
+ * that predates this rule means.
+ *
+ * entityId = userId so the outbox coalesces rapid status flaps into the latest.
+ * contextId = userId, contextType = 'profile' (reuses existing routing).
+ * NO appendMutationLog — presence must not be replayed from history.
+ */
+function queuePresenceEvent(
+  userId: string,
+  status: PresenceStatus,
+  activities: Activity[],
+  targetPeerOrigins: string[] | undefined,
+  messageIdSuffix: string,
+): void {
   const ts = Date.now();
   const payload: FederationPresenceUpdatePayload = {
-    homeUserId: user.id,
+    homeUserId: userId,
     homeInstance: getOurOrigin(),
     status,
     ts,
-    ...(activities.length > 0 ? { activities } : {}),
+    activities,
   };
 
   const event: FederationRelayEvent = {
     eventType: 'presence_update',
     contextType: 'profile',
-    messageId: `presence:${user.id}:${ts}`,
+    messageId: `presence:${userId}:${ts}${messageIdSuffix}`,
     encryptionVersion: 0,
     timestamp: ts,
     presenceUpdate: payload,
   };
 
-  // entityId = userId so the outbox coalesces rapid status flaps into the latest.
-  // contextId = userId, contextType = 'profile' (reuses existing routing).
-  // targetPeerOrigins = undefined → broadcast to all active peers.
-  // NO appendMutationLog — presence must not be replayed from history.
-  queueOutboxEvent(
-    user.id,
-    user.id,
-    'presence_update',
-    JSON.stringify(event),
-    undefined,
-    'profile',
-  );
+  queueOutboxEvent(userId, userId, 'presence_update', JSON.stringify(event), targetPeerOrigins, 'profile');
 }
 
 /**
- * On peer activation, send a fresh presence snapshot to the newly-active peer
- * for every online local native user that has an S2S relationship with that
- * peer (so the peer's stubs reflect current reality — presence is outbox-only,
- * no mutation-log replay can do this).
+ * A friendship between native `nativeUserId` and `friendUserId` was just
+ * created. If the friend is replicated, send the native's current presence
+ * (status + `activities`) to the friend's home, which keeps it on its row for
+ * the native and tells the friend. Presence relays fire only on change, so an
+ * activity that began before the friend's home had a row for the native was
+ * dropped there (#340).
+ *
+ * No-op when the native is itself replicated (its home owns the projection),
+ * when the friend is local, or when the native is offline (the friendship
+ * payload's profile snapshot already carries that).
+ */
+export function snapshotPresenceForFriend(nativeUserId: string, friendUserId: string, activities: Activity[]): void {
+  if (!isFederationRelayEnabled()) return;
+
+  const db = getDb();
+  const native = db.select().from(schema.users).where(eq(schema.users.id, nativeUserId)).get();
+  const friend = db.select().from(schema.users).where(eq(schema.users.id, friendUserId)).get();
+  if (!native || !friend) return;
+  if (native.homeInstance || !friend.homeInstance) return;
+  if (!native.status || native.status === 'offline') return;
+
+  const targets = getFriendEventTargets(null, friend.homeInstance);
+  if (targets.length === 0) return;
+  queuePresenceEvent(native.id, native.status as PresenceStatus, activities, targets, ':friend');
+}
+
+/**
+ * On peer activation, send a fresh presence snapshot (status and current
+ * activities) to the newly-active peer for every online local native user that
+ * has an S2S relationship with that peer (so the peer's stubs reflect current
+ * reality — presence is outbox-only, no mutation-log replay can do this).
  *
  * Scope is bounded by relationship count, not native count. A native qualifies
  * if ANY of:
@@ -78,7 +116,7 @@ export function queuePresenceRelay(
  * because markPeerStubsOffline ran on deactivation — peers and our stubs both
  * need a fresh handshake on recovery, not a stale-window-skip.
  */
-export function snapshotPresenceForPeer(peerOrigin: string): void {
+export async function snapshotPresenceForPeer(peerOrigin: string): Promise<void> {
   if (!isFederationRelayEnabled()) return;
 
   const db = getDb();
@@ -155,27 +193,16 @@ export function snapshotPresenceForPeer(peerOrigin: string): void {
     } catch { /* malformed JSON — skip */ }
   }
 
-  // 4. Filter to online natives in the related set; emit one outbox event each.
+  // 4. Filter to online natives in the related set; emit one outbox event each,
+  // carrying the native's current activities.
+  // Lazy import keeps this module pure for tests that don't need ws/handler.
+  const { connectionManager } = await import('../ws/handler.js');
   for (const u of allNatives) {
     if (!relatedNativeIds.has(u.id)) continue;
     if (!u.status || u.status === 'offline') continue;
     if (u.homeInstance) continue; // belt-and-braces: must be native
 
-    const ts = Date.now();
-    const event: FederationRelayEvent = {
-      eventType: 'presence_update',
-      contextType: 'profile',
-      messageId: `presence:${u.id}:${ts}:snap`,
-      encryptionVersion: 0,
-      timestamp: ts,
-      presenceUpdate: {
-        homeUserId: u.id,
-        homeInstance: getOurOrigin(),
-        status: u.status as 'online' | 'idle' | 'dnd',
-        ts,
-      },
-    };
-    queueOutboxEvent(u.id, u.id, 'presence_update', JSON.stringify(event), [peerOrigin], 'profile');
+    queuePresenceEvent(u.id, u.status as PresenceStatus, connectionManager.getUserActivities(u.id), [peerOrigin], ':snap');
   }
 }
 
@@ -195,7 +222,7 @@ export async function markPeerStubsOffline(peerOrigin: string): Promise<void> {
   const peerDomain = extractDomain(peerOrigin);
   const db = getDb();
   const stubs = db
-    .select({ id: schema.users.id })
+    .select({ id: schema.users.id, homeUserId: schema.users.homeUserId, homeInstance: schema.users.homeInstance })
     .from(schema.users)
     .where(and(
       eq(schema.users.homeInstance, peerDomain),
@@ -214,13 +241,11 @@ export async function markPeerStubsOffline(peerOrigin: string): Promise<void> {
       .where(eq(schema.users.id, stub.id))
       .run();
 
+    // The activities relayed from the peer are stale once it is unreachable.
+    connectionManager.clearUserActivities(stub.id);
+
     const targets = collectProfileBroadcastTargetIds(stub.id);
-    const payload = {
-      type: 'presence_update' as const,
-      userId: stub.id,
-      status: 'offline' as const,
-      activities: [] as Activity[],
-    };
+    const payload = presenceUpdateEvent(stub, 'offline', []);
     for (const uid of targets) connectionManager.sendToUser(uid, payload);
   }
 }

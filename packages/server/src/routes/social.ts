@@ -4,6 +4,7 @@ import { getDb, getRawDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { connectionManager } from '../ws/handler.js';
+import { exchangeFriendPresence } from '../ws/presence.js';
 import { appendMutationLog, queueOutboxEvent, buildFriendContextId, getFriendEventTargets } from '../utils/federationOutbox.js';
 import { getOurOrigin, normalizeOriginForCompare } from '../utils/federationAuth.js';
 import { ensurePeered } from '../utils/federationPeering.js';
@@ -667,6 +668,9 @@ export async function socialRoutes(app: FastifyInstance): Promise<void> {
           requestId: id,
         });
       }
+      // Each side sees the other's current status and activity now, not at
+      // their next change (#340).
+      exchangeFriendPresence(friendRequest.fromId, friendRequest.toId);
     } else {
       // For declined, just update the status (single write, no transaction needed)
       db.update(schema.friendRequests)

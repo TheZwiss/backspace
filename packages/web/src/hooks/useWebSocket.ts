@@ -16,6 +16,7 @@ import { ownStatusReport, statusToAssertOnRemote } from '../utils/selfStatus';
 import { getActiveRoom } from './useLiveKit';
 import { useUIStore } from '../stores/uiStore';
 import { useActivityStore } from '../stores/activityStore';
+import { presenceSubjectOf, readyActivityEntries } from '../utils/presenceSubject';
 import { useDiscoverStore } from '../stores/discoverStore';
 import { useFederationStore } from '../stores/federationStore';
 import { detectClientKind } from '../platform/clientKind';
@@ -321,7 +322,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
       }
       // Initialize activity data from ready payload
       if (event.userActivities) {
-        useActivityStore.getState().initActivities(event.userActivities);
+        useActivityStore.getState().initActivities(readyActivityEntries(event), origin);
       }
       if (event.user.showActivity !== undefined) {
         useActivityStore.setState({ showActivity: event.user.showActivity });
@@ -599,9 +600,12 @@ function handleEvent(origin: string, event: ServerEvent): void {
       const report = ownStatusReport(useAuthStore.getState().user, { origin, isHome }, event);
       if (report) useAuthStore.getState().applyOwnStatus(report);
       updateMemberPresence(event.userId, event.status);
-      useSocialStore.getState().updateFriendPresence(event.userId, event.status);
+      // Friends and activities are keyed by the subject's home identity, so a
+      // replicated row's delivery and the home's native delivery agree (#340).
+      const subject = presenceSubjectOf(event, origin);
+      useSocialStore.getState().updateFriendPresence(subject, origin, event.status);
       if (event.activities) {
-        useActivityStore.getState().setUserActivities(event.userId, event.activities);
+        useActivityStore.getState().setUserActivities(subject, origin, event.activities);
       }
       break;
     }
@@ -634,7 +638,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
       if (event.user.isDeleted) {
         useSocialStore.getState().removeFriendLocally(event.user.id, origin);
         useSocialStore.getState().removeRequestsForUser(event.user.id);
-        useActivityStore.getState().clearUserActivities(event.user.id);
+        useActivityStore.getState().clearUserActivities(event.user, origin);
         useDiscoverStore.getState().removeUser(event.user.id);
         useChatStore.getState().clearTypingForUser(event.user.id);
       }

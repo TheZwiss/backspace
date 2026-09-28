@@ -17,7 +17,7 @@ import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { getAvatarGradient } from '../../utils/gradients';
 import { api } from '../../api/client';
 import { Mascot } from '../ui/Mascot';
-import { useActivityStore } from '../../stores/activityStore';
+import { useActivityStore, activitiesFor } from '../../stores/activityStore';
 import { ActivityCard, hasRichActivity, getActivityAccentClass } from '../ui/ActivityCard';
 import { getPrimaryActivity } from '@backspace/shared/src/activities.js';
 import { parseFederatedUsername, isFederationGlobeApplicable } from '../../utils/identity';
@@ -273,7 +273,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
             offlineActivityFriends.push(f);
             continue;
           }
-          const acts = userActivities.get(f.homeUserId ?? f.id) ?? [];
+          const acts = activitiesFor(userActivities, f, f._instanceOrigin);
           const primary = getPrimaryActivity(acts);
           if (primary && primary.type !== 'custom') {
             activeFriends.push(f);
@@ -283,7 +283,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
         }
 
         const renderActivityFriend = (friend: TaggedFriend, isOffline = false) => {
-          const activities = userActivities.get(friend.homeUserId ?? friend.id) ?? [];
+          const activities = activitiesFor(userActivities, friend, friend._instanceOrigin);
           const isRichActivity = !isOffline && hasRichActivity(activities);
           const primary = getPrimaryActivity(activities);
           const accentClass = primary ? getActivityAccentClass(primary.type) : '';

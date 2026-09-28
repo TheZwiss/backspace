@@ -4,8 +4,9 @@ import { collectProfileBroadcastTargetIds } from '../../../utils/userDeletion.js
 import { connectionManager } from '../../../ws/handler.js';
 import { getDmMessageWithUser } from '../../dm.js';
 import { and, eq, isNull } from 'drizzle-orm';
-import type { FederationRelayEvent } from '@backspace/shared';
+import type { Activity, FederationRelayEvent } from '@backspace/shared';
 import { buildDmChannelPayload } from '../dmChannels.js';
+import { presenceUpdateEvent, validateActivities } from '../../../ws/presenceEvent.js';
 import { extractDomain, resolveRelayActor, attributionRefusal } from '../identity.js';
 
 export function processFileRejectedEvent(
@@ -135,7 +136,8 @@ export function processFileRejectedEvent(
  * the source peer's domain (attribution check, mirrors profile_update).
  *
  * Effect on success:
- *   1. Update the local stub's status column.
+ *   1. Update the local stub's status column and keep the relayed activities
+ *      for it in connectionManager (cleared by `[]` or offline).
  *   2. Broadcast a WS presence_update to local users via collectProfileBroadcastTargetIds
  *      (friends + DM members + space co-members), so the green dot updates without a
  *      page refresh on every connected client that knows this user.
@@ -146,6 +148,10 @@ export function processFileRejectedEvent(
  *   - homeInstance domain mismatch on the existing stub → ignore (collision against
  *     a stub of a different identity).
  *   - Invalid status string → reject; sender is buggy, surface for diagnosis.
+ *   - Activities that fail `validateActivities` → status applied, activities
+ *     treated as absent (unchanged).
+ *   - No `activities` field (a peer that predates always sending it) →
+ *     activities unchanged; `[]` or offline clears them.
  */
 export function processPresenceUpdateEvent(
   event: FederationRelayEvent,
@@ -173,6 +179,7 @@ export function processPresenceUpdateEvent(
     return;
   }
 
+
   // The row updated is the one that IS the payload's identity, homed on the
   // sending peer (`resolveRelayActor`). A native user of this instance is never
   // one, so its presence is only ever set here. No such row: accept as a no-op.
@@ -198,14 +205,31 @@ export function processPresenceUpdateEvent(
     .where(eq(schema.users.id, localUser.id))
     .run();
 
-  // Broadcast presence_update WS event to local users who care.
+  // Keep the relayed activities on the replicated row, so the ready payload
+  // and the friendship snapshot can report a remote user's activity that
+  // began before a local user started watching (#340).
+  //   - offline: none.
+  //   - a list (`[]` included): the full set. Held in memory and re-sent in
+  //     ready payloads, so held to the local activity_update limits; a list
+  //     that fails them is ignored like an absent one, and the status applies.
+  //   - absent: unchanged. A peer that predates always sending the list
+  //     relays status alone on every connect and in its activation snapshot,
+  //     also while its user is playing.
+  let activities: Activity[] | undefined;
+  if (payload.status === 'offline') {
+    activities = [];
+  } else if (payload.activities !== undefined) {
+    const valid = validateActivities(payload.activities);
+    if (valid) activities = valid;
+    else console.warn(`[federation] presence_update for ${localUser.id}: activities over the limits, status applied, activities ignored`);
+  }
+  if (activities !== undefined) connectionManager.setUserActivities(localUser.id, activities);
+
+  // Broadcast presence_update WS event to local users who care. When the
+  // activities changed they are included (possibly empty, which clears on
+  // clients); otherwise the client keeps what it has.
   const targetUserIds = collectProfileBroadcastTargetIds(localUser.id);
-  const wsPayload = {
-    type: 'presence_update' as const,
-    userId: localUser.id,
-    status: payload.status,
-    ...(payload.activities && payload.activities.length > 0 ? { activities: payload.activities } : {}),
-  };
+  const wsPayload = presenceUpdateEvent(localUser, payload.status, activities);
   for (const uid of targetUserIds) {
     connectionManager.sendToUser(uid, wsPayload);
   }

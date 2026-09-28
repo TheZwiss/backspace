@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { MemberWithUser, Activity } from '@backspace/shared';
 import { useFormatters } from '../../i18n/formatters';
 import { useSpaceStore } from '../../stores/spaceStore';
-import { useActivityStore } from '../../stores/activityStore';
+import { useActivityStore, activitiesFor } from '../../stores/activityStore';
 import { useUIStore } from '../../stores/uiStore';
 import { Avatar } from '../ui/Avatar';
 import { Username } from '../ui/Username';
@@ -138,6 +138,7 @@ export function MobileMembersScreen({ params }: MobileMembersScreenProps) {
 
   const spaceId = params?.spaceId || currentSpaceId;
   const space = spaces.find(s => s.id === spaceId);
+  const spaceOrigin = space?._instanceOrigin ?? '';
   const ownerId = space?.ownerId;
 
   // Mirror desktop MemberSidebar's `showMemberSkeleton`: gate the skeleton
@@ -192,7 +193,7 @@ export function MobileMembersScreen({ params }: MobileMembersScreenProps) {
     // Roles do not depend on presence: an offline member keeps their colour,
     // dimmed with the rest of the row.
     const colorStyle = getMemberColor(member);
-    const activities = userActivities.get(member.userId) ?? [];
+    const activities = activitiesFor(userActivities, member.user, spaceOrigin);
     const isRichActivity = !isOffline && hasRichActivity(activities);
     const primary = getPrimaryActivity(activities);
     const accentClass = primary ? getActivityAccentClass(primary.type) : '';
