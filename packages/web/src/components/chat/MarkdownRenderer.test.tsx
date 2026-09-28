@@ -6,9 +6,22 @@ import { MarkdownRenderer } from './MarkdownRenderer';
 // case touches them; stub them so the rest of the file needs no app state.
 vi.mock('../../stores/spaceStore', () => ({
   useSpaceStore: (selector: (s: unknown) => unknown) =>
-    selector({ members: [], spaces: [], currentSpaceId: null, userViews: new Map() }),
+    selector({
+      members: [],
+      spaces: [],
+      currentSpaceId: null,
+      userViews: new Map(),
+      dmChannels: [],
+      dmAlternatives: new Map(),
+      channelToSpaceMap: new Map(),
+      channelOriginMap: new Map(),
+    }),
   getApiForOrigin: vi.fn(),
+  getMyUserIdForOrigin: vi.fn(),
   resolveUserOrigin: vi.fn(),
+}));
+vi.mock('../../stores/authStore', () => ({
+  useAuthStore: (selector: (s: unknown) => unknown) => selector({ user: null }),
 }));
 vi.mock('../../stores/uiStore', () => ({
   useUIStore: (selector: (s: unknown) => unknown) =>

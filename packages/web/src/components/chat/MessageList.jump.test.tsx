@@ -91,7 +91,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
   useChatStore.setState({ messages: new Map(), hasMore: new Map(), detachedChannels: new Set() });
-  useSpaceStore.setState({ members: [], currentSpaceId: null });
+  useSpaceStore.setState({ members: [], currentSpaceId: null, channelToSpaceMap: new Map() });
 });
 
 interface Layout {
@@ -163,6 +163,7 @@ describe('reply preview jump', () => {
       members: [{ spaceId: 'space-1', userId: mira.id, nickname: null, joinedAt: 1, user: mira, roles: [] }],
       spaces: [],
       currentSpaceId: 'space-1',
+      channelToSpaceMap: new Map([[CHANNEL, 'space-1']]),
     });
     const openUserProfile = vi.spyOn(useUIStore.getState(), 'openUserProfile');
     renderList();

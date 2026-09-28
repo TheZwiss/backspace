@@ -1,12 +1,22 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import type { User } from '@backspace/shared';
-import { useSpaceStore } from '../../stores/spaceStore';
 import { useUIStore } from '../../stores/uiStore';
-import { useCanonicalUserView } from '../../utils/userViewLookup';
+import { useChannelUser } from '../../utils/channelUser';
+
+/** Resolved mention without a role colour (a DM, or a member with no role). */
+const ACCENT_COLOR = '#7c6cf6';
+/** A mention this client cannot place in the channel. */
+const UNRESOLVED_COLOR = '#a0a0aa';
 
 interface MentionBadgeProps {
   userId: string;
+  /**
+   * The channel the mention was written in. A `<@id>` token carries an id on
+   * that channel's origin and names one of that channel's people, so it is
+   * resolved there (`utils/channelUser`). Null outside a channel: the badge
+   * cannot resolve and shows the unknown-user label.
+   */
+  channelId: string | null;
   /**
    * False inside another control (a reply preview is a jump button): the badge
    * keeps its look but is plain text, so it neither opens a profile nor nests
@@ -15,43 +25,24 @@ interface MentionBadgeProps {
   interactive?: boolean;
 }
 
-export const MentionBadge = React.memo(function MentionBadge({ userId, interactive = true }: MentionBadgeProps) {
+export const MentionBadge = React.memo(function MentionBadge({ userId, channelId, interactive = true }: MentionBadgeProps) {
   const { t } = useTranslation('chat');
-  const members = useSpaceStore((s) => s.members);
-  const spaces = useSpaceStore((s) => s.spaces);
-  const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
   const openUserProfile = useUIStore((s) => s.openUserProfile);
+  const resolved = useChannelUser(channelId, userId);
 
-  const member = members.find((m) => m.userId === userId);
-  const space = spaces.find((s) => s.id === currentSpaceId);
-  const ownerId = space?.ownerId;
-
-  const _FALLBACK_USER = { id: '', username: '', createdAt: 0, isAdmin: false, replicatedInstances: [] } as unknown as User;
-  const canonicalMemberUser = useCanonicalUserView(member?.user ?? _FALLBACK_USER);
-  const memberUser = member ? canonicalMemberUser : null;
-
-  let displayName: string;
-  let color: string;
-
-  if (member && memberUser) {
-    displayName = memberUser.displayName ?? memberUser.username;
-    if (member.roles && member.roles.length > 0) {
-      const sorted = [...member.roles].sort((a, b) => b.position - a.position);
-      color = sorted[0]!.color;
-    } else if (ownerId && userId === ownerId) {
-      color = '#fda4af';
-    } else {
-      color = '#7c6cf6'; // accent-primary default
-    }
-  } else {
-    displayName = t('message.mention.unknownUser');
-    color = '#a0a0aa'; // text-secondary fallback
-  }
+  const displayName = resolved
+    ? resolved.user.displayName ?? resolved.user.username
+    : t('message.mention.unknownUser');
+  // Role colour and owner rose exist only in space channels (nameColor is null in a DM).
+  const color = resolved ? resolved.nameColor ?? ACCENT_COLOR : UNRESOLVED_COLOR;
 
   const handleClick = (e: React.MouseEvent) => {
-    if (!member || !memberUser) return;
+    if (!resolved) return;
     e.stopPropagation();
-    openUserProfile(memberUser, e.currentTarget.getBoundingClientRect(), undefined, { spaceId: member.spaceId, userId: member.userId });
+    const memberContext = resolved.member
+      ? { spaceId: resolved.member.spaceId, userId: resolved.member.userId }
+      : undefined;
+    openUserProfile(resolved.user, e.currentTarget.getBoundingClientRect(), undefined, memberContext);
   };
 
   // Build inline styles: role-colored text with tinted background

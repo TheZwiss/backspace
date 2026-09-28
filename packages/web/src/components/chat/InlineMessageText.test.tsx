@@ -6,9 +6,22 @@ import { InlineMessageText } from './InlineMessageText';
 // test needs no app state.
 vi.mock('../../stores/spaceStore', () => ({
   useSpaceStore: (selector: (s: unknown) => unknown) =>
-    selector({ members: [], spaces: [], currentSpaceId: null, userViews: new Map() }),
+    selector({
+      members: [],
+      spaces: [],
+      currentSpaceId: null,
+      userViews: new Map(),
+      dmChannels: [],
+      dmAlternatives: new Map(),
+      channelToSpaceMap: new Map(),
+      channelOriginMap: new Map(),
+    }),
   getApiForOrigin: vi.fn(),
+  getMyUserIdForOrigin: vi.fn(),
   resolveUserOrigin: vi.fn(),
+}));
+vi.mock('../../stores/authStore', () => ({
+  useAuthStore: (selector: (s: unknown) => unknown) => selector({ user: null }),
 }));
 vi.mock('../../stores/uiStore', () => ({
   useUIStore: (selector: (s: unknown) => unknown) =>
@@ -21,17 +34,17 @@ vi.mock('../../api/client', () => ({
 
 describe('InlineMessageText', () => {
   it('renders mention tokens as badges', () => {
-    const { container } = render(<InlineMessageText content={'hi <@U1> there'} />);
+    const { container } = render(<InlineMessageText channelId="chan-1" content={'hi <@U1> there'} />);
     expect(container.textContent).toBe('hi @Unknown User there');
   });
 
   it('renders emoji shortcodes as emoji, as the full message does (issue #252)', () => {
-    const { container } = render(<InlineMessageText content={'on fire :heart_on_fire: <@U1>'} />);
+    const { container } = render(<InlineMessageText channelId="chan-1" content={'on fire :heart_on_fire: <@U1>'} />);
     expect(container.textContent).toBe('on fire ❤️‍🔥 @Unknown User');
   });
 
   it('leaves shortcodes inside code spans as written', () => {
-    const { container } = render(<InlineMessageText content={'use `:smile:` for :smile:'} />);
+    const { container } = render(<InlineMessageText channelId="chan-1" content={'use `:smile:` for :smile:'} />);
     expect(container.textContent).toBe('use `:smile:` for 😄');
   });
 });

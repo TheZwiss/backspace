@@ -24,6 +24,7 @@ import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import { isDeletedPartnerDm } from '../../utils/dmFormatters';
 import { isSelf, resolveDisplayIdentity } from '../../utils/identity';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
+import { useSelfIdInChannel } from '../../utils/channelUser';
 import {
   isPendingMessage,
   usePendingMessageStore,
@@ -174,6 +175,9 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
     ? message.channelId || message.dmChannelId || ''
     : message.channelId || (message as MessageWithUser & { dmChannelId?: string }).dmChannelId || '';
   const isAuthor = isSelf(message.user, currentUser);
+  // The channel whose origin issued this message's ids; mentions resolve there.
+  const mentionChannelId = channelKey || null;
+  const selfIdHere = useSelfIdInChannel(mentionChannelId);
   const startEditing = () => {
     setEditContent(message.content ?? '');
     setEditingMessage(message.id);
@@ -407,8 +411,9 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
 
   const replyRoleColor = (msg: { userId: string }) => getMemberDisplayColor(msg.userId);
 
-  // Self-mention highlighting
-  const isMentioned = currentUser && message.content?.includes('<@' + currentUser.id + '>');
+  // Self-mention highlighting. A token carries an id on the channel's origin,
+  // so "me" is my id there, not my home id (#332).
+  const isMentioned = !!selfIdHere && !!message.content?.includes(`<@${selfIdHere}>`);
 
   const content = (
     <div
@@ -470,7 +475,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
                 style={replyRoleColor(replyTo)}
               />
               <span className="text-[14px] text-txt-message truncate max-w-[400px] group-hover/reply:text-txt-primary transition-colors">
-                {replyTo.content ? <InlineMessageText content={replyTo.content} /> : ''}
+                {replyTo.content ? <InlineMessageText content={replyTo.content} channelId={mentionChannelId} /> : ''}
               </span>
             </>
           );
@@ -566,7 +571,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
               <>
                 {message.content && (
                   <div className="text-txt-message text-[15px] leading-[1.5] break-words whitespace-pre-wrap selection:bg-accent-primary/30">
-                    <MarkdownRenderer content={message.content} />
+                    <MarkdownRenderer content={message.content} channelId={mentionChannelId} />
                     {message.editedAt && (
                       <span className="text-[10px] text-txt-tertiary ml-1 select-none font-medium">{t('chat:message.edited')}</span>
                     )}

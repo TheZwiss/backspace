@@ -9,7 +9,7 @@ import { TypingIndicator } from './TypingIndicator';
 import { InputPopover, type InputPopoverTab } from './InputPopover';
 import { AttachmentProgress } from './AttachmentProgress';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
-import { MAX_MESSAGE_LENGTH, type MemberWithUser } from '@backspace/shared';
+import { MAX_MESSAGE_LENGTH } from '@backspace/shared';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useComposerStore } from '../../stores/composerStore';
@@ -19,6 +19,11 @@ import { putHandle, supportsFsHandles, supportsDnDHandles } from '../../utils/id
 import { useVisualViewportInset } from '../../hooks/useVisualViewportInset';
 import { useAuthStore } from '../../stores/authStore';
 import { findLastOwnEditableMessage } from './messageEditing';
+import {
+  filterMentionCandidates,
+  useChannelMentionCandidates,
+  type ChannelUser,
+} from '../../utils/channelUser';
 
 interface MessageInputProps {
   channelId: string;
@@ -94,7 +99,8 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
   const editingMessageId = useChatStore((s) => s.editingMessageId);
   const setEditingMessage = useChatStore((s) => s.setEditingMessage);
   const currentUser = useAuthStore((s) => s.user);
-  const members = useSpaceStore((s) => s.members);
+  // Who can be mentioned here: this channel's people, with ids on its origin.
+  const mentionCandidates = useChannelMentionCandidates(channelId);
 
   const addToast = useUIStore((s) => s.addToast);
   const appendBubble = usePendingMessageStore((s) => s.append);
@@ -195,18 +201,11 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
     }
   }, [stagedTransfers, addToast, t]);
 
-  // Filter members for the mention popover (used for keyboard nav clamping)
-  const filteredMembers = useMemo(() => {
-    if (!mentionState) return [];
-    const q = mentionState.query.toLowerCase();
-    return members
-      .filter((m) => {
-        const name = (m.user.displayName ?? m.user.username).toLowerCase();
-        const username = m.user.username.toLowerCase();
-        return name.includes(q) || username.includes(q);
-      })
-      .slice(0, 8);
-  }, [members, mentionState]);
+  // The popover's rows; keyboard navigation indexes the same list.
+  const mentionMatches = useMemo(
+    () => (mentionState ? filterMentionCandidates(mentionCandidates, mentionState.query) : []),
+    [mentionCandidates, mentionState],
+  );
 
   const handleTyping = useCallback(() => {
     if (typingTimeoutRef.current) return;
@@ -387,13 +386,13 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
   };
 
   const selectMention = useCallback(
-    (member: MemberWithUser) => {
+    (candidate: ChannelUser) => {
       if (!mentionState) return;
       const textarea = textareaRef.current;
       const cursorPos = textarea?.selectionStart ?? draftText.length;
       const before = draftText.slice(0, mentionState.startIndex);
       const after = draftText.slice(cursorPos);
-      const insertion = `<@${member.userId}> `;
+      const insertion = `<@${candidate.userId}> `;
       const newContent = before + insertion + after;
       setDraft(channelId, newContent);
       setMentionState(null);
@@ -413,11 +412,11 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
 
   const handleKeyDown = (e: React.KeyboardEvent): void => {
     // Mention popover keyboard navigation
-    if (mentionState && filteredMembers.length > 0) {
+    if (mentionState && mentionMatches.length > 0) {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
         setMentionState((prev) =>
-          prev ? { ...prev, selectedIndex: Math.min(prev.selectedIndex + 1, filteredMembers.length - 1) } : null,
+          prev ? { ...prev, selectedIndex: Math.min(prev.selectedIndex + 1, mentionMatches.length - 1) } : null,
         );
         return;
       }
@@ -430,7 +429,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
       }
       if (e.key === 'Enter' || e.key === 'Tab') {
         e.preventDefault();
-        const selected = filteredMembers[mentionState.selectedIndex];
+        const selected = mentionMatches[mentionState.selectedIndex];
         if (selected) selectMention(selected);
         return;
       }
@@ -835,9 +834,9 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
         onDragOver={canAttachFiles ? handleDragOver : undefined}
       >
         {/* Mention autocomplete popover */}
-        {mentionState && filteredMembers.length > 0 && (
+        {mentionState && mentionMatches.length > 0 && (
           <MentionPopover
-            query={mentionState.query}
+            candidates={mentionMatches}
             selectedIndex={mentionState.selectedIndex}
             onSelect={selectMention}
             anchorRef={inputContainerRef}

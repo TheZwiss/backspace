@@ -205,6 +205,7 @@ function seedStores(state: RowState): void {
   useAuthStore.setState({ user: ME });
   useSpaceStore.setState({
     channelOriginMap: new Map([[CHANNEL, '']]),
+    channelToSpaceMap: new Map([[CHANNEL, SPACE]]),
     channelPermissions: new Map([[CHANNEL, permissionsToString(ALL_PERMISSIONS)]]),
     dmChannels: [],
     members: [MIRA, OSKAR, TOVE, ME].map((user) => ({ spaceId: SPACE, userId: user.id, nickname: null, joinedAt: 1, user, roles: [] })),
