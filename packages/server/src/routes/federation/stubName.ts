@@ -111,21 +111,19 @@ export interface StubRenameSeed {
 /**
  * Rename a placeholder-named stub (`isPlaceholderNamedStub`) to
  * `<username>@<domain>`, where `username` is the handle the row's home
- * reports. Home usernames never change, so this happens at most once per row.
- * Every other row, and every `username` that is not handle-shaped, leaves the
- * row unchanged.
+ * reports, and return the row as written. Home usernames never change, so
+ * this happens at most once per row. Every other row, and every `username`
+ * that is not handle-shaped, is returned unchanged (the same object).
  *
  * When another row already holds the name, the stub takes the first free
  * suffixed name (`firstFreeUsername`), as creation does. With a `seed`, an
  * empty `displayName` is filled with `seed.displayName ?? username` and a
  * differing `status` is taken over.
  *
- * After a rename, every local user who can see the row (friends, DM partners,
- * shared space members; `collectProfileBroadcastTargetIds`) gets `user_updated`,
- * as `processProfileUpdateEvent` does, so open clients show the new name
- * without a reload.
+ * Announces nothing: `renamePlaceholderNamedStub` does, and hydration
+ * announces once after it has filled the profile.
  */
-export function renamePlaceholderNamedStub(
+export function applyPlaceholderRename(
   user: UserRow,
   username: string | null | undefined,
   db: ReturnType<typeof getDb>,
@@ -149,11 +147,35 @@ export function renamePlaceholderNamedStub(
     .where(eq(schema.users.id, user.id))
     .run();
   console.log(`[federation] Renamed stub ${user.id}: ${user.username} -> ${newUsername}`);
+  return { ...user, ...updates };
+}
 
-  const renamed: UserRow = { ...user, ...updates };
-  const userUpdatedEvent = { type: 'user_updated' as const, user: sanitizeUser(renamed, false) };
+/**
+ * Send `user_updated` with the row to every local user who can see it
+ * (friends, DM partners, shared space members;
+ * `collectProfileBroadcastTargetIds`), as `processProfileUpdateEvent` does, so
+ * open clients show the change without a reload.
+ */
+export function announceUserUpdated(user: UserRow): void {
+  const userUpdatedEvent = { type: 'user_updated' as const, user: sanitizeUser(user, false) };
   for (const uid of collectProfileBroadcastTargetIds(user.id)) {
     connectionManager.sendToUser(uid, userUpdatedEvent);
   }
+}
+
+/**
+ * `applyPlaceholderRename`, then `announceUserUpdated` when the row was
+ * renamed. For callers that do not hydrate the row afterwards (identity
+ * resolution, the stub backfill); a caller that hydrates next announces again
+ * once the profile is filled.
+ */
+export function renamePlaceholderNamedStub(
+  user: UserRow,
+  username: string | null | undefined,
+  db: ReturnType<typeof getDb>,
+  seed?: StubRenameSeed,
+): UserRow {
+  const renamed = applyPlaceholderRename(user, username, db, seed);
+  if (renamed !== user) announceUserUpdated(renamed);
   return renamed;
 }

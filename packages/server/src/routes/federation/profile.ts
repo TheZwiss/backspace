@@ -13,14 +13,20 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { FederationRelayEvent, FederationRelayProfileSnapshot } from '@backspace/shared';
 import { extractDomain, resolveRelayActor } from './identity.js';
-import { renamePlaceholderNamedStub } from './stubName.js';
+import { announceUserUpdated, applyPlaceholderRename } from './stubName.js';
 
 /**
  * Hydrate a replicated user stub with profile data from a relay event.
  * Only updates fields that are currently null/empty on the local row,
  * so manually-set local values are preserved. The one rewrite is the
  * username of a row that still carries a placeholder name
- * (`renamePlaceholderNamedStub`).
+ * (`applyPlaceholderRename`).
+ *
+ * When the row changed (renamed, or a field filled), the users who can see it
+ * get one `user_updated` with the final row (`announceUserUpdated`), after
+ * every field is written. A rename just before by `resolveOrCreateReplicatedUser`
+ * announced the row without the display name this fills, so this is the event
+ * that carries it.
  */
 export async function hydrateReplicatedUserProfile(
   userIn: typeof schema.users.$inferSelect,
@@ -37,7 +43,8 @@ export async function hydrateReplicatedUserProfile(
   if (userIn.federationHomeOrphaned === 1) return userIn;
 
   // A row still carrying a placeholder name takes the snapshot's username.
-  const user = renamePlaceholderNamedStub(userIn, profile.username, db);
+  const user = applyPlaceholderRename(userIn, profile.username, db);
+  const renamed = user !== userIn;
 
   const homeInstance = userIn.homeInstance;
   const baseUrl = homeInstance.startsWith('http') ? homeInstance : `https://${homeInstance}`;
@@ -68,18 +75,23 @@ export async function hydrateReplicatedUserProfile(
   // (which carries a monotonic version). In particular, locally-downloaded
   // bare filenames produced by that path must not be clobbered back to URLs.
   if (profile.avatar && !user.avatar) updates.avatar = await resolveAsset(profile.avatar);
-  if (profile.avatarColor) updates.avatarColor = profile.avatarColor;
+  if (profile.avatarColor && profile.avatarColor !== user.avatarColor) updates.avatarColor = profile.avatarColor;
   if (profile.banner && !user.banner) updates.banner = await resolveAsset(profile.banner);
   if (profile.bio && !user.bio) updates.bio = profile.bio;
 
-  if (Object.keys(updates).length === 0) return user;
+  if (Object.keys(updates).length === 0) {
+    if (renamed) announceUserUpdated(user);
+    return user;
+  }
 
   db.update(schema.users)
     .set(updates)
     .where(eq(schema.users.id, user.id))
     .run();
 
-  return { ...user, ...updates };
+  const hydrated = { ...user, ...updates };
+  announceUserUpdated(hydrated);
+  return hydrated;
 }
 
 

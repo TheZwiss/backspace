@@ -218,4 +218,38 @@ describe('renaming an id-named replicated row to its real handle', () => {
     expect(row().username).toBe(`${KAI_ID}@friend.example`);
     expect(row().displayName).toBeNull();
   });
+
+  function userUpdatedTo(uid: string): Array<{ username: string; displayName: string | null }> {
+    return vi.mocked(connectionManager.sendToUser).mock.calls
+      .filter(([to, event]) => to === uid && (event as { type: string }).type === 'user_updated')
+      .map(([, event]) => (event as { user: { username: string; displayName: string | null } }).user);
+  }
+
+  it('a rename by hydration is announced once, after the display name is filled', async () => {
+    seedRow();
+    testDb.insert(schema.friends).values({ userId: 'local-anna', friendId: 'stub-kai', createdAt: Date.now() }).run();
+    const { hydrateReplicatedUserProfile } = await import('./federation.js');
+    await hydrateReplicatedUserProfile(row(), { username: 'kai', displayName: 'Kai' }, testDb);
+    expect(userUpdatedTo('local-anna')).toEqual([
+      expect.objectContaining({ username: 'kai@friend.example', displayName: 'Kai' }),
+    ]);
+  });
+
+  it('a rename by identity resolution followed by hydration ends with the display name announced', async () => {
+    seedRow();
+    testDb.insert(schema.friends).values({ userId: 'local-anna', friendId: 'stub-kai', createdAt: Date.now() }).run();
+    const { resolveOrCreateReplicatedUser, hydrateReplicatedUserProfile } = await import('./federation.js');
+    const resolved = resolveOrCreateReplicatedUser(KAI_ID, 'friend.example', testDb, { username: 'kai' });
+    await hydrateReplicatedUserProfile(resolved!, { username: 'kai', displayName: 'Kai' }, testDb);
+    const events = userUpdatedTo('local-anna');
+    expect(events.at(-1)).toEqual(expect.objectContaining({ username: 'kai@friend.example', displayName: 'Kai' }));
+  });
+
+  it('hydration that changes nothing announces nothing', async () => {
+    seedRow({ username: 'kai@friend.example', displayName: 'Kai', avatarColor: '#7c6cf6' });
+    testDb.insert(schema.friends).values({ userId: 'local-anna', friendId: 'stub-kai', createdAt: Date.now() }).run();
+    const { hydrateReplicatedUserProfile } = await import('./federation.js');
+    await hydrateReplicatedUserProfile(row(), { username: 'kai', displayName: 'Kai', avatarColor: '#7c6cf6' }, testDb);
+    expect(userUpdatedTo('local-anna')).toEqual([]);
+  });
 });
