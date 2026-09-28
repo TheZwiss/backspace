@@ -40,6 +40,8 @@ IDs: Snowflake text, permissions: bigint decimal strings
 | lastClient | text | | `'web'`, `'desktop'` or `'mobile'`, taken from the client's WebSocket auth message. |
 | createdAt | integer NOT NULL | | Epoch ms |
 
+**Index:** `idx_users_home_user_id` on `(home_user_id)` (migration `0020_users_home_user_id_index`). Every federated identity lookup (`resolveRelayActor`, `resolveLocalUser`, the relay's participant, author and mention resolution) filters on `home_user_id` first. It is a single-column index on purpose: a home user id matches about one row, and most pair lookups compare `home_instance` normalized (scheme stripped, lowercased) or in code, where a `(home_user_id, home_instance)` composite's second column cannot be used.
+
 ### spaces
 | Column | Type | Default | Notes |
 |--------|------|---------|-------|

@@ -1,0 +1,1 @@
+CREATE INDEX `idx_users_home_user_id` ON `users` (`home_user_id`);

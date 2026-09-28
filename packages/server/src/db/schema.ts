@@ -39,7 +39,16 @@ export const users = sqliteTable('users', {
   /** 'web' | 'desktop' | 'mobile', from the client's auth message. */
   lastClient: text('last_client'),
   createdAt: integer('created_at').notNull(),
-});
+}, (table) => ({
+  /**
+   * Every federated identity lookup starts with `home_user_id = ?`
+   * (`resolveRelayActor`, `resolveLocalUser`, the relay mention lists).
+   * Single column on purpose: a home user id matches about one row, and most
+   * pair lookups compare `home_instance` normalized or in code, where a
+   * composite's second column cannot be used.
+   */
+  homeUserIdx: index('idx_users_home_user_id').on(table.homeUserId),
+}));
 
 export const spaces = sqliteTable('spaces', {
   id: text('id').primaryKey(),
