@@ -2,17 +2,20 @@ import { and, eq, like } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { lookupRemoteUserByHomeId } from './federationLookup.js';
 import { extractDomain } from '../routes/federation.js';
-import { isIdNamedStub, renameIdNamedStub } from '../routes/federation/stubName.js';
+import { isPlaceholderNamedStub, renamePlaceholderNamedStub } from '../routes/federation/stubName.js';
 
 /**
- * For each replicated stub on this instance still named `<homeUserId>@<domain>`
- * (`isIdNamedStub`) whose home_instance equals the given peer's domain, ask the
+ * For each replicated stub on this instance that still carries a placeholder
+ * name (`isPlaceholderNamedStub`: `<homeUserId>@<domain>`, or a local part that
+ * is not a handle) whose home_instance equals the given peer's domain, ask the
  * peer for the canonical username via lookupRemoteUserByHomeId and rename the
- * stub (`renameIdNamedStub`, which also seeds an empty displayName and a
- * differing status from the answer).
+ * stub (`renamePlaceholderNamedStub`, which also seeds an empty displayName and
+ * a differing status from the answer).
  *
- * Such stubs come from any first contact that happened without a username:
- * the home could not be asked, or the row predates the realname scheme.
+ * Such stubs come from any first contact that happened without a username
+ * (the home could not be asked, or the row predates the realname scheme), and
+ * from incoming calls, which named the caller after their display name until
+ * the call relay stopped passing it as the username.
  * Identity resolution and hydration rename them as soon as a username arrives;
  * this pass catches the ones nothing has touched since.
  *
@@ -37,7 +40,7 @@ export async function backfillStubUsernamesForPeer(peerOrigin: string): Promise<
   if (!peer || peer.status !== 'active') return;
 
   // Coarse SQL prefilter: stubs from this peer whose username ends with @peerDomain.
-  // `isIdNamedStub` then narrows to the `<homeUserId>@<domain>` shape because
+  // `isPlaceholderNamedStub` then narrows to placeholder names because
   // Drizzle can't express that comparison portably.
   const candidates = db
     .select()
@@ -52,7 +55,7 @@ export async function backfillStubUsernamesForPeer(peerOrigin: string): Promise<
     .all();
 
   for (const stub of candidates) {
-    if (!stub.homeUserId || !isIdNamedStub(stub)) continue;
+    if (!stub.homeUserId || !isPlaceholderNamedStub(stub)) continue;
 
     const result = await lookupRemoteUserByHomeId(peerOrigin, stub.homeUserId);
     if (!result.ok) {
@@ -63,7 +66,7 @@ export async function backfillStubUsernamesForPeer(peerOrigin: string): Promise<
     // The answer must be about the id we asked for.
     if (result.homeUserId !== stub.homeUserId) continue;
 
-    renameIdNamedStub(stub, result.username, db, {
+    renamePlaceholderNamedStub(stub, result.username, db, {
       displayName: result.profile.displayName,
       status: result.profile.status ?? null,
     });

@@ -13,13 +13,14 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { FederationRelayEvent, FederationRelayProfileSnapshot } from '@backspace/shared';
 import { extractDomain, resolveRelayActor } from './identity.js';
-import { renameIdNamedStub } from './stubName.js';
+import { renamePlaceholderNamedStub } from './stubName.js';
 
 /**
  * Hydrate a replicated user stub with profile data from a relay event.
  * Only updates fields that are currently null/empty on the local row,
  * so manually-set local values are preserved. The one rewrite is the
- * username of a row still named `<homeUserId>@<domain>` (`renameIdNamedStub`).
+ * username of a row that still carries a placeholder name
+ * (`renamePlaceholderNamedStub`).
  */
 export async function hydrateReplicatedUserProfile(
   userIn: typeof schema.users.$inferSelect,
@@ -35,8 +36,8 @@ export async function hydrateReplicatedUserProfile(
   // guards (detach spec §4.3).
   if (userIn.federationHomeOrphaned === 1) return userIn;
 
-  // A row still named `<homeUserId>@<domain>` takes the snapshot's username.
-  const user = renameIdNamedStub(userIn, profile.username, db);
+  // A row still carrying a placeholder name takes the snapshot's username.
+  const user = renamePlaceholderNamedStub(userIn, profile.username, db);
 
   const homeInstance = userIn.homeInstance;
   const baseUrl = homeInstance.startsWith('http') ? homeInstance : `https://${homeInstance}`;

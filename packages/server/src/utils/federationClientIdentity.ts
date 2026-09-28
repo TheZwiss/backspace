@@ -1,7 +1,7 @@
 import { getDb, schema } from '../db/index.js';
 import { hydrateReplicatedUserProfile, resolveOrCreateReplicatedUser } from '../routes/federation.js';
 import { resolveRelayActor } from '../routes/federation/identity.js';
-import { isIdNamedStub } from '../routes/federation/stubName.js';
+import { isPlaceholderNamedStub } from '../routes/federation/stubName.js';
 import { canonicalizeHomeInstance } from './federationAuth.js';
 import { lookupRemoteUserByHomeId, type LookupResult } from './federationLookup.js';
 import { resolveOriginFromHostname } from './federationOriginResolve.js';
@@ -168,7 +168,7 @@ export async function resolveRemoteIdentityForClient(
   if (known.kind === 'mismatch') return null;
 
   if (known.kind === 'found') {
-    if (!isIdNamedStub(known.user)) return known.user;
+    if (!isPlaceholderNamedStub(known.user)) return known.user;
     const peerOrigin = activePeerOriginFor(homeInstance, db);
     if (!peerOrigin) return known.user;
     const answer = await askHome(peerOrigin, homeUserId);

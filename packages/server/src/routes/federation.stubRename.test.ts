@@ -114,16 +114,91 @@ describe('renaming an id-named replicated row to its real handle', () => {
     expect(row().username).toBe(`${KAI_ID}@friend.example`);
   });
 
-  it('the rename never takes a name another row holds', async () => {
+  it('when another row holds the name, the rename takes the first free suffix, as creation does', async () => {
     seedRow();
     testDb.insert(schema.users).values({
       id: 'other-kai', username: 'kai@friend.example', passwordHash: '!federation-replicated',
       homeInstance: 'friend.example', homeUserId: '999', createdAt: Date.now(),
     }).run();
+    testDb.insert(schema.users).values({
+      id: 'other-kai-1', username: 'kai_1@friend.example', passwordHash: '!federation-replicated',
+      homeInstance: 'friend.example', homeUserId: '998', createdAt: Date.now(),
+    }).run();
     const { resolveOrCreateReplicatedUser } = await import('./federation.js');
     const resolved = resolveOrCreateReplicatedUser(KAI_ID, 'friend.example', testDb, { username: 'kai' });
     expect(resolved?.id).toBe('stub-kai');
+    expect(row().username).toBe('kai_2@friend.example');
+    expect(row('other-kai').username).toBe('kai@friend.example');
+  });
+
+  it('after a suffixed rename, later hints neither rename nor warn again', async () => {
+    seedRow();
+    testDb.insert(schema.users).values({
+      id: 'other-kai', username: 'kai@friend.example', passwordHash: '!federation-replicated',
+      homeInstance: 'friend.example', homeUserId: '999', createdAt: Date.now(),
+    }).run();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const { resolveOrCreateReplicatedUser } = await import('./federation.js');
+      for (let i = 0; i < 3; i++) resolveOrCreateReplicatedUser(KAI_ID, 'friend.example', testDb, { username: 'kai' });
+      expect(row().username).toBe('kai_1@friend.example');
+      expect(warn).not.toHaveBeenCalled();
+      expect(userUpdatedRecipients()).toEqual([]);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('a row named after a display name (not a handle) is renamed to the handle', async () => {
+    seedRow({ username: 'kai smith@friend.example', displayName: 'Kai Smith' });
+    testDb.insert(schema.friends).values({ userId: 'local-anna', friendId: 'stub-kai', createdAt: Date.now() }).run();
+    const { resolveOrCreateReplicatedUser } = await import('./federation.js');
+    const resolved = resolveOrCreateReplicatedUser(KAI_ID, 'friend.example', testDb, { username: 'kai' });
+    expect(resolved?.username).toBe('kai@friend.example');
+    expect(row().username).toBe('kai@friend.example');
+    expect(row().displayName).toBe('Kai Smith');
+    expect(userUpdatedRecipients()).toContain('local-anna');
+  });
+
+  it.each([
+    ['a display name with a dot', 'k.smith@friend.example'],
+    ['a display name with a dash', 'kai-smith@friend.example'],
+    ['a display name with non-ASCII letters', 'kaï@friend.example'],
+    ['a relayed name that kept its own domain', 'kai@friend.example@friend.example'],
+  ])('a row named after %s is renamed', async (_label, username) => {
+    seedRow({ username });
+    const { resolveOrCreateReplicatedUser } = await import('./federation.js');
+    resolveOrCreateReplicatedUser(KAI_ID, 'friend.example', testDb, { username: 'kai' });
+    expect(row().username).toBe('kai@friend.example');
+  });
+
+  it('a row named after a display name keeps it when it has its own login credentials', async () => {
+    seedRow({ username: 'kai smith@friend.example', passwordHash: '$2b$10$abcdefghijklmnopqrstuv' });
+    const { resolveOrCreateReplicatedUser } = await import('./federation.js');
+    resolveOrCreateReplicatedUser(KAI_ID, 'friend.example', testDb, { username: 'kai' });
+    expect(row().username).toBe('kai smith@friend.example');
+  });
+
+  it('a row named after a display name keeps it when it is detached', async () => {
+    seedRow({ username: 'kai smith@friend.example', federationHomeOrphaned: 1 });
+    const { resolveOrCreateReplicatedUser } = await import('./federation.js');
+    resolveOrCreateReplicatedUser(KAI_ID, 'friend.example', testDb, { username: 'kai' });
+    expect(row().username).toBe('kai smith@friend.example');
+  });
+
+  it('a hint that is not a handle never renames a row', async () => {
+    seedRow();
+    const { resolveOrCreateReplicatedUser } = await import('./federation.js');
+    resolveOrCreateReplicatedUser(KAI_ID, 'friend.example', testDb, { username: 'Kai Smith' });
     expect(row().username).toBe(`${KAI_ID}@friend.example`);
+    expect(userUpdatedRecipients()).toEqual([]);
+  });
+
+  it('a row whose name is shaped like a handle is not renamed, whatever the hint', async () => {
+    seedRow({ username: 'kai_dev@friend.example' });
+    const { resolveOrCreateReplicatedUser } = await import('./federation.js');
+    resolveOrCreateReplicatedUser(KAI_ID, 'friend.example', testDb, { username: 'kai' });
+    expect(row().username).toBe('kai_dev@friend.example');
   });
 
   it('profile hydration with a username renames the row', async () => {

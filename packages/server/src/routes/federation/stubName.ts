@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { getDb, schema } from '../../db/index.js';
 import { sanitizeUser } from '../../utils/sanitize.js';
@@ -11,9 +12,39 @@ type UserStatus = 'online' | 'idle' | 'dnd' | 'offline';
 const REPLICATED_PASSWORD_HASH = '!federation-replicated';
 
 /**
- * Whether a row is a replicated stub still named `<homeUserId>@<domain>`: the
- * name `resolveOrCreateReplicatedUser` gives a remote user it meets without
- * knowing their username. Only such a row is ever renamed.
+ * A home username, lowercased as replicated names are. Registration has
+ * accepted only `[a-zA-Z0-9_]` since the first release (auth.ts), so a local
+ * part with any other character (a space, a dot, a dash, a letter outside
+ * ASCII, an `@`) is certainly not a handle.
+ */
+const HANDLE = /^[a-z0-9_]+$/;
+
+/** Most `_<n>` suffixes tried before a random one (`firstFreeUsername`). */
+const MAX_NUMBERED_SUFFIX = 10;
+
+/**
+ * The part of a replicated row's username before `@<homeInstance>`, or null
+ * when the username does not end with the row's own domain.
+ */
+function localPartOf(user: UserRow): string | null {
+  if (!user.homeInstance) return null;
+  const suffix = `@${user.homeInstance}`.toLowerCase();
+  const username = user.username.toLowerCase();
+  if (!username.endsWith(suffix)) return null;
+  return username.slice(0, username.length - suffix.length);
+}
+
+/**
+ * Whether a row is a replicated stub whose username is a placeholder, not
+ * its home handle. Two kinds exist:
+ *   - `<homeUserId>@<domain>`: the name `resolveOrCreateReplicatedUser` gives
+ *     a remote user it meets without knowing their username;
+ *   - a local part that is not handle-shaped (`HANDLE`), such as
+ *     `<display name>@<domain>`, which incoming calls created before the call
+ *     relay stopped passing the caller's display name as the username.
+ * Only such a row is ever renamed. A placeholder that happens to be shaped
+ * like a handle (a display name such as "kai") cannot be told apart from a
+ * real handle here and is left alone.
  *
  * Excluded, and so never renamed:
  *   - native rows and rows without a home id (nothing to compare);
@@ -22,11 +53,48 @@ const REPLICATED_PASSWORD_HASH = '!federation-replicated';
  *   - detached rows (`federationHomeOrphaned = 1`): the home domain now belongs
  *     to another incarnation, which never names an established account.
  */
-export function isIdNamedStub(user: UserRow): boolean {
+export function isPlaceholderNamedStub(user: UserRow): boolean {
   if (!user.homeInstance || !user.homeUserId) return false;
   if (user.passwordHash !== REPLICATED_PASSWORD_HASH) return false;
   if (user.federationHomeOrphaned === 1) return false;
-  return user.username === `${user.homeUserId}@${user.homeInstance}`.toLowerCase();
+  const localPart = localPartOf(user);
+  if (localPart === null) return false;
+  return localPart === user.homeUserId.toLowerCase() || !HANDLE.test(localPart);
+}
+
+/**
+ * The replicated username `<handle>@<domain>`, or, when another row holds it,
+ * the first free `<handle>_<n>@<domain>` (n = 1..10), then a random suffix.
+ * `ownerId` is the row the name is for; its own current name does not count
+ * as taken. Creation and rename both name rows through this, so a handle
+ * whose name is held (a username freed by an account deletion and registered
+ * again, while this instance still holds the old replica) gets the same
+ * suffixed name either way.
+ */
+export function firstFreeUsername(
+  handle: string,
+  domain: string,
+  db: ReturnType<typeof getDb>,
+  ownerId?: string,
+): string {
+  const isTaken = (candidate: string): boolean => {
+    const holder = db
+      .select({ id: schema.users.id })
+      .from(schema.users)
+      .where(eq(schema.users.username, candidate))
+      .get();
+    return holder !== undefined && holder.id !== ownerId;
+  };
+  let username = `${handle}@${domain}`.toLowerCase();
+  let attempt = 0;
+  while (isTaken(username)) {
+    attempt++;
+    if (attempt > MAX_NUMBERED_SUFFIX) {
+      return `${handle}_${randomBytes(4).toString('hex')}@${domain}`.toLowerCase();
+    }
+    username = `${handle}_${attempt}@${domain}`.toLowerCase();
+  }
+  return username;
 }
 
 /**
@@ -41,12 +109,14 @@ export interface StubRenameSeed {
 }
 
 /**
- * Rename an id-named stub (`isIdNamedStub`) to `<username>@<domain>`, where
- * `username` is the handle the row's home reports. Home usernames never change,
- * so this happens at most once per row. Every other row is returned unchanged.
+ * Rename a placeholder-named stub (`isPlaceholderNamedStub`) to
+ * `<username>@<domain>`, where `username` is the handle the row's home
+ * reports. Home usernames never change, so this happens at most once per row.
+ * Every other row, and every `username` that is not handle-shaped, leaves the
+ * row unchanged.
  *
- * Collision-safe: when another row already holds the target name, the stub
- * keeps its id name (the next trusted username retries). With a `seed`, an
+ * When another row already holds the name, the stub takes the first free
+ * suffixed name (`firstFreeUsername`), as creation does. With a `seed`, an
  * empty `displayName` is filled with `seed.displayName ?? username` and a
  * differing `status` is taken over.
  *
@@ -55,28 +125,18 @@ export interface StubRenameSeed {
  * as `processProfileUpdateEvent` does, so open clients show the new name
  * without a reload.
  */
-export function renameIdNamedStub(
+export function renamePlaceholderNamedStub(
   user: UserRow,
   username: string | null | undefined,
   db: ReturnType<typeof getDb>,
   seed?: StubRenameSeed,
 ): UserRow {
-  if (!isIdNamedStub(user)) return user;
-  const handle = username?.trim();
-  if (!handle || handle.includes('@')) return user;
+  if (!isPlaceholderNamedStub(user) || !user.homeInstance) return user;
+  const handle = username?.trim().toLowerCase();
+  if (!handle || !HANDLE.test(handle)) return user;
 
-  const newUsername = `${handle}@${user.homeInstance}`.toLowerCase();
+  const newUsername = firstFreeUsername(handle, user.homeInstance, db, user.id);
   if (newUsername === user.username) return user;
-
-  const holder = db
-    .select({ id: schema.users.id })
-    .from(schema.users)
-    .where(eq(schema.users.username, newUsername))
-    .get();
-  if (holder && holder.id !== user.id) {
-    console.warn(`[federation] Not renaming stub ${user.id} (${user.username}): ${newUsername} belongs to user ${holder.id}`);
-    return user;
-  }
 
   const updates: { username: string; displayName?: string; status?: UserStatus } = { username: newUsername };
   if (seed) {

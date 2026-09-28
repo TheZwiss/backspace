@@ -4,8 +4,7 @@ import { getDb, schema } from '../../db/index.js';
 import { getOurOrigin, normalizeOriginForCompare } from '../../utils/federationAuth.js';
 import { generateSnowflake } from '../../utils/snowflake.js';
 import { and, eq, isNull, or, sql } from 'drizzle-orm';
-import { randomBytes } from 'node:crypto';
-import { renameIdNamedStub } from './stubName.js';
+import { firstFreeUsername, renamePlaceholderNamedStub } from './stubName.js';
 
 /**
  * Extract bare domain from a homeInstance value.
@@ -492,9 +491,9 @@ export function resolveOrCreateReplicatedUser(
 ): typeof schema.users.$inferSelect | null {
   const existing = lookupFederatedUser(homeUserId, homeInstance, db, hints);
   if (existing.kind === 'found') {
-    // A row met before its username was known is still named
-    // `<homeUserId>@<domain>`; the first username hint renames it.
-    return renameIdNamedStub(backfillHomeUserId(existing.user, homeUserId, db), hints?.username, db);
+    // A row met before its username was known still carries a placeholder
+    // name (`isPlaceholderNamedStub`); the first username hint renames it.
+    return renamePlaceholderNamedStub(backfillHomeUserId(existing.user, homeUserId, db), hints?.username, db);
   }
   // The id belongs only to local users of another identity. It names no one
   // here, and a stub for it would give one id two identities on this instance.
@@ -545,23 +544,9 @@ export function resolveOrCreateReplicatedUser(
   // returns the real handle. Without a hint the stub is named
   // `<homeUserId>@<domain>`, and the first later hint renames it (above).
   const localPart = (hints?.username ?? homeUserId).toLowerCase();
-  const baseUsername = `${localPart}@${domain}`.toLowerCase();
-
-  // Guard against the (unlikely) case where this username already
-  // exists — e.g. a prior partial replication or manual creation.
-  let username = baseUsername;
-  let collision = db.select().from(schema.users).where(eq(schema.users.username, username)).get();
-  let attempt = 0;
-  while (collision) {
-    attempt++;
-    username = `${localPart}_${attempt}@${domain}`.toLowerCase();
-    collision = db.select().from(schema.users).where(eq(schema.users.username, username)).get();
-    if (attempt > 10) {
-      // Extremely unlikely; use a random suffix to break out
-      username = `${localPart}_${randomBytes(4).toString('hex')}@${domain}`.toLowerCase();
-      break;
-    }
-  }
+  // A name another row already holds (a partial replication, or a handle
+  // freed by an account deletion and registered again) gets a suffix.
+  const username = firstFreeUsername(localPart, domain, db);
 
   const userId = generateSnowflake();
   const now = Date.now();

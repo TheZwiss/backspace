@@ -137,6 +137,63 @@ describe('backfillStubUsernamesForPeer', () => {
     expect(row!.displayName).toBeNull(); // unchanged
   });
 
+  it('renames a stub named after a display name by an earlier call, from the home\'s answer', async () => {
+    testDb.insert(schema.users).values({
+      id: 'stub-1',
+      username: 'kai smith@orbit.ddns.net',
+      displayName: 'Kai Smith',
+      passwordHash: '!federation-replicated',
+      status: 'offline',
+      isAdmin: 0,
+      homeInstance: 'orbit.ddns.net',
+      homeUserId: '1234567890',
+      createdAt: Date.now(),
+    }).run();
+    lookupResponses.set('1234567890', {
+      ok: true,
+      homeUserId: '1234567890',
+      username: 'kai',
+      profile: { displayName: 'Kai Smith', avatar: null, avatarColor: null, banner: null, bio: null },
+    });
+
+    const { backfillStubUsernamesForPeer } = await import('./federationStubBackfill.js');
+    await backfillStubUsernamesForPeer('https://orbit.ddns.net');
+
+    expect(lookupCalls).toEqual([{ peerOrigin: 'https://orbit.ddns.net', homeUserId: '1234567890' }]);
+    const row = testDb.select().from(schema.users).where(eq(schema.users.id, 'stub-1')).get();
+    expect(row!.username).toBe('kai@orbit.ddns.net');
+    expect(row!.displayName).toBe('Kai Smith');
+  });
+
+  it('keeps asking about the other stubs when the home fails for one', async () => {
+    for (const [id, homeUserId] of [['stub-1', '111'], ['stub-2', '222']] as const) {
+      testDb.insert(schema.users).values({
+        id,
+        username: `${homeUserId}@orbit.ddns.net`,
+        displayName: null,
+        passwordHash: '!federation-replicated',
+        status: 'offline',
+        isAdmin: 0,
+        homeInstance: 'orbit.ddns.net',
+        homeUserId,
+        createdAt: Date.now(),
+      }).run();
+    }
+    lookupResponses.set('111', { ok: false, reason: 'unreachable' });
+    lookupResponses.set('222', {
+      ok: true,
+      homeUserId: '222',
+      username: 'second',
+      profile: { displayName: null, avatar: null, avatarColor: null, banner: null, bio: null },
+    });
+
+    const { backfillStubUsernamesForPeer } = await import('./federationStubBackfill.js');
+    await backfillStubUsernamesForPeer('https://orbit.ddns.net');
+
+    expect(lookupCalls.map(c => c.homeUserId)).toEqual(['111', '222']);
+    expect(testDb.select().from(schema.users).where(eq(schema.users.id, 'stub-2')).get()!.username).toBe('second@orbit.ddns.net');
+  });
+
   it('is a no-op when peer is not active', async () => {
     testDb.update(schema.federationPeers)
       .set({ status: 'unreachable' })
