@@ -163,7 +163,7 @@ The in-memory call state (`FederatedCallEntry`) is keyed by `federatedId` (not `
 
 ### Late-Bind dmChannelId
 
-When `findOrCreateDmChannel` creates a local DM channel during an active federated call (e.g., the first message arrives while a call is ringing), it binds the `dmChannelId` on the existing `FederatedCallEntry`. This transitions the call from Path B to Path A delivery without interrupting the call.
+When the relayed first message creates a local 1-on-1 copy (`findOrCreateOneOnOne`, then `lateBindFederatedCall` in `processCreateEvent`) during an active federated call (e.g., the first message arrives while a call is ringing), it binds the `dmChannelId` on the existing `FederatedCallEntry`. This transitions the call from Path B to Path A delivery without interrupting the call.
 
 ### Token Generation & Room Identity
 

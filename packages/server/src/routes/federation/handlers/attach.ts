@@ -294,8 +294,8 @@ export function registerAttachRoutes(app: FastifyInstance): void {
     //  - merged: dm_channel_closed removes the stale source entry; dm_channel_created
     //    (full DmChannel payload — the client handler reads dmChannel.members) resurfaces
     //    the surviving target with its merged history.
-    //  - rekeyed: dm_channel_created upserts the channel by id (spaceStore.addDmChannel
-    //    replaces by id), refreshing the now-stale federatedId in place. dm_channel_updated
+    //  - rekeyed: dm_channel_created upserts the channel's copy (the client's DM merge
+    //    module, web/src/stores/dmConversations.ts), refreshing the now-stale federatedId in place. dm_channel_updated
     //    would only patch name/icon, not federatedId, so it cannot heal the client here.
     for (const r of dmReconcileResults) {
       const targetPayload = loadDmChannelWire(db, r.targetChannelId);

@@ -1,8 +1,8 @@
-# ADR 0001: DM conversation identity
+# ADR 0002: DM conversation identity
 
 | | |
 |---|---|
-| Status | Proposed |
+| Status | Accepted |
 | Date | 2026-09-28 |
 | Issue | [#345](https://github.com/TheZwiss/backspace/issues/345) (follow-ups of #344) |
 

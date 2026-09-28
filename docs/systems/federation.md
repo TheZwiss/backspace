@@ -7,7 +7,7 @@ Source files:
   - `routes/federation/rateLimits.ts` -- In-memory sliding-window rate limiters (accept/relay/lookup/ensure) + replay-nonce store + eviction timers
   - `routes/federation/origin.ts` -- `validateOrigin`, `resolveLocalOrigin`, `sanitizePeer` (+ `SanitizedPeer` shape)
   - `routes/federation/identity.ts` -- Federated identity resolution: `extractDomain`, `getOurIdentityDomain`, `attributionRefusal`, `localUserStandingOnPeer`, `resolveRelayActor`, `resolveLocalUser`, `findFederatedUser`, `resolveOrCreateReplicatedUser`, `backfillHomeUserId`
-  - `routes/federation/dmChannels.ts` -- DM channel/message payload builders, `findOrCreateDmChannel`, `resolveLocalDmMessage`, `isUrlFromPeer`
+  - `routes/federation/dmChannels.ts` -- DM message payload builder, `resolveLocalDmMessage`, `isUrlFromPeer` (1-on-1 find-or-create is `findOrCreateOneOnOne` in `utils/dmConversation.ts`)
   - `routes/federation/profile.ts` -- Replicated-profile hydration + asset download, `processProfileUpdateEvent`, `backfillReplicatedProfileAssets`
   - `routes/federation/reconciliation.ts` -- DM federated-id reconciliation + dead-incarnation artifact sweeps (worker-facing maintenance)
   - `routes/federation/events/*.ts` -- Inbound relay event processors, grouped by domain: `dmMessages`, `membership`, `friends`, `calls`, `dmState` (presence/read-state/close/reopen/file-rejected), and `dispatch` (`processRelayEvents`, the fan-out entry point shared by the HTTP relay handler and the initial-sync worker)
@@ -382,7 +382,7 @@ The owner-initiated exception to the detach invariant (re-attach spec §3.2), on
 
 **Stub merge (spec §3.3).** By the time the owner re-attaches, R may already hold a replicated stub for the new home identity (from ordinary DM/friend relay, e.g. `youruser_1@<domain>`). Two rows must not share `(homeUserId, homeInstance)`, so the stub is merged into the detached row inside the transaction: every `users.id` FK a replicated stub **can** populate is repointed, with collision rows deduped **before** repoint. Tables (audited against `schema.ts`): `dm_members` (dedupe on `dm_channel_id`), `dm_messages`, `messages`, `dm_reactions` (dedupe on `dm_message_id+emoji`), `reactions` (dedupe on `message_id+emoji`), `friends` (both columns + drop self-rows), `friend_requests` (both columns + drop self-rows), `read_states` (dedupe on `channel_id`), `dm_channels.owner_id` (plain-text column, no FK). Space-scoped FKs (`space_members`, `member_roles`, `*_overrides`, `bans`, `join_requests`, `voice_restrictions`, layouts/folders) and moderator/owner RESTRICT columns are **not** repointed — a DM/friend replica can never hold them. The stub row is then deleted. Only a `'!federation-replicated'` row is ever a merge source (guard 4).
 
-**1-on-1 DM `federatedId` reconciliation (reattach-dm-reconcile spec §3.1–§3.2).** A 1-on-1 DM's identity is `computeFederatedId(homeUserIdA, homeUserIdB)` — a deterministic SHA-256 of the two sorted home user IDs. The re-bind changes the account's `home_user_id`, so **every** 1-on-1 DM it participates in now derives a different `federatedId`: pre-reattach history stays under the OLD-identity channel while post-reattach messages compute the NEW id and land in a parallel channel — one conversation surfaced twice. So, still inside the re-attach transaction (after the re-bind UPDATE), the endpoint enumerates the account's 1-on-1 channels (exactly 2 members, 1-on-1-shaped `federated_id`) and calls `reconcileDmChannelFederatedId(rawDb, channelId)` on each. That helper recomputes the expected id from the members' **current** home identities and, when it differs from the stored id, either **re-keys in place** (no channel already carries the new id) or **merges the drifted channel INTO the existing new-identity channel and deletes it** (`idx_dm_federated` is UNIQUE, so two rows can never share a `federated_id`). Merge moves `dm_messages` (globally-unique snowflake ids; `attachments`/`dm_reactions` follow by `dm_message_id`), dedupes `dm_members` and `read_states` on their composite PKs, then drops the source row. Group DMs (random-UUID `federatedId`) are **skipped** — their id is member-independent, so re-attach never drifts them. After commit, affected local members receive `dm_channel_closed` (merged source) + `dm_channel_created` (full surviving-channel payload) so the split collapses live without a reload.
+**1-on-1 DM `federatedId` reconciliation (reattach-dm-reconcile spec §3.1–§3.2).** A 1-on-1 DM's identity is `oneOnOneKey(a, b)` (`utils/dmConversation.ts`) — a deterministic SHA-256 of the two sorted home user IDs. The re-bind changes the account's `home_user_id`, so **every** 1-on-1 DM it participates in now derives a different `federatedId`: pre-reattach history stays under the OLD-identity channel while post-reattach messages compute the NEW id and land in a parallel channel — one conversation surfaced twice. So, still inside the re-attach transaction (after the re-bind UPDATE), the endpoint enumerates the account's 1-on-1 channels (exactly 2 members, 1-on-1-shaped `federated_id`) and calls `reconcileDmChannelFederatedId(rawDb, channelId)` on each. That helper recomputes the expected id from the members' **current** home identities and, when it differs from the stored id, either **re-keys in place** (no channel already carries the new id) or **merges the drifted channel INTO the existing new-identity channel and deletes it** (`idx_dm_federated` is UNIQUE, so two rows can never share a `federated_id`). Merge moves `dm_messages` (globally-unique snowflake ids; `attachments`/`dm_reactions` follow by `dm_message_id`), keeps one `dm_members` row per home identity (a member the target already holds, under any local id, is dropped from the source, reopening the target's row when the source's was open), dedupes `read_states` on their composite PK, re-points the source's `federation_mutation_log` and `federation_outbox` rows (`context_id` is the local channel id) to the target, then drops the source row. Re-attach enumerates its channels by 1-on-1-shaped `federated_id`; the helper itself also treats an ownerless row with a UUID key as a group and skips it. Group DMs (random-UUID `federatedId`) are **skipped** — their id is member-independent, so re-attach never drifts them. After commit, affected local members receive `dm_channel_closed` (merged source) + `dm_channel_created` (full surviving-channel payload) so the split collapses live without a reload.
 
 **Why R-local reconciliation is complete, not partial (spec §2).** A 1-on-1 DM is stored on an instance only if that instance is the home of at least one participant. The detached account is homed at the reset domain, i.e. **not native to R** (the peer where it now lives) — so the *other* participant of every 1-on-1 DM it holds on R is necessarily R-native, and R is that channel's authoritative home. Re-keying locally therefore produces the globally-correct id (the same value the R-native counterpart and the new home-identity compute); the reset home instance holds no old-identity channel. There is no cross-instance residual to relay: R-local reconciliation covers 100% of the account's 1-on-1 DMs.
 
@@ -862,23 +862,24 @@ All origin comparisons use `extractDomain()` or `getOurOrigin()` with normalizat
 5. `getGroupDmTargetOrigins(channelId)` returns the participants' instances minus our own -- `[]` when both participants are local
 6. `queueOutboxEvent(messageId, channelId, 'create', payload, targetOrigins)` -> queued only to those peers; a `[]` target list matches no peer, so a conversation between two local users is never relayed
 
-**Channel creation (1-on-1 with federated user):**
-- When `POST /api/dm` creates a channel where either participant has `homeInstance` set, the deterministic `federatedId = SHA256(sorted([homeUserIdA, homeUserIdB])).slice(0, 32)` is computed and stored immediately
-- This ensures `findOrCreateDmChannel` on the receiving instance finds the existing channel when the S2S reply arrives, preventing duplicate channels
+**Channel creation (1-on-1):**
+- `POST /api/dm` finds or creates the row with `findOrCreateOneOnOne` (`utils/dmConversation.ts`), which stores `oneOnOneKey(a, b) = SHA256(sorted([homeIdentityA, homeIdentityB]).join(':')).slice(0, 32)` on every 1-on-1 from insert, relay on or off and native pairs included; rows from before that get it from the startup backfill (`backfillOneOnOneKeys`, run by `initDatabase`)
+- The receiving instance computes the same key from the relayed participants, so its `findOrCreateOneOnOne` finds the existing copy when the S2S reply arrives, preventing duplicate channels
+- Nothing is relayed at creation. The recipient's membership on the creating instance is inserted closed and opened by the first message (dm-system.md "1-on-1 DM Creation")
 
 **Inbound (receiving instance -- `processCreateEvent`):**
 1. Validate: `event.message` and `event.participants` (>= 2) required
 2. Dedup: check `(sourceInstance, sourceMessageId)` -- reject if exists
 3. Resolve ALL participants via `resolveOrCreateReplicatedUser`, hydrate profiles
 4. No `event.federatedId` -> 1-on-1 path. The author must be one of the first two participants and the signing peer one of their home origins, else `invalid_target` (see `dm-system.md` "Relayed message creates")
-5. Compute deterministic `federatedId = SHA256(sorted([homeUserIdA, homeUserIdB])).slice(0, 32)`
-6. `findOrCreateDmChannel(federatedId, [localUserA.id, localUserB.id], db)`:
-   - Find by `federatedId` in `dm_channels`
-   - If exists: ensure both users are members (idempotent insert)
-   - If not: create channel with `federatedId`, add both members
+5. `findOrCreateOneOnOne(db, localUserA, localUserB, { open: 'both' })` (`utils/dmConversation.ts`), keyed `oneOnOneKey` over the two local rows' home identities:
+   - The row holding the key, its members made the pair (missing ones added, a same-identity row under another local id re-pointed; never a third member)
+   - Else an unkeyed row whose members are exactly the pair, keyed
+   - Else a new row with the key, both members open
+6. `lateBindFederatedCall(key, channelId)` binds a call that rang before this copy existed
 7. Insert `dm_messages` with `sourceInstance` and `sourceMessageId`; `replyToId` is `resolveRelayedReplyTarget(message.replyTo)`, which resolves the reference with `resolveLocalDmMessage` and keeps it only when the target is in the same local channel (else `null`); `content` is `rewriteRelayedMentions(message.content, message.mentions)` for a user message, the stored content naming this instance's rows in its mention tokens
 8. Process attachments (see File Replication)
-9. Broadcast `dm_message_created` to local members, **skipping** members whose `homeInstance === sourceInstance` (they already have the original)
+9. Broadcast `dm_message_created` to every local member, members homed on the source instance included; a closed member is reopened and gets `dm_channel_created` (built by `loadDmChannelWire` with this message) first
 
 ### Group DMs
 
@@ -895,16 +896,18 @@ Same as 1-on-1 except:
 4. The author must be a member of the channel and the signing peer one of its relay target origins, else `unauthorized_source` (retried; `invalid_target` if the channel is a 1-on-1). See `dm-system.md` "Relayed message creates"
 5. Insert message, broadcast to local members
 
-### Federated ID Generation (`federationOutbox.ts:computeFederatedId`)
+### Federated ID Generation (`utils/dmConversation.ts`)
 
 ```typescript
-// 1-on-1: deterministic 32-char hex hash
-const sorted = [homeUserIdA, homeUserIdB].sort();
+// 1-on-1: oneOnOneKey(a, b), deterministic 32-char hex hash over homeUserId || id
+const sorted = [homeIdentityOf(a), homeIdentityOf(b)].sort();
 return sha256(sorted.join(':')).slice(0, 32);
 
-// Group: random 36-char UUID with dashes
+// Group: mintGroupKey(), random 36-char UUID with dashes, minted once
 return crypto.randomUUID();
 ```
+
+No other code computes or mints a key (ADR 0002). See dm-system.md "Federated ID Algorithm" for when each is stored.
 
 The format difference (32-char hash vs 36-char UUID) is used by the self-healing migration to detect channel type independently of `owner_id`.
 
@@ -2012,11 +2015,10 @@ All workers are started by `startFederationWorkers()` on server boot and stopped
 | Janitor | 1h | -- | -- | `runFederationJanitor` (sync) |
 | Startup bootstrap sync | Once at startup | -- | 30s per page | `startupBootstrapSync` → `onPeerActivated` |
 | Dead-incarnation sweep | Once at startup | -- | -- | `sweepDeadIncarnationArtifacts` (sync, idempotent) |
-| DM `federatedId` reconciliation | Once at startup | -- | -- | `reconcileDriftedDmFederatedIds` (sync, idempotent) |
 
 `sweepDeadIncarnationArtifacts` — startup, idempotent: deletes DM channels with no native member (with explicit child-row cleanup) and unreferenced replicated stubs homed at this instance's own domain; still-referenced stubs are skipped and logged. It does not rely on FK cascade (must not assume `PRAGMA foreign_keys` is ON): the channel delete explicitly clears its `dm_reactions`/`attachments`/`dm_messages`/`dm_members`/`read_states` rows, and the stub delete explicitly clears its `dm_reactions`/`reactions`/`read_states` rows — and the stub's deletable guard mirrors the non-cascading FKs to `users.id` by hand (a future non-cascading FK to `users.id` needs a matching NOT-EXISTS clause).
 
-`reconcileDriftedDmFederatedIds` — startup, idempotent (reattach-dm-reconcile spec §3.3): in one transaction, iterates every 1-on-1 DM channel (exactly 2 members, 1-on-1-shaped `federated_id`) and calls `reconcileDmChannelFederatedId` on each, re-keying or merging any whose stored id has drifted from its members' current home identities. This **heals accounts re-attached before inline reconciliation shipped** (§3.2) — including the live split-conversation duplicate — without manual DB surgery. On a clean database every channel is a no-op (one hash per 1-on-1 channel); it logs a summary only when it changed something (`[federation] DM federatedId reconciliation: rekeyed N, merged M`). Wired next to `sweepDeadIncarnationArtifacts` in `startFederationWorkers`.
+The 1-on-1 key sweep that used to run here (`reconcileDriftedDmFederatedIds`) is `backfillOneOnOneKeys`, run by `initDatabase` on every boot whether or not the workers start, and widened to unkeyed rows: every 1-on-1 (no owner, exactly 2 members, not soft-deleted) whose key is NULL or differs from its members' current home identities goes through `reconcileDmChannelFederatedId`. It still **heals accounts re-attached before inline reconciliation shipped** (§3.2). See dm-system.md "Federated ID Algorithm".
 
 ### Janitor Cleanup (`storageJanitor.ts:runFederationJanitor`)
 
