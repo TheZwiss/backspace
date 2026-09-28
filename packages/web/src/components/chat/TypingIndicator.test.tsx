@@ -5,6 +5,7 @@ import { setLanguage } from '../../i18n';
 import { useAuthStore } from '../../stores/authStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useSpaceStore } from '../../stores/spaceStore';
+import { clearMyUserIdCache, setMyUserIdForOrigin } from '../../utils/crossStoreResolvers';
 import { TypingIndicator } from './TypingIndicator';
 
 vi.mock('../../audio/AudioManager', () => ({
@@ -64,7 +65,8 @@ beforeEach(() => {
 afterEach(async () => {
   useAuthStore.setState({ user: null });
   useChatStore.setState({ typingUsers: new Map() });
-  useSpaceStore.setState({ dmChannels: [], members: [], channelToSpaceMap: new Map() });
+  useSpaceStore.setState({ dmChannels: [], members: [], channelToSpaceMap: new Map(), channelOriginMap: new Map() });
+  clearMyUserIdCache();
   await setLanguage('en');
 });
 
@@ -134,5 +136,30 @@ describe('TypingIndicator', () => {
     typing(dm.id, [[kai.id, 'kai'], [stub.id, stub.username]]);
     render(<TypingIndicator channelId={dm.id} />);
     expect(typingLine().textContent).toBe('Kai und Quinn schreiben');
+  });
+
+  describe("leaves out the viewer by the viewer's id on the channel's instance", () => {
+    const ORBIT = 'https://orbit.example';
+    const meOnOrbit = makeUser('me-orbit', 'alice@home.example', 'Alice');
+    // Orbit issued this row an id that happens to equal the viewer's home id.
+    const sameIdOnOrbit = makeUser(me.id, 'mira', 'Mira');
+    const orbitDm = { id: 'dm-orbit', ownerId: null, createdAt: 1, members: [meOnOrbit, sameIdOnOrbit], lastMessage: null } as unknown as DmChannel;
+
+    beforeEach(() => {
+      setMyUserIdForOrigin(ORBIT, meOnOrbit.id);
+      useSpaceStore.setState({ dmChannels: [orbitDm], channelOriginMap: new Map([[orbitDm.id, ORBIT]]) });
+    });
+
+    it("hides the viewer's own typing on a channel another instance serves", () => {
+      typing(orbitDm.id, [[meOnOrbit.id, meOnOrbit.username]]);
+      render(<TypingIndicator channelId={orbitDm.id} />);
+      expect(document.querySelector('[data-typing-line]')).toBeNull();
+    });
+
+    it("shows someone else there whose id equals the viewer's home id", () => {
+      typing(orbitDm.id, [[sameIdOnOrbit.id, sameIdOnOrbit.username]]);
+      render(<TypingIndicator channelId={orbitDm.id} />);
+      expect(typingLine().textContent).toBe('Mira is typing');
+    });
   });
 });

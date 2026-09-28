@@ -1,9 +1,8 @@
 import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useChatStore } from '../../stores/chatStore';
-import { useAuthStore } from '../../stores/authStore';
 import { useFormatters } from '../../i18n/formatters';
-import { useChannelUser, type ChannelUser } from '../../utils/channelUser';
+import { useChannelUser, useSelfIdInChannel, type ChannelUser } from '../../utils/channelUser';
 import { parseFederatedUsername } from '../../utils/identity';
 
 interface TypingIndicatorProps {
@@ -65,15 +64,17 @@ export function TypingIndicator({ channelId }: TypingIndicatorProps) {
   const { t } = useTranslation('chat');
   const fmt = useFormatters();
   const typingUsersRaw = useChatStore((s) => s.typingUsers.get(channelId));
-  const currentUserId = useAuthStore((s) => s.user?.id);
+  // Typing entries carry ids issued by the channel's instance, so the viewer
+  // is left out by their id there, not by the home id.
+  const selfId = useSelfIdInChannel(channelId);
 
-  // Filter out current user and expired entries
+  // Filter out the viewer and expired entries
   const others = useMemo(() => {
     if (!typingUsersRaw || typingUsersRaw.length === 0) return [];
     const now = Date.now();
     return typingUsersRaw
-      .filter(t => now - t.timestamp < 5000 && t.userId !== currentUserId);
-  }, [typingUsersRaw, currentUserId]);
+      .filter(t => now - t.timestamp < 5000 && t.userId !== selfId);
+  }, [typingUsersRaw, selfId]);
 
   // Only the named typers are resolved; a summary names nobody.
   const first = others.length <= MAX_NAMED_TYPERS ? others[0] : undefined;
