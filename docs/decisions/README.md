@@ -86,3 +86,4 @@ must now follow. Include what is deliberately not tested or not supported.
 | Number | Title | Status |
 |---|---|---|
 | 0001 | Mobile client architecture (#125) | Proposed |
+| 0001 | DM conversation identity (#345) | Proposed |
