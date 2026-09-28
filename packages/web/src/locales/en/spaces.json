@@ -352,7 +352,9 @@
       },
       "updateRolesFailed": "Failed to update roles",
       "kickFailed": "Failed to kick member",
-      "banFailed": "Failed to ban member"
+      "banFailed": "Failed to ban member",
+      "rolesAboveYou": "Roles at or above your highest role are locked.",
+      "rolesUnheld": "Roles with permissions you do not have cannot be given."
     }
   },
   "bans": {
@@ -406,7 +408,11 @@
     "createFailed": "Failed to create role",
     "saveFailed": "Failed to save role",
     "deleteFailed": "Failed to delete role",
-    "copyFailed": "Failed to copy role"
+    "copyFailed": "Failed to copy role",
+    "unheldLocked": "You can only switch permissions you have yourself. The others are locked.",
+    "unheldPermission": "You do not have this permission",
+    "copyUnheld": "This role has permissions you do not have, so you cannot copy it.",
+    "copyDeleteUnheld": "This role has permissions you do not have, so you cannot copy or delete it."
   },
   "permissions": {
     "title": "Permissions",
@@ -452,7 +458,11 @@
     "loadFailed": "Failed to load overrides",
     "saveFailed": "Failed to save overrides",
     "partialFailure_one": "{{count}} override failed to save",
-    "partialFailure_other": "{{count}} overrides failed to save"
+    "partialFailure_other": "{{count}} overrides failed to save",
+    "unheldLocked": "You can only switch permissions you have yourself. The others are locked.",
+    "unheldPermission": "You do not have this permission",
+    "removeUnheld": "This override sets permissions you do not have. Only someone who has them can remove it.",
+    "removeUnheldShort": "Only someone with these permissions can remove it"
   },
   "sidebar": {
     "directMessages": "Direct Messages",

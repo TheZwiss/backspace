@@ -7,46 +7,56 @@ export function TriStateToggle({
   value,
   onChange,
   disabled,
+  label,
 }: {
   value: TriState;
   onChange: (v: TriState) => void;
+  /** Locked: the current state stays visible, but no button changes it. */
   disabled?: boolean;
+  /** Names the group of three buttons, e.g. the permission it sets. */
+  label?: string;
 }) {
   const { t } = useTranslation(['spaces']);
   const btnClass = (v: TriState, active: boolean) => {
     const base = 'w-6 h-6 flex items-center justify-center rounded-full transition-colors text-xs font-bold';
-    if (disabled) return `${base} cursor-not-allowed opacity-40`;
-    if (!active) return `${base} cursor-pointer text-txt-tertiary hover:text-txt-secondary`;
+    const interaction = disabled ? 'cursor-not-allowed' : 'cursor-pointer';
+    if (!active) return `${base} ${interaction} text-txt-tertiary${disabled ? '' : ' hover:text-txt-secondary'}`;
     switch (v) {
-      case 'deny': return `${base} cursor-pointer bg-accent-rose/15 text-accent-rose`;
-      case 'neutral': return `${base} cursor-pointer bg-white/[0.06] text-txt-tertiary`;
-      case 'allow': return `${base} cursor-pointer bg-accent-primary/15 text-accent-primary`;
+      case 'deny': return `${base} ${interaction} bg-accent-rose/15 text-accent-rose`;
+      case 'neutral': return `${base} ${interaction} bg-white/[0.06] text-txt-tertiary`;
+      case 'allow': return `${base} ${interaction} bg-accent-primary/15 text-accent-primary`;
     }
   };
 
+  const names: Record<TriState, string> = {
+    deny: t('spaces:permissions.tristate.deny'),
+    neutral: t('spaces:permissions.tristate.neutral'),
+    allow: t('spaces:permissions.tristate.allow'),
+  };
+
+  const button = (v: TriState, glyph: string, next: TriState) => (
+    <button
+      type="button"
+      className={btnClass(v, value === v)}
+      onClick={() => !disabled && onChange(next)}
+      disabled={disabled}
+      aria-pressed={value === v}
+      aria-label={names[v]}
+      title={names[v]}
+    >
+      {glyph}
+    </button>
+  );
+
   return (
-    <div className="flex items-center gap-0.5 bg-surface-input rounded-full p-0.5">
-      <button
-        className={btnClass('deny', value === 'deny')}
-        onClick={() => !disabled && onChange(value === 'deny' ? 'neutral' : 'deny')}
-        title={t('spaces:permissions.tristate.deny')}
-      >
-        ✕
-      </button>
-      <button
-        className={btnClass('neutral', value === 'neutral')}
-        onClick={() => !disabled && onChange('neutral')}
-        title={t('spaces:permissions.tristate.neutral')}
-      >
-        /
-      </button>
-      <button
-        className={btnClass('allow', value === 'allow')}
-        onClick={() => !disabled && onChange(value === 'allow' ? 'neutral' : 'allow')}
-        title={t('spaces:permissions.tristate.allow')}
-      >
-        ✓
-      </button>
+    <div
+      role="group"
+      aria-label={label}
+      className={`flex items-center gap-0.5 bg-surface-input rounded-full p-0.5${disabled ? ' opacity-50' : ''}`}
+    >
+      {button('deny', '✕', value === 'deny' ? 'neutral' : 'deny')}
+      {button('neutral', '/', 'neutral')}
+      {button('allow', '✓', value === 'allow' ? 'neutral' : 'allow')}
     </div>
   );
 }

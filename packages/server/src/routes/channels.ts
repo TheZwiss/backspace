@@ -4,7 +4,7 @@ import { getDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { isMember, hasPermission, getChannelSpaceId, PermissionBits, computePermissions } from '../utils/permissions.js';
-import { permissionsToString } from '@backspace/shared/src/permissions.js';
+import { permissionsToString, stringToPermissions, overrideChangeRefusal, type HeldBitsRefusal, type OverrideBits } from '@backspace/shared/src/permissions.js';
 import {
   CATEGORY_NAME_MAX_LENGTH,
   CATEGORY_NAME_MIN_LENGTH,
@@ -141,6 +141,26 @@ function broadcastCategoryOverrideChange(spaceId: string, categoryId: string): v
       spaceId,
     });
   }
+}
+
+/** A stored override row as bits, or null when there is none. */
+function storedOverrideBits(row: { allow: string; deny: string } | undefined): OverrideBits | null {
+  return row ? { allow: stringToPermissions(row.allow), deny: stringToPermissions(row.deny) } : null;
+}
+
+/**
+ * Held-bits rule for an override write (permissions.md, "Held-bits rule"):
+ * the actor may only switch bits they hold in the space. The comparison is
+ * against the stored row, so an unheld bit someone more senior set can stay
+ * while the actor edits the others. `after` null is a delete.
+ */
+function overrideWriteRefusal(
+  actorId: string,
+  spaceId: string,
+  before: { allow: string; deny: string } | undefined,
+  after: OverrideBits | null,
+): HeldBitsRefusal | null {
+  return overrideChangeRefusal(computePermissions(actorId, spaceId), storedOverrideBits(before), after);
 }
 
 export async function channelRoutes(app: FastifyInstance): Promise<void> {
@@ -501,17 +521,15 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, 400, 'override_bits_invalid');
     }
 
-    // Privilege escalation guard: non-admin users can only grant permissions they possess
-    const callerPerms = computePermissions(request.userId, channel.spaceId);
-    if ((callerPerms & PermissionBits.ADMINISTRATOR) === 0n) {
-      const escalatedAllow = allowBits & ~callerPerms;
-      if (escalatedAllow !== 0n) {
-        return sendError(reply, 403, 'cannot_grant_unowned_permissions');
-      }
-      const escalatedDeny = denyBits & ~callerPerms;
-      if (escalatedDeny !== 0n) {
-        return sendError(reply, 403, 'cannot_deny_unowned_permissions');
-      }
+    // Privilege escalation guard: only bits the caller holds may change
+    const existingChannelOverride = db.select().from(schema.channelOverrides).where(and(
+      eq(schema.channelOverrides.channelId, id),
+      eq(schema.channelOverrides.targetType, targetType),
+      eq(schema.channelOverrides.targetId, targetId),
+    )).get();
+    const escalation = overrideWriteRefusal(request.userId, channel.spaceId, existingChannelOverride, { allow: allowBits, deny: denyBits });
+    if (escalation) {
+      return sendError(reply, 403, escalation);
     }
 
     // Upsert: delete existing then insert
@@ -555,6 +573,18 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
 
       if (!hasPermission(request.userId, channel.spaceId, PermissionBits.MANAGE_ROLES)) {
         return sendError(reply, 403, 'missing_permission', { permission: 'MANAGE_ROLES' });
+      }
+
+      // Deleting clears every bit the override sets; without this check a
+      // delete and re-create would get round the held-bits rule on PUT.
+      const existing = db.select().from(schema.channelOverrides).where(and(
+        eq(schema.channelOverrides.channelId, id),
+        eq(schema.channelOverrides.targetType, targetType),
+        eq(schema.channelOverrides.targetId, targetId),
+      )).get();
+      const escalation = overrideWriteRefusal(request.userId, channel.spaceId, existing, null);
+      if (escalation) {
+        return sendError(reply, 403, escalation);
       }
 
       db.delete(schema.channelOverrides).where(
@@ -647,16 +677,14 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
     }
 
     // Privilege escalation guard (matches channel override pattern)
-    const callerPerms = computePermissions(request.userId, category.spaceId);
-    if ((callerPerms & PermissionBits.ADMINISTRATOR) === 0n) {
-      const escalatedAllow = allowBits & ~callerPerms;
-      if (escalatedAllow !== 0n) {
-        return sendError(reply, 403, 'cannot_grant_unowned_permissions');
-      }
-      const escalatedDeny = denyBits & ~callerPerms;
-      if (escalatedDeny !== 0n) {
-        return sendError(reply, 403, 'cannot_deny_unowned_permissions');
-      }
+    const existingCategoryOverride = db.select().from(schema.categoryOverrides).where(and(
+      eq(schema.categoryOverrides.categoryId, id),
+      eq(schema.categoryOverrides.targetType, targetType),
+      eq(schema.categoryOverrides.targetId, targetId),
+    )).get();
+    const escalation = overrideWriteRefusal(request.userId, category.spaceId, existingCategoryOverride, { allow: allowBits, deny: denyBits });
+    if (escalation) {
+      return sendError(reply, 403, escalation);
     }
 
     db.transaction((tx) => {
@@ -699,6 +727,17 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
 
       if (!hasPermission(request.userId, category.spaceId, PermissionBits.MANAGE_ROLES)) {
         return sendError(reply, 403, 'missing_permission', { permission: 'MANAGE_ROLES' });
+      }
+
+      // Deleting clears every bit the override sets (see the channel route).
+      const existing = db.select().from(schema.categoryOverrides).where(and(
+        eq(schema.categoryOverrides.categoryId, id),
+        eq(schema.categoryOverrides.targetType, targetType),
+        eq(schema.categoryOverrides.targetId, targetId),
+      )).get();
+      const escalation = overrideWriteRefusal(request.userId, category.spaceId, existing, null);
+      if (escalation) {
+        return sendError(reply, 403, escalation);
       }
 
       db.delete(schema.categoryOverrides).where(

@@ -4,6 +4,7 @@ import { useSpaceStore } from '../../stores/spaceStore';
 import { PermissionBits, permissionsToString, stringToPermissions } from '../../utils/permissions';
 import { OverrideEntry, type PermissionDef } from './OverrideEntry';
 import { describeError } from '../../i18n/errors';
+import { useViewerHeldPermissions, unswitchableBits, viewerCanRemoveOverride } from '../../utils/roleHierarchy';
 import type { Role, MemberWithUser } from '@backspace/shared';
 
 // The padlock the Overview privacy note uses; this note sits beside the same subject.
@@ -41,6 +42,10 @@ export function PermissionsEditor({
   const { t } = useTranslation(['spaces', 'common']);
   const roles = useSpaceStore((s) => s.roles);
   const members = useSpaceStore((s) => s.members);
+  // Held-bits rule (permissions.md): the viewer can only switch bits they
+  // hold, and only remove a saved override whose bits are all ones they hold.
+  const held = useViewerHeldPermissions(spaceId);
+  const lockedBits = useMemo(() => unswitchableBits(held, permDefs.map((p) => p.bit)), [held, permDefs]);
 
   // Fetched overrides
   const [overrides, setOverrides] = useState<Override[]>([]);
@@ -139,6 +144,14 @@ export function PermissionsEditor({
     return map;
   }, [overrides]);
 
+  // A row staged in this edit can always be dropped; a saved one is deleted
+  // on the server, which clears every bit it sets.
+  const isRemoveLocked = useCallback((key: string): boolean => {
+    const saved = existingOverrideMap.get(key);
+    if (!saved) return false;
+    return !viewerCanRemoveOverride(held, { allow: stringToPermissions(saved.allow), deny: stringToPermissions(saved.deny) });
+  }, [existingOverrideMap, held]);
+
   // Get effective allow/deny for a key — considers drafts, new overrides, and originals
   const getEffective = useCallback((key: string): { allow: bigint; deny: bigint } => {
     if (newOverrides.has(key)) {
@@ -173,6 +186,7 @@ export function PermissionsEditor({
   // edited bits) is dropped, and a row the server already stores is marked for
   // deletion, so removing works the same after a remove-and-re-add.
   const handleRemove = useCallback((key: string) => {
+    if (isRemoveLocked(key)) return;
     setNewOverrides(prev => {
       if (!prev.has(key)) return prev;
       const next = new Map(prev);
@@ -192,7 +206,7 @@ export function PermissionsEditor({
         return next;
       });
     }
-  }, [existingOverrideMap]);
+  }, [existingOverrideMap, isRemoveLocked]);
 
   // Add role override
   const handleAddRole = useCallback((roleId: string) => {
@@ -434,6 +448,8 @@ export function PermissionsEditor({
                 deny={eff.deny}
                 onChange={(a, d) => handleChange(key, a, d)}
                 onRemove={() => handleRemove(key)}
+                lockedBits={lockedBits}
+                removeLocked={isRemoveLocked(key)}
               />
             );
           })}
@@ -505,6 +521,8 @@ export function PermissionsEditor({
                 deny={eff.deny}
                 onChange={(a, d) => handleChange(key, a, d)}
                 onRemove={() => handleRemove(key)}
+                lockedBits={lockedBits}
+                removeLocked={isRemoveLocked(key)}
               />
             );
           })}

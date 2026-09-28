@@ -349,7 +349,9 @@
       },
       "updateRolesFailed": "更新身份组失败",
       "kickFailed": "踢出成员失败",
-      "banFailed": "封禁成员失败"
+      "banFailed": "封禁成员失败",
+      "rolesAboveYou": "与您的最高身份组同级或更高的身份组已锁定。",
+      "rolesUnheld": "无法授予拥有您没有的权限的身份组。"
     }
   },
   "bans": {
@@ -403,7 +405,11 @@
     "createFailed": "创建身份组失败",
     "saveFailed": "保存身份组失败",
     "deleteFailed": "删除身份组失败",
-    "copyFailed": "复制身份组失败"
+    "copyFailed": "复制身份组失败",
+    "unheldLocked": "您只能切换自己拥有的权限，其他权限已锁定。",
+    "unheldPermission": "您没有此权限",
+    "copyUnheld": "此身份组拥有您没有的权限，因此您无法复制它。",
+    "copyDeleteUnheld": "此身份组拥有您没有的权限，因此您无法复制或删除它。"
   },
   "permissions": {
     "title": "权限配置",
@@ -447,7 +453,11 @@
     "noMoreRoles": "没有更多可添加的身份组",
     "loadFailed": "加载权限覆盖失败",
     "saveFailed": "保存权限覆盖失败",
-    "partialFailure_other": "{{count}} 个权限覆盖保存失败"
+    "partialFailure_other": "{{count}} 个权限覆盖保存失败",
+    "unheldLocked": "您只能切换自己拥有的权限，其他权限已锁定。",
+    "unheldPermission": "您没有此权限",
+    "removeUnheld": "此权限覆盖设置了您没有的权限。只有拥有这些权限的人才能移除它。",
+    "removeUnheldShort": "只有拥有这些权限的人才能移除它"
   },
   "sidebar": {
     "directMessages": "私信列表",

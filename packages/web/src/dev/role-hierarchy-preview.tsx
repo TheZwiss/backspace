@@ -22,26 +22,42 @@
 //   order-error      the move is refused: order put back, reason shown.
 //   order-mobile     the phone layout: up and down buttons, no handles.
 //   order-mobile-moderator  the phone layout for the Moderators member.
+//
+// The held-bits scenes (permissions.md, "Held-bits rule") show what the
+// Helpers member may switch. Helpers hold view, send, kick, ban, manage roles
+// and mute; the owner has given Members Create Invite and Attach Files.
+//   held-role        the Roles panel on Members: toggles for bits the viewer
+//                    does not hold are locked, with the note; Copy blocked.
+//   held-everyone    the same on @everyone.
+//   held-owner       the owner on Members: nothing locked.
+//   held-mobile      held-role at phone width.
+//   held-overrides   channel overrides: Members opened with Manage Messages
+//                    allowed by the owner (locked, remove locked), @everyone
+//                    opened with only held bits (removable).
 // `?lang=de` (the app's dev-only switch) renders any scene in German.
 import { createRoot } from 'react-dom/client';
 import type { MemberWithUser, Role, User } from '@backspace/shared';
 import { MembersPanel } from '../components/modals/spaceSettingsPanels/MembersPanel';
 import { RolesPanel } from '../components/modals/spaceSettingsPanels/RolesPanel';
+import { PermissionsEditor, type Override } from '../components/ui/PermissionsEditor';
+import type { PermissionDef } from '../components/ui/OverrideEntry';
 import { useSpaceStore, type TaggedSpace } from '../stores/spaceStore';
 import { useAuthStore } from '../stores/authStore';
 import { useUIStore } from '../stores/uiStore';
 import { api, HttpError } from '../api/client';
-import { PermissionBits, permissionsToString } from '../utils/permissions';
+import { ALL_PERMISSIONS, PermissionBits, permissionsToString } from '../utils/permissions';
 import { initI18n } from '../i18n';
 import { initializeInterfaceScale } from '../platform/interfaceScale';
 import '../styles/globals.css';
 
 type Scene =
   | 'members' | 'role-locked' | 'role-editable'
-  | 'order-owner' | 'order-moderator' | 'order-keyboard' | 'order-error' | 'order-mobile' | 'order-mobile-moderator';
+  | 'order-owner' | 'order-moderator' | 'order-keyboard' | 'order-error' | 'order-mobile' | 'order-mobile-moderator'
+  | 'held-role' | 'held-everyone' | 'held-owner' | 'held-mobile' | 'held-overrides';
 const SCENES: readonly Scene[] = [
   'members', 'role-locked', 'role-editable',
   'order-owner', 'order-moderator', 'order-keyboard', 'order-error', 'order-mobile', 'order-mobile-moderator',
+  'held-role', 'held-everyone', 'held-owner', 'held-mobile', 'held-overrides',
 ];
 
 const SPACE_ID = 'space-1';
@@ -94,6 +110,51 @@ function seed(): void {
   });
 }
 
+// ─── Held-bits scenes ───────────────────────────────────────────────────────
+
+const H_MEMBERS = role('r-member', 'Members', '#a5f3c4', 1, permissionsToString(
+  PermissionBits.VIEW_CHANNEL | PermissionBits.SEND_MESSAGES | PermissionBits.CREATE_INVITE | PermissionBits.ATTACH_FILES,
+));
+
+const TEXT_PERMS: PermissionDef[] = [
+  { key: 'VIEW_CHANNEL', bit: PermissionBits.VIEW_CHANNEL },
+  { key: 'SEND_MESSAGES', bit: PermissionBits.SEND_MESSAGES },
+  { key: 'MANAGE_MESSAGES', bit: PermissionBits.MANAGE_MESSAGES },
+  { key: 'ATTACH_FILES', bit: PermissionBits.ATTACH_FILES },
+  { key: 'READ_MESSAGE_HISTORY', bit: PermissionBits.READ_MESSAGE_HISTORY },
+  { key: 'ADD_REACTIONS', bit: PermissionBits.ADD_REACTIONS },
+];
+
+const HELD_OVERRIDES: Override[] = [
+  { targetType: 'role', targetId: SPACE_ID, allow: '0', deny: permissionsToString(PermissionBits.SEND_MESSAGES) },
+  { targetType: 'role', targetId: 'r-member', allow: permissionsToString(PermissionBits.MANAGE_MESSAGES | PermissionBits.SEND_MESSAGES), deny: '0' },
+];
+
+function seedHeld(scene: Scene): void {
+  seed();
+  const owner = scene === 'held-owner';
+  if (owner) useAuthStore.setState({ user: user('owner', 'Jannis') });
+  useUIStore.setState({ isMobile: scene === 'held-mobile' });
+  useSpaceStore.setState({
+    roles: [EVERYONE, MODS, HELPERS, H_MEMBERS],
+    spacePermissions: new Map([[SPACE_ID, owner ? permissionsToString(ALL_PERMISSIONS) : MODERATION]]),
+  });
+}
+
+function OverridesBench() {
+  return (
+    <PermissionsEditor
+      entityId="channel-1"
+      spaceId={SPACE_ID}
+      permDefs={TEXT_PERMS}
+      unhideNote=""
+      getOverrides={async () => HELD_OVERRIDES}
+      putOverride={async () => ({ success: true })}
+      deleteOverride={async () => ({ success: true })}
+    />
+  );
+}
+
 // ─── Order scenes ───────────────────────────────────────────────────────────
 
 const O_EVERYONE = role(SPACE_ID, '@everyone', '#b9bbbe', 0, permissionsToString(PermissionBits.VIEW_CHANNEL));
@@ -139,8 +200,10 @@ function seedOrder(scene: Scene): void {
 function Workbench({ scene }: { scene: Scene }) {
   return (
     <div className="min-h-screen py-6 bg-surface-chat">
-      <div className={scene.startsWith('order-mobile') ? 'px-4 w-[390px]' : 'px-6 max-w-[640px] mx-auto'}>
-        {scene === 'members' ? <MembersPanel spaceId={SPACE_ID} /> : <RolesPanel spaceId={SPACE_ID} />}
+      <div className={scene.startsWith('order-mobile') || scene === 'held-mobile' ? 'px-4 w-[390px]' : 'px-6 max-w-[640px] mx-auto'}>
+        {scene === 'members' ? <MembersPanel spaceId={SPACE_ID} />
+          : scene === 'held-overrides' ? <OverridesBench />
+            : <RolesPanel spaceId={SPACE_ID} />}
       </div>
     </div>
   );
@@ -170,6 +233,7 @@ async function start(): Promise<void> {
   initializeInterfaceScale();
   await initI18n();
   if (scene.startsWith('order-')) seedOrder(scene);
+  else if (scene.startsWith('held-')) seedHeld(scene);
   else seed();
   const host = document.getElementById('root');
   if (!host) throw new Error('missing #root');
@@ -177,6 +241,12 @@ async function start(): Promise<void> {
   if (scene === 'members') await clickText('Lena', '.text-sm.font-medium');
   if (scene === 'role-locked') await clickText('Moderators', 'button');
   if (scene === 'role-editable') await clickText('Members', 'button');
+  if (scene === 'held-role' || scene === 'held-owner' || scene === 'held-mobile') await clickText('Members', 'button');
+  if (scene === 'held-everyone') await clickText('@everyone', 'button');
+  if (scene === 'held-overrides') {
+    await clickText('Members', 'button[aria-expanded]');
+    await clickText('@everyone', 'button[aria-expanded]');
+  }
   if (scene === 'order-moderator') {
     const handle = await waitFor(() => document.querySelector<HTMLButtonElement>('button[aria-label="Move Helpers"], button[aria-label="Helpers verschieben"]'));
     handle.focus();

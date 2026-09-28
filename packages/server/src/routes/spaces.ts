@@ -6,7 +6,7 @@ import { authenticate } from '../utils/auth.js';
 import { markDirectoryDirty } from '../directory/state.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { isMember, isSpaceOwner, isBanned, hasPermission, computePermissions, PermissionBits } from '../utils/permissions.js';
-import { DEFAULT_EVERYONE_PERMISSIONS, ALL_PERMISSIONS, permissionsToString } from '@backspace/shared/src/permissions.js';
+import { DEFAULT_EVERYONE_PERMISSIONS, ALL_PERMISSIONS, permissionsToString, stringToPermissions, roleBitsChangeRefusal, type HeldBitsRefusal } from '@backspace/shared/src/permissions.js';
 import crypto from 'crypto';
 import { connectionManager } from '../ws/handler.js';
 import { deleteAttachmentFiles, deleteUploadFile, deleteAttachmentByFilename } from '../utils/fileCleanup.js';
@@ -72,20 +72,47 @@ function generateInviteCode(): string {
   return crypto.randomBytes(4).toString('hex');
 }
 
+/** A permissions value from a request body as a non-negative bigint, or null when it is not one. */
+function parsePermissionBits(value: unknown): bigint | null {
+  if (typeof value !== 'string' && typeof value !== 'number') return null;
+  try {
+    const bits = BigInt(value);
+    return bits < 0n ? null : bits;
+  } catch {
+    return null;
+  }
+}
+
 type RoleChangeRefusal = {
   status: 400 | 403 | 404;
-  code: 'missing_permission' | 'cannot_change_own_roles' | 'space_owner_only' | 'member_not_found' | 'role_not_in_space' | 'everyone_role_not_assignable' | 'role_hierarchy';
+  code: 'missing_permission' | 'cannot_change_own_roles' | 'space_owner_only' | 'member_not_found' | 'role_not_in_space' | 'everyone_role_not_assignable' | 'role_hierarchy' | HeldBitsRefusal;
   details?: Record<string, string>;
 };
+
+/**
+ * Held-bits rule for handing out a role (permissions.md, "Held-bits rule"):
+ * giving a member a role gives them its bits, so the actor must hold every
+ * one of them. Taking a role away is governed by the hierarchy alone.
+ */
+function roleGrantRefusal(spaceId: string, actorId: string, rolePermissions: string | null): HeldBitsRefusal | null {
+  return roleBitsChangeRefusal(computePermissions(actorId, spaceId), 0n, stringToPermissions(rolePermissions));
+}
 
 /**
  * The checks shared by the two single-role routes (add one role to a member,
  * take one away). They match what PATCH /members/:uid enforces for a whole
  * role set: MANAGE_ROLES, not one's own roles, not the owner's, a member of
  * this space, a role of this space other than @everyone, a member ranked
- * below the actor and a role below the actor's top role.
+ * below the actor, a role below the actor's top role and, when adding, a
+ * role whose bits the actor holds.
  */
-function checkSingleRoleChange(spaceId: string, actorId: string, targetId: string, roleId: string): RoleChangeRefusal | null {
+function checkSingleRoleChange(
+  spaceId: string,
+  actorId: string,
+  targetId: string,
+  roleId: string,
+  change: 'add' | 'remove',
+): RoleChangeRefusal | null {
   const db = getDb();
   if (!hasPermission(actorId, spaceId, PermissionBits.MANAGE_ROLES)) {
     return { status: 403, code: 'missing_permission', details: { permission: 'MANAGE_ROLES' } };
@@ -101,6 +128,10 @@ function checkSingleRoleChange(spaceId: string, actorId: string, targetId: strin
   const actor = getHierarchyStanding(spaceId, actorId);
   if (!canActOnMember(actor, getHierarchyStanding(spaceId, targetId)) || !canManageRoleAt(actor, role.position ?? 0)) {
     return { status: 403, code: 'role_hierarchy' };
+  }
+  if (change === 'add') {
+    const refusal = roleGrantRefusal(spaceId, actorId, role.permissions);
+    if (refusal) return { status: 403, code: refusal };
   }
   return null;
 }
@@ -947,6 +978,13 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
         return sendError(reply, 403, 'role_hierarchy');
       }
     }
+    // Held-bits rule: a role this request adds must carry only bits the actor holds.
+    for (const roleId of roleIds.filter(r => !currentRoleIds.has(r))) {
+      const refusal = roleGrantRefusal(id, request.userId, spaceRoles.find(r => r.id === roleId)?.permissions ?? null);
+      if (refusal) {
+        return sendError(reply, 403, refusal);
+      }
+    }
 
     // Atomically replace member's role assignments
     db.transaction((tx) => {
@@ -1124,18 +1162,25 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, 403, 'missing_permission', { permission: 'MANAGE_ROLES' });
     }
 
-    // Validate permissions string is a valid bigint if provided
+    // A new role can only carry bits its creator holds (held-bits rule,
+    // permissions.md). Without this a MANAGE_ROLES holder could create an
+    // ADMINISTRATOR role below their own and give it to anyone they outrank.
+    const actorPerms = computePermissions(request.userId, id);
     let permStr: string;
     if (permissions !== undefined && permissions !== null) {
-      try {
-        BigInt(permissions);
-        permStr = permissions;
-      } catch {
+      const requested = parsePermissionBits(permissions);
+      if (requested === null) {
         return sendError(reply, 400, 'permissions_invalid');
       }
+      const refusal = roleBitsChangeRefusal(actorPerms, 0n, requested);
+      if (refusal) {
+        return sendError(reply, 403, refusal);
+      }
+      permStr = permissionsToString(requested);
     } else {
-      // Default to @everyone baseline so new roles start functional
-      permStr = permissionsToString(DEFAULT_EVERYONE_PERMISSIONS);
+      // Default to the @everyone baseline so new roles start functional,
+      // limited to the bits the creator holds.
+      permStr = permissionsToString(DEFAULT_EVERYONE_PERMISSIONS & actorPerms);
     }
 
     // Trim and validate name
@@ -1236,12 +1281,20 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     if (color !== undefined) updates.color = color;
 
     if (permissions !== undefined) {
-      try {
-        BigInt(permissions);
-        updates.permissions = permissions;
-      } catch {
+      const requested = parsePermissionBits(permissions);
+      if (requested === null) {
         return sendError(reply, 400, 'permissions_invalid');
       }
+      // Held-bits rule: only bits the actor holds may be switched, on or off.
+      const refusal = roleBitsChangeRefusal(
+        computePermissions(request.userId, id),
+        stringToPermissions(role.permissions),
+        requested,
+      );
+      if (refusal) {
+        return sendError(reply, 403, refusal);
+      }
+      updates.permissions = permissionsToString(requested);
     }
 
     if (Object.keys(updates).length === 0 && position === undefined) {
@@ -1296,6 +1349,13 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, 403, 'role_hierarchy');
     }
 
+    // Held-bits rule: deleting a role switches its bits off for everyone who
+    // holds it, including members ranked above the actor.
+    const deleteRefusal = roleBitsChangeRefusal(computePermissions(request.userId, id), stringToPermissions(role.permissions), 0n);
+    if (deleteRefusal) {
+      return sendError(reply, 403, deleteRefusal);
+    }
+
     // Overrides name their target without a foreign key, so they would
     // outlive the role: invisible in the editor and impossible to remove.
     db.transaction((tx) => {
@@ -1327,7 +1387,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     const { roleId } = request.body;
     const db = getDb();
 
-    const refusal = checkSingleRoleChange(id, request.userId, uid, roleId);
+    const refusal = checkSingleRoleChange(id, request.userId, uid, roleId, 'add');
     if (refusal) return sendError(reply, refusal.status, refusal.code, refusal.details);
 
     db.insert(schema.memberRoles).values({
@@ -1349,7 +1409,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     const { id, uid, roleId } = request.params;
     const db = getDb();
 
-    const refusal = checkSingleRoleChange(id, request.userId, uid, roleId);
+    const refusal = checkSingleRoleChange(id, request.userId, uid, roleId, 'remove');
     if (refusal) return sendError(reply, refusal.status, refusal.code, refusal.details);
 
     db.delete(schema.memberRoles).where(and(

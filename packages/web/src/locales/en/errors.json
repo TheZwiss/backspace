@@ -194,6 +194,7 @@
   "override_bits_invalid": "The permission values are not valid.",
   "cannot_grant_unowned_permissions": "You cannot grant permissions you do not have yourself.",
   "cannot_deny_unowned_permissions": "You cannot deny permissions you do not have yourself.",
+  "cannot_change_unowned_permissions": "You can only change permissions you have yourself.",
   "category_name_required": "Enter a category name.",
   "category_name_length": "Category names must be {{min}} to {{max}} characters long.",
   "layout_arrays_required": "The layout must include both channels and categories.",

@@ -194,6 +194,7 @@
   "override_bits_invalid": "Значения прав указаны неверно.",
   "cannot_grant_unowned_permissions": "Нельзя выдать права, которых нет у вас самих.",
   "cannot_deny_unowned_permissions": "Нельзя запретить права, которых нет у вас самих.",
+  "cannot_change_unowned_permissions": "Изменять можно только те права, которые есть у вас самих.",
   "category_name_required": "Укажите название категории.",
   "category_name_length": "Название категории должно содержать от {{min}} до {{max}} символов.",
   "layout_arrays_required": "Раскладка должна включать и каналы, и категории.",

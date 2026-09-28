@@ -194,6 +194,7 @@
   "override_bits_invalid": "Die Berechtigungswerte sind ungültig.",
   "cannot_grant_unowned_permissions": "Du kannst keine Berechtigungen erteilen, die du selbst nicht hast.",
   "cannot_deny_unowned_permissions": "Du kannst keine Berechtigungen verweigern, die du selbst nicht hast.",
+  "cannot_change_unowned_permissions": "Du kannst nur Berechtigungen ändern, die du selbst hast.",
   "category_name_required": "Gib einen Kategorienamen ein.",
   "category_name_length": "Kategorienamen müssen {{min}} bis {{max}} Zeichen lang sein.",
   "layout_arrays_required": "Das Layout muss Kanäle und Kategorien enthalten.",

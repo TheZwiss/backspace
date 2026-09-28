@@ -216,6 +216,7 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   override_bits_invalid: 'allow and deny must be valid decimal integer strings',
   cannot_grant_unowned_permissions: 'Cannot grant permissions you do not possess',
   cannot_deny_unowned_permissions: 'Cannot deny permissions you do not possess',
+  cannot_change_unowned_permissions: 'Cannot change permissions you do not possess',
   category_name_required: 'Category name is required',
   category_name_length: 'Category name must be between {{min}} and {{max}} characters',
   layout_arrays_required: 'channels and categories arrays are required',

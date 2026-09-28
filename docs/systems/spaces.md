@@ -485,7 +485,7 @@ Both single-role routes apply the same checks as the replace route (not own role
 
 - Name defaults to `'new role'` if empty
 - Duplicate name check (case-insensitive, raw SQL COLLATE NOCASE)
-- Permissions default to `DEFAULT_EVERYONE_PERMISSIONS` if not provided
+- Permissions default to `DEFAULT_EVERYONE_PERMISSIONS` limited to the bits the actor holds; given permissions must all be held (`403 cannot_grant_unowned_permissions`, permissions.md "Held-bits rule")
 - Created at the bottom: position 1, the other roles move up one (`normalizeRolePositions`); refused with `403 role_hierarchy` unless the actor ranks above 1
 - Color defaults to `'#b9bbbe'`
 - After creation: pushes ready payload to all space members, checks voice permissions
@@ -497,7 +497,7 @@ Both single-role routes apply the same checks as the replace route (not own role
 **Body:** `{ name?, color?, position?, permissions? }`
 
 - Name: trimmed, non-empty, duplicate check (case-insensitive, excludes self)
-- Permissions: validated as valid bigint string
+- Permissions: a non-negative integer string (`400 permissions_invalid`); only bits the actor holds may be switched (`403 cannot_grant_unowned_permissions` on, `403 cannot_change_unowned_permissions` off; permissions.md "Held-bits rule")
 - `404 role_not_in_space` for a role of another space; `403 role_hierarchy` for a role at or above the actor's top role
 - Position: an integer from 1 (not for @everyone, `400 validation_failed`) below the actor's top role; the role moves there and the others are renumbered so positions stay distinct
 - Client: the role list in Space Settings > Roles sends `{ position }` alone to reorder (drag handle, arrow keys, up and down buttons; permissions.md, "Setting the order")
@@ -509,7 +509,7 @@ Both single-role routes apply the same checks as the replace route (not own role
 **Permission:** `MANAGE_ROLES`
 
 - Cannot delete @everyone role (roleId === spaceId)
-- `404 role_not_in_space` for a role of another space; `403 role_hierarchy` for a role at or above the actor's top role
+- `404 role_not_in_space` for a role of another space; `403 role_hierarchy` for a role at or above the actor's top role; `403 cannot_change_unowned_permissions` for a role carrying a bit the actor does not hold (permissions.md "Held-bits rule")
 - Deletes channel and category overrides referencing this role, then renumbers the remaining roles
 - After delete: pushes ready payload to all members, checks voice permissions
 
@@ -613,11 +613,11 @@ Override endpoints documented here for API completeness:
 | Endpoint | Permission | Notes |
 |----------|------------|-------|
 | `GET /api/channels/:id/overrides` | `MANAGE_ROLES` | List channel overrides |
-| `PUT /api/channels/:id/overrides` | `MANAGE_ROLES` | Upsert (delete+insert in tx). Privilege escalation guard. |
-| `DELETE /api/channels/:id/overrides/:targetType/:targetId` | `MANAGE_ROLES` | Remove override |
+| `PUT /api/channels/:id/overrides` | `MANAGE_ROLES` | Upsert (delete+insert in tx). Held-bits rule against the stored row. |
+| `DELETE /api/channels/:id/overrides/:targetType/:targetId` | `MANAGE_ROLES` | Remove override; refused when it sets a bit the actor does not hold |
 | `GET /api/categories/:id/overrides` | `MANAGE_ROLES` | List category overrides |
-| `PUT /api/categories/:id/overrides` | `MANAGE_ROLES` | Upsert with escalation guard |
-| `DELETE /api/categories/:id/overrides/:targetType/:targetId` | `MANAGE_ROLES` | Remove override |
+| `PUT /api/categories/:id/overrides` | `MANAGE_ROLES` | Upsert; held-bits rule against the stored row |
+| `DELETE /api/categories/:id/overrides/:targetType/:targetId` | `MANAGE_ROLES` | Remove override; refused when it sets a bit the actor does not hold |
 
 All override mutations call `broadcastOverrideChange` (channel) or `broadcastCategoryOverrideChange` (category) which re-evaluates VIEW_CHANNEL per-user and sends `channel_updated` (gained access) or `channel_deleted` (lost access). Voice permission enforcement via `checkVoicePermissions` runs after every override change.
 

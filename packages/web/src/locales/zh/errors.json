@@ -194,6 +194,7 @@
   "override_bits_invalid": "权限数值无效。",
   "cannot_grant_unowned_permissions": "您不能授予自己未拥有的权限。",
   "cannot_deny_unowned_permissions": "您不能拒绝自己未拥有的权限。",
+  "cannot_change_unowned_permissions": "您只能更改自己拥有的权限。",
   "category_name_required": "请输入分类名称。",
   "category_name_length": "分类名称长度必须在 {{min}} 到 {{max}} 个字符之间。",
   "layout_arrays_required": "布局必须同时包含频道和分类。",

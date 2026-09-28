@@ -5,6 +5,7 @@ import { PermissionBits } from '../../utils/permissions';
 import { Tooltip } from './Tooltip';
 
 const TRASH_ICON = 'M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z';
+const LOCK_ICON = 'M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z';
 
 export type PermissionKey = keyof typeof PermissionBits;
 
@@ -52,6 +53,8 @@ export function OverrideEntry({
   deny,
   onChange,
   onRemove,
+  lockedBits = 0n,
+  removeLocked = false,
 }: {
   label: string;
   color?: string;
@@ -60,6 +63,10 @@ export function OverrideEntry({
   deny: bigint;
   onChange: (allow: bigint, deny: bigint) => void;
   onRemove?: () => void;
+  /** Bits the viewer may not switch (held-bits rule): their toggles show their state, locked. */
+  lockedBits?: bigint;
+  /** The saved override sets a bit the viewer does not hold, so they may not remove it. */
+  removeLocked?: boolean;
 }) {
   const { t } = useTranslation(['spaces']);
   const permissionNames = usePermissionNames();
@@ -72,6 +79,7 @@ export function OverrideEntry({
   };
 
   const setState = (bit: bigint, state: TriState) => {
+    if ((lockedBits & bit) !== 0n) return;
     let newAllow = allow & ~bit;
     let newDeny = deny & ~bit;
     if (state === 'allow') newAllow |= bit;
@@ -83,6 +91,7 @@ export function OverrideEntry({
   const summary = permDefs.filter(p => getState(p.bit) !== 'neutral');
   const panelId = useId();
   const removable = !!onRemove;
+  const hasLockedRow = permDefs.some((p) => (lockedBits & p.bit) !== 0n);
 
   return (
     <div className="rounded-lg bg-white/[0.02] overflow-hidden">
@@ -114,12 +123,15 @@ export function OverrideEntry({
           </svg>
         </button>
         {removable ? (
-          <Tooltip content={t('spaces:permissions.removeOverride')} position="top">
+          <Tooltip content={t(removeLocked ? 'spaces:permissions.removeUnheldShort' : 'spaces:permissions.removeOverride')} position="top">
             <button
               type="button"
-              onClick={onRemove}
+              onClick={removeLocked ? undefined : onRemove}
+              disabled={removeLocked}
               aria-label={t('spaces:permissions.removeOverrideFor', { name: label })}
-              className="w-7 h-7 mr-1.5 flex items-center justify-center rounded text-txt-tertiary hover:text-accent-rose hover:bg-accent-rose/10 transition-colors"
+              className={`w-7 h-7 mr-1.5 flex items-center justify-center rounded text-txt-tertiary transition-colors ${
+                removeLocked ? 'opacity-40 cursor-not-allowed' : 'hover:text-accent-rose hover:bg-accent-rose/10'
+              }`}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                 <path d={TRASH_ICON} />
@@ -138,24 +150,54 @@ export function OverrideEntry({
           aria-label={label}
           className="px-3 pb-3 space-y-1.5 border-t border-white/[0.04] pt-2"
         >
-          {permDefs.map((perm) => (
-            <div key={perm.key} className="flex items-center justify-between">
-              <span className="text-[13px] text-txt-secondary">{permissionNames[perm.key]}</span>
-              <TriStateToggle
-                value={getState(perm.bit)}
-                onChange={(v) => setState(perm.bit, v)}
-              />
+          {hasLockedRow && (
+            <div className="flex items-start gap-2 pb-1 text-[12px] leading-snug text-txt-tertiary">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className="flex-shrink-0 mt-[2px]">
+                <path d={LOCK_ICON} />
+              </svg>
+              <span>{t('spaces:permissions.unheldLocked')}</span>
             </div>
-          ))}
+          )}
+          {permDefs.map((perm) => {
+            const locked = (lockedBits & perm.bit) !== 0n;
+            const name = permissionNames[perm.key];
+            return (
+              <div key={perm.key} className="flex items-center justify-between gap-3">
+                <span className={`text-[13px] text-txt-secondary${locked ? ' opacity-60' : ''}`}>{name}</span>
+                <span className="flex items-center gap-2 flex-shrink-0">
+                  {locked && (
+                    <svg
+                      width="12" height="12" viewBox="0 0 24 24" fill="currentColor"
+                      className="text-txt-tertiary"
+                      role="img"
+                      aria-label={t('spaces:permissions.unheldPermission')}
+                    >
+                      <title>{t('spaces:permissions.unheldPermission')}</title>
+                      <path d={LOCK_ICON} />
+                    </svg>
+                  )}
+                  <TriStateToggle
+                    value={getState(perm.bit)}
+                    onChange={(v) => setState(perm.bit, v)}
+                    disabled={locked}
+                    label={name}
+                  />
+                </span>
+              </div>
+            );
+          })}
           {removable && (
             <div className="flex items-center justify-between gap-3 pt-2.5 !mt-2.5 border-t border-white/[0.04]">
               <span className="text-[12px] leading-snug text-txt-tertiary">
-                {t('spaces:permissions.removeOverrideHint')}
+                {t(removeLocked ? 'spaces:permissions.removeUnheld' : 'spaces:permissions.removeOverrideHint')}
               </span>
               <button
                 type="button"
-                onClick={onRemove}
-                className="flex-shrink-0 px-2.5 py-1 rounded text-[12.5px] font-medium text-accent-rose hover:bg-accent-rose/10 transition-colors"
+                onClick={removeLocked ? undefined : onRemove}
+                disabled={removeLocked}
+                className={`flex-shrink-0 px-2.5 py-1 rounded text-[12.5px] font-medium text-accent-rose transition-colors ${
+                  removeLocked ? 'opacity-40 cursor-not-allowed' : 'hover:bg-accent-rose/10'
+                }`}
               >
                 {t('spaces:permissions.removeOverride')}
               </button>

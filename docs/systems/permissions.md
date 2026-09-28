@@ -163,9 +163,107 @@ roles do not have distinct positions from 1 up (`canReorderRoles`), the list
 offers no controls. That is an instance from before the hierarchy, which
 stores every role at 0 and would apply a position as given.
 
-Covered by `routes/roleHierarchy.test.ts`, `ws/voiceModerationHierarchy.test.ts`,
+Covered by `routes/roleHierarchy.test.ts`, `routes/heldPermissions.test.ts`,
+`utils/roleRules.test.ts` (the shared rules), `ws/voiceModerationHierarchy.test.ts`,
 `voiceMenuItems.test.ts`, `spaceSettingsPanels/roleHierarchyGating.test.tsx`,
 `utils/roleOrder.test.ts` and `spaceSettingsPanels/RolesPanel.reorder.test.tsx`.
+
+## Held-bits rule
+
+The hierarchy decides which roles and members a `MANAGE_ROLES` holder may
+touch. The held-bits rule decides which permission bits they may switch
+there: only bits they hold in the space themselves. "Held" is the actor's
+space-level `computePermissions`; the owner, instance admins and
+`ADMINISTRATOR` holders hold every bit. A channel override that grants the
+actor a bit does not count.
+
+| Route | Rule | Refusal (`403`) |
+|---|---|---|
+| `POST /spaces/:id/roles` | every bit in `permissions` must be held; without `permissions` the new role gets `DEFAULT_EVERYONE_PERMISSIONS` limited to the held bits | `cannot_grant_unowned_permissions` |
+| `PATCH /spaces/:id/roles/:rid { permissions }` | compared with the stored value: an unheld bit may not be switched on or off; unheld bits already on the role stay while the actor edits the rest | on: `cannot_grant_unowned_permissions`, off: `cannot_change_unowned_permissions` |
+| `DELETE /spaces/:id/roles/:rid` | deleting switches every bit of the role off for everyone who holds it, members ranked above the actor included, so each must be held | `cannot_change_unowned_permissions` |
+| `PATCH /spaces/:id/members/:uid`, `POST /spaces/:id/members/:uid/roles` | giving a member a role gives them its bits, so every bit of each role the request adds must be held; a role the member already has may stay | `cannot_grant_unowned_permissions` |
+| `PUT /channels/:id/overrides`, `PUT /categories/:id/overrides` | compared with the stored override: a newly allowed or newly denied unheld bit is refused, and so is clearing one from allow or deny; unheld bits already set stay while the actor edits the rest | allow: `cannot_grant_unowned_permissions`, deny: `cannot_deny_unowned_permissions`, clear: `cannot_change_unowned_permissions` |
+| `DELETE /channels/:id/overrides/...`, `DELETE /categories/:id/overrides/...` | a delete clears every bit the override sets, so each must be held | `cannot_change_unowned_permissions` |
+
+The hierarchy check runs first, so a role at or above the actor's top role
+answers `role_hierarchy`. Taking a role away from a member
+(`PATCH /members/:uid`, `DELETE /members/:uid/roles/:rid`) is governed by the
+hierarchy alone: the member ranks below the actor, and taking their role only
+lowers what that one member can do. Deleting the role is different, because
+it also changes members ranked above the actor who hold it. A bit no `PermissionBits` entry defines counts as
+unheld for everyone but a holder of every permission, so a stray bit in an old
+row never blocks the owner.
+
+Why a delete is refused: `DELETE` is the same change as a `PUT` with no bits.
+If it were allowed, deleting and re-creating an override would clear any
+unheld bit the `PUT` rule protects. The cost is that a moderator cannot remove
+an override the owner set with a bit the moderator lacks; the owner, an
+instance admin or an `ADMINISTRATOR` holder can.
+
+The rule is `roleBitsChangeRefusal` / `overrideChangeRefusal` in
+`packages/shared/src/permissions.ts`, used by the routes and by the client.
+The client reads "held" from `spacePermissions` (the `myPermissions` the
+space's own instance computed for the viewer's id there) through
+`useViewerHeldPermissions` in `web/src/utils/roleHierarchy.ts`. When that is
+not loaded, nothing is locked and the server decides.
+
+### What changes for an existing space
+
+**Owners need to check one thing after the update.** Open Space Settings >
+Roles in each space and check the order. The first boot ranks the roles in
+the order they were created, oldest highest, not by importance. A role
+created after a moderator role now ranks below it, so holders of that
+moderator role can kick, ban and voice-moderate its members (non-owner
+`ADMINISTRATOR` holders included), take the role from them and move it.
+Drag the roles, or use the up and down buttons, until the most senior role is
+at the top.
+
+When an instance updates to this version:
+
+1. **Roles are renumbered once, at the first boot.** Before, every role sat at
+   position 0. The boot pass gives @everyone 0 and the other roles n..1 in the
+   order the role list showed them, oldest role highest. The owner can change
+   the order in Space Settings > Roles. Where a member's top role decides
+   something (the member list group and the name colour), a member with
+   several roles may now be shown under a different one. In the member list,
+   the owner's group heading takes the colour of one of the owner's roles
+   instead of rose when the owner has a role.
+2. **Moderation needs a higher rank.** Kick, ban, space mute, space deafen,
+   move and disconnect are refused against a member whose top role is at or
+   above the actor's, including a member with the same top role. Members with
+   no role can still be targeted by anyone with a role. A member whose
+   moderation permission comes only from @everyone (no role) can no longer
+   use it on anyone.
+3. **Managing roles needs a higher rank.** A `MANAGE_ROLES` holder can no
+   longer assign or remove roles at or above their own top role, change the
+   roles of a member at or above them, edit, delete or move roles at or above
+   their own top role, or create a role when their top role is the lowest one
+   (position 1) or they have none. Editing @everyone needs a role.
+4. **`ADMINISTRATOR` does not exempt from the hierarchy.** A non-owner
+   `ADMINISTRATOR` holder is ranked by their roles like anyone else, and a
+   moderator ranked above an `ADMINISTRATOR` role can act on it and its
+   members. `ADMINISTRATOR` holders still hold every bit for the held-bits
+   rule.
+5. **Only held bits can be switched on roles.** Before, a `MANAGE_ROLES`
+   holder could put any bit on any role, including `ADMINISTRATOR` on their
+   own role or on @everyone. Now they can only switch bits they hold, and new
+   roles they create start with the @everyone defaults they hold. Copying or
+   deleting a role that carries a bit they lack is refused, and so is giving
+   such a role to a member, even when it ranks below them (for example an
+   `ADMINISTRATOR` role the owner created after the moderator role). They
+   can still take it away from a member ranked below them.
+6. **Overrides: editing got looser, deleting got stricter.** Before, a `PUT`
+   was refused when the override contained any unheld bit at all, so a
+   moderator could not re-save an override the owner had set with such a bit;
+   a `DELETE` was not checked. Now a `PUT` keeps the unheld bits and lets the
+   moderator edit the rest, and a `DELETE` of an override that sets an unheld
+   bit is refused. The Private switch in channel and category settings writes
+   the @everyone override: making a channel public deletes it and making it
+   private replaces it, so either is refused when the stored @everyone
+   override sets a bit the moderator lacks.
+7. **Unchanged:** the owner and instance admins, unban, leaving a space, and
+   anything a member does to themselves.
 
 ---
 
@@ -210,12 +308,31 @@ channel-scoped for editing or deleting one channel. The current split:
 | Channel | view, send, attach, react, read history, manage messages; connect, speak, stream; edit or delete the channel (`MANAGE_CHANNELS`); mute, deafen, move, disconnect a voice user (checked on the channel the target is in) |
 | Space | create a channel; reorder channels and categories; create, rename or delete a category; read or write any channel or category override (`MANAGE_ROLES`); invites, kick, ban, space settings |
 
-Member and role actions also follow the role hierarchy (above). The client
-hides kick and ban for members ranked at or above the viewer, greys out roles
-at or above the viewer's own in the member role editor, shows such a role
-read-only in the role editor, locks such roles in the role list's reorder
-controls, and leaves the voice moderation menu and voice drag-to-move off for
-those members.
+Member and role actions also follow the role hierarchy and the held-bits
+rule (above). Every gated surface:
+
+| Surface | File | Gating |
+|---|---|---|
+| Members list: kick and ban | `spaceSettingsPanels/MembersPanel.tsx` | hidden for members ranked at or above the viewer |
+| Members list: role checkboxes | `spaceSettingsPanels/MembersPanel.tsx` | roles at or above the viewer's top role disabled (`settings.members.rolesAboveYou`); a role the member does not have yet and that carries a bit the viewer does not hold disabled (`settings.members.rolesUnheld`); each reason shown under the list with a lock, and as the row's title; the editor does not open for members ranked at or above the viewer |
+| Role list: reorder | `spaceSettingsPanels/RoleOrderList.tsx` | lock instead of controls on roles at or above the viewer's top role |
+| Role list: Create Role | `spaceSettingsPanels/RolesPanel.tsx` | disabled unless the viewer ranks above position 1 |
+| Role editor: whole role | `spaceSettingsPanels/RolesPanel.tsx` | read-only with the `roles.aboveYou` note for a role at or above the viewer's top role; no Delete |
+| Role editor: permission toggles | `spaceSettingsPanels/RolesPanel.tsx` | a toggle for a bit the viewer does not hold is locked in both directions, shows its state and a lock, and the `roles.unheldLocked` note says why |
+| Role editor: Copy Role | `spaceSettingsPanels/RolesPanel.tsx` | disabled when the viewer cannot create a role at 1, or the role carries a bit the viewer does not hold (`roles.copyUnheld`) |
+| Role editor: Delete Role | `spaceSettingsPanels/RolesPanel.tsx` | not offered for a role at or above the viewer's top role; disabled when the role carries a bit the viewer does not hold (`roles.copyDeleteUnheld`) |
+| Channel and category overrides: toggles | `ui/OverrideEntry.tsx` via `ui/PermissionsEditor.tsx` | a tri-state toggle for a bit the viewer does not hold is locked, shows its state and a lock, and the `permissions.unheldLocked` note says why |
+| Channel and category overrides: remove | `ui/OverrideEntry.tsx` via `ui/PermissionsEditor.tsx` | disabled for a saved override that sets a bit the viewer does not hold (`permissions.removeUnheld`); a row added in the same edit can always be dropped |
+| Voice user menu: mute, deafen, move, disconnect | `voice/voiceMenuItems.tsx` | no moderation items for members ranked at or above the viewer |
+| Voice drag-to-move | `hooks/useDragManager.ts` via `layout/ChannelSidebar.tsx` | not draggable for members ranked at or above the viewer |
+
+The helpers in `web/src/utils/roleHierarchy.ts` are the surface every role
+and permission editor gates with: `myUserIdInSpace`, `myStandingIn`,
+`viewerCanActOn`, `viewerCanManageRoleAt`, `viewerCanActOnUserInSpace`,
+`useViewerHeldPermissions` / `viewerHeldPermissions`, `viewerCanSwitchBit`,
+`unswitchableBits`, `viewerCanCreateRoleWith` and `viewerCanRemoveOverride`.
+Each compares with the viewer's id and permissions on the space's own
+instance, never the home id.
 
 A control that needs two permissions at different scopes checks each at its own.
 Channel settings is the example: the delete button reads the channel's

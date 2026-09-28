@@ -5,11 +5,23 @@ import { ConfirmDialog } from '../../ui/ConfirmDialog';
 import { useSpaceStore, getApiForOrigin } from '../../../stores/spaceStore';
 import { parseFederatedUsername, isFederationGlobeApplicable } from '../../../utils/identity';
 import { useCanonicalUserView } from '../../../utils/userViewLookup';
-import { hasPermissionBit, PermissionBits } from '../../../utils/permissions';
-import { myUserIdInSpace, viewerCanActOn, viewerCanManageRoleAt } from '../../../utils/roleHierarchy';
+import { hasPermissionBit, PermissionBits, stringToPermissions } from '../../../utils/permissions';
+import {
+  myUserIdInSpace,
+  viewerCanActOn,
+  viewerCanManageRoleAt,
+  viewerHoldsEveryBit,
+  useViewerHeldPermissions,
+} from '../../../utils/roleHierarchy';
 import { useFormatters } from '../../../i18n/formatters';
 import { describeError } from '../../../i18n/errors';
 import type { MemberWithUser, Role } from '@backspace/shared';
+
+// The padlock the role editor's lock notes use.
+const LOCK_ICON = 'M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z';
+
+/** Why a role checkbox is locked: the role ranks too high, or it carries bits the viewer lacks. */
+type RoleLock = 'rank' | 'bits';
 
 function MembersPanelRow({
   member,
@@ -23,6 +35,8 @@ function MembersPanelRow({
   assignableRoles,
   manageableRoleIds,
   memberRoleIds,
+  savedRoleIds,
+  heldPermissions,
   hasPendingChanges,
   onToggleExpand,
   onRoleToggle,
@@ -42,6 +56,10 @@ function MembersPanelRow({
   /** Roles the viewer may hand out or take back (below their own top role). */
   manageableRoleIds: Set<string>;
   memberRoleIds: Set<string>;
+  /** The member's roles as the server has them; a role not among them is being given. */
+  savedRoleIds: Set<string>;
+  /** The viewer's bits in the space (held-bits rule); null when not loaded. */
+  heldPermissions: bigint | null;
   hasPendingChanges: boolean;
   onToggleExpand: (userId: string) => void;
   onRoleToggle: (userId: string, roleId: string, currentRoleIds: Set<string>) => void;
@@ -53,6 +71,22 @@ function MembersPanelRow({
   const canonical = useCanonicalUserView(member.user);
   const isOwner = member.userId === ownerId;
   const displayName = canonical.displayName ?? canonical.username;
+
+  // A role is locked when it ranks at or above the viewer (hierarchy), or when
+  // giving it would hand out bits the viewer does not hold (held-bits rule).
+  // Taking a role the member already has is governed by the hierarchy alone.
+  const roleLocks = new Map<string, RoleLock>();
+  for (const role of assignableRoles) {
+    if (!manageableRoleIds.has(role.id)) roleLocks.set(role.id, 'rank');
+    else if (!savedRoleIds.has(role.id) && !viewerHoldsEveryBit(heldPermissions, stringToPermissions(role.permissions))) {
+      roleLocks.set(role.id, 'bits');
+    }
+  }
+  const lockKinds = (['rank', 'bits'] as const).filter((kind) => [...roleLocks.values()].includes(kind));
+  const lockReason: Record<RoleLock, string> = {
+    rank: t('spaces:settings.members.rolesAboveYou'),
+    bits: t('spaces:settings.members.rolesUnheld'),
+  };
 
   return (
     <div>
@@ -136,10 +170,12 @@ function MembersPanelRow({
       {isExpanded && expandable && (
         <div className="mt-1 mb-1 ml-10 space-y-1">
           {assignableRoles.map((role) => {
-            const manageable = manageableRoleIds.has(role.id);
+            const lock = roleLocks.get(role.id);
+            const manageable = lock === undefined;
             return (
               <label
                 key={role.id}
+                title={lock ? lockReason[lock] : undefined}
                 className={`flex items-center gap-2 group/role ${manageable ? 'cursor-pointer' : 'cursor-default opacity-50'}`}
               >
                 <input
@@ -158,6 +194,16 @@ function MembersPanelRow({
               </label>
             );
           })}
+          {lockKinds.length > 0 && (
+            <div className="flex items-start gap-2 pt-1 text-[12px] leading-snug text-txt-tertiary">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className="flex-shrink-0 mt-[2px]">
+                <path d={LOCK_ICON} />
+              </svg>
+              <span>
+                {lockKinds.map((kind) => <span key={kind} className="block">{lockReason[kind]}</span>)}
+              </span>
+            </div>
+          )}
           {hasPendingChanges && (
             <div className="flex items-center gap-2 mt-1.5">
               <button
@@ -192,6 +238,7 @@ export function MembersPanel({ spaceId }: MembersPanelProps) {
   const roles = useSpaceStore((s) => s.roles);
   const loadSpaceDetail = useSpaceStore((s) => s.loadSpaceDetail);
   const spacePermissions = useSpaceStore((s) => s.spacePermissions);
+  const heldPermissions = useViewerHeldPermissions(spaceId);
 
   const space = spaces.find((s) => s.id === spaceId);
   const spaceApi = getApiForOrigin(space?._instanceOrigin ?? '');
@@ -309,6 +356,8 @@ export function MembersPanel({ spaceId }: MembersPanelProps) {
                 assignableRoles={assignableRoles}
                 manageableRoleIds={manageableRoleIds}
                 memberRoleIds={getMemberRoleIds(member)}
+                savedRoleIds={new Set(member.roles?.map((r) => r.id) ?? [])}
+                heldPermissions={heldPermissions}
                 hasPendingChanges={pendingRoleChanges.has(member.userId)}
                 onToggleExpand={(uid) => setExpandedMemberId(expandedMemberId === uid ? null : uid)}
                 onRoleToggle={handleRoleToggle}

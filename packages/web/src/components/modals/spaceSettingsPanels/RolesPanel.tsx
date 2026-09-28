@@ -7,7 +7,13 @@ import { PermissionBits, stringToPermissions, permissionsToString } from '../../
 import { usePermissionNames, type PermissionKey } from '../../ui/OverrideEntry';
 import { describeError } from '../../../i18n/errors';
 import type { Role } from '@backspace/shared';
-import { viewerCanManageRoleAt } from '../../../utils/roleHierarchy';
+import {
+  viewerCanManageRoleAt,
+  useViewerHeldPermissions,
+  viewerCanSwitchBit,
+  viewerCanCreateRoleWith,
+  viewerHoldsEveryBit,
+} from '../../../utils/roleHierarchy';
 import { RoleOrderList } from './RoleOrderList';
 
 // ─── Permission display groups ─────────────────────────────────────────────
@@ -56,6 +62,23 @@ const PERMISSION_GROUPS: { id: PermissionGroupId; perms: PermDef[] }[] = [
     ],
   },
 ];
+
+const ALL_PERMISSION_DEFS: PermDef[] = PERMISSION_GROUPS.flatMap((group) => group.perms);
+
+// The padlock the privacy notes use, shown on a toggle the viewer cannot switch.
+const LOCK_ICON = 'M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z';
+
+/** A note about a lock in the role editor, with the padlock in front. */
+function LockNote({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-white/[0.03] text-[13px] text-txt-secondary">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className="flex-shrink-0 mt-[3px] text-txt-tertiary">
+        <path d={LOCK_ICON} />
+      </svg>
+      <p>{children}</p>
+    </div>
+  );
+}
 
 const PRESET_COLORS = [
   '#b9bbbe', '#a5f3c4', '#ffc9a9', '#c4b5fd', '#93c5fd',
@@ -189,7 +212,15 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
   // Roles at or above the viewer's top role can be looked at, not changed
   // (permissions.md, "Role hierarchy"); the server refuses the change anyway.
   const canEdit = !space || viewerCanManageRoleAt(space, members, role.position);
-  const canCopy = !space || viewerCanManageRoleAt(space, members, 1);
+  // Held-bits rule (permissions.md): only bits the viewer holds can be
+  // switched, and a copy can only carry bits they hold.
+  const held = useViewerHeldPermissions(spaceId);
+  const copyCarriesUnheld = !viewerCanCreateRoleWith(held, stringToPermissions(role.permissions));
+  const canCopy = (!space || viewerCanManageRoleAt(space, members, 1)) && !copyCarriesUnheld;
+  // Deleting switches the role's bits off for everyone holding it.
+  const offersDelete = !isEveryone && canEdit;
+  const deleteCarriesUnheld = offersDelete && !viewerHoldsEveryBit(held, stringToPermissions(role.permissions));
+  const hasUnheldToggle = canEdit && ALL_PERMISSION_DEFS.some((perm) => !viewerCanSwitchBit(held, perm.bit));
   // Every role write goes to the space's own instance (client-federation.md).
   const roleApi = () => getApiForOrigin(space?._instanceOrigin ?? '').roles;
 
@@ -229,7 +260,7 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
   const hasChanges = hasNameChange || hasColorChange || hasPermChange;
 
   const togglePermission = (bit: bigint) => {
-    if (!canEdit) return;
+    if (!canEdit || !viewerCanSwitchBit(held, bit)) return;
     setDraftPermissions((prev) => (prev & bit) !== 0n ? prev & ~bit : prev | bit);
   };
 
@@ -267,6 +298,7 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
   };
 
   const handleDelete = async () => {
+    if (deleteCarriesUnheld) return;
     if (!confirmDelete) {
       setConfirmDelete(true);
       return;
@@ -335,10 +367,14 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
         </div>
       )}
 
-      {!canEdit && (
-        <p className="px-3 py-2 rounded-lg bg-white/[0.03] text-[13px] text-txt-secondary">
-          {t('spaces:roles.aboveYou')}
-        </p>
+      {!canEdit && <LockNote>{t('spaces:roles.aboveYou')}</LockNote>}
+
+      {(hasUnheldToggle || copyCarriesUnheld) && (
+        <LockNote>
+          {hasUnheldToggle && t('spaces:roles.unheldLocked')}
+          {hasUnheldToggle && copyCarriesUnheld && ' '}
+          {copyCarriesUnheld && t(deleteCarriesUnheld ? 'spaces:roles.copyDeleteUnheld' : 'spaces:roles.copyUnheld')}
+        </LockNote>
       )}
 
       {/* Identity card (Name + Color — not shown for @everyone) */}
@@ -419,32 +455,57 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
                 const hasAdmin = (draftPermissions & PermissionBits.ADMINISTRATOR) !== 0n;
                 const isOn = isAdminBit ? hasAdmin : hasAdmin || (draftPermissions & perm.bit) !== 0n;
                 const isInherited = !isAdminBit && hasAdmin;
-                const isLocked = isInherited || !canEdit;
+                const isUnheld = canEdit && !viewerCanSwitchBit(held, perm.bit);
+                const isLocked = isInherited || !canEdit || isUnheld;
+                const name = permissionNames[perm.key];
                 return (
                   <label
                     key={perm.key}
-                    className={`flex items-center justify-between py-1.5 px-2 rounded cursor-pointer group/perm ${
-                      isLocked ? 'opacity-50 cursor-default' : 'hover:bg-interactive-hover'
+                    className={`flex items-center justify-between gap-3 py-1.5 px-2 rounded group/perm ${
+                      isLocked ? 'cursor-default' : 'cursor-pointer hover:bg-interactive-hover'
                     }`}
                   >
-                    <span className={`text-sm ${isAdminBit ? 'text-txt-danger font-medium' : 'text-txt-primary'}`}>
-                      {permissionNames[perm.key]}
+                    <span className={`text-sm ${isLocked ? 'opacity-50 ' : ''}${isAdminBit ? 'text-txt-danger font-medium' : 'text-txt-primary'}`}>
+                      {name}
                     </span>
-                    <div
-                      onClick={(e) => {
-                        e.preventDefault();
-                        if (!isLocked) togglePermission(perm.bit);
-                      }}
-                      className={`relative w-9 h-5 rounded-full transition-colors ${
-                        isLocked ? 'cursor-default' : 'cursor-pointer'
-                      } ${isOn ? 'bg-accent-primary' : 'bg-interactive-muted'}`}
-                    >
+                    <span className="flex items-center gap-2 flex-shrink-0">
+                      {isUnheld && (
+                        <svg
+                          width="12" height="12" viewBox="0 0 24 24" fill="currentColor"
+                          className="text-txt-tertiary"
+                          role="img"
+                          aria-label={t('spaces:roles.unheldPermission')}
+                        >
+                          <title>{t('spaces:roles.unheldPermission')}</title>
+                          <path d={LOCK_ICON} />
+                        </svg>
+                      )}
                       <div
-                        className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${
-                          isOn ? 'translate-x-4' : 'translate-x-0.5'
-                        }`}
-                      />
-                    </div>
+                        role="switch"
+                        aria-checked={isOn}
+                        aria-disabled={isLocked}
+                        aria-label={name}
+                        tabIndex={isLocked ? -1 : 0}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          if (!isLocked) togglePermission(perm.bit);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key !== ' ' && e.key !== 'Enter') return;
+                          e.preventDefault();
+                          if (!isLocked) togglePermission(perm.bit);
+                        }}
+                        className={`relative w-9 h-5 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary ${
+                          isLocked ? 'cursor-default opacity-50' : 'cursor-pointer'
+                        } ${isOn ? 'bg-accent-primary' : 'bg-interactive-muted'}`}
+                      >
+                        <div
+                          className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${
+                            isOn ? 'translate-x-4' : 'translate-x-0.5'
+                          }`}
+                        />
+                      </div>
+                    </span>
                   </label>
                 );
               })}
@@ -488,12 +549,12 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
               >
                 {copying ? t('spaces:roles.copying') : t('spaces:roles.copy')}
               </button>
-              {!isEveryone && canEdit && (
+              {offersDelete && (
                 <>
                   <div className="w-px h-5 bg-white/10" />
                   <button
                     onClick={handleDelete}
-                    disabled={deleting}
+                    disabled={deleting || deleteCarriesUnheld}
                     className={`px-3 py-1.5 text-sm font-medium rounded-full transition-colors disabled:opacity-50 ${
                       confirmDelete
                         ? 'bg-accent-rose/15 text-accent-rose'

@@ -91,7 +91,9 @@ describe('RolesPanel', () => {
   it('shows a role at or above the viewer\'s top role read-only, without Delete', async () => {
     render(<RolesPanel spaceId={SPACE_ID} />);
     await userEvent.click(screen.getByRole('button', { name: 'Moderators' }));
-    expect(screen.getByText(/ranks at or above your highest role/)).toBeInTheDocument();
+    const note = screen.getByText(/ranks at or above your highest role/);
+    // Styled like the held-bits note: the same padlock in front.
+    expect(note.parentElement?.querySelector('svg path')).not.toBeNull();
     expect(screen.getByDisplayValue('Moderators')).toBeDisabled();
     expect(screen.queryByRole('button', { name: 'Delete Role' })).toBeNull();
   });

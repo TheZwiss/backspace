@@ -223,6 +223,7 @@ export const ERROR_CODES = [
   'override_bits_invalid',
   'cannot_grant_unowned_permissions',
   'cannot_deny_unowned_permissions',
+  'cannot_change_unowned_permissions',
   'category_name_required',
   'category_name_length',
   'layout_arrays_required',

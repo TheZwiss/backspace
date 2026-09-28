@@ -3,14 +3,20 @@ import {
   canActOnMember,
   canManageRoleAt,
   topRolePosition,
+  roleBitsChangeRefusal,
+  overrideChangeRefusal,
+  stringToPermissions,
   type HierarchyStanding,
+  type OverrideBits,
 } from '@backspace/shared/src/permissions';
 import { useSpaceStore, getMyUserIdForOrigin, type TaggedSpace } from '../stores/spaceStore';
 import { canReorderRoles, rolesInRankOrder } from './roleOrder';
 
-// Client gating for the role hierarchy (docs/systems/permissions.md, "Role
-// hierarchy"). The comparison is the shared one the server enforces; this
-// module only finds the two members to compare in the loaded space.
+// Client gating for the role hierarchy and the held-bits rule
+// (docs/systems/permissions.md, "Role hierarchy" and "Held-bits rule"). The
+// comparisons are the shared ones the server enforces; this module only finds
+// the facts to compare in the loaded space. These names are a stable surface
+// for every role and permission editor; keep them when adding one.
 //
 // Ids are ids on the space's own instance: the member list is loaded from
 // there, and the viewer is found through getMyUserIdForOrigin, so a viewer
@@ -107,4 +113,72 @@ export function viewerCanActOnUserInSpace(spaceId: string, targetUserId: string)
   const target = members.find((m) => m.userId === targetUserId);
   if (!space || !target) return true;
   return viewerCanActOn(space, members, target);
+}
+
+// ─── Held-bits rule ─────────────────────────────────────────────────────────
+
+/**
+ * The permission bits the viewer holds in `spaceId` at space level, or null
+ * when they are not loaded. The value is the `myPermissions` the space's own
+ * instance computed for the viewer's id there, so it is already per instance;
+ * the owner, instance admins and ADMINISTRATOR holders get every bit.
+ */
+export function viewerHeldPermissions(
+  spacePermissions: ReadonlyMap<string, string>,
+  spaceId: string,
+): bigint | null {
+  const value = spacePermissions.get(spaceId);
+  return value === undefined ? null : stringToPermissions(value);
+}
+
+/** Hook form of `viewerHeldPermissions` over the space store. */
+export function useViewerHeldPermissions(spaceId: string): bigint | null {
+  const value = useSpaceStore((s) => s.spacePermissions.get(spaceId));
+  return value === undefined ? null : stringToPermissions(value);
+}
+
+/**
+ * Whether the viewer may switch `bit` (on or off) on a role or an override:
+ * they hold it, or `held` is unknown and the server decides.
+ */
+export function viewerCanSwitchBit(held: bigint | null, bit: bigint): boolean {
+  if (held === null) return true;
+  return roleBitsChangeRefusal(held, 0n, bit) === null;
+}
+
+/** The bits among `bits` the viewer may not switch; 0n when `held` is unknown. */
+export function unswitchableBits(held: bigint | null, bits: readonly bigint[]): bigint {
+  let locked = 0n;
+  for (const bit of bits) {
+    if (!viewerCanSwitchBit(held, bit)) locked |= bit;
+  }
+  return locked;
+}
+
+/**
+ * Whether the viewer holds every bit in `permissions`, which is what giving a
+ * member a role carrying them and deleting such a role need. True when
+ * `held` is unknown.
+ */
+export function viewerHoldsEveryBit(held: bigint | null, permissions: bigint): boolean {
+  if (held === null) return true;
+  return roleBitsChangeRefusal(held, 0n, permissions) === null;
+}
+
+/**
+ * Whether the viewer may create a role carrying `permissions` (a new role or
+ * a copy): every bit on it must be one they hold. True when `held` is unknown.
+ */
+export function viewerCanCreateRoleWith(held: bigint | null, permissions: bigint): boolean {
+  return viewerHoldsEveryBit(held, permissions);
+}
+
+/**
+ * Whether the viewer may delete an override the server stores with `stored`
+ * bits: deleting clears every bit it sets, so each must be one they hold.
+ * True when `held` is unknown.
+ */
+export function viewerCanRemoveOverride(held: bigint | null, stored: OverrideBits): boolean {
+  if (held === null) return true;
+  return overrideChangeRefusal(held, stored, null) === null;
 }

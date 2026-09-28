@@ -352,7 +352,9 @@
       },
       "updateRolesFailed": "Rollen konnten nicht aktualisiert werden",
       "kickFailed": "Mitglied konnte nicht entfernt werden",
-      "banFailed": "Mitglied konnte nicht gesperrt werden"
+      "banFailed": "Mitglied konnte nicht gesperrt werden",
+      "rolesAboveYou": "Rollen auf oder über deiner höchsten Rolle sind gesperrt.",
+      "rolesUnheld": "Rollen mit Berechtigungen, die du nicht hast, kannst du nicht vergeben."
     }
   },
   "bans": {
@@ -406,7 +408,11 @@
     "createFailed": "Rolle konnte nicht erstellt werden",
     "saveFailed": "Rolle konnte nicht gespeichert werden",
     "deleteFailed": "Rolle konnte nicht gelöscht werden",
-    "copyFailed": "Rolle konnte nicht kopiert werden"
+    "copyFailed": "Rolle konnte nicht kopiert werden",
+    "unheldLocked": "Du kannst nur Berechtigungen umschalten, die du selbst hast. Die anderen sind gesperrt.",
+    "unheldPermission": "Du hast diese Berechtigung nicht",
+    "copyUnheld": "Diese Rolle hat Berechtigungen, die du nicht hast. Du kannst sie deshalb nicht kopieren.",
+    "copyDeleteUnheld": "Diese Rolle hat Berechtigungen, die du nicht hast. Du kannst sie deshalb weder kopieren noch löschen."
   },
   "permissions": {
     "title": "Berechtigungen",
@@ -452,7 +458,11 @@
     "loadFailed": "Überschreibungen konnten nicht geladen werden",
     "saveFailed": "Überschreibungen konnten nicht gespeichert werden",
     "partialFailure_one": "{{count}} Überschreibung konnte nicht gespeichert werden",
-    "partialFailure_other": "{{count}} Überschreibungen konnten nicht gespeichert werden"
+    "partialFailure_other": "{{count}} Überschreibungen konnten nicht gespeichert werden",
+    "unheldLocked": "Du kannst nur Berechtigungen umschalten, die du selbst hast. Die anderen sind gesperrt.",
+    "unheldPermission": "Du hast diese Berechtigung nicht",
+    "removeUnheld": "Diese Überschreibung setzt Berechtigungen, die du nicht hast. Nur wer sie hat, kann sie entfernen.",
+    "removeUnheldShort": "Nur wer diese Berechtigungen hat, kann diese Überschreibung entfernen"
   },
   "sidebar": {
     "directMessages": "Direktnachrichten",

@@ -125,3 +125,69 @@ export function canManageRoleAt(actor: HierarchyStanding, rolePosition: number):
   if (actor.isOwner || actor.isInstanceAdmin) return true;
   return rolePosition < actor.topPosition;
 }
+
+// ─── Held-Bits Rule ─────────────────────────────────────────────────────────
+// A member can only switch permission bits they hold in the space themselves,
+// on a role and on a channel or category override. `held` is the actor's
+// space-level permissions: the owner, instance admins and ADMINISTRATOR
+// holders hold every bit. The rule compares the value before and after the
+// change, so an unheld bit someone more senior set stays where it is while
+// the actor edits the others, but the actor cannot switch it in either
+// direction. It runs after the role hierarchy, which decides which roles the
+// actor may edit at all. See docs/systems/permissions.md, "Held-bits rule".
+
+/** The ErrorCode a held-bits refusal answers with. */
+export type HeldBitsRefusal =
+  | 'cannot_grant_unowned_permissions'
+  | 'cannot_deny_unowned_permissions'
+  | 'cannot_change_unowned_permissions';
+
+/** The allow and deny bits of a channel or category override. */
+export interface OverrideBits {
+  allow: bigint;
+  deny: bigint;
+}
+
+/**
+ * The bits an actor holding `held` may not switch. Holding every permission
+ * (owner, instance admin, ADMINISTRATOR) leaves nothing unheld, bits no
+ * permission defines included, so a stray bit in an old row never blocks
+ * them; anyone else may not switch a bit they do not hold.
+ */
+function unheldBits(held: bigint): bigint {
+  return (held & ALL_PERMISSIONS) === ALL_PERMISSIONS ? 0n : ~held;
+}
+
+/**
+ * Why a role's permissions may not go from `before` to `after` for an actor
+ * holding `held`, or null when they may: switching on an unheld bit is a
+ * grant, switching one off is a change.
+ */
+export function roleBitsChangeRefusal(held: bigint, before: bigint, after: bigint): HeldBitsRefusal | null {
+  const unheld = unheldBits(held);
+  if ((after & ~before & unheld) !== 0n) return 'cannot_grant_unowned_permissions';
+  if ((before & ~after & unheld) !== 0n) return 'cannot_change_unowned_permissions';
+  return null;
+}
+
+/**
+ * Why an override may not go from `before` to `after` for an actor holding
+ * `held`, or null when it may. A missing override (`null`) has no bits, so
+ * `after` null is a delete. A newly allowed unheld bit is a grant, a newly
+ * denied one a deny, and clearing one from allow or deny a change.
+ */
+export function overrideChangeRefusal(
+  held: bigint,
+  before: OverrideBits | null,
+  after: OverrideBits | null,
+): HeldBitsRefusal | null {
+  const oldAllow = before?.allow ?? 0n;
+  const oldDeny = before?.deny ?? 0n;
+  const newAllow = after?.allow ?? 0n;
+  const newDeny = after?.deny ?? 0n;
+  const unheld = unheldBits(held);
+  if ((newAllow & ~oldAllow & unheld) !== 0n) return 'cannot_grant_unowned_permissions';
+  if ((newDeny & ~oldDeny & unheld) !== 0n) return 'cannot_deny_unowned_permissions';
+  if ((((oldAllow & ~newAllow) | (oldDeny & ~newDeny)) & unheld) !== 0n) return 'cannot_change_unowned_permissions';
+  return null;
+}
