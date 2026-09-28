@@ -78,7 +78,11 @@
     "sendMessage": "发送消息",
     "uploadFailed": "上传 {{file}} 失败：{{reason}}",
     "uploadFailedReason": "上传失败",
-    "sendFailed": "发送消息失败"
+    "sendFailed": "发送消息失败",
+    "typing": {
+      "named_other": "{{names}} 正在输入",
+      "several": "多人正在输入"
+    }
   },
   "menu": {
     "saveImage": "保存图片",
