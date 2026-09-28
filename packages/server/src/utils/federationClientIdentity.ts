@@ -9,6 +9,9 @@ import { eq } from 'drizzle-orm';
 
 type UserRow = typeof schema.users.$inferSelect;
 
+/** A user id as `generateSnowflake` writes it: a decimal 64-bit integer. */
+const SNOWFLAKE_ID = /^\d{1,20}$/;
+
 /** What the identity's home said when asked for the user by id. */
 type HomeAnswer =
   | { kind: 'answered'; user: Extract<LookupResult, { ok: true }> }
@@ -140,15 +143,19 @@ async function resolveWithAnswer(
  *   - Known row with its real name: returned as is, no network call.
  *   - Known row still named `<homeUserId>@<domain>`: the home is asked and the
  *     row renamed; without an answer it is returned unchanged.
- *   - Unknown identity: the home is asked and the row created with the
- *     reported name. Without an answer (no active peer, unreachable, rate
- *     limited), the row is created under the id name, and renamed by the
- *     first username that arrives later (a relayed message, a friend-add, the
+ *   - Unknown identity: a row is created only when the `homeUserId` is
+ *     shaped like a snowflake. When the home is an active peer it is asked
+ *     and the row created with the reported name; when it says there is no
+ *     such user, nothing is created. When it cannot be asked (no active
+ *     peering yet) or does not answer (unreachable, rate limited, timeout),
+ *     the row is created under the id name and renamed by the first username
+ *     that arrives later (a relayed message, a friend-add, the
  *     peer-activation backfill).
  *
- * Returns null, and creates nothing, where `resolveOrCreateReplicatedUser`
- * does (the id belongs to a local user of another identity, a tombstoned or
- * self-homed identity). Callers answer null with their not-found error.
+ * Returns null, and creates nothing, in those refusal cases and where
+ * `resolveOrCreateReplicatedUser` does (the id belongs to a local user of
+ * another identity, a tombstoned or self-homed identity). Callers answer null
+ * with their not-found error.
  */
 export async function resolveRemoteIdentityForClient(
   homeUserId: string,
@@ -167,10 +174,17 @@ export async function resolveRemoteIdentityForClient(
     return (await resolveWithAnswer(homeUserId, homeInstance, answer.user, db)) ?? known.user;
   }
 
+  // A new row is created only for an id shaped like one (every user id is a
+  // snowflake) that its home does not deny. Without an active peering yet the
+  // home cannot be asked: the row gets the id name, and the DM's first message
+  // starts the peering, whose activation renames the row (backfill).
+  if (!SNOWFLAKE_ID.test(homeUserId)) return null;
   const peerOrigin = activePeerOriginFor(homeInstance, db);
-  if (peerOrigin) {
-    const answer = await askHome(peerOrigin, homeUserId);
-    if (answer.kind === 'answered') return resolveWithAnswer(homeUserId, homeInstance, answer.user, db);
+  if (!peerOrigin) return resolveOrCreateReplicatedUser(homeUserId, homeInstance, db);
+  const answer = await askHome(peerOrigin, homeUserId);
+  switch (answer.kind) {
+    case 'answered': return resolveWithAnswer(homeUserId, homeInstance, answer.user, db);
+    case 'no_such_user': return null;
+    case 'no_answer': return resolveOrCreateReplicatedUser(homeUserId, homeInstance, db);
   }
-  return resolveOrCreateReplicatedUser(homeUserId, homeInstance, db);
 }

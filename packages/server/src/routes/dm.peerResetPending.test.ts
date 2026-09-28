@@ -17,6 +17,8 @@ type TestDb = ReturnType<typeof drizzle<typeof schema>>;
 let sqlite: Database.Database;
 let testDb: TestDb;
 const currentUserId = 'user-A';
+/** A home user id as the home instance writes it (a snowflake). */
+const REMOTE_BOB = '1234567890123456789';
 
 vi.mock('../db/index.js', () => ({
   getDb: () => testDb,
@@ -127,7 +129,7 @@ describe('POST /api/dm — limbo-window peer_reset_pending guard', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/dm',
-      payload: { homeUserId: 'remote-bob', homeInstance: 'https://remote.example' },
+      payload: { homeUserId: REMOTE_BOB, homeInstance: 'https://remote.example' },
     });
 
     expect(res.statusCode).toBe(409);
@@ -135,7 +137,7 @@ describe('POST /api/dm — limbo-window peer_reset_pending guard', () => {
     expect(res.json().error).toMatch(/being reset/);
     // No stub created and no DM channel created for the reset-pending peer.
     expect(testDb.select().from(schema.dmChannels).all()).toHaveLength(0);
-    expect(testDb.select().from(schema.users).where(eq(schema.users.homeUserId, 'remote-bob')).all()).toHaveLength(0);
+    expect(testDb.select().from(schema.users).where(eq(schema.users.homeUserId, REMOTE_BOB)).all()).toHaveLength(0);
   });
 
   it('proceeds normally when the reset event is RESOLVED', async () => {
@@ -145,7 +147,7 @@ describe('POST /api/dm — limbo-window peer_reset_pending guard', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/dm',
-      payload: { homeUserId: 'remote-bob', homeInstance: 'https://remote.example' },
+      payload: { homeUserId: REMOTE_BOB, homeInstance: 'https://remote.example' },
     });
 
     expect(res.statusCode).toBe(201);
@@ -157,7 +159,7 @@ describe('POST /api/dm — limbo-window peer_reset_pending guard', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/dm',
-      payload: { homeUserId: 'remote-bob', homeInstance: 'https://remote.example' },
+      payload: { homeUserId: REMOTE_BOB, homeInstance: 'https://remote.example' },
     });
 
     expect(res.statusCode).toBe(201);

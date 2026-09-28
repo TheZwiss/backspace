@@ -359,7 +359,9 @@ export function resolveLocalUser(
  *
  * Three-tier matching:
  * 1. Identity: the row that IS `homeUserId` + `homeInstance` (`resolveRelayActor`)
- * 2. Domain + username hint: normalized homeInstance domain + username base match
+ * 2. Domain + username hint: normalized homeInstance domain + username base
+ *    match, among rows that have no `homeUserId` yet (the only rows a name
+ *    can bind; `backfillHomeUserId` then records the id on the match)
  * 3. Not found: returns undefined
  *
  * When tier 1 reports `mismatch` (the `homeUserId` belongs only to local users
@@ -404,6 +406,10 @@ function lookupFederatedUser(
       and(
         eq(schema.users.homeInstance, domain),
         eq(schema.users.isDeleted, 0),
+        // A username match binds only a row that has no home id yet. A row
+        // with a home id is already one identity; tier 1 found it or it is
+        // someone else, and a name must not turn it into the one asked for.
+        isNull(schema.users.homeUserId),
         // Detached (home-orphaned) accounts are sovereign: never re-bindable to
         // the domain's new incarnation via username heuristics — that is exactly
         // how a new same-name user would capture the established account.

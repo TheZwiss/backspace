@@ -288,17 +288,17 @@ describe('findFederatedUser — detached (home-orphaned) accounts', () => {
 
   it('tier-2 STILL matches a NON-detached same-name federated account (the exclusion clause does not over-filter)', async () => {
     const { findFederatedUser } = await import('./federation.js');
-    // Positive companion to the exclusion test: replace the detached seed with an
-    // otherwise-identical NON-detached row (federationHomeOrphaned = 0). Same domain,
-    // same handle base, fresh homeUserId, same hint — the ONLY difference is the flag.
-    // This locks that the `eq(federationHomeOrphaned, 0)` clause discriminates on the
-    // flag alone and never withholds a legitimate replicated identity from tier-2.
+    // Positive companion to the exclusion test: replace the detached seed with a
+    // NON-detached row (federationHomeOrphaned = 0) that has no home id yet, the
+    // only kind of row tier-2 binds. Same domain, same handle base, same hint.
+    // This locks that the `eq(federationHomeOrphaned, 0)` clause discriminates on
+    // the flag alone and never withholds a bindable row from tier-2.
     testDb.delete(schema.users).where(eq(schema.users.id, 'detached-1')).run();
     seedUser({
       id: 'live-1',
       username: 'alice@peer.example',
       homeInstance: 'peer.example',
-      homeUserId: 'legacy-home-uid',
+      homeUserId: null,
       passwordHash: '$2b$10$abcdefghijklmnopqrstuv',
       federationHomeOrphaned: 0,
     });
@@ -306,5 +306,35 @@ describe('findFederatedUser — detached (home-orphaned) accounts', () => {
     const found = findFederatedUser('new-home-uid', 'peer.example', testDb, { username: 'alice' });
     expect(found?.id).toBe('live-1');
     expect(found?.federationHomeOrphaned).toBe(0);
+  });
+});
+
+describe('findFederatedUser: a username match binds only a row that has no home id yet', () => {
+  beforeEach(() => {
+    sqlite = new Database(':memory:');
+    testDb = drizzle(sqlite, { schema });
+    applyMigrations(sqlite);
+  });
+
+  it('binds a same-name row without a home id and records the home id on it', async () => {
+    seedUser({ id: 'acct-1', username: 'kai@friend.example', homeInstance: 'friend.example', homeUserId: null });
+    const { resolveOrCreateReplicatedUser } = await import('./federation.js');
+    const resolved = resolveOrCreateReplicatedUser('1234567890123456789', 'friend.example', testDb, { username: 'kai' });
+    expect(resolved?.id).toBe('acct-1');
+    expect(resolved?.homeUserId).toBe('1234567890123456789');
+  });
+
+  it('never binds a same-name row that already carries a different home id', async () => {
+    seedUser({
+      id: 'other-1', username: 'kai@friend.example', homeInstance: 'friend.example',
+      homeUserId: 'kai', passwordHash: '!federation-replicated',
+    });
+    const { findFederatedUser, resolveOrCreateReplicatedUser } = await import('./federation.js');
+    expect(findFederatedUser('1234567890123456789', 'friend.example', testDb, { username: 'kai' })).toBeUndefined();
+    const resolved = resolveOrCreateReplicatedUser('1234567890123456789', 'friend.example', testDb, { username: 'kai' });
+    expect(resolved?.id).not.toBe('other-1');
+    expect(resolved?.homeUserId).toBe('1234567890123456789');
+    const other = testDb.select().from(schema.users).where(eq(schema.users.id, 'other-1')).get();
+    expect(other?.homeUserId).toBe('kai');
   });
 });
