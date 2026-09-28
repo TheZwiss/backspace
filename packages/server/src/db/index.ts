@@ -6,6 +6,7 @@ import { config } from '../config.js';
 import * as schema from './schema.js';
 import { ensureDefaults, backfillOneOnOneDmMembership } from './migrate.js';
 import { setWorkerId } from '../utils/snowflake.js';
+import { backfillOneOnOneKeys } from '../utils/dmConversation.js';
 import { createSnapshot } from '../utils/backup.js';
 import { hasPendingMigrations } from './pendingMigrations.js';
 import { mkdirSync, existsSync } from 'fs';
@@ -36,9 +37,11 @@ export function initDatabase() {
   // Snapshot before migrating — but only when there is a real DB AND a migration
   // is actually pending. History is stable across most boots, so this avoids
   // churning the pre-migration retention with identical copies on every restart.
+  let snapshotTaken = false;
   if (!config.backup.disabled && dbExisted && hasPendingMigrations(sqlite, migrationsFolder)) {
     try {
       const snap = createSnapshot(sqlite, 'pre-migration');
+      snapshotTaken = true;
       console.log(`[backup] pre-migration snapshot written: ${snap}`);
     } catch (err) {
       console.error(`[backup] pre-migration snapshot FAILED — aborting migration to protect data: ${(err as Error).message}`);
@@ -54,6 +57,24 @@ export function initDatabase() {
   // Recover pre-fix broken 1-on-1 DM threads (deleted partner's membership row
   // lost before the tombstone fix). Idempotent — safe no-op on every later boot.
   backfillOneOnOneDmMembership(sqlite);
+  // Every 1-on-1 row holds the key of its two members (ADR 0002): keys rows
+  // made while relay was off and heals drifted ones, merging rows where two
+  // hold one conversation. Idempotent. Before it changes anything, the
+  // database is snapshotted like before a migration (unless this boot already
+  // did); a failed snapshot aborts, as it does for migrations.
+  backfillOneOnOneKeys(sqlite, {
+    beforeChanges: () => {
+      if (config.backup.disabled || snapshotTaken) return;
+      try {
+        const snap = createSnapshot(sqlite, 'pre-migration');
+        snapshotTaken = true;
+        console.log(`[backup] pre-migration snapshot before the 1-on-1 DM key backfill written: ${snap}`);
+      } catch (err) {
+        console.error(`[backup] snapshot before the 1-on-1 DM key backfill FAILED — aborting to protect data: ${(err as Error).message}`);
+        throw err;
+      }
+    },
+  });
 
   // Initialize Snowflake worker ID from persisted value
   const settings = sqlite.prepare('SELECT worker_id FROM instance_settings WHERE id = 1').get() as { worker_id: number } | undefined;

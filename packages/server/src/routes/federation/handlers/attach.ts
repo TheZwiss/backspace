@@ -16,8 +16,7 @@ import { extractDomain } from '../identity.js';
 import { downloadProfileAsset } from '../profile.js';
 import { isLookupRateLimited } from '../rateLimits.js';
 import { authenticateS2SPeer } from './s2sAuth.js';
-import { reconcileDmChannelFederatedId } from '../reconciliation.js';
-import type { DmReconcileResult } from '../reconciliation.js';
+import { reconcileDmChannelFederatedId, type DmReconcileResult } from '../../../utils/dmConversation.js';
 
 export function registerAttachRoutes(app: FastifyInstance): void {
   // ─── POST /api/federation/verify-attach-proof ───────────────────────────────

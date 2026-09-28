@@ -23,8 +23,7 @@ export { attributionRefusal, extractDomain, findFederatedUser, getOurIdentityDom
 export { validateOrigin } from './federation/origin.js';
 export { backfillReplicatedProfileAssets, hydrateReplicatedUserProfile, processProfileUpdateEvent } from './federation/profile.js';
 export { _resetLookupRateBuckets } from './federation/rateLimits.js';
-export { reconcileDmChannelFederatedId, reconcileDriftedDmFederatedIds, sweepDeadIncarnationArtifacts } from './federation/reconciliation.js';
-export type { DmReconcileResult } from './federation/reconciliation.js';
+export { sweepDeadIncarnationArtifacts } from './federation/reconciliation.js';
 
 /**
  * Register every federation HTTP endpoint on the Fastify instance.

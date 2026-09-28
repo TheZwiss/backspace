@@ -86,7 +86,7 @@ describe('reconcileDmChannelFederatedId', () => {
     seedUser('a', 'a', null); seedUser('b', 'b-home', 'orbit.test');
     const fed = pairKey('a', 'b-home');
     seedChannel('ch1', fed, ['a', 'b']);
-    const { reconcileDmChannelFederatedId } = await import('./federation.js');
+    const { reconcileDmChannelFederatedId } = await import('../utils/dmConversation.js');
     const r = reconcileDmChannelFederatedId(sqlite, 'ch1');
     expect(r.action).toBe('noop');
     expect(testDb.select().from(schema.dmChannels).get()!.federatedId).toBe(fed);
@@ -97,7 +97,7 @@ describe('reconcileDmChannelFederatedId', () => {
     seedUser('a', 'a', null); seedUser('b', 'b-new', 'orbit.test');
     const oldFed = pairKey('a', 'b-old');
     seedChannel('ch1', oldFed, ['a', 'b']);
-    const { reconcileDmChannelFederatedId } = await import('./federation.js');
+    const { reconcileDmChannelFederatedId } = await import('../utils/dmConversation.js');
     const r = reconcileDmChannelFederatedId(sqlite, 'ch1');
     expect(r.action).toBe('rekeyed');
     expect(testDb.select().from(schema.dmChannels).get()!.federatedId).toBe(pairKey('a', 'b-new'));
@@ -109,7 +109,7 @@ describe('reconcileDmChannelFederatedId', () => {
     const newFed = pairKey('a', 'b-new');
     seedChannel('chOld', oldFed, ['a', 'b']); seedMsg('m1', 'chOld', 'a', 100); seedMsg('m2', 'chOld', 'b', 110);
     seedChannel('chNew', newFed, ['a', 'b']); seedMsg('m3', 'chNew', 'a', 120);
-    const { reconcileDmChannelFederatedId } = await import('./federation.js');
+    const { reconcileDmChannelFederatedId } = await import('../utils/dmConversation.js');
     const r = reconcileDmChannelFederatedId(sqlite, 'chOld');
     expect(r.action).toBe('merged');
     expect(r.targetChannelId).toBe('chNew');
@@ -125,14 +125,14 @@ describe('reconcileDmChannelFederatedId', () => {
   it('skips group DMs (UUID federatedId / >2 members)', async () => {
     seedUser('a', 'a', null); seedUser('b', 'b', null); seedUser('c', 'c', null);
     seedChannel('g1', 'c361f0db-d856-2b62-44f5-ed9eba92a67d', ['a', 'b', 'c']);
-    const { reconcileDmChannelFederatedId } = await import('./federation.js');
+    const { reconcileDmChannelFederatedId } = await import('../utils/dmConversation.js');
     expect(reconcileDmChannelFederatedId(sqlite, 'g1').action).toBe('noop');
   });
 
   it('skips a channel with an unresolvable member set (not exactly 2)', async () => {
     seedUser('a', 'a', null);
     seedChannel('ch1', pairKey('a', 'b'), ['a']);
-    const { reconcileDmChannelFederatedId } = await import('./federation.js');
+    const { reconcileDmChannelFederatedId } = await import('../utils/dmConversation.js');
     expect(reconcileDmChannelFederatedId(sqlite, 'ch1').action).toBe('noop');
   });
 
@@ -145,7 +145,7 @@ describe('reconcileDmChannelFederatedId', () => {
       { userId: 'a', channelId: 'chOld', lastReadMessageId: 'm1', updatedAt: 1 },
       { userId: 'a', channelId: 'chNew', lastReadMessageId: 'm2', updatedAt: 2 },
     ]).run();
-    const { reconcileDmChannelFederatedId } = await import('./federation.js');
+    const { reconcileDmChannelFederatedId } = await import('../utils/dmConversation.js');
     reconcileDmChannelFederatedId(sqlite, 'chOld');
     const rs = testDb.select().from(schema.readStates).all();
     expect(rs.filter(r => r.channelId === 'chOld')).toHaveLength(0);
