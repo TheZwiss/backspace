@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import type { DmChannel, MemberWithUser, User } from '@backspace/shared';
 import { useAuthStore } from '../stores/authStore';
 import { getMyUserIdForOrigin, useSpaceStore, type TaggedSpace } from '../stores/spaceStore';
+import { locateDmChannel } from './dmChannelLookup';
 import { getCanonicalUserView, useCanonicalUserView } from './userViewLookup';
 
 /**
@@ -39,54 +40,57 @@ export interface ChannelUser {
   nameColor: string | null;
 }
 
-/** The store slices a channel's people are derived from. */
+/**
+ * The store slices a channel's people are derived from. The per-channel
+ * lookup maps are not among them: see `ChannelFacts`.
+ */
 interface ChannelUserSources {
   dmChannels: DmChannel[];
   dmAlternatives: Map<string, Map<string, string>>;
   members: MemberWithUser[];
-  channelToSpaceMap: Map<string, string>;
-  channelOriginMap: Map<string, string>;
   spaces: TaggedSpace[];
 }
 
+/**
+ * What the lookup maps say about one channel: its space and the origin that
+ * issued its id ('' is home).
+ *
+ * `channelToSpaceMap` and `channelOriginMap` are updated in place
+ * (`upsertChannel`, several WS channel handlers), so their identity says
+ * nothing about their content and cannot be a memo input. The hooks read the
+ * channel's two entries as values instead: a selector returning a string is
+ * re-run on every store update, so a write in place is seen with the next one.
+ */
+interface ChannelFacts {
+  spaceId: string | undefined;
+  origin: string;
+}
+
 type ChannelRoster =
-  | { kind: 'dm'; dm: DmChannel; origin: string }
+  /**
+   * `people` are the members the listed entry holds, read in `origin`'s ids
+   * (the current assumption; see `DmChannelLocation`); empty when the client
+   * holds no member list for the copy that issued the id.
+   */
+  | { kind: 'dm'; origin: string; people: readonly User[] }
   | { kind: 'space'; spaceId: string; origin: string; members: MemberWithUser[]; ownerId: string | null }
   | { kind: 'unknown'; origin: string };
 
-/**
- * The DM a channel id belongs to, and the origin that id was issued by.
- *
- * Same resolution as `resolveDmChannelId` (the pinned entry, or another
- * origin's local id for it recorded in `dmAlternatives`), done over the given
- * slices so hooks can memoize on them, and returning the issuing origin too:
- * ids under an alternate id are that origin's, not the pinned origin's.
- */
-function findDm(sources: ChannelUserSources, channelId: string): { dm: DmChannel; origin: string } | null {
-  const pinned = sources.dmChannels.find((dm) => dm.id === channelId);
-  if (pinned) return { dm: pinned, origin: sources.channelOriginMap.get(pinned.id) ?? '' };
-  for (const [federatedId, byOrigin] of sources.dmAlternatives) {
-    for (const [origin, localId] of byOrigin) {
-      if (localId !== channelId) continue;
-      const primary = sources.dmChannels.find((dm) => dm.federatedId === federatedId);
-      return primary ? { dm: primary, origin } : null;
-    }
-  }
-  return null;
-}
+function rosterOf(sources: ChannelUserSources, facts: ChannelFacts, channelId: string): ChannelRoster {
+  const dm = locateDmChannel(sources.dmChannels, sources.dmAlternatives, channelId);
+  if (dm?.kind === 'pinned') return { kind: 'dm', origin: facts.origin, people: dm.dm.members };
+  // Another origin's id for a listed conversation: ids under it are that
+  // origin's, and the listed entry's members are not that copy's list, so
+  // nobody resolves here. It is still a DM, never a space channel.
+  if (dm?.kind === 'alternate') return { kind: 'dm', origin: dm.origin, people: [] };
 
-function rosterOf(sources: ChannelUserSources, channelId: string): ChannelRoster {
-  const dm = findDm(sources, channelId);
-  if (dm) return { kind: 'dm', dm: dm.dm, origin: dm.origin };
-
-  const origin = sources.channelOriginMap.get(channelId) ?? '';
-  const spaceId = sources.channelToSpaceMap.get(channelId);
-  if (!spaceId) return { kind: 'unknown', origin };
+  if (!facts.spaceId) return { kind: 'unknown', origin: facts.origin };
+  const spaceId = facts.spaceId;
   // `members` holds one space's roster at a time; rows of any other space are
   // not this channel's people.
   const members = sources.members.filter((m) => m.spaceId === spaceId);
   const ownerId = sources.spaces.find((s) => s.id === spaceId)?.ownerId ?? null;
-  return { kind: 'space', spaceId, origin, members, ownerId };
+  return { kind: 'space', spaceId, origin: facts.origin, members, ownerId };
 }
 
 function spaceNameColor(member: MemberWithUser, ownerId: string | null): string | null {
@@ -106,10 +110,15 @@ function fromSpaceMember(member: MemberWithUser, ownerId: string | null): Channe
   return { userId: member.userId, user: member.user, member, nameColor: spaceNameColor(member, ownerId) };
 }
 
-function findChannelUser(sources: ChannelUserSources, channelId: string, userId: string): ChannelUser | null {
-  const roster = rosterOf(sources, channelId);
+function findChannelUser(
+  sources: ChannelUserSources,
+  facts: ChannelFacts,
+  channelId: string,
+  userId: string,
+): ChannelUser | null {
+  const roster = rosterOf(sources, facts, channelId);
   if (roster.kind === 'dm') {
-    const user = roster.dm.members.find((u) => u.id === userId);
+    const user = roster.people.find((u) => u.id === userId);
     return user ? fromDmUser(user) : null;
   }
   if (roster.kind === 'space') {
@@ -126,13 +135,14 @@ function selfIdOnOrigin(origin: string, homeUserId: string | undefined): string 
 
 function channelCandidates(
   sources: ChannelUserSources,
+  facts: ChannelFacts,
   channelId: string,
   homeUserId: string | undefined,
 ): ChannelUser[] {
-  const roster = rosterOf(sources, channelId);
+  const roster = rosterOf(sources, facts, channelId);
   if (roster.kind === 'dm') {
     const selfId = selfIdOnOrigin(roster.origin, homeUserId);
-    return roster.dm.members.filter((u) => u.id !== selfId).map(fromDmUser);
+    return roster.people.filter((u) => u.id !== selfId).map(fromDmUser);
   }
   if (roster.kind === 'space') {
     return roster.members.map((m) => fromSpaceMember(m, roster.ownerId));
@@ -140,26 +150,41 @@ function channelCandidates(
   return [];
 }
 
-function channelSelfId(sources: ChannelUserSources, channelId: string, homeUserId: string | undefined): string | undefined {
-  return selfIdOnOrigin(rosterOf(sources, channelId).origin, homeUserId);
+function channelSelfId(
+  sources: ChannelUserSources,
+  facts: ChannelFacts,
+  channelId: string,
+  homeUserId: string | undefined,
+): string | undefined {
+  return selfIdOnOrigin(rosterOf(sources, facts, channelId).origin, homeUserId);
 }
 
 function currentSources(): ChannelUserSources {
-  const { dmChannels, dmAlternatives, members, channelToSpaceMap, channelOriginMap, spaces } = useSpaceStore.getState();
-  return { dmChannels, dmAlternatives, members, channelToSpaceMap, channelOriginMap, spaces };
+  const { dmChannels, dmAlternatives, members, spaces } = useSpaceStore.getState();
+  return { dmChannels, dmAlternatives, members, spaces };
+}
+
+function currentFacts(channelId: string): ChannelFacts {
+  const { channelToSpaceMap, channelOriginMap } = useSpaceStore.getState();
+  return { spaceId: channelToSpaceMap.get(channelId), origin: channelOriginMap.get(channelId) ?? '' };
 }
 
 function useSources(): ChannelUserSources {
   const dmChannels = useSpaceStore((s) => s.dmChannels);
   const dmAlternatives = useSpaceStore((s) => s.dmAlternatives);
   const members = useSpaceStore((s) => s.members);
-  const channelToSpaceMap = useSpaceStore((s) => s.channelToSpaceMap);
-  const channelOriginMap = useSpaceStore((s) => s.channelOriginMap);
   const spaces = useSpaceStore((s) => s.spaces);
   return useMemo(
-    () => ({ dmChannels, dmAlternatives, members, channelToSpaceMap, channelOriginMap, spaces }),
-    [dmChannels, dmAlternatives, members, channelToSpaceMap, channelOriginMap, spaces],
+    () => ({ dmChannels, dmAlternatives, members, spaces }),
+    [dmChannels, dmAlternatives, members, spaces],
   );
+}
+
+/** Reactive `currentFacts`: the channel's entries read as values (see `ChannelFacts`). */
+function useFacts(channelId: string | null): ChannelFacts {
+  const spaceId = useSpaceStore((s) => (channelId ? s.channelToSpaceMap.get(channelId) : undefined));
+  const origin = useSpaceStore((s) => (channelId ? s.channelOriginMap.get(channelId) ?? '' : ''));
+  return useMemo(() => ({ spaceId, origin }), [spaceId, origin]);
 }
 
 // ─── Non-React ──────────────────────────────────────────────────────────────
@@ -171,7 +196,7 @@ function useSources(): ChannelUserSources {
  * the loaded one).
  */
 export function resolveChannelUser(channelId: string, userId: string): ChannelUser | null {
-  const found = findChannelUser(currentSources(), channelId, userId);
+  const found = findChannelUser(currentSources(), currentFacts(channelId), channelId, userId);
   return found ? { ...found, user: getCanonicalUserView(found.user) } : null;
 }
 
@@ -181,12 +206,12 @@ export function resolveChannelUser(channelId: string, userId: string): ChannelUs
  * what a mention token in this channel must carry.
  */
 export function getChannelMentionCandidates(channelId: string): ChannelUser[] {
-  return channelCandidates(currentSources(), channelId, useAuthStore.getState().user?.id);
+  return channelCandidates(currentSources(), currentFacts(channelId), channelId, useAuthStore.getState().user?.id);
 }
 
 /** The signed-in user's id on the origin that issued `channelId`'s ids. */
 export function getSelfIdInChannel(channelId: string): string | undefined {
-  return channelSelfId(currentSources(), channelId, useAuthStore.getState().user?.id);
+  return channelSelfId(currentSources(), currentFacts(channelId), channelId, useAuthStore.getState().user?.id);
 }
 
 /** Whether `userId`, as written in channel `channelId`, is the signed-in user. */
@@ -240,9 +265,10 @@ const NO_USER: User = {
  */
 export function useChannelUser(channelId: string | null, userId: string | null): ChannelUser | null {
   const sources = useSources();
+  const facts = useFacts(channelId);
   const found = useMemo(
-    () => (channelId && userId ? findChannelUser(sources, channelId, userId) : null),
-    [sources, channelId, userId],
+    () => (channelId && userId ? findChannelUser(sources, facts, channelId, userId) : null),
+    [sources, facts, channelId, userId],
   );
   const canonical = useCanonicalUserView(found?.user ?? NO_USER);
   return useMemo(() => (found ? { ...found, user: canonical } : null), [found, canonical]);
@@ -251,16 +277,21 @@ export function useChannelUser(channelId: string | null, userId: string | null):
 /** Reactive `getChannelMentionCandidates`. */
 export function useChannelMentionCandidates(channelId: string): ChannelUser[] {
   const sources = useSources();
+  const facts = useFacts(channelId);
   const homeUserId = useAuthStore((s) => s.user?.id);
-  return useMemo(() => channelCandidates(sources, channelId, homeUserId), [sources, channelId, homeUserId]);
+  return useMemo(
+    () => channelCandidates(sources, facts, channelId, homeUserId),
+    [sources, facts, channelId, homeUserId],
+  );
 }
 
 /** Reactive `getSelfIdInChannel`. */
 export function useSelfIdInChannel(channelId: string | null): string | undefined {
   const sources = useSources();
+  const facts = useFacts(channelId);
   const homeUserId = useAuthStore((s) => s.user?.id);
   return useMemo(
-    () => (channelId ? channelSelfId(sources, channelId, homeUserId) : undefined),
-    [sources, channelId, homeUserId],
+    () => (channelId ? channelSelfId(sources, facts, channelId, homeUserId) : undefined),
+    [sources, facts, channelId, homeUserId],
   );
 }

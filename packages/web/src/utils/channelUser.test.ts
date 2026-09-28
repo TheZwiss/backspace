@@ -88,7 +88,19 @@ describe('resolveChannelUser', () => {
       members: [member('space-1', zed)],
     });
     expect(resolveChannelUser('dm-alt', zed.id)).toBeNull();
-    expect(resolveChannelUser('dm-alt', kai.id)?.member).toBeNull();
+  });
+
+  it("resolves nobody under another origin's id for a DM: its ids are that origin's and its members are not held", () => {
+    // The listed entry's members carry the home's ids. An id written under
+    // orbit's channel id is one of orbit's ids, so neither the home id nor
+    // orbit's id can be read against that member list.
+    useSpaceStore.setState({
+      dmChannels: [homeDm],
+      channelOriginMap: new Map([[homeDm.id, '']]),
+      dmAlternatives: new Map([['fed-1', new Map([['', homeDm.id], [ORBIT, 'dm-alt']])]]),
+    });
+    expect(resolveChannelUser('dm-alt', kai.id)).toBeNull();
+    expect(resolveChannelUser('dm-alt', kaiOnOrbit.id)).toBeNull();
   });
 
   it('never consults the space roster for a DM', () => {
@@ -156,6 +168,17 @@ describe('getChannelMentionCandidates', () => {
       members: [member('space-1', kai), member('space-2', zed)],
     });
     expect(getChannelMentionCandidates('chan-1').map((c) => c.userId)).toEqual([kai.id]);
+  });
+
+  it("is empty under another origin's id for a DM, never the listed entry's home ids", () => {
+    useAuthStore.setState({ user: me });
+    setMyUserIdForOrigin(ORBIT, meOnOrbit.id);
+    useSpaceStore.setState({
+      dmChannels: [homeDm],
+      channelOriginMap: new Map([[homeDm.id, '']]),
+      dmAlternatives: new Map([['fed-1', new Map([['', homeDm.id], [ORBIT, 'dm-alt']])]]),
+    });
+    expect(getChannelMentionCandidates('dm-alt')).toEqual([]);
   });
 
   it('is empty for a space channel whose roster is not loaded', () => {

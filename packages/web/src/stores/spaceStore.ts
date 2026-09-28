@@ -4,6 +4,7 @@ import { api, BackspaceApiClient } from '../api/client';
 import { resolveAssetUrl, normalizeUserAssets } from '../utils/assetUrls';
 import { isSelf, canonicalUserKey, isDeliveryFromHome } from '../utils/identity';
 import { sortDmChannels } from '../utils/dmSorting';
+import { locateDmChannel } from '../utils/dmChannelLookup';
 import { deriveMissingOneOnOneKeys, type ListedDmChannel } from '../utils/dmConversationKey';
 import {
   getApiForOrigin,
@@ -1426,6 +1427,9 @@ setOwnerInstanceForDmResolver(getOwnerInstanceForDm);
  *   for a DM whose primary is present in `dmChannels`: returns the primary's ID.
  * - Otherwise: returns `null` (unknown ID — caller should no-op).
  *
+ * The lookup itself is `locateDmChannel` (`utils/dmChannelLookup.ts`), shared
+ * with `utils/channelUser.ts`.
+ *
  * Used by:
  *  - `dm_message_created` WS handler to route messages arriving from alternate
  *    origins to the primary entry (§3.11 of the failover spec).
@@ -1433,16 +1437,7 @@ setOwnerInstanceForDmResolver(getOwnerInstanceForDm);
  */
 export function resolveDmChannelId(rawId: string): string | null {
   const { dmChannels, dmAlternatives } = useSpaceStore.getState();
-  if (dmChannels.some(dm => dm.id === rawId)) return rawId;
-
-  for (const [federatedId, byOrigin] of dmAlternatives) {
-    for (const localId of byOrigin.values()) {
-      if (localId !== rawId) continue;
-      const primary = dmChannels.find(dm => dm.federatedId === federatedId);
-      return primary ? primary.id : null;
-    }
-  }
-  return null;
+  return locateDmChannel(dmChannels, dmAlternatives, rawId)?.dm.id ?? null;
 }
 
 // ─── Cross-store resolvers (federation) ───────────────────────────────────────
