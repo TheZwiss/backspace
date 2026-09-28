@@ -3,6 +3,7 @@ import { getDb, schema } from '../../../db/index.js';
 import { normalizeOriginForCompare } from '../../../utils/federationAuth.js';
 import { computeFederatedId, getGroupDmTargetOrigins } from '../../../utils/federationOutbox.js';
 import { deleteAttachmentFiles } from '../../../utils/fileCleanup.js';
+import { rewriteRelayedMentions } from '../../../utils/federationMentions.js';
 import { sanitizeUser } from '../../../utils/sanitize.js';
 import { generateSnowflake } from '../../../utils/snowflake.js';
 import { connectionManager } from '../../../ws/handler.js';
@@ -145,6 +146,13 @@ export async function processCreateEvent(
   // shared-coordinate `replyTo` is resolved inside this conversation instead.
   const replyToId = resolveRelayedReplyTarget(event.message.replyTo, sourceInstance, localDmChannelId, db);
 
+  // Mention tokens carry the sender's ids; store them as this instance's.
+  // System content is not text with tokens and is stored as sent.
+  const isSystem = event.message.type === 'system';
+  const content = isSystem
+    ? event.message.content
+    : rewriteRelayedMentions(event.message.content, event.message.mentions, db);
+
   // Insert the message
   const localMessageId = generateSnowflake();
   db.insert(schema.dmMessages)
@@ -152,8 +160,8 @@ export async function processCreateEvent(
       id: localMessageId,
       dmChannelId: localDmChannelId,
       userId: authorUser.id,
-      content: event.message.content,
-      type: event.message.type === 'system' ? 'system' : 'user',
+      content,
+      type: isSystem ? 'system' : 'user',
       replyToId,
       createdAt: event.message.createdAt,
       editedAt: null,
@@ -443,7 +451,10 @@ export function processUpdateEvent(
   }
   const localMsg = resolved.localMsg;
 
-  const content = event.message?.content ?? null;
+  // Mention tokens carry the sender's ids; store them as this instance's.
+  const content = localMsg.type === 'system'
+    ? event.message?.content ?? null
+    : rewriteRelayedMentions(event.message?.content ?? null, event.message?.mentions, db);
   const editedAt = event.message?.editedAt ?? Date.now();
 
   db.update(schema.dmMessages)

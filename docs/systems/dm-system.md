@@ -543,6 +543,7 @@ Single source of truth for message relay payload construction:
   content: message.content,
   replyToId: message.replyToId ?? null,          // sender-local; receivers ignore it
   replyTo?: { messageId, messageHomeInstance },  // only on replies; see below
+  mentions?: [{ id, homeUserId, homeInstance }], // only when the content mentions someone; see "Mentions in relayed messages"
   editedAt: message.editedAt ?? null,
   createdAt: message.createdAt,
 }
@@ -551,6 +552,19 @@ Single source of truth for message relay payload construction:
 **Naming a message across instances.** Each instance holds its own copy of a federated message under its own local id, so a relay event that points at another message names it with `FederationMessageRef { messageId, messageHomeInstance }`: the message's id on the instance that created it, and that instance's origin. `dmMessageFederationRef(row)` (`federationOutbox.ts`) builds it from a row: a row this instance created is `(row.id, getOurOrigin())`, a relayed copy is `(row.sourceMessageId, row.sourceInstance)`. The receiver turns it back into its own row with `resolveLocalDmMessage`. Replies (`message.replyTo`, filled by `dmReplyRefForRelay` in `queueDmRelay` and in the sync endpoint) and reactions (`reaction.messageId` + `reaction.messageHomeInstance`, filled by the WS reaction handlers and in the sync endpoint) both use it. `replyTo` is an optional field: an older sender omits it and its replies arrive without a quote, an older receiver ignores it.
 
 The full event includes `participants` (all channel members with their federated identities and profile snapshots) and optionally `federatedId` (for group DMs).
+
+### Mentions in relayed messages
+
+This is the one place the rule is written; other specs point here. Code: `utils/federationMentions.ts`.
+
+A mention is a `<@id>` token in the content, and the id is one the instance the content was written on issued: a DM's tokens are its pinned origin's ids, which name nobody on another instance. So a relayed `create` or `update` carries `message.mentions: FederationMentionRef[]`, and the receiver stores the content with its own ids in the tokens.
+
+- **Tokens.** `<@[A-Za-z0-9_-]+>` outside fenced and inline code, the same scan as the web `MarkdownRenderer`. A token inside code is text and is never listed or rewritten. DMs have no channel or role mentions.
+- **Sender** (`relayMentionsOf`, called by `buildRelayPayload` and by the sync endpoint on the current content). Each distinct token id that names a live local user becomes `{ id, homeUserId, homeInstance }` with that row's `relayActorOfUser` identity: a native user is its own id and `getOurOrigin()`, a replicated or federated row its home pair. An id with no live row, or a row without a comparable identity, is left out. At most `MAX_RELAYED_MENTIONS` (100) entries. System messages and content without mentions carry no list.
+- **Receiver** (`rewriteRelayedMentions`, in `processCreateEvent` before the insert and in `processUpdateEvent` before the write, for events with and without `target`). The list is read defensively: a non-array is ignored, at most 100 entries are read, an entry needs a token-shaped `id` and non-empty string fields of at most 255 characters, and only the first entry for an id counts. Each listed id that appears as a token is resolved with `resolveRelayActor(homeUserId, homeInstance)`, matched on the pair and never on the bare id. A `found` row replaces the token's id. An identity with no live row here (`unknown`, `mismatch`, or a deleted user) leaves the token as written, and no row is created for a mention: every participant was already resolved or created for the event, the web resolves a DM token only among the DM's members, and creating stubs from a list would let any peer create rows by naming identities. System messages are stored as sent.
+- **Edits.** An edit carries its full new content and a list in its own sender's id space, which can be a different instance from the one that sent the create (a user writing through their account on another instance). The receiver rewrites from scratch and keeps no mention state.
+- **What follows.** Stored content names local rows, so the REST and WebSocket payloads, reply previews (built from the local row), search (`LIKE` over stored content) and the web notification filter (`content.includes('<@myId>')`) all see this instance's ids.
+- **Mixed versions.** An older sender sends no list and its content is stored as sent (foreign ids, rendered as an unknown user, as before). An older receiver ignores the list.
 
 ### Inbound: Message Create
 
@@ -628,7 +642,7 @@ An event **without** a `target` (an older sender) is matched as `(sourceInstance
 **Function:** `federation.ts:processUpdateEvent()`
 
 1. Find and authorize the local message ("Relayed edits and deletes")
-2. Update content and `editedAt`
+2. Update content (mention tokens rewritten, "Mentions in relayed messages") and `editedAt`
 3. Broadcast `dm_message_updated` to all local members
 
 ### Inbound: Message Delete

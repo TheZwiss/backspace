@@ -6,6 +6,7 @@ import { sendSignedJson } from './signedResponse.js';
 import { getInstanceId } from '../../../utils/federationEpoch.js';
 import { dmMessageFederationRef, dmMessageMutationTarget, dmReplyRefForRelay, getDmParticipants } from '../../../utils/federationOutbox.js';
 import { deleteAttachmentFiles } from '../../../utils/fileCleanup.js';
+import { relayMentionsOf } from '../../../utils/federationMentions.js';
 import { sanitizeUser } from '../../../utils/sanitize.js';
 import { collectDeletionBroadcastTargets, tombstoneUser } from '../../../utils/userDeletion.js';
 import { connectionManager } from '../../../ws/handler.js';
@@ -785,6 +786,7 @@ export function registerRelayRoutes(app: FastifyInstance): void {
           .get();
 
         const replyRef = dmReplyRefForRelay(mutation.context_id, message.replyToId);
+        const mentions = message.type === 'system' ? [] : relayMentionsOf(message.content, db);
         const updateTarget = mutationType === 'update'
           ? dmMessageMutationTarget(message, message.userId)
           : null;
@@ -805,6 +807,7 @@ export function registerRelayRoutes(app: FastifyInstance): void {
             content: message.content,
             replyToId: message.replyToId ?? null,
             ...(replyRef ? { replyTo: replyRef } : {}),
+            ...(mentions.length > 0 ? { mentions } : {}),
             editedAt: message.editedAt ?? null,
             createdAt: message.createdAt,
             attachments: attachments.length > 0 ? attachments : undefined,

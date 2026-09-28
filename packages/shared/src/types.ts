@@ -1164,6 +1164,14 @@ export interface FederationRelayEvent {
      * stores no reply target when it does not resolve there.
      */
     replyTo?: FederationMessageRef | null;
+    /**
+     * The users the content's `<@id>` tokens name, each as the sender's id
+     * with the federated identity it stands for. Optional: absent from older
+     * senders, from system messages and from content that mentions nobody.
+     * The receiver rewrites each token to its own row for that identity; see
+     * `FederationMentionRef`.
+     */
+    mentions?: FederationMentionRef[];
     editedAt: number | null;
     createdAt: number;
     attachments?: FederationRelayAttachment[];
@@ -1318,6 +1326,22 @@ export interface FederationFriendshipPayload {
 export interface FederationMessageRef {
   messageId: string;
   messageHomeInstance: string;
+}
+
+/**
+ * One user a relayed message's content mentions.
+ *
+ * A `<@id>` token carries an id issued by the instance the content was written
+ * on, which names nobody on another instance. `id` is that id as it appears in
+ * the relayed content; `homeUserId` + `homeInstance` is the federated identity
+ * of the user it names there. A receiver resolves the identity to its own row
+ * and rewrites `<@id>` to that row's id before storing the content, and keeps
+ * the token as written when it holds no row for the identity.
+ */
+export interface FederationMentionRef {
+  id: string;
+  homeUserId: string;
+  homeInstance: string;
 }
 
 /**

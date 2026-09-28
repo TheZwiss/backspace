@@ -7,6 +7,7 @@ import type { FederationRelayEvent, FederationRelayParticipant, FederationRelayA
 import { getOurOrigin, buildFederationHeaders } from './federationAuth.js';
 import { extractDomain, relayActorOfUser } from '../routes/federation.js';
 import { racePeering, ensurePeered, createAutoPlaceholderPeer } from './federationPeering.js';
+import { relayMentionsOf } from './federationMentions.js';
 import { federationFetch } from './federationFetch.js';
 
 // ─── Settings Cache ──────────────────────────────────────────────────────────
@@ -648,7 +649,9 @@ export function dmReplyRefForRelay(
  * Build the relay payload object for a DM message.
  * Used internally by queueDmRelay; the sync endpoint builds the same shape.
  * `replyTo` comes from `dmReplyRefForRelay`: `replyToId` is this instance's
- * local id and only `replyTo` means anything to the receiver.
+ * local id and only `replyTo` means anything to the receiver. `mentions`
+ * (`relayMentionsOf`) names the users the content's `<@id>` tokens stand for,
+ * for the same reason; system messages and content without mentions carry none.
  */
 export function buildRelayPayload(
   message: {
@@ -666,6 +669,7 @@ export function buildRelayPayload(
   },
   replyTo: FederationMessageRef | null = null,
 ): NonNullable<FederationRelayEvent['message']> {
+  const mentions = message.type === 'system' ? [] : relayMentionsOf(message.content);
   return {
     userId: user.id,
     homeUserId: user.homeUserId || user.id,
@@ -674,6 +678,7 @@ export function buildRelayPayload(
     content: message.content,
     replyToId: message.replyToId ?? null,
     ...(replyTo ? { replyTo } : {}),
+    ...(mentions.length > 0 ? { mentions } : {}),
     editedAt: message.editedAt ?? null,
     createdAt: message.createdAt,
   };

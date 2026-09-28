@@ -858,7 +858,7 @@ All origin comparisons use `extractDomain()` or `getOurOrigin()` with normalizat
 **Outbound (origin instance):**
 1. Message created via REST (`POST /api/dm/:id/messages`) or WS (`dm_message_create`)
 2. `queueDmRelay(message, channelId, 'create')` called from `dm.ts` / `events.ts`
-3. `buildRelayPayload()` constructs the message portion with `homeUserId`, `homeInstance`, `content`, `replyToId` (sender-local, never adopted by a receiver), `replyTo` (the replied-to message as a `FederationMessageRef`, replies only), `editedAt`, `createdAt`
+3. `buildRelayPayload()` constructs the message portion with `homeUserId`, `homeInstance`, `content`, `replyToId` (sender-local, never adopted by a receiver), `replyTo` (the replied-to message as a `FederationMessageRef`, replies only), `mentions` (the federated identities behind the content's `<@id>` tokens, only when it has any; see "Optional `message.mentions` field"), `editedAt`, `createdAt`
 4. `getDmParticipants(channelId)` resolves all members to `(homeUserId, homeInstance)` pairs with profile snapshots
 5. `getGroupDmTargetOrigins(channelId)` returns the participants' instances minus our own -- `[]` when both participants are local
 6. `queueOutboxEvent(messageId, channelId, 'create', payload, targetOrigins)` -> queued only to those peers; a `[]` target list matches no peer, so a conversation between two local users is never relayed
@@ -877,7 +877,7 @@ All origin comparisons use `extractDomain()` or `getOurOrigin()` with normalizat
    - Find by `federatedId` in `dm_channels`
    - If exists: ensure both users are members (idempotent insert)
    - If not: create channel with `federatedId`, add both members
-7. Insert `dm_messages` with `sourceInstance` and `sourceMessageId`; `replyToId` is `resolveRelayedReplyTarget(message.replyTo)`, which resolves the reference with `resolveLocalDmMessage` and keeps it only when the target is in the same local channel (else `null`)
+7. Insert `dm_messages` with `sourceInstance` and `sourceMessageId`; `replyToId` is `resolveRelayedReplyTarget(message.replyTo)`, which resolves the reference with `resolveLocalDmMessage` and keeps it only when the target is in the same local channel (else `null`); `content` is `rewriteRelayedMentions(message.content, message.mentions)` for a user message, the stored content naming this instance's rows in its mention tokens
 8. Process attachments (see File Replication)
 9. Broadcast `dm_message_created` to local members, **skipping** members whose `homeInstance === sourceInstance` (they already have the original)
 
@@ -924,6 +924,12 @@ The `(source_instance, source_message_id)` pair is checked before insertion. Dup
 This is a **forward- and backward-compatible** addition because the inbound relay endpoint (`/api/federation/relay`) validates only structural fields (`version`, `events` array shape, `sourceInstance`); unknown fields are passed through. Old peers that don't emit `type` produce relay events that get inserted as user messages on receiving peers (the existing default), and old peers receiving relay events from new peers ignore the field entirely. No protocol-version bump is required.
 
 This permissiveness is **intentional** — the relay envelope is designed for additive evolution. Future optional fields should follow this same pattern (no schema bump, document the field here, defaults preserve old-peer behavior).
+
+### Optional `message.mentions` field (#347)
+
+`FederationRelayEvent.message.mentions?: FederationMentionRef[]`, each `{ id, homeUserId, homeInstance }`: an id as it appears in a `<@id>` token of the relayed `content`, and the federated identity of the user it names on the sender. It rides every path that carries content: live `create` and `update` (`buildRelayPayload`) and the sync endpoint's replay of both (`relayMentionsOf` on the current content). The receiver (`processCreateEvent`, `processUpdateEvent`) rewrites each listed token to its own row for that identity before storing the content. Sender and receiver rules, validation and limits are in `dm-system.md` "Mentions in relayed messages"; the code is `utils/federationMentions.ts`.
+
+Additive like `message.type`: an older sender omits the list and its content is stored as sent, which leaves foreign ids in the tokens as before; an older receiver ignores the field and does the same.
 
 ### Typing Indicator Relay
 
