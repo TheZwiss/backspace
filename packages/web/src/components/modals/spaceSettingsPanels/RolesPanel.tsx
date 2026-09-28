@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useSpaceStore } from '../../../stores/spaceStore';
+import { useSpaceStore, getApiForOrigin } from '../../../stores/spaceStore';
 import { useUIStore } from '../../../stores/uiStore';
-import { api, HttpError } from '../../../api/client';
+import { HttpError } from '../../../api/client';
 import { PermissionBits, stringToPermissions, permissionsToString } from '../../../utils/permissions';
 import { usePermissionNames, type PermissionKey } from '../../ui/OverrideEntry';
 import { describeError } from '../../../i18n/errors';
@@ -100,7 +100,8 @@ export function RolesPanel({ spaceId }: RolesPanelProps) {
     setError('');
     try {
       const uniqueName = getUniqueRoleName(t('spaces:roles.defaultName'), roles);
-      const newRole = await api.roles.create(spaceId, { name: uniqueName });
+      // Roles live on the space's own instance (client-federation.md).
+      const newRole = await getApiForOrigin(space?._instanceOrigin ?? '').roles.create(spaceId, { name: uniqueName });
       await loadSpaceDetail(spaceId);
       setIsNewRole(true);
       setEditingRoleId(newRole.id);
@@ -189,6 +190,8 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
   // (permissions.md, "Role hierarchy"); the server refuses the change anyway.
   const canEdit = !space || viewerCanManageRoleAt(space, members, role.position);
   const canCopy = !space || viewerCanManageRoleAt(space, members, 1);
+  // Every role write goes to the space's own instance (client-federation.md).
+  const roleApi = () => getApiForOrigin(space?._instanceOrigin ?? '').roles;
 
   const [draftName, setDraftName] = useState(role.name);
   const [nameError, setNameError] = useState('');
@@ -239,7 +242,7 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
       if (hasNameChange) data.name = draftName.trim();
       if (hasColorChange) data.color = draftColor;
       if (hasPermChange) data.permissions = permissionsToString(draftPermissions);
-      await api.roles.update(spaceId, role.id, data);
+      await roleApi().update(spaceId, role.id, data);
       await loadSpaceDetail(spaceId);
       addToast(t('spaces:roles.saved'), 'success', 2000);
     } catch (err) {
@@ -271,7 +274,7 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
     setDeleting(true);
     setSaveError('');
     try {
-      await api.roles.delete(spaceId, role.id);
+      await roleApi().delete(spaceId, role.id);
       await loadSpaceDetail(spaceId);
       onDeleted();
     } catch (err) {
@@ -289,7 +292,7 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
     setSaveError('');
     try {
       const uniqueName = getUniqueRoleName(t('spaces:roles.copyName', { name: role.name }), roles);
-      const newRole = await api.roles.create(spaceId, {
+      const newRole = await roleApi().create(spaceId, {
         name: uniqueName,
         color: role.color,
         permissions: role.permissions ?? undefined,
