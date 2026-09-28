@@ -2,7 +2,7 @@ import path from 'node:path';
 import { getDb, schema } from '../../../db/index.js';
 import { normalizeOriginForCompare } from '../../../utils/federationAuth.js';
 import { getGroupDmTargetOrigins } from '../../../utils/federationOutbox.js';
-import { oneOnOneKey } from '../../../utils/dmConversation.js';
+import { findOrCreateOneOnOne, oneOnOneKey } from '../../../utils/dmConversation.js';
 import { loadDmChannelWire } from '../../../utils/dmChannelWire.js';
 import { deleteAttachmentFiles } from '../../../utils/fileCleanup.js';
 import { rewriteRelayedMentions } from '../../../utils/federationMentions.js';
@@ -12,7 +12,7 @@ import { connectionManager } from '../../../ws/handler.js';
 import { getDmMessageWithUser } from '../../dm.js';
 import { and, eq, isNull, or } from 'drizzle-orm';
 import type { FederationMessageTarget, FederationRelayEvent } from '@backspace/shared';
-import { buildDmMessagePayload, dmChannelMembers, findOrCreateDmChannel, isRelayTarget, isUrlFromPeer, mayRelayInto, memberWithIdentity, nonMemberRefusal, resolveLocalDmMessage, resolveRelayedReplyTarget } from '../dmChannels.js';
+import { buildDmMessagePayload, dmChannelMembers, isRelayTarget, isUrlFromPeer, mayRelayInto, memberWithIdentity, nonMemberRefusal, resolveLocalDmMessage, resolveRelayedReplyTarget } from '../dmChannels.js';
 import { attributionRefusal, extractDomain, relayActorOfUser, resolveOrCreateReplicatedUser, resolveRelayActor, sameRelayActor } from '../identity.js';
 import { hydrateReplicatedUserProfile } from '../profile.js';
 
@@ -133,12 +133,11 @@ export async function processCreateEvent(
       rejected.push({ messageId: event.messageId, reason: 'invalid_target' });
       return;
     }
-    const federatedId = oneOnOneKey(pair[0]!, pair[1]!);
-    localDmChannelId = findOrCreateDmChannel(
-      federatedId,
-      [resolvedParticipants[0]!.localUser.id, resolvedParticipants[1]!.localUser.id],
-      db,
-    );
+    // Both members open: the message that creates a copy here is delivered
+    // with it.
+    localDmChannelId = findOrCreateOneOnOne(db, pair[0]!, pair[1]!, { open: 'both' }).channelId;
+    // A call that rang here before this copy existed is bound to it now.
+    connectionManager.lateBindFederatedCall(oneOnOneKey(pair[0]!, pair[1]!), localDmChannelId);
   }
 
   // The wire's `replyToId` is the sender's local id and is never adopted; the

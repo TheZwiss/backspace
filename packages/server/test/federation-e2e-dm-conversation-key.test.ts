@@ -5,12 +5,15 @@ import path from 'node:path';
 import {
   bootIdentityPeered,
   identityOrigin,
+  peerSecretOn,
+  postSignedRelay,
+  queuedRelayEvents,
   sendDmMessage,
   readDb,
   withWritableDb,
   type PeeredHarness,
 } from './helpers/federationE2E.js';
-import { channelByFederatedId, memberIds, pairFederatedId } from './helpers/dmScope.js';
+import { channelByFederatedId, memberIds, pairFederatedId, postAs } from './helpers/dmScope.js';
 import { registerLocal, createFederatedUser, type TestUser } from './helpers/testUsers.js';
 import { spawnInstance, type SpawnedInstance } from './helpers/twoInstanceHarness.js';
 import type { DmChannel } from '@backspace/shared';
@@ -40,6 +43,7 @@ let A: SpawnedInstance;
 let B: SpawnedInstance;
 let alice: TestUser;
 let carol: TestUser;
+let bob: TestUser;
 let erin: TestUser;
 
 beforeAll(async () => {
@@ -48,6 +52,7 @@ beforeAll(async () => {
   B = h.remotes[0]!;
   ({ homeUser: alice } = await createFederatedUser(A, B, 'alice'));
   carol = await registerLocal(A, 'carol');
+  bob = await registerLocal(B, 'bob');
   erin = await registerLocal(B, 'erin');
 }, 90_000);
 
@@ -124,6 +129,38 @@ async function openDm(inst: SpawnedInstance, token: string, body: Record<string,
   });
   return { status: res.status, dm: await res.json() as DmChannel };
 }
+
+describe('federation e2e: local create looks a 1-on-1 up by its key first', () => {
+  it('B answers a local create with the relay-created copy (200) when that copy holds other member rows', async () => {
+    const dmOnA = await postAs<DmChannel>(A, alice.token, '/api/dm', { homeUserId: bob.id, homeInstance: B.domain });
+    const key = pairFederatedId(alice.id, bob.id);
+    expect(dmOnA.federatedId).toBe(key);
+
+    const sent = await sendDmMessage(A, alice.token, dmOnA.id, { content: 'relay creates the copy on B' });
+    expect(sent.status).toBe(201);
+    const event = queuedRelayEvents(A, dmOnA.id, 'create').find(e => e.messageId === sent.id);
+    expect(event).toBeDefined();
+    const res = await postSignedRelay(B, identityOrigin(A), peerSecretOn(B, identityOrigin(A)), [event!]);
+    expect(res.body?.accepted).toContain(sent.id);
+
+    const copyOnB = channelByFederatedId(B, key);
+    expect(copyOnB).toBeDefined();
+    const aliceRowOnB = memberIds(B, copyOnB!).find(id => id !== bob.id);
+    expect(aliceRowOnB).toBeDefined();
+
+    // B's copy loses alice's member row: a local create by membership no
+    // longer finds it, and inserting the pair's key again violates the unique
+    // index.
+    withWritableDb(B, db => db.prepare('DELETE FROM dm_members WHERE dm_channel_id = ? AND user_id = ?').run(copyOnB, aliceRowOnB));
+
+    const opened = await openDm(B, bob.token, { homeUserId: alice.id, homeInstance: A.domain });
+    expect(opened.status).toBe(200);
+    expect(opened.dm.id).toBe(copyOnB);
+    expect(opened.dm.federatedId).toBe(key);
+    expect(memberIds(B, copyOnB!)).toEqual([aliceRowOnB!, bob.id].sort());
+    expect(readDb(B, db => (db.prepare('SELECT count(*) AS n FROM dm_channels WHERE federated_id = ?').get(key) as { n: number }).n)).toBe(1);
+  });
+});
 
 describe('federation e2e: every 1-on-1 holds its key, relay on or off', () => {
   let carolDm: string;

@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import type Database from 'better-sqlite3';
+import { generateSnowflake } from './snowflake.js';
 
 /**
  * DM conversation identity (docs/decisions/0002-dm-conversation-identity.md).
@@ -228,4 +229,152 @@ export function backfillOneOnOneKeys(
   if (rekeyed > 0 || merged > 0) {
     console.log(`[db] 1-on-1 DM key backfill: keyed ${rekeyed}, merged ${merged}`);
   }
+}
+
+// ─── Finding or creating a 1-on-1 ────────────────────────────────────────────
+
+/** A database handle with its underlying better-sqlite3 connection. */
+export interface DbWithClient {
+  $client: Database.Database;
+}
+
+export interface OneOnOneOptions {
+  /**
+   * Whose membership this call opens when it adds one. `'both'`: the relay,
+   * which delivers a message in the same step. `'first'`: an explicit open by
+   * `a` (`POST /api/dm`, a space invite); `b` joins closed and the
+   * conversation reaches their list with its first message, through the
+   * resurface path every message send runs.
+   */
+  open: 'both' | 'first';
+}
+
+export interface OneOnOneResult {
+  channelId: string;
+  /** True when this call inserted the row. */
+  created: boolean;
+}
+
+function channelHoldingKey(rawDb: Database.Database, key: string): string | undefined {
+  return (rawDb.prepare(`SELECT id FROM dm_channels WHERE federated_id = ?`).get(key) as { id: string } | undefined)?.id;
+}
+
+/**
+ * Whether every member row of a row belongs to one of the pair's two people
+ * (possibly under more than one local id each), and none to anyone else.
+ */
+function holdsOnlyThePair(members: MemberIdentityRow[], a: HomeIdentified, b: HomeIdentified): boolean {
+  const pair = [homeIdentityOf(a), homeIdentityOf(b)];
+  return members.every(member => pair.includes(identityOfRow(member)));
+}
+
+/**
+ * Leave one member row per person on a row: where a person has rows under
+ * several local ids, the one under the pair's local id is kept (else the
+ * first), the others are dropped, and the kept row is open when any of them
+ * was.
+ */
+function collapseToOneRowPerPerson(rawDb: Database.Database, channelId: string, a: HomeIdentified, b: HomeIdentified): void {
+  const byIdentity = new Map<string, MemberIdentityRow[]>();
+  for (const member of membersWithIdentity(rawDb, channelId)) {
+    const identity = identityOfRow(member);
+    const rows = byIdentity.get(identity);
+    if (rows) rows.push(member);
+    else byIdentity.set(identity, [member]);
+  }
+  for (const rows of byIdentity.values()) {
+    if (rows.length < 2) continue;
+    const kept = rows.find(r => r.user_id === a.id || r.user_id === b.id) ?? rows[0]!;
+    for (const row of rows) {
+      if (row !== kept) rawDb.prepare(`DELETE FROM dm_members WHERE dm_channel_id = ? AND user_id = ?`).run(channelId, row.user_id);
+    }
+    if (kept.closed !== 0 && rows.some(r => r.closed === 0)) {
+      rawDb.prepare(`UPDATE dm_members SET closed = 0 WHERE dm_channel_id = ? AND user_id = ?`).run(channelId, kept.user_id);
+    }
+  }
+}
+
+/**
+ * Make a row's members exactly the pair: a pair member already present stays
+ * as it is; a member row holding a pair member's home identity under another
+ * local id is re-pointed to that member (its open state kept); a pair member
+ * with neither is added, open or closed as `options` says.
+ */
+function alignToPair(rawDb: Database.Database, channelId: string, a: HomeIdentified, b: HomeIdentified, options: OneOnOneOptions): void {
+  const members = membersWithIdentity(rawDb, channelId);
+  for (const party of [a, b]) {
+    if (members.some(m => m.user_id === party.id)) continue;
+    const underOtherId = members.find(m => m.user_id !== a.id && m.user_id !== b.id && identityOfRow(m) === homeIdentityOf(party));
+    if (underOtherId) {
+      rawDb.prepare(`UPDATE dm_members SET user_id = ? WHERE dm_channel_id = ? AND user_id = ?`).run(party.id, channelId, underOtherId.user_id);
+      continue;
+    }
+    const closed = options.open === 'first' && party === b ? 1 : 0;
+    rawDb.prepare(`INSERT INTO dm_members (dm_channel_id, user_id, closed) VALUES (?, ?, ?)`).run(channelId, party.id, closed);
+  }
+}
+
+/**
+ * The 1-on-1 between local users `a` and `b`, created if there is none. The
+ * only code that looks up or inserts a 1-on-1 row (ADR 0002); each caller
+ * keeps its own side effects (reopening the caller, notifying anyone, late
+ * binding a call). In one transaction:
+ *
+ * 1. The row holding `oneOnOneKey(a, b)` is the conversation. Its members are
+ *    made the pair (`collapseToOneRowPerPerson`, then `alignToPair`); a 1-on-1
+ *    never gets a third member. A row
+ *    holding the key under someone else's membership has drifted: it is first
+ *    moved to its own members' key (`reconcileDmChannelFederatedId`).
+ * 2. Else a 1-on-1 row whose members are exactly `a` and `b` (one the startup
+ *    backfill has not keyed yet) is keyed and returned.
+ * 3. Else a new row is inserted with the key; `b` joins closed when `a` opens
+ *    it (`options.open === 'first'`).
+ *
+ * Looking up by key first is what keeps a relay-created row with other member
+ * rows from turning a local open into a second insert of the same key.
+ */
+export function findOrCreateOneOnOne(
+  db: DbWithClient,
+  a: HomeIdentified,
+  b: HomeIdentified,
+  options: OneOnOneOptions,
+): OneOnOneResult {
+  const rawDb = db.$client;
+  const key = oneOnOneKey(a, b);
+
+  return rawDb.transaction((): OneOnOneResult => {
+    let keyed = channelHoldingKey(rawDb, key);
+    if (keyed && !holdsOnlyThePair(membersWithIdentity(rawDb, keyed), a, b)) {
+      reconcileDmChannelFederatedId(rawDb, keyed);
+      keyed = channelHoldingKey(rawDb, key);
+      if (keyed && !holdsOnlyThePair(membersWithIdentity(rawDb, keyed), a, b)) {
+        throw new Error(`DM channel ${keyed} holds the 1-on-1 key of ${a.id} and ${b.id} but other members, and cannot be re-keyed`);
+      }
+    }
+    if (keyed) {
+      collapseToOneRowPerPerson(rawDb, keyed, a, b);
+      alignToPair(rawDb, keyed, a, b, options);
+      return { channelId: keyed, created: false };
+    }
+
+    const byMembers = (rawDb.prepare(`
+      SELECT c.id, c.owner_id, c.federated_id FROM dm_channels c
+      WHERE c.owner_id IS NULL AND c.deleted_at IS NULL
+        AND EXISTS (SELECT 1 FROM dm_members m WHERE m.dm_channel_id = c.id AND m.user_id = ?)
+        AND EXISTS (SELECT 1 FROM dm_members m WHERE m.dm_channel_id = c.id AND m.user_id = ?)
+        AND (SELECT count(*) FROM dm_members m WHERE m.dm_channel_id = c.id) = 2
+      ORDER BY c.created_at, c.id
+    `).all(a.id, b.id) as Array<{ id: string; owner_id: string | null; federated_id: string | null }>)
+      .find(mayBeOneOnOneRow);
+    if (byMembers) {
+      return { channelId: reconcileDmChannelFederatedId(rawDb, byMembers.id).targetChannelId, created: false };
+    }
+
+    const channelId = generateSnowflake();
+    rawDb.prepare(`INSERT INTO dm_channels (id, owner_id, federated_id, created_at) VALUES (?, NULL, ?, ?)`).run(channelId, key, Date.now());
+    const insertMember = rawDb.prepare(`INSERT INTO dm_members (dm_channel_id, user_id, closed) VALUES (?, ?, ?)`);
+    insertMember.run(channelId, a.id, 0);
+    insertMember.run(channelId, b.id, options.open === 'first' ? 1 : 0);
+    return { channelId, created: true };
+  })();
 }

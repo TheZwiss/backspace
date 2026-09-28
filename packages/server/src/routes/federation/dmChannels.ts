@@ -2,90 +2,12 @@ import { getDb, schema } from '../../db/index.js';
 import { getOurOrigin } from '../../utils/federationAuth.js';
 import { relayTargetOrigins } from '../../utils/federationOutbox.js';
 import { sanitizeUser } from '../../utils/sanitize.js';
-import { generateSnowflake } from '../../utils/snowflake.js';
-import { connectionManager } from '../../ws/handler.js';
 import { extractDomain, relayActorOfUser, sameRelayActor, type RelayActor } from './identity.js';
 import { and, eq, isNull, or } from 'drizzle-orm';
 import type { FederatedCallEntry } from '../../ws/handler.js';
 import type { DmMessageWithUser, FederationMessageRef } from '@backspace/shared';
 
 // ─── Relay Event Processors ──────────────────────────────────────────────────
-
-
-/**
- * Find or create a local DM channel for a federated DM.
- * Uses federated_id for deterministic cross-instance lookup.
- */
-export function findOrCreateDmChannel(
-  federatedId: string,
-  localUserIds: string[],
-  db: ReturnType<typeof getDb>,
-): string {
-  // Try to find existing channel by federated ID
-  const existing = db
-    .select()
-    .from(schema.dmChannels)
-    .where(eq(schema.dmChannels.federatedId, federatedId))
-    .get();
-
-  if (existing) {
-    // Ensure all users are members (they might have been removed)
-    for (const userId of localUserIds) {
-      const member = db
-        .select()
-        .from(schema.dmMembers)
-        .where(
-          and(
-            eq(schema.dmMembers.dmChannelId, existing.id),
-            eq(schema.dmMembers.userId, userId),
-          ),
-        )
-        .get();
-
-      if (!member) {
-        db.insert(schema.dmMembers)
-          .values({
-            dmChannelId: existing.id,
-            userId,
-            closed: 0,
-          })
-          .run();
-      }
-    }
-    // Late-bind: if a FederatedCallEntry exists for this federatedId with null dmChannelId,
-    // update it now that we have a local channel
-    connectionManager.lateBindFederatedCall(federatedId, existing.id);
-    return existing.id;
-  }
-
-  // Create new DM channel with federated ID
-  const channelId = generateSnowflake();
-  const now = Date.now();
-
-  db.insert(schema.dmChannels)
-    .values({
-      id: channelId,
-      federatedId,
-      createdAt: now,
-    })
-    .run();
-
-  for (const userId of localUserIds) {
-    db.insert(schema.dmMembers)
-      .values({
-        dmChannelId: channelId,
-        userId,
-        closed: 0,
-      })
-      .run();
-  }
-
-  // Late-bind: if a FederatedCallEntry exists for this federatedId with null dmChannelId,
-  // update it now that we have a local channel
-  connectionManager.lateBindFederatedCall(federatedId, channelId);
-
-  return channelId;
-}
 
 
 /**

@@ -24,7 +24,7 @@ import {
 import { fetchSpaceInviteSnapshot, getLocalInviteSnapshot } from '../utils/spaceInviteSnapshot.js';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { loadDmChannelWire, loadOpenDmChannels } from '../utils/dmChannelWire.js';
-import { mintGroupKey, oneOnOneKey } from '../utils/dmConversation.js';
+import { findOrCreateOneOnOne, mintGroupKey, type OneOnOneResult } from '../utils/dmConversation.js';
 import { sendError } from '../utils/httpErrors.js';
 
 /** Members a group DM can hold, the owner included. */
@@ -307,119 +307,63 @@ export function broadcastDmMessage(dmChannelId: string, message: DmMessageWithUs
 }
 
 /**
- * Find the existing 1-on-1 DM channel between two users, reopening it if
- * the caller had it soft-closed. Creates a new channel atomically when none
- * exists. Returns the channel id.
- *
- * Mirrors the dedup-or-create behavior of the existing `POST /api/dm`
- * handler, including:
- *  - skipping group DMs (ownerId !== null) and channels with !== 2 members
- *  - excluding soft-deleted channels
- *  - reopening on the caller side and queueing a `dm_reopen` relay
- *  - computing a deterministic `federatedId` when either party is federated
- *  - notifying the target on a fresh create with the same `dm_channel_created`
- *    payload shape (`id`, `ownerId`, `federatedId`, `createdAt`, `members`,
- *    `lastMessage: null`).
- *
- * NOTE: This helper is intentionally duplicated from `POST /api/dm` rather
- * than refactored out of it — mixing a behavior-preserving rewrite of a
- * heavily-used path with new feature work is the regression pattern this
- * codebase avoids.
+ * Open the 1-on-1 between the caller and `targetUser` for the caller: the
+ * conversation `findOrCreateOneOnOne` finds or creates, reopened on the
+ * caller's side (with a `dm_reopen` relay) when they had closed it. A new
+ * conversation is announced to the target with `dm_channel_created`.
+ * `POST /api/dm` and `ensureOneOnOneDmChannel` both open conversations
+ * through it.
+ */
+function openOneOnOne(
+  callerId: string,
+  targetUser: typeof schema.users.$inferSelect,
+  db: ReturnType<typeof getDb>,
+): OneOnOneResult {
+  const callerRow = db.select().from(schema.users).where(eq(schema.users.id, callerId)).get();
+  const opened = findOrCreateOneOnOne(
+    db,
+    { id: callerId, homeUserId: callerRow?.homeUserId ?? null },
+    targetUser,
+    { open: 'both' },
+  );
+
+  if (opened.created) {
+    const payload = loadDmChannelWire(db, opened.channelId);
+    if (payload) {
+      connectionManager.sendToUser(targetUser.id, {
+        type: 'dm_channel_created',
+        dmChannel: payload,
+      });
+    }
+    return opened;
+  }
+
+  const reopened = db.update(schema.dmMembers)
+    .set({ closed: 0 })
+    .where(and(
+      eq(schema.dmMembers.dmChannelId, opened.channelId),
+      eq(schema.dmMembers.userId, callerId),
+      eq(schema.dmMembers.closed, 1),
+    ))
+    .run();
+  if (reopened.changes > 0) {
+    // Relay reopen to federated peers
+    queueDmCloseRelay(opened.channelId, callerId, 'dm_reopen');
+  }
+  return opened;
+}
+
+/**
+ * The 1-on-1 between `callerId` and `targetUser`, opened for the caller
+ * (`openOneOnOne`). Returns the channel id. Used where a feature needs the
+ * conversation to post into, such as a space invite.
  */
 export function ensureOneOnOneDmChannel(
   callerId: string,
   targetUser: typeof schema.users.$inferSelect,
   db: ReturnType<typeof getDb>,
 ): string {
-  // 1. Look for an existing 1-on-1 channel between caller and target.
-  const callerMemberships = db.select()
-    .from(schema.dmMembers)
-    .where(eq(schema.dmMembers.userId, callerId))
-    .all();
-
-  for (const membership of callerMemberships) {
-    const otherMember = db.select()
-      .from(schema.dmMembers)
-      .where(and(
-        eq(schema.dmMembers.dmChannelId, membership.dmChannelId),
-        eq(schema.dmMembers.userId, targetUser.id),
-      ))
-      .get();
-    if (!otherMember) continue;
-
-    // Only match 1-on-1 DMs (exactly 2 members). Skip group DMs that
-    // happen to include the target user.
-    const memberCount = db.select()
-      .from(schema.dmMembers)
-      .where(eq(schema.dmMembers.dmChannelId, membership.dmChannelId))
-      .all()
-      .length;
-    if (memberCount !== 2) continue;
-
-    const dmChannel = db.select()
-      .from(schema.dmChannels)
-      .where(and(
-        eq(schema.dmChannels.id, membership.dmChannelId),
-        isNull(schema.dmChannels.deletedAt),
-      ))
-      .get();
-    if (!dmChannel) continue;
-    if (dmChannel.ownerId !== null) continue; // belt-and-braces: skip group DMs
-
-    // Reopen if caller had it closed
-    if (membership.closed === 1) {
-      db.update(schema.dmMembers)
-        .set({ closed: 0 })
-        .where(and(
-          eq(schema.dmMembers.dmChannelId, membership.dmChannelId),
-          eq(schema.dmMembers.userId, callerId),
-        ))
-        .run();
-
-      // Relay reopen to federated peers
-      queueDmCloseRelay(membership.dmChannelId, callerId, 'dm_reopen');
-    }
-    return dmChannel.id;
-  }
-
-  // 2. Create new channel atomically.
-  const dmChannelId = generateSnowflake();
-  const now = Date.now();
-
-  // Every 1-on-1 is keyed at insert (ADR 0002): the key is a label, and
-  // whether anything is relayed is decided by the member set.
-  const keyedCaller = db.select().from(schema.users).where(eq(schema.users.id, callerId)).get();
-  const federatedId = oneOnOneKey({ id: callerId, homeUserId: keyedCaller?.homeUserId ?? null }, targetUser);
-
-  db.transaction((tx) => {
-    tx.insert(schema.dmChannels).values({
-      id: dmChannelId,
-      ownerId: null,
-      federatedId,
-      createdAt: now,
-    }).run();
-
-    tx.insert(schema.dmMembers).values({
-      dmChannelId,
-      userId: callerId,
-    }).run();
-
-    tx.insert(schema.dmMembers).values({
-      dmChannelId,
-      userId: targetUser.id,
-    }).run();
-  });
-
-  // Notify the target so their sidebar updates — same payload as POST /api/dm.
-  const payload = loadDmChannelWire(db, dmChannelId);
-  if (payload) {
-    connectionManager.sendToUser(targetUser.id, {
-      type: 'dm_channel_created',
-      dmChannel: payload,
-    });
-  }
-
-  return dmChannelId;
+  return openOneOnOne(callerId, targetUser, db).channelId;
 }
 
 /**
@@ -892,101 +836,12 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, 400, 'cannot_dm_self');
     }
 
-    // Check if DM channel already exists between these two users
-    // (both have membership rows, regardless of closed state)
-    const myDms = db.select()
-      .from(schema.dmMembers)
-      .where(eq(schema.dmMembers.userId, request.userId))
-      .all();
-
-    for (const myDm of myDms) {
-      const otherMember = db.select()
-        .from(schema.dmMembers)
-        .where(and(
-          eq(schema.dmMembers.dmChannelId, myDm.dmChannelId),
-          eq(schema.dmMembers.userId, targetUserId),
-        ))
-        .get();
-
-      if (otherMember) {
-        // Only match 1-on-1 DMs (exactly 2 members). Skip group DMs that
-        // happen to include the target user to avoid returning the wrong channel.
-        const memberCount = db.select()
-          .from(schema.dmMembers)
-          .where(eq(schema.dmMembers.dmChannelId, myDm.dmChannelId))
-          .all()
-          .length;
-        if (memberCount !== 2) continue;
-
-        // DM channel already exists between these users (exclude soft-deleted)
-        const dmChannel = db.select()
-          .from(schema.dmChannels)
-          .where(and(eq(schema.dmChannels.id, myDm.dmChannelId), isNull(schema.dmChannels.deletedAt)))
-          .get();
-
-        if (!dmChannel) continue;
-
-        // Reopen if the requesting user had closed it
-        if (myDm.closed === 1) {
-          db.update(schema.dmMembers)
-            .set({ closed: 0 })
-            .where(and(
-              eq(schema.dmMembers.dmChannelId, myDm.dmChannelId),
-              eq(schema.dmMembers.userId, request.userId),
-            ))
-            .run();
-
-          // Relay reopen to federated peers
-          queueDmCloseRelay(myDm.dmChannelId, request.userId, 'dm_reopen');
-        }
-
-        const result = loadDmChannelWire(db, dmChannel.id);
-        if (!result) continue;
-
-        return reply.code(200).send(result);
-      }
-    }
-
-    // Create new DM channel with both members atomically
-    const dmChannelId = generateSnowflake();
-    const now = Date.now();
-
-    // Every 1-on-1 is keyed at insert (ADR 0002): the key is a label, and
-    // whether anything is relayed is decided by the member set.
-    const keyedCaller = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
-    const federatedId = oneOnOneKey({ id: request.userId, homeUserId: keyedCaller?.homeUserId ?? null }, targetUser);
-
-    db.transaction((tx) => {
-      tx.insert(schema.dmChannels).values({
-        id: dmChannelId,
-        ownerId: null,
-        federatedId,
-        createdAt: now,
-      }).run();
-
-      tx.insert(schema.dmMembers).values({
-        dmChannelId,
-        userId: request.userId,
-      }).run();
-
-      tx.insert(schema.dmMembers).values({
-        dmChannelId,
-        userId: targetUserId,
-      }).run();
-    });
-
-    const result = loadDmChannelWire(db, dmChannelId);
+    const opened = openOneOnOne(request.userId, targetUser, db);
+    const result = loadDmChannelWire(db, opened.channelId);
     if (!result) {
       return sendError(reply, 500, 'internal_error');
     }
-
-    // Broadcast dm_channel_created to the other user so their sidebar updates
-    connectionManager.sendToUser(targetUserId, {
-      type: 'dm_channel_created',
-      dmChannel: result,
-    });
-
-    return reply.code(201).send(result);
+    return reply.code(opened.created ? 201 : 200).send(result);
   });
 
   // POST /api/dm/group - Create a new group DM with multiple members

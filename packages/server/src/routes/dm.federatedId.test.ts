@@ -203,3 +203,38 @@ describe('every 1-on-1 is keyed at insert', () => {
     expect(storedKey(withBob)).toBe(oneOnOneKey({ id: 'user-A', homeUserId: 'user-A' }, bob));
   });
 });
+
+describe('POST /api/dm finds a 1-on-1 by its key first', () => {
+  let app: FastifyInstance;
+
+  beforeEach(async () => {
+    sqlite = new Database(':memory:');
+    testDb = drizzle(sqlite, { schema });
+    applyMigrations(sqlite);
+    seedTwoUsers();
+    currentUserId = 'user-A';
+    relayEnabled = true;
+    app = await buildApp();
+  });
+
+  it('answers 200 with the relay-created row when it holds the key under another member row for the same person', async () => {
+    // An older row for bob's identity: the relay created the conversation with it.
+    testDb.insert(schema.users).values({
+      id: 'user-B-old', username: 'bob-old', passwordHash: 'x',
+      homeUserId: 'remote-bob', homeInstance: 'https://remote.example', createdAt: Date.now(),
+    }).run();
+    const key = oneOnOneKey({ id: 'user-A', homeUserId: null }, { id: 'user-B', homeUserId: 'remote-bob' });
+    testDb.insert(schema.dmChannels).values({ id: 'relayed', federatedId: key, createdAt: 1 }).run();
+    testDb.insert(schema.dmMembers).values([
+      { dmChannelId: 'relayed', userId: 'user-A', closed: 0 },
+      { dmChannelId: 'relayed', userId: 'user-B-old', closed: 0 },
+    ]).run();
+
+    const res = await app.inject({ method: 'POST', url: '/api/dm', payload: { userId: 'user-B' } });
+    expect(res.statusCode).toBe(200);
+    expect((res.json() as { id: string }).id).toBe('relayed');
+    const members = testDb.select().from(schema.dmMembers).all().filter(m => m.dmChannelId === 'relayed').map(m => m.userId).sort();
+    expect(members).toEqual(['user-A', 'user-B']);
+    expect(testDb.select().from(schema.dmChannels).all()).toHaveLength(1);
+  });
+});
