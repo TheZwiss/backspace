@@ -47,7 +47,8 @@ vi.mock('../db/index.js', () => ({
   schema,
 }));
 
-// The sync endpoint names a native author's instance by `config.domain`.
+// `config.domain` differs from `getOurOrigin()` in the PUBLIC_ORIGIN case
+// below; the replay must name our instance by the origin, as the live relay does.
 vi.mock('../config.js', async (importActual) => {
   const actual = await importActual<typeof import('../config.js')>();
   return { ...actual, config: { ...actual.config, domain: 'home.test' } };
@@ -183,5 +184,55 @@ describe('POST /api/federation/sync — replayed messages carry their mention li
     const result = await orbitReplays(await orbitPullsFromHome());
     expect(result.rejected).toEqual([]);
     expect(orbitCopy()).toBe('ping <@bob> from <@alice-on-orbit>');
+  });
+});
+
+describe('POST /api/federation/sync — a replayed message has the live relay\'s message part', () => {
+  beforeEach(async () => {
+    home = makeInstance(HOME_ORIGIN, ORBIT_ORIGIN);
+    seedUser(home.db, { id: 'alice', username: 'alice', passwordHash: 'real-hash', homeInstance: null });
+    seedUser(home.db, { id: 'bob-on-home', username: 'bob@orbit.test', homeInstance: 'orbit.test', homeUserId: 'bob' });
+    seedDm(home.db, 'ch-home', ['alice', 'bob-on-home']);
+    home.db.insert(schema.dmMessages).values({
+      id: 'msg-on-home', dmChannelId: 'ch-home', userId: 'alice', type: 'system',
+      content: JSON.stringify({ event: 'member_added', targetUserId: 'bob-on-home', targetDisplayName: 'bob' }),
+      createdAt: 100,
+    }).run();
+    home.db.insert(schema.federationMutationLog).values({
+      id: 'ml-create', entityId: 'msg-on-home', contextId: 'ch-home', contextType: 'dm',
+      mutationType: 'create', mutatedAt: 100, payload: null,
+    }).run();
+
+    orbit = makeInstance(ORBIT_ORIGIN, HOME_ORIGIN);
+    seedUser(orbit.db, { id: 'bob', username: 'bob', passwordHash: 'real-hash', homeInstance: null });
+    seedUser(orbit.db, { id: 'alice-on-orbit', username: 'alice@home.test', homeInstance: 'home.test', homeUserId: 'alice' });
+    seedDm(orbit.db, 'ch-orbit', ['bob', 'alice-on-orbit']);
+
+    current = home;
+    app = await buildApp();
+  });
+
+  it('a system message replays typed as system, with no mention list', async () => {
+    const create = (await orbitPullsFromHome()).find(e => e.eventType === 'create');
+    expect(create?.message?.type).toBe('system');
+    expect(create?.message && 'mentions' in create.message).toBe(false);
+  });
+
+  it('the receiver stores a replayed system message as a system message', async () => {
+    const result = await orbitReplays(await orbitPullsFromHome());
+    expect(result.rejected).toEqual([]);
+    const row = orbit.db
+      .select({ type: schema.dmMessages.type })
+      .from(schema.dmMessages)
+      .where(eq(schema.dmMessages.sourceMessageId, 'msg-on-home'))
+      .get();
+    expect(row?.type).toBe('system');
+  });
+
+  it('a native author is named by our origin, not by https://DOMAIN (PUBLIC_ORIGIN)', async () => {
+    home.origin = 'https://home.test:8443';
+    const create = (await orbitPullsFromHome()).find(e => e.eventType === 'create');
+    expect(create?.message?.homeUserId).toBe('alice');
+    expect(create?.message?.homeInstance).toBe('https://home.test:8443');
   });
 });

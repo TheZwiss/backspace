@@ -927,7 +927,7 @@ This permissiveness is **intentional** — the relay envelope is designed for ad
 
 ### Optional `message.mentions` field (#347)
 
-`FederationRelayEvent.message.mentions?: FederationMentionRef[]`, each `{ id, homeUserId, homeInstance }`: an id as it appears in a `<@id>` token of the relayed `content`, and the federated identity of the user it names on the sender. It rides every path that carries content: live `create` and `update` (`buildRelayPayload`) and the sync endpoint's replay of both (`relayMentionsOf` on the current content). The receiver (`processCreateEvent`, `processUpdateEvent`) rewrites each listed token to its own row for that identity before storing the content. Sender and receiver rules, validation and limits are in `dm-system.md` "Mentions in relayed messages"; the code is `utils/federationMentions.ts`.
+`FederationRelayEvent.message.mentions?: FederationMentionRef[]`, each `{ id, homeUserId, homeInstance }`: an id as it appears in a `<@id>` token of the relayed `content`, and the federated identity of the user it names on the sender. It rides every path that carries content: live `create` and `update` and the sync endpoint's replay of both, which all build the message part with `buildRelayPayload` (the replay on the current content). The receiver (`processCreateEvent`, `processUpdateEvent`) rewrites each listed token to its own row for that identity before storing the content. Sender and receiver rules, validation and limits are in `dm-system.md` "Mentions in relayed messages"; the code is `utils/federationMentions.ts`.
 
 Additive like `message.type`: an older sender omits the list and its content is stored as sent, which leaves foreign ids in the tokens as before; an older receiver ignores the field and does the same.
 
@@ -1870,7 +1870,7 @@ HMAC-authenticated. Returns events from the `federation_mutation_log`.
 - Joins `federation_mutation_log` with `dm_messages` to reconstruct events
 - Only returns locally-created messages (`source_instance IS NULL` via the LEFT JOIN)
 - Handles delete mutations separately (message rows don't exist for deletes)
-- For create/update: fetches current message state from DB, builds full relay event with attachments and participants
+- For create/update: fetches current message state from DB and builds the message part with `buildRelayPayload`, the live relay's builder, so a replayed message carries the same `type`, author identity (`getOurOrigin()` for a native author), `replyTo` and `mentions` as a live one; adds attachments (`sourceUrl` on `getOurOrigin()`) and participants
 - Membership/friend mutations store the full event payload in the mutation log, so they are returned directly
 
 **Friend sync:**

@@ -71,22 +71,30 @@ describe('mention tokens', () => {
 
 describe('relayMentionsOf (sender)', () => {
   it('names each mentioned local row by its federated identity', () => {
-    expect(relayMentionsOf('hi <@ann>, <@kai-here> and <@ola-here>')).toEqual([
+    expect(relayMentionsOf({ content: 'hi <@ann>, <@kai-here> and <@ola-here>' })).toEqual([
       { id: 'ann', homeUserId: 'ann', homeInstance: 'https://here.test' },
       { id: 'kai-here', homeUserId: 'kai-home', homeInstance: 'there.test' },
       { id: 'ola-here', homeUserId: 'ola-home', homeInstance: 'third.test' },
     ]);
   });
 
-  it('leaves out ids that name no live row, and tokens inside code', () => {
-    expect(relayMentionsOf('<@nobody> <@gone> `<@ann>`')).toEqual([]);
-    expect(relayMentionsOf(null)).toEqual([]);
+  it('leaves out ids that name no live row, and tokens inside code, and carries no list when none is left', () => {
+    expect(relayMentionsOf({ content: '<@nobody> <@gone> `<@ann>` <@ann>' })).toEqual([
+      { id: 'ann', homeUserId: 'ann', homeInstance: 'https://here.test' },
+    ]);
+    expect(relayMentionsOf({ content: '<@nobody> <@gone> `<@ann>`' })).toBeUndefined();
+    expect(relayMentionsOf({ content: null })).toBeUndefined();
+  });
+
+  it('carries no list for a system message', () => {
+    expect(relayMentionsOf({ type: 'system', content: 'hi <@ann>' })).toBeUndefined();
+    expect(relayMentionsOf({ type: 'user', content: 'hi <@ann>' })).toHaveLength(1);
   });
 
   it('caps the list', () => {
     const ids = Array.from({ length: MAX_RELAYED_MENTIONS + 5 }, (_, i) => `u${i}`);
     for (const id of ids) seedUser({ id, username: id, passwordHash: 'x' });
-    expect(relayMentionsOf(ids.map(id => `<@${id}>`).join(' '))).toHaveLength(MAX_RELAYED_MENTIONS);
+    expect(relayMentionsOf({ content: ids.map(id => `<@${id}>`).join(' ') })).toHaveLength(MAX_RELAYED_MENTIONS);
   });
 });
 

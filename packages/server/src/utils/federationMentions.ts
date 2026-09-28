@@ -56,7 +56,11 @@ export function replaceMentionTokens(content: string, localIds: ReadonlyMap<stri
 }
 
 /**
- * Sender side: the `mentions` list a relayed message with `content` carries.
+ * Sender side: the `mentions` list a relayed message carries, or undefined
+ * when it carries none. Every relay builder spreads this one value, so the
+ * rule lives here: a system message carries no list (its content is not text
+ * with tokens), and neither does content with no resolvable mention.
+ *
  * Each token id that names a live user row here becomes an entry with that
  * row's federated identity (`relayActorOfUser`): a native row is its own id on
  * this instance, a replicated or federated row its home pair. Ids that name
@@ -64,10 +68,11 @@ export function replaceMentionTokens(content: string, localIds: ReadonlyMap<stri
  * token then reaches the receiver as written.
  */
 export function relayMentionsOf(
-  content: string | null,
+  message: { type?: string | null; content: string | null },
   db: ReturnType<typeof getDb> = getDb(),
-): FederationMentionRef[] {
-  if (!content) return [];
+): FederationMentionRef[] | undefined {
+  const { content } = message;
+  if (message.type === 'system' || !content) return undefined;
   const mentions: FederationMentionRef[] = [];
   for (const id of mentionTokenIds(content)) {
     if (mentions.length >= MAX_RELAYED_MENTIONS) break;
@@ -86,7 +91,7 @@ export function relayMentionsOf(
     if (!identity) continue;
     mentions.push({ id, homeUserId: identity.homeUserId, homeInstance: identity.homeInstance });
   }
-  return mentions;
+  return mentions.length > 0 ? mentions : undefined;
 }
 
 function isBoundedString(value: unknown): value is string {

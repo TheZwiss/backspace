@@ -4,9 +4,8 @@ import { getDb, getRawDb, schema } from '../../../db/index.js';
 import { getOurOrigin, normalizeOriginForCompare, parseFederationHeaders, verifyPeerSignature } from '../../../utils/federationAuth.js';
 import { sendSignedJson } from './signedResponse.js';
 import { getInstanceId } from '../../../utils/federationEpoch.js';
-import { dmMessageFederationRef, dmMessageMutationTarget, dmReplyRefForRelay, getDmParticipants } from '../../../utils/federationOutbox.js';
+import { buildRelayPayload, dmMessageFederationRef, dmMessageMutationTarget, dmReplyRefForRelay, getDmParticipants } from '../../../utils/federationOutbox.js';
 import { deleteAttachmentFiles } from '../../../utils/fileCleanup.js';
-import { relayMentionsOf } from '../../../utils/federationMentions.js';
 import { sanitizeUser } from '../../../utils/sanitize.js';
 import { collectDeletionBroadcastTargets, tombstoneUser } from '../../../utils/userDeletion.js';
 import { connectionManager } from '../../../ws/handler.js';
@@ -15,7 +14,6 @@ import type { FederationIdentityDeleteS2SRequest, FederationMessageTarget, Feder
 import type { FastifyInstance } from 'fastify';
 import { processRelayEvents } from '../events/dispatch.js';
 import { extractDomain } from '../identity.js';
-import { resolveLocalOrigin } from '../origin.js';
 import { isRelayRateLimited } from '../rateLimits.js';
 import { authenticateS2SPeer } from './s2sAuth.js';
 
@@ -746,9 +744,6 @@ export function registerRelayRoutes(app: FastifyInstance): void {
           continue;
         }
 
-        const homeUserId = authorUser.homeUserId || authorUser.id;
-        const homeInstance = authorUser.homeInstance || (config.domain ? `https://${config.domain}` : '');
-
         // Fetch attachments for the message
         const attachmentRows = db
           .select()
@@ -756,12 +751,7 @@ export function registerRelayRoutes(app: FastifyInstance): void {
           .where(eq(schema.attachments.dmMessageId, message.id))
           .all();
 
-        let localOrigin: string;
-        try {
-          localOrigin = resolveLocalOrigin();
-        } catch {
-          localOrigin = config.domain ? `https://${config.domain}` : '';
-        }
+        const localOrigin = getOurOrigin();
 
         const attachments: FederationRelayAttachment[] = attachmentRows.map(a => ({
           id: a.id,
@@ -786,7 +776,6 @@ export function registerRelayRoutes(app: FastifyInstance): void {
           .get();
 
         const replyRef = dmReplyRefForRelay(mutation.context_id, message.replyToId);
-        const mentions = message.type === 'system' ? [] : relayMentionsOf(message.content, db);
         const updateTarget = mutationType === 'update'
           ? dmMessageMutationTarget(message, message.userId)
           : null;
@@ -801,15 +790,7 @@ export function registerRelayRoutes(app: FastifyInstance): void {
           participants: getDmParticipants(mutation.context_id),
           ...(updateTarget ? { target: updateTarget } : {}),
           message: {
-            userId: message.userId,
-            homeUserId,
-            homeInstance,
-            content: message.content,
-            replyToId: message.replyToId ?? null,
-            ...(replyRef ? { replyTo: replyRef } : {}),
-            ...(mentions.length > 0 ? { mentions } : {}),
-            editedAt: message.editedAt ?? null,
-            createdAt: message.createdAt,
+            ...buildRelayPayload(message, authorUser, replyRef),
             attachments: attachments.length > 0 ? attachments : undefined,
           },
         });

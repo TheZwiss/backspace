@@ -646,17 +646,18 @@ export function dmReplyRefForRelay(
 }
 
 /**
- * Build the relay payload object for a DM message.
- * Used internally by queueDmRelay; the sync endpoint builds the same shape.
+ * Build the message part of a relayed DM message event, without attachments.
+ * The live relay (`queueDmRelay`) and the sync endpoint's replay both use it,
+ * so a replayed message reaches a peer in the same shape as a live one.
  * `replyTo` comes from `dmReplyRefForRelay`: `replyToId` is this instance's
  * local id and only `replyTo` means anything to the receiver. `mentions`
  * (`relayMentionsOf`) names the users the content's `<@id>` tokens stand for,
- * for the same reason; system messages and content without mentions carry none.
+ * for the same reason.
  */
 export function buildRelayPayload(
   message: {
     id: string;
-    type?: 'user' | 'system' | null;
+    type?: string | null;
     content: string | null;
     replyToId?: string | null;
     editedAt?: number | null;
@@ -669,7 +670,7 @@ export function buildRelayPayload(
   },
   replyTo: FederationMessageRef | null = null,
 ): NonNullable<FederationRelayEvent['message']> {
-  const mentions = message.type === 'system' ? [] : relayMentionsOf(message.content);
+  const mentions = relayMentionsOf(message);
   return {
     userId: user.id,
     homeUserId: user.homeUserId || user.id,
@@ -678,7 +679,7 @@ export function buildRelayPayload(
     content: message.content,
     replyToId: message.replyToId ?? null,
     ...(replyTo ? { replyTo } : {}),
-    ...(mentions.length > 0 ? { mentions } : {}),
+    ...(mentions ? { mentions } : {}),
     editedAt: message.editedAt ?? null,
     createdAt: message.createdAt,
   };
