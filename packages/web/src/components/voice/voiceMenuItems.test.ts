@@ -115,4 +115,12 @@ describe('buildVoiceModMenuItems role hierarchy', () => {
     useAuthStore.setState({ user: user('owner') });
     expect(keysFor('senior')).toEqual(expect.arrayContaining(['space-mute', 'disconnect']));
   });
+
+  it('leaves the decision to the server on an instance from before the hierarchy (every role at 0)', () => {
+    useSpaceStore.setState({
+      roles: [],
+      members: [member('me', [role('r-helper', 0)]), member('senior', [role('r-mod', 0)]), member('owner', [])],
+    });
+    expect(keysFor('senior')).toEqual(expect.arrayContaining(['space-mute', 'space-deafen', 'disconnect', 'move-to']));
+  });
 });

@@ -90,7 +90,7 @@ describe('MembersPanel', () => {
 describe('RolesPanel', () => {
   it('shows a role at or above the viewer\'s top role read-only, without Delete', async () => {
     render(<RolesPanel spaceId={SPACE_ID} />);
-    await userEvent.click(screen.getByRole('button', { name: /Moderators/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Moderators' }));
     expect(screen.getByText(/ranks at or above your highest role/)).toBeInTheDocument();
     expect(screen.getByDisplayValue('Moderators')).toBeDisabled();
     expect(screen.queryByRole('button', { name: 'Delete Role' })).toBeNull();
@@ -98,8 +98,42 @@ describe('RolesPanel', () => {
 
   it('keeps a role below the viewer\'s top role editable', async () => {
     render(<RolesPanel spaceId={SPACE_ID} />);
-    await userEvent.click(screen.getByRole('button', { name: /Members/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Members' }));
     expect(screen.queryByText(/ranks at or above your highest role/)).toBeNull();
     expect(screen.getByDisplayValue('Members')).toBeEnabled();
+  });
+});
+
+// An instance from before the hierarchy keeps every role at 0 and ranks
+// nobody; there the client leaves every decision to the server, as before.
+describe('a space on an instance from before the hierarchy', () => {
+  beforeEach(() => {
+    const flat = [EVERYONE, MODS, HELPERS, MEMBERS_ROLE].map((r) => ({ ...r, position: 0 }));
+    const byId = (id: string) => flat.find((r) => r.id === id)!;
+    useSpaceStore.setState({
+      roles: flat,
+      members: [
+        member('owner', []),
+        member('helper', [byId('r-helper')]),
+        member('senior', [byId('r-mod')]),
+        member('junior', [byId('r-member')]),
+      ],
+    });
+  });
+
+  it('offers kick, ban and every role checkbox in the Members panel', async () => {
+    render(<MembersPanel spaceId={SPACE_ID} />);
+    expect(within(rowOf('Senior')).getByRole('button', { name: 'Kick' })).toBeInTheDocument();
+    expect(within(rowOf('Senior')).getByRole('button', { name: 'Ban' })).toBeInTheDocument();
+    await userEvent.click(screen.getByText('Senior'));
+    expect(screen.getByRole('checkbox', { name: 'Moderators' })).toBeEnabled();
+  });
+
+  it('keeps every role editable and Create Role enabled', async () => {
+    render(<RolesPanel spaceId={SPACE_ID} />);
+    expect(screen.getByRole('button', { name: 'Create Role' })).toBeEnabled();
+    await userEvent.click(screen.getByRole('button', { name: 'Moderators' }));
+    expect(screen.queryByText(/ranks at or above your highest role/)).toBeNull();
+    expect(screen.getByDisplayValue('Moderators')).toBeEnabled();
   });
 });

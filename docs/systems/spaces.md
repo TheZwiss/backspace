@@ -500,6 +500,7 @@ Both single-role routes apply the same checks as the replace route (not own role
 - Permissions: validated as valid bigint string
 - `404 role_not_in_space` for a role of another space; `403 role_hierarchy` for a role at or above the actor's top role
 - Position: an integer from 1 (not for @everyone, `400 validation_failed`) below the actor's top role; the role moves there and the others are renumbered so positions stay distinct
+- Client: the role list in Space Settings > Roles sends `{ position }` alone to reorder (drag handle, arrow keys, up and down buttons; permissions.md, "Setting the order")
 - After update: pushes ready payload to all members, checks voice permissions
 
 ### Delete Role

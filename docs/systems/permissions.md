@@ -121,7 +121,10 @@ as their local replicated user there. The client reads them in
 `web/src/utils/roleHierarchy.ts` from the loaded member list, finding the
 viewer through `getMyUserIdForOrigin` of the space's origin. When the space is
 not the loaded one or a member row is missing, the client leaves the control
-offered and the server decides.
+offered and the server decides. The same holds when the space's roles do not
+have distinct positions from 1 up (`spaceRanksRoles`, the `canReorderRoles`
+test): that is an instance from before the hierarchy, which keeps every role
+at 0 and enforces no ranks, so every surface behaves there as it did before.
 
 **Positions.** `db/rolePositions.ts` keeps them distinct.
 `normalizeRolePositions` orders a space's roles by position descending, then
@@ -133,8 +136,36 @@ position and renumbers the rest (`moveRoleToPosition`). Databases from before
 this rule had every role at 0; the boot pass turns the order the role list
 already showed (oldest role first) into positions.
 
+**Setting the order.** The role list in Space Settings > Roles
+(`spaceSettingsPanels/RoleOrderList.tsx`) shows the roles in rank order, most
+senior first, @everyone last, and says that a role ranks above the ones below
+it. The order is the hierarchy, so this list is where the owner sets it:
+- Desktop: each role the viewer may move has a drag handle. The handle is a
+  focusable button, and the up and down arrow keys move the role one place.
+  Up and down buttons appear on hover or focus, so a move never needs a drag.
+- Phone (the same panel in the fullscreen settings modal): the up and down
+  buttons are always shown at 40 px, and there is no handle.
+- A role at or above the viewer's top role shows a lock instead of controls.
+  The owner and instance admins move any role; @everyone never moves.
+
+The move rule is `canMoveRole` in `web/src/utils/roleOrder.ts`: the role and
+the position it moves to must both pass `canManageRoleAt`, the check the
+server makes on `PATCH /roles/:rid { position }`. A move sends the position
+the role in the target slot holds. It shows at once (`moveRoleInRankOrder`
+renumbers n..1 as `moveRoleToPosition` does), goes to the space's own
+instance through `getApiForOrigin(space._instanceOrigin)`, and is put back
+if refused, with the server's reason (`describeError`) right under the role
+that moved back, scrolled into view. The viewer is ranked
+by their id on the space's instance (`myStandingIn`). The server pushes every
+member a ready payload after the move. Their client reloads the open space
+(`loadSpaceDetail`), so other open role lists show the new order. When the
+roles do not have distinct positions from 1 up (`canReorderRoles`), the list
+offers no controls. That is an instance from before the hierarchy, which
+stores every role at 0 and would apply a position as given.
+
 Covered by `routes/roleHierarchy.test.ts`, `ws/voiceModerationHierarchy.test.ts`,
-`voiceMenuItems.test.ts` and `spaceSettingsPanels/roleHierarchyGating.test.tsx`.
+`voiceMenuItems.test.ts`, `spaceSettingsPanels/roleHierarchyGating.test.tsx`,
+`utils/roleOrder.test.ts` and `spaceSettingsPanels/RolesPanel.reorder.test.tsx`.
 
 ---
 
@@ -182,8 +213,9 @@ channel-scoped for editing or deleting one channel. The current split:
 Member and role actions also follow the role hierarchy (above). The client
 hides kick and ban for members ranked at or above the viewer, greys out roles
 at or above the viewer's own in the member role editor, shows such a role
-read-only in the role editor, and leaves the voice moderation menu and voice
-drag-to-move off for those members.
+read-only in the role editor, locks such roles in the role list's reorder
+controls, and leaves the voice moderation menu and voice drag-to-move off for
+those members.
 
 A control that needs two permissions at different scopes checks each at its own.
 Channel settings is the example: the delete button reads the channel's

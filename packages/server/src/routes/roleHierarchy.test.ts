@@ -275,6 +275,47 @@ describe('role management follows the role hierarchy', () => {
     expect(positions()).toEqual({ [SPACE_ID]: 0, 'r-member': 3, 'r-mod': 2, 'r-helper': 1 });
   });
 
+  it('lets a MANAGE_ROLES member reorder the roles below their own, and no higher', async () => {
+    // Moderators 4, Helpers 3, Members 2, Guests 1: the helper manages 2 and 1.
+    testDb.insert(schema.roles).values({ id: 'r-guest', spaceId: SPACE_ID, name: 'Guests', position: 0, permissions: '0', createdAt: now + 1 }).run();
+    const { normalizeRolePositions } = await import('../db/rolePositions.js');
+    normalizeRolePositions(sqlite, SPACE_ID);
+    expect(positions()).toMatchObject({ 'r-mod': 4, 'r-helper': 3, 'r-member': 2, 'r-guest': 1 });
+
+    as('helper');
+    const move = (roleId: string, position: number) =>
+      app.inject({ method: 'PATCH', url: `/api/spaces/${SPACE_ID}/roles/${roleId}`, payload: { position } });
+
+    const ok = await move('r-guest', 2);
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json<{ id: string; position: number }>()).toMatchObject({ id: 'r-guest', position: 2 });
+    expect(positions()).toEqual({ [SPACE_ID]: 0, 'r-mod': 4, 'r-helper': 3, 'r-guest': 2, 'r-member': 1 });
+
+    // Up to their own rank, their own role, and a role above them: refused, nothing moves.
+    expectHierarchyRefusal(await move('r-member', 3));
+    expectHierarchyRefusal(await move('r-helper', 1));
+    expectHierarchyRefusal(await move('r-mod', 1));
+    expect(positions()).toEqual({ [SPACE_ID]: 0, 'r-mod': 4, 'r-helper': 3, 'r-guest': 2, 'r-member': 1 });
+
+    // @everyone stays at the bottom.
+    const everyone = await move(SPACE_ID, 1);
+    expect(everyone.statusCode).toBe(400);
+    expect(positions()[SPACE_ID]).toBe(0);
+  });
+
+  it('pushes every member a ready payload after a move, which reloads their open role list', async () => {
+    const { connectionManager } = await import('../ws/handler.js');
+    const push = vi.mocked(connectionManager.pushReadyPayload);
+    push.mockClear();
+    as('owner');
+    const res = await app.inject({ method: 'PATCH', url: `/api/spaces/${SPACE_ID}/roles/r-member`, payload: { position: 2 } });
+    expect(res.statusCode).toBe(200);
+    const pushedTo = new Set(push.mock.calls.map(([userId]) => userId));
+    for (const userId of ['owner', 'mod', 'mod-2', 'helper', 'member', 'plain', 'instance-admin', 'fed-helper']) {
+      expect(pushedTo.has(userId)).toBe(true);
+    }
+  });
+
   it('creates a new role at the bottom, just above @everyone', async () => {
     as('helper');
     const res = await app.inject({ method: 'POST', url: `/api/spaces/${SPACE_ID}/roles`, payload: { name: 'Fresh' } });

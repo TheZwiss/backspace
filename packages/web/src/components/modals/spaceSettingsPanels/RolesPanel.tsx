@@ -8,6 +8,7 @@ import { usePermissionNames, type PermissionKey } from '../../ui/OverrideEntry';
 import { describeError } from '../../../i18n/errors';
 import type { Role } from '@backspace/shared';
 import { viewerCanManageRoleAt } from '../../../utils/roleHierarchy';
+import { RoleOrderList } from './RoleOrderList';
 
 // ─── Permission display groups ─────────────────────────────────────────────
 
@@ -94,15 +95,6 @@ export function RolesPanel({ spaceId }: RolesPanelProps) {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
 
-  // Sort: non-everyone roles by position desc, @everyone always last
-  const sortedRoles = [...roles].sort((a, b) => {
-    const aIsEveryone = a.id === spaceId;
-    const bIsEveryone = b.id === spaceId;
-    if (aIsEveryone) return 1;
-    if (bIsEveryone) return -1;
-    return b.position - a.position;
-  });
-
   const handleCreateRole = async () => {
     setCreating(true);
     setError('');
@@ -161,40 +153,13 @@ export function RolesPanel({ spaceId }: RolesPanelProps) {
 
       <div>
         <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('spaces:roles.listHeading')}</div>
-        <p className="text-xs text-txt-tertiary mb-2">{t('spaces:roles.description')}</p>
+        <p className="text-xs text-txt-tertiary">{t('spaces:roles.description')}</p>
+        <p className="text-xs text-txt-tertiary mb-2">{t('spaces:roles.hierarchyHint')}</p>
         <div className="rounded-lg bg-white/[0.02] p-2">
-          <div className="space-y-0.5">
-            {sortedRoles.map((role) => {
-              const isEveryone = role.id === spaceId;
-              return (
-                <button
-                  key={role.id}
-                  onClick={() => { setIsNewRole(false); setEditingRoleId(role.id); }}
-                  className="w-full flex items-center justify-between px-3 py-2 rounded hover:bg-interactive-hover transition-colors text-left group"
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div
-                      className="w-3 h-3 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: role.color }}
-                    />
-                    <span className="text-sm text-txt-primary truncate">
-                      {/* i18n-check: allow-literal — @everyone is the role's identifier, not a phrase */}
-                      {isEveryone ? '@everyone' : role.name}
-                    </span>
-                  </div>
-                  <svg
-                    className="w-4 h-4 text-txt-tertiary group-hover:text-txt-secondary transition-colors flex-shrink-0"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                  </svg>
-                </button>
-              );
-            })}
-          </div>
+          <RoleOrderList
+            spaceId={spaceId}
+            onOpen={(roleId) => { setIsNewRole(false); setEditingRoleId(roleId); }}
+          />
         </div>
       </div>
     </div>

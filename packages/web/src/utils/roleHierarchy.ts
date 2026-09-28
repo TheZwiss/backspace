@@ -1,4 +1,4 @@
-import type { MemberWithUser } from '@backspace/shared';
+import type { MemberWithUser, Role } from '@backspace/shared';
 import {
   canActOnMember,
   canManageRoleAt,
@@ -6,6 +6,7 @@ import {
   type HierarchyStanding,
 } from '@backspace/shared/src/permissions';
 import { useSpaceStore, getMyUserIdForOrigin, type TaggedSpace } from '../stores/spaceStore';
+import { canReorderRoles, rolesInRankOrder } from './roleOrder';
 
 // Client gating for the role hierarchy (docs/systems/permissions.md, "Role
 // hierarchy"). The comparison is the shared one the server enforces; this
@@ -34,13 +35,35 @@ export function myUserIdInSpace(space: Pick<TaggedSpace, '_instanceOrigin'>): st
 }
 
 /**
- * The viewer's standing in `space`, from its loaded member list; null when
- * the viewer's member row is not there.
+ * Whether the roles of `spaceId` rank anyone: every role but @everyone has its
+ * own position from 1 up. An instance from before the role hierarchy keeps
+ * every role at 0 and enforces no ranks, so there is nothing to compare. The
+ * roles are the store's role list for the space together with the roles the
+ * loaded members hold, so a tie shows even while the role list is not loaded.
+ */
+export function spaceRanksRoles(spaceId: string, members: readonly MemberWithUser[]): boolean {
+  const byId = new Map<string, Role>();
+  for (const role of useSpaceStore.getState().roles) {
+    if (role.spaceId === spaceId) byId.set(role.id, role);
+  }
+  for (const member of members) {
+    for (const role of member.roles ?? []) {
+      if (role.spaceId === spaceId && !byId.has(role.id)) byId.set(role.id, role);
+    }
+  }
+  return canReorderRoles(rolesInRankOrder([...byId.values()], spaceId));
+}
+
+/**
+ * The viewer's standing in `space`, from its loaded member list; null (the
+ * server decides) when the viewer's member row is not there, or when the
+ * space's roles do not rank anyone (`spaceRanksRoles`).
  */
 export function myStandingIn(
   space: Pick<TaggedSpace, 'id' | 'ownerId' | '_instanceOrigin'>,
   members: readonly MemberWithUser[],
 ): HierarchyStanding | null {
+  if (!spaceRanksRoles(space.id, members)) return null;
   const myId = myUserIdInSpace(space);
   const me = myId ? members.find((m) => m.userId === myId) : undefined;
   return me ? standingOf(space, me) : null;
