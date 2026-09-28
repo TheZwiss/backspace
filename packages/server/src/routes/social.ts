@@ -280,11 +280,11 @@ async function handleFederatedFriendRequest(
   // peering.status === 'active' — continue
 
   // 3. Lookup — a peer's HTTP/transport failure must never surface as a raw 500
-  // on a user action. lookupRemoteUser maps peer HTTP failures (403/5xx,
-  // malformed body) to a structured `unreachable`; lookupRemoteUserByHomeId
-  // throws on them instead. This try/catch returns any throw (those, or e.g. a
-  // missing peer row) to the user as a graceful 503 rather than an Internal
-  // Server Error. (BUG-3, 2026-07-02: a desynced peer returned 403 → unhandled throw → 500.)
+  // on a user action. Both lookups map peer HTTP failures (403/5xx, malformed
+  // body) to a structured `unreachable`; they throw only when the peer row is
+  // missing. This try/catch returns such a throw to the user as a graceful 503
+  // rather than an Internal Server Error. (BUG-3, 2026-07-02: a desynced peer
+  // returned 403 → unhandled throw → 500.)
   let lookup: LookupResult;
   try {
     lookup = await target.lookup(peerOrigin);

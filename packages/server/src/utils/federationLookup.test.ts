@@ -241,3 +241,54 @@ describe('lookupRemoteUser', () => {
     expect(result).toEqual({ ok: false, reason: 'unreachable' });
   });
 });
+
+describe('lookupRemoteUserByHomeId', () => {
+  function answer(status: number, body: unknown): void {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: status >= 200 && status < 300,
+      status,
+      headers: { get: () => null },
+      json: async () => body,
+    }));
+  }
+
+  it('returns ok:true with the answer on HTTP 200 + found', async () => {
+    answer(200, VALID_RESPONSE_BODY);
+    const { lookupRemoteUserByHomeId } = await import('./federationLookup.js');
+    const result = await lookupRemoteUserByHomeId(PEER_ORIGIN, 'remote-uid-1');
+    expect(result).toMatchObject({ ok: true, homeUserId: 'remote-uid-1', username: 'bob' });
+  });
+
+  it('returns not_found only on an explicit { found: false }', async () => {
+    answer(200, { found: false });
+    const { lookupRemoteUserByHomeId } = await import('./federationLookup.js');
+    expect(await lookupRemoteUserByHomeId(PEER_ORIGIN, 'nobody')).toEqual({ ok: false, reason: 'not_found' });
+  });
+
+  it.each([403, 404, 500, 502])('returns unreachable on HTTP %i instead of throwing', async (status) => {
+    answer(status, { error: 'nope' });
+    const { lookupRemoteUserByHomeId } = await import('./federationLookup.js');
+    expect(await lookupRemoteUserByHomeId(PEER_ORIGIN, 'remote-uid-1')).toEqual({ ok: false, reason: 'unreachable' });
+  });
+
+  it('returns unreachable on a 200 body that is not JSON', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      json: async () => { throw new SyntaxError('Unexpected token <'); },
+    }));
+    const { lookupRemoteUserByHomeId } = await import('./federationLookup.js');
+    expect(await lookupRemoteUserByHomeId(PEER_ORIGIN, 'remote-uid-1')).toEqual({ ok: false, reason: 'unreachable' });
+  });
+
+  it.each([
+    ['an empty object', {}],
+    ['null', null],
+    ['found without a user', { found: true }],
+  ])('returns unreachable on a 200 body that is %s, never not_found', async (_label, body) => {
+    answer(200, body);
+    const { lookupRemoteUserByHomeId } = await import('./federationLookup.js');
+    expect(await lookupRemoteUserByHomeId(PEER_ORIGIN, 'remote-uid-1')).toEqual({ ok: false, reason: 'unreachable' });
+  });
+});

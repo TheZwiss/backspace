@@ -94,6 +94,8 @@ async function askHome(peerOrigin: string, homeUserId: string): Promise<HomeAnsw
   try {
     result = await lookupRemoteUserByHomeId(peerOrigin, homeUserId, { timeoutMs: CLIENT_HOME_LOOKUP_TIMEOUT_MS });
   } catch (err) {
+    // Only a peer row that vanished since `activePeerOriginFor` read it; every
+    // peer failure comes back as `unreachable`.
     console.warn('[federation] by-home-id lookup of %s on %s failed: %s', homeUserId, peerOrigin, (err as Error).message);
     rememberNoAnswer(key, Date.now());
     return { kind: 'no_answer' };
