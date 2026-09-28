@@ -25,6 +25,7 @@ import { fileURLToPath } from 'node:url';
 import * as schema from '../db/schema.js';
 import { setWorkerId } from '../utils/snowflake.js';
 import type { FederationRelayEvent } from '@backspace/shared';
+import { connectionManager } from '../ws/handler.js';
 
 setWorkerId(1);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -358,5 +359,72 @@ describe('friend_request_update is applied to the users that are its identities 
     expect(userIdOf(home, 'carol-id')).toBeUndefined();
     expect(home.db.select().from(schema.friends).all()).toHaveLength(0);
     expect(home.db.select().from(schema.friendRequests).where(eq(schema.friendRequests.fromId, ALICE)).get()?.status).toBe('pending');
+  });
+});
+
+describe('the WS event of a relayed friendship goes to the side that is homed here, compared by identity', () => {
+  function wsRecipients(type: string): string[] {
+    return vi.mocked(connectionManager.sendToUser).mock.calls
+      .filter(([, event]) => (event as { type: string }).type === type)
+      .map(([uid]) => uid);
+  }
+
+  beforeEach(() => {
+    vi.mocked(connectionManager.sendToUser).mockClear();
+  });
+
+  it('friend_add first: our requester gets friend_request_accepted when the peer names our domain without a scheme', async () => {
+    await aliceRequestsBob();
+    const events = await bobAccepts();
+    const add = events.find(e => e.eventType === 'friend_add')!;
+    const bare: FederationRelayEvent = {
+      ...add,
+      friendship: { ...add.friendship!, from: { homeUserId: ALICE, homeInstance: 'home.test' } },
+    };
+    vi.mocked(connectionManager.sendToUser).mockClear();
+
+    const result = await deliver(home, orbit, [bare]);
+    expect(result.rejected).toEqual([]);
+    expect(wsRecipients('friend_request_accepted')).toEqual([ALICE]);
+  });
+
+  it('friend_add first: the same with the full origin', async () => {
+    await aliceRequestsBob();
+    const events = await bobAccepts();
+    const add = events.find(e => e.eventType === 'friend_add')!;
+    const full: FederationRelayEvent = {
+      ...add,
+      friendship: { ...add.friendship!, from: { homeUserId: ALICE, homeInstance: HOME } },
+    };
+    vi.mocked(connectionManager.sendToUser).mockClear();
+
+    await deliver(home, orbit, [full]);
+    expect(wsRecipients('friend_request_accepted')).toEqual([ALICE]);
+  });
+
+  it('friend_remove naming our user as `from` without a scheme tells our user', async () => {
+    await aliceRequestsBob();
+    await deliver(home, orbit, await bobAccepts());
+    const bobOnHome = userIdOf(home, BOB)!;
+    vi.mocked(connectionManager.sendToUser).mockClear();
+
+    const remove: FederationRelayEvent = {
+      eventType: 'friend_remove',
+      contextType: 'friend',
+      messageId: 'friend:remove-bare',
+      encryptionVersion: 0,
+      timestamp: Date.now(),
+      friendship: {
+        from: { homeUserId: ALICE, homeInstance: 'home.test' },
+        to: { homeUserId: BOB, homeInstance: ORBIT },
+        createdAt: Date.now(),
+      },
+    };
+    const result = await deliver(home, orbit, [remove]);
+    expect(result.rejected).toEqual([]);
+    expect(areFriends(home, ALICE, bobOnHome)).toBe(false);
+    const sent = vi.mocked(connectionManager.sendToUser).mock.calls
+      .filter(([, event]) => (event as { type: string }).type === 'friend_removed');
+    expect(sent).toEqual([[ALICE, { type: 'friend_removed', userId: bobOnHome }]]);
   });
 });

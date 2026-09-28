@@ -1,13 +1,22 @@
 import { getDb, schema } from '../../../db/index.js';
-import { getOurOrigin, normalizeOriginForCompare } from '../../../utils/federationAuth.js';
+import { normalizeOriginForCompare } from '../../../utils/federationAuth.js';
 import { sanitizeUser } from '../../../utils/sanitize.js';
 import { generateSnowflake } from '../../../utils/snowflake.js';
 import { connectionManager } from '../../../ws/handler.js';
 import { exchangeFriendPresence } from '../../../ws/presence.js';
 import { and, eq, or } from 'drizzle-orm';
 import type { FederationRelayEvent } from '@backspace/shared';
-import { extractDomain, resolveOrCreateReplicatedUser, resolveRelayActor, attributionRefusal } from '../identity.js';
+import { extractDomain, isOwnDomain, resolveOrCreateReplicatedUser, resolveRelayActor, attributionRefusal, type RelayActor } from '../identity.js';
 import { hydrateReplicatedUserProfile } from '../profile.js';
+
+/**
+ * Whether a friendship side names a user homed on this instance. Compared by
+ * domain (`isOwnDomain`), because a peer may send our origin as a full URL or
+ * as the bare domain it stores for our users.
+ */
+function isHomedHere(actor: RelayActor): boolean {
+  return isOwnDomain(extractDomain(actor.homeInstance).toLowerCase());
+}
 
 export async function processFriendRequestCreateEvent(
   event: FederationRelayEvent,
@@ -426,10 +435,10 @@ export async function processFriendAddEvent(
       .run();
   });
 
-  // Determine which user is local and broadcast to them
-  const ourOrigin = getOurOrigin();
-  const localUser = from.homeInstance === ourOrigin ? fromUser : toUser;
-  const remoteUser = from.homeInstance === ourOrigin ? toUser : fromUser;
+  // The requester or the acceptor, whichever is homed here, is told
+  const fromIsOurs = isHomedHere(from);
+  const localUser = fromIsOurs ? fromUser : toUser;
+  const remoteUser = fromIsOurs ? toUser : fromUser;
 
   connectionManager.sendToUser(localUser.id, {
     type: 'friend_request_accepted',
@@ -506,11 +515,10 @@ export function processFriendRemoveEvent(
     )
     .run();
 
-  // Determine which user is local (the one whose home instance is NOT the source)
-  // The removing user is on the source instance; broadcast to the other user
-  const ourOrigin = getOurOrigin();
-  const localUser = from.homeInstance === ourOrigin ? fromUser : toUser;
-  const removingUser = from.homeInstance === ourOrigin ? toUser : fromUser;
+  // The side homed here is told; the other side is the one who removed
+  const fromIsOurs = isHomedHere(from);
+  const localUser = fromIsOurs ? fromUser : toUser;
+  const removingUser = fromIsOurs ? toUser : fromUser;
 
   connectionManager.sendToUser(localUser.id, {
     type: 'friend_removed',
