@@ -16,8 +16,11 @@ import type { DmChannel, User } from '@backspace/shared';
  * already shows instead of becoming a second row.
  */
 
-/** A DM as any server version may list it: `federatedId` is absent up to 1.6.1. */
-export type ListedDmChannel = Omit<DmChannel, 'federatedId'> & { federatedId?: string | null };
+/** Fields a server up to 1.6.1 leaves out of `GET /api/dm`. */
+type FieldsAbsentUpTo161 = 'federatedId' | 'ownerHomeUserId' | 'ownerHomeInstance' | 'name' | 'icon' | 'metadataUpdatedAt';
+
+/** A DM as any server version may list it: the conversation key and the group metadata are absent up to 1.6.1. */
+export type ListedDmChannel = Omit<DmChannel, FieldsAbsentUpTo161> & Partial<Pick<DmChannel, FieldsAbsentUpTo161>>;
 
 /** A 1-on-1 DM: no owner, exactly two members. Groups always have an owner. */
 export function isOneOnOneDm(dm: Pick<DmChannel, 'ownerId' | 'members'>): boolean {

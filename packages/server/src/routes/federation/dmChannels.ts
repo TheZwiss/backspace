@@ -2,58 +2,12 @@ import { getDb, schema } from '../../db/index.js';
 import { getOurOrigin } from '../../utils/federationAuth.js';
 import { relayTargetOrigins } from '../../utils/federationOutbox.js';
 import { sanitizeUser } from '../../utils/sanitize.js';
-import { toDmChannelWire } from '../../utils/dmChannelWire.js';
 import { generateSnowflake } from '../../utils/snowflake.js';
 import { connectionManager } from '../../ws/handler.js';
-import { getDmMessageWithUser } from '../dm.js';
 import { extractDomain, relayActorOfUser, sameRelayActor, type RelayActor } from './identity.js';
-import { and, desc, eq, inArray, isNull, or } from 'drizzle-orm';
+import { and, eq, isNull, or } from 'drizzle-orm';
 import type { FederatedCallEntry } from '../../ws/handler.js';
-import type { DmChannel, DmMessageWithUser, FederationMessageRef } from '@backspace/shared';
-
-/**
- * Build the full DM channel payload used by `dm_channel_created` events.
- * Hydrates members, fetches the last message, and returns a `DmChannel`-shaped
- * object — or `null` when the channel row doesn't exist / is deleted.
- *
- * An optional `lastMessageOverride` lets callers supply the message object
- * directly (e.g. the just-relayed message) instead of querying the DB.
- */
-export function buildDmChannelPayload(
-  channelId: string,
-  db: ReturnType<typeof getDb>,
-  lastMessageOverride?: DmMessageWithUser | null,
-): DmChannel | null {
-  const dmChannel = db.select()
-    .from(schema.dmChannels)
-    .where(and(eq(schema.dmChannels.id, channelId), isNull(schema.dmChannels.deletedAt)))
-    .get();
-  if (!dmChannel) return null;
-
-  const allMemberRows = db.select()
-    .from(schema.dmMembers)
-    .where(eq(schema.dmMembers.dmChannelId, channelId))
-    .all();
-  const memberUserIds = allMemberRows.map(m => m.userId);
-  const users = memberUserIds.length > 0
-    ? db.select().from(schema.users).where(inArray(schema.users.id, memberUserIds)).all()
-    : [];
-
-  let lastMessage: DmMessageWithUser | null = lastMessageOverride ?? null;
-  if (!lastMessageOverride) {
-    const lastMsgRow = db.select({ id: schema.dmMessages.id })
-      .from(schema.dmMessages)
-      .where(eq(schema.dmMessages.dmChannelId, channelId))
-      .orderBy(desc(schema.dmMessages.createdAt))
-      .limit(1)
-      .get();
-    if (lastMsgRow) {
-      lastMessage = getDmMessageWithUser(lastMsgRow.id);
-    }
-  }
-
-  return toDmChannelWire(dmChannel, users, lastMessage);
-}
+import type { DmMessageWithUser, FederationMessageRef } from '@backspace/shared';
 
 // ─── Relay Event Processors ──────────────────────────────────────────────────
 

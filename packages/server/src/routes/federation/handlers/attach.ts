@@ -11,7 +11,7 @@ import { and, eq, isNull, or } from 'drizzle-orm';
 import { randomBytes } from 'node:crypto';
 import type { DmChannel } from '@backspace/shared';
 import type { FastifyInstance, FastifyReply } from 'fastify';
-import { buildDmChannelPayload } from '../dmChannels.js';
+import { loadDmChannelWire } from '../../../utils/dmChannelWire.js';
 import { extractDomain } from '../identity.js';
 import { downloadProfileAsset } from '../profile.js';
 import { isLookupRateLimited } from '../rateLimits.js';
@@ -298,7 +298,7 @@ export function registerAttachRoutes(app: FastifyInstance): void {
     //    replaces by id), refreshing the now-stale federatedId in place. dm_channel_updated
     //    would only patch name/icon, not federatedId, so it cannot heal the client here.
     for (const r of dmReconcileResults) {
-      const targetPayload = buildDmChannelPayload(r.targetChannelId, db);
+      const targetPayload = loadDmChannelWire(db, r.targetChannelId);
       for (const uid of r.affectedUserIds) {
         if (r.action === 'merged') {
           connectionManager.sendToUser(uid, { type: 'dm_channel_closed' as const, dmChannelId: r.channelId });

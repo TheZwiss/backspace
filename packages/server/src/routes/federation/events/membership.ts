@@ -3,11 +3,12 @@ import { getDb, schema } from '../../../db/index.js';
 import { canonicalizeHomeInstance, getOurOrigin, normalizeOriginForCompare } from '../../../utils/federationAuth.js';
 import { deleteUploadFile } from '../../../utils/fileCleanup.js';
 import { sanitizeUser } from '../../../utils/sanitize.js';
+import { loadDmChannelWire } from '../../../utils/dmChannelWire.js';
 import { generateSnowflake } from '../../../utils/snowflake.js';
 import { connectionManager } from '../../../ws/handler.js';
 import { GROUP_DM_NAME_MAX_LENGTH, GROUP_DM_NAME_MIN_LENGTH } from '@backspace/shared/src/constants.js';
-import { and, eq, inArray, or } from 'drizzle-orm';
-import type { DmChannel, DmMessageWithUser, FederationRelayEvent } from '@backspace/shared';
+import { and, eq, or } from 'drizzle-orm';
+import type { DmMessageWithUser, FederationRelayEvent } from '@backspace/shared';
 import { extractDomain, resolveOrCreateReplicatedUser, resolveRelayActor, attributionRefusal } from '../identity.js';
 import { downloadProfileAsset, processProfileUpdateEvent } from '../profile.js';
 import { dmChannelMembers, mayRelayInto, memberWithIdentity } from '../dmChannels.js';
@@ -248,7 +249,7 @@ export async function processMemberAddEvent(
     sourceMessageId: event.messageId,
   }).run();
 
-  const systemMessagePayload = {
+  const systemMessagePayload: DmMessageWithUser = {
     id: addSysMsgId,
     dmChannelId: channel.id,
     userId: actorId,
@@ -270,41 +271,26 @@ export async function processMemberAddEvent(
     // duplicate sidebar entries for users connected to multiple instances).
     // Include the system message we just persisted as lastMessage so the sidebar
     // preview and unread calculation use the same anchor as future messages.
-    const memberRows = db.select()
-      .from(schema.dmMembers)
-      .where(eq(schema.dmMembers.dmChannelId, channel.id))
-      .all();
-    const memberUserIds = memberRows.map(m => m.userId);
-    const memberUsers = memberUserIds.length > 0
-      ? db.select().from(schema.users).where(inArray(schema.users.id, memberUserIds)).all()
-      : [];
-
-    const bootstrapResult = {
-      id: channel.id,
-      federatedId: channel.federatedId,
-      ownerId: channel.ownerId,
-      createdAt: channel.createdAt,
-      members: memberUsers.map(u => sanitizeUser(u)),
-      lastMessage: systemMessagePayload,
-    };
-
-    const bootstrapOrigin = getOurOrigin();
-    for (const mu of memberUsers) {
-      const muHome = mu.homeInstance
-        ? (mu.homeInstance.startsWith('http') ? mu.homeInstance : `https://${mu.homeInstance}`)
-        : bootstrapOrigin;  // null homeInstance = native local user
-      if (muHome !== bootstrapOrigin) continue;
-      connectionManager.sendToUser(mu.id, {
-        type: 'dm_channel_created',
-        dmChannel: bootstrapResult as unknown as DmChannel,
-      });
+    const bootstrapResult = loadDmChannelWire(db, channel.id, systemMessagePayload);
+    if (bootstrapResult) {
+      const bootstrapOrigin = getOurOrigin();
+      for (const mu of bootstrapResult.members) {
+        const muHome = mu.homeInstance
+          ? (mu.homeInstance.startsWith('http') ? mu.homeInstance : `https://${mu.homeInstance}`)
+          : bootstrapOrigin;  // null homeInstance = native local user
+        if (muHome !== bootstrapOrigin) continue;
+        connectionManager.sendToUser(mu.id, {
+          type: 'dm_channel_created',
+          dmChannel: bootstrapResult,
+        });
+      }
     }
   } else {
     // Incremental: channel already exists for local members, so broadcast the
     // structural change (dm_member_added) and the chat message.
     connectionManager.sendToDmMembers(channel.id, {
       type: 'dm_message_created',
-      message: systemMessagePayload as unknown as DmMessageWithUser,
+      message: systemMessagePayload,
     });
     connectionManager.sendToDmMembers(channel.id, {
       type: 'dm_member_added',

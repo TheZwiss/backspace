@@ -1411,7 +1411,7 @@ function buildReadyPayload(userId: string): {
       eq(schema.dmMembers.closed, 0),
     ))
     .all();
-  const dmChannels = loadOpenDmChannels(db, userId);
+  const dmChannels = loadOpenDmChannels(db, userId, dmMemberships);
 
   // Include DM channel IDs in the visible set for read state filtering
   for (const dm of dmChannels) {

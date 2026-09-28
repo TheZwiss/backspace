@@ -1,5 +1,5 @@
-import { and, eq, inArray, isNull, or, sql } from 'drizzle-orm';
-import type { DmChannel, DmLastMessagePreview } from '@backspace/shared';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
+import type { DmChannel, DmLastMessagePreview, DmMessageWithUser } from '@backspace/shared';
 import type { getDb } from '../db/index.js';
 import { schema } from '../db/index.js';
 import { sanitizeUser } from './sanitize.js';
@@ -56,66 +56,42 @@ export function toDmLastMessagePreview(
   };
 }
 
+type DmMemberRow = typeof schema.dmMembers.$inferSelect;
+
 /**
- * Every DM the user has open (a `dm_members` row with `closed = 0` on a
- * channel that is not soft-deleted), each with its members and last-message
- * preview, in the order of the user's membership rows. Used by the ready
- * payload and by `GET /api/dm`, so the two lists cannot differ.
+ * The sidebar preview of the newest message of each channel in `channelIds`,
+ * keyed by channel. Chunked, so any number of channels stays under SQLite's
+ * bound-variable limit. On a tie on `created_at` the first row per channel
+ * wins.
  */
-export function loadOpenDmChannels(db: Db, userId: string): DmChannel[] {
-  const memberships = db.select()
-    .from(schema.dmMembers)
-    .where(and(
-      eq(schema.dmMembers.userId, userId),
-      eq(schema.dmMembers.closed, 0),
-    ))
-    .all();
-  if (memberships.length === 0) return [];
+function newestMessagePreviews(db: Db, channelIds: string[]): Map<string, DmLastMessagePreview> {
+  const previews = new Map<string, DmLastMessagePreview>();
+  if (channelIds.length === 0) return previews;
 
-  const dmChannelIds = memberships.map(m => m.dmChannelId);
-
-  const channelRows = batchInArray(
-    dmChannelIds,
-    ids => db.select().from(schema.dmChannels)
-      .where(and(inArray(schema.dmChannels.id, ids), isNull(schema.dmChannels.deletedAt))).all(),
-  );
-  const channelMap = new Map(channelRows.map(c => [c.id, c]));
-
-  const memberRows = batchInArray(
-    dmChannelIds,
-    ids => db.select().from(schema.dmMembers).where(inArray(schema.dmMembers.dmChannelId, ids)).all(),
-  );
-  const memberIdsByChannel = new Map<string, string[]>();
-  for (const m of memberRows) {
-    const list = memberIdsByChannel.get(m.dmChannelId);
-    if (list) list.push(m.userId);
-    else memberIdsByChannel.set(m.dmChannelId, [m.userId]);
-  }
-
-  const userIds = [...new Set(memberRows.map(m => m.userId))];
-  const userRows = userIds.length > 0
-    ? batchInArray(userIds, ids => db.select().from(schema.users).where(inArray(schema.users.id, ids)).all())
-    : [];
-  const userMap = new Map(userRows.map(u => [u.id, u]));
-
-  // Last message per channel in two steps: MAX(created_at) per channel, then
-  // the rows at those timestamps. On a tie the first row per channel wins.
-  const maxTimestamps = batchInArray(
-    dmChannelIds,
-    ids => db.select({
+  // One grouped pass per chunk finds each channel's newest timestamp, and the
+  // rows at it are joined back. (A correlated MAX per candidate row re-reads
+  // the conversation for every message in it: quadratic in its length.)
+  const newest = batchInArray(channelIds, ids => {
+    const latest = db.select({
       dmChannelId: schema.dmMessages.dmChannelId,
       maxCreatedAt: sql<number>`MAX(${schema.dmMessages.createdAt})`.as('max_created_at'),
-    }).from(schema.dmMessages).where(inArray(schema.dmMessages.dmChannelId, ids)).groupBy(schema.dmMessages.dmChannelId).all(),
-  );
+    })
+      .from(schema.dmMessages)
+      .where(inArray(schema.dmMessages.dmChannelId, ids))
+      .groupBy(schema.dmMessages.dmChannelId)
+      .as('latest');
+    return db.select()
+      .from(schema.dmMessages)
+      .innerJoin(latest, and(
+        eq(schema.dmMessages.dmChannelId, latest.dmChannelId),
+        eq(schema.dmMessages.createdAt, latest.maxCreatedAt),
+      ))
+      .all()
+      .map(row => row.dm_messages);
+  });
   const lastMessageMap = new Map<string, DmMessageRow>();
-  if (maxTimestamps.length > 0) {
-    const conditions = maxTimestamps.map(t =>
-      and(eq(schema.dmMessages.dmChannelId, t.dmChannelId), eq(schema.dmMessages.createdAt, t.maxCreatedAt)),
-    );
-    const lastMessages = db.select().from(schema.dmMessages).where(or(...conditions)).all();
-    for (const m of lastMessages) {
-      if (!lastMessageMap.has(m.dmChannelId)) lastMessageMap.set(m.dmChannelId, m);
-    }
+  for (const m of newest) {
+    if (!lastMessageMap.has(m.dmChannelId)) lastMessageMap.set(m.dmChannelId, m);
   }
 
   const lastMessageIds = [...lastMessageMap.values()].map(m => m.id);
@@ -137,19 +113,97 @@ export function loadOpenDmChannels(db: Db, userId: string): DmChannel[] {
     else attachmentsByMessage.set(a.dmMessageId, [entry]);
   }
 
+  for (const [channelId, message] of lastMessageMap) {
+    previews.set(channelId, toDmLastMessagePreview(message, attachmentsByMessage.get(message.id) ?? []));
+  }
+  return previews;
+}
+
+/**
+ * Each channel's members as user rows, in the order of its membership rows.
+ */
+function membersByChannel(db: Db, channelIds: string[]): Map<string, UserRow[]> {
+  const memberRows = batchInArray(
+    channelIds,
+    ids => db.select().from(schema.dmMembers).where(inArray(schema.dmMembers.dmChannelId, ids)).all(),
+  );
+  const userIds = [...new Set(memberRows.map(m => m.userId))];
+  const userRows = userIds.length > 0
+    ? batchInArray(userIds, ids => db.select().from(schema.users).where(inArray(schema.users.id, ids)).all())
+    : [];
+  const userMap = new Map(userRows.map(u => [u.id, u]));
+
+  const byChannel = new Map<string, UserRow[]>();
+  for (const m of memberRows) {
+    const user = userMap.get(m.userId);
+    if (!user) continue;
+    const list = byChannel.get(m.dmChannelId);
+    if (list) list.push(user);
+    else byChannel.set(m.dmChannelId, [user]);
+  }
+  return byChannel;
+}
+
+/**
+ * Every DM the user has open (a `dm_members` row with `closed = 0` on a
+ * channel that is not soft-deleted), each with its members and last-message
+ * preview, in the order of the user's membership rows. Used by the ready
+ * payload and by `GET /api/dm`, so the two lists cannot differ.
+ *
+ * `openMemberships` are the user's open membership rows when the caller has
+ * already read them (the ready builder does); otherwise they are read here.
+ */
+export function loadOpenDmChannels(db: Db, userId: string, openMemberships?: DmMemberRow[]): DmChannel[] {
+  const memberships = openMemberships ?? db.select()
+    .from(schema.dmMembers)
+    .where(and(
+      eq(schema.dmMembers.userId, userId),
+      eq(schema.dmMembers.closed, 0),
+    ))
+    .all();
+  if (memberships.length === 0) return [];
+
+  const dmChannelIds = memberships.map(m => m.dmChannelId);
+
+  const channelRows = batchInArray(
+    dmChannelIds,
+    ids => db.select().from(schema.dmChannels)
+      .where(and(inArray(schema.dmChannels.id, ids), isNull(schema.dmChannels.deletedAt))).all(),
+  );
+  const channelMap = new Map(channelRows.map(c => [c.id, c]));
+  const members = membersByChannel(db, dmChannelIds);
+  const previews = newestMessagePreviews(db, dmChannelIds);
+
   const dmChannels: DmChannel[] = [];
   for (const membership of memberships) {
     const channel = channelMap.get(membership.dmChannelId);
     if (!channel) continue;
-    const members = (memberIdsByChannel.get(channel.id) ?? [])
-      .map(id => userMap.get(id))
-      .filter((u): u is UserRow => u !== undefined);
-    const last = lastMessageMap.get(channel.id);
-    dmChannels.push(toDmChannelWire(
-      channel,
-      members,
-      last ? toDmLastMessagePreview(last, attachmentsByMessage.get(last.id) ?? []) : null,
-    ));
+    dmChannels.push(toDmChannelWire(channel, members.get(channel.id) ?? [], previews.get(channel.id) ?? null));
   }
   return dmChannels;
+}
+
+/**
+ * One DM channel as it goes on the wire, or null when the row does not exist
+ * or is soft-deleted. Every emitter that sends a single conversation
+ * (`dm_channel_created`, the create responses, re-attach) uses this, so its
+ * payload is the entry the ready payload and `GET /api/dm` list for the row.
+ *
+ * `lastMessage` is the message the emitter is delivering with the channel
+ * (the one that reopens it, a relayed message, a bootstrap system message);
+ * without it, the newest stored message's preview is used.
+ */
+export function loadDmChannelWire(
+  db: Db,
+  channelId: string,
+  lastMessage?: DmLastMessagePreview | DmMessageWithUser,
+): DmChannel | null {
+  const channel = db.select()
+    .from(schema.dmChannels)
+    .where(and(eq(schema.dmChannels.id, channelId), isNull(schema.dmChannels.deletedAt)))
+    .get();
+  if (!channel) return null;
+  const members = membersByChannel(db, [channelId]).get(channelId) ?? [];
+  const last = lastMessage ?? newestMessagePreviews(db, [channelId]).get(channelId) ?? null;
+  return toDmChannelWire(channel, members, last);
 }

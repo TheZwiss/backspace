@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { eq } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import { setWorkerId } from '../utils/snowflake.js';
-import type { FederationRelayEvent } from '@backspace/shared';
+import type { DmChannel, FederationRelayEvent } from '@backspace/shared';
 
 setWorkerId(5);
 
@@ -402,5 +402,33 @@ describe('processMemberAddEvent — bootstrap with group metadata snapshot', () 
     expect(row!.name).toBe('Local Current Name');
     expect(row!.icon).toBe('local-current-icon.png');
     expect(row!.metadataUpdatedAt).toBe(9999);
+  });
+});
+
+describe('processMemberAddEvent — the bootstrap dm_channel_created', () => {
+  it('is the loadDmChannelWire payload of the new row, group metadata included', async () => {
+    testDb.insert(schema.users).values({
+      id: 'local-carol', username: 'carol', passwordHash: 'x', homeUserId: null, homeInstance: null, createdAt: 1,
+    }).run();
+    const event = buildBootstrapEvent({ name: 'With Carol', icon: null, metadataUpdatedAt: 77 });
+    event.group!.members.push({ homeUserId: 'local-carol', homeInstance: 'local.test', profile: { username: 'carol', displayName: 'carol' } });
+
+    const fed = await import('./federation.js');
+    const accepted: string[] = [];
+    const rejected: Array<{ messageId: string; reason: string }> = [];
+    await fed.processMemberAddEvent(event, OWNER_ORIGIN, testDb, accepted, rejected);
+    expect(rejected).toEqual([]);
+
+    const created = vi.mocked(connectionManager.sendToUser).mock.calls
+      .filter(([to, e]) => to === 'local-carol' && e.type === 'dm_channel_created')
+      .map(([, e]) => (e as { dmChannel: DmChannel }).dmChannel);
+    expect(created).toHaveLength(1);
+    const payload = JSON.parse(JSON.stringify(created[0])) as DmChannel;
+    const { loadDmChannelWire } = await import('../utils/dmChannelWire.js');
+    const wire = JSON.parse(JSON.stringify(loadDmChannelWire(testDb as never, payload.id))) as DmChannel;
+    expect(Object.keys(payload).sort()).toEqual(Object.keys(wire).sort());
+    expect({ ...payload, lastMessage: null }).toEqual({ ...wire, lastMessage: null });
+    expect(payload).toMatchObject({ name: 'With Carol', metadataUpdatedAt: 77, ownerHomeUserId: 'home-owner-1' });
+    expect(payload.lastMessage?.id).toBe(wire.lastMessage?.id);
   });
 });

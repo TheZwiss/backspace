@@ -7,7 +7,6 @@ import { isDmMember, isDeadOneOnOne } from '../utils/permissions.js';
 import { connectionManager } from '../ws/handler.js';
 import {
   MAX_MESSAGE_LENGTH,
-  type DmChannel,
   type DmMessage,
   type DmMessageWithUser,
   type CreateDmRequest,
@@ -24,7 +23,7 @@ import {
 } from '@backspace/shared';
 import { fetchSpaceInviteSnapshot, getLocalInviteSnapshot } from '../utils/spaceInviteSnapshot.js';
 import { sanitizeUser } from '../utils/sanitize.js';
-import { loadOpenDmChannels } from '../utils/dmChannelWire.js';
+import { loadDmChannelWire, loadOpenDmChannels } from '../utils/dmChannelWire.js';
 import { mintGroupKey, oneOnOneKey } from '../utils/dmConversation.js';
 import { sendError } from '../utils/httpErrors.js';
 
@@ -290,32 +289,12 @@ export function broadcastDmMessage(dmChannelId: string, message: DmMessageWithUs
         ))
         .run();
 
-      // Build and send dm_channel_created so their sidebar picks it up
-      const allMemberRows = db.select()
-        .from(schema.dmMembers)
-        .where(eq(schema.dmMembers.dmChannelId, dmChannelId))
-        .all();
-      const memberUserIds = allMemberRows.map(m => m.userId);
-      const users = memberUserIds.length > 0
-        ? db.select().from(schema.users).where(inArray(schema.users.id, memberUserIds)).all()
-        : [];
-
-      const dmChannel = db.select()
-        .from(schema.dmChannels)
-        .where(and(eq(schema.dmChannels.id, dmChannelId), isNull(schema.dmChannels.deletedAt)))
-        .get();
-
+      // Send dm_channel_created, with this message, so their sidebar picks it up
+      const dmChannel = loadDmChannelWire(db, dmChannelId, message);
       if (dmChannel) {
         connectionManager.sendToUser(member.userId, {
           type: 'dm_channel_created',
-          dmChannel: {
-            id: dmChannel.id,
-            ownerId: dmChannel.ownerId ?? null,
-            federatedId: dmChannel.federatedId ?? null,
-            createdAt: dmChannel.createdAt,
-            members: users.map(u => sanitizeUser(u)),
-            lastMessage: message,
-          },
+          dmChannel,
         });
       }
     }
@@ -431,25 +410,14 @@ export function ensureOneOnOneDmChannel(
     }).run();
   });
 
-  // Notify the target so their sidebar updates — same payload shape as POST /api/dm.
-  const callerUser = db.select().from(schema.users).where(eq(schema.users.id, callerId)).get();
-  const members = [callerUser, targetUser]
-    .filter((u): u is NonNullable<typeof u> => u !== undefined)
-    .map(u => sanitizeUser(u));
-
-  const payload: DmChannel = {
-    id: dmChannelId,
-    ownerId: null,
-    federatedId: federatedId ?? null,
-    createdAt: now,
-    members,
-    lastMessage: null,
-  };
-
-  connectionManager.sendToUser(targetUser.id, {
-    type: 'dm_channel_created',
-    dmChannel: payload,
-  });
+  // Notify the target so their sidebar updates — same payload as POST /api/dm.
+  const payload = loadDmChannelWire(db, dmChannelId);
+  if (payload) {
+    connectionManager.sendToUser(targetUser.id, {
+      type: 'dm_channel_created',
+      dmChannel: payload,
+    });
+  }
 
   return dmChannelId;
 }
@@ -972,38 +940,8 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
           queueDmCloseRelay(myDm.dmChannelId, request.userId, 'dm_reopen');
         }
 
-        const dmMemberRows = db.select()
-          .from(schema.dmMembers)
-          .where(eq(schema.dmMembers.dmChannelId, myDm.dmChannelId))
-          .all();
-
-        const memberUserIds = dmMemberRows.map(m => m.userId);
-        const users = db.select().from(schema.users).where(inArray(schema.users.id, memberUserIds)).all();
-
-        // Fetch actual last message
-        const lastMsgRows = db.select()
-          .from(schema.dmMessages)
-          .where(eq(schema.dmMessages.dmChannelId, myDm.dmChannelId))
-          .orderBy(desc(schema.dmMessages.createdAt))
-          .limit(1)
-          .all();
-        const lastMsg = lastMsgRows[0] ?? null;
-
-        const result: DmChannel = {
-          id: dmChannel.id,
-          ownerId: dmChannel.ownerId ?? null,
-          federatedId: dmChannel.federatedId ?? null,
-          createdAt: dmChannel.createdAt,
-          members: users.map(u => sanitizeUser(u)),
-          lastMessage: lastMsg ? {
-            id: lastMsg.id,
-            dmChannelId: lastMsg.dmChannelId,
-            userId: lastMsg.userId,
-            content: lastMsg.content,
-            createdAt: lastMsg.createdAt,
-            type: lastMsg.type === 'system' ? 'system' : 'user',
-          } : null,
-        };
+        const result = loadDmChannelWire(db, dmChannel.id);
+        if (!result) continue;
 
         return reply.code(200).send(result);
       }
@@ -1037,19 +975,10 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       }).run();
     });
 
-    const currentUserRow = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
-    const members = [currentUserRow, targetUser]
-      .filter((u): u is NonNullable<typeof u> => u !== undefined)
-      .map(u => sanitizeUser(u));
-
-    const result: DmChannel = {
-      id: dmChannelId,
-      ownerId: null,
-      federatedId: federatedId ?? null,
-      createdAt: now,
-      members,
-      lastMessage: null,
-    };
+    const result = loadDmChannelWire(db, dmChannelId);
+    if (!result) {
+      return sendError(reply, 500, 'internal_error');
+    }
 
     // Broadcast dm_channel_created to the other user so their sidebar updates
     connectionManager.sendToUser(targetUserId, {
@@ -1219,14 +1148,10 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       .filter((u): u is NonNullable<typeof u> => u !== undefined)
       .map(u => sanitizeUser(u));
 
-    const result: DmChannel = {
-      id: dmChannelId,
-      ownerId: request.userId,
-      federatedId: federatedId ?? null,
-      createdAt: now,
-      members: allMembers,
-      lastMessage: null,
-    };
+    const result = loadDmChannelWire(db, dmChannelId);
+    if (!result) {
+      return sendError(reply, 500, 'internal_error');
+    }
 
     // Broadcast dm_channel_created only to LOCAL members.
     // Remote members will receive the channel via federation relay → bootstrap
@@ -1760,40 +1685,11 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       }
     }
 
-    // Build full DmChannel response with all members
-    const allMemberRows = db.select()
-      .from(schema.dmMembers)
-      .where(eq(schema.dmMembers.dmChannelId, id))
-      .all();
-    const memberUserIds = allMemberRows.map(m => m.userId);
-    const users = memberUserIds.length > 0
-      ? db.select().from(schema.users).where(inArray(schema.users.id, memberUserIds)).all()
-      : [];
-
-    // Fetch last message
-    const lastMsgRows = db.select()
-      .from(schema.dmMessages)
-      .where(eq(schema.dmMessages.dmChannelId, id))
-      .orderBy(desc(schema.dmMessages.createdAt))
-      .limit(1)
-      .all();
-    const lastMsg = lastMsgRows[0] ?? null;
-
-    const result: DmChannel = {
-      id: dmChannel.id,
-      ownerId: dmChannel.ownerId ?? null,
-      federatedId: dmChannel.federatedId ?? null,
-      createdAt: dmChannel.createdAt,
-      members: users.map(u => sanitizeUser(u)),
-      lastMessage: lastMsg ? {
-        id: lastMsg.id,
-        dmChannelId: lastMsg.dmChannelId,
-        userId: lastMsg.userId,
-        content: lastMsg.content,
-        createdAt: lastMsg.createdAt,
-        type: lastMsg.type === 'system' ? 'system' : 'user',
-      } : null,
-    };
+    // The channel as the new member's sidebar gets it
+    const result = loadDmChannelWire(db, id);
+    if (!result) {
+      return sendError(reply, 404, 'dm_not_found');
+    }
 
     const newUser = sanitizeUser(targetUser);
 

@@ -3,6 +3,7 @@ import { getDb, schema } from '../../../db/index.js';
 import { normalizeOriginForCompare } from '../../../utils/federationAuth.js';
 import { getGroupDmTargetOrigins } from '../../../utils/federationOutbox.js';
 import { oneOnOneKey } from '../../../utils/dmConversation.js';
+import { loadDmChannelWire } from '../../../utils/dmChannelWire.js';
 import { deleteAttachmentFiles } from '../../../utils/fileCleanup.js';
 import { rewriteRelayedMentions } from '../../../utils/federationMentions.js';
 import { sanitizeUser } from '../../../utils/sanitize.js';
@@ -11,7 +12,7 @@ import { connectionManager } from '../../../ws/handler.js';
 import { getDmMessageWithUser } from '../../dm.js';
 import { and, eq, isNull, or } from 'drizzle-orm';
 import type { FederationMessageTarget, FederationRelayEvent } from '@backspace/shared';
-import { buildDmChannelPayload, buildDmMessagePayload, dmChannelMembers, findOrCreateDmChannel, isRelayTarget, isUrlFromPeer, mayRelayInto, memberWithIdentity, nonMemberRefusal, resolveLocalDmMessage, resolveRelayedReplyTarget } from '../dmChannels.js';
+import { buildDmMessagePayload, dmChannelMembers, findOrCreateDmChannel, isRelayTarget, isUrlFromPeer, mayRelayInto, memberWithIdentity, nonMemberRefusal, resolveLocalDmMessage, resolveRelayedReplyTarget } from '../dmChannels.js';
 import { attributionRefusal, extractDomain, relayActorOfUser, resolveOrCreateReplicatedUser, resolveRelayActor, sameRelayActor } from '../identity.js';
 import { hydrateReplicatedUserProfile } from '../profile.js';
 
@@ -248,7 +249,7 @@ export async function processCreateEvent(
           ))
           .run();
 
-        const payload = buildDmChannelPayload(localDmChannelId, db, fullMessage);
+        const payload = loadDmChannelWire(db, localDmChannelId, fullMessage);
         if (payload) {
           connectionManager.sendToUser(member.userId, {
             type: 'dm_channel_created',

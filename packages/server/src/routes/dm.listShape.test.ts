@@ -7,7 +7,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as schema from '../db/schema.js';
 import { setWorkerId } from '../utils/snowflake.js';
-import type { DmChannel } from '@backspace/shared';
+import { and, eq } from 'drizzle-orm';
+import type { DmChannel, DmMessageWithUser } from '@backspace/shared';
 
 setWorkerId(1);
 
@@ -156,11 +157,165 @@ describe('DmChannel wire shape: GET /api/dm, ready and dm_channel_created agree'
     ['a federated 1-on-1', ONE_ON_ONE],
     ['a group', GROUP],
   ])('the dm_channel_created payload for %s has the same keys as the ready entry', async (_label, id) => {
-    const { buildDmChannelPayload } = await import('./federation/dmChannels.js');
+    const { loadDmChannelWire } = await import('../utils/dmChannelWire.js');
     const readyEntry = (await readyDmChannels()).find(d => d.id === id);
-    const payload = JSON.parse(JSON.stringify(buildDmChannelPayload(id, testDb as never))) as DmChannel;
-    expect(Object.keys(payload).sort()).toEqual(Object.keys(readyEntry!).sort());
-    // lastMessage is the full message there (the relay passes the one it just stored); the channel fields are equal.
-    expect({ ...payload, lastMessage: null }).toEqual({ ...readyEntry!, lastMessage: null });
+    const payload = JSON.parse(JSON.stringify(loadDmChannelWire(testDb as never, id))) as DmChannel;
+    // Without a message to deliver, the payload is the ready entry, last-message preview included.
+    expect(payload).toEqual(readyEntry);
+  });
+});
+
+/**
+ * Every emitter puts a `DmChannel` on the wire through `loadDmChannelWire`
+ * (ADR 0002, "One server wire serializer"): its payload has the same keys and
+ * values as the serializer's for the same row. A payload built before the
+ * emitter's own system messages are stored carries the last message as of that
+ * moment, so those are compared with `lastMessage` left out.
+ */
+describe('every DmChannel emitter builds its payload with loadDmChannelWire', () => {
+  let app: FastifyInstance;
+
+  beforeEach(async () => {
+    const sqlite = new Database(':memory:');
+    testDb = drizzle(sqlite, { schema });
+    applyMigrations(sqlite);
+    seed();
+    testDb.insert(schema.users).values([
+      { id: 'user-dave', username: 'dave', passwordHash: 'x', homeUserId: null, homeInstance: null, createdAt: now },
+      { id: 'user-erin', username: 'erin', passwordHash: 'x', homeUserId: null, homeInstance: null, createdAt: now },
+    ]).run();
+    testDb.insert(schema.friends).values([
+      { userId: ME, friendId: 'user-carol', createdAt: now },
+      { userId: ME, friendId: 'user-dave', createdAt: now },
+      { userId: ME, friendId: 'user-erin', createdAt: now },
+    ]).run();
+    app = Fastify({ logger: false });
+    const { dmRoutes } = await import('./dm.js');
+    await app.register(dmRoutes);
+    await app.ready();
+  });
+
+  afterEach(async () => {
+    await app.close();
+    vi.restoreAllMocks();
+  });
+
+  async function wireOf(id: string, lastMessage?: DmMessageWithUser): Promise<DmChannel> {
+    const { loadDmChannelWire } = await import('../utils/dmChannelWire.js');
+    const wire = loadDmChannelWire(testDb as never, id, lastMessage);
+    expect(wire).not.toBeNull();
+    return JSON.parse(JSON.stringify(wire)) as DmChannel;
+  }
+
+  function expectSameChannel(payload: DmChannel, wire: DmChannel): void {
+    expect(Object.keys(payload).sort()).toEqual(Object.keys(wire).sort());
+    expect({ ...payload, lastMessage: null }).toEqual({ ...wire, lastMessage: null });
+  }
+
+  async function createdSentTo(userId: string, run: () => Promise<unknown>): Promise<DmChannel[]> {
+    const { connectionManager } = await import('../ws/handler.js');
+    const send = vi.spyOn(connectionManager, 'sendToUser');
+    await run();
+    return send.mock.calls
+      .filter(([to, event]) => to === userId && event.type === 'dm_channel_created')
+      .map(([, event]) => JSON.parse(JSON.stringify((event as { dmChannel: DmChannel }).dmChannel)) as DmChannel);
+  }
+
+  it('POST /api/dm answering with an existing 1-on-1 (200)', async () => {
+    const res = await app.inject({ method: 'POST', url: '/api/dm', payload: { userId: 'user-bob' } });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual(await wireOf(ONE_ON_ONE));
+  });
+
+  it('POST /api/dm answering with a new 1-on-1 (201)', async () => {
+    const res = await app.inject({ method: 'POST', url: '/api/dm', payload: { userId: 'user-carol' } });
+    expect(res.statusCode).toBe(201);
+    const body = res.json() as DmChannel;
+    expect(body).toEqual(await wireOf(body.id));
+  });
+
+  it('POST /api/dm/group: the response and the members\' dm_channel_created', async () => {
+    let res: Awaited<ReturnType<FastifyInstance['inject']>> | undefined;
+    const sent = await createdSentTo('user-carol', async () => {
+      res = await app.inject({ method: 'POST', url: '/api/dm/group', payload: { users: [{ id: 'user-carol' }, { id: 'user-dave' }] } });
+    });
+    expect(res!.statusCode).toBe(201);
+    const body = res!.json() as DmChannel;
+    const wire = await wireOf(body.id);
+    expectSameChannel(body, wire);
+    expect(sent).toHaveLength(1);
+    expectSameChannel(sent[0]!, wire);
+  });
+
+  it('POST /api/dm/:id/members: the dm_channel_created the added member gets', async () => {
+    const sent = await createdSentTo('user-erin', async () => {
+      const res = await app.inject({ method: 'POST', url: `/api/dm/${GROUP}/members`, payload: { userId: 'user-erin' } });
+      expect(res.statusCode).toBeLessThan(300);
+    });
+    expect(sent).toHaveLength(1);
+    expectSameChannel(sent[0]!, await wireOf(GROUP));
+    expect(sent[0]!.name).toBe('Weekend plans');
+  });
+
+  it('broadcastDmMessage: the dm_channel_created that reopens a closed conversation', async () => {
+    testDb.update(schema.dmMembers).set({ closed: 1 })
+      .where(and(eq(schema.dmMembers.dmChannelId, GROUP), eq(schema.dmMembers.userId, 'user-carol'))).run();
+    const { broadcastDmMessage, getDmMessageWithUser } = await import('./dm.js');
+    const message = getDmMessageWithUser('msg-group')!;
+    const sent = await createdSentTo('user-carol', async () => { broadcastDmMessage(GROUP, message); });
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toEqual(await wireOf(GROUP, message));
+  });
+});
+
+describe('the newest-message lookup on a long conversation', () => {
+  it('reads the last message of a conversation with thousands of messages without scanning it per row', async () => {
+    const sqlite = new Database(':memory:');
+    testDb = drizzle(sqlite, { schema });
+    applyMigrations(sqlite);
+    seed();
+    const count = 8_000;
+    sqlite.transaction(() => {
+      const message = sqlite.prepare(`INSERT INTO dm_messages (id, dm_channel_id, user_id, content, created_at) VALUES (?, ?, ?, 'x', ?)`);
+      for (let i = 0; i < count; i++) message.run(`long-${i}`, ONE_ON_ONE, i % 2 === 0 ? ME : 'user-bob', now + 10 + i);
+    })();
+    const { loadDmChannelWire, loadOpenDmChannels } = await import('../utils/dmChannelWire.js');
+    const started = performance.now();
+    const wire = loadDmChannelWire(testDb as never, ONE_ON_ONE);
+    const listed = loadOpenDmChannels(testDb as never, ME).find(d => d.id === ONE_ON_ONE);
+    const elapsed = performance.now() - started;
+    expect(wire?.lastMessage?.id).toBe(`long-${count - 1}`);
+    expect(listed?.lastMessage?.id).toBe(`long-${count - 1}`);
+    // A lookup that re-reads the conversation for every candidate row takes
+    // seconds here (quadratic in its messages); one grouped pass takes ms.
+    expect(elapsed).toBeLessThan(750);
+  });
+});
+
+describe('loadOpenDmChannels with many conversations', () => {
+  it('lists every open DM with its last message when a user has more than a thousand', async () => {
+    const sqlite = new Database(':memory:');
+    testDb = drizzle(sqlite, { schema });
+    applyMigrations(sqlite);
+    seed();
+    const count = 1_200;
+    sqlite.transaction(() => {
+      const user = sqlite.prepare(`INSERT INTO users (id, username, password_hash, created_at) VALUES (?, ?, 'x', ?)`);
+      const channel = sqlite.prepare(`INSERT INTO dm_channels (id, created_at) VALUES (?, ?)`);
+      const member = sqlite.prepare(`INSERT INTO dm_members (dm_channel_id, user_id, closed) VALUES (?, ?, 0)`);
+      const message = sqlite.prepare(`INSERT INTO dm_messages (id, dm_channel_id, user_id, content, created_at) VALUES (?, ?, ?, 'hi', ?)`);
+      for (let i = 0; i < count; i++) {
+        user.run(`peer-${i}`, `peer${i}`, now);
+        channel.run(`bulk-${i}`, now);
+        member.run(`bulk-${i}`, ME);
+        member.run(`bulk-${i}`, `peer-${i}`);
+        message.run(`bulk-msg-${i}-a`, `bulk-${i}`, `peer-${i}`, now + i);
+        message.run(`bulk-msg-${i}-b`, `bulk-${i}`, ME, now + i + 1);
+      }
+    })();
+    const { loadOpenDmChannels } = await import('../utils/dmChannelWire.js');
+    const bulk = loadOpenDmChannels(testDb as never, ME).filter(d => d.id.startsWith('bulk-'));
+    expect(bulk).toHaveLength(count);
+    expect(bulk.every(d => d.lastMessage?.id === `bulk-msg-${d.id.slice('bulk-'.length)}-b`)).toBe(true);
   });
 });

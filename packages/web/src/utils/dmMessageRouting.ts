@@ -99,9 +99,15 @@ function deliverAsNewConversation(origin: string, message: DmMessageWithUser): v
   useSpaceStore.getState().addDmChannel({
     id: message.dmChannelId,
     federatedId: null,
+    ownerId: null,
+    ownerHomeUserId: null,
+    ownerHomeInstance: null,
     createdAt: message.createdAt,
     members: message.user ? [message.user] : [],
     lastMessage: message,
+    name: null,
+    icon: null,
+    metadataUpdatedAt: 0,
   }, origin);
   const { currentChannelId, markChannelUnread } = useChatStore.getState();
   if (message.dmChannelId !== currentChannelId && !isOwnMessage(origin, message)) {

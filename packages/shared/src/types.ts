@@ -377,18 +377,25 @@ export interface DmLastMessagePreview {
   attachments?: Array<{ type: string; filename: string }>;
 }
 
+/**
+ * A DM conversation as a current server puts it on the wire. Every field is
+ * required, nullable where the row can be null, so a server payload that
+ * forgets one does not compile; the server builds it only through
+ * `utils/dmChannelWire.ts` (ADR 0002).
+ */
 export interface DmChannel {
   id: string;
+  /** The conversation key: `null` only for a group no other instance holds. */
   federatedId: string | null;
-  ownerId?: string | null;
-  ownerHomeUserId?: string | null;
-  ownerHomeInstance?: string | null;
+  ownerId: string | null;
+  ownerHomeUserId: string | null;
+  ownerHomeInstance: string | null;
   createdAt: number;
   members: User[];
-  lastMessage?: DmLastMessagePreview | DmMessageWithUser | null;
-  name?: string | null;
-  icon?: string | null;
-  metadataUpdatedAt?: number;
+  lastMessage: DmLastMessagePreview | DmMessageWithUser | null;
+  name: string | null;
+  icon: string | null;
+  metadataUpdatedAt: number;
 }
 
 export interface DmMessage {

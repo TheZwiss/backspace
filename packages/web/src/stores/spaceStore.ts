@@ -108,11 +108,11 @@ function completeListedDms(
     return {
       ...dm,
       federatedId,
-      ownerHomeUserId: sentOrKnown(dm.ownerHomeUserId, known?.ownerHomeUserId),
-      ownerHomeInstance: sentOrKnown(dm.ownerHomeInstance, known?.ownerHomeInstance),
-      name: sentOrKnown(dm.name, known?.name),
-      icon: sentOrKnown(dm.icon, known?.icon),
-      metadataUpdatedAt: sentOrKnown(dm.metadataUpdatedAt, known?.metadataUpdatedAt),
+      ownerHomeUserId: sentOrKnown(dm.ownerHomeUserId, known?.ownerHomeUserId) ?? null,
+      ownerHomeInstance: sentOrKnown(dm.ownerHomeInstance, known?.ownerHomeInstance) ?? null,
+      name: sentOrKnown(dm.name, known?.name) ?? null,
+      icon: sentOrKnown(dm.icon, known?.icon) ?? null,
+      metadataUpdatedAt: sentOrKnown(dm.metadataUpdatedAt, known?.metadataUpdatedAt) ?? 0,
     };
   });
 }
