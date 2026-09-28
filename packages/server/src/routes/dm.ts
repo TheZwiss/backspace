@@ -252,10 +252,40 @@ export function getDmMessageWithUser(dmMessageId: string): DmMessageWithUser | n
 }
 
 /**
- * Broadcasts a DM message to all members of a DM channel.
- * For members who have closed the channel (closed=1), also sends a
- * dm_channel_created event to resurface the channel in their sidebar,
- * and flips their closed flag back to 0.
+ * Reopen a conversation for every member who has it closed, and send each of
+ * them `dm_channel_created` so it appears in their list. `lastMessage` is the
+ * message being delivered with it; without one, the newest stored message is
+ * the preview. Run before anything that needs the conversation in a member's
+ * list: a new message (`broadcastDmMessage`) and a call (call start), which is
+ * how a new 1-on-1 reaches its recipient (#360).
+ */
+export function reopenForClosedMembers(dmChannelId: string, lastMessage?: DmMessageWithUser): void {
+  const db = getDb();
+  const closedMembers = db.select()
+    .from(schema.dmMembers)
+    .where(and(eq(schema.dmMembers.dmChannelId, dmChannelId), eq(schema.dmMembers.closed, 1)))
+    .all();
+  if (closedMembers.length === 0) return;
+
+  db.update(schema.dmMembers)
+    .set({ closed: 0 })
+    .where(and(eq(schema.dmMembers.dmChannelId, dmChannelId), eq(schema.dmMembers.closed, 1)))
+    .run();
+
+  const dmChannel = loadDmChannelWire(db, dmChannelId, lastMessage);
+  if (!dmChannel) return;
+  for (const member of closedMembers) {
+    connectionManager.sendToUser(member.userId, {
+      type: 'dm_channel_created',
+      dmChannel,
+    });
+  }
+}
+
+/**
+ * Broadcasts a DM message to all members of a DM channel. Members who have
+ * closed the channel get it back first (`reopenForClosedMembers`), with this
+ * message as its last message.
  */
 export function broadcastDmMessage(dmChannelId: string, message: DmMessageWithUser): void {
   const db = getDb();
@@ -278,27 +308,9 @@ export function broadcastDmMessage(dmChannelId: string, message: DmMessageWithUs
   // Relay typing stop to remote peers (fire-and-forget)
   sendTypingRelay(dmChannelId, 'dm_typing_stop', message.userId);
 
+  reopenForClosedMembers(dmChannelId, message);
+
   for (const member of dmMembers) {
-    // If this member had closed the DM, resurface it first
-    if (member.closed === 1) {
-      db.update(schema.dmMembers)
-        .set({ closed: 0 })
-        .where(and(
-          eq(schema.dmMembers.dmChannelId, dmChannelId),
-          eq(schema.dmMembers.userId, member.userId),
-        ))
-        .run();
-
-      // Send dm_channel_created, with this message, so their sidebar picks it up
-      const dmChannel = loadDmChannelWire(db, dmChannelId, message);
-      if (dmChannel) {
-        connectionManager.sendToUser(member.userId, {
-          type: 'dm_channel_created',
-          dmChannel,
-        });
-      }
-    }
-
     connectionManager.sendToUser(member.userId, {
       type: 'dm_message_created',
       message,
@@ -309,10 +321,14 @@ export function broadcastDmMessage(dmChannelId: string, message: DmMessageWithUs
 /**
  * Open the 1-on-1 between the caller and `targetUser` for the caller: the
  * conversation `findOrCreateOneOnOne` finds or creates, reopened on the
- * caller's side (with a `dm_reopen` relay) when they had closed it. A new
- * conversation is announced to the target with `dm_channel_created`.
- * `POST /api/dm` and `ensureOneOnOneDmChannel` both open conversations
- * through it.
+ * caller's side (with a `dm_reopen` relay) when they had closed it.
+ *
+ * Nothing reaches the target (#360). A new conversation gets the target's
+ * membership closed, and an existing one the target closed stays closed: the
+ * next message sent in it reopens it for them and delivers it with that
+ * message (`broadcastDmMessage`), the way a conversation reaches a recipient
+ * on another instance. `POST /api/dm` and `ensureOneOnOneDmChannel` both open
+ * conversations through it.
  */
 function openOneOnOne(
   callerId: string,
@@ -324,19 +340,9 @@ function openOneOnOne(
     db,
     { id: callerId, homeUserId: callerRow?.homeUserId ?? null },
     targetUser,
-    { open: 'both' },
+    { open: 'first' },
   );
-
-  if (opened.created) {
-    const payload = loadDmChannelWire(db, opened.channelId);
-    if (payload) {
-      connectionManager.sendToUser(targetUser.id, {
-        type: 'dm_channel_created',
-        dmChannel: payload,
-      });
-    }
-    return opened;
-  }
+  if (opened.created) return opened;
 
   const reopened = db.update(schema.dmMembers)
     .set({ closed: 0 })

@@ -10,11 +10,13 @@ import {
   queuedRelayEvents,
   sendDmMessage,
   readDb,
+  waitUntil,
   withWritableDb,
   type PeeredHarness,
 } from './helpers/federationE2E.js';
 import { channelByFederatedId, memberIds, pairFederatedId, postAs } from './helpers/dmScope.js';
 import { registerLocal, createFederatedUser, type TestUser } from './helpers/testUsers.js';
+import { connectWs, type WsEvent } from './helpers/wsListener.js';
 import { spawnInstance, type SpawnedInstance } from './helpers/twoInstanceHarness.js';
 import type { DmChannel } from '@backspace/shared';
 
@@ -31,9 +33,14 @@ vi.setConfig({ testTimeout: 60_000 });
  * first, so a relay-created copy is returned instead of a second insert that
  * the unique index turns into a 500.
  *
+ * Opening a 1-on-1 puts it in the opener's list only (#360): the recipient's
+ * membership is created closed, and the first message brings the
+ * conversation to them. The relay's copy on the other instance is unchanged:
+ * it is created with the message, open for both.
+ *
  * Topology (IDENTITY profile, so B's inbound relay handling is fully real):
  *   alice — native on A, with a federated account on B
- *   carol — native on A
+ *   carol, dave — native on A
  *   bob, erin — native on B
  * A's real create events are read from A's outbox and posted, signed, to B.
  */
@@ -45,6 +52,7 @@ let alice: TestUser;
 let carol: TestUser;
 let bob: TestUser;
 let erin: TestUser;
+let dave: TestUser;
 
 beforeAll(async () => {
   h = await bootIdentityPeered(1);
@@ -54,6 +62,7 @@ beforeAll(async () => {
   carol = await registerLocal(A, 'carol');
   bob = await registerLocal(B, 'bob');
   erin = await registerLocal(B, 'erin');
+  dave = await registerLocal(A, 'dave');
 }, 90_000);
 
 afterAll(async () => {
@@ -220,5 +229,69 @@ describe('federation e2e: every 1-on-1 holds its key, relay on or off', () => {
     const listRes = await fetch(`${A.origin}/api/dm`, { headers: { Authorization: `Bearer ${alice.token}` } });
     const listed = await listRes.json() as DmChannel[];
     expect(listed.filter(d => d.federatedId === key).map(d => d.id)).toEqual([relayCopy]);
+  });
+});
+
+function closedFlag(inst: SpawnedInstance, channelId: string, userId: string): number | undefined {
+  return readDb(inst, db =>
+    (db.prepare('SELECT closed FROM dm_members WHERE dm_channel_id = ? AND user_id = ?').get(channelId, userId) as { closed: number } | undefined)?.closed,
+  );
+}
+
+describe('federation e2e: a 1-on-1 reaches its recipient with the first message (#360)', () => {
+  it('a local recipient sees nothing until the first message, then gets the conversation with it', async () => {
+    const daveWs = await connectWs(A.origin, dave.token);
+    try {
+      const opened = await openDm(A, alice.token, { userId: dave.id });
+      expect(opened.status).toBe(201);
+      expect(closedFlag(A, opened.dm.id, dave.id)).toBe(1);
+
+      const listBefore = await fetch(`${A.origin}/api/dm`, { headers: { Authorization: `Bearer ${dave.token}` } });
+      expect((await listBefore.json() as DmChannel[]).some(d => d.id === opened.dm.id)).toBe(false);
+      expect(daveWs.events.some(e => e.type === 'dm_channel_created')).toBe(false);
+
+      const sent = await sendDmMessage(A, alice.token, opened.dm.id, { content: 'hello dave' });
+      expect(sent.status).toBe(201);
+      expect(await waitUntil(() => daveWs.events.some(e => e.type === 'dm_message_created'), 8_000)).toBe(true);
+      const created = daveWs.events.filter((e: WsEvent) => e.type === 'dm_channel_created');
+      expect(created).toHaveLength(1);
+      const dm = created[0]!.dmChannel as DmChannel;
+      expect(dm.id).toBe(opened.dm.id);
+      expect(dm.lastMessage?.id).toBe(sent.id);
+      expect(closedFlag(A, opened.dm.id, dave.id)).toBe(0);
+    } finally {
+      daveWs.close();
+    }
+  });
+
+  it('a federated recipient: the local copy holds their row closed until the first message; the relayed copy is open for both', async () => {
+    const bobOpened = await openDm(A, carol.token, { homeUserId: bob.id, homeInstance: B.domain });
+    expect(bobOpened.status).toBe(201);
+    const bobRowOnA = memberIds(A, bobOpened.dm.id).find(id => id !== carol.id)!;
+    expect(closedFlag(A, bobOpened.dm.id, bobRowOnA)).toBe(1);
+
+    const bobWs = await connectWs(B.origin, bob.token);
+    try {
+      const sent = await sendDmMessage(A, carol.token, bobOpened.dm.id, { content: 'hello bob' });
+      expect(sent.status).toBe(201);
+      expect(closedFlag(A, bobOpened.dm.id, bobRowOnA)).toBe(0);
+
+      const event = queuedRelayEvents(A, bobOpened.dm.id, 'create').find(e => e.messageId === sent.id);
+      expect(event).toBeDefined();
+      const res = await postSignedRelay(B, identityOrigin(A), peerSecretOn(B, identityOrigin(A)), [event!]);
+      expect(res.body?.accepted).toContain(sent.id);
+
+      const copyOnB = channelByFederatedId(B, pairFederatedId(carol.id, bob.id))!;
+      expect(copyOnB).toBeDefined();
+      for (const member of memberIds(B, copyOnB)) expect(closedFlag(B, copyOnB, member)).toBe(0);
+      expect(await waitUntil(() => bobWs.events.some(e => e.type === 'dm_message_created'), 8_000)).toBe(true);
+      // As before: the relay creates the copy with the message, and no
+      // dm_channel_created precedes it.
+      expect(bobWs.events.some(e => e.type === 'dm_channel_created')).toBe(false);
+      const listed = await fetch(`${B.origin}/api/dm`, { headers: { Authorization: `Bearer ${bob.token}` } });
+      expect((await listed.json() as DmChannel[]).map(d => d.id)).toContain(copyOnB);
+    } finally {
+      bobWs.close();
+    }
   });
 });

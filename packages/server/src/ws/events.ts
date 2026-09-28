@@ -5,7 +5,7 @@ import { generateSnowflake } from '../utils/snowflake.js';
 import { connectionManager, getVoiceRoomElapsedSeconds } from './handler.js';
 import type { VoiceRoom, DmRoomMeta, SpaceRoomMeta } from './handler.js';
 import { isMember, getChannelSpaceId, isDmMember, isDeadOneOnOne, hasPermission, computePermissions, PermissionBits } from '../utils/permissions.js';
-import { broadcastDmMessage, getDmMessageWithUser, isDmReplyTargetInChannel } from '../routes/dm.js';
+import { broadcastDmMessage, getDmMessageWithUser, isDmReplyTargetInChannel, reopenForClosedMembers } from '../routes/dm.js';
 import { fetchReplyToMessages, isReplyTargetInChannel } from '../routes/messages.js';
 import { MAX_MESSAGE_LENGTH, isChosenUserStatus, type MessageWithUser, type Attachment, type DmMessageWithUser, type Embed, type ServerEvent, type DmCallUndeliverableFailure, type DmCallUndeliverableReason } from '@backspace/shared';
 import type { CallRelayResult, CallFanoutFailure } from '../utils/federationOutbox.js';
@@ -1402,6 +1402,11 @@ function handleDmCallStart(event: Record<string, unknown>, userId: string, usern
   // Bind voice session to this socket so removeConnection can clean up
   // if the caller closes the tab while the call is ringing
   connectionManager.setVoiceWs(userId, ws);
+
+  // A member who has the conversation closed (a new 1-on-1's recipient before
+  // its first message, #360) gets it back first, so the call has a
+  // conversation to open in and survives a reconnect.
+  reopenForClosedMembers(dmChannelId);
 
   // Ring other members
   connectionManager.sendToDmMembers(dmChannelId, {
