@@ -1,9 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-const mockFailover = vi.fn();
-vi.mock('../utils/dmOriginFailover', () => ({
-  failoverDmOriginsFromDisconnected: (o: string) => mockFailover(o),
-}));
 vi.mock('../hooks/useWebSocket', () => ({
   connectInstance: vi.fn(),
   disconnectInstance: vi.fn(),
@@ -23,6 +19,10 @@ vi.mock('./authStore', () => ({
 
 import { useInstanceStore } from './instanceStore';
 import type { ConnectedInstance } from './instanceStore';
+import { useSpaceStore } from './spaceStore';
+import type { DmChannel } from '@backspace/shared';
+
+let mockFailover: ReturnType<typeof vi.spyOn>;
 
 function inst(origin: string, status: ConnectedInstance['status']): ConnectedInstance {
   return {
@@ -33,21 +33,28 @@ function inst(origin: string, status: ConnectedInstance['status']): ConnectedIns
 }
 
 beforeEach(() => {
-  mockFailover.mockClear();
+  mockFailover?.mockRestore();
+  useSpaceStore.getState().reset();
+  // A socket that drops makes the origin unavailable to the DM pin rule.
+  mockFailover = vi.spyOn(useSpaceStore.getState(), 'setDmOriginAvailable');
   useInstanceStore.setState({ instances: [], registry: new Map(), registryUpdatedAt: 0 });
 });
+
+function dm(id: string, federatedId: string): DmChannel {
+  return { id, federatedId, createdAt: 1, members: [] };
+}
 
 describe('instanceStore failover triggers', () => {
   it('fires failover on connected → disconnected transition', () => {
     useInstanceStore.setState({ instances: [inst('https://b.example', 'connected')] });
     useInstanceStore.getState().setInstanceStatus('https://b.example', 'disconnected');
-    expect(mockFailover).toHaveBeenCalledExactlyOnceWith('https://b.example');
+    expect(mockFailover).toHaveBeenCalledExactlyOnceWith('https://b.example', false);
   });
 
   it('fires failover on connected → error transition', () => {
     useInstanceStore.setState({ instances: [inst('https://b.example', 'connected')] });
     useInstanceStore.getState().setInstanceStatus('https://b.example', 'error');
-    expect(mockFailover).toHaveBeenCalledExactlyOnceWith('https://b.example');
+    expect(mockFailover).toHaveBeenCalledExactlyOnceWith('https://b.example', false);
   });
 
   it('does not fire on connecting → connected', () => {
@@ -67,35 +74,26 @@ describe('instanceStore failover triggers', () => {
     expect(mockFailover).not.toHaveBeenCalled();
   });
 
-  it('disconnectInstance runs failover before removeInstanceSpaces', async () => {
-    // Seed a DM pinned to b.example with home as alternative — removeInstanceSpaces
-    // uses spaceStore, which we let run; we just check failover ran first (call order).
-    const spaceModule = await import('./spaceStore');
-    const spaceSpy = vi.spyOn(spaceModule.useSpaceStore.getState(), 'removeInstanceSpaces');
-    const callOrder: string[] = [];
-    mockFailover.mockImplementation(() => { callOrder.push('failover'); });
-    spaceSpy.mockImplementation(() => { callOrder.push('removeInstanceSpaces'); });
+  it('disconnectInstance moves a DM pinned to the origin onto another connected copy', () => {
+    // b.example's copy was listed first; c.example holds another copy.
+    useSpaceStore.getState().populateFromReady('https://b.example', [], [], [dm('b-1', 'fed-aaa')]);
+    useSpaceStore.getState().populateFromReady('https://c.example', [], [], [dm('c-1', 'fed-aaa')]);
+    expect(useSpaceStore.getState().dmChannels.map(d => d.id)).toEqual(['b-1']);
 
-    useInstanceStore.setState({ instances: [inst('https://b.example', 'connected')] });
+    useInstanceStore.setState({ instances: [inst('https://b.example', 'connected'), inst('https://c.example', 'connected')] });
     useInstanceStore.getState().disconnectInstance('https://b.example');
-    await Promise.resolve();
 
-    expect(callOrder).toEqual(['failover', 'removeInstanceSpaces']);
-    spaceSpy.mockRestore();
+    expect(useSpaceStore.getState().dmChannels.map(d => d.id)).toEqual(['c-1']);
+    expect(useSpaceStore.getState().channelOriginMap.get('c-1')).toBe('https://c.example');
   });
 
-  it('forceRemoveEntry runs failover before removeInstanceSpaces', async () => {
-    const spaceModule = await import('./spaceStore');
-    const spaceSpy = vi.spyOn(spaceModule.useSpaceStore.getState(), 'removeInstanceSpaces');
-    const callOrder: string[] = [];
-    mockFailover.mockImplementation(() => { callOrder.push('failover'); });
-    spaceSpy.mockImplementation(() => { callOrder.push('removeInstanceSpaces'); });
+  it('forceRemoveEntry moves a DM pinned to the origin onto another copy and drops the ones with none', () => {
+    useSpaceStore.getState().populateFromReady('https://b.example', [], [], [dm('b-1', 'fed-aaa'), dm('b-2', 'fed-bbb')]);
+    useSpaceStore.getState().populateFromReady('', [], [], [dm('home-1', 'fed-aaa')]);
 
     useInstanceStore.setState({ instances: [inst('https://b.example', 'connected')] });
     useInstanceStore.getState().forceRemoveEntry('https://b.example');
-    await Promise.resolve();
 
-    expect(callOrder).toEqual(['failover', 'removeInstanceSpaces']);
-    spaceSpy.mockRestore();
+    expect(useSpaceStore.getState().dmChannels.map(d => d.id)).toEqual(['home-1']);
   });
 });

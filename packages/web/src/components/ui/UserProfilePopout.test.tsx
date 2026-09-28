@@ -10,8 +10,8 @@ import type { User } from '@backspace/shared';
 vi.mock('../../stores/spaceStore', () => ({
   useSpaceStore: Object.assign(
     (selector: (s: Record<string, unknown>) => unknown) =>
-      selector({ addDmChannel: vi.fn(), findExistingDmForUser: vi.fn() }),
-    { getState: () => ({ addDmChannel: vi.fn(), findExistingDmForUser: vi.fn() }) },
+      selector({ upsertDmCopy: vi.fn(), findExistingDmForUser: vi.fn() }),
+    { getState: () => ({ upsertDmCopy: vi.fn(), findExistingDmForUser: vi.fn() }) },
   ),
   getApiForOrigin: () => ({ uploads: { url: (k: string) => `/uploads/${k}` } }),
   resolveUserOrigin: () => 'local',

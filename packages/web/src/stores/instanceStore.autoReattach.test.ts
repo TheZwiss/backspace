@@ -5,9 +5,6 @@ import type { BackspaceApiClient } from '../api/client';
 // ── Module mocks (mirror instanceStore.failover.test.ts) ─────────────────────
 // These stub the side-effecting modules instanceStore pulls in at import time so
 // the store loads cleanly under jsdom with no network, audio, or WS activity.
-vi.mock('../utils/dmOriginFailover', () => ({
-  failoverDmOriginsFromDisconnected: vi.fn(),
-}));
 vi.mock('../hooks/useWebSocket', () => ({
   connectInstance: vi.fn(),
   disconnectInstance: vi.fn(),

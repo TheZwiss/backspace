@@ -36,15 +36,14 @@ import type { DmChannel, User } from '@backspace/shared';
 
 describe('updateUserEverywhere → DM member patch (drives the live Deleted-User update)', () => {
   beforeEach(() => {
-    useSpaceStore.setState({
-      dmChannels: [{
-        id: 'd1', ownerId: null, createdAt: 0,
-        members: [
-          { id: 'me', username: 'me' } as User,
-          { id: 'partner', username: 'partner', displayName: 'Partner', isDeleted: false } as User,
-        ],
-      } as DmChannel],
-    });
+    useSpaceStore.getState().reset();
+    useSpaceStore.getState().populateFromReady('', [], [], [{
+      id: 'd1', federatedId: null, ownerId: null, createdAt: 0,
+      members: [
+        { id: 'me', username: 'me' } as User,
+        { id: 'partner', username: 'partner', displayName: 'Partner', isDeleted: false } as User,
+      ],
+    } as DmChannel]);
   });
 
   it('rewrites the matching member to the sanitized deleted user', () => {

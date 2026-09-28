@@ -1,11 +1,31 @@
 import { create } from 'zustand';
-import type { Space, Channel, ChannelCategory, MemberWithUser, SpaceWithChannelsAndMembers, Role, SpaceFolder, SpaceLayoutItem, DmChannel, User, UpdateSpaceRequest, CreateSpaceRequest, UpdateChannelRequest } from '@backspace/shared';
+import type { Space, Channel, ChannelCategory, MemberWithUser, SpaceWithChannelsAndMembers, Role, SpaceFolder, SpaceLayoutItem, DmChannel, DmMessageWithUser, User, UpdateSpaceRequest, CreateSpaceRequest, UpdateChannelRequest } from '@backspace/shared';
 import { api, BackspaceApiClient } from '../api/client';
 import { resolveAssetUrl, normalizeUserAssets } from '../utils/assetUrls';
 import { isSelf, canonicalUserKey, isDeliveryFromHome, activityKey, type PresenceSubject } from '../utils/identity';
 import { sortDmChannels } from '../utils/dmSorting';
 import { locateDmChannel } from '../utils/dmChannelLookup';
-import { deriveMissingOneOnOneKeys, type ListedDmChannel } from '../utils/dmConversationKey';
+import { deriveMissingOneOnOneKeys, type PeerDmChannel } from '../utils/dmConversationKey';
+import { applyDmPinMoves } from '../utils/dmOriginFailover';
+import {
+  EMPTY_DM_CONVERSATIONS,
+  mergeOriginListing,
+  upsertCopy,
+  upsertUnplacedCopy,
+  removeCopy,
+  patchCopy,
+  patchEveryCopy,
+  setOriginAvailable,
+  dropOrigin,
+  pinnedDmChannels,
+  pinnedOriginByChannelId,
+  conversationCopyIndex,
+  copyIdOnOrigin,
+  copyOnOrigin,
+  type DmConversations,
+  type DmOperation,
+  type DmPinContext,
+} from './dmConversations';
 import {
   getApiForOrigin,
   resolveOriginFromHostname,
@@ -57,71 +77,6 @@ export interface UserViewEntry {
   updatedAt: number;
 }
 
-// ─── DM list completion ───────────────────────────────────────────────────────
-
-/**
- * The listed DMs from `origin` as full `DmChannel`s, for `reloadDmsForOrigin`.
- *
- * A field the server sent (null included) is kept as sent. A field it left
- * out, which only a peer on 1.6.1 or older does, is filled from what the
- * client already holds for that channel id on this origin: its entry in
- * `dmChannels`, and for the key also the `dmAlternatives` record. A key still
- * unknown falls back to `derivedKeys` (1-on-1 keys derived from the members),
- * then to null.
- *
- * A derived key is dropped again (back to null) when another entry of the same
- * listing ends up with the same key. The peer then holds two rows for one pair
- * (a keyless legacy 1-on-1 next to the relay-created copy), and the dedup
- * below would keep only one of them, possibly hiding the live copy.
- */
-function completeListedDms(
-  listed: ListedDmChannel[],
-  origin: string,
-  state: Pick<SpaceState, 'dmChannels' | 'channelOriginMap' | 'dmAlternatives'>,
-  derivedKeys: Map<string, string>,
-): DmChannel[] {
-  const knownById = new Map<string, DmChannel>();
-  for (const dm of state.dmChannels) {
-    if ((state.channelOriginMap.get(dm.id) ?? '') === origin) knownById.set(dm.id, dm);
-  }
-  const alternateKeyById = new Map<string, string>();
-  for (const [fid, byOrigin] of state.dmAlternatives) {
-    const channelId = byOrigin.get(origin);
-    if (channelId !== undefined) alternateKeyById.set(channelId, fid);
-  }
-
-  const resolved = listed.map((dm): { dm: ListedDmChannel; federatedId: string | null; derived: boolean } => {
-    if (dm.federatedId !== undefined) return { dm, federatedId: dm.federatedId, derived: false };
-    const knownKey = knownById.get(dm.id)?.federatedId ?? alternateKeyById.get(dm.id) ?? null;
-    if (knownKey) return { dm, federatedId: knownKey, derived: false };
-    const derivedKey = derivedKeys.get(dm.id) ?? null;
-    return { dm, federatedId: derivedKey, derived: derivedKey !== null };
-  });
-  const entriesPerKey = new Map<string, number>();
-  for (const { federatedId } of resolved) {
-    if (federatedId) entriesPerKey.set(federatedId, (entriesPerKey.get(federatedId) ?? 0) + 1);
-  }
-
-  return resolved.map(({ dm, federatedId: resolvedKey, derived }): DmChannel => {
-    const known = knownById.get(dm.id);
-    const federatedId = derived && resolvedKey && (entriesPerKey.get(resolvedKey) ?? 0) > 1 ? null : resolvedKey;
-    return {
-      ...dm,
-      federatedId,
-      ownerHomeUserId: sentOrKnown(dm.ownerHomeUserId, known?.ownerHomeUserId) ?? null,
-      ownerHomeInstance: sentOrKnown(dm.ownerHomeInstance, known?.ownerHomeInstance) ?? null,
-      name: sentOrKnown(dm.name, known?.name) ?? null,
-      icon: sentOrKnown(dm.icon, known?.icon) ?? null,
-      metadataUpdatedAt: sentOrKnown(dm.metadataUpdatedAt, known?.metadataUpdatedAt) ?? 0,
-    };
-  });
-}
-
-/** The value the server sent, or the one already held when the server left the field out. */
-function sentOrKnown<T>(sent: T | undefined, known: T | undefined): T | undefined {
-  return sent !== undefined ? sent : known;
-}
-
 // ─── Roster changes during a detail fetch ────────────────────────────────────
 // `loadSpaceDetail` replaces `members` with the roster the server sent. A
 // `member_joined` or `member_left` that arrives while that fetch is in flight
@@ -160,6 +115,68 @@ function applyRosterChange(members: MemberWithUser[], change: RosterChange): Mem
   return members.filter(m => m.userId !== change.userId);
 }
 
+// ─── DM conversations: the derived view ──────────────────────────────────────
+// `dmConversations` (stores/dmConversations.ts) is the only DM state the
+// store writes. `dmChannels`, `dmAlternatives` and the DM entries of
+// `channelOriginMap` and `channelLastMessageIds` are derived from it after
+// every operation, here, and written nowhere else.
+
+type DmView = Pick<SpaceState, 'dmConversations' | 'dmChannels' | 'dmAlternatives' | 'channelOriginMap' | 'channelLastMessageIds'>;
+
+/**
+ * The store fields derived from `conversations`. `previousRows` are the DM
+ * rows the maps held entries for until now; those entries are replaced, the
+ * space-channel entries are kept.
+ */
+function deriveDmView(
+  conversations: DmConversations,
+  previousRows: readonly DmChannel[],
+  channelOriginMap: ReadonlyMap<string, string>,
+  channelLastMessageIds: ReadonlyMap<string, string>,
+): DmView {
+  const origins = new Map(channelOriginMap);
+  const lastMessageIds = new Map(channelLastMessageIds);
+  for (const dm of previousRows) {
+    origins.delete(dm.id);
+    lastMessageIds.delete(dm.id);
+  }
+  const rows = pinnedDmChannels(conversations);
+  for (const [channelId, origin] of pinnedOriginByChannelId(conversations)) origins.set(channelId, origin);
+  for (const dm of rows) {
+    if (dm.lastMessage?.id) lastMessageIds.set(dm.id, dm.lastMessage.id);
+  }
+  const { unreadChannels, currentChannelId } = useChatStore.getState();
+  return {
+    dmConversations: conversations,
+    dmChannels: sortDmChannels(rows, unreadChannels, currentChannelId),
+    dmAlternatives: conversationCopyIndex(conversations),
+    channelOriginMap: origins,
+    channelLastMessageIds: lastMessageIds,
+  };
+}
+
+/** The pin rule's view of the session: the user's home is `getLayoutHomeOrigin()`. */
+function dmPinContext(): DmPinContext {
+  return { home: getLayoutHomeOrigin() };
+}
+
+/**
+ * Store the result of a DM operation, derive the view from it, and apply its
+ * pin moves: the chat state and URL of a row follow it to its new channel id
+ * (`applyDmPinMoves`), after which the list is re-sorted, since the moves
+ * carried unread state to the new ids.
+ */
+function commitDmOperation(op: DmOperation): void {
+  if (op.next !== useSpaceStore.getState().dmConversations) {
+    useSpaceStore.setState((state) =>
+      deriveDmView(op.next, state.dmChannels, state.channelOriginMap, state.channelLastMessageIds),
+    );
+  }
+  if (op.pinMoves.length === 0) return;
+  applyDmPinMoves(op.pinMoves);
+  useSpaceStore.getState().resortDmChannels();
+}
+
 // ─── Store interface ──────────────────────────────────────────────────────────
 
 interface SpaceState {
@@ -184,6 +201,13 @@ interface SpaceState {
   roles: Role[];
   folders: SpaceFolder[];
   spaceLayout: SpaceLayoutItem[] | null;
+  /**
+   * Every DM copy the client knows, grouped into conversations, with the
+   * pinned copy of each (`stores/dmConversations.ts`). The only DM state
+   * actions write; the DM fields below are derived from it.
+   */
+  dmConversations: DmConversations;
+  /** Derived: the pinned copy of each conversation, sorted by `sortDmChannels`. The DM list. */
   dmChannels: DmChannel[];
   channelToSpaceMap: Map<string, string>;
   channelLastMessageIds: Map<string, string>;
@@ -192,7 +216,11 @@ interface SpaceState {
   channelOriginMap: Map<string, string>; // channelId → instance origin ('' = home)
   voiceChannelIds: Set<string>; // channelIds that are voice channels (excluded from unread)
   categoryOriginMap: Map<string, string>; // categoryId → instance origin ('' = home)
-  /** federatedId → (origin → localChannelId). Every DM from every origin's ready payload is recorded here regardless of dedup outcome, so failover can re-point to an alternate origin's local channel ID. */
+  /**
+   * Derived: conversation key → (origin → that origin's channel id), for every
+   * copy of every keyed conversation, the pinned one included. The index
+   * `resolveDmChannelId` reads to place an id another instance sent.
+   */
   dmAlternatives: Map<string, Map<string, string>>;
   /**
    * canonicalUserKey → best-known view of that user. Populated from every wire
@@ -229,10 +257,23 @@ interface SpaceState {
   setCategories: (categories: ChannelCategory[]) => void;
   setMembers: (members: MemberWithUser[]) => void;
   setRoles: (roles: Role[]) => void;
-  setDmChannels: (channels: DmChannel[]) => void;
-  addDmChannel: (channel: DmChannel, origin?: string) => void;
-  /** Record that `origin` holds its own copy of the DM `federatedId` under `channelId` (see `dmAlternatives`). */
-  recordDmAlternative: (federatedId: string, origin: string, channelId: string) => void;
+  /**
+   * A DM channel a server sent outside a listing (`dm_channel_created`, a
+   * create response) joins its conversation. Returns the channel id of the
+   * conversation's pinned copy, which is where the UI navigates.
+   */
+  upsertDmCopy: (origin: string, channel: PeerDmChannel, keySource: 'stated' | 'unknown') => string;
+  /** A message no listing placed gets an entry of its own under the origin that sent it. */
+  placeUnplacedDmMessage: (origin: string, message: DmMessageWithUser) => void;
+  /** Change the DM copy with this channel id (its last message, members, metadata). */
+  patchDmCopy: (channelId: string, patch: (channel: DmChannel) => DmChannel) => void;
+  /**
+   * Re-sort the DM list after unread or selection changed. `currentChannelId`
+   * overrides the chat store's for this sort.
+   */
+  resortDmChannels: (currentChannelId?: string | null) => void;
+  /** An origin's socket dropped (false) or came back: rows pinned there fail over by the pin rule. */
+  setDmOriginAvailable: (origin: string, available: boolean) => void;
   reloadDmsForOrigin: (origin: string) => Promise<void>;
   removeDmChannel: (id: string) => void;
   addDmMember: (dmChannelId: string, user: User) => void;
@@ -336,6 +377,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
   roles: [],
   folders: [],
   spaceLayout: null,
+  dmConversations: EMPTY_DM_CONVERSATIONS,
   dmChannels: [],
   channelToSpaceMap: new Map(),
   channelLastMessageIds: new Map(),
@@ -362,6 +404,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       roles: [],
       folders: [],
       spaceLayout: null,
+      dmConversations: EMPTY_DM_CONVERSATIONS,
       dmChannels: [],
       channelToSpaceMap: new Map(),
       channelLastMessageIds: new Map(),
@@ -391,45 +434,45 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
   setCategories: (categories) => set({ categories }),
   setMembers: (members) => set({ members }),
   setRoles: (roles) => set({ roles }),
-  setDmChannels: (dmChannels) => set({ dmChannels }),
+  upsertDmCopy: (origin, channel, keySource) => {
+    const op = upsertCopy(get().dmConversations, origin, channel, keySource, dmPinContext());
+    commitDmOperation(op);
+    return op.pinnedChannelId;
+  },
 
-  addDmChannel: (channel, origin?: string) => set((state) => {
-    const channelOriginMap = new Map(state.channelOriginMap);
-    if (origin !== undefined) {
-      channelOriginMap.set(channel.id, origin);
-    }
-    return {
-      dmChannels: [channel, ...state.dmChannels.filter(c => c.id !== channel.id)],
-      channelOriginMap,
-    };
+  placeUnplacedDmMessage: (origin, message) => {
+    commitDmOperation(upsertUnplacedCopy(get().dmConversations, origin, message, dmPinContext()));
+  },
+
+  patchDmCopy: (channelId, patch) => {
+    commitDmOperation(patchCopy(get().dmConversations, channelId, patch));
+  },
+
+  resortDmChannels: (currentChannelId) => set((state) => {
+    if (state.dmChannels.length === 0) return state;
+    const chat = useChatStore.getState();
+    const current = currentChannelId !== undefined ? currentChannelId : chat.currentChannelId;
+    return { dmChannels: sortDmChannels(state.dmChannels, chat.unreadChannels, current) };
   }),
 
-  recordDmAlternative: (federatedId, origin, channelId) => set((state) => {
-    if (state.dmAlternatives.get(federatedId)?.get(origin) === channelId) return state;
-    const dmAlternatives = new Map(state.dmAlternatives);
-    const byOrigin = new Map(dmAlternatives.get(federatedId) ?? []);
-    byOrigin.set(origin, channelId);
-    dmAlternatives.set(federatedId, byOrigin);
-    return { dmAlternatives };
-  }),
+  setDmOriginAvailable: (origin, available) => {
+    commitDmOperation(setOriginAvailable(get().dmConversations, origin, available, dmPinContext()));
+  },
 
-  // Refetch and replace the DM list for a single origin, mirroring the DM
-  // portion of populateFromReady (dedup vs other origins by federatedId, origin
-  // map, last-message map, failover alternatives, userViews). Used after a
-  // re-attach reconciles this connection's 1-on-1 federatedIds (merge/re-key)
-  // so the split conversation collapses without a full WS reconnect, and by
-  // `utils/dmMessageRouting` to learn which conversation an unknown channel id
-  // belongs to. Origin '' is the home instance. Throws on a failed fetch; both
-  // callers catch.
+  // Refetch this origin's DM list and merge it as the origin's copies
+  // (`mergeOriginListing`). Used after a re-attach reconciles this
+  // connection's 1-on-1 keys (merge/re-key) so a split conversation collapses
+  // without a full WS reconnect, and by `utils/dmMessageRouting` to learn which
+  // conversation an unknown channel id belongs to. Origin '' is the home
+  // instance. Throws on a failed fetch; the callers catch.
   //
   // A peer on 1.6.1 or older lists its DMs without `federatedId` and the group
-  // metadata (see `utils/dmConversationKey`). Such an entry takes the key the
-  // client already knows for that channel id, or else the key derived from its
-  // two members for a 1-on-1, and keeps the group metadata the client already
-  // holds. A field the server does send, null included, is taken as sent.
+  // metadata. The merge module fills an absent field from the copy it already
+  // holds for that channel id, and a 1-on-1 still without a key takes the one
+  // derived from its members here (see `completePeerListing`).
   reloadDmsForOrigin: async (origin: string) => {
     const client = getApiForOrigin(origin);
-    const listed: ListedDmChannel[] = await client.dm.list();
+    const listed: PeerDmChannel[] = await client.dm.list();
     // Before normalization: the derivation reads the members' raw homeInstance.
     const derivedKeys = await deriveMissingOneOnOneKeys(listed);
 
@@ -442,72 +485,15 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       }
     }
 
-    set((state) => {
-      const incomingDms = completeListedDms(listed, origin, state, derivedKeys);
-
-      // Upsert every DM member into the userViews cache (home + remote).
-      const { upsertUserView } = get();
-      for (const dm of incomingDms) {
-        for (const member of dm.members) {
-          upsertUserView(member, origin);
-        }
+    // Upsert every DM member into the userViews cache (home + remote).
+    const { upsertUserView } = get();
+    for (const dm of listed) {
+      for (const member of dm.members) {
+        upsertUserView(member, origin);
       }
+    }
 
-      // Dedup vs DMs already loaded from OTHER origins (same federatedId).
-      const existingFederatedIds = new Map<string, string>();
-      for (const dm of state.dmChannels) {
-        if (dm.federatedId && (state.channelOriginMap.get(dm.id) ?? '') !== origin) {
-          existingFederatedIds.set(dm.federatedId, dm.id);
-        }
-      }
-
-      const channelOriginMap = new Map(state.channelOriginMap);
-      const channelLastMessageIds = new Map(state.channelLastMessageIds);
-      // Drop this origin's stale channel-map entries before repopulating.
-      for (const dm of state.dmChannels) {
-        if ((state.channelOriginMap.get(dm.id) ?? '') === origin) {
-          channelOriginMap.delete(dm.id);
-          channelLastMessageIds.delete(dm.id);
-        }
-      }
-
-      const dmAlternatives = new Map<string, Map<string, string>>();
-      for (const [fid, byOrigin] of state.dmAlternatives) {
-        dmAlternatives.set(fid, new Map(byOrigin));
-      }
-
-      const filteredDms: DmChannel[] = [];
-      for (const dm of incomingDms) {
-        if (dm.federatedId && existingFederatedIds.has(dm.federatedId)) {
-          continue; // duplicate cross-instance DM — keep the copy from the other origin
-        }
-        filteredDms.push(dm);
-        if (dm.federatedId) existingFederatedIds.set(dm.federatedId, dm.id);
-      }
-      for (const dm of filteredDms) {
-        channelOriginMap.set(dm.id, origin);
-        if (dm.lastMessage?.id) channelLastMessageIds.set(dm.id, dm.lastMessage.id);
-      }
-      // Record every DM's (origin → localChannelId) for failover lookup.
-      for (const dm of incomingDms) {
-        if (!dm.federatedId) continue;
-        let byOrigin = dmAlternatives.get(dm.federatedId);
-        if (!byOrigin) {
-          byOrigin = new Map();
-          dmAlternatives.set(dm.federatedId, byOrigin);
-        }
-        byOrigin.set(origin, dm.id);
-      }
-
-      const existingDmsFromOtherOrigins = state.dmChannels.filter(
-        dm => (state.channelOriginMap.get(dm.id) ?? '') !== origin,
-      );
-      const mergedDms = [...existingDmsFromOtherOrigins, ...filteredDms];
-      const { unreadChannels, currentChannelId } = useChatStore.getState();
-      const sortedDms = sortDmChannels(mergedDms, unreadChannels, currentChannelId);
-
-      return { dmChannels: sortedDms, channelOriginMap, channelLastMessageIds, dmAlternatives };
-    });
+    commitDmOperation(mergeOriginListing(get().dmConversations, origin, listed, derivedKeys, dmPinContext()));
   },
 
   upsertUserView: (user, deliveringOrigin) => set((state) => {
@@ -529,32 +515,25 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
   }),
 
   removeDmChannel: (id) => {
-    set((state) => ({
-      dmChannels: state.dmChannels.filter(c => c.id !== id)
-    }));
+    commitDmOperation(removeCopy(get().dmConversations, id, dmPinContext()));
     // Clean up unread/read state for the closed DM
     useChatStore.getState().removeChannelStates(new Set([id]));
   },
 
-  addDmMember: (dmChannelId, user) => set((state) => ({
-    dmChannels: state.dmChannels.map(dm =>
-      dm.id === dmChannelId
-        ? { ...dm, members: dm.members.some(m => m.id === user.id) ? dm.members : [...dm.members, user] }
-        : dm
-    ),
-  })),
+  addDmMember: (dmChannelId, user) => {
+    commitDmOperation(patchCopy(get().dmConversations, dmChannelId, (dm) =>
+      dm.members.some(m => m.id === user.id) ? dm : { ...dm, members: [...dm.members, user] },
+    ));
+  },
 
-  removeDmMember: (dmChannelId, userId) => set((state) => ({
-    dmChannels: state.dmChannels.map(dm =>
-      dm.id === dmChannelId
-        ? { ...dm, members: dm.members.filter(m => m.id !== userId) }
-        : dm
-    ),
-  })),
+  removeDmMember: (dmChannelId, userId) => {
+    commitDmOperation(patchCopy(get().dmConversations, dmChannelId, (dm) =>
+      ({ ...dm, members: dm.members.filter(m => m.id !== userId) }),
+    ));
+  },
 
-  updateDmOwner: (dmChannelId, newOwnerId, newOwnerHomeUserId, newOwnerHomeInstance) => set((state) => ({
-    dmChannels: state.dmChannels.map(dm => {
-      if (dm.id !== dmChannelId) return dm;
+  updateDmOwner: (dmChannelId, newOwnerId, newOwnerHomeUserId, newOwnerHomeInstance) => {
+    commitDmOperation(patchCopy(get().dmConversations, dmChannelId, (dm) => {
       const next = { ...dm, ownerId: newOwnerId };
       // Only overwrite the federation routing fields when the caller supplies
       // them. Older servers that omit these fields must not blank out the
@@ -564,39 +543,34 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       if (newOwnerHomeUserId !== undefined) next.ownerHomeUserId = newOwnerHomeUserId;
       if (newOwnerHomeInstance !== undefined) next.ownerHomeInstance = newOwnerHomeInstance;
       return next;
-    }),
-  })),
+    }));
+  },
 
   // Patches the group DM's display metadata (name + icon). Idempotent: a
   // payload with only one of `name`/`icon` leaves the other field untouched.
   // Mirrors `updateDmOwner` shape; called by the `dm_channel_updated` WS
   // handler after a remote rename / icon change.
-  updateDmMetadata: (dmChannelId, patch) => set((state) => ({
-    dmChannels: state.dmChannels.map(dm => {
-      if (dm.id !== dmChannelId) return dm;
+  updateDmMetadata: (dmChannelId, patch) => {
+    commitDmOperation(patchCopy(get().dmConversations, dmChannelId, (dm) => {
       const next = { ...dm };
       if ('name' in patch) next.name = patch.name ?? null;
       if ('icon' in patch) next.icon = patch.icon ?? null;
       return next;
-    }),
-  })),
+    }));
+  },
 
   closeDm: async (id) => {
     const origin = get().channelOriginMap.get(id) || '';
     const targetApi = getApiForOrigin(origin);
     await targetApi.dm.close(id);
-    set((state) => ({
-      dmChannels: state.dmChannels.filter(c => c.id !== id)
-    }));
+    commitDmOperation(removeCopy(get().dmConversations, id, dmPinContext()));
   },
 
   leaveDm: async (id) => {
     const origin = get().channelOriginMap.get(id) || '';
     const targetApi = getApiForOrigin(origin);
     await targetApi.dm.leave(id);
-    set((state) => ({
-      dmChannels: state.dmChannels.filter(c => c.id !== id)
-    }));
+    commitDmOperation(removeCopy(get().dmConversations, id, dmPinContext()));
   },
 
   loadSpaces: async () => {
@@ -987,13 +961,12 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       members: state.members.map(m =>
         m.userId === user.id ? { ...m, user: { ...m.user, ...user } } : m
       ),
-      dmChannels: state.dmChannels.map(dm => ({
-        ...dm,
-        members: dm.members.map(m =>
-          m.id === user.id ? { ...m, ...user } : m
-        ),
-      })),
     }));
+    commitDmOperation(patchEveryCopy(get().dmConversations, (dm) =>
+      dm.members.some(m => m.id === user.id)
+        ? { ...dm, members: dm.members.map(m => (m.id === user.id ? { ...m, ...user } : m)) }
+        : dm,
+    ));
   },
 
   addMember: (spaceId: string, member: MemberWithUser) => {
@@ -1078,10 +1051,6 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     const channelOriginMap = new Map(get().channelOriginMap);
     const voiceChannelIds = new Set(get().voiceChannelIds);
     const categoryOriginMap = new Map(get().categoryOriginMap);
-    const dmAlternatives = new Map<string, Map<string, string>>();
-    for (const [fid, byOrigin] of get().dmAlternatives) {
-      dmAlternatives.set(fid, new Map(byOrigin));
-    }
 
     // If home, clear home-origin entries first to avoid stale data
     if (isHome) {
@@ -1176,74 +1145,20 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       }
     }
 
-    // Build a set of existing federatedIds for dedup (only from OTHER origins —
-    // DMs from the reconnecting origin will be replaced, not deduplicated)
-    const existingFederatedIds = new Map<string, string>(); // federatedId → dmChannelId
-    for (const dm of get().dmChannels) {
-      if (dm.federatedId) {
-        const dmOrigin = get().channelOriginMap.get(dm.id);
-        if (dmOrigin !== origin) {
-          existingFederatedIds.set(dm.federatedId, dm.id);
-        }
-      }
-    }
-
-    // Filter incoming DMs: skip duplicates (same federatedId already loaded from another origin)
-    const filteredDms: typeof incomingDms = [];
-    for (const dm of incomingDms) {
-      if (dm.federatedId && existingFederatedIds.has(dm.federatedId)) {
-        // Duplicate cross-instance DM — keep the existing copy
-        continue;
-      }
-      filteredDms.push(dm);
-      if (dm.federatedId) {
-        existingFederatedIds.set(dm.federatedId, dm.id);
-      }
-    }
-
-    for (const dm of filteredDms) {
-      channelOriginMap.set(dm.id, origin);
-      if (dm.lastMessage?.id) {
-        channelLastMessageIds.set(dm.id, dm.lastMessage.id);
-      }
-    }
-
-    // Record every DM's (origin → localChannelId) for failover lookup,
-    // regardless of whether the dedup pass kept this copy in dmChannels.
-    for (const dm of incomingDms) {
-      if (!dm.federatedId) continue;
-      let byOrigin = dmAlternatives.get(dm.federatedId);
-      if (!byOrigin) {
-        byOrigin = new Map();
-        dmAlternatives.set(dm.federatedId, byOrigin);
-      }
-      byOrigin.set(origin, dm.id);
-    }
-
-    // Merge: remove DMs belonging to this origin from existing state, then append incoming
-    const existingDmsFromOtherOrigins = get().dmChannels.filter(dm => {
-      const dmOrigin = get().channelOriginMap.get(dm.id);
-      return dmOrigin !== origin;
-    });
-    const mergedDms = [...existingDmsFromOtherOrigins, ...filteredDms];
-
-    // Sort DMs using unread-first ordering. On initial load, unreadChannels may
-    // still be empty (read states are processed after populateFromReady); the
-    // safety-net re-sort in setReadStates handles that case.
-    const { unreadChannels, currentChannelId } = useChatStore.getState();
-    const sortedDms = sortDmChannels(mergedDms, unreadChannels, currentChannelId);
+    // Every DM this origin holds replaces its previous copies; the merge
+    // module dedups them against the other origins' copies and pins one copy
+    // per conversation. The DM fields of the store are derived from the result.
+    const dmOperation = mergeOriginListing(get().dmConversations, origin, incomingDms, new Map(), dmPinContext());
+    const dmView = deriveDmView(dmOperation.next, get().dmChannels, channelOriginMap, channelLastMessageIds);
 
     const update: Partial<SpaceState> = {
+      ...dmView,
       spaces: mergedSpaces,
-      dmChannels: sortedDms,
       channelToSpaceMap,
-      channelLastMessageIds,
       spacePermissions,
       channelPermissions,
-      channelOriginMap,
       voiceChannelIds,
       categoryOriginMap,
-      dmAlternatives,
     };
 
     // LWW layout merge: accept incoming layout only if its timestamp is >= ours
@@ -1262,6 +1177,10 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     }
 
     set(update as any);
+    if (dmOperation.pinMoves.length > 0) {
+      applyDmPinMoves(dmOperation.pinMoves);
+      get().resortDmChannels();
+    }
   },
 
   addSpaceFromReady: (origin: string, space: SpaceWithChannelsAndMembers) => {
@@ -1383,16 +1302,8 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
         }
       }
 
-      // Prune dmAlternatives: drop this origin from every inner map.
-      const dmAlternatives = new Map<string, Map<string, string>>();
-      for (const [fid, byOrigin] of state.dmAlternatives) {
-        const nextInner = new Map(byOrigin);
-        nextInner.delete(origin);
-        if (nextInner.size > 0) dmAlternatives.set(fid, nextInner);
-      }
-
       // Prune userViews: drop entries delivered by this origin. Symmetrical
-      // with dmAlternatives — full removal evicts; transient disconnect leaves
+      // with the DM copies — full removal evicts; transient disconnect leaves
       // the last-known view in place. If the surviving cache no longer holds
       // a home view for some user, render falls back to whatever the carrying
       // payload supplies (no crash; just degrades to stub view).
@@ -1417,7 +1328,6 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
         channelPermissions,
         channelOriginMap,
         spacePermissions,
-        dmAlternatives,
         userViews,
         currentSpaceId: remainingSpaces.find(s => s.id === state.currentSpaceId)
           ? state.currentSpaceId
@@ -1428,6 +1338,11 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
         loadedSpaceIds,
       };
     });
+
+    // This origin's DM copies go. A row pinned to one of them moves to
+    // another copy of its conversation, and its chat state moves with it,
+    // before the states of the removed ids are cleaned up below.
+    commitDmOperation(dropOrigin(get().dmConversations, origin, dmPinContext()));
 
     // Clean up orphaned unread/read states and cached messages in chatStore
     if (channelIdsToRemove.size > 0) {
@@ -1487,8 +1402,8 @@ setOwnerInstanceForDmResolver(getOwnerInstanceForDm);
  * Resolves a raw DM channel ID to its primary `dmChannels` entry ID.
  *
  * - If `rawId` is already a primary entry: returns `rawId` unchanged.
- * - If `rawId` is recorded in `dmAlternatives` as an alternate-origin local ID
- *   for a DM whose primary is present in `dmChannels`: returns the primary's ID.
+ * - If `rawId` is another origin's copy of a conversation listed in
+ *   `dmChannels` (the derived `dmAlternatives` index): returns the primary's ID.
  * - Otherwise: returns `null` (unknown ID — caller should no-op).
  *
  * The lookup itself is `locateDmChannel` (`utils/dmChannelLookup.ts`), shared
@@ -1502,6 +1417,23 @@ setOwnerInstanceForDmResolver(getOwnerInstanceForDm);
 export function resolveDmChannelId(rawId: string): string | null {
   const { dmChannels, dmAlternatives } = useSpaceStore.getState();
   return locateDmChannel(dmChannels, dmAlternatives, rawId)?.dm.id ?? null;
+}
+
+/**
+ * The channel id `origin` holds for the DM conversation of `channelId`, or
+ * null when that instance holds no copy of it. A request to an instance must
+ * name the conversation by that instance's own id, not by the pinned copy's.
+ */
+export function dmCopyIdOnOrigin(channelId: string, origin: string): string | null {
+  return copyIdOnOrigin(useSpaceStore.getState().dmConversations, channelId, origin);
+}
+
+/**
+ * The copy `origin` holds of the DM conversation of `channelId` (its id and
+ * its members as that instance knows them), or null when it holds none.
+ */
+export function dmCopyOnOrigin(channelId: string, origin: string): DmChannel | null {
+  return copyOnOrigin(useSpaceStore.getState().dmConversations, channelId, origin);
 }
 
 // ─── Cross-store resolvers (federation) ───────────────────────────────────────

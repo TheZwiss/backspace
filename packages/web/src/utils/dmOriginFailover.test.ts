@@ -19,21 +19,18 @@ vi.mock('../audio/AudioManager', () => ({
   },
 }));
 
-// Stub authStore to avoid localStorage access during module init.
-vi.mock('../stores/authStore', () => ({
-  useAuthStore: Object.assign(
-    (selector: (s: unknown) => unknown) => selector({ user: null, token: null }),
-    {
-      getState: () => ({ user: null, token: null }),
-      setState: vi.fn(),
-      subscribe: vi.fn(),
-    }
-  ),
-}));
+// The signed-in account is homed on B, so B's copy of a conversation is the
+// pinned one while B is connected (the pin rule's home is the layout home).
+vi.mock('../stores/authStore', () => {
+  const state = { user: { id: 'u-home', username: 'u', homeInstance: 'b.example', homeUserId: 'u-on-b' }, token: 't' };
+  return {
+    useAuthStore: Object.assign(
+      (selector: (s: unknown) => unknown) => selector(state),
+      { getState: () => state, setState: vi.fn(), subscribe: vi.fn() },
+    ),
+  };
+});
 
-// Stub instanceStore to avoid TDZ crash from the module-level
-// setApiForOriginResolver() call in instanceStore.ts.
-// We use a factory so vitest hoisting sees a self-contained mock.
 vi.mock('../stores/instanceStore', async () => {
   const { create } = await import('zustand');
   const store = create<{ instances: unknown[] }>()(() => ({ instances: [] }));
@@ -58,36 +55,27 @@ vi.mock('../stores/voiceStore', async () => {
 
 import { useSpaceStore } from '../stores/spaceStore';
 import { useChatStore } from '../stores/chatStore';
-import { useInstanceStore } from '../stores/instanceStore';
-import { failoverDmOriginsFromDisconnected } from './dmOriginFailover';
-import type { DmChannel, User } from '@backspace/shared';
-import type { ConnectedInstance as Inst } from '../stores/instanceStore';
+import { setOriginFromHostnameResolver } from './crossStoreResolvers';
+import { applyIncomingDmMessage } from './dmMessageRouting';
+import type { DmChannel, DmMessageWithUser } from '@backspace/shared';
+
+const B = 'https://b.example';
+const C = 'https://c.example';
 
 function makeDm(id: string, federatedId: string | null): DmChannel {
   return { id, federatedId, createdAt: 1000, members: [] };
 }
 
-function fakeUser(id: string): User {
-  return {
-    id, username: id, displayName: null, avatar: null, accentColor: null,
-    banner: null, bio: null, status: 'online', activities: [], createdAt: 1,
-    homeInstance: null, homeUserId: null,
-  } as any;
+function listFrom(origin: string, dms: DmChannel[]): void {
+  useSpaceStore.getState().populateFromReady(origin, [], [], dms);
 }
 
-function fakeInstance(origin: string, status: Inst['status']): Inst {
-  return {
-    origin,
-    label: origin,
-    token: 'tok',
-    user: fakeUser(`u-${origin}`),
-    username: 'u',
-    status,
-    api: {} as any,
-  };
+function rowIds(): string[] {
+  return useSpaceStore.getState().dmChannels.map(d => d.id).sort();
 }
 
 beforeEach(() => {
+  setOriginFromHostnameResolver((host) => (host === 'b.example' ? B : host === 'c.example' ? C : ''));
   useSpaceStore.getState().reset();
   useChatStore.setState({
     messages: new Map(),
@@ -99,38 +87,24 @@ beforeEach(() => {
     scrollPositions: new Map(),
     currentChannelId: null,
   });
-  useInstanceStore.setState({ instances: [] });
   // Replace history.replaceState to observe URL writes in tests.
   vi.spyOn(window.history, 'replaceState').mockImplementation(() => {});
 });
 
-describe('failoverDmOriginsFromDisconnected', () => {
-  it('no-ops when disconnected origin has no DMs pinned to it', () => {
-    useSpaceStore.setState({
-      dmChannels: [makeDm('home-1', 'fed-aaa')],
-      channelOriginMap: new Map([['home-1', '']]),
-      dmAlternatives: new Map([['fed-aaa', new Map([['', 'home-1']])]]),
-    });
-    useInstanceStore.setState({ instances: [fakeInstance('https://b.example', 'disconnected')] });
+describe('DM failover: setDmOriginAvailable(origin, false) and the pin-move effect', () => {
+  it('no-ops when the dropped origin pins no DM', () => {
+    listFrom('', [makeDm('home-1', 'fed-aaa')]);
 
-    failoverDmOriginsFromDisconnected('https://b.example');
+    useSpaceStore.getState().setDmOriginAvailable(C, false);
 
     expect(useSpaceStore.getState().channelOriginMap.get('home-1')).toBe('');
+    expect(window.history.replaceState).not.toHaveBeenCalled();
   });
 
-  it('re-keys a DM to the connected home alternative', () => {
-    useSpaceStore.setState({
-      dmChannels: [makeDm('b-1', 'fed-aaa')],
-      channelOriginMap: new Map([['b-1', 'https://b.example']]),
-      channelLastMessageIds: new Map([['b-1', 'msg-last-on-b']]),
-      dmAlternatives: new Map([
-        ['fed-aaa', new Map([
-          ['https://b.example', 'b-1'],
-          ['', 'home-1'],
-        ])],
-      ]),
-    });
-    useInstanceStore.setState({ instances: [fakeInstance('https://b.example', 'disconnected')] });
+  it('moves a DM to the connected home copy, and its chat state with it', () => {
+    listFrom(B, [makeDm('b-1', 'fed-aaa')]);
+    listFrom('', [makeDm('home-1', 'fed-aaa')]);
+    expect(rowIds()).toEqual(['b-1']);
     useChatStore.setState({
       messages: new Map([['b-1', []]]),
       readStates: new Map([['b-1', 'prev']]),
@@ -138,11 +112,10 @@ describe('failoverDmOriginsFromDisconnected', () => {
       currentChannelId: 'b-1',
     });
 
-    failoverDmOriginsFromDisconnected('https://b.example');
+    useSpaceStore.getState().setDmOriginAvailable(B, false);
 
     const sp = useSpaceStore.getState();
-    expect(sp.dmChannels.find(d => d.id === 'home-1')).toBeTruthy();
-    expect(sp.dmChannels.find(d => d.id === 'b-1')).toBeUndefined();
+    expect(rowIds()).toEqual(['home-1']);
     expect(sp.channelOriginMap.get('home-1')).toBe('');
     expect(sp.channelOriginMap.has('b-1')).toBe(false);
     expect(sp.channelLastMessageIds.has('b-1')).toBe(false);
@@ -155,130 +128,102 @@ describe('failoverDmOriginsFromDisconnected', () => {
     expect(ch.currentChannelId).toBe('home-1');
   });
 
-  it('prefers home (empty-string origin) when multiple alternatives are connected', () => {
-    useSpaceStore.setState({
-      dmChannels: [makeDm('b-1', 'fed-aaa')],
-      channelOriginMap: new Map([['b-1', 'https://b.example']]),
-      dmAlternatives: new Map([
-        ['fed-aaa', new Map([
-          ['https://b.example', 'b-1'],
-          ['https://c.example', 'c-1'],
-          ['', 'home-1'],
-        ])],
-      ]),
-    });
-    useInstanceStore.setState({
-      instances: [
-        fakeInstance('https://b.example', 'disconnected'),
-        fakeInstance('https://c.example', 'connected'),
-      ],
-    });
+  it('moves to the first reachable copy the client learned, here the browsed instance\'s', () => {
+    listFrom(B, [makeDm('b-1', 'fed-aaa')]);
+    listFrom('', [makeDm('home-1', 'fed-aaa')]);
+    listFrom(C, [makeDm('c-1', 'fed-aaa')]);
 
-    failoverDmOriginsFromDisconnected('https://b.example');
+    useSpaceStore.getState().setDmOriginAvailable(B, false);
 
-    expect(useSpaceStore.getState().channelOriginMap.get('home-1')).toBe('');
+    expect(rowIds()).toEqual(['home-1']);
   });
 
-  it('falls back to a connected remote when home is not an alternative', () => {
-    useSpaceStore.setState({
-      dmChannels: [makeDm('b-1', 'fed-aaa')],
-      channelOriginMap: new Map([['b-1', 'https://b.example']]),
-      dmAlternatives: new Map([
-        ['fed-aaa', new Map([
-          ['https://b.example', 'b-1'],
-          ['https://c.example', 'c-1'],
-        ])],
-      ]),
-    });
-    useInstanceStore.setState({
-      instances: [
-        fakeInstance('https://b.example', 'disconnected'),
-        fakeInstance('https://c.example', 'connected'),
-      ],
-    });
+  it('falls back to a connected sibling when the browsed instance holds no copy', () => {
+    listFrom(B, [makeDm('b-1', 'fed-aaa')]);
+    listFrom(C, [makeDm('c-1', 'fed-aaa')]);
 
-    failoverDmOriginsFromDisconnected('https://b.example');
+    useSpaceStore.getState().setDmOriginAvailable(B, false);
+
+    expect(rowIds()).toEqual(['c-1']);
+    expect(useSpaceStore.getState().channelOriginMap.get('c-1')).toBe(C);
+  });
+
+  it('leaves the pin untouched when no other copy is connected', () => {
+    listFrom(B, [makeDm('b-1', 'fed-aaa')]);
+    listFrom(C, [makeDm('c-1', 'fed-aaa')]);
+    useSpaceStore.getState().setDmOriginAvailable(C, false);
+
+    useSpaceStore.getState().setDmOriginAvailable(B, false);
+
+    expect(rowIds()).toEqual(['b-1']);
+    expect(useSpaceStore.getState().channelOriginMap.get('b-1')).toBe(B);
+  });
+
+  it('leaves a DM without a key where it is', () => {
+    listFrom(B, [makeDm('b-local', null)]);
+
+    useSpaceStore.getState().setDmOriginAvailable(B, false);
+
+    expect(useSpaceStore.getState().channelOriginMap.get('b-local')).toBe(B);
+  });
+
+  it('keeps the dropped origin\'s copy, and its returning ready moves the DM back to the home copy', () => {
+    listFrom(B, [makeDm('b-1', 'fed-aaa')]);
+    listFrom('', [makeDm('home-1', 'fed-aaa')]);
+    useSpaceStore.getState().setDmOriginAvailable(B, false);
+    expect(useSpaceStore.getState().dmAlternatives.get('fed-aaa')?.get(B)).toBe('b-1');
+
+    listFrom(B, [makeDm('b-1', 'fed-aaa')]);
+
+    expect(rowIds()).toEqual(['b-1']);
+    expect(useSpaceStore.getState().channelOriginMap.get('b-1')).toBe(B);
+  });
+
+  it('a returning sibling that is not home does not take the DM back', () => {
+    listFrom(C, [makeDm('c-1', 'fed-aaa')]);
+    listFrom('', [makeDm('home-1', 'fed-aaa')]);
+    // The account's home B holds no copy, so C's copy, listed first, is pinned.
+    expect(rowIds()).toEqual(['c-1']);
+    useSpaceStore.getState().setDmOriginAvailable(C, false);
+    expect(rowIds()).toEqual(['home-1']);
+
+    listFrom(C, [makeDm('c-1', 'fed-aaa')]);
+
+    expect(rowIds()).toEqual(['home-1']);
+  });
+
+  it('a DM that fails over shows the newest message its new copy received, not the one it was listed with', async () => {
+    const at = (id: string, dmChannelId: string, content: string, createdAt: number): DmMessageWithUser => ({
+      id, dmChannelId, userId: 'bob', user: { id: 'bob', username: 'bob' } as DmMessageWithUser['user'],
+      content, createdAt, attachments: [], embeds: [], reactions: [],
+    });
+    listFrom(B, [{ ...makeDm('b-1', 'fed-aaa'), lastMessage: at('m1-b', 'b-1', 'first', 2000) }]);
+    listFrom('', [{ ...makeDm('home-1', 'fed-aaa'), lastMessage: at('m1-home', 'home-1', 'first', 2000) }]);
+    listFrom(C, [{ ...makeDm('c-1', 'fed-bbb'), lastMessage: at('m-c', 'c-1', 'other', 3000) }]);
+    expect(rowIds()).toEqual(['b-1', 'c-1']);
+
+    // The same new message reaches both copies; only B's is shown.
+    await applyIncomingDmMessage(B, at('m2-b', 'b-1', 'newest', 4000));
+    await applyIncomingDmMessage('', at('m2-home', 'home-1', 'newest', 4000));
+    // The copy not shown takes no part in the message list or unread state (#295).
+    expect(useChatStore.getState().messages.has('home-1')).toBe(false);
+    expect(useChatStore.getState().unreadChannels.has('home-1')).toBe(false);
+
+    useSpaceStore.getState().setDmOriginAvailable(B, false);
 
     const sp = useSpaceStore.getState();
-    expect(sp.channelOriginMap.get('c-1')).toBe('https://c.example');
-    expect(sp.dmChannels.find(d => d.id === 'c-1')).toBeTruthy();
+    expect(sp.dmChannels.map(d => d.id)).toEqual(['home-1', 'c-1']);
+    expect(sp.dmChannels[0]?.lastMessage?.content).toBe('newest');
+    expect(sp.channelLastMessageIds.get('home-1')).toBe('m2-home');
   });
 
-  it('leaves the pin untouched when no alternatives are connected', () => {
-    useSpaceStore.setState({
-      dmChannels: [makeDm('b-1', 'fed-aaa')],
-      channelOriginMap: new Map([['b-1', 'https://b.example']]),
-      dmAlternatives: new Map([
-        ['fed-aaa', new Map([
-          ['https://b.example', 'b-1'],
-          ['https://c.example', 'c-1'],
-        ])],
-      ]),
-    });
-    useInstanceStore.setState({
-      instances: [
-        fakeInstance('https://b.example', 'disconnected'),
-        fakeInstance('https://c.example', 'error'),
-      ],
-    });
-
-    failoverDmOriginsFromDisconnected('https://b.example');
-
-    expect(useSpaceStore.getState().channelOriginMap.get('b-1')).toBe('https://b.example');
-    expect(useSpaceStore.getState().dmChannels.find(d => d.id === 'b-1')).toBeTruthy();
-  });
-
-  it('skips DMs without a federatedId', () => {
-    useSpaceStore.setState({
-      dmChannels: [makeDm('b-local', null)],
-      channelOriginMap: new Map([['b-local', 'https://b.example']]),
-      dmAlternatives: new Map(),
-    });
-    useInstanceStore.setState({ instances: [fakeInstance('https://b.example', 'disconnected')] });
-
-    failoverDmOriginsFromDisconnected('https://b.example');
-
-    expect(useSpaceStore.getState().channelOriginMap.get('b-local')).toBe('https://b.example');
-  });
-
-  it('retains oldOrigin → oldLocalId in dmAlternatives after rekey for fail-back', () => {
-    useSpaceStore.setState({
-      dmChannels: [makeDm('b-1', 'fed-aaa')],
-      channelOriginMap: new Map([['b-1', 'https://b.example']]),
-      dmAlternatives: new Map([
-        ['fed-aaa', new Map([
-          ['https://b.example', 'b-1'],
-          ['', 'home-1'],
-        ])],
-      ]),
-    });
-    useInstanceStore.setState({ instances: [fakeInstance('https://b.example', 'disconnected')] });
-
-    failoverDmOriginsFromDisconnected('https://b.example');
-
-    const alts = useSpaceStore.getState().dmAlternatives.get('fed-aaa');
-    // Old primary (b) retained as alternative for possible future fail-back.
-    expect(alts?.get('https://b.example')).toBe('b-1');
-    // Alternative map entry for the new primary's own origin is removed — it IS the primary now.
-    expect(alts?.has('')).toBe(false);
-  });
-
-  it('updates the URL via history.replaceState when rekeying the current channel', () => {
+  it('updates the URL via history.replaceState when moving the DM on screen', () => {
     window.history.pushState({}, '', '/channels/@me/b-1');
-    useSpaceStore.setState({
-      dmChannels: [makeDm('b-1', 'fed-aaa')],
-      channelOriginMap: new Map([['b-1', 'https://b.example']]),
-      dmAlternatives: new Map([
-        ['fed-aaa', new Map([
-          ['https://b.example', 'b-1'],
-          ['', 'home-1'],
-        ])],
-      ]),
-    });
-    useInstanceStore.setState({ instances: [fakeInstance('https://b.example', 'disconnected')] });
+    listFrom(B, [makeDm('b-1', 'fed-aaa')]);
+    listFrom('', [makeDm('home-1', 'fed-aaa')]);
     useChatStore.setState({ currentChannelId: 'b-1' });
 
-    failoverDmOriginsFromDisconnected('https://b.example');
+    useSpaceStore.getState().setDmOriginAvailable(B, false);
 
     expect(window.history.replaceState).toHaveBeenCalledWith(
       expect.anything(),
@@ -288,21 +233,15 @@ describe('failoverDmOriginsFromDisconnected', () => {
   });
 
   it('does not touch voice state during failover (voice is handled separately)', async () => {
-    useSpaceStore.setState({
-      dmChannels: [makeDm('b-1', 'fed-aaa')],
-      channelOriginMap: new Map([['b-1', 'https://b.example']]),
-      dmAlternatives: new Map([
-        ['fed-aaa', new Map([['https://b.example', 'b-1'], ['', 'home-1']])],
-      ]),
-    });
-    useInstanceStore.setState({ instances: [fakeInstance('https://b.example', 'disconnected')] });
+    listFrom(B, [makeDm('b-1', 'fed-aaa')]);
+    listFrom('', [makeDm('home-1', 'fed-aaa')]);
 
     const { useVoiceStore } = await import('../stores/voiceStore');
     const beforeActive = useVoiceStore.getState().activeDmCall;
     const beforeOutgoing = useVoiceStore.getState().outgoingCall;
     useVoiceStore.setState({ activeDmCall: { dmChannelId: 'b-1' } });
 
-    failoverDmOriginsFromDisconnected('https://b.example');
+    useSpaceStore.getState().setDmOriginAvailable(B, false);
 
     expect(useVoiceStore.getState().activeDmCall?.dmChannelId).toBe('b-1');
     // Restore

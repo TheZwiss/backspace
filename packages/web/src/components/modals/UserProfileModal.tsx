@@ -65,7 +65,7 @@ export function UserProfileModal() {
   const addToast = useUIStore((s) => s.addToast);
   const navigate = useNavigate();
   const f = useFormatters();
-  const addDmChannel = useSpaceStore((s) => s.addDmChannel);
+  const upsertDmCopy = useSpaceStore((s) => s.upsertDmCopy);
   const friends = useSocialStore((s) => s.friends);
   const requests = useSocialStore((s) => s.requests);
   const sendFriendRequest = useSocialStore((s) => s.sendFriendRequest);
@@ -198,10 +198,11 @@ export function UserProfileModal() {
         homeUserId: user.homeUserId ?? undefined,
         homeInstance: user.homeInstance ?? undefined,
       });
-      addDmChannel(channel);
+      // The answer joins its conversation; open the conversation's row.
+      const rowId = upsertDmCopy('', channel, 'stated');
       useUIStore.getState().setShowDms(true);
       closeModal();
-      navigate(`/channels/@me/${channel.id}`);
+      navigate(`/channels/@me/${rowId}`);
     } catch (err) {
       addToast(t('social:sendMessage.failed', { reason: describeError(err) }), 'warning');
     }

@@ -38,7 +38,6 @@ import { useSpaceStore, setApiForOriginResolver, setMyUserIdForOrigin } from '..
 import { useChatStore } from '../stores/chatStore';
 import { api, type BackspaceApiClient } from '../api/client';
 import { applyIncomingDmMessage, applyIncomingDmChannel } from './dmMessageRouting';
-import { repinDmsToHomeCopies } from './dmOriginFailover';
 import { wireDm, asListedBy161, copyDm } from '../test/dmWireShape';
 import type { DmChannel, DmMessageWithUser, User } from '@backspace/shared';
 
@@ -111,14 +110,11 @@ beforeEach(() => {
   setApiForOriginResolver(() => fakeRemoteClient());
   setMyUserIdForOrigin(REMOTE, 'alice-on-remote');
 
+  // Home lists carol's and bob's DMs. REMOTE's ready arrived before its copy
+  // of the bob DM existed, so only the home copy is known.
+  useSpaceStore.getState().populateFromReady('', [], [], [carolDm, bobDm].map(copyDm));
+  useSpaceStore.getState().populateFromReady(REMOTE, [], [], []);
   // Carol's DM is unread (so it sorts first); alice is looking at bob's DM.
-  useSpaceStore.setState({
-    dmChannels: [carolDm, bobDm],
-    channelOriginMap: new Map([['dm-carol', ''], ['dm-bob-home', '']]),
-    // REMOTE's ready arrived before its copy of the bob DM existed, so only the
-    // home copy is recorded.
-    dmAlternatives: new Map([[FID_ALICE_BOB, new Map([['', 'dm-bob-home']])]]),
-  });
   useChatStore.setState({
     messages: new Map(),
     unreadChannels: new Set(['dm-carol']),
@@ -263,9 +259,7 @@ describe.each([
 describe('applyIncomingDmMessage: the list holds only ids the pinned origin knows (#295)', () => {
   beforeEach(() => {
     // Both copies of the bob conversation are known; home is the pinned one.
-    useSpaceStore.setState({
-      dmAlternatives: new Map([[FID_ALICE_BOB, new Map([['', 'dm-bob-home'], [REMOTE, 'dm-bob-remote']])]]),
-    });
+    useSpaceStore.getState().populateFromReady(REMOTE, [], [], [copyDm(bobDmOnRemote)]);
   });
 
   // bob's message as REMOTE (its home) pushes it, and as home pushes its relayed copy.
@@ -343,7 +337,7 @@ describe('the home copy of a conversation is the pinned one (#295 review)', () =
   const dmOnHome = wireDm({ id: 'dm-uv-home', federatedId: FID_ALICE_VERA, createdAt: 11, members: [aliceHome, veraHome] });
 
   beforeEach(() => {
-    useSpaceStore.setState({ dmChannels: [], channelOriginMap: new Map(), dmAlternatives: new Map() });
+    useSpaceStore.getState().reset();
     useChatStore.setState({ messages: new Map(), unreadChannels: new Set(), currentChannelId: null });
   });
 
@@ -379,7 +373,6 @@ describe('the home copy of a conversation is the pinned one (#295 review)', () =
     const { populateFromReady } = useSpaceStore.getState();
     populateFromReady(C, [], [], [dmOnC]);
     populateFromReady('', [], [], [dmOnHome]);
-    repinDmsToHomeCopies();
 
     expect(useSpaceStore.getState().dmChannels.map(d => d.id)).toEqual(['dm-uv-home']);
     expect(useSpaceStore.getState().channelOriginMap.get('dm-uv-home')).toBe('');

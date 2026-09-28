@@ -5,9 +5,9 @@ import type { DmChannel, User } from '@backspace/shared';
  *
  * Every instance holding a copy of a federated 1-on-1 gives it the same key:
  * the first 32 hex characters of SHA-256 over the two members' home user ids,
- * sorted and joined with ':' (`oneOnOneKey` in the server's
- * `utils/dmConversation.ts`, the one place every server path computes it,
- * which is what lets two instances' copies be matched). Group
+ * sorted and joined with ':' (`computeFederatedId` in the server's
+ * `utils/federationOutbox.ts`; the relay and the re-attach reconcile compute it
+ * the same way, which is what lets two instances' copies be matched). Group
  * keys are random UUIDs and cannot be derived.
  *
  * Servers up to 1.6.1 listed DMs in `GET /api/dm` without the key. A client
@@ -16,14 +16,27 @@ import type { DmChannel, User } from '@backspace/shared';
  * already shows instead of becoming a second row.
  */
 
-/** Fields a server up to 1.6.1 leaves out of `GET /api/dm`. */
-type FieldsAbsentUpTo161 = 'federatedId' | 'ownerHomeUserId' | 'ownerHomeInstance' | 'name' | 'icon' | 'metadataUpdatedAt';
+/** The fields a peer on 1.6.1 or older may leave out of a DM it sends. */
+type PeerOptionalField =
+  | 'federatedId'
+  | 'ownerId'
+  | 'ownerHomeUserId'
+  | 'ownerHomeInstance'
+  | 'name'
+  | 'icon'
+  | 'lastMessage'
+  | 'metadataUpdatedAt';
 
-/** A DM as any server version may list it: the conversation key and the group metadata are absent up to 1.6.1. */
-export type ListedDmChannel = Omit<DmChannel, FieldsAbsentUpTo161> & Partial<Pick<DmChannel, FieldsAbsentUpTo161>>;
+/**
+ * A DM as a server of any version may send it. Up to 1.6.1, `GET /api/dm` left
+ * out `federatedId` and the group metadata. Only the client merge module
+ * (`stores/dmConversations.ts`) reads this type; everything else reads the
+ * full `DmChannel` it produces.
+ */
+export type PeerDmChannel = Omit<DmChannel, PeerOptionalField> & Partial<Pick<DmChannel, PeerOptionalField>>;
 
 /** A 1-on-1 DM: no owner, exactly two members. Groups always have an owner. */
-export function isOneOnOneDm(dm: Pick<DmChannel, 'ownerId' | 'members'>): boolean {
+export function isOneOnOneDm(dm: Pick<PeerDmChannel, 'ownerId' | 'members'>): boolean {
   return !dm.ownerId && dm.members.length === 2;
 }
 
@@ -57,7 +70,7 @@ export async function oneOnOneFederatedId(
  * `homeInstance` is what says so. A 1-on-1 the server would have left
  * unkeyed gets no key here either.
  */
-export async function deriveMissingOneOnOneKeys(listed: ListedDmChannel[]): Promise<Map<string, string>> {
+export async function deriveMissingOneOnOneKeys(listed: readonly PeerDmChannel[]): Promise<Map<string, string>> {
   const derived = new Map<string, string>();
   for (const dm of listed) {
     if (dm.federatedId !== undefined) continue;

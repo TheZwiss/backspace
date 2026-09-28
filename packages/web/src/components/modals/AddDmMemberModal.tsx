@@ -4,11 +4,11 @@ import { useTranslation } from 'react-i18next';
 import { Modal } from '../ui/Modal';
 import { Avatar } from '../ui/Avatar';
 import { useUIStore } from '../../stores/uiStore';
-import { useSpaceStore } from '../../stores/spaceStore';
+import { useSpaceStore, dmCopyOnOrigin, getChannelOrigin } from '../../stores/spaceStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useSocialStore, type TaggedFriend } from '../../stores/socialStore';
 import { api } from '../../api/client';
-import { isSelf, parseFederatedUsername } from '../../utils/identity';
+import { isSelf, parseFederatedUsername, deliveringHost } from '../../utils/identity';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import type { User } from '@backspace/shared';
 
@@ -88,7 +88,7 @@ export function AddDmMemberModal() {
   const modalData = useUIStore((s) => s.modalData);
   const closeModal = useUIStore((s) => s.closeModal);
   const dmChannels = useSpaceStore((s) => s.dmChannels);
-  const addDmChannel = useSpaceStore((s) => s.addDmChannel);
+  const upsertDmCopy = useSpaceStore((s) => s.upsertDmCopy);
   const friends = useSocialStore((s) => s.friends);
   const navigate = useNavigate();
   const myUser = useAuthStore((s) => s.user);
@@ -160,31 +160,51 @@ export function AddDmMemberModal() {
     if (!dmChannelId || !dmChannel || isAdding || selectedFriends.length === 0) return;
     setError('');
     setIsAdding(true);
+    // Both requests go to the home instance, which knows the conversation
+    // only as its own copy: its id and its members. The row may be pinned to
+    // another instance's copy, whose ids mean nothing there.
+    const homeCopy = dmCopyOnOrigin(dmChannelId, '');
     try {
       if (!dmChannel.ownerId) {
         // 1-on-1 DM → create a new group DM with all selected + existing other member
-        const otherMember = dmChannel.members.find(m => !isSelf(m, myUser));
-        if (!otherMember) {
+        const partner = (homeCopy ?? dmChannel).members.find(m => !isSelf(m, myUser));
+        if (!partner) {
           setError(t('dm:addMember.noOtherMember'));
           setIsAdding(false);
           return;
         }
+        // Home's own row for the partner when it holds the conversation;
+        // otherwise the partner by their home identity, which home resolves.
+        const partnerIdentity = homeCopy
+          ? { id: partner.id, homeUserId: partner.homeUserId, homeInstance: partner.homeInstance }
+          : {
+              id: partner.id,
+              homeUserId: partner.homeUserId ?? partner.id,
+              homeInstance: partner.homeInstance ?? deliveringHost(getChannelOrigin(dmChannelId)),
+            };
         const users = [
-          { id: otherMember.id, homeUserId: otherMember.homeUserId, homeInstance: otherMember.homeInstance },
+          partnerIdentity,
           ...selectedFriends.map((f) => ({
             id: f.id,
             homeUserId: f.homeUserId,
             homeInstance: f.homeInstance,
           })),
         ];
-        const newChannel = await api.dm.createGroup({ users, fromDmChannelId: dmChannelId });
-        addDmChannel(newChannel);
+        // Home checks the source 1-on-1 by its own id; without a home copy
+        // there is none to name.
+        const newChannel = await api.dm.createGroup({ users, fromDmChannelId: homeCopy?.id });
+        const rowId = upsertDmCopy('', newChannel, 'stated');
         closeModal();
-        navigate(`/channels/@me/${newChannel.id}`);
+        navigate(`/channels/@me/${rowId}`);
       } else {
-        // Existing group DM → add each friend sequentially
+        // Existing group DM → add each friend sequentially, on home's copy.
+        if (!homeCopy) {
+          setError(t('dm:addMember.failed'));
+          setIsAdding(false);
+          return;
+        }
         for (const friend of selectedFriends) {
-          await api.dm.addMember(dmChannelId, {
+          await api.dm.addMember(homeCopy.id, {
             userId: friend.homeInstance ? undefined : friend.id,
             homeUserId: friend.homeUserId ?? undefined,
             homeInstance: friend.homeInstance ?? undefined,

@@ -343,14 +343,13 @@ describe('FriendsPage', () => {
     it('calls api.dm.create and navigates when clicking the Message button', async () => {
       const user = userEvent.setup();
       const friend = makeFriend({ id: 'friend-42', username: 'dmpal', displayName: 'DM Pal' });
-      const mockAddDmChannel = vi.fn();
 
       useSocialStore.setState({
         friends: [friend],
         requests: [],
       });
+      useSpaceStore.getState().reset();
       useSpaceStore.setState({
-        addDmChannel: mockAddDmChannel,
         findExistingDmForUser: () => null,
       });
 
@@ -376,12 +375,37 @@ describe('FriendsPage', () => {
       });
 
       await waitFor(() => {
-        expect(mockAddDmChannel).toHaveBeenCalledWith(expect.objectContaining({ id: 'dm-channel-99' }));
-      });
-
-      await waitFor(() => {
         expect(mockNavigate).toHaveBeenCalledWith('/channels/@me/dm-channel-99');
       });
+      expect(useSpaceStore.getState().dmChannels.map(d => d.id)).toEqual(['dm-channel-99']);
+    });
+
+    it('a DM the client already shows from another instance lands in its one row', async () => {
+      // REMOTE's copy of the conversation is listed; findExistingDmForUser
+      // (a shortcut, not identity) does not recognise it, so the request goes
+      // out. The conversation key in the answer makes it the same row.
+      const key = '0'.repeat(31) + '1';
+      const user = userEvent.setup();
+      const friend = makeFriend({ id: 'friend-42', username: 'dmpal', displayName: 'DM Pal' });
+      useSocialStore.setState({ friends: [friend], requests: [] });
+      useSpaceStore.getState().reset();
+      useSpaceStore.setState({ findExistingDmForUser: () => null });
+      useSpaceStore.getState().populateFromReady('https://remote.example', [], [], [
+        { id: 'dm-remote-copy', federatedId: key, createdAt: 1, members: [] },
+      ]);
+      const { api } = await import('../../api/client');
+      (api.dm.create as ReturnType<typeof vi.fn>).mockResolvedValue({
+        id: 'dm-home-copy', federatedId: key, createdAt: 2, members: [],
+      });
+
+      renderFriendsPage();
+      await user.click(screen.getByText('All'));
+      await user.click(screen.getByTitle('Message'));
+
+      await waitFor(() => {
+        expect(mockNavigate).toHaveBeenCalledWith('/channels/@me/dm-home-copy');
+      });
+      expect(useSpaceStore.getState().dmChannels.map(d => d.id)).toEqual(['dm-home-copy']);
     });
   });
 

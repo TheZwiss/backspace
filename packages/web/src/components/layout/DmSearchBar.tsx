@@ -155,7 +155,7 @@ export function DmSearchBar() {
   const [selectedIndex, setSelectedIndex] = useState(0);
 
   const dmChannels = useSpaceStore((s) => s.dmChannels);
-  const addDmChannel = useSpaceStore((s) => s.addDmChannel);
+  const upsertDmCopy = useSpaceStore((s) => s.upsertDmCopy);
   const user = useAuthStore((s) => s.user);
   const navigate = useNavigate();
 
@@ -305,15 +305,16 @@ export function DmSearchBar() {
           homeUserId: item.user.homeUserId ?? undefined,
           homeInstance: item.user.homeInstance ?? undefined,
         });
-        addDmChannel(channel);
+        // The answer joins its conversation; open the conversation's row.
+        const rowId = upsertDmCopy('', channel, 'stated');
         close();
         useUIStore.getState().setShowDms(true);
-        navigate(`/channels/@me/${channel.id}`);
+        navigate(`/channels/@me/${rowId}`);
       } catch (err) {
         setError((err as Error).message || t('dm:search.createFailed'));
       }
     }
-  }, [close, navigate, addDmChannel, t]);
+  }, [close, navigate, upsertDmCopy, t]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {

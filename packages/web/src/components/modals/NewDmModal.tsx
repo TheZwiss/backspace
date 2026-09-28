@@ -44,7 +44,7 @@ export function NewDmModal() {
   const [error, setError] = useState('');
   const activeModal = useUIStore((s) => s.activeModal);
   const closeModal = useUIStore((s) => s.closeModal);
-  const addDmChannel = useSpaceStore((s) => s.addDmChannel);
+  const upsertDmCopy = useSpaceStore((s) => s.upsertDmCopy);
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -101,10 +101,11 @@ export function NewDmModal() {
         homeUserId: user.homeUserId ?? undefined,
         homeInstance: user.homeInstance ?? undefined,
       });
-      addDmChannel(channel);
+      // The answer joins its conversation; open the conversation's row.
+      const rowId = upsertDmCopy('', channel, 'stated');
       closeModal();
       useUIStore.getState().setShowDms(true);
-      navigate(`/channels/@me/${channel.id}`);
+      navigate(`/channels/@me/${rowId}`);
     } catch (err) {
       setError((err as Error).message || t('dm:search.createFailed'));
     }

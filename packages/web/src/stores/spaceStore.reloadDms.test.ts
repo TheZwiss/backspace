@@ -37,7 +37,6 @@ vi.mock('./instanceStore', async () => {
 import { useSpaceStore, setApiForOriginResolver } from './spaceStore';
 import { useChatStore } from './chatStore';
 import { api, type BackspaceApiClient } from '../api/client';
-import { repinDmsToHomeCopies } from '../utils/dmOriginFailover';
 import { wireDm, asListedBy161, copyDm } from '../test/dmWireShape';
 import type { DmChannel, User } from '@backspace/shared';
 
@@ -114,7 +113,6 @@ describe('reloadDmsForOrigin: a 1.6.1 peer lists DMs without the conversation ke
     expect(rowIds()).toEqual(['dm-bob-remote']);
 
     useSpaceStore.getState().populateFromReady('', [], [], [bobDmHome]);
-    repinDmsToHomeCopies();
 
     expect(rowIds()).toEqual(['dm-bob-home']);
     expect(useSpaceStore.getState().channelOriginMap.get('dm-bob-home')).toBe('');
@@ -143,6 +141,19 @@ describe('reloadDmsForOrigin: a 1.6.1 peer lists DMs without the conversation ke
 
     expect(rowIds()).toEqual(['dm-bob-home', 'dm-carol']);
     expect(useSpaceStore.getState().dmAlternatives.get(FID_ALICE_BOB)?.get(REMOTE)).toBe('dm-bob-remote');
+  });
+
+  it('a copy the peer stated unkeyed in ready stays its own row through a keyless reload (#345)', async () => {
+    // Created on REMOTE while its relay was off: REMOTE's ready states null.
+    const unkeyed = wireDm({ id: 'dm-bob-unkeyed', federatedId: null, createdAt: 5, members: [aliceOnRemote, bobOnRemote] });
+    useSpaceStore.getState().populateFromReady('', [], [], [bobDmHome]);
+    useSpaceStore.getState().populateFromReady(REMOTE, [], [], [unkeyed]);
+    remoteList = [asListedBy161(unkeyed)];
+
+    await useSpaceStore.getState().reloadDmsForOrigin(REMOTE);
+
+    expect(rowIds()).toEqual(['dm-bob-home', 'dm-bob-unkeyed']);
+    expect(useSpaceStore.getState().dmChannels.find(d => d.id === 'dm-bob-unkeyed')?.federatedId).toBeNull();
   });
 
   it('a key it already knows for a listed channel is kept, not replaced by the missing field', async () => {

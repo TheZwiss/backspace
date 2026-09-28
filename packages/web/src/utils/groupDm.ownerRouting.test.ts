@@ -220,14 +220,12 @@ describe('group DM owner routing — api.dm.* (Task 5.2)', () => {
     // The fix: WS event carries `newOwnerHomeUserId` + `newOwnerHomeInstance`
     // and the store writes them. This test pins that behavior down.
     const { updateDmOwner } = useSpaceStore.getState();
-    useSpaceStore.setState({
-      dmChannels: [{
-        ...baseDm,
-        ownerId: 'old-owner',
-        ownerHomeUserId: 'old-owner-home',
-        ownerHomeInstance: 'https://nova.test',
-      }],
-    });
+    useSpaceStore.getState().populateFromReady('', [], [], [{
+      ...baseDm,
+      ownerId: 'old-owner',
+      ownerHomeUserId: 'old-owner-home',
+      ownerHomeInstance: 'https://nova.test',
+    }]);
 
     updateDmOwner('dm-1', 'new-owner', 'new-owner-home', 'https://orbit.test');
 
@@ -244,14 +242,12 @@ describe('group DM owner routing — api.dm.* (Task 5.2)', () => {
     // not blank out the existing home fields, or `getOwnerInstanceForDm`
     // would silently fall back to '' (home) — re-introducing the bug.
     const { updateDmOwner } = useSpaceStore.getState();
-    useSpaceStore.setState({
-      dmChannels: [{
-        ...baseDm,
-        ownerId: 'old-owner',
-        ownerHomeUserId: 'old-owner-home',
-        ownerHomeInstance: 'https://nova.test',
-      }],
-    });
+    useSpaceStore.getState().populateFromReady('', [], [], [{
+      ...baseDm,
+      ownerId: 'old-owner',
+      ownerHomeUserId: 'old-owner-home',
+      ownerHomeInstance: 'https://nova.test',
+    }]);
 
     updateDmOwner('dm-1', 'new-owner');
 

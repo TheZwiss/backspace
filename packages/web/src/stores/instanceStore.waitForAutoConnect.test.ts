@@ -2,9 +2,6 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 // The same shims as instanceStore.tokenResolver.test.ts, so importing the
 // store does not pull in the real WS, audio or federation machinery.
-vi.mock('../utils/dmOriginFailover', () => ({
-  failoverDmOriginsFromDisconnected: vi.fn(),
-}));
 vi.mock('../hooks/useWebSocket', () => ({
   connectInstance: vi.fn(),
   disconnectInstance: vi.fn(),

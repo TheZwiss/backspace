@@ -37,7 +37,7 @@ export function UserProfilePopout({ user: propUser, onClose, anchor, placement =
   const { t } = useTranslation(['social', 'common']);
   const navigate = useNavigate();
   const f = useFormatters();
-  const addDmChannel = useSpaceStore((s) => s.addDmChannel);
+  const upsertDmCopy = useSpaceStore((s) => s.upsertDmCopy);
   const openModal = useUIStore((s) => s.openModal);
   const addToast = useUIStore((s) => s.addToast);
   // Resolve to the best-known view of this user from the userViews cache.
@@ -110,10 +110,11 @@ export function UserProfilePopout({ user: propUser, onClose, anchor, placement =
         homeUserId: user.homeUserId ?? undefined,
         homeInstance: user.homeInstance ?? undefined,
       });
-      addDmChannel(channel);
+      // The answer joins its conversation; open the conversation's row.
+      const rowId = upsertDmCopy('', channel, 'stated');
       useUIStore.getState().setShowDms(true);
       onClose();
-      navigate(`/channels/@me/${channel.id}`);
+      navigate(`/channels/@me/${rowId}`);
     } catch (err) {
       addToast(t('social:sendMessage.failed', { reason: describeError(err) }), 'warning');
     }

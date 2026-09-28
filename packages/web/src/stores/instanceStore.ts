@@ -19,7 +19,6 @@ import { useSpaceStore } from './spaceStore';
 import { connectInstance, disconnectInstance as disconnectWs, disconnectAllRemote } from '../hooks/useWebSocket';
 // dmOriginFailover lazily reads useInstanceStore/useSpaceStore/useChatStore at call time,
 // so a static import here does not create an import-time cycle.
-import { failoverDmOriginsFromDisconnected, repinDmsToHomeCopies } from '../utils/dmOriginFailover';
 import { useUIStore } from './uiStore';
 import { homeHostOf, parseFederatedUsername } from '../utils/identity';
 // The registry's `errorMessage` carries one of these codes, never a sentence:
@@ -364,7 +363,6 @@ export async function maybeAutoReattach(instance: ConnectedInstance): Promise<vo
     // — the server's dm_channel_closed/created events cover the live sidebar too.
     try {
       await useSpaceStore.getState().reloadDmsForOrigin(instance.origin);
-      repinDmsToHomeCopies();
     } catch { /* non-fatal */ }
   } catch (err) {
     // Non-fatal: the connection works either way; the explicit re-attach
@@ -900,7 +898,9 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     // event: see the `live-*` phases.
     writeConnectionState(origin, `live-${status}`, { error });
     if (prev === 'connected' && (status === 'disconnected' || status === 'error')) {
-      failoverDmOriginsFromDisconnected(origin);
+      // DMs pinned to this origin fail over to a reachable copy (pin rule in
+      // stores/dmConversations.ts). Its next `ready` makes it reachable again.
+      useSpaceStore.getState().setDmOriginAvailable(origin, false);
     }
   },
 
@@ -914,10 +914,8 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     const userId = useAuthStore.getState().user?.id;
     if (userId) saveCachedTokens(get().instances, userId);
 
-    // Failover DMs to a connected sibling BEFORE removeInstanceSpaces wipes
-    // this origin's pins. DMs with a connected alternative survive via rekey;
-    // DMs without one are removed alongside the rest of the instance's content.
-    failoverDmOriginsFromDisconnected(origin);
+    // Drops this origin's content. A DM with a copy on another instance moves
+    // to that copy (the pin rule); a DM without one is removed.
     useSpaceStore.getState().removeInstanceSpaces(origin);
 
     // Sync updated lists to remaining instances (fire-and-forget)
@@ -1162,8 +1160,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       return { instances: updated, registry, registryUpdatedAt };
     });
 
-    // Same rationale as disconnectInstance — preserve DMs with connected alts.
-    failoverDmOriginsFromDisconnected(origin);
+    // Same as disconnectInstance: DMs with a copy elsewhere move to it.
     useSpaceStore.getState().removeInstanceSpaces(origin);
 
     get().syncRegistry().catch(() => {});

@@ -5,7 +5,6 @@ import { HttpError } from '../api/client';
 import { isDmChannel, getChannelOrigin, getApiForOrigin, useSpaceStore } from './spaceStore';
 import { useAuthStore } from './authStore';
 import { normalizeMessageAssets } from '../utils/assetUrls';
-import { sortDmChannels } from '../utils/dmSorting';
 import { usePendingMessageStore } from './pendingMessageStore';
 
 const MAX_MESSAGES_PER_CHANNEL = 200;
@@ -428,13 +427,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       // For DMs, update lastMessage on the DM channel so sidebar re-sorts
       if (isDm) {
-        const { dmChannels, setDmChannels } = useSpaceStore.getState();
-        const updatedDms = dmChannels.map(dm =>
-          dm.id === channelId
-            ? { ...dm, lastMessage: { id: tempId, dmChannelId: channelId, userId: currentUser.id, content, createdAt: Date.now() } }
-            : dm
-        );
-        setDmChannels(sortDmChannels(updatedDms, get().unreadChannels, get().currentChannelId));
+        useSpaceStore.getState().patchDmCopy(channelId, dm => ({
+          ...dm,
+          lastMessage: { id: tempId, dmChannelId: channelId, userId: currentUser.id, content, createdAt: Date.now() },
+        }));
       }
     }
 
@@ -749,10 +745,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     // Re-sort DM list now that unread state is known (handles initial load
     // where populateFromReady runs before read states are processed)
-    const { dmChannels, setDmChannels } = useSpaceStore.getState();
-    if (dmChannels.length > 0) {
-      setDmChannels(sortDmChannels(dmChannels, unread, currentChannelId));
-    }
+    useSpaceStore.getState().resortDmChannels(currentChannelId);
   },
 
   markChannelUnread: (channelId: string) => {
@@ -818,8 +811,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     // Re-sort DM list when a DM is marked as read (moves from unread to read group)
     if (isDmChannel(channelId)) {
-      const { dmChannels, setDmChannels } = useSpaceStore.getState();
-      setDmChannels(sortDmChannels(dmChannels, get().unreadChannels, channelId));
+      useSpaceStore.getState().resortDmChannels(channelId);
     }
 
     // Send to the correct instance

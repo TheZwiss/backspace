@@ -112,7 +112,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
   const [activeTab, setActiveTab] = useState<Tab>('online');
   const [pendingUnfriend, setPendingUnfriend] = useState<{ id: string; name: string } | null>(null);
   const navigate = useNavigate();
-  const addDmChannel = useSpaceStore((s) => s.addDmChannel);
+  const upsertDmCopy = useSpaceStore((s) => s.upsertDmCopy);
   const addToast = useUIStore((s) => s.addToast);
 
   // If the user clicked "Retry your friend request" in the Connections panel
@@ -163,8 +163,9 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
         homeUserId: homeUserId ?? undefined,
         homeInstance: homeInstance ?? undefined,
       });
-      addDmChannel(dmChannel);
-      navigate(`/channels/@me/${dmChannel.id}`);
+      // The answer joins its conversation; open the conversation's row.
+      const rowId = upsertDmCopy('', dmChannel, 'stated');
+      navigate(`/channels/@me/${rowId}`);
     } catch (err) {
       addToast(t('social:sendMessage.failed', { reason: describeError(err) }), 'warning');
     }
