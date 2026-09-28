@@ -4,6 +4,7 @@ Source files:
 - `packages/server/src/routes/dm.ts` -- REST endpoints for DM CRUD, group lifecycle, message send/edit/delete, federation event queueing, `broadcastDmMessage()` with soft-close reopen logic
 - `packages/server/src/routes/federation.ts` -- Inbound relay event processors: `processMemberAddEvent`, `processMemberRemoveEvent`, `processOwnershipTransferEvent`, `processCreateEvent`, `processUpdateEvent`, `processDeleteEvent`, reaction processors, identity resolution (`resolveLocalUser`, `resolveOrCreateReplicatedUser`, `findOrCreateDmChannel`)
 - `packages/server/src/utils/federationOutbox.ts` -- `queueOutboxEvent`, `appendMutationLog`, `queueDmRelay`, `getDmParticipants`, `getGroupDmTargetOrigins`, `computeFederatedId`, `buildRelayPayload`
+- `packages/server/src/utils/dmChannelWire.ts` -- `toDmChannelWire()` (the one `DmChannel` serializer), `toDmLastMessagePreview()`, `loadOpenDmChannels()` (the DM list shared by the ready payload and `GET /api/dm`)
 - `packages/server/src/utils/storageJanitor.ts` -- `cleanupSoftDeletedDmChannels()` (24h grace period hard-delete)
 - `packages/server/src/utils/userDeletion.ts` -- `tombstoneUser()`: DM membership partition (1-on-1 kept / group dropped) + dead-DM purge on "zero live members" (see "DM Tombstone Semantics")
 - `packages/server/src/utils/permissions.ts` -- `isDeadOneOnOne()` read-only guard for Deleted-User 1-on-1 threads
@@ -972,9 +973,13 @@ const normalized = homeInstance.startsWith('http')
 - `limit`: 1-100, default 50
 - Results returned in chronological order (oldest first)
 
-### DM Channel List Sorting
+### DM Channel List
 
-`GET /api/dm` returns channels sorted by `lastMessage.createdAt` descending (newest activity first), falling back to `channel.createdAt` for channels with no messages.
+`GET /api/dm` returns the same entries as the `ready` payload's `dmChannels`: both call `loadOpenDmChannels()` (`utils/dmChannelWire.ts`), and `buildDmChannelPayload()` (the `dm_channel_created` payload) goes through the same `toDmChannelWire()`. Every entry carries `id`, `federatedId`, `ownerId`, `ownerHomeUserId`, `ownerHomeInstance`, `createdAt`, `name`, `icon`, `metadataUpdatedAt`, `members` and `lastMessage`, with `null` (or `0` for `metadataUpdatedAt`) where the channel has no value. The shared `DmChannel` type has `federatedId: string | null` as a required field, so a serializer that leaves it out does not compile.
+
+Servers up to 1.6.1 built the list by hand and left out `federatedId`, the owner identity, `name`, `icon` and `metadataUpdatedAt`. A client connected to both instances of a conversation re-reads an instance's list to place a channel id it has not seen (`reloadDmsForOrigin`), and without the key it showed that instance's mirrored copy as a second row, once per conversation the instance mirrors. `reloadDmsForOrigin` still handles peers on those versions; see `client-federation.md` "WS event routing contract".
+
+The list is sorted by `lastMessage.createdAt` descending (newest activity first), falling back to `channel.createdAt` for channels with no messages.
 
 ---
 

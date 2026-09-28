@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { WebSocket } from 'ws';
 import { verifyJwt } from '../utils/auth.js';
 import { getDb, schema } from '../db/index.js';
-import { eq, and, or, inArray, isNull, desc, sql } from 'drizzle-orm';
+import { eq, and, inArray, desc, sql } from 'drizzle-orm';
 import { handleClientEvent } from './events.js';
 import { computePermissions, PermissionBits, permissionsToString } from '../utils/permissions.js';
 import type {
@@ -21,6 +21,8 @@ import type {
   Activity,
 } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
+import { batchInArray } from '../utils/sqlBatch.js';
+import { loadOpenDmChannels } from '../utils/dmChannelWire.js';
 import { collectProfileBroadcastTargetIds } from '../utils/userDeletion.js';
 import { statusOnConnect } from '../utils/presenceStatus.js';
 import { touchUserActivity, parseClientKind } from '../telemetry/activity.js';
@@ -30,21 +32,8 @@ import { utcDay } from '../telemetry/day.js';
 const wsIsAlive: WeakMap<WebSocket, boolean> = new WeakMap();
 let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
 
-// SQLite's SQLITE_MAX_VARIABLE_NUMBER default is 999.
-// Chunk inArray() calls to stay safely under this limit.
-const BATCH_CHUNK_SIZE = 500;
-
 export const VOICE_RECONNECT_GRACE_MS = 60_000;
 const MAX_PENDING_VOICE_RECONNECTS = 10_000;
-
-function batchInArray<TId, TResult>(ids: TId[], queryFn: (chunk: TId[]) => TResult[]): TResult[] {
-  if (ids.length <= BATCH_CHUNK_SIZE) return queryFn(ids);
-  const results: TResult[] = [];
-  for (let i = 0; i < ids.length; i += BATCH_CHUNK_SIZE) {
-    results.push(...queryFn(ids.slice(i, i + BATCH_CHUNK_SIZE)));
-  }
-  return results;
-}
 
 export interface AuthenticatedSocket {
   ws: WebSocket;
@@ -1415,7 +1404,8 @@ function buildReadyPayload(userId: string): {
   // Store user's space IDs for broadcasting
   connectionManager.setUserSpaces(userId, spaceIds);
 
-  // Get DM channels
+  // Open DM memberships (active-call lookup below) and the DM channels
+  // themselves (the same list GET /api/dm serves).
   const dmMemberships = db.select()
     .from(schema.dmMembers)
     .where(and(
@@ -1423,110 +1413,7 @@ function buildReadyPayload(userId: string): {
       eq(schema.dmMembers.closed, 0),
     ))
     .all();
-
-  const dmChannelIds = dmMemberships.map(dm => dm.dmChannelId);
-  const dmChannels: DmChannel[] = [];
-
-  if (dmChannelIds.length > 0) {
-    // Batch: all DM channels (1 query, exclude soft-deleted)
-    const allDmChannelRows = batchInArray(
-      dmChannelIds,
-      ids => db.select().from(schema.dmChannels).where(and(inArray(schema.dmChannels.id, ids), isNull(schema.dmChannels.deletedAt))).all(),
-    );
-    const dmChannelMap = new Map(allDmChannelRows.map(c => [c.id, c]));
-
-    // Batch: all DM members across all channels (1 query)
-    const allDmMemberRows = batchInArray(
-      dmChannelIds,
-      ids => db.select().from(schema.dmMembers).where(inArray(schema.dmMembers.dmChannelId, ids)).all(),
-    );
-
-    // Batch: all unique users from DM members (1 query)
-    const allDmUserIds = [...new Set(allDmMemberRows.map(m => m.userId))];
-    const allDmUsers = allDmUserIds.length > 0
-      ? batchInArray(allDmUserIds, ids => db.select().from(schema.users).where(inArray(schema.users.id, ids)).all())
-      : [];
-    const dmUserMap = new Map(allDmUsers.map(u => [u.id, u]));
-
-    // Batch: last message per DM channel.
-    // Two-step approach (same as GET /api/dm): get MAX(created_at) per channel,
-    // then fetch the actual message rows matching those timestamps.
-    const dmMaxTimestamps = batchInArray(
-      dmChannelIds,
-      ids => db.select({
-        dmChannelId: schema.dmMessages.dmChannelId,
-        maxCreatedAt: sql<number>`MAX(${schema.dmMessages.createdAt})`.as('max_created_at'),
-      }).from(schema.dmMessages).where(inArray(schema.dmMessages.dmChannelId, ids)).groupBy(schema.dmMessages.dmChannelId).all(),
-    );
-    const dmLastMsgMap = new Map<string, typeof schema.dmMessages.$inferSelect>();
-    if (dmMaxTimestamps.length > 0) {
-      const conditions = dmMaxTimestamps.map(t =>
-        and(eq(schema.dmMessages.dmChannelId, t.dmChannelId), eq(schema.dmMessages.createdAt, t.maxCreatedAt!))
-      );
-      const dmLastMessages = db.select().from(schema.dmMessages).where(or(...conditions)).all();
-      for (const m of dmLastMessages) {
-        if (!dmLastMsgMap.has(m.dmChannelId)) {
-          dmLastMsgMap.set(m.dmChannelId, m);
-        }
-      }
-    }
-    const dmLastMsgIds = [...dmLastMsgMap.values()].map(m => m.id);
-
-    // Batch: attachments for last messages (1 query)
-    const dmLastMsgAttachments = dmLastMsgIds.length > 0
-      ? batchInArray(dmLastMsgIds, ids =>
-          db.select({
-            dmMessageId: schema.attachments.dmMessageId,
-            type: schema.attachments.mimetype,
-            filename: schema.attachments.originalName,
-          }).from(schema.attachments).where(inArray(schema.attachments.dmMessageId, ids)).all()
-        )
-      : [];
-    const dmLastMsgAttachmentMap = new Map<string, Array<{ type: string; filename: string }>>();
-    for (const a of dmLastMsgAttachments) {
-      if (!a.dmMessageId) continue;
-      const arr = dmLastMsgAttachmentMap.get(a.dmMessageId) ?? [];
-      arr.push({ type: a.type, filename: a.filename });
-      dmLastMsgAttachmentMap.set(a.dmMessageId, arr);
-    }
-
-    // Assemble DM channels with zero additional queries
-    for (const dm of dmMemberships) {
-      const dmChannel = dmChannelMap.get(dm.dmChannelId);
-      if (!dmChannel) continue;
-
-      const memberRows = allDmMemberRows.filter(m => m.dmChannelId === dm.dmChannelId);
-      const members = memberRows
-        .map(m => dmUserMap.get(m.userId))
-        .filter((u): u is NonNullable<typeof u> => u != null)
-        .map(u => sanitizeUser(u));
-
-      const last = dmLastMsgMap.get(dm.dmChannelId) ?? null;
-
-      dmChannels.push({
-        id: dmChannel.id,
-        federatedId: dmChannel.federatedId ?? null,
-        ownerId: dmChannel.ownerId ?? null,
-        ownerHomeUserId: dmChannel.ownerHomeUserId ?? null,
-        ownerHomeInstance: dmChannel.ownerHomeInstance ?? null,
-        createdAt: dmChannel.createdAt,
-        name: dmChannel.name ?? null,
-        icon: dmChannel.icon ?? null,
-        metadataUpdatedAt: dmChannel.metadataUpdatedAt ?? 0,
-        members,
-        lastMessage: last ? {
-          id: last.id,
-          dmChannelId: last.dmChannelId,
-          userId: last.userId,
-          content: last.content,
-          createdAt: last.createdAt,
-          type: last.type === 'system' ? 'system' : 'user',
-          attachments: dmLastMsgAttachmentMap.get(last.id) ?? [],
-        } : null,
-      });
-    }
-
-  }
+  const dmChannels = loadOpenDmChannels(db, userId);
 
   // Include DM channel IDs in the visible set for read state filtering
   for (const dm of dmChannels) {

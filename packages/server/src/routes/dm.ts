@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { eq, and, or, desc, lt, inArray, isNull, sql } from 'drizzle-orm';
+import { eq, and, or, desc, lt, inArray, isNull } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
@@ -24,6 +24,7 @@ import {
 } from '@backspace/shared';
 import { fetchSpaceInviteSnapshot, getLocalInviteSnapshot } from '../utils/spaceInviteSnapshot.js';
 import { sanitizeUser } from '../utils/sanitize.js';
+import { loadOpenDmChannels } from '../utils/dmChannelWire.js';
 import { sendError } from '../utils/httpErrors.js';
 
 /** Members a group DM can hold, the owner included. */
@@ -857,125 +858,9 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
   // Centralized auth for all DM routes
   app.addHook('preHandler', authenticate);
 
-  // GET /api/dm - List user's DM channels
+  // GET /api/dm - List user's DM channels, in the same shape as the ready payload
   app.get('/api/dm', async (request, reply) => {
-    const db = getDb();
-
-    const memberships = db.select()
-      .from(schema.dmMembers)
-      .where(and(
-        eq(schema.dmMembers.userId, request.userId),
-        eq(schema.dmMembers.closed, 0),
-      ))
-      .all();
-
-    if (memberships.length === 0) {
-      return reply.code(200).send([]);
-    }
-
-    const dmChannelIds = memberships.map(m => m.dmChannelId);
-
-    // Batch fetch all DM channels (exclude soft-deleted)
-    const channelRows = db.select().from(schema.dmChannels)
-      .where(and(inArray(schema.dmChannels.id, dmChannelIds), isNull(schema.dmChannels.deletedAt))).all();
-    const channelMap = new Map(channelRows.map(c => [c.id, c]));
-
-    // Batch fetch all DM members
-    const allMemberRows = db.select().from(schema.dmMembers)
-      .where(inArray(schema.dmMembers.dmChannelId, dmChannelIds)).all();
-    const membersByChannel = new Map<string, string[]>();
-    for (const m of allMemberRows) {
-      if (!membersByChannel.has(m.dmChannelId)) membersByChannel.set(m.dmChannelId, []);
-      membersByChannel.get(m.dmChannelId)!.push(m.userId);
-    }
-
-    // Batch fetch all unique users
-    const allUserIds = [...new Set(allMemberRows.map(m => m.userId))];
-    const userRows = allUserIds.length > 0
-      ? db.select().from(schema.users).where(inArray(schema.users.id, allUserIds)).all()
-      : [];
-    const userMap = new Map(userRows.map(u => [u.id, u]));
-
-    // Batch fetch last message per DM channel:
-    // Get the max created_at per channel, then fetch matching messages
-    const maxTimestamps = db.select({
-      dmChannelId: schema.dmMessages.dmChannelId,
-      maxCreatedAt: sql<number>`MAX(${schema.dmMessages.createdAt})`.as('max_created_at'),
-    })
-      .from(schema.dmMessages)
-      .where(inArray(schema.dmMessages.dmChannelId, dmChannelIds))
-      .groupBy(schema.dmMessages.dmChannelId)
-      .all();
-
-    const lastMessageMap = new Map<string, { id: string; dmChannelId: string; userId: string; content: string | null; createdAt: number; type: 'user' | 'system' }>();
-    if (maxTimestamps.length > 0) {
-      // Build conditions to fetch the actual message rows matching max timestamps
-      const conditions = maxTimestamps.map(t =>
-        and(eq(schema.dmMessages.dmChannelId, t.dmChannelId), eq(schema.dmMessages.createdAt, t.maxCreatedAt!))
-      );
-      const lastMessages = db.select()
-        .from(schema.dmMessages)
-        .where(or(...conditions))
-        .all();
-      for (const m of lastMessages) {
-        // In case of ties, keep the first one per channel
-        if (!lastMessageMap.has(m.dmChannelId)) {
-          lastMessageMap.set(m.dmChannelId, {
-            id: m.id, dmChannelId: m.dmChannelId, userId: m.userId,
-            content: m.content, createdAt: m.createdAt,
-            type: m.type === 'system' ? 'system' : 'user',
-          });
-        }
-      }
-    }
-
-    // Batch fetch attachments for last messages
-    const lastMsgIds = [...lastMessageMap.values()].map(m => m.id);
-    const lastMsgAttachments = lastMsgIds.length > 0
-      ? db.select({
-          dmMessageId: schema.attachments.dmMessageId,
-          type: schema.attachments.mimetype,
-          filename: schema.attachments.originalName,
-        }).from(schema.attachments).where(inArray(schema.attachments.dmMessageId, lastMsgIds)).all()
-      : [];
-    const lastMsgAttachmentMap = new Map<string, Array<{ type: string; filename: string }>>();
-    for (const a of lastMsgAttachments) {
-      if (!a.dmMessageId) continue;
-      const arr = lastMsgAttachmentMap.get(a.dmMessageId) ?? [];
-      arr.push({ type: a.type, filename: a.filename });
-      lastMsgAttachmentMap.set(a.dmMessageId, arr);
-    }
-
-    // Assemble results
-    const dmChannels: DmChannel[] = [];
-    for (const channelId of dmChannelIds) {
-      const channel = channelMap.get(channelId);
-      if (!channel) continue;
-
-      const memberIds = membersByChannel.get(channelId) ?? [];
-      const members = memberIds
-        .map(id => userMap.get(id))
-        .filter((u): u is NonNullable<typeof u> => u !== undefined)
-        .map(u => sanitizeUser(u));
-
-      const lastMsg = lastMessageMap.get(channelId) ?? null;
-
-      dmChannels.push({
-        id: channel.id,
-        ownerId: channel.ownerId ?? null,
-        createdAt: channel.createdAt,
-        members,
-        lastMessage: lastMsg ? {
-          id: lastMsg.id,
-          dmChannelId: lastMsg.dmChannelId,
-          userId: lastMsg.userId,
-          content: lastMsg.content,
-          createdAt: lastMsg.createdAt,
-          type: lastMsg.type,
-          attachments: lastMsgAttachmentMap.get(lastMsg.id) ?? [],
-        } : null,
-      });
-    }
+    const dmChannels = loadOpenDmChannels(getDb(), request.userId);
 
     // Sort by last message timestamp (newest first)
     dmChannels.sort((a, b) => {

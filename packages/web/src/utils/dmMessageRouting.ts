@@ -98,6 +98,7 @@ function deliverAsNewConversation(origin: string, message: DmMessageWithUser): v
   useChatStore.getState().addRealtimeMessage(message.dmChannelId, asChatMessage(message));
   useSpaceStore.getState().addDmChannel({
     id: message.dmChannelId,
+    federatedId: null,
     createdAt: message.createdAt,
     members: message.user ? [message.user] : [],
     lastMessage: message,

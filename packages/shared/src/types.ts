@@ -379,7 +379,7 @@ export interface DmLastMessagePreview {
 
 export interface DmChannel {
   id: string;
-  federatedId?: string | null;
+  federatedId: string | null;
   ownerId?: string | null;
   ownerHomeUserId?: string | null;
   ownerHomeInstance?: string | null;

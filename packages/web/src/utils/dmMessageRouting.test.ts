@@ -39,9 +39,16 @@ import { useChatStore } from '../stores/chatStore';
 import { api, type BackspaceApiClient } from '../api/client';
 import { applyIncomingDmMessage, applyIncomingDmChannel } from './dmMessageRouting';
 import { repinDmsToHomeCopies } from './dmOriginFailover';
+import { wireDm, asListedBy161, copyDm } from '../test/dmWireShape';
 import type { DmChannel, DmMessageWithUser, User } from '@backspace/shared';
 
 const REMOTE = 'https://remote.example';
+
+// The keys servers give these conversations: computeFederatedId over the two
+// members' home user ids (packages/server/src/utils/federationOutbox.ts).
+const FID_ALICE_BOB = 'fc8aa3239ccea0cd4cbfb7701d770ac9';
+const FID_ALICE_DAVE = '9e29da28574912cfc1942cd6528d5a46';
+const FID_ALICE_VERA = '987ee3b88eaaa8cb60bf9fe0f9808530';
 
 function user(id: string, homeUserId: string | null = null, homeInstance: string | null = null): User {
   return {
@@ -70,28 +77,27 @@ function message(overrides: Partial<DmMessageWithUser> & Pick<DmMessageWithUser,
   };
 }
 
-const carolDm: DmChannel = {
-  id: 'dm-carol', federatedId: null, createdAt: 1, members: [aliceHome, carolHome],
+// Fixtures in the wire shape of a current server (see test/dmWireShape.ts).
+const carolDm = wireDm({
+  id: 'dm-carol', createdAt: 1, members: [aliceHome, carolHome],
   lastMessage: { id: 'm-carol-1', dmChannelId: 'dm-carol', userId: 'carol-home', content: 'hi alice', createdAt: 4_000 },
-};
-const bobDm: DmChannel = {
-  id: 'dm-bob-home', federatedId: 'fid-alice-bob', createdAt: 1, members: [aliceHome, bobOnHome],
-  lastMessage: null,
-};
-// REMOTE's copy of the same conversation, as REMOTE's GET /api/dm returns it.
-const bobDmOnRemote: DmChannel = {
-  id: 'dm-bob-remote', federatedId: 'fid-alice-bob', createdAt: 2, members: [aliceOnRemote, bobOnRemote],
-  lastMessage: null,
-};
+});
+const bobDm = wireDm({ id: 'dm-bob-home', federatedId: FID_ALICE_BOB, createdAt: 1, members: [aliceHome, bobOnHome] });
+// REMOTE's copy of the same conversation.
+const bobDmOnRemote = wireDm({
+  id: 'dm-bob-remote', federatedId: FID_ALICE_BOB, createdAt: 2, members: [aliceOnRemote, bobOnRemote],
+});
 
 let remoteDmList: DmChannel[];
 let remoteListCalls: number;
+/** How REMOTE's GET /api/dm puts an entry on the wire: current servers send it whole. */
+let remoteListShape: (dm: DmChannel) => DmChannel;
 
 function fakeRemoteClient(): BackspaceApiClient {
   const dm = {
     list: async (): Promise<DmChannel[]> => {
       remoteListCalls += 1;
-      return remoteDmList.map(d => ({ ...d, members: d.members.map(m => ({ ...m })) }));
+      return remoteDmList.map(d => remoteListShape(copyDm(d)));
     },
   };
   return { dm } as unknown as BackspaceApiClient;
@@ -101,6 +107,7 @@ beforeEach(() => {
   useSpaceStore.getState().reset();
   remoteDmList = [bobDmOnRemote];
   remoteListCalls = 0;
+  remoteListShape = dm => dm;
   setApiForOriginResolver(() => fakeRemoteClient());
   setMyUserIdForOrigin(REMOTE, 'alice-on-remote');
 
@@ -110,7 +117,7 @@ beforeEach(() => {
     channelOriginMap: new Map([['dm-carol', ''], ['dm-bob-home', '']]),
     // REMOTE's ready arrived before its copy of the bob DM existed, so only the
     // home copy is recorded.
-    dmAlternatives: new Map([['fid-alice-bob', new Map([['', 'dm-bob-home']])]]),
+    dmAlternatives: new Map([[FID_ALICE_BOB, new Map([['', 'dm-bob-home']])]]),
   });
   useChatStore.setState({
     messages: new Map(),
@@ -127,7 +134,21 @@ function dmById(id: string): DmChannel | undefined {
   return useSpaceStore.getState().dmChannels.find(d => d.id === id);
 }
 
-describe('applyIncomingDmMessage: a message never lands in another conversation (#296)', () => {
+/** Every sidebar row, by id: a duplicate row shows up here whatever key it carries. */
+function rowIds(): string[] {
+  return useSpaceStore.getState().dmChannels.map(d => d.id).sort();
+}
+
+// REMOTE may run a current server or 1.6.1, whose GET /api/dm left out the
+// conversation key; the client lists DMs from peers on either.
+describe.each([
+  ['a current server', (dm: DmChannel): DmChannel => dm],
+  ['a 1.6.1 server', asListedBy161],
+])('applyIncomingDmMessage: a message never lands in another conversation (#296), REMOTE on %s', (_label, shape) => {
+  beforeEach(() => {
+    remoteListShape = shape;
+  });
+
   it('the mirrored copy of alice\'s message to bob does not enter carol\'s unread DM', async () => {
     // alice -> bob, sent through home; REMOTE mirrors it and pushes its copy to
     // alice's federated account on REMOTE under REMOTE's channel id.
@@ -158,17 +179,29 @@ describe('applyIncomingDmMessage: a message never lands in another conversation 
     }));
 
     expect(remoteListCalls).toBe(1);
-    expect(useSpaceStore.getState().dmAlternatives.get('fid-alice-bob')?.get(REMOTE)).toBe('dm-bob-remote');
-    // No second sidebar entry for the same conversation.
-    expect(useSpaceStore.getState().dmChannels.filter(d => d.federatedId === 'fid-alice-bob')).toHaveLength(1);
+    expect(useSpaceStore.getState().dmAlternatives.get(FID_ALICE_BOB)?.get(REMOTE)).toBe('dm-bob-remote');
+    // No second sidebar row for the same conversation.
+    expect(rowIds()).toEqual(['dm-bob-home', 'dm-carol']);
+    expect(contentsOf('dm-bob-remote')).toEqual([]);
+  });
+
+  it('after the first message of a new conversation, a later mirrored copy resolves without another list read', async () => {
+    const mirrored = (id: string, content: string): DmMessageWithUser => message({
+      id, dmChannelId: 'dm-bob-remote', userId: 'alice-on-remote', user: aliceOnRemote, content,
+      sourceInstance: 'https://home.example', sourceMessageId: `${id}-home`,
+    });
+    await applyIncomingDmMessage(REMOTE, mirrored('m-remote-first', 'test'));
+    await applyIncomingDmMessage(REMOTE, mirrored('m-remote-next', 'next'));
+
+    expect(remoteListCalls).toBe(1);
+    expect(rowIds()).toEqual(['dm-bob-home', 'dm-carol']);
   });
 
   it('a genuinely new conversation from an origin gets its own entry, not a guessed existing one', async () => {
     const daveOnRemote = user('dave-remote');
-    const newDm: DmChannel = {
-      id: 'dm-dave-remote', federatedId: 'fid-alice-dave', createdAt: 3, members: [aliceOnRemote, daveOnRemote],
-      lastMessage: null,
-    };
+    const newDm = wireDm({
+      id: 'dm-dave-remote', federatedId: FID_ALICE_DAVE, createdAt: 3, members: [aliceOnRemote, daveOnRemote],
+    });
     remoteDmList = [bobDmOnRemote, newDm];
 
     await applyIncomingDmMessage(REMOTE, message({
@@ -183,7 +216,9 @@ describe('applyIncomingDmMessage: a message never lands in another conversation 
     expect(contentsOf('dm-bob-home')).not.toContain('hi dave');
     expect(contentsOf('dm-dave-remote')).toContain('hi dave');
     expect(dmById('dm-dave-remote')?.members.map(m => m.id).sort()).toEqual(['alice-on-remote', 'dave-remote']);
+    expect(dmById('dm-dave-remote')?.federatedId).toBe(FID_ALICE_DAVE);
     expect(useSpaceStore.getState().channelOriginMap.get('dm-dave-remote')).toBe(REMOTE);
+    expect(rowIds()).toEqual(['dm-bob-home', 'dm-carol', 'dm-dave-remote']);
   });
 
   it('when the origin cannot be asked, a self-authored message is still not put into another conversation', async () => {
@@ -205,7 +240,7 @@ describe('applyIncomingDmMessage: a message never lands in another conversation 
   });
 
   it('a home-origin message for an unknown channel is resolved against the home list too', async () => {
-    const listSpy = vi.spyOn(api.dm, 'list').mockResolvedValue([carolDm, bobDm]);
+    const listSpy = vi.spyOn(api.dm, 'list').mockResolvedValue([carolDm, bobDm].map(copyDm));
     try {
       await applyIncomingDmMessage('', message({
         id: 'm-home-x',
@@ -217,6 +252,8 @@ describe('applyIncomingDmMessage: a message never lands in another conversation 
       expect(listSpy).toHaveBeenCalledTimes(1);
       expect(contentsOf('dm-carol')).not.toContain('orphan');
       expect(contentsOf('dm-bob-home')).not.toContain('orphan');
+      // The home rows keep their key through the reload.
+      expect(dmById('dm-bob-home')?.federatedId).toBe(FID_ALICE_BOB);
     } finally {
       listSpy.mockRestore();
     }
@@ -227,7 +264,7 @@ describe('applyIncomingDmMessage: the list holds only ids the pinned origin know
   beforeEach(() => {
     // Both copies of the bob conversation are known; home is the pinned one.
     useSpaceStore.setState({
-      dmAlternatives: new Map([['fid-alice-bob', new Map([['', 'dm-bob-home'], [REMOTE, 'dm-bob-remote']])]]),
+      dmAlternatives: new Map([[FID_ALICE_BOB, new Map([['', 'dm-bob-home'], [REMOTE, 'dm-bob-remote']])]]),
     });
   });
 
@@ -268,8 +305,8 @@ describe('applyIncomingDmChannel: alternates are recorded when the copy is skipp
   it('a dm_channel_created for a conversation already listed records the alternate instead of dropping it', async () => {
     applyIncomingDmChannel(REMOTE, bobDmOnRemote);
 
-    expect(useSpaceStore.getState().dmChannels.filter(d => d.federatedId === 'fid-alice-bob')).toHaveLength(1);
-    expect(useSpaceStore.getState().dmAlternatives.get('fid-alice-bob')?.get(REMOTE)).toBe('dm-bob-remote');
+    expect(rowIds()).toEqual(['dm-bob-home', 'dm-carol']);
+    expect(useSpaceStore.getState().dmAlternatives.get(FID_ALICE_BOB)?.get(REMOTE)).toBe('dm-bob-remote');
 
     // A message for that channel from REMOTE now resolves without asking REMOTE.
     await applyIncomingDmMessage(REMOTE, message({
@@ -284,9 +321,9 @@ describe('applyIncomingDmChannel: alternates are recorded when the copy is skipp
   });
 
   it('a dm_channel_created for a new conversation adds it under its origin', () => {
-    const fresh: DmChannel = {
-      id: 'dm-new-remote', federatedId: 'fid-new', createdAt: 9, members: [aliceOnRemote, bobOnRemote], lastMessage: null,
-    };
+    const fresh = wireDm({
+      id: 'dm-new-remote', federatedId: 'fid-new', createdAt: 9, members: [aliceOnRemote, bobOnRemote],
+    });
     applyIncomingDmChannel(REMOTE, fresh);
     expect(dmById('dm-new-remote')).toBeDefined();
     expect(useSpaceStore.getState().channelOriginMap.get('dm-new-remote')).toBe(REMOTE);
@@ -302,12 +339,8 @@ describe('the home copy of a conversation is the pinned one (#295 review)', () =
   const aliceOnC = user('alice-on-c', 'alice-home', 'home.example');
   const veraOnC = user('vera-stub-on-c', 'vera-home', 'home.example');
   const veraHome = user('vera-home');
-  const dmOnC: DmChannel = {
-    id: 'dm-uv-c', federatedId: 'fid-alice-vera', createdAt: 10, members: [aliceOnC, veraOnC], lastMessage: null,
-  };
-  const dmOnHome: DmChannel = {
-    id: 'dm-uv-home', federatedId: 'fid-alice-vera', createdAt: 11, members: [aliceHome, veraHome], lastMessage: null,
-  };
+  const dmOnC = wireDm({ id: 'dm-uv-c', federatedId: FID_ALICE_VERA, createdAt: 10, members: [aliceOnC, veraOnC] });
+  const dmOnHome = wireDm({ id: 'dm-uv-home', federatedId: FID_ALICE_VERA, createdAt: 11, members: [aliceHome, veraHome] });
 
   beforeEach(() => {
     useSpaceStore.setState({ dmChannels: [], channelOriginMap: new Map(), dmAlternatives: new Map() });
@@ -320,7 +353,7 @@ describe('the home copy of a conversation is the pinned one (#295 review)', () =
     expect(useSpaceStore.getState().channelOriginMap.get('dm-uv-c')).toBe(C);
 
     // Home created its copy from C's relay; vera's reply arrives from home.
-    const listSpy = vi.spyOn(api.dm, 'list').mockResolvedValue([dmOnHome]);
+    const listSpy = vi.spyOn(api.dm, 'list').mockResolvedValue([copyDm(dmOnHome)]);
     try {
       await applyIncomingDmMessage('', message({
         id: 'm-vera-1', dmChannelId: 'dm-uv-home', userId: 'vera-home', user: veraHome, content: 'reply from vera',
@@ -329,8 +362,7 @@ describe('the home copy of a conversation is the pinned one (#295 review)', () =
       listSpy.mockRestore();
     }
 
-    const entries = useSpaceStore.getState().dmChannels.filter(d => d.federatedId === 'fid-alice-vera');
-    expect(entries.map(d => d.id)).toEqual(['dm-uv-home']);
+    expect(useSpaceStore.getState().dmChannels.map(d => d.id)).toEqual(['dm-uv-home']);
     expect(useSpaceStore.getState().channelOriginMap.get('dm-uv-home')).toBe('');
     expect(contentsOf('dm-uv-home')).toEqual(['reply from vera']);
   });
@@ -349,8 +381,7 @@ describe('the home copy of a conversation is the pinned one (#295 review)', () =
     populateFromReady('', [], [], [dmOnHome]);
     repinDmsToHomeCopies();
 
-    expect(useSpaceStore.getState().dmChannels.filter(d => d.federatedId === 'fid-alice-vera').map(d => d.id))
-      .toEqual(['dm-uv-home']);
+    expect(useSpaceStore.getState().dmChannels.map(d => d.id)).toEqual(['dm-uv-home']);
     expect(useSpaceStore.getState().channelOriginMap.get('dm-uv-home')).toBe('');
   });
 

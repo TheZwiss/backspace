@@ -4,6 +4,7 @@ import { api, BackspaceApiClient } from '../api/client';
 import { resolveAssetUrl, normalizeUserAssets } from '../utils/assetUrls';
 import { isSelf, canonicalUserKey, isDeliveryFromHome } from '../utils/identity';
 import { sortDmChannels } from '../utils/dmSorting';
+import { deriveMissingOneOnOneKeys, type ListedDmChannel } from '../utils/dmConversationKey';
 import {
   getApiForOrigin,
   resolveOriginFromHostname,
@@ -53,6 +54,71 @@ export interface UserViewEntry {
   deliveredBy: string;
   isHome: boolean;
   updatedAt: number;
+}
+
+// ─── DM list completion ───────────────────────────────────────────────────────
+
+/**
+ * The listed DMs from `origin` as full `DmChannel`s, for `reloadDmsForOrigin`.
+ *
+ * A field the server sent (null included) is kept as sent. A field it left
+ * out, which only a peer on 1.6.1 or older does, is filled from what the
+ * client already holds for that channel id on this origin: its entry in
+ * `dmChannels`, and for the key also the `dmAlternatives` record. A key still
+ * unknown falls back to `derivedKeys` (1-on-1 keys derived from the members),
+ * then to null.
+ *
+ * A derived key is dropped again (back to null) when another entry of the same
+ * listing ends up with the same key. The peer then holds two rows for one pair
+ * (a keyless legacy 1-on-1 next to the relay-created copy), and the dedup
+ * below would keep only one of them, possibly hiding the live copy.
+ */
+function completeListedDms(
+  listed: ListedDmChannel[],
+  origin: string,
+  state: Pick<SpaceState, 'dmChannels' | 'channelOriginMap' | 'dmAlternatives'>,
+  derivedKeys: Map<string, string>,
+): DmChannel[] {
+  const knownById = new Map<string, DmChannel>();
+  for (const dm of state.dmChannels) {
+    if ((state.channelOriginMap.get(dm.id) ?? '') === origin) knownById.set(dm.id, dm);
+  }
+  const alternateKeyById = new Map<string, string>();
+  for (const [fid, byOrigin] of state.dmAlternatives) {
+    const channelId = byOrigin.get(origin);
+    if (channelId !== undefined) alternateKeyById.set(channelId, fid);
+  }
+
+  const resolved = listed.map((dm): { dm: ListedDmChannel; federatedId: string | null; derived: boolean } => {
+    if (dm.federatedId !== undefined) return { dm, federatedId: dm.federatedId, derived: false };
+    const knownKey = knownById.get(dm.id)?.federatedId ?? alternateKeyById.get(dm.id) ?? null;
+    if (knownKey) return { dm, federatedId: knownKey, derived: false };
+    const derivedKey = derivedKeys.get(dm.id) ?? null;
+    return { dm, federatedId: derivedKey, derived: derivedKey !== null };
+  });
+  const entriesPerKey = new Map<string, number>();
+  for (const { federatedId } of resolved) {
+    if (federatedId) entriesPerKey.set(federatedId, (entriesPerKey.get(federatedId) ?? 0) + 1);
+  }
+
+  return resolved.map(({ dm, federatedId: resolvedKey, derived }): DmChannel => {
+    const known = knownById.get(dm.id);
+    const federatedId = derived && resolvedKey && (entriesPerKey.get(resolvedKey) ?? 0) > 1 ? null : resolvedKey;
+    return {
+      ...dm,
+      federatedId,
+      ownerHomeUserId: sentOrKnown(dm.ownerHomeUserId, known?.ownerHomeUserId),
+      ownerHomeInstance: sentOrKnown(dm.ownerHomeInstance, known?.ownerHomeInstance),
+      name: sentOrKnown(dm.name, known?.name),
+      icon: sentOrKnown(dm.icon, known?.icon),
+      metadataUpdatedAt: sentOrKnown(dm.metadataUpdatedAt, known?.metadataUpdatedAt),
+    };
+  });
+}
+
+/** The value the server sent, or the one already held when the server left the field out. */
+function sentOrKnown<T>(sent: T | undefined, known: T | undefined): T | undefined {
+  return sent !== undefined ? sent : known;
 }
 
 // ─── Store interface ──────────────────────────────────────────────────────────
@@ -309,13 +375,21 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
   // `utils/dmMessageRouting` to learn which conversation an unknown channel id
   // belongs to. Origin '' is the home instance. Throws on a failed fetch; both
   // callers catch.
+  //
+  // A peer on 1.6.1 or older lists its DMs without `federatedId` and the group
+  // metadata (see `utils/dmConversationKey`). Such an entry takes the key the
+  // client already knows for that channel id, or else the key derived from its
+  // two members for a 1-on-1, and keeps the group metadata the client already
+  // holds. A field the server does send, null included, is taken as sent.
   reloadDmsForOrigin: async (origin: string) => {
     const client = getApiForOrigin(origin);
-    const incomingDms = await client.dm.list();
+    const listed: ListedDmChannel[] = await client.dm.list();
+    // Before normalization: the derivation reads the members' raw homeInstance.
+    const derivedKeys = await deriveMissingOneOnOneKeys(listed);
 
     // Normalize remote-origin DM member asset URLs (home origin serves clean paths).
     if (origin !== '') {
-      for (const dm of incomingDms) {
+      for (const dm of listed) {
         for (const member of dm.members) {
           normalizeUserAssets(member, origin);
         }
@@ -323,6 +397,8 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     }
 
     set((state) => {
+      const incomingDms = completeListedDms(listed, origin, state, derivedKeys);
+
       // Upsert every DM member into the userViews cache (home + remote).
       const { upsertUserView } = get();
       for (const dm of incomingDms) {

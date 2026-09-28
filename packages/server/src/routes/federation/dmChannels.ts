@@ -2,6 +2,7 @@ import { getDb, schema } from '../../db/index.js';
 import { getOurOrigin } from '../../utils/federationAuth.js';
 import { relayTargetOrigins } from '../../utils/federationOutbox.js';
 import { sanitizeUser } from '../../utils/sanitize.js';
+import { toDmChannelWire } from '../../utils/dmChannelWire.js';
 import { generateSnowflake } from '../../utils/snowflake.js';
 import { connectionManager } from '../../ws/handler.js';
 import { getDmMessageWithUser } from '../dm.js';
@@ -51,14 +52,7 @@ export function buildDmChannelPayload(
     }
   }
 
-  return {
-    id: dmChannel.id,
-    ownerId: dmChannel.ownerId ?? null,
-    federatedId: dmChannel.federatedId ?? null,
-    createdAt: dmChannel.createdAt,
-    members: users.map(u => sanitizeUser(u)),
-    lastMessage,
-  };
+  return toDmChannelWire(dmChannel, users, lastMessage);
 }
 
 // ─── Relay Event Processors ──────────────────────────────────────────────────
