@@ -753,11 +753,11 @@ function handleEvent(origin: string, event: ServerEvent): void {
     case 'member_joined':
       if (!isHome) normalizeUserAssets(event.member.user, origin);
       upsertUserView(event.member.user, origin);
-      if (isLoadedRosterSpace(event.spaceId, origin)) addMember(event.member);
+      if (isLoadedRosterSpace(event.spaceId, origin)) addMember(event.spaceId, event.member);
       break;
 
     case 'member_left':
-      if (isLoadedRosterSpace(event.spaceId, origin)) removeMember(event.userId);
+      if (isLoadedRosterSpace(event.spaceId, origin)) removeMember(event.spaceId, event.userId);
       break;
 
     case 'member_banned': {

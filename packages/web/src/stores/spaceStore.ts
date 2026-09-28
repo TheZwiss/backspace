@@ -122,6 +122,44 @@ function sentOrKnown<T>(sent: T | undefined, known: T | undefined): T | undefine
   return sent !== undefined ? sent : known;
 }
 
+// ─── Roster changes during a detail fetch ────────────────────────────────────
+// `loadSpaceDetail` replaces `members` with the roster the server sent. A
+// `member_joined` or `member_left` that arrives while that fetch is in flight
+// is applied to the old list and would be lost when the fetched roster lands,
+// since the server may have built its response before the change. So each
+// in-flight load keeps the changes for its space in arrival order and replays
+// them onto the fetched roster (`replayRosterChange`). Replaying is safe when
+// the response already has the change: a replayed join adds the member only
+// when the roster lacks them, since the fetched row can be newer than the join
+// event (a role assigned during the fetch), and a leave of an absent member
+// removes nothing.
+
+type RosterChange =
+  | { kind: 'join'; member: MemberWithUser }
+  | { kind: 'leave'; userId: string };
+
+/** spaceId → the change logs of the loads in flight for it (one per load). */
+const inFlightRosterLogs = new Map<string, Set<RosterChange[]>>();
+
+function recordRosterChange(spaceId: string, change: RosterChange): void {
+  const logs = inFlightRosterLogs.get(spaceId);
+  if (!logs) return;
+  for (const log of logs) log.push(change);
+}
+
+/** A change replayed onto a fetched roster: a join never replaces a fetched row. */
+function replayRosterChange(members: MemberWithUser[], change: RosterChange): MemberWithUser[] {
+  if (change.kind === 'join' && members.some(m => m.userId === change.member.userId)) return members;
+  return applyRosterChange(members, change);
+}
+
+function applyRosterChange(members: MemberWithUser[], change: RosterChange): MemberWithUser[] {
+  if (change.kind === 'join') {
+    return [...members.filter(m => m.userId !== change.member.userId), change.member];
+  }
+  return members.filter(m => m.userId !== change.userId);
+}
+
 // ─── Store interface ──────────────────────────────────────────────────────────
 
 interface SpaceState {
@@ -237,8 +275,10 @@ interface SpaceState {
    */
   updateMemberPresence: (subject: PresenceSubject, origin: string, status: string) => void;
   updateUserEverywhere: (user: User) => void;
-  addMember: (member: MemberWithUser) => void;
-  removeMember: (userId: string) => void;
+  /** A member joined `spaceId`, the open space. Also replayed onto an in-flight detail fetch's roster. */
+  addMember: (spaceId: string, member: MemberWithUser) => void;
+  /** A member left `spaceId`, the open space. Also replayed onto an in-flight detail fetch's roster. */
+  removeMember: (spaceId: string, userId: string) => void;
   setSpaceLayout: (layout: SpaceLayoutItem[] | null) => void;
   updateSpaceLayout: (items: SpaceLayoutItem[], folders: Record<string, { name: string | null; color: string | null; spaceIds: string[] }>) => Promise<void>;
   populateFromReady: (origin: string, spaces: SpaceWithChannelsAndMembers[], folders?: SpaceFolder[], dmChannels?: DmChannel[], spaceLayout?: SpaceLayoutItem[] | null, layoutUpdatedAt?: number) => void;
@@ -571,6 +611,8 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
   },
 
   loadSpaceDetail: async (spaceId: string) => {
+    // Joins and leaves that arrive during the fetch, replayed onto its roster.
+    const rosterChanges: RosterChange[] = [];
     try {
       // Resolve the correct API client based on the server's instance origin
       const space =get().spaces.find(s => s.id === spaceId);
@@ -578,6 +620,10 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       set({ loadingSpaceId: spaceId });
       const origin = space._instanceOrigin ?? '';
       const client = getApiForOrigin(origin);
+
+      const logs = inFlightRosterLogs.get(spaceId) ?? new Set<RosterChange[]>();
+      logs.add(rosterChanges);
+      inFlightRosterLogs.set(spaceId, logs);
 
       const detail = await client.spaces.get(spaceId);
       // Normalize remote asset URLs (avatars, server icon)
@@ -614,7 +660,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
           lastSelectedSpaceId: spaceId,
           channels: detail.channels.sort((a, b) => a.position - b.position),
           categories: (detail.categories || []).sort((a, b) => a.position - b.position),
-          members: detail.members,
+          members: rosterChanges.reduce(replayRosterChange, detail.members),
           roles: detail.roles.sort((a, b) => b.position - a.position),
           spacePermissions,
           channelPermissions,
@@ -623,6 +669,10 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       });
     } catch {
       set({ loadingSpaceId: null });
+    } finally {
+      const logs = inFlightRosterLogs.get(spaceId);
+      logs?.delete(rosterChanges);
+      if (logs?.size === 0) inFlightRosterLogs.delete(spaceId);
     }
   },
 
@@ -946,16 +996,16 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     }));
   },
 
-  addMember: (member: MemberWithUser) => {
-    set((state) => ({
-      members: [...state.members.filter(m => m.userId !== member.userId), member],
-    }));
+  addMember: (spaceId: string, member: MemberWithUser) => {
+    const change: RosterChange = { kind: 'join', member };
+    recordRosterChange(spaceId, change);
+    set((state) => ({ members: applyRosterChange(state.members, change) }));
   },
 
-  removeMember: (userId: string) => {
-    set((state) => ({
-      members: state.members.filter(m => m.userId !== userId),
-    }));
+  removeMember: (spaceId: string, userId: string) => {
+    const change: RosterChange = { kind: 'leave', userId };
+    recordRosterChange(spaceId, change);
+    set((state) => ({ members: applyRosterChange(state.members, change) }));
   },
 
   setSpaceLayout: (layout) => set({ spaceLayout: layout }),
