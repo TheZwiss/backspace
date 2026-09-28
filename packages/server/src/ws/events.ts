@@ -16,11 +16,10 @@ import { applyChosenStatus } from './presence.js';
 import { presenceUpdateFor, validateActivities } from './presenceEvent.js';
 import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
 import { resolveEmbeds, reResolveEmbeds, embedRowToEmbed } from '../utils/embedResolver.js';
-import { appendMutationLog, dmMessageFederationRef, dmMessageMutationTarget, queueOutboxEvent, queueDmRelay, queueDmMessageDeleteRelay, getGroupDmTargetOrigins, sendCallRelay, computeFederatedId, sendTypingRelay, queueReadStateRelay } from '../utils/federationOutbox.js';
+import { appendMutationLog, dmMessageFederationRef, dmMessageMutationTarget, queueOutboxEvent, queueDmRelay, queueDmMessageDeleteRelay, getGroupDmTargetOrigins, sendCallRelay, sendTypingRelay, queueReadStateRelay } from '../utils/federationOutbox.js';
 import { canonicalizeHomeInstance, getOurOrigin, normalizeOriginForCompare } from '../utils/federationAuth.js';
 import { generateFederatedCallToken } from '../routes/livekit.js';
 import { config } from '../config.js';
-import crypto from 'node:crypto';
 
 /**
  * Re-evaluate SPEAK permission for all participants in voice channels
@@ -1752,16 +1751,17 @@ async function sendFederatedCallStart(
   const db = getDb();
   const ourOrigin = getOurOrigin();
 
-  // Look up DM channel for federatedId
-  const channel = db.select({
-    federatedId: schema.dmChannels.federatedId,
-    ownerId: schema.dmChannels.ownerId,
-  })
+  // The conversation key names the call on every instance. Call start reads
+  // it and never computes or mints one (ADR 0002): every 1-on-1 is keyed at
+  // insert, and a group without a key has no copy on any peer, so a row
+  // without one is not announced.
+  const channel = db.select({ federatedId: schema.dmChannels.federatedId })
     .from(schema.dmChannels)
     .where(eq(schema.dmChannels.id, dmChannelId))
     .get();
 
-  if (!channel) return;
+  if (!channel?.federatedId) return;
+  const federatedId = channel.federatedId;
 
   // Get all DM members with their user records
   const members = db.select({
@@ -1775,26 +1775,6 @@ async function sendFederatedCallStart(
     .innerJoin(schema.users, eq(schema.dmMembers.userId, schema.users.id))
     .where(eq(schema.dmMembers.dmChannelId, dmChannelId))
     .all();
-
-  // Compute or reuse federatedId
-  let federatedId = channel.federatedId;
-  if (!federatedId) {
-    if (!channel.ownerId) {
-      const callerMember = members.find(m => m.userId === callerId);
-      const otherMember = members.find(m => m.userId !== callerId);
-      if (!callerMember || !otherMember) return;
-      federatedId = computeFederatedId(
-        callerMember.homeUserId || callerMember.userId,
-        otherMember.homeUserId || otherMember.userId,
-      );
-    } else {
-      federatedId = crypto.randomUUID();
-    }
-    db.update(schema.dmChannels)
-      .set({ federatedId })
-      .where(eq(schema.dmChannels.id, dmChannelId))
-      .run();
-  }
 
   // Classify members relative to this instance. `homeInstance` is stored in two
   // shapes (bare host and full URL), so every comparison goes through

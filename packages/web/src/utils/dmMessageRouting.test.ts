@@ -44,8 +44,8 @@ import type { DmChannel, DmMessageWithUser, User } from '@backspace/shared';
 
 const REMOTE = 'https://remote.example';
 
-// The keys servers give these conversations: computeFederatedId over the two
-// members' home user ids (packages/server/src/utils/federationOutbox.ts).
+// The keys servers give these conversations: oneOnOneKey over the two
+// members' home user ids (packages/server/src/utils/dmConversation.ts).
 const FID_ALICE_BOB = 'fc8aa3239ccea0cd4cbfb7701d770ac9';
 const FID_ALICE_DAVE = '9e29da28574912cfc1942cd6528d5a46';
 const FID_ALICE_VERA = '987ee3b88eaaa8cb60bf9fe0f9808530';

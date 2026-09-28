@@ -5,7 +5,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as schema from '../db/schema.js';
-import { computeFederatedId } from '../utils/federationOutbox.js';
+import { oneOnOneKey } from '../utils/dmConversation.js';
+
+/** The 1-on-1 key of two home identities. */
+const pairKey = (a: string, b: string): string => oneOnOneKey({ id: a, homeUserId: null }, { id: b, homeUserId: null });
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 type TestDb = ReturnType<typeof drizzle<typeof schema>>;
@@ -81,7 +84,7 @@ beforeEach(() => {
 describe('reconcileDmChannelFederatedId', () => {
   it('noop when the stored id already matches the members', async () => {
     seedUser('a', 'a', null); seedUser('b', 'b-home', 'orbit.test');
-    const fed = computeFederatedId('a', 'b-home');
+    const fed = pairKey('a', 'b-home');
     seedChannel('ch1', fed, ['a', 'b']);
     const { reconcileDmChannelFederatedId } = await import('./federation.js');
     const r = reconcileDmChannelFederatedId(sqlite, 'ch1');
@@ -92,18 +95,18 @@ describe('reconcileDmChannelFederatedId', () => {
   it('re-keys in place when a member home id changed and no target exists', async () => {
     // member b now has NEW home id 'b-new'; channel still carries the OLD-pair id.
     seedUser('a', 'a', null); seedUser('b', 'b-new', 'orbit.test');
-    const oldFed = computeFederatedId('a', 'b-old');
+    const oldFed = pairKey('a', 'b-old');
     seedChannel('ch1', oldFed, ['a', 'b']);
     const { reconcileDmChannelFederatedId } = await import('./federation.js');
     const r = reconcileDmChannelFederatedId(sqlite, 'ch1');
     expect(r.action).toBe('rekeyed');
-    expect(testDb.select().from(schema.dmChannels).get()!.federatedId).toBe(computeFederatedId('a', 'b-new'));
+    expect(testDb.select().from(schema.dmChannels).get()!.federatedId).toBe(pairKey('a', 'b-new'));
   });
 
   it('merges into the target when one already carries the new id', async () => {
     seedUser('a', 'a', null); seedUser('b', 'b-new', 'orbit.test');
-    const oldFed = computeFederatedId('a', 'b-old');
-    const newFed = computeFederatedId('a', 'b-new');
+    const oldFed = pairKey('a', 'b-old');
+    const newFed = pairKey('a', 'b-new');
     seedChannel('chOld', oldFed, ['a', 'b']); seedMsg('m1', 'chOld', 'a', 100); seedMsg('m2', 'chOld', 'b', 110);
     seedChannel('chNew', newFed, ['a', 'b']); seedMsg('m3', 'chNew', 'a', 120);
     const { reconcileDmChannelFederatedId } = await import('./federation.js');
@@ -128,14 +131,14 @@ describe('reconcileDmChannelFederatedId', () => {
 
   it('skips a channel with an unresolvable member set (not exactly 2)', async () => {
     seedUser('a', 'a', null);
-    seedChannel('ch1', computeFederatedId('a', 'b'), ['a']);
+    seedChannel('ch1', pairKey('a', 'b'), ['a']);
     const { reconcileDmChannelFederatedId } = await import('./federation.js');
     expect(reconcileDmChannelFederatedId(sqlite, 'ch1').action).toBe('noop');
   });
 
   it('dedupes read_states on merge (composite PK user_id+channel_id)', async () => {
     seedUser('a', 'a', null); seedUser('b', 'b-new', 'orbit.test');
-    const oldFed = computeFederatedId('a', 'b-old'); const newFed = computeFederatedId('a', 'b-new');
+    const oldFed = pairKey('a', 'b-old'); const newFed = pairKey('a', 'b-new');
     seedChannel('chOld', oldFed, ['a', 'b']); seedMsg('m1', 'chOld', 'a', 100);
     seedChannel('chNew', newFed, ['a', 'b']); seedMsg('m2', 'chNew', 'a', 120);
     testDb.insert(schema.readStates).values([

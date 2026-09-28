@@ -2,7 +2,6 @@ import { getDb } from '../db/index.js';
 import * as schema from '../db/schema.js';
 import { eq, and, inArray } from 'drizzle-orm';
 import { generateSnowflake } from './snowflake.js';
-import crypto from 'node:crypto';
 import type { FederationRelayEvent, FederationRelayParticipant, FederationRelayAttachment, DmMessageWithUser, FederationRelayRequest, DmCallUndeliverableReason, FederationMessageRef, FederationMessageTarget } from '@backspace/shared';
 import { getOurOrigin, buildFederationHeaders } from './federationAuth.js';
 import { extractDomain, relayActorOfUser } from '../routes/federation.js';
@@ -335,24 +334,6 @@ export function queueOutboxEvent(
   } catch (err) {
     console.error('[federation-outbox] Failed to queue outbox event:', err);
   }
-}
-
-/**
- * Compute a federated ID for a DM channel.
- *
- * For 1-on-1 DMs: deterministic SHA-256 hash of 2 sorted home user IDs (backward compatible).
- * For group DMs: call with no arguments to generate a new UUID.
- */
-export function computeFederatedId(homeUserIdA: string, homeUserIdB: string): string;
-export function computeFederatedId(): string;
-export function computeFederatedId(homeUserIdA?: string, homeUserIdB?: string): string {
-  if (homeUserIdA && homeUserIdB) {
-    // 1-on-1: deterministic pair hash (backward compatible with canonicalDmPairId)
-    const sorted = [homeUserIdA, homeUserIdB].sort();
-    return crypto.createHash('sha256').update(sorted.join(':')).digest('hex').slice(0, 32);
-  }
-  // Group: origin-assigned UUID
-  return crypto.randomUUID();
 }
 
 /**

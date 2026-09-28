@@ -5,7 +5,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as schema from '../db/schema.js';
-import { computeFederatedId } from '../utils/federationOutbox.js';
+import { oneOnOneKey } from '../utils/dmConversation.js';
+
+/** The 1-on-1 key of two home identities. */
+const pairKey = (a: string, b: string): string => oneOnOneKey({ id: a, homeUserId: null }, { id: b, homeUserId: null });
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 type TestDb = ReturnType<typeof drizzle<typeof schema>>;
@@ -80,11 +83,11 @@ describe('reconcileDriftedDmFederatedIds', () => {
   it('heals a drifted 1-on-1 channel and leaves correct ones untouched', async () => {
     seedUser('a', 'a', null); seedUser('b', 'b-new', 'orbit.test'); seedUser('c', 'c', null);
     // drifted: stored under old pairing, member b now has b-new; target under new pairing exists.
-    const oldFed = computeFederatedId('a', 'b-old'); const newFed = computeFederatedId('a', 'b-new');
+    const oldFed = pairKey('a', 'b-old'); const newFed = pairKey('a', 'b-new');
     seedChannel('chOld', oldFed, ['a', 'b']); seedMsg('m1', 'chOld', 'a', 100);
     seedChannel('chNew', newFed, ['a', 'b']); seedMsg('m2', 'chNew', 'a', 200);
     // correct channel untouched
-    const okFed = computeFederatedId('a', 'c'); seedChannel('chOk', okFed, ['a', 'c']);
+    const okFed = pairKey('a', 'c'); seedChannel('chOk', okFed, ['a', 'c']);
 
     const { reconcileDriftedDmFederatedIds } = await import('./federation.js');
     reconcileDriftedDmFederatedIds();
@@ -95,7 +98,7 @@ describe('reconcileDriftedDmFederatedIds', () => {
 
   it('is idempotent — second run is a noop', async () => {
     seedUser('a', 'a', null); seedUser('b', 'b', null);
-    seedChannel('ch1', computeFederatedId('a', 'b'), ['a', 'b']);
+    seedChannel('ch1', pairKey('a', 'b'), ['a', 'b']);
     const { reconcileDriftedDmFederatedIds } = await import('./federation.js');
     reconcileDriftedDmFederatedIds();
     const before = testDb.select().from(schema.dmChannels).all();

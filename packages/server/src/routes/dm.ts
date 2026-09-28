@@ -25,6 +25,7 @@ import {
 import { fetchSpaceInviteSnapshot, getLocalInviteSnapshot } from '../utils/spaceInviteSnapshot.js';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { loadOpenDmChannels } from '../utils/dmChannelWire.js';
+import { mintGroupKey, oneOnOneKey } from '../utils/dmConversation.js';
 import { sendError } from '../utils/httpErrors.js';
 
 /** Members a group DM can hold, the owner included. */
@@ -49,7 +50,6 @@ import {
   getDmParticipants,
   getGroupDmTargetOrigins,
   isFederationRelayEnabled,
-  computeFederatedId,
   sendTypingRelay,
   normalizeIconForWire,
 } from '../utils/federationOutbox.js';
@@ -407,20 +407,10 @@ export function ensureOneOnOneDmChannel(
   const dmChannelId = generateSnowflake();
   const now = Date.now();
 
-  // Compute deterministic federatedId for federated 1-on-1 DMs so that the
-  // S2S relay can find this channel when the reply arrives, preventing duplicates.
-  let federatedId: string | null = null;
-  if (isFederationRelayEnabled()) {
-    const callerUser = db.select().from(schema.users).where(eq(schema.users.id, callerId)).get();
-    const callerHomeUserId = callerUser?.homeUserId || callerId;
-    const targetHomeUserId = targetUser.homeUserId || targetUser.id;
-    const callerHomeInstance = callerUser?.homeInstance || null;
-    const targetHomeInstance = targetUser.homeInstance || null;
-
-    if (callerHomeInstance || targetHomeInstance) {
-      federatedId = computeFederatedId(callerHomeUserId, targetHomeUserId);
-    }
-  }
+  // Every 1-on-1 is keyed at insert (ADR 0002): the key is a label, and
+  // whether anything is relayed is decided by the member set.
+  const keyedCaller = db.select().from(schema.users).where(eq(schema.users.id, callerId)).get();
+  const federatedId = oneOnOneKey({ id: callerId, homeUserId: keyedCaller?.homeUserId ?? null }, targetUser);
 
   db.transaction((tx) => {
     tx.insert(schema.dmChannels).values({
@@ -1023,21 +1013,10 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     const dmChannelId = generateSnowflake();
     const now = Date.now();
 
-    // Compute deterministic federatedId for federated 1-on-1 DMs so that the
-    // S2S relay can find this channel when the reply arrives, preventing duplicates.
-    let federatedId: string | null = null;
-    if (isFederationRelayEnabled()) {
-      const callerUser = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
-      const callerHomeUserId = callerUser?.homeUserId || request.userId;
-      const targetHomeUserId = targetUser.homeUserId || targetUser.id;
-      const callerHomeInstance = callerUser?.homeInstance || null;
-      const targetHomeInstance = targetUser.homeInstance || null;
-
-      // If either user is federated, this DM needs a federatedId for S2S relay matching
-      if (callerHomeInstance || targetHomeInstance) {
-        federatedId = computeFederatedId(callerHomeUserId, targetHomeUserId);
-      }
-    }
+    // Every 1-on-1 is keyed at insert (ADR 0002): the key is a label, and
+    // whether anything is relayed is decided by the member set.
+    const keyedCaller = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
+    const federatedId = oneOnOneKey({ id: request.userId, homeUserId: keyedCaller?.homeUserId ?? null }, targetUser);
 
     db.transaction((tx) => {
       tx.insert(schema.dmChannels).values({
@@ -1221,7 +1200,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       const hasRemote = allUsers.some(u => u.homeInstance && u.homeInstance !== domainOrigin);
 
       if (hasRemote) {
-        federatedId = computeFederatedId();
+        federatedId = mintGroupKey();
         db.update(schema.dmChannels)
           .set({
             federatedId,
@@ -1759,7 +1738,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       const hasRemote = participants.some(p => p.homeInstance !== domainOrigin);
 
       if (hasRemote) {
-        const newFederatedId = computeFederatedId();
+        const newFederatedId = mintGroupKey();
         const ownerUser = db.select().from(schema.users).where(eq(schema.users.id, dmChannel.ownerId!)).get();
         db.update(schema.dmChannels)
           .set({

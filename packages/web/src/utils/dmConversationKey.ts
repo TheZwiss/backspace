@@ -5,9 +5,9 @@ import type { DmChannel, User } from '@backspace/shared';
  *
  * Every instance holding a copy of a federated 1-on-1 gives it the same key:
  * the first 32 hex characters of SHA-256 over the two members' home user ids,
- * sorted and joined with ':' (`computeFederatedId` in the server's
- * `utils/federationOutbox.ts`; the relay and the re-attach reconcile compute it
- * the same way, which is what lets two instances' copies be matched). Group
+ * sorted and joined with ':' (`oneOnOneKey` in the server's
+ * `utils/dmConversation.ts`, the one place every server path computes it,
+ * which is what lets two instances' copies be matched). Group
  * keys are random UUIDs and cannot be derived.
  *
  * Servers up to 1.6.1 listed DMs in `GET /api/dm` without the key. A client

@@ -11,8 +11,8 @@ function user(id: string, homeUserId: string | null = null, homeInstance: string
 }
 
 describe('oneOnOneFederatedId', () => {
-  it('equals the server\'s computeFederatedId for the same pair, in either order', async () => {
-    // computeFederatedId('alice-home', 'bob-remote') in packages/server/src/utils/federationOutbox.ts.
+  it('equals the server\'s oneOnOneKey for the same pair, in either order', async () => {
+    // The vector packages/server/src/utils/dmConversation.test.ts checks oneOnOneKey against.
     const expected = 'fc8aa3239ccea0cd4cbfb7701d770ac9';
     expect(await oneOnOneFederatedId(user('alice-home'), user('bob-stub', 'bob-remote', 'b.example'))).toBe(expected);
     expect(await oneOnOneFederatedId(user('bob-remote'), user('alice-on-b', 'alice-home', 'a.example'))).toBe(expected);

@@ -111,7 +111,7 @@ function seedLocalUser(id: string, opts: { homeUserId?: string | null; homeInsta
   }).run();
 }
 
-function seedDmChannel(id: string, federatedId: string, ownerId: string | null): void {
+function seedDmChannel(id: string, federatedId: string | null, ownerId: string | null): void {
   testDb.insert(schema.dmChannels).values({
     id,
     ownerId,
@@ -260,5 +260,51 @@ describe('sendFederatedCallStart — LiveKit token scoping', () => {
       'bob-home': 'token:fed-same-peer:bob-home',
       'erin-home': 'token:fed-same-peer:erin-home',
     });
+  });
+});
+
+describe('sendFederatedCallStart — the conversation key', () => {
+  beforeEach(async () => {
+    sqlite = new Database(':memory:');
+    testDb = drizzle(sqlite, { schema });
+    applyMigrations(sqlite);
+
+    const cm = await importManager();
+    for (const [fedId] of cm.getAllFederatedCalls()) cm.clearFederatedCall(fedId);
+    sendCallRelayMock.mockReset();
+    sendCallRelayMock.mockResolvedValue({ ok: true, undeliverable: [] });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    sqlite.close();
+  });
+
+  function storedKey(id: string): string | null {
+    return testDb.select().from(schema.dmChannels).all().find(c => c.id === id)!.federatedId;
+  }
+
+  it.each([
+    ['a group', 'alice'],
+    ['a 1-on-1', null],
+  ])('%s without a key is not announced, and call start mints no key for it', async (_label, ownerId) => {
+    // A group keyed nowhere has no copy on any peer (its key is minted with the
+    // owner identity when it first gets a member homed elsewhere); a keyless
+    // 1-on-1 cannot exist once the startup backfill has run.
+    seedLocalUser('alice', { homeUserId: null, homeInstance: null });
+    seedLocalUser('bob-stub', { homeUserId: 'bob-home', homeInstance: 'https://orbit.example' });
+    seedDmChannel('dm-unkeyed', null, ownerId);
+    seedDmMember('dm-unkeyed', 'alice');
+    seedDmMember('dm-unkeyed', 'bob-stub');
+    seedActivePeer('https://orbit.example', 'Orbit');
+
+    const cm = await importManager();
+    cm.createDmRoom('dm-unkeyed', 'alice');
+
+    const { sendFederatedCallStartForTest } = await importSUT();
+    await sendFederatedCallStartForTest('dm-unkeyed', 'alice', 'Alice');
+
+    expect(relayedOrigins()).toEqual([]);
+    expect(storedKey('dm-unkeyed')).toBeNull();
   });
 });

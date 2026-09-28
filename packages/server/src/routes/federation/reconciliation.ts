@@ -1,5 +1,5 @@
 import { getRawDb } from '../../db/index.js';
-import { computeFederatedId } from '../../utils/federationOutbox.js';
+import { oneOnOneKey } from '../../utils/dmConversation.js';
 import { and, or } from 'drizzle-orm';
 import { getOurIdentityDomain } from './identity.js';
 
@@ -42,9 +42,10 @@ export function reconcileDmChannelFederatedId(
   `).all(channelId) as Array<{ id: string; home_user_id: string | null }>;
   if (members.length !== 2) return noop;
 
-  const homeA = members[0]!.home_user_id || members[0]!.id;
-  const homeB = members[1]!.home_user_id || members[1]!.id;
-  const expected = computeFederatedId(homeA, homeB);
+  const expected = oneOnOneKey(
+    { id: members[0]!.id, homeUserId: members[0]!.home_user_id },
+    { id: members[1]!.id, homeUserId: members[1]!.home_user_id },
+  );
   if (expected === chan.federated_id) return noop;
 
   const target = rawDb.prepare(`SELECT id FROM dm_channels WHERE federated_id = ? AND deleted_at IS NULL AND id != ?`).get(expected, channelId) as

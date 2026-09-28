@@ -9,7 +9,10 @@ import { eq } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import { setWorkerId } from '../utils/snowflake.js';
 import { signJwt } from '../utils/auth.js';
-import { computeFederatedId } from '../utils/federationOutbox.js';
+import { oneOnOneKey } from '../utils/dmConversation.js';
+
+/** The 1-on-1 key of two home identities. */
+const pairKey = (a: string, b: string): string => oneOnOneKey({ id: a, homeUserId: null }, { id: b, homeUserId: null });
 
 setWorkerId(13);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -279,8 +282,8 @@ describe('POST /api/users/@me/reattach — 1-on-1 DM channel reconciliation', ()
   });
 
   it('merges the pre-reattach history channel into the new-identity channel', async () => {
-    const oldFed = computeFederatedId('alice', 'dead-home-1'); // alice home = her id (native)
-    const newFed = computeFederatedId('alice', 'new-home-1');
+    const oldFed = pairKey('alice', 'dead-home-1'); // alice home = her id (native)
+    const newFed = pairKey('alice', 'new-home-1');
     // history channel (old id)
     testDb.insert(schema.dmChannels).values({ id: 'ch-old', federatedId: oldFed, createdAt: 1 }).run();
     testDb.insert(schema.dmMembers).values([
@@ -308,7 +311,7 @@ describe('POST /api/users/@me/reattach — 1-on-1 DM channel reconciliation', ()
   });
 
   it('re-keys the history channel in place when no new-identity channel exists yet', async () => {
-    const oldFed = computeFederatedId('alice', 'dead-home-1');
+    const oldFed = pairKey('alice', 'dead-home-1');
     testDb.insert(schema.dmChannels).values({ id: 'ch-old', federatedId: oldFed, createdAt: 1 }).run();
     testDb.insert(schema.dmMembers).values([
       { dmChannelId: 'ch-old', userId: 'alice', closed: 0 },
@@ -319,6 +322,6 @@ describe('POST /api/users/@me/reattach — 1-on-1 DM channel reconciliation', ()
     const res = await reattach('detached-1', 'youruser@orbit.test');
     expect(res.statusCode).toBe(200);
     const ch = testDb.select().from(schema.dmChannels).all().find(c => c.id === 'ch-old')!;
-    expect(ch.federatedId).toBe(computeFederatedId('alice', 'new-home-1'));
+    expect(ch.federatedId).toBe(pairKey('alice', 'new-home-1'));
   });
 });

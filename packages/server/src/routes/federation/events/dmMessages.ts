@@ -1,7 +1,8 @@
 import path from 'node:path';
 import { getDb, schema } from '../../../db/index.js';
 import { normalizeOriginForCompare } from '../../../utils/federationAuth.js';
-import { computeFederatedId, getGroupDmTargetOrigins } from '../../../utils/federationOutbox.js';
+import { getGroupDmTargetOrigins } from '../../../utils/federationOutbox.js';
+import { oneOnOneKey } from '../../../utils/dmConversation.js';
 import { deleteAttachmentFiles } from '../../../utils/fileCleanup.js';
 import { rewriteRelayedMentions } from '../../../utils/federationMentions.js';
 import { sanitizeUser } from '../../../utils/sanitize.js';
@@ -131,10 +132,7 @@ export async function processCreateEvent(
       rejected.push({ messageId: event.messageId, reason: 'invalid_target' });
       return;
     }
-    const federatedId = computeFederatedId(
-      resolvedParticipants[0]!.homeUserId,
-      resolvedParticipants[1]!.homeUserId,
-    );
+    const federatedId = oneOnOneKey(pair[0]!, pair[1]!);
     localDmChannelId = findOrCreateDmChannel(
       federatedId,
       [resolvedParticipants[0]!.localUser.id, resolvedParticipants[1]!.localUser.id],

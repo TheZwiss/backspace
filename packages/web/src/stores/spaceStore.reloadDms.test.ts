@@ -43,7 +43,7 @@ import type { DmChannel, User } from '@backspace/shared';
 
 const REMOTE = 'https://remote.example';
 
-// computeFederatedId('alice-home', 'bob-remote') on the server: the key both
+// oneOnOneKey over 'alice-home' and 'bob-remote' on the server: the key both
 // instances give the alice-bob conversation.
 const FID_ALICE_BOB = 'fc8aa3239ccea0cd4cbfb7701d770ac9';
 const FID_GROUP = '0e0e0e0e-0000-4000-8000-000000000000';

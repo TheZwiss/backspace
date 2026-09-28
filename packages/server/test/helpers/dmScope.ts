@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import type { FederationRelayEvent } from '@backspace/shared';
+import { oneOnOneKey } from '../../src/utils/dmConversation.js';
 import { queuedRelayEvents, readDb, withWritableDb, type RelayPostResult } from './federationE2E.js';
 import type { TestUser } from './testUsers.js';
 import type { SpawnedInstance } from './twoInstanceHarness.js';
@@ -42,9 +43,9 @@ export function rowFor(inst: SpawnedInstance, homeUserId: string): string {
   return row.id;
 }
 
-/** The deterministic federatedId of a 1-on-1 (`computeFederatedId(a, b)`). */
+/** The key of the 1-on-1 between two home identities (`oneOnOneKey`). */
 export function pairFederatedId(a: string, b: string): string {
-  return crypto.createHash('sha256').update([a, b].sort().join(':')).digest('hex').slice(0, 32);
+  return oneOnOneKey({ id: a, homeUserId: null }, { id: b, homeUserId: null });
 }
 
 export function channelByFederatedId(inst: SpawnedInstance, federatedId: string): string | undefined {
