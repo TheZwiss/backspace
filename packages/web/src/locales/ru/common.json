@@ -82,7 +82,8 @@
     "searchMembers": "Поиск участников…",
     "noMembersFound": "Участники не найдены",
     "or": "или",
-    "nameAZ": "Имя (А–Я)"
+    "nameAZ": "Имя (А–Я)",
+    "suggestions": "Предложения"
   },
   "time": {
     "today": "Сегодня в {{time}}",

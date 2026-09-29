@@ -306,4 +306,27 @@ of them is a future change that requires sourcing new audio:
 - Moderator move-to-channel / kick-from-voice (the LK disconnect already plays
   `disconnect.ogg` for forced disconnects)
 - Friend request received / accepted
-- Mention-everyone / @here (Backspace doesn't currently parse these)
+
+## Space and channel notification preferences
+
+Space/channel context menus offer notification settings and mute durations of
+15 minutes, 1 hour, 8 hours, or forever. Preferences are persisted by the
+hosting instance and synchronized across the user's connected devices.
+
+Both message sound and OS notification use the same preference gate:
+
+1. Self-authored messages never alert; DM behavior remains unchanged.
+2. An unexpired space **or** channel mute blocks alerts. A channel override
+   cannot bypass a muted parent space; expiry is effective at the deadline.
+3. Channel level inherits from space unless explicitly set. `nothing` blocks,
+   `all` alerts for every message, `mentions` matches direct, everyone/here,
+   or one of the recipient's roles.
+4. Space suppression flags remove everyone/here or role matches in mentions
+   mode. They do not cancel a direct user mention or an explicit all level.
+5. If both levels inherit, the existing all-message sound switch supplies the
+   sound default; OS notifications default to mentions. Global DND and existing
+   visibility/notification-permission gates still apply.
+
+Mute does not hide messages or clear unread indicators. Everyone/here and role
+mentions reuse `message.ogg`, not a new sound. `@here` currently shares
+everyone's real-time semantics (no separate online-only check).

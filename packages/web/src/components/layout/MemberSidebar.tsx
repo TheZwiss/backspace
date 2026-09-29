@@ -11,10 +11,11 @@ import { getPrimaryActivity } from '@backspace/shared/src/activities.js';
 import { parseFederatedUsername, isFederationGlobeApplicable, userDisplayName } from '../../utils/identity';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { useDelayedLoading } from '../../hooks/useDelayedLoading';
+import { OwnerTitleHeading } from './OwnerTitleHeading';
 
 /**
- * Which heading a member group renders under: the owner and the plain
- * "online" bucket are translated, a role group shows the role's own name.
+ * Owner headings are editable separately; online and role groups keep their
+ * translated label or assigned role name.
  */
 type MemberGroupKind = 'owner' | 'role' | 'online';
 
@@ -183,7 +184,6 @@ export function MemberSidebar() {
   };
 
   const groupHeading = (kind: MemberGroupKind, label: string | null): string => {
-    if (kind === 'owner') return t('spaces:members.groups.owner');
     if (kind === 'online') return t('common:states.online');
     return label ?? '';
   };
@@ -236,9 +236,13 @@ export function MemberSidebar() {
         {/* Role-based groups */}
         {roleGroups.map(([key, group]) => (
           <div key={key} className="mb-4">
-            <h3 className="text-[10.5px] font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
-              {groupHeading(group.kind, group.label)} — {formatNumber(group.members.length)}
-            </h3>
+            {group.kind === 'owner' && space ? (
+              <OwnerTitleHeading key={space.id} space={space} count={group.members.length} />
+            ) : (
+              <h3 className="text-[10.5px] font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
+                {groupHeading(group.kind, group.label)} — {formatNumber(group.members.length)}
+              </h3>
+            )}
             {group.members.map((m) => renderMember(m))}
           </div>
         ))}

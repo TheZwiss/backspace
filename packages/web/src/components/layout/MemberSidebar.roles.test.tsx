@@ -22,7 +22,7 @@ const SPACE_ID = 'space-1';
 
 const SPACE: TaggedSpace = {
   id: SPACE_ID, name: 'Aether Drift', icon: null, banner: null, avatarColor: 'lavender',
-  ownerId: 'u-owner', inviteCode: null, visibility: 'public', directoryListed: false,
+  ownerId: 'u-owner', ownerTitle: null, inviteCode: null, visibility: 'public', directoryListed: false,
   description: '', createdAt: 1, _instanceOrigin: '',
 };
 

@@ -1,46 +1,72 @@
+import type {
+  Channel,
+  ChannelCategory,
+  CreateSpaceRequest,
+  DmChannel,
+  DmMessageWithUser,
+  MemberWithUser,
+  Role,
+  Space,
+  SpaceFolder,
+  SpaceLayoutItem,
+  SpaceWithChannelsAndMembers,
+  UpdateChannelRequest,
+  UpdateSpaceRequest,
+  User,
+} from '@backspace/shared';
 import { create } from 'zustand';
-import type { Space, Channel, ChannelCategory, MemberWithUser, SpaceWithChannelsAndMembers, Role, SpaceFolder, SpaceLayoutItem, DmChannel, DmMessageWithUser, User, UpdateSpaceRequest, CreateSpaceRequest, UpdateChannelRequest } from '@backspace/shared';
 import { api, BackspaceApiClient } from '../api/client';
-import { resolveAssetUrl, normalizeUserAssets } from '../utils/assetUrls';
-import { isSelf, canonicalUserKey, isDeliveryFromHome, activityKey, type PresenceSubject } from '../utils/identity';
-import { sortDmChannels } from '../utils/dmSorting';
+import { normalizeUserAssets, resolveAssetUrl } from '../utils/assetUrls';
+import {
+  clearMyUserIdCache,
+  getApiForOrigin,
+  getCachedUserIdForOrigin,
+  resolveOriginFromHostname,
+  resolveUserIdFromInstances,
+  setOwnerInstanceForDmResolver,
+} from '../utils/crossStoreResolvers';
 import { locateDmChannel } from '../utils/dmChannelLookup';
 import { deriveMissingOneOnOneKeys, type PeerDmChannel } from '../utils/dmConversationKey';
 import { applyDmPinMoves } from '../utils/dmOriginFailover';
+import { sortDmChannels } from '../utils/dmSorting';
 import {
-  EMPTY_DM_CONVERSATIONS,
-  mergeOriginListing,
-  upsertCopy,
-  upsertUnplacedCopy,
-  removeCopy,
-  patchCopy,
-  patchEveryCopy,
-  setOriginAvailable,
-  dropOrigin,
-  pinnedDmChannels,
-  pinnedOriginByChannelId,
+  activityKey,
+  canonicalUserKey,
+  isDeliveryFromHome,
+  isSelf,
+  type PresenceSubject,
+} from '../utils/identity';
+import { useAuthStore } from './authStore';
+import { useChatStore } from './chatStore';
+import {
   conversationCopyIndex,
   copyIdOnOrigin,
   copyOnOrigin,
+  dropOrigin,
+  EMPTY_DM_CONVERSATIONS,
+  mergeOriginListing,
+  patchCopy,
+  patchEveryCopy,
+  pinnedDmChannels,
+  pinnedOriginByChannelId,
+  removeCopy,
+  setOriginAvailable,
+  upsertCopy,
+  upsertUnplacedCopy,
   type DmConversations,
   type DmOperation,
   type DmPinContext,
 } from './dmConversations';
-import {
-  getApiForOrigin,
-  resolveOriginFromHostname,
-  resolveUserIdFromInstances,
-  getCachedUserIdForOrigin,
-  clearMyUserIdCache,
-  setOwnerInstanceForDmResolver,
-} from '../utils/crossStoreResolvers';
-import { useAuthStore } from './authStore';
-import { useChatStore } from './chatStore';
+import { createAddSpaceFromReadySlice } from './spaceAddSpaceFromReadySlice';
+import { createSpaceLayoutSlice, pushLayoutToOrigin } from './spaceLayoutSlice';
+import { createPopulateFromReadySlice } from './spacePopulateFromReadySlice';
+import { createRemoveInstanceSpacesSlice } from './spaceRemoveInstanceSpacesSlice';
+import type { SpaceState } from './spaceStoreTypes';
 
 // ─── Instance-aware types ─────────────────────────────────────────────────────
 
 /** Server augmented with instance origin tracking (client-only, not in shared types). */
-export type TaggedSpace = Space & { _instanceOrigin: string };
+export type TaggedSpace = Space & { _instanceOrigin: string; ownerTitle?: string | null };
 
 // ─── Error types ─────────────────────────────────────────────────────────────
 
@@ -61,14 +87,6 @@ export class NotConnectedError extends Error {
  * across every connected instance, regardless of whether the carrying channel
  * survived dedup. Mirrors `dmAlternatives` philosophy: information from
  * skipped ready payloads is still load-bearing for rendering.
- *
- * - `deliveredBy`: the origin string used at insert time. Required for
- *   lifecycle pruning (drop entries whose delivering origin is removed from
- *   Connections) — the user's declared `homeInstance` is NOT a substitute,
- *   because a stub view delivered by orbit has homeInstance=nova.
- * - `isHome`: cached at insert time so the preference rule does not need to
- *   re-normalize on every write.
- * - `updatedAt`: same-tier freshness tiebreaker.
  */
 export interface UserViewEntry {
   user: User;
@@ -78,16 +96,6 @@ export interface UserViewEntry {
 }
 
 // ─── Roster changes during a detail fetch ────────────────────────────────────
-// `loadSpaceDetail` replaces `members` with the roster the server sent. A
-// `member_joined` or `member_left` that arrives while that fetch is in flight
-// is applied to the old list and would be lost when the fetched roster lands,
-// since the server may have built its response before the change. So each
-// in-flight load keeps the changes for its space in arrival order and replays
-// them onto the fetched roster (`replayRosterChange`). Replaying is safe when
-// the response already has the change: a replayed join adds the member only
-// when the roster lacks them, since the fetched row can be newer than the join
-// event (a role assigned during the fetch), and a leave of an absent member
-// removes nothing.
 
 type RosterChange =
   | { kind: 'join'; member: MemberWithUser }
@@ -116,19 +124,15 @@ function applyRosterChange(members: MemberWithUser[], change: RosterChange): Mem
 }
 
 // ─── DM conversations: the derived view ──────────────────────────────────────
-// `dmConversations` (stores/dmConversations.ts) is the only DM state the
-// store writes. `dmChannels`, `dmAlternatives` and the DM entries of
-// `channelOriginMap` and `channelLastMessageIds` are derived from it after
-// every operation, here, and written nowhere else.
 
-type DmView = Pick<SpaceState, 'dmConversations' | 'dmChannels' | 'dmAlternatives' | 'channelOriginMap' | 'channelLastMessageIds'>;
+export type DmView = Pick<SpaceState, 'dmConversations' | 'dmChannels' | 'dmAlternatives' | 'channelOriginMap' | 'channelLastMessageIds'>;
 
 /**
  * The store fields derived from `conversations`. `previousRows` are the DM
  * rows the maps held entries for until now; those entries are replaced, the
  * space-channel entries are kept.
  */
-function deriveDmView(
+export function deriveDmView(
   conversations: DmConversations,
   previousRows: readonly DmChannel[],
   channelOriginMap: ReadonlyMap<string, string>,
@@ -156,7 +160,7 @@ function deriveDmView(
 }
 
 /** The pin rule's view of the session: the user's home is `getLayoutHomeOrigin()`. */
-function dmPinContext(): DmPinContext {
+export function dmPinContext(): DmPinContext {
   return { home: getLayoutHomeOrigin() };
 }
 
@@ -166,7 +170,7 @@ function dmPinContext(): DmPinContext {
  * (`applyDmPinMoves`), after which the list is re-sorted, since the moves
  * carried unread state to the new ids.
  */
-function commitDmOperation(op: DmOperation): void {
+export function commitDmOperation(op: DmOperation): void {
   if (op.next !== useSpaceStore.getState().dmConversations) {
     useSpaceStore.setState((state) =>
       deriveDmView(op.next, state.dmChannels, state.channelOriginMap, state.channelLastMessageIds),
@@ -177,197 +181,9 @@ function commitDmOperation(op: DmOperation): void {
   useSpaceStore.getState().resortDmChannels();
 }
 
-// ─── Store interface ──────────────────────────────────────────────────────────
+// ─── Store implementation ───────────────────────────────────────────────────
 
-interface SpaceState {
-  spaces: TaggedSpace[];
-  currentSpaceId: string | null;
-  /**
-   * Sticky memory of the most-recently-selected space. Updated on every
-   * `setCurrentSpace(non-null)` and when `loadSpaceDetail` lands. Crucially, it
-   * is NOT cleared by `setCurrentSpace(null)` (the @me / DMs navigation case)
-   * so mobile callers can answer "which space should the Spaces tab return to
-   * after a side trip through DMs?" — `currentSpaceId` is wiped on @me by
-   * AppLayout's URL effect, which would otherwise force a fallback to
-   * `spaces[0]`. Cleared only when the remembered space is actually removed
-   * (deleteSpace / leaveSpace / removeSpaceFromState / removeInstanceSpaces /
-   * reset). Ephemeral — not persisted, since URL drives initial state on
-   * reload.
-   */
-  lastSelectedSpaceId: string | null;
-  channels: Channel[];
-  categories: ChannelCategory[];
-  members: MemberWithUser[];
-  roles: Role[];
-  folders: SpaceFolder[];
-  spaceLayout: SpaceLayoutItem[] | null;
-  /**
-   * Every DM copy the client knows, grouped into conversations, with the
-   * pinned copy of each (`stores/dmConversations.ts`). The only DM state
-   * actions write; the DM fields below are derived from it.
-   */
-  dmConversations: DmConversations;
-  /** Derived: the pinned copy of each conversation, sorted by `sortDmChannels`. The DM list. */
-  dmChannels: DmChannel[];
-  channelToSpaceMap: Map<string, string>;
-  channelLastMessageIds: Map<string, string>;
-  spacePermissions: Map<string, string>; // spaceId → myPermissions decimal string
-  channelPermissions: Map<string, string>; // channelId → myPermissions decimal string
-  channelOriginMap: Map<string, string>; // channelId → instance origin ('' = home)
-  voiceChannelIds: Set<string>; // channelIds that are voice channels (excluded from unread)
-  categoryOriginMap: Map<string, string>; // categoryId → instance origin ('' = home)
-  /**
-   * Derived: conversation key → (origin → that origin's channel id), for every
-   * copy of every keyed conversation, the pinned one included. The index
-   * `resolveDmChannelId` reads to place an id another instance sent.
-   */
-  dmAlternatives: Map<string, Map<string, string>>;
-  /**
-   * canonicalUserKey → best-known view of that user. Populated from every wire
-   * surface that delivers a User object (DM members, message authors, friends,
-   * space members, profile updates). Pruned only on full instance removal
-   * (`removeInstanceSpaces`) and `reset`, never on transient WS disconnect —
-   * mirrors `dmAlternatives`' no-flapping invariant. Render sites read through
-   * `getCanonicalUserView` / `useCanonicalUserView` to surface the home view
-   * even when the carrying channel was deduped away.
-   */
-  userViews: Map<string, UserViewEntry>;
-  loadingSpaceId: string | null; // non-null while loadSpaceDetail is fetching
-  /**
-   * Set of spaceIds whose `loadSpaceDetail` has completed at least once this
-   * session. Distinct from `currentSpaceId` (which moves with selection) and
-   * from `loadingSpaceId` (which only marks in-flight). Render sites use this
-   * to differentiate "load not yet attempted" from "loaded with empty result"
-   * — see `MobileSpacesScreen`'s mascot empty state, which must not appear
-   * during the pre-skeleton load window.
-   *
-   * Lifecycle:
-   *  - Added on successful `loadSpaceDetail` completion.
-   *  - Cleared per-space when the space is removed (`deleteSpace`,
-   *    `leaveSpace`, `removeSpace`, `removeInstanceSpaces`).
-   *  - Wiped entirely on `reset` (logout).
-   *
-   * Not persisted (ephemeral).
-   */
-  loadedSpaceIds: Set<string>;
-  _layoutUpdatedAt: number;
-  setSpaces: (spaces: TaggedSpace[]) => void;
-  setCurrentSpace: (spaceId: string | null) => void;
-  setChannels: (channels: Channel[]) => void;
-  setCategories: (categories: ChannelCategory[]) => void;
-  setMembers: (members: MemberWithUser[]) => void;
-  setRoles: (roles: Role[]) => void;
-  /**
-   * A DM channel a server sent outside a listing (`dm_channel_created`, a
-   * create response) joins its conversation. Returns the channel id of the
-   * conversation's pinned copy, which is where the UI navigates.
-   */
-  upsertDmCopy: (origin: string, channel: PeerDmChannel, keySource: 'stated' | 'unknown') => string;
-  /** A message no listing placed gets an entry of its own under the origin that sent it. */
-  placeUnplacedDmMessage: (origin: string, message: DmMessageWithUser) => void;
-  /** Change the DM copy with this channel id (its last message, members, metadata). */
-  patchDmCopy: (channelId: string, patch: (channel: DmChannel) => DmChannel) => void;
-  /**
-   * Re-sort the DM list after unread or selection changed. `currentChannelId`
-   * overrides the chat store's for this sort.
-   */
-  resortDmChannels: (currentChannelId?: string | null) => void;
-  /** An origin's socket dropped (false) or came back: rows pinned there fail over by the pin rule. */
-  setDmOriginAvailable: (origin: string, available: boolean) => void;
-  reloadDmsForOrigin: (origin: string) => Promise<void>;
-  removeDmChannel: (id: string) => void;
-  addDmMember: (dmChannelId: string, user: User) => void;
-  removeDmMember: (dmChannelId: string, userId: string) => void;
-  updateDmOwner: (
-    dmChannelId: string,
-    newOwnerId: string,
-    newOwnerHomeUserId?: string,
-    newOwnerHomeInstance?: string,
-  ) => void;
-  updateDmMetadata: (dmChannelId: string, patch: { name?: string | null; icon?: string | null }) => void;
-  closeDm: (id: string) => Promise<void>;
-  leaveDm: (id: string) => Promise<void>;
-  loadSpaces: () => Promise<void>;
-  loadSpaceDetail: (spaceId: string) => Promise<void>;
-  createSpace: (data: CreateSpaceRequest) => Promise<Space>;
-  updateSpace: (spaceId: string, data: UpdateSpaceRequest) => Promise<void>;
-  deleteSpace: (spaceId: string) => Promise<void>;
-  joinSpace: (spaceId: string, inviteCode: string) => Promise<void>;
-  leaveSpace: (spaceId: string) => Promise<void>;
-  joinByCode: (inviteCode: string, origin?: string) => Promise<Space>;
-  generateInvite: (spaceId: string) => Promise<string>;
-  createChannel: (spaceId: string, name: string, type: 'text' | 'voice', topic?: string, categoryId?: string) => Promise<Channel>;
-  upsertChannel: (channel: Channel, spaceId: string, origin: string) => void;
-  /** Updates a space channel on its own instance and applies the stored row,
-   *  which the server may have normalized (see `normalizeChannelName`). */
-  updateChannel: (channelId: string, data: UpdateChannelRequest) => Promise<Channel>;
-  deleteChannel: (channelId: string) => Promise<void>;
-  createCategory: (spaceId: string, name: string) => Promise<ChannelCategory>;
-  /** Updates a category on its space's instance and applies the stored row. */
-  updateCategory: (categoryId: string, data: { name?: string; position?: number }) => Promise<ChannelCategory>;
-  deleteCategory: (categoryId: string) => Promise<void>;
-  updateChannelLayout: (spaceId: string, data: { channels: Array<{ id: string; position: number; categoryId: string | null }>; categories: Array<{ id: string; position: number }> }) => Promise<void>;
-  addSpace: (space: Space) => void;
-  removeSpace: (spaceId: string) => void;
-  /**
-   * Set the status of the person `subject` names, as `origin` delivered it,
-   * wherever the client shows them: roster rows and cached views, matched by
-   * `activityKey` (their home identity), never by a raw row id.
-   */
-  updateMemberPresence: (subject: PresenceSubject, origin: string, status: string) => void;
-  updateUserEverywhere: (user: User) => void;
-  /** A member joined `spaceId`, the open space. Also replayed onto an in-flight detail fetch's roster. */
-  addMember: (spaceId: string, member: MemberWithUser) => void;
-  /** A member left `spaceId`, the open space. Also replayed onto an in-flight detail fetch's roster. */
-  removeMember: (spaceId: string, userId: string) => void;
-  setSpaceLayout: (layout: SpaceLayoutItem[] | null) => void;
-  updateSpaceLayout: (items: SpaceLayoutItem[], folders: Record<string, { name: string | null; color: string | null; spaceIds: string[] }>) => Promise<void>;
-  populateFromReady: (origin: string, spaces: SpaceWithChannelsAndMembers[], folders?: SpaceFolder[], dmChannels?: DmChannel[], spaceLayout?: SpaceLayoutItem[] | null, layoutUpdatedAt?: number) => void;
-  /**
-   * Upsert a User into the userViews cache under the preference rule:
-   *   - if no entry: insert
-   *   - if existing is home view and incoming is stub: ignore
-   *   - if existing is stub and incoming is home view: overwrite (upgrade)
-   *   - same tier (both home or both stub): freshness wins (incoming overwrites)
-   * Origin is REQUIRED to derive the home/stub tier and to enable pruning by
-   * delivering origin on instance removal.
-   */
-  upsertUserView: (user: User, deliveringOrigin: string) => void;
-  addSpaceFromReady: (origin: string, space: SpaceWithChannelsAndMembers) => void;
-  removeInstanceSpaces: (origin: string) => void;
-  transferOwnership: (spaceId: string, newOwnerId: string) => Promise<void>;
-  findExistingDmForUser: (targetUser: { id: string; homeUserId?: string | null }) => { dm: DmChannel; origin: string } | null;
-  reset: () => void;
-}
-
-/**
- * Push the current layout to a specific origin whose layout was older.
- * Used when populateFromReady receives a stale layout from an instance.
- */
-async function pushLayoutToOrigin(
-  origin: string,
-  layout: SpaceLayoutItem[] | null,
-  folders: SpaceFolder[],
-  updatedAt: number,
-): Promise<void> {
-  try {
-    const targetApi = getApiForOrigin(origin);
-    // Build folder map from SpaceFolder[]
-    const folderMap: Record<string, { name: string | null; color: string | null; spaceIds: string[] }> = {};
-    for (const f of folders) {
-      folderMap[f.id] = { name: f.name, color: f.color, spaceIds: f.spaceIds };
-    }
-    await targetApi.spaceLayout.update({
-      items: layout ?? [],
-      folders: folderMap,
-      updatedAt,
-    });
-  } catch (err) {
-    console.warn(`[SpaceStore] Failed to push layout to ${origin || 'home'}:`, err);
-  }
-}
-
-export const useSpaceStore = create<SpaceState>((set, get) => ({
+export const useSpaceStore = create<SpaceState>((set, get, apiStore) => ({
   spaces: [],
   currentSpaceId: null,
   lastSelectedSpaceId: null,
@@ -392,48 +208,18 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
   loadedSpaceIds: new Set(),
   _layoutUpdatedAt: 0,
 
-  reset: () => {
-    clearMyUserIdCache();
-    set({
-      spaces: [],
-      currentSpaceId: null,
-      lastSelectedSpaceId: null,
-      channels: [],
-      categories: [],
-      members: [],
-      roles: [],
-      folders: [],
-      spaceLayout: null,
-      dmConversations: EMPTY_DM_CONVERSATIONS,
-      dmChannels: [],
-      channelToSpaceMap: new Map(),
-      channelLastMessageIds: new Map(),
-      spacePermissions: new Map(),
-      channelPermissions: new Map(),
-      channelOriginMap: new Map(),
-      voiceChannelIds: new Set(),
-      categoryOriginMap: new Map(),
-      dmAlternatives: new Map(),
-      userViews: new Map(),
-      loadingSpaceId: null,
-      loadedSpaceIds: new Set(),
-      _layoutUpdatedAt: 0,
-    });
-  },
-
   setSpaces: (spaces) => set({ spaces }),
   setCurrentSpace: (spaceId) =>
     set((state) => ({
       currentSpaceId: spaceId,
-      // Only update sticky memory when actually selecting a space. Clearing
-      // currentSpaceId (e.g. on @me navigation) must NOT wipe the memory —
-      // that's the whole point of this slot.
       lastSelectedSpaceId: spaceId !== null ? spaceId : state.lastSelectedSpaceId,
     })),
   setChannels: (channels) => set({ channels }),
   setCategories: (categories) => set({ categories }),
   setMembers: (members) => set({ members }),
   setRoles: (roles) => set({ roles }),
+
+  // DM Actions
   upsertDmCopy: (origin, channel, keySource) => {
     const op = upsertCopy(get().dmConversations, origin, channel, keySource, dmPinContext());
     commitDmOperation(op);
@@ -459,24 +245,11 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     commitDmOperation(setOriginAvailable(get().dmConversations, origin, available, dmPinContext()));
   },
 
-  // Refetch this origin's DM list and merge it as the origin's copies
-  // (`mergeOriginListing`). Used after a re-attach reconciles this
-  // connection's 1-on-1 keys (merge/re-key) so a split conversation collapses
-  // without a full WS reconnect, and by `utils/dmMessageRouting` to learn which
-  // conversation an unknown channel id belongs to. Origin '' is the home
-  // instance. Throws on a failed fetch; the callers catch.
-  //
-  // A peer on 1.6.1 or older lists its DMs without `federatedId` and the group
-  // metadata. The merge module fills an absent field from the copy it already
-  // holds for that channel id, and a 1-on-1 still without a key takes the one
-  // derived from its members here (see `completePeerListing`).
   reloadDmsForOrigin: async (origin: string) => {
     const client = getApiForOrigin(origin);
     const listed: PeerDmChannel[] = await client.dm.list();
-    // Before normalization: the derivation reads the members' raw homeInstance.
     const derivedKeys = await deriveMissingOneOnOneKeys(listed);
 
-    // Normalize remote-origin DM member asset URLs (home origin serves clean paths).
     if (origin !== '') {
       for (const dm of listed) {
         for (const member of dm.members) {
@@ -485,7 +258,6 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       }
     }
 
-    // Upsert every DM member into the userViews cache (home + remote).
     const { upsertUserView } = get();
     for (const dm of listed) {
       for (const member of dm.members) {
@@ -501,7 +273,6 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     const incomingIsHome = isDeliveryFromHome(user, deliveringOrigin);
     const existing = state.userViews.get(key);
 
-    // Stub view never overwrites a home view.
     if (existing && existing.isHome && !incomingIsHome) return state;
 
     const next = new Map(state.userViews);
@@ -516,7 +287,6 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
 
   removeDmChannel: (id) => {
     commitDmOperation(removeCopy(get().dmConversations, id, dmPinContext()));
-    // Clean up unread/read state for the closed DM
     useChatStore.getState().removeChannelStates(new Set([id]));
   },
 
@@ -535,21 +305,12 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
   updateDmOwner: (dmChannelId, newOwnerId, newOwnerHomeUserId, newOwnerHomeInstance) => {
     commitDmOperation(patchCopy(get().dmConversations, dmChannelId, (dm) => {
       const next = { ...dm, ownerId: newOwnerId };
-      // Only overwrite the federation routing fields when the caller supplies
-      // them. Older servers that omit these fields must not blank out the
-      // existing values — the DM would otherwise lose its owner-routing data
-      // and `getOwnerInstanceForDm` would silently fall back to '' (home),
-      // re-introducing the bug this WS extension fixes.
       if (newOwnerHomeUserId !== undefined) next.ownerHomeUserId = newOwnerHomeUserId;
       if (newOwnerHomeInstance !== undefined) next.ownerHomeInstance = newOwnerHomeInstance;
       return next;
     }));
   },
 
-  // Patches the group DM's display metadata (name + icon). Idempotent: a
-  // payload with only one of `name`/`icon` leaves the other field untouched.
-  // Mirrors `updateDmOwner` shape; called by the `dm_channel_updated` WS
-  // handler after a remote rename / icon change.
   updateDmMetadata: (dmChannelId, patch) => {
     commitDmOperation(patchCopy(get().dmConversations, dmChannelId, (dm) => {
       const next = { ...dm };
@@ -573,9 +334,15 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     commitDmOperation(removeCopy(get().dmConversations, id, dmPinContext()));
   },
 
+  setDmChannels: (channels) => set({ dmChannels: channels }),
+  addDmChannel: (channel, origin = '') => {
+    get().upsertDmCopy(origin, channel, 'stated');
+  },
+
+  // Space Actions
   loadSpaces: async () => {
     try {
-      const spaces =await api.spaces.list();
+      const spaces = await api.spaces.list();
       set((state) => ({
         spaces: spaces.map(s => ({ ...s, _instanceOrigin: '' })) as TaggedSpace[],
       }));
@@ -585,12 +352,10 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
   },
 
   loadSpaceDetail: async (spaceId: string) => {
-    // Joins and leaves that arrive during the fetch, replayed onto its roster.
     const rosterChanges: RosterChange[] = [];
     try {
-      // Resolve the correct API client based on the server's instance origin
-      const space =get().spaces.find(s => s.id === spaceId);
-      if (!space) return; // Not populated yet — remote WS ready will trigger reload
+      const space = get().spaces.find(s => s.id === spaceId);
+      if (!space) return;
       set({ loadingSpaceId: spaceId });
       const origin = space._instanceOrigin ?? '';
       const client = getApiForOrigin(origin);
@@ -600,20 +365,16 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       inFlightRosterLogs.set(spaceId, logs);
 
       const detail = await client.spaces.get(spaceId);
-      // Normalize remote asset URLs (avatars, server icon)
       if (origin) {
         if (detail.icon) detail.icon = resolveAssetUrl(detail.icon, origin) ?? detail.icon;
         for (const member of detail.members) {
           normalizeUserAssets(member.user, origin);
         }
       }
-      // Upsert every member into the userViews cache (home or remote).
-      // Assets are already normalized above for the remote case.
       for (const member of detail.members) {
         get().upsertUserView(member.user, origin);
       }
 
-      // Populate permission maps from REST response
       const spacePermissions = new Map(get().spacePermissions);
       const channelPermissions = new Map(get().channelPermissions);
       if (detail.myPermissions) {
@@ -662,7 +423,6 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     const origin = space?._instanceOrigin ?? '';
     const client = getApiForOrigin(origin);
     const updated = await client.spaces.update(spaceId, data);
-    // Normalize remote asset URLs so the icon/banner display correctly in-app
     if (origin && updated.icon) {
       updated.icon = resolveAssetUrl(updated.icon, origin) ?? updated.icon;
     }
@@ -710,7 +470,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
   },
 
   joinSpace: async (spaceId: string, inviteCode: string) => {
-    const space =await api.spaces.join(spaceId, { inviteCode });
+    const space = await api.spaces.join(spaceId, { inviteCode });
     set((state) => {
       if (state.spaces.find(s => s.id === space.id)) return state;
       return { spaces: [...state.spaces, { ...space, _instanceOrigin: '' } as TaggedSpace] };
@@ -718,13 +478,10 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
   },
 
   joinByCode: async (inviteCode: string, origin?: string) => {
-    // Normalize: an explicit home origin is equivalent to undefined (local).
-    // Mirrors inviteParser's same normalization at the URL boundary.
     if (origin && typeof window !== 'undefined' && origin === window.location.origin) {
       origin = undefined;
     }
     if (origin) {
-      // Remote instance — verify connectivity via dynamic import (avoids circular dep)
       const { useInstanceStore } = await import('./instanceStore');
       const connected = useInstanceStore.getState().instances.some(
         (i) => i.origin === origin && i.status === 'connected',
@@ -732,7 +489,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       if (!connected) throw new NotConnectedError(origin);
 
       const remoteApi = getApiForOrigin(origin);
-      const space =await remoteApi.spaces.joinByCode(inviteCode);
+      const space = await remoteApi.spaces.joinByCode(inviteCode);
       if (space.icon) space.icon = resolveAssetUrl(space.icon, origin) ?? space.icon;
       if (space.banner) space.banner = resolveAssetUrl(space.banner, origin) ?? space.banner;
       set((state) => {
@@ -742,8 +499,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       return space;
     }
 
-    // Home instance
-    const space =await api.spaces.joinByCode(inviteCode);
+    const space = await api.spaces.joinByCode(inviteCode);
     set((state) => {
       if (state.spaces.find(s => s.id === space.id)) return state;
       return { spaces: [...state.spaces, { ...space, _instanceOrigin: '' } as TaggedSpace] };
@@ -752,36 +508,25 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
   },
 
   generateInvite: async (spaceId: string) => {
-    const space =get().spaces.find(s => s.id === spaceId);
+    const space = get().spaces.find(s => s.id === spaceId);
     const origin = space?._instanceOrigin ?? '';
     const client = getApiForOrigin(origin);
     const result = await client.spaces.invite(spaceId);
     return result.inviteCode;
   },
 
+  // Channel & Category Actions
   createChannel: async (spaceId: string, name: string, type: 'text' | 'voice', topic?: string, categoryId?: string) => {
     const space = get().spaces.find(s => s.id === spaceId);
     const origin = space?._instanceOrigin ?? '';
     const client = getApiForOrigin(origin);
     const channel = await client.channels.create(spaceId, { name, type, topic, categoryId });
-    // Reconcile through upsertChannel so the new channel's permission entry is
-    // written with a fresh map reference (see upsertChannel). The create
-    // response carries the creator's myPermissions, so the channel renders
-    // immediately without waiting for the channel_created WS event.
     get().upsertChannel(channel, spaceId, origin);
     return channel;
   },
 
-  // Add or replace a channel and its derived lookup state. channels and
-  // channelPermissions are render inputs for the sidebar's visibleChannels memo,
-  // so they MUST be replaced with fresh references — mutating the existing
-  // channelPermissions Map in place sets the value but never triggers a
-  // re-render, which is why a freshly created channel could stay hidden until
-  // the space was reloaded.
   upsertChannel: (channel: Channel, spaceId: string, origin: string) => {
     set((state) => {
-      // Lookup maps are read imperatively (routing/voice), not render inputs —
-      // in-place mutation matches their usage everywhere else.
       state.channelToSpaceMap.set(channel.id, spaceId);
       state.channelOriginMap.set(channel.id, origin);
       if (channel.type === 'voice') state.voiceChannelIds.add(channel.id);
@@ -791,7 +536,6 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
         channelPermissions.set(channel.id, channel.myPermissions);
       }
 
-      // channels only holds the currently-open space's list.
       if (state.currentSpaceId !== spaceId) {
         return { channelPermissions };
       }
@@ -807,8 +551,6 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
   updateChannel: async (channelId: string, data: UpdateChannelRequest) => {
     const origin = get().channelOriginMap.get(channelId) ?? '';
     const channel = await getApiForOrigin(origin).channels.update(channelId, data);
-    // The channel_updated WS event carries the same row; applying the
-    // response too means the caller sees the stored value without waiting.
     get().upsertChannel(channel, channel.spaceId, origin);
     return channel;
   },
@@ -827,7 +569,6 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     const origin = space?._instanceOrigin ?? '';
     const client = getApiForOrigin(origin);
     const category = await client.categories.create(spaceId, name);
-    // Will be added via WS event, but add optimistically
     set((state) => {
       if (state.categories.some(c => c.id === category.id)) return state;
       return { categories: [...state.categories, category].sort((a, b) => a.position - b.position) };
@@ -840,8 +581,6 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     const space = known ? get().spaces.find(s => s.id === known.spaceId) : undefined;
     const origin = space?._instanceOrigin ?? get().categoryOriginMap.get(categoryId) ?? '';
     const category = await getApiForOrigin(origin).categories.update(categoryId, data);
-    // The category_updated WS event carries the same row; applying the
-    // response too means the caller sees the stored value without waiting.
     set((state) => ({
       categories: state.categories
         .map(c => (c.id === category.id ? category : c))
@@ -857,7 +596,6 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     const origin = space?._instanceOrigin ?? '';
     const client = getApiForOrigin(origin);
     await client.categories.delete(categoryId);
-    // WS events will update the store
   },
 
   updateChannelLayout: async (spaceId: string, data: { channels: Array<{ id: string; position: number; categoryId: string | null }>; categories: Array<{ id: string; position: number }> }) => {
@@ -865,7 +603,6 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     const origin = space?._instanceOrigin ?? '';
     const client = getApiForOrigin(origin);
     await client.channels.updateLayout(spaceId, data);
-    // WS event will broadcast the updated layout
   },
 
   addSpace: (space: Space) => {
@@ -876,7 +613,6 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
   },
 
   removeSpace: (spaceId: string) => {
-    // Collect channel IDs before set() so we can clean up chatStore after
     const currentState = get();
     const channelIdsToRemove = new Set<string>();
     for (const [channelId, sid] of currentState.channelToSpaceMap) {
@@ -915,7 +651,6 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       };
     });
 
-    // Clean up orphaned unread/read states and cached messages in chatStore
     if (channelIdsToRemove.size > 0) {
       useChatStore.getState().removeChannelStates(channelIdsToRemove);
     }
@@ -925,10 +660,6 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     const key = activityKey(subject, origin);
     set((state) => {
       const typedStatus = status as 'online' | 'idle' | 'dnd' | 'offline';
-      // Mirror the status into the userViews cache so any component reading via
-      // useCanonicalUserView (e.g. the FriendItem avatar dot) re-renders with
-      // fresh status — not just spaceStore.members which only feeds space UIs.
-      // Each entry is keyed as the origin that delivered it saw the user.
       let nextUserViews = state.userViews;
       for (const [viewKey, entry] of state.userViews) {
         if (activityKey(entry.user, entry.deliveredBy) !== key) continue;
@@ -936,7 +667,6 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
         nextUserViews.set(viewKey, { ...entry, user: { ...entry.user, status: typedStatus } });
       }
 
-      // A roster row is keyed as its space's origin issued it.
       const spaceOrigins = new Map<string, string>();
       const spaceOriginOf = (spaceId: string): string => {
         let spaceOrigin = spaceOrigins.get(spaceId);
@@ -981,260 +711,6 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     set((state) => ({ members: applyRosterChange(state.members, change) }));
   },
 
-  setSpaceLayout: (layout) => set({ spaceLayout: layout }),
-
-  updateSpaceLayout: async (items, folders) => {
-    const now = Date.now();
-    // Optimistic: apply the layout immediately with new timestamp
-    set({ spaceLayout: items, _layoutUpdatedAt: now });
-
-    // Push to ALL connected instances in parallel (browsing + remotes)
-    const targets: { origin: string; apiClient: BackspaceApiClient }[] = [
-      { origin: '', apiClient: api },
-    ];
-
-    // Dynamically import instanceStore to avoid circular dep
-    try {
-      const { useInstanceStore } = await import('./instanceStore');
-      const connected = useInstanceStore.getState().instances.filter(i => i.status === 'connected');
-      for (const inst of connected) {
-        targets.push({ origin: inst.origin, apiClient: inst.api });
-      }
-    } catch { /* instanceStore not available yet */ }
-
-    const results = await Promise.allSettled(
-      targets.map(t => t.apiClient.spaceLayout.update({ items, folders, updatedAt: now }))
-    );
-
-    // Use the first successful response to resolve new:* IDs
-    for (const result of results) {
-      if (result.status === 'fulfilled') {
-        const resolved = result.value;
-        set({
-          spaceLayout: resolved.items,
-          folders: resolved.folders,
-          _layoutUpdatedAt: resolved.updatedAt ?? now,
-        });
-        break;
-      }
-    }
-  },
-
-  populateFromReady: (origin: string, spaces: SpaceWithChannelsAndMembers[], folders?: SpaceFolder[], dmChannels?: DmChannel[], spaceLayout?: SpaceLayoutItem[] | null, layoutUpdatedAt?: number) => {
-    const isHome = !origin;
-
-    // Tag all incoming servers with their instance origin
-    const taggedSpaces: TaggedSpace[] = spaces.map(s => ({
-      id: s.id,
-      name: s.name,
-      icon: s.icon,
-      banner: s.banner ?? null,
-      avatarColor: s.avatarColor ?? null,
-      ownerId: s.ownerId,
-      inviteCode: s.inviteCode,
-      visibility: s.visibility ?? 'private' as const,
-      directoryListed: s.directoryListed ?? false,
-      description: s.description ?? null,
-      createdAt: s.createdAt,
-      _instanceOrigin: origin,
-    }));
-
-    // Merge by origin: keep servers from other origins, replace all from this origin
-    const existingFromOtherOrigins = get().spaces.filter(s => s._instanceOrigin !== origin);
-    const mergedSpaces = [...existingFromOtherOrigins, ...taggedSpaces];
-
-    // Build/merge maps for incoming channels
-    const channelToSpaceMap = new Map(get().channelToSpaceMap);
-    const channelLastMessageIds = new Map(get().channelLastMessageIds);
-    const spacePermissions = new Map(get().spacePermissions);
-    const channelPermissions = new Map(get().channelPermissions);
-    const channelOriginMap = new Map(get().channelOriginMap);
-    const voiceChannelIds = new Set(get().voiceChannelIds);
-    const categoryOriginMap = new Map(get().categoryOriginMap);
-
-    // If home, clear home-origin entries first to avoid stale data
-    if (isHome) {
-      for (const [key, val] of get().channelOriginMap) {
-        if (val === origin) {
-          channelToSpaceMap.delete(key);
-          channelLastMessageIds.delete(key);
-          channelPermissions.delete(key);
-          channelOriginMap.delete(key);
-          voiceChannelIds.delete(key);
-        }
-      }
-      // Also clear server permissions for this origin
-      for (const s of get().spaces) {
-        if (s._instanceOrigin === origin) {
-          spacePermissions.delete(s.id);
-        }
-      }
-    } else {
-      // Remote: clear entries that belonged to this origin
-      for (const [key, val] of get().channelOriginMap) {
-        if (val === origin) {
-          channelToSpaceMap.delete(key);
-          channelLastMessageIds.delete(key);
-          channelPermissions.delete(key);
-          channelOriginMap.delete(key);
-          voiceChannelIds.delete(key);
-        }
-      }
-      for (const s of get().spaces) {
-        if (s._instanceOrigin === origin) {
-          spacePermissions.delete(s.id);
-        }
-      }
-    }
-
-    // Populate maps from incoming servers
-    for (const srv of spaces) {
-      if (srv.myPermissions) {
-        spacePermissions.set(srv.id, srv.myPermissions);
-      }
-      for (const ch of srv.channels) {
-        channelToSpaceMap.set(ch.id, srv.id);
-        channelOriginMap.set(ch.id, origin);
-        if (ch.type === 'voice') {
-          voiceChannelIds.add(ch.id);
-        } else if (ch.lastMessageId) {
-          channelLastMessageIds.set(ch.id, ch.lastMessageId);
-        }
-        if (ch.myPermissions) {
-          channelPermissions.set(ch.id, ch.myPermissions);
-        }
-      }
-      if (srv.categories) {
-        for (const cat of srv.categories) {
-          categoryOriginMap.set(cat.id, origin);
-        }
-      }
-      // Upsert every space member into the userViews cache. Assets for remote
-      // origins were normalized by the ready handler in useWebSocket before
-      // populateFromReady was called, so the user objects are already clean here.
-      if (srv.members) {
-        const { upsertUserView } = get();
-        for (const member of srv.members) {
-          upsertUserView(member.user, origin);
-        }
-      }
-    }
-
-    // Accept DMs from all origins. Each instance serves its own DM data.
-    const incomingDms = dmChannels ?? [];
-
-    // Normalize asset URLs for remote-origin DMs
-    if (origin !== '') {
-      for (const dm of incomingDms) {
-        for (const member of dm.members) {
-          normalizeUserAssets(member, origin);
-        }
-      }
-    }
-
-    // Upsert every DM member from every origin into the userViews cache.
-    // This runs unconditionally (home + remote) and BEFORE the dedup pass so
-    // members of DMs that are about to be discarded still land in the cache.
-    // Assets are already normalized above for the remote case.
-    {
-      const { upsertUserView } = get();
-      for (const dm of incomingDms) {
-        for (const member of dm.members) {
-          upsertUserView(member, origin);
-        }
-      }
-    }
-
-    // Every DM this origin holds replaces its previous copies; the merge
-    // module dedups them against the other origins' copies and pins one copy
-    // per conversation. The DM fields of the store are derived from the result.
-    const dmOperation = mergeOriginListing(get().dmConversations, origin, incomingDms, new Map(), dmPinContext());
-    const dmView = deriveDmView(dmOperation.next, get().dmChannels, channelOriginMap, channelLastMessageIds);
-
-    const update: Partial<SpaceState> = {
-      ...dmView,
-      spaces: mergedSpaces,
-      channelToSpaceMap,
-      spacePermissions,
-      channelPermissions,
-      voiceChannelIds,
-      categoryOriginMap,
-    };
-
-    // LWW layout merge: accept incoming layout only if its timestamp is >= ours
-    const incomingTs = layoutUpdatedAt ?? 0;
-    const currentTs = get()._layoutUpdatedAt;
-    if (incomingTs >= currentTs) {
-      // Incoming is same age or newer — accept
-      update.folders = folders || [];
-      if (spaceLayout !== undefined) {
-        update.spaceLayout = spaceLayout ?? null;
-      }
-      (update as any)._layoutUpdatedAt = incomingTs;
-    } else {
-      // Our layout is newer — push back to this instance
-      pushLayoutToOrigin(origin, get().spaceLayout, get().folders, currentTs);
-    }
-
-    set(update as any);
-    if (dmOperation.pinMoves.length > 0) {
-      applyDmPinMoves(dmOperation.pinMoves);
-      get().resortDmChannels();
-    }
-  },
-
-  addSpaceFromReady: (origin: string, space: SpaceWithChannelsAndMembers) => {
-    // Normalize remote asset URLs before creating the tagged object
-    if (origin) {
-      if (space.icon) space.icon = resolveAssetUrl(space.icon, origin) ?? space.icon;
-      if (space.banner) space.banner = resolveAssetUrl(space.banner, origin) ?? space.banner;
-    }
-
-    const tagged: TaggedSpace = {
-      id: space.id,
-      name: space.name,
-      icon: space.icon,
-      banner: space.banner ?? null,
-      avatarColor: space.avatarColor ?? null,
-      ownerId: space.ownerId,
-      inviteCode: space.inviteCode,
-      visibility: space.visibility,
-      directoryListed: space.directoryListed ?? false,
-      description: space.description,
-      createdAt: space.createdAt,
-      _instanceOrigin: origin,
-    };
-
-    const channelToSpaceMap = new Map(get().channelToSpaceMap);
-    const channelLastMessageIds = new Map(get().channelLastMessageIds);
-    const spacePermissions = new Map(get().spacePermissions);
-    const channelPermissions = new Map(get().channelPermissions);
-    const channelOriginMap = new Map(get().channelOriginMap);
-
-    if (space.myPermissions) {
-      spacePermissions.set(space.id, space.myPermissions);
-    }
-    for (const ch of space.channels) {
-      channelToSpaceMap.set(ch.id, space.id);
-      channelOriginMap.set(ch.id, origin);
-      if (ch.lastMessageId) {
-        channelLastMessageIds.set(ch.id, ch.lastMessageId);
-      }
-      if (ch.myPermissions) {
-        channelPermissions.set(ch.id, ch.myPermissions);
-      }
-    }
-
-    set((state) => ({
-      spaces: [...state.spaces.filter(s => s.id !== space.id), tagged],
-      channelToSpaceMap,
-      channelLastMessageIds,
-      spacePermissions,
-      channelPermissions,
-      channelOriginMap,
-    }));
-  },
-
   transferOwnership: async (spaceId: string, newOwnerId: string) => {
     const space = get().spaces.find(s => s.id === spaceId);
     const origin = (space as TaggedSpace)?._instanceOrigin ?? '';
@@ -1272,84 +748,43 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     return null;
   },
 
-  removeInstanceSpaces: (origin: string) => {
-    // Collect channel IDs before set() for chatStore cleanup
-    const currentState = get();
-    const channelIdsToRemove = new Set<string>();
-    for (const [channelId, chOrigin] of currentState.channelOriginMap) {
-      if (chOrigin === origin) channelIdsToRemove.add(channelId);
-    }
-
-    set((state) => {
-      const remainingSpaces = state.spaces.filter(s => s._instanceOrigin !== origin);
-
-      // Clean up maps for channels that belonged to this origin
-      const channelToSpaceMap = new Map(state.channelToSpaceMap);
-      const channelLastMessageIds = new Map(state.channelLastMessageIds);
-      const channelPermissions = new Map(state.channelPermissions);
-      const channelOriginMap = new Map(state.channelOriginMap);
-      const spacePermissions = new Map(state.spacePermissions);
-
-      for (const channelId of channelIdsToRemove) {
-        channelToSpaceMap.delete(channelId);
-        channelLastMessageIds.delete(channelId);
-        channelPermissions.delete(channelId);
-        channelOriginMap.delete(channelId);
-      }
-      for (const s of state.spaces) {
-        if (s._instanceOrigin === origin) {
-          spacePermissions.delete(s.id);
-        }
-      }
-
-      // Prune userViews: drop entries delivered by this origin. Symmetrical
-      // with the DM copies — full removal evicts; transient disconnect leaves
-      // the last-known view in place. If the surviving cache no longer holds
-      // a home view for some user, render falls back to whatever the carrying
-      // payload supplies (no crash; just degrades to stub view).
-      const userViews = new Map<string, UserViewEntry>();
-      for (const [key, entry] of state.userViews) {
-        if (entry.deliveredBy !== origin) userViews.set(key, entry);
-      }
-
-      // Drop loadedSpaceIds entries for spaces removed by this instance teardown
-      const removedSpaceIds = new Set(
-        state.spaces.filter(s => s._instanceOrigin === origin).map(s => s.id)
-      );
-      const loadedSpaceIds = new Set<string>();
-      for (const id of state.loadedSpaceIds) {
-        if (!removedSpaceIds.has(id)) loadedSpaceIds.add(id);
-      }
-
-      return {
-        spaces: remainingSpaces,
-        channelToSpaceMap,
-        channelLastMessageIds,
-        channelPermissions,
-        channelOriginMap,
-        spacePermissions,
-        userViews,
-        currentSpaceId: remainingSpaces.find(s => s.id === state.currentSpaceId)
-          ? state.currentSpaceId
-          : null,
-        lastSelectedSpaceId: remainingSpaces.find(s => s.id === state.lastSelectedSpaceId)
-          ? state.lastSelectedSpaceId
-          : null,
-        loadedSpaceIds,
-      };
+  reset: () => {
+    clearMyUserIdCache();
+    set({
+      spaces: [],
+      currentSpaceId: null,
+      lastSelectedSpaceId: null,
+      channels: [],
+      categories: [],
+      members: [],
+      roles: [],
+      folders: [],
+      spaceLayout: null,
+      dmConversations: EMPTY_DM_CONVERSATIONS,
+      dmChannels: [],
+      channelToSpaceMap: new Map(),
+      channelLastMessageIds: new Map(),
+      spacePermissions: new Map(),
+      channelPermissions: new Map(),
+      channelOriginMap: new Map(),
+      voiceChannelIds: new Set(),
+      categoryOriginMap: new Map(),
+      dmAlternatives: new Map(),
+      userViews: new Map(),
+      loadingSpaceId: null,
+      loadedSpaceIds: new Set(),
+      _layoutUpdatedAt: 0,
     });
-
-    // This origin's DM copies go. A row pinned to one of them moves to
-    // another copy of its conversation, and its chat state moves with it,
-    // before the states of the removed ids are cleaned up below.
-    commitDmOperation(dropOrigin(get().dmConversations, origin, dmPinContext()));
-
-    // Clean up orphaned unread/read states and cached messages in chatStore
-    if (channelIdsToRemove.size > 0) {
-      useChatStore.getState().removeChannelStates(channelIdsToRemove);
-    }
   },
+
+  // Slices
+  ...createPopulateFromReadySlice(set, get, apiStore),
+  ...createAddSpaceFromReadySlice(set, get, apiStore),
+  ...createRemoveInstanceSpacesSlice(set, get, apiStore),
+  ...createSpaceLayoutSlice(set, get, apiStore),
 }));
+
+export { pushLayoutToOrigin };
 
 /**
  * Data-driven DM channel detection. Returns true if the given channelId
@@ -1361,7 +796,6 @@ export function isDmChannel(channelId: string): boolean {
   if (dmChannels.length > 0) {
     return dmChannels.some(dm => dm.id === channelId);
   }
-  // Before WS ready populates dmChannels, fall back to URL path
   if (typeof window !== 'undefined') {
     return window.location.pathname.startsWith('/channels/@me/');
   }
@@ -1378,18 +812,7 @@ export function getChannelOrigin(channelId: string): string {
 
 /**
  * Returns the owner's home-instance origin for a group DM, or '' for the
- * local home instance. Used to route owner-only API calls (rename, icon,
- * kick, transfer) so the federation event's sourceInstance equals the
- * channel's ownerHomeInstance — required by receiver authority checks.
- *
- * Distinct from getChannelOrigin: that function returns the channel's
- * pinned serving origin (where the client's WS connection mirrors the
- * channel), which can differ from the owner's home instance after a
- * manual transfer.
- *
- * The resolver itself lives in `utils/crossStoreResolvers.ts` so that
- * `api/client.ts` can call it without creating a value-cycle on spaceStore;
- * spaceStore registers the resolver below at module load.
+ * local home instance.
  */
 export function getOwnerInstanceForDm(channelId: string): string {
   const dm = useSpaceStore.getState().dmChannels.find(d => d.id === channelId);
@@ -1400,19 +823,6 @@ setOwnerInstanceForDmResolver(getOwnerInstanceForDm);
 
 /**
  * Resolves a raw DM channel ID to its primary `dmChannels` entry ID.
- *
- * - If `rawId` is already a primary entry: returns `rawId` unchanged.
- * - If `rawId` is another origin's copy of a conversation listed in
- *   `dmChannels` (the derived `dmAlternatives` index): returns the primary's ID.
- * - Otherwise: returns `null` (unknown ID — caller should no-op).
- *
- * The lookup itself is `locateDmChannel` (`utils/dmChannelLookup.ts`), shared
- * with `utils/channelUser.ts`.
- *
- * Used by:
- *  - `dm_message_created` WS handler to route messages arriving from alternate
- *    origins to the primary entry (§3.11 of the failover spec).
- *  - Future DM WS handlers that need to dedup alternate-origin deliveries.
  */
 export function resolveDmChannelId(rawId: string): string | null {
   const { dmChannels, dmAlternatives } = useSpaceStore.getState();
@@ -1421,8 +831,7 @@ export function resolveDmChannelId(rawId: string): string | null {
 
 /**
  * The channel id `origin` holds for the DM conversation of `channelId`, or
- * null when that instance holds no copy of it. A request to an instance must
- * name the conversation by that instance's own id, not by the pinned copy's.
+ * null when that instance holds no copy of it.
  */
 export function dmCopyIdOnOrigin(channelId: string, origin: string): string | null {
   return copyIdOnOrigin(useSpaceStore.getState().dmConversations, channelId, origin);
@@ -1437,12 +846,6 @@ export function dmCopyOnOrigin(channelId: string, origin: string): DmChannel | n
 }
 
 // ─── Cross-store resolvers (federation) ───────────────────────────────────────
-// The resolver/setter pairs and the WS-populated user-ID cache live in
-// `utils/crossStoreResolvers.ts` — a neutral module with no store imports —
-// to break a TDZ cycle: instanceStore registers these at top-level load, but
-// a spaceStore-rooted import chain leaves spaceStore mid-load when that code
-// runs. Re-exported here for backward compatibility with existing import
-// sites. See the header comment in crossStoreResolvers.ts for details.
 export {
   setApiForOriginResolver,
   getApiForOrigin,
@@ -1481,9 +884,7 @@ export function getLayoutHomeOrigin(): string {
  */
 export function getMyUserIdForOrigin(origin: string): string | undefined {
   if (!origin) return useAuthStore.getState().user?.id;
-  // Direct cache (populated from WS ready) takes priority — always correct
   const cached = getCachedUserIdForOrigin(origin);
   if (cached) return cached;
-  // Fallback to instanceStore resolver (may have placeholder user during connection)
   return resolveUserIdFromInstances(origin);
 }

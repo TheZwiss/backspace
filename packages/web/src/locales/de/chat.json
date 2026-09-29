@@ -147,5 +147,10 @@
   "notification": {
     "unknownSender": "Jemand",
     "attachmentOnly": "Hat einen Anhang gesendet"
+  },
+  "poke": {
+    "action": "Anstupsen",
+    "received": "{{actor}} hat {{target}} angestupst",
+    "disconnected": "Verbindung getrennt. Anstupsen wurde nicht gesendet."
   }
 }

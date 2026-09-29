@@ -193,7 +193,7 @@ const COMMUNITY_SPACE: TaggedSpace = {
   icon: null,
   banner: null,
   avatarColor: 'mint',
-  ownerId: 'maintainer',
+  ownerId: 'maintainer', ownerTitle: null,
   inviteCode: null,
   visibility: 'request',
   directoryListed: true,

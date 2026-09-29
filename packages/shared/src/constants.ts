@@ -67,3 +67,6 @@ export const GROUP_DM_NAME_MAX_LENGTH = 50;
 export const GROUP_DM_NAME_MIN_LENGTH = 1;
 export const GROUP_DM_ICON_MAX_BYTES = 8 * 1024 * 1024; // 8 MB
 export const GROUP_DM_ICON_MIME_PREFIX = 'image/';
+
+/** Member-list headings stay short enough to identify the owner at a glance. */
+export const MAX_OWNER_TITLE_LENGTH = 32;

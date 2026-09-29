@@ -163,6 +163,7 @@ function buildFullSpace(spaceId: string, forUserId: string): SpaceWithChannelsAn
     banner: space.banner ?? null,
     avatarColor: (space.avatarColor as SpaceWithChannelsAndMembers['avatarColor']) ?? null,
     ownerId: space.ownerId,
+    ownerTitle: space.ownerTitle,
     inviteCode: space.inviteCode,
     visibility: (space.visibility ?? 'private') as SpaceWithChannelsAndMembers['visibility'],
     directoryListed: space.directoryListed === 1,

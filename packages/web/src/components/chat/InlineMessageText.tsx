@@ -1,11 +1,28 @@
+import { MassMentionBadge } from './MassMentionBadge';
 import { MentionBadge } from './MentionBadge';
 import { replaceEmojiShortcodesInMarkdownSource } from '../../utils/emojiShortcodes';
 import { splitMentionTokens } from '../../utils/mentionTokens';
+
+const MASS_MENTION_SPLIT = /(```[\s\S]*?```|`[^`]+`|<@&[a-zA-Z0-9_-]+>|(?<![\w@])@(?:everyone|here)(?![\w-]))/g;
 
 interface InlineMessageTextProps {
   content: string;
   /** The channel the text was written in; its mentions resolve there (see `MentionBadge`). */
   channelId: string | null;
+}
+
+function renderTextSegment(text: string, baseKey: number) {
+  const parts = text.split(MASS_MENTION_SPLIT);
+  return parts.map((part, j) => {
+    if (part === '@everyone' || part === '@here') {
+      return <MassMentionBadge key={`${baseKey}-${j}`} token={part.slice(1)} />;
+    }
+    const role = part.match(/^<@(&[a-zA-Z0-9_-]+)>$/);
+    if (role) {
+      return <MassMentionBadge key={`${baseKey}-${j}`} token={role[1]!} />;
+    }
+    return replaceEmojiShortcodesInMarkdownSource(part);
+  });
 }
 
 /**
@@ -22,7 +39,7 @@ export function InlineMessageText({ content, channelId }: InlineMessageTextProps
       {splitMentionTokens(content).map((segment, i) =>
         segment.kind === 'mention'
           ? <MentionBadge key={i} userId={segment.userId} channelId={channelId} interactive={false} />
-          : replaceEmojiShortcodesInMarkdownSource(segment.text),
+          : renderTextSegment(segment.text, i),
       )}
     </>
   );
