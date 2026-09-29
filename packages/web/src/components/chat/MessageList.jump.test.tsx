@@ -278,6 +278,23 @@ describe('reply preview jump', () => {
     expect(target).not.toHaveAttribute('tabindex');
   });
 
+  it('names the row it focuses by author and time, so a screen reader announces it (issue #329)', async () => {
+    const original = msg('10', 'where is the release checklist?');
+    const reply = msg('11', 'in the wiki', { replyToId: '10', replyTo: original });
+    useChatStore.setState({
+      messages: new Map([[CHANNEL, [original, reply]]]),
+      hasMore: new Map([[CHANNEL, false]]),
+    });
+    renderList();
+
+    await userEvent.click(screen.getByRole('button', { name: /jump to the original message/i }));
+
+    const target = document.getElementById('msg-10');
+    expect(target).toHaveFocus();
+    expect(target).toHaveAttribute('role', 'article');
+    expect(target).toHaveAccessibleName(/^mira, .+/);
+  });
+
   it('leaves focus alone when the user moved it while the jump was loading (issue #313)', async () => {
     const original = msg('3', 'an old question');
     const reply = msg('60', 'answering that old question', { replyToId: '3', replyTo: original });

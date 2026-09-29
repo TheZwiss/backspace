@@ -4,6 +4,7 @@
       "hint": "Esc zum <cancel>Abbrechen</cancel> • Enter zum <save>Speichern</save>"
     },
     "edited": "(bearbeitet)",
+    "rowLabel": "{{author}}, {{time}}",
     "gifAlt": "GIF-Animation",
     "upload": {
       "failed": "Upload fehlgeschlagen",

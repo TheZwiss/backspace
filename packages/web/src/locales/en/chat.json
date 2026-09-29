@@ -4,6 +4,7 @@
       "hint": "escape to <cancel>cancel</cancel> • enter to <save>save</save>"
     },
     "edited": "(edited)",
+    "rowLabel": "{{author}}, {{time}}",
     "gifAlt": "GIF",
     "upload": {
       "failed": "Upload failed",

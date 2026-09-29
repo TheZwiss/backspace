@@ -4,6 +4,7 @@
       "hint": "按 Esc <cancel>取消</cancel> • 按 Enter <save>保存</save>"
     },
     "edited": "(已编辑)",
+    "rowLabel": "{{author}}，{{time}}",
     "gifAlt": "GIF 动图",
     "upload": {
       "failed": "上传失败",
