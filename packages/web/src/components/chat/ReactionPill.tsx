@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import type { Reaction } from '@backspace/shared';
 import { useFormatters } from '../../i18n/formatters';
-import { useAuthStore } from '../../stores/authStore';
+import { useSelfIdentity } from '../../stores/authStore';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useFloatingPosition } from '../../hooks/useFloatingPosition';
@@ -17,6 +17,8 @@ interface ReactionPillProps {
   emoji: string;
   /** Every reaction on the message with this emoji. */
   reactions: readonly Reaction[];
+  /** The instance that issued the message and its reactions. */
+  origin: string;
   onToggle: () => void;
 }
 
@@ -42,10 +44,10 @@ function truncateName(name: string): string {
  * routed through the cross-instance user views so a remote user shows their
  * home instance's name rather than a stub's.
  */
-export function ReactionPill({ emoji, reactions, onToggle }: ReactionPillProps) {
+export function ReactionPill({ emoji, reactions, origin, onToggle }: ReactionPillProps) {
   const { t } = useTranslation(['chat', 'common']);
   const fmt = useFormatters();
-  const currentUser = useAuthStore((s) => s.user);
+  const self = useSelfIdentity();
   const isMobile = useUIStore((s) => s.isMobile);
   const descriptionId = useId();
   const [open, setOpen] = useState(false);
@@ -64,17 +66,17 @@ export function ReactionPill({ emoji, reactions, onToggle }: ReactionPillProps) 
 
   useEffect(() => () => clearTimeout(showTimerRef.current), []);
 
-  const mine = reactions.some((r) => isOwnReaction(r, currentUser));
+  const mine = reactions.some((r) => isOwnReaction(r, origin, self));
 
   const nameOf = (reaction: Reaction): string => {
     const user = reaction.user
       ?? useSpaceStore.getState().members.find((m) => m.userId === reaction.userId)?.user;
     if (!user) return t('common:states.unknown');
-    const view = getCanonicalUserView(user);
+    const view = getCanonicalUserView(user, origin);
     return truncateName(view.displayName || parseFederatedUsername(view.username).baseName);
   };
 
-  const summary = summarizeReactors(reactions, (r) => isOwnReaction(r, currentUser), nameOf);
+  const summary = summarizeReactors(reactions, (r) => isOwnReaction(r, origin, self), nameOf);
   const sentence = reactionSentence(summary, t, fmt);
   const before = sentence.text.slice(0, sentence.namesStart);
   const names = sentence.text.slice(sentence.namesStart, sentence.namesStart + sentence.namesLength);

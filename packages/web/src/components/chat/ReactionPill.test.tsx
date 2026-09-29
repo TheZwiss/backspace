@@ -40,7 +40,7 @@ afterEach(() => {
 });
 
 function renderPill(reactions: Reaction[], onToggle = vi.fn()) {
-  render(<ReactionPill emoji="🎉" reactions={reactions} onToggle={onToggle} />);
+  render(<ReactionPill emoji="🎉" reactions={reactions} origin="" onToggle={onToggle} />);
   return screen.getByRole('button');
 }
 
