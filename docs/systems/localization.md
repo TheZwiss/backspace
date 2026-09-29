@@ -453,7 +453,8 @@ It fails on:
 6. A direct `toLocale*` or `Intl.*` call in the web package outside
    `formatters.ts`.
 7. An `ErrorCode` with no entry in `errors.json`.
-8. A literal user-facing string in JSX or in a `addToast(...)` call, in any
+8. A literal user-facing string in JSX or in an `addToast(...)` call (bare or
+   through a store, `useUIStore.getState().addToast(...)`), in any
    file not listed in `scripts/i18n-pending.txt`. The rule reads each
    component's TypeScript syntax tree (the compiler is resolved from the web
    package), so it sees text wherever JSX puts it: JSX text inside

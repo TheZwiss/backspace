@@ -511,10 +511,23 @@ function renderedLiterals(node, out) {
 }
 
 /**
+ * The name a call is made through: `addToast` for `addToast(...)`,
+ * `store.addToast(...)`, `store?.addToast(...)` and
+ * `useUIStore.getState().addToast(...)` alike.
+ */
+function calleeName(expression) {
+  const T = ts();
+  if (T.isIdentifier(expression)) return expression.text;
+  if (T.isPropertyAccessExpression(expression)) return expression.name.text;
+  return null;
+}
+
+/**
  * Literal user-facing text in one component file, read from its syntax tree:
  * JSX text anywhere (inside conditionals and maps too), literal values of the
  * text attributes whether quoted or computed, literal JSX children
- * (`{open ? 'Open' : t('x')}`), and literal first arguments of `addToast`.
+ * (`{open ? 'Open' : t('x')}`), and literal first arguments of `addToast`,
+ * called bare or through a store.
  */
 function literalFindingsIn(rel, text) {
   const T = ts();
@@ -545,7 +558,7 @@ function literalFindingsIn(rel, text) {
       }
     } else if (T.isJsxExpression(node) && node.expression && (T.isJsxElement(node.parent) || T.isJsxFragment(node.parent))) {
       pushRendered(node.expression, 'JSX child');
-    } else if (T.isCallExpression(node) && T.isIdentifier(node.expression) && node.expression.text === 'addToast') {
+    } else if (T.isCallExpression(node) && calleeName(node.expression) === 'addToast') {
       const first = node.arguments[0];
       if (first) pushRendered(first, 'addToast literal');
     }

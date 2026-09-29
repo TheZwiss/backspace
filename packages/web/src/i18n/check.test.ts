@@ -335,6 +335,22 @@ describe('literal-string', () => {
     expect(findings.map((f) => f.line).sort((a, b) => (a ?? 0) - (b ?? 0))).toEqual([5, 5, 7, 10, 10, 10, 11]);
   });
 
+  it('reads toast literals passed through a store as well as a bare addToast', () => {
+    const toasts = [
+      'export function S({ n }: { n: number }) {',
+      '  const store = useUIStore();',
+      '  useUIStore.getState().addToast("Copied", "success");',
+      '  store.addToast(`Saved ${n}`, "success");',
+      '  store?.addToast(n > 1 ? "Many" : t("one"));',
+      '  store.addToast(t("ok"));',
+      '  return null;',
+      '}',
+    ].join('\n');
+    const root = makeRoot({ 'packages/web/src/components/S.tsx': toasts });
+    const findings = checkLiteralStrings(root, { pending: [] }) as Finding[];
+    expect(findings.map((f) => f.line).sort((a, b) => (a ?? 0) - (b ?? 0))).toEqual([3, 4, 5]);
+  });
+
   it('does not read conditions, keys passed to functions or class names as text', () => {
     const clean = [
       'export function K({ kind, a }: { kind: string; a: boolean }) {',
