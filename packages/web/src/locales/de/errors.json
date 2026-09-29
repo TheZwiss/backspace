@@ -49,6 +49,7 @@
   "account_deleted": "Dieses Konto wurde gelöscht.",
   "target_domain_required": "Gib die Adresse der Instanz an, mit der verbunden werden soll.",
   "native_account_required": "Das kann nur ein Konto, das auf dieser Instanz erstellt wurde.",
+  "reattach_handle_taken": "Ein anderes Konto auf dieser Instanz meldet sich bereits mit diesem Benutzernamen an, deshalb kann dieses Konto nicht damit verknüpft werden.",
   "username_confirmation_required": "Gib deinen Benutzernamen zur Bestätigung ein.",
   "username_confirmation_mismatch": "Der eingegebene Benutzername stimmt nicht mit deinem Konto überein.",
   "avatar_url_invalid": "Die Adresse des Avatarbilds ist ungültig.",

@@ -77,6 +77,7 @@ export const ERROR_CODES = [
   'account_deleted',
   'target_domain_required',
   'native_account_required',
+  'reattach_handle_taken',
   'username_confirmation_required',
   'username_confirmation_mismatch',
   'avatar_url_invalid',

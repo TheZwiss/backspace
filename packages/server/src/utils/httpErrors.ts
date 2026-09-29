@@ -66,6 +66,7 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   account_deleted: 'This account has been deleted',
   target_domain_required: 'targetDomain is required (string)',
   native_account_required: 'Only native accounts can mint attach proofs',
+  reattach_handle_taken: 'Another account on this instance signs in with that handle',
   username_confirmation_required: 'Username confirmation is required',
   username_confirmation_mismatch: 'Username does not match',
   avatar_url_invalid: 'Avatar URL must be a relative upload path or http/https URL',

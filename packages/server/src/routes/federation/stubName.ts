@@ -165,6 +165,78 @@ export function firstFreeUsername(
 }
 
 /**
+ * Whether two rows are the same federated identity: the same `homeUserId` at
+ * the same home domain.
+ */
+function isSameIdentity(
+  a: Pick<UserRow, 'homeUserId' | 'homeInstance'>,
+  b: Pick<UserRow, 'homeUserId' | 'homeInstance'>,
+): boolean {
+  if (!a.homeUserId || !a.homeInstance || !b.homeUserId || !b.homeInstance) return false;
+  return a.homeUserId === b.homeUserId && a.homeInstance.toLowerCase() === b.homeInstance.toLowerCase();
+}
+
+/** What `claimHandleName` did. */
+export type HandleClaim =
+  /**
+   * The row is named `username` now. `moved` is the replica that held the
+   * name and moved aside, as written, for the caller to announce.
+   */
+  | { kind: 'claimed'; username: string; moved: UserRow | null }
+  /** Another account signs in with the name, or a replica of the same identity holds it. */
+  | { kind: 'held'; holderId: string };
+
+/**
+ * Name a login row (a federated account: it signs in with its username) after
+ * its home handle, exactly `<handle>@<domain>`. The client signs in to another
+ * instance as `<handle>@<home>` and registers that name when no row has it, so
+ * any other name locks the owner out of automatic sign-in and lets a second
+ * row for the same identity be registered.
+ *
+ * Only a replica can make room, and only a replica of another identity (a
+ * stale replica of an account deleted on its home whose handle was registered
+ * again): it moves to the first free suffixed name for the handle
+ * (`firstFreeUsername`), which its own home's hints re-check later. A name
+ * another login row holds, or a replica of this same identity holds (two rows
+ * for one identity; only the proof-gated re-attach merge absorbs such a
+ * replica), is left alone and reported as `held`.
+ *
+ * `handle` must be handle-shaped (`handleFromHint`); callers read the home's
+ * answer through it first. Writes without a transaction of its own, so a
+ * caller that must not keep a half-done rename runs it inside one. Logs each
+ * rename. Announces nothing.
+ */
+export function claimHandleName(
+  row: UserRow,
+  handle: string,
+  domain: string,
+  db: ReturnType<typeof getDb>,
+): HandleClaim {
+  if (!HANDLE.test(handle)) throw new Error(`claimHandleName: "${handle}" is not a handle`);
+  const username = `${handle}@${domain}`.toLowerCase();
+  let moved: UserRow | null = null;
+
+  const holder = db.select().from(schema.users).where(eq(schema.users.username, username)).get();
+  if (holder && holder.id !== row.id) {
+    if (holder.passwordHash !== REPLICATED_PASSWORD_HASH || isSameIdentity(holder, row)) {
+      return { kind: 'held', holderId: holder.id };
+    }
+    // No owner: the holder's own name counts as taken, so it moves to a
+    // suffixed name for the handle.
+    const aside = firstFreeUsername(handle, domain, db);
+    db.update(schema.users).set({ username: aside }).where(eq(schema.users.id, holder.id)).run();
+    console.log(`[federation] Moved replica ${holder.id}: ${holder.username} -> ${aside} (account ${row.id} takes its handle)`);
+    moved = { ...holder, username: aside };
+  }
+
+  if (row.username !== username) {
+    db.update(schema.users).set({ username }).where(eq(schema.users.id, row.id)).run();
+    console.log(`[federation] Renamed account ${row.id}: ${row.username} -> ${username} (its home handle)`);
+  }
+  return { kind: 'claimed', username, moved };
+}
+
+/**
  * What the rename may seed besides the username. The stub backfill passes the
  * home's lookup answer. Identity resolution and hydration pass nothing:
  * hydration fills `displayName` itself (fill-empty), so seeding it here from

@@ -49,6 +49,7 @@
   "account_deleted": "This account was deleted.",
   "target_domain_required": "Enter the address of the instance to attach to.",
   "native_account_required": "Only an account that was created on this instance can do that.",
+  "reattach_handle_taken": "Another account on this instance already signs in with that username, so this account cannot be linked to it.",
   "username_confirmation_required": "Type your username to confirm.",
   "username_confirmation_mismatch": "The username you typed does not match your account.",
   "avatar_url_invalid": "The avatar image address is not valid.",

@@ -168,7 +168,7 @@ describe('POST /api/users/@me/reattach — success', () => {
     expect(row.username).toBe('youruser@orbit.test'); // same base → no rename
   });
 
-  it('renames when the new home username base differs (collision-suffix scheme)', async () => {
+  it('claims the exact handle; a replica of another identity holding it moves aside', async () => {
     verifyMock.mockResolvedValue({ valid: true, homeUserId: 'new-home-1', username: 'hans' });
     testDb.insert(schema.users).values({
       id: 'squatter', username: 'hans@orbit.test', passwordHash: '!federation-replicated',
@@ -177,7 +177,42 @@ describe('POST /api/users/@me/reattach — success', () => {
     const res = await reattach('detached-1', 'youruser@orbit.test');
     expect(res.statusCode).toBe(200);
     const row = testDb.select().from(schema.users).where(eq(schema.users.id, 'detached-1')).get()!;
-    expect(row.username).toBe('hans_1@orbit.test');
+    expect(row.username).toBe('hans@orbit.test');
+    const squatter = testDb.select().from(schema.users).where(eq(schema.users.id, 'squatter')).get()!;
+    expect(squatter.username).toBe('hans~1@orbit.test');
+  });
+
+  it('re-attach claims the exact handle for a row an older re-attach suffixed', async () => {
+    testDb.update(schema.users).set({ username: 'youruser_1@orbit.test' }).where(eq(schema.users.id, 'detached-1')).run();
+    const res = await reattach('detached-1', 'youruser_1@orbit.test');
+    expect(res.statusCode).toBe(200);
+    const row = testDb.select().from(schema.users).where(eq(schema.users.id, 'detached-1')).get()!;
+    expect(row.username).toBe('youruser@orbit.test');
+  });
+
+  it('409 reattach_handle_taken when another account signs in with the handle; nothing changes', async () => {
+    verifyMock.mockResolvedValue({ valid: true, homeUserId: 'new-home-1', username: 'hans' });
+    testDb.insert(schema.users).values({
+      id: 'hans-account', username: 'hans@orbit.test', passwordHash: 'real-hash',
+      homeInstance: 'orbit.test', homeUserId: 'other', createdAt: 1,
+    }).run();
+    const res = await reattach('detached-1', 'youruser@orbit.test');
+    expect(res.statusCode).toBe(409);
+    expect(res.json().code).toBe('reattach_handle_taken');
+    const row = testDb.select().from(schema.users).where(eq(schema.users.id, 'detached-1')).get()!;
+    expect(row.username).toBe('youruser@orbit.test');
+    expect(row.homeUserId).toBe('dead-home-1');
+    expect(row.federationHomeOrphaned).toBe(1);
+    const holder = testDb.select().from(schema.users).where(eq(schema.users.id, 'hans-account')).get()!;
+    expect(holder.username).toBe('hans@orbit.test');
+  });
+
+  it('401 when the home names the identity with something that is not a handle', async () => {
+    verifyMock.mockResolvedValue({ valid: true, homeUserId: 'new-home-1', username: 'Hans Meier' });
+    const res = await reattach('detached-1', 'youruser@orbit.test');
+    expect(res.statusCode).toBe(401);
+    const row = testDb.select().from(schema.users).where(eq(schema.users.id, 'detached-1')).get()!;
+    expect(row.homeUserId).toBe('dead-home-1');
   });
 
   it('proceeds without a profile when the home profile fetch fails', async () => {
@@ -261,6 +296,15 @@ describe('POST /api/users/@me/reattach — stub merge', () => {
     const friendRows = testDb.select().from(schema.friends).all();
     expect(friendRows).toHaveLength(1);
     expect(friendRows[0]!.friendId).toBe('detached-1');
+  });
+
+  it('takes the handle the merged stub of the same identity held', async () => {
+    verifyMock.mockResolvedValue({ valid: true, homeUserId: 'new-home-1', username: 'hans' });
+    testDb.update(schema.users).set({ username: 'hans@orbit.test' }).where(eq(schema.users.id, 'stub-new')).run();
+    const res = await reattach('detached-1', 'youruser@orbit.test');
+    expect(res.statusCode).toBe(200);
+    const row = testDb.select().from(schema.users).where(eq(schema.users.id, 'detached-1')).get()!;
+    expect(row.username).toBe('hans@orbit.test');
   });
 
   it('409 when the new identity is held by a REAL account (not a stub)', async () => {

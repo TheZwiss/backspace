@@ -8,7 +8,6 @@ import { sanitizeUser } from '../../../utils/sanitize.js';
 import { collectProfileBroadcastTargetIds } from '../../../utils/userDeletion.js';
 import { connectionManager } from '../../../ws/handler.js';
 import { and, eq, isNull, or } from 'drizzle-orm';
-import { randomBytes } from 'node:crypto';
 import type { DmChannel } from '@backspace/shared';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { loadDmChannelWire } from '../../../utils/dmChannelWire.js';
@@ -17,6 +16,15 @@ import { downloadProfileAsset } from '../profile.js';
 import { isLookupRateLimited } from '../rateLimits.js';
 import { authenticateS2SPeer } from './s2sAuth.js';
 import { reconcileDmChannelFederatedId, type DmReconcileResult } from '../../../utils/dmConversation.js';
+import { sendError } from '../../../utils/httpErrors.js';
+import { announceUserUpdated, claimHandleName, handleFromHint } from '../stubName.js';
+
+/** Thrown inside the re-attach transaction to roll it back when the handle is held. */
+class HandleHeldError extends Error {
+  constructor(readonly holderId: string) {
+    super(`handle held by ${holderId}`);
+  }
+}
 
 export function registerAttachRoutes(app: FastifyInstance): void {
   // ─── POST /api/federation/verify-attach-proof ───────────────────────────────
@@ -155,33 +163,21 @@ export function registerAttachRoutes(app: FastifyInstance): void {
       return reply.code(409).send({ error: 'The new identity is already bound to another account on this instance', statusCode: 409 });
     }
 
-    // Username: adopt the new home base when it differs (existing collision-suffix
-    // scheme). Usernames are not identity, so a base match keeps the current handle.
-    const currentBase = detached.username.includes('@')
-      ? detached.username.slice(0, detached.username.indexOf('@'))
-      : detached.username;
-    let newUsername = detached.username;
-    const newBase = verified.username.toLowerCase();
-    if (newBase !== currentBase.toLowerCase()) {
-      let candidate = `${newBase}@${homeDomain}`;
-      let attempt = 0;
-      while (rawDb.prepare(`SELECT 1 FROM users WHERE username = ? AND id != ?`).get(candidate, detached.id)) {
-        attempt++;
-        candidate = `${newBase}_${attempt}@${homeDomain}`;
-        if (attempt > 10) {
-          candidate = `${newBase}_${randomBytes(4).toString('hex')}@${homeDomain}`;
-          break;
-        }
-      }
-      newUsername = candidate;
+    // The account signs in with its name, which must be exactly its home
+    // handle (`claimHandleName`). The home's signed answer names the handle; an
+    // answer that is not handle-shaped cannot name an account there.
+    const handle = handleFromHint(verified.username);
+    if (!handle) {
+      return reply.code(401).send({ error: 'Attach proof could not be verified', statusCode: 401 });
     }
+    let movedReplica: typeof schema.users.$inferSelect | null = null;
 
     // Merge + re-bind, atomically. All users.id FK repointing lives here; dedupe
     // rows that would collide on a composite PK / unique index BEFORE repointing
     // (spec §3.3). The stub row is the only source — a real account holding the
     // identity was already rejected by guard 4.
     const dmReconcileResults: DmReconcileResult[] = [];
-    rawDb.transaction(() => {
+    const mergeAndRebind = rawDb.transaction(() => {
       if (existingRow) {
         const stubId = existingRow.id;
         const targetId = detached.id;
@@ -232,8 +228,15 @@ export function registerAttachRoutes(app: FastifyInstance): void {
       // Re-bind. profile_updated_at is nulled so the home's next profile_update
       // (any version) tier-1 matches and applies (the accept-and-skip guards
       // only fire on federation_home_orphaned = 1).
-      rawDb.prepare(`UPDATE users SET home_user_id = ?, federation_home_orphaned = 0, username = ?, profile_updated_at = NULL WHERE id = ?`)
-        .run(verified.homeUserId, newUsername, detached.id);
+      rawDb.prepare(`UPDATE users SET home_user_id = ?, federation_home_orphaned = 0, profile_updated_at = NULL WHERE id = ?`)
+        .run(verified.homeUserId, detached.id);
+
+      // Name the account after its handle, after the merge above removed the
+      // stub of this identity that may have held it. A name another account
+      // signs in with rolls the whole re-attach back.
+      const claim = claimHandleName({ ...detached, homeUserId: verified.homeUserId, federationHomeOrphaned: 0 }, handle, homeDomain, db);
+      if (claim.kind === 'held') throw new HandleHeldError(claim.holderId);
+      movedReplica = claim.moved;
 
       // Reconcile the account's 1-on-1 DM channels: the home_user_id just
       // changed, so every 1-on-1 federatedId derived from it is now stale.
@@ -253,7 +256,15 @@ export function registerAttachRoutes(app: FastifyInstance): void {
         const result = reconcileDmChannelFederatedId(rawDb, c.id);
         if (result.action !== 'noop') dmReconcileResults.push(result);
       }
-    })();
+    });
+    try {
+      mergeAndRebind();
+    } catch (err) {
+      if (!(err instanceof HandleHeldError)) throw err;
+      console.warn(`[federation] Re-attach of ${detached.id} refused: account ${err.holderId} signs in with ${handle}@${homeDomain}`);
+      return sendError(reply, 409, 'reattach_handle_taken');
+    }
+    if (movedReplica) announceUserUpdated(movedReplica);
 
     // Best-effort initial profile pull (spec §3.2 step 4). Failure is fine — the
     // account is re-attached; the next relay fills the profile.
