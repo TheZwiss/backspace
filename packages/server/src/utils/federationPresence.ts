@@ -10,8 +10,9 @@ import { extractDomain } from '../routes/federation.js';
 export type PresenceStatus = 'online' | 'idle' | 'dnd' | 'offline';
 
 /**
- * Queue a presence_update event for the given native user. Broadcast to all
- * active peers (mirrors profile_update). Outbox-only — presence is ephemeral;
+ * Queue a presence_update event for the given native user. Broadcast like
+ * profile_update: to active and unreachable peers, not pending ones (see
+ * `queueOutboxEvent`). Outbox-only — presence is ephemeral;
  * stale replays from a mutation log are wrong, so we never call
  * appendMutationLog. The peer-activation hook re-emits a fresh snapshot for
  * peer-related online natives, so a peer recovering from unreachable converges
@@ -31,7 +32,7 @@ export function queuePresenceRelay(
   if (!user) return;
   if (user.homeInstance) return; // replicated — not our authority
 
-  // targetPeerOrigins = undefined → broadcast to all active peers.
+  // targetPeerOrigins = undefined → broadcast (see `queueOutboxEvent`).
   queuePresenceEvent(user.id, status, activities, undefined, '');
 }
 
@@ -41,7 +42,9 @@ export function queuePresenceRelay(
  * absent field as "unchanged", which is what a status-only relay from a peer
  * that predates this rule means.
  *
- * entityId = userId so the outbox coalesces rapid status flaps into the latest.
+ * entityId = userId. The outbox queue is `presence:<userId>`, apart from the
+ * user's profile queue; a newer status replaces a queued one
+ * (federationOutboxQueue.ts).
  * contextId = userId, contextType = 'profile' (reuses existing routing).
  * NO appendMutationLog — presence must not be replayed from history.
  */

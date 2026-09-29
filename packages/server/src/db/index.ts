@@ -8,6 +8,7 @@ import { ensureDefaults, backfillOneOnOneDmMembership } from './migrate.js';
 import { normalizeAllRolePositions } from './rolePositions.js';
 import { setWorkerId } from '../utils/snowflake.js';
 import { backfillOneOnOneKeys } from '../utils/dmConversation.js';
+import { backfillOutboxQueueKeys } from '../utils/federationOutboxQueue.js';
 import { createSnapshot } from '../utils/backup.js';
 import { hasPendingMigrations } from './pendingMigrations.js';
 import { mkdirSync, existsSync } from 'fs';
@@ -76,6 +77,10 @@ export function initDatabase() {
       }
     },
   });
+
+  // Key every outbox row queued before queue keys existed (migration 0021)
+  // by the rule the outbox queues by today. Idempotent.
+  backfillOutboxQueueKeys(sqlite);
 
   // Give every role its own position, in the order the role list already
   // shows them, so the role hierarchy has something to compare. Roles created

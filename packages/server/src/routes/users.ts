@@ -580,11 +580,11 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
           'profile',
         );
         queueOutboxEvent(
-          updatedUser!.id,    // entityId — user's ID (coalesces rapid edits)
+          updatedUser!.id,    // entityId — user's ID (queue `profile:<id>`: a newer edit replaces a queued one)
           updatedUser!.id,    // contextId — user-scoped
           'profile_update',
           JSON.stringify({ profileUpdate: profilePayload }),
-          undefined,          // targetPeerOrigins — broadcast to all active peers
+          undefined,          // targetPeerOrigins — broadcast to active and unreachable peers
           'profile',          // contextType
         );
       }

@@ -15,7 +15,8 @@ Source files:
     - `routes/federation/handlers/s2sAuth.ts` -- `authenticateS2SPeer(request, reply, opts?)`: the shared inbound S2S-HMAC auth preamble (parse headers → resolve active peer → optional per-peer rate limit **before** signature → verify HMAC signature → nonce replay). Adopted by the six endpoints whose preamble is byte-identical: `DELETE /identity`, `POST /relay`, `POST /sync` (`relay.ts`), `POST /users/lookup`, `POST /users/by-home-id` (`lookup.ts`), and `POST /verify-attach-proof` (`attach.ts`). Returns `{ ok: true, peer, nonce }` or, having already sent the rejection reply, `{ ok: false }` (caller must `return`). **Intentional non-adopters** (each keeps a load-bearing gate the helper would flatten, documented in its own docstring/comment): `POST /epoch` (revoked-only gate for peer recovery, 400 on missing headers, no nonce check), `POST /peer/rotate` (active-only, no nonce check), `POST /peer/denied` (`awaiting_approval` gate, synthetic no-grace secret verify).
 - `packages/server/src/utils/federationAuth.ts` -- HMAC signing, verification, header parsing, `getOurOrigin()`
 - `packages/server/src/utils/federationFetch.ts` -- The outbound path for peer-addressed requests: origin trust levels (`approved` / `asserted`), origin format checks, no redirect following. See §1b.
-- `packages/server/src/utils/federationOutbox.ts` -- Event queuing, coalescing, relay payload construction, mutation log, participant/target resolution
+- `packages/server/src/utils/federationOutbox.ts` -- Event queuing (which peers), relay payload construction, mutation log, participant/target resolution
+- `packages/server/src/utils/federationOutboxQueue.ts` -- Outbox queues: queue keys, fold rules, offered marking, queue heads, expiry by queue, boot key backfill
 - `packages/server/src/utils/federationLookup.ts` -- HMAC-signed remote-user lookups: `lookupRemoteUser` (by username) and `lookupRemoteUserByHomeId` (reverse lookup, used by the stub backfill and `resolveRemoteIdentityForClient`)
 - `packages/server/src/utils/federationPresence.ts` -- S2S presence relay: `queuePresenceRelay`, `snapshotPresenceForPeer` (relationship-scoped), `markPeerStubsOffline`
 - `packages/server/src/utils/federationStubBackfill.ts` -- Renames replicated stubs that still carry a placeholder name by reverse-looking-up the canonical username via the peer
@@ -971,68 +972,79 @@ Trigger (API/WS handler)
   -> contextType 'dm' with no targetPeerOrigins? -> refuse, log, return
        (DM traffic is participant-scoped and must never fan out to every peer;
         an omitted list means broadcast, which only profile/presence may use)
-  -> Fetch active peers from federation_peers
+  -> Fetch peers from federation_peers:
+       broadcast (no targets): status active or unreachable
+       targeted:               status active, pending or unreachable
   -> Filter to targetPeerOrigins (if specified) -- EXACT string match against peer.origin
        (an empty array is a target list, not an absence of one: it matches
         nothing, which is how a local-only DM is suppressed)
-  -> If zero peers match -> logs warning and returns
-  -> For each peer, in a transaction:
-      -> Check for existing outbox entry by (peerId, entityId)
-      -> COALESCE:
-          - delete + existing create -> delete both (net: never relayed)
-          - update + existing create -> update payload, keep 'create' eventType
-          - update + existing update -> update payload and eventType
-          - no existing -> insert new entry
-      -> TTL: now + (relayTtlDays * 86400000)
+  -> Targeted origin with no peer row -> createAutoPlaceholderPeer (see Peer-row provenance)
+  -> For each peer, in a transaction: writeOutboxEvent (federationOutboxQueue.ts)
+       -> file the event into the queue of its entity, by the rules below
+       -> TTL: now + (relayTtlDays * 86400000)
 ```
 
-### Coalescing Rules (per-peer, per-entity)
+**Who gets a broadcast.** An `unreachable` peer is an established peering with a backlog: it may still consider us active and never pull our log, and our recovery does not re-send profiles, so its queue is how a change made during the outage reaches it. A `pending` peer is not sent broadcasts: its activation already delivers what they carry (it pulls our `profile` mutation log, and our `onPeerActivated` pushes a presence snapshot). Before #321 the broadcast used the targeted status list, which had been widened for placeholders, so every profile edit landed on every auto-created pending row and kept it from being swept.
 
-| Incoming | Existing | Result |
-|----------|----------|--------|
-| `delete` | `create` | Entry removed (message was never relayed) |
-| `update` | `create` | Payload updated, keeps `create` type (peer gets full message) |
-| `update` | `update` | Payload updated, type becomes latest |
-| `delete` | `update` | Payload updated, type becomes `delete` |
-| any | none | New entry inserted |
-| any | on the wire | Payload and type become the incoming event's; the merge waits for the peer's answer |
+### Outbox queues (`federationOutboxQueue.ts`)
 
-The table (`mergeUndeliveredEvent` in `federationOutbox.ts`) assumes the peer has not received the existing entry. That is not known while the worker has the entry **on the wire**: read for a POST whose answer has not come back. `federationOutbox.ts` keeps those outbox ids in memory (`rowsOnTheWire`, set by `beginOutboxDelivery`, cleared by `finishOutboxDelivery`), and an event queued for one of them is stored as itself and marks the entry superseded. When the answer comes:
+The outbox holds, per peer, one **queue per entity**: `federation_outbox.queue_key`, derived from the event by `outboxQueueKey` from one rule table over every outbox event type (`OUTBOX_EVENT_RULES`; a new event type without a rule fails typecheck). `entity_id` stays the id the peer knows the event by (the relay event's `messageId`); the two are separate because one wire id can name several entities and one entity can travel under several wire ids.
 
-- **Taken** (accepted, or rejected as `duplicate`): a superseded entry is kept (not deleted with the batch) and goes out on the next tick as the newer event. An edit or delete of a message whose create was on the wire is therefore sent as an `update` / `delete`, and a status change made while the previous one was on the wire is not lost.
-- **Not taken** (any other terminal rejection, a retryable rejection, not mentioned, auth failure, HTTP error, network error or timeout, worker stopping): a superseded entry is merged now by the table with the sent event as the existing one (`requeueAfterUndeliveredSend`): a create and delete cancel out, a create with a later edit stays a create (and is refused again if the refusal was terminal). It stays due and is not backed off; only entries nobody touched move to their next backoff step.
+| Queue | Key | Family |
+|-------|-----|--------|
+| A DM message: `create`, `update`, `delete` | `message:<entity_id>` | message |
+| One user's reaction with one emoji on one message: `reaction_add` (wire id: the reaction id), `reaction_remove` (wire id: `msg:user:emoji`) | `reaction:<messageHomeInstance>:<messageId>:<userId>:<emoji>` | state |
+| A user's presence | `presence:<userId>` | state |
+| A user's profile | `profile:<userId>` | state |
+| A user's read position in a conversation | `read_state:<federatedId>:<homeInstance>:<homeUserId>` | state |
+| Whether a user has a conversation closed: `dm_close`, `dm_reopen` | `dm_open:<federatedId>:<homeInstance>:<homeUserId>` | state |
+| One rejected attachment: `file_rejected` (wire id: the message's id) | `file_rejected:<entity_id>:<attachmentId>` | event |
+| A friendship: every `friend_*` event of the pair | `friendship:<contextId>` | event |
+| A group DM: `member_add`, `member_remove`, `ownership_transfer`, `group_metadata_update` | `group:<federatedId>` | event |
 
-Superseding an entry also gives it `createdAt = now` (at least one more than before), because the worker stamps each event's `timestamp` with its entry's `createdAt` and receivers that order by it (read state applies only a strictly greater timestamp) must see the newer event as newer. The original `createdAt` is kept in `rowsOnTheWire` and restored when the entry is merged as not taken, so it keeps its place ahead of entries queued after it.
+**Delivery order.** The worker only sends a queue's head (its oldest row), so a peer applies an entity's events in the order they happened, and a row backing off holds back only its own queue.
 
-Before #367 the worker settled entries by id whatever had been merged into them meanwhile, so an accepted batch deleted the newer event with it, and the create-then-delete rule dropped a delete whose create had already reached the peer.
+**Offered.** `offered_at` records when some path first possibly handed a row to the peer: the worker sets it before the POST leaves (in the same synchronous step that reads the batch), and the `/sync` handler sets it on the pulling peer's rows of the pulled context (`markOutboxOfferedForPeer`), since the mutation log it serves can carry the same event. It is never cleared: a send whose outcome is unknown (timeout, abort, an HTTP error, an unreadable answer, a stopped process) may have reached the peer. A row that has been offered is never changed again; it is only deleted (settled, replaced or expired) or has its backoff moved. A replacement is a new row, so settling the offered row by id can never touch it.
+
+**Folding a newer event into its queue** (`writeOutboxEvent`). A fold is only made where it is right whatever the peer already holds:
+
+| Family | Newer event | Result |
+|--------|-------------|--------|
+| state | any | Every queued row of the entity is deleted and the event inserted as a new row: it sets the whole state on its own |
+| message | `update`, tail is a `create` not yet offered | The create carries the new payload and keeps its place (the peer cannot have the message) |
+| message | `update`, tail is an `update` | The queued update is replaced by a new row |
+| message | `update`, tail is an offered `create` | Appended behind it: the create is sent again (the peer answers `duplicate` if it has it), then the update |
+| message | `delete`, the queue holds a `create` not yet offered | Everything queued for the message goes and nothing is sent: the peer never had it |
+| message | `delete`, otherwise | Everything queued for the message is replaced by the delete (a delete for a message the peer does not hold is settled there) |
+| event | any | Appended: each event is its own fact, sent in turn |
+
+A new row is due now and gets `createdAt = max(now, newest row of its queue + 1)`. The worker stamps each event's `timestamp` with its row's `createdAt`, so a receiver that keeps only a strictly newer timestamp (read state) applies it. A reaction add not yet offered is not cancelled by a remove: the peer may hold the reaction from before the add.
+
+Before #372 the outbox kept one row per (peer, entity id) and merged newer events into it on the assumption that the peer had not received it. A presence change and a profile change for one user overwrote each other; two size rejections of one message's attachments kept one; after a timeout or a 5xx, a create and a later delete cancelled out and an edit was resent as a create the peer answered `duplicate`, so the peer kept the message or the old text. A merge also kept the older row's position, so remove, add, remove of one reaction reached the peer as add, remove, add. #371 had tracked rows on the wire in memory, which a restart lost and which ended when any answer came.
 
 ### Outbox Delivery Worker (`federationWorker.ts:processOutboxTick`)
 
-**Interval:** 10 seconds (`OUTBOX_INTERVAL_MS`)
+**Interval:** 1 second (`OUTBOX_INTERVAL_MS`; an idle poll is a no-op)
 **Batch size:** 50 (`OUTBOX_BATCH_LIMIT`)
 **Timeout:** 30 seconds per request (`OUTBOX_FETCH_TIMEOUT_MS`)
 
-1. Query entries where `nextRetryAt <= now` joined with active peers, ordered by `createdAt ASC`, limit 50
+1. Query rows where `nextRetryAt <= now`, joined with active peers, that head their queue (`isOutboxQueueHead`: no older row of the same peer and key; a row without a key is its own queue), ordered by `createdAt, id`, limit 50
 2. Group by peer
-3. For each peer, read its entries again (an earlier peer's POST in the same tick may have taken up to the timeout, and entries merged into or removed meanwhile go out as they are now), mark them on the wire (`beginOutboxDelivery`, see [Coalescing Rules](#coalescing-rules-per-peer-per-entity)), and reconstruct `FederationRelayEvent[]` from stored payloads:
-   - Parse JSON payload
-   - Copy fields: `federatedId`, `participants`, `message`, `reactions`, `reaction`, `target`, `membership`, `ownership`, `group`, `friendship`, file_rejected fields
-   - Set `eventType`, `contextType`, `messageId`, `dmChannelId`, `encryptionVersion`, `timestamp`
-4. Build `FederationRelayRequest` with `version: 1`, `sourceInstance: ourOrigin`
-5. Sign with `buildFederationHeaders(body, peerHmacSecret, ourOrigin)`
-6. POST to `{peerOrigin}/api/federation/relay`
-7. On success (200):
-   - Compute the **terminal entity set** = accepted entries ∪ duplicate-rejected entries
-   - Delete all terminal entries from outbox (matched by `entityId` -> `outboxId`), except entries superseded while on the wire
-   - Every other entry in the batch (non-terminal rejections, and any entry the response does not mention) stays in the outbox and moves to its next backoff step (`attempts + 1`, `nextRetryAt = now + backoff`). Before this, such entries kept their `nextRetryAt` and were resent on every 10-second tick; a run of them at the head of the `createdAt`-ordered batch could crowd newer events out of it
-   - Log non-terminal rejected entries at `console.warn`
-   - Store `result.maxUploadSize` on peer record
-   - Update peer: `lastSeenAt = now`, `consecutiveFailures = 0`
-8. On failure (non-200 or network error):
-   - `handleOutboxDeliveryFailure()`:
-     - Increment `attempts` per entry, compute `nextRetryAt = now + backoff`
-     - Increment peer `consecutiveFailures`, set `lastFailureAt`
-     - If `consecutiveFailures >= PEER_UNREACHABLE_THRESHOLD (10)` -> mark peer `unreachable`
+3. For each peer, `takeOutboxBatch`: read its rows again (an earlier peer's POST in the same tick may have taken up to the timeout; a row replaced meanwhile is gone and its replacement goes on a later tick), keep one row per wire id (the answer names events by it), and mark them offered. Then reconstruct `FederationRelayEvent[]` from the stored payloads (`buildRelayEvents`)
+4. Build `FederationRelayRequest` with `version: 1`, `sourceInstance: ourOrigin`, sign it, POST to `{peerOrigin}/api/federation/relay` (`sendOutboxBatch`, which never throws and reports one of four outcomes)
+5. **Answered** (a 2xx with a readable body): `settleAnsweredBatch`, one transaction:
+   - accepted, or rejected as `duplicate`: the row is deleted
+   - rejected for good (`classifyRelayRejection`, the one reader of `TERMINAL_REJECTION_REASONS`): the row is deleted; for a `create`, the rest of its queue too (`refusalEndsOutboxQueue`), since the peer will never hold the message
+   - any other rejection, or a row the answer does not mention: next backoff step (`attempts + 1`, `nextRetryAt = now + backoff`)
+
+   After the transaction, and unable to change the rows: rollback callbacks for the refusals, logging, and the peer's bookkeeping (`lastSeenAt`, `consecutiveFailures = 0`, `consecutiveAuthFailures = 0`, `remoteMaxUploadSize`). A failure there is logged and the batch stays settled
+6. **Auth refused** (401/403): every row moves to its next backoff step, and `handleRelayAuthRefusal` counts the failure (see [Authentication-failure handling](#authentication-failure-handling-401--403))
+7. **Failed** (network error, timeout, a non-2xx, an unreadable answer): the peer may have applied the batch. `handleOutboxDeliveryFailure` moves every row to its next backoff step, increments the peer's `consecutiveFailures` and sets `lastFailureAt`; at `PEER_UNREACHABLE_THRESHOLD (10)` `markPeerUnreachable` (the outbox's one peer-status write) sets `unreachable` and resets recovery pacing
+8. **Aborted** (the worker is stopping): nothing changes; the rows stay offered and due
+
+**Expiry.** The janitor's TTL sweep expires queues, not rows (`expireOutboxQueues`): a row past its `expiresAt` takes every row queued behind it in its queue with it, because those change something the peer may never have got (an edit behind a create, a cancel behind a friend request). A state row behind it is kept, since it carries the entity's whole state. Rows ahead of it stay.
+
+**Rows queued before queue keys.** Migration 0021 marks every existing row offered (whether it had reached the peer was never recorded) and drops `presence_update` rows on auto-created pending peers. `backfillOutboxQueueKeys` (run at boot from `db/index.ts`) gives each row without a key the key its event gets today.
 
 #### Terminal rejection reasons
 
@@ -1267,7 +1279,7 @@ Owner-authored update of a group DM's `name` and/or `icon`. Mirrors the `profile
 
 **Targeting:** `getGroupDmTargetOrigins(channelId)` — every peer that hosts a member of the channel.
 
-**Coalescing:** queued via `queueGroupMetadataRelay`; rapid edits coalesce per peer with `entityId = channelId`.
+**Queueing:** queued via `queueGroupMetadataRelay` into the group's queue (`group:<federatedId>`), after the group's earlier membership events; see [Outbox queues](#outbox-queues-federationoutboxqueuets).
 
 **Receiver flow (`processGroupMetadataUpdateEvent`):**
 1. Lookup channel by `event.federatedId`. If missing → accepted (idempotent — no replica to update).
@@ -1650,7 +1662,7 @@ Profile data is synced server-to-server. The home instance is authoritative — 
 
 **Targeting:** Broadcast to all active peers. Peers silently accept if they have no replica.
 
-**Coalescing:** `entityId = homeUserId`. Rapid successive edits coalesce to one delivery per peer.
+**Queueing:** `entityId = homeUserId`, queue `profile:<homeUserId>`; a newer edit replaces a queued one. See [Outbox queues](#outbox-queues-federationoutboxqueuets).
 
 **Processing:** The row updated is the one that IS the payload's `homeUserId` + `homeInstance` (`resolveRelayActor`) and is homed elsewhere; a native user of this instance is never one, and anything else is acked without effect (no replica here). Remote overwrites all 6 mutable fields unconditionally; `displayName` falls back to `payload.displayName ?? payload.username`. Rejects if incoming `profileUpdatedAt ≤ stored`. Broadcasts `user_updated` to local WS clients.
 
@@ -1713,7 +1725,7 @@ No-op for replicated users (we don't own their presence).
 
 **Targeting:** broadcast to all active peers (mirrors `profile_update`). Peers without a stub silently no-op. Privacy: status is already public to anyone authorized to see the user via friend/DM/space relationships, so broadcast-fanout adds no new disclosure surface.
 
-**Coalescing:** `entityId = userId`, `contextId = userId`. Rapid status flaps coalesce to the latest queued event per peer.
+**Queueing:** `entityId = userId`, `contextId = userId`, queue `presence:<userId>` (separate from the user's profile queue); a newer status replaces a queued one. See [Outbox queues](#outbox-queues-federationoutboxqueuets).
 
 **Receiver:** `processPresenceUpdateEvent` (`routes/federation.ts`). Strict attribution — `payload.homeInstance` domain MUST equal source peer's domain. Resolves the local stub that IS the payload's `homeUserId` + `homeInstance` (`resolveRelayActor`; a native user of this instance is never one, and anything but a `found` row homed elsewhere is acked without effect), updates the stub's `status`, keeps the activities for the stub in `ConnectionManager.userActivities` (a list replaces them after `validateActivities`, the local `activity_update` limits; `[]` or `offline` clears them; an absent field or a list that fails validation leaves them unchanged), and broadcasts a WS `presence_update` to local users via `collectProfileBroadcastTargetIds(stub.id)` — friends, DM members, and space co-members — with `activities` when they changed (empty clears on clients), without it otherwise, and with the stub's `homeUserId`/`homeInstance`. The kept activities are what the ready payload and the friendship snapshot report for the remote user.
 
@@ -2024,7 +2036,7 @@ All workers are started by `startFederationWorkers()` on server boot and stopped
 
 | Worker | Interval | Batch | Timeout | Source |
 |--------|----------|-------|---------|--------|
-| Outbox delivery | 10s | 50 | 30s | `processOutboxTick` |
+| Outbox delivery | 1s | 50 | 30s | `processOutboxTick` |
 | File download | 30s | 5 | 60s | `processFileQueueTick` |
 | Health check | 15min | all unreachable | 10s | `processHealthCheckTick` |
 | Epoch-refresh baseline | Startup + 15min (end of health tick) | active peers w/ `peer_instance_id IS NULL` | 10s per peer | `refreshPeerEpochs` (populate-if-null, self-terminating) |
@@ -2040,16 +2052,16 @@ The 1-on-1 key sweep that used to run here (`reconcileDriftedDmFederatedIds`) is
 
 | Target | Condition | Retention |
 |--------|-----------|-----------|
-| `federation_outbox` | `expiresAt < now` | Configurable via `federationRelayTtlDays` (default 30) |
+| `federation_outbox` | `expiresAt < now`, by queue: the rows queued behind an expired row go with it, except state rows (see [Outbox Delivery Worker](#outbox-delivery-worker-federationworkertsprocessoutboxtick), **Expiry**) | Configurable via `federationRelayTtlDays` (default 30) |
 | `federation_mutation_log` | `mutatedAt < (now - 90 days)` | 90 days |
 | `federation_file_queue` (completed) | `createdAt < (now - 7 days)` | 7 days |
 | `federation_file_queue` (any) | `expiresAt < now` | 30 days (set at queue time) |
 | `dm_channels` (soft-deleted) | `deletedAt < (now - 24h)` | 24-hour grace period |
-| `federation_peers` (unused auto rows) | `status = 'pending'`, `initiated_by = 'auto'`, `created_at < (now - 1h)`, no outbox entry other than `presence_update`, no handshake with the origin in flight | 1-hour grace (`AUTO_PENDING_PEER_GRACE_MS`) |
+| `federation_peers` (unused auto rows) | `status = 'pending'`, `initiated_by = 'auto'`, `created_at < (now - 1h)`, no outbox entry, no handshake with the origin in flight | 1-hour grace (`AUTO_PENDING_PEER_GRACE_MS`) |
 
 DM channel hard-delete cascades: reactions, embeds, attachments (DB rows + disk files), messages, members, outbox entries, mutation log entries, file queue entries.
 
-**Unused auto pending peer rows (`cleanupUnusedAutoPendingPeers`).** A `pending` row that local traffic created is kept for the entries waiting on its handshake. Once those are gone (typically expired at the relay TTL while the origin never answered) nothing removed the row, because untargeted broadcasts (`queueOutboxEvent` with no targets reaches `pending` peers) keep queueing `presence_update` onto it, and while it existed `/peer/initiate` for the origin answered `409`. The sweep runs after the outbox expiry in the same janitor pass and deletes such a row together with its presence entries (explicitly, not via the foreign-key cascade), then sends `federation_peers_changed` to admins. Only `presence_update` entries are disposable: presence never enters the mutation log, a presence event for a user the receiver has no copy of is a no-op there, and every activation sends a fresh snapshot (`snapshotPresenceForPeer` in `onPeerActivated`), so a later peering loses nothing. Any other entry, including a `profile_update` broadcast, keeps the row until that entry's own TTL. The one-hour grace equals `UNLINKED_AGE_MS` and the janitor interval, so a row is never removed by the sweep that first sees it and the worker has made several paced attempts on it first. Rows an admin or the remote created, and auto rows that left `pending`, are never touched.
+**Unused auto pending peer rows (`cleanupUnusedAutoPendingPeers`).** A `pending` row that local traffic created is kept for the entries waiting on its handshake. Once those are gone (typically expired at the relay TTL while the origin never answered) nothing else removes the row, and while it exists `/peer/initiate` for the origin answers `409`. The sweep runs after the outbox expiry in the same janitor pass and deletes such a row, then sends `federation_peers_changed` to admins. It needs no exception for any event type: broadcasts are not queued onto pending peers ([Event Queuing](#event-queuing-federationoutboxtsqueueoutboxevent)), so every entry on a pending row was addressed to that origin. Before #321 broadcasts did land there; the sweep then ignored `presence_update` entries, and a profile edit at least once a month kept a dead origin's row alive for good. The one-hour grace equals `UNLINKED_AGE_MS` and the janitor interval, so a row is never removed by the sweep that first sees it and the worker has made several paced attempts on it first. Rows an admin or the remote created, and auto rows that left `pending`, are never touched.
 
 ### Worker Startup Gate
 
