@@ -255,7 +255,7 @@ describe('formatDmSidebarPreview — name_changed system message', () => {
   });
 });
 
-describe('formatDmSidebarPreview — system content it does not know', () => {
+describe('formatDmSidebarPreview: system content it does not know', () => {
   it('an unknown event → the generic label', () => {
     const dm = makeGroupDm({ type: 'system', userId: 'U1', content: JSON.stringify({ event: 'call_started' }), createdAt: 1 });
     expect(formatDmSidebarPreview(dm, { id: 'OTHER', username: 'other' })).toBe('System message');

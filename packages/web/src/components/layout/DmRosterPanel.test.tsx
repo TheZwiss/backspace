@@ -100,7 +100,7 @@ vi.mock('../../stores/socialStore', () => ({
   ),
 }));
 
-// Owner-only actions — stubbed; calls return success by default. Which
+// Owner-only actions, stubbed; calls return success by default. Which
 // instance they go to is covered by `groupDmOwnerActions.test.ts`.
 const apiKickMember = vi.fn().mockResolvedValue({ success: true });
 const apiTransferOwnership = vi.fn().mockResolvedValue({});

@@ -103,7 +103,7 @@ describe('SystemMessage — icon_changed', () => {
   });
 });
 
-describe('SystemMessage — membership events', () => {
+describe('SystemMessage: membership events', () => {
   it('member_added → "Heidi added Bob to the group"', () => {
     renderSM(buildMessage({ event: 'member_added', targetUserId: 'U2', targetDisplayName: 'Bob' }), dm);
     expect(screen.getByText(/Heidi added Bob to the group/)).toBeDefined();
@@ -125,7 +125,7 @@ describe('SystemMessage — membership events', () => {
   });
 });
 
-describe('SystemMessage — content it does not know', () => {
+describe('SystemMessage: content it does not know', () => {
   it('an unknown event renders the generic label, never the content', () => {
     const { container } = renderSM(buildMessage({ event: 'call_started', note: 'visible text' }), dm);
     expect(screen.getByText('System message')).toBeDefined();

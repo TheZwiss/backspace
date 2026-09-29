@@ -104,7 +104,7 @@ describe('getOwnerInstanceForDm — helper', () => {
 
 // Which instance an owner-only request goes to, and how it names the
 // conversation and the member there, is `groupDmOwnerActions.test.ts`.
-describe('group DM owner routing — the owner instance the store keeps', () => {
+describe('group DM owner routing: the owner instance the store keeps', () => {
   it('updateDmOwner keeps ownerHomeInstance in sync so the next owner-only op routes correctly', () => {
     // Regression: the `dm_owner_updated` WS handler used to call
     // updateDmOwner(channelId, newOwnerId) without the home-identity fields.
