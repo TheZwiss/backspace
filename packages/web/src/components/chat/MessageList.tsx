@@ -460,7 +460,8 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
   // eslint-disable-next-line react-hooks/exhaustive-deps -- isAtBottomRef read via ref intentionally
   }, [messages.length, channelId, beginSmoothScrollIntent]);
 
-  // Auto-scroll when content height grows (embeds/images loading) while near bottom
+  // Keep the latest messages visible when content grows or the viewport shrinks
+  // (e.g. the mobile keyboard opens), provided the user was already at the bottom.
   const hasMessages = messages.length > 0;
   useEffect(() => {
     const content = contentRef.current;
@@ -474,6 +475,7 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
       lastProgrammaticBottomScrollRef.current = c.scrollTop;
     });
     observer.observe(content);
+    observer.observe(container);
     return () => observer.disconnect();
   }, [hasMessages, channelId]);
 
