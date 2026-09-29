@@ -31,6 +31,7 @@
     "noHistoryPermission": "You do not have permission to view message history in this channel",
     "loading": "Loading messages",
     "loadingOlder": "Loading older messages",
+    "loadFailed": "Couldn't load messages",
     "jumpToPresent": "Jump to Present",
     "jump": {
       "unavailable": "That message is no longer available",

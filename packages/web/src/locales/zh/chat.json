@@ -30,6 +30,7 @@
     "noHistoryPermission": "您没有权限查看此频道的历史消息",
     "loading": "正在加载消息",
     "loadingOlder": "正在加载更早的消息",
+    "loadFailed": "无法加载消息",
     "jumpToPresent": "跳转至最新",
     "jump": {
       "unavailable": "该消息已不可用",

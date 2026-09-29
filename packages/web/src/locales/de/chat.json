@@ -31,6 +31,7 @@
     "noHistoryPermission": "Du hast keine Berechtigung, den Nachrichtenverlauf dieses Kanals zu sehen",
     "loading": "Nachrichten werden geladen",
     "loadingOlder": "Ältere Nachrichten werden geladen",
+    "loadFailed": "Nachrichten konnten nicht geladen werden",
     "jumpToPresent": "Zu den neuesten Nachrichten",
     "jump": {
       "unavailable": "Diese Nachricht ist nicht mehr verfügbar",

@@ -23,6 +23,7 @@ import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import { isSelf, parseFederatedUsername } from '../../utils/identity';
 import { formatDmHeaderName } from '../../utils/dmFormatters';
 import { useDelayedLoading } from '../../hooks/useDelayedLoading';
+import { describeError } from '../../i18n/errors';
 import type { MessageWithUser } from '@backspace/shared';
 import { SystemMessage } from './SystemMessage';
 import { MessageJumpContext } from './messageJumpContext';
@@ -1113,6 +1114,15 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
         </div>
       )}
 
+      {loadState?.status === 'failed' && messages.length === 0 && (
+        <LoadFailedNotice
+          title={t('chat:list.loadFailed')}
+          detail={describeError(loadState.error)}
+          retryLabel={t('common:actions.tryAgain')}
+          onRetry={() => { void loadMessages(channelId, true); }}
+        />
+      )}
+
       {(!isNearBottom || isDetached) && messages.length > 0 && (
         <button
           onClick={() => { void jumpToPresent(); }}
@@ -1126,6 +1136,34 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
       )}
     </div>
     </MessageJumpContext.Provider>
+  );
+}
+
+/**
+ * The channel's messages could not be loaded. An overlay over the scroll
+ * container, never a replacement for it (docs/systems/message-list.md,
+ * "ContainerRef invariant"), so the list's effects stay attached for the retry.
+ */
+function LoadFailedNotice({ title, detail, retryLabel, onRetry }: {
+  title: string;
+  detail: string;
+  retryLabel: string;
+  onRetry: () => void;
+}) {
+  return (
+    <div className="absolute inset-0 z-10 flex items-center justify-center bg-surface-chat px-6">
+      <div role="alert" className="flex max-w-sm flex-col items-center gap-1 text-center">
+        <p className="text-[15px] font-semibold text-txt-primary">{title}</p>
+        <p className="text-[13px] text-txt-tertiary break-words">{detail}</p>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="mt-3 rounded-full bg-accent-primary px-4 py-1.5 text-[14px] font-medium text-white transition-colors hover:bg-accent-primary/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-chat"
+        >
+          {retryLabel}
+        </button>
+      </div>
+    </div>
   );
 }
 

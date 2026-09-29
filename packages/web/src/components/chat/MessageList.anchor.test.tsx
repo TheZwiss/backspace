@@ -402,3 +402,30 @@ describe('opening at the first unread message (issue #375)', () => {
     expect(dividerBefore('55')).toBe(true);
   });
 });
+
+describe('a channel that fails to load (issue #329)', () => {
+  it('says so and offers to try again', async () => {
+    useChatStore.setState({ messages: new Map(), hasMore: new Map(), loadStates: new Map() });
+    latestMessages.mockRejectedValueOnce(new Error('Network request failed'));
+    render(list());
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent("Couldn't load messages");
+    expect(alert).toHaveTextContent('Network request failed');
+    // The scroll container stays mounted under the overlay.
+    expect(document.querySelector('.overflow-y-auto')).toBeInTheDocument();
+
+    latestMessages.mockResolvedValueOnce(page(1, 3));
+    await userEvent.click(within(alert).getByRole('button', { name: 'Try again' }));
+
+    await waitFor(() => expect(document.getElementById('msg-3')).toBeInTheDocument());
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('shows nothing for a failure in another channel', async () => {
+    useChatStore.setState({ loadStates: new Map([['chan-other', { status: 'failed', error: new Error('down') }]]) });
+    render(list());
+    await waitFor(() => expect(document.getElementById('msg-60')).toBeInTheDocument());
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+});
