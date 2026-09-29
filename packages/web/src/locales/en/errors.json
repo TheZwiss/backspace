@@ -102,6 +102,7 @@
   "message_update_failed": "The message could not be updated. Try again.",
   "message_not_found": "That message could not be found.",
   "not_message_author": "You can only edit or delete your own messages.",
+  "system_message_immutable": "System messages cannot be edited.",
   "field_not_boolean": "The {{field}} setting must be either on or off.",
   "instance_settings_missing": "The instance settings have not been set up yet. Restart the server to create them.",
   "instance_settings_reload_failed": "The settings were saved but could not be read back. Reload to check them.",

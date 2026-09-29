@@ -102,6 +102,7 @@
   "message_update_failed": "消息更新失败，请重试。",
   "message_not_found": "未找到该消息。",
   "not_message_author": "您只能编辑或删除自己的消息。",
+  "system_message_immutable": "系统消息无法编辑。",
   "field_not_boolean": "{{field}} 设置项必须是开启或关闭状态。",
   "instance_settings_missing": "实例设置尚未初始化，请重启服务器以生成设置。",
   "instance_settings_reload_failed": "设置已保存但无法读取，请刷新后检查。",

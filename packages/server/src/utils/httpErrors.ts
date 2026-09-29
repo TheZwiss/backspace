@@ -120,6 +120,7 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   message_update_failed: 'Failed to update message',
   message_not_found: 'Message not found',
   not_message_author: 'You can only edit or delete your own messages',
+  system_message_immutable: 'System messages cannot be edited',
   // admin-settings
   field_not_boolean: '{{field}} must be a boolean',
   instance_settings_missing: 'Instance settings not initialized',

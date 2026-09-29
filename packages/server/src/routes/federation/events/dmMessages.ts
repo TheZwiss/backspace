@@ -12,6 +12,7 @@ import { connectionManager } from '../../../ws/handler.js';
 import { getDmMessageWithUser } from '../../dm.js';
 import { and, eq, isNull, or } from 'drizzle-orm';
 import type { FederationMessageTarget, FederationRelayEvent } from '@backspace/shared';
+import { parseDmSystemEvent, RELAYABLE_DM_SYSTEM_EVENTS } from '@backspace/shared/src/dmSystemEvents.js';
 import { buildDmMessagePayload, dmChannelMembers, isRelayTarget, isUrlFromPeer, mayRelayInto, memberWithIdentity, nonMemberRefusal, resolveLocalDmMessage, resolveRelayedReplyTarget } from '../dmChannels.js';
 import { attributionRefusal, extractDomain, relayActorOfUser, resolveOrCreateReplicatedUser, resolveRelayActor, sameRelayActor } from '../identity.js';
 import { hydrateReplicatedUserProfile } from '../profile.js';
@@ -57,6 +58,21 @@ export async function processCreateEvent(
   if (existingMsg) {
     rejected.push({ messageId: event.messageId, reason: 'duplicate' });
     return;
+  }
+
+  // Relayed system content is validated before anything is written: only an
+  // event a peer relays as a message (a space invite) is stored, in its
+  // canonical form (dm-system.md, "System messages").
+  const isSystem = event.message.type === 'system';
+  let systemContent: string | null = null;
+  if (isSystem) {
+    const systemEvent = parseDmSystemEvent(event.message.content);
+    if (!systemEvent || !RELAYABLE_DM_SYSTEM_EVENTS.has(systemEvent.event)) {
+      console.warn(`[federation] Refused relayed system message ${event.messageId} from ${extractDomain(sourceInstance)}: not a well-formed relayable system event`);
+      rejected.push({ messageId: event.messageId, reason: 'invalid_system_message' });
+      return;
+    }
+    systemContent = JSON.stringify(systemEvent);
   }
 
   // Resolve ALL participants to local users, auto-creating replicated stubs
@@ -145,11 +161,8 @@ export async function processCreateEvent(
   const replyToId = resolveRelayedReplyTarget(event.message.replyTo, sourceInstance, localDmChannelId, db);
 
   // Mention tokens carry the sender's ids; store them as this instance's.
-  // System content is not text with tokens and is stored as sent.
-  const isSystem = event.message.type === 'system';
-  const content = isSystem
-    ? event.message.content
-    : rewriteRelayedMentions(event.message.content, event.message.mentions, db);
+  // System content was validated and canonicalized above.
+  const content = systemContent ?? rewriteRelayedMentions(event.message.content, event.message.mentions, db);
 
   // Insert the message
   const localMessageId = generateSnowflake();
@@ -449,10 +462,15 @@ export function processUpdateEvent(
   }
   const localMsg = resolved.localMsg;
 
+  // System messages cannot be edited (dm-system.md, "System messages").
+  if (localMsg.type === 'system') {
+    console.warn(`[federation] Refused relayed update of system message ${localMsg.id} from ${extractDomain(sourceInstance)}`);
+    rejected.push({ messageId: event.messageId, reason: 'system_message_immutable' });
+    return;
+  }
+
   // Mention tokens carry the sender's ids; store them as this instance's.
-  const content = localMsg.type === 'system'
-    ? event.message?.content ?? null
-    : rewriteRelayedMentions(event.message?.content ?? null, event.message?.mentions, db);
+  const content = rewriteRelayedMentions(event.message?.content ?? null, event.message?.mentions, db);
   const editedAt = event.message?.editedAt ?? Date.now();
 
   db.update(schema.dmMessages)

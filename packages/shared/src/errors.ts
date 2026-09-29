@@ -236,6 +236,7 @@ export const ERROR_CODES = [
   'message_create_failed',
   'message_update_failed',
   'not_message_author',
+  'system_message_immutable',
   'message_edit_not_author',
   'message_delete_forbidden',
   'internal_error',

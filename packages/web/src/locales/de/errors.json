@@ -102,6 +102,7 @@
   "message_update_failed": "Die Nachricht konnte nicht geändert werden. Versuche es noch einmal.",
   "message_not_found": "Diese Nachricht wurde nicht gefunden.",
   "not_message_author": "Du kannst nur deine eigenen Nachrichten bearbeiten oder löschen.",
+  "system_message_immutable": "Systemnachrichten können nicht bearbeitet werden.",
   "field_not_boolean": "Die Einstellung {{field}} muss entweder an oder aus sein.",
   "instance_settings_missing": "Die Instanzeinstellungen wurden noch nicht angelegt. Starte den Server neu, um sie zu erstellen.",
   "instance_settings_reload_failed": "Die Einstellungen wurden gespeichert, konnten aber nicht zurückgelesen werden. Lade neu, um sie zu prüfen.",

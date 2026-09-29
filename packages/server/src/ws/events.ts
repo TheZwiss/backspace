@@ -22,6 +22,7 @@ import { generateFederatedCallToken } from '../routes/livekit.js';
 import { config } from '../config.js';
 import { canActOnMemberInSpace } from '../utils/roleHierarchy.js';
 import { ERROR_MESSAGES } from '../utils/httpErrors.js';
+import { dmMessageEditRefusal } from '../utils/dmSystemMessages.js';
 
 /**
  * Re-evaluate SPEAK permission for all participants in voice channels
@@ -942,8 +943,9 @@ function handleDmMessageEdit(event: Record<string, unknown>, userId: string): vo
     return;
   }
 
-  if (msg.userId !== userId) {
-    connectionManager.sendToUser(userId, { type: 'error', message: 'You can only edit your own messages' });
+  const editRefusal = dmMessageEditRefusal(msg, userId);
+  if (editRefusal) {
+    connectionManager.sendToUser(userId, { type: 'error', message: ERROR_MESSAGES[editRefusal], code: editRefusal });
     return;
   }
 

@@ -1782,3 +1782,5 @@ export interface TelemetryStatus {
    */
   askDue: boolean;
 }
+
+export type { DmSystemEvent } from './dmSystemEvents.js';

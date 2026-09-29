@@ -57,6 +57,8 @@ import { resolveOriginFromHostname } from '../utils/federationOriginResolve.js';
 import type { FederationRelayEvent } from '@backspace/shared';
 import { resolveLocalUser } from './federation.js';
 import { resolveRemoteIdentityForClient } from '../utils/federationClientIdentity.js';
+import { dmMessageEditRefusal, dmSystemContent, dmSystemName } from '../utils/dmSystemMessages.js';
+import { parseDmSystemEvent } from '@backspace/shared/src/dmSystemEvents.js';
 
 /**
  * Batch-fetch reactions for a set of DM message IDs.
@@ -471,10 +473,6 @@ function transferGroupDmOwnership(
     ? previousOwnerRow
     : db.select().from(schema.users).where(eq(schema.users.id, actorUserId)).get();
 
-  const newOwnerBaseName = newOwnerRow?.username?.includes('@')
-    ? newOwnerRow.username.split('@')[0]
-    : (newOwnerRow?.username ?? 'Unknown');
-  const newOwnerDisplayName = newOwnerRow?.displayName ?? newOwnerBaseName;
 
   // Federation targets must be computed BEFORE the channel update so we use the
   // current home-identity columns; membership doesn't change in a transfer, so a
@@ -501,10 +499,10 @@ function transferGroupDmOwnership(
 
   const ownerSysMsgId = generateSnowflake();
   const ownerNow = Date.now();
-  const ownerSysContent = JSON.stringify({
+  const ownerSysContent = dmSystemContent({
     event: 'owner_changed',
     newOwnerId,
-    newOwnerDisplayName,
+    newOwnerDisplayName: dmSystemName(newOwnerRow),
   });
 
   // Wire homeInstance values are canonicalized to full URLs so receivers store
@@ -636,17 +634,13 @@ function removeDmMember(
     ? targetUserRow
     : db.select().from(schema.users).where(eq(schema.users.id, actorUserId)).get();
 
-  const targetBaseName = targetUserRow?.username?.includes('@')
-    ? targetUserRow.username.split('@')[0]
-    : (targetUserRow?.username ?? 'Unknown');
-
   // Insert + broadcast member_removed system message (still a member at this point)
   const sysMsgId = generateSnowflake();
   const sysNow = Date.now();
-  const sysContent = JSON.stringify({
+  const sysContent = dmSystemContent({
     event: 'member_removed',
     targetUserId,
-    targetDisplayName: targetUserRow?.displayName ?? targetBaseName,
+    targetDisplayName: dmSystemName(targetUserRow),
     reason,
   });
 
@@ -1035,15 +1029,14 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     // Remote instances create their own system messages via federation event handlers.
     for (const targetUser of targetUsers) {
       if (!targetUser) continue;
-      const baseName = targetUser.username.includes('@') ? targetUser.username.split('@')[0] : targetUser.username;
       const sysMsg = {
         id: generateSnowflake(),
         dmChannelId: dmChannelId,
         userId: request.userId,
-        content: JSON.stringify({
+        content: dmSystemContent({
           event: 'member_added',
           targetUserId: targetUser.id,
-          targetDisplayName: targetUser.displayName ?? baseName,
+          targetDisplayName: dmSystemName(targetUser),
         }),
         type: 'system' as const,
         createdAt: now,
@@ -1305,7 +1298,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
 
       if (nameChanged) {
         const sysId = generateSnowflake();
-        const content = JSON.stringify({ event: 'name_changed', oldName, newName: nextName });
+        const content = dmSystemContent({ event: 'name_changed', oldName, newName: nextName });
         tx.insert(schema.dmMessages).values({
           id: sysId,
           dmChannelId: id,
@@ -1320,7 +1313,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
 
       if (iconChanged) {
         const sysId = generateSnowflake();
-        const content = JSON.stringify({ event: 'icon_changed' });
+        const content = dmSystemContent({ event: 'icon_changed' });
         tx.insert(schema.dmMessages).values({
           id: sysId,
           dmChannelId: id,
@@ -1570,15 +1563,14 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     });
 
     // Insert & broadcast system message for member addition
-    const addBaseName = targetUser.username.includes('@') ? targetUser.username.split('@')[0] : targetUser.username;
     const addSysMsg = {
       id: generateSnowflake(),
       dmChannelId: id,
       userId: request.userId,
-      content: JSON.stringify({
+      content: dmSystemContent({
         event: 'member_added',
-        targetUserId: targetUserId,
-        targetDisplayName: targetUser.displayName ?? addBaseName,
+        targetUserId,
+        targetDisplayName: dmSystemName(targetUser),
       }),
       type: 'system' as const,
       createdAt: Date.now(),
@@ -2063,13 +2055,10 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, 403, 'space_requires_approval');
     }
 
-    // 4. Resolve / create the 1-on-1 DM (delegate to dedup helper).
-    const dmChannelId = ensureOneOnOneDmChannel(callerId, targetUser, db);
-
-    // 5. Build content + insert system message.
-    const now = Date.now();
-    const messageId = generateSnowflake();
-    const payload: SpaceInviteSystemPayload = {
+    // The invite's content, in the form every receiving instance checks it
+    // against (parseDmSystemEvent). An invite a receiver would refuse is not
+    // sent, and nothing is written for it.
+    const invite = parseDmSystemEvent(JSON.stringify({
       event: 'space_invite',
       spaceId: body.spaceId,
       spaceInstanceOrigin: spaceOrigin,
@@ -2082,13 +2071,22 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
         description: snapshot.description,
         instanceName: snapshot.instanceName,
       },
-    };
+    } satisfies SpaceInviteSystemPayload));
+    if (!invite || invite.event !== 'space_invite') {
+      return sendError(reply, 400, 'invite_invalid');
+    }
 
+    // 4. Resolve / create the 1-on-1 DM (delegate to dedup helper).
+    const dmChannelId = ensureOneOnOneDmChannel(callerId, targetUser, db);
+
+    // 5. Insert the system message.
+    const now = Date.now();
+    const messageId = generateSnowflake();
     db.insert(schema.dmMessages).values({
       id: messageId,
       dmChannelId,
       userId: callerId,
-      content: JSON.stringify(payload),
+      content: dmSystemContent(invite),
       type: 'system',
       createdAt: now,
     }).run();
@@ -2224,8 +2222,9 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, 404, 'message_not_found');
     }
 
-    if (msg.userId !== request.userId) {
-      return sendError(reply, 403, 'not_message_author');
+    const editRefusal = dmMessageEditRefusal(msg, request.userId);
+    if (editRefusal) {
+      return sendError(reply, 403, editRefusal);
     }
 
     if (isDeadOneOnOne(msg.dmChannelId, request.userId)) {
