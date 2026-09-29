@@ -1090,20 +1090,6 @@ class ConnectionManager implements ReplicaSessionHost {
       }
     }
   }
-
-  /** Push a fresh ready payload to a specific user, forcing full store re-sync. */
-  pushReadyPayload(userId: string): void {
-    const connections = this.getUserConnections(userId);
-    if (connections.size === 0) return;
-
-    const readyData = buildReadyPayload(userId);
-    const message = JSON.stringify({ type: 'ready', ...readyData });
-    for (const ws of connections) {
-      if (ws.readyState === 1) {
-        ws.send(message);
-      }
-    }
-  }
 }
 
 export const connectionManager = new ConnectionManager();
@@ -1209,7 +1195,8 @@ class WsRateLimiter {
   }
 }
 
-function buildReadyPayload(userId: string): {
+/** The `ready` payload for `userId`: everything a client needs to start, sent once per connection. */
+export function buildReadyPayload(userId: string): {
   user: User;
   spaces: SpaceWithChannelsAndMembers[];
   dmChannels: DmChannel[];

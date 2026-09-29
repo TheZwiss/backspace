@@ -6,7 +6,7 @@ import { authenticate } from '../utils/auth.js';
 import { markDirectoryDirty } from '../directory/state.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { isMember, isSpaceOwner, isBanned, hasPermission, computePermissions, PermissionBits } from '../utils/permissions.js';
-import { DEFAULT_EVERYONE_PERMISSIONS, ALL_PERMISSIONS, permissionsToString, stringToPermissions, roleBitsChangeRefusal, type HeldBitsRefusal } from '@backspace/shared/src/permissions.js';
+import { DEFAULT_EVERYONE_PERMISSIONS, ALL_PERMISSIONS, permissionsToString, stringToPermissions, parsePermissionString, roleBitsChangeRefusal, type HeldBitsRefusal } from '@backspace/shared/src/permissions.js';
 import crypto from 'crypto';
 import { connectionManager } from '../ws/handler.js';
 import { deleteAttachmentFiles, deleteUploadFile, deleteAttachmentByFilename } from '../utils/fileCleanup.js';
@@ -72,15 +72,16 @@ function generateInviteCode(): string {
   return crypto.randomBytes(4).toString('hex');
 }
 
-/** A permissions value from a request body as a non-negative bigint, or null when it is not one. */
-function parsePermissionBits(value: unknown): bigint | null {
-  if (typeof value !== 'string' && typeof value !== 'number') return null;
-  try {
-    const bits = BigInt(value);
-    return bits < 0n ? null : bits;
-  } catch {
-    return null;
-  }
+/**
+ * After a change to the space's roles or to a member's roles: every connected
+ * member is told with `space_access_changed` (docs/systems/websocket.md) and
+ * refetches the space's detail, which carries their permissions, the channels
+ * they can see, the roles and the member list. Voice permissions are
+ * re-checked here too, since a role can carry SPEAK or STREAM.
+ */
+function announceAccessChange(spaceId: string): void {
+  connectionManager.sendToSpace(spaceId, { type: 'space_access_changed', spaceId });
+  checkVoicePermissions(spaceId);
 }
 
 type RoleChangeRefusal = {
@@ -918,7 +919,11 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, 400, 'cannot_change_own_roles');
     }
 
-    if (!Array.isArray(roleIds)) {
+    // A set of role ids: each a string, none twice. The whole list replaces
+    // the member's roles, and the table holds each role once per member.
+    if (!Array.isArray(roleIds)
+      || !roleIds.every((roleId): roleId is string => typeof roleId === 'string')
+      || new Set(roleIds).size !== roleIds.length) {
       return sendError(reply, 400, 'role_ids_invalid');
     }
 
@@ -1006,9 +1011,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       }
     });
 
-    // Force target user's client to re-sync with their new permissions
-    connectionManager.pushReadyPayload(uid);
-    checkVoicePermissions(id);
+    announceAccessChange(id);
 
     // Build response with populated roles
     const updatedMember = db.select()
@@ -1168,7 +1171,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     const actorPerms = computePermissions(request.userId, id);
     let permStr: string;
     if (permissions !== undefined && permissions !== null) {
-      const requested = parsePermissionBits(permissions);
+      const requested = parsePermissionString(permissions);
       if (requested === null) {
         return sendError(reply, 400, 'permissions_invalid');
       }
@@ -1217,12 +1220,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
 
     const role = db.select().from(schema.roles).where(eq(schema.roles.id, roleId)).get();
 
-    // Broadcast updated state to all space members
-    const memberRows = db.select().from(schema.spaceMembers).where(eq(schema.spaceMembers.spaceId, id)).all();
-    for (const m of memberRows) {
-      connectionManager.pushReadyPayload(m.userId);
-    }
-    checkVoicePermissions(id);
+    announceAccessChange(id);
 
     return reply.code(201).send(role);
   });
@@ -1281,7 +1279,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     if (color !== undefined) updates.color = color;
 
     if (permissions !== undefined) {
-      const requested = parsePermissionBits(permissions);
+      const requested = parsePermissionString(permissions);
       if (requested === null) {
         return sendError(reply, 400, 'permissions_invalid');
       }
@@ -1310,12 +1308,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     }
     const updated = db.select().from(schema.roles).where(eq(schema.roles.id, roleId)).get();
 
-    // Broadcast updated state to all space members
-    const memberRows = db.select().from(schema.spaceMembers).where(eq(schema.spaceMembers.spaceId, id)).all();
-    for (const m of memberRows) {
-      connectionManager.pushReadyPayload(m.userId);
-    }
-    checkVoicePermissions(id);
+    announceAccessChange(id);
 
     return reply.code(200).send(updated);
   });
@@ -1369,12 +1362,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     });
     normalizeRolePositions(getRawDb(), id);
 
-    // Broadcast updated state to all space members
-    const memberRows = db.select().from(schema.spaceMembers).where(eq(schema.spaceMembers.spaceId, id)).all();
-    for (const m of memberRows) {
-      connectionManager.pushReadyPayload(m.userId);
-    }
-    checkVoicePermissions(id);
+    announceAccessChange(id);
 
     return reply.code(200).send({ success: true });
   });
@@ -1396,8 +1384,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       roleId,
     }).onConflictDoNothing().run();
 
-    connectionManager.pushReadyPayload(uid);
-    checkVoicePermissions(id);
+    announceAccessChange(id);
 
     return reply.code(200).send({ success: true });
   });
@@ -1418,8 +1405,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       eq(schema.memberRoles.roleId, roleId)
     )).run();
 
-    connectionManager.pushReadyPayload(uid);
-    checkVoicePermissions(id);
+    announceAccessChange(id);
 
     return reply.code(200).send({ success: true });
   });

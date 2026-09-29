@@ -6,6 +6,7 @@ import { config } from '../config.js';
 import * as schema from './schema.js';
 import { ensureDefaults, backfillOneOnOneDmMembership } from './migrate.js';
 import { normalizeAllRolePositions } from './rolePositions.js';
+import { normalizeStoredPermissions } from './permissionStrings.js';
 import { setWorkerId } from '../utils/snowflake.js';
 import { backfillOneOnOneKeys } from '../utils/dmConversation.js';
 import { backfillOutboxQueueKeys } from '../utils/federationOutboxQueue.js';
@@ -86,6 +87,13 @@ export function initDatabase() {
   // shows them, so the role hierarchy has something to compare. Roles created
   // before positions were maintained all sit at 0. No-op once applied.
   normalizeAllRolePositions(sqlite);
+
+  // Store every permissions value in the canonical form the routes write, with
+  // the meaning it already had (permissions.md, "Stored form"). No-op once applied.
+  const permissionValuesRewritten = normalizeStoredPermissions(sqlite);
+  if (permissionValuesRewritten > 0) {
+    console.log(`[permissions] rewrote ${permissionValuesRewritten} stored permission value(s) to canonical form`);
+  }
 
   // Initialize Snowflake worker ID from persisted value
   const settings = sqlite.prepare('SELECT worker_id FROM instance_settings WHERE id = 1').get() as { worker_id: number } | undefined;

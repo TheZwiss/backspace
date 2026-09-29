@@ -40,7 +40,6 @@ vi.mock('../ws/handler.js', () => ({
     addUserSpace: vi.fn(),
     sendToSpace: vi.fn(),
     sendToUser: (...args: unknown[]) => sendToUser(...args),
-    pushReadyPayload: vi.fn(),
     getUserSpaceEntries: () => new Map([['owner', new Set(['space-1'])], ['member', new Set(['space-1'])]]).entries(),
   },
 }));

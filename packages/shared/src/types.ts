@@ -595,7 +595,11 @@ export type ServerEvent =
   | { type: 'pong' }
   // `code` is set where the refusal has a stable ErrorCode (e.g. a voice
   // moderation action refused by the role hierarchy); older senders omit it.
-  | { type: 'error'; message: string; code?: ErrorCode };
+  | { type: 'error'; message: string; code?: ErrorCode }
+  // The space's roles or a member's roles changed: what the receiver may see
+  // or do there, and how its roles and members look, may be different now.
+  // The client refetches that space's detail (docs/systems/websocket.md).
+  | { type: 'space_access_changed'; spaceId: string };
 
 // ─── API Request/Response Types ─────────────────────────────────────────────
 

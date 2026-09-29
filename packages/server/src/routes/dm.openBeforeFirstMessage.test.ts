@@ -109,15 +109,9 @@ function createdFor(userId: string): DmChannel[] {
 }
 
 async function readyDmIds(userId: string): Promise<string[]> {
-  const { connectionManager } = await import('../ws/handler.js');
-  const ws: FakeSocket = { readyState: 1, send: vi.fn() };
-  connectionManager.addConnection(userId, ws as never);
-  connectionManager.pushReadyPayload(userId);
-  connectionManager.removeConnection(ws as never);
-  const ready = ws.send.mock.calls
-    .map(([raw]) => JSON.parse(raw as string) as { type: string; dmChannels?: DmChannel[] })
-    .find(e => e.type === 'ready');
-  return (ready?.dmChannels ?? []).map(d => d.id);
+  const { buildReadyPayload } = await import('../ws/handler.js');
+  const ready = JSON.parse(JSON.stringify(buildReadyPayload(userId))) as { dmChannels?: DmChannel[] };
+  return (ready.dmChannels ?? []).map(d => d.id);
 }
 
 async function listedDmIds(app: FastifyInstance, userId: string): Promise<string[]> {
@@ -238,14 +232,9 @@ describe('#360: a 1-on-1 reaches the recipient with its first message', () => {
       expect(await listedDmIds(app, 'carol')).toEqual([opened.dm.id]);
 
       // A reconnect while it rings restores the call.
-      const ws: FakeSocket = { readyState: 1, send: vi.fn() };
-      connectionManager.addConnection('carol', ws as never);
-      connectionManager.pushReadyPayload('carol');
-      connectionManager.removeConnection(ws as never);
-      const ready = ws.send.mock.calls
-        .map(([raw]) => JSON.parse(raw as string) as { type: string; activeCalls?: Array<{ dmChannelId: string | null }> })
-        .find(e => e.type === 'ready');
-      expect(ready?.activeCalls?.map(c => c.dmChannelId)).toEqual([opened.dm.id]);
+      const { buildReadyPayload } = await import('../ws/handler.js');
+      const ready = JSON.parse(JSON.stringify(buildReadyPayload('carol'))) as { activeCalls?: Array<{ dmChannelId: string | null }> };
+      expect(ready.activeCalls?.map(c => c.dmChannelId)).toEqual([opened.dm.id]);
     } finally {
       connectionManager.destroyRoom(opened.dm.id);
     }

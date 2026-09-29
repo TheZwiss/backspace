@@ -137,25 +137,14 @@ describe('dm_call_start: tokens go to the identity they were minted for', () => 
 
   it('a ready payload carries a member\'s own token only', async () => {
     const { processRelayEvents } = await importSUT();
-    const cm = await importManager();
     seedDm('dm-r', 'fed-r', ['bob', 'kai-here']);
     await processRelayEvents([callStart('fed-r', {
       memberTokens: [{ homeUserId: 'bob', homeInstance: 'https://local.example', token: 'tok-bob' }],
     })], 'https://remote.example', 'https://remote.example', testDb);
 
-    // The ready payload goes to the user's sockets; stop pretending every
-    // user is connected so it reaches the one opened below.
-    vi.mocked(cm.getUserConnections).mockRestore();
-    const tokenInReady = (userId: string): string | undefined => {
-      const ws = { readyState: 1, send: vi.fn() };
-      cm.addConnection(userId, ws as never);
-      cm.pushReadyPayload(userId);
-      cm.removeConnection(ws as never);
-      const ready = ws.send.mock.calls
-        .map(([raw]) => JSON.parse(raw as string) as { type: string; activeCalls?: Array<{ federatedCallId?: string; livekitToken?: string }> })
-        .find(e => e.type === 'ready');
-      return ready?.activeCalls?.find(c => c.federatedCallId === 'fed-r')?.livekitToken;
-    };
+    const { buildReadyPayload } = await import('../ws/handler.js');
+    const tokenInReady = (userId: string): string | undefined =>
+      buildReadyPayload(userId).activeCalls.find(c => c.federatedCallId === 'fed-r')?.livekitToken;
     expect(tokenInReady('bob')).toBe('tok-bob');
     expect(tokenInReady('kai-here')).toBeUndefined();
   });

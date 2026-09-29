@@ -40,7 +40,6 @@ vi.mock('../ws/handler.js', () => ({
     addUserSpace: vi.fn(),
     sendToSpace: vi.fn(),
     sendToUser: vi.fn(),
-    pushReadyPayload: vi.fn(),
     getUserSpaceEntries: () => new Map<string, Set<string>>().entries(),
   },
 }));
@@ -303,17 +302,14 @@ describe('role management follows the role hierarchy', () => {
     expect(positions()[SPACE_ID]).toBe(0);
   });
 
-  it('pushes every member a ready payload after a move, which reloads their open role list', async () => {
+  it('tells the space after a move, which refreshes every open role list', async () => {
     const { connectionManager } = await import('../ws/handler.js');
-    const push = vi.mocked(connectionManager.pushReadyPayload);
-    push.mockClear();
+    const announce = vi.mocked(connectionManager.sendToSpace);
+    announce.mockClear();
     as('owner');
     const res = await app.inject({ method: 'PATCH', url: `/api/spaces/${SPACE_ID}/roles/r-member`, payload: { position: 2 } });
     expect(res.statusCode).toBe(200);
-    const pushedTo = new Set(push.mock.calls.map(([userId]) => userId));
-    for (const userId of ['owner', 'mod', 'mod-2', 'helper', 'member', 'plain', 'instance-admin', 'fed-helper']) {
-      expect(pushedTo.has(userId)).toBe(true);
-    }
+    expect(announce).toHaveBeenCalledWith(SPACE_ID, { type: 'space_access_changed', spaceId: SPACE_ID });
   });
 
   it('creates a new role at the bottom, just above @everyone', async () => {

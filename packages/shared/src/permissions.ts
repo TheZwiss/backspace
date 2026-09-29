@@ -56,6 +56,34 @@ export function permissionsToString(perms: bigint): string {
   return perms.toString();
 }
 
+/** A canonical permissions string: a non-negative decimal integer without sign, spaces or leading zeros. */
+const CANONICAL_PERMISSIONS = /^(0|[1-9][0-9]*)$/;
+
+/**
+ * A permissions value from a request body, or null when it is not one. The
+ * wire form is the string `permissionsToString` writes, and every released
+ * client sends exactly that, so only a canonical non-negative decimal string
+ * is accepted: no numbers (a JSON number loses bits above 2^53), no sign, no
+ * hex, no spaces. What is stored is then always canonical
+ * (docs/systems/permissions.md, "Stored form").
+ */
+export function parsePermissionString(value: unknown): bigint | null {
+  if (typeof value !== 'string' || !CANONICAL_PERMISSIONS.test(value)) return null;
+  return BigInt(value);
+}
+
+/**
+ * The canonical form of a stored permissions value, read the way
+ * `stringToPermissions` reads it (so decimal, hex, surrounding spaces and the
+ * legacy JSON name list keep their meaning, and anything unreadable stays
+ * 0). A negative value reads as every bit, defined or not; it becomes the
+ * defined bits, which is the same answer for every permission check.
+ */
+export function canonicalPermissionString(stored: string | undefined | null): string {
+  const bits = stringToPermissions(stored);
+  return permissionsToString(bits < 0n ? bits & ALL_PERMISSIONS : bits);
+}
+
 /** Convert a decimal string back to bigint. Returns 0n for falsy/invalid input. */
 export function stringToPermissions(str: string | undefined | null): bigint {
   if (!str) return 0n;
