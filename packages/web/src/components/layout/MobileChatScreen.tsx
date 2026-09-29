@@ -1,7 +1,10 @@
 import React, { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useVoiceStore } from '../../stores/voiceStore';
+import { wsSend } from '../../hooks/useWebSocket';
 import { useUIStore } from '../../stores/uiStore';
 import { useChatStore } from '../../stores/chatStore';
-import { useSpaceStore } from '../../stores/spaceStore';
+import { getChannelOrigin, useSpaceStore } from '../../stores/spaceStore';
 import { useAuthStore } from '../../stores/authStore';
 import { MessageList } from '../chat/MessageList';
 import { MessageInput } from '../chat/MessageInput';
@@ -19,6 +22,10 @@ interface MobileChatScreenProps {
 }
 
 export function MobileChatScreen({ params }: MobileChatScreenProps) {
+  const { t } = useTranslation(['spaces', 'common']);
+  const outgoingCall = useVoiceStore((s) => s.outgoingCall);
+  const activeDmCall = useVoiceStore((s) => s.activeDmCall);
+  const incomingCall = useVoiceStore((s) => s.incomingCall);
   const popMobileScreen = useUIStore((s) => s.popMobileScreen);
   const pushMobileScreen = useUIStore((s) => s.pushMobileScreen);
 
@@ -49,6 +56,18 @@ export function MobileChatScreen({ params }: MobileChatScreenProps) {
   const rawMainOther = !isGroup ? otherMembers[0] : undefined;
   const canonicalMainOther = useCanonicalUserView((rawMainOther as unknown as User) ?? FALLBACK_USER);
   const dmPartnerDeleted = dm ? isDeletedPartnerDm(dm, authUser) : false;
+  const isCallingThisDm = !!channelId && outgoingCall?.dmChannelId === channelId;
+  const handleCall = () => {
+    if (!channelId || !dm || dmPartnerDeleted) return;
+    const voice = useVoiceStore.getState();
+    if (voice.outgoingCall?.dmChannelId === channelId) {
+      voice.setOutgoingCall(null);
+      wsSend({ type: 'dm_call_end', dmChannelId: channelId, federatedCallId: voice.federatedCallId }, voice.callOrigin || getChannelOrigin(channelId));
+    } else if (!voice.outgoingCall && !voice.activeDmCall && !voice.incomingCall) {
+      voice.setOutgoingCall({ dmChannelId: channelId });
+      wsSend({ type: 'dm_call_start', dmChannelId: channelId }, getChannelOrigin(channelId));
+    }
+  };
 
   // Resolve channel/DM name. Group DMs route through `formatDmHeaderName` so
   // a renamed group shows `dm.name` (previously this surface silently dropped
@@ -89,6 +108,20 @@ export function MobileChatScreen({ params }: MobileChatScreenProps) {
           </h1>
         </div>
         <TransferIndicator />
+        {dm && !dmPartnerDeleted && (
+          <button
+            type="button"
+            onClick={handleCall}
+            disabled={!isCallingThisDm && !!(outgoingCall || activeDmCall || incomingCall)}
+            className={`w-11 h-11 shrink-0 flex items-center justify-center rounded-lg disabled:opacity-50 disabled:cursor-not-allowed ${isCallingThisDm ? 'text-txt-danger bg-accent-rose/10' : 'text-txt-secondary hover:text-txt-primary'}`}
+            aria-label={isCallingThisDm ? t('common:actions.cancel') : t('spaces:main.dm.startVoiceCall')}
+            title={isCallingThisDm ? t('common:actions.cancel') : t('spaces:main.dm.startVoiceCall')}
+          >
+            <svg className={`w-5 h-5 ${isCallingThisDm ? 'rotate-[135deg]' : ''}`} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
+            </svg>
+          </button>
+        )}
         {/* Members button — shown for space channels AND group DMs. 1-on-1
             DMs have no roster, so it stays hidden there. Tapping a space-
             channel button pushes the regular `members` screen; tapping a
