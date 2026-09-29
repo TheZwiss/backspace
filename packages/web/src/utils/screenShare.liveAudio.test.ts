@@ -323,7 +323,7 @@ describe('audio that leaves the publication by itself', () => {
     await publishScreenShare(room, makeStream(makeTrack('video'), makeTrack('audio')));
     // livekit-client unpublishes a ScreenShareAudio track whose source ended.
     pubs.delete(Track.Source.ScreenShareAudio);
-    handleScreenShareAudioUnpublished();
+    handleScreenShareAudioUnpublished(room);
     expect(useVoiceStore.getState().screenShareAudio).toBe('unavailable');
   });
 });

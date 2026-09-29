@@ -34,7 +34,7 @@ import {
   getRequestedPublishedScreenShareCodec,
   handleScreenShareUnpublished,
   handleScreenShareAudioUnpublished,
-  isScreenShareRepublishing,
+  settleScreenShareAfterReconnect,
   resolveNativeOverdrive,
   syncScreenShareAudio,
 } from '../utils/screenShare';
@@ -861,19 +861,18 @@ export function useLiveKit() {
       });
       newRoom.on(RoomEvent.LocalTrackUnpublished, (publication: LocalTrackPublication) => {
         if (publication.source === Track.Source.ScreenShare) {
-          // A codec change unpublishes and republishes the same track. Dropping
-          // ourselves from the watched set there makes the local tile flicker on
-          // every toggle, since only LocalTrackPublished puts it back — so this
-          // half of the teardown honours the republish guard too.
-          if (!isScreenShareRepublishing()) {
+          // screenShare decides whether the share is over: a stop (ours, the
+          // OS stop bar, the source ending) or a republish of the same share
+          // (a codec change, a full reconnect). Only an end drops our own
+          // stream from the watched set; a republish keeps it, or the local
+          // tile would flicker until LocalTrackPublished puts it back.
+          if (handleScreenShareUnpublished(newRoom)) {
             const { userId } = parseIdentity(newRoom.localParticipant.identity);
             useVoiceStore.getState().unwatchStream(userId);
           }
-          // OS-level "Stop sharing" fires this without going through stopScreenShare
-          handleScreenShareUnpublished(newRoom);
         }
         if (publication.source === Track.Source.ScreenShareAudio) {
-          handleScreenShareAudioUnpublished();
+          handleScreenShareAudioUnpublished(newRoom);
         }
         guardedUpdate();
       });
@@ -946,6 +945,9 @@ export function useLiveKit() {
           );
 
           if (connected) {
+            // A full reconnect republished every local track: the share goes
+            // on if its publication came back, and ends here if not.
+            settleScreenShareAfterReconnect(newRoom);
             // On LiveKit reconnect, re-register with WS server (server may have restarted)
             if (connectedChannelRef.current) {
               registerWithServer();
@@ -958,6 +960,8 @@ export function useLiveKit() {
         }
       });
       newRoom.on(RoomEvent.Disconnected, (reason?: DisconnectReason) => {
+        // A full reconnect that gave up: a share it had withdrawn ends here.
+        settleScreenShareAfterReconnect(newRoom);
         if (roomRef.current !== newRoom) return;
         republish.clear();
         // The SDK emits Disconnected before rejecting an initial connect.

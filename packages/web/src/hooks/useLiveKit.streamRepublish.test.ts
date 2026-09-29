@@ -1,7 +1,7 @@
 import { act, cleanup, render, renderHook } from '@testing-library/react';
 import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Room, RoomEvent, DisconnectReason, Track } from 'livekit-client';
+import { Room, RoomEvent, DisconnectReason, Track, ConnectionState } from 'livekit-client';
 import { useLiveKit } from './useLiveKit';
 import { useVoiceStore } from '../stores/voiceStore';
 import { useAuthStore } from '../stores/authStore';
@@ -497,12 +497,13 @@ describe('the sharer\'s own side across a republish', () => {
     });
   }
 
-  function videoCapture(): MediaStream {
+  function videoCapture(withAudio = false): MediaStream {
     const track = {
       kind: 'video', id: 'capture', readyState: 'live', contentHint: '',
       stop: vi.fn(), getSettings: () => ({}), applyConstraints: vi.fn(async () => {}),
     } as unknown as MediaStreamTrack;
-    return new MediaStream([track]);
+    const audio = { kind: 'audio', id: 'loopback', readyState: 'live', stop: vi.fn() } as unknown as MediaStreamTrack;
+    return new MediaStream(withAudio ? [track, audio] : [track]);
   }
 
   /** A viewer's ping as an older client sends it: the sharer's user id as that viewer lists it. */
@@ -515,7 +516,7 @@ describe('the sharer\'s own side across a republish', () => {
     return mocks.audio.playSound.mock.calls.map(([name]) => name as string);
   }
 
-  async function sharing(identity = ME) {
+  async function sharing(identity = ME, { withAudio = false } = {}) {
     const room = await connectedRoom();
     localSharer(room, identity);
     // List ourselves under the identity before the cues start, as a real
@@ -525,7 +526,7 @@ describe('the sharer\'s own side across a republish', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     render(createElement(SoundController));
     act(() => { vi.advanceTimersByTime(1000); });
-    await act(async () => { await publishScreenShare(room, videoCapture()); });
+    await act(async () => { await publishScreenShare(room, videoCapture(withAudio)); });
     expect(cuesPlayed()).toEqual(['stream_started']);
     mocks.audio.playSound.mockClear();
     return room;
@@ -575,6 +576,118 @@ describe('the sharer\'s own side across a republish', () => {
 
     expect(cuesPlayed()).toEqual(['stream_ended']);
     expect(sharerIsListedAsSharing(ME)).toBe(false);
+  });
+
+  describe('a full LiveKit reconnect while sharing', () => {
+    // livekit-client 2.22.3, Room.handleSignalRestarted: with the room in
+    // Reconnecting it calls LocalParticipant.republishAllTracks, which runs
+    // unpublishTrack(track, false) for every local track (LocalTrackUnpublished
+    // fires synchronously, before its first await) and then publishes the same
+    // track again (LocalTrackPublished). Only after that does the room go
+    // Connected. A republish that throws is logged and the room still goes
+    // Connected; a restart that fails ends in handleDisconnect and Disconnected.
+
+    function setState(room: Room, state: ConnectionState): void {
+      (room as { state: ConnectionState }).state = state;
+      act(() => { room.emit(RoomEvent.ConnectionStateChanged, state); });
+    }
+
+    /** The SDK's republishAllTracks: every unpublish first, then the publishes it gets to. */
+    function sdkRepublishAllTracks(room: Room, republish: (source: Track.Source) => boolean): void {
+      const lp = room.localParticipant;
+      const pubs = lp.trackPublications as unknown as Map<string, LocalPub>;
+      const old = [...pubs.values()];
+      act(() => {
+        for (const pub of old) {
+          pubs.delete(pub.trackSid);
+          room.emit(RoomEvent.LocalTrackUnpublished, pub as never, lp);
+        }
+      });
+      act(() => {
+        for (const pub of old) {
+          if (!republish(pub.source)) continue;
+          const again: LocalPub = { ...pub, trackSid: `${pub.trackSid}_R` };
+          pubs.set(again.trackSid, again);
+          room.emit(RoomEvent.LocalTrackPublished, again as never, lp);
+        }
+      });
+    }
+
+    function sharingFlags(): boolean[] {
+      const seen: boolean[] = [];
+      useVoiceStore.subscribe((state) => { seen.push(state.isScreenSharing); });
+      return seen;
+    }
+
+    it('keeps the share, its own tile and its Stop control through the SDK\'s republish', async () => {
+      const room = await sharing();
+      const flags = sharingFlags();
+      const listed = recordSharingFlag(ME);
+
+      setState(room, ConnectionState.Reconnecting);
+      sdkRepublishAllTracks(room, () => true);
+      setState(room, ConnectionState.Connected);
+
+      expect(flags).not.toContain(false);
+      expect(listed).not.toContain(false);
+      expect(useVoiceStore.getState().isScreenSharing).toBe(true);
+      expect(sharerIsListedAsSharing(ME)).toBe(true);
+    });
+
+    it('keeps the system audio on when the SDK republishes it too', async () => {
+      useVoiceStore.setState({
+        screenShareConfig: { ...useVoiceStore.getState().screenShareConfig, shareAudio: true },
+      });
+      const room = await sharing(ME, { withAudio: true });
+      expect(useVoiceStore.getState().screenShareAudio).toBe('published');
+
+      setState(room, ConnectionState.Reconnecting);
+      sdkRepublishAllTracks(room, () => true);
+      setState(room, ConnectionState.Connected);
+
+      expect(useVoiceStore.getState().screenShareAudio).toBe('published');
+    });
+
+    it('ends the share when the reconnect completes without the screen share', async () => {
+      const room = await sharing();
+
+      setState(room, ConnectionState.Reconnecting);
+      sdkRepublishAllTracks(room, (source) => source !== Track.Source.ScreenShare);
+      expect(useVoiceStore.getState().isScreenSharing).toBe(true);
+      setState(room, ConnectionState.Connected);
+
+      expect(useVoiceStore.getState().isScreenSharing).toBe(false);
+      expect(sharerIsListedAsSharing(ME)).toBe(false);
+    });
+
+    it('ends the share when the reconnect fails', async () => {
+      const room = await sharing();
+
+      setState(room, ConnectionState.Reconnecting);
+      sdkRepublishAllTracks(room, () => false);
+      (room as { state: ConnectionState }).state = ConnectionState.Disconnected;
+      act(() => { room.emit(RoomEvent.Disconnected, DisconnectReason.UNKNOWN_REASON); });
+
+      expect(useVoiceStore.getState().isScreenSharing).toBe(false);
+    });
+
+    it('still ends the share when the source ends during a reconnect', async () => {
+      // The shared window closes while the room is Reconnecting: livekit-client
+      // unpublishes the ended track, and nothing publishes it again.
+      const room = await sharing();
+
+      setState(room, ConnectionState.Reconnecting);
+      const lp = room.localParticipant;
+      const pubs = lp.trackPublications as unknown as Map<string, LocalPub>;
+      const video = [...pubs.values()].find((p) => p.source === Track.Source.ScreenShare)!;
+      act(() => {
+        pubs.delete(video.trackSid);
+        room.emit(RoomEvent.LocalTrackUnpublished, video as never, lp);
+      });
+      setState(room, ConnectionState.Connected);
+
+      expect(useVoiceStore.getState().isScreenSharing).toBe(false);
+    });
   });
 
   describe('when the sharer\'s id differs between instances', () => {
