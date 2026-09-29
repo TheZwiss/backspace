@@ -8,6 +8,7 @@ import { useSpaceStore } from '../../stores/spaceStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useFloatingPosition } from '../../hooks/useFloatingPosition';
 import { usePortalContainer } from '../../hooks/usePortalContainer';
+import { useDismissOnEscape } from '../../hooks/useDismissOnEscape';
 import { getCanonicalUserView } from '../../utils/userViewLookup';
 import { parseFederatedUsername } from '../../utils/identity';
 import { isOwnReaction, reactionSentence, summarizeReactors } from './reactionSummary';
@@ -93,23 +94,10 @@ export function ReactionPill({ emoji, reactions, onToggle }: ReactionPillProps) 
     setOpen(false);
   };
 
-  // Escape dismisses the tooltip however it opened (WCAG 1.4.13), and cancels
-  // one still waiting out its delay. A hovered pill does not have focus, so
-  // its own keydown never sees the key; listen on the document while a show
-  // is pending or the tooltip is open. It stays closed until the pointer or
-  // focus leaves and comes back.
-  const escapeArmed = pending || tooltipOpen;
-  useEffect(() => {
-    if (!escapeArmed) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      clearTimeout(showTimerRef.current);
-      setPending(false);
-      setOpen(false);
-    };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [escapeArmed]);
+  // Escape dismisses the tooltip however it opened, and cancels one still
+  // waiting out its delay; it stays closed until the pointer or focus leaves
+  // and comes back.
+  useDismissOnEscape(pending || tooltipOpen, hide);
 
   return (
     <>
