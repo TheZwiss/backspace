@@ -418,3 +418,18 @@ membership is binary so the two candidate predicates coincide.
 
 Covered by `packages/server/src/routes/messages.replyAuthorization.test.ts` and
 `packages/server/src/routes/dm.replyAuthorization.test.ts`.
+
+## Mass mentions
+
+`MENTION_EVERYONE` (bit 15) gates `@everyone`, `@here`, and `<@&roleId>`
+on both REST and WebSocket space-message create **and edit** paths. It is not
+granted by the default everyone role; owner/admin and channel override rules
+apply normally. Unauthorized mass-mention messages are rejected, not rewritten.
+Individual `<@userId>` mentions need no extra permission. Tokens in backtick
+inline/fenced code are ignored by mention parsing.
+
+The composer offers mass-mention candidates only with this permission. Role
+tokens render with role names/colors rather than user-profile links.
+`@here` currently has the same real-time recipient semantics as `@everyone`;
+there is no separate online-only audience check. Actual alerts remain subject
+to each recipient's notification settings and channel visibility.

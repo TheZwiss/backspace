@@ -637,3 +637,25 @@ POST /csp-report     (no auth) -> 204
 ```
 
 **`POST /api/csp-report`** is the Content Security Policy violation sink named by the policy's `report-uri` and `report-to`. Unauthenticated on purpose: a violation can happen on the login screen before any token exists. It registers content-type parsers for `application/csp-report` and `application/reports+json` in addition to the built-in `application/json`. Fastify ships parsers for neither of the first two and would otherwise answer 415, leaving an empty report log that looks exactly like a clean policy. It answers `204` to everything, including a malformed body, because a browser cannot act on an error and would only retry. It reads at most 16 KB off the wire and logs at most 4096 characters per report at `warn` level with the message `CSP violation reported`. Registered after `@fastify/rate-limit` so the shared 200/minute limit applies; that ordering is load-bearing. See `docs/systems/web-security.md`.
+
+## Notification settings
+
+Authenticated endpoints on the target's hosting instance:
+
+- `GET /api/users/@me/notification-settings`: the caller's settings array.
+- `PUT /api/users/@me/notification-settings/:targetType/:targetId`: replaces
+  one setting; requires membership of the target space. Missing targets return
+  404, nonmembers 403, invalid fields 400.
+
+PUT body (all four fields required):
+
+```json
+{"level":"mentions","mutedUntil":null,"suppressEveryone":false,"suppressRoles":false}
+```
+
+`level` accepts null, all, mentions, nothing. `mutedUntil` accepts null or a
+positive safe integer in Unix milliseconds; 9007199254740991 means permanent.
+The boolean suppression flags are space-only: channel requests with either
+flag true are rejected, not silently rewritten. Responses contain the body
+plus `targetType` and `targetId`. Writes upsert only the authenticated user's
+row and publish `notification_setting_updated` to all their local sessions.

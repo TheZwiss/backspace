@@ -37,6 +37,7 @@ export const PERMISSION_GROUPS: { id: PermissionGroupId; perms: PermDef[] }[] = 
       { bit: PermissionBits.SEND_MESSAGES, key: 'SEND_MESSAGES' },
       { bit: PermissionBits.MANAGE_MESSAGES, key: 'MANAGE_MESSAGES' },
       { bit: PermissionBits.ATTACH_FILES, key: 'ATTACH_FILES' },
+      { bit: PermissionBits.MENTION_EVERYONE, key: 'MENTION_EVERYONE' },
       { bit: PermissionBits.READ_MESSAGE_HISTORY, key: 'READ_MESSAGE_HISTORY' },
       { bit: PermissionBits.ADD_REACTIONS, key: 'ADD_REACTIONS' },
     ],
