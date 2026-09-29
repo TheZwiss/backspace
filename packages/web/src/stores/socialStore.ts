@@ -37,7 +37,7 @@ interface SocialState {
    * Send a friend request from the home instance. A typed handle is
    * `{ username }`; a user the client holds is named by `friendRequestTarget`.
    */
-  sendFriendRequest: (target: SendFriendRequest) => Promise<string | undefined>;
+  sendFriendRequest: (target: SendFriendRequest | string) => Promise<string | undefined>;
   updateFriendRequest: (id: string, status: 'accepted' | 'declined') => Promise<void>;
   cancelFriendRequest: (id: string) => Promise<void>;
   removeFriend: (id: string) => Promise<void>;
@@ -189,12 +189,13 @@ export const useSocialStore = create<SocialState>((set, get) => ({
     }
   },
 
-  sendFriendRequest: async (target: SendFriendRequest) => {
+  sendFriendRequest: async (target: SendFriendRequest | string) => {
     set({ isLoading: true, error: null });
     try {
-      const body: SendFriendRequest = target.username === undefined
-        ? target
-        : { ...target, username: target.username.trim() };
+      const input: SendFriendRequest = typeof target === 'string' ? { username: target } : target;
+      const body: SendFriendRequest = input.username === undefined
+        ? input
+        : { ...input, username: input.username.trim() };
       const res = await api.social.sendRequest(body);
       set({ isLoading: false });
       // Server emits friend_request_sent over WS; useWebSocket appends the row

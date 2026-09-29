@@ -6,6 +6,8 @@ node_modules/
 dist/
 dist-electron/
 installers/
+output/
+*.tar
 packages/web/dist/
 packages/server/dist/
 packages/shared/dist/

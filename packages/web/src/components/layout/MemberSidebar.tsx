@@ -11,10 +11,13 @@ import { getPrimaryActivity } from '@backspace/shared/src/activities.js';
 import { parseFederatedUsername, isFederationGlobeApplicable, userDisplayName } from '../../utils/identity';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { useDelayedLoading } from '../../hooks/useDelayedLoading';
+import { OwnerTitleHeading } from './OwnerTitleHeading';
+import { useMemberContextMenu } from './memberMenu/useMemberContextMenu';
+import { useContextMenuStore } from '../../stores/contextMenuStore';
 
 /**
- * Which heading a member group renders under: the owner and the plain
- * "online" bucket are translated, a role group shows the role's own name.
+ * Owner headings are editable separately; online and role groups keep their
+ * translated label or assigned role name.
  */
 type MemberGroupKind = 'owner' | 'role' | 'online';
 
@@ -65,6 +68,11 @@ function getMemberGroup(member: MemberWithUser, ownerId: string | undefined): Me
   };
 }
 
+function memberNameTone(isOffline: boolean, colored: boolean): string {
+  if (colored) return isOffline ? 'opacity-60' : '';
+  return isOffline ? 'text-txt-tertiary' : 'text-txt-primary';
+}
+
 function MemberSidebarRow({
   member,
   isOffline,
@@ -73,6 +81,7 @@ function MemberSidebarRow({
   isRichActivity,
   accentClass,
   onClickMember,
+  onContextMenuMember,
 }: {
   member: MemberWithUser;
   isOffline: boolean;
@@ -80,10 +89,11 @@ function MemberSidebarRow({
   activities: Activity[];
   isRichActivity: boolean;
   accentClass: string;
+  onContextMenuMember: (e: React.MouseEvent, member: MemberWithUser, user: MemberWithUser['user']) => void;
   onClickMember: (e: React.MouseEvent, member: MemberWithUser, user: MemberWithUser['user']) => void;
 }) {
   const canonical = useCanonicalUserView(member.user);
-  const displayName = userDisplayName(canonical);
+  const displayName = member.nickname ?? userDisplayName(canonical);
 
   const rowClass = isRichActivity
     ? `flex items-center gap-2.5 px-2.5 py-2 rounded-[10px] mb-1 cursor-pointer transition-colors glass-pill border-l-2 ${accentClass}`
@@ -93,6 +103,8 @@ function MemberSidebarRow({
     <div
       key={member.userId}
       onClick={(e) => onClickMember(e, member, canonical)}
+      onContextMenu={(e) => onContextMenuMember(e, member, canonical)}
+      data-context-menu
       className={rowClass}
     >
       <Avatar
@@ -105,13 +117,14 @@ function MemberSidebarRow({
       />
       <div className="flex-1 min-w-0">
         <span
-          className={`text-[13.5px] leading-[1.2] font-medium truncate ${colorStyle ? (isOffline ? 'opacity-60' : '') : (isOffline ? 'text-txt-tertiary' : 'text-txt-primary')}`}
+          className={`block text-[13.5px] leading-[1.2] font-medium truncate ${colorStyle ? (isOffline ? 'opacity-60' : '') : (isOffline ? 'text-txt-tertiary' : 'text-txt-primary')}`}
           style={colorStyle}
+          title={displayName}
         >
           {displayName}
         </span>
         {!isOffline && isFederationGlobeApplicable(canonical) && (
-          <div className="text-[10px] leading-[1.3] text-txt-tertiary truncate opacity-60">@{parseFederatedUsername(canonical.username).domain}</div>
+          <div className="text-[10px] leading-[1.3] text-txt-tertiary truncate opacity-60" title={`@${parseFederatedUsername(canonical.username).domain}`}>@{parseFederatedUsername(canonical.username).domain}</div>
         )}
         {!isOffline && (
           <ActivityCard
@@ -137,6 +150,7 @@ export function MemberSidebar() {
 
   const space = spaces.find(s => s.id === currentSpaceId);
   const ownerId = space?.ownerId;
+  const memberMenu = useMemberContextMenu(space);
   const spaceOrigin = space?._instanceOrigin ?? '';
 
   const { roleGroups, offlineMembers } = useMemo(() => {
@@ -179,11 +193,12 @@ export function MemberSidebar() {
 
   const handleMemberClick = (e: React.MouseEvent, member: MemberWithUser, user: MemberWithUser['user']) => {
     e.stopPropagation();
+    // Left click always means profile, regardless of the viewer's permissions.
+    useContextMenuStore.getState().close();
     openUserProfile(user, e.currentTarget.getBoundingClientRect(), 'left', { spaceId: member.spaceId, userId: member.userId });
   };
 
   const groupHeading = (kind: MemberGroupKind, label: string | null): string => {
-    if (kind === 'owner') return t('spaces:members.groups.owner');
     if (kind === 'online') return t('common:states.online');
     return label ?? '';
   };
@@ -206,12 +221,15 @@ export function MemberSidebar() {
         isRichActivity={isRichActivity}
         accentClass={accentClass}
         onClickMember={handleMemberClick}
+        onContextMenuMember={memberMenu.open}
       />
     );
   };
 
   return (
-    <div className="w-60 bg-surface-members flex-shrink-0 overflow-y-auto select-none no-scrollbar hidden desktop:block border-l border-border-hard">
+    <>
+    {memberMenu.dialogs}
+    <div className="w-60 bg-surface-members flex-shrink-0 overflow-y-auto overflow-x-hidden select-none no-scrollbar hidden desktop:block border-l border-border-hard">
       {showMemberSkeleton ? (
         <div className="px-3 pt-4" role="status" aria-label={t('spaces:members.loading')}>
           {/* Role group 1 */}
@@ -236,9 +254,13 @@ export function MemberSidebar() {
         {/* Role-based groups */}
         {roleGroups.map(([key, group]) => (
           <div key={key} className="mb-4">
-            <h3 className="text-[10.5px] font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
-              {groupHeading(group.kind, group.label)} — {formatNumber(group.members.length)}
-            </h3>
+            {group.kind === 'owner' && space ? (
+              <OwnerTitleHeading key={space.id} space={space} count={group.members.length} />
+            ) : (
+              <h3 className="text-[10.5px] font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1 truncate" title={`${groupHeading(group.kind, group.label)} — ${formatNumber(group.members.length)}`}>
+                {groupHeading(group.kind, group.label)} — {formatNumber(group.members.length)}
+              </h3>
+            )}
             {group.members.map((m) => renderMember(m))}
           </div>
         ))}
@@ -246,7 +268,7 @@ export function MemberSidebar() {
         {/* Offline */}
         {offlineMembers.length > 0 && (
           <div>
-            <h3 className="text-[10.5px] font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
+            <h3 className="text-[10.5px] font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1 truncate" title={`${t('common:states.offline')} — ${formatNumber(offlineMembers.length)}`}>
               {t('common:states.offline')} — {formatNumber(offlineMembers.length)}
             </h3>
             {offlineMembers.map((m) => renderMember(m, true))}
@@ -255,5 +277,6 @@ export function MemberSidebar() {
       </div>
       )}
     </div>
+    </>
   );
 }

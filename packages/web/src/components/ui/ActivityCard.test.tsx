@@ -25,17 +25,23 @@ describe('ActivityCard', () => {
 
     render(<ActivityCard activities={[activity]} />);
 
-    expect(screen.getByText('Escape from Tarkov')).toBeInTheDocument();
+    const titleEl = screen.getByText('Escape from Tarkov');
+    expect(titleEl).toBeInTheDocument();
+    expect(titleEl).toHaveAttribute('title', 'Escape from Tarkov');
     expect(screen.getByText('Прошло 32 мин.')).toBeInTheDocument();
   });
 
   it('renders emoji shortcodes in a custom status (issue #252)', () => {
     render(<ActivityCard activities={[{ type: 'custom', name: 'on call :pager:' }]} />);
-    expect(screen.getByText('on call 📟')).toBeInTheDocument();
+    const el = screen.getByText('on call 📟');
+    expect(el).toBeInTheDocument();
+    expect(el).toHaveAttribute('title', 'on call 📟');
   });
 
   it('renders emoji shortcodes in the fallback custom status', () => {
     render(<ActivityCard activities={[]} fallbackCustomStatus="on call :pager:" />);
-    expect(screen.getByText('on call 📟')).toBeInTheDocument();
+    const el = screen.getByText('on call 📟');
+    expect(el).toBeInTheDocument();
+    expect(el).toHaveAttribute('title', 'on call 📟');
   });
 });

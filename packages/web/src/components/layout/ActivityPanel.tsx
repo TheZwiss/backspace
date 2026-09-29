@@ -48,9 +48,9 @@ function ActivityFriendRow({
         avatarColor={canonical.avatarColor}
       />
       <div className="flex-1 min-w-0">
-        <span className={`text-[13.5px] leading-[1.2] font-medium truncate ${isOffline ? 'text-txt-tertiary' : 'text-txt-primary'}`}>{friendDisplayName}</span>
+        <span className={`block text-[13.5px] leading-[1.2] font-medium truncate ${isOffline ? 'text-txt-tertiary' : 'text-txt-primary'}`} title={friendDisplayName}>{friendDisplayName}</span>
         {!isOffline && isFederationGlobeApplicable(canonical) && (
-          <div className="text-[10px] leading-[1.3] text-txt-tertiary truncate opacity-60">@{parseFederatedUsername(canonical.username).domain}</div>
+          <div className="text-[10px] leading-[1.3] text-txt-tertiary truncate opacity-60" title={`@${parseFederatedUsername(canonical.username).domain}`}>@{parseFederatedUsername(canonical.username).domain}</div>
         )}
         {!isOffline && (
           <ActivityCard
@@ -144,7 +144,7 @@ export function ActivityPanel() {
   };
 
   return (
-    <div className="w-60 bg-surface-channel flex-shrink-0 overflow-y-auto select-none no-scrollbar hidden desktop:block border-l border-border-hard">
+    <div className="w-60 bg-surface-channel flex-shrink-0 overflow-y-auto overflow-x-hidden select-none no-scrollbar hidden desktop:block border-l border-border-hard">
       <div className="p-3">
         <h3 className="text-[20px] font-bold text-txt-primary mb-4 px-2">{t('social:activity.title')}</h3>
 

@@ -602,3 +602,17 @@ Per-remote credential this user's client presents when registering or logging in
 **Lifecycle:** created get-or-create with `onConflictDoNothing` + re-read (first-writer-wins — a racing write never replaces a stored secret). Deleted by `tombstoneUser` (explicitly: a tombstone keeps the `users` row, so the CASCADE never fires and live credentials would otherwise outlive the account) and by `POST /api/users/@me/federation-identity/delete` in `soft`/`full` mode. **Not** deleted in `leave` mode — the remote account survives and keeps authenticating with the secret.
 
 **Migration note:** `0011` is a bare `CREATE TABLE`. It reads and rewrites nothing, so it is forward-safe on a populated database and idempotent on re-run. Restoring a **pre-**`0011` backup into a **post-**`0011` deployment works — `migrate()` re-applies `0011` on boot — but any credential rows written after the snapshot are lost, and the client will mint fresh secrets for those origins. Recovery is automatic while a remote token is still valid (`provisioned_at` comes back NULL, so `ensureRemoteCredential` rotates the remote onto the new secret); otherwise the user re-authenticates through the per-instance login form once. See `deployment.md`.
+
+## Per-user notification settings
+
+Migration `0020_notification_settings.sql` adds `notification_settings`.
+Its primary key is `(user_id, target_type, target_id)`; targets are spaces or
+channels. The user FK cascades on deletion; space/channel deletion explicitly
+removes target rows because the polymorphic target has no FK.
+
+Fields: nullable `level` (all/mentions/nothing; null inherits), nullable
+`muted_until` (UTC Unix milliseconds; null means not muted), integer boolean
+`suppress_everyone` and `suppress_roles`, plus `updated_at`.
+`Number.MAX_SAFE_INTEGER` represents permanent mute. Settings live on the
+instance hosting the target, including for replicated users; no home-instance
+preference replication is required. Read states are unchanged.

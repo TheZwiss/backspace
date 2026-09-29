@@ -76,9 +76,9 @@ function ActivityFriendItem({
         avatarColor={canonical.avatarColor}
       />
       <div className="flex-1 min-w-0">
-        <span className={`text-sm leading-[1.2] font-medium truncate ${isOffline ? 'text-txt-tertiary' : 'text-txt-primary'}`}>{friendDisplayName}</span>
+        <span className={`block text-sm leading-[1.2] font-medium truncate ${isOffline ? 'text-txt-tertiary' : 'text-txt-primary'}`} title={friendDisplayName}>{friendDisplayName}</span>
         {!isOffline && isFederationGlobeApplicable(canonical) && (
-          <div className="text-[10px] leading-[1.3] text-txt-tertiary truncate opacity-60">@{parseFederatedUsername(canonical.username).domain}</div>
+          <div className="text-[10px] leading-[1.3] text-txt-tertiary truncate opacity-60" title={`@${parseFederatedUsername(canonical.username).domain}`}>@{parseFederatedUsername(canonical.username).domain}</div>
         )}
         {!isOffline && (
           <ActivityCard

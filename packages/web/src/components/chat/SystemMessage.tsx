@@ -1,4 +1,5 @@
 import type { DmChannel, MessageWithUser, SpaceInviteSystemPayload, User } from '@backspace/shared';
+import { useTranslation } from 'react-i18next';
 import { SpaceInviteCard } from './SpaceInviteCard';
 
 interface SystemMessageProps {
@@ -32,6 +33,7 @@ function resolveActorName(message: MessageWithUser, dm?: Pick<DmChannel, 'member
  * Exported so unit tests can render it directly without mounting MessageList.
  */
 export function SystemMessage({ message, dm }: SystemMessageProps) {
+  const { t } = useTranslation('chat');
   let data: Record<string, unknown> = {};
   try { data = JSON.parse(message.content ?? '{}'); } catch { /* fall through to default branch */ }
 
@@ -49,6 +51,10 @@ export function SystemMessage({ message, dm }: SystemMessageProps) {
   let text = '';
   let icon = '';
   switch (data.event) {
+    case 'channel_poke':
+      // Names are snapshots from the host; loading history must never replay animations.
+      text = t('poke.received', { actor: data.username, target: data.targetUsername });
+      break;
     case 'member_added':
       icon = '→'; // →
       text = `${actorName} added ${data.targetDisplayName} to the group`;

@@ -51,6 +51,7 @@ export const users = sqliteTable('users', {
 }));
 
 export const spaces = sqliteTable('spaces', {
+  ownerTitle: text('owner_title'),
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   icon: text('icon'),
@@ -98,6 +99,7 @@ export const channels = sqliteTable('channels', {
 }));
 
 export const messages = sqliteTable('messages', {
+  type: text('type', { enum: ['user', 'system'] }).notNull().default('user'),
   id: text('id').primaryKey(),
   channelId: text('channel_id').notNull().references(() => channels.id, { onDelete: 'cascade' }),
   userId: text('user_id').notNull().references(() => users.id),
@@ -304,6 +306,24 @@ export const readStates = sqliteTable('read_states', {
 }, (table) => ({
   pk: primaryKey({ columns: [table.userId, table.channelId] }),
   userIdx: index('idx_read_states_user_id').on(table.userId),
+}));
+
+// Per-user alert preferences for a space or one of its channels
+// (NotificationSetting in shared/types.ts). No FK on target_id: one table
+// serves both target kinds; the space and channel delete routes remove the
+// rows. Snowflake ids never collide across kinds, so the index is by id alone.
+export const notificationSettings = sqliteTable('notification_settings', {
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  targetType: text('target_type').notNull(), // 'space' | 'channel'
+  targetId: text('target_id').notNull(),
+  level: text('level'), // NotificationLevel | null (inherit)
+  mutedUntil: integer('muted_until'),
+  suppressEveryone: integer('suppress_everyone').notNull().default(0),
+  suppressRoles: integer('suppress_roles').notNull().default(0),
+  updatedAt: integer('updated_at').notNull(),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.userId, table.targetType, table.targetId] }),
+  targetIdx: index('idx_notification_settings_target').on(table.targetId),
 }));
 
 export const spaceFolders = sqliteTable('space_folders', {
@@ -631,3 +651,16 @@ export const inviteRedemptions = sqliteTable('invite_redemptions', {
   inviteIdx: index('idx_invite_redemptions_invite_id').on(table.inviteId),
   userIdx: index('idx_invite_redemptions_user_id').on(table.userId),
 }));
+
+// Assets outlive personal collections so removing a favorite cannot break message history.
+export const stickerAssets = sqliteTable('sticker_assets', {
+  id: text('id').primaryKey(),
+  createdAt: integer('created_at').notNull(),
+});
+
+export const personalStickers = sqliteTable('personal_stickers', {
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  stickerId: text('sticker_id').notNull().references(() => stickerAssets.id),
+  name: text('name').notNull(),
+  createdAt: integer('created_at').notNull(),
+}, (table) => ({ pk: primaryKey({ columns: [table.userId, table.stickerId] }) }));

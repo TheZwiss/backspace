@@ -16,6 +16,10 @@ export const PermissionBits = {
   ATTACH_FILES:         1n << 12n,
   READ_MESSAGE_HISTORY: 1n << 13n,
   ADD_REACTIONS:        1n << 14n,
+  // Lets `@everyone`, `@here` and role mentions be sent. Without it the server
+  // rejects such a message (see shared/src/mentions.ts). Deliberately not in
+  // DEFAULT_EVERYONE_PERMISSIONS: mass pings are granted per role.
+  MENTION_EVERYONE:     1n << 15n,
   CONNECT:              1n << 20n,
   SPEAK:                1n << 21n,
   MUTE_MEMBERS:         1n << 22n,

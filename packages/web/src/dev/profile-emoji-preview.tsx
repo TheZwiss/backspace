@@ -113,7 +113,7 @@ function Rows({ user }: { user: User }) {
         <div className="flex items-center gap-2.5 px-2 py-1.5 rounded-[4px]">
           <Avatar src={null} name={displayName} size={32} status="online" user={user} />
           <div className="flex-1 min-w-0">
-            <span className="text-[13.5px] leading-[1.2] font-medium truncate text-txt-primary">{displayName}</span>
+            <span className="block text-[13.5px] leading-[1.2] font-medium truncate text-txt-primary" title={displayName}>{displayName}</span>
             <ActivityCard activities={[]} fallbackCustomStatus={user.customStatus} />
           </div>
         </div>

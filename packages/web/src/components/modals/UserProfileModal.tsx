@@ -10,10 +10,10 @@ import { ProfileBio } from '../ui/ProfileBio';
 import { useUIStore, type ProfileMemberContext } from '../../stores/uiStore';
 import { useSpaceStore, getApiForOrigin, resolveUserOrigin } from '../../stores/spaceStore';
 import { api } from '../../api/client';
-import { useSocialStore, type TaggedFriend, type TaggedFriendRequest } from '../../stores/socialStore';
+import { useSocialStore } from '../../stores/socialStore';
 import { useAuthStore } from '../../stores/authStore';
 import { getAvatarGradient, getSpaceGradient, adjustColor, mutedGradient } from '../../utils/gradients';
-import { parseFederatedUsername, isSelf, canonicalUserMatch } from '../../utils/identity';
+import { parseFederatedUsername } from '../../utils/identity';
 import { loadFederatedMutuals, type TaggedMutualFriend, type MutualSpace } from '../../utils/mutuals';
 import { friendRequestTarget } from '../../utils/friendRequestTarget';
 import { presenceLabel } from '../../i18n/presence';
@@ -21,41 +21,11 @@ import { replaceEmojiShortcodes } from '../../utils/emojiShortcodes';
 import { getProfileMember, useProfileMemberRoles } from '../../hooks/useProfileMember';
 import { useShownStatus } from '../../hooks/useShownStatus';
 import { ProfileRoles } from '../ui/ProfileRoles';
+import { ProfileSpaceNickname } from '../ui/ProfileSpaceNickname';
+
+import { getFriendshipStatus, type FriendshipStatus } from '../../utils/friendshipStatus';
 
 type Tab = 'about' | 'friends' | 'spaces';
-
-type FriendshipStatus =
-  | { state: 'self' }
-  | { state: 'friends'; friend: TaggedFriend }
-  | { state: 'outbound_pending'; request: TaggedFriendRequest }
-  | { state: 'inbound_pending'; request: TaggedFriendRequest }
-  | { state: 'none' };
-
-function getFriendshipStatus(
-  viewedUser: User,
-  currentUser: User | null,
-  friends: TaggedFriend[],
-  requests: TaggedFriendRequest[],
-): FriendshipStatus {
-  if (!currentUser) return { state: 'none' };
-  if (isSelf(viewedUser, currentUser)) return { state: 'self' };
-
-  const friend = friends.find(f => canonicalUserMatch(f, viewedUser));
-  if (friend) return { state: 'friends', friend };
-
-  const request = requests.find(r =>
-    r.user && canonicalUserMatch(r.user, viewedUser)
-  );
-  if (request?.user) {
-    // request.user is the OTHER party. If their ID === toId, then I am fromId (outbound)
-    const isOutbound = request.user.id === request.toId;
-    return isOutbound
-      ? { state: 'outbound_pending', request }
-      : { state: 'inbound_pending', request };
-  }
-
-  return { state: 'none' };
-}
 
 export function UserProfileModal() {
   const { t } = useTranslation(['social', 'common']);
@@ -93,7 +63,7 @@ export function UserProfileModal() {
 
   // Determine friendship status (federation-safe canonical matching)
   const friendship: FriendshipStatus = user
-    ? getFriendshipStatus(user, currentUser, friends, requests)
+    ? getFriendshipStatus({ viewedUser: user, currentUser, friends, requests })
     : { state: 'none' };
 
   const loadUser = useCallback(async (id: string, origin: string) => {
@@ -309,6 +279,7 @@ export function UserProfileModal() {
           />
 
           <div className="mb-3">
+            <ProfileSpaceNickname member={memberContext} />
             <span className="text-[20px] font-bold leading-tight">{displayName}</span>
             <div className="text-[14px] text-txt-tertiary mt-0.5">
               <Username username={user.username} showAt className="text-[14px] text-txt-tertiary" />

@@ -470,6 +470,7 @@
     "aboveYouShort": "与您的最高身份组同级或更高"
   },
   "sidebar": {
+    "dmUnreadMessages": "{{quantity}} 条未读私信",
     "directMessages": "私信列表",
     "addSpace": "添加空间",
     "joinSpace": "加入空间",
@@ -503,7 +504,8 @@
         "description": "确定要退出此空间吗？重新加入需要新的邀请链接。"
       },
       "left": "已退出空间",
-      "leaveFailed": "退出空间失败"
+      "leaveFailed": "退出空间失败",
+      "unreadMessages": "{{quantity}} 条未读消息"
     },
     "dmList": {
       "explore": "探索",
@@ -564,6 +566,23 @@
     "loading": "正在加载成员",
     "groups": {
       "owner": "拥有者"
+    },
+    "ownerTitle": {
+      "edit": "修改拥有者头衔",
+      "label": "拥有者头衔",
+      "hint": "仅在当前空间内对所有成员可见，长度为 1–{{max}} 个字符，不影响权限。",
+      "reset": "恢复默认"
+    },
+    "menu": {
+      "profile": "查看个人资料",
+      "nickname": "修改空间昵称…",
+      "roles": "角色 / 权限组"
+    },
+    "nickname": {
+      "title": "修改空间昵称",
+      "label": "空间昵称",
+      "description": "仅在当前空间生效，不会修改账号昵称或其他空间的昵称。",
+      "reset": "恢复默认"
     }
   },
   "mobile": {
@@ -609,5 +628,35 @@
     "loading": "正在加载成员…",
     "success": "已将所有权转让给 {{name}}",
     "failed": "转让所有权失败"
+  },
+  "notifications": {
+    "title": "通知设置",
+    "description": "免打扰仅关闭提示音和系统通知，消息与未读标记不受影响。空间静音也会覆盖频道的独立设置。",
+    "level": "提醒范围",
+    "inherit": "使用默认 / 跟随空间",
+    "all": "全部消息",
+    "mentions": "仅提及我",
+    "nothing": "不提醒",
+    "mute": "免打扰",
+    "off": "关闭",
+    "minutes15": "15 分钟",
+    "hour1": "1 小时",
+    "hours8": "8 小时",
+    "forever": "直到手动关闭",
+    "existing": "保留当前静音时间",
+    "suppressEveryone": "屏蔽 @everyone 和 @here 提醒",
+    "suppressRoles": "屏蔽 @身份组 提醒",
+    "save": "保存",
+    "saving": "保存中…",
+    "permission": "提及 @everyone、@here 和身份组",
+    "unmute": "取消免打扰",
+    "muted": "已开启免打扰",
+    "active": "未开启免打扰",
+    "expiringNow": "即将到期",
+    "remainingMinutes_one": "剩余 {{count}} 分钟",
+    "remainingMinutes_other": "剩余 {{count}} 分钟",
+    "remainingHours_one": "剩余 {{count}} 小时",
+    "remainingHours_other": "剩余 {{count}} 小时",
+    "remainingHoursMinutes": "剩余 {{hours}} 小时 {{minutes}} 分钟"
   }
 }

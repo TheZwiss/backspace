@@ -46,20 +46,22 @@ export function ActivityCard({ activities, fallbackCustomStatus }: ActivityCardP
 
   if (!primary) {
     if (fallbackCustomStatus) {
-      return <div className="text-[11px] leading-[1.3] text-txt-tertiary truncate">{replaceEmojiShortcodes(fallbackCustomStatus)}</div>;
+      const statusText = replaceEmojiShortcodes(fallbackCustomStatus);
+      return <div className="text-[11px] leading-[1.3] text-txt-tertiary truncate" title={statusText}>{statusText}</div>;
     }
     return null;
   }
 
   // Custom status — plain text, no card treatment
   if (primary.type === 'custom') {
-    return <div className="text-[11px] leading-[1.3] text-txt-tertiary truncate">{replaceEmojiShortcodes(primary.name)}</div>;
+    const statusText = replaceEmojiShortcodes(primary.name);
+    return <div className="text-[11px] leading-[1.3] text-txt-tertiary truncate" title={statusText}>{statusText}</div>;
   }
 
   // Rich activity — app name + elapsed (card wrapper is on the parent row)
   return (
     <>
-      <div className="text-[11px] leading-[1.3] text-txt-secondary truncate">
+      <div className="text-[11px] leading-[1.3] text-txt-secondary truncate" title={primary.name}>
         {primary.name}
       </div>
       {primary.timestamps?.start && (

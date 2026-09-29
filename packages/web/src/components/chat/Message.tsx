@@ -1,3 +1,9 @@
+import { stickerUrl } from '@backspace/shared/src/stickers';
+import { StickerMessage } from './StickerMessage';
+import { insertComposerMention } from './useComposerMention';
+import { useChannelActivityStore } from '../../stores/channelActivityStore';
+import { getChannelOrigin } from '../../stores/spaceStore';
+import { wsSend } from '../../hooks/useWebSocket';
 import { layoutRect, layoutPixels } from '../../platform/interfaceScale';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -20,7 +26,7 @@ import { AttachmentProgress } from './AttachmentProgress';
 import { EmbedRenderer } from './EmbedRenderer';
 import { FederationGlobeIcon } from '../ui/Username';
 import { Tooltip } from '../ui/Tooltip';
-import { EmojiPicker } from './EmojiPicker';
+import { ReactionPickerPopover } from './ReactionPickerPopover';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import { isDeletedPartnerDm } from '../../utils/dmFormatters';
 import { isFederationGlobeApplicable, isSelf, resolveDisplayIdentity, userDisplayName } from '../../utils/identity';
@@ -152,7 +158,6 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
   const confirmDeleteTimeout = useRef<ReturnType<typeof setTimeout>>();
   const editTextareaRef = useRef<HTMLTextAreaElement>(null);
   const reactionPickerBtnRef = useRef<HTMLButtonElement>(null);
-  const reactionPickerRef = useRef<HTMLDivElement>(null);
   const currentUser = useAuthStore((s) => s.user);
   const editMessage = useChatStore((s) => s.editMessage);
   const editingMessageId = useChatStore((s) => s.editingMessageId);
@@ -286,28 +291,6 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
     ? (message.content?.trim() ?? null)
     : imageEmbedSourceUrl;
 
-  // Close reaction picker on outside click
-  useEffect(() => {
-    if (!showReactionPicker) return;
-    const handler = (e: MouseEvent) => {
-      if (reactionPickerRef.current?.contains(e.target as Node)) return;
-      if (reactionPickerBtnRef.current?.contains(e.target as Node)) return;
-      setShowReactionPicker(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [showReactionPicker]);
-
-  // Close reaction picker on Escape
-  useEffect(() => {
-    if (!showReactionPicker) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setShowReactionPicker(false);
-    };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [showReactionPicker]);
-
   const handleReactionEmojiSelect = useCallback((emoji: { native: string }) => {
     addReaction(message.id, emoji.native);
     setShowReactionPicker(false);
@@ -327,6 +310,9 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
     const imgEl = (e.target as HTMLElement).closest('img') as HTMLImageElement | null;
     const isContentImage = imgEl && !imgEl.closest('[data-avatar]') && !imgEl.closest('[data-embed-thumbnail]');
     const imageUrl = isContentImage ? imgEl.src : null;
+    // Attachment previews may be thumbnails; collection always uses the original source.
+    const stickerSource = isContentImage ? imgEl.dataset.stickerSource : null;
+    const stickerName = isContentImage ? imgEl.alt : undefined;
 
     // Detect right-click on a video/audio element and resolve its underlying attachment.
     // `message` is the persisted form here — pending messages return early above.
@@ -355,6 +341,8 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
       selectedText,
       previousMessageId,
       imageUrl,
+      stickerSource,
+      stickerName,
       sourceUrl,
       videoUrl: videoAtt ? attUrlOf(videoAtt.filename) : null,
       videoFilename: videoAtt ? videoAtt.originalName : null,
@@ -429,6 +417,27 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
     ? { spaceId: currentSpaceId, userId: message.userId }
     : undefined;
 
+  const supportsPoke = useChannelActivityStore(s => s.pokeOrigins[getChannelOrigin(channelKey)] === true);
+  const authorMenuItems = (): import('../../stores/contextMenuStore').ContextMenuItem[] => [
+      { type: 'action', key: 'mention-author', label: '@' + displayName,
+        disabled: !canSendMessages || isDeadDmThread,
+        onClick: () => insertComposerMention(channelKey, message.userId) },
+      { type: 'action', key: 'poke-author', label: t('chat:poke.action'),
+        disabled: !canSendMessages || isDmMessage || !supportsPoke,
+        onClick: () => {
+          if (!wsSend({ type: 'channel_poke', channelId: channelKey, targetUserId: message.userId }, getChannelOrigin(channelKey))) {
+            useUIStore.getState().addToast(t('chat:poke.disconnected'), 'warning');
+          }
+        } },
+    ];
+  const handleAuthorMenu = (e: React.MouseEvent) => {
+    // Do not bubble into the message menu: author actions are a separate interaction.
+    e.preventDefault();
+    e.stopPropagation();
+    if (pending || !message.user) return;
+    useContextMenuStore.getState().open({ x: e.clientX, y: e.clientY }, authorMenuItems());
+  };
+
   const handleUsernameClick = (e: React.MouseEvent) => {
     if (!message.user) return;
     e.stopPropagation();
@@ -467,7 +476,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
       {/* Avatar or timestamp column */}
       <div className="w-10 flex-shrink-0 flex items-start justify-start">
         {isFirstInGroup || message.replyTo ? (
-          <div className="mt-0.5">
+          <div className="mt-0.5 relative" data-poke-user={message.userId} onContextMenu={handleAuthorMenu}>
             <ProfileAvatar
               src={displayIdentity.avatar}
               name={displayName}
@@ -525,7 +534,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
 
         {(isFirstInGroup || message.replyTo) && (
           <div className="flex items-baseline gap-2 mb-0.5">
-            <span onClick={handleUsernameClick}>
+            <span onClick={handleUsernameClick} onContextMenu={handleAuthorMenu}>
               <PersonName
                 name={displayName}
                 person={displayIdentity}
@@ -600,7 +609,9 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
               <>
                 {message.content && (
                   <div className="text-txt-message text-[15px] leading-[1.5] break-words whitespace-pre-wrap selection:bg-accent-primary/30">
-                    <MarkdownRenderer content={message.content} channelId={mentionChannelId} />
+                    {stickerUrl(message.content)
+                      ? <StickerMessage token={message.content} />
+                      : <MarkdownRenderer content={message.content} channelId={mentionChannelId} />}
                     {message.editedAt && (
                       <span className="text-[10px] text-txt-tertiary ml-1 select-none font-medium">{t('chat:message.edited')}</span>
                     )}
@@ -706,34 +717,13 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
       </div>
 
       {/* Reaction emoji picker */}
-      {showInteractions && showReactionPicker && canAddReactions && reactionPickerBtnRef.current && (() => {
-        const PICKER_HEIGHT = 400;
-        const PICKER_WIDTH = 360;
-        const MARGIN = 8;
-        const btnRect = layoutRect(reactionPickerBtnRef.current!.getBoundingClientRect());
-        const spaceBelow = layoutPixels(window.innerHeight) - btnRect.bottom;
-        const spaceAbove = btnRect.top;
-        const flipAbove = spaceBelow < (PICKER_HEIGHT + MARGIN) && spaceAbove > spaceBelow;
-        const top = flipAbove
-          ? Math.max(MARGIN, btnRect.top - PICKER_HEIGHT - MARGIN)
-          : btnRect.bottom + MARGIN;
-        const left = Math.min(
-          Math.max(MARGIN, btnRect.left),
-          layoutPixels(window.innerWidth) - PICKER_WIDTH - MARGIN,
-        );
-        return createPortal(
-          <div
-            ref={reactionPickerRef}
-            className={`fixed z-[300] ${flipAbove ? 'animate-slide-down' : 'animate-slide-up'}`}
-            style={{ top, left }}
-          >
-            <div className="glass rounded-xl overflow-hidden">
-              <EmojiPicker onEmojiSelect={handleReactionEmojiSelect} />
-            </div>
-          </div>,
-          document.body,
-        );
-      })()}
+      {showInteractions && showReactionPicker && canAddReactions && (
+        <ReactionPickerPopover
+          anchorEl={reactionPickerBtnRef.current}
+          onEmojiSelect={handleReactionEmojiSelect}
+          onClose={() => setShowReactionPicker(false)}
+        />
+      )}
 
       {/* Action buttons on hover */}
       {showInteractions && (isHovered || showReactionPicker || confirmingDelete) && !isEditing && (

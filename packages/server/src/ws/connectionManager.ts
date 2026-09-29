@@ -1,0 +1,993 @@
+import type { Activity, ServerEvent } from '@backspace/shared';
+import { and, eq } from 'drizzle-orm';
+import type { WebSocket } from 'ws';
+import { getDb, schema } from '../db/index.js';
+import { computePermissions, PermissionBits } from '../utils/permissions.js';
+import { collectProfileBroadcastTargetIds } from '../utils/userDeletion.js';
+import { unreadCountEvent } from './channelUnreadCounts.js';
+
+import { buildReadyPayload } from './readyPayload.js';
+import { getVoiceRoomElapsedSeconds, MAX_PENDING_VOICE_RECONNECTS, VOICE_RECONNECT_GRACE_MS, type DmRoomMeta, type FederatedCallEntry, type SpaceRoomMeta, type VoiceRoom } from './voiceRoomTypes.js';
+import { WsRateLimiter } from './wsRateLimiter.js';
+
+class ConnectionManager {
+  // userId → Set of WebSocket connections (multiple tabs)
+  private connections: Map<string, Set<WebSocket>> = new Map();
+  // userId → Set of space IDs the user belongs to
+  private userSpaces: Map<string, Set<string>> = new Map();
+  // ws → userId (reverse lookup)
+  private wsToUser: Map<WebSocket, string> = new Map();
+  // Unified voice room tracking (replaces voiceStates + activeCalls)
+  private voiceRooms: Map<string, VoiceRoom> = new Map();
+  // O(1) reverse index: userId → roomId
+  private userToRoom: Map<string, string> = new Map();
+  // userId → { isMuted, isDeafened, isCameraOn, isScreenSharing } — voice user status
+  private voiceUserStates: Map<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }> = new Map();
+  // userId → Timeout
+  private pendingOfflineTimeouts: Map<string, NodeJS.Timeout> = new Map();
+  // Voice has a longer grace than presence so a VPN/network handover can be
+  // recovered by LiveKit without creating a visible leave/join cycle.
+  private pendingVoiceReconnects: Map<string, { timeout: NodeJS.Timeout; roomId: string | null }> = new Map();
+  // roomId → Timeout for ringing DM rooms (60s auto-cleanup)
+  private ringingTimeouts: Map<string, NodeJS.Timeout> = new Map();
+  // Callback registered by events.ts to fan dm_call_end out to peers on ring timeout.
+  // Null during startup — ring timeouts that fire before registration simply no-op (there are no peers to notify before boot completes).
+  private ringTimeoutFanoutHook: ((dmChannelId: string, callerId: string) => Promise<void>) | null = null;
+  /** Federated calls where this instance is NOT the host. Keyed by federatedId. */
+  private federatedCalls: Map<string, FederatedCallEntry> = new Map();
+  private federatedCallTimeouts: Map<string, NodeJS.Timeout> = new Map();
+  // Space-muted/deafened users (moderator action)
+  private spaceMutedUsers: Set<string> = new Set(); // Stores spaceId:userId
+  private spaceDeafenedUsers: Set<string> = new Set(); // Stores spaceId:userId
+  // Permission-muted users (SPEAK permission revoked while in voice)
+  private permissionMutedUsers: Set<string> = new Set(); // Stores spaceId:userId
+  // The specific WebSocket that initiated voice_join / DM call for this user.
+  // When THIS socket closes, voice cleanup enters the reconnect grace period.
+  private voiceWs: Map<string, WebSocket> = new Map();
+  // Per-user WebSocket rate limiters (shared across all tabs/connections)
+  private userRateLimiters: Map<string, WsRateLimiter> = new Map();
+
+  // ─── Rich Presence ──────────────────────────────────────────────────────
+  // userId → Activity[] (ephemeral, same lifecycle as voiceUserStates)
+  private userActivities: Map<string, Activity[]> = new Map();
+  // userId → boolean (cached from DB at auth time, updated via REST)
+  private userShowActivity: Map<string, boolean> = new Map();
+  // userId → status string (cached at auth, updated on presence_update)
+  private userStatuses: Map<string, string> = new Map();
+  // userId → timestamp of last activity_update (rate limiting)
+  private lastActivityUpdate: Map<string, number> = new Map();
+
+  addConnection(userId: string, ws: WebSocket): void {
+    if (!this.connections.has(userId)) {
+      this.connections.set(userId, new Set());
+    }
+    this.connections.get(userId)!.add(ws);
+    this.wsToUser.set(ws, userId);
+
+    // If they were pending offline, cancel it!
+    this.cancelDisconnect(userId);
+  }
+
+  removeConnection(ws: WebSocket): string | undefined {
+    const userId = this.wsToUser.get(ws);
+    if (!userId) return undefined;
+
+    this.wsToUser.delete(ws);
+    const userConnections = this.connections.get(userId);
+    if (userConnections) {
+      userConnections.delete(ws);
+
+      // Only the socket that owns voice starts the voice grace period. Closing
+      // another tab must not disturb the active voice session.
+      if (this.voiceWs.get(userId) === ws) {
+        this.voiceWs.delete(userId);
+        this.scheduleVoiceDisconnect(userId);
+      }
+
+      if (userConnections.size === 0) {
+        this.connections.delete(userId);
+        // Presence and voice have independent grace periods.
+        this.scheduleDisconnect(userId);
+      }
+    }
+    return userId;
+  }
+
+  private scheduleDisconnect(userId: string) {
+    if (this.pendingOfflineTimeouts.has(userId)) return;
+
+    const timeout = setTimeout(() => {
+      this.finalizeDisconnect(userId);
+      this.pendingOfflineTimeouts.delete(userId);
+    }, 5000); // 5 second grace period
+
+    this.pendingOfflineTimeouts.set(userId, timeout);
+  }
+
+  private cancelDisconnect(userId: string) {
+    const timeout = this.pendingOfflineTimeouts.get(userId);
+    if (timeout) {
+      clearTimeout(timeout);
+      this.pendingOfflineTimeouts.delete(userId);
+      console.log(`[ConnectionManager] Rescued session for user ${userId}`);
+    }
+  }
+
+  private scheduleVoiceDisconnect(userId: string): void {
+    this.cancelVoiceDisconnect(userId);
+    const roomId = this.userToRoom.get(userId)
+      ?? Array.from(this.voiceRooms).find(([, room]) =>
+        room.roomType === 'dm'
+        && (room.metadata as DmRoomMeta).state === 'ringing'
+        && (room.metadata as DmRoomMeta).callerId === userId,
+      )?.[0]
+      ?? null;
+    if (!roomId) return;
+
+    if (this.pendingVoiceReconnects.size >= MAX_PENDING_VOICE_RECONNECTS) {
+      const oldest = this.pendingVoiceReconnects.entries().next().value as
+        | [string, { timeout: NodeJS.Timeout; roomId: string | null }]
+        | undefined;
+      if (oldest) {
+        clearTimeout(oldest[1].timeout);
+        this.pendingVoiceReconnects.delete(oldest[0]);
+        this.finalizeVoiceDisconnect(oldest[0], oldest[1].roomId);
+      }
+    }
+
+    const timeout = setTimeout(() => {
+      const pending = this.pendingVoiceReconnects.get(userId);
+      if (!pending || pending.timeout !== timeout) return;
+      this.pendingVoiceReconnects.delete(userId);
+      if (!this.voiceWs.has(userId)) this.finalizeVoiceDisconnect(userId, pending.roomId);
+    }, VOICE_RECONNECT_GRACE_MS);
+    this.pendingVoiceReconnects.set(userId, { timeout, roomId });
+  }
+
+  private cancelVoiceDisconnect(userId: string): void {
+    const pending = this.pendingVoiceReconnects.get(userId);
+    if (!pending) return;
+    clearTimeout(pending.timeout);
+    this.pendingVoiceReconnects.delete(userId);
+  }
+
+  private finalizeVoiceDisconnect(userId: string, expectedRoomId: string | null = null): void {
+    if (this.voiceWs.has(userId)) return;
+    const current = this.getUserRoom(userId);
+    const left = (!expectedRoomId || current?.roomId === expectedRoomId)
+      ? this.leaveCurrentRoom(userId)
+      : null;
+    this.clearVoiceUserStatus(userId);
+
+    if (left) {
+      if (left.room.roomType === 'space') {
+        const meta = left.room.metadata as SpaceRoomMeta;
+        this.sendToSpace(meta.spaceId, {
+          type: 'voice_state_update', channelId: left.roomId, userId, action: 'leave',
+        });
+      } else {
+        this.sendToDmMembers(left.roomId, {
+          type: 'voice_state_update', channelId: left.roomId, userId, action: 'leave',
+        });
+        const updatedRoom = this.voiceRooms.get(left.roomId);
+        if (updatedRoom && updatedRoom.participants.size === 0
+            && (updatedRoom.metadata as DmRoomMeta).state === 'active') {
+          this.destroyRoom(left.roomId);
+          this.sendToDmMembers(left.roomId, { type: 'dm_call_ended', dmChannelId: left.roomId });
+        }
+      }
+    }
+
+    for (const [roomId, room] of this.voiceRooms) {
+      if (room.roomType !== 'dm') continue;
+      const meta = room.metadata as DmRoomMeta;
+      if (meta.state === 'ringing' && meta.callerId === userId
+          && (!expectedRoomId || expectedRoomId === roomId)) {
+        this.destroyRoom(roomId);
+        this.sendToDmMembers(roomId, { type: 'dm_call_ended', dmChannelId: roomId });
+      }
+    }
+  }
+
+  private finalizeDisconnect(userId: string) {
+    // Double check they are still offline
+    if (this.isUserOnline(userId)) return;
+
+    console.log(`[ConnectionManager] Finalizing disconnect for user ${userId}`);
+    const db = getDb();
+    db.update(schema.users).set({ status: 'offline' }).where(eq(schema.users.id, userId)).run();
+
+    // Clear activity state
+    this.clearUserActivities(userId);
+    this.userShowActivity.delete(userId);
+    this.userStatuses.delete(userId);
+    this.lastActivityUpdate.delete(userId);
+
+    // Broadcast offline to friends + DM co-members + space co-members.
+    // Mirrors collectProfileBroadcastTargetIds (the recipient set used by
+    // user_updated). Two locally-friended users with no shared space now see
+    // each other's offline transitions live, instead of being space-only.
+    const offlinePayload = {
+      type: 'presence_update' as const,
+      userId,
+      status: 'offline' as const,
+      activities: [] as Activity[],
+    };
+    const offlineTargets = collectProfileBroadcastTargetIds(userId);
+    for (const uid of offlineTargets) this.sendToUser(uid, offlinePayload);
+
+    // S2S: project offline to all active peers (mirrors profile_update fanout).
+    // Imported lazily to avoid circular import (federationPresence → db → ws/handler).
+    void import('../utils/federationPresence.js').then(({ queuePresenceRelay }) => {
+      try { queuePresenceRelay(userId, 'offline', []); } catch (e) { console.warn('[ws] queuePresenceRelay(offline) failed', e); }
+    });
+
+    // Clean up userSpaces (re-populated on next connect via setUserSpaces)
+    this.userSpaces.delete(userId);
+
+    // Clean up per-user rate limiter
+    this.userRateLimiters.delete(userId);
+  }
+
+  getUserConnections(userId: string): Set<WebSocket> {
+    return this.connections.get(userId) ?? new Set();
+  }
+
+  isUserOnline(userId: string): boolean {
+    const conns = this.connections.get(userId);
+    return conns !== undefined && conns.size > 0;
+  }
+
+  getUserRateLimiter(userId: string): WsRateLimiter {
+    let limiter = this.userRateLimiters.get(userId);
+    if (!limiter) {
+      limiter = new WsRateLimiter();
+      this.userRateLimiters.set(userId, limiter);
+    }
+    return limiter;
+  }
+
+  // ─── Activity accessors ─────────────────────────────────────────────────
+
+  setUserActivities(userId: string, activities: Activity[]): void {
+    if (activities.length === 0) {
+      this.userActivities.delete(userId);
+    } else {
+      this.userActivities.set(userId, activities);
+    }
+  }
+
+  getUserActivities(userId: string): Activity[] {
+    return this.userActivities.get(userId) ?? [];
+  }
+
+  clearUserActivities(userId: string): void {
+    this.userActivities.delete(userId);
+  }
+
+  setUserShowActivity(userId: string, show: boolean): void {
+    this.userShowActivity.set(userId, show);
+  }
+
+  getUserShowActivity(userId: string): boolean {
+    return this.userShowActivity.get(userId) ?? true;
+  }
+
+  setUserStatus(userId: string, status: string): void {
+    this.userStatuses.set(userId, status);
+  }
+
+  getUserStatus(userId: string): string {
+    return this.userStatuses.get(userId) ?? 'offline';
+  }
+
+  checkActivityRateLimit(userId: string): boolean {
+    const now = Date.now();
+    const last = this.lastActivityUpdate.get(userId) ?? 0;
+    if (now - last < 3000) return false;
+    this.lastActivityUpdate.set(userId, now);
+    return true;
+  }
+
+  setUserSpaces(userId: string, spaceIds: string[]): void {
+    this.userSpaces.set(userId, new Set(spaceIds));
+  }
+
+  addUserSpace(userId: string, spaceId: string): void {
+    if (!this.userSpaces.has(userId)) {
+      this.userSpaces.set(userId, new Set());
+    }
+    this.userSpaces.get(userId)!.add(spaceId);
+
+    // A user joining a space mid-session must be bootstrapped with that space's
+    // current voice presence. The `ready` payload only carries voice state at
+    // connect time (see buildReadyPayload), so without this push, members already
+    // sitting in a voice channel stay invisible in the new member's channel
+    // sidebar until a full page reload. We deliver a scoped snapshot over the same
+    // ordered WebSocket as the `voice_state_update` deltas, so there is no
+    // snapshot-vs-stream race (a join/leave that happens after this snapshot is
+    // emitted strictly afterwards on the same socket). `addUserSpace` is the single
+    // chokepoint every join path funnels through (invite, public join, join-request
+    // approval) and is NOT used on reconnect (that path uses setUserSpaces), so this
+    // fires exactly once per genuine join. Space creation hits this too but produces
+    // an empty snapshot and is skipped below.
+    const snapshot = this.buildSpaceVoiceState(spaceId, userId);
+    if (Object.keys(snapshot.voiceStates).length === 0
+        && Object.keys(snapshot.spaceVoiceStates).length === 0) {
+      return;
+    }
+    this.sendToUser(userId, {
+      type: 'space_voice_state',
+      spaceId,
+      voiceStates: snapshot.voiceStates,
+      voiceChannelElapsedSeconds: snapshot.voiceChannelElapsedSeconds,
+      voiceUserStates: snapshot.voiceUserStates,
+      spaceVoiceStates: snapshot.spaceVoiceStates,
+    });
+  }
+
+  getUserSpaces(userId: string): Set<string> {
+    return this.userSpaces.get(userId) ?? new Set();
+  }
+
+  /**
+   * Build the current voice-presence snapshot for a single space, from the
+   * perspective of `userId`:
+   * - which voice channels the user can VIEW have participants, and who they are,
+   * - each participant's per-user status (mute/deafen/camera/screenshare),
+   * - space-level mute/deafen (persisted) + permission-mute (ephemeral)
+   *   restrictions, keyed `spaceId:userId`.
+   *
+   * Voice presence is VIEW_CHANNEL-filtered per `computePermissions` exactly as
+   * `buildReadyPayload` does — a user must never learn who is sitting in a voice
+   * channel they cannot see.
+   *
+   * Single source of truth shared by `buildReadyPayload` (connect-time bootstrap,
+   * looped across all of a user's spaces) and `addUserSpace` (mid-session join
+   * push). Keep these two consumers in sync by changing only this method.
+   */
+  buildSpaceVoiceState(spaceId: string, userId: string): {
+    voiceStates: Record<string, string[]>;
+    voiceChannelElapsedSeconds: Record<string, number>;
+    voiceUserStates: Record<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }>;
+    spaceVoiceStates: Record<string, { spaceMuted: boolean; spaceDeafened: boolean; permissionMuted: boolean }>;
+  } {
+    const db = getDb();
+    const voiceStates: Record<string, string[]> = {};
+    const voiceChannelElapsedSeconds: Record<string, number> = {};
+    const voiceUserStates: Record<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }> = {};
+    const spaceVoiceStates: Record<string, { spaceMuted: boolean; spaceDeafened: boolean; permissionMuted: boolean }> = {};
+
+    // Who is currently in each of this space's voice channels the user can VIEW.
+    const voiceChannels = db.select({ id: schema.channels.id })
+      .from(schema.channels)
+      .where(and(eq(schema.channels.spaceId, spaceId), eq(schema.channels.type, 'voice')))
+      .all();
+    for (const ch of voiceChannels) {
+      const chPerms = computePermissions(userId, spaceId, ch.id);
+      const hasView = (chPerms & PermissionBits.VIEW_CHANNEL) !== 0n || (chPerms & PermissionBits.ADMINISTRATOR) !== 0n;
+      if (!hasView) continue;
+      const room = this.getRoom(ch.id);
+      if (room && room.participants.size > 0) {
+        const ids = Array.from(room.participants);
+        voiceStates[ch.id] = ids;
+        voiceChannelElapsedSeconds[ch.id] = getVoiceRoomElapsedSeconds(room);
+        for (const uid of ids) {
+          const status = this.getVoiceUserStatus(uid);
+          if (status) voiceUserStates[uid] = status;
+        }
+      }
+    }
+
+    // Space mute/deafen — persisted, authoritative (survives reconnect). These are
+    // space-level flags (they do not reveal which channel a user is in), so they
+    // are not channel-filtered, mirroring buildReadyPayload.
+    const restrictions = db.select()
+      .from(schema.voiceRestrictions)
+      .where(eq(schema.voiceRestrictions.spaceId, spaceId))
+      .all();
+    for (const r of restrictions) {
+      const key = `${r.spaceId}:${r.userId}`;
+      const existing = spaceVoiceStates[key] ?? { spaceMuted: false, spaceDeafened: false, permissionMuted: false };
+      if (r.restrictionType === 'mute') existing.spaceMuted = true;
+      if (r.restrictionType === 'deafen') existing.spaceDeafened = true;
+      spaceVoiceStates[key] = existing;
+    }
+    // Permission-mute — ephemeral, derived from in-memory state for every
+    // participant currently in this space's voice rooms (mirrors buildReadyPayload).
+    for (const [, room] of this.voiceRooms) {
+      if (room.roomType !== 'space') continue;
+      const meta = room.metadata as SpaceRoomMeta;
+      if (meta.spaceId !== spaceId) continue;
+      for (const participantId of room.participants) {
+        if (this.isPermissionMuted(spaceId, participantId)) {
+          const key = `${spaceId}:${participantId}`;
+          const existing = spaceVoiceStates[key] ?? { spaceMuted: false, spaceDeafened: false, permissionMuted: false };
+          existing.permissionMuted = true;
+          spaceVoiceStates[key] = existing;
+        }
+      }
+    }
+
+    return { voiceStates, voiceChannelElapsedSeconds, voiceUserStates, spaceVoiceStates };
+  }
+
+  // ─── Unified VoiceRoom API ─────────────────────────────────────────────────
+
+  /** Create a room. Returns false if room already exists. */
+  createRoom(roomId: string, roomType: 'space' | 'dm', metadata: SpaceRoomMeta | DmRoomMeta): boolean {
+    if (this.voiceRooms.has(roomId)) return false;
+    this.voiceRooms.set(roomId, {
+      roomId,
+      roomType,
+      participants: new Set(),
+      metadata,
+      startedAt: Date.now(),
+    });
+    return true;
+  }
+
+  /** Register a fan-out callback invoked when a ringing DM room hits its 60s timeout. */
+  setRingTimeoutFanoutHook(fn: (dmChannelId: string, callerId: string) => Promise<void>): void {
+    this.ringTimeoutFanoutHook = fn;
+  }
+
+  /** Create a DM room in ringing state with 60s auto-cleanup. */
+  createDmRoom(dmChannelId: string, callerId: string): boolean {
+    const created = this.createRoom(dmChannelId, 'dm', {
+      type: 'dm',
+      callerId,
+      state: 'ringing',
+    });
+    if (!created) return false;
+
+    // 60s ringing timeout — auto-destroy if still ringing
+    const timeout = setTimeout(() => {
+      this.ringingTimeouts.delete(dmChannelId);
+      const room = this.voiceRooms.get(dmChannelId);
+      if (room && room.roomType === 'dm' && (room.metadata as DmRoomMeta).state === 'ringing') {
+        const ringedCallerId = (room.metadata as DmRoomMeta).callerId;
+        this.destroyRoom(dmChannelId);
+        this.sendToDmMembers(dmChannelId, {
+          type: 'dm_call_ended',
+          dmChannelId,
+        });
+        // Fan dm_call_end out to remote peers so stranded Path-A/B ringees exit the ring.
+        // Without this, an accept-relay failure → Alice's 60s auto-clean leaves Bob's FederatedCallEntry lingering with no terminal event.
+        if (this.ringTimeoutFanoutHook) {
+          this.ringTimeoutFanoutHook(dmChannelId, ringedCallerId).catch(err =>
+            console.error('[ws] ring-timeout fan-out error:', err),
+          );
+        }
+      }
+    }, 60_000);
+    this.ringingTimeouts.set(dmChannelId, timeout);
+
+    return true;
+  }
+
+  /** Transition a DM room from ringing → active. Returns false if not found or not ringing. */
+  activateDmRoom(dmChannelId: string): boolean {
+    const room = this.voiceRooms.get(dmChannelId);
+    if (!room || room.roomType !== 'dm') return false;
+    const meta = room.metadata as DmRoomMeta;
+    if (meta.state !== 'ringing') return false;
+    meta.state = 'active';
+
+    // Clear ringing timeout
+    const timeout = this.ringingTimeouts.get(dmChannelId);
+    if (timeout) {
+      clearTimeout(timeout);
+      this.ringingTimeouts.delete(dmChannelId);
+    }
+    return true;
+  }
+
+  /** Register a federated call received via S2S. Adds 60s ringing timeout. */
+  createFederatedCall(entry: FederatedCallEntry): void {
+    this.clearFederatedCall(entry.federatedId);
+    this.federatedCalls.set(entry.federatedId, entry);
+
+    const timeout = setTimeout(() => {
+      this.federatedCallTimeouts.delete(entry.federatedId);
+      const call = this.federatedCalls.get(entry.federatedId);
+      if (call && call.state === 'ringing') {
+        this.federatedCalls.delete(entry.federatedId);
+        const endEvent = {
+          type: 'dm_call_ended',
+          dmChannelId: call.dmChannelId,
+          federatedCallId: call.federatedId,
+        };
+        for (const uid of call.ringedUserIds) {
+          this.sendToUser(uid, endEvent as ServerEvent);
+        }
+      }
+    }, 60_000);
+    this.federatedCallTimeouts.set(entry.federatedId, timeout);
+  }
+
+  /** Get a federated call entry by federatedId (primary lookup). */
+  getFederatedCall(federatedId: string): FederatedCallEntry | undefined {
+    return this.federatedCalls.get(federatedId);
+  }
+
+  /** Get a federated call entry by local dmChannelId (convenience reverse lookup). */
+  getFederatedCallByDmChannel(dmChannelId: string): FederatedCallEntry | undefined {
+    for (const entry of this.federatedCalls.values()) {
+      if (entry.dmChannelId === dmChannelId) return entry;
+    }
+    return undefined;
+  }
+
+  /** Transition a federated call from ringing → active. */
+  activateFederatedCall(federatedId: string): boolean {
+    const call = this.federatedCalls.get(federatedId);
+    if (!call || call.state !== 'ringing') return false;
+    call.state = 'active';
+    const timeout = this.federatedCallTimeouts.get(federatedId);
+    if (timeout) {
+      clearTimeout(timeout);
+      this.federatedCallTimeouts.delete(federatedId);
+    }
+    return true;
+  }
+
+  /** Remove a federated call entry and clear its timeout. */
+  clearFederatedCall(federatedId: string): void {
+    this.federatedCalls.delete(federatedId);
+    const timeout = this.federatedCallTimeouts.get(federatedId);
+    if (timeout) {
+      clearTimeout(timeout);
+      this.federatedCallTimeouts.delete(federatedId);
+    }
+  }
+
+  /**
+   * Evict all FederatedCallEntry objects whose federatedCallHost matches the given peer origin.
+   * Emits dm_call_undeliverable { phase: 'host_unreachable', terminal: true } to each entry's
+   * ringedUserIds, then clears the entry (and its 60s ring timer if still armed).
+   *
+   * Idempotent: re-invocation with an already-evicted host returns 0.
+   * Called from onPeerDeactivated (signal 1) and the 30s sentinel (signal 2 / backstop).
+   */
+  evictFederatedCallsForHost(
+    peerOrigin: string,
+    ctx: {
+      reason: 'peer_transient_failure' | 'peer_rejected';
+      peerLabel?: string;
+    },
+  ): number {
+    const matches: FederatedCallEntry[] = [];
+    for (const entry of this.federatedCalls.values()) {
+      if (entry.federatedCallHost === peerOrigin) matches.push(entry);
+    }
+    if (matches.length === 0) return 0;
+
+    let evicted = 0;
+    for (const entry of matches) {
+      // Re-check — concurrent teardown may have removed it between collect and broadcast.
+      if (!this.federatedCalls.has(entry.federatedId)) continue;
+
+      const event: ServerEvent = {
+        type: 'dm_call_undeliverable',
+        dmChannelId: entry.dmChannelId,
+        federatedCallId: entry.federatedId,
+        terminal: true,
+        phase: 'host_unreachable',
+        failures: [{
+          reason: ctx.reason,
+          peerOrigin,
+          peerLabel: ctx.peerLabel,
+        }],
+      };
+
+      for (const uid of entry.ringedUserIds) {
+        this.sendToUser(uid, event);
+      }
+
+      this.clearFederatedCall(entry.federatedId);
+      evicted += 1;
+    }
+
+    return evicted;
+  }
+
+  /** Late-bind a dmChannelId onto a Path B FederatedCallEntry. */
+  lateBindFederatedCall(federatedId: string, dmChannelId: string): void {
+    const call = this.federatedCalls.get(federatedId);
+    if (call && call.dmChannelId === null) {
+      call.dmChannelId = dmChannelId;
+    }
+  }
+
+  /** Expose federated calls for ready payload assembly. */
+  getAllFederatedCalls(): Map<string, FederatedCallEntry> {
+    return this.federatedCalls;
+  }
+
+  /** Add a user to a room. Enforces one-room-per-user invariant. Returns the room or null if room doesn't exist. */
+  joinRoom(roomId: string, userId: string): VoiceRoom | null {
+    const room = this.voiceRooms.get(roomId);
+    if (!room) return null;
+
+    // Enforce one-room-per-user invariant: silently remove from old room
+    const currentRoomId = this.userToRoom.get(userId);
+    if (currentRoomId && currentRoomId !== roomId) {
+      const oldRoom = this.voiceRooms.get(currentRoomId);
+      if (oldRoom) {
+        oldRoom.participants.delete(userId);
+        if (oldRoom.participants.size === 0 && oldRoom.roomType === 'space') {
+          this.voiceRooms.delete(currentRoomId);
+        }
+      }
+    }
+
+    room.participants.add(userId);
+    this.userToRoom.set(userId, roomId);
+    return room;
+  }
+
+  /** Remove a user from a specific room. Returns the room or null if not found. */
+  leaveRoom(roomId: string, userId: string): VoiceRoom | null {
+    const room = this.voiceRooms.get(roomId);
+    if (!room || !room.participants.has(userId)) return null;
+
+    room.participants.delete(userId);
+    this.userToRoom.delete(userId);
+
+    if (room.roomType === 'space') {
+      const meta = room.metadata as SpaceRoomMeta;
+      this.clearSpaceVoiceState(meta.spaceId, userId);
+    }
+
+    // Auto-cleanup empty space rooms (they're lazy-created)
+    if (room.participants.size === 0 && room.roomType === 'space') {
+      this.voiceRooms.delete(roomId);
+    }
+
+    return room;
+  }
+
+  /** Leave whatever room the user is in. Returns { roomId, room } or null. */
+  leaveCurrentRoom(userId: string): { roomId: string; room: VoiceRoom } | null {
+    const roomId = this.userToRoom.get(userId);
+    if (!roomId) return null;
+
+    const room = this.leaveRoom(roomId, userId);
+    if (!room) return null;
+
+    return { roomId, room };
+  }
+
+  /** Destroy a room entirely. Returns displaced userIds. */
+  destroyRoom(roomId: string): string[] {
+    const room = this.voiceRooms.get(roomId);
+    if (!room) return [];
+
+    const displaced: string[] = [];
+    for (const userId of room.participants) {
+      this.userToRoom.delete(userId);
+      this.cancelVoiceDisconnect(userId);
+      displaced.push(userId);
+    }
+
+    if (room.roomType === 'dm') {
+      this.cancelVoiceDisconnect((room.metadata as DmRoomMeta).callerId);
+    }
+
+    this.voiceRooms.delete(roomId);
+
+    // Clear ringing timeout if any
+    const timeout = this.ringingTimeouts.get(roomId);
+    if (timeout) {
+      clearTimeout(timeout);
+      this.ringingTimeouts.delete(roomId);
+    }
+
+    return displaced;
+  }
+
+  /** Get a room by ID. */
+  getRoom(roomId: string): VoiceRoom | undefined {
+    return this.voiceRooms.get(roomId);
+  }
+
+  /** Get participants in a room. */
+  getRoomParticipants(roomId: string): Set<string> {
+    return this.voiceRooms.get(roomId)?.participants ?? new Set();
+  }
+
+  /** Get the room a user is currently in. Returns { roomId, room } or null. */
+  getUserRoom(userId: string): { roomId: string; room: VoiceRoom } | null {
+    const roomId = this.userToRoom.get(userId);
+    if (!roomId) return null;
+    const room = this.voiceRooms.get(roomId);
+    if (!room) return null;
+    return { roomId, room };
+  }
+
+  /** Read-only access to all rooms. */
+  getAllRooms(): Map<string, VoiceRoom> {
+    return this.voiceRooms;
+  }
+
+  // ─── Voice User Status (unchanged) ────────────────────────────────────────
+
+  setVoiceUserStatus(userId: string, isMuted: boolean, isDeafened: boolean, isCameraOn: boolean, isScreenSharing: boolean): void {
+    this.voiceUserStates.set(userId, { isMuted, isDeafened, isCameraOn, isScreenSharing });
+  }
+
+  getVoiceUserStatus(userId: string): { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean } | undefined {
+    return this.voiceUserStates.get(userId);
+  }
+
+  clearVoiceUserStatus(userId: string): void {
+    this.voiceUserStates.delete(userId);
+  }
+
+  // ─── Voice WebSocket Binding ───────────────────────────────────────────────
+
+  /** Store which ws owns the voice session for this user. */
+  setVoiceWs(userId: string, ws: WebSocket): void {
+    this.cancelVoiceDisconnect(userId);
+    this.voiceWs.set(userId, ws);
+  }
+
+  /** Get the voice-owning ws for this user. */
+  getVoiceWs(userId: string): WebSocket | undefined {
+    return this.voiceWs.get(userId);
+  }
+
+  /** Clear the voice ws binding for this user. */
+  clearVoiceWs(userId: string): void {
+    this.cancelVoiceDisconnect(userId);
+    this.voiceWs.delete(userId);
+  }
+
+  setSpaceMuted(spaceId: string, userId: string, muted: boolean): void {
+    const key = `${spaceId}:${userId}`;
+    if (muted) this.spaceMutedUsers.add(key);
+    else this.spaceMutedUsers.delete(key);
+  }
+
+  isSpaceMuted(spaceId: string, userId: string): boolean {
+    return this.spaceMutedUsers.has(`${spaceId}:${userId}`);
+  }
+
+  setSpaceDeafened(spaceId: string, userId: string, deafened: boolean): void {
+    const key = `${spaceId}:${userId}`;
+    if (deafened) this.spaceDeafenedUsers.add(key);
+    else this.spaceDeafenedUsers.delete(key);
+  }
+
+  isSpaceDeafened(spaceId: string, userId: string): boolean {
+    return this.spaceDeafenedUsers.has(`${spaceId}:${userId}`);
+  }
+
+  clearSpaceVoiceState(spaceId: string, userId: string): void {
+    this.spaceMutedUsers.delete(`${spaceId}:${userId}`);
+    this.spaceDeafenedUsers.delete(`${spaceId}:${userId}`);
+    this.permissionMutedUsers.delete(`${spaceId}:${userId}`);
+  }
+
+  setPermissionMuted(spaceId: string, userId: string, muted: boolean): void {
+    const key = `${spaceId}:${userId}`;
+    if (muted) this.permissionMutedUsers.add(key);
+    else this.permissionMutedUsers.delete(key);
+  }
+
+  isPermissionMuted(spaceId: string, userId: string): boolean {
+    return this.permissionMutedUsers.has(`${spaceId}:${userId}`);
+  }
+
+  getAllVoiceUserStates(): Map<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }> {
+    return this.voiceUserStates;
+  }
+
+  // ─── Broadcasting ─────────────────────────────────────────────────────────
+
+  /** Send to a specific user (all their connections). */
+  sendToUser(userId: string, event: ServerEvent): void {
+    const connections = this.getUserConnections(userId);
+    const message = JSON.stringify(event);
+    const unread = connections.size ? unreadCountEvent(userId, event) : null;
+    const unreadMessage = unread ? JSON.stringify(unread) : null;
+    for (const ws of connections) {
+      if (ws.readyState === 1) { // WebSocket.OPEN
+        ws.send(message);
+        if (unreadMessage) ws.send(unreadMessage);
+      }
+    }
+  }
+
+  /** Send to all members of a space. */
+  sendToSpace(spaceId: string, event: ServerEvent, excludeUserId?: string): void {
+    for (const [userId, spaceIds] of this.userSpaces) {
+      if (spaceIds.has(spaceId) && userId !== excludeUserId) {
+        this.sendToUser(userId, event);
+      }
+    }
+  }
+
+  /** Send to space members who have VIEW_CHANNEL on the given channel. */
+  sendToChannel(spaceId: string, channelId: string, event: ServerEvent, excludeUserId?: string): void {
+    for (const [userId, spaceIds] of this.userSpaces) {
+      if (spaceIds.has(spaceId) && userId !== excludeUserId) {
+        const perms = computePermissions(userId, spaceId, channelId);
+        if ((perms & PermissionBits.VIEW_CHANNEL) !== 0n) {
+          this.sendToUser(userId, event);
+        }
+      }
+    }
+  }
+
+  /** Expose userSpaces iterator for pre-delete viewer collection. */
+  getUserSpaceEntries(): IterableIterator<[string, Set<string>]> {
+    return this.userSpaces.entries();
+  }
+
+  /** Send to all DM channel members (queries dm_members table). */
+  sendToDmMembers(dmChannelId: string, event: ServerEvent, excludeUserId?: string): void {
+    const db = getDb();
+    const dmMembers = db.select()
+      .from(schema.dmMembers)
+      .where(eq(schema.dmMembers.dmChannelId, dmChannelId))
+      .all();
+
+    for (const member of dmMembers) {
+      if (member.userId !== excludeUserId) {
+        this.sendToUser(member.userId, event);
+      }
+    }
+  }
+
+  /** Send event to users who were ringed for a federated call.
+   *  ALWAYS uses ringedUserIds, never sendToDmMembers — sendToDmMembers would
+   *  also reach the caller's replicated stub, causing cross-instance event contamination
+   *  (the caller's multi-instance WS gets dm_call_accepted with the wrong dmChannelId). */
+  sendToFederatedCallUsers(federatedId: string, event: ServerEvent, excludeUserId?: string): void {
+    const call = this.federatedCalls.get(federatedId);
+    if (!call) return;
+    for (const uid of call.ringedUserIds) {
+      if (uid !== excludeUserId) {
+        this.sendToUser(uid, event);
+      }
+    }
+  }
+
+  /** Send to a room — routes to sendToSpace (space rooms) or sendToDmMembers (DM rooms). */
+  sendToRoom(roomId: string, event: ServerEvent, excludeUserId?: string): void {
+    const room = this.voiceRooms.get(roomId);
+    if (!room) return;
+
+    if (room.roomType === 'space') {
+      const meta = room.metadata as SpaceRoomMeta;
+      this.sendToSpace(meta.spaceId, event, excludeUserId);
+    } else {
+      this.sendToDmMembers(roomId, event, excludeUserId);
+    }
+  }
+
+  /** Send to all connections of all online users. */
+  sendToAll(event: ServerEvent, excludeUserId?: string): void {
+    const message = JSON.stringify(event);
+    for (const [userId, connections] of this.connections) {
+      if (userId !== excludeUserId) {
+        for (const ws of connections) {
+          if (ws.readyState === 1) {
+            ws.send(message);
+          }
+        }
+      }
+    }
+  }
+
+  /** Send to a specific WebSocket instance (not all of a user's connections). */
+  sendToWs(ws: WebSocket, event: ServerEvent): void {
+    if (ws.readyState === 1) { // WebSocket.OPEN
+      ws.send(JSON.stringify(event));
+    }
+  }
+
+  /** Force-disconnect all WebSocket connections for a user (e.g. account deletion). */
+  forceDisconnectUser(userId: string): void {
+    // Cancel any pending offline timeout
+    const timeout = this.pendingOfflineTimeouts.get(userId);
+    if (timeout) {
+      clearTimeout(timeout);
+      this.pendingOfflineTimeouts.delete(userId);
+    }
+
+    // Leave voice room if in one
+    const left = this.leaveCurrentRoom(userId);
+    this.clearVoiceUserStatus(userId);
+    this.clearVoiceWs(userId);
+    if (left) {
+      if (left.room.roomType === 'space') {
+        const meta = left.room.metadata as SpaceRoomMeta;
+        this.sendToSpace(meta.spaceId, {
+          type: 'voice_state_update',
+          channelId: left.roomId,
+          userId,
+          action: 'leave',
+        });
+      } else {
+        this.sendToDmMembers(left.roomId, {
+          type: 'voice_state_update',
+          channelId: left.roomId,
+          userId,
+          action: 'leave',
+        });
+      }
+    }
+
+    // Destroy any ringing DM rooms where this user is the caller
+    for (const [roomId, room] of this.voiceRooms) {
+      if (room.roomType === 'dm') {
+        const meta = room.metadata as DmRoomMeta;
+        if (meta.state === 'ringing' && meta.callerId === userId) {
+          this.destroyRoom(roomId);
+          this.sendToDmMembers(roomId, {
+            type: 'dm_call_ended',
+            dmChannelId: roomId,
+          });
+        }
+      }
+    }
+
+    // Clear activity state
+    this.clearUserActivities(userId);
+    this.userShowActivity.delete(userId);
+    this.userStatuses.delete(userId);
+    this.lastActivityUpdate.delete(userId);
+
+    // Close all WebSocket connections
+    const connections = this.connections.get(userId);
+    if (connections) {
+      for (const ws of connections) {
+        this.wsToUser.delete(ws);
+        try { ws.close(4001, 'Account deleted'); } catch { /* ignore */ }
+      }
+      this.connections.delete(userId);
+    }
+
+    // Clean up user spaces
+    this.userSpaces.delete(userId);
+  }
+
+  getAllOnlineUserIds(): string[] {
+    return Array.from(this.connections.keys());
+  }
+
+  getAllConnections(): Map<string, Set<WebSocket>> {
+    return this.connections;
+  }
+
+  /** Send an event to all connected admin users. */
+  sendToAdmins(event: ServerEvent): void {
+    const db = getDb();
+    for (const userId of this.connections.keys()) {
+      const user = db.select({ isAdmin: schema.users.isAdmin })
+        .from(schema.users).where(eq(schema.users.id, userId)).get();
+      if (user?.isAdmin === 1) {
+        this.sendToUser(userId, event);
+      }
+    }
+  }
+
+  /** Push a fresh ready payload to a specific user, forcing full store re-sync. */
+  pushReadyPayload(userId: string): void {
+    const connections = this.getUserConnections(userId);
+    if (connections.size === 0) return;
+
+    const readyData = buildReadyPayload(userId);
+    const message = JSON.stringify({ type: 'ready', ...readyData });
+    for (const ws of connections) {
+      if (ws.readyState === 1) {
+        ws.send(message);
+      }
+    }
+  }
+}
+
+export const connectionManager = new ConnectionManager();

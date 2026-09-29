@@ -19,6 +19,7 @@
       "unknownUser": "Unbekannter Nutzer"
     },
     "reactions": {
+      "picker": "Reaktionsauswahl",
       "you": "Du",
       "others_one": "{{count}} weitere Person",
       "others_other": "{{count}} weitere",
@@ -147,5 +148,42 @@
   "notification": {
     "unknownSender": "Jemand",
     "attachmentOnly": "Hat einen Anhang gesendet"
+  },
+  "poke": {
+    "action": "Anstupsen",
+    "received": "{{actor}} hat {{target}} angestupst",
+    "disconnected": "Verbindung getrennt. Anstupsen wurde nicht gesendet."
+  },
+  "stickers": {
+    "title": "Meine Sticker",
+    "upload": "Bild hochladen",
+    "limits": "PNG, JPEG, WebP oder GIF · maximal 5 MB",
+    "loading": "Wird geladen…",
+    "empty": "Hier beginnt deine Stickersammlung",
+    "remove": "Entfernen",
+    "save": "Zu meinen Stickern hinzufügen",
+    "saved": "Zu meinen Stickern hinzugefügt",
+    "preview": "Sticker-Vorschau",
+    "manage": "Verwalten",
+    "done": "Fertig",
+    "collectionHint": "Wähle einen Sticker zum Senden.",
+    "removeHint": "Nur aus deiner Sammlung entfernen. Gesendete Nachrichten bleiben unverändert.",
+    "emptyHint": "Lade ein Bild hoch und verleihe deinen Antworten eine persönliche Note.",
+    "chooseImage": "Bild auswählen",
+    "cancel": "Abbrechen",
+    "replace": "Bild ersetzen",
+    "name": "Stickername",
+    "dropImage": "Bild hierher ziehen oder auswählen",
+    "pasteHint": "Du kannst auch ein Bild aus der Zwischenablage einfügen",
+    "uploading": "Sticker wird hinzugefügt…",
+    "singleImage": "Wähle jeweils ein Bild aus.",
+    "invalidSize": "Wähle ein nicht leeres Bild bis 5 MB.",
+    "invalidType": "Nur PNG, JPEG, WebP und GIF werden unterstützt.",
+    "invalidImage": "Dieses Bild kann nicht angezeigt werden. Wähle ein gültiges Bild.",
+    "removeNamed": "{{name}} entfernen",
+    "addMore": "Mehr hinzufügen",
+    "selectedCount_one": "{{count}} Sticker ausgewählt",
+    "selectedCount_other": "{{count}} Sticker ausgewählt",
+    "dropMore": "Klicken oder weitere Bilder hierher ziehen"
   }
 }

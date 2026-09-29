@@ -19,6 +19,7 @@
       "unknownUser": "未知用户"
     },
     "reactions": {
+      "picker": "表情回应",
       "you": "您",
       "others_other": "另外 {{count}} 人",
       "bySelf": "您做出了反应",
@@ -143,5 +144,41 @@
   "notification": {
     "unknownSender": "有人",
     "attachmentOnly": "发送了一个附件"
+  },
+  "poke": {
+    "action": "戳一戳",
+    "received": "{{actor}} 戳了戳 {{target}}",
+    "disconnected": "连接已断开，戳一戳未发送"
+  },
+  "stickers": {
+    "title": "我的表情",
+    "upload": "上传图片",
+    "limits": "PNG、JPEG、WebP 或 GIF · 单张最大 5 MB",
+    "loading": "处理中…",
+    "empty": "把喜欢的表情，收在这里",
+    "remove": "移除",
+    "save": "添加到我的表情",
+    "saved": "已添加到我的表情",
+    "preview": "预览表情",
+    "manage": "管理",
+    "done": "完成",
+    "collectionHint": "点击即可发送，把喜欢的表情留在这里。",
+    "removeHint": "仅从收藏中移除，已发送的消息和回应不受影响。",
+    "emptyHint": "上传一张图片，让每次聊天都多一点你的风格。",
+    "chooseImage": "选择图片",
+    "cancel": "取消",
+    "replace": "更换图片",
+    "name": "表情名称",
+    "dropImage": "点击选择，或将图片拖到这里",
+    "pasteHint": "也可以直接粘贴剪贴板中的图片",
+    "uploading": "正在添加表情…",
+    "singleImage": "每次请选择一张图片。",
+    "invalidSize": "请选择不超过 5 MB 的非空图片。",
+    "invalidType": "仅支持 PNG、JPEG、WebP 和 GIF 图片。",
+    "invalidImage": "无法预览这张图片，请选择有效的图片。",
+    "removeNamed": "移除 {{name}}",
+    "addMore": "添加更多",
+    "selectedCount_other": "已选择 {{count}} 个表情",
+    "dropMore": "点击或拖入更多图片"
   }
 }

@@ -19,7 +19,6 @@ import { RoleOrderList } from './RoleOrderList';
 import { LockNote, LOCK_ICON } from '../../ui/LockNote';
 
 const ALL_PERMISSION_DEFS: PermDef[] = PERMISSION_GROUPS.flatMap((group) => group.perms);
-
 const PRESET_COLORS = [
   '#b9bbbe', '#a5f3c4', '#ffc9a9', '#c4b5fd', '#93c5fd',
   '#fbbf24', '#fda4af', '#f87171', '#60a5fa', '#34d399',

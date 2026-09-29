@@ -15,8 +15,12 @@
     "./src/activities.js": "./src/activities.ts",
     "./src/constants": "./src/constants.ts",
     "./src/constants.js": "./src/constants.ts",
+    "./src/mentions": "./src/mentions.ts",
+    "./src/mentions.js": "./src/mentions.ts",
     "./src/errors": "./src/errors.ts",
-    "./src/errors.js": "./src/errors.ts"
+    "./src/errors.js": "./src/errors.ts",
+    "./src/stickers": "./src/stickers.ts",
+    "./src/stickers.js": "./src/stickers.ts"
   },
   "scripts": {
     "build": "tsc",

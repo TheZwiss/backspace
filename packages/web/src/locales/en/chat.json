@@ -19,6 +19,7 @@
       "unknownUser": "Unknown User"
     },
     "reactions": {
+      "picker": "Reaction picker",
       "you": "You",
       "others_one": "{{count}} other",
       "others_other": "{{count}} others",
@@ -147,5 +148,42 @@
   "notification": {
     "unknownSender": "Someone",
     "attachmentOnly": "Sent an attachment"
+  },
+  "poke": {
+    "action": "Poke",
+    "received": "{{actor}} poked {{target}}",
+    "disconnected": "Disconnected. Poke was not sent."
+  },
+  "stickers": {
+    "title": "My stickers",
+    "upload": "Upload image",
+    "limits": "PNG, JPEG, WebP or GIF · up to 5 MB",
+    "loading": "Loading…",
+    "empty": "Your sticker collection starts here",
+    "remove": "Remove",
+    "save": "Add to my stickers",
+    "saved": "Added to my stickers",
+    "preview": "Preview sticker",
+    "manage": "Manage",
+    "done": "Done",
+    "collectionHint": "Pick a sticker to send. Make this space your own.",
+    "removeHint": "Remove stickers from your collection. Existing messages stay unchanged.",
+    "emptyHint": "Save your favorite moments as stickers, ready for your next reply.",
+    "chooseImage": "Choose image",
+    "cancel": "Cancel",
+    "replace": "Replace image",
+    "name": "Sticker name",
+    "dropImage": "Click or drop an image here",
+    "pasteHint": "You can also paste an image from your clipboard",
+    "uploading": "Adding sticker…",
+    "singleImage": "Choose one image at a time.",
+    "invalidSize": "Choose a non-empty image up to 5 MB.",
+    "invalidType": "Only PNG, JPEG, WebP and GIF images are supported.",
+    "invalidImage": "This image cannot be previewed. Choose a valid image.",
+    "removeNamed": "Remove {{name}}",
+    "addMore": "Add more",
+    "selectedCount_one": "{{count}} sticker selected",
+    "selectedCount_other": "{{count}} stickers selected",
+    "dropMore": "Click or drop more images here"
   }
 }

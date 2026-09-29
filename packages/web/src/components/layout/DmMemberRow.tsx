@@ -195,22 +195,23 @@ export function DmMemberRow({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5 min-w-0">
           <span
-            className={`text-[13.5px] leading-[1.2] font-medium truncate ${
+            className={`block min-w-0 text-[13.5px] leading-[1.2] font-medium truncate ${
               isOffline ? 'text-txt-tertiary' : 'text-txt-primary'
             }`}
+            title={displayName}
           >
             {displayName}
           </span>
           {showGlobe && (
             <Tooltip content={canonical.username} position="top">
-              <span data-federation-globe className="inline-flex">
+              <span data-federation-globe className="inline-flex flex-shrink-0">
                 <GlobeIcon />
               </span>
             </Tooltip>
           )}
           {isOwner && (
             <Tooltip content={t('dm:memberRow.ownerTooltip')} position="top">
-              <span data-owner-crown className="inline-flex">
+              <span data-owner-crown className="inline-flex flex-shrink-0">
                 <CrownIcon />
               </span>
             </Tooltip>
@@ -218,13 +219,13 @@ export function DmMemberRow({
         </div>
 
         {showGlobe && domain && (
-          <div className="text-[10px] leading-[1.3] text-txt-tertiary truncate opacity-60">
+          <div className="text-[10px] leading-[1.3] text-txt-tertiary truncate opacity-60" title={`@${domain}`}>
             @{domain}
           </div>
         )}
 
         {!isOffline && canonical.customStatus && (
-          <div className="text-[11px] leading-[1.3] text-txt-tertiary truncate">
+          <div className="text-[11px] leading-[1.3] text-txt-tertiary truncate" title={replaceEmojiShortcodes(canonical.customStatus)}>
             {replaceEmojiShortcodes(canonical.customStatus)}
           </div>
         )}

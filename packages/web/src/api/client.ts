@@ -1,3 +1,4 @@
+import type { PersonalSticker } from '@backspace/shared/src/stickers';
 import { isErrorCode, type ErrorCode, type ErrorDetails } from '@backspace/shared/src/errors';
 import type {
   AuthResponse,
@@ -158,6 +159,9 @@ export class RateLimitError extends HttpError {
 }
 
 export class BackspaceApiClient {
+  readonly notificationSettings: {
+    update: (target: { targetType: import('@backspace/shared').NotificationTargetType; targetId: string }, data: import('@backspace/shared').UpdateNotificationSettingRequest) => Promise<import('@backspace/shared').NotificationSetting>;
+  };
   readonly auth: {
     register: (data: RegisterRequest) => Promise<AuthResponse>;
     login: (data: LoginRequest) => Promise<AuthResponse>;
@@ -399,6 +403,13 @@ export class BackspaceApiClient {
     };
   };
 
+  stickers: {
+    list: () => Promise<PersonalSticker[]>;
+    upload: (data: { name: string; image: string }) => Promise<PersonalSticker>;
+    collect: (data: { id: string; token: string }) => Promise<PersonalSticker>;
+    remove: (id: string) => Promise<{ success: boolean }>;
+  };
+
   constructor(baseUrl: string, getToken: () => string | null, onUnauthorized?: () => void) {
     async function request<T>(
       method: string,
@@ -454,6 +465,17 @@ export class BackspaceApiClient {
 
       return response.json() as Promise<T>;
     }
+
+    this.notificationSettings = {
+      update: (target, data) => request('PUT',
+        '/users/@me/notification-settings/' + target.targetType + '/' + encodeURIComponent(target.targetId), data),
+    };
+    this.stickers = {
+      list: () => request('GET', '/stickers'),
+      upload: (data) => request('POST', '/stickers', data),
+      collect: ({ id, token }) => request('POST', `/stickers/${encodeURIComponent(id)}/collect`, { token }),
+      remove: (id) => request('DELETE', `/stickers/${encodeURIComponent(id)}`),
+    };
 
     this.auth = {
       register: (data: RegisterRequest) =>

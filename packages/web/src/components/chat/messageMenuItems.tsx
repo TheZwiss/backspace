@@ -1,7 +1,7 @@
 import React from 'react';
 import type { ContextMenuItem } from '../../stores/contextMenuStore';
 import type { MessageWithUser } from '@backspace/shared';
-import { saveImage, copyImageToClipboard } from '../../utils/imageActions';
+import { buildImageMenuItems } from './imageMenuItems';
 import { useUIStore } from '../../stores/uiStore';
 import { useTransferStore } from '../../stores/transferStore';
 import i18n from '../../i18n';
@@ -24,6 +24,8 @@ interface MessageMenuParams {
   onOpenEmojiPicker: () => void;
   onMarkUnread: (messageId: string) => void;
   imageUrl?: string | null;
+  stickerSource?: string | null;
+  stickerName?: string;
   sourceUrl?: string | null;
   videoUrl?: string | null;
   videoFilename?: string | null;
@@ -61,49 +63,7 @@ export function buildMessageMenuItems(params: MessageMenuParams): ContextMenuIte
 
   const items: ContextMenuItem[] = [];
 
-  // ── Image Actions (when right-clicking an image) ──────────────────────
-  if (imageUrl) {
-    items.push({
-      key: 'save-image',
-      type: 'action',
-      label: i18n.t('chat:menu.saveImage'),
-      icon: (
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
-        </svg>
-      ),
-      onClick: () => saveImage(imageUrl),
-    });
-    items.push({
-      key: 'copy-image',
-      type: 'action',
-      label: i18n.t('chat:menu.copyImage'),
-      icon: (
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M21 9v10c0 1.1-.9 2-2 2H8c-1.1 0-2-.9-2-2V5c0-1.1.9-2 2-2h7l6 6zm-2 1h-5V4H8v15h11V10zM3 15V3c0-1.1.9-2 2-2h9v2H5v12H3z" />
-        </svg>
-      ),
-      onClick: () => {
-        copyImageToClipboard(imageUrl);
-      },
-    });
-    if (!sourceUrl) {
-      items.push({
-        key: 'open-original',
-        type: 'action',
-        label: i18n.t('chat:menu.openOriginal'),
-        icon: (
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M19 19H5V5h7V3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z" />
-          </svg>
-        ),
-        onClick: () => {
-          window.open(imageUrl, '_blank', 'noopener');
-        },
-      });
-    }
-    items.push({ key: 'image-sep', type: 'separator' });
-  }
+  items.push(...buildImageMenuItems({ imageUrl, sourceUrl, stickerSource: params.stickerSource, stickerName: params.stickerName }));
 
   // ── Video Actions (when right-clicking a video attachment) ─────────────
   if (videoUrl && videoFilename) {
@@ -151,40 +111,7 @@ export function buildMessageMenuItems(params: MessageMenuParams): ContextMenuIte
     items.push({ key: 'audio-sep', type: 'separator' });
   }
 
-  // ── Link Actions (when URL text is suppressed) ──────────────────────
-  if (sourceUrl) {
-    items.push({
-      key: 'copy-link',
-      type: 'action',
-      label: i18n.t('chat:menu.copyLink'),
-      icon: (
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z" />
-        </svg>
-      ),
-      onClick: () => {
-        navigator.clipboard.writeText(sourceUrl).then(() => {
-          useUIStore.getState().addToast(i18n.t('chat:menu.linkCopied'), 'success', 3000);
-        }).catch(() => {
-          useUIStore.getState().addToast(i18n.t('chat:menu.linkCopyFailed'), 'warning', 3000);
-        });
-      },
-    });
-    items.push({
-      key: 'open-link',
-      type: 'action',
-      label: i18n.t('chat:menu.openLink'),
-      icon: (
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M19 19H5V5h7V3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z" />
-        </svg>
-      ),
-      onClick: () => {
-        window.open(sourceUrl, '_blank', 'noopener');
-      },
-    });
-    items.push({ key: 'link-sep', type: 'separator' });
-  }
+  items.push(...buildLinkMenuItems(sourceUrl));
 
   // ── Quick Reaction Row ──────────────────────────────────────────────────
   if (canAddReactions) {
@@ -322,6 +249,46 @@ export function buildMessageMenuItems(params: MessageMenuParams): ContextMenuIte
       onClick: onDelete,
       danger: true,
     });
+  }
+
+  return items;
+}
+
+function buildLinkMenuItems(sourceUrl?: string | null): ContextMenuItem[] {
+  const items: ContextMenuItem[] = [];
+  // ── Link Actions (when URL text is suppressed) ──────────────────────
+  if (sourceUrl) {
+    items.push({
+      key: 'copy-link',
+      type: 'action',
+      label: i18n.t('chat:menu.copyLink'),
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z" />
+        </svg>
+      ),
+      onClick: () => {
+        navigator.clipboard.writeText(sourceUrl).then(() => {
+          useUIStore.getState().addToast(i18n.t('chat:menu.linkCopied'), 'success', 3000);
+        }).catch(() => {
+          useUIStore.getState().addToast(i18n.t('chat:menu.linkCopyFailed'), 'warning', 3000);
+        });
+      },
+    });
+    items.push({
+      key: 'open-link',
+      type: 'action',
+      label: i18n.t('chat:menu.openLink'),
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M19 19H5V5h7V3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z" />
+        </svg>
+      ),
+      onClick: () => {
+        window.open(sourceUrl, '_blank', 'noopener');
+      },
+    });
+    items.push({ key: 'link-sep', type: 'separator' });
   }
 
   return items;

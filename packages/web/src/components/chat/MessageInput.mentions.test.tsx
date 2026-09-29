@@ -136,4 +136,27 @@ describe('MessageInput mention picker (#338)', () => {
     expect(screen.getByText('Mira')).toBeInTheDocument();
     expect(screen.queryByText('Zed')).not.toBeInTheDocument();
   });
+
+  it('lists roles and mass mentions in space channels when authorized and inserts role token', () => {
+    const mira = makeUser('mira', 'mira', 'Mira');
+    const teamRole = { id: 'team-role', name: 'DevTeam', color: '#00ff00', isEveryone: false, position: 1, permissions: '0' };
+    useSpaceStore.setState({
+      dmChannels: [],
+      channelToSpaceMap: new Map([['chan-1', 'space-1']]),
+      // 1024 (VIEW_CHANNEL) + 32768 (MENTION_EVERYONE)
+      channelPermissions: new Map([['chan-1', String(1024n | (1n << 15n))]]),
+      members: [member('space-1', mira)],
+      roles: [teamRole as any],
+      currentSpaceId: 'space-1',
+    });
+    render(<MessageInput channelId="chan-1" channelName="general" />);
+
+    const textbox = typeInComposer('hello @dev');
+
+    expect(screen.getByText('@DevTeam')).toBeInTheDocument();
+    fireEvent.keyDown(textbox, { key: 'Enter' });
+
+    expect(useComposerStore.getState().get('chan-1').draftText).toBe('hello <@&team-role> ');
+  });
 });
+

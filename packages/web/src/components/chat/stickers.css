@@ -1,0 +1,17 @@
+/* Keep sticker controls on the same surface/accent tokens as the surrounding chat. */
+.sticker-primary-button, .sticker-secondary-button, .sticker-icon-button {
+  @apply inline-flex items-center justify-center gap-1.5 rounded-lg text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary/60 disabled:opacity-40 disabled:cursor-not-allowed;
+}
+.sticker-primary-button { @apply px-3 py-2 bg-accent-primary text-surface-base hover:bg-accent-primary-hover; }
+.sticker-secondary-button { @apply px-2.5 py-2 text-txt-secondary hover:bg-interactive-hover hover:text-txt-primary; }
+.sticker-icon-button { @apply w-8 h-8 text-txt-tertiary hover:bg-interactive-hover hover:text-txt-primary; }
+.sticker-tile { @apply rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary/60; }
+.sticker-remove-button { @apply absolute top-1 right-1 flex h-6 w-6 items-center justify-center rounded-full border border-accent-rose/30 bg-surface-elevated text-txt-danger hover:bg-accent-rose/20 disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-accent-rose; }
+.sticker-dropzone { @apply w-full min-h-48 flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border-hard bg-surface-input/40 p-4 transition-colors hover:border-accent-primary/60 hover:bg-accent-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary/60 disabled:cursor-wait; }
+.sticker-dropzone-active { @apply border-accent-primary bg-accent-primary/10; }
+/* Subtle checks reveal transparent edges without changing the uploaded image. */
+.sticker-checkerboard {
+  background-image: conic-gradient(rgb(var(--text-tertiary) / .06) 25%, transparent 0 50%, rgb(var(--text-tertiary) / .06) 0 75%, transparent 0);
+  background-size: 16px 16px;
+}
+.sticker-spinner { @apply inline-block h-3.5 w-3.5 shrink-0 rounded-full border-2 border-current border-t-transparent animate-spin; }

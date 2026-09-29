@@ -4,6 +4,7 @@ import {
   RoomEvent,
   Track,
   Participant,
+  AudioPresets,
   RemoteParticipant,
   RemoteTrackPublication,
   RemoteAudioTrack,
@@ -717,7 +718,16 @@ export function useLiveKit() {
       useVoiceStore.setState({ livekitHostOrigin: hostOrigin });
       // Refreshed per join; home's document arrives with every home `ready`.
       if (hostOrigin) void refreshStreamHostLimits(hostOrigin);
-      const newRoom = new Room({ adaptiveStream: true, dynacast: true, publishDefaults: { videoCodec: 'h264', simulcast: true } });
+      const newRoom = new Room({
+        adaptiveStream: true,
+        dynacast: true,
+        publishDefaults: {
+          videoCodec: 'h264',
+          simulcast: true,
+          audioPreset: AudioPresets.musicHighQualityStereo,
+          dtx: false,
+        },
+      });
       roomRef.current = newRoom;
       republishRef.current?.clear();
       republishRef.current = new StreamRepublishTracker((identity) => {
