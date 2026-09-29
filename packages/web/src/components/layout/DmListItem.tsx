@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import type { DmChannel, User } from '@backspace/shared';
 import { Avatar } from '../ui/Avatar';
 import { AvatarStack } from '../ui/AvatarStack';
@@ -31,6 +32,7 @@ interface DmListItemProps {
 }
 
 export function DmListItem({ dm, isActive, isUnread, user, onSelect, onClose, onLeave, onContextMenu }: DmListItemProps) {
+  const { t } = useTranslation('dm');
   const otherMembers = dm.members.filter(m => !isSelf(m, user));
   const isGroup = !!dm.ownerId;
   if (otherMembers.length === 0 && !isGroup) return null;
@@ -195,7 +197,7 @@ export function DmListItem({ dm, isActive, isUnread, user, onSelect, onClose, on
       <button
         onClick={handleClose}
         className={closeClass}
-        title={isGroup ? 'Leave Group DM' : 'Close DM'}
+        title={isGroup ? t('list.leaveGroup') : t('list.close')}
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
           <path d="M18.4 4L12 10.4L5.6 4L4 5.6L10.4 12L4 18.4L5.6 20L12 13.6L18.4 20L20 18.4L13.6 12L20 5.6L18.4 4Z" />

@@ -1,6 +1,7 @@
 import { layoutRect, layoutPixels, MOBILE_LAYOUT_BREAKPOINT } from '../../platform/interfaceScale';
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -116,6 +117,7 @@ function selectPipStream(
 }
 
 export function PictureInPicture() {
+  const { t } = useTranslation('voice');
   const navigate = useNavigate();
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -446,7 +448,7 @@ export function PictureInPicture() {
       {/* LIVE badge */}
       {isScreen && (
         <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-accent-rose rounded text-[11px] font-bold text-white uppercase tracking-wide">
-          LIVE
+          {t('badges.live')}
         </div>
       )}
 

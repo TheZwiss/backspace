@@ -450,6 +450,7 @@ export function StreamingPanel() {
               <tbody>
                 {enabledResolutions.map((res) => (
                   <tr key={res}>
+                    {/* i18n-check: allow-literal (a resolution such as 1080p reads the same in every language) */}
                     <td className="text-txt-secondary font-medium pr-2 py-0.5">{RESOLUTION_LABELS[res as Resolution] ?? `${res}p`}</td>
                     {enabledFramerates.map((fps) => {
                       const key = `${res}_${fps}`;

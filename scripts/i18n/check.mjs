@@ -8,7 +8,9 @@
  * root, using forward slashes.
  */
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 export const SOURCE_LANGUAGE = 'en';
 export const LOCALES_DIR = 'packages/web/src/locales';
@@ -444,37 +446,24 @@ export function checkErrorCodes(root) {
 // ---------------------------------------------------------------------------
 
 const ALLOW_LITERAL_MARKER = 'i18n-check: allow-literal';
-const TEXT_ATTRIBUTES = ['placeholder', 'title', 'aria-label', 'alt'];
+const TEXT_ATTRIBUTES = new Set(['placeholder', 'title', 'aria-label', 'alt']);
 
-// A JSX tag whose attributes may contain `{...}` expressions nested two deep
-// (enough for `onClick={() => set({ a: 1 })}`), followed by a text node that
-// may itself contain `{...}` expressions, ending at the next tag.
-const BRACES = String.raw`\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\}`;
-// A JSX tag is never glued to an identifier or a closing bracket the way a
-// TypeScript generic is (`useRef<HTMLDivElement>(null)`), hence the lookbehind.
-const TAG = String.raw`(?<![\w$.\])])<\/?[A-Za-z][\w.:-]*(?:\s+(?:[^<>{}]|${BRACES})*)?\/?>`;
-const JSX_TEXT_RE = new RegExp(`(${TAG})((?:[^<>{}]|${BRACES})+?)(?=<)`, 'g');
-// Text that is really JavaScript between two elements of a conditional:
-// `</div>) : ready ? (<div>`. JSX text never starts with a closing bracket and
-// never carries operators.
-const JS_CONTEXT_RE = /^\s*[)\]}]|===|!==|&&|\|\||=>/;
-const ATTRIBUTE_RE = new RegExp(String.raw`\b(${TEXT_ATTRIBUTES.join('|')})=(["'])([^"'\n]*?)\2`, 'g');
-const TOAST_RE = /\baddToast\(\s*(['"`])((?:\\.|(?!\1)[^\\\n])*)\1/g;
-
-function stripExpressions(text) {
-  let previous;
-  let current = text;
-  do {
-    previous = current;
-    current = current.replace(/\{[^{}]*\}/g, ' ');
-  } while (current !== previous);
-  return current;
+/**
+ * The TypeScript compiler, from the web package that depends on it: the
+ * repository root has no dependency of its own on it, and the check runs as a
+ * plain `node` script from the root. Loaded on first use.
+ */
+const repoRootOfThisFile = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+let typescript = null;
+function ts() {
+  if (typescript) return typescript;
+  const requireFromWeb = createRequire(path.join(repoRootOfThisFile, 'packages/web/package.json'));
+  typescript = requireFromWeb('typescript');
+  return typescript;
 }
 
-function hasLetters(text) {
-  return /\p{L}/u.test(text.replace(/&[a-zA-Z]+;|&#\d+;/g, ' '));
-}
-
+// stripComments is also what readErrorCodes reads the ERROR_CODES array
+// through; it is a hoisted declaration for that reason.
 function stripComments(text) {
   // Block comments become spaces of equal length so indexes and lines hold.
   return text
@@ -482,43 +471,87 @@ function stripComments(text) {
     .replace(/(^|[^:'"`])\/\/[^\n]*/g, (m, lead) => lead + ' '.repeat(m.length - lead.length));
 }
 
-function allowedByMarker(text, index) {
-  const lineStart = text.lastIndexOf('\n', index - 1) + 1;
-  const previousLineStart = text.lastIndexOf('\n', lineStart - 2) + 1;
-  const previousLine = text.slice(previousLineStart, Math.max(previousLineStart, lineStart - 1));
-  const currentLine = text.slice(lineStart, text.indexOf('\n', index) === -1 ? text.length : text.indexOf('\n', index));
-  return previousLine.includes(ALLOW_LITERAL_MARKER) || currentLine.includes(ALLOW_LITERAL_MARKER);
+function hasLetters(text) {
+  return /\p{L}/u.test(text.replace(/&[a-zA-Z]+;|&#\d+;/g, ' '));
 }
 
-function literalFindingsIn(rel, rawText) {
+function allowedByMarker(lines, line) {
+  return (lines[line - 1] ?? '').includes(ALLOW_LITERAL_MARKER)
+    || (lines[line - 2] ?? '').includes(ALLOW_LITERAL_MARKER);
+}
+
+/**
+ * The literal text an expression can put on screen. It follows the value
+ * through the branches of `?:`, both sides of `||` and `??`, the right side of
+ * `&&`, `+` concatenation, parentheses and the literal parts of a template;
+ * it never looks into a condition or into a call's arguments, so `t('key')`,
+ * `kind === 'approve'` and `format('short')` are not text.
+ */
+function renderedLiterals(node, out) {
+  const T = ts();
+  if (T.isStringLiteral(node) || T.isNoSubstitutionTemplateLiteral(node)) {
+    out.push({ node, text: node.text });
+  } else if (T.isTemplateExpression(node)) {
+    out.push({ node, text: [node.head.text, ...node.templateSpans.map((span) => span.literal.text)].join(' ') });
+  } else if (T.isParenthesizedExpression(node) || T.isAsExpression(node) || T.isNonNullExpression(node)) {
+    renderedLiterals(node.expression, out);
+  } else if (T.isConditionalExpression(node)) {
+    renderedLiterals(node.whenTrue, out);
+    renderedLiterals(node.whenFalse, out);
+  } else if (T.isBinaryExpression(node)) {
+    const op = node.operatorToken.kind;
+    const K = T.SyntaxKind;
+    if (op === K.AmpersandAmpersandToken) renderedLiterals(node.right, out);
+    else if (op === K.BarBarToken || op === K.QuestionQuestionToken || op === K.PlusToken) {
+      renderedLiterals(node.left, out);
+      renderedLiterals(node.right, out);
+    }
+  }
+  return out;
+}
+
+/**
+ * Literal user-facing text in one component file, read from its syntax tree:
+ * JSX text anywhere (inside conditionals and maps too), literal values of the
+ * text attributes whether quoted or computed, literal JSX children
+ * (`{open ? 'Open' : t('x')}`), and literal first arguments of `addToast`.
+ */
+function literalFindingsIn(rel, text) {
+  const T = ts();
+  const source = T.createSourceFile(rel, text, T.ScriptTarget.Latest, true, T.ScriptKind.TSX);
+  const lines = text.split('\n');
   const findings = [];
-  const text = rawText; // keep indexes; comments are consulted for the marker
-  const scan = stripComments(rawText);
-  const push = (index, message) => {
-    if (allowedByMarker(text, index)) return;
-    findings.push({ rule: 'literal-string', file: rel, line: lineOf(text, index), message });
+  const push = (node, message) => {
+    const line = source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
+    if (allowedByMarker(lines, line)) return;
+    findings.push({ rule: 'literal-string', file: rel, line, message });
+  };
+  const pushRendered = (expression, describe) => {
+    for (const { node, text: value } of renderedLiterals(expression, [])) {
+      if (hasLetters(value)) push(node, `${describe} "${value.replace(/\s+/g, ' ').trim().slice(0, 60)}"`);
+    }
   };
 
-  for (const match of scan.matchAll(JSX_TEXT_RE)) {
-    const tag = match[1];
-    const body = match[2];
-    if (/^<\/?(?:script|style)\b/.test(tag)) continue;
-    const visible = stripExpressions(body).trim();
-    if (!hasLetters(visible) || JS_CONTEXT_RE.test(visible)) continue;
-    const bodyIndex = match.index + tag.length + body.search(/\S/);
-    push(bodyIndex, `JSX text "${visible.replace(/\s+/g, ' ').slice(0, 60)}"`);
-  }
-
-  for (const match of scan.matchAll(ATTRIBUTE_RE)) {
-    if (!hasLetters(match[3])) continue;
-    push(match.index, `${match[1]} attribute "${match[3].slice(0, 60)}"`);
-  }
-
-  for (const match of scan.matchAll(TOAST_RE)) {
-    if (!hasLetters(match[2])) continue;
-    push(match.index, `addToast literal "${match[2].slice(0, 60)}"`);
-  }
-
+  const visit = (node) => {
+    if (T.isJsxText(node)) {
+      const visible = node.text.replace(/\s+/g, ' ').trim();
+      if (hasLetters(visible)) push(node, `JSX text "${visible.slice(0, 60)}"`);
+    } else if (T.isJsxAttribute(node)) {
+      const name = node.name.getText(source);
+      const init = node.initializer;
+      if (TEXT_ATTRIBUTES.has(name) && init) {
+        if (T.isStringLiteral(init)) pushRendered(init, `${name} attribute`);
+        else if (T.isJsxExpression(init) && init.expression) pushRendered(init.expression, `${name} attribute`);
+      }
+    } else if (T.isJsxExpression(node) && node.expression && (T.isJsxElement(node.parent) || T.isJsxFragment(node.parent))) {
+      pushRendered(node.expression, 'JSX child');
+    } else if (T.isCallExpression(node) && T.isIdentifier(node.expression) && node.expression.text === 'addToast') {
+      const first = node.arguments[0];
+      if (first) pushRendered(first, 'addToast literal');
+    }
+    T.forEachChild(node, visit);
+  };
+  visit(source);
   return findings;
 }
 

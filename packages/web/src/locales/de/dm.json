@@ -87,7 +87,8 @@
     "hoursShort_one": "{{count}} Std",
     "hoursShort_other": "{{count}} Std",
     "daysShort_one": "{{count}} T",
-    "daysShort_other": "{{count}} T"
+    "daysShort_other": "{{count}} T",
+    "close": "Unterhaltung schließen"
   },
   "newDm": {
     "title": "Neue Direktnachricht",

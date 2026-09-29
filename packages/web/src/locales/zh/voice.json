@@ -250,5 +250,6 @@
     "shareScreen": "共享屏幕",
     "stopSharingScreen": "停止共享屏幕",
     "disconnect": "断开通话"
-  }
+  },
+  "connectLocked": "您没有连接到此频道的权限"
 }

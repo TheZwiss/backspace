@@ -95,7 +95,8 @@
     "daysShort_one": "{{count}} д",
     "daysShort_few": "{{count}} д",
     "daysShort_many": "{{count}} д",
-    "daysShort_other": "{{count}} д"
+    "daysShort_other": "{{count}} д",
+    "close": "Закрыть беседу"
   },
   "newDm": {
     "title": "Новое личное сообщение",

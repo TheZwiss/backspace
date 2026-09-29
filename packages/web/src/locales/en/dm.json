@@ -87,7 +87,8 @@
     "hoursShort_one": "{{count}}h",
     "hoursShort_other": "{{count}}h",
     "daysShort_one": "{{count}}d",
-    "daysShort_other": "{{count}}d"
+    "daysShort_other": "{{count}}d",
+    "close": "Close DM"
   },
   "newDm": {
     "title": "New Direct Message",

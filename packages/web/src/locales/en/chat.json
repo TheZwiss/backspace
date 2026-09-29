@@ -147,5 +147,14 @@
   "notification": {
     "unknownSender": "Someone",
     "attachmentOnly": "Sent an attachment"
+  },
+  "embed": {
+    "loadAction": "Click to load",
+    "loadNamed": "Load {{name}}",
+    "loadUnnamed": "Load embed",
+    "frameTitle": "Embed",
+    "playNamed": "Play {{title}}",
+    "playUnnamed": "Play video",
+    "videoTitle": "Video"
   }
 }

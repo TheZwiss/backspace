@@ -252,5 +252,6 @@
     "shareScreen": "Share screen",
     "stopSharingScreen": "Stop sharing screen",
     "disconnect": "Disconnect from call"
-  }
+  },
+  "connectLocked": "You don't have permission to connect to this channel"
 }

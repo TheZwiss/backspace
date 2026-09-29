@@ -311,6 +311,45 @@ describe('literal-string', () => {
     expect(checkLiteralStrings(root, { pending: [] })).toEqual([]);
   });
 
+  it('reads text inside conditional JSX and computed attributes (#328)', () => {
+    // The regex scan treated a `{...}` block as opaque, so everything inside
+    // `{ready ? (...) : (...)}` and every `attr={...}` went unread.
+    const hidden = [
+      'export function E({ ready, x, n }: { ready: boolean; x: string | null; n: number }) {',
+      '  return (',
+      '    <div>',
+      '      {ready ? (',
+      '        <button aria-label={`Load ${x}`} title={x ?? "Embed"}>',
+      '          <svg />',
+      '          Click to load',
+      '        </button>',
+      '      ) : null}',
+      '      <p title={ready ? "Leave Group DM" : "Close DM"}>{n} connected</p>',
+      '      <p>{ready ? "Open" : t("closed")}</p>',
+      '    </div>',
+      '  );',
+      '}',
+    ].join('\n');
+    const root = makeRoot({ 'packages/web/src/components/E.tsx': hidden });
+    const findings = checkLiteralStrings(root, { pending: [] }) as Finding[];
+    expect(findings.map((f) => f.line).sort((a, b) => (a ?? 0) - (b ?? 0))).toEqual([5, 5, 7, 10, 10, 10, 11]);
+  });
+
+  it('does not read conditions, keys passed to functions or class names as text', () => {
+    const clean = [
+      'export function K({ kind, a }: { kind: string; a: boolean }) {',
+      '  return (',
+      '    <div className="text-sm text-txt-primary" title={kind === "approve" ? t("x.approve") : t("x.deny")}>',
+      '      {a && <span aria-label={t("y", { name: "Mira" })}>{format("short")}</span>}',
+      '      <img alt="" />',
+      '    </div>',
+      '  );',
+      '}',
+    ].join('\n');
+    const root = makeRoot({ 'packages/web/src/components/K.tsx': clean });
+    expect(checkLiteralStrings(root, { pending: [] })).toEqual([]);
+  });
+
   it('lists every file with literals regardless of the pending list', () => {
     const root = makeRoot({
       'packages/web/src/components/P.tsx': dirty,

@@ -155,5 +155,14 @@
   "notification": {
     "unknownSender": "Кто-то",
     "attachmentOnly": "Отправлено вложение"
+  },
+  "embed": {
+    "loadAction": "Нажмите, чтобы загрузить",
+    "loadNamed": "Загрузить: {{name}}",
+    "loadUnnamed": "Загрузить встроенный контент",
+    "frameTitle": "Встроенный контент",
+    "playNamed": "Воспроизвести: {{title}}",
+    "playUnnamed": "Воспроизвести видео",
+    "videoTitle": "Видео"
   }
 }

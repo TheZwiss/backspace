@@ -252,5 +252,6 @@
     "shareScreen": "Bildschirm teilen",
     "stopSharingScreen": "Bildschirmübertragung beenden",
     "disconnect": "Anruf verlassen"
-  }
+  },
+  "connectLocked": "Du hast keine Berechtigung, dich mit diesem Kanal zu verbinden"
 }
