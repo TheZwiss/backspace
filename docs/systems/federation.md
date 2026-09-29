@@ -2198,13 +2198,7 @@ The frontend needs to resolve federated identities for display purposes:
 
 **`parseFederatedUsername(username)`** -- splits `"erin@nova.ddns.net"` into `{baseName: "erin", domain: "nova.ddns.net"}`.
 
-**`isSelf(user, homeUser)`** -- determines if a user object is the logged-in user or their replicated stub. Uses cascading checks: same ID, known self-ID set, homeInstance + baseName match.
-
-**`canonicalUserMatch(a, b)`** -- federation-safe check for whether two user objects represent the same person. Cascades through: same local ID, `homeUserId` cross-match, username + homeInstance fallback.
-
-**`resolveDisplayIdentity(user, homeUser)`** -- returns `homeUser` for display if `user` is a replicated stub of `homeUser`, enabling consistent avatars and display names across instances.
-
-**Cross-instance self-ID registry:** `registerSelfId(id)` / `clearSelfIds()` track all Snowflake IDs belonging to the current user across connected instances, populated from WS `ready` events.
+**Who a row is, and whether it is the signed-in user** (`homeIdentityOf`, `userKey`, `authStore.myRowIds`, `isMine`, `personRequest`) are described in `client-federation.md` section 5.
 
 ---
 
