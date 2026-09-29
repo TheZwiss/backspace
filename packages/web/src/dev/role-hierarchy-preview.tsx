@@ -39,6 +39,10 @@
 //                    viewer lacks) locked, each reason under the list.
 //   overrides-higher channel overrides on Moderators (above the viewer) and
 //                    on Ada (ranked above the viewer): read-only, opened.
+//   voice-refusal    a voice moderation action refused by the server over
+//                    the WebSocket (`error` with code role_hierarchy): the
+//                    toast the socket handler raises, through the same
+//                    describeErrorCode call.
 // `?lang=de` (the app's dev-only switch) renders any scene in German.
 import { createRoot } from 'react-dom/client';
 import type { MemberWithUser, Role, User } from '@backspace/shared';
@@ -52,6 +56,8 @@ import { useUIStore } from '../stores/uiStore';
 import { api, HttpError } from '../api/client';
 import { ALL_PERMISSIONS, PermissionBits, permissionsToString } from '../utils/permissions';
 import { initI18n } from '../i18n';
+import { describeErrorCode } from '../i18n/errors';
+import { ToastContainer } from '../components/ui/ToastContainer';
 import { initializeInterfaceScale } from '../platform/interfaceScale';
 import '../styles/globals.css';
 
@@ -59,12 +65,12 @@ type Scene =
   | 'members' | 'role-locked' | 'role-editable'
   | 'order-owner' | 'order-moderator' | 'order-keyboard' | 'order-error' | 'order-mobile' | 'order-mobile-moderator'
   | 'held-role' | 'held-everyone' | 'held-owner' | 'held-mobile' | 'held-overrides'
-  | 'members-held' | 'overrides-higher';
+  | 'members-held' | 'overrides-higher' | 'voice-refusal';
 const SCENES: readonly Scene[] = [
   'members', 'role-locked', 'role-editable',
   'order-owner', 'order-moderator', 'order-keyboard', 'order-error', 'order-mobile', 'order-mobile-moderator',
   'held-role', 'held-everyone', 'held-owner', 'held-mobile', 'held-overrides',
-  'members-held', 'overrides-higher',
+  'members-held', 'overrides-higher', 'voice-refusal',
 ];
 
 const SPACE_ID = 'space-1';
@@ -215,7 +221,8 @@ function Workbench({ scene }: { scene: Scene }) {
   return (
     <div className="min-h-screen py-6 bg-surface-chat">
       <div className={scene.startsWith('order-mobile') || scene === 'held-mobile' ? 'px-4 w-[390px]' : 'px-6 max-w-[640px] mx-auto'}>
-        {scene === 'members' ? <MembersPanel spaceId={SPACE_ID} />
+        {scene === 'voice-refusal' ? <ToastContainer />
+          : scene === 'members' ? <MembersPanel spaceId={SPACE_ID} />
           : scene === 'held-overrides' ? <OverridesBench overrides={HELD_OVERRIDES} />
             : scene === 'overrides-higher' ? <OverridesBench overrides={HIGHER_OVERRIDES} />
             : scene === 'members-held' ? <MembersPanel spaceId={SPACE_ID} />
@@ -254,6 +261,9 @@ async function start(): Promise<void> {
   const host = document.getElementById('root');
   if (!host) throw new Error('missing #root');
   createRoot(host).render(<Workbench scene={scene} />);
+  if (scene === 'voice-refusal') {
+    useUIStore.getState().addToast(describeErrorCode('role_hierarchy', 'You can only do that to members and roles ranked below your highest role.'), 'warning', 0);
+  }
   if (scene === 'members') await clickText('Lena', '.text-sm.font-medium');
   if (scene === 'role-locked') await clickText('Moderators', 'button');
   if (scene === 'role-editable') await clickText('Members', 'button');

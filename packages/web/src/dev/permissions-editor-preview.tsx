@@ -24,6 +24,11 @@
 //              View Channels deny set back to neutral.
 //   long-edit  @everyone opened and its Send Messages deny set back to
 //              neutral: a long list with a pending change and no note.
+//   overview-private  the Overview tab of the private entity: the switch
+//              on and the lock note.
+//   overview-after-save  the private entity, the @everyone row removed on
+//              the Permissions tab and saved, then back to Overview: public,
+//              without reopening the dialog.
 import { createRoot } from 'react-dom/client';
 import type { Channel, ChannelCategory, MemberWithUser, Role, User } from '@backspace/shared';
 import { ChannelSettingsModal } from '../components/modals/ChannelSettingsModal';
@@ -35,8 +40,8 @@ import { initI18n } from '../i18n';
 import { initializeInterfaceScale } from '../platform/interfaceScale';
 import '../styles/globals.css';
 
-type Scene = 'many' | 'expanded' | 'removed' | 'empty' | 'everyone' | 'picker' | 'full' | 'members' | 'no-match' | 'private-removed' | 'private-cleared' | 'long-edit';
-const SCENES: readonly Scene[] = ['many', 'expanded', 'removed', 'empty', 'everyone', 'picker', 'full', 'members', 'no-match', 'private-removed', 'private-cleared', 'long-edit'];
+type Scene = 'many' | 'expanded' | 'removed' | 'empty' | 'everyone' | 'picker' | 'full' | 'members' | 'no-match' | 'private-removed' | 'private-cleared' | 'long-edit' | 'overview-private' | 'overview-after-save';
+const SCENES: readonly Scene[] = ['many', 'expanded', 'removed', 'empty', 'everyone', 'picker', 'full', 'members', 'no-match', 'private-removed', 'private-cleared', 'long-edit', 'overview-private', 'overview-after-save'];
 type Entity = 'channel' | 'category';
 
 const SPACE_ID = 'space-1';
@@ -106,7 +111,7 @@ function seededOverrides(scene: Scene): StoredOverride[] {
     channelId: CHANNEL_ID, targetType, targetId, allow: permissionsToString(allow), deny: permissionsToString(deny),
   });
   const everyRole = scene === 'full' ? [o('role', 'r-member', PermissionBits.ADD_REACTIONS, 0n)] : [];
-  const hidden = scene === 'private-removed' || scene === 'private-cleared';
+  const hidden = scene === 'private-removed' || scene === 'private-cleared' || scene === 'overview-private' || scene === 'overview-after-save';
   const everyoneDeny = hidden ? PermissionBits.VIEW_CHANNEL | PermissionBits.SEND_MESSAGES : PermissionBits.SEND_MESSAGES;
   return [
     ...everyRole,
@@ -188,11 +193,23 @@ function typeInto(input: HTMLInputElement, value: string): void {
 }
 
 async function drive(scene: Scene): Promise<void> {
+  if (scene === 'overview-private') {
+    await waitFor(() => document.querySelector('[role="switch"][aria-checked="true"]'));
+    return;
+  }
   const tab = await waitFor(() => buttonByText('Permissions'));
   tab.click();
   if (scene === 'empty' || scene === 'many') return;
   if (scene === 'everyone') {
     (await waitFor(() => rowButton('@everyone'))).click();
+    return;
+  }
+  if (scene === 'overview-after-save') {
+    await waitFor(() => rowButton('@everyone'));
+    (await waitFor(() => document.querySelector<HTMLButtonElement>('button[aria-label="Remove override for @everyone"]'))).click();
+    (await waitFor(() => buttonByText('Save'))).click();
+    await waitFor(() => (buttonByText('Save') ? null : true));
+    (await waitFor(() => buttonByText('Overview'))).click();
     return;
   }
   if (scene === 'private-removed') {
