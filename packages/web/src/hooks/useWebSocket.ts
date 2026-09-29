@@ -131,6 +131,7 @@ function buildWsUrl(origin: string): string {
 // ─── Call relay helpers ───────────────────────────────────────────────────────
 
 import { buildCallUndeliverableToast } from '../utils/callUndeliverableToast';
+import { peerRejectedToast } from '../utils/peerRejectedToast';
 
 export { buildCallUndeliverableToast };
 
@@ -834,12 +835,7 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
       rejectedPeerOrigins.add(event.peerOrigin);
       awaitingApprovalPeerOrigins.delete(event.peerOrigin);
       activePeerOrigins.delete(event.peerOrigin);
-      const label = event.peerLabel || event.peerOrigin;
-      addToast(
-        `Cannot relay messages to ${label} — ${event.reason}`,
-        'warning',
-        10000,
-      );
+      addToast(peerRejectedToast(event), 'warning', 10000);
       notifyFederationChangeListeners();
       break;
     }

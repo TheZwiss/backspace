@@ -169,7 +169,6 @@
       "active": "Active",
       "pending": "Pending",
       "unreachable": "Unreachable",
-      "rejected": "Rejected (auto-peering denied)",
       "rejectedShort": "Rejected",
       "revoked": "Revoked",
       "awaitingApproval": "Awaiting Approval",
@@ -218,7 +217,27 @@
       "rotateSecret": "Rotate Secret",
       "rotationInProgress": "Rotation already in progress",
       "revoke": "Revoke",
-      "editInterval": "Edit rotation interval"
+      "editInterval": "Edit rotation interval",
+      "reason": {
+        "auth_failures": "Signed deliveries keep failing",
+        "peer_reset_detected": "Reinstalled with a new identity",
+        "repeer_incomplete": "Re-peering could not be verified",
+        "denied_by_local_admin": "Declined by your admin",
+        "denied_by_remote": "Declined by their admin",
+        "revoked_by_remote": "Revoked by their admin",
+        "expired_on_remote": "Request expired on their side",
+        "stale_peering_on_remote": "Their side holds an older peering"
+      },
+      "reasonDetail": {
+        "auth_failures": "{{host}} refused five signed deliveries in a row, so the two instances no longer share the same secret. Reset the peering, then peer again.",
+        "peer_reset_detected": "{{host}} was reinstalled: it reports a different instance identity than before. Use Re-peer in the banner above to connect to the new instance and clean up the old one's accounts.",
+        "repeer_incomplete": "{{host}} accepted a handshake, but a signed check with the new secret failed, so the peering is not used. Reset it and try again. If it fails again, their admin has to reset their side.",
+        "denied_by_local_admin": "An admin here declined the peering request from {{host}}. Its requests are refused until you re-initiate or delete this entry.",
+        "denied_by_remote": "The admin of {{host}} declined peering with this instance. Re-initiate once they agree.",
+        "revoked_by_remote": "The admin of {{host}} revoked peering with this instance. It comes back when they re-initiate.",
+        "expired_on_remote": "The admin of {{host}} did not answer the peering request within 30 days. Re-initiate to ask again.",
+        "stale_peering_on_remote": "{{host}} still holds an older peering with this instance and refuses a new one until its admin resets it. This instance checks every 15 minutes and connects as soon as they have."
+      }
     },
     "approvals": {
       "title": "Pending Approval Requests",
@@ -322,5 +341,16 @@
         }
       }
     }
+  },
+  "peerRejected": {
+    "auth_failures": "Messages to {{name}} are not being delivered: the connection's shared secret stopped working. An admin has to reset the peering.",
+    "peer_reset_detected": "Messages to {{name}} are not being delivered: it was reinstalled. An admin has to re-peer.",
+    "repeer_incomplete": "Messages to {{name}} are not being delivered: re-peering could not be verified. An admin has to reset the peering.",
+    "denied_by_local_admin": "Messages to {{name}} cannot be delivered: your admin declined federation with it.",
+    "denied_by_remote": "Messages to {{name}} cannot be delivered: its admin declined federation with this instance.",
+    "revoked_by_remote": "Messages to {{name}} cannot be delivered: its admin revoked federation with this instance.",
+    "expired_on_remote": "Messages to {{name}} cannot be delivered: its admin did not answer the federation request in time.",
+    "stale_peering_on_remote": "Messages to {{name}} cannot be delivered yet: it still holds an older connection to this instance that its admin has to reset.",
+    "fallback": "Messages to {{name}} cannot be delivered: {{reason}}"
   }
 }
