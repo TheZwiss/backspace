@@ -11,7 +11,7 @@ vi.mock('../../../audio/AudioManager', () => ({
 }));
 
 import { RolesPanel } from './RolesPanel';
-import { useSpaceStore, setMyUserIdForOrigin, type TaggedSpace } from '../../../stores/spaceStore';
+import { useSpaceStore, type TaggedSpace } from '../../../stores/spaceStore';
 import { useAuthStore } from '../../../stores/authStore';
 import { useUIStore } from '../../../stores/uiStore';
 import { api, HttpError, type BackspaceApiClient } from '../../../api/client';
@@ -295,7 +295,7 @@ describe('a space on another instance', () => {
     useSpaceStore.setState({
       members: [member('owner', []), member('moderator-local', [MODS]), member('regular', [REGULARS])],
     });
-    setMyUserIdForOrigin(ORBIT, 'moderator-local');
+    useAuthStore.getState().recordMyRow(ORBIT, 'moderator-local');
     const remoteUpdate = vi.fn(async () => ({ ...GUESTS, position: 2 }));
     const remote = { roles: { update: remoteUpdate } } as unknown as BackspaceApiClient;
     const homeUpdate = vi.spyOn(api.roles, 'update');

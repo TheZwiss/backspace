@@ -16,6 +16,7 @@ import {
   useViewerHeldPermissions,
 } from '../../utils/roleHierarchy';
 import { userDisplayName } from '../../utils/identity';
+import { useSpaceOrigin } from '../../hooks/useSpaceOrigin';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { describeError } from '../../i18n/errors';
 import { withSavedRole } from '../../utils/roleOrder';
@@ -108,7 +109,8 @@ function MemberRolesBody({
   const addToast = useUIStore((s) => s.addToast);
   const openUserProfile = useUIStore((s) => s.openUserProfile);
   const permissionNames = usePermissionNames();
-  const canonical = useCanonicalUserView(member.user);
+  const origin = useSpaceOrigin(spaceId);
+  const canonical = useCanonicalUserView(member.user, origin);
   const displayName = userDisplayName(canonical);
   const nameIdPrefix = useId();
 
@@ -255,7 +257,7 @@ function MemberRolesBody({
   const handleViewProfile = (e: React.MouseEvent<HTMLButtonElement>) => {
     const anchor = e.currentTarget.getBoundingClientRect();
     onClose();
-    openUserProfile(canonical, anchor, 'right', { spaceId, userId });
+    openUserProfile(canonical, origin, anchor, 'right', { spaceId, userId });
   };
 
   const groupTitle = (id: PermissionGroupId): string => {
