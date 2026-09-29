@@ -5,6 +5,7 @@ import { canManageRoleAt } from '@backspace/shared/src/permissions';
 import { useSpaceStore, getApiForOrigin } from '../../../stores/spaceStore';
 import { useUIStore } from '../../../stores/uiStore';
 import { describeError } from '../../../i18n/errors';
+import { LOCK_ICON } from '../../ui/LockNote';
 import { myStandingIn } from '../../../utils/roleHierarchy';
 import { rolesInRankOrder, canReorderRoles, canMoveRole, moveRoleInRankOrder } from '../../../utils/roleOrder';
 
@@ -175,14 +176,11 @@ export function RoleOrderList({ spaceId, onOpen }: RoleOrderListProps) {
       width="12"
       height="12"
       viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
+      fill="currentColor"
       className="text-txt-tertiary opacity-70 flex-shrink-0"
     >
       <title>{t('roles.reorder.locked', { name: role.name })}</title>
-      <rect x="5" y="11" width="14" height="10" rx="2" />
-      <path strokeLinecap="round" d="M8 11V7a4 4 0 0 1 8 0v4" />
+      <path d={LOCK_ICON} />
     </svg>
   );
 
