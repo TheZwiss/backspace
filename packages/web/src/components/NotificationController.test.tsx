@@ -10,7 +10,6 @@ import { useChatStore } from '../stores/chatStore';
 import { useUIStore } from '../stores/uiStore';
 import { useVoiceStore } from '../stores/voiceStore';
 import { setLanguage } from '../i18n';
-import { clearMyUserIdCache, setMyUserIdForOrigin } from '../utils/crossStoreResolvers';
 
 vi.mock('../audio/AudioManager', () => ({ AudioManager: { getInstance: () => ({}) } }));
 
@@ -54,7 +53,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
-  clearMyUserIdCache();
+  useAuthStore.setState({ myRowIds: new Map() });
   delete window.backspace;
   vi.useRealTimers();
   vi.restoreAllMocks();
@@ -123,15 +122,27 @@ describe('notification clicks', () => {
       channelId: 'remote-chat', message: { id: String(i) } as MessageWithUser,
     }));
     useChatStore.setState({ realtimeMessageEvents: oldEvents });
+    useAuthStore.getState().recordMyRow('https://remote.example', 'remote-me');
     const view = mount();
     act(() => vi.advanceTimersByTime(1000));
     act(() => useChatStore.setState({ realtimeMessageEvents: [...oldEvents.slice(1), {
       channelId: 'remote-chat',
-      message: { id: 'new', channelId: 'remote-chat', userId: 'other', content: 'Hello <@me>' } as MessageWithUser,
+      message: { id: 'new', channelId: 'remote-chat', userId: 'other', content: 'Hello <@remote-me>' } as MessageWithUser,
     }] }));
     expect(BrowserNotification.instances).toHaveLength(1);
     act(() => BrowserNotification.instances[0]!.onclick?.());
     expect(view.getByTestId('route')).toHaveTextContent('/channels/remote-space/remote-chat');
+  });
+
+  it('opens the DM a notification was raised for, although a DM message has no channelId of its own (#332)', () => {
+    const view = mount();
+    act(() => vi.advanceTimersByTime(1000));
+    // A DM message as the server sends it: `dmChannelId`, no `channelId`.
+    const message = { id: 'dm-1', dmChannelId: 'dm', userId: 'other', content: 'hi' } as unknown as MessageWithUser;
+    act(() => useChatStore.setState({ realtimeMessageEvents: [{ channelId: 'dm', message }] }));
+    expect(BrowserNotification.instances).toHaveLength(1);
+    act(() => BrowserNotification.instances[0]!.onclick?.());
+    expect(view.getByTestId('route')).toHaveTextContent('/channels/@me/dm');
   });
 
   it('shows emoji shortcodes in the notification text as emoji (issue #252)', () => {
@@ -169,7 +180,7 @@ describe('which messages raise a notification (#317)', () => {
       channelOriginMap: new Map([['remote-chat', 'https://remote.example'], ['remote-dm', 'https://remote.example']]),
       dmChannels: [{ id: 'dm' } as DmChannel, { id: 'remote-dm' } as DmChannel],
     });
-    setMyUserIdForOrigin('https://remote.example', 'remote-me');
+    useAuthStore.getState().recordMyRow('https://remote.example', 'remote-me');
     mount();
     act(() => vi.advanceTimersByTime(1000));
   }

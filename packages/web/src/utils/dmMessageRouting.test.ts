@@ -29,7 +29,7 @@ vi.mock('../stores/instanceStore', async () => {
   return { useInstanceStore: store };
 });
 
-import { useSpaceStore, setApiForOriginResolver } from '../stores/spaceStore';
+import { useSpaceStore, setApiForOriginResolver, isDmChannel } from '../stores/spaceStore';
 import { useAuthStore } from '../stores/authStore';
 import { useChatStore } from '../stores/chatStore';
 import { api, type BackspaceApiClient } from '../api/client';
@@ -229,6 +229,30 @@ describe.each([
     expect(contentsOf('dm-carol')).not.toContain('while offline');
     expect(contentsOf('dm-bob-home')).not.toContain('while offline');
     expect(dmById('dm-carol')?.lastMessage?.content).toBe('hi alice');
+  });
+
+  it('a message no list places is filed only once its conversation is listed, so its alert sees a DM (#332)', async () => {
+    setApiForOriginResolver(() => ({
+      dm: { list: async () => { throw new Error('offline'); } },
+    }) as unknown as BackspaceApiClient);
+    const seenAsDm: boolean[] = [];
+    const unsubscribe = useChatStore.subscribe((state, prev) => {
+      if (state.realtimeMessageEvents === prev.realtimeMessageEvents) return;
+      const event = state.realtimeMessageEvents.at(-1)!;
+      seenAsDm.push(isDmChannel(event.channelId));
+    });
+    try {
+      await applyIncomingDmMessage(REMOTE, message({
+        id: 'm-new-1',
+        dmChannelId: 'dm-new-remote',
+        userId: 'bob-remote',
+        user: bobOnRemote,
+        content: 'first message',
+      }));
+    } finally {
+      unsubscribe();
+    }
+    expect(seenAsDm).toEqual([true]);
   });
 
   it('a home-origin message for an unknown channel is resolved against the home list too', async () => {

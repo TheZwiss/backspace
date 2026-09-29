@@ -92,8 +92,10 @@ function deliverToConversation(origin: string, primaryId: string, message: DmMes
 
 /** A conversation no list placed: give it its own entry under the origin that sent it. */
 function deliverAsNewConversation(origin: string, message: DmMessageWithUser): void {
-  useChatStore.getState().addRealtimeMessage(message.dmChannelId, asChatMessage(message));
+  // The conversation is placed first: filing the message tells the alert
+  // subscribers, which ask whether the channel is a DM.
   useSpaceStore.getState().placeUnplacedDmMessage(origin, message);
+  useChatStore.getState().addRealtimeMessage(message.dmChannelId, asChatMessage(message));
   const { currentChannelId, markChannelUnread } = useChatStore.getState();
   if (message.dmChannelId !== currentChannelId && !isOwnMessage(origin, message)) {
     markChannelUnread(message.dmChannelId);
