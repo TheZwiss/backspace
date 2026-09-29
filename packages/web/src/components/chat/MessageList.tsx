@@ -163,7 +163,8 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
   const loadMessagesAround = useChatStore((s) => s.loadMessagesAround);
   const isDetached = useChatStore((s) => s.detachedChannels.has(channelId));
   const addToast = useUIStore((s) => s.addToast);
-  const isLoading = useChatStore((s) => s.isLoading);
+  const loadState = useChatStore((s) => s.loadStates.get(channelId));
+  const isLoading = loadState?.status === 'loading';
   const hasMore = useChatStore((s) => s.hasMore.get(channelId) ?? true);
   const ackChannel = useChatStore((s) => s.ackChannel);
   const saveScrollPosition = useChatStore((s) => s.saveScrollPosition);
@@ -477,14 +478,15 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
   // Track the last message ID so the ack re-fires when a temp message is replaced by its server-confirmed ID
   const lastMessageId = messages.length > 0 ? messages[messages.length - 1]?.id ?? '' : '';
 
-  // Ack channel when messages load or when new messages arrive while near bottom
+  // The channel is read once the view is held at the newest message: the
+  // anchor is the bottom and the cache is not a window short of the present.
   useEffect(() => {
-    if (messages.length > 0 && isNearBottom) {
+    if (messages.length > 0 && isAtBottom && !isDetached) {
       clearTimeout(ackTimerRef.current);
       ackTimerRef.current = setTimeout(() => ackChannel(channelId), 200);
     }
     return () => clearTimeout(ackTimerRef.current);
-  }, [channelId, messages.length, lastMessageId, isNearBottom, ackChannel]);
+  }, [channelId, messages.length, lastMessageId, isAtBottom, isDetached, ackChannel]);
 
   // Channel open and close. Opening picks the target the view will take once
   // the channel's rows are there; closing (a channel switch or an unmount)

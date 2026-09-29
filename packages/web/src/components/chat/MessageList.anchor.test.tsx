@@ -4,8 +4,9 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import type { MessageWithUser } from '@backspace/shared';
 
+const wsSend = vi.fn();
 vi.mock('../../hooks/useWebSocket', () => ({
-  wsSend: vi.fn(),
+  wsSend: (...args: unknown[]) => wsSend(...args),
   wsSendAll: vi.fn(),
 }));
 
@@ -82,6 +83,7 @@ function userScrollTo(layout: ScrollLayout, el: HTMLElement, top: number): void 
 }
 
 beforeEach(() => {
+  wsSend.mockReset();
   messagesAround.mockReset();
   latestMessages.mockReset();
   scrollIntoView.mockReset();
@@ -229,5 +231,35 @@ describe('Jump to Present (issue #329)', () => {
 
     // The newer jump wins: the list goes back to its target, not to the bottom.
     await waitFor(() => expect(messagesAround).toHaveBeenCalledWith(CHANNEL, '90', 50));
+  });
+});
+
+describe('read acks', () => {
+  function acks(): unknown[] {
+    return wsSend.mock.calls.filter(([event]) => (event as { type: string }).type === 'channel_ack').map(([event]) => event);
+  }
+
+  it('marks the channel read once the view is at the newest message', async () => {
+    const layout: ScrollLayout = { scrollHeight: 2800, clientHeight: 800, scrollTop: 0, rowY: stackRows(ids(1, 60), 16) };
+    stubScrollLayout(layout);
+    render(list());
+    await waitFor(() => expect(acks()).toEqual([{ type: 'channel_ack', channelId: CHANNEL, messageId: '60' }]));
+  });
+
+  it('does not mark the channel read while the view is above the newest message', async () => {
+    const layout: ScrollLayout = { scrollHeight: 2800, clientHeight: 800, scrollTop: 0, rowY: stackRows(ids(1, 60), 16) };
+    stubScrollLayout(layout);
+    const { container } = render(list());
+    await waitFor(() => expect(layout.scrollTop).toBe(2000));
+    // Scrolled up a few rows: near the bottom, not at it.
+    userScrollTo(layout, viewport(container), 1600);
+    wsSend.mockClear();
+
+    act(() => {
+      useChatStore.getState().addRealtimeMessage(CHANNEL, msg('61', 'someone else speaks'));
+    });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    expect(acks()).toEqual([]);
   });
 });
