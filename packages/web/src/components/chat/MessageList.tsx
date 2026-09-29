@@ -26,7 +26,14 @@ import { useDelayedLoading } from '../../hooks/useDelayedLoading';
 import type { MessageWithUser } from '@backspace/shared';
 import { SystemMessage } from './SystemMessage';
 import { MessageJumpContext } from './messageJumpContext';
-import { BOTTOM_ANCHOR, resolveOpenTarget, type OpenTarget, type ScrollAnchor } from './scrollAnchor';
+import {
+  BOTTOM_ANCHOR,
+  firstUnreadMessageId,
+  pageReachesReadPosition,
+  resolveOpenTarget,
+  type OpenTarget,
+  type ScrollAnchor,
+} from './scrollAnchor';
 import { layoutPixels } from '../../platform/interfaceScale';
 
 const EMPTY_MESSAGES: MessageWithUser[] = [];
@@ -63,6 +70,10 @@ function centredScrollTop(container: HTMLElement, el: HTMLElement): number {
   const max = Math.max(0, container.scrollHeight - container.clientHeight);
   return Math.min(max, Math.max(0, unclamped));
 }
+
+// Where a channel opened at its first unread message holds that row: far
+// enough below the viewport top that the unread divider above it shows.
+const UNREAD_ROW_OFFSET_PX = 64;
 
 // A row's height before it is laid out, for anchoring a jump target that is
 // still loading. The anchor is re-measured once the row renders.
@@ -208,6 +219,9 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
   const anchorLoadInFlightRef = useRef(false);
   // The rows the last render held, to tell a replaced cache from an edit.
   const renderedIdsRef = useRef<{ channelId: string; ids: string[] }>({ channelId, ids: [] });
+  // The first unread message when the channel opened, shown with a divider
+  // above it for the rest of the visit (a snapshot: acking does not move it).
+  const [unreadMarker, setUnreadMarker] = useState<{ channelId: string; messageId: string } | null>(null);
 
   // Smooth-scroll intent tracking. While a smooth scroll is animating toward the bottom,
   // intermediate `handleScroll` measurements would otherwise see a large distance from
@@ -515,8 +529,9 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
     appliedGeometryRef.current = null;
     anchorLoadInFlightRef.current = false;
     jumpSeqRef.current += 1;
-    const saved = useChatStore.getState().scrollPositions.get(channelId);
-    openTargetRef.current = resolveOpenTarget(saved, undefined);
+    const { scrollPositions, readStates } = useChatStore.getState();
+    openTargetRef.current = resolveOpenTarget(scrollPositions.get(channelId), readStates.get(channelId));
+    setUnreadMarker(null);
     // Nothing reads the anchor before the channel opens; the open sets it.
     anchorRef.current = BOTTOM_ANCHOR;
     const opensAtBottom = openTargetRef.current.kind === 'bottom';
@@ -548,6 +563,59 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
     };
   }, [channelId, saveScrollPosition]);
 
+  const isOwnMessage = useCallback(
+    (message: MessageWithUser) => isSelf(message.user, useAuthStore.getState().user),
+    [],
+  );
+
+  /**
+   * Hold the first unread row below the viewport top, with its divider. When
+   * everything unread fits on screen the view is at the bottom anyway: hold
+   * the bottom, so the list keeps following and the channel is marked read.
+   */
+  const anchorAtUnread = useCallback((messageId: string) => {
+    const container = containerRef.current;
+    if (!container) return;
+    setUnreadMarker({ channelId, messageId });
+    setAnchor({ kind: 'message', messageId, offsetPx: UNREAD_ROW_OFFSET_PX });
+    applyAnchor();
+    if (container.scrollHeight - container.scrollTop - container.clientHeight < AT_BOTTOM_THRESHOLD_PX) {
+      setAnchor(BOTTOM_ANCHOR);
+      applyAnchor();
+    }
+  }, [channelId, setAnchor, applyAnchor]);
+
+  /**
+   * The unread messages start before the loaded page: load the window around
+   * the read message on the channel's origin and open there. If that message
+   * is gone or the load fails, open at the latest message.
+   */
+  const openAtUnreadWindow = useCallback(async (lastReadId: string) => {
+    const seq = ++jumpSeqRef.current;
+    const requestChannelId = channelId;
+    const isCurrent = () => jumpSeqRef.current === seq && currentChannelIdRef.current === requestChannelId;
+    // Hold the read message meanwhile: nothing follows the bottom or acks.
+    setAnchor({ kind: 'message', messageId: lastReadId, offsetPx: 0 });
+    anchorLoadInFlightRef.current = true;
+    let result: LoadAroundResult;
+    try {
+      result = await loadMessagesAround(requestChannelId, lastReadId);
+    } finally {
+      if (jumpSeqRef.current === seq) anchorLoadInFlightRef.current = false;
+    }
+    if (!isCurrent()) return;
+    await nextFrame();
+    if (!isCurrent()) return;
+    const rows = useChatStore.getState().messages.get(requestChannelId) ?? [];
+    const first = result === 'loaded' ? firstUnreadMessageId(rows, lastReadId, isOwnMessage) : null;
+    if (first) {
+      anchorAtUnread(first);
+      return;
+    }
+    setAnchor(BOTTOM_ANCHOR);
+    applyAnchor();
+  }, [channelId, setAnchor, loadMessagesAround, isOwnMessage, anchorAtUnread, applyAnchor]);
+
   /** Take the open target once the channel's rows are rendered. */
   const openChannel = useCallback(() => {
     const container = containerRef.current;
@@ -560,9 +628,37 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
       else void restoreAnchor(target);
       return;
     }
+    if (target.kind === 'unread') {
+      const state = useChatStore.getState();
+      const rows = state.messages.get(channelId) ?? [];
+      const hasOlder = state.hasMore.get(channelId) ?? true;
+      if (!pageReachesReadPosition(rows, target.lastReadId, hasOlder)) {
+        void openAtUnreadWindow(target.lastReadId);
+        return;
+      }
+      const first = firstUnreadMessageId(rows, target.lastReadId, isOwnMessage);
+      if (first) {
+        anchorAtUnread(first);
+        return;
+      }
+    }
     setAnchor(BOTTOM_ANCHOR);
     applyAnchor();
-  }, [channelId, setAnchor, applyAnchor, restoreAnchor]);
+  }, [channelId, setAnchor, applyAnchor, restoreAnchor, openAtUnreadWindow, isOwnMessage, anchorAtUnread]);
+
+  // Mark Unread on a message of the open channel moves the divider to the
+  // first unread message after it. Read positions otherwise only move forward.
+  const readPosition = useChatStore((s) => s.readStates.get(channelId));
+  const lastReadPositionRef = useRef<{ channelId: string; id: string | undefined }>({ channelId, id: readPosition });
+  useEffect(() => {
+    const previous = lastReadPositionRef.current;
+    lastReadPositionRef.current = { channelId, id: readPosition };
+    if (previous.channelId !== channelId || readPosition === undefined || previous.id === undefined) return;
+    if (!/^\d+$/.test(readPosition) || !/^\d+$/.test(previous.id) || BigInt(readPosition) >= BigInt(previous.id)) return;
+    const rows = useChatStore.getState().messages.get(channelId) ?? [];
+    const first = firstUnreadMessageId(rows, readPosition, isOwnMessage);
+    setUnreadMarker(first ? { channelId, messageId: first } : null);
+  }, [channelId, readPosition, isOwnMessage]);
 
   // The rows changed. Before the channel is open, this is the moment to open
   // it. After, the anchor holds the view: new rows below a view at the bottom
@@ -975,6 +1071,9 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
                     <div className="flex-1 h-[1px] bg-border-hard" />
                   </div>
                 )}
+                {unreadMarker?.channelId === channelId && unreadMarker.messageId === msg.id && (
+                  <UnreadDivider label={t('chat:list.unread.label')} description={t('chat:list.unread.divider')} />
+                )}
                 {msg.type === 'system' ? (
                   <SystemMessage message={msg} dm={currentDm ?? null} />
                 ) : (
@@ -1027,6 +1126,25 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
       )}
     </div>
     </MessageJumpContext.Provider>
+  );
+}
+
+/**
+ * Where the unread messages start. A separator with its own name, so a
+ * screen reader moving through the list hears it; the visible label is short.
+ */
+function UnreadDivider({ label, description }: { label: string; description: string }) {
+  return (
+    <div
+      role="separator"
+      aria-label={description}
+      className="flex items-center gap-2 pl-5 pr-4 my-2 select-none pointer-events-none"
+    >
+      <div className="flex-1 h-px bg-accent-rose/50" />
+      <span className="rounded-full bg-accent-rose/15 px-2 py-[1px] text-[11px] font-bold leading-4 text-accent-rose">
+        {label}
+      </span>
+    </div>
   );
 }
 

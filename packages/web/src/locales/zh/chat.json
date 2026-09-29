@@ -36,6 +36,10 @@
       "failed": "无法加载该消息",
       "presentFailed": "无法加载最新消息"
     },
+    "unread": {
+      "label": "新",
+      "divider": "新消息"
+    },
     "welcome": {
       "channel": {
         "title": "欢迎来到本频道！",

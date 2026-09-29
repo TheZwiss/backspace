@@ -37,6 +37,10 @@
       "failed": "Couldn't load that message",
       "presentFailed": "Couldn't load the latest messages"
     },
+    "unread": {
+      "label": "New",
+      "divider": "New messages"
+    },
     "welcome": {
       "channel": {
         "title": "Welcome to the channel!",

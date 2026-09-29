@@ -37,6 +37,7 @@ import { useSpaceStore } from '../../stores/spaceStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useUIStore } from '../../stores/uiStore';
 import { ALL_PERMISSIONS, permissionsToString } from '../../utils/permissions';
+import { HttpError } from '../../api/client';
 import {
   CHANNEL,
   me,
@@ -295,5 +296,109 @@ describe('read acks', () => {
     await new Promise((resolve) => setTimeout(resolve, 300));
 
     expect(acks()).toEqual([]);
+  });
+});
+
+describe('opening at the first unread message (issue #375)', () => {
+  const UNREAD_ROW_OFFSET = 64;
+
+  function acks(): unknown[] {
+    return wsSend.mock.calls.filter(([event]) => (event as { type: string }).type === 'channel_ack').map(([event]) => event);
+  }
+
+  function dividerBefore(messageId: string): boolean {
+    const divider = screen.queryByRole('separator', { name: /new messages/i });
+    if (!divider) return false;
+    const row = document.getElementById(`msg-${messageId}`);
+    return !!row && divider.compareDocumentPosition(row) === Node.DOCUMENT_POSITION_FOLLOWING
+      && (divider.nextElementSibling === row || divider.nextElementSibling?.contains(row) === true);
+  }
+
+  it('opens at the first unread message with a divider above it, without marking it read', async () => {
+    useChatStore.setState({ readStates: new Map([[CHANNEL, '40']]) });
+    const layout: ScrollLayout = { scrollHeight: 2800, clientHeight: 800, scrollTop: 0, rowY: stackRows(ids(1, 60), 16) };
+    stubScrollLayout(layout);
+    render(list());
+
+    await waitFor(() => expect(layout.scrollTop).toBe(layout.rowY['41']! - UNREAD_ROW_OFFSET));
+    expect(dividerBefore('41')).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(acks()).toEqual([]);
+  });
+
+  it("starts after the viewer's own messages", async () => {
+    const rows = page(1, 60).map((m) => (m.id === '41' ? { ...m, userId: me.id, user: me } : m));
+    useChatStore.setState({ messages: new Map([[CHANNEL, rows]]), readStates: new Map([[CHANNEL, '40']]) });
+    const layout: ScrollLayout = { scrollHeight: 2800, clientHeight: 800, scrollTop: 0, rowY: stackRows(ids(1, 60), 16) };
+    stubScrollLayout(layout);
+    render(list());
+
+    await waitFor(() => expect(layout.scrollTop).toBe(layout.rowY['42']! - UNREAD_ROW_OFFSET));
+    expect(dividerBefore('42')).toBe(true);
+  });
+
+  it('opens at the latest message when everything is read', async () => {
+    useChatStore.setState({ readStates: new Map([[CHANNEL, '60']]) });
+    const layout: ScrollLayout = { scrollHeight: 2800, clientHeight: 800, scrollTop: 0, rowY: stackRows(ids(1, 60), 16) };
+    stubScrollLayout(layout);
+    render(list());
+
+    await waitFor(() => expect(layout.scrollTop).toBe(2000));
+    expect(screen.queryByRole('separator', { name: /new messages/i })).toBeNull();
+  });
+
+  it('follows new messages and marks the channel read when the unread ones fit on screen', async () => {
+    useChatStore.setState({ readStates: new Map([[CHANNEL, '58']]) });
+    const layout: ScrollLayout = { scrollHeight: 2800, clientHeight: 800, scrollTop: 0, rowY: stackRows(ids(1, 60), 16) };
+    stubScrollLayout(layout);
+    render(list());
+
+    await waitFor(() => expect(layout.scrollTop).toBe(2000));
+    expect(dividerBefore('59')).toBe(true);
+    await waitFor(() => expect(acks()).toEqual([{ type: 'channel_ack', channelId: CHANNEL, messageId: '60' }]));
+  });
+
+  it('loads the window around the read position when the unread messages start before the newest page', async () => {
+    useChatStore.setState({
+      messages: new Map([[CHANNEL, page(100, 149)]]),
+      hasMore: new Map([[CHANNEL, true]]),
+      readStates: new Map([[CHANNEL, '60']]),
+    });
+    messagesAround.mockResolvedValue(page(36, 85));
+    const layout: ScrollLayout = { scrollHeight: 2400, clientHeight: 800, scrollTop: 0, rowY: stackRows([...ids(36, 85), ...ids(100, 149)], 216) };
+    stubScrollLayout(layout);
+    render(list());
+
+    await waitFor(() => expect(messagesAround).toHaveBeenCalledWith(CHANNEL, '60', 50));
+    await waitFor(() => expect(dividerBefore('61')).toBe(true));
+    await waitFor(() => expect(layout.scrollTop).toBe(layout.rowY['61']! - UNREAD_ROW_OFFSET));
+  });
+
+  it('opens at the latest message when the read message is gone', async () => {
+    useChatStore.setState({
+      messages: new Map([[CHANNEL, page(100, 149)]]),
+      hasMore: new Map([[CHANNEL, true]]),
+      readStates: new Map([[CHANNEL, '60']]),
+    });
+    messagesAround.mockRejectedValue(new HttpError(404, 'Message not found', undefined, 'message_not_found'));
+    const layout: ScrollLayout = { scrollHeight: 2400, clientHeight: 800, scrollTop: 0, rowY: stackRows(ids(100, 149), 216) };
+    stubScrollLayout(layout);
+    render(list());
+
+    await waitFor(() => expect(layout.scrollTop).toBe(1600));
+    expect(useUIStore.getState().toasts).toEqual([]);
+  });
+
+  it('moves the divider when a message is marked unread', async () => {
+    const layout: ScrollLayout = { scrollHeight: 2800, clientHeight: 800, scrollTop: 0, rowY: stackRows(ids(1, 60), 16) };
+    stubScrollLayout(layout);
+    render(list());
+    await waitFor(() => expect(layout.scrollTop).toBe(2000));
+    expect(screen.queryByRole('separator', { name: /new messages/i })).toBeNull();
+    await waitFor(() => expect(useChatStore.getState().readStates.get(CHANNEL)).toBe('60'));
+
+    act(() => { useChatStore.getState().markUnread(CHANNEL, '54'); });
+
+    expect(dividerBefore('55')).toBe(true);
   });
 });

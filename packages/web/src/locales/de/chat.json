@@ -37,6 +37,10 @@
       "failed": "Die Nachricht konnte nicht geladen werden",
       "presentFailed": "Die neuesten Nachrichten konnten nicht geladen werden"
     },
+    "unread": {
+      "label": "Neu",
+      "divider": "Neue Nachrichten"
+    },
     "welcome": {
       "channel": {
         "title": "Willkommen im Kanal!",

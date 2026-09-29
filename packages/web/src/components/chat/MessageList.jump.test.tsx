@@ -86,8 +86,9 @@ beforeEach(() => {
     dmChannels: [],
   });
   useUIStore.setState({ toasts: [] });
-  // An unmount saves the list's anchor; each test opens the channel fresh.
-  useChatStore.setState({ scrollPositions: new Map() });
+  // An unmount saves the list's anchor and an ack records a read position;
+  // each test opens the channel fresh.
+  useChatStore.setState({ scrollPositions: new Map(), readStates: new Map() });
 });
 
 afterEach(() => {
