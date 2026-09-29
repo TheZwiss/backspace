@@ -147,5 +147,10 @@
   "notification": {
     "unknownSender": "Someone",
     "attachmentOnly": "Sent an attachment"
+  },
+  "poke": {
+    "action": "Poke",
+    "received": "{{actor}} poked {{target}}",
+    "disconnected": "Disconnected. Poke was not sent."
   }
 }

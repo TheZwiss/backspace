@@ -510,7 +510,8 @@
         "description": "Willst du diesen Space wirklich verlassen? Zum erneuten Beitreten brauchst du eine neue Einladung."
       },
       "left": "Du hast den Space verlassen",
-      "leaveFailed": "Space konnte nicht verlassen werden"
+      "leaveFailed": "Space konnte nicht verlassen werden",
+      "unreadMessages": "Ungelesene Nachrichten: {{quantity}}"
     },
     "dmList": {
       "explore": "Entdecken",
@@ -541,7 +542,8 @@
       "spaceMuted": "Im Space stummgeschaltet",
       "spaceDeafened": "Ton im Space ausgeschaltet",
       "permissionMuted": "Stummgeschaltet (keine Sprechberechtigung)"
-    }
+    },
+    "dmUnreadMessages": "{{quantity}} ungelesene Direktnachrichten"
   },
   "channels": {
     "loading": "Kanäle werden geladen",
@@ -620,5 +622,35 @@
     "loading": "Mitglieder werden geladen…",
     "success": "Besitz an {{name}} übertragen",
     "failed": "Besitz konnte nicht übertragen werden"
+  },
+  "notifications": {
+    "title": "Benachrichtigungseinstellungen",
+    "description": "Stummschalten deaktiviert Töne und Systembenachrichtigungen. Nachrichten und Ungelesen-Markierungen bleiben erhalten. Stumme Spaces schalten auch Kanäle stumm.",
+    "level": "Benachrichtigen bei",
+    "inherit": "Standard / Space übernehmen",
+    "all": "Allen Nachrichten",
+    "mentions": "Nur Erwähnungen",
+    "nothing": "Nichts",
+    "mute": "Stummschalten",
+    "off": "Nicht stumm",
+    "minutes15": "15 Minuten",
+    "hour1": "1 Stunde",
+    "hours8": "8 Stunden",
+    "forever": "Bis ich es wieder einschalte",
+    "existing": "Aktuelle Stummschaltung beibehalten",
+    "suppressEveryone": "@everyone und @here unterdrücken",
+    "suppressRoles": "Rollenerwähnungen unterdrücken",
+    "save": "Speichern",
+    "saving": "Wird gespeichert…",
+    "permission": "@everyone, @here und Rollen erwähnen",
+    "unmute": "Stummschaltung aufheben",
+    "muted": "Stummgeschaltet",
+    "active": "Benachrichtigungen aktiviert",
+    "expiringNow": "läuft gerade ab",
+    "remainingMinutes_one": "noch {{count}} Min.",
+    "remainingMinutes_other": "noch {{count}} Min.",
+    "remainingHours_one": "noch {{count}} Stunde",
+    "remainingHours_other": "noch {{count}} Stunden",
+    "remainingHoursMinutes": "noch {{hours}} Std. {{minutes}} Min."
   }
 }

@@ -15,6 +15,7 @@ import {
   type Embed,
 } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
+import { hasMassMention } from '@backspace/shared/src/mentions.js';
 import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
 import { sendError } from '../utils/httpErrors.js';
 import { fetchEmbedsForMessages, resolveEmbeds, reResolveEmbeds, embedRowToEmbed } from '../utils/embedResolver.js';
@@ -124,6 +125,7 @@ export function fetchReplyToMessages(
       userId: rm.userId,
       replyToId: rm.replyToId,
       content: rm.content,
+      type: rm.type,
       editedAt: rm.editedAt,
       createdAt: rm.createdAt,
       user: sanitizeUser(user),
@@ -184,6 +186,7 @@ export function buildMessageWithUser(
     userId: message.userId,
     replyToId: message.replyToId,
     content: message.content,
+    type: message.type,
     editedAt: message.editedAt,
     createdAt: message.createdAt,
     user: sanitizeUser(user),
@@ -342,6 +345,11 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, 400, 'content_too_long', { max: MAX_MESSAGE_LENGTH });
     }
 
+    // @everyone/@here/role mentions ping many people; only MENTION_EVERYONE may send them.
+    if (hasMassMention(content) && !hasPermission(request.userId, spaceId, PermissionBits.MENTION_EVERYONE, id)) {
+      return sendError(reply, 403, 'missing_permission', { permission: 'MENTION_EVERYONE' });
+    }
+
     // A reply may only target a message in the channel it is posted into.
     if (replyToId && !isReplyTargetInChannel(id, replyToId)) {
       return sendError(reply, 400, 'reply_target_invalid');
@@ -446,8 +454,15 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, 404, 'message_not_found');
     }
 
-    if (message.userId !== request.userId) {
+    // System event payloads are server-authored and cannot be edited by the actor.
+    if (message.type === 'system' || message.userId !== request.userId) {
       return sendError(reply, 403, 'message_edit_not_author');
+    }
+
+    // Editing cannot bypass the same mass-mention permission as creation.
+    const mentionSpaceId = getChannelSpaceId(message.channelId);
+    if (hasMassMention(content) && (!mentionSpaceId || !hasPermission(request.userId, mentionSpaceId, PermissionBits.MENTION_EVERYONE, message.channelId))) {
+      return sendError(reply, 403, 'missing_permission', { permission: 'MENTION_EVERYONE' });
     }
 
     const now = Date.now();
