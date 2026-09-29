@@ -41,8 +41,8 @@ Source files:
 | `call_calling.ogg` | outgoing DM call (loop) | caller | `voiceStore.outgoingCall !== null`. |
 | `stream_started.ogg` | any participant started a screen share | everyone in call (incl. the streamer) | a userId appears in the `participants[].isScreenSharing` set. |
 | `stream_ended.ogg` | any participant stopped a screen share | everyone in call | a userId leaves the `participants[].isScreenSharing` set. |
-| `stream_user_joined.ogg` | (a) a viewer started watching **my** stream; (b) **I** started watching someone's stream | streamer **and** the acting viewer | (a) streamer-side: `streamWatchers[selfUserId]` gains a watcher identity. (b) viewer-side: local feedback played by `handleViewerWatchToggle(_, true)` on the explicit "Watch Stream" action. |
-| `stream_user_left.ogg` | (a) a viewer stopped watching **my** stream; (b) **I** stopped watching someone's stream | streamer **and** the acting viewer | (a) streamer-side: `streamWatchers[selfUserId]` loses a watcher identity (suppressed for the whole set when self-stream-end fires — see Mechanism Notes). (b) viewer-side: local feedback played by `handleViewerWatchToggle(_, false)` on the explicit "Stop Watching" action. |
+| `stream_user_joined.ogg` | (a) a viewer started watching **my** stream; (b) **I** started watching someone's stream | streamer **and** the acting viewer | (a) streamer-side: `streamWatchers[own LiveKit identity]` gains a watcher identity. (b) viewer-side: local feedback played by `handleViewerWatchToggle(_, true)` on the explicit "Watch Stream" action. |
+| `stream_user_left.ogg` | (a) a viewer stopped watching **my** stream; (b) **I** stopped watching someone's stream | streamer **and** the acting viewer | (a) streamer-side: `streamWatchers[own LiveKit identity]` loses a watcher identity (suppressed for the whole set when self-stream-end fires — see Mechanism Notes). (b) viewer-side: local feedback played by `handleViewerWatchToggle(_, false)` on the explicit "Stop Watching" action. |
 | `message.ogg` | new chat message arrived | self | The message is a `message` alert (see "Which messages alert" below). User can flip `messageSoundAllChannels` to fire on every channel. Alert: withheld on Do Not Disturb (see below). |
 
 ---
@@ -214,7 +214,8 @@ small data-channel ping instead, mirroring the existing `deafen` pattern in
 ```ts
 interface StreamWatchPayload {
   type: 'stream_watch';
-  target: string;   // streamer userId
+  target: string;           // sharer's user id as the viewer's client lists it
+  targetIdentity?: string;  // sharer's LiveKit identity (optional, see below)
   watching: boolean;
 }
 
@@ -247,10 +248,22 @@ broadcast. This is deliberate: if they did, a streamer who just stopped
 sharing would receive a flurry of `watching: false` pings from every former
 viewer and play `stream_user_left` on top of their own `stream_ended` cue.
 
-**Receiver.** `useLiveKit.handleDataReceived` parses the payload and calls
-`voiceStore.recordStreamWatch(target, watcherIdentity, watching)`.
-`SoundController` watches `streamWatchers[selfUserId]` for diff transitions
-and fires the streamer-only sounds.
+**Keys.** `voiceStore.streamWatchers` maps the sharer's LiveKit identity to
+the set of watcher LiveKit identities. Identities on both sides, because a
+user id is per instance while the identity is the one string every client in
+the room knows a participant by. Viewers send `streamWatchFor(sharer, watching)`
+(`streamWatchProtocol.ts`), which carries both `target` (for sharers that
+predate `targetIdentity` and read only that) and `targetIdentity`.
+
+**Receiver.** `useLiveKit.handleDataReceived` parses the payload, resolves the
+key with `streamWatchKey(payload, participants)` and calls
+`voiceStore.recordStreamWatch(sharerIdentity, watcherIdentity, watching)`.
+`streamWatchKey` takes `targetIdentity` when present; for an older viewer's
+ping it takes the identity of the participant this client lists under
+`target`, and drops the ping (null) when nobody is listed under it.
+`SoundController` finds its own entry through the local participant
+(`isLocal`), not an account id, watches `streamWatchers[that identity]` for
+diff transitions and fires the streamer-only sounds.
 
 **Crash / drop cleanup.** `RoomEvent.ParticipantDisconnected` evicts the
 disconnecting participant identity from every watcher set
@@ -260,7 +273,8 @@ side at that point.
 **Self-stream-end suppression.** When the streamer themselves stops sharing
 (a real stop; a codec republish is not one, see above),
 SoundController detects this in the same set-diff that fires `stream_ended`
-and synchronously calls `clearStreamWatchers(myUserId)`. The watcher diff is
+and synchronously calls `clearStreamWatchers(ownIdentity)` (the identity it
+was last listed under, since the list is empty after a disconnect). The watcher diff is
 gated on `selfIsSharing` (which is now false), so neither the outer
 subscriber tick nor the re-entered subscriber tick triggered by the clear
 fires any per-watcher sound. The same gate also makes a stop-then-restart
@@ -272,12 +286,21 @@ subscriber and has no unsubscribe counterpart in LiveKit JS 2.17.
 
 ### Federation
 
-LiveKit data channels are room-scoped, so the protocol works unchanged for
-federated DM calls: a single LiveKit room hosted by one instance with all
-participants attached directly. The federation-aware `myIds` set
-(`{currentUser.id, currentUser.homeUserId}`) is used for self-detection in
-both viewer-tracking and message-mention matching, so a remote-instance
-mention by `homeUserId` correctly triggers the message sound.
+LiveKit data channels are room-scoped: a federated DM call or a remote
+space's voice channel is one LiveKit room hosted by one instance, with every
+participant attached directly. User ids are not shared across it. In a remote
+space's channel the token's identity carries the id the space's instance has
+for the user; in a federated DM call it carries the home id, and each client
+lists the member under its own local id. That is why the watcher set is keyed
+by LiveKit identity and the sharer finds itself through the local participant
+(see Keys and Receiver above).
+
+Mixed versions: a new viewer's ping still carries `target`, so an older sharer
+behaves as before. An older viewer's ping carries only `target` and reaches a
+new sharer's set when both clients list the sharer under the same id (a space
+channel, a same-instance DM call); a cross-instance DM viewer on an older
+client names the sharer by an id the sharer's client does not know, so its
+ping is dropped and the sharer hears no cue for it, as before.
 
 ---
 

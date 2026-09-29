@@ -468,9 +468,9 @@ describe('the sharer\'s own side across a republish', () => {
   });
 
   /** The local participant, with publish and unpublish emitting the SDK's events. */
-  function localSharer(room: Room) {
+  function localSharer(room: Room, identity = ME) {
     const lp = room.localParticipant;
-    (lp as { identity: string }).identity = ME;
+    (lp as { identity: string }).identity = identity;
     const pubs = lp.trackPublications as unknown as Map<string, LocalPub>;
     let sid = 0;
     vi.spyOn(lp, 'publishData').mockResolvedValue(undefined);
@@ -505,8 +505,9 @@ describe('the sharer\'s own side across a republish', () => {
     return new MediaStream([track]);
   }
 
-  function viewerPing(room: Room, watching: boolean): void {
-    const payload = new TextEncoder().encode(JSON.stringify({ type: 'stream_watch', target: 'me', watching }));
+  /** A viewer's ping as an older client sends it: the sharer's user id as that viewer lists it. */
+  function viewerPing(room: Room, watching: boolean, target: { target: string; targetIdentity?: string } = { target: 'me' }): void {
+    const payload = new TextEncoder().encode(JSON.stringify({ type: 'stream_watch', ...target, watching }));
     act(() => { room.emit(RoomEvent.DataReceived, payload, { identity: VIEWER } as never); });
   }
 
@@ -514,16 +515,26 @@ describe('the sharer\'s own side across a republish', () => {
     return mocks.audio.playSound.mock.calls.map(([name]) => name as string);
   }
 
-  async function sharingWithOneViewer() {
+  async function sharing(identity = ME) {
     const room = await connectedRoom();
-    localSharer(room);
+    localSharer(room, identity);
+    // List ourselves under the identity before the cues start, as a real
+    // connect does: the token's identity is known from the first update.
+    act(() => { room.emit(RoomEvent.ParticipantMetadataChanged, undefined, room.localParticipant); });
     useAuthStore.setState({ user: { id: 'me', status: 'online' } as User });
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     render(createElement(SoundController));
     act(() => { vi.advanceTimersByTime(1000); });
     await act(async () => { await publishScreenShare(room, videoCapture()); });
+    expect(cuesPlayed()).toEqual(['stream_started']);
+    mocks.audio.playSound.mockClear();
+    return room;
+  }
+
+  async function sharingWithOneViewer() {
+    const room = await sharing();
     viewerPing(room, true);
-    expect(cuesPlayed()).toEqual(['stream_started', 'stream_user_joined']);
+    expect(cuesPlayed()).toEqual(['stream_user_joined']);
     mocks.audio.playSound.mockClear();
     return room;
   }
@@ -564,6 +575,44 @@ describe('the sharer\'s own side across a republish', () => {
 
     expect(cuesPlayed()).toEqual(['stream_ended']);
     expect(sharerIsListedAsSharing(ME)).toBe(false);
+  });
+
+  describe('when the sharer\'s id differs between instances', () => {
+    // The watcher set is keyed by the sharer's LiveKit identity, the one string
+    // every client in the room shares. Its user id is per instance.
+
+    it('a remote-instance space channel: hears viewers who name it by that instance\'s id', async () => {
+      // The token comes from the space's instance, so the identity carries the
+      // id that instance has for this user, not the home account's id ('me').
+      const room = await sharing('r-77:Me');
+
+      viewerPing(room, true, { target: 'r-77' });
+      viewerPing(room, false, { target: 'r-77', targetIdentity: 'r-77:Me' });
+
+      expect(cuesPlayed()).toEqual(['stream_user_joined', 'stream_user_left']);
+    });
+
+    it('a federated DM call: hears a viewer whose client knows it by another id', async () => {
+      // The identity carries the home id; each client lists the member under
+      // its own local id, so the viewer's `target` means nothing here.
+      mocks.space.dmChannels = [{ id: 'dm', members: [{ id: 'me', homeUserId: 'me-home' }] }];
+      useVoiceStore.setState({ activeDmCall: { dmChannelId: 'dm' } as never });
+      const room = await sharing('me-home:Me');
+
+      viewerPing(room, true, { target: 'viewer-local-me', targetIdentity: 'me-home:Me' });
+      await act(async () => { await republishScreenShare(room); });
+      viewerPing(room, false, { target: 'viewer-local-me', targetIdentity: 'me-home:Me' });
+
+      expect(cuesPlayed()).toEqual(['stream_user_joined', 'stream_user_left']);
+    });
+
+    it('ignores pings about another sharer', async () => {
+      const room = await sharing();
+
+      viewerPing(room, true, { target: 'bob', targetIdentity: 'bob:Bob' });
+
+      expect(cuesPlayed()).toEqual([]);
+    });
   });
 });
 

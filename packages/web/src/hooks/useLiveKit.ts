@@ -38,7 +38,7 @@ import {
   resolveNativeOverdrive,
   syncScreenShareAudio,
 } from '../utils/screenShare';
-import { isStreamRepublish, parseStreamWatch } from '../utils/streamWatchProtocol';
+import { isStreamRepublish, parseStreamWatch, streamWatchKey } from '../utils/streamWatchProtocol';
 import { StreamRepublishTracker } from '../utils/streamRepublish';
 import { getMediaStreamTrack } from '../utils/livekitInternals';
 import { deactivate as deactivateHwOverdrive } from '../utils/hwOverdrive';
@@ -408,10 +408,15 @@ export function useLiveKit() {
     if (participant) {
       const sw = parseStreamWatch(payload);
       if (sw) {
-        // sw.target is the streamer's bare userId. participant.identity is the
-        // viewer's full LiveKit identity ("userId:username"); we key by identity
-        // so ParticipantDisconnected can evict cleanly.
-        useVoiceStore.getState().recordStreamWatch(sw.target, participant.identity, sw.watching);
+        // Both sides of the watcher set are LiveKit identities: the sharer's
+        // (the one string every client in the room shares, where its user id
+        // is per instance) and the viewer's, so ParticipantDisconnected can
+        // evict cleanly. An older viewer's ping is placed through the
+        // participant it names by user id, or dropped when none matches.
+        const sharerIdentity = streamWatchKey(sw, useVoiceStore.getState().participants);
+        if (sharerIdentity) {
+          useVoiceStore.getState().recordStreamWatch(sharerIdentity, participant.identity, sw.watching);
+        }
         return;
       }
       if (isStreamRepublish(payload)) {
