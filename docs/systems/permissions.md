@@ -6,6 +6,30 @@ Source files:
 - `packages/web/src/utils/permissions.ts` — Client-side helpers
 
 Storage: Bigint decimal strings in SQLite TEXT columns (bigint not JSON-safe).
+See "Stored form" for the exact form.
+
+## Stored form
+
+A permissions value (`roles.permissions`, override `allow` and `deny`) is a
+canonical non-negative decimal string: `permissionsToString` of the bits, no
+sign, no leading zeros, no spaces, no hex. It is also the only wire form a
+write accepts: `parsePermissionString` in `packages/shared/src/permissions.ts`
+takes a string matching `^(0|[1-9][0-9]*)$` and nothing else, and the role
+routes (`POST`/`PATCH /spaces/:id/roles`, refusal `400 permissions_invalid`)
+and the override routes (`PUT /channels/:id/overrides`,
+`PUT /categories/:id/overrides`, refusal `400 override_bits_invalid`) parse
+through it. An override write that leaves out `allow` or `deny` sets no bits
+there. Every released client sends exactly these strings.
+
+Before this rule the override routes stored whatever `BigInt()` accepted, and
+older role routes the request's string as given, so an old database can hold
+`"0x10"`, `" 8"`, `"-1"`, a legacy JSON name list or NULL. A boot pass,
+`normalizeStoredPermissions` (`server/src/db/permissionStrings.ts`), rewrites
+each to `canonicalPermissionString`: the value as `stringToPermissions` reads
+it, so every check gives the same answer; a negative value, which reads as
+every bit, becomes the defined bits (`& ALL_PERMISSIONS`). It logs how many
+values it rewrote and is a no-op once applied.
+
 
 ---
 
@@ -141,9 +165,13 @@ already showed (oldest role first) into positions.
 (`spaceSettingsPanels/RoleOrderList.tsx`) shows the roles in rank order, most
 senior first, @everyone last, and says that a role ranks above the ones below
 it. The order is the hierarchy, so this list is where the owner sets it:
-- Desktop: each role the viewer may move has a drag handle. The handle is a
+- Desktop: the row of each role the viewer may move is what a drag picks up
+  (grab it anywhere: the name, the colour dot, the handle). The handle is a
   focusable button, and the up and down arrow keys move the role one place.
   Up and down buttons appear on hover or focus, so a move never needs a drag.
+  Drag, keys and buttons all go through the same move. Chrome starts no drag
+  of an ancestor from inside a button, so the row's name button and handle
+  are draggable themselves and their dragstart reaches the row.
 - Phone (the same panel in the fullscreen settings modal): the up and down
   buttons are always shown at 40 px, and there is no handle.
 - A role at or above the viewer's top role shows a lock instead of controls.
@@ -157,9 +185,10 @@ renumbers n..1 as `moveRoleToPosition` does), goes to the space's own
 instance through `getApiForOrigin(space._instanceOrigin)`, and is put back
 if refused, with the server's reason (`describeError`) right under the role
 that moved back, scrolled into view. The viewer is ranked
-by their id on the space's instance (`myStandingIn`). The server pushes every
-member a ready payload after the move. Their client reloads the open space
-(`loadSpaceDetail`), so other open role lists show the new order. When the
+by their id on the space's instance (`myStandingIn`). The server tells every
+member with `space_access_changed` after the move (websocket.md), and their
+client refreshes the space quietly, so other open role lists show the new
+order. When the
 roles do not have distinct positions from 1 up (`canReorderRoles`), the list
 offers no controls. That is an instance from before the hierarchy, which
 stores every role at 0 and would apply a position as given.
@@ -167,8 +196,11 @@ stores every role at 0 and would apply a position as given.
 Covered by `routes/roleHierarchy.test.ts`, `routes/heldPermissions.test.ts`,
 `utils/roleRules.test.ts` (the shared rules), `ws/voiceModerationHierarchy.test.ts`,
 `voiceMenuItems.test.ts`, `spaceSettingsPanels/roleHierarchyGating.test.tsx`,
-`ui/PermissionsEditor.hierarchy.test.tsx`, `utils/roleOrder.test.ts` and
-`spaceSettingsPanels/RolesPanel.reorder.test.tsx`.
+`ui/PermissionsEditor.hierarchy.test.tsx`, `utils/roleOrder.test.ts`,
+`spaceSettingsPanels/RolesPanel.reorder.test.tsx` (drag included),
+`routes/permissionBits.validation.test.ts`, `db/permissionStrings.test.ts`,
+`modals/entityPrivacy.test.tsx`, `utils/overrideBits.test.ts`,
+`utils/memberGroups.test.ts` and `hooks/useWebSocket.spaceAccess.test.ts`.
 
 ## Held-bits rule
 
@@ -228,9 +260,9 @@ When an instance updates to this version:
    order the role list showed them, oldest role highest. The owner can change
    the order in Space Settings > Roles. Where a member's top role decides
    something (the member list group and the name colour), a member with
-   several roles may now be shown under a different one. In the member list,
-   the owner's group heading takes the colour of one of the owner's roles
-   instead of rose when the owner has a role.
+   several roles may now be shown under a different one. The owner's name
+   takes the colour of their top role when they have one, rose otherwise
+   (`memberNameColor` in `web/src/utils/memberGroups.ts`).
 2. **Moderation needs a higher rank.** Kick, ban, space mute, space deafen,
    move and disconnect are refused against a member whose top role is at or
    above the actor's, including a member with the same top role. Members with
@@ -264,10 +296,12 @@ When an instance updates to this version:
    moderator could not re-save an override the owner had set with such a bit;
    a `DELETE` was not checked. Now a `PUT` keeps the unheld bits and lets the
    moderator edit the rest, and a `DELETE` of an override that sets an unheld
-   bit is refused. The Private switch in channel and category settings writes
-   the @everyone override: making a channel public deletes it and making it
-   private replaces it, so either is refused when the stored @everyone
-   override sets a bit the moderator lacks.
+   bit is refused. The Private switch in channel and category settings
+   changes only the View Channels bit of the @everyone override
+   (`useEntityOverrides().setBits`, `withOverrideBits`): the row keeps every
+   other bit and is removed only when nothing is left on it. So the switch
+   needs View Channels held and a role (the hierarchy on @everyone), not
+   every bit the stored @everyone override sets.
 7. **Unchanged:** the owner and instance admins, unban, leaving a space, and
    anything a member does to themselves.
 

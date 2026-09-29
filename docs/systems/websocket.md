@@ -149,7 +149,29 @@ handler alike, so both paths reach the same audience. (`reaction_added` and
 | `category_updated` | category, spaceId | space |
 | `category_deleted` | categoryId, spaceId | space |
 | `channel_layout_updated` | spaceId, channels[], categories[] | space |
+| `space_access_changed` | spaceId | space |
 | `space_layout_updated` | layout[], folders[], updatedAt? | user |
+
+`space_access_changed` follows any change to the space's roles or to a
+member's roles: `POST`, `PATCH`, `DELETE /spaces/:id/roles[/:rid]`,
+`PATCH /spaces/:id/members/:uid`, `POST`/`DELETE /spaces/:id/members/:uid/roles`.
+What the receiver may see or do there, and how the roles and members look,
+may be different now. The client refetches the space's detail from its own
+instance with `loadSpaceDetail(spaceId, { quiet: true })`: no loading state
+(no skeleton) and no message cache touched; for a space that is not open it
+only updates that space's permission entries. Every channel the detail lists
+goes through `upsertChannel`, and a channel of that space it no longer lists
+goes through the `channel_deleted` path, which also closes it when it is
+open (`refreshSpaceAccess` in `hooks/useWebSocket.ts`). These routes used to
+push a whole `ready` instead, which every client handles as a reconnect.
+Mixed versions: an old client connected to a new server ignores the event
+and misses live role changes in that space until it reconnects; a new client
+connected to an old server still gets the old `ready` push.
+
+An `error` that carries a `code` is the refusal of something the user just
+did (so far `role_hierarchy` from the voice moderation events); the client
+shows it as a warning toast in the user's language (`describeErrorCode`).
+An `error` without a code is only logged.
 
 ### DM Channel Management
 | type | fields | scope |
