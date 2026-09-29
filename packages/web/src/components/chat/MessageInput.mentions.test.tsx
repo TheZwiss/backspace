@@ -6,7 +6,6 @@ import { useChatStore } from '../../stores/chatStore';
 import { useComposerStore } from '../../stores/composerStore';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useUIStore } from '../../stores/uiStore';
-import { clearMyUserIdCache, setMyUserIdForOrigin } from '../../utils/crossStoreResolvers';
 import { MessageInput } from './MessageInput';
 
 vi.mock('../../hooks/useWebSocket', () => ({ wsSend: vi.fn() }));
@@ -70,7 +69,7 @@ beforeEach(() => {
   useAuthStore.setState({ user: me });
   useUIStore.setState({ isMobile: false });
   useComposerStore.setState({ states: new Map() });
-  setMyUserIdForOrigin(ORBIT, meOnOrbit.id);
+  useAuthStore.getState().recordMyRow(ORBIT, meOnOrbit.id);
 });
 
 afterEach(() => {
@@ -84,7 +83,7 @@ afterEach(() => {
     channelToSpaceMap: new Map(),
   });
   useAuthStore.setState({ user: null });
-  clearMyUserIdCache();
+  useAuthStore.setState({ myRowIds: new Map() });
 });
 
 describe('MessageInput mention picker (#338)', () => {

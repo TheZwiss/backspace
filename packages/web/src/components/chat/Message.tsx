@@ -11,7 +11,7 @@ import { Avatar } from '../ui/Avatar';
 import { ProfileAvatar } from '../ui/ProfileAvatar';
 import { useContextMenuStore } from '../../stores/contextMenuStore';
 import { buildMessageMenuItems } from './messageMenuItems';
-import { useAuthStore } from '../../stores/authStore';
+import { useAuthStore, useSelfIdentity } from '../../stores/authStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -23,7 +23,7 @@ import { Tooltip } from '../ui/Tooltip';
 import { EmojiPicker } from './EmojiPicker';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import { isDeletedPartnerDm } from '../../utils/dmFormatters';
-import { isFederationGlobeApplicable, isSelf, resolveDisplayIdentity, userDisplayName } from '../../utils/identity';
+import { isFederationGlobeApplicable, isMine, userDisplayName } from '../../utils/identity';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { useSelfIdInChannel } from '../../utils/channelUser';
 import { contentMentionsAny } from '../../utils/mentionTokens';
@@ -201,7 +201,10 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
   const channelKey: string = isPendingMessage(message)
     ? message.channelId || message.dmChannelId || ''
     : message.channelId || (message as MessageWithUser & { dmChannelId?: string }).dmChannelId || '';
-  const isAuthor = isSelf(message.user, currentUser);
+  // The instance that issued this message and its rows.
+  const messageOrigin = useSpaceStore((s) => s.channelOriginMap.get(channelKey) ?? '');
+  const self = useSelfIdentity();
+  const isAuthor = isMine(message.user, messageOrigin, self);
   // The channel whose origin issued this message's ids; mentions resolve there.
   const mentionChannelId = channelKey || null;
   const selfIdHere = useSelfIdInChannel(mentionChannelId);
@@ -227,7 +230,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
   // DISPLAY, but the add/toggle affordances are withdrawn since the server drops them.
   const isDeadDmThread = !!dmChannelId && (() => {
     const dm = dmChannels.find(d => d.id === dmChannelId);
-    return dm ? isDeletedPartnerDm(dm, currentUser) : false;
+    return dm ? isDeletedPartnerDm(dm, { self, origin: messageOrigin }) : false;
   })();
   const canManageMessages = hasPermissionBit(myChPerms, PermissionBits.MANAGE_MESSAGES);
   const canSendMessages = isDmMessage || hasPermissionBit(myChPerms, PermissionBits.SEND_MESSAGES);
@@ -241,14 +244,14 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
 
   const _FALLBACK_USER = { id: '', username: '', createdAt: 0, isAdmin: false, replicatedInstances: [] } as unknown as User;
   const _rawMsgUser = message.user ?? null;
-  const _canonicalMsgUser = useCanonicalUserView(_rawMsgUser ?? _FALLBACK_USER);
+  const _canonicalMsgUser = useCanonicalUserView(_rawMsgUser ?? _FALLBACK_USER, messageOrigin);
   const _rawReplyUser = (!isPendingMessage(message) && message.replyTo?.user) ? message.replyTo.user : null;
-  const _canonicalReplyUser = useCanonicalUserView(_rawReplyUser ?? _FALLBACK_USER);
+  const _canonicalReplyUser = useCanonicalUserView(_rawReplyUser ?? _FALLBACK_USER, messageOrigin);
 
   const toggleReaction = (emoji: string) => {
     // Read-only: a dead 1-on-1 DM accepts no reaction mutations (add OR remove).
     if (isDeadDmThread) return;
-    const hasReacted = message.reactions?.some(r => isOwnReaction(r, currentUser) && r.emoji === emoji);
+    const hasReacted = message.reactions?.some(r => isOwnReaction(r, messageOrigin, self) && r.emoji === emoji);
     if (hasReacted) {
       removeReaction(message.id, emoji);
     } else if (canAddReactions) {
@@ -397,13 +400,13 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
     }
   };
 
-  // Resolve display identity: replicated-self messages show home user's avatar/name.
-  // For non-self messages, further route through canonical user view cache so stale
-  // federated stubs are replaced with the best-known profile data.
-  const _resolvedIdentity = resolveDisplayIdentity(message.user, currentUser);
-  const displayIdentity = (!isSelf(_resolvedIdentity, currentUser) && _rawMsgUser)
-    ? _canonicalMsgUser
-    : _resolvedIdentity;
+  // Display identity: the user's own messages, from any instance, show their
+  // session row; anyone else's go through the userViews cache so a stale copy
+  // shows the best-known profile. `displayOrigin` issued the row shown.
+  const displayIdentity = isAuthor && currentUser
+    ? currentUser
+    : (_rawMsgUser ? _canonicalMsgUser : message.user);
+  const displayOrigin = isAuthor && currentUser ? '' : messageOrigin;
   const displayName = userDisplayName(displayIdentity);
 
   const spaces = useSpaceStore((s) => s.spaces);
@@ -428,7 +431,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
   const handleUsernameClick = (e: React.MouseEvent) => {
     if (!message.user) return;
     e.stopPropagation();
-    openUserProfile(message.user, e.currentTarget.getBoundingClientRect(), undefined, authorMember);
+    openUserProfile(message.user, messageOrigin, e.currentTarget.getBoundingClientRect(), undefined, authorMember);
   };
 
   const replyRoleColor = (msg: { userId: string }) => getMemberDisplayColor(msg.userId);
@@ -471,6 +474,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
               name={displayName}
               size={40}
               user={displayIdentity}
+              origin={displayOrigin}
               member={authorMember}
               className="hover:drop-shadow-md transition-all active:translate-y-[1px]"
             />
@@ -486,10 +490,9 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
       <div className="flex-1 min-w-0">
         {message.replyTo && (() => {
           const replyTo = message.replyTo;
-          const _rawReply = resolveDisplayIdentity(replyTo.user, currentUser);
-          const replyIdentity = (!isSelf(_rawReply, currentUser) && _rawReplyUser)
-            ? _canonicalReplyUser
-            : _rawReply;
+          const replyIdentity = isMine(replyTo.user, messageOrigin, self) && currentUser
+            ? currentUser
+            : (_rawReplyUser ? _canonicalReplyUser : replyTo.user);
           const replyDisplayName = userDisplayName(replyIdentity);
           const preview = (
             <>
@@ -694,6 +697,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
                     key={emoji}
                     emoji={emoji}
                     reactions={reactions}
+                    origin={messageOrigin}
                     onToggle={() => toggleReaction(emoji)}
                   />
                 ))}
