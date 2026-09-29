@@ -4,7 +4,7 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'path';
 import { devCspPreamble } from './src/build/devCsp';
-import { PRECACHE_MAX_FILE_BYTES } from './src/build/precache';
+import { PRECACHE_GLOB_PATTERNS, PRECACHE_MAX_FILE_BYTES } from './src/build/precache';
 
 export default defineConfig({
   plugins: [
@@ -40,6 +40,8 @@ export default defineConfig({
         importScripts: ['sw-rollover.js'],
         clientsClaim: true,
         cleanupOutdatedCaches: true,
+        // The precached file types; the CI size check reads the same list.
+        globPatterns: PRECACHE_GLOB_PATTERNS,
         // CI fails when a precached file nears this limit; see src/build/precache.ts.
         maximumFileSizeToCacheInBytes: PRECACHE_MAX_FILE_BYTES,
       },
