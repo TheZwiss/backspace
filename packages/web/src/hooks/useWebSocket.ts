@@ -179,7 +179,12 @@ function isLoadedRosterSpace(spaceId: string, origin: string): boolean {
   return (spaces.find(s => s.id === spaceId)?._instanceOrigin ?? '') === origin;
 }
 
-function handleEvent(origin: string, event: ServerEvent): void {
+/**
+ * `readyAlreadyDelivered`: this socket has delivered a `ready` before. A later
+ * one on the same socket is a state refresh (instances up to 1.7.0 send one
+ * as a permission refresh), not a new session: no event was missed.
+ */
+function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered = false): void {
   const isHome = origin === HOME_ORIGIN;
   const { setUser } = useAuthStore.getState();
   const { populateFromReady, loadSpaceDetail, currentSpaceId, updateMemberPresence, addMember, removeMember, removeDmChannel, upsertUserView } = useSpaceStore.getState();
@@ -269,10 +274,12 @@ function handleEvent(origin: string, event: ServerEvent): void {
         }
       }
 
-      // Clear stale message cache for all channels on this origin so the next
-      // visit does a fresh fetch (and scroll-to-bottom fires correctly).
-      // Force-reload the currently open channel immediately.
-      {
+      // A new session may have missed messages while disconnected: clear the
+      // message cache for all channels on this origin so the next visit does a
+      // fresh fetch, and force-reload the open channel now (its view keeps its
+      // anchor, docs/systems/message-list.md). A refresh ready on a live socket
+      // missed nothing, so the cache and the open view stay as they are.
+      if (!readyAlreadyDelivered) {
         const chatState = useChatStore.getState();
         const { channelOriginMap } = useSpaceStore.getState();
         const newMessages = new Map(chatState.messages);
@@ -1335,6 +1342,8 @@ function connectToOrigin(origin: string, token: string): void {
     startHeartbeat(conn);
   };
 
+  // Whether this socket has delivered its session's `ready` yet.
+  let readyDelivered = false;
   ws.onmessage = (e) => {
     let event: ServerEvent;
     try {
@@ -1343,8 +1352,10 @@ function connectToOrigin(origin: string, token: string): void {
       console.error(`Failed to parse WebSocket message (${origin || 'home'})`);
       return;
     }
+    const readyAlreadyDelivered = readyDelivered;
+    if (event.type === 'ready') readyDelivered = true;
     try {
-      handleEvent(origin, event);
+      handleEvent(origin, event, readyAlreadyDelivered);
     } catch (err) {
       console.error('Error handling WS event "%s" (%s):', event.type, origin || 'home', err);
     }
