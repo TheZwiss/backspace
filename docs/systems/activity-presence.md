@@ -130,7 +130,8 @@ The rules live in `utils/presenceStatus.ts` (pure) and `ws/presence.ts`:
 
 - **On connect:** WebSocket auth (`ws/handler.ts`, after `authenticated = true`) writes `status = statusOnConnect(row)` and publishes the same value in the `ready` payload's `user`, the local `presence_update` broadcast and the S2S relay. For a row that owns its choice (native or detached, see below) that is `chosen_status`. For a replicated row it is the row's current `status` (the home instance's projection) unless that is `'offline'`, in which case `'online'`; the replicated row's own `chosen_status` is never used. The REST `/api/auth/login` route does **not** set status — login alone does not imply a live socket; the WS handshake is the single source of truth.
 - **On manual change:** REST `PATCH /api/users/@me { status }` and the WS `presence_update` client event both call `applyChosenStatus`. It writes `chosen_status` (only on rows that own their choice) and, while the user is connected, `status`, the in-memory `userStatuses` cache, a `presence_update` to friends, DM and space co-members and the user's own sessions, and an S2S relay. Without a connection only `chosen_status` changes. `'offline'` is rejected (`status_invalid` over REST, an error event over WS).
-- **On disconnect:** After 5s grace period, server sets `status = 'offline'` in DB (`ws/handler.ts:finalizeDisconnect`). `chosen_status` is untouched.
+- **A replicated row's projection:** its live `status` is the home's last projection, except that while this instance holds a session of the user a projection of `'offline'` shows `'online'` (`replicaLiveStatus` in `utils/presenceStatus.ts`). The `ConnectionManager` records the projection when the first session starts here (`statusForConnect`, which the auth path calls instead of `statusOnConnect` directly), keeps it current while relays arrive (`applyReplicaProjection`, called by `processPresenceUpdateEvent`, which writes and broadcasts the status it returns), and forgets it after the last disconnect.
+- **On disconnect:** After 5s grace period (`ws/handler.ts:finalizeDisconnect`), a row that owns its status is set to `'offline'`. A replicated row returns to its home's projection instead: its `status` is written back to the recorded projection, local users are told only when that differs from what they saw, relayed activities are kept unless the projection is `'offline'`, and nothing is relayed (the home owns it). `chosen_status` is untouched either way.
 - **On boot:** Server resets stale `status` rows for non-deleted accounts that own their status (native or detached; see "Boot Reset" below). `chosen_status` is untouched.
 
 ### The client's copy of the user's own status
@@ -172,7 +173,7 @@ Because the in-memory `ConnectionManager` is empty at boot by construction, no l
 1. **Server boot** → `resetStalePresenceOnBoot()` flips any non-deleted `online`/`idle`/`dnd` row that owns its status (native or detached) to `offline`. Replicated rows untouched.
 2. **Auth succeeds** → `status` set to the connect status (`chosen_status` for an account that owns its choice) in DB → local `presence_update` broadcast to friends + DM members + space co-members via `collectProfileBroadcastTargetIds` → S2S `presence_update` queued to all active peers via `queuePresenceRelay` (mirrors profile_update fanout).
 3. **Last socket closes** → 5-second grace period (`scheduleDisconnect`) to allow tab refresh/reconnect.
-4. **Grace period expires** → `finalizeDisconnect`: sets DB status to `'offline'`, clears in-memory activities, broadcasts local `presence_update` to friends/DM/space co-members, queues S2S `presence_update` to peers.
+4. **Grace period expires** → `finalizeDisconnect`: for a row that owns its status, sets DB status to `'offline'`, clears in-memory activities, broadcasts local `presence_update` to friends/DM/space co-members, queues S2S `presence_update` to peers. A replicated row returns to its home's projection (see "On disconnect" above).
 5. **Reconnect during grace** → `cancelDisconnect` prevents offline broadcast; new connection proceeds normally.
 
 ### Presence Broadcast Scope
@@ -187,7 +188,7 @@ Every emitter builds the event with `presenceUpdateFor` / `presenceUpdateEvent` 
 | `activity_update` | `handleActivityUpdate` (`ws/events.ts`) | yes |
 | `showActivity` turned off | `PATCH /api/users/@me` (`routes/users.ts`), `activities: []` | yes |
 | Connect | WS auth (`ws/handler.ts`) | no |
-| Disconnect after the grace period | `finalizeDisconnect` (`ws/handler.ts`), `offline` with `activities: []` | no (none left) |
+| Disconnect after the grace period | `finalizeDisconnect` (`ws/handler.ts`), `offline` with `activities: []`; for a replicated row the home's projection, only when it differs from what was shown | no (none left) |
 | Relayed S2S presence about a replicated user | `processPresenceUpdateEvent` (`routes/federation/events/dmState.ts`) | no |
 | Peer deactivated | `markPeerStubsOffline` (`utils/federationPresence.ts`), `offline` for each of the peer's rows | no |
 

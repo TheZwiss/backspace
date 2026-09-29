@@ -12,7 +12,8 @@ import i18n from '../i18n';
  * (`dm_channels.owner_home_instance`). A request to an instance names the
  * conversation, and the member it acts on, as that instance's own copy does:
  * the row the client shows (`channelId`) may be another instance's copy,
- * whose ids mean nothing there. See docs/systems/client-federation.md.
+ * whose ids mean nothing there. See docs/systems/dm-system.md,
+ * "Owner-Only Requests".
  */
 
 /** The owner's instance is not connected, or does not list the conversation for this user. */

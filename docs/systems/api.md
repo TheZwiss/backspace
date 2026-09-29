@@ -197,10 +197,10 @@ POST   /dm/:id/members         { userId } | { homeUserId, homeInstance } → DmC
 DELETE /dm/:id/members                                              → { success } (leave) [group only]
 DELETE /dm/:id/members/:targetUserId  ?homeInstance=                → { success } [owner kick; cannot self-kick; group only; segment is homeUserId when ?homeInstance is set]
 POST   /dm/:id/transfer        { newOwnerId? | (homeUserId+homeInstance) } → { success } [owner; group only; resolved member must be in channel; not self]
-POST   /dm/space-invite        { target: { userId } | { homeUserId, homeInstance }, spaceId, spaceInstanceOrigin, inviteCode } → SpaceInviteResponse { dmChannelId, messageId, message } [target must be a friend]
+POST   /dm/space-invite        { target: { userId } | { homeUserId, homeInstance }, spaceId, spaceInstanceOrigin, inviteCode } → SpaceInviteResponse { dmChannelId, messageId, message } [target must be a friend; 400 invite_invalid when the snapshot would not make a well-formed invite (dm-system.md, "System messages")]
 GET    /dm/:id/messages        ?before=&limit=50 (1-100)            → DmMessageWithUser[] [member]
 POST   /dm/:id/messages        { content?, attachments?, replyToId? } → 201 DmMessageWithUser [member; content or attachments required]
-PATCH  /dm/messages/:id        { content }                          → DmMessageWithUser [author]
+PATCH  /dm/messages/:id        { content }                          → DmMessageWithUser [author; 403 system_message_immutable for a system message]
 DELETE /dm/messages/:id                                             → { success } [author]
 ```
 
