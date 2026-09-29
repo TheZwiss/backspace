@@ -200,8 +200,11 @@ export function processPresenceUpdateEvent(
     return;
   }
 
+  // The row shows the projection, or 'online' for an 'offline' one while the
+  // user has a session here (`applyReplicaProjection`, activity-presence.md).
+  const shownStatus = connectionManager.applyReplicaProjection(localUser.id, payload.status);
   db.update(schema.users)
-    .set({ status: payload.status })
+    .set({ status: shownStatus })
     .where(eq(schema.users.id, localUser.id))
     .run();
 
@@ -229,7 +232,7 @@ export function processPresenceUpdateEvent(
   // activities changed they are included (possibly empty, which clears on
   // clients); otherwise the client keeps what it has.
   const targetUserIds = collectProfileBroadcastTargetIds(localUser.id);
-  const wsPayload = presenceUpdateEvent(localUser, payload.status, activities);
+  const wsPayload = presenceUpdateEvent(localUser, shownStatus, activities);
   for (const uid of targetUserIds) {
     connectionManager.sendToUser(uid, wsPayload);
   }

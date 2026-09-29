@@ -32,6 +32,8 @@ vi.mock('../ws/handler.js', () => ({
     evictFederatedCallsForHost: vi.fn(),
     federatedCalls: new Map(),
     isUserOnline: vi.fn(),
+    // No session of the user here: the row shows the projection as sent.
+    applyReplicaProjection: (_uid: string, projection: string) => projection,
     lateBindFederatedCall: vi.fn(),
     setUserActivities: vi.fn((uid: string, acts: unknown[]) => {
       if (acts.length === 0) retainedActivities.delete(uid);

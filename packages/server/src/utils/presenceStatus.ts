@@ -1,4 +1,4 @@
-import { isChosenUserStatus, ownsChosenStatus, type ChosenUserStatus } from '@backspace/shared';
+import { isChosenUserStatus, ownsChosenStatus, type ChosenUserStatus, type UserStatus } from '@backspace/shared';
 
 /**
  * Presence status rules shared by the socket auth path and the manual-change
@@ -15,19 +15,29 @@ export interface StatusSourceRow {
 }
 
 /**
+ * The live status of a replicated row (one that does not own its choice):
+ * the home instance's last projection (S2S `presence_update`), except that
+ * while this instance holds a session of the user a projection of 'offline'
+ * (none yet, or the home sees no session of its own) reads 'online'. When the
+ * session here ends, the row returns to the projection.
+ */
+export function replicaLiveStatus(projection: string | null, connectedHere: boolean): UserStatus {
+  if (isChosenUserStatus(projection)) return projection;
+  return connectedHere ? 'online' : 'offline';
+}
+
+/**
  * The status to publish when a connection for this user authenticates.
  *
  * - A row that owns its choice (native or detached, `ownsChosenStatus`): the
  *   user's chosen status.
  * - A replicated row: this instance does not own the user's choice, so its own
- *   `chosen_status` copy is ignored. The live `status` holds the home
- *   instance's last projection (S2S `presence_update`), which is kept; only
- *   when it says 'offline' (no projection yet, or it was cleared by this
- *   instance's own disconnect) does the new connection fall back to 'online'.
+ *   `chosen_status` copy is ignored; `projection` is the home's last
+ *   projection (`replicaLiveStatus` with a session here).
  */
-export function statusOnConnect(row: StatusSourceRow): ChosenUserStatus {
+export function statusOnConnect(row: StatusSourceRow, projection: string | null = row.status): ChosenUserStatus {
   if (ownsChosenStatus(row)) {
     return isChosenUserStatus(row.chosenStatus) ? row.chosenStatus : 'online';
   }
-  return isChosenUserStatus(row.status) ? row.status : 'online';
+  return isChosenUserStatus(projection) ? projection : 'online';
 }
