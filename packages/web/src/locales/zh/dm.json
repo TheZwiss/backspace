@@ -132,5 +132,9 @@
     "cancelEdit": "取消编辑",
     "federated": "联邦群组",
     "memberCount_other": "{{count}} 名成员"
+  },
+  "ownerActions": {
+    "ownerNotConnected": "此群组由 {{host}} 管理。请连接到该实例后再进行更改。",
+    "ownerNotListed": "{{host}} 尚未为你列出此群组。请稍后再试。"
   }
 }

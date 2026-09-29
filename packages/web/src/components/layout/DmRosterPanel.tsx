@@ -7,7 +7,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useSocialStore } from '../../stores/socialStore';
 import { isSelf, parseFederatedUsername } from '../../utils/identity';
-import { api } from '../../api/client';
+import { kickFromGroupDm, transferGroupDmOwnership } from '../../utils/groupDmOwnerActions';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { DmMemberRow, type DmMemberRowAction } from './DmMemberRow';
 import { visualPixels } from '../../platform/interfaceScale';
@@ -125,17 +125,9 @@ export function DmRosterPanel() {
     if (!pendingKick) return;
     setSubmitting(true);
     try {
-      // Pass federated identity when the target is a federated user.
-      // `pendingKick.id` may be the home id (when the home view is in the
-      // userViews cache) OR a local id from any instance — neither is
-      // guaranteed to match the OWNER instance's local replicated id. The
-      // owner instance resolves home id + home instance via
-      // `resolveOrCreateReplicatedUser`, which is the only deterministic
-      // way to find the right `dm_members.userId` row across instances.
-      const federated = pendingKick.homeUserId && pendingKick.homeInstance
-        ? { homeUserId: pendingKick.homeUserId, homeInstance: pendingKick.homeInstance }
-        : undefined;
-      await api.dm.kickMember(dmChannel.id, pendingKick.id, federated);
+      // Sent to the owner's instance, naming the conversation and the
+      // member as its copy does (`groupDmOwnerActions`).
+      await kickFromGroupDm(dmChannel.id, pendingKick);
       addToast(
         t('dm:kick.success', { name: pendingKick.displayName ?? parseFederatedUsername(pendingKick.username).baseName }),
         'success',
@@ -157,11 +149,7 @@ export function DmRosterPanel() {
     if (!pendingTransfer) return;
     setSubmitting(true);
     try {
-      // See confirmKick for the rationale on federated identity.
-      const federated = pendingTransfer.homeUserId && pendingTransfer.homeInstance
-        ? { homeUserId: pendingTransfer.homeUserId, homeInstance: pendingTransfer.homeInstance }
-        : undefined;
-      await api.dm.transferOwnership(dmChannel.id, pendingTransfer.id, federated);
+      await transferGroupDmOwnership(dmChannel.id, pendingTransfer);
       addToast(
         t('dm:transfer.success', { name: pendingTransfer.displayName ?? parseFederatedUsername(pendingTransfer.username).baseName }),
         'success',

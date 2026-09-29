@@ -138,5 +138,9 @@
     "federated": "Föderierte Gruppe",
     "memberCount_one": "{{count}} Mitglied",
     "memberCount_other": "{{count}} Mitglieder"
+  },
+  "ownerActions": {
+    "ownerNotConnected": "Diese Gruppe wird auf {{host}} verwaltet. Verbinde dich mit dieser Instanz, um sie zu ändern.",
+    "ownerNotListed": "{{host}} führt diese Gruppe für dich noch nicht. Versuch es gleich noch einmal."
   }
 }

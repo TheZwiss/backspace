@@ -11,6 +11,7 @@ import { useSocialStore } from '../../stores/socialStore';
 import { useTransferStore } from '../../stores/transferStore';
 import { waitForTransferAttachment } from '../../utils/waitForTransfer';
 import { api } from '../../api/client';
+import { kickFromGroupDm, transferGroupDmOwnership, updateGroupDmMetadata } from '../../utils/groupDmOwnerActions';
 import { isSelf, parseFederatedUsername } from '../../utils/identity';
 import { AvatarStack } from '../ui/AvatarStack';
 import { DmMemberRow, type DmMemberRowAction } from '../layout/DmMemberRow';
@@ -38,7 +39,7 @@ type Tab = 'overview' | 'members';
  *   1. If an icon blob is staged, upload it via transferStore.
  *   2. Build PATCH body with ONLY changed fields (name and/or icon).
  *      Cleared icon → `icon: null`.
- *   3. `api.dm.updateMetadata(channelId, body)` then close the modal.
+ *   3. `updateGroupDmMetadata(channelId, body)` then close the modal.
  * Cancel discards the staged blob; no upload fires.
  */
 export function GroupDmSettings() {
@@ -219,7 +220,7 @@ export function GroupDmSettings() {
         body.icon = filename;
       }
 
-      await api.dm.updateMetadata(dmChannelId, body);
+      await updateGroupDmMetadata(dmChannelId, body);
       // Mirror SpaceSettings save behavior: close the modal. The WS broadcast
       // (`dm_channel_updated`) updates the open channel in-place.
       closeModal();
@@ -295,7 +296,7 @@ export function GroupDmSettings() {
     if (!pendingKick) return;
     setMemberActionSubmitting(true);
     try {
-      await api.dm.kickMember(dmChannelId, pendingKick.id);
+      await kickFromGroupDm(dmChannelId, pendingKick);
       addToast(
         t('dm:kick.success', { name: pendingKick.displayName ?? parseFederatedUsername(pendingKick.username).baseName }),
         'success',
@@ -317,7 +318,7 @@ export function GroupDmSettings() {
     if (!pendingTransfer) return;
     setMemberActionSubmitting(true);
     try {
-      await api.dm.transferOwnership(dmChannelId, pendingTransfer.id);
+      await transferGroupDmOwnership(dmChannelId, pendingTransfer);
       addToast(
         t('dm:transfer.success', { name: pendingTransfer.displayName ?? parseFederatedUsername(pendingTransfer.username).baseName }),
         'success',

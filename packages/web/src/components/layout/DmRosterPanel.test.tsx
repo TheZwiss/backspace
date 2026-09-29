@@ -100,24 +100,13 @@ vi.mock('../../stores/socialStore', () => ({
   ),
 }));
 
-// API client — both owner-only methods are stubbed; calls return success by default.
+// Owner-only actions — stubbed; calls return success by default. Which
+// instance they go to is covered by `groupDmOwnerActions.test.ts`.
 const apiKickMember = vi.fn().mockResolvedValue({ success: true });
 const apiTransferOwnership = vi.fn().mockResolvedValue({});
-vi.mock('../../api/client', () => ({
-  api: {
-    dm: {
-      kickMember: (
-        channelId: string,
-        userId: string,
-        federated?: { homeUserId: string; homeInstance: string },
-      ) => apiKickMember(channelId, userId, federated),
-      transferOwnership: (
-        channelId: string,
-        userId: string,
-        federated?: { homeUserId: string; homeInstance: string },
-      ) => apiTransferOwnership(channelId, userId, federated),
-    },
-  },
+vi.mock('../../utils/groupDmOwnerActions', () => ({
+  kickFromGroupDm: (channelId: string, member: User) => apiKickMember(channelId, member),
+  transferGroupDmOwnership: (channelId: string, member: User) => apiTransferOwnership(channelId, member),
 }));
 
 // useCanonicalUserView falls back to the input on cache miss; that's exactly
@@ -325,7 +314,7 @@ describe('DmRosterPanel — section grouping', () => {
 });
 
 describe('DmRosterPanel — action wiring', () => {
-  it('kick action: opens confirm dialog, then calls api.dm.kickMember on confirm', async () => {
+  it('kick action: opens confirm dialog, then removes the member on confirm', async () => {
     const u = userEvent.setup();
     const owner = makeUser({ id: 'me', username: 'me', displayName: 'Me' });
     const target = makeUser({ id: 'tgt', username: 'tgt', displayName: 'Tgt' });
@@ -350,11 +339,10 @@ describe('DmRosterPanel — action wiring', () => {
     await waitFor(() => {
       expect(apiKickMember).toHaveBeenCalledTimes(1);
     });
-    // Local target → federated arg is undefined.
-    expect(apiKickMember).toHaveBeenCalledWith('dm-1', 'tgt', undefined);
+    expect(apiKickMember).toHaveBeenCalledWith('dm-1', expect.objectContaining({ id: 'tgt' }));
   });
 
-  it('transfer action: opens confirm dialog, then calls api.dm.transferOwnership on confirm', async () => {
+  it('transfer action: opens confirm dialog, then transfers ownership on confirm', async () => {
     const u = userEvent.setup();
     const owner = makeUser({ id: 'me', username: 'me', displayName: 'Me' });
     const target = makeUser({ id: 'tgt', username: 'tgt', displayName: 'Tgt' });
@@ -375,8 +363,7 @@ describe('DmRosterPanel — action wiring', () => {
     await waitFor(() => {
       expect(apiTransferOwnership).toHaveBeenCalledTimes(1);
     });
-    // Local target → federated arg is undefined.
-    expect(apiTransferOwnership).toHaveBeenCalledWith('dm-1', 'tgt', undefined);
+    expect(apiTransferOwnership).toHaveBeenCalledWith('dm-1', expect.objectContaining({ id: 'tgt' }));
   });
 
   it('remove-friend action: calls socialStore.removeFriend with the row user id', async () => {

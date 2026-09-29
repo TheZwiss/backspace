@@ -43,7 +43,6 @@ import {
   resolveUserIdFromInstances,
   getCachedUserIdForOrigin,
   clearMyUserIdCache,
-  setOwnerInstanceForDmResolver,
 } from '../utils/crossStoreResolvers';
 import { useAuthStore } from './authStore';
 import { useChatStore } from './chatStore';
@@ -1430,26 +1429,19 @@ export function getChannelOrigin(channelId: string): string {
 }
 
 /**
- * Returns the owner's home-instance origin for a group DM, or '' for the
- * local home instance. Used to route owner-only API calls (rename, icon,
- * kick, transfer) so the federation event's sourceInstance equals the
- * channel's ownerHomeInstance — required by receiver authority checks.
+ * The owner's home instance of a group DM as the channel records it
+ * (`ownerHomeInstance`, an origin or host), or '' when none is recorded.
+ * `utils/groupDmOwnerActions.ts` sends owner-only requests there.
  *
  * Distinct from getChannelOrigin: that function returns the channel's
  * pinned serving origin (where the client's WS connection mirrors the
  * channel), which can differ from the owner's home instance after a
  * manual transfer.
- *
- * The resolver itself lives in `utils/crossStoreResolvers.ts` so that
- * `api/client.ts` can call it without creating a value-cycle on spaceStore;
- * spaceStore registers the resolver below at module load.
  */
 export function getOwnerInstanceForDm(channelId: string): string {
   const dm = useSpaceStore.getState().dmChannels.find(d => d.id === channelId);
   return dm?.ownerHomeInstance ?? '';
 }
-
-setOwnerInstanceForDmResolver(getOwnerInstanceForDm);
 
 /**
  * Resolves a raw DM channel ID to its primary `dmChannels` entry ID.
