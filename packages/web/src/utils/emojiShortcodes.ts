@@ -1,5 +1,5 @@
-import data from '@emoji-mart/data';
 import type { Emoji, EmojiMartData } from '@emoji-mart/data';
+import { loadEmojiData } from './emojiData';
 
 // ─── Emoji shortcodes ───────────────────────────────────────────────────────
 // `:name:` text is turned into the emoji it names when user text is rendered.
@@ -8,12 +8,16 @@ import type { Emoji, EmojiMartData } from '@emoji-mart/data';
 // every client.
 //
 // Names, in order of precedence:
-//   1. the emoji picker's own names (emoji-mart's data set, bundled with the
-//      picker), including its aliases;
+//   1. the emoji picker's own names (emoji-mart's data set, the chunk
+//      emojiData.ts loads for the picker too), including its aliases;
 //   2. Discord's names that emoji-mart does not have (`:cross:`,
 //      `:slight_smile:`, `:regional_indicator_a:`), from the generated table in
-//      discordEmojiAliases.ts. That table is its own chunk: main.tsx loads it
-//      with `loadDiscordEmojiAliases()` before the first render;
+//      discordEmojiAliases.ts, also a chunk of its own.
+//   main.tsx loads both with `loadEmojiShortcodeNames()` before the first
+//   render, so text never shows a shortcode that later turns into an emoji.
+//   Until they load (or if a download fails) names resolve to nothing and
+//   text stays as written; conversion happens at render time and stored text
+//   is never changed, so nothing typed is lost;
 //   3. Discord's skin-tone spellings on any name from 1 or 2: `_tone1`..`_tone5`
 //      and `_light_skin_tone`.. `_dark_skin_tone` (tone 1 is the lightest).
 // In every name `_` and `-` are the same character, so `:flag_va:` finds
@@ -26,8 +30,6 @@ import type { Emoji, EmojiMartData } from '@emoji-mart/data';
 // `est.:cross:`, `:smile::smile:` and CJK text without spaces still convert.
 // Text inside a URL (`https://…`, `www.…`) is never converted, and unknown
 // names stay as typed.
-
-const EMOJI_DATA = data as EmojiMartData;
 
 /** A shortcode, optionally followed by the picker's skin tone: `:name:` or `:name::skin-tone-N:`. */
 const SHORTCODE_SOURCE = ':([a-z0-9_+-]+):(?::skin-tone-([1-6]):)?';
@@ -50,16 +52,19 @@ function isAsciiAlphanumeric(char: string | undefined): boolean {
 
 // ─── Name tables ────────────────────────────────────────────────────────────
 
+let emojiData: EmojiMartData | null = null;
 let martByName: Map<string, Emoji> | null = null;
 let martByNative: Map<string, Emoji> | null = null;
+const NO_EMOJI: ReadonlyMap<string, Emoji> = new Map();
 
-/** Normalised emoji-mart name or alias → emoji. Built on first use. */
-function getMartByName(): Map<string, Emoji> {
+/** Normalised emoji-mart name or alias → emoji. Built on first use after the data loads. */
+function getMartByName(): ReadonlyMap<string, Emoji> {
   if (martByName) return martByName;
+  if (!emojiData) return NO_EMOJI;
   const map = new Map<string, Emoji>();
-  for (const [id, emoji] of Object.entries(EMOJI_DATA.emojis)) map.set(normaliseName(id), emoji);
-  for (const [alias, id] of Object.entries(EMOJI_DATA.aliases)) {
-    const emoji = EMOJI_DATA.emojis[id];
+  for (const [id, emoji] of Object.entries(emojiData.emojis)) map.set(normaliseName(id), emoji);
+  for (const [alias, id] of Object.entries(emojiData.aliases)) {
+    const emoji = emojiData.emojis[id];
     if (emoji) map.set(normaliseName(alias), emoji);
   }
   martByName = map;
@@ -67,10 +72,11 @@ function getMartByName(): Map<string, Emoji> {
 }
 
 /** Emoji (without variation selectors) → its emoji-mart entry, for skin tones of Discord names. */
-function getMartByNative(): Map<string, Emoji> {
+function getMartByNative(): ReadonlyMap<string, Emoji> {
   if (martByNative) return martByNative;
+  if (!emojiData) return NO_EMOJI;
   const map = new Map<string, Emoji>();
-  for (const emoji of Object.values(EMOJI_DATA.emojis)) {
+  for (const emoji of Object.values(emojiData.emojis)) {
     const base = emoji.skins[0]?.native;
     if (base) map.set(stripVariation(base), emoji);
   }
@@ -79,18 +85,31 @@ function getMartByNative(): Map<string, Emoji> {
 }
 
 let discordAliases: Readonly<Record<string, string>> | null = null;
-let discordAliasesLoad: Promise<void> | null = null;
+let namesLoad: Promise<void> | null = null;
 
 /**
- * Load Discord's names (a separate chunk). Resolves once they are available,
- * or once loading has failed: the app renders either way, and without the
- * table only Discord-only names stay as typed.
+ * Load every shortcode name: emoji-mart's data set and Discord's table, two
+ * chunks fetched in parallel. Resolves once both have arrived or failed; it
+ * never rejects, because the app renders either way. Without emoji-mart's
+ * data no name converts; without Discord's table only Discord-only names stay
+ * as typed. A part that failed is fetched again on the next call.
  */
-export function loadDiscordEmojiAliases(): Promise<void> {
-  discordAliasesLoad ??= import('./discordEmojiAliases')
-    .then((module) => { discordAliases = module.DISCORD_EMOJI_ALIASES; })
-    .catch((error: unknown) => { console.warn('[emoji] Discord shortcode names failed to load:', error); });
-  return discordAliasesLoad;
+export function loadEmojiShortcodeNames(): Promise<void> {
+  namesLoad ??= Promise.all([
+    emojiData ? Promise.resolve() : loadEmojiData()
+      .then((data) => {
+        emojiData = data;
+        martByName = null;
+        martByNative = null;
+      })
+      .catch((error: unknown) => { console.warn('[emoji] Emoji names failed to load:', error); }),
+    discordAliases ? Promise.resolve() : import('./discordEmojiAliases')
+      .then((module) => { discordAliases = module.DISCORD_EMOJI_ALIASES; })
+      .catch((error: unknown) => { console.warn('[emoji] Discord shortcode names failed to load:', error); }),
+  ]).then(() => {
+    if (!emojiData || !discordAliases) namesLoad = null;
+  });
+  return namesLoad;
 }
 
 function discordAlias(name: string): string | undefined {

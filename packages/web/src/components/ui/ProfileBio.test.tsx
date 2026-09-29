@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
 import { ProfileBio } from './ProfileBio';
-import { loadDiscordEmojiAliases } from '../../utils/emojiShortcodes';
+import { loadEmojiShortcodeNames } from '../../utils/emojiShortcodes';
 
 // A bio renders newlines the way a chat message does: the container is
 // `whitespace-pre-wrap` and paragraphs carry no margin, so
@@ -55,7 +55,7 @@ describe('ProfileBio', () => {
   });
 
   it('renders Discord shortcode names once they are loaded (issue #252)', async () => {
-    await loadDiscordEmojiAliases();
+    await loadEmojiShortcodeNames();
     const { container } = render(<ProfileBio bio={'est.:cross: :heart_on_fire:\n\n-Catholic :cross: :flag_va: :orthodox_cross:'} />);
     expect(paragraphs(container).map((p) => p.textContent)).toEqual([
       'est.✝️ ❤️‍🔥',
